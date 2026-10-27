@@ -1,0 +1,6 @@
+<!-- English strings for the installer. The namespace marker is filled by package.ps1. -->
+<WixLocalization Culture="en-us" xmlns="__WIX_NAMESPACE__/wxl">
+  <String Id="ProductName" Value="Archforge" />
+  <String Id="Manufacturer" Value="The Archforge contributors" />
+  <String Id="Downgrade" Value="A newer version of Archforge is already installed." />
+</WixLocalization>

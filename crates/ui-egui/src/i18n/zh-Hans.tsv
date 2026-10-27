@@ -1,0 +1,45 @@
+# 简体中文目录。列：kind、context、key、text（参见 i18n/mod.rs）。各行与相关条目放在一起。
+# Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit.
+# 应用程序菜单
+str		Quit Archforge	退出 Archforge
+# 主页
+plural		{n} element	{n} 个元素
+str		Recent projects	最近的项目
+str		Open project	打开项目
+str		Close	关闭
+str		Home	主页
+str		Search projects and actions	搜索项目和操作
+str		Not available yet	尚不可用
+str		Welcome home	主页
+str		Welcome to Archforge	欢迎使用 Archforge
+str		Start with the big picture. Or with one detail. Bring it all together.	从全局开始，或从一个细节开始，再把一切整合起来。
+str		Build better, together.	携手打造更好的作品。
+str		Get help, share ideas, and help shape the future of Archforge.	获取帮助、分享想法，共同塑造 Archforge 的未来。
+str		Community	社区
+str		What’s new	新功能
+str		Start something	开始
+str		Choose a starting point. You can change direction at any time.	选择一个起点。你可以随时改变方向。
+str		New project	新建项目
+str		A clean start for your next idea.	从零开始，实现你的下一个想法。
+str		Create project	创建项目
+str		Open a project	打开项目
+str		Continue from a project on this device.	继续处理此设备上的项目。
+str		Browse files	浏览文件
+str		Explore an example	探索示例
+str		Learn by navigating a connected model.	通过浏览一个相互关联的模型来学习。
+str		Explore example	查看示例
+str		Import a model	导入模型
+str		Bring existing elements into a project.	将现有元素导入项目。
+str		Choose a file	选择文件
+str		Pinned folders	已固定的文件夹
+str		Keep your project locations close.	让项目位置触手可及。
+str		Pin a folder	固定文件夹
+str		Pick up in the exact view you left.	从你离开时的视图继续。
+str		Last opened	上次打开
+str		No recent projects yet	暂无最近的项目
+str		Projects you create or open will appear here.	你创建或打开的项目将显示在这里。
+str		Your models, your workspace.	你的模型，你的工作区。
+str		Help & shortcuts	帮助与快捷键
+str		Switch to the dark appearance	切换到深色外观
+str		Switch to the light appearance	切换到浅色外观
+str		Last view: {view}	上次视图：{view}

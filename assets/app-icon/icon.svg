@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- The Archforge app icon, the default appearance: a structural A whose crossbar is a
+       teal model link, on a slate tile with a faint diagram grid, at the macOS icon grid (an 824 px tile in a
+       1024 px canvas). Sizes from 16 to 32 px render icon-small.svg. Original artwork. -->
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3A5F86"/>
+      <stop offset="1" stop-color="#223B55"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.3" cy="0.2" r="0.9">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.10"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="clip"><rect x="100" y="100" width="824" height="824" rx="185"/></clipPath>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#tile)"/>
+  <g clip-path="url(#clip)" stroke="#FFFFFF" stroke-opacity="0.06" stroke-width="2" fill="none"><path d="M160 100 V924" /><path d="M224 100 V924" /><path d="M288 100 V924" /><path d="M352 100 V924" /><path d="M416 100 V924" /><path d="M480 100 V924" /><path d="M544 100 V924" /><path d="M608 100 V924" /><path d="M672 100 V924" /><path d="M736 100 V924" /><path d="M800 100 V924" /><path d="M864 100 V924" /><path d="M100 160 H924" /><path d="M100 224 H924" /><path d="M100 288 H924" /><path d="M100 352 H924" /><path d="M100 416 H924" /><path d="M100 480 H924" /><path d="M100 544 H924" /><path d="M100 608 H924" /><path d="M100 672 H924" /><path d="M100 736 H924" /><path d="M100 800 H924" /><path d="M100 864 H924" /></g>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#glow)"/>
+  <rect x="101.5" y="101.5" width="821" height="821" rx="183.5" fill="none" stroke="#FFFFFF" stroke-opacity="0.20" stroke-width="3"/>
+  <g transform="translate(217.6 225.6) scale(9.2)"><path d="M7 54 L26 10 L36 10 L18 54 Z" fill="#FFFFFF"/><path d="M28 10 L38 10 L57 54 L45 54 Z" fill="#FFFFFF"/><path d="M24 35 L40 35 L43 43 L21 43 Z" fill="#9ED8DE"/></g>
+</svg>

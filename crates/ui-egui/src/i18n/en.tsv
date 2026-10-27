@@ -1,0 +1,44 @@
+# English catalogue. Columns: kind, context, key, text (see i18n/mod.rs). Rows go beside related entries.
+# Application menu
+str		Quit Archforge	Quit Archforge
+# Home
+plural		{n} element	{n} element|{n} elements
+str		Recent projects	Recent projects
+str		Open project	Open project
+str		Close	Close
+str		Home	Home
+str		Search projects and actions	Search projects and actions
+str		Not available yet	Not available yet
+str		Welcome home	Welcome home
+str		Welcome to Archforge	Welcome to Archforge
+str		Start with the big picture. Or with one detail. Bring it all together.	Start with the big picture. Or with one detail. Bring it all together.
+str		Build better, together.	Build better, together.
+str		Get help, share ideas, and help shape the future of Archforge.	Get help, share ideas, and help shape the future of Archforge.
+str		Community	Community
+str		What’s new	What’s new
+str		Start something	Start something
+str		Choose a starting point. You can change direction at any time.	Choose a starting point. You can change direction at any time.
+str		New project	New project
+str		A clean start for your next idea.	A clean start for your next idea.
+str		Create project	Create project
+str		Open a project	Open a project
+str		Continue from a project on this device.	Continue from a project on this device.
+str		Browse files	Browse files
+str		Explore an example	Explore an example
+str		Learn by navigating a connected model.	Learn by navigating a connected model.
+str		Explore example	Explore example
+str		Import a model	Import a model
+str		Bring existing elements into a project.	Bring existing elements into a project.
+str		Choose a file	Choose a file
+str		Pinned folders	Pinned folders
+str		Keep your project locations close.	Keep your project locations close.
+str		Pin a folder	Pin a folder
+str		Pick up in the exact view you left.	Pick up in the exact view you left.
+str		Last opened	Last opened
+str		No recent projects yet	No recent projects yet
+str		Projects you create or open will appear here.	Projects you create or open will appear here.
+str		Your models, your workspace.	Your models, your workspace.
+str		Help & shortcuts	Help & shortcuts
+str		Switch to the dark appearance	Switch to the dark appearance
+str		Switch to the light appearance	Switch to the light appearance
+str		Last view: {view}	Last view: {view}

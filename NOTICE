@@ -1,0 +1,13 @@
+Archforge
+Copyright 2026 the Archforge contributors.
+
+The code is dual-licensed under the MIT licence (LICENSE-MIT) and the Apache License, Version 2.0
+(LICENSE-APACHE), at your option.
+
+The artwork in this repository, the application icon included, is licensed like the code. The name
+Archforge is a brand mark and is not covered by either licence: a fork that is distributed under
+another name may say that it is based on Archforge, but does not use the name as its own.
+
+Third-party assets and their licences are listed in ATTRIBUTION.md, as are the fonts the program
+draws with: Inter, from craft-fonts, the fonts input of the build, and the fonts bundled with egui.
+Their licence texts are in licenses/fonts/.

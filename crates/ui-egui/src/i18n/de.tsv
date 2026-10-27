@@ -1,0 +1,45 @@
+# Deutscher Katalog. Spalten: kind, context, key, text (siehe i18n/mod.rs). Zeilen stehen neben verwandten Einträgen.
+# Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit.
+# Programmmenü
+str		Quit Archforge	Archforge beenden
+# Home
+plural		{n} element	{n} Element|{n} Elemente
+str		Recent projects	Zuletzt geöffnete Projekte
+str		Open project	Projekt öffnen
+str		Close	Schließen
+str		Home	Start
+str		Search projects and actions	Projekte und Aktionen suchen
+str		Not available yet	Noch nicht verfügbar
+str		Welcome home	Startseite
+str		Welcome to Archforge	Willkommen bei Archforge
+str		Start with the big picture. Or with one detail. Bring it all together.	Beginnen Sie mit dem großen Ganzen. Oder mit einem Detail. Und führen Sie alles zusammen.
+str		Build better, together.	Gemeinsam besser bauen.
+str		Get help, share ideas, and help shape the future of Archforge.	Holen Sie sich Hilfe, teilen Sie Ideen und gestalten Sie die Zukunft von Archforge mit.
+str		Community	Community
+str		What’s new	Neuigkeiten
+str		Start something	Etwas beginnen
+str		Choose a starting point. You can change direction at any time.	Wählen Sie einen Ausgangspunkt. Sie können die Richtung jederzeit ändern.
+str		New project	Neues Projekt
+str		A clean start for your next idea.	Ein sauberer Start für Ihre nächste Idee.
+str		Create project	Projekt erstellen
+str		Open a project	Ein Projekt öffnen
+str		Continue from a project on this device.	Arbeiten Sie an einem Projekt auf diesem Gerät weiter.
+str		Browse files	Dateien durchsuchen
+str		Explore an example	Ein Beispiel erkunden
+str		Learn by navigating a connected model.	Lernen Sie, indem Sie sich durch ein verknüpftes Modell bewegen.
+str		Explore example	Beispiel erkunden
+str		Import a model	Ein Modell importieren
+str		Bring existing elements into a project.	Übernehmen Sie vorhandene Elemente in ein Projekt.
+str		Choose a file	Datei auswählen
+str		Pinned folders	Angeheftete Ordner
+str		Keep your project locations close.	Halten Sie Ihre Projektorte griffbereit.
+str		Pin a folder	Ordner anheften
+str		Pick up in the exact view you left.	Machen Sie genau in der Ansicht weiter, die Sie verlassen haben.
+str		Last opened	Zuletzt geöffnet
+str		No recent projects yet	Noch keine zuletzt geöffneten Projekte
+str		Projects you create or open will appear here.	Projekte, die Sie erstellen oder öffnen, erscheinen hier.
+str		Your models, your workspace.	Ihre Modelle, Ihr Arbeitsbereich.
+str		Help & shortcuts	Hilfe & Tastenkürzel
+str		Switch to the dark appearance	Zur dunklen Darstellung wechseln
+str		Switch to the light appearance	Zur hellen Darstellung wechseln
+str		Last view: {view}	Letzte Ansicht: {view}

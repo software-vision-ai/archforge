@@ -1,0 +1,45 @@
+# 日本語カタログ。列: kind、context、key、text（i18n/mod.rs を参照）。行は関連する項目の隣に置きます。
+# Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit.
+# アプリケーションメニュー
+str		Quit Archforge	Archforge を終了
+# ホーム
+plural		{n} element	{n} 個の要素
+str		Recent projects	最近使ったプロジェクト
+str		Open project	プロジェクトを開く
+str		Close	閉じる
+str		Home	ホーム
+str		Search projects and actions	プロジェクトと操作を検索
+str		Not available yet	まだ利用できません
+str		Welcome home	ホーム
+str		Welcome to Archforge	Archforge へようこそ
+str		Start with the big picture. Or with one detail. Bring it all together.	全体像からでも、ひとつの詳細からでも。すべてをひとつにまとめましょう。
+str		Build better, together.	一緒に、より良いものを。
+str		Get help, share ideas, and help shape the future of Archforge.	ヘルプを得たり、アイデアを共有したりして、Archforge の未来づくりに参加しましょう。
+str		Community	コミュニティ
+str		What’s new	新機能
+str		Start something	始める
+str		Choose a starting point. You can change direction at any time.	出発点を選んでください。方向はいつでも変えられます。
+str		New project	新規プロジェクト
+str		A clean start for your next idea.	次のアイデアを、まっさらな状態から。
+str		Create project	プロジェクトを作成
+str		Open a project	プロジェクトを開く
+str		Continue from a project on this device.	このデバイス上のプロジェクトから続けます。
+str		Browse files	ファイルを参照
+str		Explore an example	サンプルを探索
+str		Learn by navigating a connected model.	つながったモデルをたどりながら学べます。
+str		Explore example	サンプルを見る
+str		Import a model	モデルをインポート
+str		Bring existing elements into a project.	既存の要素をプロジェクトに取り込みます。
+str		Choose a file	ファイルを選択
+str		Pinned folders	ピン留めしたフォルダー
+str		Keep your project locations close.	プロジェクトの保存場所を、すぐ手の届くところに。
+str		Pin a folder	フォルダーをピン留め
+str		Pick up in the exact view you left.	中断したビューからそのまま再開できます。
+str		Last opened	最後に開いた日時
+str		No recent projects yet	最近使ったプロジェクトはまだありません
+str		Projects you create or open will appear here.	作成したり開いたりしたプロジェクトがここに表示されます。
+str		Your models, your workspace.	あなたのモデル、あなたのワークスペース。
+str		Help & shortcuts	ヘルプとショートカット
+str		Switch to the dark appearance	ダーク表示に切り替え
+str		Switch to the light appearance	ライト表示に切り替え
+str		Last view: {view}	前回のビュー: {view}

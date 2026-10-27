@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0">
+<dict>
+  <!-- The hardened runtime needs no exception for a pure-Rust application. Add an entitlement only
+       with a note that says why it is needed. -->
+</dict>
+</plist>

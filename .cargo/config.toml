@@ -1,0 +1,14 @@
+[alias]
+xtask = "run -p xtask --"
+
+# For separate build directories, set CARGO_TARGET_DIR.
+
+# The fonts build input: a checkout of craft-fonts (github.com/storytold/craft-fonts) next to this
+# one, where the interface's Inter faces come from. Without it the build warns and the toolkit's
+# face stands in.
+[env]
+CRAFT_FONTS_DIR = { value = "../craft-fonts", relative = true }
+
+# Optional, never committed: work on the shared crates from a sibling checkout.
+# [patch."https://github.com/storytold/craft-libs"]
+# craft-atomic = { path = "../craft-libs/crates/atomic" }

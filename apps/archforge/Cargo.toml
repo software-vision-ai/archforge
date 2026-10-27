@@ -1,0 +1,30 @@
+[package]
+name = "archforge"
+description = "Archforge, the desktop application"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+build = "build.rs"
+
+[[bin]]
+name = "archforge"
+path = "src/main.rs"
+
+[dependencies]
+archforge-ui-egui.workspace = true
+eframe.workspace = true
+fontdb.workspace = true
+egui.workspace = true
+craft-atomic.workspace = true
+log.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+muda.workspace = true
+
+[lints]
+workspace = true

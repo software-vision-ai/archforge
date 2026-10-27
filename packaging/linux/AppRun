@@ -1,0 +1,5 @@
+#!/bin/sh
+# AppImage entry point: puts the bundled usr/bin first on PATH and runs the bundled application.
+HERE=$(dirname "$(readlink -f "$0")")
+export PATH="$HERE/usr/bin:$PATH"
+exec "$HERE/usr/bin/archforge" "$@"

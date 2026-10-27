@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Archforge
+Comment=A desktop modelling application
+Exec=archforge
+Icon=ai.software_vision.archforge
+Terminal=false
+Categories=Graphics;
+StartupWMClass=archforge

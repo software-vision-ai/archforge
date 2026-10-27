@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>ai.software_vision.archforge</id>
+  <name>Archforge</name>
+  <summary>A desktop modelling application</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT OR Apache-2.0</project_license>
+  <description>
+    <p>Archforge is a desktop modelling application.</p>
+  </description>
+  <launchable type="desktop-id">ai.software_vision.archforge.desktop</launchable>
+  <provides>
+    <binary>archforge</binary>
+  </provides>
+  <releases>
+    <release version="__VERSION__" date="__DATE__" />
+  </releases>
+  <content_rating type="oars-1.1" />
+</component>

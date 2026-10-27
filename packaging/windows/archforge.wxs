@@ -1,0 +1,50 @@
+<!-- The Windows installer: per-user or per-machine with a wizard. The namespace marker is
+     filled by package.ps1 from WIX_NAMESPACE. Variables: Version, BinDir, IconFile, RootDir. -->
+<Wix xmlns="__WIX_NAMESPACE__/wxs" xmlns:ui="__WIX_NAMESPACE__/wxs/ui">
+  <Package Name="!(loc.ProductName)" Manufacturer="!(loc.Manufacturer)" Version="$(var.Version)"
+           UpgradeCode="FF039653-6730-967C-EE7A-F98C442841DF" Scope="perUserOrMachine" Compressed="yes">
+    <MajorUpgrade DowngradeErrorMessage="!(loc.Downgrade)" />
+    <MediaTemplate EmbedCab="yes" />
+    <Icon Id="archforge.ico" SourceFile="$(var.IconFile)" />
+    <Property Id="ARPPRODUCTICON" Value="archforge.ico" />
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+    <ui:WixUI Id="WixUI_InstallDir" />
+    <WixVariable Id="WixUILicenseRtf" Value="$(var.RootDir)\packaging\windows\license.rtf" />
+
+    <StandardDirectory Id="ProgramFiles6432Folder">
+      <Directory Id="INSTALLFOLDER" Name="!(loc.ProductName)">
+        <Component Id="MainExecutable">
+          <File Id="AppExe" Source="$(var.BinDir)\archforge.exe" KeyPath="yes">
+            <Shortcut Id="StartMenuShortcut" Directory="ProgramMenuFolder" Name="!(loc.ProductName)" Icon="archforge.ico" Advertise="yes" />
+          </File>
+        </Component>
+        <Component Id="Licences">
+          <File Id="LicenseMit" Source="$(var.RootDir)\LICENSE-MIT" KeyPath="yes" />
+          <File Id="LicenseApache" Source="$(var.RootDir)\LICENSE-APACHE" />
+          <File Id="Notice" Source="$(var.RootDir)\NOTICE" />
+          <File Id="Attribution" Source="$(var.RootDir)\ATTRIBUTION.md" />
+        </Component>
+        <Directory Id="LicensesFolder" Name="licenses">
+          <Directory Id="FontLicensesFolder" Name="fonts">
+            <!-- The texts of the fonts the program embeds; package.ps1 checks that every file under
+                 licenses/ is listed here. -->
+            <Component Id="FontLicences">
+              <File Id="FontLicenceHack" Source="$(var.RootDir)\licenses\fonts\Hack.txt" KeyPath="yes" />
+              <File Id="FontLicenceOfl" Source="$(var.RootDir)\licenses\fonts\OFL-1.1.txt" />
+              <File Id="FontLicenceInter" Source="$(var.RootDir)\licenses\fonts\Inter-OFL.txt" />
+              <File Id="FontLicenceUbuntu" Source="$(var.RootDir)\licenses\fonts\Ubuntu-font-1.0.txt" />
+              <File Id="FontLicenceEmojiIcon" Source="$(var.RootDir)\licenses\fonts\emoji-icon-font-MIT.txt" />
+            </Component>
+          </Directory>
+        </Directory>
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder" />
+
+    <Feature Id="Main" Title="!(loc.ProductName)">
+      <ComponentRef Id="MainExecutable" />
+      <ComponentRef Id="Licences" />
+      <ComponentRef Id="FontLicences" />
+    </Feature>
+  </Package>
+</Wix>

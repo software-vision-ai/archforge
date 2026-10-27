@@ -1,0 +1,34 @@
+# deb and rpm. package.sh sets STAGE, VERSION, ARCH and POSTINST.
+name: archforge
+arch: ${ARCH}
+platform: linux
+version: ${VERSION}
+version_schema: semver
+section: graphics
+priority: optional
+maintainer: The Archforge contributors
+description: |
+  Archforge, a desktop modelling application.
+license: MIT OR Apache-2.0
+depends:
+  - libxkbcommon0
+  - libvulkan1 | libegl1
+recommends:
+  - libx11-6
+  - libwayland-client0
+  - xdg-desktop-portal
+overrides:
+  rpm:
+    depends:
+      - libxkbcommon
+      - (vulkan-loader or mesa-libEGL)
+    recommends:
+      - libX11
+      - libwayland-client
+      - xdg-desktop-portal
+contents:
+  - src: ${STAGE}/
+    dst: /usr/
+    type: tree
+scripts:
+  postinstall: ${POSTINST}

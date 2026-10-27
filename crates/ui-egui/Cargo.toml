@@ -1,0 +1,33 @@
+[package]
+name = "archforge-ui-egui"
+description = "The user interface: Home, drawn from the design"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[features]
+# Offscreen rendering of the window to an image, for screenshots.
+snapshot = ["dep:egui_kittest"]
+
+[dependencies]
+egui.workspace = true
+egui_kittest = { workspace = true, optional = true, features = ["wgpu"] }
+serde.workspace = true
+log.workspace = true
+skrifa.workspace = true
+
+[dev-dependencies]
+egui_kittest = { workspace = true, features = ["wgpu"] }
+serde_json.workspace = true
+# Writes the snapshot example's picture.
+png.workspace = true
+
+[[example]]
+name = "snapshot"
+required-features = ["snapshot"]
+
+[lints]
+workspace = true

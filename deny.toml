@@ -1,0 +1,55 @@
+# Licence allowlist and source policy for `cargo deny check`, which `cargo xtask ci` runs.
+
+[graph]
+all-features = true
+
+[licenses]
+allow = [
+    "MIT",
+    "MIT-0",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+    "BSL-1.0",
+    "CC0-1.0",
+]
+confidence-threshold = 0.9
+
+# The fonts egui bundles, which the program carries and draws with: OFL-1.1 and the Ubuntu Font
+# Licence permit that; ATTRIBUTION.md names the faces and licenses/fonts/ holds the texts.
+[[licenses.exceptions]]
+# Pinned like ATTRIBUTION.toml's rows, so an upgrade is reviewed before the exception covers it.
+crate = "epaint_default_fonts@0.36.2"
+allow = ["OFL-1.1", "Ubuntu-font-1.0"]
+
+[advisories]
+# Unmaintained, with no release Archforge can reach until a parent moves, and reached only through
+# crates Archforge depends on: proc-macro-error and ttf-parser have no patched release, and the
+# zbus family's successor, zbus 6, waits on accesskit_unix and atspi. Each comes back when its
+# parent updates.
+# A vulnerability is never ignored here: it is fixed by an upgrade.
+ignore = [
+    { id = "RUSTSEC-2024-0370", reason = "proc-macro-error 1.0.4, a build-time macro helper of glib-macros, through gtk 0.18 for muda's Linux menu bar" },
+    { id = "RUSTSEC-2026-0192", reason = "ttf-parser 0.25.1, through ab_glyph and sctk-adwaita for winit's Linux window decorations" },
+    { id = "RUSTSEC-2026-0370", reason = "zvariant 5.15.1, through atspi and accesskit_unix for egui-winit's Linux accessibility bridge" },
+    { id = "RUSTSEC-2026-0371", reason = "zbus_names 4.3.5, through atspi and accesskit_unix for egui-winit's Linux accessibility bridge" },
+    { id = "RUSTSEC-2026-0372", reason = "zvariant_derive 5.15.1, through zvariant for egui-winit's Linux accessibility bridge" },
+]
+
+[bans]
+multiple-versions = "allow"
+wildcards = "deny"
+# Exempts the non-registry dependencies of private crates (publish = false in each): the
+# workspace's own path dependencies, and the craft-libs git dependencies, which follow its main branch
+# and [sources] limits to that one repository. Registry dependencies stay wildcard-denied.
+allow-wildcard-paths = true
+
+[sources]
+# Only the default registry and craft-libs.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-git = ["https://github.com/storytold/craft-libs"]

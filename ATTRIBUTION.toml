@@ -1,0 +1,105 @@
+# One row per file under assets/:
+#
+# [[asset]]
+# path = "assets/icons/example.svg"
+# author = "who made it"
+# source = "where it came from, with its version"
+# licence = "MIT OR Apache-2.0"
+# sha256 = "the file's hash; `cargo xtask assets` prints it when it does not match"
+#
+# A font the program carries and draws with:
+#
+# [[face]]
+# face = "the face's name"
+# author = "who made it"
+# copyright = "its copyright notice, word for word from the font"
+# crate = "the crate that carries it, when one does"
+# version = "that crate's version, as Cargo.lock holds it; an upgrade fails the check until reviewed"
+# source = "the crate and version, then where in it; or where the face comes from"
+# licence = "OFL-1.1"
+#
+# `cargo xtask assets` checks every row and regenerates ATTRIBUTION.md; never edit that file by hand.
+# Every licence named in a row needs its text in the tree, listed here.
+
+[[asset]]
+path = "assets/app-icon/icon.svg"
+author = "The Archforge contributors"
+source = "original artwork, the app icon, drawn for Archforge"
+licence = "MIT OR Apache-2.0"
+sha256 = "8bc2bf8dbb1d93ad9f56a0c64650aaa7e46f09dac7f0703cf7168c855a939027"
+
+[[asset]]
+path = "assets/app-icon/icon-dark.svg"
+author = "The Archforge contributors"
+source = "original artwork, the app icon, dark appearance, drawn for Archforge"
+licence = "MIT OR Apache-2.0"
+sha256 = "75a6ba1f8a8c63fd7e25b6d60916ddaf0d3539e61794464681216d999178fd2f"
+
+[[asset]]
+path = "assets/app-icon/icon-small.svg"
+author = "The Archforge contributors"
+source = "original artwork, the app icon at 16 to 32 px, drawn for Archforge"
+licence = "MIT OR Apache-2.0"
+sha256 = "780e2ba571a11db97b8dc88591415152e47fba9cef84321d4ba6f03769e60a04"
+
+[[asset]]
+path = "assets/app-icon/icon-small-dark.svg"
+author = "The Archforge contributors"
+source = "original artwork, the app icon at 16 to 32 px, dark appearance, drawn for Archforge"
+licence = "MIT OR Apache-2.0"
+sha256 = "cf789be8baec957ee0e4d1f0d99e4c3ed8a2937e90f6862a22f8bfd7329c250c"
+
+[licences]
+"MIT OR Apache-2.0" = "LICENSE-MIT, LICENSE-APACHE"
+"Ubuntu Font Licence 1.0" = "licenses/fonts/Ubuntu-font-1.0.txt"
+"MIT (Hack), Bitstream Vera Licence" = "licenses/fonts/Hack.txt"
+"OFL-1.1" = "licenses/fonts/OFL-1.1.txt"
+"OFL-1.1 (Inter)" = "licenses/fonts/Inter-OFL.txt"
+"MIT (emoji-icon-font)" = "licenses/fonts/emoji-icon-font-MIT.txt"
+
+# The interface's face, embedded from craft-fonts, the fonts input of the build.
+
+[[face]]
+face = "Inter Regular, Inter SemiBold"
+author = "The Inter Project Authors"
+copyright = "Copyright (c) 2016 The Inter Project Authors (https://github.com/rsms/inter)"
+source = "Inter 4.1 (release v4.1, github.com/rsms/inter), from craft-fonts (github.com/storytold/craft-fonts), the fonts input of the build"
+licence = "OFL-1.1 (Inter)"
+
+# The faces bundled with egui.
+
+[[face]]
+face = "Ubuntu Light"
+author = "Canonical Ltd."
+copyright = "Copyright 2011 Canonical Ltd.  Licensed under the Ubuntu Font Licence 1.0"
+crate = "epaint_default_fonts"
+version = "0.36.2"
+source = "epaint_default_fonts 0.36.2 (egui), fonts/Ubuntu-Light.ttf"
+licence = "Ubuntu Font Licence 1.0"
+
+[[face]]
+face = "Hack Regular"
+author = "Source Foundry Authors, from DejaVu and Bitstream Vera"
+copyright = "Copyright (c) 2018 Source Foundry Authors / Copyright (c) 2003 by Bitstream, Inc. All Rights Reserved."
+crate = "epaint_default_fonts"
+version = "0.36.2"
+source = "epaint_default_fonts 0.36.2 (egui), fonts/Hack-Regular.ttf"
+licence = "MIT (Hack), Bitstream Vera Licence"
+
+[[face]]
+face = "Noto Emoji Regular"
+author = "Google Inc."
+copyright = "Copyright 2013 Google Inc. All Rights Reserved."
+crate = "epaint_default_fonts"
+version = "0.36.2"
+source = "epaint_default_fonts 0.36.2 (egui), fonts/NotoEmoji-Regular.ttf"
+licence = "OFL-1.1"
+
+[[face]]
+face = "emoji-icon-font"
+author = "John Slegers"
+copyright = "Copyright (c) 2014 John Slegers"
+crate = "epaint_default_fonts"
+version = "0.36.2"
+source = "epaint_default_fonts 0.36.2 (egui), fonts/emoji-icon-font.ttf"
+licence = "MIT (emoji-icon-font)"

@@ -1,0 +1,45 @@
+# Catálogo em português europeu. Colunas: kind, context, key, text (ver i18n/mod.rs). As linhas ficam junto das entradas relacionadas.
+# Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit.
+# Menu da aplicação
+str		Quit Archforge	Sair do Archforge
+# Início
+plural		{n} element	{n} elemento|{n} elementos
+str		Recent projects	Projetos recentes
+str		Open project	Abrir projeto
+str		Close	Fechar
+str		Home	Início
+str		Search projects and actions	Pesquisar projetos e ações
+str		Not available yet	Ainda não disponível
+str		Welcome home	Início
+str		Welcome to Archforge	Bem-vindo ao Archforge
+str		Start with the big picture. Or with one detail. Bring it all together.	Comece pela visão geral. Ou por um pormenor. E junte tudo.
+str		Build better, together.	Construir melhor, em conjunto.
+str		Get help, share ideas, and help shape the future of Archforge.	Obtenha ajuda, partilhe ideias e ajude a moldar o futuro do Archforge.
+str		Community	Comunidade
+str		What’s new	Novidades
+str		Start something	Começar algo
+str		Choose a starting point. You can change direction at any time.	Escolha um ponto de partida. Pode mudar de direção a qualquer momento.
+str		New project	Novo projeto
+str		A clean start for your next idea.	Um começo limpo para a sua próxima ideia.
+str		Create project	Criar projeto
+str		Open a project	Abrir um projeto
+str		Continue from a project on this device.	Continue a partir de um projeto neste dispositivo.
+str		Browse files	Procurar ficheiros
+str		Explore an example	Explorar um exemplo
+str		Learn by navigating a connected model.	Aprenda ao navegar por um modelo interligado.
+str		Explore example	Explorar exemplo
+str		Import a model	Importar um modelo
+str		Bring existing elements into a project.	Traga elementos existentes para um projeto.
+str		Choose a file	Escolher um ficheiro
+str		Pinned folders	Pastas afixadas
+str		Keep your project locations close.	Mantenha as localizações dos seus projetos à mão.
+str		Pin a folder	Afixar uma pasta
+str		Pick up in the exact view you left.	Retome exatamente na vista onde ficou.
+str		Last opened	Última abertura
+str		No recent projects yet	Ainda não há projetos recentes
+str		Projects you create or open will appear here.	Os projetos que criar ou abrir aparecerão aqui.
+str		Your models, your workspace.	Os seus modelos, o seu espaço de trabalho.
+str		Help & shortcuts	Ajuda e atalhos
+str		Switch to the dark appearance	Mudar para a aparência escura
+str		Switch to the light appearance	Mudar para a aparência clara
+str		Last view: {view}	Última vista: {view}
