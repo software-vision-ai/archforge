@@ -13,6 +13,9 @@ description: "Use when writing, placing or running tests in Archforge: a regress
   - the task runner: a `tests` module in the `xtask/src` file it checks
   - the project database's server: unit tests beside the code in `crates/dolt/src`, and
     `crates/dolt/tests/server.rs` against a real dolt
+  - projects on disk: `crates/project/tests/project.rs` against a real dolt; the app's projects
+    host: the `tests` module in `apps/archforge/src/projects.rs`
+  - name rules: the case table in `crates/names/src/lib.rs`
 - A screen test builds the real `Shell` in an `egui_kittest` harness, draws it in both appearances
   and finds controls by automation id (`harness` and `click` in `crates/ui-egui/src/tests.rs`).
   Every harness pins the language with `set_language`; `every_harness_pins_the_language` fails a
@@ -35,7 +38,7 @@ description: "Use when writing, placing or running tests in Archforge: a regress
   newest main), format, lint, test, assets, skills, layers, portable, brands and deny. It stops at the
   first failure and prints a table of steps.
 - The test step needs dolt 2.6 or later on the PATH or in `ARCHFORGE_DOLT`; without it the
-  server tests fail and say how to install it. A test that starts a server stops it on every path,
+  server and project tests fail and say so. A test that starts a server stops it on every path,
   so a failed run leaves no server behind.
 - The portable step needs the `wasm32-unknown-unknown` target (`rustup target add wasm32-unknown-unknown`)
   and a cargo from rustup on `PATH`; the deny step needs cargo-deny at the version `xtask/src/main.rs`

@@ -16,6 +16,7 @@ mod macos_menu;
 #[cfg(target_os = "macos")]
 mod macos_window;
 mod prefs;
+mod projects;
 mod services;
 #[cfg(test)]
 mod winres;
@@ -51,6 +52,8 @@ struct DesktopApp {
     shell: Shell,
     marker: PathBuf,
     settings: PathBuf,
+    /// The projects the shell creates: their servers stop on exit.
+    projects: std::sync::Arc<projects::Projects>,
     #[cfg(target_os = "macos")]
     menu: Option<macos_menu::NativeMenu>,
 }
@@ -75,6 +78,7 @@ impl eframe::App for DesktopApp {
         if let Err(e) = prefs::save(&self.settings, &prefs::capture(&self.shell)) {
             log::error!("the preferences could not be saved: {e}");
         }
+        self.projects.shutdown();
     }
 }
 
@@ -136,7 +140,8 @@ fn run() -> i32 {
             options,
             Box::new(move |_cc| {
                 let stored = cell.borrow_mut().take().ok_or("the application was already started")?;
-                let mut shell = Shell::new(services::native());
+                let projects = std::sync::Arc::new(projects::Projects::new(&settings, build_info::version_line()));
+                let mut shell = Shell::new(services::native(projects.clone()));
                 prefs::apply(&stored, &mut shell);
                 #[cfg(target_os = "macos")]
                 let menu = native_menu(&mut shell);
@@ -144,6 +149,7 @@ fn run() -> i32 {
                     shell,
                     marker,
                     settings,
+                    projects,
                     #[cfg(target_os = "macos")]
                     menu,
                 }))

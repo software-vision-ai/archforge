@@ -31,6 +31,42 @@ pub struct Services {
     pub user_name: Option<String>,
     /// Where new projects go unless the user picks another folder; none leaves the choice open.
     pub projects_folder: Option<Folder>,
+    /// Creates projects; none keeps Create project unavailable.
+    pub projects: Option<std::sync::Arc<dyn ProjectHost>>,
+}
+
+/// The host's part in making projects. The shell never touches a project's files or its database:
+/// it asks, and draws the answer.
+pub trait ProjectHost: Send + Sync {
+    /// Starts creating the project `name` in `folder` and returns at once; the host works on its
+    /// own thread and sends one answer. The project created is open afterwards.
+    fn create(&self, folder: &std::path::Path, name: &str) -> std::sync::mpsc::Receiver<Result<Opened, CreateError>>;
+}
+
+/// An open project as the shell shows it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Opened {
+    pub name: String,
+    pub path: std::path::PathBuf,
+}
+
+/// Why a project could not be created, in the kinds the dialog explains; a detail is the host's
+/// own technical text, shown small and untranslated under the translated sentence.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CreateError {
+    BadName,
+    NameTaken,
+    /// A creation that did not finish left a folder of that name.
+    Unfinished,
+    FolderUnusable {
+        detail: String,
+    },
+    DoltMissing {
+        detail: String,
+    },
+    Failed {
+        detail: String,
+    },
 }
 
 /// A folder as the shell shows it: where it is, and how the interface names it.
@@ -61,6 +97,8 @@ pub struct Shell {
     pub home: home::Data,
     /// The New project dialog, while it is open over Home.
     pub new_project: Option<new_project::Dialog>,
+    /// The open project, once one is created.
+    pub project: Option<Opened>,
     /// Set by `request_quit`; the next frame closes the window.
     quit_requested: bool,
 }
@@ -80,6 +118,7 @@ impl Shell {
             top_inset: 0.0,
             home: home::Data::default(),
             new_project: None,
+            project: None,
             quit_requested: false,
         }
     }
@@ -120,9 +159,12 @@ impl Shell {
         }
     }
 
-    /// The window title: the application's name.
+    /// The window title: the open project's name and the application's, or the application's alone.
     pub fn title(&self) -> String {
-        "Archforge".to_string()
+        match &self.project {
+            Some(p) => crate::i18n::fmt(&crate::i18n::tr("{name} — Archforge"), &[("name", &p.name)]),
+            None => "Archforge".to_string(),
+        }
     }
 
     /// Draws the window: Home, the start screen, and the New project dialog over it when open.

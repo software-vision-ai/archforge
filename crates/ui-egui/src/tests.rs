@@ -179,6 +179,115 @@ fn in_the_smallest_window_the_dialog_keeps_its_buttons_and_field_inside_it() {
     }
 }
 
+/// A host that keeps each creation's sender, so a test answers when it chooses.
+#[derive(Default)]
+struct FakeHost {
+    pending: std::sync::Mutex<Vec<std::sync::mpsc::Sender<Result<crate::Opened, crate::CreateError>>>>,
+    asked: std::sync::Mutex<Vec<(std::path::PathBuf, String)>>,
+}
+
+impl crate::ProjectHost for FakeHost {
+    fn create(&self, folder: &std::path::Path, name: &str) -> std::sync::mpsc::Receiver<Result<crate::Opened, crate::CreateError>> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.pending.lock().unwrap().push(tx);
+        self.asked.lock().unwrap().push((folder.to_path_buf(), name.to_string()));
+        rx
+    }
+}
+
+/// The real shell with a fake host and the usual folder, the dialog open and a name typed.
+fn creating_harness() -> (Harness<'static, Shell>, std::sync::Arc<FakeHost>) {
+    crate::i18n::set_language("en");
+    let host = std::sync::Arc::new(FakeHost::default());
+    let folder = crate::Folder { path: "/Users/robin/Documents/Archforge".into(), label: "Documents / Archforge".into() };
+    let services = Services { projects: Some(host.clone()), projects_folder: Some(folder), ..Services::default() };
+    let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1000.0)).build_ui_state(
+        |ui, shell: &mut Shell| {
+            shell.logic(ui.ctx());
+            shell.ui(ui);
+        },
+        Shell::new(services),
+    );
+    h.run();
+    open_new_project(&mut h);
+    h.event(egui::Event::Text("Commerce platform".into()));
+    h.run();
+    (h, host)
+}
+
+/// A click while the dialog waits: it repaints until the answer comes, so a few frames are run
+/// rather than waiting for the window to settle.
+fn press(h: &mut Harness<'static, Shell>, at: egui::Pos2) {
+    h.event(egui::Event::PointerMoved(at));
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE });
+    }
+    h.run_steps(4);
+}
+
+fn answer(h: &mut Harness<'static, Shell>, host: &FakeHost, result: Result<crate::Opened, crate::CreateError>) {
+    let tx = host.pending.lock().unwrap().pop().expect("a creation was asked for");
+    tx.send(result).unwrap();
+    h.run_steps(4);
+}
+
+#[test]
+fn create_project_asks_the_host_and_opens_the_project_it_made() {
+    let (mut h, host) = creating_harness();
+    let at = centre_of(&h, "new-project.create");
+    press(&mut h, at);
+    assert_eq!(host.asked.lock().unwrap().as_slice(), [("/Users/robin/Documents/Archforge".into(), "Commerce platform".to_string())]);
+    assert!(h.state().new_project.as_ref().is_some_and(|d| d.creating()), "the dialog waits");
+    // While it waits, nothing closes the dialog and a second click asks nothing.
+    for way in ["new-project.cancel", "new-project.close", "new-project.create"] {
+        let at = centre_of(&h, way);
+        press(&mut h, at);
+    }
+    h.key_press(egui::Key::Escape);
+    h.run_steps(4);
+    assert!(h.state().new_project.is_some());
+    assert_eq!(host.asked.lock().unwrap().len(), 1);
+    let path = std::path::PathBuf::from("/Users/robin/Documents/Archforge/Commerce platform.archforge");
+    answer(&mut h, &host, Ok(crate::Opened { name: "Commerce platform".into(), path: path.clone() }));
+    assert!(h.state().new_project.is_none(), "success closes the dialog");
+    assert_eq!(h.state().project.as_ref().map(|p| p.path.clone()), Some(path));
+    assert_eq!(h.state().title(), "Commerce platform — Archforge");
+    assert_eq!(h.state().home.recent.first().map(|r| r.name.as_str()), Some("Commerce platform"));
+}
+
+#[test]
+fn enter_in_the_name_field_creates_too() {
+    let (mut h, host) = creating_harness();
+    h.key_press(egui::Key::Enter);
+    h.run_steps(4);
+    assert_eq!(host.asked.lock().unwrap().len(), 1);
+}
+
+#[test]
+fn a_failed_creation_keeps_the_dialog_and_the_name_and_says_why() {
+    let (mut h, host) = creating_harness();
+    for failure in [
+        crate::CreateError::NameTaken,
+        crate::CreateError::Unfinished,
+        crate::CreateError::DoltMissing { detail: "no dolt on the PATH".into() },
+        crate::CreateError::Failed { detail: "the server did not start".into() },
+    ] {
+        let at = centre_of(&h, "new-project.create");
+        press(&mut h, at);
+        answer(&mut h, &host, Err(failure.clone()));
+        let dialog = h.state().new_project.as_ref().expect("the dialog stays");
+        assert!(!dialog.creating(), "{failure:?}: it no longer waits");
+        assert_eq!(dialog.name, "Commerce platform");
+        assert!(h.state().project.is_none());
+    }
+    // A host thread that ended without answering is a failure too, not a wait for ever.
+    let at = centre_of(&h, "new-project.create");
+    press(&mut h, at);
+    host.pending.lock().unwrap().clear();
+    h.run_steps(4);
+    assert!(h.state().new_project.as_ref().is_some_and(|d| !d.creating()));
+}
+
 #[test]
 fn every_ui_state_field_is_read() {
     // Every UI state field is read somewhere outside its own definition.

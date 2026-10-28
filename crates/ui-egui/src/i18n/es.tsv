@@ -2,6 +2,7 @@
 # Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit.
 # Menú de la aplicación
 str		Quit Archforge	Salir de Archforge
+str		{name} — Archforge	{name} — Archforge
 # Inicio
 plural		{n} element	{n} elemento|{n} elementos
 str		Recent projects	Proyectos recientes
@@ -29,7 +30,7 @@ str		Name your project	Ponga nombre a su proyecto
 str		You can rename it later.	Puede cambiarle el nombre más tarde.
 str		A project name cannot contain control characters.	Un nombre de proyecto no puede contener caracteres de control.
 str		A project name cannot contain {char}.	Un nombre de proyecto no puede contener {char}.
-str		A project name can be at most {n} characters.	Un nombre de proyecto puede tener como máximo {n} caracteres.
+str		This name is too long for a file name.	Este nombre es demasiado largo para un nombre de archivo.
 str		A project name cannot start or end with a space.	Un nombre de proyecto no puede empezar ni terminar con un espacio.
 str		A project name cannot start with a dot.	Un nombre de proyecto no puede empezar con un punto.
 str		A project name cannot end with a dot.	Un nombre de proyecto no puede terminar con un punto.
@@ -49,6 +50,14 @@ str		Chats and prompts, linked to what they touched.	Chats y prompts, vinculados
 str		History	Historial
 str		Every change kept, to compare or restore.	Cada cambio se conserva, para comparar o restaurar.
 str		Cancel	Cancelar
+str		Creating…	Creando…
+str		A project called {name} is already in this folder.	Ya hay un proyecto llamado {name} en esta carpeta.
+str		An unfinished project called {name} is in this folder; delete it or choose another name.	Hay un proyecto inacabado llamado {name} en esta carpeta; elimínelo o elija otro nombre.
+str		This name cannot be used.	Este nombre no se puede usar.
+str		The folder cannot hold projects.	La carpeta no puede contener proyectos.
+str		Archforge cannot find Dolt, which keeps its projects.	Archforge no encuentra Dolt, que guarda sus proyectos.
+str		The project could not be created.	No se pudo crear el proyecto.
+str		The work stopped without an answer.	El trabajo se detuvo sin respuesta.
 # Inicio, continuación
 str		Open a project	Abrir un proyecto
 str		Continue from a project on this device.	Continúe con un proyecto de este dispositivo.
@@ -63,6 +72,8 @@ str		Pinned folders	Carpetas fijadas
 str		Keep your project locations close.	Tenga a mano las ubicaciones de sus proyectos.
 str		Pin a folder	Fijar una carpeta
 str		Pick up in the exact view you left.	Continúe exactamente en la vista en la que lo dejó.
+str		Nothing yet	Nada todavía
+str		Just now	Ahora mismo
 str		Last opened	Última apertura
 str		No recent projects yet	Aún no hay proyectos recientes
 str		Projects you create or open will appear here.	Los proyectos que cree o abra aparecerán aquí.

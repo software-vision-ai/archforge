@@ -1,16 +1,17 @@
-//! The host services the shell may call: the installed fonts, the account's name and the folder
-//! new projects go in.
+//! The host services the shell may call: the installed fonts, the account's name, the folder new
+//! projects go in, and the projects themselves.
 
 use std::path::PathBuf;
 
 use archforge_ui_egui::{Folder, Services};
 
-pub fn native() -> Services {
+pub fn native(projects: std::sync::Arc<crate::projects::Projects>) -> Services {
     Services {
         // The installed fonts, scanned and read on the shell's font worker.
         fonts: Some(std::sync::Arc::new(crate::fonts::SystemFonts::installed())),
         user_name: user_name(),
         projects_folder: projects_folder(),
+        projects: Some(projects),
     }
 }
 

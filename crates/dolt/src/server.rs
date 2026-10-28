@@ -59,24 +59,13 @@ pub struct Server {
 impl Server {
     /// Starts the server for `data_dir`, first recovering what an earlier start left behind.
     pub fn start(dolt: &Dolt, data_dir: &Path, opts: &ServerOptions) -> Result<Server, Error> {
-        paths::text("project folder", data_dir)?;
-        if !data_dir.is_dir() {
-            return Err(Error::NotAFolder { path: data_dir.to_path_buf() });
-        }
-        let data_dir = data_dir.canonicalize().map_err(|e| Error::io("cannot read", data_dir, e))?;
-        let data_text = paths::text("project folder", &data_dir)?.to_string();
-        private_records(&opts.records)?;
-        let (run_root, uid) = run_dir::checked_root(&opts.run_root.clone().unwrap_or_else(|| run_dir::default_root(&opts.records)))?;
+        let Prepared { data_dir, data_text, run_root, uid } = prepare(data_dir, opts)?;
         let me = std::process::id();
         let owner = identity(me)?.ok_or_else(|| Error::HelperFailed {
             helper: "the identity helper".into(),
             status: "no answer".into(),
             output: format!("process {me} not found"),
         })?;
-
-        sweep(&opts.records, &data_text, uid);
-        recover(&data_dir, &data_text, opts, uid)?;
-
         let run_dir = run_dir::create(&run_root, uid)?;
         let launched = launch(dolt, &data_dir, &data_text, &run_root, &run_dir, uid, &owner.started, opts);
         if launched.is_err() {
@@ -139,6 +128,36 @@ impl Drop for Server {
             log::warn!("the project's database server did not stop cleanly: {e}");
         }
     }
+}
+
+/// A start's checked inputs, after recovery.
+struct Prepared {
+    data_dir: PathBuf,
+    data_text: String,
+    run_root: PathBuf,
+    uid: Option<u32>,
+}
+
+/// Checks the folder, the records and the run root, then sweeps and recovers.
+fn prepare(data_dir: &Path, opts: &ServerOptions) -> Result<Prepared, Error> {
+    paths::text("project folder", data_dir)?;
+    if !data_dir.is_dir() {
+        return Err(Error::NotAFolder { path: data_dir.to_path_buf() });
+    }
+    let data_dir = data_dir.canonicalize().map_err(|e| Error::io("cannot read", data_dir, e))?;
+    let data_text = paths::text("project folder", &data_dir)?.to_string();
+    private_records(&opts.records)?;
+    let (run_root, uid) = run_dir::checked_root(&opts.run_root.clone().unwrap_or_else(|| run_dir::default_root(&opts.records)))?;
+    sweep(&opts.records, &data_text, uid);
+    recover(&data_dir, &data_text, opts, uid)?;
+    Ok(Prepared { data_dir, data_text, run_root, uid })
+}
+
+/// Recovers `data_dir` without starting a server: a server a crashed Archforge left on a folder
+/// that will not be opened (an unfinished project, say) is stopped all the same. Fails as
+/// [`Server::start`] would, without starting.
+pub fn recover_only(data_dir: &Path, opts: &ServerOptions) -> Result<(), Error> {
+    prepare(data_dir, opts).map(|_| ())
 }
 
 /// The records folder drives what recovery stops: like the dolt home, a folder only this user can
