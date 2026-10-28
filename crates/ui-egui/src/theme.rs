@@ -33,6 +33,7 @@ pub fn apply(ctx: &egui::Context, kind: ThemeKind) {
     v.selection.bg_fill = p.accent_tint;
     v.selection.stroke = Stroke::new(1.0, p.accent);
     v.hyperlink_color = p.accent;
+    v.text_cursor.stroke = Stroke::new(1.5, p.accent);
     v.widgets.noninteractive.bg_stroke = Stroke::new(1.0, p.border);
     v.widgets.noninteractive.fg_stroke = Stroke::new(1.0, p.text_secondary);
     ctx.set_theme(theme);

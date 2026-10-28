@@ -22,6 +22,34 @@ str		Choose a starting point. You can change direction at any time.	Escolha um p
 str		New project	Novo projeto
 str		A clean start for your next idea.	Um começo limpo para a sua próxima ideia.
 str		Create project	Criar projeto
+# Diálogo Novo projeto
+str		Your models, every view of them, and the issues and conversations about them.	Os seus modelos, cada vista deles e as tarefas e conversas sobre eles.
+str		Project name	Nome do projeto
+str		Name your project	Dê um nome ao projeto
+str		You can rename it later.	Pode mudar o nome mais tarde.
+str		A project name cannot contain control characters.	Um nome de projeto não pode conter caracteres de controlo.
+str		A project name cannot contain {char}.	Um nome de projeto não pode conter {char}.
+str		A project name can be at most {n} characters.	Um nome de projeto pode ter no máximo {n} caracteres.
+str		A project name cannot start or end with a space.	Um nome de projeto não pode começar nem terminar com um espaço.
+str		A project name cannot start with a dot.	Um nome de projeto não pode começar com um ponto.
+str		A project name cannot end with a dot.	Um nome de projeto não pode terminar com um ponto.
+str		Windows keeps this name for itself; choose another.	O Windows reserva este nome; escolha outro.
+str		Location	Localização
+str		No folder chosen yet	Ainda não foi escolhida nenhuma pasta
+str		Change…	Alterar…
+str		Creates {file} here: one versioned project file that keeps every change.	Cria {file} aqui: um ficheiro de projeto com versões que guarda cada alteração.
+str		The project file is made here: one versioned file that keeps every change.	O ficheiro do projeto é criado aqui: um ficheiro com versões que guarda cada alteração.
+str		Diagrams	Diagramas
+str		Add diagrams of any kind as you go: UML 2, C4 and many more. Every diagram shows the same model.	Adicione diagramas de qualquer tipo à medida que trabalha: UML 2, C4 e muitos mais. Cada diagrama mostra o mesmo modelo.
+str		In every project	Em cada projeto
+str		Issues	Tarefas
+str		Work tracked on the elements it concerns.	Trabalho acompanhado nos elementos a que diz respeito.
+str		Conversations	Conversas
+str		Chats and prompts, linked to what they touched.	Chats e prompts, ligados ao que tocaram.
+str		History	Histórico
+str		Every change kept, to compare or restore.	Cada alteração guardada, para comparar ou restaurar.
+str		Cancel	Cancelar
+# Início, continuação
 str		Open a project	Abrir um projeto
 str		Continue from a project on this device.	Continue a partir de um projeto neste dispositivo.
 str		Browse files	Procurar ficheiros

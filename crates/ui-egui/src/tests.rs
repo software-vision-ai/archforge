@@ -92,6 +92,93 @@ fn the_theme_switch_flips_the_appearance_and_the_banner_stays_closed() {
     assert!(!ids(&h).iter().any(|i| i == "home.banner.close"), "a closed banner is not drawn");
 }
 
+/// The centre of a registered control.
+fn centre_of(h: &Harness<'static, Shell>, id: &str) -> egui::Pos2 {
+    let w = h.state().widgets().iter().find(|w| w.id == id).unwrap_or_else(|| panic!("{id} is not drawn"));
+    egui::pos2((w.rect[0] + w.rect[2]) / 2.0, (w.rect[1] + w.rect[3]) / 2.0)
+}
+
+fn open_new_project(h: &mut Harness<'static, Shell>) {
+    let at = centre_of(h, "home.start.new-project");
+    click(h, at);
+    h.run();
+    assert!(h.state().new_project.is_some(), "the New project card opens the dialog");
+}
+
+#[test]
+fn the_new_project_dialog_opens_from_home_in_both_appearances_with_its_controls() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = harness(theme);
+        open_new_project(&mut h);
+        let ids = ids(&h);
+        for id in ["new-project.name", "new-project.location.change", "new-project.close", "new-project.cancel", "new-project.create"] {
+            assert!(ids.iter().any(|i| i == id), "{theme:?}: {id} in {ids:?}");
+        }
+    }
+}
+
+#[test]
+fn the_name_field_has_the_keyboard_and_takes_a_name() {
+    let mut h = harness(ThemeKind::Light);
+    open_new_project(&mut h);
+    h.event(egui::Event::Text("Commerce platform".into()));
+    h.run();
+    assert_eq!(h.state().new_project.as_ref().map(|d| d.name.as_str()), Some("Commerce platform"));
+}
+
+#[test]
+fn cancel_the_close_button_and_escape_close_the_dialog() {
+    let mut h = harness(ThemeKind::Light);
+    for way in ["new-project.cancel", "new-project.close", "escape"] {
+        open_new_project(&mut h);
+        if way == "escape" {
+            h.key_press(egui::Key::Escape);
+        } else {
+            let at = centre_of(&h, way);
+            click(&mut h, at);
+        }
+        h.run();
+        assert!(h.state().new_project.is_none(), "{way} closes the dialog");
+    }
+}
+
+#[test]
+fn create_project_waits_for_creating_projects_and_home_takes_no_click_behind_the_dialog() {
+    let mut h = harness(ThemeKind::Light);
+    open_new_project(&mut h);
+    h.event(egui::Event::Text("Commerce platform".into()));
+    h.run();
+    let at = centre_of(&h, "new-project.create");
+    click(&mut h, at);
+    assert!(h.state().new_project.is_some(), "Create project is not available yet and leaves the dialog open");
+    let at = centre_of(&h, "home.theme");
+    click(&mut h, at);
+    assert_eq!(h.state().state.theme, ThemeKind::Light, "the theme switch behind the veil took the click");
+}
+
+#[test]
+fn in_the_smallest_window_the_dialog_keeps_its_buttons_and_field_inside_it() {
+    crate::i18n::set_language("en");
+    let shell = Shell::new(Services::default());
+    let mut h = Harness::builder().with_size(egui::vec2(640.0, 400.0)).build_ui_state(
+        |ui, shell: &mut Shell| {
+            shell.logic(ui.ctx());
+            shell.ui(ui);
+        },
+        shell,
+    );
+    h.run();
+    crate::new_project::open(h.state_mut());
+    h.run();
+    h.run();
+    let window = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(640.0, 400.0));
+    for id in ["new-project.name", "new-project.cancel", "new-project.create", "new-project.close"] {
+        let w = h.state().widgets().iter().find(|w| w.id == id).unwrap_or_else(|| panic!("{id} is not drawn"));
+        let r = egui::Rect::from_min_max(egui::pos2(w.rect[0], w.rect[1]), egui::pos2(w.rect[2], w.rect[3]));
+        assert!(window.contains_rect(r), "{id} at {r:?} leaves the window");
+    }
+}
+
 #[test]
 fn every_ui_state_field_is_read() {
     // Every UI state field is read somewhere outside its own definition.

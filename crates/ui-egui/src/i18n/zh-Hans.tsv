@@ -22,6 +22,34 @@ str		Choose a starting point. You can change direction at any time.	选择一个
 str		New project	新建项目
 str		A clean start for your next idea.	从零开始，实现你的下一个想法。
 str		Create project	创建项目
+# 新建项目对话框
+str		Your models, every view of them, and the issues and conversations about them.	你的模型、模型的每个视图，以及与之相关的问题和对话。
+str		Project name	项目名称
+str		Name your project	为项目命名
+str		You can rename it later.	以后可以重命名。
+str		A project name cannot contain control characters.	项目名称不能包含控制字符。
+str		A project name cannot contain {char}.	项目名称不能包含 {char}。
+str		A project name can be at most {n} characters.	项目名称最多 {n} 个字符。
+str		A project name cannot start or end with a space.	项目名称不能以空格开头或结尾。
+str		A project name cannot start with a dot.	项目名称不能以点开头。
+str		A project name cannot end with a dot.	项目名称不能以点结尾。
+str		Windows keeps this name for itself; choose another.	Windows 保留了这个名称，请另选一个。
+str		Location	位置
+str		No folder chosen yet	尚未选择文件夹
+str		Change…	更改…
+str		Creates {file} here: one versioned project file that keeps every change.	在此创建 {file}：一个保留每次更改的版本化项目文件。
+str		The project file is made here: one versioned file that keeps every change.	项目文件在此创建：一个保留每次更改的版本化文件。
+str		Diagrams	图表
+str		Add diagrams of any kind as you go: UML 2, C4 and many more. Every diagram shows the same model.	随时添加任意类型的图表：UML 2、C4 等等。每个图表都显示同一个模型。
+str		In every project	每个项目都包含
+str		Issues	问题
+str		Work tracked on the elements it concerns.	在相关元素上跟踪的工作。
+str		Conversations	对话
+str		Chats and prompts, linked to what they touched.	聊天和请求，与它们涉及的元素关联。
+str		History	历史
+str		Every change kept, to compare or restore.	保留每次更改，可比较或恢复。
+str		Cancel	取消
+# 主页（续）
 str		Open a project	打开项目
 str		Continue from a project on this device.	继续处理此设备上的项目。
 str		Browse files	浏览文件

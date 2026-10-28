@@ -21,6 +21,34 @@ str		Choose a starting point. You can change direction at any time.	Choose a sta
 str		New project	New project
 str		A clean start for your next idea.	A clean start for your next idea.
 str		Create project	Create project
+# New project dialog
+str		Your models, every view of them, and the issues and conversations about them.	Your models, every view of them, and the issues and conversations about them.
+str		Project name	Project name
+str		Name your project	Name your project
+str		You can rename it later.	You can rename it later.
+str		A project name cannot contain control characters.	A project name cannot contain control characters.
+str		A project name cannot contain {char}.	A project name cannot contain {char}.
+str		A project name can be at most {n} characters.	A project name can be at most {n} characters.
+str		A project name cannot start or end with a space.	A project name cannot start or end with a space.
+str		A project name cannot start with a dot.	A project name cannot start with a dot.
+str		A project name cannot end with a dot.	A project name cannot end with a dot.
+str		Windows keeps this name for itself; choose another.	Windows keeps this name for itself; choose another.
+str		Location	Location
+str		No folder chosen yet	No folder chosen yet
+str		Change…	Change…
+str		Creates {file} here: one versioned project file that keeps every change.	Creates {file} here: one versioned project file that keeps every change.
+str		The project file is made here: one versioned file that keeps every change.	The project file is made here: one versioned file that keeps every change.
+str		Diagrams	Diagrams
+str		Add diagrams of any kind as you go: UML 2, C4 and many more. Every diagram shows the same model.	Add diagrams of any kind as you go: UML 2, C4 and many more. Every diagram shows the same model.
+str		In every project	In every project
+str		Issues	Issues
+str		Work tracked on the elements it concerns.	Work tracked on the elements it concerns.
+str		Conversations	Conversations
+str		Chats and prompts, linked to what they touched.	Chats and prompts, linked to what they touched.
+str		History	History
+str		Every change kept, to compare or restore.	Every change kept, to compare or restore.
+str		Cancel	Cancel
+# Home, continued
 str		Open a project	Open a project
 str		Continue from a project on this device.	Continue from a project on this device.
 str		Browse files	Browse files
