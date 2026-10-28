@@ -168,10 +168,8 @@ fn title_strip(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
         }
     }
     let left = r.left() + if shell.top_inset > 0.0 { STRIP_LEFT_MAC } else { STRIP_LEFT };
-    // Home, the active place: tinted, outlined.
+    // Home, the active place: its icon in the accent colour, straight on the strip.
     let home = Rect::from_min_size(pos2(left, r.top() + 2.0), Vec2::splat(24.0));
-    paint.rect_filled(home, 6.0, p.accent_tint);
-    paint.rect_stroke(home, 6.0, Stroke::new(1.0, p.border_hover), StrokeKind::Inside);
     ux::icon(paint, home.min + vec2(4.0, 4.0), &icons::HOME, 16.0, p.accent);
     control(shell, ui, "home.tab.home", "tab", home, true).on_hover_text(tr("Home"));
     // Open project, a ghost button beside it.

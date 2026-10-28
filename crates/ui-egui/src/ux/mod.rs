@@ -18,14 +18,14 @@ pub struct Palette {
     pub title_strip: Color32,
     /// Dividers and the borders of cards, buttons and fields.
     pub border: Color32,
-    /// A card's border under the pointer; the active Home button's outline.
+    /// A card's border under the pointer.
     pub border_hover: Color32,
     pub text: Color32,
     pub text_secondary: Color32,
     pub text_muted: Color32,
     /// The brand blue for text and icons.
     pub accent: Color32,
-    /// The brand blue's tint: the active tab, the avatar, icon tiles.
+    /// The brand blue's tint: the avatar and icon tiles.
     pub accent_tint: Color32,
     /// The primary button's and the brand mark's fill.
     pub accent_fill: Color32,
