@@ -14,6 +14,7 @@ repository = "https://github.com/software-vision-ai/archforge"
 archforge-ui-egui = { path = "crates/ui-egui" }
 archforge-dolt = { path = "crates/dolt" }
 archforge-names = { path = "crates/names" }
+archforge-engine = { path = "crates/engine" }
 archforge-project = { path = "crates/project" }
 
 # External crates.

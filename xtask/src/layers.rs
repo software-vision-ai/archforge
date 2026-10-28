@@ -28,6 +28,8 @@ pub enum Class {
 pub const TABLE: &[(&str, Class)] = &[
     // The rules for names that become file names: pure, shared by the shell and the host.
     ("names", Class::Standalone),
+    // The command engine: knows no notation, builds for the portable target.
+    ("engine", Class::Layer(3)),
     ("ui-egui", Class::Layer(6)),
     // Host services, for the desktop only: the application uses them and the shell never depends on
     // them, so the portable-target check, which builds the layers below the shell, leaves them out.
@@ -82,6 +84,10 @@ pub fn violations(packages: &[Package]) -> Vec<String> {
         }
         let here = layer(class).unwrap_or(0);
         for (dep, kind) in &p.deps {
+            // A crate's dev edge to itself only switches on a feature for its own tests.
+            if *dep == p.short && kind == "dev" {
+                continue;
+            }
             if let Some(dep_class) = workspace.get(dep.as_str()) {
                 let Some(dep_class) = dep_class else { continue };
                 if class == Class::Standalone {
@@ -184,7 +190,7 @@ mod tests {
     fn a_clean_tree_has_no_violation() {
         let packages = vec![
             pkg("geom", Some(Class::Layer(0)), &[]),
-            pkg("model", Some(Class::Layer(1)), &[("geom", "normal"), ("color", "dev")]),
+            pkg("model", Some(Class::Layer(1)), &[("geom", "normal"), ("color", "dev"), ("model", "dev")]),
             pkg("color", Some(Class::Layer(0)), &[]),
             pkg("ui-egui", Some(Class::Layer(6)), &[("model", "normal"), ("egui", "normal")]),
         ];
