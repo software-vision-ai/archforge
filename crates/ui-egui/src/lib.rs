@@ -2,13 +2,14 @@
 //!
 //! `Shell` owns the host's injected `Services`, the serialisable `UiState` and what Home lists.
 //! Each frame `logic` takes in the installed fonts and applies the appearance; `ui` draws Home,
-//! the start screen. The shell never touches the file system or the operating system: the host
+//! the start screen, and the New project dialog over it while it is open. The shell never touches the file system or the operating system: the host
 //! supplies `Services`.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
 pub mod fonts;
 pub mod home;
 pub mod i18n;
+pub mod new_project;
 #[cfg(feature = "snapshot")]
 pub mod offscreen;
 pub mod state;
@@ -28,6 +29,16 @@ pub struct Services {
     pub fonts: Option<std::sync::Arc<dyn FontSource>>,
     /// The full name of the account the app runs under, for Home's avatar; none hides it.
     pub user_name: Option<String>,
+    /// Where new projects go unless the user picks another folder; none leaves the choice open.
+    pub projects_folder: Option<Folder>,
+}
+
+/// A folder as the shell shows it: where it is, and how the interface names it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Folder {
+    pub path: std::path::PathBuf,
+    /// Its name for people, such as `Documents / Archforge`.
+    pub label: String,
 }
 
 pub struct Shell {
@@ -48,6 +59,8 @@ pub struct Shell {
     pub top_inset: f32,
     /// What Home lists: the pinned folders and the recent projects.
     pub home: home::Data,
+    /// The New project dialog, while it is open over Home.
+    pub new_project: Option<new_project::Dialog>,
     /// Set by `request_quit`; the next frame closes the window.
     quit_requested: bool,
 }
@@ -66,6 +79,7 @@ impl Shell {
             last_title: String::new(),
             top_inset: 0.0,
             home: home::Data::default(),
+            new_project: None,
             quit_requested: false,
         }
     }
@@ -111,7 +125,7 @@ impl Shell {
         "Archforge".to_string()
     }
 
-    /// Draws the window: Home, the start screen.
+    /// Draws the window: Home, the start screen, and the New project dialog over it when open.
     pub fn ui(&mut self, ui: &mut egui::Ui) {
         self.registry.begin_frame();
         // The OS window title follows the in-app title; on a host with a native title bar it is
@@ -122,6 +136,7 @@ impl Shell {
             self.last_title = title;
         }
         home::show(self, ui);
+        new_project::show(self, ui);
     }
 }
 

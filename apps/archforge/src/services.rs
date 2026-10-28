@@ -1,13 +1,25 @@
-//! The host services the shell may call: the installed fonts and the account's name.
+//! The host services the shell may call: the installed fonts, the account's name and the folder
+//! new projects go in.
 
-use archforge_ui_egui::Services;
+use std::path::PathBuf;
+
+use archforge_ui_egui::{Folder, Services};
 
 pub fn native() -> Services {
     Services {
         // The installed fonts, scanned and read on the shell's font worker.
         fonts: Some(std::sync::Arc::new(crate::fonts::SystemFonts::installed())),
         user_name: user_name(),
+        projects_folder: projects_folder(),
     }
+}
+
+/// `Documents/Archforge` in the user's home folder, where the platform has a Documents folder;
+/// it is created only when the first project goes there.
+pub fn projects_folder() -> Option<Folder> {
+    let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).map(PathBuf::from).filter(|h| h.is_absolute())?;
+    let documents = home.join("Documents");
+    documents.is_dir().then(|| Folder { path: documents.join("Archforge"), label: "Documents / Archforge".to_string() })
 }
 
 /// The full name of the account the app runs under, for Home's avatar: on macOS what `id -F`

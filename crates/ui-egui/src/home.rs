@@ -9,8 +9,8 @@
 //! width (four, two or one to a row) and what the design anchors right stays right.
 //!
 //! The colours are the palette of the shell's theme (Light or Dark); the strip's theme switch
-//! changes it. Controls whose screens are not built yet are drawn as designed, do nothing when
-//! clicked and say so on hover.
+//! changes it. The New project card opens its dialog. Controls whose screens are not built yet
+//! are drawn as designed, do nothing when clicked and say so on hover.
 
 use egui::{Color32, Pos2, Rect, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
 
@@ -95,9 +95,11 @@ impl Hue {
     }
 }
 
-/// Whether the start cards lead anywhere yet: each opens a screen not built so far, so none takes
-/// a click or shows the hover border the design gives a card under the pointer.
-const STARTS_LIVE: bool = false;
+/// Whether a start card leads anywhere yet: New project opens its dialog; the others open screens
+/// not built so far, so they take no click and show no hover border.
+fn start_live(id: &str) -> bool {
+    id == "new-project"
+}
 
 /// The four start cards: automation id, title, line, link, icon and colour.
 const STARTS: [(&str, &str, &str, &str, &ux::Icon, Hue); 4] = [
@@ -432,8 +434,12 @@ fn start_card(
     r: Rect,
     (id, title, line, link, icon, hue): &(&str, &str, &str, &str, &ux::Icon, Hue),
 ) {
-    let resp = control(shell, ui, &format!("home.start.{id}"), "card", r, STARTS_LIVE);
-    let border = if STARTS_LIVE && resp.hovered() { p.border_hover } else { p.border };
+    let live = start_live(id);
+    let resp = control(shell, ui, &format!("home.start.{id}"), "card", r, live);
+    let border = if live && resp.hovered() { p.border_hover } else { p.border };
+    if live && resp.clicked() {
+        crate::new_project::open(shell);
+    }
     paint.rect_filled(r, 12.0, p.surface);
     paint.rect_stroke(r, 12.0, Stroke::new(1.0, border), StrokeKind::Inside);
     let tile = Rect::from_min_size(r.min + vec2(20.0, 20.0), Vec2::splat(36.0));

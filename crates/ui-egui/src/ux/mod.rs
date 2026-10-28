@@ -37,6 +37,14 @@ pub struct Palette {
     pub purple_tint: Color32,
     pub amber: Color32,
     pub amber_tint: Color32,
+    /// The veil over the window behind a dialog.
+    pub scrim: Color32,
+    /// A dialog's shadow.
+    pub shadow: Color32,
+    /// The ring of a field that has the keyboard.
+    pub focus: Color32,
+    /// A dialog's edge: none in Light, where its shadow sets it off, a hairline in Dark.
+    pub dialog_edge: Color32,
 }
 
 const fn rgb(hex: u32) -> Color32 {
@@ -62,6 +70,11 @@ pub const LIGHT: Palette = Palette {
     purple_tint: rgb(0xF2ECFA),
     amber: rgb(0xA47420),
     amber_tint: rgb(0xFBF3E4),
+    // #172844 at 40 %, #152B3A at 20 %, premultiplied.
+    scrim: Color32::from_rgba_premultiplied(9, 16, 27, 102),
+    shadow: Color32::from_rgba_premultiplied(4, 9, 12, 51),
+    focus: rgb(0x7999EF),
+    dialog_edge: Color32::TRANSPARENT,
 };
 
 pub const DARK: Palette = Palette {
@@ -83,6 +96,11 @@ pub const DARK: Palette = Palette {
     purple_tint: rgb(0x2A2240),
     amber: rgb(0xE2AE55),
     amber_tint: rgb(0x362B16),
+    // Black at 55 % and at 50 %.
+    scrim: Color32::from_rgba_premultiplied(0, 0, 0, 140),
+    shadow: Color32::from_rgba_premultiplied(0, 0, 0, 128),
+    focus: rgb(0x5B7EE8),
+    dialog_edge: rgb(0x2A3441),
 };
 
 /// The palette of an appearance.

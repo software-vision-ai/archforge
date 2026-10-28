@@ -2,14 +2,34 @@
 //! the headless harness, drawn once settled and rendered to RGBA.
 
 use crate::theme::ThemeKind;
-use crate::{Services, Shell};
+use crate::{Folder, Services, Shell};
 
-/// Renders the window at `width` by `height` logical pixels, `scale` pixels a point, in `theme`:
+/// What a render shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Screen {
+    Home,
+    /// The New project dialog over Home, a name typed and the usual folder.
+    NewProject,
+}
+
+/// Renders Home at `width` by `height` logical pixels, `scale` pixels a point, in `theme`:
 /// `(width, height, rgba)` in pixels.
 pub fn render(width: f32, height: f32, scale: f32, theme: ThemeKind) -> Result<(u32, u32, Vec<u8>), String> {
+    render_screen(width, height, scale, theme, Screen::Home)
+}
+
+/// [`render`] of a given screen.
+pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, screen: Screen) -> Result<(u32, u32, Vec<u8>), String> {
     crate::i18n::set_language("en");
     let mut shell = Shell::new(Services::default());
     shell.state.theme = theme;
+    if screen == Screen::NewProject {
+        shell.services.projects_folder = Some(Folder { path: "/Users/robin/Documents/Archforge".into(), label: "Documents / Archforge".into() });
+        crate::new_project::open(&mut shell);
+        if let Some(d) = shell.new_project.as_mut() {
+            d.name = "Commerce platform".into();
+        }
+    }
     let mut harness = egui_kittest::Harness::builder().with_size(egui::vec2(width, height)).with_pixels_per_point(scale).build_ui_state(
         |ui, shell: &mut Shell| {
             shell.logic(ui.ctx());
