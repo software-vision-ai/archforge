@@ -32,8 +32,9 @@ cargo xtask ci
 
 first moves craft-libs to the newest commit of its main branch (in `Cargo.lock`), then runs every
 check the repository has, in order, and stops at the first failure: formatting, lints, tests, the
-asset attribution, the crate layering, a build for `wasm32-unknown-unknown` and cargo-deny. It
-needs that target (`rustup target add wasm32-unknown-unknown`) and cargo-deny 0.20.2
+asset attribution, the agent skills in `skills/` against the files they name, the crate layering, a
+build for `wasm32-unknown-unknown` and cargo-deny. It needs that target
+(`rustup target add wasm32-unknown-unknown`) and cargo-deny 0.20.2
 (`cargo install --locked cargo-deny@0.20.2`), which fetches the RustSec advisory database, so the
 gate needs the network. Maintainers also run an optional trademark check; without its list
 (`FORGE_BRANDS`) the gate skips it and says so. `cargo xtask shot` renders the window offscreen to

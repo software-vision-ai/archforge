@@ -10,6 +10,7 @@ mod brands;
 mod ico;
 mod layers;
 mod shot;
+mod skills;
 mod stats;
 mod util;
 mod version;
@@ -25,6 +26,7 @@ const USAGE: &str = "usage: cargo xtask <verb>
   layers             the layer check
   wasm               the portable-target check
   assets [--check]   the attribution check; regenerates ATTRIBUTION.md unless --check
+  skills             the skills check: the routing tables and every file, verb and skill they name
   brands             the optional trademark check against the list FORGE_BRANDS names
   version [x.y.z]    print or set the workspace version
   ico <out> <png>... pack PNGs into a Windows icon
@@ -88,6 +90,7 @@ fn steps() -> Vec<Step> {
         ("lint", cargo_step(&["clippy", "--workspace", "--all-targets", "--all-features", "--", "-D", "warnings"])),
         ("test", cargo_step(&["test", "--workspace"])),
         ("assets", Box::new(|| assets::run(true))),
+        ("skills", Box::new(skills::run)),
         ("layers", Box::new(layers::run)),
         ("portable", Box::new(wasm::run)),
     ];
@@ -164,6 +167,7 @@ fn main() {
         Some("layers") => layers::run(),
         Some("wasm") => wasm::run(),
         Some("assets") => assets::run(check),
+        Some("skills") => skills::run(),
         Some("brands") => brands::run(),
         Some("version") => version::run(rest.first().map(String::as_str)),
         Some("ico") => ico::run(rest),
