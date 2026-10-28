@@ -29,6 +29,9 @@ People will trust Archforge with their models. This outranks feature work.
   next start skips that graphics choice.
 - A font egui cannot load is left out and said in the log (`crates/ui-egui/src/fonts.rs`,
   `crates/ui-egui/src/ux/mod.rs`); text waits for `ux::ready`.
+- The command engine (`crates/engine`) validates every call's parameters centrally before a
+  handler runs, and runs the notation's code (handlers, predicates, `weight`, `retain_valid`) guarded
+  on copies, so a panic or a refusal changes nothing.
 - The interface never touches the file system or the operating system: the host injects
   `Services` (`crates/ui-egui/src/lib.rs`, `apps/archforge/src/services.rs`).
 

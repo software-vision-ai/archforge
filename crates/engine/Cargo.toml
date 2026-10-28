@@ -1,0 +1,24 @@
+[package]
+name = "archforge-engine"
+description = "The command engine: registered commands, validation, undo and redo, unsaved changes"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[features]
+# Helpers for the tests of crates that bring their commands; never shipped.
+testing = []
+
+[dependencies]
+log.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+archforge-engine = { path = ".", features = ["testing"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,132 @@
+//! The engine's errors. Every variant names the value it is about and, where it helps, the values
+//! that would have been accepted.
+
+use std::fmt;
+
+/// Why a call did not run, or failed; in every case nothing changed.
+#[derive(Debug, Clone, PartialEq)]
+pub enum EngineError {
+    UnknownCommand {
+        id: String,
+        close: Vec<String>,
+        count: usize,
+    },
+    NotAnObject,
+    TooLarge {
+        bytes: usize,
+        max: usize,
+    },
+    TooDeep {
+        max: usize,
+    },
+    UnknownKey {
+        key: String,
+        accepted: Vec<String>,
+    },
+    MissingKey {
+        key: String,
+    },
+    WrongType {
+        key: String,
+        expected: &'static str,
+    },
+    OutOfRange {
+        key: String,
+        range: String,
+    },
+    NotAChoice {
+        key: String,
+        choices: Vec<String>,
+    },
+    TooLong {
+        key: String,
+        max: usize,
+    },
+    Disabled {
+        id: String,
+        reason: &'static str,
+    },
+    Failed {
+        id: String,
+        error: CommandError,
+    },
+    /// A handler panicked; its message is kept for the log and the report.
+    Internal {
+        id: String,
+        message: String,
+    },
+    InteractionRunning,
+    NoInteraction,
+    /// The command cannot run inside a batch (undo and redo).
+    NotInBatch {
+        id: String,
+    },
+}
+
+/// The most of a caller's own text an error repeats, in characters.
+const ECHO: usize = 200;
+
+/// A caller's text as an error repeats it: whole when short, else cut at a character boundary and
+/// marked as cut.
+pub(crate) fn echo(s: &str) -> String {
+    if s.chars().count() <= ECHO {
+        s.to_string()
+    } else {
+        let mut out: String = s.chars().take(ECHO).collect();
+        out.push_str("... (truncated)");
+        out
+    }
+}
+
+/// What a handler reports when it refuses: a message, and the parameter it is about.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommandError {
+    pub message: String,
+    pub key: Option<String>,
+}
+
+impl CommandError {
+    pub fn new(message: impl Into<String>) -> CommandError {
+        CommandError { message: message.into(), key: None }
+    }
+
+    pub fn about(key: &str, message: impl Into<String>) -> CommandError {
+        CommandError { message: message.into(), key: Some(key.to_string()) }
+    }
+}
+
+impl fmt::Display for CommandError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.key {
+            Some(k) => write!(f, "{k}: {}", self.message),
+            None => f.write_str(&self.message),
+        }
+    }
+}
+
+impl fmt::Display for EngineError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            EngineError::UnknownCommand { id, close, count } if close.is_empty() => write!(f, "no command {id:?}; {count} commands are known"),
+            EngineError::UnknownCommand { id, close, count } => write!(f, "no command {id:?}; close ones: {} (of {count})", close.join(", ")),
+            EngineError::NotAnObject => f.write_str("the parameters must be a JSON object"),
+            EngineError::TooLarge { bytes, max } => write!(f, "the parameters weigh over {bytes} bytes; the limit is {max}"),
+            EngineError::TooDeep { max } => write!(f, "the parameters nest deeper than {max} levels"),
+            EngineError::UnknownKey { key, accepted } if accepted.is_empty() => write!(f, "unknown parameter {key:?}; this command takes none"),
+            EngineError::UnknownKey { key, accepted } => write!(f, "unknown parameter {key:?}; accepted: {}", accepted.join(", ")),
+            EngineError::MissingKey { key } => write!(f, "the parameter {key:?} is required"),
+            EngineError::WrongType { key, expected } => write!(f, "the parameter {key:?} must be of type {expected}"),
+            EngineError::OutOfRange { key, range } => write!(f, "the parameter {key:?} must be within {range}"),
+            EngineError::NotAChoice { key, choices } => write!(f, "the parameter {key:?} must be one of {}", choices.join(", ")),
+            EngineError::TooLong { key, max } => write!(f, "the parameter {key:?} is longer than {max} bytes"),
+            EngineError::Disabled { id, reason } => write!(f, "{id} is not available: {reason}"),
+            EngineError::Failed { id, error } => write!(f, "{id} failed: {error}"),
+            EngineError::Internal { id, message } => write!(f, "{id} stopped on an internal error ({message}); nothing was changed"),
+            EngineError::InteractionRunning => f.write_str("a gesture is in progress; retry after the gesture"),
+            EngineError::NoInteraction => f.write_str("no gesture is in progress"),
+            EngineError::NotInBatch { id } => write!(f, "{id} cannot run inside a batch"),
+        }
+    }
+}
+
+impl std::error::Error for EngineError {}
