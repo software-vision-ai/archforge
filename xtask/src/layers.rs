@@ -25,7 +25,12 @@ pub enum Class {
 }
 
 /// Every library crate, by short name. Every library crate of the workspace has a row.
-pub const TABLE: &[(&str, Class)] = &[("ui-egui", Class::Layer(6))];
+pub const TABLE: &[(&str, Class)] = &[
+    ("ui-egui", Class::Layer(6)),
+    // Host services, for the desktop only: the application uses them and the shell never depends on
+    // them, so the portable-target check, which builds the layers below the shell, leaves them out.
+    ("dolt", Class::Layer(7)),
+];
 
 /// The shell crate: the highest crate the portable-target check builds.
 pub const SHELL: &str = "ui-egui";

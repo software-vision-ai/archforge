@@ -11,6 +11,8 @@ description: "Use when writing, placing or running tests in Archforge: a regress
   - translations: `crates/ui-egui/src/i18n/tests.rs`
   - the desktop app (arguments, preferences, graphics): the `tests` module in `apps/archforge/src/main.rs`
   - the task runner: a `tests` module in the `xtask/src` file it checks
+  - the project database's server: unit tests beside the code in `crates/dolt/src`, and
+    `crates/dolt/tests/server.rs` against a real dolt
 - A screen test builds the real `Shell` in an `egui_kittest` harness, draws it in both appearances
   and finds controls by automation id (`harness` and `click` in `crates/ui-egui/src/tests.rs`).
   Every harness pins the language with `set_language`; `every_harness_pins_the_language` fails a
@@ -32,6 +34,9 @@ description: "Use when writing, placing or running tests in Archforge: a regress
 - Before proposing a change: the gate, `cargo xtask ci`. Its steps are update (craft-libs to their
   newest main), format, lint, test, assets, skills, layers, portable, brands and deny. It stops at the
   first failure and prints a table of steps.
+- The test step needs dolt 2.6 or later on the PATH or in `ARCHFORGE_DOLT`; without it the
+  server tests fail and say how to install it. A test that starts a server stops it on every path,
+  so a failed run leaves no server behind.
 - The portable step needs the `wasm32-unknown-unknown` target (`rustup target add wasm32-unknown-unknown`)
   and a cargo from rustup on `PATH`; the deny step needs cargo-deny at the version `xtask/src/main.rs`
   names; both the update and deny steps need the network.
