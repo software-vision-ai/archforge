@@ -11,10 +11,22 @@ use serde_json::Value;
 use crate::params::{ParamDoc, Params, parse_params};
 use crate::{CommandError, Document, View};
 
-/// What a handler acts on: the document, which undo covers, and the view, which it never touches.
+/// What a handler acts on: the document, which undo covers, the view, which it never touches, and
+/// the counter new ids come from, which undo never rolls back, so an id is never given twice.
 pub struct Ctx<'a, D, V> {
     pub doc: &'a mut D,
     pub view: &'a mut V,
+    pub next: &'a mut u64,
+}
+
+impl<D, V> Ctx<'_, D, V> {
+    /// The next number for a new id, or None when the counter is spent.
+    pub fn fresh(&mut self) -> Option<u64> {
+        let n = *self.next;
+        let after = n.checked_add(1)?;
+        *self.next = after;
+        Some(n)
+    }
 }
 
 /// What an enabled predicate sees: the state the command would run on, and the history.

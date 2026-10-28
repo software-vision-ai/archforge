@@ -1,7 +1,8 @@
 //! A project on disk: `<name>.archforge`, the data folder of a Dolt server, with one database,
-//! `project`, whose `settings` table says what the project is. Creating it makes the folder, starts
-//! the server, writes the settings and commits them; opening it checks the folder, starts the
-//! server and reads the settings back. The project stays open, its server running, until it is
+//! `project`, whose `settings` table says what the project is and whose `er_` tables hold the ER
+//! model. Creating it makes the folder, starts the server, writes the settings and the empty model
+//! and commits them; opening it checks the folder, starts the server, reads the settings back and
+//! upgrades an older format. The project stays open, its server running, until it is
 //! closed or dropped.
 //!
 //! A folder from elsewhere is never trusted: its server settings cannot sync with a remote or run
@@ -11,21 +12,26 @@
 //! user. Host services, layer 8: the interface never depends on this crate.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
+mod er;
 mod error;
 mod time;
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
 use archforge_dolt::{Dolt, Server, ServerOptions};
+use archforge_er::ErModel;
+use mysql::Conn;
 use mysql::prelude::Queryable;
 
+pub use er::{NEXT, STORE_BUDGET, UpgradeStep};
 pub use error::Error;
 pub use time::timestamp;
 
 /// The project format this Archforge writes and the newest it reads.
-pub const FORMAT: u32 = 1;
+pub const FORMAT: u32 = 2;
 /// A project folder's extension.
 pub const EXTENSION: &str = archforge_names::EXTENSION;
 /// The one database in a project folder.
@@ -34,8 +40,8 @@ pub const DATABASE: &str = "project";
 pub const MARKER: &str = ".creating";
 /// The settings a project holds, and the caps that reading them keeps to.
 const MAX_ROWS: usize = 1000;
-const MAX_KEY: usize = 64;
-const MAX_VALUE: usize = 1024;
+pub(crate) const MAX_KEY: usize = 64;
+pub(crate) const MAX_VALUE: usize = 1024;
 /// The author of the creation commit.
 const AUTHOR: &str = "Archforge <archforge@localhost>";
 
@@ -56,6 +62,8 @@ pub struct Hooks {
     pub after_start: Option<Box<dyn Fn(u32, &Path) -> Result<(), String> + Send + Sync>>,
     /// Set to stop a creation between its steps; it then undoes what it did.
     pub cancel: Option<Arc<AtomicBool>>,
+    /// Called at each step of an upgrade from an older format; an error stops the upgrade there.
+    pub upgrade: Option<Box<dyn Fn(UpgradeStep) -> Result<(), String> + Send + Sync>>,
 }
 
 impl Hooks {
@@ -121,8 +129,13 @@ impl Project {
         }
     }
 
-    /// Opens the project at `path`.
+    /// Opens the project at `path`, upgrading an older format.
     pub fn open(dolt: &Dolt, opts: &ServerOptions, path: &Path) -> Result<Project, Error> {
+        Project::open_with(dolt, opts, path, &Hooks::default())
+    }
+
+    /// [`Project::open`] with hooks.
+    pub fn open_with(dolt: &Dolt, opts: &ServerOptions, path: &Path, hooks: &Hooks) -> Result<Project, Error> {
         let not_a_project = |why: &str| Error::NotAProject { path: path.to_path_buf(), why: why.into() };
         text(path, "project folder").map_err(|_| not_a_project("its path is not plain text"))?;
         let meta = std::fs::symlink_metadata(path).map_err(|e| Error::io("cannot open", path, e))?;
@@ -144,7 +157,7 @@ impl Project {
         private(&path)?;
         own_dot_dolt(&path)?;
         let server = Server::start(dolt, &path, opts).map_err(Error::Server)?;
-        match read_settings(&server, &path) {
+        match read_settings(&server, &path).and_then(|settings| upgraded(&server, &path, settings, hooks)) {
             Ok(settings) => Ok(Project { server, path, settings }),
             Err(e) => {
                 if let Err(stop) = server.stop() {
@@ -166,6 +179,33 @@ impl Project {
     /// The project's server, for the model to talk to.
     pub fn server(&self) -> &Server {
         &self.server
+    }
+
+    /// Stores the ER model and its id counter in the working set; Save commits it.
+    pub fn store_er(&self, model: &ErModel, counter: u64) -> Result<(), Error> {
+        self.store_er_within(model, counter, STORE_BUDGET)
+    }
+
+    /// [`Project::store_er`] with its own time budget.
+    pub fn store_er_within(&self, model: &ErModel, counter: u64, budget: Duration) -> Result<(), Error> {
+        er::store(&mut self.connection()?, model, counter, budget)
+    }
+
+    /// The ER model and its id counter as the working set holds them.
+    pub fn load_er(&self) -> Result<(ErModel, u64), Error> {
+        er::load(&mut self.connection()?, &self.path)
+    }
+
+    /// Whether the working set holds model changes not yet committed (owner decision: anything in
+    /// the `er_` tables, or a setting other than the id counter).
+    pub fn model_uncommitted(&self) -> Result<bool, Error> {
+        er::uncommitted(&mut self.connection()?, &self.path)
+    }
+
+    fn connection(&self) -> Result<Conn, Error> {
+        let mut c = self.server.connect().map_err(Error::Server)?;
+        c.query_drop(format!("USE `{DATABASE}`")).map_err(|e| Error::Sql { what: "cannot use the project database", source: e })?;
+        Ok(c)
     }
 
     /// Stops the project's server.
@@ -295,6 +335,7 @@ fn build(
     let format = FORMAT.to_string();
     let rows = [("format", format.as_str()), ("name", name), ("created_by", created_by), ("created_at", now)];
     c.exec_batch("INSERT INTO settings (`key`, `value`) VALUES (?, ?)", rows).map_err(sql("cannot write the settings"))?;
+    er::make_tables(&mut c)?;
     // The commit's reply is not read: converting a row that is not one string would panic.
     c.query_drop(format!("CALL DOLT_COMMIT('-Am', 'Create the project', '--author', '{AUTHOR}')")).map_err(sql("cannot commit the project"))?;
     hooks.cancelled()?;
@@ -349,6 +390,14 @@ fn read_settings(server: &Server, path: &Path) -> Result<Settings, Error> {
     }
     let get = |k: &str| map.get(k).cloned().unwrap_or_default();
     Ok(Settings { format, name, created_by: get("created_by"), created_at: get("created_at") })
+}
+
+/// Refuses a project with scripts, upgrades one in an older format, then reads its settings again.
+fn upgraded(server: &Server, path: &Path, settings: Settings, hooks: &Hooks) -> Result<Settings, Error> {
+    let mut c = server.connect().map_err(Error::Server)?;
+    c.query_drop(format!("USE `{DATABASE}`")).map_err(|e| Error::Sql { what: "cannot use the project database", source: e })?;
+    er::no_scripts(&mut c, path)?;
+    if er::upgrade(&mut c, path, settings.format, hooks)? { read_settings(server, path) } else { Ok(settings) }
 }
 
 /// Refuses a project folder others may write to, or another user's.

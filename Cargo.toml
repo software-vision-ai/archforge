@@ -15,6 +15,7 @@ archforge-ui-egui = { path = "crates/ui-egui" }
 archforge-dolt = { path = "crates/dolt" }
 archforge-names = { path = "crates/names" }
 archforge-engine = { path = "crates/engine" }
+archforge-er = { path = "crates/er" }
 archforge-project = { path = "crates/project" }
 
 # External crates.

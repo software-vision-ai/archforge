@@ -38,7 +38,7 @@ mod tests {
     use super::*;
 
     /// Files below the shell that may touch the platform, each behind a target guard.
-    pub const PLATFORM_SEAMS: &[&str] = &[];
+    pub const PLATFORM_SEAMS: &[&str] = &["crates/engine/src/testing.rs"];
 
     /// Calls that reach the clock, processes, the network or the environment.
     pub const PLATFORM_CALLS: &[&str] = &["std::fs", "std::process", "std::net", "std::env", "SystemTime", "Instant::now", "std::thread::sleep"];

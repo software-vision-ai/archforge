@@ -26,12 +26,14 @@ on its starting state, and the recovery save comes with persistence.
 | `Registry::new` | `pub fn new(specs: Vec<CommandSpec<D, V>>) -> Result<Arc<Registry<D, V>>, String>` |
 | `cmd!` | registers a command: journaled and undoable, `query`, or `noundo` |
 | `cmd::edit::specs` | `edit.undo` and `edit.redo` for every table |
-| `Session::new` | `pub fn new(registry: Arc<Registry<D, V>>, doc: D, options: Options) -> Session<D, V>` |
+| `Session::new` | `pub fn new(registry: Arc<Registry<D, V>>, doc: D, counter: u64, options: Options) -> Session<D, V>` |
+| `Session::counter`, `Ctx::fresh` | the counter new ids come from: outside undo, so an id is never given twice |
 | `Session::execute` | `pub fn execute(&mut self, id: &str, params: &Value) -> Result<Outcome, EngineError>` |
 | `Session::{undo, redo, batch, replay}` | history, several commands as one step, a journal entry again |
 | `Session::{begin_interaction, preview, commit, cancel}` | a gesture: previews on the state before it, one step at the end |
-| `Session::{is_dirty, mark_saved, journal, dropped}` | unsaved changes, the tail log, what the caps dropped |
+| `Session::{is_dirty, mark_saved, mark_unsaved, journal, dropped}` | unsaved changes (or none saved yet), the tail log, what the caps dropped |
 | `Document`, `View` | what undo covers (with a size estimate); view state, kept valid after every change |
 | `testing::round_trip` | feature `testing`: a command, its undo and its redo give identical documents |
+| `testing::sweep` | feature `testing`: every command with hostile parameters; no panic, refusals change nothing |
 
 **Non-goals.** Persistence, dialogs, long jobs, hit-testing: they come with their first users.

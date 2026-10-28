@@ -102,6 +102,30 @@ fn sneak(ctx: &mut Ctx<'_, Items, Selection>, _: &Params) -> Result<Value, Comma
     Ok(Value::Null)
 }
 
+/// Adds an item named after a fresh id from the counter, failing afterwards when asked to.
+fn tag(ctx: &mut Ctx<'_, Items, Selection>, p: &Params) -> Result<Value, CommandError> {
+    let n = ctx.fresh().ok_or_else(|| CommandError::new("no ids left"))?;
+    ctx.doc.0.push(format!("t{n}"));
+    if p.bool("fail").unwrap_or(false) {
+        return Err(CommandError::new("asked to fail"));
+    }
+    Ok(json!({ "id": format!("t{n}") }))
+}
+
+/// Takes an id and changes nothing: refused.
+fn burn(ctx: &mut Ctx<'_, Items, Selection>, _: &Params) -> Result<Value, CommandError> {
+    ctx.fresh();
+    Ok(Value::Null)
+}
+
+/// Renames an item to a fresh id's name when `text` is empty, else to `text`.
+fn label(ctx: &mut Ctx<'_, Items, Selection>, p: &Params) -> Result<Value, CommandError> {
+    let i = index(ctx, p, "index")?;
+    let text = p.str("text").unwrap_or_default();
+    ctx.doc.0[i] = if text.is_empty() { format!("t{}", ctx.fresh().ok_or_else(|| CommandError::new("no ids left"))?) } else { text.to_string() };
+    Ok(Value::Null)
+}
+
 fn specs() -> Vec<CommandSpec<Items, Selection>> {
     let mut s = archforge_engine::cmd::edit::specs();
     s.extend([
@@ -122,6 +146,17 @@ fn specs() -> Vec<CommandSpec<Items, Selection>> {
         cmd!("item.fail", "Fail", &["Item"], None, "", always, fail),
         cmd!("item.explode", "Explode", &["Item"], None, "", always, explode),
         cmd!(noundo "item.sneak", "Sneak", &["Item"], None, "", always, sneak),
+        cmd!("item.tag", "Tag", &["Item"], None, "fail: bool = false; fail after taking an id", always, tag),
+        cmd!("item.burn", "Burn", &["Item"], None, "", always, burn),
+        cmd!(
+            "item.label",
+            "Label",
+            &["Item"],
+            None,
+            "index: integer, 0..1000; which item\ntext: string; the name, a fresh id's when empty",
+            has_items,
+            label
+        ),
     ]);
     s
 }
@@ -131,7 +166,7 @@ fn registry() -> Arc<Registry<Items, Selection>> {
 }
 
 fn session() -> S {
-    Session::new(registry(), Items::default(), Options::default())
+    Session::new(registry(), Items::default(), 1, Options::default())
 }
 
 fn names(s: &S) -> Vec<&str> {
@@ -402,7 +437,7 @@ fn a_gesture_previews_freely_and_commits_one_step() {
 #[test]
 fn the_caps_drop_the_oldest_and_a_step_too_heavy_clears_the_history() {
     let options = Options { max_steps: 3, max_weight: 10_000, max_journal: 4, max_journal_bytes: 1_000_000 };
-    let mut s = Session::new(registry(), Items::default(), options);
+    let mut s = Session::new(registry(), Items::default(), 1, options);
     for i in 0..6 {
         s.execute("item.add", &json!({ "name": format!("{i}") })).unwrap();
     }
@@ -424,7 +459,7 @@ fn the_caps_drop_the_oldest_and_a_step_too_heavy_clears_the_history() {
     assert!(!s.can_undo() && !s.can_redo());
     // The journal's byte cap.
     let options = Options { max_journal_bytes: 300, ..Options::default() };
-    let mut s = Session::new(registry(), Items::default(), options);
+    let mut s = Session::new(registry(), Items::default(), 1, options);
     for _ in 0..5 {
         s.execute("item.add", &json!({ "name": "z".repeat(100) })).unwrap();
     }
@@ -445,6 +480,119 @@ fn a_panic_in_the_notations_own_code_changes_nothing_even_in_undo() {
     assert_eq!(state(&s), before);
     assert!(matches!(s.undo(), Err(EngineError::Internal { .. })), "undo weighs the state it keeps for redo");
     assert_eq!(state(&s), before, "and losing nothing when it cannot");
+}
+
+#[test]
+fn the_sweep_reports_a_contained_panic() {
+    let mut s = session();
+    s.execute("item.add", &json!({ "name": "A" })).unwrap();
+    let found = archforge_engine::testing::sweep(&mut s, &["0", "1", "t1"]).unwrap_err();
+    assert!(found.starts_with("item.explode") && found.contains("panicked"), "{found}");
+}
+
+#[test]
+fn the_id_counter_is_never_undone_and_a_replay_makes_the_same_ids() {
+    let mut s = session();
+    let first = s.execute("item.tag", &json!({})).unwrap().value;
+    s.undo().unwrap();
+    let second = s.execute("item.tag", &json!({})).unwrap().value;
+    assert_ne!(first, second, "an id freed by undo is not given again");
+    let counter = s.counter();
+    assert!(s.execute("item.tag", &json!({ "fail": true })).is_err());
+    assert_eq!(s.counter(), counter, "a failed call leaves the counter");
+    s.batch("Tags", |b| {
+        b.execute("item.tag", &json!({}))?;
+        b.execute("item.tag", &json!({}))?;
+        Ok(())
+    })
+    .unwrap();
+    let entries: Vec<JournalEntry> = s.journal().cloned().collect();
+    let mut fresh = session();
+    for e in &entries {
+        fresh.replay(e).unwrap();
+    }
+    assert_eq!(fresh.doc(), s.doc(), "the same ids, from the same start counter");
+    assert_eq!(fresh.counter(), s.counter());
+}
+
+#[test]
+fn the_counter_moves_only_with_a_change_that_is_kept() {
+    let mut s = session();
+    let c0 = s.counter();
+    assert!(matches!(s.execute("item.burn", &json!({})), Err(EngineError::Failed { .. })), "an id taken for nothing is refused");
+    assert_eq!(s.counter(), c0);
+    // A batch keeps its counter only whole.
+    assert!(
+        s.batch("half", |b| {
+            b.execute("item.tag", &json!({}))?;
+            b.execute("item.fail", &json!({}))?;
+            Ok(())
+        })
+        .is_err()
+    );
+    assert_eq!(s.counter(), c0);
+    // Every preview starts from the gesture's counter; commit keeps the last one's, cancel restores.
+    s.execute("item.add", &json!({ "name": "A" })).unwrap();
+    let c1 = s.counter();
+    s.begin_interaction("item.label").unwrap();
+    s.preview(&json!({ "index": 0, "text": "" })).unwrap();
+    s.preview(&json!({ "index": 0, "text": "" })).unwrap();
+    assert_eq!((names(&s), s.counter()), (vec![format!("t{c1}").as_str()], c1 + 1));
+    s.cancel().unwrap();
+    assert_eq!((names(&s), s.counter()), (vec!["A"], c1));
+    s.begin_interaction("item.label").unwrap();
+    s.preview(&json!({ "index": 0, "text": "A" })).unwrap();
+    s.commit().unwrap();
+    assert_eq!(s.counter(), c1, "a gesture that changed nothing restores the counter");
+    s.begin_interaction("item.label").unwrap();
+    s.preview(&json!({ "index": 0, "text": "" })).unwrap();
+    s.commit().unwrap();
+    assert_eq!(s.counter(), c1 + 1);
+    // A coalesced chain that merges back to its start keeps the advanced counter.
+    s.mark_saved().unwrap();
+    let before = s.counter();
+    s.execute("item.label", &json!({ "index": 0, "text": "", "coalesce": "k" })).unwrap();
+    s.execute("item.label", &json!({ "index": 0, "text": format!("t{c1}"), "coalesce": "k" })).unwrap();
+    assert!(!s.is_dirty());
+    assert_eq!(s.counter(), before + 1, "the id taken is not handed out again");
+}
+
+#[test]
+fn a_session_opened_over_unsaved_changes_stays_unsaved_until_a_save() {
+    let mut s = session();
+    s.mark_unsaved();
+    assert!(s.is_dirty());
+    s.execute("item.add", &json!({ "name": "A" })).unwrap();
+    s.undo().unwrap();
+    assert!(s.is_dirty(), "undo back to the opened state is still unsaved");
+    s.mark_saved().unwrap();
+    assert!(!s.is_dirty());
+}
+
+#[test]
+fn a_counter_only_call_is_refused_inside_a_batch_too() {
+    let mut s = session();
+    let c = s.counter();
+    assert!(
+        s.batch("burns", |b| {
+            b.execute("item.tag", &json!({}))?;
+            b.execute("item.burn", &json!({}))?;
+            Ok(())
+        })
+        .is_err()
+    );
+    assert_eq!(s.counter(), c);
+}
+
+#[test]
+fn a_trimmed_journal_says_where_its_counter_starts() {
+    let options = Options { max_journal: 2, ..Options::default() };
+    let mut s = Session::new(registry(), Items::default(), 1, options);
+    for _ in 0..4 {
+        s.execute("item.tag", &json!({})).unwrap();
+    }
+    assert_eq!(s.journal().count(), 2);
+    assert_eq!(s.journal_start_counter(), 3, "the two kept entries took ids 3 and 4");
 }
 
 #[test]
