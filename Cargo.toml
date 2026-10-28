@@ -12,6 +12,7 @@ repository = "https://github.com/software-vision-ai/archforge"
 [workspace.dependencies]
 # Internal crates: members say `name.workspace = true` and never repeat a version or a path.
 archforge-ui-egui = { path = "crates/ui-egui" }
+archforge-dolt = { path = "crates/dolt" }
 
 # External crates.
 egui = "0.36"
@@ -31,6 +32,12 @@ skrifa = { version = "=0.44.0", default-features = false, features = ["std"] }
 # Parses the installed fonts' names for the desktop app, from bytes the app reads itself (no
 # memmap, no file access, no fontconfig); untrusted input, pinned exactly. MIT.
 fontdb = { version = "=0.24.0", default-features = false, features = ["std"] }
+
+# Talks to the project database's Dolt server over the MySQL protocol, on the same machine only:
+# pure Rust, no TLS. MIT OR Apache-2.0; pinned exactly, as it reads the server's replies.
+mysql = { version = "=28.0.4", default-features = false, features = ["minimal-rust"] }
+# Random passwords and run folder names for the Dolt server. MIT OR Apache-2.0.
+getrandom = "0.3"
 
 # Shared crates from craft-libs (the ArtCraft team, MIT OR Apache-2.0), always at its latest main:
 # the gate's first step moves Cargo.lock to the newest commit. It is the only git source

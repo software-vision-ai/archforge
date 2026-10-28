@@ -1,0 +1,35 @@
+# archforge-dolt
+
+**Purpose.** The project database's server: runs `dolt sql-server` for one project folder beside the
+application, reachable only by this user with a password made for each start, connects to it, stops
+it, and recovers a server a crashed Archforge left behind.
+
+**Layer.** Host services, layer 7: the application uses it, the interface never depends on it, and
+the portable-target check leaves it out. No toolkit.
+
+**Binding rules.** Every helper program runs by absolute path in a cleared environment with a
+budget; dolt runs in Archforge's own private dolt home with usage metrics and the online version
+check off, and never reads or writes the user's `~/.dolt`; nothing is stopped unless its owner is
+dead and it is proven to be the server this crate started; only run folders this crate made are
+removed. The password never shows in a log, an error or a debug print.
+
+**Public API.**
+
+| Item | Signature |
+|---|---|
+| `Home::prepare` | `pub fn prepare(path: &Path) -> Result<Home, Error>` (creates and checks the private dolt home) |
+| `Dolt::find` | `pub fn find(home: &Home) -> Result<Dolt, Error>` (`ARCHFORGE_DOLT`, else `dolt` on the PATH; 2.6 or later within 2) |
+| `Dolt::at` | `pub fn at(path: &Path, home: &Home) -> Result<Dolt, Error>` (an absolute path) |
+| `ServerOptions::new` | `pub fn new(records: impl Into<PathBuf>) -> ServerOptions` (records folder; run root, budgets) |
+| `Server::start` | `pub fn start(dolt: &Dolt, data_dir: &Path, opts: &ServerOptions) -> Result<Server, Error>` |
+| `Server::connect` | `pub fn connect(&self) -> Result<mysql::Conn, Error>` (socket on unix, loopback on Windows) |
+| `Server::stop` | `pub fn stop(self) -> Result<(), Error>` (dropping a server stops it too) |
+| `Server::{port, socket, password, data_dir, pid}` | the running server's facts |
+| `Error` | one enum; every variant names the value it is about |
+
+**Tests.** Unit tests for the pure parts (parsers, the recovery rules, path and folder checks) and
+integration tests in `tests/server.rs` against a real dolt 2.6 or later, measured on macOS; the Linux
+and Windows runs are still to be done.
+
+**Non-goals.** The project's tables (the project database and its settings come with creating a
+project), packaging dolt, TLS.
