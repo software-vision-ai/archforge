@@ -192,7 +192,7 @@ fn a_newer_format_is_refused() {
     let path = p.path().to_path_buf();
     p.close().unwrap();
     tamper(&env, &path, &["UPDATE settings SET `value` = '99' WHERE `key` = 'format'"]);
-    assert!(matches!(env.open(&path), Err(Error::NewerFormat { found: 99, supported: 1 })));
+    assert!(matches!(env.open(&path), Err(Error::NewerFormat { found: 99, supported: FORMAT })));
 }
 
 #[test]
@@ -226,7 +226,7 @@ fn a_failing_step_undoes_the_creation_and_never_removes_a_folder_put_in_its_plac
             *seen.lock().unwrap() = p;
             Err("a step failed".into())
         })),
-        cancel: None,
+        ..Hooks::default()
     };
     let r = Project::create_with(&env.dolt, &env.opts(), &env.folder(), "Failing", "t", "now", &hooks);
     assert!(matches!(r, Err(Error::Damaged { .. })), "{r:?}");
@@ -241,13 +241,13 @@ fn a_failing_step_undoes_the_creation_and_never_removes_a_folder_put_in_its_plac
             std::fs::write(target.join("keep.txt"), "someone else's").unwrap();
             Err("a step failed".into())
         })),
-        cancel: None,
+        ..Hooks::default()
     };
     let r = Project::create_with(&env.dolt, &env.opts(), &env.folder(), "Swapped", "t", "now", &hooks);
     assert!(matches!(r, Err(Error::Kept { .. })), "{r:?}");
     assert_eq!(std::fs::read_to_string(env.folder().join("Swapped.archforge/keep.txt")).unwrap(), "someone else's");
     // A cancelled creation leaves nothing.
-    let hooks = Hooks { after_start: None, cancel: Some(Arc::new(AtomicBool::new(true))) };
+    let hooks = Hooks { after_start: None, cancel: Some(Arc::new(AtomicBool::new(true))), upgrade: None };
     let r = Project::create_with(&env.dolt, &env.opts(), &env.folder(), "Cancelled", "t", "now", &hooks);
     assert!(matches!(r, Err(Error::Cancelled)), "{r:?}");
     assert!(!env.folder().join("Cancelled.archforge").exists());
@@ -295,7 +295,7 @@ fn creation_helper() {
                 std::thread::sleep(Duration::from_secs(120));
                 Ok(())
             })),
-            cancel: None,
+            ..Hooks::default()
         };
         let _ = Project::create_with(&env.dolt, &env.opts(), &env.folder(), parts[2], "t", "now", &hooks);
     } else {

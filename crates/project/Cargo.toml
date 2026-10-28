@@ -10,6 +10,7 @@ publish = false
 
 [dependencies]
 archforge-dolt.workspace = true
+archforge-er.workspace = true
 archforge-names.workspace = true
 log.workspace = true
 mysql.workspace = true

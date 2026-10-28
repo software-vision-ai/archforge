@@ -1,0 +1,20 @@
+[package]
+name = "archforge-er"
+description = "The ER notation: entities, attributes, relationships and diagrams, as commands for the engine"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+archforge-engine.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+archforge-engine = { workspace = true, features = ["testing"] }
+
+[lints]
+workspace = true

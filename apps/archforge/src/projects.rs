@@ -108,7 +108,7 @@ fn job(inner: &Inner, folder: &Path, name: &str, reply: &Sender<Result<Opened, C
             log::warn!("the clock reads before 1970 ({e}); the project's creation time says 1970");
             0
         });
-        let hooks = Hooks { after_start: None, cancel: Some(inner.cancel.clone()) };
+        let hooks = Hooks { cancel: Some(inner.cancel.clone()), ..Hooks::default() };
         Project::create_with(&dolt, &opts, folder, name, &inner.created_by, &archforge_project::timestamp(now), &hooks).map_err(kind)
     });
     let answer = match result {

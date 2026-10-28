@@ -23,6 +23,7 @@ pub const QUERY_CHANGED: &str = "a query changed the project";
 pub const NO_UNDO_STEP: &str = "changed the document without an undo step";
 pub const NOT_A_GESTURE: &str = "only an undoable command can be a gesture";
 pub const BATCH_TOO_LONG: &str = "a batch holds at most 10000 commands";
+pub const COUNTER_ONLY: &str = "took a new id without changing the document";
 /// The most commands one batch may run, and the longest batch label in bytes.
 pub const MAX_BATCH: usize = 10_000;
 pub const MAX_LABEL: usize = 256;
@@ -78,6 +79,7 @@ struct Interaction<D, V> {
     id: &'static str,
     doc: D,
     view: V,
+    next: u64,
     last: Option<(Params, Value)>,
 }
 
@@ -86,8 +88,10 @@ struct Change<D, V> {
     value: Value,
     doc: D,
     view: V,
+    next: u64,
     doc_changed: bool,
     view_changed: bool,
+    next_changed: bool,
     /// The weight of the state before, when the document changed.
     before_weight: usize,
     /// Whether the new document equals the "before" of the step on top of the undo stack.
@@ -99,15 +103,20 @@ pub struct Session<D, V> {
     options: Options,
     doc: D,
     view: V,
+    /// The counter new ids come from: outside the document, never undone.
+    counter: u64,
     id: u64,
     next_id: u64,
-    saved: u64,
+    /// The state last saved; none when this session holds changes no state of it saved (it was
+    /// opened over uncommitted changes).
+    saved: Option<u64>,
     undo: Vec<Snapshot<D>>,
     redo: Vec<Snapshot<D>>,
     weight: usize,
     /// The command and coalescing key of the step the immediately preceding execute pushed.
     chain: Option<(&'static str, String)>,
-    journal: VecDeque<(JournalEntry, usize)>,
+    /// Each entry with its size and the counter before it.
+    journal: VecDeque<(JournalEntry, usize, u64)>,
     journal_bytes: usize,
     dropped: Dropped,
     interaction: Option<Interaction<D, V>>,
@@ -139,8 +148,9 @@ fn disabled(id: &str, reason: &'static str) -> EngineError {
 }
 
 impl<D: Document, V: View<D>> Session<D, V> {
-    /// A session on `doc`, with the view the notation's default gives, made valid for `doc`.
-    pub fn new(registry: Arc<Registry<D, V>>, doc: D, options: Options) -> Self {
+    /// A session on `doc` with the id counter at `counter`, and the view the notation's default
+    /// gives, made valid for `doc`.
+    pub fn new(registry: Arc<Registry<D, V>>, doc: D, counter: u64, options: Options) -> Self {
         let mut view = V::default();
         view.retain_valid(&doc);
         Session {
@@ -148,9 +158,10 @@ impl<D: Document, V: View<D>> Session<D, V> {
             options,
             doc,
             view,
+            counter,
             id: 0,
             next_id: 1,
-            saved: 0,
+            saved: Some(0),
             undo: Vec::new(),
             redo: Vec::new(),
             weight: 0,
@@ -168,6 +179,11 @@ impl<D: Document, V: View<D>> Session<D, V> {
 
     pub fn view(&self) -> &V {
         &self.view
+    }
+
+    /// The id counter, for the host to keep with the document.
+    pub fn counter(&self) -> u64 {
+        self.counter
     }
 
     pub fn registry(&self) -> &Arc<Registry<D, V>> {
@@ -192,12 +208,24 @@ impl<D: Document, V: View<D>> Session<D, V> {
 
     /// Whether the document differs from the state last marked saved.
     pub fn is_dirty(&self) -> bool {
-        self.id != self.saved
+        self.saved != Some(self.id)
+    }
+
+    /// Makes the session unsaved until the next save, through any undo: for a session opened over
+    /// changes that were never saved, such as edits a crash left uncommitted.
+    pub fn mark_unsaved(&mut self) {
+        self.saved = None;
     }
 
     /// The journal, oldest first: a tail log once its caps have dropped old entries.
     pub fn journal(&self) -> impl Iterator<Item = &JournalEntry> {
-        self.journal.iter().map(|(e, _)| e)
+        self.journal.iter().map(|(e, _, _)| e)
+    }
+
+    /// The counter before the oldest journal entry kept: a session started there replays the
+    /// journal's tail to the same ids.
+    pub fn journal_start_counter(&self) -> u64 {
+        self.journal.front().map_or(self.counter, |(_, _, c)| *c)
     }
 
     pub fn dropped(&self) -> Dropped {
@@ -216,7 +244,7 @@ impl<D: Document, V: View<D>> Session<D, V> {
     /// Marks the current state as saved.
     pub fn mark_saved(&mut self) -> Result<(), EngineError> {
         self.no_interaction()?;
-        self.saved = self.id;
+        self.saved = Some(self.id);
         self.chain = None;
         Ok(())
     }
@@ -244,18 +272,24 @@ impl<D: Document, V: View<D>> Session<D, V> {
 
     /// Runs a handler on copies of the state, inside the guard, and works out everything the
     /// session needs to take the result over by plain moves.
-    fn compute(&self, spec: &CommandSpec<D, V>, run: crate::cmd::RunFn<D, V>, params: &Params, from: (&D, &V)) -> Result<Change<D, V>, EngineError> {
+    fn compute(
+        &self,
+        spec: &CommandSpec<D, V>,
+        run: crate::cmd::RunFn<D, V>,
+        params: &Params,
+        from: (&D, &V, u64),
+    ) -> Result<Change<D, V>, EngineError> {
         let top = self.undo.last().map(|s| &s.doc);
         guard(spec.id, || {
-            let (mut doc, mut view) = (from.0.clone(), from.1.clone());
-            let value =
-                run(&mut Ctx { doc: &mut doc, view: &mut view }, params).map_err(|error| EngineError::Failed { id: spec.id.to_string(), error })?;
+            let (mut doc, mut view, mut next) = (from.0.clone(), from.1.clone(), from.2);
+            let value = run(&mut Ctx { doc: &mut doc, view: &mut view, next: &mut next }, params)
+                .map_err(|error| EngineError::Failed { id: spec.id.to_string(), error })?;
             let doc_changed = doc != *from.0;
             let view_changed = view != *from.1;
             view.retain_valid(&doc);
             let before_weight = if doc_changed { from.0.weight() } else { 0 };
             let back_to_top = doc_changed && top.is_some_and(|t| *t == doc);
-            Ok(Change { value, doc, view, doc_changed, view_changed, before_weight, back_to_top })
+            Ok(Change { value, doc, view, next, doc_changed, view_changed, next_changed: next != from.2, before_weight, back_to_top })
         })
     }
 
@@ -273,14 +307,19 @@ impl<D: Document, V: View<D>> Session<D, V> {
             Handler::Redo => return self.redo().map(|label| Outcome { value: json!({ "redone": label }), history_cleared: false }),
             Handler::Run(run) => run,
         };
-        let c = self.compute(&spec, run, &params, (&self.doc, &self.view))?;
-        if is_query && (c.doc_changed || c.view_changed) {
+        let c = self.compute(&spec, run, &params, (&self.doc, &self.view, self.counter))?;
+        if is_query && (c.doc_changed || c.view_changed || c.next_changed) {
             return Err(failed(spec.id, QUERY_CHANGED));
         }
         if c.doc_changed && !spec.undoable {
             return Err(failed(spec.id, NO_UNDO_STEP));
         }
+        if c.next_changed && !c.doc_changed {
+            return Err(failed(spec.id, COUNTER_ONLY));
+        }
         // From here on only moves and bookkeeping: nothing of the notation runs.
+        let counter_before = self.counter;
+        self.counter = c.next;
         let key = params.coalesce().map(str::to_string);
         let chain = self.chain.take();
         let same_chain = matches!((&chain, &key), (Some((cid, ck)), Some(k)) if *cid == spec.id && ck == k);
@@ -312,7 +351,7 @@ impl<D: Document, V: View<D>> Session<D, V> {
         if c.doc_changed || c.view_changed {
             self.view = c.view;
             if spec.journal {
-                self.log(JournalEntry::Command { id: spec.id.to_string(), params: params.to_value() });
+                self.log(JournalEntry::Command { id: spec.id.to_string(), params: params.to_value() }, counter_before);
             }
         }
         Ok(Outcome { value: c.value, history_cleared: cleared })
@@ -351,7 +390,8 @@ impl<D: Document, V: View<D>> Session<D, V> {
         self.view = view;
         self.chain = None;
         self.enforce_caps();
-        self.log(JournalEntry::Command { id: id.to_string(), params: json!({}) });
+        let counter = self.counter;
+        self.log(JournalEntry::Command { id: id.to_string(), params: json!({}) }, counter);
         Ok(s.label)
     }
 
@@ -363,12 +403,13 @@ impl<D: Document, V: View<D>> Session<D, V> {
             return Err(EngineError::TooLong { key: "label".into(), max: MAX_LABEL });
         }
         let can = (self.can_undo(), self.can_redo());
-        let (current, view0) = (&self.doc, &self.view);
+        let (current, view0, next0) = (&self.doc, &self.view, self.counter);
         let (b, doc_changed, view_changed, before_weight) = guard("a batch", || {
             let mut b = Batch {
                 registry: &self.registry,
                 doc: current.clone(),
                 view: view0.clone(),
+                next: next0,
                 can_undo: can.0,
                 can_redo: can.1,
                 commands: Vec::new(),
@@ -381,7 +422,9 @@ impl<D: Document, V: View<D>> Session<D, V> {
             let before_weight = if doc_changed { current.weight() } else { 0 };
             Ok((b.into_parts(), doc_changed, view_changed, before_weight))
         })?;
-        let (doc, view, commands, results) = b;
+        let (doc, view, next, commands, results) = b;
+        let counter_before = self.counter;
+        self.counter = next;
         self.chain = None;
         let mut cleared = false;
         if doc_changed {
@@ -393,7 +436,7 @@ impl<D: Document, V: View<D>> Session<D, V> {
         }
         if doc_changed || view_changed {
             self.view = view;
-            self.log(JournalEntry::Batch { label: label.to_string(), commands });
+            self.log(JournalEntry::Batch { label: label.to_string(), commands }, counter_before);
         }
         Ok(Outcome { value: Value::Array(results), history_cleared: cleared })
     }
@@ -421,7 +464,7 @@ impl<D: Document, V: View<D>> Session<D, V> {
         self.check_enabled(&spec)?;
         let (doc, view) = guard(spec.id, || Ok((self.doc.clone(), self.view.clone())))?;
         self.chain = None;
-        self.interaction = Some(Interaction { id: spec.id, doc, view, last: None });
+        self.interaction = Some(Interaction { id: spec.id, doc, view, next: self.counter, last: None });
         Ok(())
     }
 
@@ -432,11 +475,12 @@ impl<D: Document, V: View<D>> Session<D, V> {
         let (spec, docs) = self.spec(id)?;
         let Handler::Run(run) = spec.handler else { return Err(EngineError::NoInteraction) };
         let it = self.interaction.as_ref().ok_or(EngineError::NoInteraction)?;
-        let result = params::validate(&docs, params, true).and_then(|p| self.compute(&spec, run, &p, (&it.doc, &it.view)).map(|c| (c, p)));
+        let result = params::validate(&docs, params, true).and_then(|p| self.compute(&spec, run, &p, (&it.doc, &it.view, it.next)).map(|c| (c, p)));
         match result {
             Ok((c, p)) => {
                 self.doc = c.doc;
                 self.view = c.view;
+                self.counter = c.next;
                 if let Some(it) = self.interaction.as_mut() {
                     it.last = Some((p, c.value.clone()));
                 }
@@ -451,6 +495,7 @@ impl<D: Document, V: View<D>> Session<D, V> {
                         self.doc = doc;
                         self.view = view;
                         if let Some(it) = self.interaction.as_mut() {
+                            self.counter = it.next;
                             it.last = None;
                         }
                     }
@@ -458,6 +503,7 @@ impl<D: Document, V: View<D>> Session<D, V> {
                         if let Some(it) = self.interaction.take() {
                             self.doc = it.doc;
                             self.view = it.view;
+                            self.counter = it.next;
                         }
                     }
                 }
@@ -490,12 +536,13 @@ impl<D: Document, V: View<D>> Session<D, V> {
                 if let Value::Object(m) = &mut p {
                     m.remove(params::COALESCE);
                 }
-                self.log(JournalEntry::Command { id: spec.id.to_string(), params: p });
+                self.log(JournalEntry::Command { id: spec.id.to_string(), params: p }, it.next);
                 Ok(Outcome { value, history_cleared: cleared })
             }
             _ => {
                 self.doc = it.doc;
                 self.view = it.view;
+                self.counter = it.next;
                 Ok(Outcome { value: Value::Null, history_cleared: false })
             }
         }
@@ -506,6 +553,7 @@ impl<D: Document, V: View<D>> Session<D, V> {
         let it = self.interaction.take().ok_or(EngineError::NoInteraction)?;
         self.doc = it.doc;
         self.view = it.view;
+        self.counter = it.next;
         Ok(())
     }
 
@@ -553,12 +601,12 @@ impl<D: Document, V: View<D>> Session<D, V> {
         }
     }
 
-    fn log(&mut self, entry: JournalEntry) {
+    fn log(&mut self, entry: JournalEntry, counter_before: u64) {
         let size = entry_size(&entry);
         self.journal_bytes = self.journal_bytes.saturating_add(size);
-        self.journal.push_back((entry, size));
+        self.journal.push_back((entry, size, counter_before));
         while self.journal.len() > self.options.max_journal || self.journal_bytes > self.options.max_journal_bytes {
-            let Some((_, gone)) = self.journal.pop_front() else { break };
+            let Some((_, gone, _)) = self.journal.pop_front() else { break };
             self.journal_bytes = self.journal_bytes.saturating_sub(gone);
             self.dropped.journal = self.dropped.journal.saturating_add(1);
             log::info!("the oldest journal entry was dropped to keep the journal within its caps");
@@ -582,6 +630,7 @@ pub struct Batch<'a, D, V> {
     registry: &'a Arc<Registry<D, V>>,
     doc: D,
     view: V,
+    next: u64,
     can_undo: bool,
     can_redo: bool,
     commands: Vec<(String, Value)>,
@@ -599,19 +648,23 @@ impl<D: Document, V: View<D>> Batch<'_, D, V> {
         (spec.enabled)(&facts).map_err(|reason| disabled(spec.id, reason))?;
         let params = params::validate(&docs, params, spec.undoable)?;
         let Handler::Run(run) = spec.handler else { return Err(EngineError::NotInBatch { id: spec.id.to_string() }) };
-        let (mut doc, mut view) = (self.doc.clone(), self.view.clone());
-        let value =
-            run(&mut Ctx { doc: &mut doc, view: &mut view }, &params).map_err(|error| EngineError::Failed { id: spec.id.to_string(), error })?;
+        let (mut doc, mut view, mut next) = (self.doc.clone(), self.view.clone(), self.next);
+        let value = run(&mut Ctx { doc: &mut doc, view: &mut view, next: &mut next }, &params)
+            .map_err(|error| EngineError::Failed { id: spec.id.to_string(), error })?;
         let doc_changed = doc != self.doc;
         let is_query = !spec.journal && !spec.undoable;
-        if is_query && (doc_changed || view != self.view) {
+        if is_query && (doc_changed || view != self.view || next != self.next) {
             return Err(failed(spec.id, QUERY_CHANGED));
         }
         if doc_changed && !spec.undoable {
             return Err(failed(spec.id, NO_UNDO_STEP));
         }
+        if next != self.next && !doc_changed {
+            return Err(failed(spec.id, COUNTER_ONLY));
+        }
         self.doc = doc;
         self.view = view;
+        self.next = next;
         if spec.journal {
             // A batch is one step of its own: a coalescing key inside it is not kept.
             let mut p = params.to_value();
@@ -633,7 +686,7 @@ impl<D: Document, V: View<D>> Batch<'_, D, V> {
     }
 
     #[allow(clippy::type_complexity)]
-    fn into_parts(self) -> (D, V, Vec<(String, Value)>, Vec<Value>) {
-        (self.doc, self.view, self.commands, self.results)
+    fn into_parts(self) -> (D, V, u64, Vec<(String, Value)>, Vec<Value>) {
+        (self.doc, self.view, self.next, self.commands, self.results)
     }
 }
