@@ -1,5 +1,5 @@
 //! Renders the window offscreen to a PNG, without opening one. Usage:
-//! `cargo run -p archforge-ui-egui --features snapshot --example snapshot -- <out.png> [light|dark] [width height [scale]] [--screen home|new-project]`
+//! `cargo run -p archforge-ui-egui --features snapshot --example snapshot -- <out.png> [light|dark] [width height [scale]] [--screen home|new-project|new-project-failed]`
 
 use archforge_ui_egui::offscreen::Screen;
 use archforge_ui_egui::theme::ThemeKind;
@@ -12,13 +12,14 @@ fn main() {
 }
 
 fn run() -> Result<(), String> {
-    const USAGE: &str = "usage: snapshot <out.png> [light|dark] [width height [scale]] [--screen home|new-project]";
+    const USAGE: &str = "usage: snapshot <out.png> [light|dark] [width height [scale]] [--screen home|new-project|new-project-failed]";
     let mut args: Vec<String> = std::env::args().skip(1).collect();
     let mut screen = Screen::Home;
     if let Some(at) = args.iter().position(|a| a == "--screen") {
         screen = match args.get(at + 1).map(String::as_str) {
             Some("home") => Screen::Home,
             Some("new-project") => Screen::NewProject,
+            Some("new-project-failed") => Screen::NewProjectFailed,
             other => return Err(format!("--screen {other:?} is not home or new-project; {USAGE}")),
         };
         args.drain(at..(at + 2).min(args.len()));

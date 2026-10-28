@@ -1,6 +1,7 @@
 # English catalogue. Columns: kind, context, key, text (see i18n/mod.rs). Rows go beside related entries.
 # Application menu
 str		Quit Archforge	Quit Archforge
+str		{name} — Archforge	{name} — Archforge
 # Home
 plural		{n} element	{n} element|{n} elements
 str		Recent projects	Recent projects
@@ -28,7 +29,7 @@ str		Name your project	Name your project
 str		You can rename it later.	You can rename it later.
 str		A project name cannot contain control characters.	A project name cannot contain control characters.
 str		A project name cannot contain {char}.	A project name cannot contain {char}.
-str		A project name can be at most {n} characters.	A project name can be at most {n} characters.
+str		This name is too long for a file name.	This name is too long for a file name.
 str		A project name cannot start or end with a space.	A project name cannot start or end with a space.
 str		A project name cannot start with a dot.	A project name cannot start with a dot.
 str		A project name cannot end with a dot.	A project name cannot end with a dot.
@@ -48,6 +49,14 @@ str		Chats and prompts, linked to what they touched.	Chats and prompts, linked t
 str		History	History
 str		Every change kept, to compare or restore.	Every change kept, to compare or restore.
 str		Cancel	Cancel
+str		Creating…	Creating…
+str		A project called {name} is already in this folder.	A project called {name} is already in this folder.
+str		An unfinished project called {name} is in this folder; delete it or choose another name.	An unfinished project called {name} is in this folder; delete it or choose another name.
+str		This name cannot be used.	This name cannot be used.
+str		The folder cannot hold projects.	The folder cannot hold projects.
+str		Archforge cannot find Dolt, which keeps its projects.	Archforge cannot find Dolt, which keeps its projects.
+str		The project could not be created.	The project could not be created.
+str		The work stopped without an answer.	The work stopped without an answer.
 # Home, continued
 str		Open a project	Open a project
 str		Continue from a project on this device.	Continue from a project on this device.
@@ -62,6 +71,8 @@ str		Pinned folders	Pinned folders
 str		Keep your project locations close.	Keep your project locations close.
 str		Pin a folder	Pin a folder
 str		Pick up in the exact view you left.	Pick up in the exact view you left.
+str		Nothing yet	Nothing yet
+str		Just now	Just now
 str		Last opened	Last opened
 str		No recent projects yet	No recent projects yet
 str		Projects you create or open will appear here.	Projects you create or open will appear here.

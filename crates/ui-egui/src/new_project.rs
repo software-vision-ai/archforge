@@ -6,15 +6,21 @@
 //! header and the footer then scrolls, and below 600 px of inner width the strip's three parts
 //! stack.
 //!
-//! Shell first: Change… and Create project are drawn as designed and not available yet, as
-//! creating the project's database comes with creating projects. Cancel, the close button and
-//! Escape close the dialog; the window behind it takes no clicks while it is open.
+//! Create project, or Enter in the name field, asks the host to create the project; the dialog
+//! then waits, taking no other click, and closes on success with the project open, or keeps the
+//! name and says what went wrong. The name follows the rules both sides share (`archforge-names`).
+//! Change… waits for the folder picker. Cancel, the close button and Escape close the dialog; the
+//! window behind it takes no clicks while it is open.
 
+use std::sync::mpsc::{Receiver, TryRecvError};
+use std::time::Duration;
+
+use archforge_names::Problem;
 use egui::{Color32, Pos2, Rect, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
 
 use crate::i18n::{fmt, tr};
 use crate::ux::{self, Palette, icons, types};
-use crate::{Shell, widgets};
+use crate::{CreateError, Opened, Shell, widgets};
 
 const WIDTH: f32 = 760.0;
 const HEIGHT: f32 = 640.0;
@@ -38,26 +44,40 @@ const FIELD: f32 = 44.0;
 const GAP: f32 = 12.0;
 /// Below this inner width the strip's parts stack.
 const THREE_UP: f32 = 600.0;
-/// The longest project name, in characters, and the most a name field takes.
-pub const MAX_NAME: usize = 100;
-const NAME_LIMIT: usize = 200;
-/// The project file's extension.
-pub const EXTENSION: &str = "archforge";
-/// The characters a file name cannot hold on some platform.
-const FORBIDDEN: &[char] = &['/', '\\', ':', '*', '?', '"', '<', '>', '|'];
-/// The names Windows keeps for devices, with any extension.
-const RESERVED: &[&str] = &[
-    "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5",
-    "LPT6", "LPT7", "LPT8", "LPT9",
-];
+/// The most a name field takes, in characters; the byte rule of `archforge-names` explains more.
+const NAME_LIMIT: usize = archforge_names::MAX_BYTES;
+/// How often the dialog looks for the host's answer while it waits.
+const POLL: Duration = Duration::from_millis(100);
 
 /// The dialog while it is open.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Default)]
 pub struct Dialog {
     /// The name as typed.
     pub name: String,
     /// Whether the name field has been given the keyboard yet, which it is once, on opening.
     focused: bool,
+    /// The host's answer to come, while a creation runs.
+    creating: Option<Receiver<Result<Opened, CreateError>>>,
+    /// The last creation's failure, and the name it was for; shown while the name is unchanged.
+    failed: Option<(String, CreateError)>,
+}
+
+impl Dialog {
+    /// Whether a creation is running.
+    pub fn creating(&self) -> bool {
+        self.creating.is_some()
+    }
+
+    /// Shows `e` as the last creation's failure, for screenshots of the dialog.
+    #[cfg(feature = "snapshot")]
+    pub(crate) fn show_failure(&mut self, e: CreateError) {
+        self.failed = Some((self.name.clone(), e));
+    }
+
+    /// The failure to show for the name as it is now.
+    fn failure(&self) -> Option<&CreateError> {
+        self.failed.as_ref().filter(|(name, _)| *name == self.name).map(|(_, e)| e)
+    }
 }
 
 /// Opens the dialog with an empty name.
@@ -65,45 +85,62 @@ pub fn open(shell: &mut Shell) {
     shell.new_project = Some(Dialog::default());
 }
 
-/// Why `name` cannot name a project's file, on any platform; `None` when it can. An empty name has
-/// no problem to report: it only keeps Create project off.
+/// Why `name` cannot name a project's file, on any platform; `None` when it can, and for an empty
+/// name, which only keeps Create project off.
 pub fn name_problem(name: &str) -> Option<String> {
-    if name.is_empty() {
-        return None;
-    }
-    if name.chars().any(char::is_control) {
-        return Some(tr("A project name cannot contain control characters."));
-    }
-    if let Some(c) = name.chars().find(|c| FORBIDDEN.contains(c)) {
-        return Some(fmt(&tr("A project name cannot contain {char}."), &[("char", &c.to_string())]));
-    }
-    if name.chars().count() > MAX_NAME {
-        return Some(fmt(&tr("A project name can be at most {n} characters."), &[("n", &MAX_NAME.to_string())]));
-    }
-    if name.starts_with(char::is_whitespace) || name.ends_with(char::is_whitespace) {
-        return Some(tr("A project name cannot start or end with a space."));
-    }
-    if name.starts_with('.') {
-        return Some(tr("A project name cannot start with a dot."));
-    }
-    if name.ends_with('.') {
-        return Some(tr("A project name cannot end with a dot."));
-    }
-    let stem = name.split('.').next().unwrap_or(name).trim_end();
-    if RESERVED.iter().any(|r| r.eq_ignore_ascii_case(stem)) {
-        return Some(tr("Windows keeps this name for itself; choose another."));
-    }
-    None
+    Some(match archforge_names::problem(name)? {
+        Problem::Empty => return None,
+        Problem::ControlCharacter => tr("A project name cannot contain control characters."),
+        Problem::Forbidden(c) => fmt(&tr("A project name cannot contain {char}."), &[("char", &c.to_string())]),
+        Problem::TooLong { .. } => tr("This name is too long for a file name."),
+        Problem::EdgeSpace => tr("A project name cannot start or end with a space."),
+        Problem::LeadingDot => tr("A project name cannot start with a dot."),
+        Problem::TrailingDot => tr("A project name cannot end with a dot."),
+        Problem::Reserved => tr("Windows keeps this name for itself; choose another."),
+    })
 }
 
 /// The project file's name for a project called `name`.
 pub fn file_name(name: &str) -> String {
-    format!("{name}.{EXTENSION}")
+    format!("{name}.{}", archforge_names::EXTENSION)
 }
 
 /// Whether `name` can be created.
 fn creatable(name: &str) -> bool {
-    !name.is_empty() && name_problem(name).is_none()
+    archforge_names::problem(name).is_none()
+}
+
+/// Whether Create project can start now: a name that can be created, a folder, a host, and no
+/// creation running.
+fn can_create(shell: &Shell, dialog: &Dialog) -> bool {
+    creatable(&dialog.name) && shell.services.projects_folder.is_some() && shell.services.projects.is_some() && !dialog.creating()
+}
+
+/// Asks the host to create the project.
+fn start(shell: &Shell, dialog: &mut Dialog) {
+    if let (Some(host), Some(folder)) = (&shell.services.projects, &shell.services.projects_folder) {
+        dialog.creating = Some(host.create(&folder.path, &dialog.name));
+        dialog.failed = None;
+    }
+}
+
+/// Takes the host's answer when it has come: the project, or the failure to show. `None` while it
+/// is still to come.
+fn answer(dialog: &mut Dialog) -> Option<Result<Opened, CreateError>> {
+    let rx = dialog.creating.as_ref()?;
+    let got = match rx.try_recv() {
+        Ok(result) => result,
+        Err(TryRecvError::Empty) => return None,
+        Err(TryRecvError::Disconnected) => Err(CreateError::Failed { detail: tr("The work stopped without an answer.") }),
+    };
+    dialog.creating = None;
+    Some(got)
+}
+
+/// The open project goes to the top of Home's recent list, once.
+fn remember(shell: &mut Shell, opened: &Opened) {
+    shell.home.recent.retain(|r| r.name != opened.name);
+    shell.home.recent.insert(0, crate::home::Recent { name: opened.name.clone(), last_view: tr("Nothing yet"), elements: 0, opened: tr("Just now") });
 }
 
 /// Draws the dialog over everything when it is open, and closes it on Cancel, the close button or
@@ -114,9 +151,21 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
         return;
     }
     let Some(mut dialog) = shell.new_project.take() else { return };
+    match answer(&mut dialog) {
+        Some(Ok(opened)) => {
+            remember(shell, &opened);
+            shell.project = Some(opened);
+            return;
+        }
+        Some(Err(e)) => dialog.failed = Some((dialog.name.clone(), e)),
+        None if dialog.creating() => ui.ctx().request_repaint_after(POLL),
+        None => {}
+    }
     let p = *ux::palette(shell.state.theme.is_dark());
     let window = ui.max_rect();
-    let mut close = ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
+    // While a creation runs nothing closes the dialog.
+    let escape = ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
+    let mut close = escape && !dialog.creating();
     egui::Area::new(egui::Id::new("new-project")).order(egui::Order::Foreground).fixed_pos(window.min).show(ui.ctx(), |ui| {
         ui.set_min_size(window.size());
         // The veil takes every click behind the dialog; on macOS its title strip still moves the window.
@@ -134,14 +183,14 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
         paint.rect_stroke(frame, 16.0, Stroke::new(1.0, p.dialog_edge), StrokeKind::Inside);
         // The dialog's own area takes its clicks, so none reaches the veil.
         let _ = ui.interact(frame, ui.id().with("new-project.frame"), Sense::click());
-        if header(shell, ui, &p, frame) {
+        if header(shell, ui, &p, frame, !dialog.creating()) {
             close = true;
         }
         // A dialog shorter than designed gives its body the room the gap above the footer had.
         let gap = if size.y < HEIGHT { GAP } else { PAD };
         let body = Rect::from_min_max(pos2(frame.left(), frame.top() + BODY_TOP), pos2(frame.right(), frame.bottom() - FOOTER - gap));
         body_scroll(shell, ui, &p, body, &mut dialog);
-        if footer(shell, ui, &p, frame, &dialog) {
+        if footer(shell, ui, &p, frame, &mut dialog) {
             close = true;
         }
     });
@@ -158,7 +207,7 @@ fn control(shell: &mut Shell, ui: &egui::Ui, id: &str, kind: &'static str, rect:
 }
 
 /// The icon, the title and its line, and the close button; gives whether it was clicked.
-fn header(shell: &mut Shell, ui: &egui::Ui, p: &Palette, frame: Rect) -> bool {
+fn header(shell: &mut Shell, ui: &egui::Ui, p: &Palette, frame: Rect, live: bool) -> bool {
     let paint = ui.painter();
     let at = |x: f32, y: f32| frame.min + vec2(x, y);
     let tile = Rect::from_min_size(at(PAD, PAD), Vec2::splat(40.0));
@@ -175,12 +224,13 @@ fn header(shell: &mut Shell, ui: &egui::Ui, p: &Palette, frame: Rect) -> bool {
         Some(room),
     );
     let close = Rect::from_min_size(at(frame.width() - 60.0, 28.0), Vec2::splat(32.0));
-    let resp = control(shell, ui, "new-project.close", "button", close, true).on_hover_text(tr("Close"));
-    if resp.hovered() {
+    let resp = control(shell, ui, "new-project.close", "button", close, live);
+    let resp = if live { resp.on_hover_text(tr("Close")) } else { resp };
+    if live && resp.hovered() {
         ui.painter().rect_filled(close, 8.0, p.border);
     }
-    ux::icon(ui.painter(), close.min + vec2(9.0, 9.0), &icons::CLOSE, 14.0, p.text_secondary);
-    resp.clicked()
+    ux::icon(ui.painter(), close.min + vec2(9.0, 9.0), &icons::CLOSE, 14.0, if live { p.text_secondary } else { p.text_muted });
+    live && resp.clicked()
 }
 
 /// The body between the header and the footer, scrolling when the window is too small for it.
@@ -208,6 +258,7 @@ fn content(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, origin: Pos2, inne
     let text_rect = Rect::from_min_size(pos2(field.left() + 14.0, field.center().y - row / 2.0), vec2((field.width() - 28.0).max(0.0), row));
     paint.rect_filled(field, 8.0, p.surface);
     let hint = egui::RichText::new(tr("Name your project")).font(font.clone()).color(p.text_muted);
+    let waiting = dialog.creating();
     let edit = egui::TextEdit::singleline(&mut dialog.name)
         .id(widgets::egui_id("new-project.name"))
         .font(font)
@@ -217,8 +268,12 @@ fn content(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, origin: Pos2, inne
         .margin(egui::Margin::ZERO)
         .char_limit(NAME_LIMIT)
         .desired_width(text_rect.width());
-    let resp = ui.put(text_rect, edit);
+    let resp = ui.add_enabled_ui(!waiting, |ui| ui.put(text_rect, edit)).inner;
     widgets::record_visible(ui, &mut shell.registry, "new-project.name", "field", field);
+    // Enter in the name field creates, as Create project does.
+    if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) && can_create(shell, dialog) {
+        start(shell, dialog);
+    }
     if !dialog.focused {
         resp.request_focus();
         dialog.focused = true;
@@ -231,9 +286,17 @@ fn content(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, origin: Pos2, inne
         Stroke::new(1.0, p.border)
     };
     paint.rect_stroke(field, 8.0, ring, StrokeKind::Inside);
-    let problem = name_problem(&dialog.name);
-    match &problem {
-        Some(why) => ux::text(&paint, at(NAME_HINT), why, types::SMALL, p.amber, Some(inner)),
+    // Under the name: why it cannot be used, a creation's failure about the name, or the hint.
+    let about_name = match dialog.failure() {
+        Some(CreateError::NameTaken) => Some(fmt(&tr("A project called {name} is already in this folder."), &[("name", &dialog.name)])),
+        Some(CreateError::Unfinished) => {
+            Some(fmt(&tr("An unfinished project called {name} is in this folder; delete it or choose another name."), &[("name", &dialog.name)]))
+        }
+        Some(CreateError::BadName) => Some(tr("This name cannot be used.")),
+        _ => None,
+    };
+    match name_problem(&dialog.name).or(about_name) {
+        Some(why) => ux::text(&paint, at(NAME_HINT), &why, types::SMALL, p.amber, Some(inner)),
         None => ux::text(&paint, at(NAME_HINT), &tr("You can rename it later."), types::SMALL, p.text_muted, Some(inner)),
     };
     // The location.
@@ -258,7 +321,22 @@ fn content(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, origin: Pos2, inne
     } else {
         tr("The project file is made here: one versioned file that keeps every change.")
     };
-    ux::text(&paint, at(LOCATION_HINT), &file_line, types::SMALL, p.text_muted, Some(inner));
+    // Under the location: a creation's failure about the folder or the work, or the file line.
+    let (headline, detail) = match dialog.failure() {
+        Some(CreateError::FolderUnusable { detail }) => (Some(tr("The folder cannot hold projects.")), detail.as_str()),
+        Some(CreateError::DoltMissing { detail }) => (Some(tr("Archforge cannot find Dolt, which keeps its projects.")), detail.as_str()),
+        Some(CreateError::Failed { detail }) => (Some(tr("The project could not be created.")), detail.as_str()),
+        _ => (None, ""),
+    };
+    match headline {
+        Some(h) => {
+            ux::text(&paint, at(LOCATION_HINT), &h, types::SMALL, p.amber, Some(inner));
+            ux::text(&paint, at(LOCATION_HINT + 17.0), detail, types::SMALL, p.text_muted, Some(inner));
+        }
+        None => {
+            ux::text(&paint, at(LOCATION_HINT), &file_line, types::SMALL, p.text_muted, Some(inner));
+        }
+    }
     // Diagrams come as the user works.
     ux::text(&paint, at(DIAGRAMS), &tr("Diagrams"), types::UI_STRONG, p.text, Some(inner));
     let line = ux::galley_rows(
@@ -294,25 +372,34 @@ fn content(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, origin: Pos2, inne
     if three { PARTS_TOP + h } else { PARTS_TOP + 3.0 * h + 2.0 * GAP }
 }
 
-/// The divider, Cancel and Create project; gives whether Cancel was clicked.
-fn footer(shell: &mut Shell, ui: &egui::Ui, p: &Palette, frame: Rect, dialog: &Dialog) -> bool {
+/// The divider, Cancel and Create project; gives whether Cancel was clicked, and starts a creation
+/// when Create project is.
+fn footer(shell: &mut Shell, ui: &egui::Ui, p: &Palette, frame: Rect, dialog: &mut Dialog) -> bool {
     let paint = ui.painter();
     paint.rect_filled(Rect::from_min_size(pos2(frame.left(), frame.bottom() - FOOTER), vec2(frame.width(), 1.0)), 0.0, p.border);
     let top = frame.bottom() - 62.0;
     let create = Rect::from_min_size(pos2(frame.right() - PAD - 144.0, top), vec2(144.0, 40.0));
     let cancel = Rect::from_min_size(pos2(create.left() - GAP - 104.0, top), vec2(104.0, 40.0));
-    let cancelled = control(shell, ui, "new-project.cancel", "button", cancel, true);
+    let waiting = dialog.creating();
+    let cancelled = control(shell, ui, "new-project.cancel", "button", cancel, !waiting);
     let paint = ui.painter();
-    paint.rect_filled(cancel, 8.0, if cancelled.hovered() { p.page } else { p.surface });
+    paint.rect_filled(cancel, 8.0, if cancelled.hovered() && !waiting { p.page } else { p.surface });
     paint.rect_stroke(cancel, 8.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
-    centred(paint, cancel, &tr("Cancel"), p.text);
-    control(shell, ui, "new-project.create", "button", create, false);
-    // A name that cannot be created keeps the button faded.
-    let fill = if creatable(&dialog.name) { p.accent_fill } else { p.accent_fill.gamma_multiply(0.45) };
+    centred(paint, cancel, &tr("Cancel"), if waiting { p.text_muted } else { p.text });
+    let live = can_create(shell, dialog);
+    // A creation needs a host; without one the button says on hover that it is not available yet.
+    let host = shell.services.projects.is_some();
+    let resp = control(shell, ui, "new-project.create", "button", create, host);
+    if live && resp.clicked() {
+        start(shell, dialog);
+    }
+    // A name that cannot be created, or a running creation, keeps the button faded.
+    let fill = if live { p.accent_fill } else { p.accent_fill.gamma_multiply(0.45) };
+    let label = if dialog.creating() { tr("Creating…") } else { tr("Create project") };
     let paint = ui.painter();
     paint.rect_filled(create, 8.0, fill);
-    centred(paint, create, &tr("Create project"), p.on_accent);
-    cancelled.clicked()
+    centred(paint, create, &label, p.on_accent);
+    !waiting && cancelled.clicked()
 }
 
 fn centred(paint: &egui::Painter, r: Rect, label: &str, color: Color32) {
@@ -325,23 +412,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_name_that_cannot_name_a_file_on_any_platform_is_refused_with_its_reason() {
+    fn every_name_rule_has_its_sentence_and_an_empty_name_none() {
         crate::i18n::set_language("en");
-        for good in ["Commerce platform", "Ünïcødé ✓", "v2.1 model", "a", "CONSOLE", "Com10"] {
-            assert_eq!(name_problem(good), None, "{good}");
-        }
+        assert_eq!(name_problem("Commerce platform"), None);
         assert_eq!(name_problem(""), None, "an empty name only keeps Create project off");
         assert!(!creatable(""));
         let says = |n: &str| name_problem(n).unwrap();
         assert!(says("a/b").contains('/'));
-        assert!(says("a:b").contains(':'));
         assert!(says("a\tb").contains("control"));
-        assert!(says(" lead").contains("space") && says("trail ").contains("space"));
+        assert!(says(" lead").contains("space"));
         assert!(says(".hidden").contains("start with a dot"));
         assert!(says("ends.").contains("end with a dot"));
-        assert!(says("con").contains("Windows") && says("LPT1.notes").contains("Windows") && says("nul").contains("Windows"));
-        assert!(says(&"x".repeat(MAX_NAME + 1)).contains("100"));
-        assert_eq!(name_problem(&"é".repeat(MAX_NAME)), None, "the limit counts characters, not bytes");
+        assert!(says("con").contains("Windows"));
+        assert!(says(&"x".repeat(archforge_names::MAX_BYTES + 1)).contains("too long"));
         assert_eq!(file_name("Commerce platform"), "Commerce platform.archforge");
     }
 }

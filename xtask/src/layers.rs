@@ -26,10 +26,13 @@ pub enum Class {
 
 /// Every library crate, by short name. Every library crate of the workspace has a row.
 pub const TABLE: &[(&str, Class)] = &[
+    // The rules for names that become file names: pure, shared by the shell and the host.
+    ("names", Class::Standalone),
     ("ui-egui", Class::Layer(6)),
     // Host services, for the desktop only: the application uses them and the shell never depends on
     // them, so the portable-target check, which builds the layers below the shell, leaves them out.
     ("dolt", Class::Layer(7)),
+    ("project", Class::Layer(8)),
 ];
 
 /// The shell crate: the highest crate the portable-target check builds.

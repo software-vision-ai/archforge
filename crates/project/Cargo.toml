@@ -1,0 +1,18 @@
+[package]
+name = "archforge-project"
+description = "A project on disk: create it, open it and read its settings, through its Dolt server"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+archforge-dolt.workspace = true
+archforge-names.workspace = true
+log.workspace = true
+mysql.workspace = true
+
+[lints]
+workspace = true

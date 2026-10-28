@@ -2,6 +2,7 @@
 # Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit.
 # アプリケーションメニュー
 str		Quit Archforge	Archforge を終了
+str		{name} — Archforge	{name} — Archforge
 # ホーム
 plural		{n} element	{n} 個の要素
 str		Recent projects	最近使ったプロジェクト
@@ -29,7 +30,7 @@ str		Name your project	プロジェクトに名前を付ける
 str		You can rename it later.	名前はあとで変更できます。
 str		A project name cannot contain control characters.	プロジェクト名に制御文字は使えません。
 str		A project name cannot contain {char}.	プロジェクト名に {char} は使えません。
-str		A project name can be at most {n} characters.	プロジェクト名は {n} 文字以内にしてください。
+str		This name is too long for a file name.	この名前はファイル名としては長すぎます。
 str		A project name cannot start or end with a space.	プロジェクト名の先頭と末尾に空白は使えません。
 str		A project name cannot start with a dot.	プロジェクト名の先頭にドットは使えません。
 str		A project name cannot end with a dot.	プロジェクト名の末尾にドットは使えません。
@@ -49,6 +50,14 @@ str		Chats and prompts, linked to what they touched.	チャットとリクエス
 str		History	履歴
 str		Every change kept, to compare or restore.	すべての変更を保存。比較や復元に使えます。
 str		Cancel	キャンセル
+str		Creating…	作成中…
+str		A project called {name} is already in this folder.	{name} という名前のプロジェクトがこのフォルダーにすでにあります。
+str		An unfinished project called {name} is in this folder; delete it or choose another name.	未完成のプロジェクト {name} がこのフォルダーにあります。削除するか、別の名前を選んでください。
+str		This name cannot be used.	この名前は使えません。
+str		The folder cannot hold projects.	このフォルダーにはプロジェクトを置けません。
+str		Archforge cannot find Dolt, which keeps its projects.	プロジェクトを保存する Dolt が見つかりません。
+str		The project could not be created.	プロジェクトを作成できませんでした。
+str		The work stopped without an answer.	処理が応答なしで止まりました。
 # ホーム（続き）
 str		Open a project	プロジェクトを開く
 str		Continue from a project on this device.	このデバイス上のプロジェクトから続けます。
@@ -63,6 +72,8 @@ str		Pinned folders	ピン留めしたフォルダー
 str		Keep your project locations close.	プロジェクトの保存場所を、すぐ手の届くところに。
 str		Pin a folder	フォルダーをピン留め
 str		Pick up in the exact view you left.	中断したビューからそのまま再開できます。
+str		Nothing yet	まだありません
+str		Just now	たった今
 str		Last opened	最後に開いた日時
 str		No recent projects yet	最近使ったプロジェクトはまだありません
 str		Projects you create or open will appear here.	作成したり開いたりしたプロジェクトがここに表示されます。

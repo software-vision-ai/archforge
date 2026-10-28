@@ -13,6 +13,7 @@ publish = false
 snapshot = ["dep:egui_kittest"]
 
 [dependencies]
+archforge-names.workspace = true
 egui.workspace = true
 egui_kittest = { workspace = true, optional = true, features = ["wgpu"] }
 serde.workspace = true

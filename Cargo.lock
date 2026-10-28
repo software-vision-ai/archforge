@@ -232,6 +232,8 @@ dependencies = [
 name = "archforge"
 version = "0.1.0"
 dependencies = [
+ "archforge-dolt",
+ "archforge-project",
  "archforge-ui-egui",
  "craft-atomic",
  "eframe",
@@ -256,9 +258,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "archforge-names"
+version = "0.1.0"
+
+[[package]]
+name = "archforge-project"
+version = "0.1.0"
+dependencies = [
+ "archforge-dolt",
+ "archforge-names",
+ "log",
+ "mysql",
+]
+
+[[package]]
 name = "archforge-ui-egui"
 version = "0.1.0"
 dependencies = [
+ "archforge-names",
  "egui",
  "egui_kittest",
  "log",

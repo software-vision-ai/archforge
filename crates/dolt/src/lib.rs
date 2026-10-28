@@ -24,4 +24,11 @@ pub use binary::Dolt;
 pub use error::Error;
 pub use home::Home;
 pub use secret::Secret;
-pub use server::{Server, ServerOptions};
+pub use server::{Server, ServerOptions, recover_only as recover};
+
+/// This user's id, read from a folder made for the purpose in the temporary folder and removed
+/// again: for checking who owns a project folder without unsafe code.
+#[cfg(unix)]
+pub fn user_id() -> std::io::Result<u32> {
+    home::current_uid(&std::env::temp_dir())
+}

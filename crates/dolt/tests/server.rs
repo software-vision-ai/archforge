@@ -313,3 +313,56 @@ fn a_lock_naming_another_program_does_not_stop_a_start_and_that_program_lives_on
     sleeper.kill().unwrap();
     sleeper.wait().unwrap();
 }
+
+/// Runs the test's dolt in `dir` with the test's home, failing the test on an error.
+fn dolt_cli(env: &Env, dir: &Path, args: &[&str]) {
+    let out = Command::new(env.dolt.path()).args(args).current_dir(dir).env("DOLT_ROOT_PATH", env.home.path()).output().unwrap();
+    assert!(out.status.success(), "dolt {args:?}: {}", String::from_utf8_lossy(&out.stderr));
+}
+
+/// Every file of a folder with its size and modification time, to see whether anything wrote to it.
+fn fingerprint(d: &Path) -> Vec<(PathBuf, u64, std::time::SystemTime)> {
+    let mut v: Vec<_> = walk(d)
+        .into_iter()
+        .map(|p| {
+            let m = std::fs::metadata(&p).unwrap();
+            (p, m.len(), m.modified().unwrap())
+        })
+        .collect();
+    v.sort();
+    v
+}
+
+#[test]
+fn a_planted_server_setting_never_syncs_with_a_remote_or_runs_events() {
+    let env = Env::new("planted");
+    let project = env.data().join("project");
+    let remote = env.base.join("remote");
+    std::fs::create_dir_all(&project).unwrap();
+    std::fs::create_dir_all(&remote).unwrap();
+    dolt_cli(&env, &project, &["init", "--name", "A", "--email", "a@localhost"]);
+    dolt_cli(&env, &project, &["sql", "-q", "create table t (a int primary key)"]);
+    dolt_cli(&env, &project, &["commit", "-Am", "init"]);
+    dolt_cli(&env, &project, &["remote", "add", "origin", &format!("file://{}", remote.display())]);
+    dolt_cli(&env, &project, &["push", "origin", "main"]);
+    // What a project folder from elsewhere could carry: replication and scheduled events turned on.
+    std::fs::create_dir_all(env.data().join(".dolt")).unwrap();
+    std::fs::write(
+        env.data().join(".dolt/config.json"),
+        r#"{"sqlserver.global.dolt_replicate_to_remote":"origin","sqlserver.global.event_scheduler":"ON"}"#,
+    )
+    .unwrap();
+    let before = fingerprint(&remote);
+    let server = env.start().unwrap();
+    let _guard = KillOnDrop(server.pid());
+    let mut c = server.connect().unwrap();
+    c.query_drop("USE project").unwrap();
+    assert_eq!(c.query_first::<String, _>("SELECT @@global.event_scheduler").unwrap().as_deref(), Some("OFF"));
+    assert_eq!(c.query_first::<String, _>("SELECT @@global.dolt_replicate_to_remote").unwrap().as_deref(), Some(""));
+    c.query_drop("INSERT INTO t VALUES (1)").unwrap();
+    c.query_drop("CALL DOLT_COMMIT('-Am', 'a change')").unwrap();
+    std::thread::sleep(Duration::from_millis(500));
+    drop(c);
+    server.stop().unwrap();
+    assert_eq!(fingerprint(&remote), before, "the remote was written to");
+}
