@@ -22,6 +22,15 @@ goes into the design first. `crates/ui-egui/README.md` lists the crate's public 
   palette. Everything else is drawn by the screen itself.
 - On macOS the title strip is the window's title bar: keep clear of `Shell::top_inset`.
 
+## Icons over text
+- Prefer an icon to a text label wherever an icon says it clearly: tools, toggles, option and
+  segmented buttons, cardinality ends, line styles, and row or editor actions such as edit, remove,
+  apply and cancel. The words go into the tooltip and the accessible name, through `tr`.
+- Keep text where no icon is clear: a heading, a field label, a value, the name of a menu entry, a
+  sentence. When in doubt, draw the icon and show it beside the design before falling back to text.
+- An icon is a thin stroke at the design's weight and size, never a scaled-up copy; an icon without
+  text always has a tooltip and an automation id.
+
 ## Controls
 - Every interactive control is registered with an automation id, its kind and its rectangle, as
   `control` in `crates/ui-egui/src/home.rs` does through `crates/ui-egui/src/widgets.rs`. Ids are
