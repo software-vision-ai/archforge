@@ -9,7 +9,7 @@ use archforge_mof::{Builder, ClassId, DataId, DataKind, MetaError, Metamodel, Pr
 pub const INDEX: u16 = 3;
 pub const URI: &str = "archforge:er";
 pub const VERSION: &str = "1";
-pub const CONTENT_HASH: &str = "49dbd76b242db293";
+pub const CONTENT_HASH: &str = "04e0c373b492b4b3";
 
 pub const BOOLEAN: DataId = DataId::new(INDEX, 0);
 pub const INTEGER: DataId = DataId::new(INDEX, 1);
@@ -19,6 +19,8 @@ pub const UNLIMITED_NATURAL: DataId = DataId::new(INDEX, 4);
 pub const CARDINALITY: DataId = DataId::new(INDEX, 5);
 pub const ENTITY_KIND: DataId = DataId::new(INDEX, 6);
 pub const REFERENTIAL_ACTION: DataId = DataId::new(INDEX, 7);
+pub const MATCH_TYPE: DataId = DataId::new(INDEX, 8);
+pub const DEFERRABILITY: DataId = DataId::new(INDEX, 9);
 
 pub const ELEMENT: ClassId = ClassId::new(INDEX, 0);
 pub const NAMED_ELEMENT: ClassId = ClassId::new(INDEX, 1);
@@ -26,8 +28,10 @@ pub const SCHEMA: ClassId = ClassId::new(INDEX, 2);
 pub const ENTITY: ClassId = ClassId::new(INDEX, 3);
 pub const ATTRIBUTE: ClassId = ClassId::new(INDEX, 4);
 pub const RELATIONSHIP: ClassId = ClassId::new(INDEX, 5);
-pub const FOREIGN_KEY: ClassId = ClassId::new(INDEX, 6);
-pub const FOREIGN_KEY_COLUMN: ClassId = ClassId::new(INDEX, 7);
+pub const KEY: ClassId = ClassId::new(INDEX, 6);
+pub const PRIMARY_KEY: ClassId = ClassId::new(INDEX, 7);
+pub const UNIQUE_CONSTRAINT: ClassId = ClassId::new(INDEX, 8);
+pub const FOREIGN_KEY: ClassId = ClassId::new(INDEX, 9);
 
 /// The properties Element declares.
 pub mod element {
@@ -54,16 +58,16 @@ pub mod entity {
     use super::PropId;
     pub const ATTRIBUTE: PropId = PropId::new(INDEX, 4);
     pub const KIND: PropId = PropId::new(INDEX, 5);
-    pub const FOREIGN_KEY: PropId = PropId::new(INDEX, 6);
+    pub const PRIMARY_KEY: PropId = PropId::new(INDEX, 6);
+    pub const UNIQUE_CONSTRAINT: PropId = PropId::new(INDEX, 7);
+    pub const FOREIGN_KEY: PropId = PropId::new(INDEX, 8);
 }
 /// The properties Attribute declares.
 pub mod attribute {
     use super::INDEX;
     use super::PropId;
-    pub const TYPE: PropId = PropId::new(INDEX, 7);
-    pub const PRIMARY_KEY: PropId = PropId::new(INDEX, 8);
-    pub const NULLABLE: PropId = PropId::new(INDEX, 9);
-    pub const UNIQUE: PropId = PropId::new(INDEX, 10);
+    pub const TYPE: PropId = PropId::new(INDEX, 9);
+    pub const NULLABLE: PropId = PropId::new(INDEX, 10);
 }
 /// The properties Relationship declares.
 pub mod relationship {
@@ -76,23 +80,31 @@ pub mod relationship {
     pub const TO_END: PropId = PropId::new(INDEX, 15);
     pub const IDENTIFYING: PropId = PropId::new(INDEX, 16);
 }
+/// The properties Key declares.
+pub mod key {
+    use super::INDEX;
+    use super::PropId;
+    pub const NAME: PropId = PropId::new(INDEX, 17);
+    pub const COLUMN: PropId = PropId::new(INDEX, 18);
+}
+/// The properties UniqueConstraint declares.
+pub mod unique_constraint {
+    use super::INDEX;
+    use super::PropId;
+    pub const NULLS_DISTINCT: PropId = PropId::new(INDEX, 19);
+}
 /// The properties ForeignKey declares.
 pub mod foreign_key {
     use super::INDEX;
     use super::PropId;
-    pub const NAME: PropId = PropId::new(INDEX, 17);
-    pub const REFERENCES: PropId = PropId::new(INDEX, 18);
-    pub const COLUMN: PropId = PropId::new(INDEX, 19);
-    pub const ON_DELETE: PropId = PropId::new(INDEX, 20);
-    pub const ON_UPDATE: PropId = PropId::new(INDEX, 21);
-    pub const RELATIONSHIP: PropId = PropId::new(INDEX, 22);
-}
-/// The properties ForeignKeyColumn declares.
-pub mod foreign_key_column {
-    use super::INDEX;
-    use super::PropId;
-    pub const ATTRIBUTE: PropId = PropId::new(INDEX, 23);
-    pub const TARGET: PropId = PropId::new(INDEX, 24);
+    pub const NAME: PropId = PropId::new(INDEX, 20);
+    pub const REFERENCES: PropId = PropId::new(INDEX, 21);
+    pub const COLUMN: PropId = PropId::new(INDEX, 22);
+    pub const ON_DELETE: PropId = PropId::new(INDEX, 23);
+    pub const ON_UPDATE: PropId = PropId::new(INDEX, 24);
+    pub const RELATIONSHIP: PropId = PropId::new(INDEX, 25);
+    pub const MATCH: PropId = PropId::new(INDEX, 26);
+    pub const DEFERRABLE: PropId = PropId::new(INDEX, 27);
 }
 
 fn build() -> Result<Arc<Metamodel>, MetaError> {
@@ -109,14 +121,18 @@ fn build() -> Result<Arc<Metamodel>, MetaError> {
         DataKind::Enumeration(vec!["noAction".into(), "restrict".into(), "cascade".into(), "setNull".into(), "setDefault".into()]),
         "",
     )?;
+    b.data_type("MatchType", DataKind::Enumeration(vec!["simple".into(), "full".into(), "partial".into()]), "")?;
+    b.data_type("Deferrability", DataKind::Enumeration(vec!["notDeferrable".into(), "initiallyImmediate".into(), "initiallyDeferred".into()]), "")?;
     b.class("Element", true, &[], "")?;
     b.class("NamedElement", true, &[ELEMENT], "")?;
     b.class("Schema", false, &[NAMED_ELEMENT], "")?;
     b.class("Entity", false, &[NAMED_ELEMENT], "")?;
     b.class("Attribute", false, &[NAMED_ELEMENT], "")?;
     b.class("Relationship", false, &[ELEMENT], "")?;
+    b.class("Key", true, &[ELEMENT], "")?;
+    b.class("PrimaryKey", false, &[KEY], "")?;
+    b.class("UniqueConstraint", false, &[KEY], "")?;
     b.class("ForeignKey", false, &[ELEMENT], "")?;
-    b.class("ForeignKeyColumn", false, &[ELEMENT], "")?;
     b.property(PropertySpec {
         name: "ownedElement",
         owner: ELEMENT,
@@ -238,6 +254,46 @@ fn build() -> Result<Arc<Metamodel>, MetaError> {
         doc: "",
     })?; // entity::KIND
     b.property(PropertySpec {
+        name: "primaryKey",
+        owner: ENTITY,
+        ty: TypeRef::Class(PRIMARY_KEY),
+        lower: 0,
+        upper: Some(1),
+        is_ordered: false,
+        is_unique: true,
+        is_composite: true,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[element::OWNED_ELEMENT],
+        redefines: &[],
+        default: None,
+        doc: "",
+    })?; // entity::PRIMARY_KEY
+    b.property(PropertySpec {
+        name: "uniqueConstraint",
+        owner: ENTITY,
+        ty: TypeRef::Class(UNIQUE_CONSTRAINT),
+        lower: 0,
+        upper: None,
+        is_ordered: true,
+        is_unique: true,
+        is_composite: true,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[element::OWNED_ELEMENT],
+        redefines: &[],
+        default: None,
+        doc: "",
+    })?; // entity::UNIQUE_CONSTRAINT
+    b.property(PropertySpec {
         name: "foreignKey",
         owner: ENTITY,
         ty: TypeRef::Class(FOREIGN_KEY),
@@ -278,26 +334,6 @@ fn build() -> Result<Arc<Metamodel>, MetaError> {
         doc: "",
     })?; // attribute::TYPE
     b.property(PropertySpec {
-        name: "primaryKey",
-        owner: ATTRIBUTE,
-        ty: TypeRef::Data(BOOLEAN),
-        lower: 1,
-        upper: Some(1),
-        is_ordered: false,
-        is_unique: true,
-        is_composite: false,
-        is_derived: false,
-        is_derived_union: false,
-        is_read_only: false,
-        is_id: false,
-        is_name: false,
-        opposite: None,
-        subsets: &[],
-        redefines: &[],
-        default: Some(Value::Bool(false)),
-        doc: "",
-    })?; // attribute::PRIMARY_KEY
-    b.property(PropertySpec {
         name: "nullable",
         owner: ATTRIBUTE,
         ty: TypeRef::Data(BOOLEAN),
@@ -317,26 +353,6 @@ fn build() -> Result<Arc<Metamodel>, MetaError> {
         default: Some(Value::Bool(true)),
         doc: "",
     })?; // attribute::NULLABLE
-    b.property(PropertySpec {
-        name: "unique",
-        owner: ATTRIBUTE,
-        ty: TypeRef::Data(BOOLEAN),
-        lower: 1,
-        upper: Some(1),
-        is_ordered: false,
-        is_unique: true,
-        is_composite: false,
-        is_derived: false,
-        is_derived_union: false,
-        is_read_only: false,
-        is_id: false,
-        is_name: false,
-        opposite: None,
-        subsets: &[],
-        redefines: &[],
-        default: Some(Value::Bool(false)),
-        doc: "",
-    })?; // attribute::UNIQUE
     b.property(PropertySpec {
         name: "name",
         owner: RELATIONSHIP,
@@ -459,6 +475,66 @@ fn build() -> Result<Arc<Metamodel>, MetaError> {
     })?; // relationship::IDENTIFYING
     b.property(PropertySpec {
         name: "name",
+        owner: KEY,
+        ty: TypeRef::Data(STRING),
+        lower: 0,
+        upper: Some(1),
+        is_ordered: false,
+        is_unique: true,
+        is_composite: false,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: true,
+        opposite: None,
+        subsets: &[],
+        redefines: &[],
+        default: None,
+        doc: "",
+    })?; // key::NAME
+    b.property(PropertySpec {
+        name: "column",
+        owner: KEY,
+        ty: TypeRef::Class(ATTRIBUTE),
+        lower: 1,
+        upper: None,
+        is_ordered: true,
+        is_unique: true,
+        is_composite: false,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[],
+        redefines: &[],
+        default: None,
+        doc: "",
+    })?; // key::COLUMN
+    b.property(PropertySpec {
+        name: "nullsDistinct",
+        owner: UNIQUE_CONSTRAINT,
+        ty: TypeRef::Data(BOOLEAN),
+        lower: 1,
+        upper: Some(1),
+        is_ordered: false,
+        is_unique: true,
+        is_composite: false,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[],
+        redefines: &[],
+        default: Some(Value::Bool(true)),
+        doc: "",
+    })?; // unique_constraint::NULLS_DISTINCT
+    b.property(PropertySpec {
+        name: "name",
         owner: FOREIGN_KEY,
         ty: TypeRef::Data(STRING),
         lower: 0,
@@ -480,7 +556,7 @@ fn build() -> Result<Arc<Metamodel>, MetaError> {
     b.property(PropertySpec {
         name: "references",
         owner: FOREIGN_KEY,
-        ty: TypeRef::Class(ENTITY),
+        ty: TypeRef::Class(KEY),
         lower: 1,
         upper: Some(1),
         is_ordered: false,
@@ -500,19 +576,19 @@ fn build() -> Result<Arc<Metamodel>, MetaError> {
     b.property(PropertySpec {
         name: "column",
         owner: FOREIGN_KEY,
-        ty: TypeRef::Class(FOREIGN_KEY_COLUMN),
+        ty: TypeRef::Class(ATTRIBUTE),
         lower: 1,
         upper: None,
         is_ordered: true,
         is_unique: true,
-        is_composite: true,
+        is_composite: false,
         is_derived: false,
         is_derived_union: false,
         is_read_only: false,
         is_id: false,
         is_name: false,
         opposite: None,
-        subsets: &[element::OWNED_ELEMENT],
+        subsets: &[],
         redefines: &[],
         default: None,
         doc: "",
@@ -578,9 +654,9 @@ fn build() -> Result<Arc<Metamodel>, MetaError> {
         doc: "",
     })?; // foreign_key::RELATIONSHIP
     b.property(PropertySpec {
-        name: "attribute",
-        owner: FOREIGN_KEY_COLUMN,
-        ty: TypeRef::Class(ATTRIBUTE),
+        name: "match",
+        owner: FOREIGN_KEY,
+        ty: TypeRef::Data(MATCH_TYPE),
         lower: 1,
         upper: Some(1),
         is_ordered: false,
@@ -594,13 +670,13 @@ fn build() -> Result<Arc<Metamodel>, MetaError> {
         opposite: None,
         subsets: &[],
         redefines: &[],
-        default: None,
+        default: Some(Value::Enum(0)),
         doc: "",
-    })?; // foreign_key_column::ATTRIBUTE
+    })?; // foreign_key::MATCH
     b.property(PropertySpec {
-        name: "target",
-        owner: FOREIGN_KEY_COLUMN,
-        ty: TypeRef::Class(ATTRIBUTE),
+        name: "deferrable",
+        owner: FOREIGN_KEY,
+        ty: TypeRef::Data(DEFERRABILITY),
         lower: 1,
         upper: Some(1),
         is_ordered: false,
@@ -614,9 +690,9 @@ fn build() -> Result<Arc<Metamodel>, MetaError> {
         opposite: None,
         subsets: &[],
         redefines: &[],
-        default: None,
+        default: Some(Value::Enum(0)),
         doc: "",
-    })?; // foreign_key_column::TARGET
+    })?; // foreign_key::DEFERRABLE
     Ok(b.finish())
 }
 

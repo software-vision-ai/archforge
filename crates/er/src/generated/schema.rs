@@ -21,6 +21,7 @@ pub const TABLES: &[Table] = &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
             Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
             Column { name: "kind", prop: Some(entity::KIND), sql: "INT NOT NULL" },
+            Column { name: "primary_key", prop: Some(entity::PRIMARY_KEY), sql: "BINARY(16) NULL" },
         ],
     },
     Table {
@@ -30,9 +31,7 @@ pub const TABLES: &[Table] = &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
             Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
             Column { name: "type", prop: Some(attribute::TYPE), sql: "TEXT NULL" },
-            Column { name: "primary_key", prop: Some(attribute::PRIMARY_KEY), sql: "TINYINT NOT NULL" },
             Column { name: "nullable", prop: Some(attribute::NULLABLE), sql: "TINYINT NOT NULL" },
-            Column { name: "unique", prop: Some(attribute::UNIQUE), sql: "TINYINT NOT NULL" },
         ],
     },
     Table {
@@ -49,6 +48,23 @@ pub const TABLES: &[Table] = &[
         ],
     },
     Table {
+        name: "er_primary_key",
+        class: PRIMARY_KEY,
+        columns: &[
+            Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
+            Column { name: "name", prop: Some(key::NAME), sql: "TEXT NULL" },
+        ],
+    },
+    Table {
+        name: "er_unique_constraint",
+        class: UNIQUE_CONSTRAINT,
+        columns: &[
+            Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
+            Column { name: "name", prop: Some(key::NAME), sql: "TEXT NULL" },
+            Column { name: "nulls_distinct", prop: Some(unique_constraint::NULLS_DISTINCT), sql: "TINYINT NOT NULL" },
+        ],
+    },
+    Table {
         name: "er_foreign_key",
         class: FOREIGN_KEY,
         columns: &[
@@ -58,15 +74,8 @@ pub const TABLES: &[Table] = &[
             Column { name: "on_delete", prop: Some(foreign_key::ON_DELETE), sql: "INT NOT NULL" },
             Column { name: "on_update", prop: Some(foreign_key::ON_UPDATE), sql: "INT NOT NULL" },
             Column { name: "relationship", prop: Some(foreign_key::RELATIONSHIP), sql: "BINARY(16) NULL" },
-        ],
-    },
-    Table {
-        name: "er_foreign_key_column",
-        class: FOREIGN_KEY_COLUMN,
-        columns: &[
-            Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "attribute", prop: Some(foreign_key_column::ATTRIBUTE), sql: "BINARY(16) NULL" },
-            Column { name: "target", prop: Some(foreign_key_column::TARGET), sql: "BINARY(16) NULL" },
+            Column { name: "match", prop: Some(foreign_key::MATCH), sql: "INT NOT NULL" },
+            Column { name: "deferrable", prop: Some(foreign_key::DEFERRABLE), sql: "INT NOT NULL" },
         ],
     },
 ];
@@ -76,6 +85,9 @@ pub const JUNCTIONS: &[Junction] = &[
     Junction { name: "er_schema_entity", class: SCHEMA, prop: schema::ENTITY, ordered: true, reference: true },
     Junction { name: "er_schema_relationship", class: SCHEMA, prop: schema::RELATIONSHIP, ordered: true, reference: true },
     Junction { name: "er_entity_attribute", class: ENTITY, prop: entity::ATTRIBUTE, ordered: true, reference: true },
+    Junction { name: "er_entity_unique_constraint", class: ENTITY, prop: entity::UNIQUE_CONSTRAINT, ordered: true, reference: true },
     Junction { name: "er_entity_foreign_key", class: ENTITY, prop: entity::FOREIGN_KEY, ordered: true, reference: true },
+    Junction { name: "er_primary_key_column", class: PRIMARY_KEY, prop: key::COLUMN, ordered: true, reference: true },
+    Junction { name: "er_unique_constraint_column", class: UNIQUE_CONSTRAINT, prop: key::COLUMN, ordered: true, reference: true },
     Junction { name: "er_foreign_key_column", class: FOREIGN_KEY, prop: foreign_key::COLUMN, ordered: true, reference: true },
 ];

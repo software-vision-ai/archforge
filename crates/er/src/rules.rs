@@ -6,14 +6,14 @@ use std::collections::BTreeSet;
 use archforge_mof::{Obj, Store, Value};
 
 use crate::{
-    ATTRIBUTE, Cardinality, ENTITY, EntityKind, FOREIGN_KEY, RELATIONSHIP, ReferentialAction, SCHEMA, attribute, entity, foreign_key,
-    foreign_key_column, named_element, relationship, schema,
+    ATTRIBUTE, Cardinality, Deferrability, ENTITY, EntityKind, FOREIGN_KEY, MatchType, PRIMARY_KEY, RELATIONSHIP, ReferentialAction, SCHEMA,
+    UNIQUE_CONSTRAINT, attribute, entity, foreign_key, key, named_element, relationship, schema, unique_constraint,
 };
 
 /// The most characters in a name, and in an attribute's type.
 pub const MAX_NAME: usize = 128;
 pub const MAX_TYPE: usize = 64;
-/// The most columns in one foreign key.
+/// The most columns in one key or foreign key.
 pub const MAX_KEY_COLUMNS: usize = 32;
 
 /// Why a name is not acceptable, as the end of the sentence "the name ...".
@@ -43,6 +43,7 @@ pub fn name_of(store: &Store, obj: Obj) -> String {
     let prop = match store.class_of(obj).ok() {
         Some(c) if c == RELATIONSHIP => relationship::NAME,
         Some(c) if c == FOREIGN_KEY => foreign_key::NAME,
+        Some(c) if c == PRIMARY_KEY || c == UNIQUE_CONSTRAINT => key::NAME,
         _ => named_element::NAME,
     };
     store.get(obj, prop).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default()
@@ -80,10 +81,10 @@ fn duplicate_names(store: &Store, children: &[Obj]) -> Vec<String> {
     out
 }
 
-/// The schema an entity, attribute or relationship belongs to.
+/// The schema an ER element belongs to.
 pub fn schema_of(store: &Store, obj: Obj) -> Option<Obj> {
     let mut cur = obj;
-    for _ in 0..4 {
+    for _ in 0..5 {
         if store.class_of(cur).ok() == Some(SCHEMA) {
             return Some(cur);
         }
@@ -133,14 +134,64 @@ pub fn type_of(store: &Store, a: Obj) -> String {
     store.get(a, attribute::TYPE).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default()
 }
 
-/// The entity an attribute belongs to.
+/// The entity an attribute, key or foreign key belongs to.
 pub fn entity_of(store: &Store, a: Obj) -> Option<Obj> {
     store.container(a).ok().flatten().map(|(e, _)| e).filter(|e| store.class_of(*e).ok() == Some(ENTITY))
 }
 
-/// An entity's primary key: its key attributes, in order.
+/// Whether `obj` is a key: a primary key or a unique constraint.
+pub fn is_key(store: &Store, obj: Obj) -> bool {
+    matches!(store.class_of(obj).ok(), Some(c) if c == PRIMARY_KEY || c == UNIQUE_CONSTRAINT)
+}
+
+/// An entity's primary key element, when it has one.
+pub fn primary_key_of(store: &Store, e: Obj) -> Option<Obj> {
+    reference(store, e, entity::PRIMARY_KEY)
+}
+
+/// A key's columns, in the key's order.
+pub fn key_columns(store: &Store, k: Obj) -> Vec<Obj> {
+    refs(store, k, key::COLUMN)
+}
+
+/// An entity's primary key columns, in the key's order; empty without a primary key.
 pub fn primary_key(store: &Store, e: Obj) -> Vec<Obj> {
-    refs(store, e, entity::ATTRIBUTE).into_iter().filter(|a| flag(store, *a, attribute::PRIMARY_KEY)).collect()
+    primary_key_of(store, e).map(|k| key_columns(store, k)).unwrap_or_default()
+}
+
+/// An entity's unique constraints, in order.
+pub fn unique_constraints(store: &Store, e: Obj) -> Vec<Obj> {
+    refs(store, e, entity::UNIQUE_CONSTRAINT)
+}
+
+/// An entity's keys: its primary key first, then its unique constraints.
+pub fn keys_of(store: &Store, e: Obj) -> Vec<Obj> {
+    primary_key_of(store, e).into_iter().chain(unique_constraints(store, e)).collect()
+}
+
+/// Whether an attribute is part of its entity's primary key.
+pub fn in_primary_key(store: &Store, a: Obj) -> bool {
+    entity_of(store, a).is_some_and(|e| primary_key(store, e).contains(&a))
+}
+
+/// The unique constraints over `a` alone.
+pub fn unique_on(store: &Store, a: Obj) -> Vec<Obj> {
+    entity_of(store, a).map(|e| unique_constraints(store, e).into_iter().filter(|u| key_columns(store, *u) == [a]).collect()).unwrap_or_default()
+}
+
+/// Whether a unique constraint covers `a` alone: the column editor's Unique checkbox.
+pub fn is_unique(store: &Store, a: Obj) -> bool {
+    !unique_on(store, a).is_empty()
+}
+
+/// Whether an attribute may hold no value.
+pub fn is_nullable(store: &Store, a: Obj) -> bool {
+    flag(store, a, attribute::NULLABLE)
+}
+
+/// Whether a unique constraint counts nulls as distinct.
+pub fn nulls_distinct(store: &Store, u: Obj) -> bool {
+    store.get(u, unique_constraint::NULLS_DISTINCT).ok().and_then(|v| v.as_bool()).unwrap_or(true)
 }
 
 /// An entity's kind.
@@ -159,36 +210,51 @@ pub fn action_of(store: &Store, fk: Obj, prop: archforge_mof::PropId) -> Referen
     }
 }
 
+/// A foreign key's match type.
+pub fn match_of(store: &Store, fk: Obj) -> MatchType {
+    match store.get(fk, foreign_key::MATCH) {
+        Ok(Value::Enum(i)) => MatchType::from_index(i).unwrap_or(MatchType::Simple),
+        _ => MatchType::Simple,
+    }
+}
+
+/// A foreign key's deferrability.
+pub fn deferrability_of(store: &Store, fk: Obj) -> Deferrability {
+    match store.get(fk, foreign_key::DEFERRABLE) {
+        Ok(Value::Enum(i)) => Deferrability::from_index(i).unwrap_or(Deferrability::NotDeferrable),
+        _ => Deferrability::NotDeferrable,
+    }
+}
+
 /// What a foreign key consists of.
 #[derive(Debug, Clone, PartialEq)]
 pub struct KeyParts {
     pub entity: Option<Obj>,
+    /// The key it points at.
+    pub key: Option<Obj>,
+    /// The entity that key belongs to.
     pub references: Option<Obj>,
-    /// (attribute of the entity, target attribute of the referenced entity)
-    pub pairs: Vec<(Obj, Obj)>,
+    /// Its own columns, matched to `targets` by position.
+    pub columns: Vec<Obj>,
+    /// The key's columns.
+    pub targets: Vec<Obj>,
     pub on_delete: ReferentialAction,
     pub on_update: ReferentialAction,
     pub relationship: Option<Obj>,
-    /// Columns missing an end, left out of `pairs`.
-    pub broken: usize,
 }
 
-/// A foreign key's parts as the store holds them; a column missing an end is counted in `broken`.
+/// A foreign key's parts as the store holds them.
 pub fn key_parts(store: &Store, fk: Obj) -> KeyParts {
-    let columns = refs(store, fk, foreign_key::COLUMN);
-    let pairs: Vec<(Obj, Obj)> = columns
-        .iter()
-        .filter_map(|c| Some((reference(store, *c, foreign_key_column::ATTRIBUTE)?, reference(store, *c, foreign_key_column::TARGET)?)))
-        .collect();
-    let broken = columns.len() - pairs.len();
+    let k = reference(store, fk, foreign_key::REFERENCES);
     KeyParts {
-        entity: store.container(fk).ok().flatten().map(|(e, _)| e),
-        references: reference(store, fk, foreign_key::REFERENCES),
-        pairs,
+        entity: entity_of(store, fk),
+        key: k,
+        references: k.and_then(|k| entity_of(store, k)),
+        columns: refs(store, fk, foreign_key::COLUMN),
+        targets: k.map(|k| key_columns(store, k)).unwrap_or_default(),
         on_delete: action_of(store, fk, foreign_key::ON_DELETE),
         on_update: action_of(store, fk, foreign_key::ON_UPDATE),
         relationship: reference(store, fk, foreign_key::RELATIONSHIP),
-        broken,
     }
 }
 
@@ -197,52 +263,80 @@ pub fn foreign_keys(store: &Store, e: Obj) -> Vec<Obj> {
     refs(store, e, entity::FOREIGN_KEY)
 }
 
-/// Why a foreign key on `entity` referencing `references` through `pairs` would break the rules:
-/// the parameter it concerns (`columns`, `references`, `on_delete` or `relationship`) and a
-/// sentence; None when it keeps them. Types are compared ignoring case, as SQL does.
+/// The foreign keys that point at key `k`.
+pub fn keys_onto(store: &Store, k: Obj) -> Vec<Obj> {
+    store.referrers(k).into_iter().filter(|(_, prop)| *prop == foreign_key::REFERENCES).map(|(fk, _)| fk).collect()
+}
+
+/// Why `columns` cannot be a key of `entity`, as a sentence; None when they can. A primary key's
+/// columns are never nullable.
+pub fn key_columns_problem(store: &Store, entity: Obj, columns: &[Obj], primary: bool) -> Option<String> {
+    if columns.is_empty() {
+        return Some("a key needs at least one column".into());
+    }
+    if columns.len() > MAX_KEY_COLUMNS {
+        return Some(format!("a key has at most {MAX_KEY_COLUMNS} columns"));
+    }
+    let mut seen = BTreeSet::new();
+    for a in columns {
+        if store.class_of(*a).ok() != Some(ATTRIBUTE) || entity_of(store, *a) != Some(entity) {
+            return Some(format!("{} is not an attribute of {}", label(store, *a), label(store, entity)));
+        }
+        if !seen.insert(*a) {
+            return Some(format!("{} appears twice in the key", label(store, *a)));
+        }
+        if primary && is_nullable(store, *a) {
+            return Some(format!("{} is nullable, and a primary key column cannot be", label(store, *a)));
+        }
+    }
+    None
+}
+
+/// Why a foreign key on `entity` with `columns` pointing at key `k` would break the rules: the
+/// parameter it concerns (`columns`, `key`, `on_delete` or `relationship`) and a sentence; None when
+/// it keeps them. Columns match the key's by position; types are compared ignoring case, as SQL does.
 pub fn key_problem(
     store: &Store,
     entity: Obj,
-    references: Obj,
-    pairs: &[(Obj, Obj)],
+    k: Obj,
+    columns: &[Obj],
     actions: [ReferentialAction; 2],
     relationship: Option<Obj>,
 ) -> Option<(&'static str, String)> {
-    let columns = |why: String| Some(("columns", why));
-    if pairs.is_empty() {
-        return columns("a foreign key needs at least one column".into());
+    let col = |why: String| Some(("columns", why));
+    if !is_key(store, k) {
+        return Some(("key", format!("{} is neither a primary key nor a unique constraint", label(store, k))));
     }
-    if pairs.len() > MAX_KEY_COLUMNS {
-        return columns(format!("a foreign key has at most {MAX_KEY_COLUMNS} columns"));
-    }
+    let Some(references) = entity_of(store, k) else { return Some(("key", "the key belongs to no entity".into())) };
     if schema_of(store, entity).is_none() || schema_of(store, entity) != schema_of(store, references) {
-        return Some(("references", "the referenced entity is in another schema".into()));
+        return Some(("key", "the key is in another schema".into()));
+    }
+    let targets = key_columns(store, k);
+    if targets.is_empty() {
+        return Some(("key", format!("the key of {} has no columns", label(store, references))));
+    }
+    if columns.is_empty() {
+        return col("a foreign key needs at least one column".into());
+    }
+    if columns.len() > MAX_KEY_COLUMNS {
+        return col(format!("a foreign key has at most {MAX_KEY_COLUMNS} columns"));
+    }
+    if columns.len() != targets.len() {
+        return col(format!("the foreign key has {} columns but the key of {} has {}", columns.len(), label(store, references), targets.len()));
     }
     let mut seen = BTreeSet::new();
-    let mut targets = BTreeSet::new();
-    for (a, t) in pairs {
+    for (a, t) in columns.iter().zip(&targets) {
         if store.class_of(*a).ok() != Some(ATTRIBUTE) || entity_of(store, *a) != Some(entity) {
-            return columns(format!("{} is not an attribute of {}", label(store, *a), label(store, entity)));
-        }
-        if store.class_of(*t).ok() != Some(ATTRIBUTE) || entity_of(store, *t) != Some(references) {
-            return columns(format!("{} is not an attribute of {}", label(store, *t), label(store, references)));
+            return col(format!("{} is not an attribute of {}", label(store, *a), label(store, entity)));
         }
         if !seen.insert(*a) {
-            return columns(format!("{} appears twice in the foreign key", label(store, *a)));
-        }
-        if !targets.insert(*t) {
-            return columns(format!("{} is targeted twice", label(store, *t)));
+            return col(format!("{} appears twice in the foreign key", label(store, *a)));
         }
         if !same_name(&type_of(store, *a), &type_of(store, *t)) {
-            return columns(format!("{} is {:?} but {} is {:?}", label(store, *a), type_of(store, *a), label(store, *t), type_of(store, *t)));
+            return col(format!("{} is {:?} but {} is {:?}", label(store, *a), type_of(store, *a), label(store, *t), type_of(store, *t)));
         }
     }
-    let key: BTreeSet<Obj> = primary_key(store, references).into_iter().collect();
-    let single_unique = pairs.len() == 1 && pairs.first().is_some_and(|(_, t)| flag(store, *t, attribute::UNIQUE));
-    if !(single_unique || (!key.is_empty() && key == targets)) {
-        return columns(format!("the targets are neither the primary key of {} nor one unique attribute", label(store, references)));
-    }
-    if actions.contains(&ReferentialAction::SetNull) && pairs.iter().any(|(a, _)| !flag(store, *a, attribute::NULLABLE)) {
+    if actions.contains(&ReferentialAction::SetNull) && columns.iter().any(|a| !is_nullable(store, *a)) {
         return Some(("on_delete", "set null needs nullable columns".into()));
     }
     if let Some(r) = relationship {
@@ -251,21 +345,39 @@ pub fn key_problem(
         if store.class_of(r).ok() != Some(RELATIONSHIP) || ends != want {
             return Some(("relationship", "the relationship does not join these two entities".into()));
         }
-        if flag(store, r, relationship::IDENTIFYING) && pairs.iter().any(|(a, _)| !flag(store, *a, attribute::PRIMARY_KEY)) {
+        let pk = primary_key(store, entity);
+        if flag(store, r, relationship::IDENTIFYING) && columns.iter().any(|a| !pk.contains(a)) {
             return Some(("relationship", "an identifying relationship's key columns must be part of the primary key".into()));
         }
     }
     None
 }
 
+/// The named keys and foreign keys of a schema with their names.
+fn constraint_names(store: &Store, s: Obj) -> Vec<(Obj, String)> {
+    refs(store, s, schema::ENTITY)
+        .into_iter()
+        .flat_map(|e| keys_of(store, e).into_iter().chain(foreign_keys(store, e)))
+        .map(|c| (c, name_of(store, c)))
+        .filter(|(_, n)| !n.is_empty())
+        .collect()
+}
+
+/// Whether `name` is free among the constraint names of `schema` (keys and foreign keys), ignoring
+/// case, except for `except`.
+pub fn constraint_name_free(store: &Store, s: Obj, name: &str, except: Option<Obj>) -> bool {
+    !constraint_names(store, s).into_iter().any(|(c, n)| Some(c) != except && same_name(&n, name))
+}
+
 /// Why an entity cannot be associative: it needs at least two foreign keys whose columns are all
 /// part of its primary key.
 pub fn associative_problem(store: &Store, e: Obj) -> Option<String> {
+    let pk = primary_key(store, e);
     let keys = foreign_keys(store, e)
         .into_iter()
         .filter(|fk| {
-            let parts = key_parts(store, *fk);
-            !parts.pairs.is_empty() && parts.pairs.iter().all(|(a, _)| flag(store, *a, attribute::PRIMARY_KEY))
+            let columns = refs(store, *fk, foreign_key::COLUMN);
+            !columns.is_empty() && columns.iter().all(|a| pk.contains(a))
         })
         .count();
     if keys < 2 { Some(format!("a mapping table needs two foreign keys within its primary key; {} has {keys}", label(store, e))) } else { None }
@@ -296,6 +408,12 @@ pub fn problems(store: &Store) -> Vec<String> {
             for name in duplicate_names(store, &entities) {
                 out.push(format!("the entity name {name:?} is used twice in {o}"));
             }
+            let mut seen: BTreeSet<String> = BTreeSet::new();
+            for (_, name) in constraint_names(store, o) {
+                if !seen.insert(name.to_lowercase()) {
+                    out.push(format!("the constraint name {name:?} is used twice in {o}"));
+                }
+            }
         }
         if class == ENTITY {
             let attributes: Vec<Obj> = store.list(o, entity::ATTRIBUTE).unwrap_or_default().iter().filter_map(Value::as_ref).collect();
@@ -304,14 +422,23 @@ pub fn problems(store: &Store) -> Vec<String> {
             }
         }
         if class == ATTRIBUTE {
-            let get = |p| store.get(o, p).ok().and_then(|v| v.as_bool()).unwrap_or(false);
-            if get(attribute::PRIMARY_KEY) && get(attribute::NULLABLE) {
+            if in_primary_key(store, o) && is_nullable(store, o) {
                 out.push(format!("{o} is a key and nullable"));
             }
             if let Some(t) = store.get(o, attribute::TYPE).ok().and_then(|v| v.as_str().map(str::to_string))
                 && let Some(p) = name_problem(&t, MAX_TYPE)
             {
                 out.push(format!("the type of {o} {p}"));
+            }
+        }
+        if class == PRIMARY_KEY || class == UNIQUE_CONSTRAINT {
+            match entity_of(store, o) {
+                Some(e) => {
+                    if let Some(p) = key_columns_problem(store, e, &key_columns(store, o), class == PRIMARY_KEY) {
+                        out.push(format!("the key {}: {p}", label(store, o)));
+                    }
+                }
+                None => out.push(format!("the key {} belongs to no entity", label(store, o))),
             }
         }
         if class == ENTITY
@@ -322,16 +449,13 @@ pub fn problems(store: &Store) -> Vec<String> {
         }
         if class == FOREIGN_KEY {
             let parts = key_parts(store, o);
-            if parts.broken > 0 {
-                out.push(format!("the foreign key {} has a column missing an end", label(store, o)));
-            }
-            match (parts.entity, parts.references) {
-                (Some(e), Some(r)) => {
-                    if let Some((_, p)) = key_problem(store, e, r, &parts.pairs, [parts.on_delete, parts.on_update], parts.relationship) {
+            match (parts.entity, parts.key) {
+                (Some(e), Some(k)) => {
+                    if let Some((_, p)) = key_problem(store, e, k, &parts.columns, [parts.on_delete, parts.on_update], parts.relationship) {
                         out.push(format!("the foreign key {}: {p}", label(store, o)));
                     }
                 }
-                _ => out.push(format!("the foreign key {} lacks its entity or its reference", label(store, o))),
+                _ => out.push(format!("the foreign key {} lacks its entity or its key", label(store, o))),
             }
         }
         if class == RELATIONSHIP {
