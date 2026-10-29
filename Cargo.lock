@@ -253,6 +253,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "archforge-diagram"
+version = "0.1.0"
+dependencies = [
+ "archforge-engine",
+ "archforge-mof",
+ "serde_json",
+]
+
+[[package]]
 name = "archforge-dolt"
 version = "0.1.0"
 dependencies = [
@@ -279,6 +288,7 @@ name = "archforge-er"
 version = "0.1.0"
 dependencies = [
  "archforge-core",
+ "archforge-diagram",
  "archforge-engine",
  "archforge-mof",
  "serde_json",

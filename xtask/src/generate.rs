@@ -47,11 +47,20 @@ pub struct Target {
     pub crate_dir: &'static str,
 }
 
-/// The metamodels and their fixed indices (decision gm2.18): core 1, uml 2, er 3, c4 4, diagram 5;
+/// The metamodels and their fixed indices (decision gm2.18): core 1, uml 2, er 3, c4 4 (reserved, not
+/// yet a target), diagram 5;
 /// the toy of the MOF core's tests is 15.
 pub const TARGETS: &[Target] = &[
     Target { name: "core", index: 1, uri: "archforge:core", version: "1", source: Source::Repo("crates/core/core.xmi"), crate_dir: "crates/core" },
     Target { name: "er", index: 3, uri: "archforge:er", version: "1", source: Source::Repo("crates/er/er.xmi"), crate_dir: "crates/er" },
+    Target {
+        name: "diagram",
+        index: 5,
+        uri: "archforge:diagram",
+        version: "1",
+        source: Source::Repo("crates/diagram/diagram.xmi"),
+        crate_dir: "crates/diagram",
+    },
     Target {
         name: "uml",
         index: 2,
@@ -1483,6 +1492,19 @@ mod tests {
         let rel_name = er.metamodel.props.iter().find(|p| &*p.name == "name" && er.universe.class_name(p.owner) == "Relationship").unwrap();
         assert!(rel_name.lower == 0, "a relationship's name is optional");
         assert_eq!(er.metamodel.props.iter().filter(|p| p.is_composite).count(), 4);
+        let diagram = build(target("diagram"), &std::fs::read(util::root().join("crates/diagram/diagram.xmi")).unwrap_or_default(), false)
+            .unwrap_or_else(|e| panic!("{e}"));
+        let names: Vec<&str> = diagram.metamodel.classes.iter().map(|c| &*c.name).collect();
+        assert_eq!(names, ["Element", "Diagram", "Node", "Edge", "Point", "Label", "Style"]);
+        assert_eq!(
+            diagram.metamodel.props.iter().filter(|p| p.is_composite).count(),
+            8,
+            "node, edge, child, two styles, waypoint, label and the union"
+        );
+        let any = |class: &str, prop: &str| {
+            diagram.metamodel.props.iter().any(|p| &*p.name == prop && diagram.universe.class_name(p.owner) == class && p.ty == TypeRef::Any)
+        };
+        assert!(any("Diagram", "element") && any("Node", "element") && any("Edge", "element"), "what a view shows is typed Any");
     }
 
     #[test]

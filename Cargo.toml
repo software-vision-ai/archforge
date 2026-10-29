@@ -19,6 +19,7 @@ archforge-er = { path = "crates/er" }
 archforge-mof = { path = "crates/mof" }
 archforge-uml = { path = "crates/uml" }
 archforge-core = { path = "crates/core" }
+archforge-diagram = { path = "crates/diagram" }
 archforge-project = { path = "crates/project" }
 
 # External crates.

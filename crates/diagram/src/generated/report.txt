@@ -1,0 +1,10 @@
+diagram 1 from XMI (FNV-1a 64 9fcea52b3e16119a)
+classes: 7 (6 concrete, 1 abstract)
+properties: 32 (1 derived or derived unions without a field, 8 composite, 0 with an opposite)
+data types: 6 (1 enumerations)
+associations: 0 (0 with an association-owned or missing end: no stored opposite)
+subsets or redefinitions of association-owned ends dropped: 0
+defaults on derived properties dropped: 0
+documentation: not emitted (gm2.23)
+skipped, not read:
+derived properties that need a hand-written getter (0):
