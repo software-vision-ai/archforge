@@ -51,6 +51,7 @@ pub struct Target {
 /// the toy of the MOF core's tests is 15.
 pub const TARGETS: &[Target] = &[
     Target { name: "core", index: 1, uri: "archforge:core", version: "1", source: Source::Repo("crates/core/core.xmi"), crate_dir: "crates/core" },
+    Target { name: "er", index: 3, uri: "archforge:er", version: "1", source: Source::Repo("crates/er/er.xmi"), crate_dir: "crates/er" },
     Target {
         name: "uml",
         index: 2,
@@ -1154,8 +1155,14 @@ fn emit_classes(b: &Built) -> String {
             let _ = writeln!(s, "        }}\n    }}\n}}\n");
         }
         // Reflect.
+        let singles = fields.iter().filter(|(p, _)| b.kind(*p) != Kind::List).count();
+        let lists = fields.len() - singles;
         let _ = writeln!(s, "impl Reflect for {sname} {{\n    fn class(&self) -> ClassId {{\n        {}\n    }}", scream(&c.name));
-        let _ = writeln!(s, "    fn get(&self, prop: PropId) -> Option<Value> {{\n        match prop {{");
+        if singles == 0 {
+            let _ = writeln!(s, "    fn get(&self, _prop: PropId) -> Option<Value> {{\n        None\n    }}");
+        } else {
+            let _ = writeln!(s, "    fn get(&self, prop: PropId) -> Option<Value> {{\n        match prop {{");
+        }
         for (p, f) in &fields {
             let expr = match b.kind(*p) {
                 Kind::List => continue,
@@ -1169,13 +1176,18 @@ fn emit_classes(b: &Built) -> String {
             };
             let _ = writeln!(s, "            {} => Some({expr}),", b.prop_const(*p));
         }
-        let _ = writeln!(s, "            _ => None,\n        }}\n    }}");
-        let singles = fields.iter().filter(|(p, _)| b.kind(*p) != Kind::List).count();
-        let _ = writeln!(s, "    fn set(&mut self, prop: PropId, value: Value) -> Result<(), String> {{");
-        if singles == 0 {
-            let _ = writeln!(s, "        let _ = &value;");
+        if singles > 0 {
+            let _ = writeln!(s, "            _ => None,\n        }}\n    }}");
         }
-        let _ = writeln!(s, "        match prop {{");
+        if singles == 0 {
+            let _ = writeln!(
+                s,
+                "    fn set(&mut self, prop: PropId, _value: Value) -> Result<(), String> {{\n        Err(format!(\"no single-valued property {{}} on {}\", prop.0))\n    }}",
+                c.name
+            );
+        } else {
+            let _ = writeln!(s, "    fn set(&mut self, prop: PropId, value: Value) -> Result<(), String> {{\n        match prop {{");
+        }
         for (p, f) in &fields {
             let arm = match b.kind(*p) {
                 Kind::List => continue,
@@ -1195,21 +1207,28 @@ fn emit_classes(b: &Built) -> String {
             };
             let _ = writeln!(s, "            {} => {{\n                {arm}\n                Ok(())\n            }}", b.prop_const(*p));
         }
-        let _ = writeln!(s, "            _ => Err(format!(\"no single-valued property {{}} on {}\", prop.0)),\n        }}\n    }}", c.name);
-        let _ = writeln!(s, "    fn list(&self, prop: PropId) -> Option<&[Value]> {{\n        match prop {{");
-        for (p, f) in &fields {
-            if b.kind(*p) == Kind::List {
-                let _ = writeln!(s, "            {} => Some(&self.{f}),", b.prop_const(*p));
-            }
+        if singles > 0 {
+            let _ = writeln!(s, "            _ => Err(format!(\"no single-valued property {{}} on {}\", prop.0)),\n        }}\n    }}", c.name);
         }
-        let _ = writeln!(s, "            _ => None,\n        }}\n    }}");
-        let _ = writeln!(s, "    fn list_mut(&mut self, prop: PropId) -> Option<&mut Vec<Value>> {{\n        match prop {{");
-        for (p, f) in &fields {
-            if b.kind(*p) == Kind::List {
-                let _ = writeln!(s, "            {} => Some(&mut self.{f}),", b.prop_const(*p));
+        if lists == 0 {
+            let _ = writeln!(s, "    fn list(&self, _prop: PropId) -> Option<&[Value]> {{\n        None\n    }}");
+            let _ = writeln!(s, "    fn list_mut(&mut self, _prop: PropId) -> Option<&mut Vec<Value>> {{\n        None\n    }}\n}}\n");
+        } else {
+            let _ = writeln!(s, "    fn list(&self, prop: PropId) -> Option<&[Value]> {{\n        match prop {{");
+            for (p, f) in &fields {
+                if b.kind(*p) == Kind::List {
+                    let _ = writeln!(s, "            {} => Some(&self.{f}),", b.prop_const(*p));
+                }
             }
+            let _ = writeln!(s, "            _ => None,\n        }}\n    }}");
+            let _ = writeln!(s, "    fn list_mut(&mut self, prop: PropId) -> Option<&mut Vec<Value>> {{\n        match prop {{");
+            for (p, f) in &fields {
+                if b.kind(*p) == Kind::List {
+                    let _ = writeln!(s, "            {} => Some(&mut self.{f}),", b.prop_const(*p));
+                }
+            }
+            let _ = writeln!(s, "            _ => None,\n        }}\n    }}\n}}\n");
         }
-        let _ = writeln!(s, "            _ => None,\n        }}\n    }}\n}}\n");
         // Typed reads on the struct, typed writes through the store.
         let _ = writeln!(s, "impl {sname} {{");
         for (p, f) in &fields {
@@ -1447,6 +1466,23 @@ mod tests {
                 && meta.contains("opposite: Some(class::OWNED_ATTRIBUTE)"),
             "{meta}"
         );
+    }
+
+    #[test]
+    fn our_own_metamodels_read_as_their_specs_say() {
+        let target = |name: &str| TARGETS.iter().find(|t| t.name == name).unwrap_or_else(|| panic!("no target {name}"));
+        let core = build(target("core"), &std::fs::read(util::root().join("crates/core/core.xmi")).unwrap_or_default(), false)
+            .unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(core.metamodel.classes.len(), 7);
+        let er =
+            build(target("er"), &std::fs::read(util::root().join("crates/er/er.xmi")).unwrap_or_default(), false).unwrap_or_else(|e| panic!("{e}"));
+        let names: Vec<&str> = er.metamodel.classes.iter().map(|c| &*c.name).collect();
+        assert_eq!(names, ["Element", "NamedElement", "Schema", "Entity", "Attribute", "Relationship"]);
+        let name = er.metamodel.props.iter().find(|p| &*p.name == "name" && er.universe.class_name(p.owner) == "NamedElement").unwrap();
+        assert!(name.is_name && name.lower == 1, "an entity's name is required and indexed");
+        let rel_name = er.metamodel.props.iter().find(|p| &*p.name == "name" && er.universe.class_name(p.owner) == "Relationship").unwrap();
+        assert!(rel_name.lower == 0, "a relationship's name is optional");
+        assert_eq!(er.metamodel.props.iter().filter(|p| p.is_composite).count(), 4);
     }
 
     #[test]

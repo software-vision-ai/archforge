@@ -247,7 +247,7 @@ fn a_failing_step_undoes_the_creation_and_never_removes_a_folder_put_in_its_plac
     assert!(matches!(r, Err(Error::Kept { .. })), "{r:?}");
     assert_eq!(std::fs::read_to_string(env.folder().join("Swapped.archforge/keep.txt")).unwrap(), "someone else's");
     // A cancelled creation leaves nothing.
-    let hooks = Hooks { after_start: None, cancel: Some(Arc::new(AtomicBool::new(true))), upgrade: None };
+    let hooks = Hooks { after_start: None, cancel: Some(Arc::new(AtomicBool::new(true))) };
     let r = Project::create_with(&env.dolt, &env.opts(), &env.folder(), "Cancelled", "t", "now", &hooks);
     assert!(matches!(r, Err(Error::Cancelled)), "{r:?}");
     assert!(!env.folder().join("Cancelled.archforge").exists());

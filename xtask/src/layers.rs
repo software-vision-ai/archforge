@@ -30,8 +30,6 @@ pub const TABLE: &[(&str, Class)] = &[
     ("names", Class::Standalone),
     // The command engine: knows no notation, builds for the portable target.
     ("engine", Class::Layer(3)),
-    // The ER notation over the engine: pure, built for the portable target.
-    ("er", Class::Layer(4)),
     // The MOF core: the meta-metamodel, the object store and change sets; pure, portable. The
     // shared core metamodel comes at 5, the notations' metamodels at 6.
     ("mof", Class::Layer(4)),
@@ -39,6 +37,8 @@ pub const TABLE: &[(&str, Class)] = &[
     ("core", Class::Layer(5)),
     // The notations' metamodels, generated over the MOF core and the shared core: UML from OMG's XMI.
     ("uml", Class::Layer(6)),
+    // The ER notation: its metamodel generated from our XMI, its commands on the MOF core.
+    ("er", Class::Layer(6)),
     ("ui-egui", Class::Layer(7)),
     // Host services, for the desktop only: the application uses them and the shell never depends on
     // them, so the portable-target check, which builds the layers below the shell, leaves them out.

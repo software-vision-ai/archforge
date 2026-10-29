@@ -63,19 +63,7 @@ pub enum Error {
         path: PathBuf,
         what: &'static str,
     },
-    /// Anything other than the model's tables is staged, so a commit would take it in too.
-    StagedChanges {
-        path: PathBuf,
-        tables: Vec<String>,
-    },
-    /// A model that breaks an invariant is never stored.
-    InvalidModel {
-        why: String,
-    },
-    /// Storing the model took longer than its budget and was rolled back.
-    StoreTooSlow {
-        budget: std::time::Duration,
-    },
+
     Server(archforge_dolt::Error),
     Sql {
         what: &'static str,
@@ -114,14 +102,7 @@ impl fmt::Display for Error {
             Error::NewerFormat { found, supported } => write!(f, "the project is in format {found}; this Archforge reads up to format {supported}"),
             Error::Damaged { path, why } => write!(f, "the project {} is damaged: {why}", path.display()),
             Error::Scripted { path, what } => write!(f, "the project {} holds {what}, which Archforge does not run", path.display()),
-            Error::StagedChanges { path, tables } => write!(
-                f,
-                "the project {} has changes staged outside Archforge ({}); commit or unstage them first",
-                path.display(),
-                tables.iter().take(10).map(|t| format!("{:?}", t.chars().take(64).collect::<String>())).collect::<Vec<_>>().join(", ")
-            ),
-            Error::InvalidModel { why } => write!(f, "the model cannot be stored: {why}"),
-            Error::StoreTooSlow { budget } => write!(f, "storing the model took longer than {} s and was undone", budget.as_secs()),
+
             Error::Server(e) => write!(f, "{e}"),
             Error::Sql { what, source } => write!(f, "{what}: {source}"),
             Error::Io { what, path, source } => write!(f, "{what} {}: {source}", path.display()),
