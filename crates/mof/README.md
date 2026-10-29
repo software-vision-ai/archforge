@@ -40,7 +40,8 @@ process. Caps: 10 million live objects, 1 million ops per change set, 1 million 
 | `Store::apply_delta` | a delta outside a recording, all or nothing |
 | `Reflect`, `Slabs` | what generated code implements |
 | `Op`, `Delta`, `Invalid`, `Problem`, `Value`, `Uuid` | the data |
-| `toy` | feature `testing`: a twenty-metaclass metamodel in the generated shape, for tests |
+| `schema::{Table, Column, Junction}` | the storage schema a metamodel's generated code describes, as data for the project crate |
+| `toy` | feature `testing`: a twenty-metaclass metamodel in the generated shape, for tests; `tests/toy.xmi` is the same metamodel as XMI, and the generator's fidelity test proves they agree |
 
 **Engine.** `Store` implements `archforge_engine::Document`: `begin`, `end`, `apply`, `invert`,
 `compose`, `is_empty` (ops that cancel are dropped), `weight`.

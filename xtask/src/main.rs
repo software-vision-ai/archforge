@@ -1,4 +1,4 @@
-//! The repository task runner. It depends on the standard library and the JSON crate only.
+//! The repository task runner: the gate, its checks, and the metamodel generator.
 //!
 //! `cargo xtask ci` is the gate: it first moves the shared crates to the newest commit of their
 //! main branch, then runs every check in order, stops at the first failure and prints a summary of
@@ -7,6 +7,7 @@
 
 mod assets;
 mod brands;
+mod generate;
 mod ico;
 mod layers;
 mod shot;
@@ -28,6 +29,8 @@ const USAGE: &str = "usage: cargo xtask <verb>
   assets [--check]   the attribution check; regenerates ATTRIBUTION.md unless --check
   skills             the skills check: the routing tables and every file, verb and skill they name
   brands             the optional trademark check against the list FORGE_BRANDS names
+  generate [name] [--docs]  regenerate a metamodel crate's code from its XMI (all when no name)
+  generated          the check that the generated code is what the XMI gives
   version [x.y.z]    print or set the workspace version
   ico <out> <png>... pack PNGs into a Windows icon
   shot [light|dark] [--size WxH] [--max-edge N]  a screenshot and a small copy under plan/shots
@@ -93,6 +96,7 @@ fn steps() -> Vec<Step> {
         ("skills", Box::new(skills::run)),
         ("layers", Box::new(layers::run)),
         ("portable", Box::new(wasm::run)),
+        ("generated", Box::new(generate::check)),
     ];
     // The trademark list is kept outside the repository: without it the check is skipped and said
     // so, or fails where the list is required.
@@ -169,6 +173,8 @@ fn main() {
         Some("assets") => assets::run(check),
         Some("skills") => skills::run(),
         Some("brands") => brands::run(),
+        Some("generate") => generate::run(rest),
+        Some("generated") => generate::check(),
         Some("version") => version::run(rest.first().map(String::as_str)),
         Some("ico") => ico::run(rest),
         Some("shot") => shot::run(rest),

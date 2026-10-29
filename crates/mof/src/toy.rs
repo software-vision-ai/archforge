@@ -12,7 +12,7 @@ use crate::meta::{Builder, ClassId, DataId, DataKind, MetaError, Metamodel, Prop
 use crate::store::{Obj, Reflect, Slabs, Store};
 use crate::value::Value;
 
-pub const INDEX: u16 = 1;
+pub const INDEX: u16 = 15;
 pub const URI: &str = "archforge:toy";
 
 const fn c(local: u16) -> ClassId {
@@ -76,14 +76,14 @@ pub const MULTIPLICITY_IS_ORDERED: PropId = p(15);
 pub const MULTIPLICITY_IS_UNIQUE: PropId = p(16);
 pub const PROPERTY_AGGREGATION: PropId = p(17);
 pub const PROPERTY_ASSOCIATION: PropId = p(18);
-pub const OPERATION_OWNED_PARAMETER: PropId = p(19);
-pub const PARAMETER_DIRECTION: PropId = p(20);
-pub const GENERALIZATION_GENERAL: PropId = p(21);
-pub const ASSOCIATION_MEMBER_END: PropId = p(22);
-pub const LITERAL_INTEGER_VALUE: PropId = p(23);
-pub const LITERAL_UNLIMITED_VALUE: PropId = p(24);
-pub const ENUMERATION_OWNED_LITERAL: PropId = p(25);
-pub const PROPERTY_CLASS: PropId = p(26);
+pub const PROPERTY_CLASS: PropId = p(19);
+pub const OPERATION_OWNED_PARAMETER: PropId = p(20);
+pub const PARAMETER_DIRECTION: PropId = p(21);
+pub const GENERALIZATION_GENERAL: PropId = p(22);
+pub const ASSOCIATION_MEMBER_END: PropId = p(23);
+pub const LITERAL_INTEGER_VALUE: PropId = p(24);
+pub const LITERAL_UNLIMITED_VALUE: PropId = p(25);
+pub const ENUMERATION_OWNED_LITERAL: PropId = p(26);
 
 fn build() -> Result<Arc<Metamodel>, MetaError> {
     let mut b = Builder::new(INDEX, URI, "toy", "1", "toy-content-hash");
@@ -197,6 +197,7 @@ fn build() -> Result<Arc<Metamodel>, MetaError> {
         PropertySpec::new("aggregation", PROPERTY, TypeRef::Data(AGGREGATION_KIND)).required().default(Value::Enum(0)),
     )?;
     prop(&mut b, PROPERTY_ASSOCIATION, PropertySpec::new("association", PROPERTY, TypeRef::Class(ASSOCIATION)).opposite(ASSOCIATION_MEMBER_END))?;
+    prop(&mut b, PROPERTY_CLASS, PropertySpec::new("class", PROPERTY, TypeRef::Class(CLASS)).opposite(CLASS_OWNED_ATTRIBUTE))?;
     class(&mut b, OPERATION, "Operation", false, &[NAMESPACE])?;
     prop(
         &mut b,
@@ -233,7 +234,6 @@ fn build() -> Result<Arc<Metamodel>, MetaError> {
             .subsets(&[NAMESPACE_OWNED_MEMBER]),
     )?;
     class(&mut b, ENUMERATION_LITERAL, "EnumerationLiteral", false, &[NAMED_ELEMENT])?;
-    prop(&mut b, PROPERTY_CLASS, PropertySpec::new("class", PROPERTY, TypeRef::Class(CLASS)).opposite(CLASS_OWNED_ATTRIBUTE))?;
     Ok(b.finish())
 }
 

@@ -191,6 +191,9 @@ impl Builder {
             if set.len() != literals.len() || literals.is_empty() {
                 return Err(MetaError(format!("the enumeration {name} needs distinct literals")));
             }
+            for l in literals {
+                plain_name(l).map_err(|e| MetaError(format!("the enumeration {name}: {e}")))?;
+            }
         }
         let id = DataId::new(self.mm.index, self.mm.data_types.len() as u16);
         self.mm.data_types.push(DataType { name: name.into(), uri: format!("{}#{name}", self.mm.uri).into(), kind, doc: doc.into() });
@@ -496,12 +499,15 @@ impl Universe {
             let mut ordered: Vec<ClassId> = Vec::new();
             self.linearize(*id, &mut ordered);
             let mut all_props: Vec<PropId> = Vec::new();
+            // What a redefined property is called in this class: a subset of it follows.
+            let mut redefined: BTreeMap<PropId, PropId> = BTreeMap::new();
             for c in &ordered {
                 if let Some(cl) = self.class(*c) {
                     for p in &cl.own_props {
                         if let Some(prop) = self.prop(*p) {
                             for r in &prop.redefines {
                                 all_props.retain(|x| x != r);
+                                redefined.insert(*r, *p);
                             }
                         }
                         if !all_props.contains(p) {
@@ -510,6 +516,15 @@ impl Universe {
                     }
                 }
             }
+            let follow = |mut q: PropId| {
+                for _ in 0..64 {
+                    match redefined.get(&q) {
+                        Some(r) if *r != q => q = *r,
+                        _ => break,
+                    }
+                }
+                q
+            };
             let stored: Vec<PropId> = all_props.iter().copied().filter(|p| self.prop(*p).is_some_and(Property::is_stored)).collect();
             let names: Vec<PropId> = all_props.iter().copied().filter(|p| self.prop(*p).is_some_and(|p| p.is_name)).collect();
             if names.len() > 1 {
@@ -523,14 +538,20 @@ impl Universe {
                 while let Some(p) = stack.pop() {
                     let Some(prop) = self.prop(p) else { continue };
                     for q in &prop.subsets {
-                        if !all_props.contains(q) {
-                            return Err(MetaError(format!("{} subsets a property its class does not have", self.prop_name(*s))));
+                        let q = follow(*q);
+                        if !all_props.contains(&q) {
+                            return Err(MetaError(format!(
+                                "{} subsets {}, which {} does not have",
+                                self.prop_name(*s),
+                                self.prop_name(q),
+                                self.class_name(*id)
+                            )));
                         }
-                        if seen.insert(*q) {
-                            stack.push(*q);
-                            match self.prop(*q) {
-                                Some(t) if t.is_derived_union => unions.entry(*q).or_default().push(*s),
-                                Some(t) if t.is_stored() => subsetted.entry(*s).or_default().push(*q),
+                        if q != *s && seen.insert(q) {
+                            stack.push(q);
+                            match self.prop(q) {
+                                Some(t) if t.is_derived_union => unions.entry(q).or_default().push(*s),
+                                Some(t) if t.is_stored() => subsetted.entry(*s).or_default().push(q),
                                 _ => {}
                             }
                         }
