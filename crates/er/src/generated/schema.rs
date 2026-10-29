@@ -20,6 +20,7 @@ pub const TABLES: &[Table] = &[
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
             Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "kind", prop: Some(entity::KIND), sql: "INT NOT NULL" },
         ],
     },
     Table {
@@ -44,6 +45,28 @@ pub const TABLES: &[Table] = &[
             Column { name: "to", prop: Some(relationship::TO), sql: "BINARY(16) NULL" },
             Column { name: "from_end", prop: Some(relationship::FROM_END), sql: "INT NOT NULL" },
             Column { name: "to_end", prop: Some(relationship::TO_END), sql: "INT NOT NULL" },
+            Column { name: "identifying", prop: Some(relationship::IDENTIFYING), sql: "TINYINT NOT NULL" },
+        ],
+    },
+    Table {
+        name: "er_foreign_key",
+        class: FOREIGN_KEY,
+        columns: &[
+            Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
+            Column { name: "name", prop: Some(foreign_key::NAME), sql: "TEXT NULL" },
+            Column { name: "references", prop: Some(foreign_key::REFERENCES), sql: "BINARY(16) NULL" },
+            Column { name: "on_delete", prop: Some(foreign_key::ON_DELETE), sql: "INT NOT NULL" },
+            Column { name: "on_update", prop: Some(foreign_key::ON_UPDATE), sql: "INT NOT NULL" },
+            Column { name: "relationship", prop: Some(foreign_key::RELATIONSHIP), sql: "BINARY(16) NULL" },
+        ],
+    },
+    Table {
+        name: "er_foreign_key_column",
+        class: FOREIGN_KEY_COLUMN,
+        columns: &[
+            Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
+            Column { name: "attribute", prop: Some(foreign_key_column::ATTRIBUTE), sql: "BINARY(16) NULL" },
+            Column { name: "target", prop: Some(foreign_key_column::TARGET), sql: "BINARY(16) NULL" },
         ],
     },
 ];
@@ -53,4 +76,6 @@ pub const JUNCTIONS: &[Junction] = &[
     Junction { name: "er_schema_entity", class: SCHEMA, prop: schema::ENTITY, ordered: true, reference: true },
     Junction { name: "er_schema_relationship", class: SCHEMA, prop: schema::RELATIONSHIP, ordered: true, reference: true },
     Junction { name: "er_entity_attribute", class: ENTITY, prop: entity::ATTRIBUTE, ordered: true, reference: true },
+    Junction { name: "er_entity_foreign_key", class: ENTITY, prop: entity::FOREIGN_KEY, ordered: true, reference: true },
+    Junction { name: "er_foreign_key_column", class: FOREIGN_KEY, prop: foreign_key::COLUMN, ordered: true, reference: true },
 ];
