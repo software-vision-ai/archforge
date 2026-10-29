@@ -1,0 +1,19 @@
+[package]
+name = "archforge-uml"
+description = "The UML 2.5.1 metamodel over the MOF core, generated from OMG's XMI"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+archforge-mof.workspace = true
+
+[dev-dependencies]
+archforge-engine = { workspace = true, features = ["testing"] }
+serde_json.workspace = true
+
+[lints]
+workspace = true

@@ -9,6 +9,13 @@ publish = false
 
 [dependencies]
 serde_json.workspace = true
+# Reads XMI for the metamodel generator; untrusted input, so pinned exactly. MIT, pure Rust, already
+# in the lockfile through the desktop stack. Never a dependency of the application.
+quick-xml = "=0.41.0"
+archforge-mof.workspace = true
+
+[dev-dependencies]
+archforge-mof = { workspace = true, features = ["testing"] }
 
 [lints]
 workspace = true

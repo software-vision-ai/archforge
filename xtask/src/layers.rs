@@ -35,6 +35,8 @@ pub const TABLE: &[(&str, Class)] = &[
     // The MOF core: the meta-metamodel, the object store and change sets; pure, portable. The
     // generated metamodel crates come at 5.
     ("mof", Class::Layer(4)),
+    // The UML metamodel, generated from OMG's XMI over the MOF core.
+    ("uml", Class::Layer(5)),
     ("ui-egui", Class::Layer(6)),
     // Host services, for the desktop only: the application uses them and the shell never depends on
     // them, so the portable-target check, which builds the layers below the shell, leaves them out.
