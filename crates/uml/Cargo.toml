@@ -12,6 +12,7 @@ publish = false
 archforge-mof.workspace = true
 
 [dev-dependencies]
+archforge-core.workspace = true
 archforge-engine = { workspace = true, features = ["testing"] }
 serde_json.workspace = true
 

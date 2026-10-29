@@ -33,15 +33,17 @@ pub const TABLE: &[(&str, Class)] = &[
     // The ER notation over the engine: pure, built for the portable target.
     ("er", Class::Layer(4)),
     // The MOF core: the meta-metamodel, the object store and change sets; pure, portable. The
-    // generated metamodel crates come at 5.
+    // shared core metamodel comes at 5, the notations' metamodels at 6.
     ("mof", Class::Layer(4)),
-    // The UML metamodel, generated from OMG's XMI over the MOF core.
-    ("uml", Class::Layer(5)),
-    ("ui-egui", Class::Layer(6)),
+    // The shared core metamodel (comments, tags, folders, trace links), generated from our XMI.
+    ("core", Class::Layer(5)),
+    // The notations' metamodels, generated over the MOF core and the shared core: UML from OMG's XMI.
+    ("uml", Class::Layer(6)),
+    ("ui-egui", Class::Layer(7)),
     // Host services, for the desktop only: the application uses them and the shell never depends on
     // them, so the portable-target check, which builds the layers below the shell, leaves them out.
-    ("dolt", Class::Layer(7)),
-    ("project", Class::Layer(8)),
+    ("dolt", Class::Layer(8)),
+    ("project", Class::Layer(9)),
 ];
 
 /// The shell crate: the highest crate the portable-target check builds.
@@ -199,13 +201,13 @@ mod tests {
             pkg("geom", Some(Class::Layer(0)), &[]),
             pkg("model", Some(Class::Layer(1)), &[("geom", "normal"), ("color", "dev"), ("model", "dev")]),
             pkg("color", Some(Class::Layer(0)), &[]),
-            pkg("ui-egui", Some(Class::Layer(6)), &[("model", "normal"), ("egui", "normal")]),
+            pkg("ui-egui", Some(Class::Layer(7)), &[("model", "normal"), ("egui", "normal")]),
         ];
         assert_eq!(violations(&packages), Vec::<String>::new());
     }
 
     #[test]
     fn every_library_crate_of_the_repository_is_in_the_table() {
-        assert_eq!(class_of(SHELL), Some(Class::Layer(6)));
+        assert_eq!(class_of(SHELL), Some(Class::Layer(7)));
     }
 }

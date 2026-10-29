@@ -1,0 +1,18 @@
+[package]
+name = "archforge-core"
+description = "The shared core metamodel: the project's root, folders, comments, tags and trace links over every notation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+archforge-mof.workspace = true
+
+# The tests over the core and a notation together live with the notation (archforge-uml), since a
+# dependency only ever points down a layer.
+
+[lints]
+workspace = true

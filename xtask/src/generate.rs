@@ -30,7 +30,6 @@ pub const SPECS_VAR: &str = "ARCHFORGE_SPECS_DIR";
 
 /// Where a target's XMI lives.
 #[derive(Clone, Copy)]
-#[allow(dead_code)] // `Repo` is for our own metamodels, which come with their tickets.
 pub enum Source {
     /// Under the folder `ARCHFORGE_SPECS_DIR` names (OMG's files, outside the repository).
     Specs(&'static str),
@@ -50,14 +49,17 @@ pub struct Target {
 
 /// The metamodels and their fixed indices (decision gm2.18): core 1, uml 2, er 3, c4 4, diagram 5;
 /// the toy of the MOF core's tests is 15.
-pub const TARGETS: &[Target] = &[Target {
-    name: "uml",
-    index: 2,
-    uri: "http://www.omg.org/spec/UML/20161101",
-    version: "2.5.1",
-    source: Source::Specs("UML/UML.xmi"),
-    crate_dir: "crates/uml",
-}];
+pub const TARGETS: &[Target] = &[
+    Target { name: "core", index: 1, uri: "archforge:core", version: "1", source: Source::Repo("crates/core/core.xmi"), crate_dir: "crates/core" },
+    Target {
+        name: "uml",
+        index: 2,
+        uri: "http://www.omg.org/spec/UML/20161101",
+        version: "2.5.1",
+        source: Source::Specs("UML/UML.xmi"),
+        crate_dir: "crates/uml",
+    },
+];
 
 const GENERATED: &str = "src/generated";
 
