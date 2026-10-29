@@ -12,9 +12,11 @@ pub use commands::{NO_DIAGRAMS, NO_ENTITIES};
 pub use model::{Attribute, Cardinality, Diagram, Entity, ErModel, ErView, Id, Invalid, Kind, Place, Relationship};
 
 /// The ER notation's session.
-pub type Session = archforge_engine::Session<ErModel, ErView>;
+/// The ER model records its changes by copying, until it moves onto the MOF core.
+pub type Doc = archforge_engine::Snapshotted<ErModel>;
+pub type Session = archforge_engine::Session<Doc, ErView>;
 
 /// The ER notation's command registry: the edit area and the ER commands.
-pub fn registry() -> Result<Arc<archforge_engine::Registry<ErModel, ErView>>, String> {
+pub fn registry() -> Result<Arc<archforge_engine::Registry<Doc, ErView>>, String> {
     archforge_engine::Registry::new(commands::specs())
 }

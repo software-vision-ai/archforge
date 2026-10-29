@@ -1,9 +1,11 @@
 # archforge-engine
 
 **Purpose.** The command engine. Every edit is a registered command; a session validates each call
-before its handler runs, applies it to a copy kept only on success, records one undo step per
-command, batch or gesture, undoes and redoes to identical state, and knows whether the project has
-unsaved changes.
+before its handler runs, lets the handler change the live document while the document records the
+change as a delta, rolls the delta back when the call fails or panics, records one undo step per
+command, batch or gesture, undoes and redoes by applying inverse deltas, and knows whether the
+project has unsaved changes. A document cheaper to copy than to record wraps itself in
+`Snapshotted`.
 
 **Layer.** 3, below the shell; builds for the portable target (no file system, process, clock or
 environment). It knows no notation: a notation crate brings its `Document`, its `View` and its
@@ -15,9 +17,12 @@ when unknown or out of bounds, enabled predicates with shared reasons, one undo 
 gesture, no step for view-only changes, failures that change nothing. Deviations from the binding:
 handlers get `Ctx` (document and view), not the session; `enabled` gets `Facts` and returns a shared
 `&'static str`; each notation builds its own `Registry`; parameters have a sixth type, `integer`
-(a float with no fraction counts); never-crash: every call into the notation's code runs guarded on
-copies, so a panic changes nothing and needs no revision bump, a panicking preview keeps the gesture
-on its starting state, and the recovery save comes with persistence.
+(a float with no fraction counts); never-crash: every call into the notation's code runs guarded, a
+failure or panic is rolled back by the inverse delta so it changes nothing, a panicking preview
+keeps the gesture on its starting state, and a rollback that itself fails poisons the session
+(every edit refused, and `mark_saved` too, until the project is opened again) instead of trusting
+an unknown state; an undo or redo whose delta does not fit the document leaves the document as it
+is and clears the history it belonged to.
 
 **Public API.**
 
@@ -32,8 +37,11 @@ on its starting state, and the recovery save comes with persistence.
 | `Session::{undo, redo, batch, replay}` | history, several commands as one step, a journal entry again |
 | `Session::{begin_interaction, preview, commit, cancel}` | a gesture: previews on the state before it, one step at the end |
 | `Session::{is_dirty, mark_saved, mark_unsaved, journal, dropped}` | unsaved changes (or none saved yet), the tail log, what the caps dropped |
-| `Document`, `View` | what undo covers (with a size estimate); view state, kept valid after every change |
+| `Document` | what undo covers: `begin`, `end` (the recorded delta), `apply` (all or nothing), `invert`, `compose`, `is_empty`, `weight` |
+| `Snapshot`, `Snapshotted<T>`, `Replace<T>` | a clone-and-compare state as a document, its delta both states whole |
+| `View` | view state, kept valid after every change |
+| `Session::poisoned` | why the session refuses edits, once a rollback failed |
 | `testing::round_trip` | feature `testing`: a command, its undo and its redo give identical documents |
-| `testing::sweep` | feature `testing`: every command with hostile parameters; no panic, refusals change nothing |
+| `testing::sweep`, `testing::sweep_with` | feature `testing`: every command with hostile parameters; no panic, refusals change nothing (`sweep_with` takes a picture function for documents that are not cloned) |
 
 **Non-goals.** Persistence, dialogs, long jobs, hit-testing: they come with their first users.

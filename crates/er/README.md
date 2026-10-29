@@ -5,7 +5,8 @@ each end, and diagrams that place entities. A document, a view (the open diagram
 and the commands that edit them, for the engine.
 
 **Layer.** 4, above the engine; pure, builds for the portable target. The project crate stores the
-model; the canvas comes later.
+model; the canvas comes later. The model records its changes by copying (`Snapshotted<ErModel>`)
+until it moves onto the MOF core (gm2.28).
 
 **Binding rules.** Every edit is a registered command with documented parameters, refused centrally
 when unknown or out of range and refused by the handler, naming the key, when an id is missing or of

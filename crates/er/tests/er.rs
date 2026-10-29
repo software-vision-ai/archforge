@@ -4,15 +4,15 @@
 use std::collections::BTreeMap;
 
 use archforge_engine::testing::{round_trip, sweep};
-use archforge_engine::{Document, EngineError, Options, Session};
+use archforge_engine::{EngineError, Options, Session, Snapshot};
 use archforge_er::model::*;
 use archforge_er::{ErModel, ErView, registry};
 use serde_json::{Value, json};
 
-type S = Session<ErModel, ErView>;
+type S = Session<archforge_er::Doc, ErView>;
 
 fn session() -> S {
-    Session::new(registry().unwrap(), ErModel::default(), 1, Options::default())
+    Session::new(registry().unwrap(), archforge_er::Doc::default(), 1, Options::default())
 }
 
 fn id(out: archforge_engine::Outcome) -> String {
@@ -361,7 +361,7 @@ fn a_selection_of_many_attributes_costs_one_pass() {
         ids.extend(attributes.iter().map(|a| a.id.clone()));
         m.entities.insert(e.clone(), Entity { id: e, name: format!("e{i}"), attributes });
     }
-    let mut s = Session::new(registry().unwrap(), m, n, Options::default());
+    let mut s = Session::new(registry().unwrap(), archforge_er::Doc::new(m), n, Options::default());
     let started = std::time::Instant::now();
     s.execute("view.select", &json!({ "ids": ids })).unwrap();
     s.execute("er.entity.add", &json!({ "name": "Another" })).unwrap();

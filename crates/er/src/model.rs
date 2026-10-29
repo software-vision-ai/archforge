@@ -329,7 +329,7 @@ impl ErModel {
     }
 }
 
-impl archforge_engine::Document for ErModel {
+impl archforge_engine::Snapshot for ErModel {
     fn weight(&self) -> usize {
         let s = |x: &str| x.len().saturating_add(48);
         let entities: usize =
