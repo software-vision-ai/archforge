@@ -601,6 +601,35 @@ pub fn cardinality_name(c: Cardinality) -> &'static str {
     }
 }
 
+/// A role name under `key`, or empty for none.
+fn role(p: &Params, key: &str) -> Result<String, CommandError> {
+    let role = text(p, key);
+    if !role.is_empty() {
+        if let Some(problem) = rules::name_problem(role, MAX_NAME) {
+            return Err(refuse(key, format!("the role {problem}")));
+        }
+        if snake(role).is_empty() {
+            return Err(refuse(key, "the role needs a letter or a digit, since it names key columns"));
+        }
+    }
+    Ok(role.to_string())
+}
+
+/// The end of relationship `r` that points at `parent`, as its cardinality and role properties.
+/// For a relationship of an entity with itself, as for drawing: the parent is the end opposite the
+/// many, or `from` for one to one.
+fn parent_end(store: &Store, r: Obj, parent: Option<Obj>) -> (archforge_mof::PropId, archforge_mof::PropId) {
+    let end = |p| store.get(r, p).ok().and_then(|v| v.as_ref());
+    let (from, to) = (end(relationship::FROM), end(relationship::TO));
+    let from_is_parent = if from == to {
+        let many = |p| rules::cardinality_of(store, r, p).is_some_and(rules::is_many);
+        many(relationship::TO_END) || !many(relationship::FROM_END)
+    } else {
+        from == parent
+    };
+    if from_is_parent { (relationship::FROM_END, relationship::FROM_ROLE) } else { (relationship::TO_END, relationship::TO_ROLE) }
+}
+
 fn relationship_name(p: &Params) -> Result<&str, CommandError> {
     let name = text(p, "name");
     if !name.is_empty() {
@@ -626,19 +655,22 @@ fn first_free(base: &str, free: impl Fn(&str) -> bool) -> Result<String, Command
 }
 
 /// Adds the columns that copy key `k` into `child` and the foreign key over them, linked to
-/// `relationship`. The columns are named `<parent>_<column>`, typed like their targets, part of the
+/// `relationship`. The columns are named `<role>_<column>`, or `<parent>_<column>` without a role,
+/// typed like their targets, part of the
 /// child's primary key when `in_key`, nullable when `optional`; when `unique`, a unique constraint
 /// covers them together, unless they are the child's whole primary key, which is unique already.
+#[allow(clippy::too_many_arguments)]
 fn add_key_columns(
     store: &mut Store,
     child: Obj,
     k: Obj,
+    role: &str,
     relationship: Option<Obj>,
     in_key: bool,
     optional: bool,
     unique: bool,
 ) -> Result<Obj, Invalid> {
-    let columns = new_key_columns(store, child, k, in_key, optional)?;
+    let columns = new_key_columns(store, child, k, role, in_key, optional)?;
     if unique && rules::primary_key(store, child) != columns {
         new_unique(store, child, &columns, "", true)?;
     }
@@ -646,15 +678,16 @@ fn add_key_columns(
     new_foreign_key(store, child, k, &columns, "", actions, relationship)
 }
 
-/// Adds one column to `child` for each column of key `k`, named `<parent>_<column>` and typed like
-/// it; in the child's primary key when `in_key`, nullable when `optional` and not in the key.
-fn new_key_columns(store: &mut Store, child: Obj, k: Obj, in_key: bool, optional: bool) -> Result<Vec<Obj>, Invalid> {
+/// Adds one column to `child` for each column of key `k`, named `<role>_<column>`, or
+/// `<parent>_<column>` without a role, and typed like it; in the child's primary key when `in_key`,
+/// nullable when `optional` and not in the key.
+fn new_key_columns(store: &mut Store, child: Obj, k: Obj, role: &str, in_key: bool, optional: bool) -> Result<Vec<Obj>, Invalid> {
     let targets = rules::key_columns(store, k);
     let parent = rules::entity_of(store, k).ok_or_else(|| Invalid::Refused("the key belongs to no entity".into()))?;
     if targets.is_empty() {
         return Err(Invalid::Refused(format!("{} has no key columns to refer to", name_of(store, parent))));
     }
-    let prefix = snake(&name_of(store, parent));
+    let prefix = if role.is_empty() { snake(&name_of(store, parent)) } else { snake(role) };
     let mut columns = Vec::with_capacity(targets.len());
     for t in targets {
         let base = format!("{prefix}_{}", snake(&name_of(store, t)));
@@ -703,13 +736,28 @@ fn new_foreign_key(
 }
 
 /// Creates a relationship without checking the rules (the callers do).
-fn new_relationship(store: &mut Store, s: Obj, from: Obj, to: Obj, ends: [Cardinality; 2], name: &str, identifying: bool) -> Result<Obj, Invalid> {
+#[allow(clippy::too_many_arguments)]
+fn new_relationship(
+    store: &mut Store,
+    s: Obj,
+    from: Obj,
+    to: Obj,
+    ends: [Cardinality; 2],
+    roles: [&str; 2],
+    name: &str,
+    identifying: bool,
+) -> Result<Obj, Invalid> {
     let r = store.create(RELATIONSHIP)?;
     store.set(r, relationship::FROM, Value::Ref(from))?;
     store.set(r, relationship::TO, Value::Ref(to))?;
     store.set(r, relationship::FROM_END, Value::Enum(ends[0].index()))?;
     store.set(r, relationship::TO_END, Value::Enum(ends[1].index()))?;
     store.set(r, relationship::IDENTIFYING, Value::Bool(identifying))?;
+    for (prop, role) in [(relationship::FROM_ROLE, roles[0]), (relationship::TO_ROLE, roles[1])] {
+        if !role.is_empty() {
+            store.set(r, prop, Value::str(role))?;
+        }
+    }
     if !name.is_empty() {
         store.set(r, relationship::NAME, Value::str(name))?;
     }
@@ -726,18 +774,20 @@ fn relationship_add(ctx: &mut C<'_>, p: &Params) -> R {
     if rules::schema_of(ctx.doc, to) != Some(s) {
         return Err(refuse("to", "the entities belong to different schemas"));
     }
+    let roles = [role(p, "from_role")?, role(p, "to_role")?];
     let identifying = p.bool("identifying").unwrap_or(false);
     let with_key = p.bool("create_foreign_key").unwrap_or(false);
     if identifying && !with_key {
         return Err(refuse("identifying", "an identifying relationship needs its foreign key; set create_foreign_key"));
     }
-    // The child holds the key: the end with many, or `to` for one to one.
-    let (child, parent, parent_end, child_many) = if rules::is_many(to_end) {
-        (to, from, from_end, true)
+    // The child holds the key: the end with many, or `to` for one to one. The role at the parent's
+    // end names the key columns.
+    let (child, parent, parent_end, child_many, parent_role) = if rules::is_many(to_end) {
+        (to, from, from_end, true, roles[0].clone())
     } else if rules::is_many(from_end) {
-        (from, to, to_end, true)
+        (from, to, to_end, true, roles[1].clone())
     } else {
-        (to, from, from_end, false)
+        (to, from, from_end, false, roles[0].clone())
     };
     let points_to = if text(p, "points_to").is_empty() { None } else { Some(key_id(ctx, p, "points_to")?) };
     if points_to.is_some() && !with_key {
@@ -748,8 +798,14 @@ fn relationship_add(ctx: &mut C<'_>, p: &Params) -> R {
         if rules::is_many(from_end) && rules::is_many(to_end) {
             return Err(refuse("create_foreign_key", "a many-to-many relationship needs a mapping table; resolve it instead"));
         }
-        if child == parent {
-            return Err(refuse("create_foreign_key", "a relationship of an entity with itself takes its foreign key by hand"));
+        if child == parent && parent_role.is_empty() {
+            return Err(refuse(
+                "create_foreign_key",
+                "a relationship of an entity with itself needs a role at the end its key points to, such as parent; the role names the key columns",
+            ));
+        }
+        if child == parent && identifying && points_to.is_none() {
+            return Err(refuse("identifying", "an entity cannot identify itself through its own primary key"));
         }
         target = match points_to {
             Some(k) if rules::entity_of(ctx.doc, k) != Some(parent) => {
@@ -765,9 +821,9 @@ fn relationship_add(ctx: &mut C<'_>, p: &Params) -> R {
     let r = ctx
         .doc
         .transaction(|st| {
-            let r = new_relationship(st, s, from, to, [from_end, to_end], &name, identifying)?;
+            let r = new_relationship(st, s, from, to, [from_end, to_end], [&roles[0], &roles[1]], &name, identifying)?;
             if let Some(k) = target {
-                add_key_columns(st, child, k, Some(r), identifying, parent_end == Cardinality::ZeroOrOne, !child_many)?;
+                add_key_columns(st, child, k, &parent_role, Some(r), identifying, parent_end == Cardinality::ZeroOrOne, !child_many)?;
                 // Identifying key columns join the child's primary key, which other keys may target.
                 let (keys, entities) = keys_near(st, child)?;
                 keys_still_hold(st, &keys, &entities)?;
@@ -813,6 +869,8 @@ pub fn resolve(store: &mut Store, r: Obj, name: &str) -> Result<Obj, Invalid> {
     let pk =
         |e: Obj| rules::primary_key_of(store, e).ok_or_else(|| Invalid::Refused(format!("{} has no primary key to refer to", name_of(store, e))));
     let (from_key, to_key) = (pk(from)?, pk(to)?);
+    // Each end's role names its columns in the mapping table and goes to the new relationship.
+    let (from_role, to_role) = (rules::role_of(store, r, relationship::FROM_ROLE), rules::role_of(store, r, relationship::TO_ROLE));
     let table = if name.is_empty() {
         let base = format!("{}_{}", snake(&name_of(store, from)), snake(&name_of(store, to)));
         first_free(&base, |n| rules::entity_name_free(store, s, n, None)).map_err(|e| Invalid::Refused(e.message))?
@@ -838,10 +896,10 @@ pub fn resolve(store: &mut Store, r: Obj, name: &str) -> Result<Obj, Invalid> {
         st.set(m, named_element::NAME, Value::str(&table))?;
         st.push(s, schema::ENTITY, Value::Ref(m))?;
         let many = [Cardinality::ExactlyOne, Cardinality::ZeroOrMore];
-        let r1 = new_relationship(st, s, from, m, many, "", true)?;
-        let r2 = new_relationship(st, s, to, m, many, "", true)?;
-        add_key_columns(st, m, from_key, Some(r1), true, false, false)?;
-        add_key_columns(st, m, to_key, Some(r2), true, false, false)?;
+        let r1 = new_relationship(st, s, from, m, many, [&from_role, ""], "", true)?;
+        let r2 = new_relationship(st, s, to, m, many, [&to_role, ""], "", true)?;
+        add_key_columns(st, m, from_key, &from_role, Some(r1), true, false, false)?;
+        add_key_columns(st, m, to_key, &to_role, Some(r2), true, false, false)?;
         st.set(m, entity::KIND, Value::Enum(EntityKind::Associative.index()))?;
         for (d, src, dst) in &shown {
             place_between(st, *d, m, (*src, r1), (*dst, r2))?;
@@ -1085,21 +1143,19 @@ fn foreign_key_set_key(ctx: &mut C<'_>, p: &Params) -> R {
     }
     // New columns follow the relationship: in the key when it identifies, nullable when the end it
     // points at is optional.
-    let (in_key, optional) = match parts.relationship {
+    let (in_key, optional, parent_role) = match parts.relationship {
         Some(r) => {
             let identifying = ctx.doc.get(r, relationship::IDENTIFYING).ok().and_then(|v| v.as_bool()).unwrap_or(false);
-            let parent = rules::entity_of(ctx.doc, k);
-            let from = ctx.doc.get(r, relationship::FROM).ok().and_then(|v| v.as_ref());
-            let end = if from == parent { relationship::FROM_END } else { relationship::TO_END };
-            (identifying, rules::cardinality_of(ctx.doc, r, end) == Some(Cardinality::ZeroOrOne))
+            let (end, role) = parent_end(ctx.doc, r, rules::entity_of(ctx.doc, k));
+            (identifying, rules::cardinality_of(ctx.doc, r, end) == Some(Cardinality::ZeroOrOne), rules::role_of(ctx.doc, r, role))
         }
-        None => (false, true),
+        None => (false, true, String::new()),
     };
     let (mut fks, entities) = keys_near(ctx.doc, e).map_err(fail)?;
     fks.push(fk);
     ctx.doc
         .transaction(|st| {
-            let columns = if given.is_empty() { new_key_columns(st, e, k, in_key, optional)? } else { given.clone() };
+            let columns = if given.is_empty() { new_key_columns(st, e, k, &parent_role, in_key, optional)? } else { given.clone() };
             st.set(fk, foreign_key::REFERENCES, Value::Ref(k))?;
             for i in (0..parts.columns.len()).rev() {
                 st.remove_at(fk, foreign_key::COLUMN, u32::try_from(i).map_err(|_| Invalid::Refused("too many columns".into()))?)?;
@@ -1236,6 +1292,20 @@ fn relationship_set_ends(ctx: &mut C<'_>, p: &Params) -> R {
     let (from_end, to_end) = (cardinality(p, "from_end")?, cardinality(p, "to_end")?);
     ctx.doc.set(r, relationship::FROM_END, Value::Enum(from_end.index())).map_err(fail)?;
     ctx.doc.set(r, relationship::TO_END, Value::Enum(to_end.index())).map_err(fail)?;
+    Ok(json!({ "id": uuid_of(ctx.doc, r)? }))
+}
+
+fn relationship_set_roles(ctx: &mut C<'_>, p: &Params) -> R {
+    let r = id_of(ctx, p, "relationship", RELATIONSHIP)?;
+    let roles = [role(p, "from_role")?, role(p, "to_role")?];
+    ctx.doc
+        .transaction(|st| {
+            for (prop, role) in [(relationship::FROM_ROLE, &roles[0]), (relationship::TO_ROLE, &roles[1])] {
+                st.set(r, prop, if role.is_empty() { Value::Null } else { Value::str(role) })?;
+            }
+            Ok(())
+        })
+        .map_err(fail)?;
     Ok(json!({ "id": uuid_of(ctx.doc, r)? }))
 }
 
@@ -1379,6 +1449,11 @@ fn entity_json(store: &Store, e: Obj) -> Json {
     })
 }
 
+fn optional_role(store: &Store, r: Obj, prop: archforge_mof::PropId) -> Json {
+    let role = rules::role_of(store, r, prop);
+    if role.is_empty() { Json::Null } else { Json::String(role) }
+}
+
 fn relationship_json(store: &Store, r: Obj) -> Json {
     let end = |p| store.get(r, p).ok().and_then(|v| v.as_ref()).map(|e| uuid_json(store, e)).unwrap_or(Json::Null);
     let card = |p| store.get(r, p).ok().and_then(|v| if let Value::Enum(i) = v { Cardinality::from_index(i) } else { None }).map(cardinality_name);
@@ -1389,6 +1464,8 @@ fn relationship_json(store: &Store, r: Obj) -> Json {
         "to": end(relationship::TO),
         "from_end": card(relationship::FROM_END),
         "to_end": card(relationship::TO_END),
+        "from_role": optional_role(store, r, relationship::FROM_ROLE),
+        "to_role": optional_role(store, r, relationship::TO_ROLE),
         "identifying": store.get(r, relationship::IDENTIFYING).ok().and_then(|v| v.as_bool()).unwrap_or(false),
     })
 }
@@ -1472,7 +1549,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ErView>> {
             "Add relationship",
             &["Relationship"],
             None,
-            "from: string; the first entity's id\nto: string; the second entity's id\nfrom_end: string = \"exactly-one\", zero-or-one|exactly-one|zero-or-more|one-or-more; the cardinality at the first end\nto_end: string = \"zero-or-more\", zero-or-one|exactly-one|zero-or-more|one-or-more; the cardinality at the second end\nname: string = \"\"; a name, or nothing\ncreate_foreign_key: bool = false; also add the foreign key and its columns to the end with many\nidentifying: bool = false; the foreign key is part of the child's primary key\npoints_to: string = \"\"; the id of the parent's key it points at, or nothing for its primary key",
+            "from: string; the first entity's id\nto: string; the second entity's id\nfrom_end: string = \"exactly-one\", zero-or-one|exactly-one|zero-or-more|one-or-more; the cardinality at the first end\nto_end: string = \"zero-or-more\", zero-or-one|exactly-one|zero-or-more|one-or-more; the cardinality at the second end\nname: string = \"\"; a name, or nothing\ncreate_foreign_key: bool = false; also add the foreign key and its columns to the end with many\nidentifying: bool = false; the foreign key is part of the child's primary key\npoints_to: string = \"\"; the id of the parent's key it points at, or nothing for its primary key\nfrom_role: string = \"\"; the role at the first end, such as parent or billing_address; it names the key columns that point there\nto_role: string = \"\"; the role at the second end",
             has_entities,
             relationship_add
         ),
@@ -1484,6 +1561,15 @@ pub fn specs() -> Vec<CommandSpec<Store, ErView>> {
             "relationship: string; the relationship's id\nfrom_end: string = \"exactly-one\", zero-or-one|exactly-one|zero-or-more|one-or-more; the cardinality at the first end\nto_end: string = \"zero-or-more\", zero-or-one|exactly-one|zero-or-more|one-or-more; the cardinality at the second end",
             has_entities,
             relationship_set_ends
+        ),
+        cmd!(
+            "er.relationship.set-roles",
+            "Set relationship roles",
+            &["Relationship"],
+            None,
+            "relationship: string; the relationship's id\nfrom_role: string; the role at the first end, or empty for none\nto_role: string; the role at the second end, or empty for none",
+            has_entities,
+            relationship_set_roles
         ),
         cmd!("er.relationship.rename", "Rename relationship", &["Relationship"], None, "relationship: string; the relationship's id\nname: string = \"\"; the new name, or nothing", has_entities, relationship_rename),
         cmd!("er.relationship.remove", "Remove relationship", &["Relationship"], None, "relationship: string; the relationship's id", has_entities, relationship_remove),

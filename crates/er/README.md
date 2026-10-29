@@ -6,7 +6,7 @@ generate er`) with the rules and commands written here. A schema is a member of 
 (the shared core); comments on ER elements are the core's; ER diagrams are the diagram metamodel's
 (`archforge-diagram`), with the ER policy in `ErView`: an `er` diagram is of a schema (always, and
 only while the project has its Model), shows that schema's entities as nodes (160 by 100 by default)
-and relationships as edges, whose labels show the name and the two cardinalities.
+and relationships as edges, whose labels show the name, the two cardinalities and the two roles.
 
 **Layer.** 6, the notations' layer, above the MOF core (4), the shared core and the diagram
 metamodel (5); pure, builds for the portable target. Storage comes with the generated tables
@@ -37,11 +37,23 @@ that a foreign key points at keeps its columns: changing them is refused until t
 changed or removed. A mapping table is an entity of kind associative with at least two foreign keys
 inside its primary key.
 
+Each end of a relationship may carry a role, such as parent and child, or billing and shipping. The
+role at the end a foreign key points to names its columns in place of the entity's name
+(`<role>_<column>`), so Order with two relationships to Address gets `billing_address_id` and
+`shipping_address_id`, and Part with a parent gets `parent_part_id`. A relationship of an entity with
+itself may bring its foreign key once the end it points to has a role. Resolving a many-to-many
+names the mapping table's columns by the roles and gives the roles to its two new relationships;
+without roles, a many-to-many of an entity with itself resolves into two relationships the
+notice below points out.
+Relationships between the same two entities that no role tells apart are noticed
+(`rules::SAME_ENDS`), not refused; roles are names (plain, at most 128 characters) and renaming one
+does not rename the columns it named.
+
 Edits that would break a key are refused and name their parameter (`columns`, `key`, `references`,
 `on_delete`, `relationship`, `points_to`, `name`, or `primary_key`, `unique` and `identifying` for
 the edits that would break one). A relationship that brings its foreign key points at the parent's
-primary key, or at the key `points_to` names; the key columns it adds are named `<parent>_<column>`
-(with `_2`, `_3`, … when taken), typed like their targets, and for a one-to-one a unique constraint
+primary key, or at the key `points_to` names; the key columns it adds are named `<role>_<column>`
+when the end it points to has a role, else `<parent>_<column>` (with `_2`, `_3`, … when taken), typed like their targets, and for a one-to-one a unique constraint
 covers them together unless they are the child's whole primary key, which is unique already. The
 edit commands for keys and foreign keys (`set`, `set-options`) take every field, so nothing the
 caller leaves out is reset. `er.foreign-key.set-key` points a foreign key at another key, with given
@@ -62,7 +74,7 @@ non-identifying one; an entity's removal takes the relationships that reach it t
 
 **The metaclasses.** `Schema` (entity, relationship), `Entity` (attribute, kind, primaryKey,
 uniqueConstraint, foreignKey), `Attribute` (type, nullable), `Relationship` (name, from, to,
-fromEnd, toEnd, identifying), the abstract `Key` (name, column) with `PrimaryKey` and
+fromEnd, toEnd, fromRole, toRole, identifying), the abstract `Key` (name, column) with `PrimaryKey` and
 `UniqueConstraint` (nullsDistinct), `ForeignKey` (name, references a Key, column, onDelete,
 onUpdate, relationship, match, deferrable) and the enumerations `Cardinality` (zeroOrOne,
 exactlyOne, zeroOrMore, oneOrMore), `EntityKind` (regular, associative), `ReferentialAction`
@@ -83,8 +95,8 @@ exactlyOne, zeroOrMore, oneOrMore), `EntityKind` (regular, associative), `Refere
 
 Commands: `er.schema.{add, rename, remove}`, `er.entity.{add, rename, remove, set-kind}`,
 `er.attribute.{add, rename, set-type, set-flags, move, remove}`, `er.relationship.{add, set-ends,
-rename, remove, set-identifying, resolve}` (`add` takes `create_foreign_key`, `identifying` and
-`points_to`), `er.primary-key.{set, remove}`, `er.unique.{add, set, remove}`,
+set-roles, rename, remove, set-identifying, resolve}` (`add` takes `create_foreign_key`,
+`identifying`, `points_to`, `from_role` and `to_role`), `er.primary-key.{set, remove}`, `er.unique.{add, set, remove}`,
 `er.foreign-key.{add, set-actions, set-options, set-key, rename, remove}`,
 `er.remove`, `view.select`, and the queries `er.schema.{list, get}` and `er.entity.{list, get}`;
 the diagram commands (`diagram.*`, `view.open-diagram`) come from `archforge-diagram`.
@@ -99,7 +111,8 @@ removals that clear `identifying`; keys as named constraints with their own orde
 constraints, the checkbox shortcuts, keys that go whole with a column; foreign keys onto any key,
 pointed elsewhere with given or new columns, match and deferrability, keys that stay while a foreign
 key points at them; relationships pointed at a unique key; removing a primary key with what depends
-on it; resolving a many-to-many into a mapping table on a diagram (also an
+on it; roles that name key columns and tell relationships between the same entities apart, an
+entity related to itself in its own table and through a mapping table; resolving a many-to-many into a mapping table on a diagram (also an
 entity with itself), undo, name collisions, and demotion when a key or an end goes; the sweep with ids of every kind; seeded random sequences (with keys, unique constraints, repointed foreign keys, resolves and type
 changes) with the rules checked after each step and undo back to the start.
 `tests/diagram.rs`: the ER policy; every diagram command on an ER diagram; refusals the policy
