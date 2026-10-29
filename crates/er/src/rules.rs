@@ -112,6 +112,19 @@ pub fn cardinality_of(store: &Store, r: Obj, prop: archforge_mof::PropId) -> Opt
     }
 }
 
+/// The role at one end of a relationship (`relationship::FROM_ROLE` or `TO_ROLE`), or empty.
+pub fn role_of(store: &Store, r: Obj, prop: archforge_mof::PropId) -> String {
+    store.get(r, prop).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default()
+}
+
+/// What tells a relationship apart from others between the same two entities: each end's entity
+/// with its role, in a fixed order.
+fn ends_with_roles(store: &Store, r: Obj) -> Option<[(Obj, String); 2]> {
+    let from = (reference(store, r, relationship::FROM)?, role_of(store, r, relationship::FROM_ROLE).to_lowercase());
+    let to = (reference(store, r, relationship::TO)?, role_of(store, r, relationship::TO_ROLE).to_lowercase());
+    Some(if from <= to { [from, to] } else { [to, from] })
+}
+
 /// Whether a relationship has many at both ends.
 pub fn is_many_to_many(store: &Store, r: Obj) -> bool {
     cardinality_of(store, r, relationship::FROM_END).is_some_and(is_many) && cardinality_of(store, r, relationship::TO_END).is_some_and(is_many)
@@ -386,10 +399,30 @@ pub fn associative_problem(store: &Store, e: Obj) -> Option<String> {
 /// The notice for a many-to-many relationship.
 pub const MANY_TO_MANY: &str = "many-to-many: it becomes a table only through a mapping table";
 
-/// What the rules point out without calling it wrong: the many-to-many relationships, each with
-/// its notice.
+/// The notice for relationships between the same two entities that no role tells apart.
+pub const SAME_ENDS: &str = "joins the same two entities as another relationship with the same roles; role names tell them apart";
+
+/// What the rules point out without calling it wrong, each relationship with its notice: the
+/// many-to-many relationships, and relationships that no role tells apart from another between the
+/// same two entities.
 pub fn notices(store: &Store) -> Vec<(Obj, &'static str)> {
-    store.alive().filter(|o| store.class_of(*o).ok() == Some(RELATIONSHIP) && is_many_to_many(store, *o)).map(|r| (r, MANY_TO_MANY)).collect()
+    let relationships: Vec<Obj> = store.alive().filter(|o| store.class_of(*o).ok() == Some(RELATIONSHIP)).collect();
+    let mut count: std::collections::BTreeMap<[(Obj, String); 2], usize> = std::collections::BTreeMap::new();
+    for r in &relationships {
+        if let Some(k) = ends_with_roles(store, *r) {
+            *count.entry(k).or_default() += 1;
+        }
+    }
+    let mut out = Vec::new();
+    for r in relationships {
+        if is_many_to_many(store, r) {
+            out.push((r, MANY_TO_MANY));
+        }
+        if ends_with_roles(store, r).is_some_and(|k| count.get(&k).copied().unwrap_or(0) > 1) {
+            out.push((r, SAME_ENDS));
+        }
+    }
+    out
 }
 
 /// What the rules find wrong in a store, each as a sentence.
@@ -459,6 +492,14 @@ pub fn problems(store: &Store) -> Vec<String> {
             }
         }
         if class == RELATIONSHIP {
+            for prop in [relationship::FROM_ROLE, relationship::TO_ROLE] {
+                let role = role_of(store, o, prop);
+                if !role.is_empty()
+                    && let Some(p) = name_problem(&role, MAX_NAME)
+                {
+                    out.push(format!("a role of {o} {p}"));
+                }
+            }
             let ends = [store.get(o, relationship::FROM), store.get(o, relationship::TO)];
             let here = schema_of(store, o);
             for end in ends {

@@ -433,12 +433,14 @@ pub struct RelationshipObj {
     pub to: Option<Obj>,
     pub from_end: u32,
     pub to_end: u32,
+    pub from_role: Option<Arc<str>>,
+    pub to_role: Option<Arc<str>>,
     pub identifying: bool,
 }
 
 impl Default for RelationshipObj {
     fn default() -> Self {
-        Self { name: None, from: None, to: None, from_end: 1, to_end: 2, identifying: false }
+        Self { name: None, from: None, to: None, from_end: 1, to_end: 2, from_role: None, to_role: None, identifying: false }
     }
 }
 
@@ -453,6 +455,8 @@ impl Reflect for RelationshipObj {
             relationship::TO => Some(self.to.map_or(Value::Null, Value::Ref)),
             relationship::FROM_END => Some(Value::Enum(self.from_end)),
             relationship::TO_END => Some(Value::Enum(self.to_end)),
+            relationship::FROM_ROLE => Some(self.from_role.clone().map_or(Value::Null, Value::Str)),
+            relationship::TO_ROLE => Some(self.to_role.clone().map_or(Value::Null, Value::Str)),
             relationship::IDENTIFYING => Some(Value::Bool(self.identifying)),
             _ => None,
         }
@@ -497,6 +501,22 @@ impl Reflect for RelationshipObj {
                 }
                 Ok(())
             }
+            relationship::FROM_ROLE => {
+                match value {
+                    Value::Null => self.from_role = None,
+                    Value::Str(v) => self.from_role = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
+            relationship::TO_ROLE => {
+                match value {
+                    Value::Null => self.to_role = None,
+                    Value::Str(v) => self.to_role = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
             relationship::IDENTIFYING => {
                 match value {
                     Value::Bool(v) => self.identifying = v,
@@ -531,6 +551,12 @@ impl RelationshipObj {
     pub fn to_end(&self) -> u32 {
         self.to_end
     }
+    pub fn from_role(&self) -> Option<&str> {
+        self.from_role.as_deref()
+    }
+    pub fn to_role(&self) -> Option<&str> {
+        self.to_role.as_deref()
+    }
     pub fn identifying(&self) -> bool {
         self.identifying
     }
@@ -548,6 +574,12 @@ impl RelationshipObj {
     }
     pub fn set_to_end(store: &mut Store, obj: Obj, v: u32) -> Result<(), Invalid> {
         store.set(obj, relationship::TO_END, Value::Enum(v))
+    }
+    pub fn set_from_role(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, relationship::FROM_ROLE, v.map_or(Value::Null, Value::str))
+    }
+    pub fn set_to_role(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, relationship::TO_ROLE, v.map_or(Value::Null, Value::str))
     }
     pub fn set_identifying(store: &mut Store, obj: Obj, v: bool) -> Result<(), Invalid> {
         store.set(obj, relationship::IDENTIFYING, Value::Bool(v))

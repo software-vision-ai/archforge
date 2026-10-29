@@ -44,6 +44,8 @@ pub const TABLES: &[Table] = &[
             Column { name: "to", prop: Some(relationship::TO), sql: "BINARY(16) NULL" },
             Column { name: "from_end", prop: Some(relationship::FROM_END), sql: "INT NOT NULL" },
             Column { name: "to_end", prop: Some(relationship::TO_END), sql: "INT NOT NULL" },
+            Column { name: "from_role", prop: Some(relationship::FROM_ROLE), sql: "TEXT NULL" },
+            Column { name: "to_role", prop: Some(relationship::TO_ROLE), sql: "TEXT NULL" },
             Column { name: "identifying", prop: Some(relationship::IDENTIFYING), sql: "TINYINT NOT NULL" },
         ],
     },

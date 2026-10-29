@@ -103,7 +103,7 @@ impl DiagramView for ErView {
     }
 
     fn text_slots(class: ClassId) -> &'static [&'static str] {
-        if class == RELATIONSHIP { &["name", "from_end", "to_end"] } else { &[] }
+        if class == RELATIONSHIP { &["name", "from_end", "to_end", "from_role", "to_role"] } else { &[] }
     }
 
     fn default_size(_class: ClassId) -> (f64, f64) {

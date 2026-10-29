@@ -117,7 +117,7 @@ fn the_er_policy_is_what_the_spec_says() {
     assert!(ErView::is_of("er", SCHEMA) && !ErView::is_of("er", ENTITY));
     assert!(ErView::shows("er", ENTITY) && !ErView::shows("er", ATTRIBUTE) && !ErView::shows("er", SCHEMA));
     assert!(ErView::connects("er", RELATIONSHIP) && !ErView::connects("er", ENTITY));
-    assert_eq!(ErView::text_slots(RELATIONSHIP), ["name", "from_end", "to_end"]);
+    assert_eq!(ErView::text_slots(RELATIONSHIP), ["name", "from_end", "to_end", "from_role", "to_role"]);
     assert!(ErView::text_slots(ENTITY).is_empty());
     assert_eq!(ErView::default_size(ENTITY), ENTITY_SIZE);
     let reg = registry().unwrap();

@@ -791,6 +791,149 @@ fn key_edits_that_would_break_a_foreign_key_are_refused_and_one_to_one_stays_uni
 }
 
 #[test]
+fn roles_name_the_key_columns_and_tell_relationships_apart() {
+    let mut s = session();
+    let sm = sample(&mut s);
+    let address = run(&mut s, "er.entity.add", json!({ "schema": sm.schema, "name": "Address" }));
+    run(&mut s, "er.attribute.add", json!({ "entity": address, "name": "address_id", "type": "BIGINT", "primary_key": true }));
+    // Two relationships between Order and Address: the roles name the columns.
+    let to_address = |role: &str| json!({ "from": address, "to": sm.order, "from_end": "zero-or-one", "to_end": "zero-or-more", "create_foreign_key": true, "from_role": role });
+    round_trip(&mut s, "er.relationship.add", &to_address("billing"));
+    let billing = relationship_ids(&mut s, &sm.schema).last().unwrap().clone();
+    run(&mut s, "er.relationship.add", to_address("shipping"));
+    let o = get(&mut s, "er.entity.get", json!({ "entity": sm.order }));
+    let names: Vec<&str> = o["attributes"].as_array().unwrap().iter().map(|a| a["name"].as_str().unwrap()).collect();
+    assert_eq!(names, ["total", "billing_address_id", "shipping_address_id"]);
+    let r = relationship(&mut s, &sm.schema, &billing);
+    assert_eq!((r["from_role"].as_str(), r["to_role"].as_str()), (Some("billing"), None));
+    assert!(get(&mut s, "er.schema.get", json!({ "schema": sm.schema }))["notices"].as_array().unwrap().is_empty(), "the roles tell them apart");
+    all_rules_hold(s.doc());
+    // Two without roles are noticed, not refused; giving one a role ends the notice.
+    let plain = json!({ "from": sm.customer, "to": address, "from_end": "exactly-one", "to_end": "zero-or-more" });
+    let first = run(&mut s, "er.relationship.add", plain.clone());
+    run(&mut s, "er.relationship.add", plain);
+    let notices = get(&mut s, "er.schema.get", json!({ "schema": sm.schema }))["notices"].clone();
+    assert_eq!(notices.as_array().map(Vec::len), Some(2));
+    assert_eq!(notices[0]["notice"], json!(rules::SAME_ENDS));
+    round_trip(&mut s, "er.relationship.set-roles", &json!({ "relationship": first, "from_role": "", "to_role": "home" }));
+    assert!(get(&mut s, "er.schema.get", json!({ "schema": sm.schema }))["notices"].as_array().unwrap().is_empty());
+    for (cmd, p, key) in [
+        ("er.relationship.add", json!({ "from": sm.customer, "to": address, "from_role": " padded " }), "from_role"),
+        ("er.relationship.set-roles", json!({ "relationship": first, "from_role": "", "to_role": "a\tb" }), "to_role"),
+    ] {
+        assert_eq!(refused_on(&mut s, cmd, p.clone()), key, "{cmd} {p}");
+    }
+    assert!(s.execute("er.relationship.set-roles", &json!({ "relationship": first, "from_role": "x" })).is_err(), "both roles are required");
+    all_rules_hold(s.doc());
+}
+
+#[test]
+fn an_entity_relates_to_itself_once_the_end_it_points_at_has_a_role() {
+    let mut s = session();
+    let schema = run(&mut s, "er.schema.add", json!({ "name": "plant" }));
+    let part = run(&mut s, "er.entity.add", json!({ "schema": schema, "name": "Part" }));
+    run(&mut s, "er.attribute.add", json!({ "entity": part, "name": "part_id", "type": "BIGINT", "primary_key": true }));
+    // A hierarchy in the table itself: parent_part_id points at the parent.
+    let tree = json!({ "from": part, "to": part, "from_end": "zero-or-one", "to_end": "zero-or-more", "create_foreign_key": true });
+    assert_eq!(refused_on(&mut s, "er.relationship.add", tree.clone()), "create_foreign_key");
+    let mut with_roles = tree;
+    with_roles["from_role"] = json!("parent");
+    with_roles["to_role"] = json!("child");
+    round_trip(&mut s, "er.relationship.add", &with_roles);
+    let p = get(&mut s, "er.entity.get", json!({ "entity": part }));
+    assert_eq!(p["attributes"][1]["name"], "parent_part_id");
+    assert_eq!((p["attributes"][1]["nullable"].as_bool(), p["foreign_keys"][0]["references"].as_str()), (Some(true), Some(part.as_str())));
+    all_rules_hold(s.doc());
+    // A hierarchy in a mapping table: the roles name its columns and go to its relationships.
+    let m2n = run(
+        &mut s,
+        "er.relationship.add",
+        json!({ "from": part, "to": part, "from_end": "zero-or-more", "to_end": "zero-or-more", "from_role": "parent", "to_role": "child" }),
+    );
+    let m = run(&mut s, "er.relationship.resolve", json!({ "relationship": m2n, "name": "part_structure" }));
+    let t = get(&mut s, "er.entity.get", json!({ "entity": m }));
+    let names: Vec<&str> = t["attributes"].as_array().unwrap().iter().map(|a| a["name"].as_str().unwrap()).collect();
+    assert_eq!(names, ["parent_part_id", "child_part_id"]);
+    assert_eq!(t["kind"], "associative");
+    let schema_json = get(&mut s, "er.schema.get", json!({ "schema": schema }));
+    let mut roles: Vec<&str> =
+        schema_json["relationships"].as_array().unwrap().iter().filter(|r| r["to"] == m).filter_map(|r| r["from_role"].as_str()).collect();
+    roles.sort_unstable();
+    assert_eq!(roles, ["child", "parent"]);
+    assert!(schema_json["notices"].as_array().unwrap().is_empty());
+    all_rules_hold(s.doc());
+}
+
+#[test]
+fn roles_follow_the_end_a_key_points_to_in_every_shape() {
+    let mut s = session();
+    let schema = run(&mut s, "er.schema.add", json!({ "name": "plant" }));
+    let part = run(&mut s, "er.entity.add", json!({ "schema": schema, "name": "Part" }));
+    run(&mut s, "er.attribute.add", json!({ "entity": part, "name": "part_id", "type": "BIGINT", "primary_key": true }));
+    let code = run(&mut s, "er.attribute.add", json!({ "entity": part, "name": "code", "type": "TEXT", "nullable": "no" }));
+    let code_key = run(&mut s, "er.unique.add", json!({ "entity": part, "columns": [code] }));
+    let column = |s: &mut Session, id: &str| {
+        let p = get(s, "er.entity.get", json!({ "entity": part }));
+        let a = p["attributes"].as_array().unwrap().iter().find(|a| a["id"] == id).unwrap().clone();
+        (a["name"].as_str().unwrap().to_string(), a["nullable"].as_bool().unwrap())
+    };
+    // The many end first: the child is `from`, so the role at `to` names the column.
+    let add = json!({ "from": part, "to": part, "from_end": "zero-or-more", "to_end": "zero-or-one", "from_role": "child", "to_role": "parent", "create_foreign_key": true });
+    run(&mut s, "er.relationship.add", add);
+    let fk = get(&mut s, "er.entity.get", json!({ "entity": part }))["foreign_keys"][0].clone();
+    let fk_id = fk["id"].as_str().unwrap().to_string();
+    assert_eq!(column(&mut s, fk["columns"][0].as_str().unwrap()), ("parent_part_id".to_string(), true));
+    // Pointed at another key without columns: the same end's role names the new column.
+    round_trip(&mut s, "er.foreign-key.set-key", &json!({ "foreign_key": fk_id, "key": code_key }));
+    let fk = get(&mut s, "er.entity.get", json!({ "entity": part }))["foreign_keys"][0].clone();
+    assert_eq!(column(&mut s, fk["columns"][0].as_str().unwrap()), ("parent_code".to_string(), true));
+    all_rules_hold(s.doc());
+    // A one-to-one names its column by the role and keeps it unique.
+    let unit = run(&mut s, "er.entity.add", json!({ "schema": schema, "name": "Unit" }));
+    run(&mut s, "er.attribute.add", json!({ "entity": unit, "name": "unit_id", "type": "INT", "primary_key": true }));
+    let one = json!({ "from": unit, "to": part, "from_end": "exactly-one", "to_end": "zero-or-one", "from_role": "stock_unit", "create_foreign_key": true });
+    run(&mut s, "er.relationship.add", one);
+    let p = get(&mut s, "er.entity.get", json!({ "entity": part }));
+    assert_eq!(p["attributes"].as_array().unwrap().last().unwrap()["name"], "stock_unit_unit_id");
+    assert_eq!(p["attributes"].as_array().unwrap().last().unwrap()["unique"], true);
+    // Refusals: an entity identifying itself, roles without a letter or a digit.
+    let ident = json!({ "from": part, "to": part, "from_end": "exactly-one", "to_end": "zero-or-more", "from_role": "whole", "create_foreign_key": true, "identifying": true });
+    assert_eq!(refused_on(&mut s, "er.relationship.add", ident), "identifying");
+    assert_eq!(refused_on(&mut s, "er.relationship.add", json!({ "from": part, "to": unit, "to_role": "--" })), "to_role");
+    all_rules_hold(s.doc());
+}
+
+#[test]
+fn the_same_ends_notice_ignores_direction_and_case() {
+    let mut s = session();
+    let sm = sample(&mut s);
+    let notices = |s: &mut Session| get(s, "er.schema.get", json!({ "schema": sm.schema }))["notices"].as_array().map(Vec::len).unwrap_or(0);
+    // places is Customer to Order; one the other way round with no roles joins the same ends.
+    let back = run(&mut s, "er.relationship.add", json!({ "from": sm.order, "to": sm.customer }));
+    assert_eq!(notices(&mut s), 2);
+    run(&mut s, "er.relationship.set-roles", json!({ "relationship": sm.places, "from_role": "Buyer", "to_role": "" }));
+    assert_eq!(notices(&mut s), 0);
+    run(&mut s, "er.relationship.set-roles", json!({ "relationship": back, "from_role": "", "to_role": "buyer" }));
+    assert_eq!(notices(&mut s), 2, "roles that differ only in case do not tell them apart");
+    // Two relationships of an entity with itself, with the roles swapped, are the same ends.
+    let one = run(&mut s, "er.relationship.add", json!({ "from": sm.customer, "to": sm.customer, "from_role": "referrer", "to_role": "referred" }));
+    let other = run(&mut s, "er.relationship.add", json!({ "from": sm.customer, "to": sm.customer, "from_role": "referred", "to_role": "referrer" }));
+    let n = get(&mut s, "er.schema.get", json!({ "schema": sm.schema }))["notices"].clone();
+    for r in [&one, &other] {
+        assert!(n.as_array().unwrap().iter().any(|x| x["relationship"] == **r), "{r}");
+    }
+}
+
+fn relationship_ids(s: &mut Session, schema: &str) -> Vec<String> {
+    get(s, "er.schema.get", json!({ "schema": schema }))["relationships"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["id"].as_str().unwrap().to_string())
+        .collect()
+}
+
+#[test]
 fn the_sweep_finds_nothing() {
     let mut s = session();
     let sm = sample(&mut s);
@@ -839,15 +982,19 @@ fn random_call(rng: &mut Rng, s: &Session) -> (&'static str, Json) {
     let ends = ["zero-or-one", "exactly-one", "zero-or-more", "one-or-more"];
     let end = |r: &mut Rng| ends[(r.next() % 4) as usize];
     let pair = |r: &mut Rng| json!([r.pick(&attributes), r.pick(&attributes)]);
-    match rng.below(21) {
+    match rng.below(22) {
         16 => ("er.primary-key.set", json!({ "entity": rng.pick(&entities), "columns": pair(rng), "name": "" })),
         17 => ("er.unique.add", json!({ "entity": rng.pick(&entities), "columns": pair(rng), "nulls_distinct": n.is_multiple_of(2) })),
         18 => ("er.foreign-key.set-key", json!({ "foreign_key": rng.pick(&keys), "key": rng.pick(&all_keys) })),
         19 => ("er.unique.remove", json!({ "unique": rng.pick(&uniques) })),
         20 => ("er.primary-key.remove", json!({ "entity": rng.pick(&entities) })),
+        21 => (
+            "er.relationship.set-roles",
+            json!({ "relationship": rng.pick(&relationships), "from_role": if n.is_multiple_of(2) { "parent" } else { "" }, "to_role": "child" }),
+        ),
         12 => (
             "er.relationship.add",
-            json!({ "from": rng.pick(&entities), "to": rng.pick(&entities), "from_end": end(rng), "to_end": end(rng), "create_foreign_key": true, "identifying": n.is_multiple_of(2) }),
+            json!({ "from": rng.pick(&entities), "to": rng.pick(&entities), "from_end": end(rng), "to_end": end(rng), "create_foreign_key": true, "identifying": n.is_multiple_of(2), "from_role": if n.is_multiple_of(3) { "parent" } else { "" }, "to_role": if n.is_multiple_of(5) { "child" } else { "" } }),
         ),
         13 => ("er.relationship.resolve", json!({ "relationship": rng.pick(&relationships) })),
         14 => ("er.foreign-key.remove", json!({ "foreign_key": rng.pick(&keys) })),

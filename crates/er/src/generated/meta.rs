@@ -9,7 +9,7 @@ use archforge_mof::{Builder, ClassId, DataId, DataKind, MetaError, Metamodel, Pr
 pub const INDEX: u16 = 3;
 pub const URI: &str = "archforge:er";
 pub const VERSION: &str = "1";
-pub const CONTENT_HASH: &str = "04e0c373b492b4b3";
+pub const CONTENT_HASH: &str = "a9b6e22f4593b0d8";
 
 pub const BOOLEAN: DataId = DataId::new(INDEX, 0);
 pub const INTEGER: DataId = DataId::new(INDEX, 1);
@@ -78,33 +78,35 @@ pub mod relationship {
     pub const TO: PropId = PropId::new(INDEX, 13);
     pub const FROM_END: PropId = PropId::new(INDEX, 14);
     pub const TO_END: PropId = PropId::new(INDEX, 15);
-    pub const IDENTIFYING: PropId = PropId::new(INDEX, 16);
+    pub const FROM_ROLE: PropId = PropId::new(INDEX, 16);
+    pub const TO_ROLE: PropId = PropId::new(INDEX, 17);
+    pub const IDENTIFYING: PropId = PropId::new(INDEX, 18);
 }
 /// The properties Key declares.
 pub mod key {
     use super::INDEX;
     use super::PropId;
-    pub const NAME: PropId = PropId::new(INDEX, 17);
-    pub const COLUMN: PropId = PropId::new(INDEX, 18);
+    pub const NAME: PropId = PropId::new(INDEX, 19);
+    pub const COLUMN: PropId = PropId::new(INDEX, 20);
 }
 /// The properties UniqueConstraint declares.
 pub mod unique_constraint {
     use super::INDEX;
     use super::PropId;
-    pub const NULLS_DISTINCT: PropId = PropId::new(INDEX, 19);
+    pub const NULLS_DISTINCT: PropId = PropId::new(INDEX, 21);
 }
 /// The properties ForeignKey declares.
 pub mod foreign_key {
     use super::INDEX;
     use super::PropId;
-    pub const NAME: PropId = PropId::new(INDEX, 20);
-    pub const REFERENCES: PropId = PropId::new(INDEX, 21);
-    pub const COLUMN: PropId = PropId::new(INDEX, 22);
-    pub const ON_DELETE: PropId = PropId::new(INDEX, 23);
-    pub const ON_UPDATE: PropId = PropId::new(INDEX, 24);
-    pub const RELATIONSHIP: PropId = PropId::new(INDEX, 25);
-    pub const MATCH: PropId = PropId::new(INDEX, 26);
-    pub const DEFERRABLE: PropId = PropId::new(INDEX, 27);
+    pub const NAME: PropId = PropId::new(INDEX, 22);
+    pub const REFERENCES: PropId = PropId::new(INDEX, 23);
+    pub const COLUMN: PropId = PropId::new(INDEX, 24);
+    pub const ON_DELETE: PropId = PropId::new(INDEX, 25);
+    pub const ON_UPDATE: PropId = PropId::new(INDEX, 26);
+    pub const RELATIONSHIP: PropId = PropId::new(INDEX, 27);
+    pub const MATCH: PropId = PropId::new(INDEX, 28);
+    pub const DEFERRABLE: PropId = PropId::new(INDEX, 29);
 }
 
 fn build() -> Result<Arc<Metamodel>, MetaError> {
@@ -453,6 +455,46 @@ fn build() -> Result<Arc<Metamodel>, MetaError> {
         default: Some(Value::Enum(2)),
         doc: "",
     })?; // relationship::TO_END
+    b.property(PropertySpec {
+        name: "fromRole",
+        owner: RELATIONSHIP,
+        ty: TypeRef::Data(STRING),
+        lower: 0,
+        upper: Some(1),
+        is_ordered: false,
+        is_unique: true,
+        is_composite: false,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[],
+        redefines: &[],
+        default: None,
+        doc: "",
+    })?; // relationship::FROM_ROLE
+    b.property(PropertySpec {
+        name: "toRole",
+        owner: RELATIONSHIP,
+        ty: TypeRef::Data(STRING),
+        lower: 0,
+        upper: Some(1),
+        is_ordered: false,
+        is_unique: true,
+        is_composite: false,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[],
+        redefines: &[],
+        default: None,
+        doc: "",
+    })?; // relationship::TO_ROLE
     b.property(PropertySpec {
         name: "identifying",
         owner: RELATIONSHIP,
