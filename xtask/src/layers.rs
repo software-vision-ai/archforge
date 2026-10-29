@@ -32,6 +32,9 @@ pub const TABLE: &[(&str, Class)] = &[
     ("engine", Class::Layer(3)),
     // The ER notation over the engine: pure, built for the portable target.
     ("er", Class::Layer(4)),
+    // The MOF core: the meta-metamodel, the object store and change sets; pure, portable. The
+    // generated metamodel crates come at 5.
+    ("mof", Class::Layer(4)),
     ("ui-egui", Class::Layer(6)),
     // Host services, for the desktop only: the application uses them and the shell never depends on
     // them, so the portable-target check, which builds the layers below the shell, leaves them out.

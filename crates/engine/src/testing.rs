@@ -6,7 +6,11 @@ use crate::{Document, Session, View};
 
 /// Runs a command, then undoes and redoes it, and says whether each step gave the identical
 /// document: before the command after the undo, and after it after the redo.
-pub fn round_trip<D: Document + std::fmt::Debug, V: View<D>>(session: &mut Session<D, V>, id: &str, params: &Value) -> Result<(), String> {
+pub fn round_trip<D: Document + Clone + PartialEq + std::fmt::Debug, V: View<D>>(
+    session: &mut Session<D, V>,
+    id: &str,
+    params: &Value,
+) -> Result<(), String> {
     let before = session.doc().clone();
     session.execute(id, params).map_err(|e| format!("{id}: {e}"))?;
     let after = session.doc().clone();
@@ -45,7 +49,20 @@ fn clock() -> Option<std::time::Instant> {
 /// still fails the sweep) or take longer than 4 s (timed, not interrupted); every refused call
 /// must leave the document, the view, the counter, the history and the journal as they were. Gives
 /// how many calls were made.
-pub fn sweep<D: Document + std::fmt::Debug, V: View<D> + std::fmt::Debug>(session: &mut Session<D, V>, ids: &[&str]) -> Result<usize, String> {
+pub fn sweep<D: Document + Clone + PartialEq + std::fmt::Debug, V: View<D> + std::fmt::Debug>(
+    session: &mut Session<D, V>,
+    ids: &[&str],
+) -> Result<usize, String> {
+    sweep_with(session, ids, Clone::clone)
+}
+
+/// [`sweep`] for a document that is not cloned: `picture` gives what a refused call must leave as
+/// it was.
+pub fn sweep_with<D: Document, V: View<D> + std::fmt::Debug, P: PartialEq + std::fmt::Debug>(
+    session: &mut Session<D, V>,
+    ids: &[&str],
+    picture: impl Fn(&D) -> P,
+) -> Result<usize, String> {
     use serde_json::json;
     let commands: Vec<(String, Vec<String>)> = {
         let facts = session.facts();
@@ -87,8 +104,14 @@ pub fn sweep<D: Document + std::fmt::Debug, V: View<D> + std::fmt::Debug>(sessio
             }
         }
         for params in sets {
-            let before =
-                (session.doc().clone(), session.view().clone(), session.counter(), session.can_undo(), session.can_redo(), session.journal().count());
+            let before = (
+                picture(session.doc()),
+                session.view().clone(),
+                session.counter(),
+                session.can_undo(),
+                session.can_redo(),
+                session.journal().count(),
+            );
             calls += 1;
             let started = clock();
             let result = session.execute(id, &params);
@@ -102,7 +125,7 @@ pub fn sweep<D: Document + std::fmt::Debug, V: View<D> + std::fmt::Debug>(sessio
             }
             if result.is_err() {
                 let after = (
-                    session.doc().clone(),
+                    picture(session.doc()),
                     session.view().clone(),
                     session.counter(),
                     session.can_undo(),

@@ -55,6 +55,11 @@ pub enum EngineError {
         id: String,
         message: String,
     },
+    /// Rolling a failed call back failed too, so the session's state can no longer be trusted:
+    /// every edit is refused until the project is opened again.
+    Poisoned {
+        message: String,
+    },
     InteractionRunning,
     NoInteraction,
     /// The command cannot run inside a batch (undo and redo).
@@ -122,6 +127,9 @@ impl fmt::Display for EngineError {
             EngineError::Disabled { id, reason } => write!(f, "{id} is not available: {reason}"),
             EngineError::Failed { id, error } => write!(f, "{id} failed: {error}"),
             EngineError::Internal { id, message } => write!(f, "{id} stopped on an internal error ({message}); nothing was changed"),
+            EngineError::Poisoned { message } => {
+                write!(f, "the session's state could not be restored after a failure ({message}); reopen the project")
+            }
             EngineError::InteractionRunning => f.write_str("a gesture is in progress; retry after the gesture"),
             EngineError::NoInteraction => f.write_str("no gesture is in progress"),
             EngineError::NotInBatch { id } => write!(f, "{id} cannot run inside a batch"),

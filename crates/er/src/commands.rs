@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 
 use crate::model::*;
 
-type C<'a> = Ctx<'a, ErModel, ErView>;
+type C<'a> = Ctx<'a, crate::Doc, ErView>;
 type R = Result<Value, CommandError>;
 
 /// Why a command is not available.
@@ -18,11 +18,11 @@ pub const NO_DIAGRAMS: &str = "There is no diagram yet.";
 pub const DEFAULT_WIDTH: f64 = 200.0;
 pub const DEFAULT_HEIGHT: f64 = 120.0;
 
-fn has_entities(f: &Facts<'_, ErModel, ErView>) -> Result<(), &'static str> {
+fn has_entities(f: &Facts<'_, crate::Doc, ErView>) -> Result<(), &'static str> {
     if f.doc.entities.is_empty() { Err(NO_ENTITIES) } else { Ok(()) }
 }
 
-fn has_diagrams(f: &Facts<'_, ErModel, ErView>) -> Result<(), &'static str> {
+fn has_diagrams(f: &Facts<'_, crate::Doc, ErView>) -> Result<(), &'static str> {
     if f.doc.diagrams.is_empty() { Err(NO_DIAGRAMS) } else { Ok(()) }
 }
 
@@ -508,11 +508,11 @@ fn diagram_get(ctx: &mut C<'_>, p: &Params) -> R {
 }
 
 fn model_get(ctx: &mut C<'_>, _: &Params) -> R {
-    serde_json::to_value(&*ctx.doc).map_err(|e| CommandError::new(e.to_string()))
+    serde_json::to_value(&**ctx.doc).map_err(|e| CommandError::new(e.to_string()))
 }
 
 /// The ER notation's command table, after the edit area.
-pub fn specs() -> Vec<CommandSpec<ErModel, ErView>> {
+pub fn specs() -> Vec<CommandSpec<crate::Doc, ErView>> {
     let mut s = archforge_engine::cmd::edit::specs();
     s.extend([
         cmd!("er.entity.add", "Add entity", &["Model"], Some("Ctrl+E"),

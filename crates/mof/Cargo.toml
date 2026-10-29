@@ -1,0 +1,25 @@
+[package]
+name = "archforge-mof"
+description = "The MOF core: the meta-metamodel, the object store with change sets, reflection and indexes"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[features]
+# The toy metamodel in the shape the generator emits, for tests; never shipped.
+testing = []
+
+[dependencies]
+archforge-engine.workspace = true
+log.workspace = true
+
+[dev-dependencies]
+archforge-mof = { path = ".", features = ["testing"] }
+archforge-engine = { workspace = true, features = ["testing"] }
+serde_json.workspace = true
+
+[lints]
+workspace = true

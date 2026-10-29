@@ -4,14 +4,17 @@ use std::sync::Arc;
 
 use archforge_engine::testing::round_trip;
 use archforge_engine::{
-    CommandError, CommandSpec, Ctx, Document, EngineError, Facts, JournalEntry, Options, Params, Registry, Session, View, always, cmd,
+    CommandError, CommandSpec, Ctx, EngineError, Facts, JournalEntry, Options, Params, Registry, Session, Snapshot, Snapshotted, View, always, cmd,
 };
 use serde_json::{Value, json};
 
 #[derive(Debug, Clone, PartialEq, Default)]
 struct Items(Vec<String>);
 
-impl Document for Items {
+/// The toy records by copying: the engine's own change-recording document is the MOF store.
+type Doc = Snapshotted<Items>;
+
+impl Snapshot for Items {
     /// Panics on an item named `boom-weight`, to prove a notation's panic changes nothing.
     #[allow(clippy::panic)]
     fn weight(&self) -> usize {
@@ -38,19 +41,19 @@ impl View<Items> for Selection {
     }
 }
 
-type S = Session<Items, Selection>;
+type S = Session<Doc, Selection>;
 const NOTHING_TO_REMOVE: &str = "There is nothing to remove.";
 
-fn has_items(f: &Facts<'_, Items, Selection>) -> Result<(), &'static str> {
+fn has_items(f: &Facts<'_, Doc, Selection>) -> Result<(), &'static str> {
     if f.doc.0.is_empty() { Err(NOTHING_TO_REMOVE) } else { Ok(()) }
 }
 
-fn index(ctx: &Ctx<'_, Items, Selection>, p: &Params, key: &str) -> Result<usize, CommandError> {
+fn index(ctx: &Ctx<'_, Doc, Selection>, p: &Params, key: &str) -> Result<usize, CommandError> {
     let i = p.integer(key).unwrap_or(0);
     usize::try_from(i).ok().filter(|i| *i < ctx.doc.0.len()).ok_or_else(|| CommandError::about(key, format!("there is no item {i}")))
 }
 
-fn add(ctx: &mut Ctx<'_, Items, Selection>, p: &Params) -> Result<Value, CommandError> {
+fn add(ctx: &mut Ctx<'_, Doc, Selection>, p: &Params) -> Result<Value, CommandError> {
     let name = p.str("name").unwrap_or_default().to_string();
     ctx.doc.0.push(name);
     let at = ctx.doc.0.len() - 1;
@@ -58,19 +61,19 @@ fn add(ctx: &mut Ctx<'_, Items, Selection>, p: &Params) -> Result<Value, Command
     Ok(json!({ "index": at }))
 }
 
-fn rename(ctx: &mut Ctx<'_, Items, Selection>, p: &Params) -> Result<Value, CommandError> {
+fn rename(ctx: &mut Ctx<'_, Doc, Selection>, p: &Params) -> Result<Value, CommandError> {
     let i = index(ctx, p, "index")?;
     ctx.doc.0[i] = p.str("name").unwrap_or_default().to_string();
     Ok(json!({ "index": i }))
 }
 
-fn remove(ctx: &mut Ctx<'_, Items, Selection>, p: &Params) -> Result<Value, CommandError> {
+fn remove(ctx: &mut Ctx<'_, Doc, Selection>, p: &Params) -> Result<Value, CommandError> {
     let i = index(ctx, p, "index")?;
     ctx.doc.0.remove(i);
     Ok(json!({ "removed": i }))
 }
 
-fn move_item(ctx: &mut Ctx<'_, Items, Selection>, p: &Params) -> Result<Value, CommandError> {
+fn move_item(ctx: &mut Ctx<'_, Doc, Selection>, p: &Params) -> Result<Value, CommandError> {
     let from = index(ctx, p, "from")?;
     let to = index(ctx, p, "to")?;
     let item = ctx.doc.0.remove(from);
@@ -78,32 +81,32 @@ fn move_item(ctx: &mut Ctx<'_, Items, Selection>, p: &Params) -> Result<Value, C
     Ok(json!({ "to": to }))
 }
 
-fn select(ctx: &mut Ctx<'_, Items, Selection>, p: &Params) -> Result<Value, CommandError> {
+fn select(ctx: &mut Ctx<'_, Doc, Selection>, p: &Params) -> Result<Value, CommandError> {
     *ctx.view = Selection(Some(index(ctx, p, "index")?));
     Ok(Value::Null)
 }
 
-fn count(ctx: &mut Ctx<'_, Items, Selection>, _: &Params) -> Result<Value, CommandError> {
+fn count(ctx: &mut Ctx<'_, Doc, Selection>, _: &Params) -> Result<Value, CommandError> {
     Ok(json!(ctx.doc.0.len()))
 }
 
-fn fail(_: &mut Ctx<'_, Items, Selection>, _: &Params) -> Result<Value, CommandError> {
+fn fail(_: &mut Ctx<'_, Doc, Selection>, _: &Params) -> Result<Value, CommandError> {
     Err(CommandError::new("it always fails"))
 }
 
 #[allow(clippy::panic)]
-fn explode(ctx: &mut Ctx<'_, Items, Selection>, _: &Params) -> Result<Value, CommandError> {
+fn explode(ctx: &mut Ctx<'_, Doc, Selection>, _: &Params) -> Result<Value, CommandError> {
     ctx.doc.0.push("half".into());
     panic!("boom")
 }
 
-fn sneak(ctx: &mut Ctx<'_, Items, Selection>, _: &Params) -> Result<Value, CommandError> {
+fn sneak(ctx: &mut Ctx<'_, Doc, Selection>, _: &Params) -> Result<Value, CommandError> {
     ctx.doc.0.push("unseen".into());
     Ok(Value::Null)
 }
 
 /// Adds an item named after a fresh id from the counter, failing afterwards when asked to.
-fn tag(ctx: &mut Ctx<'_, Items, Selection>, p: &Params) -> Result<Value, CommandError> {
+fn tag(ctx: &mut Ctx<'_, Doc, Selection>, p: &Params) -> Result<Value, CommandError> {
     let n = ctx.fresh().ok_or_else(|| CommandError::new("no ids left"))?;
     ctx.doc.0.push(format!("t{n}"));
     if p.bool("fail").unwrap_or(false) {
@@ -113,20 +116,20 @@ fn tag(ctx: &mut Ctx<'_, Items, Selection>, p: &Params) -> Result<Value, Command
 }
 
 /// Takes an id and changes nothing: refused.
-fn burn(ctx: &mut Ctx<'_, Items, Selection>, _: &Params) -> Result<Value, CommandError> {
+fn burn(ctx: &mut Ctx<'_, Doc, Selection>, _: &Params) -> Result<Value, CommandError> {
     ctx.fresh();
     Ok(Value::Null)
 }
 
 /// Renames an item to a fresh id's name when `text` is empty, else to `text`.
-fn label(ctx: &mut Ctx<'_, Items, Selection>, p: &Params) -> Result<Value, CommandError> {
+fn label(ctx: &mut Ctx<'_, Doc, Selection>, p: &Params) -> Result<Value, CommandError> {
     let i = index(ctx, p, "index")?;
     let text = p.str("text").unwrap_or_default();
     ctx.doc.0[i] = if text.is_empty() { format!("t{}", ctx.fresh().ok_or_else(|| CommandError::new("no ids left"))?) } else { text.to_string() };
     Ok(Value::Null)
 }
 
-fn specs() -> Vec<CommandSpec<Items, Selection>> {
+fn specs() -> Vec<CommandSpec<Doc, Selection>> {
     let mut s = archforge_engine::cmd::edit::specs();
     s.extend([
         cmd!("item.add", "Add item", &["Item"], Some("Ctrl+N"), "name: string = \"Item\"; the new item's name", always, add),
@@ -161,12 +164,12 @@ fn specs() -> Vec<CommandSpec<Items, Selection>> {
     s
 }
 
-fn registry() -> Arc<Registry<Items, Selection>> {
+fn registry() -> Arc<Registry<Doc, Selection>> {
     Registry::new(specs()).unwrap()
 }
 
 fn session() -> S {
-    Session::new(registry(), Items::default(), 1, Options::default())
+    Session::new(registry(), Doc::default(), 1, Options::default())
 }
 
 fn names(s: &S) -> Vec<&str> {
@@ -174,14 +177,14 @@ fn names(s: &S) -> Vec<&str> {
 }
 
 /// Everything a refused call must leave as it was.
-fn state(s: &S) -> (Items, Selection, bool, bool, bool, usize) {
+fn state(s: &S) -> (Doc, Selection, bool, bool, bool, usize) {
     (s.doc().clone(), s.view().clone(), s.can_undo(), s.can_redo(), s.is_dirty(), s.journal().count())
 }
 
 #[test]
 fn the_registry_refuses_duplicate_and_malformed_ids_and_undocumented_parameters() {
     let reg = registry();
-    let infos = reg.infos(&Facts { doc: &Items::default(), view: &Selection::default(), can_undo: false, can_redo: false });
+    let infos = reg.infos(&Facts { doc: &Doc::default(), view: &Selection::default(), can_undo: false, can_redo: false });
     assert!(infos.iter().all(|i| i.params.iter().all(|p| !p.meaning.is_empty())));
     let undo = infos.iter().find(|i| i.id == "edit.undo").unwrap();
     assert_eq!((undo.enabled, undo.disabled_reason), (false, Some(archforge_engine::cmd::edit::NOTHING_TO_UNDO)));
@@ -437,7 +440,7 @@ fn a_gesture_previews_freely_and_commits_one_step() {
 #[test]
 fn the_caps_drop_the_oldest_and_a_step_too_heavy_clears_the_history() {
     let options = Options { max_steps: 3, max_weight: 10_000, max_journal: 4, max_journal_bytes: 1_000_000 };
-    let mut s = Session::new(registry(), Items::default(), 1, options);
+    let mut s = Session::new(registry(), Doc::default(), 1, options);
     for i in 0..6 {
         s.execute("item.add", &json!({ "name": format!("{i}") })).unwrap();
     }
@@ -453,13 +456,13 @@ fn the_caps_drop_the_oldest_and_a_step_too_heavy_clears_the_history() {
         s.redo().unwrap();
     }
     let out = s.execute("item.add", &json!({ "name": "x".repeat(20_000) })).unwrap();
-    assert!(!out.history_cleared, "the step stores the state before, which is light");
-    let out = s.execute("item.add", &json!({ "name": "y" })).unwrap();
-    assert!(out.history_cleared, "the state before this step is over the cap");
+    assert!(out.history_cleared, "a step whose delta is over the whole cap clears the history");
     assert!(!s.can_undo() && !s.can_redo());
+    let out = s.execute("item.add", &json!({ "name": "y" })).unwrap();
+    assert!(out.history_cleared, "every later delta carries the heavy state too");
     // The journal's byte cap.
     let options = Options { max_journal_bytes: 300, ..Options::default() };
-    let mut s = Session::new(registry(), Items::default(), 1, options);
+    let mut s = Session::new(registry(), Doc::default(), 1, options);
     for _ in 0..5 {
         s.execute("item.add", &json!({ "name": "z".repeat(100) })).unwrap();
     }
@@ -473,13 +476,11 @@ fn a_panic_in_the_notations_own_code_changes_nothing_even_in_undo() {
     let before = state(&s);
     assert!(matches!(s.execute("item.add", &json!({ "name": "boom-view" })), Err(EngineError::Internal { message, .. }) if message == "view"));
     assert_eq!(state(&s), before);
-    // An item whose weight panics goes in; the next step then has to weigh it, and is refused whole.
-    s.execute("item.add", &json!({ "name": "boom-weight" })).unwrap();
-    let before = state(&s);
-    assert!(matches!(s.execute("item.add", &json!({ "name": "B" })), Err(EngineError::Internal { .. })));
+    // A step whose delta cannot be weighed is rolled back whole.
+    assert!(matches!(s.execute("item.add", &json!({ "name": "boom-weight" })), Err(EngineError::Internal { message, .. }) if message == "weight"));
     assert_eq!(state(&s), before);
-    assert!(matches!(s.undo(), Err(EngineError::Internal { .. })), "undo weighs the state it keeps for redo");
-    assert_eq!(state(&s), before, "and losing nothing when it cannot");
+    s.undo().unwrap();
+    assert!(names(&s).is_empty(), "undo works on stored weights and never weighs again");
 }
 
 #[test]
@@ -587,7 +588,7 @@ fn a_counter_only_call_is_refused_inside_a_batch_too() {
 #[test]
 fn a_trimmed_journal_says_where_its_counter_starts() {
     let options = Options { max_journal: 2, ..Options::default() };
-    let mut s = Session::new(registry(), Items::default(), 1, options);
+    let mut s = Session::new(registry(), Doc::default(), 1, options);
     for _ in 0..4 {
         s.execute("item.tag", &json!({})).unwrap();
     }
