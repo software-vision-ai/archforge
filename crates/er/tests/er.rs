@@ -104,8 +104,12 @@ fn the_registry_and_the_metamodel_are_what_the_spec_says() {
     let reg = registry().unwrap();
     assert!(reg.len() > 20);
     let m = metamodel().unwrap();
-    assert_eq!(m.classes.len(), 8);
-    assert_eq!(m.data_types.len(), 8, "the five primitives, Cardinality, EntityKind and ReferentialAction");
+    assert_eq!(m.classes.len(), 10);
+    assert_eq!(
+        m.data_types.len(),
+        10,
+        "the five primitives and the enumerations Cardinality, EntityKind, ReferentialAction, MatchType and Deferrability"
+    );
     assert_eq!(Cardinality::from_index(1), Some(Cardinality::ExactlyOne));
     assert_eq!(commands::cardinality_name(Cardinality::ZeroOrMore), "zero-or-more");
     assert!(TABLES.iter().any(|t| t.name == "er_attribute") && JUNCTIONS.iter().any(|j| j.name == "er_entity_attribute" && j.ordered));
@@ -199,9 +203,11 @@ fn removing_an_entity_takes_its_attributes_relationships_and_links_in_one_step()
     SchemaObj::push_entity(&mut st, sch, Value::Ref(order)).unwrap();
     let key = st.create(ATTRIBUTE).unwrap();
     AttributeObj::set_name(&mut st, key, Some("id")).unwrap();
-    AttributeObj::set_primary_key(&mut st, key, true).unwrap();
     AttributeObj::set_nullable(&mut st, key, false).unwrap();
     EntityObj::push_attribute(&mut st, customer, Value::Ref(key)).unwrap();
+    let pk = st.create(PRIMARY_KEY).unwrap();
+    PrimaryKeyObj::push_column(&mut st, pk, Value::Ref(key)).unwrap();
+    EntityObj::set_primary_key(&mut st, customer, Some(pk)).unwrap();
     let places = st.create(RELATIONSHIP).unwrap();
     RelationshipObj::set_from(&mut st, places, Some(customer)).unwrap();
     RelationshipObj::set_to(&mut st, places, Some(order)).unwrap();
@@ -217,8 +223,8 @@ fn removing_an_entity_takes_its_attributes_relationships_and_links_in_one_step()
     st.begin();
     let gone = commands::remove_entity(&mut st, customer).unwrap();
     let delta = st.end().unwrap();
-    assert_eq!(gone, 4, "the entity, its attribute, the relationship and the link");
-    assert!(!st.is_alive(customer) && !st.is_alive(key) && !st.is_alive(places) && !st.is_alive(link));
+    assert_eq!(gone, 5, "the entity, its attribute and primary key, the relationship and the link");
+    assert!(!st.is_alive(customer) && !st.is_alive(key) && !st.is_alive(pk) && !st.is_alive(places) && !st.is_alive(link));
     assert_eq!(st.list(c, comment::ANNOTATED_ELEMENT).unwrap(), vec![], "the comment let go");
     assert_eq!(st.list(m, model::LINK).unwrap(), vec![]);
     assert_eq!(st.list(sch, schema::ENTITY).unwrap(), vec![Value::Ref(order)]);
@@ -230,7 +236,7 @@ fn removing_an_entity_takes_its_attributes_relationships_and_links_in_one_step()
     let sm = sample(&mut s);
     let before = picture(s.doc());
     let out = s.execute("er.remove", &json!({ "ids": [sm.key, sm.customer, sm.places] })).unwrap();
-    assert_eq!(out.value["removed"], 3);
+    assert_eq!(out.value["removed"], 4, "the relationship, the key column with the primary key it was in, the entity");
     assert_eq!(s.doc().list(obj(s.doc(), &sm.schema), schema::ENTITY).unwrap(), vec![Value::Ref(obj(s.doc(), &sm.order))]);
     assert!(!s.view().selection.iter().any(|o| !s.doc().is_alive(*o)));
     s.undo().unwrap();
@@ -252,7 +258,7 @@ fn foreign_keys_round_trip_keep_their_rules_and_go_with_what_they_depend_on() {
     let mut s = session();
     let sm = sample(&mut s);
     let fk_col = run(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": "customer_id", "type": "BIGINT", "nullable": "no" }));
-    let add = json!({ "entity": sm.order, "references": sm.customer, "columns": [[fk_col, sm.key]], "name": "fk_order_customer", "relationship": sm.places });
+    let add = json!({ "entity": sm.order, "references": sm.customer, "columns": [fk_col], "name": "fk_order_customer", "relationship": sm.places });
     round_trip(&mut s, "er.foreign-key.add", &add);
     let order = get(&mut s, "er.entity.get", json!({ "entity": sm.order }));
     let fk = order["foreign_keys"][0]["id"].as_str().unwrap().to_string();
@@ -269,9 +275,10 @@ fn foreign_keys_round_trip_keep_their_rules_and_go_with_what_they_depend_on() {
         ("er.attribute.set-type", json!({ "attribute": fk_col, "type": "TEXT" })),
         ("er.attribute.set-type", json!({ "attribute": sm.key, "type": "TEXT" })),
         ("er.attribute.set-flags", json!({ "attribute": sm.key, "primary_key": false, "nullable": "auto", "unique": false })),
-        ("er.foreign-key.add", json!({ "entity": sm.order, "references": sm.customer, "columns": [[sm.total, sm.key]] })),
+        ("er.foreign-key.add", json!({ "entity": sm.order, "references": sm.customer, "columns": [sm.total] })),
         ("er.foreign-key.add", json!({ "entity": sm.order, "references": sm.customer, "columns": [] })),
-        ("er.foreign-key.add", json!({ "entity": sm.order, "references": sm.customer, "columns": [[sm.key, fk_col]] })),
+        ("er.foreign-key.add", json!({ "entity": sm.order, "references": sm.customer, "columns": [sm.key] })),
+        ("er.foreign-key.add", json!({ "entity": sm.order, "references": sm.customer, "columns": [fk_col], "name": "FK_CUSTOMER" })),
         ("er.entity.set-kind", json!({ "entity": sm.order, "kind": "associative" })),
     ] {
         let e = s.execute(cmd, &p).expect_err(&format!("{cmd} {p} was accepted"));
@@ -280,7 +287,7 @@ fn foreign_keys_round_trip_keep_their_rules_and_go_with_what_they_depend_on() {
     }
     // Removing the referenced key column takes the foreign key with it, in one step.
     let out = get(&mut s, "er.attribute.remove", json!({ "attribute": sm.key }));
-    assert_eq!(out["removed"], 3, "the attribute, the foreign key and its column");
+    assert_eq!(out["removed"], 3, "the attribute, the primary key it was in, and the foreign key onto that key");
     assert!(get(&mut s, "er.entity.get", json!({ "entity": sm.order }))["foreign_keys"].as_array().unwrap().is_empty());
     all_rules_hold(s.doc());
     s.undo().unwrap();
@@ -421,17 +428,17 @@ fn a_new_key_column_never_breaks_a_foreign_key_that_targets_the_key() {
     let mut s = session();
     let sm = sample(&mut s);
     let col = run(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": "customer_id", "type": "BIGINT" }));
-    run(&mut s, "er.foreign-key.add", json!({ "entity": sm.order, "references": sm.customer, "columns": [[col, sm.key]] }));
+    run(&mut s, "er.foreign-key.add", json!({ "entity": sm.order, "references": sm.customer, "columns": [col] }));
     // Customer's key would become (id, region), which the foreign key no longer covers.
     let key = refused_on(&mut s, "er.attribute.add", json!({ "entity": sm.customer, "name": "region", "type": "TEXT", "primary_key": true }));
     assert_eq!(key, "primary_key");
     run(&mut s, "er.attribute.add", json!({ "entity": sm.customer, "name": "region", "type": "TEXT" }));
     // An identifying relationship adds key columns to its child; a key that targets the child refuses it.
     let line = run(&mut s, "er.entity.add", json!({ "schema": sm.schema, "name": "Line" }));
-    let line_no = run(&mut s, "er.attribute.add", json!({ "entity": line, "name": "line_no", "type": "INT", "primary_key": true }));
+    run(&mut s, "er.attribute.add", json!({ "entity": line, "name": "line_no", "type": "INT", "primary_key": true }));
     let shipment = run(&mut s, "er.entity.add", json!({ "schema": sm.schema, "name": "Shipment" }));
     let line_ref = run(&mut s, "er.attribute.add", json!({ "entity": shipment, "name": "line_ref", "type": "INT" }));
-    run(&mut s, "er.foreign-key.add", json!({ "entity": shipment, "references": line, "columns": [[line_ref, line_no]] }));
+    run(&mut s, "er.foreign-key.add", json!({ "entity": shipment, "references": line, "columns": [line_ref] }));
     run(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": "order_id", "type": "BIGINT", "primary_key": true }));
     let add =
         json!({ "from": sm.order, "to": line, "from_end": "exactly-one", "to_end": "zero-or-more", "create_foreign_key": true, "identifying": true });
@@ -450,23 +457,27 @@ fn foreign_key_refusals_name_the_parameter_at_fault() {
     let b = run(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": "product_region", "type": "TEXT", "nullable": "yes" }));
     let other = run(&mut s, "er.schema.add", json!({ "name": "billing" }));
     let invoice = run(&mut s, "er.entity.add", json!({ "schema": other, "name": "Invoice" }));
-    let number = run(&mut s, "er.attribute.add", json!({ "entity": invoice, "name": "number", "type": "TEXT", "primary_key": true }));
+    run(&mut s, "er.attribute.add", json!({ "entity": invoice, "name": "number", "type": "TEXT", "primary_key": true }));
     let fk = |columns: Json| json!({ "entity": sm.order, "references": product, "columns": columns });
     for (p, key) in [
-        (fk(json!([[a, sku]])), "columns"),
-        (fk(json!([[a, sku], [b, sku]])), "columns"),
-        (fk(json!([[a, sku], [a, region]])), "columns"),
-        (fk(json!(vec![json!([a, sku]); 33])), "columns"),
-        (json!({ "entity": sm.order, "references": invoice, "columns": [[a, number]] }), "references"),
-        (json!({ "entity": sm.order, "references": product, "columns": [[a, sku], [b, region]], "relationship": sm.places }), "relationship"),
+        (fk(json!([a])), "columns"),
+        (fk(json!([a, a])), "columns"),
+        (fk(json!([sku, b])), "columns"),
+        (fk(json!(vec![a.clone(); 33])), "columns"),
+        (json!({ "entity": sm.order, "references": invoice, "columns": [a] }), "key"),
+        (json!({ "entity": sm.order, "key": sm.order, "columns": [a] }), "key"),
+        (json!({ "entity": sm.order, "references": product, "columns": [a, b], "relationship": sm.places }), "relationship"),
     ] {
         assert_eq!(refused_on(&mut s, "er.foreign-key.add", p.clone()), key, "{p}");
     }
     // Two columns over a two-column key; types compare ignoring case; set null on nullable columns.
-    let two = json!({ "entity": sm.order, "references": product, "columns": [[a, sku], [b, region]], "on_delete": "set-null" });
+    let two = json!({ "entity": sm.order, "references": product, "columns": [a, b], "on_delete": "set-null", "match": "full", "deferrable": "initially-deferred" });
     round_trip(&mut s, "er.foreign-key.add", &two);
     all_rules_hold(s.doc());
-    let total_fk = json!({ "entity": sm.order, "references": product, "columns": [[sm.total, sku], [b, region]] });
+    let o = get(&mut s, "er.entity.get", json!({ "entity": sm.order }));
+    assert_eq!((o["foreign_keys"][0]["match"].as_str(), o["foreign_keys"][0]["deferrable"].as_str()), (Some("full"), Some("initially-deferred")));
+    assert_eq!(o["foreign_keys"][0]["targets"], json!([sku, region]), "matched to the key's columns by position");
+    let total_fk = json!({ "entity": sm.order, "references": product, "columns": [sm.total, b] });
     assert_eq!(refused_on(&mut s, "er.foreign-key.add", total_fk), "columns", "DECIMAL is not TEXT");
 }
 
@@ -499,7 +510,7 @@ fn removals_leave_no_identifying_relationship_without_its_key() {
 }
 
 #[test]
-fn generated_names_step_aside_and_one_to_one_keys_are_unique_only_when_single() {
+fn generated_names_step_aside_and_one_to_one_keys_are_unique_together() {
     let mut s = session();
     let sm = sample(&mut s);
     let product = run(&mut s, "er.entity.add", json!({ "schema": sm.schema, "name": "Product" }));
@@ -512,7 +523,7 @@ fn generated_names_step_aside_and_one_to_one_keys_are_unique_only_when_single() 
     );
     let p = get(&mut s, "er.entity.get", json!({ "entity": product }));
     assert_eq!((p["attributes"][2]["name"].as_str(), p["attributes"][2]["unique"].as_bool()), (Some("customer_id_2"), Some(true)));
-    // A one-to-one over a two-column key cannot mark the pair unique, so neither column is.
+    // A one-to-one over a two-column key makes the pair unique together, neither column alone.
     let region = json!({ "entity": sm.customer, "name": "region", "type": "TEXT", "primary_key": true });
     let fk = p["foreign_keys"][0]["id"].as_str().unwrap().to_string();
     run(&mut s, "er.foreign-key.remove", json!({ "foreign_key": fk }));
@@ -525,6 +536,7 @@ fn generated_names_step_aside_and_one_to_one_keys_are_unique_only_when_single() 
     );
     let pr = get(&mut s, "er.entity.get", json!({ "entity": profile }));
     assert!(pr["attributes"].as_array().unwrap().iter().all(|x| x["unique"] == false));
+    assert_eq!(pr["unique_constraints"][0]["columns"].as_array().map(Vec::len), Some(2));
     all_rules_hold(s.doc());
     // Resolve: the default name steps aside, a given name that is taken is refused.
     run(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": "order_id", "type": "BIGINT", "primary_key": true }));
@@ -566,11 +578,229 @@ fn a_many_to_many_relationship_of_an_entity_with_itself_resolves_beside_it() {
 }
 
 #[test]
+fn keys_are_named_constraints_with_their_own_column_order() {
+    let mut s = session();
+    let sm = sample(&mut s);
+    let region = run(&mut s, "er.attribute.add", json!({ "entity": sm.customer, "name": "region", "type": "TEXT", "nullable": "yes" }));
+    let email = run(&mut s, "er.attribute.add", json!({ "entity": sm.customer, "name": "email", "type": "TEXT" }));
+    let number = run(&mut s, "er.attribute.add", json!({ "entity": sm.customer, "name": "number", "type": "INT" }));
+    // The key's order is its own, its columns become not nullable, and it takes a name.
+    round_trip(&mut s, "er.primary-key.set", &json!({ "entity": sm.customer, "columns": [region, sm.key], "name": "pk_customer" }));
+    assert!(
+        s.execute("er.primary-key.set", &json!({ "entity": sm.customer, "columns": [sm.key] })).is_err(),
+        "the name is required, so it is never reset"
+    );
+    let c = get(&mut s, "er.entity.get", json!({ "entity": sm.customer }));
+    assert_eq!(c["primary_key"]["columns"], json!([region, sm.key]));
+    assert_eq!(c["primary_key"]["name"], "pk_customer");
+    assert_eq!(c["attributes"][1]["nullable"], false, "a key column is not nullable");
+    assert_eq!((c["attributes"][1]["primary_key"].as_bool(), c["attributes"][2]["primary_key"].as_bool()), (Some(true), Some(false)));
+    // A composite unique constraint, with nulls not distinct.
+    let add = json!({ "entity": sm.customer, "columns": [region, number], "name": "uq_customer_number", "nulls_distinct": false });
+    round_trip(&mut s, "er.unique.add", &add);
+    let c = get(&mut s, "er.entity.get", json!({ "entity": sm.customer }));
+    let u = c["unique_constraints"][0]["id"].as_str().unwrap().to_string();
+    assert_eq!(
+        (c["unique_constraints"][0]["columns"].clone(), c["unique_constraints"][0]["nulls_distinct"].clone()),
+        (json!([region, number]), json!(false))
+    );
+    all_rules_hold(s.doc());
+    for (cmd, p, key) in [
+        ("er.primary-key.set", json!({ "entity": sm.customer, "columns": [], "name": "" }), "columns"),
+        ("er.primary-key.set", json!({ "entity": sm.customer, "columns": [sm.total], "name": "" }), "columns"),
+        ("er.primary-key.set", json!({ "entity": sm.customer, "columns": [sm.key], "name": "UQ_CUSTOMER_NUMBER" }), "name"),
+        ("er.unique.add", json!({ "entity": sm.customer, "columns": [email], "name": "pk_customer" }), "name"),
+        ("er.unique.add", json!({ "entity": sm.customer, "columns": [email, email] }), "columns"),
+        ("er.unique.add", json!({ "entity": sm.customer, "columns": [] }), "columns"),
+        ("er.unique.set", json!({ "unique": sm.key, "columns": [email], "name": "", "nulls_distinct": true }), "unique"),
+        ("er.unique.set", json!({ "unique": u, "columns": [region, number], "name": "PK_CUSTOMER", "nulls_distinct": false }), "name"),
+        ("er.primary-key.remove", json!({ "entity": sm.order }), "entity"),
+    ] {
+        assert_eq!(refused_on(&mut s, cmd, p.clone()), key, "{cmd} {p}");
+    }
+    round_trip(&mut s, "er.unique.set", &json!({ "unique": u, "columns": [number, region], "name": "", "nulls_distinct": false }));
+    assert_eq!(get(&mut s, "er.entity.get", json!({ "entity": sm.customer }))["unique_constraints"][0]["nulls_distinct"], false);
+    // The Unique checkbox makes and removes a one-column constraint.
+    round_trip(&mut s, "er.attribute.set-flags", &json!({ "attribute": email, "primary_key": false, "nullable": "yes", "unique": true }));
+    assert_eq!(get(&mut s, "er.entity.get", json!({ "entity": sm.customer }))["attributes"][2]["unique"], true);
+    round_trip(&mut s, "er.attribute.set-flags", &json!({ "attribute": email, "primary_key": false, "nullable": "yes", "unique": false }));
+    assert_eq!(get(&mut s, "er.entity.get", json!({ "entity": sm.customer }))["unique_constraints"].as_array().map(Vec::len), Some(1));
+    // Removing a column takes every key it is in, whole, as SQL does.
+    let out = get(&mut s, "er.attribute.remove", json!({ "attribute": number }));
+    assert_eq!(out["removed"], 2, "the column and the unique constraint over it");
+    all_rules_hold(s.doc());
+    s.undo().unwrap();
+    round_trip(&mut s, "er.unique.remove", &json!({ "unique": u }));
+    round_trip(&mut s, "er.primary-key.remove", &json!({ "entity": sm.customer }));
+}
+
+#[test]
+fn a_foreign_key_points_at_any_key_and_the_key_stays_while_it_does() {
+    let mut s = session();
+    let sm = sample(&mut s);
+    let region = run(&mut s, "er.attribute.add", json!({ "entity": sm.customer, "name": "region", "type": "TEXT" }));
+    let number = run(&mut s, "er.attribute.add", json!({ "entity": sm.customer, "name": "number", "type": "INT" }));
+    let email = run(&mut s, "er.attribute.add", json!({ "entity": sm.customer, "name": "email", "type": "TEXT", "unique": true }));
+    let u = run(&mut s, "er.unique.add", json!({ "entity": sm.customer, "columns": [region, number], "name": "uq_region_number" }));
+    let r_region = run(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": "customer_region", "type": "text" }));
+    let r_number = run(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": "customer_number", "type": "INT" }));
+    // Onto a composite alternate key.
+    let add = json!({ "entity": sm.order, "key": u, "columns": [r_region, r_number], "name": "fk_order_customer_number" });
+    round_trip(&mut s, "er.foreign-key.add", &add);
+    let o = get(&mut s, "er.entity.get", json!({ "entity": sm.order }));
+    let fk = o["foreign_keys"][0]["id"].as_str().unwrap().to_string();
+    assert_eq!((o["foreign_keys"][0]["key"].as_str(), o["foreign_keys"][0]["references"].as_str()), (Some(u.as_str()), Some(sm.customer.as_str())));
+    all_rules_hold(s.doc());
+    // A key that a foreign key points at keeps its columns; a new name is fine.
+    let set = |columns: Json, name: &str| json!({ "unique": u, "columns": columns, "name": name, "nulls_distinct": true });
+    assert_eq!(refused_on(&mut s, "er.unique.set", set(json!([region]), "uq_region_number")), "columns");
+    round_trip(&mut s, "er.unique.set", &set(json!([region, number]), "uq_customer_region_number"));
+    assert_eq!(
+        refused_on(&mut s, "er.foreign-key.add", json!({ "entity": sm.order, "key": u, "columns": [r_region] })),
+        "columns",
+        "one column for a two-column key"
+    );
+    // Point it at the one-column unique key instead: with given columns, or with new ones.
+    let email_key = get(&mut s, "er.entity.get", json!({ "entity": sm.customer }))["unique_constraints"][0]["id"].as_str().unwrap().to_string();
+    assert_eq!(refused_on(&mut s, "er.foreign-key.set-key", json!({ "foreign_key": fk, "key": email_key, "columns": [r_number] })), "columns");
+    round_trip(&mut s, "er.foreign-key.set-key", &json!({ "foreign_key": fk, "key": email_key }));
+    let o = get(&mut s, "er.entity.get", json!({ "entity": sm.order }));
+    let new_col = o["foreign_keys"][0]["columns"][0].as_str().unwrap().to_string();
+    assert_eq!(o["attributes"].as_array().unwrap().iter().find(|a| a["id"] == new_col).unwrap()["name"], "customer_email");
+    all_rules_hold(s.doc());
+    round_trip(&mut s, "er.foreign-key.set-options", &json!({ "foreign_key": fk, "match": "partial", "deferrable": "initially-immediate" }));
+    for (cmd, p) in [
+        ("er.foreign-key.set-options", json!({ "foreign_key": fk, "match": "partial" })),
+        ("er.foreign-key.set-options", json!({ "foreign_key": fk, "match": "loose", "deferrable": "not-deferrable" })),
+        ("er.foreign-key.add", json!({ "entity": sm.order, "key": email_key, "columns": [new_col], "deferrable": "later" })),
+    ] {
+        assert!(s.execute(cmd, &p).is_err(), "{cmd} {p}: a missing or unknown option is refused before the handler");
+    }
+    for (cmd, p, key) in [
+        ("er.foreign-key.set-key", json!({ "foreign_key": fk, "key": sm.key }), "key"),
+        ("er.foreign-key.set-key", json!({ "foreign_key": fk, "key": email_key }), "key"),
+        ("er.foreign-key.add", json!({ "entity": sm.order, "key": email_key, "references": sm.order, "columns": [new_col] }), "references"),
+    ] {
+        assert_eq!(refused_on(&mut s, cmd, p.clone()), key, "{cmd} {p}");
+    }
+    // Unticking Unique on a column a foreign key points at is refused, and removing the key takes the
+    // foreign key with it.
+    assert_eq!(
+        refused_on(&mut s, "er.attribute.set-flags", json!({ "attribute": email, "primary_key": false, "nullable": "yes", "unique": false })),
+        "unique"
+    );
+    let out = get(&mut s, "er.unique.remove", json!({ "unique": email_key }));
+    assert_eq!(out["removed"], 2, "the unique constraint and the foreign key onto it");
+    all_rules_hold(s.doc());
+}
+
+#[test]
+fn a_relationship_points_at_the_key_it_is_given() {
+    let mut s = session();
+    let sm = sample(&mut s);
+    run(&mut s, "er.attribute.add", json!({ "entity": sm.customer, "name": "email", "type": "TEXT", "unique": true }));
+    let email_key = get(&mut s, "er.entity.get", json!({ "entity": sm.customer }))["unique_constraints"][0]["id"].as_str().unwrap().to_string();
+    run(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": "order_id", "type": "BIGINT", "primary_key": true }));
+    let order_pk = get(&mut s, "er.entity.get", json!({ "entity": sm.order }))["primary_key"]["id"].as_str().unwrap().to_string();
+    let add = json!({ "from": sm.customer, "to": sm.order, "from_end": "zero-or-one", "to_end": "zero-or-more", "create_foreign_key": true, "points_to": email_key });
+    round_trip(&mut s, "er.relationship.add", &add);
+    let o = get(&mut s, "er.entity.get", json!({ "entity": sm.order }));
+    let fk = o["foreign_keys"].as_array().unwrap().last().unwrap().clone();
+    assert_eq!(fk["key"], json!(email_key));
+    let col = fk["columns"][0].as_str().unwrap().to_string();
+    let attr = o["attributes"].as_array().unwrap().iter().find(|a| a["id"] == col).unwrap().clone();
+    assert_eq!((attr["name"].as_str(), attr["type"].as_str(), attr["nullable"].as_bool()), (Some("customer_email"), Some("TEXT"), Some(true)));
+    all_rules_hold(s.doc());
+    for (p, key) in [
+        (json!({ "from": sm.customer, "to": sm.order, "create_foreign_key": true, "points_to": order_pk }), "points_to"),
+        (json!({ "from": sm.customer, "to": sm.order, "points_to": email_key }), "points_to"),
+        (json!({ "from": sm.customer, "to": sm.order, "create_foreign_key": true, "points_to": sm.key }), "points_to"),
+    ] {
+        assert_eq!(refused_on(&mut s, "er.relationship.add", p.clone()), key, "{p}");
+    }
+}
+
+#[test]
+fn removing_a_primary_key_takes_its_foreign_keys_and_what_they_made() {
+    let mut s = session();
+    let sm = sample(&mut s);
+    run(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": "order_id", "type": "BIGINT", "primary_key": true }));
+    let product = run(&mut s, "er.entity.add", json!({ "schema": sm.schema, "name": "Product" }));
+    run(&mut s, "er.attribute.add", json!({ "entity": product, "name": "sku", "type": "TEXT", "primary_key": true }));
+    let r = run(&mut s, "er.relationship.add", json!({ "from": sm.order, "to": product, "from_end": "zero-or-more", "to_end": "zero-or-more" }));
+    let m = run(&mut s, "er.relationship.resolve", json!({ "relationship": r }));
+    let before = picture(s.doc());
+    // The mapping table's own primary key goes: both its relationships stop identifying, it is a
+    // regular entity again, its foreign keys stay.
+    let out = get(&mut s, "er.primary-key.remove", json!({ "entity": m }));
+    assert_eq!(out["removed"], 1);
+    let t = get(&mut s, "er.entity.get", json!({ "entity": m }));
+    assert_eq!((t["kind"].as_str(), t["foreign_keys"].as_array().map(Vec::len)), (Some("regular"), Some(2)));
+    let schema = get(&mut s, "er.schema.get", json!({ "schema": sm.schema }));
+    assert!(schema["relationships"].as_array().unwrap().iter().filter(|x| x["to"] == m).all(|x| x["identifying"] == false));
+    all_rules_hold(s.doc());
+    s.undo().unwrap();
+    assert_eq!(picture(s.doc()), before);
+    // Product's primary key goes: the foreign key onto it goes too.
+    let out = get(&mut s, "er.primary-key.remove", json!({ "entity": product }));
+    assert_eq!(out["removed"], 2, "the primary key and the foreign key onto it");
+    assert_eq!(get(&mut s, "er.entity.get", json!({ "entity": m }))["kind"], "regular");
+    all_rules_hold(s.doc());
+}
+
+#[test]
+fn key_edits_that_would_break_a_foreign_key_are_refused_and_one_to_one_stays_unique() {
+    let mut s = session();
+    let sm = sample(&mut s);
+    // An identifying foreign key's columns cannot leave the primary key.
+    run(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": "order_id", "type": "BIGINT", "primary_key": true }));
+    let line = run(&mut s, "er.entity.add", json!({ "schema": sm.schema, "name": "Line" }));
+    let line_no = run(&mut s, "er.attribute.add", json!({ "entity": line, "name": "line_no", "type": "INT", "primary_key": true }));
+    let add =
+        json!({ "from": sm.order, "to": line, "from_end": "exactly-one", "to_end": "zero-or-more", "create_foreign_key": true, "identifying": true });
+    run(&mut s, "er.relationship.add", add);
+    assert_eq!(refused_on(&mut s, "er.primary-key.set", json!({ "entity": line, "columns": [line_no], "name": "" })), "columns");
+    // A key a foreign key points at keeps its columns; a set-null column cannot join a key.
+    let note = run(&mut s, "er.entity.add", json!({ "schema": sm.schema, "name": "Note" }));
+    let note_id = run(&mut s, "er.attribute.add", json!({ "entity": note, "name": "note_id", "type": "INT", "primary_key": true }));
+    let about = run(&mut s, "er.attribute.add", json!({ "entity": note, "name": "customer_id", "type": "BIGINT", "nullable": "yes" }));
+    run(&mut s, "er.foreign-key.add", json!({ "entity": note, "references": sm.customer, "columns": [about], "on_delete": "set-null" }));
+    let region = run(&mut s, "er.attribute.add", json!({ "entity": sm.customer, "name": "region", "type": "TEXT" }));
+    assert_eq!(refused_on(&mut s, "er.primary-key.set", json!({ "entity": sm.customer, "columns": [sm.key, region], "name": "" })), "columns");
+    assert_eq!(refused_on(&mut s, "er.primary-key.set", json!({ "entity": note, "columns": [note_id, about], "name": "" })), "columns");
+    // A column of a composite unique constraint goes with the constraint and the foreign key onto it.
+    let number = run(&mut s, "er.attribute.add", json!({ "entity": sm.customer, "name": "number", "type": "INT" }));
+    let u = run(&mut s, "er.unique.add", json!({ "entity": sm.customer, "columns": [region, number] }));
+    let (r2, n2) = (
+        run(&mut s, "er.attribute.add", json!({ "entity": note, "name": "region", "type": "TEXT" })),
+        run(&mut s, "er.attribute.add", json!({ "entity": note, "name": "number", "type": "INT" })),
+    );
+    run(&mut s, "er.foreign-key.add", json!({ "entity": note, "key": u, "columns": [r2, n2] }));
+    let out = get(&mut s, "er.attribute.remove", json!({ "attribute": number }));
+    assert_eq!(out["removed"], 3, "the column, the unique constraint over it and the foreign key onto that");
+    all_rules_hold(s.doc());
+    // An identifying one-to-one keeps its foreign key unique when the child's key is wider.
+    let profile = run(&mut s, "er.entity.add", json!({ "schema": sm.schema, "name": "Profile" }));
+    run(&mut s, "er.attribute.add", json!({ "entity": profile, "name": "profile_id", "type": "INT", "primary_key": true }));
+    let add = json!({ "from": sm.customer, "to": profile, "from_end": "exactly-one", "to_end": "zero-or-one", "create_foreign_key": true, "identifying": true });
+    run(&mut s, "er.relationship.add", add);
+    let p = get(&mut s, "er.entity.get", json!({ "entity": profile }));
+    assert_eq!(p["primary_key"]["columns"].as_array().map(Vec::len), Some(2));
+    assert_eq!(p["unique_constraints"][0]["columns"], p["foreign_keys"][0]["columns"], "the one-to-one's columns are unique together");
+    all_rules_hold(s.doc());
+}
+
+#[test]
 fn the_sweep_finds_nothing() {
     let mut s = session();
     let sm = sample(&mut s);
-    let calls =
-        sweep_with(&mut s, &[&sm.schema, &sm.customer, &sm.key, &sm.places, "not-an-id", "00000000-0000-7000-8000-000000000000"], picture).unwrap();
+    let col = run(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": "customer_id", "type": "BIGINT", "unique": true }));
+    let fk = run(&mut s, "er.foreign-key.add", json!({ "entity": sm.order, "references": sm.customer, "columns": [col] }));
+    let o = get(&mut s, "er.entity.get", json!({ "entity": sm.order }));
+    let u = o["unique_constraints"][0]["id"].as_str().unwrap().to_string();
+    let pk = get(&mut s, "er.entity.get", json!({ "entity": sm.customer }))["primary_key"]["id"].as_str().unwrap().to_string();
+    let ids = [&sm.schema, &sm.customer, &sm.key, &sm.places, &pk, &u, &fk, "not-an-id", "00000000-0000-7000-8000-000000000000"];
+    let calls = sweep_with(&mut s, &ids, picture).unwrap();
     assert!(calls > 1000, "{calls}");
     assert_eq!(problems(s.doc()), Vec::<String>::new());
 }
@@ -602,11 +832,19 @@ fn random_call(rng: &mut Rng, s: &Session) -> (&'static str, Json) {
     let attributes = ids_of(s, ATTRIBUTE);
     let relationships = ids_of(s, RELATIONSHIP);
     let keys = ids_of(s, FOREIGN_KEY);
+    let uniques = ids_of(s, UNIQUE_CONSTRAINT);
+    let all_keys: Vec<String> = ids_of(s, PRIMARY_KEY).into_iter().chain(uniques.iter().cloned()).collect();
     let n = rng.next() % 1000;
     let name = format!("n{}", rng.next() % 30);
     let ends = ["zero-or-one", "exactly-one", "zero-or-more", "one-or-more"];
     let end = |r: &mut Rng| ends[(r.next() % 4) as usize];
-    match rng.below(16) {
+    let pair = |r: &mut Rng| json!([r.pick(&attributes), r.pick(&attributes)]);
+    match rng.below(21) {
+        16 => ("er.primary-key.set", json!({ "entity": rng.pick(&entities), "columns": pair(rng), "name": "" })),
+        17 => ("er.unique.add", json!({ "entity": rng.pick(&entities), "columns": pair(rng), "nulls_distinct": n.is_multiple_of(2) })),
+        18 => ("er.foreign-key.set-key", json!({ "foreign_key": rng.pick(&keys), "key": rng.pick(&all_keys) })),
+        19 => ("er.unique.remove", json!({ "unique": rng.pick(&uniques) })),
+        20 => ("er.primary-key.remove", json!({ "entity": rng.pick(&entities) })),
         12 => (
             "er.relationship.add",
             json!({ "from": rng.pick(&entities), "to": rng.pick(&entities), "from_end": end(rng), "to_end": end(rng), "create_foreign_key": true, "identifying": n.is_multiple_of(2) }),

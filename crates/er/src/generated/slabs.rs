@@ -12,8 +12,9 @@ pub struct ErSlabs {
     pub entities: Vec<EntityObj>,
     pub attributes: Vec<AttributeObj>,
     pub relationships: Vec<RelationshipObj>,
+    pub primary_keys: Vec<PrimaryKeyObj>,
+    pub unique_constraints: Vec<UniqueConstraintObj>,
     pub foreign_keys: Vec<ForeignKeyObj>,
-    pub foreign_key_columns: Vec<ForeignKeyColumnObj>,
 }
 
 fn push<T: Default>(v: &mut Vec<T>) -> Option<u32> {
@@ -37,8 +38,9 @@ impl Slabs for ErSlabs {
             ENTITY => push(&mut self.entities),
             ATTRIBUTE => push(&mut self.attributes),
             RELATIONSHIP => push(&mut self.relationships),
+            PRIMARY_KEY => push(&mut self.primary_keys),
+            UNIQUE_CONSTRAINT => push(&mut self.unique_constraints),
             FOREIGN_KEY => push(&mut self.foreign_keys),
-            FOREIGN_KEY_COLUMN => push(&mut self.foreign_key_columns),
             _ => None,
         }
     }
@@ -48,8 +50,9 @@ impl Slabs for ErSlabs {
             ENTITY => at(&self.entities, slot),
             ATTRIBUTE => at(&self.attributes, slot),
             RELATIONSHIP => at(&self.relationships, slot),
+            PRIMARY_KEY => at(&self.primary_keys, slot),
+            UNIQUE_CONSTRAINT => at(&self.unique_constraints, slot),
             FOREIGN_KEY => at(&self.foreign_keys, slot),
-            FOREIGN_KEY_COLUMN => at(&self.foreign_key_columns, slot),
             _ => None,
         }
     }
@@ -59,8 +62,9 @@ impl Slabs for ErSlabs {
             ENTITY => at_mut(&mut self.entities, slot),
             ATTRIBUTE => at_mut(&mut self.attributes, slot),
             RELATIONSHIP => at_mut(&mut self.relationships, slot),
+            PRIMARY_KEY => at_mut(&mut self.primary_keys, slot),
+            UNIQUE_CONSTRAINT => at_mut(&mut self.unique_constraints, slot),
             FOREIGN_KEY => at_mut(&mut self.foreign_keys, slot),
-            FOREIGN_KEY_COLUMN => at_mut(&mut self.foreign_key_columns, slot),
             _ => None,
         }
     }
@@ -70,7 +74,8 @@ impl Slabs for ErSlabs {
             .saturating_add(self.entities.capacity().saturating_mul(size_of::<EntityObj>()))
             .saturating_add(self.attributes.capacity().saturating_mul(size_of::<AttributeObj>()))
             .saturating_add(self.relationships.capacity().saturating_mul(size_of::<RelationshipObj>()))
+            .saturating_add(self.primary_keys.capacity().saturating_mul(size_of::<PrimaryKeyObj>()))
+            .saturating_add(self.unique_constraints.capacity().saturating_mul(size_of::<UniqueConstraintObj>()))
             .saturating_add(self.foreign_keys.capacity().saturating_mul(size_of::<ForeignKeyObj>()))
-            .saturating_add(self.foreign_key_columns.capacity().saturating_mul(size_of::<ForeignKeyColumnObj>()))
     }
 }

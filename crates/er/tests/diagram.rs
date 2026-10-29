@@ -123,7 +123,7 @@ fn the_er_policy_is_what_the_spec_says() {
     let reg = registry().unwrap();
     assert!(reg.ids().any(|i| i == "diagram.place") && reg.ids().any(|i| i == "er.entity.add"));
     let m = metamodel().unwrap();
-    assert_eq!(m.classes.len(), 8, "the diagram metaclasses are the diagram metamodel's, not ER's");
+    assert_eq!(m.classes.len(), 10, "the diagram metaclasses are the diagram metamodel's, not ER's");
 }
 
 #[test]
@@ -223,7 +223,7 @@ fn removing_model_elements_removes_their_views_and_undo_brings_them_back() {
     assert_eq!(picture(s.doc()), before);
     // The entity goes: its node, the relationship with its edge and label, its attribute.
     let out = s.execute("er.entity.remove", &json!({ "entity": sm.customer })).unwrap();
-    assert_eq!(out.value["removed"], 6, "the edge, the label, the relationship, the node, the attribute, the entity");
+    assert_eq!(out.value["removed"], 7, "the edge, the label, the relationship, the node, the attribute, the primary key, the entity");
     assert!(!alive(s.doc(), &sm.customer_node) && alive(s.doc(), &sm.order_node) && alive(s.doc(), &sm.diagram));
     no_problems(s.doc());
     s.undo().unwrap();

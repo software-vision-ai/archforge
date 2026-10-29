@@ -17,35 +17,57 @@ when unknown or out of range and refused by the handler, naming the key, when an
 of the expected kind. Ids in parameters are the elements' UUIDs. The MOF core enforces types,
 bounds, containment and the derived union `ownedElement`; the ER rules (`rules`) add: names plain, at
 most 128 characters and unique ignoring case among a schema's entities and an entity's attributes;
-a type at most 64 characters; a key is never nullable; a relationship's ends are entities of its
-schema. Foreign keys (gm2.33): a key's columns belong to its entity, its targets are together the
-referenced entity's primary key or one unique attribute, column and target types are equal (ignoring
-case, as SQL does), no column or target twice, at most
-32 columns, set null needs nullable columns, and its relationship (when set) joins the same two
-entities; an identifying relationship's key columns are part of the child's primary key. A mapping
-table is an entity of kind associative with at least two foreign keys inside its primary key.
-Attribute edits and additions, and identifying relationships that add key columns, are refused
-when they would break a key; a key refusal names its parameter (`columns`, `references`,
-`on_delete`, `relationship`, or `primary_key` and `identifying` for the edits that would break one).
-Key columns a relationship brings are named `<parent>_<column>` (with `_2`, `_3`, … when taken) and
-unique for a one-to-one only when the parent's key has one column. A many-to-many relationship is allowed and
-noticed (`rules::notices`, `er.schema.get`'s `notices`): it becomes a table only through a mapping
-table, which `er.relationship.resolve` creates in one step (the associative entity with the key
-columns of both ends, a foreign key to each, two identifying one-to-many relationships, and on every
-diagram the mapping table midway on the old line, or beside the entity for a relationship with
-itself); the default name `<from>_<to>` steps aside with `_2`, a given name that is taken is refused. Removing an ER element takes everything it contains,
-the foreign keys that depend on any of it, the diagrams of it, the nodes and
-edges that show any of them and the trace links on any of them, in one step
-(`commands::remove_element`); a mapping table that loses a key becomes a regular entity, and an
-identifying relationship that loses its key a non-identifying one; an entity's removal takes the relationships that reach it too
+a type at most 64 characters; a relationship's ends are entities of its schema.
+
+Keys are constraints. An entity has at most one primary key and any number of unique constraints,
+each with its own name and its own column order: at least one and at most 32 of the entity's
+columns, none twice; a primary key's columns are never nullable. The column editor's checkboxes are
+shortcuts: Primary key adds the column to the end of the primary key (making one when there is
+none), Unique makes a unique constraint over that column alone. A unique constraint says whether
+rows with nulls clash (`nullsDistinct`).
+
+A foreign key points at a key, the primary key or any unique constraint (so also a composite
+alternate key), of an entity in the same schema, and lists its own columns matched to the key's by
+position: as many, none twice, of its own entity, each typed as its target (ignoring case, as SQL
+does). Set null needs nullable columns; its relationship, when set, joins the same two entities; an
+identifying relationship's key columns are part of the child's primary key. It has a match type
+(simple, full, partial) and a deferrability (not deferrable, initially immediate, initially
+deferred). Constraint names, of keys and foreign keys, are unique in a schema ignoring case. A key
+that a foreign key points at keeps its columns: changing them is refused until the foreign key is
+changed or removed. A mapping table is an entity of kind associative with at least two foreign keys
+inside its primary key.
+
+Edits that would break a key are refused and name their parameter (`columns`, `key`, `references`,
+`on_delete`, `relationship`, `points_to`, `name`, or `primary_key`, `unique` and `identifying` for
+the edits that would break one). A relationship that brings its foreign key points at the parent's
+primary key, or at the key `points_to` names; the key columns it adds are named `<parent>_<column>`
+(with `_2`, `_3`, … when taken), typed like their targets, and for a one-to-one a unique constraint
+covers them together unless they are the child's whole primary key, which is unique already. The
+edit commands for keys and foreign keys (`set`, `set-options`) take every field, so nothing the
+caller leaves out is reset. `er.foreign-key.set-key` points a foreign key at another key, with given
+columns or with new ones. A many-to-many relationship is allowed and noticed (`rules::notices`,
+`er.schema.get`'s `notices`): it becomes a table only through a mapping table, which
+`er.relationship.resolve` creates in one step (the associative entity with the key columns of both
+ends, a foreign key to each, two identifying one-to-many relationships, and on every diagram the
+mapping table midway on the old line, or beside the entity for a relationship with itself); the
+default name `<from>_<to>` steps aside with `_2`, a given name that is taken is refused.
+
+Removing an ER element takes everything it contains, the keys and foreign keys that depend on any of
+it, the diagrams of it, the nodes and edges that show any of them and the trace links on any of
+them, in one step (`commands::remove_element`). As in SQL, a key goes whole with any of its columns,
+and the foreign keys onto it go with it. A mapping table that loses a key becomes a regular entity,
+and an identifying relationship that loses its key, or whose key leaves the primary key, a
+non-identifying one; an entity's removal takes the relationships that reach it too
 (`commands::remove_entity`).
 
-**The metaclasses.** `Schema` (entity, relationship), `Entity` (attribute, kind, foreignKey),
-`Attribute` (type, primaryKey, nullable, unique), `Relationship` (name, from, to, fromEnd, toEnd,
-identifying), `ForeignKey` (name, references, column, onDelete, onUpdate, relationship),
-`ForeignKeyColumn` (attribute, target) and the enumerations `Cardinality` (zeroOrOne, exactlyOne,
-zeroOrMore, oneOrMore), `EntityKind` (regular, associative) and `ReferentialAction` (noAction,
-restrict, cascade, setNull, setDefault).
+**The metaclasses.** `Schema` (entity, relationship), `Entity` (attribute, kind, primaryKey,
+uniqueConstraint, foreignKey), `Attribute` (type, nullable), `Relationship` (name, from, to,
+fromEnd, toEnd, identifying), the abstract `Key` (name, column) with `PrimaryKey` and
+`UniqueConstraint` (nullsDistinct), `ForeignKey` (name, references a Key, column, onDelete,
+onUpdate, relationship, match, deferrable) and the enumerations `Cardinality` (zeroOrOne,
+exactlyOne, zeroOrMore, oneOrMore), `EntityKind` (regular, associative), `ReferentialAction`
+(noAction, restrict, cascade, setNull, setDefault), `MatchType` (simple, full, partial) and
+`Deferrability` (notDeferrable, initiallyImmediate, initiallyDeferred).
 
 **Public API.**
 
@@ -55,14 +77,15 @@ restrict, cascade, setNull, setDefault).
 | `Session`, `ErView` | `Session<Store, ErView>`; the view holds the selection and the open diagram, and implements `DiagramView` |
 | `DIAGRAM_KIND`, `ENTITY_SIZE` | `"er"`; an entity node's default size |
 | `universe_with`, `slabs`, `store` | a universe of the shared core, the diagram metamodel, ER and others; the slabs of the three; a store over them |
-| `rules::{name_problem, entity_name_free, attribute_name_free, schema_of, problems, notices, key_problem, associative_problem, key_parts, primary_key}` | the rules, for commands and for a whole store |
-| `commands::{remove_element, remove_entity, keys_on, resolve, cardinality_name, action_name, specs}` | the cascades, the resolve step, the names in parameters, the command table |
+| `rules::{name_problem, entity_name_free, attribute_name_free, constraint_name_free, schema_of, problems, notices, key_problem, key_columns_problem, associative_problem, key_parts, primary_key_of, primary_key, unique_constraints, keys_of, key_columns, keys_onto, in_primary_key, is_unique}` | the rules, for commands and for a whole store |
+| `commands::{remove_element, remove_entity, dependents, keys_on, resolve, cardinality_name, action_name, match_name, deferrability_name, specs}` | the cascades, the resolve step, the names in parameters, the command table |
 | the generated constants, structs, `Cardinality`, `TABLES`, `JUNCTIONS` | as every generated metamodel |
 
 Commands: `er.schema.{add, rename, remove}`, `er.entity.{add, rename, remove, set-kind}`,
 `er.attribute.{add, rename, set-type, set-flags, move, remove}`, `er.relationship.{add, set-ends,
-rename, remove, set-identifying, resolve}` (`add` takes `create_foreign_key` and `identifying`),
-`er.foreign-key.{add, set-actions, rename, remove}`,
+rename, remove, set-identifying, resolve}` (`add` takes `create_foreign_key`, `identifying` and
+`points_to`), `er.primary-key.{set, remove}`, `er.unique.{add, set, remove}`,
+`er.foreign-key.{add, set-actions, set-options, set-key, rename, remove}`,
 `er.remove`, `view.select`, and the queries `er.schema.{list, get}` and `er.entity.{list, get}`;
 the diagram commands (`diagram.*`, `view.open-diagram`) come from `archforge-diagram`.
 
@@ -72,8 +95,12 @@ link around it, and the mixed delete through the engine; foreign keys (round tri
 would break a key, each naming its parameter, removal with what they depend on, two-column keys);
 new key columns and identifying relationships that would break a key elsewhere; relationships that
 bring their foreign key, identifying or not, with names that step aside and uniqueness for one-to-one;
-removals that clear `identifying`; resolving a many-to-many into a mapping table on a diagram (also an
-entity with itself), undo, name collisions, and demotion when a key or an end goes; the sweep with ids of every kind; seeded random sequences (with keys, resolves and type
+removals that clear `identifying`; keys as named constraints with their own order, composite unique
+constraints, the checkbox shortcuts, keys that go whole with a column; foreign keys onto any key,
+pointed elsewhere with given or new columns, match and deferrability, keys that stay while a foreign
+key points at them; relationships pointed at a unique key; removing a primary key with what depends
+on it; resolving a many-to-many into a mapping table on a diagram (also an
+entity with itself), undo, name collisions, and demotion when a key or an end goes; the sweep with ids of every kind; seeded random sequences (with keys, unique constraints, repointed foreign keys, resolves and type
 changes) with the rules checked after each step and undo back to the start.
 `tests/diagram.rs`: the ER policy; every diagram command on an ER diagram; refusals the policy
 makes; model removals that take their views and undo that brings them back; the open diagram in the

@@ -1,5 +1,5 @@
 //! The ER notation: a schema of entities with ordered attributes, relationships with a
-//! cardinality at each end, foreign keys and mapping tables, as a metamodel over the MOF core (`er.xmi`, generated into
+//! cardinality at each end, primary keys, unique constraints, foreign keys and mapping tables, as a metamodel over the MOF core (`er.xmi`, generated into
 //! `generated/` by `cargo xtask generate er`) with the rules and commands written here. The schema
 //! is a member of the project's Model (the shared core); comments on ER elements are the core's;
 //! its diagrams are the diagram metamodel's, with the ER policy in [`ErView`]. Pure: builds for
