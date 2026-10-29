@@ -9,7 +9,7 @@ use archforge_mof::{Builder, ClassId, DataId, DataKind, MetaError, Metamodel, Pr
 pub const INDEX: u16 = 3;
 pub const URI: &str = "archforge:er";
 pub const VERSION: &str = "1";
-pub const CONTENT_HASH: &str = "5712a294fdf86534";
+pub const CONTENT_HASH: &str = "49dbd76b242db293";
 
 pub const BOOLEAN: DataId = DataId::new(INDEX, 0);
 pub const INTEGER: DataId = DataId::new(INDEX, 1);
@@ -17,6 +17,8 @@ pub const REAL: DataId = DataId::new(INDEX, 2);
 pub const STRING: DataId = DataId::new(INDEX, 3);
 pub const UNLIMITED_NATURAL: DataId = DataId::new(INDEX, 4);
 pub const CARDINALITY: DataId = DataId::new(INDEX, 5);
+pub const ENTITY_KIND: DataId = DataId::new(INDEX, 6);
+pub const REFERENTIAL_ACTION: DataId = DataId::new(INDEX, 7);
 
 pub const ELEMENT: ClassId = ClassId::new(INDEX, 0);
 pub const NAMED_ELEMENT: ClassId = ClassId::new(INDEX, 1);
@@ -24,6 +26,8 @@ pub const SCHEMA: ClassId = ClassId::new(INDEX, 2);
 pub const ENTITY: ClassId = ClassId::new(INDEX, 3);
 pub const ATTRIBUTE: ClassId = ClassId::new(INDEX, 4);
 pub const RELATIONSHIP: ClassId = ClassId::new(INDEX, 5);
+pub const FOREIGN_KEY: ClassId = ClassId::new(INDEX, 6);
+pub const FOREIGN_KEY_COLUMN: ClassId = ClassId::new(INDEX, 7);
 
 /// The properties Element declares.
 pub mod element {
@@ -49,25 +53,46 @@ pub mod entity {
     use super::INDEX;
     use super::PropId;
     pub const ATTRIBUTE: PropId = PropId::new(INDEX, 4);
+    pub const KIND: PropId = PropId::new(INDEX, 5);
+    pub const FOREIGN_KEY: PropId = PropId::new(INDEX, 6);
 }
 /// The properties Attribute declares.
 pub mod attribute {
     use super::INDEX;
     use super::PropId;
-    pub const TYPE: PropId = PropId::new(INDEX, 5);
-    pub const PRIMARY_KEY: PropId = PropId::new(INDEX, 6);
-    pub const NULLABLE: PropId = PropId::new(INDEX, 7);
-    pub const UNIQUE: PropId = PropId::new(INDEX, 8);
+    pub const TYPE: PropId = PropId::new(INDEX, 7);
+    pub const PRIMARY_KEY: PropId = PropId::new(INDEX, 8);
+    pub const NULLABLE: PropId = PropId::new(INDEX, 9);
+    pub const UNIQUE: PropId = PropId::new(INDEX, 10);
 }
 /// The properties Relationship declares.
 pub mod relationship {
     use super::INDEX;
     use super::PropId;
-    pub const NAME: PropId = PropId::new(INDEX, 9);
-    pub const FROM: PropId = PropId::new(INDEX, 10);
-    pub const TO: PropId = PropId::new(INDEX, 11);
-    pub const FROM_END: PropId = PropId::new(INDEX, 12);
-    pub const TO_END: PropId = PropId::new(INDEX, 13);
+    pub const NAME: PropId = PropId::new(INDEX, 11);
+    pub const FROM: PropId = PropId::new(INDEX, 12);
+    pub const TO: PropId = PropId::new(INDEX, 13);
+    pub const FROM_END: PropId = PropId::new(INDEX, 14);
+    pub const TO_END: PropId = PropId::new(INDEX, 15);
+    pub const IDENTIFYING: PropId = PropId::new(INDEX, 16);
+}
+/// The properties ForeignKey declares.
+pub mod foreign_key {
+    use super::INDEX;
+    use super::PropId;
+    pub const NAME: PropId = PropId::new(INDEX, 17);
+    pub const REFERENCES: PropId = PropId::new(INDEX, 18);
+    pub const COLUMN: PropId = PropId::new(INDEX, 19);
+    pub const ON_DELETE: PropId = PropId::new(INDEX, 20);
+    pub const ON_UPDATE: PropId = PropId::new(INDEX, 21);
+    pub const RELATIONSHIP: PropId = PropId::new(INDEX, 22);
+}
+/// The properties ForeignKeyColumn declares.
+pub mod foreign_key_column {
+    use super::INDEX;
+    use super::PropId;
+    pub const ATTRIBUTE: PropId = PropId::new(INDEX, 23);
+    pub const TARGET: PropId = PropId::new(INDEX, 24);
 }
 
 fn build() -> Result<Arc<Metamodel>, MetaError> {
@@ -78,12 +103,20 @@ fn build() -> Result<Arc<Metamodel>, MetaError> {
     b.data_type("String", DataKind::String, "")?;
     b.data_type("UnlimitedNatural", DataKind::UnlimitedNatural, "")?;
     b.data_type("Cardinality", DataKind::Enumeration(vec!["zeroOrOne".into(), "exactlyOne".into(), "zeroOrMore".into(), "oneOrMore".into()]), "")?;
+    b.data_type("EntityKind", DataKind::Enumeration(vec!["regular".into(), "associative".into()]), "")?;
+    b.data_type(
+        "ReferentialAction",
+        DataKind::Enumeration(vec!["noAction".into(), "restrict".into(), "cascade".into(), "setNull".into(), "setDefault".into()]),
+        "",
+    )?;
     b.class("Element", true, &[], "")?;
     b.class("NamedElement", true, &[ELEMENT], "")?;
     b.class("Schema", false, &[NAMED_ELEMENT], "")?;
     b.class("Entity", false, &[NAMED_ELEMENT], "")?;
     b.class("Attribute", false, &[NAMED_ELEMENT], "")?;
     b.class("Relationship", false, &[ELEMENT], "")?;
+    b.class("ForeignKey", false, &[ELEMENT], "")?;
+    b.class("ForeignKeyColumn", false, &[ELEMENT], "")?;
     b.property(PropertySpec {
         name: "ownedElement",
         owner: ELEMENT,
@@ -184,6 +217,46 @@ fn build() -> Result<Arc<Metamodel>, MetaError> {
         default: None,
         doc: "",
     })?; // entity::ATTRIBUTE
+    b.property(PropertySpec {
+        name: "kind",
+        owner: ENTITY,
+        ty: TypeRef::Data(ENTITY_KIND),
+        lower: 1,
+        upper: Some(1),
+        is_ordered: false,
+        is_unique: true,
+        is_composite: false,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[],
+        redefines: &[],
+        default: Some(Value::Enum(0)),
+        doc: "",
+    })?; // entity::KIND
+    b.property(PropertySpec {
+        name: "foreignKey",
+        owner: ENTITY,
+        ty: TypeRef::Class(FOREIGN_KEY),
+        lower: 0,
+        upper: None,
+        is_ordered: true,
+        is_unique: true,
+        is_composite: true,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[element::OWNED_ELEMENT],
+        redefines: &[],
+        default: None,
+        doc: "",
+    })?; // entity::FOREIGN_KEY
     b.property(PropertySpec {
         name: "type",
         owner: ATTRIBUTE,
@@ -364,6 +437,186 @@ fn build() -> Result<Arc<Metamodel>, MetaError> {
         default: Some(Value::Enum(2)),
         doc: "",
     })?; // relationship::TO_END
+    b.property(PropertySpec {
+        name: "identifying",
+        owner: RELATIONSHIP,
+        ty: TypeRef::Data(BOOLEAN),
+        lower: 1,
+        upper: Some(1),
+        is_ordered: false,
+        is_unique: true,
+        is_composite: false,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[],
+        redefines: &[],
+        default: Some(Value::Bool(false)),
+        doc: "",
+    })?; // relationship::IDENTIFYING
+    b.property(PropertySpec {
+        name: "name",
+        owner: FOREIGN_KEY,
+        ty: TypeRef::Data(STRING),
+        lower: 0,
+        upper: Some(1),
+        is_ordered: false,
+        is_unique: true,
+        is_composite: false,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: true,
+        opposite: None,
+        subsets: &[],
+        redefines: &[],
+        default: None,
+        doc: "",
+    })?; // foreign_key::NAME
+    b.property(PropertySpec {
+        name: "references",
+        owner: FOREIGN_KEY,
+        ty: TypeRef::Class(ENTITY),
+        lower: 1,
+        upper: Some(1),
+        is_ordered: false,
+        is_unique: true,
+        is_composite: false,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[],
+        redefines: &[],
+        default: None,
+        doc: "",
+    })?; // foreign_key::REFERENCES
+    b.property(PropertySpec {
+        name: "column",
+        owner: FOREIGN_KEY,
+        ty: TypeRef::Class(FOREIGN_KEY_COLUMN),
+        lower: 1,
+        upper: None,
+        is_ordered: true,
+        is_unique: true,
+        is_composite: true,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[element::OWNED_ELEMENT],
+        redefines: &[],
+        default: None,
+        doc: "",
+    })?; // foreign_key::COLUMN
+    b.property(PropertySpec {
+        name: "onDelete",
+        owner: FOREIGN_KEY,
+        ty: TypeRef::Data(REFERENTIAL_ACTION),
+        lower: 1,
+        upper: Some(1),
+        is_ordered: false,
+        is_unique: true,
+        is_composite: false,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[],
+        redefines: &[],
+        default: Some(Value::Enum(0)),
+        doc: "",
+    })?; // foreign_key::ON_DELETE
+    b.property(PropertySpec {
+        name: "onUpdate",
+        owner: FOREIGN_KEY,
+        ty: TypeRef::Data(REFERENTIAL_ACTION),
+        lower: 1,
+        upper: Some(1),
+        is_ordered: false,
+        is_unique: true,
+        is_composite: false,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[],
+        redefines: &[],
+        default: Some(Value::Enum(0)),
+        doc: "",
+    })?; // foreign_key::ON_UPDATE
+    b.property(PropertySpec {
+        name: "relationship",
+        owner: FOREIGN_KEY,
+        ty: TypeRef::Class(RELATIONSHIP),
+        lower: 0,
+        upper: Some(1),
+        is_ordered: false,
+        is_unique: true,
+        is_composite: false,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[],
+        redefines: &[],
+        default: None,
+        doc: "",
+    })?; // foreign_key::RELATIONSHIP
+    b.property(PropertySpec {
+        name: "attribute",
+        owner: FOREIGN_KEY_COLUMN,
+        ty: TypeRef::Class(ATTRIBUTE),
+        lower: 1,
+        upper: Some(1),
+        is_ordered: false,
+        is_unique: true,
+        is_composite: false,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[],
+        redefines: &[],
+        default: None,
+        doc: "",
+    })?; // foreign_key_column::ATTRIBUTE
+    b.property(PropertySpec {
+        name: "target",
+        owner: FOREIGN_KEY_COLUMN,
+        ty: TypeRef::Class(ATTRIBUTE),
+        lower: 1,
+        upper: Some(1),
+        is_ordered: false,
+        is_unique: true,
+        is_composite: false,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[],
+        redefines: &[],
+        default: None,
+        doc: "",
+    })?; // foreign_key_column::TARGET
     Ok(b.finish())
 }
 

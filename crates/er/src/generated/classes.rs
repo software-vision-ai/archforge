@@ -41,6 +41,69 @@ impl Cardinality {
     }
 }
 
+/// The enumeration EntityKind.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EntityKind {
+    Regular,
+    Associative,
+}
+
+impl EntityKind {
+    pub const DATA_TYPE: DataId = ENTITY_KIND;
+    pub fn from_index(i: u32) -> Option<Self> {
+        match i {
+            0 => Some(Self::Regular),
+            1 => Some(Self::Associative),
+            _ => None,
+        }
+    }
+    pub fn index(self) -> u32 {
+        self as u32
+    }
+    pub fn literal(self) -> &'static str {
+        match self {
+            Self::Regular => "regular",
+            Self::Associative => "associative",
+        }
+    }
+}
+
+/// The enumeration ReferentialAction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReferentialAction {
+    NoAction,
+    Restrict,
+    Cascade,
+    SetNull,
+    SetDefault,
+}
+
+impl ReferentialAction {
+    pub const DATA_TYPE: DataId = REFERENTIAL_ACTION;
+    pub fn from_index(i: u32) -> Option<Self> {
+        match i {
+            0 => Some(Self::NoAction),
+            1 => Some(Self::Restrict),
+            2 => Some(Self::Cascade),
+            3 => Some(Self::SetNull),
+            4 => Some(Self::SetDefault),
+            _ => None,
+        }
+    }
+    pub fn index(self) -> u32 {
+        self as u32
+    }
+    pub fn literal(self) -> &'static str {
+        match self {
+            Self::NoAction => "noAction",
+            Self::Restrict => "restrict",
+            Self::Cascade => "cascade",
+            Self::SetNull => "setNull",
+            Self::SetDefault => "setDefault",
+        }
+    }
+}
+
 use archforge_mof::DataId;
 
 /// An object of Schema, with every inherited stored property as a field.
@@ -116,6 +179,8 @@ impl SchemaObj {
 pub struct EntityObj {
     pub name: Option<Arc<str>>,
     pub attribute: Vec<Value>,
+    pub kind: u32,
+    pub foreign_key: Vec<Value>,
 }
 
 impl Reflect for EntityObj {
@@ -125,6 +190,7 @@ impl Reflect for EntityObj {
     fn get(&self, prop: PropId) -> Option<Value> {
         match prop {
             named_element::NAME => Some(self.name.clone().map_or(Value::Null, Value::Str)),
+            entity::KIND => Some(Value::Enum(self.kind)),
             _ => None,
         }
     }
@@ -138,18 +204,27 @@ impl Reflect for EntityObj {
                 }
                 Ok(())
             }
+            entity::KIND => {
+                match value {
+                    Value::Enum(v) => self.kind = v,
+                    other => return Err(format!("not a literal: {other}")),
+                }
+                Ok(())
+            }
             _ => Err(format!("no single-valued property {} on Entity", prop.0)),
         }
     }
     fn list(&self, prop: PropId) -> Option<&[Value]> {
         match prop {
             entity::ATTRIBUTE => Some(&self.attribute),
+            entity::FOREIGN_KEY => Some(&self.foreign_key),
             _ => None,
         }
     }
     fn list_mut(&mut self, prop: PropId) -> Option<&mut Vec<Value>> {
         match prop {
             entity::ATTRIBUTE => Some(&mut self.attribute),
+            entity::FOREIGN_KEY => Some(&mut self.foreign_key),
             _ => None,
         }
     }
@@ -162,11 +237,23 @@ impl EntityObj {
     pub fn attribute(&self) -> &[Value] {
         &self.attribute
     }
+    pub fn kind(&self) -> u32 {
+        self.kind
+    }
+    pub fn foreign_key(&self) -> &[Value] {
+        &self.foreign_key
+    }
     pub fn set_name(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
         store.set(obj, named_element::NAME, v.map_or(Value::Null, Value::str))
     }
     pub fn push_attribute(store: &mut Store, obj: Obj, value: Value) -> Result<u32, Invalid> {
         store.push(obj, entity::ATTRIBUTE, value)
+    }
+    pub fn set_kind(store: &mut Store, obj: Obj, v: u32) -> Result<(), Invalid> {
+        store.set(obj, entity::KIND, Value::Enum(v))
+    }
+    pub fn push_foreign_key(store: &mut Store, obj: Obj, value: Value) -> Result<u32, Invalid> {
+        store.push(obj, entity::FOREIGN_KEY, value)
     }
 }
 
@@ -291,11 +378,12 @@ pub struct RelationshipObj {
     pub to: Option<Obj>,
     pub from_end: u32,
     pub to_end: u32,
+    pub identifying: bool,
 }
 
 impl Default for RelationshipObj {
     fn default() -> Self {
-        Self { name: None, from: None, to: None, from_end: 1, to_end: 2 }
+        Self { name: None, from: None, to: None, from_end: 1, to_end: 2, identifying: false }
     }
 }
 
@@ -310,6 +398,7 @@ impl Reflect for RelationshipObj {
             relationship::TO => Some(self.to.map_or(Value::Null, Value::Ref)),
             relationship::FROM_END => Some(Value::Enum(self.from_end)),
             relationship::TO_END => Some(Value::Enum(self.to_end)),
+            relationship::IDENTIFYING => Some(Value::Bool(self.identifying)),
             _ => None,
         }
     }
@@ -353,6 +442,13 @@ impl Reflect for RelationshipObj {
                 }
                 Ok(())
             }
+            relationship::IDENTIFYING => {
+                match value {
+                    Value::Bool(v) => self.identifying = v,
+                    other => return Err(format!("not a boolean: {other}")),
+                }
+                Ok(())
+            }
             _ => Err(format!("no single-valued property {} on Relationship", prop.0)),
         }
     }
@@ -380,6 +476,9 @@ impl RelationshipObj {
     pub fn to_end(&self) -> u32 {
         self.to_end
     }
+    pub fn identifying(&self) -> bool {
+        self.identifying
+    }
     pub fn set_name(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
         store.set(obj, relationship::NAME, v.map_or(Value::Null, Value::str))
     }
@@ -394,5 +493,191 @@ impl RelationshipObj {
     }
     pub fn set_to_end(store: &mut Store, obj: Obj, v: u32) -> Result<(), Invalid> {
         store.set(obj, relationship::TO_END, Value::Enum(v))
+    }
+    pub fn set_identifying(store: &mut Store, obj: Obj, v: bool) -> Result<(), Invalid> {
+        store.set(obj, relationship::IDENTIFYING, Value::Bool(v))
+    }
+}
+
+/// An object of ForeignKey, with every inherited stored property as a field.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ForeignKeyObj {
+    pub name: Option<Arc<str>>,
+    pub references: Option<Obj>,
+    pub column: Vec<Value>,
+    pub on_delete: u32,
+    pub on_update: u32,
+    pub relationship: Option<Obj>,
+}
+
+impl Reflect for ForeignKeyObj {
+    fn class(&self) -> ClassId {
+        FOREIGN_KEY
+    }
+    fn get(&self, prop: PropId) -> Option<Value> {
+        match prop {
+            foreign_key::NAME => Some(self.name.clone().map_or(Value::Null, Value::Str)),
+            foreign_key::REFERENCES => Some(self.references.map_or(Value::Null, Value::Ref)),
+            foreign_key::ON_DELETE => Some(Value::Enum(self.on_delete)),
+            foreign_key::ON_UPDATE => Some(Value::Enum(self.on_update)),
+            foreign_key::RELATIONSHIP => Some(self.relationship.map_or(Value::Null, Value::Ref)),
+            _ => None,
+        }
+    }
+    fn set(&mut self, prop: PropId, value: Value) -> Result<(), String> {
+        match prop {
+            foreign_key::NAME => {
+                match value {
+                    Value::Null => self.name = None,
+                    Value::Str(v) => self.name = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
+            foreign_key::REFERENCES => {
+                match value {
+                    Value::Null => self.references = None,
+                    Value::Ref(v) => self.references = Some(v),
+                    other => return Err(format!("not a reference: {other}")),
+                }
+                Ok(())
+            }
+            foreign_key::ON_DELETE => {
+                match value {
+                    Value::Enum(v) => self.on_delete = v,
+                    other => return Err(format!("not a literal: {other}")),
+                }
+                Ok(())
+            }
+            foreign_key::ON_UPDATE => {
+                match value {
+                    Value::Enum(v) => self.on_update = v,
+                    other => return Err(format!("not a literal: {other}")),
+                }
+                Ok(())
+            }
+            foreign_key::RELATIONSHIP => {
+                match value {
+                    Value::Null => self.relationship = None,
+                    Value::Ref(v) => self.relationship = Some(v),
+                    other => return Err(format!("not a reference: {other}")),
+                }
+                Ok(())
+            }
+            _ => Err(format!("no single-valued property {} on ForeignKey", prop.0)),
+        }
+    }
+    fn list(&self, prop: PropId) -> Option<&[Value]> {
+        match prop {
+            foreign_key::COLUMN => Some(&self.column),
+            _ => None,
+        }
+    }
+    fn list_mut(&mut self, prop: PropId) -> Option<&mut Vec<Value>> {
+        match prop {
+            foreign_key::COLUMN => Some(&mut self.column),
+            _ => None,
+        }
+    }
+}
+
+impl ForeignKeyObj {
+    pub fn name(&self) -> Option<&str> {
+        self.name.as_deref()
+    }
+    pub fn references(&self) -> Option<Obj> {
+        self.references
+    }
+    pub fn column(&self) -> &[Value] {
+        &self.column
+    }
+    pub fn on_delete(&self) -> u32 {
+        self.on_delete
+    }
+    pub fn on_update(&self) -> u32 {
+        self.on_update
+    }
+    pub fn relationship(&self) -> Option<Obj> {
+        self.relationship
+    }
+    pub fn set_name(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, foreign_key::NAME, v.map_or(Value::Null, Value::str))
+    }
+    pub fn set_references(store: &mut Store, obj: Obj, v: Option<Obj>) -> Result<(), Invalid> {
+        store.set(obj, foreign_key::REFERENCES, v.map_or(Value::Null, Value::Ref))
+    }
+    pub fn push_column(store: &mut Store, obj: Obj, value: Value) -> Result<u32, Invalid> {
+        store.push(obj, foreign_key::COLUMN, value)
+    }
+    pub fn set_on_delete(store: &mut Store, obj: Obj, v: u32) -> Result<(), Invalid> {
+        store.set(obj, foreign_key::ON_DELETE, Value::Enum(v))
+    }
+    pub fn set_on_update(store: &mut Store, obj: Obj, v: u32) -> Result<(), Invalid> {
+        store.set(obj, foreign_key::ON_UPDATE, Value::Enum(v))
+    }
+    pub fn set_relationship(store: &mut Store, obj: Obj, v: Option<Obj>) -> Result<(), Invalid> {
+        store.set(obj, foreign_key::RELATIONSHIP, v.map_or(Value::Null, Value::Ref))
+    }
+}
+
+/// An object of ForeignKeyColumn, with every inherited stored property as a field.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ForeignKeyColumnObj {
+    pub attribute: Option<Obj>,
+    pub target: Option<Obj>,
+}
+
+impl Reflect for ForeignKeyColumnObj {
+    fn class(&self) -> ClassId {
+        FOREIGN_KEY_COLUMN
+    }
+    fn get(&self, prop: PropId) -> Option<Value> {
+        match prop {
+            foreign_key_column::ATTRIBUTE => Some(self.attribute.map_or(Value::Null, Value::Ref)),
+            foreign_key_column::TARGET => Some(self.target.map_or(Value::Null, Value::Ref)),
+            _ => None,
+        }
+    }
+    fn set(&mut self, prop: PropId, value: Value) -> Result<(), String> {
+        match prop {
+            foreign_key_column::ATTRIBUTE => {
+                match value {
+                    Value::Null => self.attribute = None,
+                    Value::Ref(v) => self.attribute = Some(v),
+                    other => return Err(format!("not a reference: {other}")),
+                }
+                Ok(())
+            }
+            foreign_key_column::TARGET => {
+                match value {
+                    Value::Null => self.target = None,
+                    Value::Ref(v) => self.target = Some(v),
+                    other => return Err(format!("not a reference: {other}")),
+                }
+                Ok(())
+            }
+            _ => Err(format!("no single-valued property {} on ForeignKeyColumn", prop.0)),
+        }
+    }
+    fn list(&self, _prop: PropId) -> Option<&[Value]> {
+        None
+    }
+    fn list_mut(&mut self, _prop: PropId) -> Option<&mut Vec<Value>> {
+        None
+    }
+}
+
+impl ForeignKeyColumnObj {
+    pub fn attribute(&self) -> Option<Obj> {
+        self.attribute
+    }
+    pub fn target(&self) -> Option<Obj> {
+        self.target
+    }
+    pub fn set_attribute(store: &mut Store, obj: Obj, v: Option<Obj>) -> Result<(), Invalid> {
+        store.set(obj, foreign_key_column::ATTRIBUTE, v.map_or(Value::Null, Value::Ref))
+    }
+    pub fn set_target(store: &mut Store, obj: Obj, v: Option<Obj>) -> Result<(), Invalid> {
+        store.set(obj, foreign_key_column::TARGET, v.map_or(Value::Null, Value::Ref))
     }
 }

@@ -1,7 +1,7 @@
-er 1 from XMI (FNV-1a 64 5712a294fdf86534)
-classes: 6 (4 concrete, 2 abstract)
-properties: 14 (1 derived or derived unions without a field, 4 composite, 0 with an opposite)
-data types: 6 (1 enumerations)
+er 1 from XMI (FNV-1a 64 49dbd76b242db293)
+classes: 8 (6 concrete, 2 abstract)
+properties: 25 (1 derived or derived unions without a field, 6 composite, 0 with an opposite)
+data types: 8 (3 enumerations)
 associations: 0 (0 with an association-owned or missing end: no stored opposite)
 subsets or redefinitions of association-owned ends dropped: 0
 defaults on derived properties dropped: 0

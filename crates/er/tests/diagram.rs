@@ -123,7 +123,7 @@ fn the_er_policy_is_what_the_spec_says() {
     let reg = registry().unwrap();
     assert!(reg.ids().any(|i| i == "diagram.place") && reg.ids().any(|i| i == "er.entity.add"));
     let m = metamodel().unwrap();
-    assert_eq!(m.classes.len(), 6, "the diagram metaclasses are the diagram metamodel's, not ER's");
+    assert_eq!(m.classes.len(), 8, "the diagram metaclasses are the diagram metamodel's, not ER's");
 }
 
 #[test]
