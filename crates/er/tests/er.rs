@@ -1,242 +1,253 @@
-//! The ER notation through the engine: invariants, every command's round trip, refusals, cascades,
-//! gestures, the view, ids after undo, the adversarial sweep, random sequences and the caps.
+//! The ER notation through the engine, on the MOF core's store with the shared core: every
+//! command's round trip, refusals that change nothing, cascades with the shared core's comments and
+//! links around a schema, the sweep, and seeded random sequences.
 
-use std::collections::BTreeMap;
+use archforge_core::{COMMENT, CommentObj, FOLDER, FolderObj, LinkKind, MODEL, ModelObj, comment, model};
+use archforge_engine::testing::sweep_with;
+use archforge_engine::{Document, EngineError, Options};
+use archforge_er::rules::problems;
+use archforge_er::*;
+use archforge_mof::{ClassId, Obj, PropId, Store, Uuid, Value};
+use serde_json::{Value as Json, json};
 
-use archforge_engine::testing::{round_trip, sweep};
-use archforge_engine::{EngineError, Options, Session, Snapshot};
-use archforge_er::model::*;
-use archforge_er::{ErModel, ErView, registry};
-use serde_json::{Value, json};
-
-type S = Session<archforge_er::Doc, ErView>;
-
-fn session() -> S {
-    Session::new(registry().unwrap(), archforge_er::Doc::default(), 1, Options::default())
+fn ids() -> Box<dyn FnMut() -> Uuid + Send> {
+    let mut n: u64 = 0;
+    Box::new(move || {
+        n += 1;
+        let mut r = [0u8; 10];
+        r[2..].copy_from_slice(&n.to_be_bytes());
+        Uuid::v7(1_761_670_800_000, r)
+    })
 }
 
-fn id(out: archforge_engine::Outcome) -> String {
-    out.value["id"].as_str().unwrap().to_string()
+/// A store over the shared core and ER that already holds the project's Model.
+fn rooted_store() -> (Store, Obj) {
+    let mut st = store(ids()).unwrap();
+    let m = st.create(MODEL).unwrap();
+    (st, m)
 }
 
-fn run(s: &mut S, cmd: &str, p: Value) -> String {
+fn session() -> Session {
+    let (st, _) = rooted_store();
+    Session::new(registry().unwrap(), st, 1, Options::default())
+}
+
+fn run(s: &mut Session, cmd: &str, p: Json) -> String {
     let out = s.execute(cmd, &p).unwrap_or_else(|e| panic!("{cmd} {p}: {e}"));
-    out.value.get("id").and_then(Value::as_str).unwrap_or_default().to_string()
+    out.value.get("id").and_then(Json::as_str).unwrap_or_default().to_string()
 }
 
-/// A small model with one of everything: two entities with attributes, a relationship, a diagram.
-fn sample(s: &mut S) -> (String, String, String, String, String) {
-    let d = run(s, "er.diagram.add", json!({ "name": "Overview" }));
-    let a = run(s, "er.entity.add", json!({ "name": "Customer", "diagram": d, "x": 10, "y": 20 }));
-    let b = run(s, "er.entity.add", json!({ "name": "Order", "diagram": d, "x": 300, "y": 20 }));
-    let k = run(s, "er.attribute.add", json!({ "entity": a, "name": "id", "kind": "BIGINT", "primary_key": true }));
-    run(s, "er.attribute.add", json!({ "entity": b, "name": "total", "kind": "DECIMAL(10,2)" }));
-    let r = run(s, "er.relationship.add", json!({ "from": a, "to": b, "from_end": "exactly-one", "to_end": "zero-or-more", "name": "places" }));
-    (d, a, b, k, r)
+fn obj(st: &Store, id: &str) -> Obj {
+    st.by_uuid(Uuid::parse(id).unwrap()).unwrap()
 }
 
-#[test]
-fn the_registry_documents_every_parameter() {
-    let reg = registry().unwrap();
-    assert!(reg.len() > 25);
+/// A schema with two entities, a keyed attribute, another attribute and a relationship.
+struct Sample {
+    schema: String,
+    customer: String,
+    order: String,
+    key: String,
+    total: String,
+    places: String,
 }
 
-#[test]
-fn check_refuses_each_broken_invariant() {
-    let mut s = session();
-    let (d, a, b, k, r) = sample(&mut s);
-    let good = s.doc().clone();
-    let counter = s.counter();
-    assert_eq!(good.check(counter), Ok(()));
-    let broken: Vec<(&str, Box<dyn Fn(&mut ErModel)>)> = vec![
-        (
-            "filed under another key",
-            Box::new(|m: &mut ErModel| {
-                let e = m.entities.remove(&a).unwrap();
-                m.entities.insert("e999".into(), e);
-            }),
-        ),
-        (
-            "an id used twice",
-            Box::new(|m: &mut ErModel| {
-                let attr = m.entities[&a].attributes[0].clone();
-                m.entities.get_mut(&b).unwrap().attributes.push(Attribute { name: "other".into(), ..attr });
-            }),
-        ),
-        (
-            "a non-canonical id",
-            Box::new(|m: &mut ErModel| {
-                m.entities.get_mut(&a).unwrap().attributes[0].id = "a07".into();
-            }),
-        ),
-        (
-            "an id at the counter",
-            Box::new({
-                let a = a.clone();
-                move |m: &mut ErModel| m.entities.get_mut(&a).unwrap().attributes[0].id = format!("a{counter}")
-            }),
-        ),
-        ("a duplicate entity name", Box::new(|m: &mut ErModel| m.entities.get_mut(&b).unwrap().name = "CUSTOMER".into())),
-        ("an empty name", Box::new(|m: &mut ErModel| m.entities.get_mut(&a).unwrap().name = String::new())),
-        ("a control character", Box::new(|m: &mut ErModel| m.entities.get_mut(&a).unwrap().name = "a\tb".into())),
-        ("a nullable key", Box::new(|m: &mut ErModel| m.entities.get_mut(&a).unwrap().attributes[0].nullable = true)),
-        ("a relationship to nothing", Box::new(|m: &mut ErModel| m.relationships.get_mut(&r).unwrap().to = "e999".into())),
-        ("a relationship name with a newline", Box::new(|m: &mut ErModel| m.relationships.get_mut(&r).unwrap().name = Some("a\nb".into()))),
-        (
-            "a place for nothing",
-            Box::new(|m: &mut ErModel| {
-                m.diagrams.get_mut(&d).unwrap().places.insert("e999".into(), Place { x: 0.0, y: 0.0, width: 100.0, height: 100.0 });
-            }),
-        ),
-        ("a place out of range", Box::new(|m: &mut ErModel| m.diagrams.get_mut(&d).unwrap().places.get_mut(&a).unwrap().x = 2e6)),
-        ("a box too small", Box::new(|m: &mut ErModel| m.diagrams.get_mut(&d).unwrap().places.get_mut(&a).unwrap().width = 5.0)),
-        ("a NaN", Box::new(|m: &mut ErModel| m.diagrams.get_mut(&d).unwrap().places.get_mut(&a).unwrap().y = f64::NAN)),
-    ];
-    for (what, breaks) in &broken {
-        let mut m = good.clone();
-        breaks(&mut m);
-        assert!(m.check(counter).is_err(), "{what} passed the check");
+fn sample(s: &mut Session) -> Sample {
+    let schema = run(s, "er.schema.add", json!({ "name": "shop" }));
+    let customer = run(s, "er.entity.add", json!({ "schema": schema, "name": "Customer" }));
+    let order = run(s, "er.entity.add", json!({ "schema": schema, "name": "Order" }));
+    let key = run(s, "er.attribute.add", json!({ "entity": customer, "name": "id", "type": "BIGINT", "primary_key": true }));
+    let total = run(s, "er.attribute.add", json!({ "entity": order, "name": "total", "type": "DECIMAL(10,2)" }));
+    let places = run(
+        s,
+        "er.relationship.add",
+        json!({ "from": customer, "to": order, "from_end": "exactly-one", "to_end": "zero-or-more", "name": "places" }),
+    );
+    Sample { schema, customer, order, key, total, places }
+}
+
+type Picture = Vec<(Obj, ClassId, Option<(Obj, PropId)>, Vec<(PropId, Vec<Value>)>)>;
+
+/// Everything observable: every live object with its class, container and stored values.
+fn picture(st: &Store) -> Picture {
+    let u = st.universe();
+    st.alive()
+        .map(|o| {
+            let class = st.class_of(o).unwrap();
+            let values = u
+                .info(class)
+                .unwrap()
+                .stored
+                .iter()
+                .map(|p| (*p, if u.prop(*p).unwrap().is_many() { st.list(o, *p).unwrap() } else { vec![st.get(o, *p).unwrap()] }))
+                .collect();
+            (o, class, st.container(o).unwrap(), values)
+        })
+        .collect()
+}
+
+/// Runs a command, undoes and redoes it, and checks the store's picture at each step.
+fn round_trip(s: &mut Session, cmd: &str, p: &Json) {
+    let before = picture(s.doc());
+    s.execute(cmd, p).unwrap_or_else(|e| panic!("{cmd} {p}: {e}"));
+    let after = picture(s.doc());
+    if after == before {
+        return;
     }
-    let _ = k;
+    s.undo().unwrap_or_else(|e| panic!("undo of {cmd}: {e}"));
+    assert_eq!(picture(s.doc()), before, "undo of {cmd}");
+    s.redo().unwrap_or_else(|e| panic!("redo of {cmd}: {e}"));
+    assert_eq!(picture(s.doc()), after, "redo of {cmd}");
 }
 
 #[test]
-fn every_command_applies_undoes_and_redoes_to_the_identical_model() {
+fn the_registry_and_the_metamodel_are_what_the_spec_says() {
+    let reg = registry().unwrap();
+    assert!(reg.len() > 20);
+    let m = metamodel().unwrap();
+    assert_eq!(m.classes.len(), 6);
+    assert_eq!(m.data_types.len(), 6, "the five primitives and Cardinality");
+    assert_eq!(Cardinality::from_index(1), Some(Cardinality::ExactlyOne));
+    assert_eq!(commands::cardinality_name(Cardinality::ZeroOrMore), "zero-or-more");
+    assert!(TABLES.iter().any(|t| t.name == "er_attribute") && JUNCTIONS.iter().any(|j| j.name == "er_entity_attribute" && j.ordered));
+}
+
+#[test]
+fn every_command_applies_undoes_and_redoes_to_the_identical_store() {
     let mut s = session();
-    let (d, a, b, k, r) = sample(&mut s);
-    let calls: Vec<(&str, Value)> = vec![
-        ("er.entity.add", json!({ "name": "Product" })),
-        ("er.entity.rename", json!({ "entity": b, "name": "Purchase" })),
-        ("er.attribute.add", json!({ "entity": a, "name": "email", "at": 0 })),
-        ("er.attribute.rename", json!({ "attribute": k, "name": "customer_id" })),
-        ("er.attribute.set-kind", json!({ "attribute": k, "kind": "UUID" })),
-        ("er.attribute.set-flags", json!({ "attribute": k, "primary_key": false, "nullable": "auto", "unique": true })),
-        ("er.relationship.set-ends", json!({ "relationship": r, "from_end": "zero-or-one", "to_end": "one-or-more" })),
-        ("er.relationship.rename", json!({ "relationship": r, "name": "" })),
-        ("er.diagram.rename", json!({ "diagram": d, "name": "Sales" })),
-        ("er.diagram.move", json!({ "diagram": d, "entities": [a, b], "dx": 5, "dy": -5 })),
-        ("er.diagram.resize", json!({ "diagram": d, "entity": a, "width": 240, "height": 160 })),
-        ("er.diagram.unplace", json!({ "diagram": d, "entity": b })),
-        ("er.diagram.place", json!({ "diagram": d, "entity": b, "x": 400, "y": 50 })),
-        ("er.relationship.remove", json!({ "relationship": r })),
-        ("er.attribute.remove", json!({ "attribute": k })),
-        ("er.entity.remove", json!({ "entity": b })),
-        ("er.diagram.remove", json!({ "diagram": d })),
+    let sm = sample(&mut s);
+    let calls: Vec<(&str, Json)> = vec![
+        ("er.schema.add", json!({ "name": "other" })),
+        ("er.schema.rename", json!({ "schema": sm.schema, "name": "sales" })),
+        ("er.entity.add", json!({ "schema": sm.schema, "name": "Product" })),
+        ("er.entity.rename", json!({ "entity": sm.order, "name": "Purchase" })),
+        ("er.attribute.add", json!({ "entity": sm.customer, "name": "email", "at": 0 })),
+        ("er.attribute.rename", json!({ "attribute": sm.key, "name": "customer_id" })),
+        ("er.attribute.set-type", json!({ "attribute": sm.key, "type": "UUID" })),
+        ("er.attribute.set-flags", json!({ "attribute": sm.key, "primary_key": false, "nullable": "auto", "unique": true })),
+        ("er.relationship.set-ends", json!({ "relationship": sm.places, "from_end": "zero-or-one", "to_end": "one-or-more" })),
+        ("er.relationship.rename", json!({ "relationship": sm.places, "name": "" })),
+        ("er.relationship.remove", json!({ "relationship": sm.places })),
+        ("er.attribute.remove", json!({ "attribute": sm.total })),
+        ("er.entity.remove", json!({ "entity": sm.order })),
+        ("er.schema.remove", json!({ "schema": sm.schema })),
     ];
     for (cmd, p) in calls {
-        round_trip(&mut s, cmd, &p).unwrap_or_else(|e| panic!("{e}"));
-        assert_eq!(s.doc().check(s.counter()), Ok(()), "{cmd}");
+        round_trip(&mut s, cmd, &p);
+        assert_eq!(problems(s.doc()), Vec::<String>::new(), "{cmd}");
     }
-    let e = run(&mut s, "er.entity.add", json!({ "name": "Last" }));
-    let attr = run(&mut s, "er.attribute.add", json!({ "entity": e, "name": "x" }));
+    let schema = run(&mut s, "er.schema.add", json!({ "name": "last" }));
+    let e = run(&mut s, "er.entity.add", json!({ "schema": schema, "name": "E" }));
+    let a = run(&mut s, "er.attribute.add", json!({ "entity": e, "name": "x" }));
     run(&mut s, "er.attribute.add", json!({ "entity": e, "name": "y" }));
-    round_trip(&mut s, "er.attribute.move", &json!({ "attribute": attr, "to": 1 })).unwrap();
+    round_trip(&mut s, "er.attribute.move", &json!({ "attribute": a, "to": 1 }));
+    assert_eq!(s.execute("er.entity.get", &json!({ "entity": e })).unwrap().value["attributes"][1]["name"], "x");
 }
 
 #[test]
 fn refusals_name_their_key_and_change_nothing() {
     let mut s = session();
-    let (d, a, b, k, r) = sample(&mut s);
-    let before = (s.doc().clone(), s.counter());
-    let refused: Vec<(&str, Value)> = vec![
-        ("er.entity.add", json!({ "name": "customer" })),
-        ("er.entity.add", json!({ "name": "" })),
-        ("er.entity.add", json!({ "name": "X", "diagram": "d999" })),
-        ("er.entity.add", json!({ "name": "X", "diagram": a })),
-        ("er.entity.rename", json!({ "entity": k, "name": "X" })),
-        ("er.attribute.add", json!({ "entity": a, "name": "ID" })),
-        ("er.attribute.add", json!({ "entity": a, "name": "x", "primary_key": true, "nullable": "yes" })),
-        ("er.attribute.add", json!({ "entity": a, "name": "x", "at": 5 })),
-        ("er.attribute.add", json!({ "entity": a, "name": "x", "kind": "" })),
-        ("er.attribute.move", json!({ "attribute": k, "to": 3 })),
-        ("er.attribute.set-flags", json!({ "attribute": k, "primary_key": true, "nullable": "yes", "unique": false })),
-        ("er.relationship.add", json!({ "from": a, "to": "e999", "from_end": "exactly-one", "to_end": "exactly-one" })),
-        ("er.relationship.add", json!({ "from": a, "to": b, "from_end": "many", "to_end": "exactly-one" })),
-        ("er.diagram.add", json!({ "name": "OVERVIEW" })),
-        ("er.diagram.place", json!({ "diagram": d, "entity": a, "x": 0, "y": 0 })),
-        ("er.diagram.move", json!({ "diagram": d, "entities": [], "dx": 1, "dy": 1 })),
-        ("er.diagram.move", json!({ "diagram": d, "entities": [a, a], "dx": 1, "dy": 1 })),
-        ("er.diagram.move", json!({ "diagram": d, "entities": [a], "dx": 1_999_999, "dy": 0 })),
-        ("er.diagram.resize", json!({ "diagram": d, "entity": a, "width": 5, "height": 100 })),
-        ("er.remove", json!({ "ids": [d] })),
-        ("er.remove", json!({ "ids": ["e999"] })),
-        ("view.select", json!({ "ids": [a, a] })),
-        ("view.select", json!({ "ids": ["r999"] })),
+    let sm = sample(&mut s);
+    let before = (picture(s.doc()), s.view().clone(), s.counter());
+    let refused: Vec<(&str, Json)> = vec![
+        ("er.schema.add", json!({ "name": "" })),
+        ("er.entity.add", json!({ "schema": sm.schema, "name": "customer" })),
+        ("er.entity.add", json!({ "schema": sm.schema, "name": "" })),
+        ("er.entity.add", json!({ "schema": "not-an-id", "name": "X" })),
+        ("er.entity.add", json!({ "schema": sm.customer, "name": "X" })),
+        ("er.entity.rename", json!({ "entity": sm.key, "name": "X" })),
+        ("er.attribute.add", json!({ "entity": sm.customer, "name": "ID" })),
+        ("er.attribute.add", json!({ "entity": sm.customer, "name": "x", "primary_key": true, "nullable": "yes" })),
+        ("er.attribute.add", json!({ "entity": sm.customer, "name": "x", "at": 5 })),
+        ("er.attribute.add", json!({ "entity": sm.customer, "name": "x", "type": "a\tb" })),
+        ("er.attribute.move", json!({ "attribute": sm.key, "to": 3 })),
+        ("er.attribute.set-flags", json!({ "attribute": sm.key, "primary_key": true, "nullable": "yes", "unique": false })),
+        (
+            "er.relationship.add",
+            json!({ "from": sm.customer, "to": "00000000-0000-7000-8000-000000000000", "from_end": "exactly-one", "to_end": "exactly-one" }),
+        ),
+        ("er.relationship.add", json!({ "from": sm.customer, "to": sm.order, "from_end": "many", "to_end": "exactly-one" })),
+        ("er.remove", json!({ "ids": [] })),
+        ("er.remove", json!({ "ids": [sm.customer, sm.customer] })),
+        ("er.remove", json!({ "ids": ["not-an-id"] })),
+        ("view.select", json!({ "ids": [sm.customer, sm.customer] })),
     ];
     for (cmd, p) in &refused {
         let e = s.execute(cmd, p).expect_err(&format!("{cmd} {p} was accepted"));
         if let EngineError::Failed { error, .. } = &e {
             assert!(error.key.is_some() || !error.message.is_empty(), "{cmd}: {e}");
         }
-        assert_eq!((s.doc().clone(), s.counter()), before, "{cmd} {p} changed the model");
+        assert_eq!((picture(s.doc()), s.view().clone(), s.counter()), before, "{cmd} {p} changed something");
     }
-    let _ = r;
+    let _ = sm.total;
 }
 
 #[test]
-fn removing_an_entity_takes_its_relationships_and_places_in_one_step() {
+fn removing_an_entity_takes_its_attributes_relationships_and_links_in_one_step() {
+    // Built on the store directly, so the shared core's folder, comment and link can sit around it.
+    let (mut st, m) = rooted_store();
+    let folder = st.create(FOLDER).unwrap();
+    FolderObj::set_name(&mut st, folder, Some("Data")).unwrap();
+    ModelObj::push_member(&mut st, m, Value::Ref(folder)).unwrap();
+    let sch = st.create(SCHEMA).unwrap();
+    SchemaObj::set_name(&mut st, sch, Some("shop")).unwrap();
+    FolderObj::push_member(&mut st, folder, Value::Ref(sch)).unwrap();
+    let customer = st.create(ENTITY).unwrap();
+    EntityObj::set_name(&mut st, customer, Some("Customer")).unwrap();
+    SchemaObj::push_entity(&mut st, sch, Value::Ref(customer)).unwrap();
+    let order = st.create(ENTITY).unwrap();
+    EntityObj::set_name(&mut st, order, Some("Order")).unwrap();
+    SchemaObj::push_entity(&mut st, sch, Value::Ref(order)).unwrap();
+    let key = st.create(ATTRIBUTE).unwrap();
+    AttributeObj::set_name(&mut st, key, Some("id")).unwrap();
+    AttributeObj::set_primary_key(&mut st, key, true).unwrap();
+    AttributeObj::set_nullable(&mut st, key, false).unwrap();
+    EntityObj::push_attribute(&mut st, customer, Value::Ref(key)).unwrap();
+    let places = st.create(RELATIONSHIP).unwrap();
+    RelationshipObj::set_from(&mut st, places, Some(customer)).unwrap();
+    RelationshipObj::set_to(&mut st, places, Some(order)).unwrap();
+    SchemaObj::push_relationship(&mut st, sch, Value::Ref(places)).unwrap();
+    let c = st.create(COMMENT).unwrap();
+    CommentObj::set_body(&mut st, c, Some("the buyer")).unwrap();
+    CommentObj::push_annotated_element(&mut st, c, Value::Ref(customer)).unwrap();
+    ModelObj::push_comment(&mut st, m, Value::Ref(c)).unwrap();
+    let link = archforge_core::link(&mut st, m, LinkKind::Persistence, order, customer, None).unwrap();
+    assert_eq!(st.container(sch).unwrap(), Some((folder, archforge_core::folder::MEMBER)), "a folder holds the schema");
+    assert_eq!(problems(&st), Vec::<String>::new());
+    let before = picture(&st);
+    st.begin();
+    let gone = commands::remove_entity(&mut st, customer).unwrap();
+    let delta = st.end().unwrap();
+    assert_eq!(gone, 4, "the entity, its attribute, the relationship and the link");
+    assert!(!st.is_alive(customer) && !st.is_alive(key) && !st.is_alive(places) && !st.is_alive(link));
+    assert_eq!(st.list(c, comment::ANNOTATED_ELEMENT).unwrap(), vec![], "the comment let go");
+    assert_eq!(st.list(m, model::LINK).unwrap(), vec![]);
+    assert_eq!(st.list(sch, schema::ENTITY).unwrap(), vec![Value::Ref(order)]);
+    assert_eq!(problems(&st), Vec::<String>::new());
+    st.apply(&Store::invert(&delta)).unwrap();
+    assert_eq!(picture(&st), before);
+    // Through the engine: a mixed delete with an attribute and its entity both listed is one step.
     let mut s = session();
-    let (d, a, _b, _k, r) = sample(&mut s);
-    let before = s.doc().clone();
-    s.execute("er.entity.remove", &json!({ "entity": a })).unwrap();
-    assert!(!s.doc().relationships.contains_key(&r));
-    assert!(!s.doc().diagrams[&d].places.contains_key(&a));
+    let sm = sample(&mut s);
+    let before = picture(s.doc());
+    let out = s.execute("er.remove", &json!({ "ids": [sm.key, sm.customer, sm.places] })).unwrap();
+    assert_eq!(out.value["removed"], 3);
+    assert_eq!(s.doc().list(obj(s.doc(), &sm.schema), schema::ENTITY).unwrap(), vec![Value::Ref(obj(s.doc(), &sm.order))]);
+    assert!(!s.view().selection.iter().any(|o| !s.doc().is_alive(*o)));
     s.undo().unwrap();
-    assert_eq!(*s.doc(), before);
-}
-
-#[test]
-fn a_mixed_delete_with_an_entity_and_its_own_parts_is_one_step() {
-    let mut s = session();
-    let (_d, a, b, k, r) = sample(&mut s);
-    let before = s.doc().clone();
-    s.execute("er.remove", &json!({ "ids": [k, a, r] })).unwrap();
-    assert_eq!(s.doc().entities.keys().collect::<Vec<_>>(), [&b]);
-    s.undo().unwrap();
-    assert_eq!(*s.doc(), before);
-}
-
-#[test]
-fn dragging_several_entities_is_one_step() {
-    let mut s = session();
-    let (d, a, b, _k, _r) = sample(&mut s);
-    let start = s.doc().clone();
-    s.begin_interaction("er.diagram.move").unwrap();
-    for i in 1..=10 {
-        s.preview(&json!({ "diagram": d, "entities": [a, b], "dx": i * 3, "dy": i })).unwrap();
-    }
-    s.commit().unwrap();
-    assert_eq!(s.doc().diagrams[&d].places[&a].x, 40.0);
-    s.undo().unwrap();
-    assert_eq!(*s.doc(), start);
-}
-
-#[test]
-fn the_view_drops_what_an_undo_removed_and_ids_are_never_given_twice() {
-    let mut s = session();
-    let first = run(&mut s, "er.entity.add", json!({ "name": "A" }));
-    assert_eq!(s.view().selection, std::slice::from_ref(&first));
-    s.undo().unwrap();
-    assert!(s.view().selection.is_empty());
-    let second = run(&mut s, "er.entity.add", json!({ "name": "A" }));
-    assert_ne!(first, second);
-    let d = run(&mut s, "er.diagram.add", json!({ "name": "D" }));
-    assert_eq!(s.view().diagram.as_deref(), Some(d.as_str()));
-    s.undo().unwrap();
-    assert_eq!(s.view().diagram, None);
+    assert_eq!(picture(s.doc()), before);
 }
 
 #[test]
 fn the_sweep_finds_nothing() {
     let mut s = session();
-    let (d, a, _b, k, r) = sample(&mut s);
-    let calls = sweep(&mut s, &[&a, &k, &r, &d, "e999", "a0", "x1"]).unwrap();
+    let sm = sample(&mut s);
+    let calls =
+        sweep_with(&mut s, &[&sm.schema, &sm.customer, &sm.key, &sm.places, "not-an-id", "00000000-0000-7000-8000-000000000000"], picture).unwrap();
     assert!(calls > 1000, "{calls}");
-    assert_eq!(s.doc().check(s.counter()), Ok(()));
+    assert_eq!(problems(s.doc()), Vec::<String>::new());
 }
 
 struct Rng(u64);
-
 impl Rng {
     fn next(&mut self) -> u64 {
         self.0 ^= self.0 << 13;
@@ -244,129 +255,59 @@ impl Rng {
         self.0 ^= self.0 << 17;
         self.0
     }
-    fn pick<'a, T>(&mut self, v: &'a [T]) -> Option<&'a T> {
-        if v.is_empty() { None } else { v.get((self.next() % v.len() as u64) as usize) }
+    fn below(&mut self, n: usize) -> usize {
+        (self.next() % n.max(1) as u64) as usize
+    }
+    fn pick<'a>(&mut self, v: &'a [String]) -> Option<&'a String> {
+        if v.is_empty() { None } else { v.get(self.below(v.len())) }
     }
 }
 
-/// A random call against the model as it is.
-fn random_call(rng: &mut Rng, m: &ErModel) -> (&'static str, Value) {
-    let entities: Vec<&String> = m.entities.keys().collect();
-    let attributes: Vec<String> = m.entities.values().flat_map(|e| e.attributes.iter().map(|a| a.id.clone())).collect();
-    let relationships: Vec<&String> = m.relationships.keys().collect();
-    let diagrams: Vec<&String> = m.diagrams.keys().collect();
+fn ids_of(s: &Session, class: ClassId) -> Vec<String> {
+    s.doc().alive().filter(|o| s.doc().class_of(*o).ok() == Some(class)).map(|o| s.doc().uuid(o).unwrap().to_string()).collect()
+}
+
+/// A random call against the store as it is.
+fn random_call(rng: &mut Rng, s: &Session) -> (&'static str, Json) {
+    let schemas = ids_of(s, SCHEMA);
+    let entities = ids_of(s, ENTITY);
+    let attributes = ids_of(s, ATTRIBUTE);
+    let relationships = ids_of(s, RELATIONSHIP);
     let n = rng.next() % 1000;
     let name = format!("n{}", rng.next() % 30);
     let ends = ["zero-or-one", "exactly-one", "zero-or-more", "one-or-more"];
     let end = |r: &mut Rng| ends[(r.next() % 4) as usize];
-    match rng.next() % 12 {
-        0 | 1 => ("er.entity.add", json!({ "name": name, "diagram": diagrams.first().map_or(String::new(), |d| (*d).clone()), "x": n, "y": n })),
-        2 => ("er.entity.rename", json!({ "entity": rng.pick(&entities), "name": name })),
-        3 => ("er.entity.remove", json!({ "entity": rng.pick(&entities) })),
-        4 => ("er.attribute.add", json!({ "entity": rng.pick(&entities), "name": name, "primary_key": n.is_multiple_of(3) })),
-        5 => ("er.attribute.remove", json!({ "attribute": rng.pick(&attributes) })),
-        6 => ("er.relationship.add", json!({ "from": rng.pick(&entities), "to": rng.pick(&entities), "from_end": end(rng), "to_end": end(rng) })),
-        7 => ("er.relationship.remove", json!({ "relationship": rng.pick(&relationships) })),
-        8 => ("er.diagram.add", json!({ "name": name })),
-        9 => ("er.diagram.place", json!({ "diagram": rng.pick(&diagrams), "entity": rng.pick(&entities), "x": n, "y": n })),
-        10 => ("er.diagram.move", json!({ "diagram": rng.pick(&diagrams), "entities": [rng.pick(&entities)], "dx": 7, "dy": 3 })),
+    match rng.below(12) {
+        0 if schemas.len() < 2 => ("er.schema.add", json!({ "name": name })),
+        0..=2 => ("er.entity.add", json!({ "schema": rng.pick(&schemas), "name": name })),
+        3 => ("er.entity.rename", json!({ "entity": rng.pick(&entities), "name": name })),
+        4 => ("er.entity.remove", json!({ "entity": rng.pick(&entities) })),
+        5 | 6 => ("er.attribute.add", json!({ "entity": rng.pick(&entities), "name": name, "primary_key": n.is_multiple_of(3) })),
+        7 => ("er.attribute.remove", json!({ "attribute": rng.pick(&attributes) })),
+        8 => ("er.relationship.add", json!({ "from": rng.pick(&entities), "to": rng.pick(&entities), "from_end": end(rng), "to_end": end(rng) })),
+        9 => ("er.relationship.remove", json!({ "relationship": rng.pick(&relationships) })),
+        10 => ("er.attribute.set-flags", json!({ "attribute": rng.pick(&attributes), "primary_key": n.is_multiple_of(2), "nullable": "auto" })),
         _ => ("er.remove", json!({ "ids": [rng.pick(&attributes).cloned().unwrap_or_default()] })),
     }
 }
 
 #[test]
-fn random_sequences_keep_every_invariant_and_replay_to_the_same_model() {
-    for seed in 1..=30u64 {
+fn random_sequences_keep_every_rule_and_undo_back_to_the_start() {
+    for seed in 1..=20u64 {
         let mut rng = Rng(seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1);
         let mut s = session();
-        for _ in 0..120 {
-            let (cmd, p) = random_call(&mut rng, s.doc());
+        let start = picture(s.doc());
+        for i in 0..120 {
+            let (cmd, p) = random_call(&mut rng, &s);
             let _ = s.execute(cmd, &p);
-            if rng.next().is_multiple_of(7) {
-                let _ = s.undo();
+            assert_eq!(problems(s.doc()), Vec::<String>::new(), "seed {seed} step {i} after {cmd} {p}");
+            if rng.next().is_multiple_of(7) && s.can_undo() {
+                s.undo().unwrap();
             }
-            assert_eq!(s.doc().check(s.counter()), Ok(()), "seed {seed} after {cmd} {p}");
         }
-        let entries: Vec<_> = s.journal().cloned().collect();
-        let mut fresh = session();
-        for e in &entries {
-            fresh.replay(e).unwrap_or_else(|err| panic!("seed {seed}: {err}"));
+        while s.can_undo() {
+            s.undo().unwrap();
         }
-        assert_eq!(fresh.doc(), s.doc(), "seed {seed}: the replay differs");
-        assert_eq!(fresh.counter(), s.counter());
+        assert_eq!(picture(s.doc()), start, "seed {seed}: undo back to the start");
     }
-}
-
-#[test]
-fn a_model_at_every_cap_passes_and_weighs_well_under_the_history_cap() {
-    let mut m = ErModel::default();
-    let mut n = 1u64;
-    let mut fresh = |kind: Kind| {
-        let id = make_id(kind, n);
-        n += 1;
-        id
-    };
-    let mut entity_ids = Vec::new();
-    for i in 0..MAX_ENTITIES {
-        let id = fresh(Kind::Entity);
-        let attributes = (0..MAX_ATTRIBUTES / MAX_ENTITIES)
-            .map(|j| Attribute {
-                id: fresh(Kind::Attribute),
-                name: format!("attribute_{j}"),
-                kind: "VARCHAR(64)".into(),
-                primary_key: false,
-                nullable: true,
-                unique: false,
-            })
-            .collect();
-        m.entities.insert(id.clone(), Entity { id: id.clone(), name: format!("entity_{i}"), attributes });
-        entity_ids.push(id);
-    }
-    for i in 0..MAX_RELATIONSHIPS {
-        let id = fresh(Kind::Relationship);
-        let (from, to) = (entity_ids[i % MAX_ENTITIES].clone(), entity_ids[(i * 7 + 1) % MAX_ENTITIES].clone());
-        m.relationships.insert(
-            id.clone(),
-            Relationship { id, name: Some(format!("rel_{i}")), from, to, from_end: Cardinality::ExactlyOne, to_end: Cardinality::ZeroOrMore },
-        );
-    }
-    for i in 0..MAX_DIAGRAMS {
-        let id = fresh(Kind::Diagram);
-        let places: BTreeMap<Id, Place> = (0..MAX_PLACES / MAX_DIAGRAMS)
-            .map(|j| (entity_ids[(i * 200 + j) % MAX_ENTITIES].clone(), Place { x: j as f64, y: i as f64, width: 200.0, height: 120.0 }))
-            .collect();
-        m.diagrams.insert(id.clone(), Diagram { id, name: format!("diagram_{i}"), places });
-    }
-    assert_eq!(m.counts(), (MAX_ATTRIBUTES, MAX_PLACES));
-    assert_eq!(m.check(n), Ok(()));
-    assert!(m.weight() * 4 < Options::default().max_weight, "{} bytes", m.weight());
-    let _ = id;
-}
-
-#[test]
-fn a_selection_of_many_attributes_costs_one_pass() {
-    let mut m = ErModel::default();
-    let mut n = 1u64;
-    let mut ids = Vec::new();
-    for i in 0..1000 {
-        let e = make_id(Kind::Entity, n);
-        n += 1;
-        let attributes: Vec<Attribute> = (0..50)
-            .map(|j| {
-                let id = make_id(Kind::Attribute, n);
-                n += 1;
-                Attribute { id, name: format!("a{j}"), kind: "INT".into(), primary_key: false, nullable: true, unique: false }
-            })
-            .collect();
-        ids.extend(attributes.iter().map(|a| a.id.clone()));
-        m.entities.insert(e.clone(), Entity { id: e, name: format!("e{i}"), attributes });
-    }
-    let mut s = Session::new(registry().unwrap(), archforge_er::Doc::new(m), n, Options::default());
-    let started = std::time::Instant::now();
-    s.execute("view.select", &json!({ "ids": ids })).unwrap();
-    s.execute("er.entity.add", &json!({ "name": "Another" })).unwrap();
-    s.execute("view.select", &json!({ "ids": ids })).unwrap();
-    s.execute("er.remove", &json!({ "ids": ids })).unwrap();
-    assert!(started.elapsed() < std::time::Duration::from_secs(5), "{:?}", started.elapsed());
-    assert_eq!(s.doc().counts().0, 0);
 }

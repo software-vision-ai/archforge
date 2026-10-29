@@ -1,6 +1,6 @@
 [package]
 name = "archforge-er"
-description = "The ER notation: entities, attributes, relationships and diagrams, as commands for the engine"
+description = "The ER notation: a schema of entities, attributes and relationships, as a metamodel over the MOF core with commands for the engine"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,8 +9,9 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+archforge-core.workspace = true
 archforge-engine.workspace = true
-serde.workspace = true
+archforge-mof.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]

@@ -1,564 +1,539 @@
-//! The ER notation's commands. Each validates what it is given against the model before it
-//! changes anything, keeps the model's invariants, and refuses with a message naming the key.
+//! The ER notation's commands over the store. Each validates what it is given before it changes
+//! anything, keeps the ER rules, and refuses with a message naming the key. Ids in parameters are
+//! the elements' UUIDs.
 
 use std::collections::BTreeSet;
 
 use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, always, cmd};
-use serde_json::{Value, json};
+use archforge_mof::{ClassId, Invalid, Obj, Store, Uuid, Value};
+use serde_json::{Value as Json, json};
 
-use crate::model::*;
+use crate::rules::{self, MAX_NAME, MAX_TYPE, name_of};
+use crate::{ATTRIBUTE, Cardinality, ENTITY, ErView, RELATIONSHIP, SCHEMA, attribute, entity, named_element, relationship, schema};
 
-type C<'a> = Ctx<'a, crate::Doc, ErView>;
-type R = Result<Value, CommandError>;
+type C<'a> = Ctx<'a, Store, ErView>;
+type R = Result<Json, CommandError>;
 
 /// Why a command is not available.
+pub const NO_SCHEMAS: &str = "There is no schema yet.";
 pub const NO_ENTITIES: &str = "There is no entity yet.";
-pub const NO_DIAGRAMS: &str = "There is no diagram yet.";
-/// The size a box is given when none is.
-pub const DEFAULT_WIDTH: f64 = 200.0;
-pub const DEFAULT_HEIGHT: f64 = 120.0;
 
-fn has_entities(f: &Facts<'_, crate::Doc, ErView>) -> Result<(), &'static str> {
-    if f.doc.entities.is_empty() { Err(NO_ENTITIES) } else { Ok(()) }
+fn any_of(store: &Store, class: ClassId) -> bool {
+    store.alive().any(|o| store.class_of(o).ok() == Some(class))
 }
 
-fn has_diagrams(f: &Facts<'_, crate::Doc, ErView>) -> Result<(), &'static str> {
-    if f.doc.diagrams.is_empty() { Err(NO_DIAGRAMS) } else { Ok(()) }
+fn has_schemas(f: &Facts<'_, Store, ErView>) -> Result<(), &'static str> {
+    if any_of(f.doc, SCHEMA) { Ok(()) } else { Err(NO_SCHEMAS) }
+}
+
+fn has_entities(f: &Facts<'_, Store, ErView>) -> Result<(), &'static str> {
+    if any_of(f.doc, ENTITY) { Ok(()) } else { Err(NO_ENTITIES) }
 }
 
 fn refuse(key: &str, why: impl Into<String>) -> CommandError {
     CommandError::about(key, why)
 }
 
+/// A store refusal, as the command's failure.
+fn fail(e: Invalid) -> CommandError {
+    CommandError::new(e.to_string())
+}
+
 fn text<'a>(p: &'a Params, key: &str) -> &'a str {
     p.str(key).unwrap_or_default()
 }
 
-/// The id given for `key`, checked to be of `kind` and in the model.
-fn id_of(ctx: &C<'_>, p: &Params, key: &str, kind: Kind) -> Result<Id, CommandError> {
-    let id = text(p, key);
-    match parse_id(id) {
-        Some((k, _)) if k == kind && ctx.doc.contains(id) => Ok(id.to_string()),
-        Some((k, _)) if k == kind => Err(refuse(key, format!("there is no {id}"))),
-        _ => Err(refuse(key, format!("{id:?} is not {} id", kind.name()))),
-    }
+fn uuid_of(store: &Store, obj: Obj) -> Result<String, CommandError> {
+    store.uuid(obj).map(|u| u.to_string()).map_err(fail)
 }
 
-/// A new id of `kind` from the counter.
-fn new_id(ctx: &mut C<'_>, kind: Kind) -> Result<Id, CommandError> {
-    ctx.fresh().map(|n| make_id(kind, n)).ok_or_else(|| CommandError::new("the model has used every id it can make"))
+/// The element the id under `key` names, of `class`.
+fn id_of(ctx: &C<'_>, p: &Params, key: &str, class: ClassId) -> Result<Obj, CommandError> {
+    let id = text(p, key);
+    let Some(uuid) = Uuid::parse(id) else { return Err(refuse(key, format!("{id:?} is not an id"))) };
+    let Some(obj) = ctx.doc.by_uuid(uuid) else { return Err(refuse(key, format!("there is no element {id}"))) };
+    if ctx.doc.class_of(obj).ok() != Some(class) {
+        return Err(refuse(
+            key,
+            format!(
+                "{id} is not {}",
+                ctx.doc
+                    .universe()
+                    .class_name(class)
+                    .to_lowercase()
+                    .replace("relationship", "a relationship")
+                    .replace("entity", "an entity")
+                    .replace("attribute", "an attribute")
+                    .replace("schema", "a schema")
+            ),
+        ));
+    }
+    Ok(obj)
 }
 
 fn check_name(key: &str, name: &str, max: usize) -> Result<(), CommandError> {
-    match name_problem(name, max) {
+    match rules::name_problem(name, max) {
         Some(p) => Err(refuse(key, format!("the name {p}"))),
         None => Ok(()),
     }
 }
 
-fn number(p: &Params, key: &str) -> f64 {
-    p.number(key).unwrap_or(0.0)
-}
-
-fn integer(p: &Params, key: &str) -> i64 {
-    p.integer(key).unwrap_or(0)
-}
-
-/// The nullable choice: auto makes a key not nullable and anything else nullable.
-fn nullable(p: &Params, key: bool) -> Result<bool, CommandError> {
-    match text(p, "nullable") {
-        "yes" if key => Err(refuse("nullable", "a primary key cannot be nullable")),
-        "yes" => Ok(true),
-        "no" => Ok(false),
-        _ => Ok(!key),
-    }
-}
-
-fn entity_mut<'a>(ctx: &'a mut C<'_>, id: &str) -> Result<&'a mut Entity, CommandError> {
-    ctx.doc.entities.get_mut(id).ok_or_else(|| CommandError::new(format!("there is no {id}")))
-}
-
-/// The entity and position of an attribute, for changing it.
-fn attribute_mut<'a>(ctx: &'a mut C<'_>, id: &str) -> Result<&'a mut Attribute, CommandError> {
+/// The project's Model, the root that holds the schemas.
+fn model(ctx: &C<'_>) -> Result<Obj, CommandError> {
     ctx.doc
-        .entities
-        .values_mut()
-        .find_map(|e| e.attributes.iter_mut().find(|a| a.id == id))
-        .ok_or_else(|| CommandError::new(format!("there is no {id}")))
+        .alive()
+        .find(|o| ctx.doc.class_of(*o).ok() == Some(archforge_core::MODEL))
+        .ok_or_else(|| CommandError::new("the project has no model root"))
 }
 
-fn entity_name_free(doc: &ErModel, name: &str, except: Option<&str>) -> Result<(), CommandError> {
-    if doc.entities.values().any(|e| Some(e.id.as_str()) != except && same_name(&e.name, name)) {
-        return Err(refuse("name", format!("an entity is already called {name:?}")));
-    }
-    Ok(())
+fn select(ctx: &mut C<'_>, objs: Vec<Obj>) {
+    ctx.view.selection = objs;
 }
 
-fn diagram_name_free(doc: &ErModel, name: &str, except: Option<&str>) -> Result<(), CommandError> {
-    if doc.diagrams.values().any(|d| Some(d.id.as_str()) != except && same_name(&d.name, name)) {
-        return Err(refuse("name", format!("a diagram is already called {name:?}")));
-    }
-    Ok(())
+fn set_name(ctx: &mut C<'_>, obj: Obj, prop: archforge_mof::PropId, name: &str) -> Result<(), CommandError> {
+    ctx.doc.set(obj, prop, if name.is_empty() { Value::Null } else { Value::str(name) }).map_err(fail)
 }
 
-fn place_ok(x: f64, y: f64, width: f64, height: f64) -> Result<(), CommandError> {
-    if !(coord_ok(x) && coord_ok(y)) {
-        return Err(refuse("x", "the place is out of range"));
-    }
-    if !(size_ok(width) && size_ok(height)) {
-        return Err(refuse("width", "the size is out of range"));
-    }
-    Ok(())
+// Schemas.
+
+fn schema_add(ctx: &mut C<'_>, p: &Params) -> R {
+    let name = text(p, "name");
+    check_name("name", name, MAX_NAME)?;
+    let m = model(ctx)?;
+    let s = ctx.doc.create(SCHEMA).map_err(fail)?;
+    set_name(ctx, s, named_element::NAME, name)?;
+    ctx.doc.push(m, archforge_core::model::MEMBER, Value::Ref(s)).map_err(fail)?;
+    select(ctx, vec![s]);
+    Ok(json!({ "id": uuid_of(ctx.doc, s)? }))
 }
 
-fn places_left(doc: &ErModel) -> Result<(), CommandError> {
-    if doc.counts().1 >= MAX_PLACES { Err(CommandError::new(format!("the model holds {MAX_PLACES} places already"))) } else { Ok(()) }
+fn schema_rename(ctx: &mut C<'_>, p: &Params) -> R {
+    let s = id_of(ctx, p, "schema", SCHEMA)?;
+    let name = text(p, "name");
+    check_name("name", name, MAX_NAME)?;
+    set_name(ctx, s, named_element::NAME, name)?;
+    Ok(json!({ "id": uuid_of(ctx.doc, s)? }))
+}
+
+fn schema_remove(ctx: &mut C<'_>, p: &Params) -> R {
+    let s = id_of(ctx, p, "schema", SCHEMA)?;
+    let gone = archforge_core::destroy_with_links(ctx.doc, s).map_err(fail)?;
+    Ok(json!({ "removed": gone }))
 }
 
 // Entities.
 
 fn entity_add(ctx: &mut C<'_>, p: &Params) -> R {
-    let name = text(p, "name").to_string();
-    check_name("name", &name, MAX_NAME)?;
-    entity_name_free(ctx.doc, &name, None)?;
-    if ctx.doc.entities.len() >= MAX_ENTITIES {
-        return Err(CommandError::new(format!("the model holds {MAX_ENTITIES} entities already")));
+    let s = id_of(ctx, p, "schema", SCHEMA)?;
+    let name = text(p, "name");
+    check_name("name", name, MAX_NAME)?;
+    if !rules::entity_name_free(ctx.doc, s, name, None) {
+        return Err(refuse("name", format!("the schema has an entity named {name:?} already")));
     }
-    let diagram = match text(p, "diagram") {
-        "" => None,
-        _ => Some(id_of(ctx, p, "diagram", Kind::Diagram)?),
-    };
-    let (x, y) = (number(p, "x"), number(p, "y"));
-    if diagram.is_some() {
-        place_ok(x, y, DEFAULT_WIDTH, DEFAULT_HEIGHT)?;
-        places_left(ctx.doc)?;
-    }
-    let id = new_id(ctx, Kind::Entity)?;
-    ctx.doc.entities.insert(id.clone(), Entity { id: id.clone(), name, attributes: Vec::new() });
-    if let Some(d) = diagram.and_then(|d| ctx.doc.diagrams.get_mut(&d)) {
-        d.places.insert(id.clone(), Place { x, y, width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT });
-    }
-    ctx.view.selection = vec![id.clone()];
-    Ok(json!({ "id": id }))
+    let e = ctx.doc.create(ENTITY).map_err(fail)?;
+    set_name(ctx, e, named_element::NAME, name)?;
+    ctx.doc.push(s, schema::ENTITY, Value::Ref(e)).map_err(fail)?;
+    select(ctx, vec![e]);
+    Ok(json!({ "id": uuid_of(ctx.doc, e)? }))
 }
 
 fn entity_rename(ctx: &mut C<'_>, p: &Params) -> R {
-    let id = id_of(ctx, p, "entity", Kind::Entity)?;
-    let name = text(p, "name").to_string();
-    check_name("name", &name, MAX_NAME)?;
-    entity_name_free(ctx.doc, &name, Some(&id))?;
-    entity_mut(ctx, &id)?.name = name;
-    Ok(json!({ "id": id }))
+    let e = id_of(ctx, p, "entity", ENTITY)?;
+    let name = text(p, "name");
+    check_name("name", name, MAX_NAME)?;
+    if let Some(s) = rules::schema_of(ctx.doc, e)
+        && !rules::entity_name_free(ctx.doc, s, name, Some(e))
+    {
+        return Err(refuse("name", format!("the schema has an entity named {name:?} already")));
+    }
+    set_name(ctx, e, named_element::NAME, name)?;
+    Ok(json!({ "id": uuid_of(ctx.doc, e)? }))
 }
 
-/// Removes an entity with its relationships and its places.
-fn remove_entity(doc: &mut ErModel, id: &str) {
-    doc.entities.remove(id);
-    doc.relationships.retain(|_, r| r.from != id && r.to != id);
-    for d in doc.diagrams.values_mut() {
-        d.places.remove(id);
-    }
+/// Removes an entity with its attributes, the relationships that reach it, and the trace links on
+/// any of them.
+pub fn remove_entity(store: &mut Store, e: Obj) -> Result<usize, Invalid> {
+    store.transaction(|st| {
+        let mut gone = 0;
+        let relationships: BTreeSet<Obj> =
+            st.referrers(e).into_iter().filter(|(_, prop)| *prop == relationship::FROM || *prop == relationship::TO).map(|(r, _)| r).collect();
+        for r in relationships {
+            if st.is_alive(r) {
+                gone += archforge_core::destroy_with_links(st, r)?;
+            }
+        }
+        gone += archforge_core::destroy_with_links(st, e)?;
+        Ok(gone)
+    })
 }
 
 fn entity_remove(ctx: &mut C<'_>, p: &Params) -> R {
-    let id = id_of(ctx, p, "entity", Kind::Entity)?;
-    remove_entity(ctx.doc, &id);
-    Ok(json!({ "removed": id }))
+    let e = id_of(ctx, p, "entity", ENTITY)?;
+    let gone = remove_entity(ctx.doc, e).map_err(fail)?;
+    Ok(json!({ "removed": gone }))
 }
 
 // Attributes.
 
+/// Whether a key may be nullable: `auto` makes a key not nullable and anything else nullable.
+fn nullable(p: &Params, primary_key: bool) -> Result<bool, CommandError> {
+    match text(p, "nullable") {
+        "auto" | "" => Ok(!primary_key),
+        "yes" => {
+            if primary_key {
+                return Err(refuse("nullable", "a key cannot be nullable"));
+            }
+            Ok(true)
+        }
+        "no" => Ok(false),
+        other => Err(refuse("nullable", format!("{other:?} is not auto, yes or no"))),
+    }
+}
+
 fn attribute_add(ctx: &mut C<'_>, p: &Params) -> R {
-    let entity = id_of(ctx, p, "entity", Kind::Entity)?;
-    let name = text(p, "name").to_string();
-    check_name("name", &name, MAX_NAME)?;
-    let kind = text(p, "kind").to_string();
-    if let Some(problem) = name_problem(&kind, MAX_KIND) {
-        return Err(refuse("kind", format!("the kind {problem}")));
+    let e = id_of(ctx, p, "entity", ENTITY)?;
+    let name = text(p, "name");
+    check_name("name", name, MAX_NAME)?;
+    if !rules::attribute_name_free(ctx.doc, e, name, None) {
+        return Err(refuse("name", format!("the entity has an attribute named {name:?} already")));
+    }
+    let kind = text(p, "type");
+    if !kind.is_empty() {
+        check_name("type", kind, MAX_TYPE)?;
     }
     let key = p.bool("primary_key").unwrap_or(false);
     let null = nullable(p, key)?;
-    if ctx.doc.counts().0 >= MAX_ATTRIBUTES {
-        return Err(CommandError::new(format!("the model holds {MAX_ATTRIBUTES} attributes already")));
-    }
-    let e = ctx.doc.entities.get(&entity).ok_or_else(|| refuse("entity", format!("there is no {entity}")))?;
-    if e.attributes.len() >= MAX_ATTRIBUTES_PER_ENTITY {
-        return Err(refuse("entity", format!("{entity} holds {MAX_ATTRIBUTES_PER_ENTITY} attributes already")));
-    }
-    if e.attributes.iter().any(|a| same_name(&a.name, &name)) {
-        return Err(refuse("name", format!("{entity} already has an attribute called {name:?}")));
-    }
-    let len = e.attributes.len();
-    let at = match integer(p, "at") {
-        -1 => len,
-        n => usize::try_from(n)
-            .ok()
-            .filter(|n| *n <= len)
-            .ok_or_else(|| refuse("at", format!("the position must be from 0 to {len}, or -1 for the end")))?,
+    let len = ctx.doc.list(e, entity::ATTRIBUTE).map_err(fail)?.len();
+    let at = match p.integer("at") {
+        Some(i) if i < 0 => len,
+        Some(i) => usize::try_from(i).ok().filter(|i| *i <= len).ok_or_else(|| refuse("at", format!("the entity has {len} attributes")))?,
+        None => len,
     };
-    let id = new_id(ctx, Kind::Attribute)?;
-    let attribute = Attribute { id: id.clone(), name, kind, primary_key: key, nullable: null, unique: p.bool("unique").unwrap_or(false) };
-    entity_mut(ctx, &entity)?.attributes.insert(at, attribute);
-    Ok(json!({ "id": id }))
+    let a = ctx.doc.create(ATTRIBUTE).map_err(fail)?;
+    set_name(ctx, a, named_element::NAME, name)?;
+    set_name(ctx, a, attribute::TYPE, kind)?;
+    ctx.doc.set(a, attribute::PRIMARY_KEY, Value::Bool(key)).map_err(fail)?;
+    ctx.doc.set(a, attribute::NULLABLE, Value::Bool(null)).map_err(fail)?;
+    ctx.doc.set(a, attribute::UNIQUE, Value::Bool(p.bool("unique").unwrap_or(false))).map_err(fail)?;
+    let at = u32::try_from(at).map_err(|_| refuse("at", "too large"))?;
+    ctx.doc.insert(e, entity::ATTRIBUTE, at, Value::Ref(a)).map_err(fail)?;
+    select(ctx, vec![a]);
+    Ok(json!({ "id": uuid_of(ctx.doc, a)? }))
 }
 
 fn attribute_rename(ctx: &mut C<'_>, p: &Params) -> R {
-    let id = id_of(ctx, p, "attribute", Kind::Attribute)?;
-    let name = text(p, "name").to_string();
-    check_name("name", &name, MAX_NAME)?;
-    let (e, _) = ctx.doc.attribute(&id).ok_or_else(|| refuse("attribute", format!("there is no {id}")))?;
-    if e.attributes.iter().any(|a| a.id != id && same_name(&a.name, &name)) {
-        return Err(refuse("name", format!("{} already has an attribute called {name:?}", e.id)));
+    let a = id_of(ctx, p, "attribute", ATTRIBUTE)?;
+    let name = text(p, "name");
+    check_name("name", name, MAX_NAME)?;
+    if let Some((e, _)) = ctx.doc.container(a).map_err(fail)?
+        && !rules::attribute_name_free(ctx.doc, e, name, Some(a))
+    {
+        return Err(refuse("name", format!("the entity has an attribute named {name:?} already")));
     }
-    attribute_mut(ctx, &id)?.name = name;
-    Ok(json!({ "id": id }))
+    set_name(ctx, a, named_element::NAME, name)?;
+    Ok(json!({ "id": uuid_of(ctx.doc, a)? }))
 }
 
-fn attribute_set_kind(ctx: &mut C<'_>, p: &Params) -> R {
-    let id = id_of(ctx, p, "attribute", Kind::Attribute)?;
-    let kind = text(p, "kind").to_string();
-    if let Some(problem) = name_problem(&kind, MAX_KIND) {
-        return Err(refuse("kind", format!("the kind {problem}")));
+fn attribute_set_type(ctx: &mut C<'_>, p: &Params) -> R {
+    let a = id_of(ctx, p, "attribute", ATTRIBUTE)?;
+    let kind = text(p, "type");
+    if !kind.is_empty() {
+        check_name("type", kind, MAX_TYPE)?;
     }
-    attribute_mut(ctx, &id)?.kind = kind;
-    Ok(json!({ "id": id }))
+    set_name(ctx, a, attribute::TYPE, kind)?;
+    Ok(json!({ "id": uuid_of(ctx.doc, a)? }))
 }
 
 fn attribute_set_flags(ctx: &mut C<'_>, p: &Params) -> R {
-    let id = id_of(ctx, p, "attribute", Kind::Attribute)?;
+    let a = id_of(ctx, p, "attribute", ATTRIBUTE)?;
     let key = p.bool("primary_key").unwrap_or(false);
     let null = nullable(p, key)?;
     let unique = p.bool("unique").unwrap_or(false);
-    let a = attribute_mut(ctx, &id)?;
-    a.primary_key = key;
-    a.nullable = null;
-    a.unique = unique;
-    Ok(json!({ "id": id, "nullable": null }))
+    ctx.doc.set(a, attribute::PRIMARY_KEY, Value::Bool(key)).map_err(fail)?;
+    ctx.doc.set(a, attribute::NULLABLE, Value::Bool(null)).map_err(fail)?;
+    ctx.doc.set(a, attribute::UNIQUE, Value::Bool(unique)).map_err(fail)?;
+    Ok(json!({ "id": uuid_of(ctx.doc, a)? }))
 }
 
 fn attribute_move(ctx: &mut C<'_>, p: &Params) -> R {
-    let id = id_of(ctx, p, "attribute", Kind::Attribute)?;
-    let (e, from) = ctx.doc.attribute(&id).ok_or_else(|| refuse("attribute", format!("there is no {id}")))?;
-    let (entity, last) = (e.id.clone(), e.attributes.len().saturating_sub(1));
-    let to = usize::try_from(integer(p, "to"))
+    let a = id_of(ctx, p, "attribute", ATTRIBUTE)?;
+    let Some((e, _)) = ctx.doc.container(a).map_err(fail)? else { return Err(refuse("attribute", "the attribute belongs to no entity")) };
+    let list = ctx.doc.list(e, entity::ATTRIBUTE).map_err(fail)?;
+    let from = list.iter().position(|v| *v == Value::Ref(a)).ok_or_else(|| refuse("attribute", "the attribute is not in its entity's list"))?;
+    let to = usize::try_from(p.integer("to").unwrap_or(0))
         .ok()
-        .filter(|t| *t <= last)
-        .ok_or_else(|| refuse("to", format!("the position must be from 0 to {last}")))?;
-    let e = entity_mut(ctx, &entity)?;
-    let a = e.attributes.remove(from);
-    e.attributes.insert(to, a);
-    Ok(json!({ "id": id, "to": to }))
+        .filter(|i| *i < list.len())
+        .ok_or_else(|| refuse("to", format!("the entity has {} attributes", list.len())))?;
+    let (from, to) = (u32::try_from(from).map_err(|_| refuse("attribute", "too far in"))?, u32::try_from(to).map_err(|_| refuse("to", "too large"))?);
+    ctx.doc.move_item(e, entity::ATTRIBUTE, from, to).map_err(fail)?;
+    Ok(json!({ "id": uuid_of(ctx.doc, a)?, "to": to }))
 }
 
 fn attribute_remove(ctx: &mut C<'_>, p: &Params) -> R {
-    let id = id_of(ctx, p, "attribute", Kind::Attribute)?;
-    for e in ctx.doc.entities.values_mut() {
-        e.attributes.retain(|a| a.id != id);
-    }
-    Ok(json!({ "removed": id }))
+    let a = id_of(ctx, p, "attribute", ATTRIBUTE)?;
+    let gone = archforge_core::destroy_with_links(ctx.doc, a).map_err(fail)?;
+    Ok(json!({ "removed": gone }))
 }
 
 // Relationships.
 
 fn cardinality(p: &Params, key: &str) -> Result<Cardinality, CommandError> {
-    Cardinality::parse(text(p, key)).ok_or_else(|| refuse(key, format!("must be one of {}", Cardinality::CHOICES.replace('|', ", "))))
+    let s = text(p, key);
+    Cardinality::from_index(match s {
+        "zero-or-one" => 0,
+        "exactly-one" => 1,
+        "zero-or-more" => 2,
+        "one-or-more" => 3,
+        _ => return Err(refuse(key, format!("{s:?} is not a cardinality"))),
+    })
+    .ok_or_else(|| refuse(key, "not a cardinality"))
 }
 
-fn relationship_name(p: &Params) -> Result<Option<String>, CommandError> {
-    match text(p, "name") {
-        "" => Ok(None),
-        name => {
-            check_name("name", name, MAX_NAME)?;
-            Ok(Some(name.to_string()))
-        }
+/// The cardinality's name in parameters.
+pub fn cardinality_name(c: Cardinality) -> &'static str {
+    match c {
+        Cardinality::ZeroOrOne => "zero-or-one",
+        Cardinality::ExactlyOne => "exactly-one",
+        Cardinality::ZeroOrMore => "zero-or-more",
+        Cardinality::OneOrMore => "one-or-more",
     }
+}
+
+fn relationship_name(p: &Params) -> Result<&str, CommandError> {
+    let name = text(p, "name");
+    if !name.is_empty() {
+        check_name("name", name, MAX_NAME)?;
+    }
+    Ok(name)
 }
 
 fn relationship_add(ctx: &mut C<'_>, p: &Params) -> R {
-    let from = id_of(ctx, p, "from", Kind::Entity)?;
-    let to = id_of(ctx, p, "to", Kind::Entity)?;
+    let from = id_of(ctx, p, "from", ENTITY)?;
+    let to = id_of(ctx, p, "to", ENTITY)?;
     let (from_end, to_end) = (cardinality(p, "from_end")?, cardinality(p, "to_end")?);
-    let name = relationship_name(p)?;
-    if ctx.doc.relationships.len() >= MAX_RELATIONSHIPS {
-        return Err(CommandError::new(format!("the model holds {MAX_RELATIONSHIPS} relationships already")));
+    let name = relationship_name(p)?.to_string();
+    let s = rules::schema_of(ctx.doc, from).ok_or_else(|| refuse("from", "the entity belongs to no schema"))?;
+    if rules::schema_of(ctx.doc, to) != Some(s) {
+        return Err(refuse("to", "the entities belong to different schemas"));
     }
-    let id = new_id(ctx, Kind::Relationship)?;
-    ctx.doc.relationships.insert(id.clone(), Relationship { id: id.clone(), name, from, to, from_end, to_end });
-    Ok(json!({ "id": id }))
+    let r = ctx.doc.create(RELATIONSHIP).map_err(fail)?;
+    ctx.doc.set(r, relationship::FROM, Value::Ref(from)).map_err(fail)?;
+    ctx.doc.set(r, relationship::TO, Value::Ref(to)).map_err(fail)?;
+    ctx.doc.set(r, relationship::FROM_END, Value::Enum(from_end.index())).map_err(fail)?;
+    ctx.doc.set(r, relationship::TO_END, Value::Enum(to_end.index())).map_err(fail)?;
+    set_name(ctx, r, relationship::NAME, &name)?;
+    ctx.doc.push(s, schema::RELATIONSHIP, Value::Ref(r)).map_err(fail)?;
+    select(ctx, vec![r]);
+    Ok(json!({ "id": uuid_of(ctx.doc, r)? }))
 }
 
 fn relationship_set_ends(ctx: &mut C<'_>, p: &Params) -> R {
-    let id = id_of(ctx, p, "relationship", Kind::Relationship)?;
+    let r = id_of(ctx, p, "relationship", RELATIONSHIP)?;
     let (from_end, to_end) = (cardinality(p, "from_end")?, cardinality(p, "to_end")?);
-    let r = ctx.doc.relationships.get_mut(&id).ok_or_else(|| refuse("relationship", format!("there is no {id}")))?;
-    r.from_end = from_end;
-    r.to_end = to_end;
-    Ok(json!({ "id": id }))
+    ctx.doc.set(r, relationship::FROM_END, Value::Enum(from_end.index())).map_err(fail)?;
+    ctx.doc.set(r, relationship::TO_END, Value::Enum(to_end.index())).map_err(fail)?;
+    Ok(json!({ "id": uuid_of(ctx.doc, r)? }))
 }
 
 fn relationship_rename(ctx: &mut C<'_>, p: &Params) -> R {
-    let id = id_of(ctx, p, "relationship", Kind::Relationship)?;
-    let name = relationship_name(p)?;
-    ctx.doc.relationships.get_mut(&id).ok_or_else(|| refuse("relationship", format!("there is no {id}")))?.name = name;
-    Ok(json!({ "id": id }))
+    let r = id_of(ctx, p, "relationship", RELATIONSHIP)?;
+    let name = relationship_name(p)?.to_string();
+    set_name(ctx, r, relationship::NAME, &name)?;
+    Ok(json!({ "id": uuid_of(ctx.doc, r)? }))
 }
 
 fn relationship_remove(ctx: &mut C<'_>, p: &Params) -> R {
-    let id = id_of(ctx, p, "relationship", Kind::Relationship)?;
-    ctx.doc.relationships.remove(&id);
-    Ok(json!({ "removed": id }))
+    let r = id_of(ctx, p, "relationship", RELATIONSHIP)?;
+    let gone = archforge_core::destroy_with_links(ctx.doc, r).map_err(fail)?;
+    Ok(json!({ "removed": gone }))
 }
 
-/// The most ids a list may hold: one of every element the caps allow.
-const MAX_LIST: usize = MAX_ENTITIES + MAX_ATTRIBUTES + MAX_RELATIONSHIPS + MAX_DIAGRAMS;
-
-/// The ids of an array parameter: strings, none twice, at most [`MAX_LIST`].
-fn id_list(p: &Params, key: &str) -> Result<Vec<String>, CommandError> {
-    let items = p.get(key).and_then(Value::as_array).cloned().unwrap_or_default();
-    if items.len() > MAX_LIST {
-        return Err(refuse(key, format!("at most {MAX_LIST} ids")));
+/// The ids of an array parameter: strings naming live elements, none twice.
+fn id_list(ctx: &C<'_>, p: &Params, key: &str) -> Result<Vec<Obj>, CommandError> {
+    let items = p.get(key).and_then(Json::as_array).cloned().unwrap_or_default();
+    if items.len() > archforge_mof::store::MAX_LIST {
+        return Err(refuse(key, format!("at most {} ids", archforge_mof::store::MAX_LIST)));
     }
     let mut seen = BTreeSet::new();
-    let mut out = Vec::with_capacity(items.len().min(MAX_ENTITIES));
+    let mut out = Vec::with_capacity(items.len());
     for v in &items {
         let id = v.as_str().ok_or_else(|| refuse(key, "every id must be a string"))?;
-        if !seen.insert(id.to_string()) {
+        let uuid = Uuid::parse(id).ok_or_else(|| refuse(key, format!("{id:?} is not an id")))?;
+        let obj = ctx.doc.by_uuid(uuid).ok_or_else(|| refuse(key, format!("there is no element {id}")))?;
+        if !seen.insert(obj) {
             return Err(refuse(key, format!("{id} is listed twice")));
         }
-        out.push(id.to_string());
+        out.push(obj);
     }
     Ok(out)
 }
 
-/// Removes entities, attributes and relationships at once: the selection's delete.
+/// Removes schemas, entities, attributes and relationships at once: the selection's delete.
+/// Relationships and attributes first, then entities, then schemas, so a cascade finds nothing
+/// missing; what an earlier removal already took is skipped.
 fn remove_many(ctx: &mut C<'_>, p: &Params) -> R {
-    let ids = id_list(p, "ids")?;
+    let ids = id_list(ctx, p, "ids")?;
     if ids.is_empty() {
         return Err(refuse("ids", "nothing to remove"));
     }
-    let attributes = ctx.doc.attribute_ids();
-    for id in &ids {
-        match parse_id(id).map(|(k, _)| k) {
-            Some(Kind::Entity | Kind::Attribute | Kind::Relationship) if ctx.doc.contains_with(id, Some(&attributes)) => {}
-            Some(Kind::Diagram) => return Err(refuse("ids", format!("{id} is a diagram; remove it with er.diagram.remove"))),
-            _ => return Err(refuse("ids", format!("there is no {id}"))),
+    let mut by_class: Vec<(ClassId, Obj)> = Vec::new();
+    for o in &ids {
+        let class = ctx.doc.class_of(*o).map_err(fail)?;
+        if ![RELATIONSHIP, ATTRIBUTE, ENTITY, SCHEMA].contains(&class) {
+            return Err(refuse("ids", format!("{} is not an ER element", uuid_of(ctx.doc, *o)?)));
         }
+        by_class.push((class, *o));
     }
-    drop(attributes);
-    // Relationships and attributes first, then entities, so a cascade finds nothing missing.
-    let mut gone = BTreeSet::new();
-    for id in &ids {
-        match parse_id(id).map(|(k, _)| k) {
-            Some(Kind::Relationship) => {
-                ctx.doc.relationships.remove(id);
+    let order = [RELATIONSHIP, ATTRIBUTE, ENTITY, SCHEMA];
+    let mut gone = 0;
+    for class in order {
+        for (c, o) in &by_class {
+            if *c == class && ctx.doc.is_alive(*o) {
+                gone += if class == ENTITY { remove_entity(ctx.doc, *o) } else { archforge_core::destroy_with_links(ctx.doc, *o) }.map_err(fail)?;
             }
-            Some(Kind::Attribute) => {
-                gone.insert(id.as_str());
-            }
-            _ => {}
         }
     }
-    if !gone.is_empty() {
-        for e in ctx.doc.entities.values_mut() {
-            e.attributes.retain(|a| !gone.contains(a.id.as_str()));
-        }
-    }
-    for id in ids.iter().filter(|id| id.starts_with('e')) {
-        remove_entity(ctx.doc, id);
-    }
-    Ok(json!({ "removed": ids }))
+    Ok(json!({ "removed": gone }))
 }
 
-// Diagrams.
-
-fn diagram_add(ctx: &mut C<'_>, p: &Params) -> R {
-    let name = text(p, "name").to_string();
-    check_name("name", &name, MAX_NAME)?;
-    diagram_name_free(ctx.doc, &name, None)?;
-    if ctx.doc.diagrams.len() >= MAX_DIAGRAMS {
-        return Err(CommandError::new(format!("the model holds {MAX_DIAGRAMS} diagrams already")));
-    }
-    let id = new_id(ctx, Kind::Diagram)?;
-    ctx.doc.diagrams.insert(id.clone(), Diagram { id: id.clone(), name, places: Default::default() });
-    ctx.view.diagram = Some(id.clone());
-    Ok(json!({ "id": id }))
-}
-
-fn diagram_rename(ctx: &mut C<'_>, p: &Params) -> R {
-    let id = id_of(ctx, p, "diagram", Kind::Diagram)?;
-    let name = text(p, "name").to_string();
-    check_name("name", &name, MAX_NAME)?;
-    diagram_name_free(ctx.doc, &name, Some(&id))?;
-    ctx.doc.diagrams.get_mut(&id).ok_or_else(|| refuse("diagram", format!("there is no {id}")))?.name = name;
-    Ok(json!({ "id": id }))
-}
-
-fn diagram_remove(ctx: &mut C<'_>, p: &Params) -> R {
-    let id = id_of(ctx, p, "diagram", Kind::Diagram)?;
-    ctx.doc.diagrams.remove(&id);
-    Ok(json!({ "removed": id }))
-}
-
-fn diagram_place(ctx: &mut C<'_>, p: &Params) -> R {
-    let diagram = id_of(ctx, p, "diagram", Kind::Diagram)?;
-    let entity = id_of(ctx, p, "entity", Kind::Entity)?;
-    let place = Place { x: number(p, "x"), y: number(p, "y"), width: number(p, "width"), height: number(p, "height") };
-    place_ok(place.x, place.y, place.width, place.height)?;
-    places_left(ctx.doc)?;
-    let d = ctx.doc.diagrams.get_mut(&diagram).ok_or_else(|| refuse("diagram", format!("there is no {diagram}")))?;
-    if d.places.contains_key(&entity) {
-        return Err(refuse("entity", format!("{entity} is already on {diagram}")));
-    }
-    d.places.insert(entity.clone(), place);
-    Ok(json!({ "diagram": diagram, "entity": entity }))
-}
-
-fn diagram_move(ctx: &mut C<'_>, p: &Params) -> R {
-    let diagram = id_of(ctx, p, "diagram", Kind::Diagram)?;
-    let entities = id_list(p, "entities")?;
-    if entities.is_empty() {
-        return Err(refuse("entities", "nothing to move"));
-    }
-    let (dx, dy) = (number(p, "dx"), number(p, "dy"));
-    let d = ctx.doc.diagrams.get_mut(&diagram).ok_or_else(|| refuse("diagram", format!("there is no {diagram}")))?;
-    // Every box is checked before any moves.
-    for e in &entities {
-        let place = d.places.get(e).ok_or_else(|| refuse("entities", format!("{e} is not on {diagram}")))?;
-        if !(coord_ok(place.x + dx) && coord_ok(place.y + dy)) {
-            return Err(refuse("dx", format!("{e} would leave the diagram's range")));
-        }
-    }
-    for e in &entities {
-        if let Some(place) = d.places.get_mut(e) {
-            place.x += dx;
-            place.y += dy;
-        }
-    }
-    Ok(json!({ "moved": entities }))
-}
-
-fn diagram_resize(ctx: &mut C<'_>, p: &Params) -> R {
-    let diagram = id_of(ctx, p, "diagram", Kind::Diagram)?;
-    let entity = id_of(ctx, p, "entity", Kind::Entity)?;
-    let (width, height) = (number(p, "width"), number(p, "height"));
-    if !(size_ok(width) && size_ok(height)) {
-        return Err(refuse("width", "the size is out of range"));
-    }
-    let place = ctx
-        .doc
-        .diagrams
-        .get_mut(&diagram)
-        .and_then(|d| d.places.get_mut(&entity))
-        .ok_or_else(|| refuse("entity", format!("{entity} is not on {diagram}")))?;
-    place.width = width;
-    place.height = height;
-    Ok(json!({ "entity": entity }))
-}
-
-fn diagram_unplace(ctx: &mut C<'_>, p: &Params) -> R {
-    let diagram = id_of(ctx, p, "diagram", Kind::Diagram)?;
-    let entity = id_of(ctx, p, "entity", Kind::Entity)?;
-    let d = ctx.doc.diagrams.get_mut(&diagram).ok_or_else(|| refuse("diagram", format!("there is no {diagram}")))?;
-    if d.places.remove(&entity).is_none() {
-        return Err(refuse("entity", format!("{entity} is not on {diagram}")));
-    }
-    Ok(json!({ "diagram": diagram, "entity": entity }))
-}
-
-// The view.
-
-fn open_diagram(ctx: &mut C<'_>, p: &Params) -> R {
-    ctx.view.diagram = match text(p, "diagram") {
-        "" => None,
-        _ => Some(id_of(ctx, p, "diagram", Kind::Diagram)?),
-    };
-    Ok(Value::Null)
-}
-
-fn select(ctx: &mut C<'_>, p: &Params) -> R {
-    let ids = id_list(p, "ids")?;
-    let attributes = ids.iter().any(|id| id.starts_with('a')).then(|| ctx.doc.attribute_ids());
-    if let Some(missing) = ids.iter().find(|id| !ctx.doc.contains_with(id, attributes.as_ref())) {
-        return Err(refuse("ids", format!("there is no {missing}")));
-    }
+fn view_select(ctx: &mut C<'_>, p: &Params) -> R {
+    let ids = id_list(ctx, p, "ids")?;
     ctx.view.selection = ids;
-    Ok(Value::Null)
+    Ok(Json::Null)
 }
 
 // Queries.
 
-fn entity_list(ctx: &mut C<'_>, _: &Params) -> R {
-    Ok(Value::Array(ctx.doc.entities.values().map(|e| json!({ "id": e.id, "name": e.name })).collect()))
+fn uuid_json(store: &Store, obj: Obj) -> Json {
+    store.uuid(obj).map(|u| Json::String(u.to_string())).unwrap_or(Json::Null)
 }
 
-fn diagram_list(ctx: &mut C<'_>, _: &Params) -> R {
-    Ok(Value::Array(ctx.doc.diagrams.values().map(|d| json!({ "id": d.id, "name": d.name, "places": d.places.len() })).collect()))
+fn attribute_json(store: &Store, a: Obj) -> Json {
+    let flag = |p| store.get(a, p).ok().and_then(|v| v.as_bool()).unwrap_or(false);
+    json!({
+        "id": uuid_json(store, a),
+        "name": name_of(store, a),
+        "type": store.get(a, attribute::TYPE).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default(),
+        "primary_key": flag(attribute::PRIMARY_KEY),
+        "nullable": flag(attribute::NULLABLE),
+        "unique": flag(attribute::UNIQUE),
+    })
+}
+
+fn entity_json(store: &Store, e: Obj) -> Json {
+    let attributes: Vec<Json> =
+        store.list(e, entity::ATTRIBUTE).unwrap_or_default().iter().filter_map(Value::as_ref).map(|a| attribute_json(store, a)).collect();
+    json!({ "id": uuid_json(store, e), "name": name_of(store, e), "attributes": attributes })
+}
+
+fn relationship_json(store: &Store, r: Obj) -> Json {
+    let end = |p| store.get(r, p).ok().and_then(|v| v.as_ref()).map(|e| uuid_json(store, e)).unwrap_or(Json::Null);
+    let card = |p| store.get(r, p).ok().and_then(|v| if let Value::Enum(i) = v { Cardinality::from_index(i) } else { None }).map(cardinality_name);
+    json!({
+        "id": uuid_json(store, r),
+        "name": store.get(r, relationship::NAME).ok().and_then(|v| v.as_str().map(str::to_string)),
+        "from": end(relationship::FROM),
+        "to": end(relationship::TO),
+        "from_end": card(relationship::FROM_END),
+        "to_end": card(relationship::TO_END),
+    })
+}
+
+fn schema_list(ctx: &mut C<'_>, _: &Params) -> R {
+    let list: Vec<Json> = ctx
+        .doc
+        .alive()
+        .filter(|o| ctx.doc.class_of(*o).ok() == Some(SCHEMA))
+        .map(|s| json!({ "id": uuid_json(ctx.doc, s), "name": name_of(ctx.doc, s) }))
+        .collect();
+    Ok(Json::Array(list))
+}
+
+fn entity_list(ctx: &mut C<'_>, p: &Params) -> R {
+    let s = id_of(ctx, p, "schema", SCHEMA)?;
+    let list: Vec<Json> = ctx
+        .doc
+        .list(s, schema::ENTITY)
+        .map_err(fail)?
+        .iter()
+        .filter_map(Value::as_ref)
+        .map(|e| json!({ "id": uuid_json(ctx.doc, e), "name": name_of(ctx.doc, e) }))
+        .collect();
+    Ok(Json::Array(list))
 }
 
 fn entity_get(ctx: &mut C<'_>, p: &Params) -> R {
-    let id = id_of(ctx, p, "entity", Kind::Entity)?;
-    let e = ctx.doc.entities.get(&id).ok_or_else(|| refuse("entity", format!("there is no {id}")))?;
-    serde_json::to_value(e).map_err(|e| CommandError::new(e.to_string()))
+    let e = id_of(ctx, p, "entity", ENTITY)?;
+    Ok(entity_json(ctx.doc, e))
 }
 
-fn diagram_get(ctx: &mut C<'_>, p: &Params) -> R {
-    let id = id_of(ctx, p, "diagram", Kind::Diagram)?;
-    let d = ctx.doc.diagrams.get(&id).ok_or_else(|| refuse("diagram", format!("there is no {id}")))?;
-    serde_json::to_value(d).map_err(|e| CommandError::new(e.to_string()))
+fn schema_get(ctx: &mut C<'_>, p: &Params) -> R {
+    let s = id_of(ctx, p, "schema", SCHEMA)?;
+    let entities: Vec<Json> =
+        ctx.doc.list(s, schema::ENTITY).map_err(fail)?.iter().filter_map(Value::as_ref).map(|e| entity_json(ctx.doc, e)).collect();
+    let relationships: Vec<Json> =
+        ctx.doc.list(s, schema::RELATIONSHIP).map_err(fail)?.iter().filter_map(Value::as_ref).map(|r| relationship_json(ctx.doc, r)).collect();
+    Ok(json!({ "id": uuid_json(ctx.doc, s), "name": name_of(ctx.doc, s), "entities": entities, "relationships": relationships }))
 }
 
-fn model_get(ctx: &mut C<'_>, _: &Params) -> R {
-    serde_json::to_value(&**ctx.doc).map_err(|e| CommandError::new(e.to_string()))
-}
-
-/// The ER notation's command table, after the edit area.
-pub fn specs() -> Vec<CommandSpec<crate::Doc, ErView>> {
+/// The ER notation's command table, with the edit area.
+pub fn specs() -> Vec<CommandSpec<Store, ErView>> {
     let mut s = archforge_engine::cmd::edit::specs();
     s.extend([
-        cmd!("er.entity.add", "Add entity", &["Model"], Some("Ctrl+E"),
-            "name: string; the entity's name\ndiagram: string = \"\"; a diagram to place it in, none when empty\nx: number = 0, -1000000..1000000; where in that diagram\ny: number = 0, -1000000..1000000; where in that diagram",
-            always, entity_add),
-        cmd!("er.entity.rename", "Rename entity", &["Model"], None, "entity: string; the entity's id\nname: string; its new name", has_entities, entity_rename),
-        cmd!("er.entity.remove", "Remove entity", &["Model"], None, "entity: string; the entity's id, removed with its relationships and places", has_entities, entity_remove),
-        cmd!("er.attribute.add", "Add attribute", &["Model"], None,
-            "entity: string; the entity's id\nname: string; the attribute's name\nkind: string = \"TEXT\"; the column type as written\nprimary_key: bool = false; whether it is part of the key\nnullable: string = \"auto\", auto|yes|no; auto: nullable unless it is a key\nunique: bool = false; whether its values are unique\nat: integer = -1, -1..199; its position, the end when -1",
-            has_entities, attribute_add),
-        cmd!("er.attribute.rename", "Rename attribute", &["Model"], None, "attribute: string; the attribute's id\nname: string; its new name", has_entities, attribute_rename),
-        cmd!("er.attribute.set-kind", "Change attribute type", &["Model"], None, "attribute: string; the attribute's id\nkind: string; the column type as written", has_entities, attribute_set_kind),
-        cmd!("er.attribute.set-flags", "Change attribute flags", &["Model"], None,
-            "attribute: string; the attribute's id\nprimary_key: bool; whether it is part of the key\nnullable: string, auto|yes|no; auto: nullable unless it is a key\nunique: bool; whether its values are unique",
-            has_entities, attribute_set_flags),
-        cmd!("er.attribute.move", "Move attribute", &["Model"], None, "attribute: string; the attribute's id\nto: integer, 0..199; its new position", has_entities, attribute_move),
-        cmd!("er.attribute.remove", "Remove attribute", &["Model"], None, "attribute: string; the attribute's id", has_entities, attribute_remove),
-        cmd!("er.relationship.add", "Add relationship", &["Model"], None,
-            "from: string; the id of the entity at one end\nto: string; the id of the entity at the other end\nfrom_end: string, zero-or-one|exactly-one|zero-or-more|one-or-more; how many take part at the from end\nto_end: string, zero-or-one|exactly-one|zero-or-more|one-or-more; how many take part at the to end\nname: string = \"\"; its name, none when empty",
-            has_entities, relationship_add),
-        cmd!("er.relationship.set-ends", "Change relationship ends", &["Model"], None,
-            "relationship: string; the relationship's id\nfrom_end: string, zero-or-one|exactly-one|zero-or-more|one-or-more; how many take part at the from end\nto_end: string, zero-or-one|exactly-one|zero-or-more|one-or-more; how many take part at the to end",
-            has_entities, relationship_set_ends),
-        cmd!("er.relationship.rename", "Rename relationship", &["Model"], None, "relationship: string; the relationship's id\nname: string; its new name, none when empty", has_entities, relationship_rename),
-        cmd!("er.relationship.remove", "Remove relationship", &["Model"], None, "relationship: string; the relationship's id", has_entities, relationship_remove),
-        cmd!("er.remove", "Delete", &["Model"], Some("Delete"), "ids: array; the entities, attributes and relationships to remove", has_entities, remove_many),
-        cmd!("er.diagram.add", "Add diagram", &["Diagram"], None, "name: string; the diagram's name", always, diagram_add),
-        cmd!("er.diagram.rename", "Rename diagram", &["Diagram"], None, "diagram: string; the diagram's id\nname: string; its new name", has_diagrams, diagram_rename),
-        cmd!("er.diagram.remove", "Remove diagram", &["Diagram"], None, "diagram: string; the diagram's id", has_diagrams, diagram_remove),
-        cmd!("er.diagram.place", "Show entity on diagram", &["Diagram"], None,
-            "diagram: string; the diagram's id\nentity: string; the entity's id\nx: number, -1000000..1000000; where its box goes\ny: number, -1000000..1000000; where its box goes\nwidth: number = 200, 20..10000; the box's width\nheight: number = 120, 20..10000; the box's height",
-            has_diagrams, diagram_place),
-        cmd!("er.diagram.move", "Move", &["Diagram"], None,
-            "diagram: string; the diagram's id\nentities: array; the ids of the entities to move, all on that diagram\ndx: number, -2000000..2000000; how far across\ndy: number, -2000000..2000000; how far down",
-            has_diagrams, diagram_move),
-        cmd!("er.diagram.resize", "Resize", &["Diagram"], None,
-            "diagram: string; the diagram's id\nentity: string; the entity's id\nwidth: number, 20..10000; the box's width\nheight: number, 20..10000; the box's height",
-            has_diagrams, diagram_resize),
-        cmd!("er.diagram.unplace", "Hide entity from diagram", &["Diagram"], None, "diagram: string; the diagram's id\nentity: string; the entity's id", has_diagrams, diagram_unplace),
-        cmd!(noundo "view.open-diagram", "Open diagram", &["View"], None, "diagram: string; the diagram's id, none when empty", always, open_diagram),
-        cmd!(noundo "view.select", "Select", &["View"], None, "ids: array = []; the elements to select", always, select),
-        cmd!(query "er.entity.list", "List entities", &["Model"], None, "", always, entity_list),
-        cmd!(query "er.diagram.list", "List diagrams", &["Diagram"], None, "", always, diagram_list),
-        cmd!(query "er.entity.get", "Show entity", &["Model"], None, "entity: string; the entity's id", has_entities, entity_get),
-        cmd!(query "er.diagram.get", "Show diagram", &["Diagram"], None, "diagram: string; the diagram's id", has_diagrams, diagram_get),
-        cmd!(query "er.model.get", "Show model", &["Model"], None, "", always, model_get),
+        cmd!("er.schema.add", "Add schema", &["Schema"], None, "name: string; the schema's name", always, schema_add),
+        cmd!("er.schema.rename", "Rename schema", &["Schema"], None, "schema: string; the schema's id\nname: string; the new name", has_schemas, schema_rename),
+        cmd!("er.schema.remove", "Remove schema", &["Schema"], None, "schema: string; the schema's id", has_schemas, schema_remove),
+        cmd!("er.entity.add", "Add entity", &["Entity"], Some("Ctrl+E"), "schema: string; the schema's id\nname: string; the entity's name", has_schemas, entity_add),
+        cmd!("er.entity.rename", "Rename entity", &["Entity"], None, "entity: string; the entity's id\nname: string; the new name", has_entities, entity_rename),
+        cmd!("er.entity.remove", "Remove entity", &["Entity"], None, "entity: string; the entity's id", has_entities, entity_remove),
+        cmd!(
+            "er.attribute.add",
+            "Add attribute",
+            &["Entity"],
+            None,
+            "entity: string; the entity's id\nname: string; the attribute's name\ntype: string = \"\"; its type, free text\nprimary_key: bool = false; part of the key\nnullable: string = \"auto\", auto|yes|no; nullable (auto: a key is not)\nunique: bool = false; unique\nat: integer = -1, -1..1000000; where in the entity, -1 for the end",
+            has_entities,
+            attribute_add
+        ),
+        cmd!("er.attribute.rename", "Rename attribute", &["Entity"], None, "attribute: string; the attribute's id\nname: string; the new name", has_entities, attribute_rename),
+        cmd!("er.attribute.set-type", "Set attribute type", &["Entity"], None, "attribute: string; the attribute's id\ntype: string = \"\"; its type, free text", has_entities, attribute_set_type),
+        cmd!(
+            "er.attribute.set-flags",
+            "Set attribute flags",
+            &["Entity"],
+            None,
+            "attribute: string; the attribute's id\nprimary_key: bool; part of the key\nnullable: string, auto|yes|no; nullable (auto: a key is not)\nunique: bool; unique",
+            has_entities,
+            attribute_set_flags
+        ),
+        cmd!("er.attribute.move", "Move attribute", &["Entity"], None, "attribute: string; the attribute's id\nto: integer, 0..1000000; its new place", has_entities, attribute_move),
+        cmd!("er.attribute.remove", "Remove attribute", &["Entity"], None, "attribute: string; the attribute's id", has_entities, attribute_remove),
+        cmd!(
+            "er.relationship.add",
+            "Add relationship",
+            &["Relationship"],
+            None,
+            "from: string; the first entity's id\nto: string; the second entity's id\nfrom_end: string = \"exactly-one\", zero-or-one|exactly-one|zero-or-more|one-or-more; the cardinality at the first end\nto_end: string = \"zero-or-more\", zero-or-one|exactly-one|zero-or-more|one-or-more; the cardinality at the second end\nname: string = \"\"; a name, or nothing",
+            has_entities,
+            relationship_add
+        ),
+        cmd!(
+            "er.relationship.set-ends",
+            "Set relationship ends",
+            &["Relationship"],
+            None,
+            "relationship: string; the relationship's id\nfrom_end: string = \"exactly-one\", zero-or-one|exactly-one|zero-or-more|one-or-more; the cardinality at the first end\nto_end: string = \"zero-or-more\", zero-or-one|exactly-one|zero-or-more|one-or-more; the cardinality at the second end",
+            has_entities,
+            relationship_set_ends
+        ),
+        cmd!("er.relationship.rename", "Rename relationship", &["Relationship"], None, "relationship: string; the relationship's id\nname: string = \"\"; the new name, or nothing", has_entities, relationship_rename),
+        cmd!("er.relationship.remove", "Remove relationship", &["Relationship"], None, "relationship: string; the relationship's id", has_entities, relationship_remove),
+        cmd!("er.remove", "Remove", &["Edit"], Some("Delete"), "ids: array; the ids of what goes", has_schemas, remove_many),
+        cmd!(noundo "view.select", "Select", &["View"], None, "ids: array = []; the ids selected", always, view_select),
+        cmd!(query "er.schema.list", "List schemas", &["Schema"], None, "", always, schema_list),
+        cmd!(query "er.schema.get", "Get schema", &["Schema"], None, "schema: string; the schema's id", has_schemas, schema_get),
+        cmd!(query "er.entity.list", "List entities", &["Entity"], None, "schema: string; the schema's id", has_schemas, entity_list),
+        cmd!(query "er.entity.get", "Get entity", &["Entity"], None, "entity: string; the entity's id", has_entities, entity_get),
     ]);
     s
 }
