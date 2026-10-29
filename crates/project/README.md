@@ -5,7 +5,7 @@ database, `project`, whose `settings` table says what the project is and whose `
 the ER model. Creates it, opens it (upgrading an older format), reads its settings back, stores and
 loads the ER model, and closes it.
 
-**Layer.** Host services, layer 8, above `archforge-dolt`: the application uses it, the interface
+**Layer.** Host services, layer 9, above `archforge-dolt`: the application uses it, the interface
 never depends on it.
 
 **Binding rules.** A name follows `archforge-names`. A creation validates first, keeps a marker

@@ -9,7 +9,7 @@
 //! events (the server crate overrides them), its own `.dolt` must hold nothing Archforge does not
 //! leave there, and its settings are read with a cap on every value. A creation that did not finish
 //! keeps a marker file, so it reads as unfinished, never as damaged, and is never removed for the
-//! user. Host services, layer 8: the interface never depends on this crate.
+//! user. Host services, layer 9: the interface never depends on this crate.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
 mod er;

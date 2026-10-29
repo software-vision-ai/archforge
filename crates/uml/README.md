@@ -5,7 +5,8 @@ concrete), 622 class-owned properties (73 derived, without a field), 13 enumerat
 primitive types, generated from OMG's `UML.xmi` by `cargo xtask generate uml`. Only `lib.rs` is
 written by hand.
 
-**Layer.** 5, above `archforge-mof`; pure, builds for the portable target.
+**Layer.** 6, the notations' layer above the MOF core (4) and the shared core (5); pure, builds for
+the portable target.
 
 **Binding rules.** Decision gm2.18: the metamodel is data read at build time and compiled in; nothing
 at runtime redefines it. The XMI is read from the folder `ARCHFORGE_SPECS_DIR` names, outside the
@@ -37,7 +38,9 @@ redefines `isAbstract`), the redefining property is the class's: `class::IS_ABST
 **Measured** (release, M4 Max): a million UML objects (classes with three typed attributes and
 their multiplicity literals), rename p99 well inside a frame; see the test's output.
 
-**Tests.** `tests/uml.rs`: the universe builds with the file's counts and the key inheritance and
+**Tests.** `tests/core_over_uml.rs`: the shared core and UML in one store (a Folder holding a
+Package, comments, tags and links across the two, destroy with links and undo, the core's rules, the
+sweep). `tests/uml.rs`: the universe builds with the file's counts and the key inheritance and
 derived-union facts; a package with a class and a typed attribute behaves as UML says through the
 store (both ends of `ownedAttribute` and `class`, containment, `ownedElement`, `ownedMember`,
 `attribute`, defaults, destroy and undo); the adversarial sweep over a session of generic commands;

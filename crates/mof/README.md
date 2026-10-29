@@ -6,8 +6,8 @@ store enforces on every change, the indexes it keeps, and the reflective access 
 It knows no metamodel of its own: generated code (one crate per metamodel) brings the typed slabs
 and a `Reflect` per metaclass.
 
-**Layer.** 4, above the engine; pure, builds for the portable target. The generated metamodel
-crates come at 5.
+**Layer.** 4, above the engine; pure, builds for the portable target. The shared core
+metamodel comes at 5, the notations' generated metamodels at 6.
 
 **Binding rules.** Decisions gm2.18 to gm2.20 and the spike gm2.24. MOF 2.5.1, EMOF plus subsets,
 derived unions, read-only redefinition resolution and association-owned ends; no operations,

@@ -57,6 +57,51 @@ pub trait Slabs: Send + 'static {
     fn bytes(&self) -> usize;
 }
 
+/// The slabs of several metamodels as one, dispatching on the class's metamodel index, so one store
+/// holds objects of every metamodel a project uses.
+#[derive(Default)]
+pub struct CompositeSlabs {
+    parts: Vec<(u16, Box<dyn Slabs>)>,
+}
+
+impl CompositeSlabs {
+    pub fn new() -> CompositeSlabs {
+        CompositeSlabs::default()
+    }
+
+    /// Adds a metamodel's slabs; a second set for the same index is refused.
+    pub fn with(mut self, index: u16, slabs: Box<dyn Slabs>) -> Result<CompositeSlabs, String> {
+        if self.parts.iter().any(|(i, _)| *i == index) {
+            return Err(format!("two slab sets for the metamodel index {index}"));
+        }
+        self.parts.push((index, slabs));
+        Ok(self)
+    }
+
+    fn part(&self, class: ClassId) -> Option<&dyn Slabs> {
+        self.parts.iter().find(|(i, _)| *i == class.metamodel()).map(|(_, s)| s.as_ref())
+    }
+
+    fn part_mut(&mut self, class: ClassId) -> Option<&mut Box<dyn Slabs>> {
+        self.parts.iter_mut().find(|(i, _)| *i == class.metamodel()).map(|(_, s)| s)
+    }
+}
+
+impl Slabs for CompositeSlabs {
+    fn create(&mut self, class: ClassId) -> Option<u32> {
+        self.part_mut(class)?.create(class)
+    }
+    fn object(&self, class: ClassId, slot: u32) -> Option<&dyn Reflect> {
+        self.part(class)?.object(class, slot)
+    }
+    fn object_mut(&mut self, class: ClassId, slot: u32) -> Option<&mut dyn Reflect> {
+        self.part_mut(class)?.object_mut(class, slot)
+    }
+    fn bytes(&self) -> usize {
+        self.parts.iter().map(|(_, s)| s.bytes()).fold(0usize, usize::saturating_add)
+    }
+}
+
 /// One change with an exact inverse.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Op {
@@ -177,6 +222,8 @@ pub enum Invalid {
     NoFit(String),
     /// A rollback failed, so the store's state is unknown: it refuses every change from now on.
     Corrupt(String),
+    /// A notation's own rule refused the change; its words.
+    Refused(String),
     /// The generated code refused; its message.
     Internal(String),
 }
@@ -206,6 +253,7 @@ impl fmt::Display for Invalid {
             Invalid::NotFinite(p) => write!(f, "{p} takes a finite number"),
             Invalid::NoFit(why) => write!(f, "the change does not fit the model's state: {why}"),
             Invalid::Corrupt(why) => write!(f, "the model's state is unknown after a failed rollback ({why}); reopen the project"),
+            Invalid::Refused(why) => f.write_str(why),
             Invalid::Internal(why) => write!(f, "{why}"),
         }
     }
@@ -555,6 +603,12 @@ impl Store {
 
     // The semantic level. Each operation is atomic: on a refusal the ops it performed so far are
     // taken back, so the store is as it was.
+
+    /// Runs `f`, several changes as one: a failure anywhere in it leaves nothing of it behind, inside
+    /// or outside an engine recording (inside one, the ops stay part of the engine's delta).
+    pub fn transaction<T>(&mut self, f: impl FnOnce(&mut Store) -> R<T>) -> R<T> {
+        self.atomic(f)
+    }
 
     /// Runs `f` so that a failure leaves nothing of it behind.
     fn atomic<T>(&mut self, f: impl FnOnce(&mut Store) -> R<T>) -> R<T> {
