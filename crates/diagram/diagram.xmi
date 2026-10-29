@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The diagram metamodel for every notation (decision gm2.21): a diagram of some element shows
+     model elements as nodes and relationships as edges, in the spirit of OMG DI but our own. A node
+     or a label carries no model text; it draws its element's. Coordinates are doubles in one logical
+     unit, absolute in the diagram's space (a child's too). Generated into crates/diagram/src/generated
+     by `cargo xtask generate diagram`. -->
+<xmi:XMI xmlns:uml="http://www.omg.org/spec/UML/20131001" xmlns:xmi="http://www.omg.org/spec/XMI/20131001">
+  <uml:Package xmi:type="uml:Package" xmi:id="_0" name="diagram" URI="archforge:diagram">
+    <packagedElement xmi:type="uml:Enumeration" xmi:id="LabelPlace" name="LabelPlace">
+      <ownedLiteral xmi:type="uml:EnumerationLiteral" xmi:id="LabelPlace-source" name="source"/>
+      <ownedLiteral xmi:type="uml:EnumerationLiteral" xmi:id="LabelPlace-middle" name="middle"/>
+      <ownedLiteral xmi:type="uml:EnumerationLiteral" xmi:id="LabelPlace-target" name="target"/>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Class" xmi:id="Element" name="Element" isAbstract="true">
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Element-ownedElement" name="ownedElement" isReadOnly="true" isDerived="true" isDerivedUnion="true" aggregation="composite">
+        <type href="archforge:mof#Any"/>
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Element-ownedElement-_lowerValue"/>
+        <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="Element-ownedElement-_upperValue" value="*"/>
+      </ownedAttribute>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Class" xmi:id="Diagram" name="Diagram">
+      <generalization xmi:type="uml:Generalization" xmi:id="Diagram-_generalization" general="Element"/>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Diagram-kind" name="kind">
+        <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Diagram-name" name="name">
+        <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String"/>
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Diagram-name-_lowerValue"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Diagram-element" name="element">
+        <type href="archforge:mof#Any"/>
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Diagram-element-_lowerValue"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Diagram-node" name="node" type="Node" isOrdered="true" aggregation="composite" subsettedProperty="Element-ownedElement">
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Diagram-node-_lowerValue"/>
+        <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="Diagram-node-_upperValue" value="*"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Diagram-edge" name="edge" type="Edge" isOrdered="true" aggregation="composite" subsettedProperty="Element-ownedElement">
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Diagram-edge-_lowerValue"/>
+        <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="Diagram-edge-_upperValue" value="*"/>
+      </ownedAttribute>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Class" xmi:id="Node" name="Node">
+      <generalization xmi:type="uml:Generalization" xmi:id="Node-_generalization" general="Element"/>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Node-element" name="element">
+        <type href="archforge:mof#Any"/>
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Node-element-_lowerValue"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Node-kind" name="kind">
+        <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String"/>
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Node-kind-_lowerValue"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Node-text" name="text">
+        <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String"/>
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Node-text-_lowerValue"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Node-x" name="x">
+        <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Real"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Node-y" name="y">
+        <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Real"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Node-width" name="width">
+        <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Real"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Node-height" name="height">
+        <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Real"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Node-child" name="child" type="Node" isOrdered="true" aggregation="composite" subsettedProperty="Element-ownedElement">
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Node-child-_lowerValue"/>
+        <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="Node-child-_upperValue" value="*"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Node-style" name="style" type="Style" aggregation="composite" subsettedProperty="Element-ownedElement">
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Node-style-_lowerValue"/>
+      </ownedAttribute>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Class" xmi:id="Edge" name="Edge">
+      <generalization xmi:type="uml:Generalization" xmi:id="Edge-_generalization" general="Element"/>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Edge-element" name="element">
+        <type href="archforge:mof#Any"/>
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Edge-element-_lowerValue"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Edge-source" name="source" type="Node"/>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Edge-target" name="target" type="Node"/>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Edge-waypoint" name="waypoint" type="Point" isOrdered="true" aggregation="composite" subsettedProperty="Element-ownedElement">
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Edge-waypoint-_lowerValue"/>
+        <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="Edge-waypoint-_upperValue" value="*"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Edge-label" name="label" type="Label" isOrdered="true" aggregation="composite" subsettedProperty="Element-ownedElement">
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Edge-label-_lowerValue"/>
+        <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="Edge-label-_upperValue" value="*"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Edge-style" name="style" type="Style" aggregation="composite" subsettedProperty="Element-ownedElement">
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Edge-style-_lowerValue"/>
+      </ownedAttribute>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Class" xmi:id="Point" name="Point">
+      <generalization xmi:type="uml:Generalization" xmi:id="Point-_generalization" general="Element"/>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Point-x" name="x">
+        <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Real"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Point-y" name="y">
+        <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Real"/>
+      </ownedAttribute>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Class" xmi:id="Label" name="Label">
+      <generalization xmi:type="uml:Generalization" xmi:id="Label-_generalization" general="Element"/>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Label-kind" name="kind">
+        <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Label-at" name="at" type="LabelPlace">
+        <defaultValue xmi:type="uml:InstanceValue" xmi:id="Label-at-_defaultValue" type="LabelPlace" instance="LabelPlace-middle"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Label-dx" name="dx">
+        <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Real"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Label-dy" name="dy">
+        <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Real"/>
+      </ownedAttribute>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Class" xmi:id="Style" name="Style">
+      <generalization xmi:type="uml:Generalization" xmi:id="Style-_generalization" general="Element"/>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Style-name" name="name">
+        <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String"/>
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Style-name-_lowerValue"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Style-fill" name="fill">
+        <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String"/>
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Style-fill-_lowerValue"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Style-stroke" name="stroke">
+        <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String"/>
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Style-stroke-_lowerValue"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Style-text" name="text">
+        <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String"/>
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Style-text-_lowerValue"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Style-line" name="line">
+        <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Real"/>
+      </ownedAttribute>
+    </packagedElement>
+  </uml:Package>
+</xmi:XMI>

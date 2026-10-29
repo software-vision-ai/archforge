@@ -35,6 +35,9 @@ pub const TABLE: &[(&str, Class)] = &[
     ("mof", Class::Layer(4)),
     // The shared core metamodel (comments, tags, folders, trace links), generated from our XMI.
     ("core", Class::Layer(5)),
+    // The diagram metamodel for every notation (diagrams, nodes, edges, labels, styles), generated
+    // from our XMI, with the generic diagram commands and the spatial index; knows no notation.
+    ("diagram", Class::Layer(5)),
     // The notations' metamodels, generated over the MOF core and the shared core: UML from OMG's XMI.
     ("uml", Class::Layer(6)),
     // The ER notation: its metamodel generated from our XMI, its commands on the MOF core.

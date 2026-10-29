@@ -10,6 +10,7 @@ publish = false
 
 [dependencies]
 archforge-core.workspace = true
+archforge-diagram.workspace = true
 archforge-engine.workspace = true
 archforge-mof.workspace = true
 serde_json.workspace = true

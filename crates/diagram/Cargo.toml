@@ -1,0 +1,21 @@
+[package]
+name = "archforge-diagram"
+description = "The diagram metamodel for every notation: diagrams, nodes, edges, labels and styles over the MOF core, with the generic diagram commands and the spatial index"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+archforge-engine.workspace = true
+archforge-mof.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+archforge-engine = { workspace = true, features = ["testing"] }
+archforge-mof = { workspace = true, features = ["testing"] }
+
+[lints]
+workspace = true

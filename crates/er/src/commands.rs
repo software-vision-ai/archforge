@@ -117,7 +117,7 @@ fn schema_rename(ctx: &mut C<'_>, p: &Params) -> R {
 
 fn schema_remove(ctx: &mut C<'_>, p: &Params) -> R {
     let s = id_of(ctx, p, "schema", SCHEMA)?;
-    let gone = archforge_core::destroy_with_links(ctx.doc, s).map_err(fail)?;
+    let gone = remove_element(ctx.doc, s).map_err(fail)?;
     Ok(json!({ "removed": gone }))
 }
 
@@ -150,8 +150,17 @@ fn entity_rename(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, e)? }))
 }
 
-/// Removes an entity with its attributes, the relationships that reach it, and the trace links on
-/// any of them.
+/// Removes an ER element with everything it contains, the diagrams of it, the nodes and edges that
+/// show any of them, and the trace links on any of them, in one step.
+pub fn remove_element(store: &mut Store, obj: Obj) -> Result<usize, Invalid> {
+    store.transaction(|st| {
+        let views = archforge_diagram::remove_views_of(st, obj)?;
+        Ok(views + archforge_core::destroy_with_links(st, obj)?)
+    })
+}
+
+/// Removes an entity with its attributes, the relationships that reach it, the views of any of
+/// them, and the trace links on any of them.
 pub fn remove_entity(store: &mut Store, e: Obj) -> Result<usize, Invalid> {
     store.transaction(|st| {
         let mut gone = 0;
@@ -159,10 +168,10 @@ pub fn remove_entity(store: &mut Store, e: Obj) -> Result<usize, Invalid> {
             st.referrers(e).into_iter().filter(|(_, prop)| *prop == relationship::FROM || *prop == relationship::TO).map(|(r, _)| r).collect();
         for r in relationships {
             if st.is_alive(r) {
-                gone += archforge_core::destroy_with_links(st, r)?;
+                gone += remove_element(st, r)?;
             }
         }
-        gone += archforge_core::destroy_with_links(st, e)?;
+        gone += remove_element(st, e)?;
         Ok(gone)
     })
 }
@@ -271,7 +280,7 @@ fn attribute_move(ctx: &mut C<'_>, p: &Params) -> R {
 
 fn attribute_remove(ctx: &mut C<'_>, p: &Params) -> R {
     let a = id_of(ctx, p, "attribute", ATTRIBUTE)?;
-    let gone = archforge_core::destroy_with_links(ctx.doc, a).map_err(fail)?;
+    let gone = remove_element(ctx.doc, a).map_err(fail)?;
     Ok(json!({ "removed": gone }))
 }
 
@@ -344,7 +353,7 @@ fn relationship_rename(ctx: &mut C<'_>, p: &Params) -> R {
 
 fn relationship_remove(ctx: &mut C<'_>, p: &Params) -> R {
     let r = id_of(ctx, p, "relationship", RELATIONSHIP)?;
-    let gone = archforge_core::destroy_with_links(ctx.doc, r).map_err(fail)?;
+    let gone = remove_element(ctx.doc, r).map_err(fail)?;
     Ok(json!({ "removed": gone }))
 }
 
@@ -389,7 +398,7 @@ fn remove_many(ctx: &mut C<'_>, p: &Params) -> R {
     for class in order {
         for (c, o) in &by_class {
             if *c == class && ctx.doc.is_alive(*o) {
-                gone += if class == ENTITY { remove_entity(ctx.doc, *o) } else { archforge_core::destroy_with_links(ctx.doc, *o) }.map_err(fail)?;
+                gone += if class == ENTITY { remove_entity(ctx.doc, *o) } else { remove_element(ctx.doc, *o) }.map_err(fail)?;
             }
         }
     }
