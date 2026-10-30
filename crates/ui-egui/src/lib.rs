@@ -13,6 +13,7 @@ pub mod i18n;
 pub mod new_project;
 #[cfg(feature = "snapshot")]
 pub mod offscreen;
+pub mod panels;
 pub mod state;
 pub mod theme;
 pub mod ux;
@@ -122,6 +123,8 @@ pub struct Shell {
     adopted: Option<std::path::PathBuf>,
     /// The Models explorer's own state: folds, filter, a name being typed, the dialogs.
     pub explorer: explorer::State,
+    /// The right panels' own state: the open editors and the last refusal.
+    pub panels: panels::State,
     /// Set by `request_quit`; the next frame closes the window.
     quit_requested: bool,
 }
@@ -146,6 +149,7 @@ impl Shell {
             session_error: None,
             adopted: None,
             explorer: explorer::State::default(),
+            panels: panels::State::default(),
             quit_requested: false,
         }
     }
@@ -165,6 +169,7 @@ impl Shell {
         self.session_error = None;
         self.adopted = None;
         self.explorer = explorer::State::default();
+        self.panels = panels::State::default();
     }
 
     /// Where the open project lives, as the status bar says it: the label of the folder new
@@ -237,6 +242,7 @@ impl Shell {
         self.adopt_project();
         if let Some(session) = &self.session {
             explorer::retain_valid(&mut self.explorer, session.doc());
+            panels::retain_valid(&mut self.panels, session.doc());
         }
         if std::mem::take(&mut self.quit_requested) {
             // Quitting goes through the normal close path, so the exit hook runs.

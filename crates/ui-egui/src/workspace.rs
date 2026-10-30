@@ -35,8 +35,6 @@ const DIVIDER: f32 = 12.0;
 /// A rail button and the pitch between two.
 const RAIL_BUTTON: Vec2 = vec2(32.0, 36.0);
 const RAIL_PITCH: f32 = 46.0;
-/// A field's height in the panel.
-const FIELD: f32 = 28.0;
 
 /// The explorers of the activity rail: automation id, the explorer, its icon and its title.
 const EXPLORERS: [(&str, Explorer, &ux::Icon, &str); 3] = [
@@ -330,53 +328,18 @@ fn right_rail(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     }
 }
 
-/// The right panel: its header with the collapse control, then its content. Properties shows the
-/// model root, the one element the project has; the other panels say what is true until their
-/// slices.
-fn panel(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, name: &str) {
-    // `name` is the project's: the model root's heading when nothing is selected.
-    let paint = ui.painter();
+/// The right panel: its header with the collapse control, then its body from `panels`.
+fn panel(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, name: &str) {
+    let paint = ui.painter().clone();
     paint.rect_filled(r, 0.0, p.surface);
     let title = PANELS.iter().find(|(_, which, _, _)| *which == shell.state.panel).map(|(_, _, _, t)| tr(t)).unwrap_or_default();
-    ux::text(paint, r.min + vec2(16.0, 12.0), &title, types::UI_STRONG, p.text, room(r.width() - 72.0));
+    ux::text(&paint, r.min + vec2(16.0, 12.0), &title, types::UI_STRONG, p.text, room(r.width() - 72.0));
     let collapse = Rect::from_min_size(pos2(r.right() - 36.0, r.top() + 8.0), vec2(28.0, 28.0));
-    ux::icon_in(paint, Rect::from_center_size(collapse.center(), Vec2::splat(16.0)), &icons::COLLAPSE, p.text_secondary);
+    ux::icon_in(&paint, Rect::from_center_size(collapse.center(), Vec2::splat(16.0)), &icons::COLLAPSE, p.text_secondary);
     control(shell, ui, "workspace.panel.collapse", "button", collapse, false).on_hover_text(tr("Collapse panel"));
     paint.rect_filled(Rect::from_min_size(pos2(r.left(), r.top() + 43.0), vec2(r.width(), 1.0)), 0.0, p.border);
-    let at = |x: f32, y: f32| r.min + vec2(x, y);
-    match shell.state.panel {
-        Panel::Properties => {
-            // The heading names the selection; with nothing selected that is the model root.
-            let selected = shell.session.as_ref().and_then(|s| {
-                let o = *s.view().selection.first()?;
-                let class = s.doc().class_of(o).ok()?;
-                Some((archforge_er::rules::name_of(s.doc(), o), class))
-            });
-            let (heading, kind, section) = match selected {
-                Some((n, c)) if c == archforge_er::SCHEMA => (n, tr("Schema · model"), tr("Schema")),
-                Some((n, c)) if c == archforge_er::ENTITY => (n, tr("Table · model, in every diagram"), tr("Table")),
-                Some((n, c)) if c == archforge_er::ATTRIBUTE => (n, tr("Column · model"), tr("Column")),
-                Some((n, _)) => (n, tr("Element · model"), tr("Element")),
-                None => (name.to_string(), tr("Model · the project's root"), tr("Model")),
-            };
-            ux::text(paint, at(16.0, 58.0), &heading, types::CARD_TITLE, p.text, room(r.width() - 32.0));
-            ux::text(paint, at(16.0, 84.0), &kind, types::CAPTION, p.text_secondary, room(r.width() - 32.0));
-            paint.rect_filled(Rect::from_min_size(at(0.0, 109.0), vec2(r.width(), 1.0)), 0.0, p.border);
-            ux::text(paint, at(16.0, 120.0), &section, types::UI, p.text, room(r.width() - 32.0));
-            ux::text(paint, at(16.0, 150.0), &tr("Name"), types::CAPTION, p.text_secondary, room(r.width() - 32.0));
-            let field = Rect::from_min_size(at(16.0, 167.0), vec2((r.width() - 32.0).max(0.0), FIELD));
-            paint.rect_filled(field, 6.0, p.field);
-            ux::text(paint, field.min + vec2(8.0, 5.0), &heading, types::SMALL, p.text, room(field.width() - 16.0));
-            // The name is typed in the explorer; the panel's fields come with slice W3.
-            control(shell, ui, "workspace.properties.name", "button", field, false);
-        }
-        Panel::Agent => {
-            ux::text(paint, at(16.0, 60.0), &tr("No agent connected"), types::UI, p.text_muted, room(r.width() - 32.0));
-        }
-        Panel::Appearance | Panel::Skills => {
-            ux::text(paint, at(16.0, 60.0), &tr("Nothing selected"), types::UI, p.text_muted, room(r.width() - 32.0));
-        }
-    }
+    let which = shell.state.panel;
+    crate::panels::draw(shell, ui, p, r, 58.0, which, name);
 }
 
 /// The status bar: what is true about the project at the left, where it lives at the right.

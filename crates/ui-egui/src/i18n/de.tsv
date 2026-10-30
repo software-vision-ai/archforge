@@ -32,6 +32,38 @@ str		Schema · model	Schema · Modell
 str		Table · model, in every diagram	Tabelle · Modell, in jedem Diagramm
 str		Column · model	Spalte · Modell
 str		Element · model	Element · Modell
+str		Skill · model	Skill · Modell
+str		Columns · {n}	Spalten · {n}
+str		Keys · {n}	Schlüssel · {n}
+str		Add column	Spalte hinzufügen
+str		Add skill	Skill hinzufügen
+str		Kind	Art
+str		Regular	Regulär
+str		Mapping table	Zuordnungstabelle
+str		Type	Typ
+str		Primary key	Primärschlüssel
+str		Not null	Nicht null
+str		Unique	Eindeutig
+str		Remove	Entfernen
+str		Apply	Übernehmen
+str		Inherited · {n}	Geerbt · {n}
+str		every table	jede Tabelle
+str		every relationship	jede Beziehung
+str		every column	jede Spalte
+str		project	Projekt
+str		overridden below	weiter unten überschrieben
+str		Every table below	Jede Tabelle darunter
+str		Every relationship below	Jede Beziehung darunter
+str		Columns of a type	Spalten eines Typs
+str		Applies to	Gilt für
+str		Column type	Spaltentyp
+str		When	Wann
+str		Modelling	Modellieren
+str		Drawing	Zeichnen
+str		Naming	Benennen
+str		Export	Exportieren
+str		Dialect	Dialekt
+str		Guidance	Hinweise
 str		Element	Element
 str		New diagram	Neues Diagramm
 str		Project created	Projekt erstellt
@@ -127,3 +159,15 @@ str		Help & shortcuts	Hilfe & Tastenkürzel
 str		Switch to the dark appearance	Zur dunklen Darstellung wechseln
 str		Switch to the light appearance	Zur hellen Darstellung wechseln
 str		Last view: {view}	Letzte Ansicht: {view}
+str		This model	Dieses Modell
+str		This schema	Dieses Schema
+str		This table	Diese Tabelle
+str		This column	Diese Spalte
+str		This skill	Dieser Skill
+str		This element	Dieses Element
+str		On this model · {n}	Auf diesem Modell · {n}
+str		On this schema · {n}	Auf diesem Schema · {n}
+str		On this table · {n}	Auf dieser Tabelle · {n}
+str		On this column · {n}	Auf dieser Spalte · {n}
+str		On this skill · {n}	Auf diesem Skill · {n}
+str		On this element · {n}	Auf diesem Element · {n}
