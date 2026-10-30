@@ -38,6 +38,10 @@ str		On this domain · {n}	On this domain · {n}
 str		Enum type · model	Enum type · model
 str		This enum type	This enum type
 str		On this enum type · {n}	On this enum type · {n}
+str		Subtype · {sub} is a {super}	Subtype · {sub} is a {super}
+str		Subtype	Subtype
+str		This subtype	This subtype
+str		On this subtype · {n}	On this subtype · {n}
 str		Element · model	Element · model
 str		Skill · model	Skill · model
 str		Columns · {n}	Columns · {n}
@@ -56,6 +60,20 @@ str		Base type	Base type
 str		Checks	Checks
 str		Add a check	Add a check
 str		Literals, in order	Literals, in order
+str		Subtypes · {n}	Subtypes · {n}
+str		Add subtype	Add subtype
+str		Complete	Complete
+str		Disjoint	Disjoint
+str		Discriminator	Discriminator
+str		Mapping	Mapping
+str		Table per type	Table per type
+str		Single table	Single table
+str		Table per concrete type	Table per concrete type
+str		key on {columns}	key on {columns}
+str		complete	complete
+str		disjoint	disjoint
+str		overlapping	overlapping
+str		A subtype joins two tables	A subtype joins two tables
 str		Add a literal	Add a literal
 str		Pick a type	Pick a type
 str		domain	domain
@@ -81,6 +99,7 @@ str		{from} to {to} is many to many	{from} to {to} is many to many
 str		{from} to {to}: one or more is not enforced by a key	{from} to {to}: one or more is not enforced by a key
 str		{key}: {problem}	{key}: {problem}
 str		{name} has no primary key	{name} has no primary key
+str		{name} has subtypes but no primary key to share	{name} has subtypes but no primary key to share
 str		{name} removed · {keys} went with it	{name} removed · {keys} went with it
 str		Add column	Add column
 str		Edit column	Edit column
@@ -154,6 +173,7 @@ str		Select	Select
 str		Pan	Pan
 str		Entity	Entity
 str		Relationship	Relationship
+str		Generalization	Generalization
 str		Relationship types	Relationship types
 str		Note	Note
 str		Group	Group

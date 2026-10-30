@@ -150,6 +150,10 @@ pub enum Menu {
     /// Which kind of type the Types section adds, and the column editor's type menu (slice S5).
     TypeKind,
     ColumnType,
+    /// The Subtypes section's table menu, discriminator and mapping (slice S6).
+    SubtypeAdd,
+    Discriminator,
+    Mapping,
 }
 
 /// The selection the panels describe.
@@ -187,6 +191,12 @@ fn subject(shell: &Shell, project: &str) -> Subject {
                     (tr("Enum type · model"), tr("Enum type"), tr("This enum type"), tr("On this enum type · {n}"))
                 }
                 Some(c) if c == archforge_core::SKILL => (tr("Skill · model"), tr("Skill"), tr("This skill"), tr("On this skill · {n}")),
+                Some(c) if c == archforge_er::GENERALIZATION => {
+                    let (sup, sub, _) = archforge_er::rules::generalization_parts(store, o);
+                    let n = |e: Option<archforge_mof::Obj>| e.map(|e| archforge_er::rules::name_of(store, e)).unwrap_or_default();
+                    let kind = fmt(&tr("Subtype · {sub} is a {super}"), &[("sub", &n(sub)), ("super", &n(sup))]);
+                    (kind, tr("Subtype"), tr("This subtype"), tr("On this subtype · {n}"))
+                }
                 Some(c) if c == archforge_er::RELATIONSHIP => {
                     let end = |p| store.get(o, p).ok().and_then(|v| v.as_ref()).map(|e| archforge_er::rules::name_of(store, e)).unwrap_or_default();
                     let kind = fmt(
@@ -204,6 +214,9 @@ fn subject(shell: &Shell, project: &str) -> Subject {
             let name = match class {
                 Some(c) if c == archforge_core::SKILL => archforge_core::skills::name_of(store, o),
                 Some(c) if c == archforge_diagram::DIAGRAM => crate::diagrams::diagram_name(store, o),
+                Some(c) if c == archforge_er::GENERALIZATION => {
+                    archforge_er::rules::generalization_parts(store, o).1.map(|s| archforge_er::rules::name_of(store, s)).unwrap_or_default()
+                }
                 _ => archforge_er::rules::name_of(store, o),
             };
             Subject { obj: Some(o), id: store.uuid(o).ok(), class, name, kind, word, this, on_this }
@@ -476,6 +489,18 @@ fn properties(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y:
                 crate::keys::problems_section(shell, ui, p, r, y + 4.0, o);
             }
         }
+        Some(c) if c == archforge_er::GENERALIZATION => {
+            // A generalization: its supertype's Subtypes section.
+            let sup = shell.session.as_ref().and_then(|s| {
+                let store = s.doc();
+                let sup = crate::subtypes::supertype_of_link(store, subject.obj?)?;
+                Some((sup, store.uuid(sup).ok()?))
+            });
+            if let (Some((sup, sup_id)), Some(id)) = (sup, subject.id) {
+                let y = crate::subtypes::subtypes_section(shell, ui, p, r, y, sup, sup_id, id);
+                crate::keys::problems_section(shell, ui, p, r, y + 4.0, sup);
+            }
+        }
         Some(c) if c == archforge_er::DOMAIN || c == archforge_er::ENUM_TYPE => {
             // A type: its schema's Types section with this type's editor open, once per selection.
             let schema = shell.session.as_ref().and_then(|s| {
@@ -726,6 +751,7 @@ fn entity_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
     y = crate::keys::keys_section(shell, ui, p, r, y, entity, entity_id);
     y = crate::checks::checks_section(shell, ui, p, r, y + 4.0, entity, entity_id);
     y = crate::indexes::indexes_section(shell, ui, p, r, y + 4.0, entity, entity_id);
+    y = crate::subtypes::subtypes_section(shell, ui, p, r, y + 4.0, entity, entity_id, entity_id);
     crate::keys::problems_section(shell, ui, p, r, y + 4.0, entity);
     // The kind menu last, over the rows.
     if shell.panels.menu == Some(Menu::Kind) {

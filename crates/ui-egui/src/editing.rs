@@ -268,7 +268,7 @@ fn decide(
     };
     match shell.canvas.tool {
         Tool::Pan => Action::Nothing,
-        Tool::Relationship => {
+        Tool::Relationship | Tool::Generalization => {
             if (resp.drag_stopped_by(egui::PointerButton::Primary) || released) && shell.canvas.gesture.is_some() {
                 return Action::Commit;
             }
@@ -479,7 +479,11 @@ fn commit(shell: &mut Shell, view: View, d: Obj, pointer: Option<Pos2>, shift: b
         }
         Gesture::Connect { from_node, .. } => {
             if let Some(to_node) = node_at(shell, view, d, pointer) {
-                crate::connect::connect(shell, d, from_node, to_node);
+                if shell.canvas.tool == crate::canvas::Tool::Generalization {
+                    crate::connect::generalize(shell, d, from_node, to_node);
+                } else {
+                    crate::connect::connect(shell, d, from_node, to_node);
+                }
             }
         }
         Gesture::Marquee { from } => {

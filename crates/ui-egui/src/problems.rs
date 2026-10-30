@@ -49,6 +49,12 @@ pub fn all(store: &Store) -> Vec<Problem> {
                     out.push(Problem { element: o, text: fmt(&tr("{key}: {problem}"), &[("key", &r::label(store, k)), ("problem", &p)]) });
                 }
             }
+            if !r::subtype_links(store, o).is_empty()
+                && r::mapping_of(store, o) == archforge_er::SubtypeMapping::TablePerType
+                && r::primary_key_of(store, o).is_none()
+            {
+                out.push(Problem { element: o, text: fmt(&tr("{name} has subtypes but no primary key to share"), &[("name", &name(store, o))]) });
+            }
             for a in members(store, o, archforge_er::entity::ATTRIBUTE) {
                 if let Some(p) = r::enum_default_problem(store, a) {
                     out.push(Problem { element: o, text: fmt(&tr("{key}: {problem}"), &[("key", &name(store, a)), ("problem", &p)]) });

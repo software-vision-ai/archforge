@@ -26,6 +26,9 @@ pub enum Screen {
     WorkspaceColumnEditor,
     /// The same table with the index editor open on its index, More open.
     WorkspaceIndexEditor,
+    /// An empty diagram with Party and its subtypes Person and Company drawn, Party selected
+    /// (slice S6).
+    WorkspaceSubtypes,
     /// The table's schema selected, with a domain and an enum type in its Types section and in
     /// the Models tree.
     WorkspaceSchemaTypes,
@@ -153,6 +156,7 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
             | Screen::WorkspaceCardinality
             | Screen::WorkspaceRelationship
             | Screen::WorkspaceMappingTable
+            | Screen::WorkspaceSubtypes
     ) {
         shell.adopt_project();
         sample_diagram(
@@ -161,6 +165,9 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
         )?;
         if screen == Screen::WorkspaceMappingTable {
             sample_mapping_table(&mut shell)?;
+        }
+        if screen == Screen::WorkspaceSubtypes {
+            sample_subtypes(&mut shell)?;
         }
         if screen == Screen::WorkspaceRelationship
             && let Some(session) = shell.session.as_mut()
@@ -351,6 +358,44 @@ fn sample_diagram(shell: &mut Shell, filled: bool) -> Result<(), String> {
     shell.canvas.fit_pending = false;
     shell.canvas.zoom = 1.0;
     shell.canvas.pan = egui::Vec2::ZERO;
+    Ok(())
+}
+
+/// Party with its subtypes Person and Company on the empty sample diagram, drawn as the design's
+/// "Subtypes" card, Party selected.
+fn sample_subtypes(shell: &mut Shell) -> Result<(), String> {
+    use serde_json::json;
+    let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
+    let store = session.doc();
+    let diagram = shell.canvas.active.and_then(|id| store.by_uuid(id)).ok_or_else(|| "the sample has no open diagram".to_string())?;
+    let schema = crate::diagrams::schema_of(store, diagram).ok_or_else(|| "the sample diagram has no schema".to_string())?;
+    let (schema, diagram) = (store.uuid(schema).map_err(|e| e.to_string())?.to_string(), store.uuid(diagram).map_err(|e| e.to_string())?.to_string());
+    let run = |session: &mut archforge_er::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
+        let out = session.execute(command, &params).map_err(|e| format!("{command}: {e:?}"))?;
+        Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
+    };
+    let party = run(session, "er.entity.add", json!({ "schema": schema, "name": "Party" }))?;
+    run(session, "er.attribute.add", json!({ "entity": party, "name": "party_id", "type": "BIGINT", "primary_key": true }))?;
+    let kind = run(session, "er.attribute.add", json!({ "entity": party, "name": "party_type", "type": "TEXT" }))?;
+    let person = run(session, "er.entity.add", json!({ "schema": schema, "name": "Person" }))?;
+    let company = run(session, "er.entity.add", json!({ "schema": schema, "name": "Company" }))?;
+    let g1 = run(session, "er.generalization.add", json!({ "supertype": party, "subtype": person }))?;
+    let g2 = run(session, "er.generalization.add", json!({ "supertype": party, "subtype": company }))?;
+    run(session, "er.attribute.add", json!({ "entity": person, "name": "birth_date", "type": "DATE" }))?;
+    run(session, "er.attribute.add", json!({ "entity": company, "name": "vat_no", "type": "TEXT" }))?;
+    run(
+        session,
+        "er.entity.set-subtyping",
+        json!({ "entity": party, "complete": true, "disjoint": true, "discriminator": kind, "mapping": "table-per-type" }),
+    )?;
+    let n_party = run(session, "diagram.place", json!({ "diagram": diagram, "element": party, "x": 420, "y": 200, "width": 240, "height": 126 }))?;
+    let n_person = run(session, "diagram.place", json!({ "diagram": diagram, "element": person, "x": 200, "y": 460, "width": 240, "height": 126 }))?;
+    let n_company =
+        run(session, "diagram.place", json!({ "diagram": diagram, "element": company, "x": 640, "y": 460, "width": 240, "height": 126 }))?;
+    run(session, "diagram.connect", json!({ "diagram": diagram, "element": g1, "source": n_person, "target": n_party }))?;
+    run(session, "diagram.connect", json!({ "diagram": diagram, "element": g2, "source": n_company, "target": n_party }))?;
+    run(session, "view.select", json!({ "ids": [party] }))?;
+    session.mark_saved().map_err(|e| format!("mark_saved: {e:?}"))?;
     Ok(())
 }
 

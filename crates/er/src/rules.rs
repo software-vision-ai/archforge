@@ -6,9 +6,10 @@ use std::collections::BTreeSet;
 use archforge_mof::{Obj, Store, Value};
 
 use crate::{
-    ATTRIBUTE, CHECK_CONSTRAINT, Cardinality, DOMAIN, Deferrability, ENTITY, ENUM_TYPE, EntityKind, FOREIGN_KEY, Generation, MatchType, NullsOrder,
-    PRIMARY_KEY, RELATIONSHIP, ReferentialAction, SCHEMA, SortDirection, TABLE_INDEX, UNIQUE_CONSTRAINT, attribute, check_constraint, domain,
-    domain_check, entity, enum_type, foreign_key, index_column, key, named_element, relationship, schema, table_index, unique_constraint,
+    ATTRIBUTE, CHECK_CONSTRAINT, Cardinality, DOMAIN, Deferrability, ENTITY, ENUM_TYPE, EntityKind, FOREIGN_KEY, GENERALIZATION, Generation,
+    MatchType, NullsOrder, PRIMARY_KEY, RELATIONSHIP, ReferentialAction, SCHEMA, SortDirection, SubtypeMapping, TABLE_INDEX, UNIQUE_CONSTRAINT,
+    attribute, check_constraint, domain, domain_check, entity, enum_type, foreign_key, generalization, index_column, key, named_element,
+    relationship, schema, table_index, unique_constraint,
 };
 
 /// The most literals of an enum type.
@@ -181,6 +182,85 @@ pub fn type_of(store: &Store, a: Obj) -> String {
 /// A column's own type name, empty when it takes a domain or an enum type.
 pub fn own_type_of(store: &Store, a: Obj) -> String {
     store.get(a, attribute::TYPE).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default()
+}
+
+// Subtypes (slice S6).
+
+/// A generalization's supertype, subtype and key relationship, when alive.
+pub fn generalization_parts(store: &Store, g: Obj) -> (Option<Obj>, Option<Obj>, Option<Obj>) {
+    let live = |p| reference(store, g, p).filter(|o| store.is_alive(*o));
+    (live(generalization::SUPERTYPE), live(generalization::SUBTYPE), live(generalization::KEY_RELATIONSHIP))
+}
+
+/// The generalizations whose subtype is `e`.
+pub fn supertype_links(store: &Store, e: Obj) -> Vec<Obj> {
+    store.referrers(e).into_iter().filter(|(g, p)| *p == generalization::SUBTYPE && store.is_alive(*g)).map(|(g, _)| g).collect()
+}
+
+/// The generalizations whose supertype is `e`, in the schema's order.
+pub fn subtype_links(store: &Store, e: Obj) -> Vec<Obj> {
+    let Some(s) = schema_of(store, e) else { return Vec::new() };
+    refs(store, s, schema::GENERALIZATION).into_iter().filter(|g| store.is_alive(*g) && generalization_parts(store, *g).0 == Some(e)).collect()
+}
+
+/// `e`'s supertype, when it has one.
+pub fn supertype_of(store: &Store, e: Obj) -> Option<Obj> {
+    supertype_links(store, e).into_iter().find_map(|g| generalization_parts(store, g).0)
+}
+
+/// Whether `a` is `b` or one of `b`'s supertypes, up the chain with a seen-set.
+pub fn is_supertype_or_self(store: &Store, a: Obj, b: Obj) -> bool {
+    let mut seen: BTreeSet<Obj> = BTreeSet::new();
+    let mut cur = Some(b);
+    while let Some(c) = cur {
+        if c == a {
+            return true;
+        }
+        if !seen.insert(c) {
+            return false;
+        }
+        cur = supertype_of(store, c);
+    }
+    false
+}
+
+/// How a supertype's subtypes become tables.
+pub fn mapping_of(store: &Store, e: Obj) -> SubtypeMapping {
+    match store.get(e, entity::SUBTYPE_MAPPING) {
+        Ok(Value::Enum(i)) => SubtypeMapping::from_index(i).unwrap_or(SubtypeMapping::TablePerType),
+        _ => SubtypeMapping::TablePerType,
+    }
+}
+
+/// A supertype's discriminator column, when it has one.
+pub fn discriminator_of(store: &Store, e: Obj) -> Option<Obj> {
+    reference(store, e, entity::DISCRIMINATOR).filter(|a| store.is_alive(*a))
+}
+
+/// Whether a supertype's subtypes are complete (every row is one of them) and disjoint (no row is
+/// two of them).
+pub fn subtyping_flags(store: &Store, e: Obj) -> (bool, bool) {
+    (flag(store, e, entity::SUBTYPES_COMPLETE), store.get(e, entity::SUBTYPES_DISJOINT).ok().and_then(|v| v.as_bool()).unwrap_or(true))
+}
+
+/// Why `subtype` cannot become a subtype of `supertype`; None when it can.
+pub fn generalization_problem(store: &Store, supertype: Obj, subtype: Obj, except: Option<Obj>) -> Option<(&'static str, String)> {
+    if supertype == subtype {
+        return Some(("subtype", "a table cannot be a subtype of itself".into()));
+    }
+    if schema_of(store, supertype).is_none() || schema_of(store, supertype) != schema_of(store, subtype) {
+        return Some(("subtype", "the two tables are in different schemas".into()));
+    }
+    if supertype_links(store, subtype).into_iter().any(|g| Some(g) != except) {
+        return Some(("subtype", format!("{} has a supertype already", label(store, subtype))));
+    }
+    if is_supertype_or_self(store, subtype, supertype) {
+        return Some((
+            "supertype",
+            format!("{} is a subtype of {} already, so this would close a circle", label(store, supertype), label(store, subtype)),
+        ));
+    }
+    None
 }
 
 // Domains and enum types (slice S5).
@@ -1030,6 +1110,46 @@ pub fn problems(store: &Store) -> Vec<String> {
                 && (!text_of(store, o, attribute::DEFAULT).is_empty() || !text_of(store, o, attribute::COLLATION).is_empty())
             {
                 out.push(format!("{o} is on a domain and has a default or collation of its own"));
+            }
+        }
+        if class == GENERALIZATION {
+            match generalization_parts(store, o) {
+                (Some(sup), Some(sub), key_rel) => {
+                    if sup == sub || schema_of(store, sup) != schema_of(store, sub) {
+                        out.push(format!("the generalization {o} joins {} to itself or across schemas", label(store, sub)));
+                    }
+                    let wants_key = mapping_of(store, sup) == SubtypeMapping::TablePerType && primary_key_of(store, sup).is_some();
+                    if wants_key && key_rel.is_none() {
+                        out.push(format!("the subtype {} lacks its key onto {}", label(store, sub), label(store, sup)));
+                    }
+                    if let Some(r) = key_rel
+                        && !flag(store, r, relationship::IDENTIFYING)
+                    {
+                        out.push(format!("the key of the subtype {} onto {} no longer identifies it", label(store, sub), label(store, sup)));
+                    }
+                    if !wants_key && key_rel.is_some() {
+                        out.push(format!("the subtype {} keeps a key onto {} its mapping does not ask for", label(store, sub), label(store, sup)));
+                    }
+                }
+                _ => out.push(format!("the generalization {o} lacks its supertype or its subtype")),
+            }
+            if store.container(o).ok().flatten().map(|(c, _)| c).and_then(|c| store.class_of(c).ok()) != Some(SCHEMA) {
+                out.push(format!("the generalization {o} belongs to no schema"));
+            }
+        }
+        if class == ENTITY {
+            if supertype_links(store, o).len() > 1 {
+                out.push(format!("{} has more than one supertype", label(store, o)));
+            }
+            if let Some(s) = supertype_of(store, o)
+                && is_supertype_or_self(store, o, s)
+            {
+                out.push(format!("{} is its own supertype through others", label(store, o)));
+            }
+            if let Some(d) = discriminator_of(store, o)
+                && entity_of(store, d) != Some(o)
+            {
+                out.push(format!("the discriminator of {} is not one of its columns", label(store, o)));
             }
         }
         if class == DOMAIN

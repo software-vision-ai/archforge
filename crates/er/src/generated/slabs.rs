@@ -21,6 +21,7 @@ pub struct ErSlabs {
     pub domains: Vec<DomainObj>,
     pub domain_checks: Vec<DomainCheckObj>,
     pub enum_types: Vec<EnumTypeObj>,
+    pub generalizations: Vec<GeneralizationObj>,
 }
 
 fn push<T: Default>(v: &mut Vec<T>) -> Option<u32> {
@@ -53,6 +54,7 @@ impl Slabs for ErSlabs {
             DOMAIN => push(&mut self.domains),
             DOMAIN_CHECK => push(&mut self.domain_checks),
             ENUM_TYPE => push(&mut self.enum_types),
+            GENERALIZATION => push(&mut self.generalizations),
             _ => None,
         }
     }
@@ -71,6 +73,7 @@ impl Slabs for ErSlabs {
             DOMAIN => at(&self.domains, slot),
             DOMAIN_CHECK => at(&self.domain_checks, slot),
             ENUM_TYPE => at(&self.enum_types, slot),
+            GENERALIZATION => at(&self.generalizations, slot),
             _ => None,
         }
     }
@@ -89,6 +92,7 @@ impl Slabs for ErSlabs {
             DOMAIN => at_mut(&mut self.domains, slot),
             DOMAIN_CHECK => at_mut(&mut self.domain_checks, slot),
             ENUM_TYPE => at_mut(&mut self.enum_types, slot),
+            GENERALIZATION => at_mut(&mut self.generalizations, slot),
             _ => None,
         }
     }
@@ -107,5 +111,6 @@ impl Slabs for ErSlabs {
             .saturating_add(self.domains.capacity().saturating_mul(size_of::<DomainObj>()))
             .saturating_add(self.domain_checks.capacity().saturating_mul(size_of::<DomainCheckObj>()))
             .saturating_add(self.enum_types.capacity().saturating_mul(size_of::<EnumTypeObj>()))
+            .saturating_add(self.generalizations.capacity().saturating_mul(size_of::<GeneralizationObj>()))
     }
 }

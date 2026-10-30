@@ -589,6 +589,13 @@ pub const TOOL_RELATIONSHIP: Icon = Icon {
     segments: &[L([0.0, 5.0], [15.0, 5.0]), L([3.0, 0.0], [3.0, 10.0]), L([10.5, 5.0], [15.0, 0.5]), L([10.5, 5.0], [15.0, 9.5])],
 };
 
+/// The generalization tool (the design's Icon / Tool · Generalization): a hollow triangle on a line.
+pub const TOOL_GENERALIZATION: Icon = Icon {
+    size: [11.0, 13.5],
+    stroke: 1.2,
+    segments: &[L([5.5, 0.0], [11.0, 8.0]), L([11.0, 8.0], [0.0, 8.0]), L([0.0, 8.0], [5.5, 0.0]), L([5.5, 8.0], [5.5, 13.5])],
+};
+
 /// The note tool: a page with its corner turned.
 pub const TOOL_NOTE: Icon = Icon {
     size: [18.0, 18.0],

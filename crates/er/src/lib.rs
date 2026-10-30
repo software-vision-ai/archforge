@@ -90,16 +90,18 @@ impl DiagramView for ErView {
         of.is_some() && rules::schema_of(store, element) == of
     }
 
+    /// Relationships, and generalizations (slice S6) drawn from the subtype to the supertype.
     fn connects(_kind: &str, class: ClassId) -> bool {
-        class == RELATIONSHIP
+        class == RELATIONSHIP || class == GENERALIZATION
     }
 
     fn ends(store: &Store, element: Obj) -> Option<(Obj, Obj)> {
-        if store.class_of(element).ok() != Some(RELATIONSHIP) {
-            return None;
-        }
         let end = |p| store.get(element, p).ok().and_then(|v| v.as_ref());
-        Some((end(relationship::FROM)?, end(relationship::TO)?))
+        match store.class_of(element).ok() {
+            Some(c) if c == RELATIONSHIP => Some((end(relationship::FROM)?, end(relationship::TO)?)),
+            Some(c) if c == GENERALIZATION => Some((end(generalization::SUBTYPE)?, end(generalization::SUPERTYPE)?)),
+            _ => None,
+        }
     }
 
     fn text_slots(class: ClassId) -> &'static [&'static str] {

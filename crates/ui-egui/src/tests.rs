@@ -2220,3 +2220,51 @@ fn the_schema_lists_its_types_and_a_column_takes_an_enum_type_from_the_type_menu
     let st = h.state().session.as_ref().unwrap().doc();
     assert_eq!(st.list(customer_obj, archforge_er::entity::ATTRIBUTE).unwrap().len(), 3);
 }
+
+#[test]
+fn the_generalization_tool_draws_a_subtype_and_the_supertype_lists_it() {
+    let (mut h, customer, order) = two_tables_harness();
+    let nodes = node_ids(&h);
+    let customer_node = nodes.iter().min_by(|a, b| rect_of(&h, a).left().total_cmp(&rect_of(&h, b).left())).unwrap().clone();
+    let order_node = nodes.iter().find(|n| **n != customer_node).unwrap().clone();
+    let at = rect_of(&h, "workspace.tools.generalization").center();
+    click(&mut h, at);
+    assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Generalization);
+    // Drag from Order to Customer: Order becomes a subtype of Customer, sharing its key.
+    let (from, to) = (rect_of(&h, &order_node).center(), rect_of(&h, &customer_node).center());
+    drag(&mut h, from, to);
+    let (generalization, customer_obj, order_obj) = {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let g = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::GENERALIZATION)).expect("a generalization");
+        let c = st.by_uuid(archforge_mof::Uuid::parse(&customer).unwrap()).unwrap();
+        let o = st.by_uuid(archforge_mof::Uuid::parse(&order).unwrap()).unwrap();
+        assert_eq!(archforge_er::rules::generalization_parts(st, g).0, Some(c));
+        assert_eq!(archforge_er::rules::generalization_parts(st, g).1, Some(o));
+        assert!(archforge_er::rules::generalization_parts(st, g).2.is_some(), "table per type made the key");
+        (g, c, o)
+    };
+    assert!(ids(&h).iter().any(|i| i.starts_with("workspace.canvas.edge.")), "the line is drawn");
+    assert_eq!(h.state().session.as_ref().unwrap().view().selection, vec![generalization]);
+    assert_eq!(h.state_mut().session.as_mut().unwrap().undo_label(), Some("Add subtype"));
+    // The generalization's Properties show the supertype's Subtypes section; Mapping single table
+    // removes the shared key in one step.
+    let rows: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.subtype.row.") && !i.ends_with(".remove")).collect();
+    assert_eq!(rows.len(), 1, "{rows:?}");
+    let at = rect_of(&h, "workspace.properties.subtypes.mapping").center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.properties.subtypes.mapping.1").center();
+    click(&mut h, at);
+    {
+        let st = h.state().session.as_ref().unwrap().doc();
+        assert_eq!(archforge_er::rules::mapping_of(st, customer_obj), archforge_er::SubtypeMapping::SingleTable);
+        assert!(archforge_er::rules::generalization_parts(st, generalization).2.is_none(), "the key went");
+        assert_eq!(st.list(order_obj, archforge_er::entity::ATTRIBUTE).unwrap().len(), 1, "Order keeps its own order_id only");
+    }
+    // The row's cross removes the subtype; the supertype stays selected.
+    let remove = ids(&h).into_iter().find(|i| i.starts_with("workspace.properties.subtype.row.") && i.ends_with(".remove")).unwrap();
+    let at = rect_of(&h, &remove).center();
+    click(&mut h, at);
+    let st = h.state().session.as_ref().unwrap().doc();
+    assert!(!st.is_alive(generalization));
+    assert_eq!(selected_name(&h), "Customer");
+}
