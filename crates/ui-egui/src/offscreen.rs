@@ -26,6 +26,9 @@ pub enum Screen {
     WorkspaceColumnEditor,
     /// The same table with the index editor open on its index, More open.
     WorkspaceIndexEditor,
+    /// The diagram of two tables with a mapping table between Order and Tag selected: its
+    /// Properties offer to collapse it, Order's key column shows its link mark.
+    WorkspaceMappingTable,
     /// A first diagram of a schema, just created and open, empty.
     WorkspaceDiagramEmpty,
     /// A diagram of two tables and their relationship, the first table selected.
@@ -138,9 +141,16 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
             | Screen::WorkspaceEntityNew
             | Screen::WorkspaceCardinality
             | Screen::WorkspaceRelationship
+            | Screen::WorkspaceMappingTable
     ) {
         shell.adopt_project();
-        sample_diagram(&mut shell, matches!(screen, Screen::WorkspaceDiagram | Screen::WorkspaceCardinality | Screen::WorkspaceRelationship))?;
+        sample_diagram(
+            &mut shell,
+            matches!(screen, Screen::WorkspaceDiagram | Screen::WorkspaceCardinality | Screen::WorkspaceRelationship | Screen::WorkspaceMappingTable),
+        )?;
+        if screen == Screen::WorkspaceMappingTable {
+            sample_mapping_table(&mut shell)?;
+        }
         if screen == Screen::WorkspaceRelationship
             && let Some(session) = shell.session.as_mut()
         {
@@ -221,6 +231,42 @@ fn sample_table(shell: &mut Shell, skills: bool) -> Result<(), String> {
     if skills {
         shell.state.panel = crate::state::Panel::Skills;
     }
+    Ok(())
+}
+
+/// Adds Tag to the filled diagram, a many-to-many line from Order to it, and resolves the line into
+/// the mapping table Order_Tag, which stays selected.
+fn sample_mapping_table(shell: &mut Shell) -> Result<(), String> {
+    use serde_json::json;
+    let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
+    let run = |session: &mut archforge_er::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
+        let out = session.execute(command, &params).map_err(|e| format!("{command}: {e:?}"))?;
+        Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
+    };
+    let store = session.doc();
+    let by_name =
+        |name: &str| store.alive().find(|o| archforge_er::rules::name_of(store, *o) == name).and_then(|o| store.uuid(o).ok()).map(|u| u.to_string());
+    let (Some(schema), Some(order), Some(diagram)) = (
+        by_name("Shop schema"),
+        by_name("Order"),
+        store.alive().find(|o| store.class_of(*o).ok() == Some(archforge_diagram::DIAGRAM)).and_then(|d| store.uuid(d).ok()).map(|u| u.to_string()),
+    ) else {
+        return Err("the filled diagram".into());
+    };
+    let order_node = archforge_diagram::views_of(store, store.by_uuid(archforge_mof::Uuid::parse(&order).ok_or("id")?).ok_or("order")?)
+        .2
+        .first()
+        .and_then(|n| store.uuid(*n).ok())
+        .map(|u| u.to_string())
+        .ok_or("Order's node")?;
+    let tag = run(session, "er.entity.add", json!({ "schema": schema, "name": "Tag" }))?;
+    run(session, "er.attribute.add", json!({ "entity": tag, "name": "tag_id", "type": "INT", "primary_key": true }))?;
+    run(session, "er.attribute.add", json!({ "entity": tag, "name": "label", "type": "VARCHAR", "length": 40 }))?;
+    let line = run(session, "er.relationship.add", json!({ "from": order, "to": tag, "from_end": "zero-or-more", "to_end": "zero-or-more" }))?;
+    let t = run(session, "diagram.place", json!({ "diagram": diagram, "element": tag, "x": 920, "y": 360, "width": 240, "height": 120 }))?;
+    run(session, "diagram.connect", json!({ "diagram": diagram, "element": line, "source": order_node, "target": t }))?;
+    run(session, "er.relationship.resolve", json!({ "relationship": line }))?;
+    session.mark_saved().map_err(|e| format!("mark_saved: {e:?}"))?;
     Ok(())
 }
 

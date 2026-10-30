@@ -42,6 +42,7 @@ pub const TABLES: &[Table] = &[
             Column { name: "generation", prop: Some(attribute::GENERATION), sql: "INT NOT NULL" },
             Column { name: "expression", prop: Some(attribute::EXPRESSION), sql: "TEXT NULL" },
             Column { name: "collation", prop: Some(attribute::COLLATION), sql: "TEXT NULL" },
+            Column { name: "linked_to", prop: Some(attribute::LINKED_TO), sql: "BINARY(16) NULL" },
         ],
     },
     Table {

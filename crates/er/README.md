@@ -82,8 +82,26 @@ namespace with keys and foreign keys; an unnamed one shows a generated name (`ru
 and an index left without columns (`commands::index_dependents`); a check's text is not parsed, so
 column references inside it are not checked.
 
+Relationships and keys agree (slice S4). A relationship's parent end drives the nullability of its
+foreign key's columns (`er.relationship.set-ends`: zero-or-one makes them nullable, exactly-one not
+null, a column in the child's primary key stays not null), and making such a column nullable or not
+moves the parent end the same way; a one-or-more child end is a notice (`rules::ONE_OR_MORE`), since
+no key enforces it. A key that grows grows the foreign keys onto it: each gets a matching new
+column, named after the role and typed like the key column; a key that shrinks takes the follower
+columns that nothing else holds, and a key that reorders reorders them. A column a relationship or
+foreign key made follows the name and type of the column it points at (`Attribute.linkedTo`,
+`rules::linked_to`, `linked_from`) until the user edits it, which clears the link, or runs
+`er.attribute.unlink`; `er.foreign-key.set-key` without columns removes the old followers it no
+longer needs. A pure mapping table, one that holds exactly the columns of its two foreign keys, all
+in its primary key, and no other key, check or index (`rules::collapse_problem`), collapses back into
+the many-to-many relationship it stood for (`er.relationship.collapse`, `commands::collapse`),
+zero-or-more at both ends since the table keeps no record of the old line, drawn between the two
+parents on every diagram where the table was. Identifying relationships never form a cycle: the
+switch, `er.foreign-key.add` and `set-key` refuse one (`rules::identifying_cycle`), and growing
+keys has a depth budget behind that.
+
 **The metaclasses.** `Schema` (entity, relationship), `Entity` (attribute, kind, primaryKey,
-uniqueConstraint, foreignKey, checkConstraint, tableIndex), `Attribute` (type with length, precision and scale, nullable, default, generation with an expression, collation), `Relationship` (name, from, to,
+uniqueConstraint, foreignKey, checkConstraint, tableIndex), `Attribute` (type with length, precision and scale, nullable, default, generation with an expression, collation, linkedTo), `Relationship` (name, from, to,
 fromEnd, toEnd, fromRole, toRole, identifying), the abstract `Key` (name, column) with `PrimaryKey` and
 `UniqueConstraint` (nullsDistinct), `ForeignKey` (name, references a Key, column, onDelete,
 onUpdate, relationship, match, deferrable) and the enumerations `Cardinality` (zeroOrOne,
@@ -104,8 +122,8 @@ first, last).
 | `DIAGRAM_KIND`, `ENTITY_SIZE` | `"er"`; an entity node's default size |
 | `new_project_session` | `pub fn new_project_session(name: &str, ids: Box<dyn FnMut() -> Uuid + Send>) -> Result<Session, String>`: a session over a store with the project's Model root named `name`; the host supplies the ids |
 | `universe_with`, `slabs`, `store` | a universe of the shared core, the diagram metamodel, ER and others; the slabs of the three; a store over them |
-| `rules::{name_problem, entity_name_free, attribute_name_free, constraint_name_free, schema_of, problems, notices, key_problem, key_columns_problem, associative_problem, key_parts, primary_key_of, primary_key, unique_constraints, keys_of, key_columns, keys_onto, in_primary_key, is_unique, checks_of, indexes_of, index_columns, index_specs, index_column_spec, IndexColumnSpec, is_unique_index, index_columns_problem, check_problem, display_name}` | the rules, for commands and for a whole store |
-| `commands::{remove_element, remove_entity, dependents, index_dependents, keys_on, resolve, cardinality_name, action_name, match_name, deferrability_name, direction_name, nulls_name, DIRECTION_WORDS, NULLS_WORDS, specs}` | the cascades, the resolve step, the names in parameters, the command table |
+| `rules::{name_problem, entity_name_free, attribute_name_free, constraint_name_free, schema_of, problems, notices, key_problem, key_columns_problem, associative_problem, key_parts, primary_key_of, primary_key, unique_constraints, keys_of, key_columns, keys_onto, in_primary_key, is_unique, checks_of, indexes_of, index_columns, index_specs, index_column_spec, IndexColumnSpec, is_unique_index, index_columns_problem, check_problem, display_name, linked_to, linked_from, collapse_problem, child_end_one_or_more, identifying_parents, identifying_cycle}` | the rules, for commands and for a whole store |
+| `commands::{remove_element, remove_entity, dependents, index_dependents, keys_on, resolve, collapse, cardinality_name, action_name, match_name, deferrability_name, direction_name, nulls_name, DIRECTION_WORDS, NULLS_WORDS, specs}` | the cascades, the resolve step, the names in parameters, the command table |
 | the generated constants, structs, `Cardinality`, `TABLES`, `JUNCTIONS` | as every generated metamodel |
 
 Commands: `er.schema.{add, rename, remove}`, `er.entity.{add, rename, remove, set-kind}`,

@@ -147,6 +147,9 @@
         <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String"/>
         <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Attribute-collation-_lowerValue"/>
       </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Attribute-linkedTo" name="linkedTo" type="Attribute">
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Attribute-linkedTo-_lowerValue"/>
+      </ownedAttribute>
     </packagedElement>
     <packagedElement xmi:type="uml:Class" xmi:id="Relationship" name="Relationship">
       <generalization xmi:type="uml:Generalization" xmi:id="Relationship-_generalization" general="Element"/>

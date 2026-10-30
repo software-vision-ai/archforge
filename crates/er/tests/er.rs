@@ -428,11 +428,13 @@ fn a_new_key_column_never_breaks_a_foreign_key_that_targets_the_key() {
     let sm = sample(&mut s);
     let col = run(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": "customer_id", "type": "BIGINT" }));
     run(&mut s, "er.foreign-key.add", json!({ "entity": sm.order, "references": sm.customer, "columns": [col] }));
-    // Customer's key would become (id, region), which the foreign key no longer covers.
-    let key = refused_on(&mut s, "er.attribute.add", json!({ "entity": sm.customer, "name": "region", "type": "TEXT", "primary_key": true }));
-    assert_eq!(key, "primary_key");
-    run(&mut s, "er.attribute.add", json!({ "entity": sm.customer, "name": "region", "type": "TEXT" }));
-    // An identifying relationship adds key columns to its child; a key that targets the child refuses it.
+    // Customer's key becomes (id, region): the foreign key grows a matching column that follows region.
+    let region = run(&mut s, "er.attribute.add", json!({ "entity": sm.customer, "name": "region", "type": "TEXT", "primary_key": true }));
+    let o = get(&mut s, "er.entity.get", json!({ "entity": sm.order }));
+    assert_eq!(o["foreign_keys"][0]["columns"].as_array().map(Vec::len), Some(2));
+    let grown = o["attributes"].as_array().unwrap().iter().find(|a| a["name"] == "customer_region").expect("the grown column");
+    assert_eq!((grown["type"].as_str(), grown["nullable"].as_bool(), grown["linked_to"].as_str()), (Some("TEXT"), Some(true), Some(region.as_str())));
+    // An identifying relationship adds key columns to its child; a key that targets the child grows too.
     let line = run(&mut s, "er.entity.add", json!({ "schema": sm.schema, "name": "Line" }));
     run(&mut s, "er.attribute.add", json!({ "entity": line, "name": "line_no", "type": "INT", "primary_key": true }));
     let shipment = run(&mut s, "er.entity.add", json!({ "schema": sm.schema, "name": "Shipment" }));
@@ -441,7 +443,10 @@ fn a_new_key_column_never_breaks_a_foreign_key_that_targets_the_key() {
     run(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": "order_id", "type": "BIGINT", "primary_key": true }));
     let add =
         json!({ "from": sm.order, "to": line, "from_end": "exactly-one", "to_end": "zero-or-more", "create_foreign_key": true, "identifying": true });
-    assert_eq!(refused_on(&mut s, "er.relationship.add", add), "identifying");
+    run(&mut s, "er.relationship.add", add);
+    let sh = get(&mut s, "er.entity.get", json!({ "entity": shipment }));
+    assert_eq!(sh["foreign_keys"][0]["columns"].as_array().map(Vec::len), Some(2), "Shipment's key onto Line grew with Line's key");
+    let _ = line_ref;
     all_rules_hold(s.doc());
 }
 
@@ -650,10 +655,16 @@ fn a_foreign_key_points_at_any_key_and_the_key_stays_while_it_does() {
     let fk = o["foreign_keys"][0]["id"].as_str().unwrap().to_string();
     assert_eq!((o["foreign_keys"][0]["key"].as_str(), o["foreign_keys"][0]["references"].as_str()), (Some(u.as_str()), Some(sm.customer.as_str())));
     all_rules_hold(s.doc());
-    // A key that a foreign key points at keeps its columns; a new name is fine.
+    // A key that a foreign key points at may lose a column: the foreign key loses its match and a
+    // hand-made column stays; a new name is fine; a column added back grows a follower.
     let set = |columns: Json, name: &str| json!({ "unique": u, "columns": columns, "name": name, "nulls_distinct": true });
-    assert_eq!(refused_on(&mut s, "er.unique.set", set(json!([region]), "uq_region_number")), "columns");
+    run(&mut s, "er.unique.set", set(json!([region]), "uq_region_number"));
+    let o = get(&mut s, "er.entity.get", json!({ "entity": sm.order }));
+    assert_eq!(o["foreign_keys"][0]["columns"], json!([r_region]));
+    assert!(o["attributes"].as_array().unwrap().iter().any(|a| a["id"] == r_number), "the hand-made column stays");
     round_trip(&mut s, "er.unique.set", &set(json!([region, number]), "uq_customer_region_number"));
+    let o = get(&mut s, "er.entity.get", json!({ "entity": sm.order }));
+    assert_eq!(o["foreign_keys"][0]["columns"].as_array().map(Vec::len), Some(2));
     assert_eq!(
         refused_on(&mut s, "er.foreign-key.add", json!({ "entity": sm.order, "key": u, "columns": [r_region] })),
         "columns",
@@ -765,7 +776,15 @@ fn key_edits_that_would_break_a_foreign_key_are_refused_and_one_to_one_stays_uni
     let about = run(&mut s, "er.attribute.add", json!({ "entity": note, "name": "customer_id", "type": "BIGINT", "nullable": "yes" }));
     run(&mut s, "er.foreign-key.add", json!({ "entity": note, "references": sm.customer, "columns": [about], "on_delete": "set-null" }));
     let region = run(&mut s, "er.attribute.add", json!({ "entity": sm.customer, "name": "region", "type": "TEXT" }));
-    assert_eq!(refused_on(&mut s, "er.primary-key.set", json!({ "entity": sm.customer, "columns": [sm.key, region], "name": "" })), "columns");
+    // Customer's key grows: Note's set-null foreign key gets a nullable follower; shrinking it back
+    // takes the follower away again.
+    run(&mut s, "er.primary-key.set", json!({ "entity": sm.customer, "columns": [sm.key, region], "name": "" }));
+    let n = get(&mut s, "er.entity.get", json!({ "entity": note }));
+    assert_eq!(n["foreign_keys"][0]["columns"].as_array().map(Vec::len), Some(2));
+    assert_eq!(n["attributes"].as_array().map(Vec::len), Some(3));
+    run(&mut s, "er.primary-key.set", json!({ "entity": sm.customer, "columns": [sm.key], "name": "" }));
+    let n = get(&mut s, "er.entity.get", json!({ "entity": note }));
+    assert_eq!((n["foreign_keys"][0]["columns"].as_array().map(Vec::len), n["attributes"].as_array().map(Vec::len)), (Some(1), Some(2)));
     assert_eq!(refused_on(&mut s, "er.primary-key.set", json!({ "entity": note, "columns": [note_id, about], "name": "" })), "columns");
     // A column of a composite unique constraint goes with the constraint and the foreign key onto it.
     let number = run(&mut s, "er.attribute.add", json!({ "entity": sm.customer, "name": "number", "type": "INT" }));
@@ -1200,5 +1219,192 @@ fn checks_and_indexes_are_named_constraints_of_a_table_and_go_with_their_columns
     run(&mut s, "er.attribute.remove", json!({ "attribute": status }));
     let o = get(&mut s, "er.entity.get", json!({ "entity": sm.order }));
     assert_eq!(o["indexes"].as_array().map(Vec::len), Some(0), "{}", o["indexes"]);
+    all_rules_hold(s.doc());
+}
+
+#[test]
+fn relationships_and_keys_agree_through_nullability_growing_keys_links_and_collapse() {
+    let mut s = session();
+    let sm = sample(&mut s);
+    let product = run(&mut s, "er.entity.add", json!({ "schema": sm.schema, "name": "Product" }));
+    let pid = run(&mut s, "er.attribute.add", json!({ "entity": product, "name": "product_id", "type": "BIGINT", "primary_key": true }));
+    let rel = run(
+        &mut s,
+        "er.relationship.add",
+        json!({ "from": product, "to": sm.order, "from_end": "exactly-one", "to_end": "zero-or-more", "create_foreign_key": true }),
+    );
+    let column = |s: &mut Session, entity: &str, name: &str| -> Json {
+        get(s, "er.entity.get", json!({ "entity": entity }))["attributes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|a| a["name"] == name)
+            .cloned()
+            .unwrap_or(Json::Null)
+    };
+    let follower = column(&mut s, &sm.order, "product_product_id");
+    assert_eq!((follower["nullable"].as_bool(), follower["linked_to"].as_str()), (Some(false), Some(pid.as_str())));
+    let fid = follower["id"].as_str().unwrap().to_string();
+    // (a) The parent end drives nullability, and nullability drives the parent end.
+    round_trip(&mut s, "er.relationship.set-ends", &json!({ "relationship": rel, "from_end": "zero-or-one", "to_end": "zero-or-more" }));
+    assert_eq!(column(&mut s, &sm.order, "product_product_id")["nullable"], true);
+    run(&mut s, "er.relationship.set-ends", json!({ "relationship": rel, "from_end": "exactly-one", "to_end": "zero-or-more" }));
+    assert_eq!(column(&mut s, &sm.order, "product_product_id")["nullable"], false);
+    run(&mut s, "er.relationship.set-ends", json!({ "relationship": rel, "from_end": "exactly-one", "to_end": "one-or-more" }));
+    assert!(rules::notices(s.doc()).iter().any(|(r, n)| *r == obj(s.doc(), &rel) && *n == rules::ONE_OR_MORE), "{:?}", rules::notices(s.doc()));
+    run(&mut s, "er.attribute.set-flags", json!({ "attribute": fid, "primary_key": false, "nullable": "yes", "unique": false }));
+    let r = relationship(&mut s, &sm.schema, &rel);
+    assert_eq!(r["from_end"], "zero-or-one", "a nullable key column makes the parent end optional");
+    assert_eq!(column(&mut s, &sm.order, "product_product_id")["linked_to"], Json::Null, "a direct edit clears the link");
+    all_rules_hold(s.doc());
+    // (c) A follower follows name and type; its own edit frees it; unlink frees it too.
+    let tag = run(&mut s, "er.entity.add", json!({ "schema": sm.schema, "name": "Tag" }));
+    let tid = run(&mut s, "er.attribute.add", json!({ "entity": tag, "name": "tag_id", "type": "INT", "primary_key": true }));
+    run(
+        &mut s,
+        "er.relationship.add",
+        json!({ "from": tag, "to": sm.order, "from_end": "exactly-one", "to_end": "zero-or-more", "create_foreign_key": true }),
+    );
+    assert_eq!(column(&mut s, &sm.order, "tag_tag_id")["linked_to"], tid);
+    round_trip(&mut s, "er.attribute.rename", &json!({ "attribute": tid, "name": "id" }));
+    assert!(column(&mut s, &sm.order, "tag_id")["linked_to"] == tid, "the follower took the new name");
+    round_trip(&mut s, "er.attribute.set-type", &json!({ "attribute": tid, "type": "VARCHAR", "length": 12 }));
+    let follower = column(&mut s, &sm.order, "tag_id")["id"].as_str().unwrap().to_string();
+    assert_eq!(rules::type_display(s.doc(), obj(s.doc(), &follower)), "VARCHAR(12)");
+    round_trip(&mut s, "er.attribute.unlink", &json!({ "attribute": follower }));
+    assert_eq!(refused_on(&mut s, "er.attribute.unlink", json!({ "attribute": follower })), "attribute");
+    run(&mut s, "er.attribute.rename", json!({ "attribute": tid, "name": "tag_id" }));
+    assert_eq!(column(&mut s, &sm.order, "tag_id")["id"], follower, "a freed column keeps its name");
+    // (b) A key that grows grows the foreign keys onto it; one that shrinks takes the followers.
+    run(&mut s, "er.attribute.add", json!({ "entity": tag, "name": "scope", "type": "TEXT", "primary_key": true }));
+    let o = get(&mut s, "er.entity.get", json!({ "entity": sm.order }));
+    let fk_tag = o["foreign_keys"].as_array().unwrap().iter().find(|k| k["references"] == tag).unwrap().clone();
+    assert_eq!(fk_tag["columns"].as_array().map(Vec::len), Some(2));
+    assert!(column(&mut s, &sm.order, "tag_scope")["linked_to"].as_str().is_some());
+    // An index on the follower goes with it; the shrink leaves every rule holding.
+    let scope_follower = column(&mut s, &sm.order, "tag_scope")["id"].as_str().unwrap().to_string();
+    run(&mut s, "er.index.add", json!({ "entity": sm.order, "columns": [scope_follower] }));
+    round_trip(&mut s, "er.primary-key.set", &json!({ "entity": tag, "columns": [tid], "name": "" }));
+    run(&mut s, "er.primary-key.set", json!({ "entity": tag, "columns": [tid], "name": "" }));
+    assert_eq!(column(&mut s, &sm.order, "tag_scope"), Json::Null, "the follower went with the key column");
+    assert_eq!(get(&mut s, "er.entity.get", json!({ "entity": sm.order }))["indexes"].as_array().map(Vec::len), Some(0), "its index went too");
+    assert_eq!(column(&mut s, &sm.order, "tag_id")["id"], follower, "the freed column stays");
+    all_rules_hold(s.doc());
+    // A chain of identifying keys follows a rename all the way down, and never closes into a cycle.
+    let oid = run(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": "order_id", "type": "BIGINT", "primary_key": true }));
+    let line = run(&mut s, "er.entity.add", json!({ "schema": sm.schema, "name": "Line" }));
+    let identifying = |from: &str, to: &str| json!({ "from": from, "to": to, "from_end": "exactly-one", "to_end": "zero-or-more", "create_foreign_key": true, "identifying": true });
+    run(&mut s, "er.relationship.add", identifying(&sm.order, &line));
+    let shipment = run(&mut s, "er.entity.add", json!({ "schema": sm.schema, "name": "Shipment" }));
+    run(&mut s, "er.relationship.add", identifying(&line, &shipment));
+    assert!(column(&mut s, &shipment, "line_order_order_id")["linked_to"].as_str().is_some());
+    run(&mut s, "er.attribute.rename", json!({ "attribute": oid, "name": "id" }));
+    assert!(column(&mut s, &line, "order_id")["linked_to"] == oid, "Line's follower took the new name");
+    assert!(column(&mut s, &shipment, "line_order_id")["linked_to"].as_str().is_some(), "Shipment's follower followed on");
+    assert_eq!(refused_on(&mut s, "er.relationship.add", identifying(&shipment, &sm.order)), "identifying");
+    let back = run(
+        &mut s,
+        "er.relationship.add",
+        json!({ "from": shipment, "to": sm.order, "from_end": "exactly-one", "to_end": "zero-or-more", "create_foreign_key": true }),
+    );
+    assert_eq!(refused_on(&mut s, "er.relationship.set-identifying", json!({ "relationship": back, "identifying": true })), "identifying");
+    run(&mut s, "er.relationship.remove", json!({ "relationship": back }));
+    run(&mut s, "er.attribute.rename", json!({ "attribute": oid, "name": "order_id" }));
+    all_rules_hold(s.doc());
+    // (d) A pure mapping table collapses into the many-to-many line it stood for, on the diagram too.
+    let m2m = run(
+        &mut s,
+        "er.relationship.add",
+        json!({ "from": sm.order, "to": tag, "from_end": "zero-or-more", "to_end": "zero-or-more", "from_role": "tagged" }),
+    );
+    let d = run(&mut s, "diagram.add", json!({ "kind": "er", "element": sm.schema }));
+    let n_order = run(&mut s, "diagram.place", json!({ "diagram": d, "element": sm.order, "x": 0.0, "y": 0.0 }));
+    let n_tag = run(&mut s, "diagram.place", json!({ "diagram": d, "element": tag, "x": 400.0, "y": 0.0 }));
+    run(&mut s, "diagram.connect", json!({ "diagram": d, "element": m2m, "source": n_order, "target": n_tag }));
+    let mapping = run(&mut s, "er.relationship.resolve", json!({ "relationship": m2m }));
+    assert!(rules::collapse_problem(s.doc(), obj(s.doc(), &mapping)).is_none());
+    run(&mut s, "er.check.add", json!({ "entity": mapping, "expression": "1 = 1" }));
+    assert_eq!(refused_on(&mut s, "er.relationship.collapse", json!({ "entity": mapping })), "entity");
+    let check = get(&mut s, "er.entity.get", json!({ "entity": mapping }))["checks"][0]["id"].as_str().unwrap().to_string();
+    run(&mut s, "er.check.remove", json!({ "check": check }));
+    let before = picture(s.doc());
+    let back = run(&mut s, "er.relationship.collapse", json!({ "entity": mapping }));
+    let after = picture(s.doc());
+    s.undo().unwrap();
+    assert_eq!(picture(s.doc()), before, "undo brings the mapping table back");
+    s.redo().unwrap();
+    assert_eq!(picture(s.doc()), after);
+    let r = relationship(&mut s, &sm.schema, &back);
+    assert_eq!((r["from_end"].as_str(), r["to_end"].as_str(), r["from_role"].as_str()), (Some("zero-or-more"), Some("zero-or-more"), Some("tagged")));
+    assert!(s.doc().by_uuid(Uuid::parse(&mapping).unwrap()).is_none_or(|m| !s.doc().is_alive(m)), "the mapping table went");
+    let (_, edges, nodes) = archforge_diagram::views_of(s.doc(), obj(s.doc(), &back));
+    assert_eq!((edges.len(), nodes.len()), (1, 0), "the line is back on the diagram");
+    assert_eq!(refused_on(&mut s, "er.relationship.collapse", json!({ "entity": sm.order })), "entity");
+    all_rules_hold(s.doc());
+}
+
+#[test]
+fn a_cycle_of_identifying_keys_in_a_loaded_document_cannot_grow_and_a_self_key_onto_a_unique_may_identify() {
+    // Past the commands' refusals (a document from a file could carry it): A identifies B and B
+    // identifies A. Growing either key runs around the circle until the budget refuses it.
+    let (mut st, _) = rooted_store();
+    let m = st.alive().find(|o| st.class_of(*o).ok() == Some(MODEL)).unwrap();
+    let s = st.create(SCHEMA).unwrap();
+    st.set(s, named_element::NAME, Value::str("loop")).unwrap();
+    st.push(m, model::MEMBER, Value::Ref(s)).unwrap();
+    let entity = |st: &mut Store, name: &str| {
+        let e = st.create(ENTITY).unwrap();
+        st.set(e, named_element::NAME, Value::str(name)).unwrap();
+        st.push(s, schema::ENTITY, Value::Ref(e)).unwrap();
+        let a = st.create(ATTRIBUTE).unwrap();
+        st.set(a, named_element::NAME, Value::str("id")).unwrap();
+        st.set(a, attribute::TYPE, Value::str("INT")).unwrap();
+        st.set(a, attribute::NULLABLE, Value::Bool(false)).unwrap();
+        st.push(e, entity::ATTRIBUTE, Value::Ref(a)).unwrap();
+        let pk = st.create(PRIMARY_KEY).unwrap();
+        st.set(e, entity::PRIMARY_KEY, Value::Ref(pk)).unwrap();
+        st.push(pk, key::COLUMN, Value::Ref(a)).unwrap();
+        (e, pk)
+    };
+    let (a, a_pk) = entity(&mut st, "A");
+    let (b, b_pk) = entity(&mut st, "B");
+    let identify = |st: &mut Store, parent: Obj, parent_pk: Obj, child: Obj, child_pk: Obj| {
+        let r = st.create(RELATIONSHIP).unwrap();
+        st.set(r, relationship::FROM, Value::Ref(parent)).unwrap();
+        st.set(r, relationship::TO, Value::Ref(child)).unwrap();
+        st.set(r, relationship::FROM_END, Value::Enum(Cardinality::ExactlyOne.index())).unwrap();
+        st.set(r, relationship::TO_END, Value::Enum(Cardinality::ZeroOrMore.index())).unwrap();
+        st.set(r, relationship::IDENTIFYING, Value::Bool(true)).unwrap();
+        st.push(s, schema::RELATIONSHIP, Value::Ref(r)).unwrap();
+        let c = st.create(ATTRIBUTE).unwrap();
+        st.set(c, named_element::NAME, Value::str("parent_id")).unwrap();
+        st.set(c, attribute::TYPE, Value::str("INT")).unwrap();
+        st.set(c, attribute::NULLABLE, Value::Bool(false)).unwrap();
+        st.push(child, entity::ATTRIBUTE, Value::Ref(c)).unwrap();
+        st.push(child_pk, key::COLUMN, Value::Ref(c)).unwrap();
+        let fk = st.create(FOREIGN_KEY).unwrap();
+        st.set(fk, foreign_key::REFERENCES, Value::Ref(parent_pk)).unwrap();
+        st.push(fk, foreign_key::COLUMN, Value::Ref(c)).unwrap();
+        st.set(fk, foreign_key::RELATIONSHIP, Value::Ref(r)).unwrap();
+        st.push(child, entity::FOREIGN_KEY, Value::Ref(fk)).unwrap();
+    };
+    identify(&mut st, a, a_pk, b, b_pk);
+    identify(&mut st, b, b_pk, a, a_pk);
+    let a_id = st.uuid(a).unwrap().to_string();
+    let mut s = Session::new(registry().unwrap(), st, 1, Options::default());
+    let before = picture(s.doc());
+    let e = s
+        .execute("er.attribute.add", &json!({ "entity": a_id, "name": "more", "type": "INT", "primary_key": true }))
+        .expect_err("the loop grows forever");
+    assert!(e.to_string().contains("deeper than") && e.to_string().contains("or form a cycle"), "{e}");
+    assert_eq!(picture(s.doc()), before, "nothing of the attempt stays");
+    // A self-reference onto a unique key may identify: it cannot recurse.
+    let mut s = session();
+    let sm = sample(&mut s);
+    let code = run(&mut s, "er.attribute.add", json!({ "entity": sm.customer, "name": "code", "type": "INT", "unique": true }));
+    let uq = get(&mut s, "er.entity.get", json!({ "entity": sm.customer }))["unique_constraints"][0]["id"].as_str().unwrap().to_string();
+    let _ = code;
+    let own = json!({ "from": sm.customer, "to": sm.customer, "from_end": "exactly-one", "to_end": "zero-or-more", "create_foreign_key": true, "identifying": true, "from_role": "parent", "points_to": uq });
+    run(&mut s, "er.relationship.add", own);
     all_rules_hold(s.doc());
 }

@@ -2019,3 +2019,89 @@ fn the_check_and_index_editors_write_through_the_engine_and_a_refusal_changes_no
     assert!(h.state().panels.index.is_none());
     assert!(archforge_er::rules::indexes_of(h.state().session.as_ref().unwrap().doc(), customer_obj).is_empty());
 }
+
+#[test]
+fn key_columns_follow_their_target_until_unlinked_and_a_pure_mapping_table_collapses() {
+    let (mut h, customer) = table_harness();
+    let (order, rel, mapping) = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
+        let st = s.doc();
+        let schema = st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap()).unwrap().to_string();
+        let order = id(s.execute("er.entity.add", &serde_json::json!({ "schema": schema, "name": "Order" })).unwrap().value);
+        s.execute("er.attribute.add", &serde_json::json!({ "entity": order, "name": "order_id", "type": "BIGINT", "primary_key": true })).unwrap();
+        let rel = id(s
+            .execute(
+                "er.relationship.add",
+                &serde_json::json!({ "from": customer, "to": order, "from_end": "exactly-one", "to_end": "zero-or-more", "create_foreign_key": true }),
+            )
+            .unwrap()
+            .value);
+        let tag = id(s.execute("er.entity.add", &serde_json::json!({ "schema": schema, "name": "Tag" })).unwrap().value);
+        s.execute("er.attribute.add", &serde_json::json!({ "entity": tag, "name": "tag_id", "type": "INT", "primary_key": true })).unwrap();
+        let line = id(s
+            .execute("er.relationship.add", &serde_json::json!({ "from": order, "to": tag, "from_end": "zero-or-more", "to_end": "zero-or-more" }))
+            .unwrap()
+            .value);
+        let mapping = id(s.execute("er.relationship.resolve", &serde_json::json!({ "relationship": line })).unwrap().value);
+        s.execute("view.select", &serde_json::json!({ "ids": [order] })).unwrap();
+        (order, rel, mapping)
+    };
+    h.run();
+    // Order's key column follows Customer.customer_id: the row carries the link mark, the editor
+    // names the target and Unlink frees it.
+    let marks: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.column.") && i.ends_with(".link")).collect();
+    assert_eq!(marks.len(), 1, "{marks:?}");
+    let row = marks[0].trim_end_matches(".link").to_string();
+    let at = rect_of(&h, &row).center();
+    click(&mut h, at);
+    assert_eq!(h.state().panels.column.as_ref().and_then(|c| c.linked.as_deref()), Some("Customer.customer_id"));
+    let at = rect_of(&h, "workspace.properties.column.unlink").center();
+    click(&mut h, at);
+    assert!(h.state().panels.column.as_ref().is_some_and(|c| c.linked.is_none() && c.unlink), "{:?}", h.state().panels.column);
+    // Cancel keeps the link; Unlink then Apply is one step that drops it.
+    let at = rect_of(&h, "workspace.properties.column.cancel").center();
+    click(&mut h, at);
+    assert_eq!(ids(&h).iter().filter(|i| i.ends_with(".link")).count(), 1, "Cancel kept the link");
+    let at = rect_of(&h, &row).center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.properties.column.unlink").center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.properties.column.apply").center();
+    click(&mut h, at);
+    assert!(h.state().panels.column.is_none(), "{:?}", h.state().panels.column);
+    assert!(!ids(&h).iter().any(|i| i.ends_with(".link")), "the mark is gone");
+    // The relationship's parent end set to zero-or-one makes the key column nullable.
+    {
+        let s = h.state_mut().session.as_mut().unwrap();
+        s.execute("view.select", &serde_json::json!({ "ids": [rel] })).unwrap();
+    }
+    h.run();
+    let at = rect_of(&h, "workspace.properties.end.from.0").center();
+    click(&mut h, at);
+    {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let order_obj = st.by_uuid(archforge_mof::Uuid::parse(&order).unwrap()).unwrap();
+        let column = st
+            .list(order_obj, archforge_er::entity::ATTRIBUTE)
+            .unwrap()
+            .iter()
+            .filter_map(archforge_mof::Value::as_ref)
+            .find(|a| archforge_er::rules::name_of(st, *a) == "customer_customer_id")
+            .unwrap();
+        assert!(archforge_er::rules::is_nullable(st, column), "zero-or-one made the key column nullable");
+    }
+    // The mapping table's Properties offer to collapse it; the click brings the line back.
+    {
+        let s = h.state_mut().session.as_mut().unwrap();
+        s.execute("view.select", &serde_json::json!({ "ids": [mapping] })).unwrap();
+    }
+    h.run();
+    assert!(ids(&h).iter().any(|i| i == "workspace.properties.collapse"), "{:?}", ids(&h));
+    let at = rect_of(&h, "workspace.properties.collapse").center();
+    click(&mut h, at);
+    let st = h.state().session.as_ref().unwrap().doc();
+    assert!(st.by_uuid(archforge_mof::Uuid::parse(&mapping).unwrap()).is_none_or(|m| !st.is_alive(m)), "{:?}", h.state().panels.notice);
+    let relationships = st.alive().filter(|o| st.class_of(*o).ok() == Some(archforge_er::RELATIONSHIP)).count();
+    assert_eq!(relationships, 2, "Customer to Order and the many-to-many line");
+}

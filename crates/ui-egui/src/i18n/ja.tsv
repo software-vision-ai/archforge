@@ -58,6 +58,7 @@ str		Problems · {n}	問題 · {n}
 str		lacks its table or its key	テーブルまたはキーがありません
 str		{column} is a key column and may be null	{column} はキー列ですが NULL を許可しています
 str		{from} to {to} is many to many	{from} から {to} は多対多です
+str		{from} to {to}: one or more is not enforced by a key	{from} から {to}: 1 以上はキーでは保証されません
 str		{key}: {problem}	{key}: {problem}
 str		{name} has no primary key	{name} に主キーがありません
 str		{name} removed · {keys} went with it	{name} を削除しました · {keys} も削除されました
@@ -67,6 +68,10 @@ str		Add skill	スキルを追加
 str		Kind	種類
 str		Regular	通常
 str		Mapping table	対応テーブル
+str		Follows {target}	{target} に追従
+str		Unlink	リンクを解除
+str		{name} holds nothing but its two keys, so it can become the many-to-many line between {from} and {to} again.	{name} は 2 つのキーしか持たないため、{from} と {to} の多対多の線に戻せます。
+str		Collapse into a relationship	リレーションシップに折りたたむ
 str		Type	型
 str		Primary key	主キー
 str		Not null	NOT NULL

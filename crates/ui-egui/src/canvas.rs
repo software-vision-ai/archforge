@@ -592,7 +592,12 @@ fn draw_node(
                         format!("{} : {ty}", archforge_er::rules::name_of(store, *column))
                     };
                     let text_x = rect.left() + ENTITY_TEXT * z;
-                    ux::text(&inner, pos2(text_x, y), &text, types::UI.scaled(z), p.text, Some((rect.right() - ENTITY_INSET * z - text_x).max(0.0)));
+                    let linked = archforge_er::rules::linked_to(store, *column).is_some();
+                    let room_x = (rect.right() - ENTITY_INSET * z - text_x - if linked { 18.0 * z } else { 0.0 }).max(0.0);
+                    let drawn = ux::text(&inner, pos2(text_x, y), &text, types::UI.scaled(z), p.text, Some(room_x));
+                    if linked {
+                        ux::icon(&inner, pos2(drawn.right() + 6.0 * z, y + 6.0 * z), &icons::LINK, 12.0 * z, p.text_secondary);
+                    }
                 }
             } else {
                 let g = ux::galley(&inner, &name, types::SECTION.scaled(z.max(DETAIL_ZOOM)), p.text, room);

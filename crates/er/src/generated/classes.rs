@@ -499,6 +499,7 @@ pub struct AttributeObj {
     pub generation: u32,
     pub expression: Option<Arc<str>>,
     pub collation: Option<Arc<str>>,
+    pub linked_to: Option<Obj>,
 }
 
 impl Default for AttributeObj {
@@ -515,6 +516,7 @@ impl Default for AttributeObj {
             generation: 0,
             expression: None,
             collation: None,
+            linked_to: None,
         }
     }
 }
@@ -536,6 +538,7 @@ impl Reflect for AttributeObj {
             attribute::GENERATION => Some(Value::Enum(self.generation)),
             attribute::EXPRESSION => Some(self.expression.clone().map_or(Value::Null, Value::Str)),
             attribute::COLLATION => Some(self.collation.clone().map_or(Value::Null, Value::Str)),
+            attribute::LINKED_TO => Some(self.linked_to.map_or(Value::Null, Value::Ref)),
             _ => None,
         }
     }
@@ -624,6 +627,14 @@ impl Reflect for AttributeObj {
                 }
                 Ok(())
             }
+            attribute::LINKED_TO => {
+                match value {
+                    Value::Null => self.linked_to = None,
+                    Value::Ref(v) => self.linked_to = Some(v),
+                    other => return Err(format!("not a reference: {other}")),
+                }
+                Ok(())
+            }
             _ => Err(format!("no single-valued property {} on Attribute", prop.0)),
         }
     }
@@ -669,6 +680,9 @@ impl AttributeObj {
     pub fn collation(&self) -> Option<&str> {
         self.collation.as_deref()
     }
+    pub fn linked_to(&self) -> Option<Obj> {
+        self.linked_to
+    }
     pub fn set_description(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
         store.set(obj, element::DESCRIPTION, v.map_or(Value::Null, Value::str))
     }
@@ -701,6 +715,9 @@ impl AttributeObj {
     }
     pub fn set_collation(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
         store.set(obj, attribute::COLLATION, v.map_or(Value::Null, Value::str))
+    }
+    pub fn set_linked_to(store: &mut Store, obj: Obj, v: Option<Obj>) -> Result<(), Invalid> {
+        store.set(obj, attribute::LINKED_TO, v.map_or(Value::Null, Value::Ref))
     }
 }
 

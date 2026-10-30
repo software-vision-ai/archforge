@@ -9,7 +9,7 @@ use archforge_mof::{Builder, ClassId, DataId, DataKind, MetaError, Metamodel, Pr
 pub const INDEX: u16 = 3;
 pub const URI: &str = "archforge:er";
 pub const VERSION: &str = "1";
-pub const CONTENT_HASH: &str = "9a98a0605623b2bb";
+pub const CONTENT_HASH: &str = "3364b8699f35d948";
 
 pub const BOOLEAN: DataId = DataId::new(INDEX, 0);
 pub const INTEGER: DataId = DataId::new(INDEX, 1);
@@ -84,71 +84,72 @@ pub mod attribute {
     pub const GENERATION: PropId = PropId::new(INDEX, 18);
     pub const EXPRESSION: PropId = PropId::new(INDEX, 19);
     pub const COLLATION: PropId = PropId::new(INDEX, 20);
+    pub const LINKED_TO: PropId = PropId::new(INDEX, 21);
 }
 /// The properties Relationship declares.
 pub mod relationship {
     use super::INDEX;
     use super::PropId;
-    pub const NAME: PropId = PropId::new(INDEX, 21);
-    pub const FROM: PropId = PropId::new(INDEX, 22);
-    pub const TO: PropId = PropId::new(INDEX, 23);
-    pub const FROM_END: PropId = PropId::new(INDEX, 24);
-    pub const TO_END: PropId = PropId::new(INDEX, 25);
-    pub const FROM_ROLE: PropId = PropId::new(INDEX, 26);
-    pub const TO_ROLE: PropId = PropId::new(INDEX, 27);
-    pub const IDENTIFYING: PropId = PropId::new(INDEX, 28);
+    pub const NAME: PropId = PropId::new(INDEX, 22);
+    pub const FROM: PropId = PropId::new(INDEX, 23);
+    pub const TO: PropId = PropId::new(INDEX, 24);
+    pub const FROM_END: PropId = PropId::new(INDEX, 25);
+    pub const TO_END: PropId = PropId::new(INDEX, 26);
+    pub const FROM_ROLE: PropId = PropId::new(INDEX, 27);
+    pub const TO_ROLE: PropId = PropId::new(INDEX, 28);
+    pub const IDENTIFYING: PropId = PropId::new(INDEX, 29);
 }
 /// The properties Key declares.
 pub mod key {
     use super::INDEX;
     use super::PropId;
-    pub const NAME: PropId = PropId::new(INDEX, 29);
-    pub const COLUMN: PropId = PropId::new(INDEX, 30);
+    pub const NAME: PropId = PropId::new(INDEX, 30);
+    pub const COLUMN: PropId = PropId::new(INDEX, 31);
 }
 /// The properties UniqueConstraint declares.
 pub mod unique_constraint {
     use super::INDEX;
     use super::PropId;
-    pub const NULLS_DISTINCT: PropId = PropId::new(INDEX, 31);
+    pub const NULLS_DISTINCT: PropId = PropId::new(INDEX, 32);
 }
 /// The properties ForeignKey declares.
 pub mod foreign_key {
     use super::INDEX;
     use super::PropId;
-    pub const NAME: PropId = PropId::new(INDEX, 32);
-    pub const REFERENCES: PropId = PropId::new(INDEX, 33);
-    pub const COLUMN: PropId = PropId::new(INDEX, 34);
-    pub const ON_DELETE: PropId = PropId::new(INDEX, 35);
-    pub const ON_UPDATE: PropId = PropId::new(INDEX, 36);
-    pub const RELATIONSHIP: PropId = PropId::new(INDEX, 37);
-    pub const MATCH: PropId = PropId::new(INDEX, 38);
-    pub const DEFERRABLE: PropId = PropId::new(INDEX, 39);
+    pub const NAME: PropId = PropId::new(INDEX, 33);
+    pub const REFERENCES: PropId = PropId::new(INDEX, 34);
+    pub const COLUMN: PropId = PropId::new(INDEX, 35);
+    pub const ON_DELETE: PropId = PropId::new(INDEX, 36);
+    pub const ON_UPDATE: PropId = PropId::new(INDEX, 37);
+    pub const RELATIONSHIP: PropId = PropId::new(INDEX, 38);
+    pub const MATCH: PropId = PropId::new(INDEX, 39);
+    pub const DEFERRABLE: PropId = PropId::new(INDEX, 40);
 }
 /// The properties CheckConstraint declares.
 pub mod check_constraint {
     use super::INDEX;
     use super::PropId;
-    pub const NAME: PropId = PropId::new(INDEX, 40);
-    pub const EXPRESSION: PropId = PropId::new(INDEX, 41);
+    pub const NAME: PropId = PropId::new(INDEX, 41);
+    pub const EXPRESSION: PropId = PropId::new(INDEX, 42);
 }
 /// The properties TableIndex declares.
 pub mod table_index {
     use super::INDEX;
     use super::PropId;
-    pub const NAME: PropId = PropId::new(INDEX, 42);
-    pub const UNIQUE: PropId = PropId::new(INDEX, 43);
-    pub const COLUMN: PropId = PropId::new(INDEX, 44);
-    pub const WHERE: PropId = PropId::new(INDEX, 45);
-    pub const METHOD: PropId = PropId::new(INDEX, 46);
+    pub const NAME: PropId = PropId::new(INDEX, 43);
+    pub const UNIQUE: PropId = PropId::new(INDEX, 44);
+    pub const COLUMN: PropId = PropId::new(INDEX, 45);
+    pub const WHERE: PropId = PropId::new(INDEX, 46);
+    pub const METHOD: PropId = PropId::new(INDEX, 47);
 }
 /// The properties IndexColumn declares.
 pub mod index_column {
     use super::INDEX;
     use super::PropId;
-    pub const ATTRIBUTE: PropId = PropId::new(INDEX, 47);
-    pub const EXPRESSION: PropId = PropId::new(INDEX, 48);
-    pub const DIRECTION: PropId = PropId::new(INDEX, 49);
-    pub const NULLS: PropId = PropId::new(INDEX, 50);
+    pub const ATTRIBUTE: PropId = PropId::new(INDEX, 48);
+    pub const EXPRESSION: PropId = PropId::new(INDEX, 49);
+    pub const DIRECTION: PropId = PropId::new(INDEX, 50);
+    pub const NULLS: PropId = PropId::new(INDEX, 51);
 }
 
 fn build() -> Result<Arc<Metamodel>, MetaError> {
@@ -613,6 +614,26 @@ fn build() -> Result<Arc<Metamodel>, MetaError> {
         default: None,
         doc: "",
     })?; // attribute::COLLATION
+    b.property(PropertySpec {
+        name: "linkedTo",
+        owner: ATTRIBUTE,
+        ty: TypeRef::Class(ATTRIBUTE),
+        lower: 0,
+        upper: Some(1),
+        is_ordered: false,
+        is_unique: true,
+        is_composite: false,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[],
+        redefines: &[],
+        default: None,
+        doc: "",
+    })?; // attribute::LINKED_TO
     b.property(PropertySpec {
         name: "name",
         owner: RELATIONSHIP,
