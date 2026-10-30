@@ -570,7 +570,8 @@ fn workspace_harness(theme: ThemeKind, size: egui::Vec2) -> Harness<'static, She
     let mut shell = Shell::new(Services { user_name: Some("Robin Meyer".into()), ids: Some(test_ids()), ..Services::default() });
     shell.state.theme = theme;
     shell.open_project(crate::Opened { name: "Commerce platform".into(), path: "/tmp/Commerce platform.archforge".into() });
-    let mut h = Harness::builder().with_size(size).build_ui_state(
+    // Frames a sixtieth of a second apart, as on screen, so two clicks in a row read as a double click.
+    let mut h = Harness::builder().with_size(size).with_step_dt(1.0 / 60.0).build_ui_state(
         |ui, shell: &mut Shell| {
             shell.logic(ui.ctx());
             shell.ui(ui);
@@ -1172,4 +1173,280 @@ fn the_canvas_draws_the_diagram_and_the_pointer_selects_pans_and_zooms() {
     click(&mut h, canvas.left_top() + egui::vec2(20.0, 20.0));
     assert!(ids(&h).iter().any(|i| i == "workspace.properties.schema"));
     let _ = diagram;
+}
+
+fn node_ids(h: &Harness<'static, Shell>) -> Vec<String> {
+    ids(h).iter().filter(|i| i.starts_with("workspace.canvas.node.")).cloned().collect()
+}
+
+fn node_bounds(h: &Harness<'static, Shell>, node: &str) -> archforge_diagram::Rect {
+    let st = h.state().session.as_ref().unwrap().doc();
+    let n = st.by_uuid(archforge_mof::Uuid::parse(node).unwrap()).unwrap();
+    archforge_diagram::grid::bounds_of(st, n)
+}
+
+#[test]
+fn the_entity_tool_places_a_table_named_in_place_as_one_undo_step() {
+    let (mut h, _customer, _diagram) = diagram_harness();
+    let at = rect_of(&h, "workspace.tools.entity").center();
+    click(&mut h, at);
+    assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Entity);
+    let canvas = rect_of(&h, "workspace.canvas");
+    let before = node_ids(&h).len();
+    click(&mut h, canvas.left_top() + egui::vec2(120.0, 320.0));
+    let nodes = node_ids(&h);
+    assert_eq!(nodes.len(), before + 1, "a node was placed: {nodes:?}");
+    let rename = h.state().canvas.rename.clone().expect("the name is open for typing");
+    assert_eq!(rename.text, "Entity");
+    assert_eq!(selected_name(&h), "Entity");
+    assert!(ids(&h).iter().any(|i| i == "workspace.canvas.rename"));
+    // Typing replaces the selected default; Enter commits the rename.
+    h.event(egui::Event::Text("Payment".into()));
+    h.run();
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    assert!(h.state().canvas.rename.is_none(), "{:?}", h.state().canvas.rename);
+    assert_eq!(selected_name(&h), "Payment");
+    // Add and place were one step: one undo removes the node and the table together.
+    let s = h.state_mut().session.as_mut().unwrap();
+    s.execute("edit.undo", &serde_json::Value::Null).unwrap();
+    s.execute("edit.undo", &serde_json::Value::Null).unwrap();
+    h.run();
+    assert_eq!(node_ids(&h).len(), before);
+    let st = h.state().session.as_ref().unwrap().doc();
+    assert!(!st.alive().any(|o| archforge_er::rules::name_of(st, o) == "Entity"), "the table went with the node");
+    // Escape returns to Select.
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Select);
+}
+
+#[test]
+fn dragging_moves_and_resizes_nodes_and_the_arrange_bar_aligns_two() {
+    let (mut h, _customer, _diagram) = diagram_harness();
+    let nodes = node_ids(&h);
+    let customer_node = nodes.iter().min_by(|a, b| rect_of(&h, a).left().total_cmp(&rect_of(&h, b).left())).unwrap().clone();
+    let order_node = nodes.iter().find(|n| **n != customer_node).unwrap().clone();
+    let zoom = h.state().canvas.zoom;
+    // A drag on the node moves it by the drag in diagram units, as one undo step.
+    let before = node_bounds(&h, customer_node.trim_start_matches("workspace.canvas.node."));
+    let from = rect_of(&h, &customer_node).center();
+    drag(&mut h, from, from + egui::vec2(60.0, 30.0));
+    let after = node_bounds(&h, customer_node.trim_start_matches("workspace.canvas.node."));
+    assert!(((after.x - before.x) as f32 - 60.0 / zoom).abs() < 1.0, "{before:?} -> {after:?}");
+    assert!(((after.y - before.y) as f32 - 30.0 / zoom).abs() < 1.0);
+    assert!(h.state().canvas.gesture.is_none());
+    let s = h.state_mut().session.as_mut().unwrap();
+    s.execute("edit.undo", &serde_json::Value::Null).unwrap();
+    h.run();
+    let back = node_bounds(&h, customer_node.trim_start_matches("workspace.canvas.node."));
+    assert!((back.x - before.x).abs() < 0.01 && (back.y - before.y).abs() < 0.01, "one undo restores the place");
+    // The bottom-right handle of the selected node resizes it.
+    let at = rect_of(&h, &customer_node).center();
+    click(&mut h, at);
+    let ring = rect_of(&h, &customer_node).expand(4.0);
+    drag(&mut h, ring.right_bottom(), ring.right_bottom() + egui::vec2(40.0, 20.0));
+    let sized = node_bounds(&h, customer_node.trim_start_matches("workspace.canvas.node."));
+    assert!((sized.width as f32 - (before.width as f32 + 40.0 / zoom)).abs() < 1.0, "{sized:?}");
+    assert!((sized.height as f32 - (before.height as f32 + 20.0 / zoom)).abs() < 1.0);
+    // Shift-click adds the second node; the Arrange bar appears and aligns the tops... and lefts.
+    let at = rect_of(&h, &order_node).center();
+    h.event(egui::Event::PointerMoved(at));
+    for pressed in [true, false] {
+        h.event_modifiers(
+            egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::SHIFT },
+            egui::Modifiers::SHIFT,
+        );
+    }
+    h.run();
+    assert_eq!(h.state().session.as_ref().unwrap().view().selection.len(), 2);
+    assert!(ids(&h).iter().any(|i| i == "workspace.canvas.arrange.left"), "{:?}", ids(&h));
+    let at = rect_of(&h, "workspace.canvas.arrange.left").center();
+    click(&mut h, at);
+    let a = node_bounds(&h, customer_node.trim_start_matches("workspace.canvas.node."));
+    let b = node_bounds(&h, order_node.trim_start_matches("workspace.canvas.node."));
+    assert!((a.x - b.x).abs() < 0.01, "aligned left: {a:?} {b:?}");
+    // The arrows nudge the selection.
+    key(&mut h, egui::Key::ArrowRight, egui::Modifiers::NONE);
+    let a2 = node_bounds(&h, customer_node.trim_start_matches("workspace.canvas.node."));
+    assert!((a2.x - a.x - 1.0).abs() < 0.01, "{a:?} -> {a2:?}");
+}
+
+#[test]
+fn the_entity_menu_removes_from_the_diagram_and_the_dialog_deletes_from_the_model() {
+    let (mut h, customer, _diagram) = diagram_harness();
+    let nodes = node_ids(&h);
+    let customer_node = nodes.iter().min_by(|a, b| rect_of(&h, a).left().total_cmp(&rect_of(&h, b).left())).unwrap().clone();
+    let order_node = nodes.iter().find(|n| **n != customer_node).unwrap().clone();
+    // The add-column adorner opens the column editor for the selected table.
+    let at = rect_of(&h, &customer_node).center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.canvas.adorn.add-column").center();
+    click(&mut h, at);
+    assert!(h.state().panels.column.as_ref().is_some_and(|c| c.target.is_none() && c.entity.to_string() == customer));
+    assert_eq!(h.state().state.panel, crate::state::Panel::Properties);
+    // A right click opens the menu; Remove from this diagram keeps the table in the model.
+    let at = rect_of(&h, &order_node).center();
+    h.event(egui::Event::PointerMoved(at));
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Secondary, pressed, modifiers: egui::Modifiers::NONE });
+    }
+    h.run();
+    assert!(h.state().canvas.menu.is_some(), "the menu opened");
+    let at = rect_of(&h, "workspace.canvas.menu.remove").center();
+    click(&mut h, at);
+    assert_eq!(node_ids(&h).len(), 1, "the node went; notice {:?}, active {:?}, ids {:?}", h.state().canvas.notice, h.state().canvas.active, ids(&h));
+    let st = h.state().session.as_ref().unwrap().doc();
+    assert!(st.alive().any(|o| archforge_er::rules::name_of(st, o) == "Order"), "the table stays");
+    // Shift+Delete on the selected Customer asks; Delete confirms and the table goes with its node.
+    let at = rect_of(&h, &customer_node).center();
+    click(&mut h, at);
+    key(&mut h, egui::Key::Delete, egui::Modifiers::SHIFT);
+    let d = h.state().explorer.delete.clone().expect("the dialog asks");
+    assert_eq!(d.name, "Customer");
+    assert_eq!(d.diagrams, 1);
+    assert!(d.node.is_some());
+    assert!(ids(&h).iter().any(|i| i == "workspace.explorer.delete.unplace"));
+    let at = rect_of(&h, "workspace.explorer.delete.confirm").center();
+    click(&mut h, at);
+    assert!(h.state().explorer.delete.is_none());
+    assert!(node_ids(&h).is_empty());
+    let st = h.state().session.as_ref().unwrap().doc();
+    assert!(!st.alive().any(|o| archforge_er::rules::name_of(st, o) == "Customer"));
+}
+
+#[test]
+fn a_table_added_in_models_is_placed_on_the_open_diagram_and_grows_with_its_columns() {
+    let (mut h, _customer, _diagram) = diagram_harness();
+    let before = node_ids(&h).len();
+    // Select the schema in Models and add a table: it lands on the diagram.
+    let schema_row = ids(&h).into_iter().find(|i| i.starts_with("workspace.explorer.row.")).unwrap();
+    let at = rect_of(&h, &schema_row).center();
+    click(&mut h, at);
+    crate::explorer::add(h.state_mut(), crate::explorer::Kind::Entity);
+    h.run();
+    assert_eq!(node_ids(&h).len(), before + 1, "placed on the open diagram");
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    // Its node starts at the empty height and grows with the first column.
+    let new_node = node_ids(&h).into_iter().max_by(|a, b| rect_of(&h, a).left().total_cmp(&rect_of(&h, b).left())).unwrap();
+    let id = new_node.trim_start_matches("workspace.canvas.node.").to_string();
+    assert!((node_bounds(&h, &id).height - crate::editing::ENTITY_EMPTY_HEIGHT).abs() < 0.01);
+    crate::explorer::add(h.state_mut(), crate::explorer::Kind::Attribute);
+    h.run();
+    assert!(
+        (node_bounds(&h, &id).height - crate::editing::content_height(1)).abs() < 0.01,
+        "{:?} notice {:?} undo {:?}",
+        node_bounds(&h, &id),
+        h.state().explorer.notice,
+        h.state().session.as_ref().unwrap().undo_label()
+    );
+    // Growth and the column were one step.
+    let s = h.state_mut().session.as_mut().unwrap();
+    s.execute("edit.undo", &serde_json::Value::Null).unwrap();
+    h.run();
+    assert!((node_bounds(&h, &id).height - crate::editing::ENTITY_EMPTY_HEIGHT).abs() < 0.01);
+}
+
+fn drag_by(h: &mut Harness<'static, Shell>, button: egui::PointerButton, from: egui::Pos2, to: egui::Pos2) {
+    h.event(egui::Event::PointerMoved(from));
+    h.event(egui::Event::PointerButton { pos: from, button, pressed: true, modifiers: egui::Modifiers::NONE });
+    h.run();
+    h.event(egui::Event::PointerMoved(to));
+    h.run();
+    h.event(egui::Event::PointerButton { pos: to, button, pressed: false, modifiers: egui::Modifiers::NONE });
+    h.run();
+}
+
+#[test]
+fn the_marquee_selects_what_it_crosses_and_a_middle_drag_only_pans() {
+    let (mut h, _customer, _diagram) = diagram_harness();
+    let nodes = node_ids(&h);
+    let customer_node = nodes.iter().min_by(|a, b| rect_of(&h, a).left().total_cmp(&rect_of(&h, b).left())).unwrap().clone();
+    let id = customer_node.trim_start_matches("workspace.canvas.node.").to_string();
+    // A middle drag over a node pans the view and moves nothing.
+    let before = node_bounds(&h, &id);
+    let pan = h.state().canvas.pan;
+    let from = rect_of(&h, &customer_node).center();
+    drag_by(&mut h, egui::PointerButton::Middle, from, from + egui::vec2(30.0, 10.0));
+    assert_eq!(node_bounds(&h, &id), before, "a middle drag moves no node");
+    assert!(h.state().canvas.gesture.is_none());
+    assert!((h.state().canvas.pan - pan - egui::vec2(30.0, 10.0)).length() < 1.0, "it panned");
+    assert_eq!(selected_name(&h), "Shop schema", "the selection is untouched");
+    // A marquee from the empty canvas over both nodes selects both tables.
+    let canvas = rect_of(&h, "workspace.canvas");
+    let a = rect_of(&h, &customer_node);
+    let other = nodes.iter().find(|n| **n != customer_node).map(|n| rect_of(&h, n)).unwrap();
+    drag(&mut h, egui::pos2(canvas.left() + 10.0, a.top() - 10.0), egui::pos2(other.right() + 10.0, other.bottom() + 10.0));
+    assert_eq!(h.state().session.as_ref().unwrap().view().selection.len(), 2, "both tables selected");
+    // Two nudges with the same key coalesce into one undo step.
+    let a0 = node_bounds(&h, &id);
+    key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+    key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+    assert!((node_bounds(&h, &id).y - a0.y - 2.0).abs() < 0.01);
+    let s = h.state_mut().session.as_mut().unwrap();
+    s.execute("edit.undo", &serde_json::Value::Null).unwrap();
+    h.run();
+    assert!((node_bounds(&h, &id).y - a0.y).abs() < 0.01, "one undo takes both nudges back");
+}
+
+#[test]
+fn double_clicks_rename_and_open_columns_and_a_refused_name_stays_open() {
+    let (mut h, customer, _diagram) = diagram_harness();
+    let nodes = node_ids(&h);
+    let customer_node = nodes.iter().min_by(|a, b| rect_of(&h, a).left().total_cmp(&rect_of(&h, b).left())).unwrap().clone();
+    let rect = rect_of(&h, &customer_node);
+    // A double click on the header opens the name; "Order" is taken, so the rename is refused and stays open.
+    let at = rect.left_top() + egui::vec2(60.0, 30.0);
+    double_click(&mut h, at);
+    assert!(h.state().canvas.rename.as_ref().is_some_and(|r| r.text == "Customer"), "{:?}", h.state().canvas.rename);
+    h.state_mut().canvas.rename.as_mut().unwrap().text = "Order".into();
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    let rename = h.state().canvas.rename.clone().expect("a refused name stays open");
+    assert!(rename.refused.is_some());
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    assert!(h.state().canvas.rename.is_none());
+    assert_eq!(selected_name(&h), "Customer");
+    // A double click on the second column row opens that column's editor.
+    let at = rect.left_top() + egui::vec2(100.0, 77.0 + 20.0 + 6.0);
+    double_click(&mut h, at);
+    let edit = h.state().panels.column.clone().expect("the column editor opened");
+    assert_eq!(edit.entity.to_string(), customer);
+    assert_eq!(edit.name, "email", "the second row is the email column");
+    // With the Entity tool, a click on a node selects it instead of placing one.
+    let n = node_ids(&h).len();
+    let at = rect_of(&h, "workspace.tools.entity").center();
+    click(&mut h, at);
+    let order_node = nodes.iter().find(|x| **x != customer_node).unwrap().clone();
+    let at = rect_of(&h, &order_node).center();
+    click(&mut h, at);
+    assert_eq!(node_ids(&h).len(), n);
+    assert_eq!(selected_name(&h), "Order");
+    // The dialog's third button removes from the diagram only. Time passes first, so the next
+    // click on Order is not read as a double click on the one before; the column editor, which
+    // would keep the keyboard, is closed.
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    for _ in 0..45 {
+        h.step();
+    }
+    h.state_mut().panels.column = None;
+    let at = rect_of(&h, &order_node).center();
+    click(&mut h, at);
+    key(&mut h, egui::Key::Delete, egui::Modifiers::SHIFT);
+    assert!(h.state().explorer.delete.is_some());
+    let at = rect_of(&h, "workspace.explorer.delete.unplace").center();
+    click(&mut h, at);
+    assert!(h.state().explorer.delete.is_none());
+    assert_eq!(node_ids(&h).len(), n - 1);
+    let st = h.state().session.as_ref().unwrap().doc();
+    assert!(st.alive().any(|o| archforge_er::rules::name_of(st, o) == "Order"), "the table stays in the model");
+}
+
+/// Two clicks a frame apart: `run` would settle for longer than egui's double-click window.
+fn double_click(h: &mut Harness<'static, Shell>, at: egui::Pos2) {
+    h.event(egui::Event::PointerMoved(at));
+    for _ in 0..2 {
+        for pressed in [true, false] {
+            h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE });
+        }
+        h.step();
+    }
+    h.run();
 }

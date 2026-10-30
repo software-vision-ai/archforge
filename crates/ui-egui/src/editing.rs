@@ -1,0 +1,1011 @@
+//! Editing on the ER canvas (slice E1 of archforge-gm2.10, from the design's frame "ER · Empty
+//! diagram · First entity named in place" and the cards "Two entities selected", "Entity menu"
+//! and "Delete from the model"): the Entity tool places a table and opens its name for typing in
+//! the node's header; Select drags nodes, resizes them by their handles, draws a marquee, nudges
+//! with the arrows and arranges two or more with the Arrange bar; a selected entity shows its two
+//! adorners (connect waits for E2, add column opens the column editor); the entity menu removes
+//! from the diagram or deletes from the model after the dialog. Every change is one engine step:
+//! a drag is previewed on the canvas and committed as one command or one batch on release.
+
+use std::collections::BTreeMap;
+
+use archforge_diagram::grid::bounds_of;
+use archforge_diagram::{Grid, Hit, diagram, node};
+use archforge_mof::{Obj, Store, Uuid};
+use egui::{Pos2, Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
+use serde_json::json;
+
+use crate::canvas::{ENTITY_FIRST_ROW, ENTITY_HEADER, ENTITY_ROW, Tool, View};
+use crate::home::control;
+use crate::i18n::tr;
+use crate::ux::{self, Palette, icons, types};
+use crate::{Shell, widgets};
+
+/// A new entity's node: the design's width, and its height without columns.
+pub const ENTITY_WIDTH: f64 = 240.0;
+pub const ENTITY_EMPTY_HEIGHT: f64 = 72.0;
+/// The least a node may be resized to: the diagram rule's.
+const MIN_SIZE: f64 = 20.0;
+/// How far a drag must go before it counts as a move.
+const DRAG_MIN: f32 = 0.5;
+/// A nudge by the arrows, and with Shift.
+const NUDGE: f64 = 1.0;
+const NUDGE_FAR: f64 = 10.0;
+/// The distance from a handle's centre that still hits it.
+const HANDLE_REACH: f32 = 7.0;
+/// An adorner's box and its gap from the node.
+const ADORNER: f32 = 26.0;
+const ADORNER_GAP: f32 = 8.0;
+/// The Arrange bar's size and its gap under the selection.
+const ARRANGE: Vec2 = vec2(189.0, 42.0);
+const ARRANGE_GAP: f32 = 16.0;
+/// The gap the stack action leaves between nodes.
+const STACK_GAP: f64 = 24.0;
+/// The entity menu's width and row height.
+const MENU_WIDTH: f32 = 260.0;
+const MENU_ROW: f32 = 30.0;
+/// The most characters a name typed in place may have: the ER rule's.
+const MAX_NAME: usize = archforge_er::rules::MAX_NAME;
+
+/// A name being typed in a node's header.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NodeRename {
+    pub node: Uuid,
+    pub entity: Uuid,
+    pub text: String,
+    /// True until the field has taken the keyboard once.
+    pub opened: bool,
+    pub refused: Option<String>,
+}
+
+/// A corner handle of a selected node.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Corner {
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    BottomRight,
+}
+
+/// A pointer gesture in progress, previewed on the canvas and committed on release.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Gesture {
+    /// The nodes moved together, from the screen point the drag started at.
+    Move { nodes: Vec<Uuid>, from: Pos2 },
+    /// A node resized by a corner, from its rectangle in diagram units.
+    Resize { node: Uuid, corner: Corner, base: Rect, from: Pos2 },
+    /// A selection rectangle from a screen point.
+    Marquee { from: Pos2 },
+}
+
+/// The entity menu, open at a screen point.
+#[derive(Debug, Clone, PartialEq)]
+pub struct EntityMenu {
+    pub node: Uuid,
+    pub entity: Uuid,
+    pub at: Pos2,
+}
+
+/// What the pointer asked for this frame, decided over the store and applied after.
+enum Action {
+    Nothing,
+    Select(Vec<Uuid>),
+    Toggle(Uuid),
+    Start(Gesture, Option<Uuid>),
+    Commit,
+    Place(f64, f64),
+    Menu(EntityMenu),
+    Rename(Uuid, Uuid),
+    OpenColumn(Uuid, Option<Uuid>),
+}
+
+fn run(shell: &mut Shell, id: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
+    let Some(session) = shell.session.as_mut() else { return Err(tr("The model could not be opened")) };
+    session.execute(id, &params).map(|o| o.value).map_err(|e| e.to_string())
+}
+
+fn select(shell: &mut Shell, ids: Vec<Uuid>) {
+    let ids: Vec<String> = ids.iter().map(Uuid::to_string).collect();
+    if let Err(e) = run(shell, "view.select", json!({ "ids": ids })) {
+        shell.canvas.notice = Some(e);
+    }
+}
+
+fn uuid(store: &Store, o: Obj) -> Option<Uuid> {
+    store.uuid(o).ok()
+}
+
+fn element_of(store: &Store, n: Obj) -> Option<Obj> {
+    store.get(n, node::ELEMENT).ok().and_then(|v| v.as_ref()).filter(|e| store.is_alive(*e))
+}
+
+fn entity_of_node(store: &Store, n: Obj) -> Option<Obj> {
+    element_of(store, n).filter(|e| store.class_of(*e).ok() == Some(archforge_er::ENTITY))
+}
+
+fn nodes_of(store: &Store, d: Obj) -> Vec<Obj> {
+    store.list(d, diagram::NODE).unwrap_or_default().iter().filter_map(archforge_mof::Value::as_ref).filter(|n| store.is_alive(*n)).collect()
+}
+
+/// A node's rectangle in diagram units.
+fn unit_rect(store: &Store, n: Obj) -> Rect {
+    let b = bounds_of(store, n);
+    Rect::from_min_size(pos2(b.x as f32, b.y as f32), vec2(b.width as f32, b.height as f32))
+}
+
+/// The columns an entity node shows, and the height that shows them all.
+pub fn content_height(columns: usize) -> f64 {
+    if columns == 0 { ENTITY_EMPTY_HEIGHT } else { (ENTITY_FIRST_ROW + 9.0) as f64 + columns as f64 * ENTITY_ROW as f64 }
+}
+
+/// The nodes of the selected elements on diagram `d`, with the hit node first.
+fn selected_nodes(store: &Store, d: Obj, selection: &[Obj], hit: Obj) -> Vec<Uuid> {
+    let mut out: Vec<Uuid> = uuid(store, hit).into_iter().collect();
+    for n in nodes_of(store, d) {
+        if n == hit {
+            continue;
+        }
+        if selection.contains(&n) || element_of(store, n).is_some_and(|e| selection.contains(&e)) {
+            out.extend(uuid(store, n));
+        }
+    }
+    out
+}
+
+fn is_selected(store: &Store, selection: &[Obj], n: Obj) -> bool {
+    selection.contains(&n) || element_of(store, n).is_some_and(|e| selection.contains(&e))
+}
+
+/// The one selected node of `d`, when exactly one is.
+fn single_selected(store: &Store, d: Obj, selection: &[Obj]) -> Option<Obj> {
+    let mut found = nodes_of(store, d).into_iter().filter(|n| is_selected(store, selection, *n));
+    let first = found.next()?;
+    found.next().is_none().then_some(first)
+}
+
+/// The corner handle of the selected node under `pos`, if any.
+fn handle_at(store: &Store, d: Obj, selection: &[Obj], view: View, pos: Pos2) -> Option<(Obj, Corner)> {
+    let n = single_selected(store, d, selection)?;
+    let ring = view.rect(&bounds_of(store, n)).expand(4.0);
+    let corners = [
+        (Corner::TopLeft, ring.left_top()),
+        (Corner::TopRight, ring.right_top()),
+        (Corner::BottomLeft, ring.left_bottom()),
+        (Corner::BottomRight, ring.right_bottom()),
+    ];
+    corners.into_iter().find(|(_, c)| (*c - pos).length() <= HANDLE_REACH).map(|(corner, _)| (n, corner))
+}
+
+/// The rectangle a resize by `corner` gives, in diagram units, never smaller than the rule's least.
+fn resized(base: Rect, corner: Corner, delta: Vec2) -> Rect {
+    let (mut min, mut max) = (base.min, base.max);
+    match corner {
+        Corner::TopLeft => min += delta,
+        Corner::TopRight => {
+            min.y += delta.y;
+            max.x += delta.x;
+        }
+        Corner::BottomLeft => {
+            min.x += delta.x;
+            max.y += delta.y;
+        }
+        Corner::BottomRight => max += delta,
+    }
+    let least = MIN_SIZE as f32;
+    if max.x - min.x < least {
+        if matches!(corner, Corner::TopLeft | Corner::BottomLeft) { min.x = max.x - least } else { max.x = min.x + least }
+    }
+    if max.y - min.y < least {
+        if matches!(corner, Corner::TopLeft | Corner::TopRight) { min.y = max.y - least } else { max.y = min.y + least }
+    }
+    Rect::from_min_max(min, max)
+}
+
+/// The screen rectangles of the nodes a gesture moves or resizes, as the canvas previews them.
+pub(crate) fn preview_rects(shell: &Shell, view: View, pointer: Option<Pos2>) -> BTreeMap<Uuid, Rect> {
+    let mut out = BTreeMap::new();
+    let (Some(store), Some(gesture), Some(pointer)) = (shell.session.as_ref().map(|s| s.doc()), shell.canvas.gesture.as_ref(), pointer) else {
+        return out;
+    };
+    if !pointer.is_finite() {
+        return out;
+    }
+    match gesture {
+        Gesture::Move { nodes, from } => {
+            let delta = pointer - *from;
+            for id in nodes {
+                if let Some(n) = store.by_uuid(*id) {
+                    out.insert(*id, view.rect(&bounds_of(store, n)).translate(delta));
+                }
+            }
+        }
+        Gesture::Resize { node, corner, base, from } => {
+            let r = resized(*base, *corner, (pointer - *from) / view.zoom);
+            out.insert(*node, Rect::from_min_size(view.to_screen(r.left() as f64, r.top() as f64), r.size() * view.zoom));
+        }
+        Gesture::Marquee { .. } => {}
+    }
+    out
+}
+
+/// Reads what the pointer asked for this frame.
+#[allow(clippy::too_many_arguments, reason = "the decision reads the response, the view, the grid and the store apart")]
+fn decide(
+    shell: &Shell,
+    resp: &egui::Response,
+    view: View,
+    grid: &Grid,
+    store: &Store,
+    d: Obj,
+    selection: &[Obj],
+    shift: bool,
+    origin: Option<Pos2>,
+) -> Action {
+    let pos = resp.interact_pointer_pos().filter(|p| p.is_finite());
+    let hit_node = |pos: Pos2| {
+        let (x, y) = view.to_canvas(pos);
+        match grid.hit(x, y) {
+            Some(Hit::Node(n)) => Some(n),
+            _ => None,
+        }
+    };
+    match shell.canvas.tool {
+        Tool::Pan => Action::Nothing,
+        Tool::Entity => match (resp.clicked(), pos) {
+            (true, Some(pos)) => match hit_node(pos) {
+                Some(n) => Action::Select(uuid(store, element_of(store, n).unwrap_or(n)).into_iter().collect()),
+                None => {
+                    let (x, y) = view.to_canvas(pos);
+                    Action::Place(x, y)
+                }
+            },
+            _ => Action::Nothing,
+        },
+        Tool::Select => {
+            if resp.drag_stopped_by(egui::PointerButton::Primary) && shell.canvas.gesture.is_some() {
+                return Action::Commit;
+            }
+            let Some(pos) = pos else { return Action::Nothing };
+            if resp.drag_started_by(egui::PointerButton::Primary) && shell.canvas.gesture.is_none() {
+                // The gesture starts where the button went down, not where the pointer is now.
+                let from = origin.filter(|o| o.is_finite()).unwrap_or(pos);
+                if let Some((n, corner)) = handle_at(store, d, selection, view, from)
+                    && let Some(id) = uuid(store, n)
+                {
+                    return Action::Start(Gesture::Resize { node: id, corner, base: unit_rect(store, n), from }, None);
+                }
+                return match hit_node(from) {
+                    Some(n) => {
+                        let nodes = if is_selected(store, selection, n) {
+                            selected_nodes(store, d, selection, n)
+                        } else {
+                            uuid(store, n).into_iter().collect()
+                        };
+                        let select_first = if is_selected(store, selection, n) { None } else { uuid(store, element_of(store, n).unwrap_or(n)) };
+                        Action::Start(Gesture::Move { nodes, from }, select_first)
+                    }
+                    None => match grid.hit(view.to_canvas(from).0, view.to_canvas(from).1) {
+                        Some(Hit::Edge(_)) => Action::Nothing,
+                        _ => Action::Start(Gesture::Marquee { from }, None),
+                    },
+                };
+            }
+            if resp.secondary_clicked()
+                && let Some(n) = hit_node(pos)
+                && let Some(entity) = entity_of_node(store, n)
+                && let (Some(node), Some(entity)) = (uuid(store, n), uuid(store, entity))
+            {
+                return Action::Menu(EntityMenu { node, entity, at: pos });
+            }
+            // A third click in a row still opens; egui counts it as a triple click.
+            if (resp.double_clicked() || resp.triple_clicked())
+                && let Some(n) = hit_node(pos)
+                && let Some(entity) = entity_of_node(store, n)
+                && let (Some(node), Some(entity_id)) = (uuid(store, n), uuid(store, entity))
+            {
+                let rect = view.rect(&bounds_of(store, n));
+                let y_units = (pos.y - rect.top()) / view.zoom;
+                if y_units < ENTITY_HEADER {
+                    return Action::Rename(node, entity_id);
+                }
+                let row = ((y_units - (ENTITY_FIRST_ROW - 4.0)) / ENTITY_ROW).floor();
+                let columns: Vec<Obj> = store
+                    .list(entity, archforge_er::entity::ATTRIBUTE)
+                    .unwrap_or_default()
+                    .iter()
+                    .filter_map(archforge_mof::Value::as_ref)
+                    .filter(|c| store.is_alive(*c))
+                    .collect();
+                let column = if row >= 0.0 { columns.get(row as usize).and_then(|c| uuid(store, *c)) } else { None };
+                return Action::OpenColumn(entity_id, column);
+            }
+            if resp.clicked() {
+                let (x, y) = view.to_canvas(pos);
+                let target = match grid.hit(x, y) {
+                    Some(Hit::Node(n)) => element_of(store, n).unwrap_or(n),
+                    Some(Hit::Edge(e)) => store.get(e, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref()).unwrap_or(e),
+                    None => d,
+                };
+                let Some(id) = uuid(store, target) else { return Action::Nothing };
+                return if shift && target != d { Action::Toggle(id) } else { Action::Select(vec![id]) };
+            }
+            Action::Nothing
+        }
+    }
+}
+
+/// Reads and applies what the pointer asked for this frame.
+pub(crate) fn pointer(shell: &mut Shell, ui: &egui::Ui, resp: &egui::Response, view: View, grid: &Grid, d: Obj) {
+    let (shift, origin) = ui.input(|i| (i.modifiers.shift, i.pointer.press_origin()));
+    let pointer = resp.interact_pointer_pos().or_else(|| ui.input(|i| i.pointer.hover_pos()));
+    let action = match shell.session.as_ref() {
+        Some(s) => {
+            let selection = s.view().selection.clone();
+            decide(shell, resp, view, grid, s.doc(), d, &selection, shift, origin)
+        }
+        None => Action::Nothing,
+    };
+    if resp.clicked() || resp.drag_started() || resp.secondary_clicked() {
+        shell.canvas.focused = true;
+        shell.canvas.menu = None;
+    }
+    match action {
+        Action::Nothing => {}
+        Action::Select(ids) => select(shell, ids),
+        Action::Toggle(id) => {
+            let mut ids: Vec<Uuid> =
+                shell.session.as_ref().map(|s| s.view().selection.iter().filter_map(|o| s.doc().uuid(*o).ok()).collect()).unwrap_or_default();
+            if let Some(i) = ids.iter().position(|x| *x == id) {
+                ids.remove(i);
+            } else {
+                ids.push(id);
+            }
+            select(shell, ids);
+        }
+        Action::Start(gesture, select_first) => {
+            if let Some(id) = select_first {
+                select(shell, vec![id]);
+            }
+            shell.canvas.gesture = Some(gesture);
+        }
+        Action::Commit => commit(shell, view, d, pointer, shift),
+        Action::Place(x, y) => place_entity(shell, d, x, y),
+        Action::Menu(m) => shell.canvas.menu = Some(m),
+        Action::Rename(node, entity) => open_rename(shell, node, entity),
+        Action::OpenColumn(entity, column) => {
+            crate::panels::open_column(shell, entity, column);
+            shell.state.panel = crate::state::Panel::Properties;
+        }
+    }
+}
+
+/// Ends the gesture: a move or a resize as one engine step, a marquee as a selection.
+fn commit(shell: &mut Shell, view: View, d: Obj, pointer: Option<Pos2>, shift: bool) {
+    let Some(gesture) = shell.canvas.gesture.take() else { return };
+    let Some(pointer) = pointer.filter(|p| p.is_finite()) else { return };
+    match gesture {
+        Gesture::Move { nodes, from } => {
+            let delta = (pointer - from) / view.zoom;
+            if delta.length() < DRAG_MIN {
+                return;
+            }
+            let ids: Vec<String> = nodes.iter().map(Uuid::to_string).collect();
+            if let Err(e) = run(shell, "diagram.move", json!({ "nodes": ids, "dx": delta.x as f64, "dy": delta.y as f64 })) {
+                shell.canvas.notice = Some(e);
+            }
+        }
+        Gesture::Resize { node, corner, base, from } => {
+            let r = resized(base, corner, (pointer - from) / view.zoom);
+            if (r.min - base.min).length() < DRAG_MIN && (r.size() - base.size()).length() < DRAG_MIN {
+                return;
+            }
+            let Some(session) = shell.session.as_mut() else { return };
+            let node = node.to_string();
+            let (dx, dy) = ((r.left() - base.left()) as f64, (r.top() - base.top()) as f64);
+            let (w, h) = (r.width() as f64, r.height() as f64);
+            let out = session.batch(&tr("Resize"), |b| {
+                if dx.abs() >= DRAG_MIN as f64 || dy.abs() >= DRAG_MIN as f64 {
+                    b.execute("diagram.move", &json!({ "nodes": [&node], "dx": dx, "dy": dy }))?;
+                }
+                b.execute("diagram.resize", &json!({ "node": &node, "width": w, "height": h }))?;
+                Ok(())
+            });
+            if let Err(e) = out {
+                shell.canvas.notice = Some(e.to_string());
+            }
+        }
+        Gesture::Marquee { from } => {
+            let area = Rect::from_two_pos(from, pointer);
+            let Some(session) = shell.session.as_ref() else { return };
+            let store = session.doc();
+            let mut ids: Vec<Uuid> = if shift { session.view().selection.iter().filter_map(|o| uuid(store, *o)).collect() } else { Vec::new() };
+            for n in nodes_of(store, d) {
+                if view.rect(&bounds_of(store, n)).intersects(area)
+                    && let Some(id) = uuid(store, element_of(store, n).unwrap_or(n))
+                    && !ids.contains(&id)
+                {
+                    ids.push(id);
+                }
+            }
+            if ids.is_empty() {
+                ids.extend(uuid(store, d));
+            }
+            select(shell, ids);
+        }
+    }
+}
+
+/// The name a new entity gets: "Entity", then "Entity 2" and on, never one its schema has.
+fn entity_name(store: &Store, schema: Obj) -> Option<String> {
+    let taken: Vec<String> = store
+        .list(schema, archforge_er::schema::ENTITY)
+        .unwrap_or_default()
+        .iter()
+        .filter_map(archforge_mof::Value::as_ref)
+        .map(|e| archforge_er::rules::name_of(store, e).to_lowercase())
+        .collect();
+    let stem = tr("Entity");
+    if !taken.contains(&stem.to_lowercase()) {
+        return Some(stem);
+    }
+    (2..=10_000u32).map(|n| format!("{stem} {n}")).find(|name| !taken.contains(&name.to_lowercase()))
+}
+
+/// Adds a table to the diagram's schema and places it at `(x, y)`, its centre under the click,
+/// as one undo step; then its name is open for typing.
+fn place_entity(shell: &mut Shell, d: Obj, x: f64, y: f64) {
+    shell.canvas.notice = None;
+    let Some(session) = shell.session.as_mut() else { return };
+    let store = session.doc();
+    let Some(schema) = crate::diagrams::schema_of(store, d) else {
+        shell.canvas.notice = Some(tr("The diagram is of no schema"));
+        return;
+    };
+    let (Some(schema_id), Some(diagram_id)) = (uuid(store, schema), uuid(store, d)) else { return };
+    let Some(name) = entity_name(store, schema) else {
+        shell.canvas.notice = Some(tr("No free name is left"));
+        return;
+    };
+    let (px, py) = ((x - ENTITY_WIDTH / 2.0).round(), (y - ENTITY_EMPTY_HEIGHT / 2.0).round());
+    let name_for_batch = name.clone();
+    let out = session.batch(&tr("Add table"), |b| {
+        let e = b.execute("er.entity.add", &json!({ "schema": schema_id.to_string(), "name": name_for_batch }))?;
+        let entity = e.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string();
+        b.execute(
+            "diagram.place",
+            &json!({ "diagram": diagram_id.to_string(), "element": entity, "x": px, "y": py, "width": ENTITY_WIDTH, "height": ENTITY_EMPTY_HEIGHT }),
+        )?;
+        Ok(())
+    });
+    match out {
+        Ok(o) => {
+            let id_at = |i: usize| o.value.get(i).and_then(|v| v.get("id")).and_then(|v| v.as_str()).and_then(Uuid::parse);
+            if let (Some(entity), Some(node)) = (id_at(0), id_at(1)) {
+                select(shell, vec![entity]);
+                shell.canvas.rename = Some(NodeRename { node, entity, text: name, opened: true, refused: None });
+                shell.canvas.focused = true;
+            }
+        }
+        Err(e) => shell.canvas.notice = Some(e.to_string()),
+    }
+}
+
+/// Where a new table lands on the open diagram when the diagram is of `schema`: to the right of
+/// the rightmost node, or near the top left of an empty diagram; none when no such diagram is open.
+fn free_place(shell: &Shell, schema: Obj) -> Option<(Uuid, f64, f64)> {
+    let session = shell.session.as_ref()?;
+    let store = session.doc();
+    let d = shell.canvas.active.and_then(|id| store.by_uuid(id)).filter(|d| store.is_alive(*d))?;
+    if crate::diagrams::schema_of(store, d) != Some(schema) {
+        return None;
+    }
+    let nodes = nodes_of(store, d);
+    let (x, y) = match nodes.iter().map(|n| unit_rect(store, *n)).filter(|r| r.is_finite()).max_by(|a, b| a.right().total_cmp(&b.right())) {
+        Some(r) => ((r.right() + 40.0) as f64, r.top() as f64),
+        None => (40.0, 40.0),
+    };
+    Some((uuid(store, d)?, x, y))
+}
+
+/// Adds a table to `schema` with `name`; on an open diagram of the schema it is placed as well,
+/// in the same undo step. The table is selected either way. Gives the table's id.
+pub fn add_entity(shell: &mut Shell, schema: Uuid, name: &str) -> Result<Uuid, String> {
+    let placed = shell.session.as_ref().and_then(|s| s.doc().by_uuid(schema)).and_then(|s| free_place(shell, s));
+    let session = shell.session.as_mut().ok_or_else(|| tr("The model could not be opened"))?;
+    let add = json!({ "schema": schema.to_string(), "name": name });
+    let entity = match placed {
+        None => session.execute("er.entity.add", &add).map(|o| o.value).map_err(|e| e.to_string())?,
+        Some((diagram, x, y)) => {
+            let out = session
+                .batch(&tr("Add table"), |b| {
+                    let e = b.execute("er.entity.add", &add)?;
+                    let entity = e.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string();
+                    b.execute(
+                        "diagram.place",
+                        &json!({ "diagram": diagram.to_string(), "element": entity, "x": x, "y": y, "width": ENTITY_WIDTH, "height": ENTITY_EMPTY_HEIGHT }),
+                    )?;
+                    Ok(())
+                })
+                .map_err(|e| e.to_string())?;
+            out.value.get(0).cloned().unwrap_or(serde_json::Value::Null)
+        }
+    };
+    let id = entity.get("id").and_then(|i| i.as_str()).and_then(Uuid::parse).ok_or_else(|| tr("The model could not be opened"))?;
+    // Placing selected the node; the table is what the explorer and Properties follow.
+    select(shell, vec![id]);
+    Ok(id)
+}
+
+/// Runs a column command and, in the same undo step, grows every node of `entity` whose height
+/// would hide the columns it then has.
+pub fn run_growing(shell: &mut Shell, label: &str, cmd: &str, params: serde_json::Value, entity: Uuid) -> Result<serde_json::Value, String> {
+    let Some(session) = shell.session.as_mut() else { return Err(tr("The model could not be opened")) };
+    let store = session.doc();
+    let Some(e) = store.by_uuid(entity) else { return Err(tr("The model could not be opened")) };
+    let columns = store.list(e, archforge_er::entity::ATTRIBUTE).map(|l| l.len()).unwrap_or(0);
+    let needed = content_height(columns.saturating_add(1));
+    let (_, _, nodes) = archforge_diagram::views_of(store, e);
+    let grow: Vec<(String, f64)> = nodes
+        .iter()
+        .filter_map(|n| {
+            let b = bounds_of(store, *n);
+            if b.height < needed { Some((uuid(store, *n)?.to_string(), b.width)) } else { None }
+        })
+        .collect();
+    if grow.is_empty() {
+        return session.execute(cmd, &params).map(|o| o.value).map_err(|e| e.to_string());
+    }
+    session
+        .batch(label, |b| {
+            b.execute(cmd, &params)?;
+            for (n, width) in &grow {
+                b.execute("diagram.resize", &json!({ "node": n, "width": width, "height": needed }))?;
+            }
+            Ok(())
+        })
+        .map(|o| o.value.get(0).cloned().unwrap_or(serde_json::Value::Null))
+        .map_err(|e| e.to_string())
+}
+
+fn open_rename(shell: &mut Shell, node: Uuid, entity: Uuid) {
+    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+    let Some(e) = store.by_uuid(entity) else { return };
+    let text = archforge_er::rules::name_of(store, e);
+    shell.canvas.rename = Some(NodeRename { node, entity, text, opened: true, refused: None });
+}
+
+/// Commits the name typed in place; a refusal keeps it open.
+fn commit_rename(shell: &mut Shell) {
+    let Some(r) = shell.canvas.rename.clone() else { return };
+    let current = shell.session.as_ref().and_then(|s| s.doc().by_uuid(r.entity).map(|e| archforge_er::rules::name_of(s.doc(), e)));
+    if current.as_deref() == Some(r.text.trim()) {
+        shell.canvas.rename = None;
+        return;
+    }
+    match run(shell, "er.entity.rename", json!({ "entity": r.entity.to_string(), "name": r.text.trim() })) {
+        Ok(_) => shell.canvas.rename = None,
+        Err(e) => {
+            // The field takes the keyboard again, the text selected, so the name can be retyped.
+            if let Some(rename) = shell.canvas.rename.as_mut() {
+                rename.refused = Some(e);
+                rename.opened = true;
+            }
+        }
+    }
+}
+
+/// Removes the nodes from the diagram, the model untouched.
+fn unplace(shell: &mut Shell, nodes: Vec<Uuid>) {
+    if nodes.is_empty() {
+        return;
+    }
+    let ids: Vec<String> = nodes.iter().map(Uuid::to_string).collect();
+    if let Err(e) = run(shell, "diagram.unplace", json!({ "nodes": ids })) {
+        shell.canvas.notice = Some(e);
+    }
+}
+
+/// How many diagrams show `element` as a node.
+pub fn diagrams_showing(store: &Store, element: Obj) -> usize {
+    let (_, _, nodes) = archforge_diagram::views_of(store, element);
+    let diagrams: std::collections::BTreeSet<Obj> = nodes.iter().filter_map(|n| archforge_diagram::diagram_of(store, *n)).collect();
+    diagrams.len()
+}
+
+/// Asks before an entity goes from the model, with what goes with it.
+fn ask_delete(shell: &mut Shell, node: Uuid, entity: Uuid) {
+    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+    let Some(e) = store.by_uuid(entity) else { return };
+    let (relationships, keys, foreign_keys) = crate::explorer::consequences(store, e);
+    let diagrams = diagrams_showing(store, e);
+    shell.explorer.delete = Some(crate::explorer::Delete {
+        ids: vec![entity],
+        name: archforge_er::rules::name_of(store, e),
+        relationships,
+        keys,
+        foreign_keys,
+        diagrams,
+        node: Some(node),
+    });
+    shell.canvas.menu = None;
+}
+
+/// Draws what sits over the diagram: the marquee, a selected node's adorners, the Arrange bar,
+/// the name typed in place and the entity menu; then reads the keys.
+pub(crate) fn overlays(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, view: View, d: Obj, overrides: &BTreeMap<Uuid, Rect>) {
+    let paint = ui.painter().with_clip_rect(r);
+    if let Some(Gesture::Marquee { from }) = shell.canvas.gesture
+        && let Some(to) = ui.input(|i| i.pointer.hover_pos())
+    {
+        let area = Rect::from_two_pos(from, to);
+        paint.rect_filled(area, 2.0, p.accent_tint.gamma_multiply(0.6));
+        paint.rect_stroke(area, 2.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
+    }
+    // What is selected on this diagram, read once.
+    let (single, many, rename_rect) = match shell.session.as_ref() {
+        Some(s) => {
+            let store = s.doc();
+            let selection = &s.view().selection;
+            let selected: Vec<(Obj, Uuid, Rect)> = nodes_of(store, d)
+                .into_iter()
+                .filter(|n| is_selected(store, selection, *n))
+                .filter_map(|n| {
+                    let id = uuid(store, n)?;
+                    Some((n, id, overrides.get(&id).copied().unwrap_or_else(|| view.rect(&bounds_of(store, n)))))
+                })
+                .collect();
+            let single = match selected.as_slice() {
+                [(n, id, rect)] => entity_of_node(store, *n).and_then(|e| uuid(store, e)).map(|e| (*id, e, *rect)),
+                _ => None,
+            };
+            let many: Vec<(Uuid, Rect)> = if selected.len() >= 2 { selected.iter().map(|(_, id, rect)| (*id, *rect)).collect() } else { Vec::new() };
+            let rename_rect = shell.canvas.rename.as_ref().and_then(|rn| store.by_uuid(rn.node)).map(|n| view.rect(&bounds_of(store, n)));
+            (single, many, rename_rect)
+        }
+        None => (None, Vec::new(), None),
+    };
+    if let Some((node, entity, rect)) = single
+        && shell.canvas.gesture.is_none()
+    {
+        adorners(shell, ui, p, r, rect, node, entity);
+    }
+    if !many.is_empty() && shell.canvas.gesture.is_none() {
+        arrange_bar(shell, ui, p, r, view, &many);
+    }
+    if let Some(rect) = rename_rect {
+        rename_field(shell, ui, p, rect, view.zoom);
+    }
+    if let Some(menu) = shell.canvas.menu.clone() {
+        entity_menu(shell, ui, p, r, &menu);
+    }
+    keyboard(shell, ui, d);
+}
+
+/// The two adorners of a selected entity: connect (E2) and add column.
+fn adorners(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, rect: Rect, _node: Uuid, entity: Uuid) {
+    let paint = ui.painter().with_clip_rect(r);
+    let boxes = [
+        ("connect", &icons::ADORN_CONNECT, "Connect", pos2(rect.right() + ADORNER_GAP, rect.top() - ADORNER - 6.0), false),
+        ("add-column", &icons::ADORN_ADD, "Add column", pos2(rect.right() + ADORNER_GAP, rect.bottom() - ADORNER + 6.0), true),
+    ];
+    for (key, icon, hint, at, live) in boxes {
+        let b = Rect::from_min_size(at, Vec2::splat(ADORNER));
+        if !r.intersects(b) {
+            continue;
+        }
+        paint.rect_filled(b, 4.0, p.surface);
+        paint.rect_stroke(b, 4.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
+        ux::icon_in(&paint, b, icon, if live { p.text_secondary } else { p.text_muted });
+        if control(shell, ui, &format!("workspace.canvas.adorn.{key}"), "button", b, live).on_hover_text(tr(hint)).clicked() && key == "add-column" {
+            crate::panels::open_column(shell, entity, None);
+            shell.state.panel = crate::state::Panel::Properties;
+        }
+    }
+}
+
+/// The Arrange bar under two or more selected nodes: align left, centre, right; distribute;
+/// stack. Each is one undo step over the selection.
+fn arrange_bar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, view: View, nodes: &[(Uuid, Rect)]) {
+    let paint = ui.painter().with_clip_rect(r);
+    let bounds = nodes.iter().fold(Rect::NOTHING, |b, (_, rect)| b.union(*rect));
+    let x = (bounds.center().x - ARRANGE.x / 2.0).clamp(r.left() + 8.0, (r.right() - ARRANGE.x - 8.0).max(r.left() + 8.0));
+    let y = (bounds.bottom() + ARRANGE_GAP).min(r.bottom() - ARRANGE.y - 8.0);
+    let bar = Rect::from_min_size(pos2(x, y), ARRANGE);
+    paint.rect_filled(bar.expand(2.0), 12.0, p.shadow);
+    paint.rect_filled(bar, 10.0, p.surface);
+    paint.rect_stroke(bar, 10.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
+    let buttons: [(&str, &ux::Icon, &str, f32); 5] = [
+        ("left", &icons::ARRANGE_LEFT, "Align left", 7.0),
+        ("centre", &icons::ARRANGE_CENTRE, "Align centres", 41.0),
+        ("right", &icons::ARRANGE_RIGHT, "Align right", 75.0),
+        ("distribute", &icons::ARRANGE_DISTRIBUTE, "Distribute horizontally", 120.0),
+        ("stack", &icons::ARRANGE_STACK, "Stack vertically", 154.0),
+    ];
+    paint.rect_filled(Rect::from_min_size(pos2(bar.left() + 112.0, bar.top() + 11.0), vec2(1.0, 20.0)), 0.0, p.border);
+    let mut picked = None;
+    for (key, icon, hint, bx) in buttons {
+        let b = Rect::from_min_size(pos2(bar.left() + bx, bar.top() + 5.0), Vec2::splat(32.0));
+        ux::icon_in(&paint, b, icon, p.text_secondary);
+        if control(shell, ui, &format!("workspace.canvas.arrange.{key}"), "button", b, true).on_hover_text(tr(hint)).clicked() {
+            picked = Some(key);
+        }
+    }
+    let Some(key) = picked else { return };
+    // The moves in diagram units, from the rectangles as stored.
+    let units: Vec<(Uuid, Rect)> =
+        nodes.iter().map(|(id, rect)| (*id, Rect::from_min_size(pos2_of(view.to_canvas(rect.min)), rect.size() / view.zoom))).collect();
+    let all = units.iter().fold(Rect::NOTHING, |b, (_, rect)| b.union(*rect));
+    let mut moves: Vec<(Uuid, f64, f64)> = Vec::new();
+    match key {
+        "left" => moves.extend(units.iter().map(|(id, rc)| (*id, (all.left() - rc.left()) as f64, 0.0))),
+        "centre" => moves.extend(units.iter().map(|(id, rc)| (*id, (all.center().x - rc.center().x) as f64, 0.0))),
+        "right" => moves.extend(units.iter().map(|(id, rc)| (*id, (all.right() - rc.right()) as f64, 0.0))),
+        "distribute" => {
+            let mut sorted = units.clone();
+            sorted.sort_by(|a, b| a.1.left().total_cmp(&b.1.left()));
+            let widths: f32 = sorted.iter().map(|(_, rc)| rc.width()).sum();
+            let gap = ((all.width() - widths) / (sorted.len().saturating_sub(1)).max(1) as f32).max(0.0);
+            let mut x = all.left();
+            for (id, rc) in &sorted {
+                moves.push((*id, (x - rc.left()) as f64, 0.0));
+                x += rc.width() + gap;
+            }
+        }
+        _ => {
+            let mut sorted = units.clone();
+            sorted.sort_by(|a, b| a.1.top().total_cmp(&b.1.top()));
+            let mut y = all.top();
+            for (id, rc) in &sorted {
+                moves.push((*id, (all.left() - rc.left()) as f64, (y - rc.top()) as f64));
+                y += rc.height() + STACK_GAP as f32;
+            }
+        }
+    }
+    moves.retain(|(_, dx, dy)| dx.abs() >= DRAG_MIN as f64 || dy.abs() >= DRAG_MIN as f64);
+    if moves.is_empty() {
+        return;
+    }
+    let Some(session) = shell.session.as_mut() else { return };
+    let out = session.batch(&tr("Arrange"), |b| {
+        for (id, dx, dy) in &moves {
+            b.execute("diagram.move", &json!({ "nodes": [id.to_string()], "dx": dx, "dy": dy }))?;
+        }
+        Ok(())
+    });
+    if let Err(e) = out {
+        shell.canvas.notice = Some(e.to_string());
+    }
+}
+
+fn pos2_of((x, y): (f64, f64)) -> Pos2 {
+    pos2(x as f32, y as f32)
+}
+
+/// The name typed in the node's header: the design's tinted field over the name, the text
+/// selected when the entity is new; Enter commits, Escape closes, a refusal stays under it.
+fn rename_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, rect: Rect, z: f32) {
+    let paint = ui.painter().clone();
+    let field = Rect::from_min_size(rect.min + vec2(14.0, 28.0) * z, vec2((rect.width() - 28.0 * z).max(0.0), 30.0 * z));
+    paint.rect_filled(field, 2.0 * z, p.accent_tint);
+    widgets::record_visible(ui, &mut shell.registry, "workspace.canvas.rename", "field", field);
+    let Some(rn) = shell.canvas.rename.as_mut() else { return };
+    let fresh = std::mem::take(&mut rn.opened);
+    let inner = Rect::from_min_max(
+        pos2(field.left() + 4.0 * z, field.top() + 2.0 * z),
+        pos2((field.right() - 4.0 * z).max(field.left() + 4.0 * z), field.bottom() - 2.0 * z),
+    );
+    let id = widgets::egui_id("workspace.canvas.rename");
+    let edit = egui::TextEdit::singleline(&mut rn.text)
+        .id(id)
+        .frame(egui::Frame::NONE)
+        .font(types::SECTION.scaled(z).font())
+        .text_color(p.text)
+        .char_limit(MAX_NAME)
+        .desired_width(inner.width());
+    let out = edit.show(&mut ui.new_child(egui::UiBuilder::new().max_rect(inner)));
+    if fresh {
+        out.response.request_focus();
+        if let Some(mut state) = egui::TextEdit::load_state(ui.ctx(), id) {
+            state
+                .cursor
+                .set_char_range(Some(egui::text::CCursorRange::two(egui::text::CCursor::new(0), egui::text::CCursor::new(rn.text.chars().count()))));
+            state.store(ui.ctx(), id);
+        }
+    }
+    if let Some(refused) = rn.refused.clone() {
+        ux::text(&paint, pos2(field.left(), field.bottom() + 4.0 * z), &refused, types::CAPTION, p.amber, Some(field.width().max(0.0)));
+    }
+    // Escape makes the field give up the keyboard before this reads it, so it is read first.
+    let has_focus = out.response.has_focus();
+    let (enter, escape) = ui.input(|i| (i.key_pressed(egui::Key::Enter), i.key_pressed(egui::Key::Escape)));
+    let nothing_focused = ui.memory(|m| m.focused().is_none());
+    if escape && (has_focus || out.response.lost_focus() || nothing_focused) {
+        shell.canvas.rename = None;
+    } else if (has_focus && enter) || (!fresh && out.response.lost_focus()) {
+        commit_rename(shell);
+    }
+}
+
+/// The entity menu: the design's rows with their shortcuts.
+fn entity_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, menu: &EntityMenu) {
+    let paint = ui.painter().clone();
+    let mac = ui.ctx().os() == egui::os::OperatingSystem::Mac;
+    let (add_chord, delete_chord, model_chord) = if mac { ("⌘↩", "⌫", "⇧⌫") } else { ("Ctrl Enter", "Del", "Shift Del") };
+    let rows: [(&str, &str, &str, bool, bool); 5] = [
+        ("related", "Show related tables", "R", false, false),
+        ("open", "Open in Models", "", true, false),
+        ("add-column", "Add column", add_chord, true, false),
+        ("remove", "Remove from this diagram", delete_chord, true, false),
+        ("delete", "Delete from the model…", model_chord, true, true),
+    ];
+    let height = 8.0 + rows.len() as f32 * MENU_ROW + 2.0;
+    let x = menu.at.x.min(r.right() - MENU_WIDTH - 8.0).max(r.left() + 8.0);
+    let y = menu.at.y.min(r.bottom() - height - 8.0).max(r.top() + 8.0);
+    let m = Rect::from_min_size(pos2(x, y), vec2(MENU_WIDTH, height));
+    paint.rect_filled(m.expand(2.0), 10.0, p.shadow);
+    paint.rect_filled(m, 8.0, p.surface);
+    paint.rect_stroke(m, 8.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
+    let mut picked = None;
+    let mut ry = m.top() + 4.0;
+    for (i, (key, label, shortcut, live, danger)) in rows.iter().enumerate() {
+        if i == 1 || i == 3 {
+            paint.rect_filled(Rect::from_min_size(pos2(m.left() + 8.0, ry), vec2(MENU_WIDTH - 16.0, 1.0)), 0.0, p.border);
+            ry += 1.0;
+        }
+        let row = Rect::from_min_size(pos2(m.left() + 4.0, ry), vec2(MENU_WIDTH - 8.0, MENU_ROW));
+        let resp = control(shell, ui, &format!("workspace.canvas.menu.{key}"), "menu-item", row, *live);
+        if resp.hovered() && *live {
+            paint.rect_filled(row, 5.0, p.page);
+        }
+        let ink = if *danger {
+            p.danger
+        } else if *live {
+            p.text
+        } else {
+            p.text_muted
+        };
+        ux::text(&paint, row.min + vec2(10.0, 7.5), &tr(label), types::SMALL, ink, Some(MENU_WIDTH - 70.0));
+        if !shortcut.is_empty() {
+            let g = ux::galley(&paint, shortcut, types::CAPTION, p.text_muted, None);
+            paint.galley(pos2(row.right() - 10.0 - g.size().x, row.top() + 8.0), g, p.text_muted);
+        }
+        if resp.clicked() && *live {
+            picked = Some(*key);
+        }
+        ry += MENU_ROW;
+    }
+    let outside = ui.input(|i| i.pointer.any_pressed() && !i.pointer.interact_pos().is_some_and(|pos| m.contains(pos)));
+    if outside || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+        shell.canvas.menu = None;
+    }
+    let Some(key) = picked else { return };
+    shell.canvas.menu = None;
+    match key {
+        "open" => {
+            shell.state.explorer = crate::state::Explorer::Models;
+            select(shell, vec![menu.entity]);
+        }
+        "add-column" => {
+            crate::panels::open_column(shell, menu.entity, None);
+            shell.state.panel = crate::state::Panel::Properties;
+        }
+        "remove" => unplace(shell, vec![menu.node]),
+        "delete" => ask_delete(shell, menu.node, menu.entity),
+        _ => {}
+    }
+}
+
+/// The keys while the canvas has them: Escape back to Select, Delete removes the selected nodes
+/// from the diagram (with Shift, asks before deleting from the model), the arrows nudge.
+fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
+    if !shell.canvas.focused
+        || shell.canvas.rename.is_some()
+        || shell.canvas.menu.is_some()
+        || shell.explorer.delete.is_some()
+        || shell.diagrams.new.is_some()
+    {
+        return;
+    }
+    if ui.memory(|m| m.focused().is_some()) {
+        return;
+    }
+    let (escape, delete, shift, add_column, left, right, up, down) = ui.input(|i| {
+        (
+            i.key_pressed(egui::Key::Escape),
+            i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace),
+            i.modifiers.shift,
+            i.modifiers.command && i.key_pressed(egui::Key::Enter),
+            i.key_pressed(egui::Key::ArrowLeft),
+            i.key_pressed(egui::Key::ArrowRight),
+            i.key_pressed(egui::Key::ArrowUp),
+            i.key_pressed(egui::Key::ArrowDown),
+        )
+    });
+    if escape {
+        shell.canvas.tool = Tool::Select;
+        shell.canvas.gesture = None;
+        return;
+    }
+    let selected: Vec<(Uuid, Option<Uuid>)> = match shell.session.as_ref() {
+        Some(s) => {
+            let store = s.doc();
+            let selection = &s.view().selection;
+            nodes_of(store, d)
+                .into_iter()
+                .filter(|n| is_selected(store, selection, *n))
+                .filter_map(|n| Some((uuid(store, n)?, entity_of_node(store, n).and_then(|e| uuid(store, e)))))
+                .collect()
+        }
+        None => Vec::new(),
+    };
+    if selected.is_empty() {
+        return;
+    }
+    if add_column {
+        if let [(_, Some(entity))] = selected.as_slice() {
+            crate::panels::open_column(shell, *entity, None);
+            shell.state.panel = crate::state::Panel::Properties;
+        }
+        return;
+    }
+    if delete {
+        if shift {
+            if let Some((node, Some(entity))) = selected.first().copied() {
+                ask_delete(shell, node, entity);
+            }
+        } else {
+            unplace(shell, selected.iter().map(|(n, _)| *n).collect());
+        }
+        return;
+    }
+    let step = if shift { NUDGE_FAR } else { NUDGE };
+    let (dx, dy) = match (left, right, up, down) {
+        (true, _, _, _) => (-step, 0.0),
+        (_, true, _, _) => (step, 0.0),
+        (_, _, true, _) => (0.0, -step),
+        (_, _, _, true) => (0.0, step),
+        _ => return,
+    };
+    let ids: Vec<String> = selected.iter().map(|(n, _)| n.to_string()).collect();
+    if let Err(e) = run(shell, "diagram.move", json!({ "nodes": ids, "dx": dx, "dy": dy, "coalesce": "nudge" })) {
+        shell.canvas.notice = Some(e);
+    }
+}
+
+/// Drops what the store no longer has.
+pub fn retain_valid(state: &mut crate::canvas::State, store: &Store) {
+    let alive = |id: &Uuid| store.by_uuid(*id).is_some_and(|o| store.is_alive(o));
+    if state.rename.as_ref().is_some_and(|r| !alive(&r.node) || !alive(&r.entity)) {
+        state.rename = None;
+    }
+    if state.menu.as_ref().is_some_and(|m| !alive(&m.node)) {
+        state.menu = None;
+    }
+    let gone = match &state.gesture {
+        Some(Gesture::Move { nodes, .. }) => nodes.iter().any(|n| !alive(n)),
+        Some(Gesture::Resize { node, .. }) => !alive(node),
+        _ => false,
+    };
+    if gone {
+        state.gesture = None;
+    }
+}
+
+/// Every hover text and menu row to translate, for the catalogue tests.
+#[cfg(test)]
+pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
+    [
+        "Connect",
+        "Add column",
+        "Align left",
+        "Align centres",
+        "Align right",
+        "Distribute horizontally",
+        "Stack vertically",
+        "Show related tables",
+        "Open in Models",
+        "Remove from this diagram",
+        "Delete from the model…",
+    ]
+    .into_iter()
+}

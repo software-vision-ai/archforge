@@ -24,6 +24,8 @@ str		Delete {name} from the model?	从模型中删除 {name}？
 str		Narrow the filter to see more	缩小筛选范围以查看更多
 str		No free name is left	没有可用的名称了
 str		What it holds goes with it.	它包含的内容也会一并删除。
+str		Remove from this diagram only	仅从此图中移除
+plural		It disappears from {n} diagram.	将从 {n} 个图中消失。
 plural		{n} relationship goes with it.	{n} 个关系将一并删除。
 plural		{n} key goes with it.	{n} 个键将一并删除。
 plural		{n} foreign key goes with it.	{n} 个外键将一并删除。
@@ -94,6 +96,21 @@ str		Group	分组
 str		Group kinds	分组类型
 str		Key status	键状态
 str		Grid	网格
+str		Add table	添加表
+str		Resize	调整大小
+str		Arrange	排列
+str		Connect	连接
+str		Align left	左对齐
+str		Align centres	居中对齐
+str		Align right	右对齐
+str		Distribute horizontally	水平分布
+str		Stack vertically	垂直堆叠
+str		Show related tables	显示相关表
+str		Open in Models	在模型中打开
+str		Remove from this diagram	从此图中移除
+str		Delete from the model…	从模型中删除…
+str		The diagram is of no schema	此图不属于任何架构
+plural		+ {n} more column	+ 另 {n} 列
 str		Minimap	缩略图
 str		Hide minimap	隐藏缩略图
 str		Show minimap	显示缩略图
