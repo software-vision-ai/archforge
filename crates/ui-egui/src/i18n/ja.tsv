@@ -235,3 +235,31 @@ str		On this diagram · {n}	この図に · {n}
 str		Relationship · {from} to {to}	リレーションシップ · {from} から {to}
 str		This relationship	このリレーションシップ
 str		On this relationship · {n}	このリレーションシップに · {n}
+str		Remove foreign key	外部キーを削除
+str		Add id column	id 列を追加
+str		Choose key columns	キー列を選択
+str		Ends	端
+str		{entity} end	{entity} 側
+str		Role	ロール
+str		Foreign key	外部キー
+str		An identifying relationship needs its foreign key; turn the switch on first	識別リレーションシップには外部キーが必要です。先にスイッチをオンにしてください
+str		Points to	参照先
+str		Existing columns of {entity}	{entity} の既存の列
+str		{type} · type differs	{type} · 型が異なります
+str		On delete	削除時
+str		On update	更新時
+str		No action	何もしない
+str		Restrict	制限
+str		Cascade	カスケード
+str		Set null	NULL に設定
+str		Set default	既定値に設定
+str		More	その他
+str		Deferrable	遅延可能
+str		No	いいえ
+str		Yes – checked at once	はい – すぐに検査
+str		Yes – checked at commit	はい – コミット時に検査
+str		Match	一致
+str		Simple	単純
+str		Full	完全
+str		Partial	部分
+str		{parent} has no primary key yet, so there is nothing in {child} to point at.	{parent} にはまだ主キーがないため、{child} から参照できるものがありません。

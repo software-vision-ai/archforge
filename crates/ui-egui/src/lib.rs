@@ -18,6 +18,7 @@ pub mod new_project;
 #[cfg(feature = "snapshot")]
 pub mod offscreen;
 pub mod panels;
+pub mod relation;
 pub mod state;
 pub mod theme;
 pub mod ux;

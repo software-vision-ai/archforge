@@ -235,3 +235,31 @@ str		On this diagram · {n}	此图上 · {n}
 str		Relationship · {from} to {to}	关系 · {from} 到 {to}
 str		This relationship	此关系
 str		On this relationship · {n}	此关系上 · {n}
+str		Remove foreign key	移除外键
+str		Add id column	添加 id 列
+str		Choose key columns	选择键列
+str		Ends	端点
+str		{entity} end	{entity} 端
+str		Role	角色
+str		Foreign key	外键
+str		An identifying relationship needs its foreign key; turn the switch on first	标识关系需要外键；请先打开开关
+str		Points to	指向
+str		Existing columns of {entity}	{entity} 的现有列
+str		{type} · type differs	{type} · 类型不同
+str		On delete	删除时
+str		On update	更新时
+str		No action	无操作
+str		Restrict	限制
+str		Cascade	级联
+str		Set null	设为空
+str		Set default	设为默认
+str		More	更多
+str		Deferrable	可延迟
+str		No	否
+str		Yes – checked at once	是 – 立即检查
+str		Yes – checked at commit	是 – 提交时检查
+str		Match	匹配
+str		Simple	简单
+str		Full	完全
+str		Partial	部分
+str		{parent} has no primary key yet, so there is nothing in {child} to point at.	{parent} 还没有主键，因此 {child} 中没有可指向的内容。

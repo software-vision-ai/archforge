@@ -20,9 +20,9 @@ use crate::state::Panel;
 use crate::ux::{self, Palette, icons, types};
 use crate::{Shell, widgets};
 
-const PAD: f32 = 16.0;
-const FIELD: f32 = 28.0;
-const ROW: f32 = 36.0;
+pub(crate) const PAD: f32 = 16.0;
+pub(crate) const FIELD: f32 = 28.0;
+pub(crate) const ROW: f32 = 36.0;
 const MAX_NAME: usize = archforge_er::rules::MAX_NAME;
 const MAX_TYPE: usize = archforge_er::rules::MAX_TYPE;
 
@@ -41,6 +41,11 @@ pub struct State {
     pub notice: Option<String>,
     /// The column whose selection opened the editor, so Cancel and + are not undone next frame.
     pub selected_column: Option<Uuid>,
+    /// A relationship's Properties (slice E3): a role being typed, whether More is open, and the
+    /// relationship whose switch asked for a key its parent cannot give.
+    pub role: Option<crate::relation::RoleEdit>,
+    pub more_open: bool,
+    pub no_key_card: Option<Uuid>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -93,15 +98,23 @@ pub struct SkillEdit {
 pub enum Menu {
     Kind,
     Applies,
+    /// A relationship's foreign key (slice E3): what it points to, one key pair's child column,
+    /// the two referential actions, deferrability and match.
+    Points,
+    Pair(usize),
+    OnDelete,
+    OnUpdate,
+    Deferrable,
+    Match,
 }
 
 /// The selection the panels describe.
 #[derive(Debug, Clone, PartialEq)]
-struct Subject {
-    obj: Option<Obj>,
-    id: Option<Uuid>,
-    class: Option<archforge_mof::ClassId>,
-    name: String,
+pub(crate) struct Subject {
+    pub obj: Option<Obj>,
+    pub id: Option<Uuid>,
+    pub class: Option<archforge_mof::ClassId>,
+    pub name: String,
     /// The kind line under the heading and the word for the selection.
     kind: String,
     word: String,
@@ -167,7 +180,7 @@ impl Subject {
     }
 }
 
-fn run(shell: &mut Shell, id: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
+pub(crate) fn run(shell: &mut Shell, id: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
     let Some(session) = shell.session.as_mut() else { return Err(tr("The model could not be opened")) };
     session.execute(id, &params).map(|o| o.value).map_err(|e| e.to_string())
 }
@@ -195,13 +208,14 @@ pub fn retain_valid(state: &mut State, store: &Store) {
     {
         state.skill = None;
     }
+    crate::relation::retain_valid(state, store);
 }
 
 // Shared drawing.
 
 /// A section's full-width top line and its title row with an optional `+`; gives the y under it,
 /// or none when the `+` was clicked this frame.
-fn section(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, y: f32, title: &str, add: Option<(&str, &str)>) -> Option<f32> {
+pub(crate) fn section(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, y: f32, title: &str, add: Option<(&str, &str)>) -> Option<f32> {
     let paint = ui.painter();
     paint.rect_filled(Rect::from_min_size(pos2(r.left(), y), vec2(r.width(), 1.0)), 0.0, p.border);
     ux::text(paint, pos2(r.left() + PAD, y + 17.0), title, types::UI, p.text, Some((r.width() - 2.0 * PAD - 40.0).max(0.0)));
@@ -217,7 +231,7 @@ fn section(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, y: f32, title
 
 /// A label over a filled text field that commits on Enter or when it loses the keyboard; gives
 /// the text as typed and whether it was committed this frame.
-fn text_field(
+pub(crate) fn text_field(
     shell: &mut Shell,
     ui: &mut egui::Ui,
     p: &Palette,
@@ -257,7 +271,17 @@ fn text_field(
 }
 
 /// A filled select showing `value`; a click opens or closes `menu`.
-fn select_field(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: egui::Pos2, width: f32, id: &str, label: &str, value: &str, menu: Menu) -> Rect {
+pub(crate) fn select_field(
+    shell: &mut Shell,
+    ui: &egui::Ui,
+    p: &Palette,
+    at: egui::Pos2,
+    width: f32,
+    id: &str,
+    label: &str,
+    value: &str,
+    menu: Menu,
+) -> Rect {
     let paint = ui.painter();
     ux::text(paint, at, label, types::CAPTION, p.text_secondary, Some(width.max(0.0)));
     let field = Rect::from_min_size(at + vec2(0.0, 17.0), vec2(width.max(0.0), FIELD));
@@ -299,7 +323,7 @@ fn menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, id: &str, i
 }
 
 /// A check box with its label; a click flips `on`.
-fn check(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: egui::Pos2, id: &str, label: &str, on: &mut bool) -> f32 {
+pub(crate) fn check(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: egui::Pos2, id: &str, label: &str, on: &mut bool) -> f32 {
     let paint = ui.painter();
     let b = Rect::from_min_size(at, Vec2::splat(16.0));
     paint.rect_filled(b, 4.0, if *on { p.accent_fill } else { p.surface });
@@ -364,10 +388,7 @@ fn properties(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y:
             name_field(shell, ui, p, pos2(r.left() + PAD, y), width, subject, "er.schema.rename", "schema");
         }
         Some(c) if c == archforge_er::ENTITY => entity_body(shell, ui, p, r, y, subject),
-        Some(c) if c == archforge_er::RELATIONSHIP => {
-            // A relationship: its name; the ends and the foreign key come with slice E3.
-            name_field(shell, ui, p, pos2(r.left() + PAD, y), width, subject, "er.relationship.rename", "relationship");
-        }
+        Some(c) if c == archforge_er::RELATIONSHIP => crate::relation::body(shell, ui, p, r, y, subject),
         Some(c) if c == archforge_diagram::DIAGRAM => {
             // A diagram: its name, and the schema it is of, which does not change.
             let half = (width - 16.0) / 2.0;
@@ -424,7 +445,7 @@ fn properties(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y:
 }
 
 /// The name field of a schema or table, committed through its rename command.
-fn name_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: egui::Pos2, width: f32, subject: &Subject, cmd: &str, key: &str) {
+pub(crate) fn name_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: egui::Pos2, width: f32, subject: &Subject, cmd: &str, key: &str) {
     let Some(id) = subject.id else { return };
     let mut text = match &shell.panels.name {
         Some(n) if n.target == id => n.text.clone(),

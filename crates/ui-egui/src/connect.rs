@@ -111,7 +111,7 @@ pub fn self_loop(rect: Rect, z: f32) -> Vec<Pos2> {
 }
 
 /// Draws the ends of a short sample line, as the popover's choices and the live line show them.
-fn sample_line(paint: &egui::Painter, p: &Palette, centre: Pos2, from: Option<Cardinality>, to: Option<Cardinality>, ink: egui::Color32) {
+pub(crate) fn sample_line(paint: &egui::Painter, p: &Palette, centre: Pos2, from: Option<Cardinality>, to: Option<Cardinality>, ink: egui::Color32) {
     let z = 0.7;
     let (a, b) = (centre - vec2(18.0, 0.0), centre + vec2(18.0, 0.0));
     let stroke = Stroke::new(1.2, ink);

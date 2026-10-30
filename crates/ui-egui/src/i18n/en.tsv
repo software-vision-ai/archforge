@@ -234,3 +234,31 @@ str		On this diagram · {n}	On this diagram · {n}
 str		Relationship · {from} to {to}	Relationship · {from} to {to}
 str		This relationship	This relationship
 str		On this relationship · {n}	On this relationship · {n}
+str		Remove foreign key	Remove foreign key
+str		Add id column	Add id column
+str		Choose key columns	Choose key columns
+str		Ends	Ends
+str		{entity} end	{entity} end
+str		Role	Role
+str		Foreign key	Foreign key
+str		An identifying relationship needs its foreign key; turn the switch on first	An identifying relationship needs its foreign key; turn the switch on first
+str		Points to	Points to
+str		Existing columns of {entity}	Existing columns of {entity}
+str		{type} · type differs	{type} · type differs
+str		On delete	On delete
+str		On update	On update
+str		No action	No action
+str		Restrict	Restrict
+str		Cascade	Cascade
+str		Set null	Set null
+str		Set default	Set default
+str		More	More
+str		Deferrable	Deferrable
+str		No	No
+str		Yes – checked at once	Yes – checked at once
+str		Yes – checked at commit	Yes – checked at commit
+str		Match	Match
+str		Simple	Simple
+str		Full	Full
+str		Partial	Partial
+str		{parent} has no primary key yet, so there is nothing in {child} to point at.	{parent} has no primary key yet, so there is nothing in {child} to point at.

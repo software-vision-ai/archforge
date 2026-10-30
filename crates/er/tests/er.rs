@@ -276,7 +276,6 @@ fn foreign_keys_round_trip_keep_their_rules_and_go_with_what_they_depend_on() {
         ("er.attribute.set-type", json!({ "attribute": sm.key, "type": "TEXT" })),
         ("er.attribute.set-flags", json!({ "attribute": sm.key, "primary_key": false, "nullable": "auto", "unique": false })),
         ("er.foreign-key.add", json!({ "entity": sm.order, "references": sm.customer, "columns": [sm.total] })),
-        ("er.foreign-key.add", json!({ "entity": sm.order, "references": sm.customer, "columns": [] })),
         ("er.foreign-key.add", json!({ "entity": sm.order, "references": sm.customer, "columns": [sm.key] })),
         ("er.foreign-key.add", json!({ "entity": sm.order, "references": sm.customer, "columns": [fk_col], "name": "FK_CUSTOMER" })),
         ("er.entity.set-kind", json!({ "entity": sm.order, "kind": "associative" })),
@@ -1033,4 +1032,27 @@ fn random_sequences_keep_every_rule_and_undo_back_to_the_start() {
         }
         assert_eq!(picture(s.doc()), start, "seed {seed}: undo back to the start");
     }
+}
+
+#[test]
+fn a_foreign_key_without_columns_gets_new_ones_named_after_the_parent() {
+    let mut s = session();
+    let sm = sample(&mut s);
+    let before = picture(s.doc());
+    let fk = run(&mut s, "er.foreign-key.add", json!({ "entity": sm.order, "references": sm.customer, "relationship": sm.places }));
+    let st = s.doc();
+    let fk_obj = obj(st, &fk);
+    let columns: Vec<Obj> = st.list(fk_obj, foreign_key::COLUMN).unwrap().iter().filter_map(Value::as_ref).collect();
+    assert_eq!(columns.len(), 1, "one column per column of Customer's primary key");
+    assert_eq!(rules::name_of(st, columns[0]), "customer_id", "named after the parent and its key column");
+    assert_eq!(rules::type_of(st, columns[0]), "BIGINT", "typed as the key column");
+    assert_eq!(rules::entity_of(st, columns[0]), Some(obj(st, &sm.order)), "added to the child");
+    assert_eq!(
+        st.get(fk_obj, foreign_key::REFERENCES).unwrap().as_ref(),
+        rules::primary_key_of(st, obj(st, &sm.customer)),
+        "points at the primary key"
+    );
+    all_rules_hold(st);
+    s.execute("edit.undo", &Json::Null).unwrap();
+    assert_eq!(picture(s.doc()), before, "one undo takes the key and its column");
 }
