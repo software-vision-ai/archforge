@@ -12,6 +12,26 @@ str		Search projects and actions	Search projects and actions
 # Workspace
 str		Find an element, view, or action	Find an element, view, or action
 str		No schemas yet	No schemas yet
+str		Add	Add
+str		Schema	Schema
+str		Folder	Folder
+str		Table	Table
+str		Column	Column
+str		Skill	Skill
+str		Nothing matches the filter	Nothing matches the filter
+str		Delete {name} from the model?	Delete {name} from the model?
+str		Narrow the filter to see more	Narrow the filter to see more
+str		No free name is left	No free name is left
+str		What it holds goes with it.	What it holds goes with it.
+plural		{n} relationship goes with it.	{n} relationship goes with it.|{n} relationships go with it.
+plural		{n} key goes with it.	{n} key goes with it.|{n} keys go with it.
+plural		{n} foreign key goes with it.	{n} foreign key goes with it.|{n} foreign keys go with it.
+str		Delete	Delete
+str		Schema · model	Schema · model
+str		Table · model, in every diagram	Table · model, in every diagram
+str		Column · model	Column · model
+str		Element · model	Element · model
+str		Element	Element
 str		New diagram	New diagram
 str		Project created	Project created
 str		Model · the project's root	Model · the project's root

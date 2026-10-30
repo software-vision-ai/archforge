@@ -14,6 +14,8 @@ pub enum Screen {
     NewProjectFailed,
     /// The workspace of a project just created.
     Workspace,
+    /// The same after `+` added the first schema, its name open for typing.
+    WorkspaceSchema,
 }
 
 /// Renders Home at `width` by `height` logical pixels, `scale` pixels a point, in `theme`:
@@ -34,7 +36,7 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
     });
     let mut shell = Shell::new(Services { user_name: Some("Jordan Dale".into()), ids: Some(ids), ..Services::default() });
     shell.state.theme = theme;
-    if screen == Screen::Workspace {
+    if matches!(screen, Screen::Workspace | Screen::WorkspaceSchema) {
         shell.services.projects_folder = Some(Folder { path: "/Users/robin/Documents/Archforge".into(), label: "Documents / Archforge".into() });
         shell.open_project(crate::Opened {
             name: "Commerce platform".into(),
@@ -52,6 +54,11 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
                 });
             }
         }
+    }
+    if screen == Screen::WorkspaceSchema {
+        // The session first, as the first frame would make it, then the schema the + adds.
+        shell.adopt_project();
+        crate::explorer::add(&mut shell, crate::explorer::Kind::Schema);
     }
     let mut harness = egui_kittest::Harness::builder().with_size(egui::vec2(width, height)).with_pixels_per_point(scale).build_ui_state(
         |ui, shell: &mut Shell| {

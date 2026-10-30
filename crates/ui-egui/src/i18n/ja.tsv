@@ -13,6 +13,26 @@ str		Search projects and actions	プロジェクトと操作を検索
 # ワークスペース
 str		Find an element, view, or action	要素、ビュー、操作を検索
 str		No schemas yet	スキーマはまだありません
+str		Add	追加
+str		Schema	スキーマ
+str		Folder	フォルダー
+str		Table	テーブル
+str		Column	列
+str		Skill	スキル
+str		Nothing matches the filter	フィルターに一致するものはありません
+str		Delete {name} from the model?	{name} をモデルから削除しますか？
+str		Narrow the filter to see more	もっと見るにはフィルターを絞り込んでください
+str		No free name is left	空いている名前がありません
+str		What it holds goes with it.	含まれるものも一緒に削除されます。
+plural		{n} relationship goes with it.	{n} 件のリレーションシップが一緒に削除されます。
+plural		{n} key goes with it.	{n} 件のキーが一緒に削除されます。
+plural		{n} foreign key goes with it.	{n} 件の外部キーが一緒に削除されます。
+str		Delete	削除
+str		Schema · model	スキーマ · モデル
+str		Table · model, in every diagram	テーブル · モデル、すべての図に
+str		Column · model	列 · モデル
+str		Element · model	要素 · モデル
+str		Element	要素
 str		New diagram	新しい図
 str		Project created	プロジェクトを作成しました
 str		Model · the project's root	モデル · プロジェクトのルート

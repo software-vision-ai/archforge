@@ -6,6 +6,7 @@
 //! supplies `Services`.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
+pub mod explorer;
 pub mod fonts;
 pub mod home;
 pub mod i18n;
@@ -119,6 +120,8 @@ pub struct Shell {
     pub session_error: Option<SessionError>,
     /// The project the session was made for, so it is made once.
     adopted: Option<std::path::PathBuf>,
+    /// The Models explorer's own state: folds, filter, a name being typed, the dialogs.
+    pub explorer: explorer::State,
     /// Set by `request_quit`; the next frame closes the window.
     quit_requested: bool,
 }
@@ -142,6 +145,7 @@ impl Shell {
             session: None,
             session_error: None,
             adopted: None,
+            explorer: explorer::State::default(),
             quit_requested: false,
         }
     }
@@ -160,6 +164,7 @@ impl Shell {
         self.session = None;
         self.session_error = None;
         self.adopted = None;
+        self.explorer = explorer::State::default();
     }
 
     /// Where the open project lives, as the status bar says it: the label of the folder new
@@ -177,7 +182,7 @@ impl Shell {
     /// The session of the open project, made once per project through the ER crate, with the
     /// host's ids. Without an id source, or when the engine refuses, the reason is kept for the
     /// status bar and said once in the log.
-    fn adopt_project(&mut self) {
+    pub(crate) fn adopt_project(&mut self) {
         let Some(project) = &self.project else { return };
         if self.adopted.as_ref() == Some(&project.path) {
             return;
@@ -230,6 +235,9 @@ impl Shell {
             self.applied_theme = Some(self.state.theme);
         }
         self.adopt_project();
+        if let Some(session) = &self.session {
+            explorer::retain_valid(&mut self.explorer, session.doc());
+        }
         if std::mem::take(&mut self.quit_requested) {
             // Quitting goes through the normal close path, so the exit hook runs.
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);

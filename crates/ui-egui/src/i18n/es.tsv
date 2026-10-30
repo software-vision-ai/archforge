@@ -13,6 +13,26 @@ str		Search projects and actions	Buscar proyectos y acciones
 # Espacio de trabajo
 str		Find an element, view, or action	Buscar un elemento, vista o acción
 str		No schemas yet	Aún no hay esquemas
+str		Add	Añadir
+str		Schema	Esquema
+str		Folder	Carpeta
+str		Table	Tabla
+str		Column	Columna
+str		Skill	Habilidad
+str		Nothing matches the filter	Nada coincide con el filtro
+str		Delete {name} from the model?	¿Eliminar {name} del modelo?
+str		Narrow the filter to see more	Acote el filtro para ver más
+str		No free name is left	No queda ningún nombre libre
+str		What it holds goes with it.	Lo que contiene se va con él.
+plural		{n} relationship goes with it.	{n} relación se va con él.|{n} relaciones se van con él.
+plural		{n} key goes with it.	{n} clave se va con él.|{n} claves se van con él.
+plural		{n} foreign key goes with it.	{n} clave foránea se va con él.|{n} claves foráneas se van con él.
+str		Delete	Eliminar
+str		Schema · model	Esquema · modelo
+str		Table · model, in every diagram	Tabla · modelo, en todos los diagramas
+str		Column · model	Columna · modelo
+str		Element · model	Elemento · modelo
+str		Element	Elemento
 str		New diagram	Nuevo diagrama
 str		Project created	Proyecto creado
 str		Model · the project's root	Modelo · la raíz del proyecto

@@ -120,6 +120,7 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
             return;
         }
         activity_rail(shell, ui, &p, Rect::from_min_size(body.min, vec2(ACTIVITY, body.height())));
+        undo_redo(shell, ui);
         if let Some(r) = cols.explorer {
             explorer(shell, ui, &p, r);
             resize(shell, ui, &p, r.right(), body, "workspace.explorer.resize", true);
@@ -131,6 +132,8 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
         }
         right_rail(shell, ui, &p, cols.rail);
         status_bar(shell, ui, &p, status);
+        // Over everything: the explorer's dialog, when it asks.
+        crate::explorer::delete_dialog(shell, ui, &p);
     });
 }
 
@@ -202,6 +205,24 @@ fn bar_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, name: &str) -
     true
 }
 
+/// Undo and redo from the keyboard, through the engine, while no field has the keyboard.
+fn undo_redo(shell: &mut Shell, ui: &egui::Ui) {
+    if ui.memory(|m| m.focused().is_some()) || shell.explorer.delete.is_some() {
+        return;
+    }
+    let (undo, redo) = ui.input(|i| {
+        let z = i.key_pressed(egui::Key::Z) && i.modifiers.command;
+        (z && !i.modifiers.shift, (z && i.modifiers.shift) || (i.key_pressed(egui::Key::Y) && i.modifiers.command))
+    });
+    if let Some(session) = shell.session.as_mut() {
+        if undo && session.can_undo() {
+            let _ = session.execute("edit.undo", &serde_json::Value::Null);
+        } else if redo && session.can_redo() {
+            let _ = session.execute("edit.redo", &serde_json::Value::Null);
+        }
+    }
+}
+
 /// The activity rail: the explorers, the active one marked with the tint and a bar at the left.
 fn activity_rail(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     let paint = ui.painter();
@@ -222,29 +243,33 @@ fn activity_rail(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     }
 }
 
-/// The explorer column: its title with the add control, the filter field, and what it lists,
-/// which is nothing yet: the tree starts at the schemas, and the project has none.
-fn explorer(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
-    let paint = ui.painter();
+/// The explorer column: Models is the tree over the session; Diagrams and Source Control show
+/// their titles, filters and what is true, which is nothing yet.
+fn explorer(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
+    let paint = ui.painter().clone();
     paint.rect_filled(r, 0.0, p.surface);
     paint.rect_filled(Rect::from_min_max(pos2(r.right() - 1.0, r.top()), r.max), 0.0, p.border);
+    if shell.state.explorer == Explorer::Models {
+        crate::explorer::draw(shell, ui, p, r);
+        return;
+    }
     let at = |x: f32, y: f32| r.min + vec2(x, y);
     let (title, filter, empty) = match shell.state.explorer {
-        Explorer::Models => (tr("Models"), tr("Filter models…"), tr("No schemas yet")),
+        Explorer::Models => return,
         Explorer::Diagrams => (tr("Diagrams"), tr("Filter diagrams…"), tr("No diagrams yet")),
         Explorer::SourceControl => (tr("Source Control"), tr("Filter changes…"), tr("No changes yet")),
     };
-    ux::text(paint, at(20.0, 25.0), &title.to_uppercase(), types::EYEBROW, p.text, room(r.width() - 80.0));
+    ux::text(&paint, at(20.0, 25.0), &title.to_uppercase(), types::EYEBROW, p.text, room(r.width() - 80.0));
     let add = Rect::from_min_size(pos2(r.right() - 40.0, r.top() + 20.0), Vec2::splat(24.0));
-    ux::icon_in(paint, Rect::from_center_size(add.center(), Vec2::splat(16.0)), &icons::PLUS, p.text_secondary);
+    ux::icon_in(&paint, Rect::from_center_size(add.center(), Vec2::splat(16.0)), &icons::PLUS, p.text_secondary);
     control(shell, ui, "workspace.explorer.add", "button", add, false);
     let field = Rect::from_min_max(at(16.0, 65.0), pos2(r.right() - 16.0, r.top() + 97.0));
     paint.rect_filled(field, 8.0, p.page);
     paint.rect_stroke(field, 8.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
-    ux::icon(paint, field.min + vec2(10.0, 9.0), &icons::SEARCH, 13.0, p.text_secondary);
-    ux::text(paint, field.min + vec2(33.0, 7.0), &filter, types::SMALL, p.text_secondary, room(field.width() - 44.0));
+    ux::icon(&paint, field.min + vec2(10.0, 9.0), &icons::SEARCH, 13.0, p.text_secondary);
+    ux::text(&paint, field.min + vec2(33.0, 7.0), &filter, types::SMALL, p.text_secondary, room(field.width() - 44.0));
     control(shell, ui, "workspace.explorer.filter", "button", field, false);
-    ux::text(paint, at(36.0, 119.0), &empty, types::SMALL, p.text_muted, room(r.width() - 52.0));
+    ux::text(&paint, at(36.0, 119.0), &empty, types::SMALL, p.text_muted, room(r.width() - 52.0));
 }
 
 /// A column divider: dragging it changes the column's width within its range.
@@ -309,6 +334,7 @@ fn right_rail(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
 /// model root, the one element the project has; the other panels say what is true until their
 /// slices.
 fn panel(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, name: &str) {
+    // `name` is the project's: the model root's heading when nothing is selected.
     let paint = ui.painter();
     paint.rect_filled(r, 0.0, p.surface);
     let title = PANELS.iter().find(|(_, which, _, _)| *which == shell.state.panel).map(|(_, _, _, t)| tr(t)).unwrap_or_default();
@@ -321,15 +347,27 @@ fn panel(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, name: &str) {
     match shell.state.panel {
         Panel::Properties => {
             // The heading names the selection; with nothing selected that is the model root.
-            ux::text(paint, at(16.0, 58.0), name, types::CARD_TITLE, p.text, room(r.width() - 32.0));
-            ux::text(paint, at(16.0, 84.0), &tr("Model · the project's root"), types::CAPTION, p.text_secondary, room(r.width() - 32.0));
+            let selected = shell.session.as_ref().and_then(|s| {
+                let o = *s.view().selection.first()?;
+                let class = s.doc().class_of(o).ok()?;
+                Some((archforge_er::rules::name_of(s.doc(), o), class))
+            });
+            let (heading, kind, section) = match selected {
+                Some((n, c)) if c == archforge_er::SCHEMA => (n, tr("Schema · model"), tr("Schema")),
+                Some((n, c)) if c == archforge_er::ENTITY => (n, tr("Table · model, in every diagram"), tr("Table")),
+                Some((n, c)) if c == archforge_er::ATTRIBUTE => (n, tr("Column · model"), tr("Column")),
+                Some((n, _)) => (n, tr("Element · model"), tr("Element")),
+                None => (name.to_string(), tr("Model · the project's root"), tr("Model")),
+            };
+            ux::text(paint, at(16.0, 58.0), &heading, types::CARD_TITLE, p.text, room(r.width() - 32.0));
+            ux::text(paint, at(16.0, 84.0), &kind, types::CAPTION, p.text_secondary, room(r.width() - 32.0));
             paint.rect_filled(Rect::from_min_size(at(0.0, 109.0), vec2(r.width(), 1.0)), 0.0, p.border);
-            ux::text(paint, at(16.0, 120.0), &tr("Model"), types::UI, p.text, room(r.width() - 32.0));
+            ux::text(paint, at(16.0, 120.0), &section, types::UI, p.text, room(r.width() - 32.0));
             ux::text(paint, at(16.0, 150.0), &tr("Name"), types::CAPTION, p.text_secondary, room(r.width() - 32.0));
             let field = Rect::from_min_size(at(16.0, 167.0), vec2((r.width() - 32.0).max(0.0), FIELD));
             paint.rect_filled(field, 6.0, p.field);
-            ux::text(paint, field.min + vec2(8.0, 5.0), name, types::SMALL, p.text, room(field.width() - 16.0));
-            // Renaming the model comes with the Models explorer slice.
+            ux::text(paint, field.min + vec2(8.0, 5.0), &heading, types::SMALL, p.text, room(field.width() - 16.0));
+            // The name is typed in the explorer; the panel's fields come with slice W3.
             control(shell, ui, "workspace.properties.name", "button", field, false);
         }
         Panel::Agent => {

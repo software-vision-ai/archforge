@@ -1,13 +1,15 @@
 # archforge-ui-egui
 
 **Purpose.** The user interface: Home, the start screen, the New project dialog over it, and the
-workspace once a project is open (`workspace`: the project bar, the activity rail and explorer,
+workspace once a project is open (`workspace`: the project bar, the activity rail and the Models
+explorer over the session (`explorer`: schemas, tables, columns and skills; `+` adds, a name is
+typed in place, Delete asks when other things go with it),
 the diagram tab strip with its new-diagram control over the empty canvas, the right rail between
 the canvas and its panel, the status bar), drawn from the design with its own palette, type and
 icons (`ux`). An open project has an in-memory ER session (`Shell::session`); nothing reaches the
 project's database yet, and the status bar says so once there is something unsaved.
 
-**Layer.** 7, over `archforge-er` (6), `archforge-mof` (4), `archforge-engine` (3) and
+**Layer.** 7, over `archforge-er` (6), `archforge-core` (5), `archforge-mof` (4), `archforge-engine` (3) and
 `archforge-names`; the only library crate that may use the toolkit (egui). The shell never reads
 the clock or the file system: the ids of a model's elements come from the host (`Services::ids`).
 
@@ -37,9 +39,11 @@ or explorer with nothing to show says so in one line, never with a help text.
 | the title strip's controls | `strip.home`, `strip.open-project`, `strip.theme` on every screen; on the workspace `strip.home` closes the project |
 | `i18n::{tr, tr_ctx, trn, set_language}` | catalogue lookups at draw time |
 | `offscreen::render` | `pub fn render(width: f32, height: f32, scale: f32, theme: ThemeKind) -> Result<(u32, u32, Vec<u8>), String>` (feature `snapshot`) |
-| `offscreen::render_screen` | the same for a `Screen`: Home, the New project dialog over it, or the workspace |
+| `offscreen::render_screen` | the same for a `Screen`: Home, the New project dialog over it, the workspace, or the workspace with its first schema being named |
+| `explorer::{State, add, remove_selection, rows, fresh_name, Kind}` | the Models explorer's state and the actions the tests and the host drive |
 | `new_project::{open, name_problem, file_name}` | the New project dialog: open it, a name's problem in words, the file a name gives |
 | `Folder` | a folder as the shell shows it: its path and its label |
 
-**Non-goals.** The screens behind Home's other controls, the explorers' contents, the panels'
-contents and the canvas: slices W2 to W4 of the workspace chrome, then their own rows.
+**Non-goals.** The screens behind Home's other controls, the Diagrams and Source Control
+explorers' contents, the panels' fields and the canvas: slices W3 and W4 of the workspace chrome,
+then their own rows.
