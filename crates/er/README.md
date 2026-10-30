@@ -72,14 +72,27 @@ and an identifying relationship that loses its key, or whose key leaves the prim
 non-identifying one; an entity's removal takes the relationships that reach it too
 (`commands::remove_entity`).
 
+Checks and indexes (slice S3) belong to an entity: a `CheckConstraint` holds an SQL expression every
+row holds and an optional name; a `TableIndex` (named so because `Index` would clash with the
+generated package index) holds its columns in order, each an `IndexColumn` with an attribute of the
+entity or an expression, a sort direction and a nulls order, plus unique, an optional partial-index
+condition (where) and an access method as free text. Their names share the schema's constraint
+namespace with keys and foreign keys; an unnamed one shows a generated name (`rules::display_name`:
+`ck_<table>_<n>`, `ix_<table>_<columns>`). Removing an attribute removes the index columns on it,
+and an index left without columns (`commands::index_dependents`); a check's text is not parsed, so
+column references inside it are not checked.
+
 **The metaclasses.** `Schema` (entity, relationship), `Entity` (attribute, kind, primaryKey,
-uniqueConstraint, foreignKey), `Attribute` (type with length, precision and scale, nullable, default, generation with an expression, collation), `Relationship` (name, from, to,
+uniqueConstraint, foreignKey, checkConstraint, tableIndex), `Attribute` (type with length, precision and scale, nullable, default, generation with an expression, collation), `Relationship` (name, from, to,
 fromEnd, toEnd, fromRole, toRole, identifying), the abstract `Key` (name, column) with `PrimaryKey` and
 `UniqueConstraint` (nullsDistinct), `ForeignKey` (name, references a Key, column, onDelete,
 onUpdate, relationship, match, deferrable) and the enumerations `Cardinality` (zeroOrOne,
 exactlyOne, zeroOrMore, oneOrMore), `EntityKind` (regular, associative), `ReferentialAction`
 (noAction, restrict, cascade, setNull, setDefault), `MatchType` (simple, full, partial) and
-`Deferrability` (notDeferrable, initiallyImmediate, initiallyDeferred).
+`Deferrability` (notDeferrable, initiallyImmediate, initiallyDeferred); `CheckConstraint` (name,
+expression), `TableIndex` (name, unique, column, where, method), `IndexColumn` (attribute or
+expression, direction, nulls) with `SortDirection` (ascending, descending) and `NullsOrder` (default,
+first, last).
 
 **Public API.**
 
@@ -91,8 +104,8 @@ exactlyOne, zeroOrMore, oneOrMore), `EntityKind` (regular, associative), `Refere
 | `DIAGRAM_KIND`, `ENTITY_SIZE` | `"er"`; an entity node's default size |
 | `new_project_session` | `pub fn new_project_session(name: &str, ids: Box<dyn FnMut() -> Uuid + Send>) -> Result<Session, String>`: a session over a store with the project's Model root named `name`; the host supplies the ids |
 | `universe_with`, `slabs`, `store` | a universe of the shared core, the diagram metamodel, ER and others; the slabs of the three; a store over them |
-| `rules::{name_problem, entity_name_free, attribute_name_free, constraint_name_free, schema_of, problems, notices, key_problem, key_columns_problem, associative_problem, key_parts, primary_key_of, primary_key, unique_constraints, keys_of, key_columns, keys_onto, in_primary_key, is_unique}` | the rules, for commands and for a whole store |
-| `commands::{remove_element, remove_entity, dependents, keys_on, resolve, cardinality_name, action_name, match_name, deferrability_name, specs}` | the cascades, the resolve step, the names in parameters, the command table |
+| `rules::{name_problem, entity_name_free, attribute_name_free, constraint_name_free, schema_of, problems, notices, key_problem, key_columns_problem, associative_problem, key_parts, primary_key_of, primary_key, unique_constraints, keys_of, key_columns, keys_onto, in_primary_key, is_unique, checks_of, indexes_of, index_columns, index_specs, index_column_spec, IndexColumnSpec, is_unique_index, index_columns_problem, check_problem, display_name}` | the rules, for commands and for a whole store |
+| `commands::{remove_element, remove_entity, dependents, index_dependents, keys_on, resolve, cardinality_name, action_name, match_name, deferrability_name, direction_name, nulls_name, DIRECTION_WORDS, NULLS_WORDS, specs}` | the cascades, the resolve step, the names in parameters, the command table |
 | the generated constants, structs, `Cardinality`, `TABLES`, `JUNCTIONS` | as every generated metamodel |
 
 Commands: `er.schema.{add, rename, remove}`, `er.entity.{add, rename, remove, set-kind}`,

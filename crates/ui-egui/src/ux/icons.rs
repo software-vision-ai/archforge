@@ -100,6 +100,13 @@ pub const CHAT: Icon = Icon {
 /// The close icon.
 pub const CLOSE: Icon = Icon { size: [14.0, 14.0], stroke: 1.7, segments: &[L([0.0, 0.0], [14.0, 14.0]), L([14.0, 0.0], [0.0, 14.0])] };
 
+/// The sort arrows of an index column: ascending points up, descending down (thin, as the design's
+/// Icon / Sort · Ascending and · Descending).
+pub const SORT_ASCENDING: Icon =
+    Icon { size: [7.0, 9.0], stroke: 1.1, segments: &[L([3.5, 9.0], [3.5, 0.0]), L([0.0, 3.5], [3.5, 0.0]), L([3.5, 0.0], [7.0, 3.5])] };
+pub const SORT_DESCENDING: Icon =
+    Icon { size: [7.0, 9.0], stroke: 1.1, segments: &[L([3.5, 0.0], [3.5, 9.0]), L([0.0, 5.5], [3.5, 9.0]), L([3.5, 9.0], [7.0, 5.5])] };
+
 /// The arrow pointing right.
 pub const ARROW: Icon =
     Icon { size: [16.0, 16.0], stroke: 1.7, segments: &[L([0.0, 8.0], [16.0, 8.0]), L([9.778, 0.0], [16.0, 8.0]), L([16.0, 8.0], [9.778, 16.0])] };

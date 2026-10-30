@@ -41,6 +41,19 @@ str		Add a column	列を追加
 str		Add unique constraint	一意制約を追加
 str		Columns, in key order	キーの順の列
 str		Nulls distinct	NULL を区別
+str		Checks · {n}	チェック制約 · {n}
+str		Indexes · {n}	インデックス · {n}
+str		Add check constraint	チェック制約を追加
+str		Add index	インデックスを追加
+str		Columns, in index order	インデックス順の列
+str		An expression	式
+str		Where	Where
+str		Method	メソッド
+str		Ascending	昇順
+str		Descending	降順
+str		Nulls default	NULL の順序: 既定
+str		Nulls first	NULL を先頭に
+str		Nulls last	NULL を末尾に
 str		Problems · {n}	問題 · {n}
 str		lacks its table or its key	テーブルまたはキーがありません
 str		{column} is a key column and may be null	{column} はキー列ですが NULL を許可しています

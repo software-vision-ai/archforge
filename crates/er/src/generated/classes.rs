@@ -200,6 +200,63 @@ impl Generation {
     }
 }
 
+/// The enumeration SortDirection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SortDirection {
+    Ascending,
+    Descending,
+}
+
+impl SortDirection {
+    pub const DATA_TYPE: DataId = SORT_DIRECTION;
+    pub fn from_index(i: u32) -> Option<Self> {
+        match i {
+            0 => Some(Self::Ascending),
+            1 => Some(Self::Descending),
+            _ => None,
+        }
+    }
+    pub fn index(self) -> u32 {
+        self as u32
+    }
+    pub fn literal(self) -> &'static str {
+        match self {
+            Self::Ascending => "ascending",
+            Self::Descending => "descending",
+        }
+    }
+}
+
+/// The enumeration NullsOrder.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NullsOrder {
+    Default,
+    First,
+    Last,
+}
+
+impl NullsOrder {
+    pub const DATA_TYPE: DataId = NULLS_ORDER;
+    pub fn from_index(i: u32) -> Option<Self> {
+        match i {
+            0 => Some(Self::Default),
+            1 => Some(Self::First),
+            2 => Some(Self::Last),
+            _ => None,
+        }
+    }
+    pub fn index(self) -> u32 {
+        self as u32
+    }
+    pub fn literal(self) -> &'static str {
+        match self {
+            Self::Default => "default",
+            Self::First => "first",
+            Self::Last => "last",
+        }
+    }
+}
+
 use archforge_mof::DataId;
 
 /// An object of Schema, with every inherited stored property as a field.
@@ -296,6 +353,8 @@ pub struct EntityObj {
     pub primary_key: Option<Obj>,
     pub unique_constraint: Vec<Value>,
     pub foreign_key: Vec<Value>,
+    pub check_constraint: Vec<Value>,
+    pub table_index: Vec<Value>,
 }
 
 impl Reflect for EntityObj {
@@ -352,6 +411,8 @@ impl Reflect for EntityObj {
             entity::ATTRIBUTE => Some(&self.attribute),
             entity::UNIQUE_CONSTRAINT => Some(&self.unique_constraint),
             entity::FOREIGN_KEY => Some(&self.foreign_key),
+            entity::CHECK_CONSTRAINT => Some(&self.check_constraint),
+            entity::TABLE_INDEX => Some(&self.table_index),
             _ => None,
         }
     }
@@ -360,6 +421,8 @@ impl Reflect for EntityObj {
             entity::ATTRIBUTE => Some(&mut self.attribute),
             entity::UNIQUE_CONSTRAINT => Some(&mut self.unique_constraint),
             entity::FOREIGN_KEY => Some(&mut self.foreign_key),
+            entity::CHECK_CONSTRAINT => Some(&mut self.check_constraint),
+            entity::TABLE_INDEX => Some(&mut self.table_index),
             _ => None,
         }
     }
@@ -387,6 +450,12 @@ impl EntityObj {
     pub fn foreign_key(&self) -> &[Value] {
         &self.foreign_key
     }
+    pub fn check_constraint(&self) -> &[Value] {
+        &self.check_constraint
+    }
+    pub fn table_index(&self) -> &[Value] {
+        &self.table_index
+    }
     pub fn set_description(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
         store.set(obj, element::DESCRIPTION, v.map_or(Value::Null, Value::str))
     }
@@ -407,6 +476,12 @@ impl EntityObj {
     }
     pub fn push_foreign_key(store: &mut Store, obj: Obj, value: Value) -> Result<u32, Invalid> {
         store.push(obj, entity::FOREIGN_KEY, value)
+    }
+    pub fn push_check_constraint(store: &mut Store, obj: Obj, value: Value) -> Result<u32, Invalid> {
+        store.push(obj, entity::CHECK_CONSTRAINT, value)
+    }
+    pub fn push_table_index(store: &mut Store, obj: Obj, value: Value) -> Result<u32, Invalid> {
+        store.push(obj, entity::TABLE_INDEX, value)
     }
 }
 
@@ -1141,5 +1216,313 @@ impl ForeignKeyObj {
     }
     pub fn set_deferrable(store: &mut Store, obj: Obj, v: u32) -> Result<(), Invalid> {
         store.set(obj, foreign_key::DEFERRABLE, Value::Enum(v))
+    }
+}
+
+/// An object of CheckConstraint, with every inherited stored property as a field.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct CheckConstraintObj {
+    pub description: Option<Arc<str>>,
+    pub name: Option<Arc<str>>,
+    pub expression: Option<Arc<str>>,
+}
+
+impl Reflect for CheckConstraintObj {
+    fn class(&self) -> ClassId {
+        CHECK_CONSTRAINT
+    }
+    fn get(&self, prop: PropId) -> Option<Value> {
+        match prop {
+            element::DESCRIPTION => Some(self.description.clone().map_or(Value::Null, Value::Str)),
+            check_constraint::NAME => Some(self.name.clone().map_or(Value::Null, Value::Str)),
+            check_constraint::EXPRESSION => Some(self.expression.clone().map_or(Value::Null, Value::Str)),
+            _ => None,
+        }
+    }
+    fn set(&mut self, prop: PropId, value: Value) -> Result<(), String> {
+        match prop {
+            element::DESCRIPTION => {
+                match value {
+                    Value::Null => self.description = None,
+                    Value::Str(v) => self.description = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
+            check_constraint::NAME => {
+                match value {
+                    Value::Null => self.name = None,
+                    Value::Str(v) => self.name = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
+            check_constraint::EXPRESSION => {
+                match value {
+                    Value::Null => self.expression = None,
+                    Value::Str(v) => self.expression = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
+            _ => Err(format!("no single-valued property {} on CheckConstraint", prop.0)),
+        }
+    }
+    fn list(&self, _prop: PropId) -> Option<&[Value]> {
+        None
+    }
+    fn list_mut(&mut self, _prop: PropId) -> Option<&mut Vec<Value>> {
+        None
+    }
+}
+
+impl CheckConstraintObj {
+    pub fn description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
+    pub fn name(&self) -> Option<&str> {
+        self.name.as_deref()
+    }
+    pub fn expression(&self) -> Option<&str> {
+        self.expression.as_deref()
+    }
+    pub fn set_description(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, element::DESCRIPTION, v.map_or(Value::Null, Value::str))
+    }
+    pub fn set_name(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, check_constraint::NAME, v.map_or(Value::Null, Value::str))
+    }
+    pub fn set_expression(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, check_constraint::EXPRESSION, v.map_or(Value::Null, Value::str))
+    }
+}
+
+/// An object of TableIndex, with every inherited stored property as a field.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct TableIndexObj {
+    pub description: Option<Arc<str>>,
+    pub name: Option<Arc<str>>,
+    pub unique: bool,
+    pub column: Vec<Value>,
+    pub where_: Option<Arc<str>>,
+    pub method: Option<Arc<str>>,
+}
+
+impl Reflect for TableIndexObj {
+    fn class(&self) -> ClassId {
+        TABLE_INDEX
+    }
+    fn get(&self, prop: PropId) -> Option<Value> {
+        match prop {
+            element::DESCRIPTION => Some(self.description.clone().map_or(Value::Null, Value::Str)),
+            table_index::NAME => Some(self.name.clone().map_or(Value::Null, Value::Str)),
+            table_index::UNIQUE => Some(Value::Bool(self.unique)),
+            table_index::WHERE => Some(self.where_.clone().map_or(Value::Null, Value::Str)),
+            table_index::METHOD => Some(self.method.clone().map_or(Value::Null, Value::Str)),
+            _ => None,
+        }
+    }
+    fn set(&mut self, prop: PropId, value: Value) -> Result<(), String> {
+        match prop {
+            element::DESCRIPTION => {
+                match value {
+                    Value::Null => self.description = None,
+                    Value::Str(v) => self.description = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
+            table_index::NAME => {
+                match value {
+                    Value::Null => self.name = None,
+                    Value::Str(v) => self.name = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
+            table_index::UNIQUE => {
+                match value {
+                    Value::Bool(v) => self.unique = v,
+                    other => return Err(format!("not a boolean: {other}")),
+                }
+                Ok(())
+            }
+            table_index::WHERE => {
+                match value {
+                    Value::Null => self.where_ = None,
+                    Value::Str(v) => self.where_ = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
+            table_index::METHOD => {
+                match value {
+                    Value::Null => self.method = None,
+                    Value::Str(v) => self.method = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
+            _ => Err(format!("no single-valued property {} on TableIndex", prop.0)),
+        }
+    }
+    fn list(&self, prop: PropId) -> Option<&[Value]> {
+        match prop {
+            table_index::COLUMN => Some(&self.column),
+            _ => None,
+        }
+    }
+    fn list_mut(&mut self, prop: PropId) -> Option<&mut Vec<Value>> {
+        match prop {
+            table_index::COLUMN => Some(&mut self.column),
+            _ => None,
+        }
+    }
+}
+
+impl TableIndexObj {
+    pub fn description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
+    pub fn name(&self) -> Option<&str> {
+        self.name.as_deref()
+    }
+    pub fn unique(&self) -> bool {
+        self.unique
+    }
+    pub fn column(&self) -> &[Value] {
+        &self.column
+    }
+    pub fn where_(&self) -> Option<&str> {
+        self.where_.as_deref()
+    }
+    pub fn method(&self) -> Option<&str> {
+        self.method.as_deref()
+    }
+    pub fn set_description(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, element::DESCRIPTION, v.map_or(Value::Null, Value::str))
+    }
+    pub fn set_name(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, table_index::NAME, v.map_or(Value::Null, Value::str))
+    }
+    pub fn set_unique(store: &mut Store, obj: Obj, v: bool) -> Result<(), Invalid> {
+        store.set(obj, table_index::UNIQUE, Value::Bool(v))
+    }
+    pub fn push_column(store: &mut Store, obj: Obj, value: Value) -> Result<u32, Invalid> {
+        store.push(obj, table_index::COLUMN, value)
+    }
+    pub fn set_where_(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, table_index::WHERE, v.map_or(Value::Null, Value::str))
+    }
+    pub fn set_method(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, table_index::METHOD, v.map_or(Value::Null, Value::str))
+    }
+}
+
+/// An object of IndexColumn, with every inherited stored property as a field.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct IndexColumnObj {
+    pub description: Option<Arc<str>>,
+    pub attribute: Option<Obj>,
+    pub expression: Option<Arc<str>>,
+    pub direction: u32,
+    pub nulls: u32,
+}
+
+impl Reflect for IndexColumnObj {
+    fn class(&self) -> ClassId {
+        INDEX_COLUMN
+    }
+    fn get(&self, prop: PropId) -> Option<Value> {
+        match prop {
+            element::DESCRIPTION => Some(self.description.clone().map_or(Value::Null, Value::Str)),
+            index_column::ATTRIBUTE => Some(self.attribute.map_or(Value::Null, Value::Ref)),
+            index_column::EXPRESSION => Some(self.expression.clone().map_or(Value::Null, Value::Str)),
+            index_column::DIRECTION => Some(Value::Enum(self.direction)),
+            index_column::NULLS => Some(Value::Enum(self.nulls)),
+            _ => None,
+        }
+    }
+    fn set(&mut self, prop: PropId, value: Value) -> Result<(), String> {
+        match prop {
+            element::DESCRIPTION => {
+                match value {
+                    Value::Null => self.description = None,
+                    Value::Str(v) => self.description = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
+            index_column::ATTRIBUTE => {
+                match value {
+                    Value::Null => self.attribute = None,
+                    Value::Ref(v) => self.attribute = Some(v),
+                    other => return Err(format!("not a reference: {other}")),
+                }
+                Ok(())
+            }
+            index_column::EXPRESSION => {
+                match value {
+                    Value::Null => self.expression = None,
+                    Value::Str(v) => self.expression = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
+            index_column::DIRECTION => {
+                match value {
+                    Value::Enum(v) => self.direction = v,
+                    other => return Err(format!("not a literal: {other}")),
+                }
+                Ok(())
+            }
+            index_column::NULLS => {
+                match value {
+                    Value::Enum(v) => self.nulls = v,
+                    other => return Err(format!("not a literal: {other}")),
+                }
+                Ok(())
+            }
+            _ => Err(format!("no single-valued property {} on IndexColumn", prop.0)),
+        }
+    }
+    fn list(&self, _prop: PropId) -> Option<&[Value]> {
+        None
+    }
+    fn list_mut(&mut self, _prop: PropId) -> Option<&mut Vec<Value>> {
+        None
+    }
+}
+
+impl IndexColumnObj {
+    pub fn description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
+    pub fn attribute(&self) -> Option<Obj> {
+        self.attribute
+    }
+    pub fn expression(&self) -> Option<&str> {
+        self.expression.as_deref()
+    }
+    pub fn direction(&self) -> u32 {
+        self.direction
+    }
+    pub fn nulls(&self) -> u32 {
+        self.nulls
+    }
+    pub fn set_description(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, element::DESCRIPTION, v.map_or(Value::Null, Value::str))
+    }
+    pub fn set_attribute(store: &mut Store, obj: Obj, v: Option<Obj>) -> Result<(), Invalid> {
+        store.set(obj, index_column::ATTRIBUTE, v.map_or(Value::Null, Value::Ref))
+    }
+    pub fn set_expression(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, index_column::EXPRESSION, v.map_or(Value::Null, Value::str))
+    }
+    pub fn set_direction(store: &mut Store, obj: Obj, v: u32) -> Result<(), Invalid> {
+        store.set(obj, index_column::DIRECTION, Value::Enum(v))
+    }
+    pub fn set_nulls(store: &mut Store, obj: Obj, v: u32) -> Result<(), Invalid> {
+        store.set(obj, index_column::NULLS, Value::Enum(v))
     }
 }

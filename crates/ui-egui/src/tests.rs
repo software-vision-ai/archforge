@@ -1439,6 +1439,15 @@ fn double_clicks_rename_and_open_columns_and_a_refused_name_stays_open() {
     assert!(st.alive().any(|o| archforge_er::rules::name_of(st, o) == "Order"), "the table stays in the model");
 }
 
+/// A secondary click, for context menus.
+fn right_click(h: &mut Harness<'static, Shell>, at: egui::Pos2) {
+    h.event(egui::Event::PointerMoved(at));
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Secondary, pressed, modifiers: egui::Modifiers::NONE });
+    }
+    h.run();
+}
+
 /// Two clicks a frame apart: `run` would settle for longer than egui's double-click window.
 fn double_click(h: &mut Harness<'static, Shell>, at: egui::Pos2) {
     h.event(egui::Event::PointerMoved(at));
@@ -1929,4 +1938,84 @@ fn the_column_editor_sets_the_size_default_and_generation_and_the_heading_takes_
     let st = h.state().session.as_ref().unwrap().doc();
     let customer_obj = st.by_uuid(archforge_mof::Uuid::parse(&customer).unwrap()).unwrap();
     assert_eq!(archforge_er::rules::text_of(st, customer_obj, archforge_er::element::DESCRIPTION), "People who buy.");
+}
+
+#[test]
+fn the_check_and_index_editors_write_through_the_engine_and_a_refusal_changes_nothing() {
+    use archforge_er::{NullsOrder, SortDirection};
+    let (mut h, customer) = table_harness();
+    let found = ids(&h);
+    assert!(
+        found.iter().any(|i| i == "workspace.properties.checks.add") && found.iter().any(|i| i == "workspace.properties.indexes.add"),
+        "{found:?}"
+    );
+    // + opens the check editor; Apply without an expression is refused and nothing lands; with
+    // one, the check is added and the table stays selected.
+    let at = rect_of(&h, "workspace.properties.checks.add").center();
+    click(&mut h, at);
+    assert!(h.state().panels.check.as_ref().is_some_and(|c| c.target.is_none()));
+    let at = rect_of(&h, "workspace.properties.check.apply").center();
+    click(&mut h, at);
+    assert!(h.state().panels.check.as_ref().is_some_and(|c| c.refused.is_some()), "{:?}", h.state().panels.check);
+    let customer_obj = {
+        let st = h.state().session.as_ref().unwrap().doc();
+        st.by_uuid(archforge_mof::Uuid::parse(&customer).unwrap()).unwrap()
+    };
+    assert!(archforge_er::rules::checks_of(h.state().session.as_ref().unwrap().doc(), customer_obj).is_empty());
+    h.state_mut().panels.check.as_mut().unwrap().expression = "email <> ''".into();
+    let at = rect_of(&h, "workspace.properties.check.apply").center();
+    click(&mut h, at);
+    assert!(h.state().panels.check.is_none(), "{:?}", h.state().panels.check);
+    assert_eq!(archforge_er::rules::checks_of(h.state().session.as_ref().unwrap().doc(), customer_obj).len(), 1);
+    assert_eq!(ids(&h).iter().filter(|i| i.starts_with("workspace.properties.check.row.")).count(), 1);
+    assert_eq!(selected_name(&h), "Customer");
+    // + opens the index editor; two columns come from the menu, the second turns descending, the
+    // first takes Nulls last from its right-click menu; Apply writes the index in one command.
+    let at = rect_of(&h, "workspace.properties.indexes.add").center();
+    click(&mut h, at);
+    assert!(h.state().panels.index.as_ref().is_some_and(|i| i.target.is_none()));
+    let at = rect_of(&h, "workspace.properties.index.column.add").center();
+    click(&mut h, at);
+    assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::IndexColumn));
+    let items: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.index.column.add.")).collect();
+    assert_eq!(items.len(), 3, "two columns and an expression: {items:?}");
+    let at = rect_of(&h, &items[0]).center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.properties.index.column.add").center();
+    click(&mut h, at);
+    let items: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.index.column.add.")).collect();
+    assert_eq!(items.len(), 2, "the column left and an expression: {items:?}");
+    let at = rect_of(&h, &items[0]).center();
+    click(&mut h, at);
+    assert_eq!(h.state().panels.index.as_ref().unwrap().columns.len(), 2);
+    let at = rect_of(&h, "workspace.properties.index.column.1.direction").center();
+    click(&mut h, at);
+    assert_eq!(h.state().panels.index.as_ref().unwrap().columns[1].direction, SortDirection::Descending);
+    let at = rect_of(&h, "workspace.properties.index.column.0").center();
+    right_click(&mut h, at);
+    assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::IndexNulls(0)));
+    let at = rect_of(&h, "workspace.properties.index.column.0.nulls.2").center();
+    click(&mut h, at);
+    assert_eq!(h.state().panels.index.as_ref().unwrap().columns[0].nulls, NullsOrder::Last);
+    let at = rect_of(&h, "workspace.properties.index.apply").center();
+    click(&mut h, at);
+    assert!(h.state().panels.index.is_none(), "{:?}", h.state().panels.index);
+    {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let indexes = archforge_er::rules::indexes_of(st, customer_obj);
+        assert_eq!(indexes.len(), 1);
+        let specs = archforge_er::rules::index_specs(st, indexes[0]);
+        assert_eq!((specs.len(), specs[0].nulls, specs[1].direction), (2, NullsOrder::Last, SortDirection::Descending));
+        assert_eq!(archforge_er::rules::display_name(st, indexes[0]), "ix_customer_customer_id_email");
+    }
+    assert_eq!(selected_name(&h), "Customer");
+    // The index row opens its editor; the bin removes the index.
+    let row = ids(&h).into_iter().find(|i| i.starts_with("workspace.properties.index.row.")).unwrap();
+    let at = rect_of(&h, &row).center();
+    click(&mut h, at);
+    assert!(h.state().panels.index.as_ref().is_some_and(|i| i.target.is_some()));
+    let at = rect_of(&h, "workspace.properties.index.remove").center();
+    click(&mut h, at);
+    assert!(h.state().panels.index.is_none());
+    assert!(archforge_er::rules::indexes_of(h.state().session.as_ref().unwrap().doc(), customer_obj).is_empty());
 }

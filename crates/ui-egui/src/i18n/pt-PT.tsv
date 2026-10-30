@@ -41,6 +41,19 @@ str		Add a column	Adicionar uma coluna
 str		Add unique constraint	Adicionar restrição de unicidade
 str		Columns, in key order	Colunas, na ordem da chave
 str		Nulls distinct	Nulos distintos
+str		Checks · {n}	Verificações · {n}
+str		Indexes · {n}	Índices · {n}
+str		Add check constraint	Adicionar restrição de verificação
+str		Add index	Adicionar índice
+str		Columns, in index order	Colunas pela ordem do índice
+str		An expression	Uma expressão
+str		Where	Where
+str		Method	Método
+str		Ascending	Ascendente
+str		Descending	Descendente
+str		Nulls default	Nulos por omissão
+str		Nulls first	Nulos primeiro
+str		Nulls last	Nulos no fim
 str		Problems · {n}	Problemas · {n}
 str		lacks its table or its key	não tem a sua tabela ou a sua chave
 str		{column} is a key column and may be null	{column} é coluna chave e admite nulos

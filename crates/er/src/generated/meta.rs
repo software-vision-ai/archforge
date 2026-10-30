@@ -9,7 +9,7 @@ use archforge_mof::{Builder, ClassId, DataId, DataKind, MetaError, Metamodel, Pr
 pub const INDEX: u16 = 3;
 pub const URI: &str = "archforge:er";
 pub const VERSION: &str = "1";
-pub const CONTENT_HASH: &str = "e8ec9a14fb8860a9";
+pub const CONTENT_HASH: &str = "9a98a0605623b2bb";
 
 pub const BOOLEAN: DataId = DataId::new(INDEX, 0);
 pub const INTEGER: DataId = DataId::new(INDEX, 1);
@@ -22,6 +22,8 @@ pub const REFERENTIAL_ACTION: DataId = DataId::new(INDEX, 7);
 pub const MATCH_TYPE: DataId = DataId::new(INDEX, 8);
 pub const DEFERRABILITY: DataId = DataId::new(INDEX, 9);
 pub const GENERATION: DataId = DataId::new(INDEX, 10);
+pub const SORT_DIRECTION: DataId = DataId::new(INDEX, 11);
+pub const NULLS_ORDER: DataId = DataId::new(INDEX, 12);
 
 pub const ELEMENT: ClassId = ClassId::new(INDEX, 0);
 pub const NAMED_ELEMENT: ClassId = ClassId::new(INDEX, 1);
@@ -33,6 +35,9 @@ pub const KEY: ClassId = ClassId::new(INDEX, 6);
 pub const PRIMARY_KEY: ClassId = ClassId::new(INDEX, 7);
 pub const UNIQUE_CONSTRAINT: ClassId = ClassId::new(INDEX, 8);
 pub const FOREIGN_KEY: ClassId = ClassId::new(INDEX, 9);
+pub const CHECK_CONSTRAINT: ClassId = ClassId::new(INDEX, 10);
+pub const TABLE_INDEX: ClassId = ClassId::new(INDEX, 11);
+pub const INDEX_COLUMN: ClassId = ClassId::new(INDEX, 12);
 
 /// The properties Element declares.
 pub mod element {
@@ -63,59 +68,87 @@ pub mod entity {
     pub const PRIMARY_KEY: PropId = PropId::new(INDEX, 7);
     pub const UNIQUE_CONSTRAINT: PropId = PropId::new(INDEX, 8);
     pub const FOREIGN_KEY: PropId = PropId::new(INDEX, 9);
+    pub const CHECK_CONSTRAINT: PropId = PropId::new(INDEX, 10);
+    pub const TABLE_INDEX: PropId = PropId::new(INDEX, 11);
 }
 /// The properties Attribute declares.
 pub mod attribute {
     use super::INDEX;
     use super::PropId;
-    pub const TYPE: PropId = PropId::new(INDEX, 10);
-    pub const NULLABLE: PropId = PropId::new(INDEX, 11);
-    pub const LENGTH: PropId = PropId::new(INDEX, 12);
-    pub const PRECISION: PropId = PropId::new(INDEX, 13);
-    pub const SCALE: PropId = PropId::new(INDEX, 14);
-    pub const DEFAULT: PropId = PropId::new(INDEX, 15);
-    pub const GENERATION: PropId = PropId::new(INDEX, 16);
-    pub const EXPRESSION: PropId = PropId::new(INDEX, 17);
-    pub const COLLATION: PropId = PropId::new(INDEX, 18);
+    pub const TYPE: PropId = PropId::new(INDEX, 12);
+    pub const NULLABLE: PropId = PropId::new(INDEX, 13);
+    pub const LENGTH: PropId = PropId::new(INDEX, 14);
+    pub const PRECISION: PropId = PropId::new(INDEX, 15);
+    pub const SCALE: PropId = PropId::new(INDEX, 16);
+    pub const DEFAULT: PropId = PropId::new(INDEX, 17);
+    pub const GENERATION: PropId = PropId::new(INDEX, 18);
+    pub const EXPRESSION: PropId = PropId::new(INDEX, 19);
+    pub const COLLATION: PropId = PropId::new(INDEX, 20);
 }
 /// The properties Relationship declares.
 pub mod relationship {
     use super::INDEX;
     use super::PropId;
-    pub const NAME: PropId = PropId::new(INDEX, 19);
-    pub const FROM: PropId = PropId::new(INDEX, 20);
-    pub const TO: PropId = PropId::new(INDEX, 21);
-    pub const FROM_END: PropId = PropId::new(INDEX, 22);
-    pub const TO_END: PropId = PropId::new(INDEX, 23);
-    pub const FROM_ROLE: PropId = PropId::new(INDEX, 24);
-    pub const TO_ROLE: PropId = PropId::new(INDEX, 25);
-    pub const IDENTIFYING: PropId = PropId::new(INDEX, 26);
+    pub const NAME: PropId = PropId::new(INDEX, 21);
+    pub const FROM: PropId = PropId::new(INDEX, 22);
+    pub const TO: PropId = PropId::new(INDEX, 23);
+    pub const FROM_END: PropId = PropId::new(INDEX, 24);
+    pub const TO_END: PropId = PropId::new(INDEX, 25);
+    pub const FROM_ROLE: PropId = PropId::new(INDEX, 26);
+    pub const TO_ROLE: PropId = PropId::new(INDEX, 27);
+    pub const IDENTIFYING: PropId = PropId::new(INDEX, 28);
 }
 /// The properties Key declares.
 pub mod key {
     use super::INDEX;
     use super::PropId;
-    pub const NAME: PropId = PropId::new(INDEX, 27);
-    pub const COLUMN: PropId = PropId::new(INDEX, 28);
+    pub const NAME: PropId = PropId::new(INDEX, 29);
+    pub const COLUMN: PropId = PropId::new(INDEX, 30);
 }
 /// The properties UniqueConstraint declares.
 pub mod unique_constraint {
     use super::INDEX;
     use super::PropId;
-    pub const NULLS_DISTINCT: PropId = PropId::new(INDEX, 29);
+    pub const NULLS_DISTINCT: PropId = PropId::new(INDEX, 31);
 }
 /// The properties ForeignKey declares.
 pub mod foreign_key {
     use super::INDEX;
     use super::PropId;
-    pub const NAME: PropId = PropId::new(INDEX, 30);
-    pub const REFERENCES: PropId = PropId::new(INDEX, 31);
-    pub const COLUMN: PropId = PropId::new(INDEX, 32);
-    pub const ON_DELETE: PropId = PropId::new(INDEX, 33);
-    pub const ON_UPDATE: PropId = PropId::new(INDEX, 34);
-    pub const RELATIONSHIP: PropId = PropId::new(INDEX, 35);
-    pub const MATCH: PropId = PropId::new(INDEX, 36);
-    pub const DEFERRABLE: PropId = PropId::new(INDEX, 37);
+    pub const NAME: PropId = PropId::new(INDEX, 32);
+    pub const REFERENCES: PropId = PropId::new(INDEX, 33);
+    pub const COLUMN: PropId = PropId::new(INDEX, 34);
+    pub const ON_DELETE: PropId = PropId::new(INDEX, 35);
+    pub const ON_UPDATE: PropId = PropId::new(INDEX, 36);
+    pub const RELATIONSHIP: PropId = PropId::new(INDEX, 37);
+    pub const MATCH: PropId = PropId::new(INDEX, 38);
+    pub const DEFERRABLE: PropId = PropId::new(INDEX, 39);
+}
+/// The properties CheckConstraint declares.
+pub mod check_constraint {
+    use super::INDEX;
+    use super::PropId;
+    pub const NAME: PropId = PropId::new(INDEX, 40);
+    pub const EXPRESSION: PropId = PropId::new(INDEX, 41);
+}
+/// The properties TableIndex declares.
+pub mod table_index {
+    use super::INDEX;
+    use super::PropId;
+    pub const NAME: PropId = PropId::new(INDEX, 42);
+    pub const UNIQUE: PropId = PropId::new(INDEX, 43);
+    pub const COLUMN: PropId = PropId::new(INDEX, 44);
+    pub const WHERE: PropId = PropId::new(INDEX, 45);
+    pub const METHOD: PropId = PropId::new(INDEX, 46);
+}
+/// The properties IndexColumn declares.
+pub mod index_column {
+    use super::INDEX;
+    use super::PropId;
+    pub const ATTRIBUTE: PropId = PropId::new(INDEX, 47);
+    pub const EXPRESSION: PropId = PropId::new(INDEX, 48);
+    pub const DIRECTION: PropId = PropId::new(INDEX, 49);
+    pub const NULLS: PropId = PropId::new(INDEX, 50);
 }
 
 fn build() -> Result<Arc<Metamodel>, MetaError> {
@@ -145,6 +178,8 @@ fn build() -> Result<Arc<Metamodel>, MetaError> {
         ]),
         "",
     )?;
+    b.data_type("SortDirection", DataKind::Enumeration(vec!["ascending".into(), "descending".into()]), "")?;
+    b.data_type("NullsOrder", DataKind::Enumeration(vec!["default".into(), "first".into(), "last".into()]), "")?;
     b.class("Element", true, &[], "")?;
     b.class("NamedElement", true, &[ELEMENT], "")?;
     b.class("Schema", false, &[NAMED_ELEMENT], "")?;
@@ -155,6 +190,9 @@ fn build() -> Result<Arc<Metamodel>, MetaError> {
     b.class("PrimaryKey", false, &[KEY], "")?;
     b.class("UniqueConstraint", false, &[KEY], "")?;
     b.class("ForeignKey", false, &[ELEMENT], "")?;
+    b.class("CheckConstraint", false, &[ELEMENT], "")?;
+    b.class("TableIndex", false, &[ELEMENT], "")?;
+    b.class("IndexColumn", false, &[ELEMENT], "")?;
     b.property(PropertySpec {
         name: "ownedElement",
         owner: ELEMENT,
@@ -355,6 +393,46 @@ fn build() -> Result<Arc<Metamodel>, MetaError> {
         default: None,
         doc: "",
     })?; // entity::FOREIGN_KEY
+    b.property(PropertySpec {
+        name: "checkConstraint",
+        owner: ENTITY,
+        ty: TypeRef::Class(CHECK_CONSTRAINT),
+        lower: 0,
+        upper: None,
+        is_ordered: true,
+        is_unique: true,
+        is_composite: true,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[element::OWNED_ELEMENT],
+        redefines: &[],
+        default: None,
+        doc: "",
+    })?; // entity::CHECK_CONSTRAINT
+    b.property(PropertySpec {
+        name: "tableIndex",
+        owner: ENTITY,
+        ty: TypeRef::Class(TABLE_INDEX),
+        lower: 0,
+        upper: None,
+        is_ordered: true,
+        is_unique: true,
+        is_composite: true,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[element::OWNED_ELEMENT],
+        redefines: &[],
+        default: None,
+        doc: "",
+    })?; // entity::TABLE_INDEX
     b.property(PropertySpec {
         name: "type",
         owner: ATTRIBUTE,
@@ -915,6 +993,226 @@ fn build() -> Result<Arc<Metamodel>, MetaError> {
         default: Some(Value::Enum(0)),
         doc: "",
     })?; // foreign_key::DEFERRABLE
+    b.property(PropertySpec {
+        name: "name",
+        owner: CHECK_CONSTRAINT,
+        ty: TypeRef::Data(STRING),
+        lower: 0,
+        upper: Some(1),
+        is_ordered: false,
+        is_unique: true,
+        is_composite: false,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: true,
+        opposite: None,
+        subsets: &[],
+        redefines: &[],
+        default: None,
+        doc: "",
+    })?; // check_constraint::NAME
+    b.property(PropertySpec {
+        name: "expression",
+        owner: CHECK_CONSTRAINT,
+        ty: TypeRef::Data(STRING),
+        lower: 0,
+        upper: Some(1),
+        is_ordered: false,
+        is_unique: true,
+        is_composite: false,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[],
+        redefines: &[],
+        default: None,
+        doc: "",
+    })?; // check_constraint::EXPRESSION
+    b.property(PropertySpec {
+        name: "name",
+        owner: TABLE_INDEX,
+        ty: TypeRef::Data(STRING),
+        lower: 0,
+        upper: Some(1),
+        is_ordered: false,
+        is_unique: true,
+        is_composite: false,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: true,
+        opposite: None,
+        subsets: &[],
+        redefines: &[],
+        default: None,
+        doc: "",
+    })?; // table_index::NAME
+    b.property(PropertySpec {
+        name: "unique",
+        owner: TABLE_INDEX,
+        ty: TypeRef::Data(BOOLEAN),
+        lower: 1,
+        upper: Some(1),
+        is_ordered: false,
+        is_unique: true,
+        is_composite: false,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[],
+        redefines: &[],
+        default: Some(Value::Bool(false)),
+        doc: "",
+    })?; // table_index::UNIQUE
+    b.property(PropertySpec {
+        name: "column",
+        owner: TABLE_INDEX,
+        ty: TypeRef::Class(INDEX_COLUMN),
+        lower: 0,
+        upper: None,
+        is_ordered: true,
+        is_unique: true,
+        is_composite: true,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[element::OWNED_ELEMENT],
+        redefines: &[],
+        default: None,
+        doc: "",
+    })?; // table_index::COLUMN
+    b.property(PropertySpec {
+        name: "where",
+        owner: TABLE_INDEX,
+        ty: TypeRef::Data(STRING),
+        lower: 0,
+        upper: Some(1),
+        is_ordered: false,
+        is_unique: true,
+        is_composite: false,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[],
+        redefines: &[],
+        default: None,
+        doc: "",
+    })?; // table_index::WHERE
+    b.property(PropertySpec {
+        name: "method",
+        owner: TABLE_INDEX,
+        ty: TypeRef::Data(STRING),
+        lower: 0,
+        upper: Some(1),
+        is_ordered: false,
+        is_unique: true,
+        is_composite: false,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[],
+        redefines: &[],
+        default: None,
+        doc: "",
+    })?; // table_index::METHOD
+    b.property(PropertySpec {
+        name: "attribute",
+        owner: INDEX_COLUMN,
+        ty: TypeRef::Class(ATTRIBUTE),
+        lower: 0,
+        upper: Some(1),
+        is_ordered: false,
+        is_unique: true,
+        is_composite: false,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[],
+        redefines: &[],
+        default: None,
+        doc: "",
+    })?; // index_column::ATTRIBUTE
+    b.property(PropertySpec {
+        name: "expression",
+        owner: INDEX_COLUMN,
+        ty: TypeRef::Data(STRING),
+        lower: 0,
+        upper: Some(1),
+        is_ordered: false,
+        is_unique: true,
+        is_composite: false,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[],
+        redefines: &[],
+        default: None,
+        doc: "",
+    })?; // index_column::EXPRESSION
+    b.property(PropertySpec {
+        name: "direction",
+        owner: INDEX_COLUMN,
+        ty: TypeRef::Data(SORT_DIRECTION),
+        lower: 1,
+        upper: Some(1),
+        is_ordered: false,
+        is_unique: true,
+        is_composite: false,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[],
+        redefines: &[],
+        default: Some(Value::Enum(0)),
+        doc: "",
+    })?; // index_column::DIRECTION
+    b.property(PropertySpec {
+        name: "nulls",
+        owner: INDEX_COLUMN,
+        ty: TypeRef::Data(NULLS_ORDER),
+        lower: 1,
+        upper: Some(1),
+        is_ordered: false,
+        is_unique: true,
+        is_composite: false,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[],
+        redefines: &[],
+        default: Some(Value::Enum(0)),
+        doc: "",
+    })?; // index_column::NULLS
     Ok(b.finish())
 }
 

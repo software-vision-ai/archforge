@@ -94,6 +94,40 @@ pub const TABLES: &[Table] = &[
             Column { name: "deferrable", prop: Some(foreign_key::DEFERRABLE), sql: "INT NOT NULL" },
         ],
     },
+    Table {
+        name: "er_check_constraint",
+        class: CHECK_CONSTRAINT,
+        columns: &[
+            Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
+            Column { name: "description", prop: Some(element::DESCRIPTION), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(check_constraint::NAME), sql: "TEXT NULL" },
+            Column { name: "expression", prop: Some(check_constraint::EXPRESSION), sql: "TEXT NULL" },
+        ],
+    },
+    Table {
+        name: "er_table_index",
+        class: TABLE_INDEX,
+        columns: &[
+            Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
+            Column { name: "description", prop: Some(element::DESCRIPTION), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(table_index::NAME), sql: "TEXT NULL" },
+            Column { name: "unique", prop: Some(table_index::UNIQUE), sql: "TINYINT NOT NULL" },
+            Column { name: "where", prop: Some(table_index::WHERE), sql: "TEXT NULL" },
+            Column { name: "method", prop: Some(table_index::METHOD), sql: "TEXT NULL" },
+        ],
+    },
+    Table {
+        name: "er_index_column",
+        class: INDEX_COLUMN,
+        columns: &[
+            Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
+            Column { name: "description", prop: Some(element::DESCRIPTION), sql: "TEXT NULL" },
+            Column { name: "attribute", prop: Some(index_column::ATTRIBUTE), sql: "BINARY(16) NULL" },
+            Column { name: "expression", prop: Some(index_column::EXPRESSION), sql: "TEXT NULL" },
+            Column { name: "direction", prop: Some(index_column::DIRECTION), sql: "INT NOT NULL" },
+            Column { name: "nulls", prop: Some(index_column::NULLS), sql: "INT NOT NULL" },
+        ],
+    },
 ];
 
 /// One table per multi-valued stored property.
@@ -103,7 +137,10 @@ pub const JUNCTIONS: &[Junction] = &[
     Junction { name: "er_entity_attribute", class: ENTITY, prop: entity::ATTRIBUTE, ordered: true, reference: true },
     Junction { name: "er_entity_unique_constraint", class: ENTITY, prop: entity::UNIQUE_CONSTRAINT, ordered: true, reference: true },
     Junction { name: "er_entity_foreign_key", class: ENTITY, prop: entity::FOREIGN_KEY, ordered: true, reference: true },
+    Junction { name: "er_entity_check_constraint", class: ENTITY, prop: entity::CHECK_CONSTRAINT, ordered: true, reference: true },
+    Junction { name: "er_entity_table_index", class: ENTITY, prop: entity::TABLE_INDEX, ordered: true, reference: true },
     Junction { name: "er_primary_key_column", class: PRIMARY_KEY, prop: key::COLUMN, ordered: true, reference: true },
     Junction { name: "er_unique_constraint_column", class: UNIQUE_CONSTRAINT, prop: key::COLUMN, ordered: true, reference: true },
     Junction { name: "er_foreign_key_column", class: FOREIGN_KEY, prop: foreign_key::COLUMN, ordered: true, reference: true },
+    Junction { name: "er_table_index_column", class: TABLE_INDEX, prop: table_index::COLUMN, ordered: true, reference: true },
 ];

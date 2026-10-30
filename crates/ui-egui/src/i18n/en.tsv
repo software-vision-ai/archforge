@@ -40,6 +40,19 @@ str		Add a column	Add a column
 str		Add unique constraint	Add unique constraint
 str		Columns, in key order	Columns, in key order
 str		Nulls distinct	Nulls distinct
+str		Checks · {n}	Checks · {n}
+str		Indexes · {n}	Indexes · {n}
+str		Add check constraint	Add check constraint
+str		Add index	Add index
+str		Columns, in index order	Columns, in index order
+str		An expression	An expression
+str		Where	Where
+str		Method	Method
+str		Ascending	Ascending
+str		Descending	Descending
+str		Nulls default	Nulls default
+str		Nulls first	Nulls first
+str		Nulls last	Nulls last
 str		Problems · {n}	Problems · {n}
 str		lacks its table or its key	lacks its table or its key
 str		{column} is a key column and may be null	{column} is a key column and may be null

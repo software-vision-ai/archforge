@@ -7,6 +7,7 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
 pub mod canvas;
+pub mod checks;
 pub mod connect;
 pub mod diagrams;
 pub mod editing;
@@ -14,6 +15,7 @@ pub mod explorer;
 pub mod fonts;
 pub mod home;
 pub mod i18n;
+pub mod indexes;
 pub mod keys;
 pub mod new_project;
 #[cfg(feature = "snapshot")]

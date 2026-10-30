@@ -41,6 +41,19 @@ str		Add a column	添加一列
 str		Add unique constraint	添加唯一约束
 str		Columns, in key order	按键顺序的列
 str		Nulls distinct	空值视为不同
+str		Checks · {n}	检查约束 · {n}
+str		Indexes · {n}	索引 · {n}
+str		Add check constraint	添加检查约束
+str		Add index	添加索引
+str		Columns, in index order	按索引顺序的列
+str		An expression	表达式
+str		Where	Where
+str		Method	方法
+str		Ascending	升序
+str		Descending	降序
+str		Nulls default	空值默认顺序
+str		Nulls first	空值在前
+str		Nulls last	空值在后
 str		Problems · {n}	问题 · {n}
 str		lacks its table or its key	缺少其表或其键
 str		{column} is a key column and may be null	{column} 是键列但允许为空
