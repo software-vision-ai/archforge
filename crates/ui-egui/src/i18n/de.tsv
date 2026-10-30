@@ -58,6 +58,7 @@ str		Problems · {n}	Probleme · {n}
 str		lacks its table or its key	hat keine Tabelle oder keinen Schlüssel
 str		{column} is a key column and may be null	{column} ist eine Schlüsselspalte und darf leer sein
 str		{from} to {to} is many to many	{from} zu {to} ist viele zu viele
+str		{from} to {to}: one or more is not enforced by a key	{from} zu {to}: eins oder mehr erzwingt kein Schlüssel
 str		{key}: {problem}	{key}: {problem}
 str		{name} has no primary key	{name} hat keinen Primärschlüssel
 str		{name} removed · {keys} went with it	{name} entfernt · {keys} ging mit
@@ -67,6 +68,10 @@ str		Add skill	Skill hinzufügen
 str		Kind	Art
 str		Regular	Regulär
 str		Mapping table	Zuordnungstabelle
+str		Follows {target}	Folgt {target}
+str		Unlink	Verknüpfung lösen
+str		{name} holds nothing but its two keys, so it can become the many-to-many line between {from} and {to} again.	{name} enthält nur seine zwei Schlüssel und kann wieder die Viele-zu-viele-Linie zwischen {from} und {to} werden.
+str		Collapse into a relationship	In eine Beziehung zusammenfassen
 str		Type	Typ
 str		Primary key	Primärschlüssel
 str		Not null	Nicht null

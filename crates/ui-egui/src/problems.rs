@@ -72,15 +72,15 @@ pub fn all(store: &Store) -> Vec<Problem> {
                 }
             }
         }
-        if class == archforge_er::RELATIONSHIP && r::is_many_to_many(store, o) {
+        if class == archforge_er::RELATIONSHIP {
             let end = |p| store.get(o, p).ok().and_then(|v| v.as_ref()).map(|e| name(store, e)).unwrap_or_default();
-            out.push(Problem {
-                element: o,
-                text: fmt(
-                    &tr("{from} to {to} is many to many"),
-                    &[("from", &end(archforge_er::relationship::FROM)), ("to", &end(archforge_er::relationship::TO))],
-                ),
-            });
+            let ends = [("from", end(archforge_er::relationship::FROM)), ("to", end(archforge_er::relationship::TO))];
+            let ends: Vec<(&str, &str)> = ends.iter().map(|(k, v)| (*k, v.as_str())).collect();
+            if r::is_many_to_many(store, o) {
+                out.push(Problem { element: o, text: fmt(&tr("{from} to {to} is many to many"), &ends) });
+            } else if r::child_end_one_or_more(store, o) {
+                out.push(Problem { element: o, text: fmt(&tr("{from} to {to}: one or more is not enforced by a key"), &ends) });
+            }
         }
     }
     out

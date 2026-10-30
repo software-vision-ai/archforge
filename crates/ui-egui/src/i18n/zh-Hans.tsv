@@ -58,6 +58,7 @@ str		Problems · {n}	问题 · {n}
 str		lacks its table or its key	缺少其表或其键
 str		{column} is a key column and may be null	{column} 是键列但允许为空
 str		{from} to {to} is many to many	{from} 到 {to} 是多对多
+str		{from} to {to}: one or more is not enforced by a key	{from} 到 {to}：一个或多个无法由键保证
 str		{key}: {problem}	{key}: {problem}
 str		{name} has no primary key	{name} 没有主键
 str		{name} removed · {keys} went with it	已删除 {name} · {keys} 随之删除
@@ -67,6 +68,10 @@ str		Add skill	添加技能
 str		Kind	种类
 str		Regular	常规
 str		Mapping table	映射表
+str		Follows {target}	跟随 {target}
+str		Unlink	取消链接
+str		{name} holds nothing but its two keys, so it can become the many-to-many line between {from} and {to} again.	{name} 只包含它的两个键，因此可以重新成为 {from} 与 {to} 之间的多对多连线。
+str		Collapse into a relationship	折叠为关系
 str		Type	类型
 str		Primary key	主键
 str		Not null	非空

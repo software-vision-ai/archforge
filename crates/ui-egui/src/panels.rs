@@ -81,8 +81,19 @@ pub struct ColumnEdit {
     pub unique: bool,
     /// Whether More (the collation) is open.
     pub more: bool,
+    /// The column this one follows, as "Table.column" (slice S4), until unlinked.
+    pub linked: Option<String>,
+    /// Whether Unlink was clicked; the unlink goes out with Apply.
+    pub unlink: bool,
     pub refused: Option<String>,
     pub opened: bool,
+}
+
+/// The column `a` follows, as "Table.column".
+fn linked_label(store: &Store, a: Obj) -> Option<String> {
+    let t = archforge_er::rules::linked_to(store, a)?;
+    let table = archforge_er::rules::entity_of(store, t).map(|e| archforge_er::rules::name_of(store, e)).unwrap_or_default();
+    Some(format!("{table}.{}", archforge_er::rules::name_of(store, t)))
 }
 
 /// What a skill aims at, as the editor's select offers it.
@@ -554,6 +565,8 @@ struct ColumnRow {
     primary: bool,
     unique: bool,
     foreign: bool,
+    /// The column this one follows, as "Table.column".
+    linked: Option<String>,
 }
 
 fn entity_rows(store: &Store, e: Obj) -> (Vec<ColumnRow>, bool) {
@@ -567,6 +580,7 @@ fn entity_rows(store: &Store, e: Obj) -> (Vec<ColumnRow>, bool) {
                 primary: archforge_er::rules::in_primary_key(store, a),
                 unique: archforge_er::rules::is_unique(store, a),
                 foreign: store.referrers(a).iter().any(|(_, p)| *p == archforge_er::foreign_key::COLUMN),
+                linked: linked_label(store, a),
             })
         })
         .collect();
@@ -592,6 +606,11 @@ fn entity_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
     let kind_field =
         select_field(shell, ui, p, pos2(r.left() + PAD + half + 8.0, y), half, "workspace.properties.kind", &tr("Kind"), &kind_word, Menu::Kind);
     y += 17.0 + FIELD + 16.0;
+    // A pure mapping table offers to collapse back into its line (slice S4).
+    let collapsible = shell.session.as_ref().is_some_and(|s| archforge_er::rules::collapse_problem(s.doc(), entity).is_none());
+    if collapsible {
+        y = collapse_offer(shell, ui, p, r, y, entity, entity_id, &subject.name);
+    }
     // Columns.
     let title = fmt(&tr("Columns · {n}"), &[("n", &columns.len().to_string())]);
     let Some(next) = section(shell, ui, p, r, y, &title, Some(("workspace.properties.columns.add", "Add column"))) else {
@@ -626,14 +645,16 @@ fn entity_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
             paint.galley(br.center() - g.size() / 2.0, g, ink);
         }
         let name = ux::text(&paint, row.min + vec2(58.0, 8.5), &col.name, types::UI, p.text, Some((width - 58.0 - 40.0).max(0.0)));
-        ux::text(
-            &paint,
-            pos2(name.right() + 8.0, row.top() + 10.5),
-            &col.ty,
-            types::CAPTION,
-            p.text_secondary,
-            Some((row.right() - name.right() - 40.0).max(0.0)),
-        );
+        let mut after = name.right() + 8.0;
+        if let Some(target) = &col.linked {
+            // The link mark of a key column that follows the column it points at.
+            let mark = Rect::from_min_size(pos2(after, row.top() + 11.0), vec2(14.0, 14.0));
+            ux::icon_in(&paint, mark, &icons::LINK, p.text_secondary);
+            control(shell, ui, &format!("workspace.properties.column.{}.link", col.id), "mark", mark.expand(3.0), true)
+                .on_hover_text(fmt(&tr("Follows {target}"), &[("target", target)]));
+            after += 20.0;
+        }
+        ux::text(&paint, pos2(after, row.top() + 10.5), &col.ty, types::CAPTION, p.text_secondary, Some((row.right() - after - 32.0).max(0.0)));
         if resp.hovered() {
             ux::icon_in(&paint, Rect::from_min_size(pos2(row.right() - 24.0, row.top() + 10.0), Vec2::splat(16.0)), &icons::EDIT, p.text_secondary);
         }
@@ -687,6 +708,8 @@ pub(crate) fn open_column(shell: &mut Shell, entity: Uuid, target: Option<Uuid>)
                 not_null: !archforge_er::rules::is_nullable(store, a),
                 unique: archforge_er::rules::is_unique(store, a),
                 more: false,
+                linked: linked_label(store, a),
+                unlink: false,
                 refused: None,
                 opened: true,
             }
@@ -718,6 +741,8 @@ pub(crate) fn open_column(shell: &mut Shell, entity: Uuid, target: Option<Uuid>)
                 not_null: false,
                 unique: false,
                 more: false,
+                linked: None,
+                unlink: false,
                 refused: None,
                 opened: true,
             }
@@ -742,6 +767,53 @@ fn is_computed(g: archforge_er::Generation) -> bool {
 
 /// The column editor card, as the design's (slice S2 adds the size, default, generation and,
 /// under More, the collation); gives the y under it.
+/// The offer on a pure mapping table to become its many-to-many line again (the design's card
+/// "Mapping table that can collapse"); gives the y under it.
+fn collapse_offer(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, entity: Obj, entity_id: Uuid, name: &str) -> f32 {
+    let paint = ui.painter().clone();
+    let width = r.width() - 2.0 * PAD;
+    let (from, to) = match shell.session.as_ref() {
+        Some(s) => {
+            let store = s.doc();
+            let mut parents = archforge_er::rules::foreign_keys(store, entity).into_iter().filter_map(|fk| {
+                let k = archforge_er::rules::key_parts(store, fk).key?;
+                Some(archforge_er::rules::name_of(store, archforge_er::rules::entity_of(store, k)?))
+            });
+            (parents.next().unwrap_or_default(), parents.next().unwrap_or_default())
+        }
+        None => return y,
+    };
+    let y = section(shell, ui, p, r, y, &tr("Mapping table"), None).unwrap_or(y + 50.0) - 6.0;
+    let message = fmt(
+        &tr("{name} holds nothing but its two keys, so it can become the many-to-many line between {from} and {to} again."),
+        &[("name", name), ("from", &from), ("to", &to)],
+    );
+    let inner = (width - 24.0).max(0.0);
+    let g = ux::galley_rows(&paint, &message, types::SMALL, p.text, Some(inner), 4);
+    let text_h = g.size().y;
+    let card = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width.max(0.0), 12.0 + text_h + 12.0 + 24.0 + 12.0));
+    paint.rect_filled(card, 8.0, p.accent_tint);
+    paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
+    paint.galley(card.min + vec2(12.0, 12.0), g, p.text);
+    let label = tr("Collapse into a relationship");
+    let g = ux::galley(&paint, &label, types::UI, p.text, None);
+    let button = Rect::from_min_size(card.min + vec2(12.0, 12.0 + text_h + 12.0), vec2(6.0 + 14.0 + 7.0 + g.size().x + 8.0, 24.0));
+    ux::icon_in(&paint, Rect::from_min_size(button.min + vec2(6.0, 5.0), Vec2::splat(14.0)), &icons::MERGE_LINE, p.text);
+    paint.galley(button.min + vec2(27.0, 2.5), g, p.text);
+    let resp = control(shell, ui, "workspace.properties.collapse", "button", button, true);
+    if resp.hovered() {
+        paint.rect_stroke(button, 6.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
+    }
+    if resp.clicked() {
+        // The command selects the relationship it makes.
+        match run(shell, "er.relationship.collapse", json!({ "entity": entity_id.to_string() })) {
+            Ok(_) => shell.panels.notice = None,
+            Err(e) => shell.panels.notice = Some(e),
+        }
+    }
+    card.bottom() + 10.0
+}
+
 fn column_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 {
     let paint = ui.painter().clone();
     let width = r.width() - 2.0 * PAD;
@@ -757,6 +829,9 @@ fn column_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: 
     if edit.more {
         height += row;
     }
+    if edit.linked.is_some() {
+        height += 28.0;
+    }
     if edit.refused.is_some() {
         height += 20.0;
     }
@@ -770,6 +845,26 @@ fn column_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: 
     let mut enter =
         text_field(shell, ui, p, at(0.0, cy), inner, "workspace.properties.column.name", &tr("Name"), &mut edit.name, MAX_NAME, take, false);
     cy += row;
+    if let Some(target) = edit.linked.clone() {
+        // What the column follows, with the way out of it.
+        ux::icon_in(&paint, Rect::from_min_size(at(0.0, cy + 3.0), Vec2::splat(14.0)), &icons::LINK, p.text_secondary);
+        ux::text(
+            &paint,
+            at(20.0, cy),
+            &fmt(&tr("Follows {target}"), &[("target", &target)]),
+            types::CAPTION,
+            p.text_secondary,
+            Some((inner - 20.0 - 32.0).max(0.0)),
+        );
+        let unlink = Rect::from_min_size(pos2(card.right() - 12.0 - 24.0, card.top() + cy - 4.0), Vec2::splat(24.0));
+        ux::icon_in(&paint, Rect::from_center_size(unlink.center(), Vec2::splat(12.0)), &icons::CLOSE, p.text_secondary);
+        if control(shell, ui, "workspace.properties.column.unlink", "button", unlink, true).on_hover_text(tr("Unlink")).clicked() {
+            // Pending until Apply, so the card stays one step and Cancel keeps the link.
+            edit.linked = None;
+            edit.unlink = true;
+        }
+        cy += 28.0;
+    }
     // The type, with the size fields its shape takes beside it.
     let (type_w, size_w) = match shape {
         archforge_er::rules::TypeShape::Plain => (inner, 0.0),
@@ -1048,6 +1143,9 @@ fn commit_column(shell: &mut Shell, edit: &ColumnEdit) {
             let old_collation = string_of(store, a, archforge_er::attribute::COLLATION);
             let id = t.to_string();
             let mut steps: Vec<(&str, serde_json::Value)> = Vec::new();
+            if edit.unlink {
+                steps.push(("er.attribute.unlink", json!({ "attribute": id })));
+            }
             if edit.name.trim() != old_name {
                 steps.push(("er.attribute.rename", json!({ "attribute": id, "name": edit.name.trim() })));
             }
@@ -1512,7 +1610,7 @@ fn commit_skill(shell: &mut Shell, edit: &SkillEdit) {
 /// trigger toggles, for the catalogue tests.
 #[cfg(test)]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
-    ["Add column", "Add skill", "Remove", "Cancel", "Apply", "Modelling", "Drawing", "Naming", "Export"]
+    ["Add column", "Add skill", "Remove", "Cancel", "Apply", "Unlink", "Modelling", "Drawing", "Naming", "Export"]
         .into_iter()
         .chain(GENERATIONS.iter().map(|(_, w)| *w))
 }

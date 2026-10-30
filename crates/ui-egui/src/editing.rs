@@ -1010,13 +1010,22 @@ fn entity_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, menu: &En
     let paint = ui.painter().clone();
     let mac = ui.ctx().os() == egui::os::OperatingSystem::Mac;
     let (add_chord, delete_chord, model_chord) = if mac { ("⌘↩", "⌫", "⇧⌫") } else { ("Ctrl Enter", "Del", "Shift Del") };
-    let rows: [(&str, &str, &str, bool, bool); 5] = [
+    let collapsible = shell
+        .session
+        .as_ref()
+        .and_then(|s| s.doc().by_uuid(menu.entity).map(|e| archforge_er::rules::collapse_problem(s.doc(), e).is_none()))
+        .unwrap_or(false);
+    let mut rows: Vec<(&str, &str, &str, bool, bool)> = vec![
         ("related", "Show related tables", "R", false, false),
         ("open", "Open in Models", "", true, false),
         ("add-column", "Add column", add_chord, true, false),
-        ("remove", "Remove from this diagram", delete_chord, true, false),
-        ("delete", "Delete from the model…", model_chord, true, true),
     ];
+    if collapsible {
+        rows.push(("collapse", "Collapse into a relationship", "", true, false));
+    }
+    rows.push(("remove", "Remove from this diagram", delete_chord, true, false));
+    rows.push(("delete", "Delete from the model…", model_chord, true, true));
+    let separators = [1, rows.len() - 2];
     let height = 8.0 + rows.len() as f32 * MENU_ROW + 2.0;
     let x = menu.at.x.min(r.right() - MENU_WIDTH - 8.0).max(r.left() + 8.0);
     let y = menu.at.y.min(r.bottom() - height - 8.0).max(r.top() + 8.0);
@@ -1027,7 +1036,7 @@ fn entity_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, menu: &En
     let mut picked = None;
     let mut ry = m.top() + 4.0;
     for (i, (key, label, shortcut, live, danger)) in rows.iter().enumerate() {
-        if i == 1 || i == 3 {
+        if separators.contains(&i) {
             paint.rect_filled(Rect::from_min_size(pos2(m.left() + 8.0, ry), vec2(MENU_WIDTH - 16.0, 1.0)), 0.0, p.border);
             ry += 1.0;
         }
@@ -1067,6 +1076,12 @@ fn entity_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, menu: &En
         "add-column" => {
             crate::panels::open_column(shell, menu.entity, None);
             shell.state.panel = crate::state::Panel::Properties;
+        }
+        "collapse" => {
+            // The command selects the relationship it makes.
+            if let Err(e) = run(shell, "er.relationship.collapse", json!({ "entity": menu.entity.to_string() })) {
+                shell.canvas.notice = Some(e);
+            }
         }
         "remove" => unplace(shell, vec![menu.node]),
         "delete" => ask_delete(shell, menu.node, menu.entity),
@@ -1185,6 +1200,7 @@ pub fn retain_valid(state: &mut crate::canvas::State, store: &Store) {
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
     [
         "Connect",
+        "Collapse into a relationship",
         "Add column",
         "Align left",
         "Align centres",

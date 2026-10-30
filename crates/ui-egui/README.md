@@ -72,6 +72,7 @@ or explorer with nothing to show says so in one line, never with a help text.
 | `keys::{KeyEdit, KeyRow, rows, open}` | a table's keys and the key editor's state |
 | `checks::{CheckEdit, CheckRow, rows, open}` | a table's check constraints and the check editor's state |
 | `indexes::{IndexEdit, IndexRow, ColumnSpec, rows, open}` | a table's indexes and the index editor's state |
+| `panels::ColumnEdit::linked` | the column a key column follows, shown as a link mark on its row and on the canvas, with Unlink in its editor (slice S4); a pure mapping table's Properties offer to collapse it |
 | `problems::{Problem, all, by_element, of}` | the problems the shell shows, on the element the user would fix them on |
 | `new_project::{open, name_problem, file_name}` | the New project dialog: open it, a name's problem in words, the file a name gives |
 | `Folder` | a folder as the shell shows it: its path and its label |

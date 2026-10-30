@@ -325,6 +325,12 @@ pub fn remove_element(store: &mut Store, obj: Obj) -> Result<usize, Invalid> {
         let mut relationships: BTreeSet<Obj> = BTreeSet::new();
         let (keys, fks) = dependents(st, obj)?;
         let index_parts = index_dependents(st, obj)?;
+        // A follower loses its link when its target goes.
+        for o in subtree_of(st, obj)?.0 {
+            for c in rules::linked_from(st, o) {
+                st.set(c, attribute::LINKED_TO, Value::Null)?;
+            }
+        }
         for x in fks.iter().chain(&keys).copied().chain([obj]) {
             let class = st.class_of(x)?;
             if class == FOREIGN_KEY {
@@ -426,10 +432,6 @@ fn attribute_add(ctx: &mut C<'_>, p: &Params) -> R {
     };
     let at = u32::try_from(at).map_err(|_| refuse("at", "too large"))?;
     let unique = p.bool("unique").unwrap_or(false);
-    // A new key column changes the primary key that foreign keys elsewhere point at.
-    if key && let Some(pk) = rules::primary_key_of(ctx.doc, e) {
-        key_is_free(ctx.doc, pk, "primary_key")?;
-    }
     let (keys, entities) = keys_near(ctx.doc, e).map_err(fail)?;
     let a = ctx
         .doc
@@ -450,6 +452,7 @@ fn attribute_add(ctx: &mut C<'_>, p: &Params) -> R {
             }
             st.insert(e, entity::ATTRIBUTE, at, Value::Ref(a))?;
             if key {
+                // A new key column grows the primary key that foreign keys elsewhere point at.
                 join_primary_key(st, e, a)?;
             }
             if unique {
@@ -472,8 +475,152 @@ fn attribute_rename(ctx: &mut C<'_>, p: &Params) -> R {
     {
         return Err(refuse("name", format!("the entity has an attribute named {name:?} already")));
     }
-    set_name(ctx, a, named_element::NAME, name)?;
+    let old = name_of(ctx.doc, a);
+    ctx.doc
+        .transaction(|st| {
+            st.set(a, named_element::NAME, Value::str(name))?;
+            if old != name {
+                clear_link(st, a)?;
+                follow_rename(st, a, &old, name)?;
+            }
+            Ok(())
+        })
+        .map_err(|e| refuse("name", e.to_string()))?;
     Ok(json!({ "id": uuid_of(ctx.doc, a)? }))
+}
+
+// Linked key columns (slice S4): a column a relationship made follows the name and type of the
+// column it points at until the user edits it.
+
+/// Drops the link of `a`, so an edit of its own stays.
+fn clear_link(st: &mut Store, a: Obj) -> Result<(), Invalid> {
+    if rules::linked_to(st, a).is_some() {
+        st.set(a, attribute::LINKED_TO, Value::Null)?;
+    }
+    Ok(())
+}
+
+/// Renames the columns that follow `a` from `old` to `new`: a follower named `<prefix>_<old>` becomes
+/// `<prefix>_<new>`, stepping aside with a number when that name is taken; another name stays.
+fn follow_rename(st: &mut Store, a: Obj, old: &str, new: &str) -> Result<(), Invalid> {
+    let mut seen: BTreeSet<Obj> = BTreeSet::from([a]);
+    let mut queue: Vec<(Obj, String, String)> = vec![(a, old.to_string(), new.to_string())];
+    while let Some((a, old, new)) = queue.pop() {
+        let suffix = format!("_{}", snake(&old));
+        for c in rules::linked_from(st, a) {
+            if !seen.insert(c) {
+                continue;
+            }
+            let current = name_of(st, c);
+            let Some(prefix) = current.strip_suffix(&suffix) else { continue };
+            let Some(e) = rules::entity_of(st, c) else { continue };
+            let base = format!("{prefix}_{}", snake(&new));
+            let name = first_free(&base, |n| rules::attribute_name_free(st, e, n, Some(c))).map_err(|e| Invalid::Refused(e.message))?;
+            st.set(c, named_element::NAME, Value::str(&name))?;
+            // A follower's own followers (an identifying chain) follow on.
+            queue.push((c, current, name));
+        }
+    }
+    Ok(())
+}
+
+/// Gives the columns that follow `a`, and theirs, its type and size.
+fn follow_type(st: &mut Store, a: Obj) -> Result<(), Invalid> {
+    let kind = rules::type_of(st, a);
+    let size = rules::size_of(st, a);
+    let mut seen: BTreeSet<Obj> = BTreeSet::from([a]);
+    let mut queue = vec![a];
+    while let Some(a) = queue.pop() {
+        for c in rules::linked_from(st, a) {
+            if seen.insert(c) {
+                st.set(c, attribute::TYPE, text_or_null(&kind))?;
+                set_size(st, c, size)?;
+                queue.push(c);
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Whether a key column that followed its target can go with it: it is linked, in no unique
+/// constraint, and in no foreign key but `fk`.
+fn removable_follower(st: &Store, c: Obj, fk: Obj) -> bool {
+    rules::linked_to(st, c).is_some()
+        && rules::unique_on(st, c).is_empty()
+        && !st.referrers(c).iter().any(|(src, prop)| *prop == foreign_key::COLUMN && *src != fk)
+}
+
+/// Removes a follower column from its table: out of the primary key first, then with everything
+/// that depended on it (index columns, views, links), as any removal does.
+fn remove_follower(st: &mut Store, c: Obj) -> Result<(), Invalid> {
+    if let Some(e) = rules::entity_of(st, c) {
+        leave_primary_key(st, e, c)?;
+    }
+    remove_element(st, c)?;
+    Ok(())
+}
+
+/// What a foreign key's new columns take from its relationship: in the child's primary key when it
+/// identifies, nullable when the end it points at is optional, named after the role.
+fn follower_shape(st: &Store, fk: Obj) -> (bool, bool, String) {
+    let parts = rules::key_parts(st, fk);
+    match parts.relationship {
+        Some(r) => {
+            let identifying = st.get(r, relationship::IDENTIFYING).ok().and_then(|v| v.as_bool()).unwrap_or(false);
+            let (end, role) = parent_end(st, r, parts.key.and_then(|k| rules::entity_of(st, k)));
+            (identifying, rules::cardinality_of(st, r, end) == Some(Cardinality::ZeroOrOne), rules::role_of(st, r, role))
+        }
+        None => (false, true, String::new()),
+    }
+}
+
+/// After key `k` changed from `old` to `new` columns: every foreign key onto it gets a matching
+/// column for each new key column, keeps its column for each kept one in the key's new order, and
+/// loses its column for each dropped one, removing a follower that nothing else holds.
+fn grow_foreign_keys(st: &mut Store, k: Obj, old: &[Obj], new: &[Obj]) -> Result<(), Invalid> {
+    // Growing a key grows the keys built on it; a cycle of identifying keys would never end, so the
+    // depth has a budget (the cycle itself is refused where it would be made).
+    thread_local! { static DEPTH: std::cell::Cell<u32> = const { std::cell::Cell::new(0) }; }
+    struct Deeper;
+    impl Drop for Deeper {
+        fn drop(&mut self) {
+            DEPTH.with(|d| d.set(d.get().saturating_sub(1)));
+        }
+    }
+    if DEPTH.with(|d| d.get()) >= rules::MAX_KEY_COLUMNS as u32 {
+        return Err(Invalid::Refused(format!("the keys built on this key run deeper than {} levels or form a cycle", rules::MAX_KEY_COLUMNS)));
+    }
+    DEPTH.with(|d| d.set(d.get() + 1));
+    let _deeper = Deeper;
+    for fk in rules::keys_onto(st, k) {
+        let parts = rules::key_parts(st, fk);
+        let Some(child) = parts.entity else { continue };
+        let (in_key, optional, role) = follower_shape(st, fk);
+        let parent = rules::entity_of(st, k).map(|e| name_of(st, e)).unwrap_or_default();
+        let prefix = if role.is_empty() { snake(&parent) } else { snake(&role) };
+        let mut columns = Vec::with_capacity(new.len());
+        for t in new {
+            match old.iter().position(|o| o == t).and_then(|i| parts.columns.get(i)) {
+                Some(c) => columns.push(*c),
+                None => columns.push(new_key_column(st, child, *t, &prefix, in_key, optional)?),
+            }
+        }
+        for i in (0..parts.columns.len()).rev() {
+            st.remove_at(fk, foreign_key::COLUMN, u32::try_from(i).map_err(|_| Invalid::Refused("too many columns".into()))?)?;
+        }
+        for c in &columns {
+            st.push(fk, foreign_key::COLUMN, Value::Ref(*c))?;
+        }
+        for (i, t) in old.iter().enumerate() {
+            if !new.contains(t)
+                && let Some(c) = parts.columns.get(i).copied()
+                && removable_follower(st, c, fk)
+            {
+                remove_follower(st, c)?;
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Every foreign key that involves entity `e`, and the entities around them: what a change to `e`'s
@@ -558,10 +705,15 @@ fn ensure_primary_key(store: &mut Store, e: Obj) -> Result<Obj, Invalid> {
 }
 
 /// Adds `a` to the end of its entity's primary key and makes it not nullable.
+/// Puts `a` into its entity's primary key, made when there is none; the foreign keys onto the key
+/// grow with it.
 fn join_primary_key(store: &mut Store, e: Obj, a: Obj) -> Result<(), Invalid> {
     let pk = ensure_primary_key(store, e)?;
-    if !rules::key_columns(store, pk).contains(&a) {
+    let old = rules::key_columns(store, pk);
+    if !old.contains(&a) {
         store.push(pk, key::COLUMN, Value::Ref(a))?;
+        let new = rules::key_columns(store, pk);
+        grow_foreign_keys(store, pk, &old, &new)?;
     }
     store.set(a, attribute::NULLABLE, Value::Bool(false))
 }
@@ -569,9 +721,13 @@ fn join_primary_key(store: &mut Store, e: Obj, a: Obj) -> Result<(), Invalid> {
 /// Takes `a` out of its entity's primary key; a key left without columns goes.
 fn leave_primary_key(store: &mut Store, e: Obj, a: Obj) -> Result<(), Invalid> {
     let Some(pk) = rules::primary_key_of(store, e) else { return Ok(()) };
+    let old = rules::key_columns(store, pk);
     store.remove_value(pk, key::COLUMN, &Value::Ref(a))?;
-    if rules::key_columns(store, pk).is_empty() {
+    let new = rules::key_columns(store, pk);
+    if new.is_empty() {
         archforge_core::destroy_with_links(store, pk)?;
+    } else {
+        grow_foreign_keys(store, pk, &old, &new)?;
     }
     Ok(())
 }
@@ -608,10 +764,15 @@ fn attribute_set_type(ctx: &mut C<'_>, p: &Params) -> R {
     let size = size_params(p, kind)?;
     let (keys, entities) = keys_around(ctx.doc, a).map_err(fail)?;
     let value = text_or_null(kind);
+    let old = (rules::type_of(ctx.doc, a), rules::size_of(ctx.doc, a));
     ctx.doc
         .transaction(|st| {
             st.set(a, attribute::TYPE, value)?;
             set_size(st, a, size)?;
+            if (rules::type_of(st, a), rules::size_of(st, a)) != old {
+                clear_link(st, a)?;
+                follow_type(st, a)?;
+            }
             if let Some(problem) = rules::generation_problem(st, a) {
                 return Err(Invalid::Refused(problem));
             }
@@ -644,9 +805,13 @@ fn attribute_set_default(ctx: &mut C<'_>, p: &Params) -> R {
     let a = id_of(ctx, p, "attribute", ATTRIBUTE)?;
     let default = text(p, "default");
     check_text("default", rules::text_problem(default, MAX_TEXT))?;
+    let old = rules::text_of(ctx.doc, a, attribute::DEFAULT);
     ctx.doc
         .transaction(|st| {
             st.set(a, attribute::DEFAULT, text_or_null(default))?;
+            if old != default {
+                clear_link(st, a)?;
+            }
             match rules::generation_problem(st, a) {
                 Some(problem) => Err(Invalid::Refused(problem)),
                 None => Ok(()),
@@ -669,10 +834,14 @@ pub const GENERATION_WORDS: [(Generation, &str); 5] = [
 fn attribute_set_generation(ctx: &mut C<'_>, p: &Params) -> R {
     let a = id_of(ctx, p, "attribute", ATTRIBUTE)?;
     let (generation, expression) = generation_params(p)?;
+    let old = (rules::generation_of(ctx.doc, a), rules::text_of(ctx.doc, a, attribute::EXPRESSION));
     ctx.doc
         .transaction(|st| {
             st.set(a, attribute::GENERATION, Value::Enum(generation.index()))?;
             st.set(a, attribute::EXPRESSION, text_or_null(expression))?;
+            if (generation, expression.to_string()) != old {
+                clear_link(st, a)?;
+            }
             match rules::generation_problem(st, a) {
                 Some(problem) => Err(Invalid::Refused(problem)),
                 None => Ok(()),
@@ -689,7 +858,13 @@ fn attribute_set_collation(ctx: &mut C<'_>, p: &Params) -> R {
     if !collation.is_empty() {
         check_name("collation", collation, MAX_NAME)?;
     }
-    set_name(ctx, a, attribute::COLLATION, collation)?;
+    let old = rules::text_of(ctx.doc, a, attribute::COLLATION);
+    ctx.doc
+        .transaction(|st| {
+            st.set(a, attribute::COLLATION, text_or_null(collation))?;
+            if old != collation { clear_link(st, a) } else { Ok(()) }
+        })
+        .map_err(fail)?;
     Ok(json!({ "id": uuid_of(ctx.doc, a)? }))
 }
 
@@ -709,11 +884,16 @@ fn attribute_set_flags(ctx: &mut C<'_>, p: &Params) -> R {
     let unique = p.bool("unique").unwrap_or(false);
     let e = rules::entity_of(ctx.doc, a).ok_or_else(|| refuse("attribute", "the attribute belongs to no entity"))?;
     let was_key = rules::in_primary_key(ctx.doc, a);
-    if key != was_key
+    // Leaving the key is fine while the key keeps a column; the last column cannot leave a key that
+    // foreign keys point at, since the key would go with it.
+    if was_key
+        && !key
         && let Some(pk) = rules::primary_key_of(ctx.doc, e)
+        && rules::key_columns(ctx.doc, pk).len() == 1
     {
         key_is_free(ctx.doc, pk, "primary_key")?;
     }
+    let was_null = rules::is_nullable(ctx.doc, a);
     let uniques = rules::unique_on(ctx.doc, a);
     if !unique {
         for u in &uniques {
@@ -721,6 +901,7 @@ fn attribute_set_flags(ctx: &mut C<'_>, p: &Params) -> R {
         }
     }
     let (fks, entities) = keys_around(ctx.doc, a).map_err(fail)?;
+    let was_unique = !uniques.is_empty();
     ctx.doc
         .transaction(|st| {
             match (key, was_key) {
@@ -729,6 +910,12 @@ fn attribute_set_flags(ctx: &mut C<'_>, p: &Params) -> R {
                 _ => {}
             }
             st.set(a, attribute::NULLABLE, Value::Bool(null))?;
+            if null != was_null {
+                follow_nullability(st, a, null)?;
+            }
+            if key != was_key || null != was_null || unique != was_unique {
+                clear_link(st, a)?;
+            }
             if unique && uniques.is_empty() {
                 new_unique(st, e, &[a], "", true)?;
             }
@@ -879,22 +1066,31 @@ fn new_key_columns(store: &mut Store, child: Obj, k: Obj, role: &str, in_key: bo
     let prefix = if role.is_empty() { snake(&name_of(store, parent)) } else { snake(role) };
     let mut columns = Vec::with_capacity(targets.len());
     for t in targets {
-        let base = format!("{prefix}_{}", snake(&name_of(store, t)));
-        let name = first_free(&base, |n| rules::attribute_name_free(store, child, n, None)).map_err(|e| Invalid::Refused(e.message))?;
-        let a = store.create(ATTRIBUTE)?;
-        store.set(a, named_element::NAME, Value::str(&name))?;
-        let kind = rules::type_of(store, t);
-        if !kind.is_empty() {
-            store.set(a, attribute::TYPE, Value::str(&kind))?;
-        }
-        store.set(a, attribute::NULLABLE, Value::Bool(optional && !in_key))?;
-        store.push(child, entity::ATTRIBUTE, Value::Ref(a))?;
-        if in_key {
-            join_primary_key(store, child, a)?;
-        }
-        columns.push(a);
+        columns.push(new_key_column(store, child, t, &prefix, in_key, optional)?);
     }
     Ok(columns)
+}
+
+/// One column of `child` that copies key column `t`: named `<prefix>_<column>`, typed and sized like
+/// it, linked to it, in the child's primary key when `in_key`, nullable when `optional` and not in
+/// the key.
+fn new_key_column(store: &mut Store, child: Obj, t: Obj, prefix: &str, in_key: bool, optional: bool) -> Result<Obj, Invalid> {
+    let base = format!("{prefix}_{}", snake(&name_of(store, t)));
+    let name = first_free(&base, |n| rules::attribute_name_free(store, child, n, None)).map_err(|e| Invalid::Refused(e.message))?;
+    let a = store.create(ATTRIBUTE)?;
+    store.set(a, named_element::NAME, Value::str(&name))?;
+    let kind = rules::type_of(store, t);
+    if !kind.is_empty() {
+        store.set(a, attribute::TYPE, Value::str(&kind))?;
+    }
+    set_size(store, a, rules::size_of(store, t))?;
+    store.set(a, attribute::NULLABLE, Value::Bool(optional && !in_key))?;
+    store.set(a, attribute::LINKED_TO, Value::Ref(t))?;
+    store.push(child, entity::ATTRIBUTE, Value::Ref(a))?;
+    if in_key {
+        join_primary_key(store, child, a)?;
+    }
+    Ok(a)
 }
 
 /// Creates a foreign key without checking the rules (the callers do).
@@ -1006,6 +1202,12 @@ fn relationship_add(ctx: &mut C<'_>, p: &Params) -> R {
                     .ok_or_else(|| refuse("create_foreign_key", format!("{} has no primary key to refer to", name_of(ctx.doc, parent))))?,
             ),
         };
+        if identifying
+            && let Some(k) = target
+            && rules::identifying_cycle(ctx.doc, child, k)
+        {
+            return Err(refuse("identifying", cycle_text(ctx.doc, child, k)));
+        }
     }
     let r = ctx
         .doc
@@ -1034,6 +1236,16 @@ fn relationship_set_identifying(ctx: &mut C<'_>, p: &Params) -> R {
     let keys: Vec<Obj> = ctx.doc.referrers(r).into_iter().filter(|(_, prop)| *prop == foreign_key::RELATIONSHIP).map(|(fk, _)| fk).collect();
     if identifying && keys.is_empty() {
         return Err(refuse("identifying", "the relationship has no foreign key to make part of a primary key"));
+    }
+    if identifying {
+        for fk in &keys {
+            let parts = rules::key_parts(ctx.doc, *fk);
+            if let (Some(child), Some(k)) = (parts.entity, parts.key)
+                && rules::identifying_cycle(ctx.doc, child, k)
+            {
+                return Err(refuse("identifying", cycle_text(ctx.doc, child, k)));
+            }
+        }
     }
     ctx.doc
         .transaction(|st| {
@@ -1140,6 +1352,90 @@ fn relationship_resolve(ctx: &mut C<'_>, p: &Params) -> R {
     let m = resolve(ctx.doc, r, name).map_err(|e| refuse("relationship", e.to_string()))?;
     select(ctx, vec![m]);
     Ok(json!({ "id": uuid_of(ctx.doc, m)? }))
+}
+
+/// Drops a key column's link to the column it followed.
+fn attribute_unlink(ctx: &mut C<'_>, p: &Params) -> R {
+    let a = id_of(ctx, p, "attribute", ATTRIBUTE)?;
+    if rules::linked_to(ctx.doc, a).is_none() {
+        return Err(refuse("attribute", format!("{} follows no column", name_of(ctx.doc, a))));
+    }
+    ctx.doc.set(a, attribute::LINKED_TO, Value::Null).map_err(fail)?;
+    Ok(json!({ "id": uuid_of(ctx.doc, a)? }))
+}
+
+/// Replaces a pure mapping table by the many-to-many relationship it stood for: one relationship
+/// between the two parents with the roles and the description carried over, drawn on every diagram
+/// between the two parents where the table was; the table, its two relationships and its views go.
+/// One step.
+pub fn collapse(store: &mut Store, m: Obj) -> Result<Obj, Invalid> {
+    if let Some(problem) = rules::collapse_problem(store, m) {
+        return Err(Invalid::Refused(problem));
+    }
+    let s = rules::schema_of(store, m).ok_or_else(|| Invalid::Refused("the table belongs to no schema".into()))?;
+    let fks = rules::foreign_keys(store, m);
+    let mut ends: Vec<(Obj, Obj, String)> = Vec::with_capacity(2);
+    for fk in &fks {
+        let parts = rules::key_parts(store, *fk);
+        let (Some(r), Some(parent)) = (parts.relationship, parts.key.and_then(|k| rules::entity_of(store, k))) else {
+            return Err(Invalid::Refused("a foreign key lacks its relationship or its key".into()));
+        };
+        let (_, role) = parent_end(store, r, Some(parent));
+        ends.push((r, parent, rules::role_of(store, r, role)));
+    }
+    let [(r1, from, from_role), (r2, to, to_role)] = <[_; 2]>::try_from(ends).map_err(|_| Invalid::Refused("two foreign keys".into()))?;
+    // Where the table is drawn: (diagram, node of `from`, node of `to`) through its two lines.
+    let other_end = |edge: Obj, n: Obj| {
+        let src = store.get(edge, archforge_diagram::edge::SOURCE).ok()?.as_ref()?;
+        let dst = store.get(edge, archforge_diagram::edge::TARGET).ok()?.as_ref()?;
+        if src == n {
+            Some(dst)
+        } else if dst == n {
+            Some(src)
+        } else {
+            None
+        }
+    };
+    let mut shown: Vec<(Obj, Obj, Obj)> = Vec::new();
+    for n in archforge_diagram::views_of(store, m).2 {
+        let Some(d) = archforge_diagram::diagram_of(store, n) else { continue };
+        let edges: Vec<Obj> = store
+            .referrers(n)
+            .into_iter()
+            .filter(|(_, p)| *p == archforge_diagram::edge::SOURCE || *p == archforge_diagram::edge::TARGET)
+            .map(|(e, _)| e)
+            .collect();
+        let of = |r: Obj| {
+            edges
+                .iter()
+                .find(|e| store.get(**e, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref()) == Some(r))
+                .and_then(|e| other_end(*e, n))
+        };
+        if let (Some(a), Some(b)) = (of(r1), of(r2)) {
+            shown.push((d, a, b));
+        }
+    }
+    let description = rules::text_of(store, m, element::DESCRIPTION);
+    store.transaction(|st| {
+        let r = new_relationship(st, s, from, to, [Cardinality::ZeroOrMore, Cardinality::ZeroOrMore], [&from_role, &to_role], "", false)?;
+        st.set(r, element::DESCRIPTION, text_or_null(&description))?;
+        for (d, a, b) in &shown {
+            let e = st.create(archforge_diagram::EDGE)?;
+            st.set(e, archforge_diagram::edge::ELEMENT, Value::Ref(r))?;
+            st.set(e, archforge_diagram::edge::SOURCE, Value::Ref(*a))?;
+            st.set(e, archforge_diagram::edge::TARGET, Value::Ref(*b))?;
+            st.push(*d, archforge_diagram::diagram::EDGE, Value::Ref(e))?;
+        }
+        remove_entity(st, m)?;
+        Ok(r)
+    })
+}
+
+fn relationship_collapse(ctx: &mut C<'_>, p: &Params) -> R {
+    let m = id_of(ctx, p, "entity", ENTITY)?;
+    let r = collapse(ctx.doc, m).map_err(|e| refuse("entity", e.to_string()))?;
+    select(ctx, vec![r]);
+    Ok(json!({ "id": uuid_of(ctx.doc, r)? }))
 }
 
 // Foreign keys.
@@ -1278,6 +1574,9 @@ fn foreign_key_add(ctx: &mut C<'_>, p: &Params) -> R {
     let (in_key, optional, parent_role) = match rel {
         Some(r) => {
             let identifying = ctx.doc.get(r, relationship::IDENTIFYING).ok().and_then(|v| v.as_bool()).unwrap_or(false);
+            if identifying && rules::identifying_cycle(ctx.doc, e, k) {
+                return Err(refuse("relationship", cycle_text(ctx.doc, e, k)));
+            }
             let (end, role) = parent_end(ctx.doc, r, rules::entity_of(ctx.doc, k));
             (identifying, rules::cardinality_of(ctx.doc, r, end) == Some(Cardinality::ZeroOrOne), rules::role_of(ctx.doc, r, role))
         }
@@ -1353,6 +1652,9 @@ fn foreign_key_set_key(ctx: &mut C<'_>, p: &Params) -> R {
     let (in_key, optional, parent_role) = match parts.relationship {
         Some(r) => {
             let identifying = ctx.doc.get(r, relationship::IDENTIFYING).ok().and_then(|v| v.as_bool()).unwrap_or(false);
+            if identifying && rules::identifying_cycle(ctx.doc, e, k) {
+                return Err(refuse("key", cycle_text(ctx.doc, e, k)));
+            }
             let (end, role) = parent_end(ctx.doc, r, rules::entity_of(ctx.doc, k));
             (identifying, rules::cardinality_of(ctx.doc, r, end) == Some(Cardinality::ZeroOrOne), rules::role_of(ctx.doc, r, role))
         }
@@ -1369,6 +1671,12 @@ fn foreign_key_set_key(ctx: &mut C<'_>, p: &Params) -> R {
             }
             for a in &columns {
                 st.push(fk, foreign_key::COLUMN, Value::Ref(*a))?;
+            }
+            // The old followers that nothing else holds go with the old key.
+            for c in &parts.columns {
+                if !columns.contains(c) && removable_follower(st, *c, fk) {
+                    remove_follower(st, *c)?;
+                }
             }
             keys_still_hold(st, &fks, &entities)
         })
@@ -1404,17 +1712,14 @@ fn primary_key_set(ctx: &mut C<'_>, p: &Params) -> R {
     if let Some(problem) = rules::key_columns_problem(ctx.doc, e, &columns, false) {
         return Err(refuse("columns", problem));
     }
-    if let Some(pk) = existing
-        && rules::key_columns(ctx.doc, pk) != columns
-    {
-        key_is_free(ctx.doc, pk, "columns")?;
-    }
     let (fks, entities) = keys_near(ctx.doc, e).map_err(fail)?;
     let pk = ctx
         .doc
         .transaction(|st| {
             let pk = ensure_primary_key(st, e)?;
+            let old = rules::key_columns(st, pk);
             set_key_columns(st, pk, &columns)?;
+            grow_foreign_keys(st, pk, &old, &columns)?;
             for a in &columns {
                 st.set(*a, attribute::NULLABLE, Value::Bool(false))?;
             }
@@ -1458,13 +1763,14 @@ fn unique_set(ctx: &mut C<'_>, p: &Params) -> R {
     if let Some(problem) = rules::key_columns_problem(ctx.doc, e, &columns, false) {
         return Err(refuse("columns", problem));
     }
-    if rules::key_columns(ctx.doc, u) != columns {
-        key_is_free(ctx.doc, u, "columns")?;
-    }
     let distinct = nulls_distinct(p);
+    let (fks, entities) = keys_near(ctx.doc, e).map_err(fail)?;
     ctx.doc
         .transaction(|st| {
+            let old = rules::key_columns(st, u);
             set_key_columns(st, u, &columns)?;
+            grow_foreign_keys(st, u, &old, &columns)?;
+            keys_still_hold(st, &fks, &entities)?;
             st.set(u, key::NAME, if name.is_empty() { Value::Null } else { Value::str(&name) })?;
             st.set(u, unique_constraint::NULLS_DISTINCT, Value::Bool(distinct))
         })
@@ -1710,12 +2016,74 @@ fn entity_set_kind(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, e)? }))
 }
 
+/// Why key `k` cannot identify `child`: the identifying keys would run in a circle.
+fn cycle_text(store: &Store, child: Obj, k: Obj) -> String {
+    let parent = rules::entity_of(store, k).map(|p| name_of(store, p)).unwrap_or_default();
+    format!("the identifying relationships would form a cycle between {} and {parent}", name_of(store, child))
+}
+
+/// Sets a relationship's ends; the key columns of its foreign key follow the parent end: nullable
+/// for zero-or-one, not null for exactly-one, a column in the child's primary key staying not null.
 fn relationship_set_ends(ctx: &mut C<'_>, p: &Params) -> R {
     let r = id_of(ctx, p, "relationship", RELATIONSHIP)?;
     let (from_end, to_end) = (cardinality(p, "from_end")?, cardinality(p, "to_end")?);
-    ctx.doc.set(r, relationship::FROM_END, Value::Enum(from_end.index())).map_err(fail)?;
-    ctx.doc.set(r, relationship::TO_END, Value::Enum(to_end.index())).map_err(fail)?;
+    let (was_from, was_to) = (rules::cardinality_of(ctx.doc, r, relationship::FROM_END), rules::cardinality_of(ctx.doc, r, relationship::TO_END));
+    let (was_from, was_to) = (was_from.unwrap_or(from_end), was_to.unwrap_or(to_end));
+    let fks: Vec<Obj> = ctx.doc.referrers(r).into_iter().filter(|(_, prop)| *prop == foreign_key::RELATIONSHIP).map(|(fk, _)| fk).collect();
+    let (fks, entities) = gather(ctx.doc, fks.into_iter().collect(), None).map_err(fail)?;
+    ctx.doc
+        .transaction(|st| {
+            st.set(r, relationship::FROM_END, Value::Enum(from_end.index()))?;
+            st.set(r, relationship::TO_END, Value::Enum(to_end.index()))?;
+            for fk in &fks {
+                let parts = rules::key_parts(st, *fk);
+                if parts.relationship != Some(r) {
+                    continue;
+                }
+                let Some(child) = parts.entity else { continue };
+                let (end, _) = parent_end(st, r, parts.key.and_then(|k| rules::entity_of(st, k)));
+                let nullable = match rules::cardinality_of(st, r, end) {
+                    Some(Cardinality::ZeroOrOne) => true,
+                    Some(Cardinality::ExactlyOne) => false,
+                    _ => continue,
+                };
+                let pk = rules::primary_key(st, child);
+                for a in &parts.columns {
+                    // A column another foreign key also holds keeps that key's say.
+                    let shared = st.referrers(*a).iter().any(|(src, prop)| *prop == foreign_key::COLUMN && *src != *fk);
+                    if !pk.contains(a) && !shared {
+                        st.set(*a, attribute::NULLABLE, Value::Bool(nullable))?;
+                    }
+                }
+            }
+            keys_still_hold(st, &fks, &entities)
+        })
+        .map_err(|e| refuse(if to_end != was_to && from_end == was_from { "to_end" } else { "from_end" }, e.to_string()))?;
     Ok(json!({ "id": uuid_of(ctx.doc, r)? }))
+}
+
+/// A key column made nullable or not moves the parent end of its relationship to zero-or-one or
+/// exactly-one, so the picture keeps agreeing with itself.
+fn follow_nullability(st: &mut Store, a: Obj, nullable: bool) -> Result<(), Invalid> {
+    let fks: Vec<Obj> = st.referrers(a).into_iter().filter(|(_, prop)| *prop == foreign_key::COLUMN).map(|(fk, _)| fk).collect();
+    for fk in fks {
+        let parts = rules::key_parts(st, fk);
+        let (Some(r), Some(child)) = (parts.relationship, parts.entity) else { continue };
+        if rules::is_many_to_many(st, r) {
+            continue;
+        }
+        // The end is optional when every column of the key outside the child's primary key is.
+        let pk = rules::primary_key(st, child);
+        let outside: Vec<Obj> = parts.columns.iter().copied().filter(|c| !pk.contains(c)).collect();
+        if outside.is_empty() {
+            continue;
+        }
+        let optional = outside.iter().all(|c| if *c == a { nullable } else { rules::is_nullable(st, *c) });
+        let (end, _) = parent_end(st, r, parts.key.and_then(|k| rules::entity_of(st, k)));
+        let card = if optional { Cardinality::ZeroOrOne } else { Cardinality::ExactlyOne };
+        st.set(r, end, Value::Enum(card.index()))?;
+    }
+    Ok(())
 }
 
 fn relationship_set_roles(ctx: &mut C<'_>, p: &Params) -> R {
@@ -1815,6 +2183,7 @@ fn attribute_json(store: &Store, a: Obj) -> Json {
         "primary_key": rules::in_primary_key(store, a),
         "nullable": rules::is_nullable(store, a),
         "unique": rules::is_unique(store, a),
+        "linked_to": rules::linked_to(store, a).map(|t| uuid_json(store, t)).unwrap_or(Json::Null),
     })
 }
 
@@ -2035,6 +2404,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ErView>> {
             has_entities,
             attribute_set_flags
         ),
+        cmd!("er.attribute.unlink", "Unlink attribute", &["Entity"], None, "attribute: string; the id of a key column that follows the column it points at", has_entities, attribute_unlink),
         cmd!("er.attribute.move", "Move attribute", &["Entity"], None, "attribute: string; the attribute's id\nto: integer, 0..1000000; its new place", has_entities, attribute_move),
         cmd!("er.attribute.remove", "Remove attribute", &["Entity"], None, "attribute: string; the attribute's id", has_entities, attribute_remove),
         cmd!(
@@ -2190,6 +2560,15 @@ pub fn specs() -> Vec<CommandSpec<Store, ErView>> {
         ),
         cmd!("er.index.remove", "Remove index", &["Entity"], None, "index: string; the index's id", has_entities, index_remove),
         cmd!("er.entity.set-kind", "Set entity kind", &["Entity"], None, "entity: string; the entity's id\nkind: string, regular|associative; associative for a mapping table", has_entities, entity_set_kind),
+        cmd!(
+            "er.relationship.collapse",
+            "Collapse mapping table",
+            &["Relationship"],
+            None,
+            "entity: string; the id of a mapping table that holds nothing but its two keys",
+            has_entities,
+            relationship_collapse
+        ),
         cmd!("er.remove", "Remove", &["Edit"], Some("Delete"), "ids: array; the ids of what goes", has_schemas, remove_many),
         cmd!(noundo "view.select", "Select", &["View"], None, "ids: array = []; the ids selected", always, view_select),
         cmd!(query "er.schema.list", "List schemas", &["Schema"], None, "", always, schema_list),

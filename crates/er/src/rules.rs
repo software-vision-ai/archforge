@@ -371,6 +371,101 @@ pub fn nulls_distinct(store: &Store, u: Obj) -> bool {
     store.get(u, unique_constraint::NULLS_DISTINCT).ok().and_then(|v| v.as_bool()).unwrap_or(true)
 }
 
+// Linked key columns and mapping tables (slice S4).
+
+/// The column a key column follows: the one it was made to point at, until the user edits it.
+pub fn linked_to(store: &Store, a: Obj) -> Option<Obj> {
+    reference(store, a, attribute::LINKED_TO).filter(|t| store.is_alive(*t))
+}
+
+/// The columns that follow `a`.
+pub fn linked_from(store: &Store, a: Obj) -> Vec<Obj> {
+    store.referrers(a).into_iter().filter(|(_, p)| *p == attribute::LINKED_TO).map(|(c, _)| c).filter(|c| store.is_alive(*c)).collect()
+}
+
+/// Why an entity is no pure mapping table that could collapse back into a relationship: it needs
+/// exactly two foreign keys with their relationships, columns that are exactly theirs and all in its
+/// primary key, and no unique constraint, check or index. None when it can collapse.
+pub fn collapse_problem(store: &Store, e: Obj) -> Option<String> {
+    let fks = foreign_keys(store, e);
+    if fks.len() != 2 {
+        return Some("a mapping table has exactly two foreign keys".into());
+    }
+    let mut covered: BTreeSet<Obj> = BTreeSet::new();
+    let mut own: BTreeSet<Obj> = BTreeSet::new();
+    for fk in &fks {
+        let parts = key_parts(store, *fk);
+        let Some(r) = parts.relationship else { return Some(format!("the foreign key {} realises no relationship", label(store, *fk))) };
+        own.insert(r);
+        covered.extend(parts.columns);
+    }
+    let touching = store.referrers(e).into_iter().any(|(r, p)| (p == relationship::FROM || p == relationship::TO) && !own.contains(&r));
+    if touching {
+        return Some("it has a relationship of its own".into());
+    }
+    let attributes: BTreeSet<Obj> = refs(store, e, entity::ATTRIBUTE).into_iter().collect();
+    if attributes != covered {
+        return Some("it has columns of its own".into());
+    }
+    if primary_key(store, e).into_iter().collect::<BTreeSet<Obj>>() != attributes {
+        return Some("its columns are not all in its primary key".into());
+    }
+    if !unique_constraints(store, e).is_empty() {
+        return Some("it has a unique constraint".into());
+    }
+    if !checks_of(store, e).is_empty() {
+        return Some("it has a check constraint".into());
+    }
+    if !indexes_of(store, e).is_empty() {
+        return Some("it has an index".into());
+    }
+    None
+}
+
+/// The entities whose primary key `e`'s primary key is built on through identifying relationships:
+/// the parents of its identifying foreign keys, and theirs, with a seen-set.
+pub fn identifying_parents(store: &Store, e: Obj) -> BTreeSet<Obj> {
+    let mut seen: BTreeSet<Obj> = BTreeSet::new();
+    let mut queue = vec![e];
+    while let Some(c) = queue.pop() {
+        for fk in foreign_keys(store, c) {
+            let parts = key_parts(store, fk);
+            let Some(r) = parts.relationship else { continue };
+            if !flag(store, r, relationship::IDENTIFYING) {
+                continue;
+            }
+            if let Some(p) = parts.key.and_then(|k| entity_of(store, k))
+                && seen.insert(p)
+            {
+                queue.push(p);
+            }
+        }
+    }
+    seen
+}
+
+/// Whether a foreign key of `child` onto key `k` that identifies would close a cycle: the key's
+/// entity is built on `child` already, directly or through others, or `k` is `child`'s own primary
+/// key (a self-reference onto a unique key cannot recurse, so it may identify).
+pub fn identifying_cycle(store: &Store, child: Obj, k: Obj) -> bool {
+    let Some(parent) = entity_of(store, k) else { return false };
+    if child == parent {
+        return store.class_of(k).ok() == Some(PRIMARY_KEY);
+    }
+    identifying_parents(store, parent).contains(&child)
+}
+
+/// Whether a relationship's child end is one-or-more, which no key enforces.
+pub fn child_end_one_or_more(store: &Store, r: Obj) -> bool {
+    let from = cardinality_of(store, r, relationship::FROM_END);
+    let to = cardinality_of(store, r, relationship::TO_END);
+    match (from, to) {
+        (Some(f), Some(t)) if is_many(f) && is_many(t) => false,
+        (Some(Cardinality::OneOrMore), _) | (_, Some(Cardinality::OneOrMore)) => true,
+        _ => false,
+    }
+}
+
 // Checks and indexes (slice S3).
 
 /// An entity's check constraints, in order.
@@ -695,6 +790,9 @@ pub fn associative_problem(store: &Store, e: Obj) -> Option<String> {
 /// The notice for a many-to-many relationship.
 pub const MANY_TO_MANY: &str = "many-to-many: it becomes a table only through a mapping table";
 
+/// The notice on a relationship whose child end is one-or-more.
+pub const ONE_OR_MORE: &str = "one-or-more at the child end: no key enforces it";
+
 /// The notice for relationships between the same two entities that no role tells apart.
 pub const SAME_ENDS: &str = "joins the same two entities as another relationship with the same roles; role names tell them apart";
 
@@ -713,6 +811,9 @@ pub fn notices(store: &Store) -> Vec<(Obj, &'static str)> {
     for r in relationships {
         if is_many_to_many(store, r) {
             out.push((r, MANY_TO_MANY));
+        }
+        if child_end_one_or_more(store, r) {
+            out.push((r, ONE_OR_MORE));
         }
         if ends_with_roles(store, r).is_some_and(|k| count.get(&k).copied().unwrap_or(0) > 1) {
             out.push((r, SAME_ENDS));

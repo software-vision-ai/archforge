@@ -107,6 +107,43 @@ pub const SORT_ASCENDING: Icon =
 pub const SORT_DESCENDING: Icon =
     Icon { size: [7.0, 9.0], stroke: 1.1, segments: &[L([3.5, 0.0], [3.5, 9.0]), L([0.0, 5.5], [3.5, 9.0]), L([3.5, 9.0], [7.0, 5.5])] };
 
+/// The link mark of a key column that follows the column it points at (the design's Icon / Link):
+/// two chain links.
+pub const LINK: Icon = Icon {
+    size: [12.0, 7.0],
+    stroke: 1.1,
+    segments: &[
+        L([4.9, 5.0], [3.9, 6.0]),
+        L([3.9, 6.0], [1.2, 6.0]),
+        L([1.2, 6.0], [0.6, 3.5]),
+        L([0.6, 3.5], [1.2, 1.0]),
+        L([1.2, 1.0], [3.9, 1.0]),
+        L([3.9, 1.0], [5.9, 1.0]),
+        L([6.9, 2.0], [7.9, 1.0]),
+        L([7.9, 1.0], [10.6, 1.0]),
+        L([10.6, 1.0], [11.2, 3.5]),
+        L([11.2, 3.5], [10.6, 6.0]),
+        L([10.6, 6.0], [7.9, 6.0]),
+        L([7.9, 6.0], [5.9, 6.0]),
+    ],
+};
+
+/// The mark of a mapping table that becomes a line again (the design's Icon / Collapse): two
+/// arrows meeting at a bar.
+pub const MERGE_LINE: Icon = Icon {
+    size: [12.0, 9.0],
+    stroke: 1.1,
+    segments: &[
+        L([0.0, 4.5], [4.0, 4.5]),
+        L([2.0, 2.5], [4.0, 4.5]),
+        L([4.0, 4.5], [2.0, 6.5]),
+        L([12.0, 4.5], [8.0, 4.5]),
+        L([10.0, 2.5], [8.0, 4.5]),
+        L([8.0, 4.5], [10.0, 6.5]),
+        L([6.0, 0.0], [6.0, 9.0]),
+    ],
+};
+
 /// The arrow pointing right.
 pub const ARROW: Icon =
     Icon { size: [16.0, 16.0], stroke: 1.7, segments: &[L([0.0, 8.0], [16.0, 8.0]), L([9.778, 0.0], [16.0, 8.0]), L([16.0, 8.0], [9.778, 16.0])] };

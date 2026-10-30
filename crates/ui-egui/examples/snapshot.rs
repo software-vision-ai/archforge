@@ -1,5 +1,5 @@
 //! Renders the window offscreen to a PNG, without opening one. Usage:
-//! `cargo run -p archforge-ui-egui --features snapshot --example snapshot -- <out.png> [light|dark] [width height [scale]] [--screen home|new-project|new-project-failed|workspace|workspace-schema|workspace-table|workspace-skills|workspace-diagram-empty|workspace-diagram|workspace-entity-new|workspace-cardinality|workspace-relationship|workspace-key-editor|workspace-column-editor|workspace-index-editor]`
+//! `cargo run -p archforge-ui-egui --features snapshot --example snapshot -- <out.png> [light|dark] [width height [scale]] [--screen home|new-project|new-project-failed|workspace|workspace-schema|workspace-table|workspace-skills|workspace-diagram-empty|workspace-diagram|workspace-entity-new|workspace-cardinality|workspace-relationship|workspace-key-editor|workspace-column-editor|workspace-index-editor|workspace-mapping-table]`
 
 use archforge_ui_egui::offscreen::Screen;
 use archforge_ui_egui::theme::ThemeKind;
@@ -27,6 +27,7 @@ fn run() -> Result<(), String> {
             Some("workspace-skills") => Screen::WorkspaceSkills,
             Some("workspace-key-editor") => Screen::WorkspaceKeyEditor,
             Some("workspace-index-editor") => Screen::WorkspaceIndexEditor,
+            Some("workspace-mapping-table") => Screen::WorkspaceMappingTable,
             Some("workspace-column-editor") => Screen::WorkspaceColumnEditor,
             Some("workspace-diagram-empty") => Screen::WorkspaceDiagramEmpty,
             Some("workspace-diagram") => Screen::WorkspaceDiagram,
@@ -35,7 +36,7 @@ fn run() -> Result<(), String> {
             Some("workspace-relationship") => Screen::WorkspaceRelationship,
             other => {
                 return Err(format!(
-                    "--screen {other:?} is not home, new-project, new-project-failed, workspace, workspace-schema, workspace-table, workspace-skills, workspace-diagram-empty, workspace-diagram, workspace-entity-new, workspace-cardinality, workspace-relationship, workspace-key-editor, workspace-column-editor or workspace-index-editor; {USAGE}"
+                    "--screen {other:?} is not home, new-project, new-project-failed, workspace, workspace-schema, workspace-table, workspace-skills, workspace-diagram-empty, workspace-diagram, workspace-entity-new, workspace-cardinality, workspace-relationship, workspace-key-editor, workspace-column-editor, workspace-index-editor or workspace-mapping-table; {USAGE}"
                 ));
             }
         };
