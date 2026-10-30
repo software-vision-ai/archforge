@@ -643,9 +643,12 @@ fn the_rails_switch_the_explorer_and_the_panel_and_home_closes_the_project() {
     let at = rect_of(&h, "workspace.explorers.diagrams").center();
     click(&mut h, at);
     assert_eq!(h.state().state.explorer, crate::state::Explorer::Diagrams);
-    // A control whose slice is not built takes no click: the project stays open.
+    // The tab strip's + opens the New diagram dialog; Escape closes it.
     let at = rect_of(&h, "workspace.tabs.add").center();
     click(&mut h, at);
+    assert!(h.state().diagrams.new.is_some());
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    assert!(h.state().diagrams.new.is_none());
     assert!(h.state().project.is_some());
     let at = rect_of(&h, "workspace.header.home").center();
     click(&mut h, at);
@@ -986,4 +989,187 @@ fn the_skills_tab_adds_a_skill_on_the_table_and_shows_the_schemas_as_inherited()
     let at = rect_of(&h, "workspace.skills.apply").center();
     click(&mut h, at);
     assert!(h.state().panels.skill.as_ref().is_some_and(|e| e.refused.is_some()));
+}
+
+/// The table harness with Order, the relationship `places` and an ER diagram of the schema
+/// showing both tables and the relationship, open in the centre: `(harness, customer, diagram)`.
+fn diagram_harness() -> (Harness<'static, Shell>, String, String) {
+    let (mut h, customer) = table_harness();
+    let diagram = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
+        let st = s.doc();
+        let schema = st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap()).unwrap().to_string();
+        let order = id(s.execute("er.entity.add", &serde_json::json!({ "schema": schema, "name": "Order" })).unwrap().value);
+        s.execute("er.attribute.add", &serde_json::json!({ "entity": order, "name": "order_id", "type": "BIGINT", "primary_key": true })).unwrap();
+        let places = id(s
+            .execute("er.relationship.add", &serde_json::json!({ "from": customer, "to": order, "name": "places", "create_foreign_key": true }))
+            .unwrap()
+            .value);
+        let diagram = id(s.execute("diagram.add", &serde_json::json!({ "kind": "er", "element": schema, "name": "Shop schema" })).unwrap().value);
+        let c = id(s
+            .execute(
+                "diagram.place",
+                &serde_json::json!({ "diagram": diagram, "element": customer, "x": 100, "y": 100, "width": 240, "height": 166 }),
+            )
+            .unwrap()
+            .value);
+        let o = id(s
+            .execute("diagram.place", &serde_json::json!({ "diagram": diagram, "element": order, "x": 500, "y": 100, "width": 240, "height": 166 }))
+            .unwrap()
+            .value);
+        let edge =
+            id(s.execute("diagram.connect", &serde_json::json!({ "diagram": diagram, "element": places, "source": c, "target": o })).unwrap().value);
+        s.execute("diagram.label", &serde_json::json!({ "edge": edge, "kind": "name", "at": "middle" })).unwrap();
+        diagram
+    };
+    crate::canvas::open(h.state_mut(), archforge_mof::Uuid::parse(&diagram).unwrap());
+    h.run();
+    (h, customer, diagram)
+}
+
+fn drag(h: &mut Harness<'static, Shell>, from: egui::Pos2, to: egui::Pos2) {
+    h.event(egui::Event::PointerMoved(from));
+    h.event(egui::Event::PointerButton { pos: from, button: egui::PointerButton::Primary, pressed: true, modifiers: egui::Modifiers::NONE });
+    h.run();
+    h.event(egui::Event::PointerMoved(to));
+    h.run();
+    h.event(egui::Event::PointerButton { pos: to, button: egui::PointerButton::Primary, pressed: false, modifiers: egui::Modifiers::NONE });
+    h.run();
+}
+
+fn selected_name(h: &Harness<'static, Shell>) -> String {
+    let s = h.state().session.as_ref().unwrap();
+    let st = s.doc();
+    let o = s.view().selection.first().copied().unwrap();
+    if st.class_of(o).ok() == Some(archforge_diagram::DIAGRAM) { crate::diagrams::diagram_name(st, o) } else { archforge_er::rules::name_of(st, o) }
+}
+
+#[test]
+fn the_diagrams_explorer_creates_a_diagram_through_the_dialog_and_opens_it_in_a_tab() {
+    let (mut h, _customer) = table_harness();
+    let at = rect_of(&h, "workspace.explorers.diagrams").center();
+    click(&mut h, at);
+    assert!(!ids(&h).iter().any(|i| i.starts_with("workspace.diagrams.row.")), "no diagram yet");
+    assert!(!ids(&h).iter().any(|i| i == "workspace.canvas"), "the canvas is plain without a diagram");
+    // The + opens the dialog with the schema's name and the schema chosen.
+    let at = rect_of(&h, "workspace.diagrams.add").center();
+    click(&mut h, at);
+    let edit = h.state().diagrams.new.clone().expect("the dialog opened");
+    assert_eq!(edit.name, "Shop");
+    assert!(edit.schema.is_some());
+    let at = rect_of(&h, "workspace.new-diagram.create").center();
+    click(&mut h, at);
+    assert!(h.state().diagrams.new.is_none(), "the dialog closed");
+    let diagram = {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let d = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_diagram::DIAGRAM)).expect("the diagram was added");
+        st.uuid(d).unwrap()
+    };
+    assert_eq!(h.state().canvas.active, Some(diagram));
+    assert_eq!(h.state().canvas.tabs, vec![diagram]);
+    assert_eq!(selected_name(&h), "Shop", "the diagram is selected, so Properties shows it");
+    let found = ids(&h);
+    for id in [
+        format!("workspace.tabs.{diagram}"),
+        format!("workspace.diagrams.row.{diagram}"),
+        "workspace.canvas".to_string(),
+        "workspace.minimap.fit".to_string(),
+    ] {
+        assert!(found.contains(&id), "{id} in {found:?}");
+    }
+    // Closing the tab empties the centre; the row opens it again.
+    let at = rect_of(&h, &format!("workspace.tabs.{diagram}.close")).center();
+    click(&mut h, at);
+    assert_eq!(h.state().canvas.active, None);
+    assert!(h.state().canvas.tabs.is_empty());
+    assert!(!ids(&h).iter().any(|i| i == "workspace.canvas"));
+    let at = rect_of(&h, &format!("workspace.diagrams.row.{diagram}")).center();
+    click(&mut h, at);
+    assert_eq!(h.state().canvas.active, Some(diagram));
+    // The filter narrows the rows.
+    h.state_mut().diagrams.filter = "zzz".into();
+    h.run();
+    assert!(!ids(&h).iter().any(|i| i.starts_with("workspace.diagrams.row.")));
+    h.state_mut().diagrams.filter = "sho".into();
+    h.run();
+    assert!(ids(&h).iter().any(|i| i == &format!("workspace.diagrams.row.{diagram}")));
+    h.state_mut().diagrams.filter.clear();
+    // A second diagram of a new schema: the schema is made with the diagram's name.
+    let at = rect_of(&h, "workspace.tabs.add").center();
+    click(&mut h, at);
+    h.state_mut().diagrams.new.as_mut().unwrap().name = "Billing".into();
+    let at = rect_of(&h, "workspace.new-diagram.schema").center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.new-diagram.schema.1").center();
+    click(&mut h, at);
+    assert_eq!(h.state().diagrams.new.as_ref().unwrap().schema, None, "New schema chosen");
+    let at = rect_of(&h, "workspace.new-diagram.create").center();
+    click(&mut h, at);
+    assert!(h.state().diagrams.new.is_none(), "{:?}", h.state().diagrams.new);
+    let st = h.state().session.as_ref().unwrap().doc();
+    assert!(st.alive().any(|o| st.class_of(o).ok() == Some(archforge_er::SCHEMA) && archforge_er::rules::name_of(st, o) == "Billing"));
+    assert_eq!(h.state().canvas.tabs.len(), 2);
+    assert_eq!(selected_name(&h), "Billing");
+}
+
+#[test]
+fn the_canvas_draws_the_diagram_and_the_pointer_selects_pans_and_zooms() {
+    let (mut h, customer, diagram) = diagram_harness();
+    let found = ids(&h);
+    let nodes: Vec<String> = found.iter().filter(|i| i.starts_with("workspace.canvas.node.")).cloned().collect();
+    assert_eq!(nodes.len(), 2, "both tables are drawn: {found:?}");
+    assert_eq!(found.iter().filter(|i| i.starts_with("workspace.canvas.edge.")).count(), 1, "the relationship is drawn");
+    assert_eq!(selected_name(&h), "Shop schema", "opening selects the diagram");
+    // The node at the left is Customer: a click selects the table behind it.
+    let customer_node = nodes.iter().min_by(|a, b| rect_of(&h, a).left().total_cmp(&rect_of(&h, b).left())).unwrap().clone();
+    let at = rect_of(&h, &customer_node).center();
+    click(&mut h, at);
+    assert_eq!(selected_name(&h), "Customer");
+    let st = h.state().session.as_ref().unwrap().doc();
+    let customer_obj = st.by_uuid(archforge_mof::Uuid::parse(&customer).unwrap()).unwrap();
+    assert_eq!(h.state().session.as_ref().unwrap().view().selection, vec![customer_obj]);
+    // A click on the empty canvas selects the diagram again.
+    let canvas = rect_of(&h, "workspace.canvas");
+    click(&mut h, canvas.left_top() + egui::vec2(20.0, 20.0));
+    assert_eq!(selected_name(&h), "Shop schema");
+    // The pan tool drags the view.
+    let at = rect_of(&h, "workspace.tools.pan").center();
+    click(&mut h, at);
+    assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Pan);
+    let before = h.state().canvas.pan;
+    let from = canvas.left_top() + egui::vec2(20.0, 20.0);
+    drag(&mut h, from, from + egui::vec2(50.0, 20.0));
+    let after = h.state().canvas.pan;
+    assert!((after - before - egui::vec2(50.0, 20.0)).length() < 1.0, "{before:?} -> {after:?}");
+    // The zoom buttons and Whole diagram.
+    let fitted = h.state().canvas.zoom;
+    let at = rect_of(&h, "workspace.zoom.in").center();
+    click(&mut h, at);
+    assert!(h.state().canvas.zoom > fitted);
+    let at = rect_of(&h, "workspace.zoom.out").center();
+    click(&mut h, at);
+    click(&mut h, at);
+    assert!(h.state().canvas.zoom < fitted);
+    let at = rect_of(&h, "workspace.minimap.fit").center();
+    click(&mut h, at);
+    assert!((h.state().canvas.zoom - fitted).abs() < 0.001);
+    // The toggles.
+    let at = rect_of(&h, "workspace.tools.grid").center();
+    click(&mut h, at);
+    assert!(!h.state().canvas.grid);
+    let at = rect_of(&h, "workspace.tools.key-status").center();
+    click(&mut h, at);
+    assert!(!h.state().canvas.key_status);
+    let at = rect_of(&h, "workspace.minimap.toggle").center();
+    click(&mut h, at);
+    assert!(!h.state().canvas.minimap_open);
+    assert!(!ids(&h).iter().any(|i| i == "workspace.minimap.fit"));
+    let at = rect_of(&h, "workspace.minimap.toggle").center();
+    click(&mut h, at);
+    assert!(h.state().canvas.minimap_open);
+    // Properties shows the diagram with its schema when the diagram is selected.
+    click(&mut h, canvas.left_top() + egui::vec2(20.0, 20.0));
+    assert!(ids(&h).iter().any(|i| i == "workspace.properties.schema"));
+    let _ = diagram;
 }

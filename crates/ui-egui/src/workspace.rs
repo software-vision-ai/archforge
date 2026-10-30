@@ -1,7 +1,7 @@
 //! The workspace, the window once a project is open (slice W1 of the workspace chrome, from the
 //! design's frame "Workspace · Project just created"): the title strip, the project bar, the
-//! activity rail at the left with the explorer column beside it, the centre with the diagram tab
-//! strip over an empty canvas area, the right rail with its four panels, and the status bar. Every
+//! activity rail at the left with the explorer column beside it, the centre with the diagram tabs
+//! over the canvas (`canvas`), the right rail with its four panels, and the status bar. Every
 //! control the design shows is drawn; those whose slices are not built yet take no click and say
 //! so on hover. The explorer and the panel keep their widths in the UI state and resize by their
 //! dividers.
@@ -21,7 +21,6 @@ use crate::{Shell, widgets};
 /// The activity rail's width, the right rail's, the tab strip's and the status bar's heights.
 const ACTIVITY: f32 = 52.0;
 const RAIL: f32 = 40.0;
-const TABS: f32 = 36.0;
 const STATUS: f32 = 40.0;
 /// The explorer's and the panel's widths: the design's, and the range a drag keeps them in.
 pub(crate) const EXPLORER_DEFAULT: f32 = 368.0;
@@ -130,8 +129,9 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
         }
         right_rail(shell, ui, &p, cols.rail);
         status_bar(shell, ui, &p, status);
-        // Over everything: the explorer's dialog, when it asks.
+        // Over everything: the explorer's dialog and the New diagram dialog, when they ask.
         crate::explorer::delete_dialog(shell, ui, &p);
+        crate::diagrams::new_dialog(shell, ui, &p);
     });
 }
 
@@ -205,7 +205,7 @@ fn bar_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, name: &str) -
 
 /// Undo and redo from the keyboard, through the engine, while no field has the keyboard.
 fn undo_redo(shell: &mut Shell, ui: &egui::Ui) {
-    if ui.memory(|m| m.focused().is_some()) || shell.explorer.delete.is_some() {
+    if ui.memory(|m| m.focused().is_some()) || shell.explorer.delete.is_some() || shell.diagrams.new.is_some() {
         return;
     }
     let (undo, redo) = ui.input(|i| {
@@ -247,14 +247,16 @@ fn explorer(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     let paint = ui.painter().clone();
     paint.rect_filled(r, 0.0, p.surface);
     paint.rect_filled(Rect::from_min_max(pos2(r.right() - 1.0, r.top()), r.max), 0.0, p.border);
-    if shell.state.explorer == Explorer::Models {
-        crate::explorer::draw(shell, ui, p, r);
-        return;
-    }
     let at = |x: f32, y: f32| r.min + vec2(x, y);
     let (title, filter, empty) = match shell.state.explorer {
-        Explorer::Models => return,
-        Explorer::Diagrams => (tr("Diagrams"), tr("Filter diagrams…"), tr("No diagrams yet")),
+        Explorer::Models => {
+            crate::explorer::draw(shell, ui, p, r);
+            return;
+        }
+        Explorer::Diagrams => {
+            crate::diagrams::draw(shell, ui, p, r);
+            return;
+        }
         Explorer::SourceControl => (tr("Source Control"), tr("Filter changes…"), tr("No changes yet")),
     };
     ux::text(&paint, at(20.0, 25.0), &title.to_uppercase(), types::EYEBROW, p.text, room(r.width() - 80.0));
@@ -288,17 +290,9 @@ fn resize(shell: &mut Shell, ui: &egui::Ui, p: &Palette, x: f32, body: Rect, id:
     }
 }
 
-/// The centre: the diagram tab strip, with no tab yet and the new-diagram control at its left,
-/// over the empty canvas area.
-fn centre(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
-    let paint = ui.painter();
-    let tabs = Rect::from_min_size(r.min, vec2(r.width(), TABS));
-    paint.rect_filled(tabs, 0.0, p.page);
-    paint.rect_filled(Rect::from_min_max(pos2(r.left(), tabs.bottom() - 1.0), tabs.max), 0.0, p.border);
-    let add = Rect::from_min_size(pos2(r.left() + 8.0, r.top() + 4.0), Vec2::splat(28.0));
-    ux::icon_in(paint, Rect::from_center_size(add.center(), Vec2::splat(16.0)), &icons::PLUS, p.text_secondary);
-    control(shell, ui, "workspace.tabs.add", "button", add, false).on_hover_text(tr("New diagram"));
-    paint.rect_filled(Rect::from_min_max(pos2(r.left(), tabs.bottom()), r.max), 0.0, p.canvas);
+/// The centre: the diagram tabs over the canvas, drawn by the canvas module.
+fn centre(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
+    crate::canvas::centre(shell, ui, p, r);
 }
 
 /// The right rail: the four panels, the active one marked.

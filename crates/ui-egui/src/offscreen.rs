@@ -20,6 +20,10 @@ pub enum Screen {
     WorkspaceTable,
     /// The same table with the Skills tab open on it, a skill on the schema inherited.
     WorkspaceSkills,
+    /// A first diagram of a schema, just created and open, empty.
+    WorkspaceDiagramEmpty,
+    /// A diagram of two tables and their relationship, the first table selected.
+    WorkspaceDiagram,
 }
 
 /// Renders Home at `width` by `height` logical pixels, `scale` pixels a point, in `theme`:
@@ -40,7 +44,7 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
     });
     let mut shell = Shell::new(Services { user_name: Some("Jordan Dale".into()), ids: Some(ids), ..Services::default() });
     shell.state.theme = theme;
-    if matches!(screen, Screen::Workspace | Screen::WorkspaceSchema | Screen::WorkspaceTable | Screen::WorkspaceSkills) {
+    if !matches!(screen, Screen::Home | Screen::NewProject | Screen::NewProjectFailed) {
         shell.services.projects_folder = Some(Folder { path: "/Users/robin/Documents/Archforge".into(), label: "Documents / Archforge".into() });
         shell.open_project(crate::Opened {
             name: "Commerce platform".into(),
@@ -67,6 +71,10 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
     if matches!(screen, Screen::WorkspaceTable | Screen::WorkspaceSkills) {
         shell.adopt_project();
         sample_table(&mut shell, screen == Screen::WorkspaceSkills)?;
+    }
+    if matches!(screen, Screen::WorkspaceDiagramEmpty | Screen::WorkspaceDiagram) {
+        shell.adopt_project();
+        sample_diagram(&mut shell, screen == Screen::WorkspaceDiagram)?;
     }
     let mut harness = egui_kittest::Harness::builder().with_size(egui::vec2(width, height)).with_pixels_per_point(scale).build_ui_state(
         |ui, shell: &mut Shell| {
@@ -118,5 +126,50 @@ fn sample_table(shell: &mut Shell, skills: bool) -> Result<(), String> {
     if skills {
         shell.state.panel = crate::state::Panel::Skills;
     }
+    Ok(())
+}
+
+/// A schema "Shop schema" with its diagram open: empty, as the journey's first diagram; or with
+/// Customer and Order placed, the relationship `places` between them and Customer selected, as
+/// the design's ER frame.
+fn sample_diagram(shell: &mut Shell, filled: bool) -> Result<(), String> {
+    use serde_json::json;
+    let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
+    let run = |session: &mut archforge_er::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
+        let out = session.execute(command, &params).map_err(|e| format!("{command}: {e:?}"))?;
+        Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
+    };
+    let schema = run(session, "er.schema.add", json!({ "name": "Shop schema" }))?;
+    let diagram = run(session, "diagram.add", json!({ "kind": "er", "element": schema, "name": "Shop schema" }))?;
+    let mut select = diagram.clone();
+    if filled {
+        let customer = run(session, "er.entity.add", json!({ "schema": schema, "name": "Customer" }))?;
+        run(session, "er.attribute.add", json!({ "entity": customer, "name": "customer_id", "type": "BIGINT", "primary_key": true }))?;
+        run(session, "er.attribute.add", json!({ "entity": customer, "name": "region", "type": "TEXT", "primary_key": true }))?;
+        run(session, "er.attribute.add", json!({ "entity": customer, "name": "email", "type": "VARCHAR(255)", "unique": true }))?;
+        run(session, "er.attribute.add", json!({ "entity": customer, "name": "name", "type": "VARCHAR(120)" }))?;
+        let order = run(session, "er.entity.add", json!({ "schema": schema, "name": "Order" }))?;
+        run(session, "er.attribute.add", json!({ "entity": order, "name": "order_id", "type": "BIGINT", "primary_key": true }))?;
+        run(session, "er.attribute.add", json!({ "entity": order, "name": "placed_at", "type": "TIMESTAMP" }))?;
+        let places = run(
+            session,
+            "er.relationship.add",
+            json!({ "from": customer, "to": order, "from_end": "exactly-one", "to_end": "zero-or-more", "name": "places", "create_foreign_key": true }),
+        )?;
+        let c = run(session, "diagram.place", json!({ "diagram": diagram, "element": customer, "x": 200, "y": 360, "width": 240, "height": 166 }))?;
+        let o = run(session, "diagram.place", json!({ "diagram": diagram, "element": order, "x": 560, "y": 360, "width": 240, "height": 166 }))?;
+        let edge = run(session, "diagram.connect", json!({ "diagram": diagram, "element": places, "source": c, "target": o }))?;
+        run(session, "diagram.label", json!({ "edge": edge, "kind": "name", "at": "middle" }))?;
+        select = customer;
+    }
+    session.mark_saved().map_err(|e| format!("mark_saved: {e:?}"))?;
+    let id = archforge_mof::Uuid::parse(&diagram).ok_or_else(|| "the diagram's id does not parse".to_string())?;
+    crate::canvas::open(shell, id);
+    let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
+    run(session, "view.select", json!({ "ids": [select] }))?;
+    // The canvas fits the diagram on its first frame; the sample wants the design's 100 %.
+    shell.canvas.fit_pending = false;
+    shell.canvas.zoom = 1.0;
+    shell.canvas.pan = egui::Vec2::ZERO;
     Ok(())
 }

@@ -66,6 +66,10 @@ str		Dialect	Dialekt
 str		Guidance	Hinweise
 str		Element	Element
 str		New diagram	Neues Diagramm
+str		Create	Erstellen
+str		ER diagram	ER-Diagramm
+str		New schema	Neues Schema
+str		Name the diagram	Dem Diagramm einen Namen geben
 str		Project created	Projekt erstellt
 str		Model · the project's root	Modell · die Wurzel des Projekts
 str		Model	Modell
@@ -80,6 +84,26 @@ str		Filter models…	Modelle filtern…
 str		Filter diagrams…	Diagramme filtern…
 str		Filter changes…	Änderungen filtern…
 str		No diagrams yet	Noch keine Diagramme
+str		Select	Auswählen
+str		Pan	Verschieben
+str		Entity	Entität
+str		Relationship	Beziehung
+str		Relationship types	Beziehungsarten
+str		Note	Notiz
+str		Group	Gruppe
+str		Group kinds	Gruppenarten
+str		Key status	Schlüsselstatus
+str		Grid	Raster
+str		Minimap	Minimap
+str		Hide minimap	Minimap ausblenden
+str		Show minimap	Minimap einblenden
+str		Whole diagram	Ganzes Diagramm
+str		Zoom in	Vergrößern
+str		Zoom out	Verkleinern
+str		{n} %	{n} %
+str		Empty diagram	Leeres Diagramm
+str		Unnamed diagram	Unbenanntes Diagramm
+str		Model behind this diagram	Modell hinter diesem Diagramm
 str		No changes yet	Noch keine Änderungen
 str		Nothing selected	Nichts ausgewählt
 str		No agent connected	Kein Agent verbunden
@@ -171,3 +195,7 @@ str		On this table · {n}	Auf dieser Tabelle · {n}
 str		On this column · {n}	Auf dieser Spalte · {n}
 str		On this skill · {n}	Auf diesem Skill · {n}
 str		On this element · {n}	Auf diesem Element · {n}
+str		Diagram	Diagramm
+str		Diagram · of {schema}	Diagramm · von {schema}
+str		This diagram	Dieses Diagramm
+str		On this diagram · {n}	Auf diesem Diagramm · {n}

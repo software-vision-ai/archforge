@@ -6,6 +6,8 @@
 //! supplies `Services`.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
+pub mod canvas;
+pub mod diagrams;
 pub mod explorer;
 pub mod fonts;
 pub mod home;
@@ -123,6 +125,10 @@ pub struct Shell {
     adopted: Option<std::path::PathBuf>,
     /// The Models explorer's own state: folds, filter, a name being typed, the dialogs.
     pub explorer: explorer::State,
+    /// The Diagrams explorer's own state: folds, filter, the New diagram dialog.
+    pub diagrams: diagrams::State,
+    /// The centre's own state: the open tabs, the view, the tool and the toggles.
+    pub canvas: canvas::State,
     /// The right panels' own state: the open editors and the last refusal.
     pub panels: panels::State,
     /// Set by `request_quit`; the next frame closes the window.
@@ -149,6 +155,8 @@ impl Shell {
             session_error: None,
             adopted: None,
             explorer: explorer::State::default(),
+            diagrams: diagrams::State::default(),
+            canvas: canvas::State::default(),
             panels: panels::State::default(),
             quit_requested: false,
         }
@@ -169,6 +177,8 @@ impl Shell {
         self.session_error = None;
         self.adopted = None;
         self.explorer = explorer::State::default();
+        self.diagrams = diagrams::State::default();
+        self.canvas = canvas::State::default();
         self.panels = panels::State::default();
     }
 
@@ -242,6 +252,8 @@ impl Shell {
         self.adopt_project();
         if let Some(session) = &self.session {
             explorer::retain_valid(&mut self.explorer, session.doc());
+            diagrams::retain_valid(&mut self.diagrams, session.doc());
+            canvas::retain_valid(&mut self.canvas, session.doc());
             panels::retain_valid(&mut self.panels, session.doc());
         }
         if std::mem::take(&mut self.quit_requested) {
