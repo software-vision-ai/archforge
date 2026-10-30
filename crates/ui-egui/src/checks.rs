@@ -148,6 +148,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     let card = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width, height));
     paint.rect_filled(card, 8.0, p.surface);
     paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
+    crate::panels::reveal(shell, ui, card);
     let inner = (width - 24.0).max(0.0);
     let at = |x: f32, dy: f32| card.min + vec2(12.0 + x, dy);
     let take = std::mem::take(&mut edit.opened);
