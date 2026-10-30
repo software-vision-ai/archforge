@@ -1577,3 +1577,173 @@ fn the_cardinality_popover_sets_the_ends_and_a_many_to_many_line_offers_its_mapp
     let st = h.state().session.as_ref().unwrap().doc();
     assert!(st.alive().any(|o| archforge_er::rules::name_of(st, o) == "CustomerOrder"), "the mapping table exists");
 }
+
+/// The diagram harness with the relationship `places` selected, its Properties shown.
+fn relationship_harness() -> (Harness<'static, Shell>, archforge_mof::Obj) {
+    let (mut h, _customer, _diagram) = diagram_harness();
+    let rel = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let st = s.doc();
+        let rel = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::RELATIONSHIP)).unwrap();
+        let id = st.uuid(rel).unwrap().to_string();
+        s.execute("view.select", &serde_json::json!({ "ids": [id] })).unwrap();
+        rel
+    };
+    h.run();
+    (h, rel)
+}
+
+fn fk_of(h: &Harness<'static, Shell>, rel: archforge_mof::Obj) -> Option<archforge_mof::Obj> {
+    let st = h.state().session.as_ref().unwrap().doc();
+    st.referrers(rel).into_iter().find(|(_, p)| *p == archforge_er::foreign_key::RELATIONSHIP).map(|(f, _)| f)
+}
+
+#[test]
+fn relationship_properties_set_the_ends_roles_identifying_and_the_foreign_key_actions() {
+    let (mut h, rel) = relationship_harness();
+    let found = ids(&h);
+    for id in [
+        "workspace.properties.identifying",
+        "workspace.properties.end.from.0",
+        "workspace.properties.end.to.3",
+        "workspace.properties.role.from",
+        "workspace.properties.foreign-key",
+        "workspace.properties.points-to",
+        "workspace.properties.pair.0",
+        "workspace.properties.on-delete",
+        "workspace.properties.more",
+    ] {
+        assert!(found.iter().any(|i| i == id), "{id} in {found:?}");
+    }
+    // The to end becomes one-or-more.
+    let at = rect_of(&h, "workspace.properties.end.to.3").center();
+    click(&mut h, at);
+    let st = h.state().session.as_ref().unwrap().doc();
+    assert_eq!(archforge_er::rules::cardinality_of(st, rel, archforge_er::relationship::TO_END), Some(archforge_er::Cardinality::OneOrMore));
+    // Identifying: the foreign key's columns join the child's primary key.
+    let at = rect_of(&h, "workspace.properties.identifying").center();
+    click(&mut h, at);
+    let st = h.state().session.as_ref().unwrap().doc();
+    assert!(matches!(st.get(rel, archforge_er::relationship::IDENTIFYING), Ok(archforge_mof::Value::Bool(true))), "{:?}", h.state().panels.notice);
+    // A role typed and committed with Enter.
+    let at = rect_of(&h, "workspace.properties.role.from").center();
+    click(&mut h, at);
+    h.event(egui::Event::Text("buyer".into()));
+    h.run();
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    let st = h.state().session.as_ref().unwrap().doc();
+    assert_eq!(st.get(rel, archforge_er::relationship::FROM_ROLE).unwrap().as_str(), Some("buyer"));
+    // On delete: Cascade.
+    let at = rect_of(&h, "workspace.properties.on-delete").center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.properties.on-delete.2").center();
+    click(&mut h, at);
+    let fk = fk_of(&h, rel).expect("the foreign key");
+    let st = h.state().session.as_ref().unwrap().doc();
+    assert_eq!(
+        st.get(fk, archforge_er::foreign_key::ON_DELETE).unwrap(),
+        archforge_mof::Value::Enum(archforge_er::ReferentialAction::Cascade.index())
+    );
+    // More opens Deferrable; checked at commit.
+    let at = rect_of(&h, "workspace.properties.more").center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.properties.deferrable").center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.properties.deferrable.2").center();
+    click(&mut h, at);
+    let st = h.state().session.as_ref().unwrap().doc();
+    assert_eq!(
+        st.get(fk, archforge_er::foreign_key::DEFERRABLE).unwrap(),
+        archforge_mof::Value::Enum(archforge_er::Deferrability::InitiallyDeferred.index())
+    );
+}
+
+#[test]
+fn the_foreign_key_switch_removes_and_adds_the_key_with_its_columns_as_one_step() {
+    let (mut h, rel) = relationship_harness();
+    let columns_of_order = |h: &Harness<'static, Shell>| {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let order = st.alive().find(|o| archforge_er::rules::name_of(st, *o) == "Order").unwrap();
+        st.list(order, archforge_er::entity::ATTRIBUTE).unwrap().len()
+    };
+    let before = columns_of_order(&h);
+    let fk = fk_of(&h, rel).expect("the foreign key");
+    let key_columns = h.state().session.as_ref().unwrap().doc().list(fk, archforge_er::foreign_key::COLUMN).unwrap().len();
+    assert!(key_columns >= 1);
+    // Off: the key and its columns go together.
+    let at = rect_of(&h, "workspace.properties.foreign-key").center();
+    click(&mut h, at);
+    assert!(fk_of(&h, rel).is_none(), "{:?}", h.state().panels.notice);
+    assert_eq!(columns_of_order(&h), before - key_columns);
+    assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Remove foreign key"));
+    // On again: one Order column per Customer key column, and the key.
+    let at = rect_of(&h, "workspace.properties.foreign-key").center();
+    click(&mut h, at);
+    assert!(fk_of(&h, rel).is_some(), "{:?}", h.state().panels.notice);
+    assert_eq!(columns_of_order(&h), before);
+    assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add foreign key"));
+    // A pair's child column can be an existing column of the same type.
+    {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let st = s.doc();
+        let order = st.uuid(st.alive().find(|o| archforge_er::rules::name_of(st, *o) == "Order").unwrap()).unwrap().to_string();
+        s.execute("er.attribute.add", &serde_json::json!({ "entity": order, "name": "buyer_ref", "type": "BIGINT" })).unwrap();
+        // Adding selected the column; the panel shows the relationship again.
+        let rel_id = s.doc().uuid(rel).unwrap().to_string();
+        s.execute("view.select", &serde_json::json!({ "ids": [rel_id] })).unwrap();
+    }
+    h.run();
+    let at = rect_of(&h, "workspace.properties.pair.0").center();
+    click(&mut h, at);
+    assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::Pair(0)));
+    let items: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.pair.0.")).collect();
+    assert!(items.len() >= 2, "{items:?}");
+    // The last item is buyer_ref (same type as customer_id).
+    let at = rect_of(&h, items.last().unwrap()).center();
+    click(&mut h, at);
+    let fk = fk_of(&h, rel).unwrap();
+    let st = h.state().session.as_ref().unwrap().doc();
+    let cols: Vec<String> = st
+        .list(fk, archforge_er::foreign_key::COLUMN)
+        .unwrap()
+        .iter()
+        .filter_map(archforge_mof::Value::as_ref)
+        .map(|c| archforge_er::rules::name_of(st, c))
+        .collect();
+    assert!(cols.contains(&"buyer_ref".to_string()), "{cols:?} notice {:?}", h.state().panels.notice);
+}
+
+#[test]
+fn a_parent_without_a_key_gets_the_card_and_add_id_column_makes_the_key() {
+    let (mut h, _customer, _order) = two_tables_harness();
+    // Payment without any column, joined from Order as the parent-less side.
+    let (payment_rel, payment) = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let st = s.doc();
+        let schema = st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap()).unwrap().to_string();
+        let order = st.uuid(st.alive().find(|o| archforge_er::rules::name_of(st, *o) == "Order").unwrap()).unwrap().to_string();
+        let payment = s.execute("er.entity.add", &serde_json::json!({ "schema": schema, "name": "Payment" })).unwrap().value["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let rel = s.execute("er.relationship.add", &serde_json::json!({ "from": payment, "to": order, "name": "settles" })).unwrap().value["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        s.execute("view.select", &serde_json::json!({ "ids": [rel] })).unwrap();
+        (rel, payment)
+    };
+    h.run();
+    assert!(ids(&h).iter().any(|i| i == "workspace.properties.foreign-key"));
+    let at = rect_of(&h, "workspace.properties.foreign-key").center();
+    click(&mut h, at);
+    assert!(ids(&h).iter().any(|i| i == "workspace.properties.add-id"), "the card offers Add id column: {:?}", ids(&h));
+    let at = rect_of(&h, "workspace.properties.add-id").center();
+    click(&mut h, at);
+    let st = h.state().session.as_ref().unwrap().doc();
+    let payment_obj = st.by_uuid(archforge_mof::Uuid::parse(&payment).unwrap()).unwrap();
+    assert!(archforge_er::rules::primary_key_of(st, payment_obj).is_some(), "Payment has its id key: {:?}", h.state().panels.notice);
+    let rel_obj = st.by_uuid(archforge_mof::Uuid::parse(&payment_rel).unwrap()).unwrap();
+    assert!(st.referrers(rel_obj).into_iter().any(|(_, p)| p == archforge_er::foreign_key::RELATIONSHIP), "the foreign key exists");
+    assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add id column"));
+}

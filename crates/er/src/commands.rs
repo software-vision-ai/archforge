@@ -1069,20 +1069,38 @@ fn target_key(ctx: &C<'_>, p: &Params) -> Result<Obj, CommandError> {
     rules::primary_key_of(ctx.doc, e).ok_or_else(|| refuse("references", format!("{} has no primary key to refer to", name_of(ctx.doc, e))))
 }
 
+/// Adds a foreign key: with `columns`, those columns hold it; without, new columns are added for
+/// the key's columns, named and typed as drawing a relationship names and types them.
 fn foreign_key_add(ctx: &mut C<'_>, p: &Params) -> R {
     let e = id_of(ctx, p, "entity", ENTITY)?;
     let k = target_key(ctx, p)?;
-    let columns = attribute_list(ctx, p, "columns")?;
+    let given = attribute_list(ctx, p, "columns")?;
     let name = constraint_name(ctx, p, e, None)?;
     let actions = [action(p, "on_delete")?, action(p, "on_update")?];
     let (matching, deferrable) = (match_type(p)?, deferrability(p)?);
     let rel = if text(p, "relationship").is_empty() { None } else { Some(id_of(ctx, p, "relationship", RELATIONSHIP)?) };
-    if let Some((param, problem)) = rules::key_problem(ctx.doc, e, k, &columns, actions, rel) {
+    if !given.is_empty()
+        && let Some((param, problem)) = rules::key_problem(ctx.doc, e, k, &given, actions, rel)
+    {
         return Err(refuse(param, problem));
     }
+    // New columns follow the relationship: in the key when it identifies, nullable when the end it
+    // points at is optional.
+    let (in_key, optional, parent_role) = match rel {
+        Some(r) => {
+            let identifying = ctx.doc.get(r, relationship::IDENTIFYING).ok().and_then(|v| v.as_bool()).unwrap_or(false);
+            let (end, role) = parent_end(ctx.doc, r, rules::entity_of(ctx.doc, k));
+            (identifying, rules::cardinality_of(ctx.doc, r, end) == Some(Cardinality::ZeroOrOne), rules::role_of(ctx.doc, r, role))
+        }
+        None => (false, true, String::new()),
+    };
     let fk = ctx
         .doc
         .transaction(|st| {
+            let columns = if given.is_empty() { new_key_columns(st, e, k, &parent_role, in_key, optional)? } else { given.clone() };
+            if let Some((_, problem)) = rules::key_problem(st, e, k, &columns, actions, rel) {
+                return Err(Invalid::Refused(problem));
+            }
             let fk = new_foreign_key(st, e, k, &columns, &name, actions, rel)?;
             st.set(fk, foreign_key::MATCH, Value::Enum(matching.index()))?;
             st.set(fk, foreign_key::DEFERRABLE, Value::Enum(deferrable.index()))?;
@@ -1596,7 +1614,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ErView>> {
             "Add foreign key",
             &["Entity"],
             None,
-            "entity: string; the id of the entity that holds the key\nkey: string = \"\"; the id of the primary key or unique constraint it points at\nreferences: string = \"\"; without key, the entity whose primary key it points at\ncolumns: array; the ids of its own columns, in the key's column order\nname: string = \"\"; a constraint name, or nothing\non_delete: string = \"no-action\", no-action|restrict|cascade|set-null|set-default; when the referenced row goes\non_update: string = \"no-action\", no-action|restrict|cascade|set-null|set-default; when the referenced key changes\nmatch: string = \"simple\", simple|full|partial; how null columns match\ndeferrable: string = \"not-deferrable\", not-deferrable|initially-immediate|initially-deferred; when it is checked\nrelationship: string = \"\"; the id of the relationship it realises, or nothing",
+            "entity: string; the id of the entity that holds the key\nkey: string = \"\"; the id of the primary key or unique constraint it points at\nreferences: string = \"\"; without key, the entity whose primary key it points at\ncolumns: array = []; the ids of its own columns, in the key's column order, or none to add new ones\nname: string = \"\"; a constraint name, or nothing\non_delete: string = \"no-action\", no-action|restrict|cascade|set-null|set-default; when the referenced row goes\non_update: string = \"no-action\", no-action|restrict|cascade|set-null|set-default; when the referenced key changes\nmatch: string = \"simple\", simple|full|partial; how null columns match\ndeferrable: string = \"not-deferrable\", not-deferrable|initially-immediate|initially-deferred; when it is checked\nrelationship: string = \"\"; the id of the relationship it realises, or nothing",
             has_entities,
             foreign_key_add
         ),

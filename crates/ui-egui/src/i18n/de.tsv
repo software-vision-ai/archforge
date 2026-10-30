@@ -235,3 +235,31 @@ str		On this diagram · {n}	Auf diesem Diagramm · {n}
 str		Relationship · {from} to {to}	Beziehung · {from} zu {to}
 str		This relationship	Diese Beziehung
 str		On this relationship · {n}	Auf dieser Beziehung · {n}
+str		Remove foreign key	Fremdschlüssel entfernen
+str		Add id column	id-Spalte hinzufügen
+str		Choose key columns	Schlüsselspalten wählen
+str		Ends	Enden
+str		{entity} end	{entity}-Ende
+str		Role	Rolle
+str		Foreign key	Fremdschlüssel
+str		An identifying relationship needs its foreign key; turn the switch on first	Eine identifizierende Beziehung braucht ihren Fremdschlüssel; erst den Schalter einschalten
+str		Points to	Zeigt auf
+str		Existing columns of {entity}	Vorhandene Spalten von {entity}
+str		{type} · type differs	{type} · anderer Typ
+str		On delete	Beim Löschen
+str		On update	Beim Ändern
+str		No action	Keine Aktion
+str		Restrict	Verhindern
+str		Cascade	Weitergeben
+str		Set null	Auf Null setzen
+str		Set default	Auf Standard setzen
+str		More	Mehr
+str		Deferrable	Aufschiebbar
+str		No	Nein
+str		Yes – checked at once	Ja – sofort geprüft
+str		Yes – checked at commit	Ja – beim Commit geprüft
+str		Match	Abgleich
+str		Simple	Einfach
+str		Full	Vollständig
+str		Partial	Teilweise
+str		{parent} has no primary key yet, so there is nothing in {child} to point at.	{parent} hat noch keinen Primärschlüssel, also gibt es in {child} nichts, worauf gezeigt werden kann.

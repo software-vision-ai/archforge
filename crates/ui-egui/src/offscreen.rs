@@ -28,6 +28,8 @@ pub enum Screen {
     WorkspaceEntityNew,
     /// The diagram of two tables with the Relationship tool active and the cardinality popover open.
     WorkspaceCardinality,
+    /// The same diagram with the relationship selected, its Properties shown.
+    WorkspaceRelationship,
 }
 
 /// Renders Home at `width` by `height` logical pixels, `scale` pixels a point, in `theme`:
@@ -76,9 +78,25 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
         shell.adopt_project();
         sample_table(&mut shell, screen == Screen::WorkspaceSkills)?;
     }
-    if matches!(screen, Screen::WorkspaceDiagramEmpty | Screen::WorkspaceDiagram | Screen::WorkspaceEntityNew | Screen::WorkspaceCardinality) {
+    if matches!(
+        screen,
+        Screen::WorkspaceDiagramEmpty
+            | Screen::WorkspaceDiagram
+            | Screen::WorkspaceEntityNew
+            | Screen::WorkspaceCardinality
+            | Screen::WorkspaceRelationship
+    ) {
         shell.adopt_project();
-        sample_diagram(&mut shell, matches!(screen, Screen::WorkspaceDiagram | Screen::WorkspaceCardinality))?;
+        sample_diagram(&mut shell, matches!(screen, Screen::WorkspaceDiagram | Screen::WorkspaceCardinality | Screen::WorkspaceRelationship))?;
+        if screen == Screen::WorkspaceRelationship
+            && let Some(session) = shell.session.as_mut()
+        {
+            let store = session.doc();
+            let rel = store.alive().find(|o| store.class_of(*o).ok() == Some(archforge_er::RELATIONSHIP)).and_then(|o| store.uuid(o).ok());
+            if let Some(rel) = rel {
+                session.execute("view.select", &serde_json::json!({ "ids": [rel.to_string()] })).map_err(|e| format!("view.select: {e:?}"))?;
+            }
+        }
         if screen == Screen::WorkspaceEntityNew {
             sample_new_entity(&mut shell)?;
         }

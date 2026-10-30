@@ -1,5 +1,5 @@
 //! Renders the window offscreen to a PNG, without opening one. Usage:
-//! `cargo run -p archforge-ui-egui --features snapshot --example snapshot -- <out.png> [light|dark] [width height [scale]] [--screen home|new-project|new-project-failed|workspace|workspace-schema|workspace-table|workspace-skills|workspace-diagram-empty|workspace-diagram|workspace-entity-new|workspace-cardinality]`
+//! `cargo run -p archforge-ui-egui --features snapshot --example snapshot -- <out.png> [light|dark] [width height [scale]] [--screen home|new-project|new-project-failed|workspace|workspace-schema|workspace-table|workspace-skills|workspace-diagram-empty|workspace-diagram|workspace-entity-new|workspace-cardinality|workspace-relationship]`
 
 use archforge_ui_egui::offscreen::Screen;
 use archforge_ui_egui::theme::ThemeKind;
@@ -29,9 +29,10 @@ fn run() -> Result<(), String> {
             Some("workspace-diagram") => Screen::WorkspaceDiagram,
             Some("workspace-entity-new") => Screen::WorkspaceEntityNew,
             Some("workspace-cardinality") => Screen::WorkspaceCardinality,
+            Some("workspace-relationship") => Screen::WorkspaceRelationship,
             other => {
                 return Err(format!(
-                    "--screen {other:?} is not home, new-project, new-project-failed, workspace, workspace-schema, workspace-table, workspace-skills, workspace-diagram-empty, workspace-diagram, workspace-entity-new or workspace-cardinality; {USAGE}"
+                    "--screen {other:?} is not home, new-project, new-project-failed, workspace, workspace-schema, workspace-table, workspace-skills, workspace-diagram-empty, workspace-diagram, workspace-entity-new, workspace-cardinality or workspace-relationship; {USAGE}"
                 ));
             }
         };
