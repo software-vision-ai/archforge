@@ -26,6 +26,8 @@ pub enum Screen {
     WorkspaceDiagram,
     /// An empty diagram with its first entity just placed, its name open for typing.
     WorkspaceEntityNew,
+    /// The diagram of two tables with the Relationship tool active and the cardinality popover open.
+    WorkspaceCardinality,
 }
 
 /// Renders Home at `width` by `height` logical pixels, `scale` pixels a point, in `theme`:
@@ -74,11 +76,15 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
         shell.adopt_project();
         sample_table(&mut shell, screen == Screen::WorkspaceSkills)?;
     }
-    if matches!(screen, Screen::WorkspaceDiagramEmpty | Screen::WorkspaceDiagram | Screen::WorkspaceEntityNew) {
+    if matches!(screen, Screen::WorkspaceDiagramEmpty | Screen::WorkspaceDiagram | Screen::WorkspaceEntityNew | Screen::WorkspaceCardinality) {
         shell.adopt_project();
-        sample_diagram(&mut shell, screen == Screen::WorkspaceDiagram)?;
+        sample_diagram(&mut shell, matches!(screen, Screen::WorkspaceDiagram | Screen::WorkspaceCardinality))?;
         if screen == Screen::WorkspaceEntityNew {
             sample_new_entity(&mut shell)?;
+        }
+        if screen == Screen::WorkspaceCardinality {
+            shell.canvas.tool = crate::canvas::Tool::Relationship;
+            shell.canvas.popover = true;
         }
     }
     let mut harness = egui_kittest::Harness::builder().with_size(egui::vec2(width, height)).with_pixels_per_point(scale).build_ui_state(

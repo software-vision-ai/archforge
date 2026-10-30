@@ -10,7 +10,11 @@ diagram tabs, the open diagram drawn read-only from the diagram metamodel in the
 with entity cards, ER edges and labels, pan and zoom, the minimap with the zoom control, the canvas
 toolbar; a click selects what it hits; `editing`: the Entity tool places a table named in place,
 Select drags, resizes, marquees, nudges and arranges nodes, the entity menu removes from the
-diagram or deletes from the model after the dialog, a node grows with its columns), the right rail between the
+diagram or deletes from the model after the dialog, a node grows with its columns; `connect`: the
+Relationship tool and the connect adorner drag a line from table to table with the cardinality
+popover's ends, the relationship, its edge and its label as one step and the foreign key when the
+parent has a key, lines coloured by key status, a mapping table offered for many to many, Delete
+with a toast's Undo), the right rail between the
 canvas and its panel with Properties (`panels`: a schema's name; a table's name, kind, columns
 with the in-place column editor, keys; a diagram's name and schema) and Skills (the skills on the
 selection, the inherited ones, the skill editor) following the selection, the status bar), drawn
@@ -53,10 +57,11 @@ or explorer with nothing to show says so in one line, never with a help text.
 | `diagrams::{State, rows, open_new, retain_valid, diagram_name, schema_of}` | the Diagrams explorer's state, its rows and the New diagram dialog |
 | `canvas::{State, Tool, open, close_tab, retain_valid}` | the centre's state: the tabs, the view (pan, zoom), the tool, the toggles and the editing state; `open` shows a diagram through `view.open-diagram` |
 | `editing::{add_entity, run_growing, content_height, diagrams_showing, NodeRename, Gesture, EntityMenu}` | canvas editing: a table added (and placed on an open diagram) as one step, a column command that grows the table's nodes with it, the gesture and menu state |
+| `connect::{RelKind, MappingOffer, Toast, connect, offer_mapping, has_foreign_key, remove_selected_relationship}` | relationships drawn on the canvas: the ends a new line gets, the mapping table offer, the toast |
 | `new_project::{open, name_problem, file_name}` | the New project dialog: open it, a name's problem in words, the file a name gives |
 | `Folder` | a folder as the shell shows it: its path and its label |
 
 **Non-goals.** The screens behind Home's other controls, the Source Control explorer's contents,
 the Agent and Appearance panels, relationships and foreign keys in Properties, key editing beyond
-the column flags, drawing relationships and notes on the canvas (slices E2 to E4), the drawing
+the column flags, relationship ends and keys in Properties and notes on the canvas (slices E3 and E4), the drawing
 tools' menus, folders and renaming in the Diagrams tree: their own rows.

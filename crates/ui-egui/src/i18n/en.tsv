@@ -109,6 +109,22 @@ str		Open in Models	Open in Models
 str		Remove from this diagram	Remove from this diagram
 str		Delete from the model…	Delete from the model…
 str		The diagram is of no schema	The diagram is of no schema
+str		A relationship joins two tables	A relationship joins two tables
+str		Add relationship	Add relationship
+str		Cardinality	Cardinality
+str		Presets	Presets
+str		Start	Start
+str		End	End
+str		Identifying	Identifying
+str		Identifying needs the parent's primary key; drawn as not identifying	Identifying needs the parent's primary key; drawn as not identifying
+str		Many to many · add a mapping table	Many to many · add a mapping table
+str		Many to many · {from} and {to}	Many to many · {from} and {to}
+str		Add mapping table	Add mapping table
+str		Keep the line	Keep the line
+str		Columns	Columns
+str		Relationship removed	Relationship removed
+str		{name} removed	{name} removed
+str		Undo	Undo
 plural		+ {n} more column	+ {n} more column|+ {n} more columns
 str		Minimap	Minimap
 str		Hide minimap	Hide minimap
@@ -215,3 +231,6 @@ str		Diagram	Diagram
 str		Diagram · of {schema}	Diagram · of {schema}
 str		This diagram	This diagram
 str		On this diagram · {n}	On this diagram · {n}
+str		Relationship · {from} to {to}	Relationship · {from} to {to}
+str		This relationship	This relationship
+str		On this relationship · {n}	On this relationship · {n}

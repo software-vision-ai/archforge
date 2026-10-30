@@ -76,6 +76,8 @@ pub enum Gesture {
     Resize { node: Uuid, corner: Corner, base: Rect, from: Pos2 },
     /// A selection rectangle from a screen point.
     Marquee { from: Pos2 },
+    /// A relationship drawn from a node, from the screen point the drag started at (slice E2).
+    Connect { from_node: Uuid, from: Pos2 },
 }
 
 /// The entity menu, open at a screen point.
@@ -223,7 +225,7 @@ pub(crate) fn preview_rects(shell: &Shell, view: View, pointer: Option<Pos2>) ->
             let r = resized(*base, *corner, (pointer - *from) / view.zoom);
             out.insert(*node, Rect::from_min_size(view.to_screen(r.left() as f64, r.top() as f64), r.size() * view.zoom));
         }
-        Gesture::Marquee { .. } => {}
+        Gesture::Marquee { .. } | Gesture::Connect { .. } => {}
     }
     out
 }
@@ -240,6 +242,7 @@ fn decide(
     selection: &[Obj],
     shift: bool,
     origin: Option<Pos2>,
+    released: bool,
 ) -> Action {
     let pos = resp.interact_pointer_pos().filter(|p| p.is_finite());
     let hit_node = |pos: Pos2| {
@@ -251,6 +254,26 @@ fn decide(
     };
     match shell.canvas.tool {
         Tool::Pan => Action::Nothing,
+        Tool::Relationship => {
+            if (resp.drag_stopped_by(egui::PointerButton::Primary) || released) && shell.canvas.gesture.is_some() {
+                return Action::Commit;
+            }
+            let Some(pos) = pos else { return Action::Nothing };
+            if resp.drag_started_by(egui::PointerButton::Primary) && shell.canvas.gesture.is_none() {
+                let from = origin.filter(|o| o.is_finite()).unwrap_or(pos);
+                return match hit_node(from).filter(|n| entity_of_node(store, *n).is_some()).and_then(|n| uuid(store, n)) {
+                    Some(from_node) => Action::Start(Gesture::Connect { from_node, from }, None),
+                    None => Action::Nothing,
+                };
+            }
+            if resp.clicked() {
+                return match hit_node(pos) {
+                    Some(n) => Action::Select(uuid(store, element_of(store, n).unwrap_or(n)).into_iter().collect()),
+                    None => Action::Nothing,
+                };
+            }
+            Action::Nothing
+        }
         Tool::Entity => match (resp.clicked(), pos) {
             (true, Some(pos)) => match hit_node(pos) {
                 Some(n) => Action::Select(uuid(store, element_of(store, n).unwrap_or(n)).into_iter().collect()),
@@ -262,7 +285,7 @@ fn decide(
             _ => Action::Nothing,
         },
         Tool::Select => {
-            if resp.drag_stopped_by(egui::PointerButton::Primary) && shell.canvas.gesture.is_some() {
+            if (resp.drag_stopped_by(egui::PointerButton::Primary) || released) && shell.canvas.gesture.is_some() {
                 return Action::Commit;
             }
             let Some(pos) = pos else { return Action::Nothing };
@@ -336,12 +359,12 @@ fn decide(
 
 /// Reads and applies what the pointer asked for this frame.
 pub(crate) fn pointer(shell: &mut Shell, ui: &egui::Ui, resp: &egui::Response, view: View, grid: &Grid, d: Obj) {
-    let (shift, origin) = ui.input(|i| (i.modifiers.shift, i.pointer.press_origin()));
+    let (shift, origin, released) = ui.input(|i| (i.modifiers.shift, i.pointer.press_origin(), i.pointer.primary_released()));
     let pointer = resp.interact_pointer_pos().or_else(|| ui.input(|i| i.pointer.hover_pos()));
     let action = match shell.session.as_ref() {
         Some(s) => {
             let selection = s.view().selection.clone();
-            decide(shell, resp, view, grid, s.doc(), d, &selection, shift, origin)
+            decide(shell, resp, view, grid, s.doc(), d, &selection, shift, origin, released)
         }
         None => Action::Nothing,
     };
@@ -414,6 +437,11 @@ fn commit(shell: &mut Shell, view: View, d: Obj, pointer: Option<Pos2>, shift: b
                 shell.canvas.notice = Some(e.to_string());
             }
         }
+        Gesture::Connect { from_node, .. } => {
+            if let Some(to_node) = node_at(shell, view, d, pointer) {
+                crate::connect::connect(shell, d, from_node, to_node);
+            }
+        }
         Gesture::Marquee { from } => {
             let area = Rect::from_two_pos(from, pointer);
             let Some(session) = shell.session.as_ref() else { return };
@@ -433,6 +461,16 @@ fn commit(shell: &mut Shell, view: View, d: Obj, pointer: Option<Pos2>, shift: b
             select(shell, ids);
         }
     }
+}
+
+/// The topmost entity node of `d` under a screen point.
+fn node_at(shell: &Shell, view: View, d: Obj, at: Pos2) -> Option<Uuid> {
+    let store = shell.session.as_ref()?.doc();
+    nodes_of(store, d)
+        .into_iter()
+        .rev()
+        .find(|n| entity_of_node(store, *n).is_some() && view.rect(&bounds_of(store, *n)).contains(at))
+        .and_then(|n| uuid(store, n))
 }
 
 /// The name a new entity gets: "Entity", then "Entity 2" and on, never one its schema has.
@@ -634,6 +672,15 @@ fn ask_delete(shell: &mut Shell, node: Uuid, entity: Uuid) {
 /// the name typed in place and the entity menu; then reads the keys.
 pub(crate) fn overlays(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, view: View, d: Obj, overrides: &BTreeMap<Uuid, Rect>) {
     let paint = ui.painter().with_clip_rect(r);
+    if let Some(Gesture::Connect { from_node, .. }) = shell.canvas.gesture
+        && let Some(pointer) = ui.input(|i| i.pointer.hover_pos())
+    {
+        let target = node_at(shell, view, d, pointer).and_then(|id| shell.session.as_ref()?.doc().by_uuid(id)).map(|n| {
+            let store = shell.session.as_ref().map(|s| s.doc());
+            store.map(|s| view.rect(&bounds_of(s, n))).unwrap_or(Rect::NOTHING)
+        });
+        crate::connect::live_line(shell, &paint, p, view, from_node, pointer, target);
+    }
     if let Some(Gesture::Marquee { from }) = shell.canvas.gesture
         && let Some(to) = ui.input(|i| i.pointer.hover_pos())
     {
@@ -682,10 +729,10 @@ pub(crate) fn overlays(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rec
 }
 
 /// The two adorners of a selected entity: connect (E2) and add column.
-fn adorners(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, rect: Rect, _node: Uuid, entity: Uuid) {
+fn adorners(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, rect: Rect, node: Uuid, entity: Uuid) {
     let paint = ui.painter().with_clip_rect(r);
     let boxes = [
-        ("connect", &icons::ADORN_CONNECT, "Connect", pos2(rect.right() + ADORNER_GAP, rect.top() - ADORNER - 6.0), false),
+        ("connect", &icons::ADORN_CONNECT, "Connect", pos2(rect.right() + ADORNER_GAP, rect.top() - ADORNER - 6.0), true),
         ("add-column", &icons::ADORN_ADD, "Add column", pos2(rect.right() + ADORNER_GAP, rect.bottom() - ADORNER + 6.0), true),
     ];
     for (key, icon, hint, at, live) in boxes {
@@ -696,9 +743,22 @@ fn adorners(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, rect: Rect, 
         paint.rect_filled(b, 4.0, p.surface);
         paint.rect_stroke(b, 4.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
         ux::icon_in(&paint, b, icon, if live { p.text_secondary } else { p.text_muted });
-        if control(shell, ui, &format!("workspace.canvas.adorn.{key}"), "button", b, live).on_hover_text(tr(hint)).clicked() && key == "add-column" {
+        // The connect adorner is dragged, so it senses drags where the other takes clicks.
+        let id = format!("workspace.canvas.adorn.{key}");
+        let resp = if key == "connect" {
+            widgets::record_visible(ui, &mut shell.registry, &id, "button", b);
+            ui.interact(b, widgets::egui_id(&id), egui::Sense::click_and_drag()).on_hover_cursor(egui::CursorIcon::Crosshair).on_hover_text(tr(hint))
+        } else {
+            control(shell, ui, &id, "button", b, live).on_hover_text(tr(hint))
+        };
+        if resp.clicked() && key == "add-column" {
             crate::panels::open_column(shell, entity, None);
             shell.state.panel = crate::state::Panel::Properties;
+        }
+        // Dragging the connect adorner draws a relationship from this entity.
+        if key == "connect" && resp.drag_started_by(egui::PointerButton::Primary) && shell.canvas.gesture.is_none() {
+            let from = ui.input(|i| i.pointer.press_origin()).filter(|o| o.is_finite()).unwrap_or(b.center());
+            shell.canvas.gesture = Some(Gesture::Connect { from_node: node, from });
         }
     }
 }
@@ -924,6 +984,11 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
     if escape {
         shell.canvas.tool = Tool::Select;
         shell.canvas.gesture = None;
+        shell.canvas.popover = false;
+        shell.canvas.mapping = None;
+        return;
+    }
+    if delete && !shift && crate::connect::remove_selected_relationship(shell) {
         return;
     }
     let selected: Vec<(Uuid, Option<Uuid>)> = match shell.session.as_ref() {
@@ -984,6 +1049,7 @@ pub fn retain_valid(state: &mut crate::canvas::State, store: &Store) {
     let gone = match &state.gesture {
         Some(Gesture::Move { nodes, .. }) => nodes.iter().any(|n| !alive(n)),
         Some(Gesture::Resize { node, .. }) => !alive(node),
+        Some(Gesture::Connect { from_node, .. }) => !alive(from_node),
         _ => false,
     };
     if gone {

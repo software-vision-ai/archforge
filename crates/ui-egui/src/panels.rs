@@ -126,6 +126,14 @@ fn subject(shell: &Shell, project: &str) -> Subject {
                 }
                 Some(c) if c == archforge_er::ATTRIBUTE => (tr("Column · model"), tr("Column"), tr("This column"), tr("On this column · {n}")),
                 Some(c) if c == archforge_core::SKILL => (tr("Skill · model"), tr("Skill"), tr("This skill"), tr("On this skill · {n}")),
+                Some(c) if c == archforge_er::RELATIONSHIP => {
+                    let end = |p| store.get(o, p).ok().and_then(|v| v.as_ref()).map(|e| archforge_er::rules::name_of(store, e)).unwrap_or_default();
+                    let kind = fmt(
+                        &tr("Relationship · {from} to {to}"),
+                        &[("from", &end(archforge_er::relationship::FROM)), ("to", &end(archforge_er::relationship::TO))],
+                    );
+                    (kind, tr("Relationship"), tr("This relationship"), tr("On this relationship · {n}"))
+                }
                 Some(c) if c == archforge_diagram::DIAGRAM => {
                     let schema = crate::diagrams::schema_of(store, o).map(|s| archforge_er::rules::name_of(store, s)).unwrap_or_default();
                     (fmt(&tr("Diagram · of {schema}"), &[("schema", &schema)]), tr("Diagram"), tr("This diagram"), tr("On this diagram · {n}"))
@@ -356,6 +364,10 @@ fn properties(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y:
             name_field(shell, ui, p, pos2(r.left() + PAD, y), width, subject, "er.schema.rename", "schema");
         }
         Some(c) if c == archforge_er::ENTITY => entity_body(shell, ui, p, r, y, subject),
+        Some(c) if c == archforge_er::RELATIONSHIP => {
+            // A relationship: its name; the ends and the foreign key come with slice E3.
+            name_field(shell, ui, p, pos2(r.left() + PAD, y), width, subject, "er.relationship.rename", "relationship");
+        }
         Some(c) if c == archforge_diagram::DIAGRAM => {
             // A diagram: its name, and the schema it is of, which does not change.
             let half = (width - 16.0) / 2.0;
