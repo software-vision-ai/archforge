@@ -24,6 +24,8 @@ pub enum Screen {
     WorkspaceDiagramEmpty,
     /// A diagram of two tables and their relationship, the first table selected.
     WorkspaceDiagram,
+    /// An empty diagram with its first entity just placed, its name open for typing.
+    WorkspaceEntityNew,
 }
 
 /// Renders Home at `width` by `height` logical pixels, `scale` pixels a point, in `theme`:
@@ -72,9 +74,12 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
         shell.adopt_project();
         sample_table(&mut shell, screen == Screen::WorkspaceSkills)?;
     }
-    if matches!(screen, Screen::WorkspaceDiagramEmpty | Screen::WorkspaceDiagram) {
+    if matches!(screen, Screen::WorkspaceDiagramEmpty | Screen::WorkspaceDiagram | Screen::WorkspaceEntityNew) {
         shell.adopt_project();
         sample_diagram(&mut shell, screen == Screen::WorkspaceDiagram)?;
+        if screen == Screen::WorkspaceEntityNew {
+            sample_new_entity(&mut shell)?;
+        }
     }
     let mut harness = egui_kittest::Harness::builder().with_size(egui::vec2(width, height)).with_pixels_per_point(scale).build_ui_state(
         |ui, shell: &mut Shell| {
@@ -171,5 +176,34 @@ fn sample_diagram(shell: &mut Shell, filled: bool) -> Result<(), String> {
     shell.canvas.fit_pending = false;
     shell.canvas.zoom = 1.0;
     shell.canvas.pan = egui::Vec2::ZERO;
+    Ok(())
+}
+
+/// The first entity of the empty sample diagram, placed by the Entity tool with its name open for
+/// typing, as the design's "First entity named in place".
+fn sample_new_entity(shell: &mut Shell) -> Result<(), String> {
+    use serde_json::json;
+    let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
+    let store = session.doc();
+    let diagram = shell.canvas.active.and_then(|id| store.by_uuid(id)).ok_or_else(|| "the sample has no open diagram".to_string())?;
+    let schema = crate::diagrams::schema_of(store, diagram).ok_or_else(|| "the sample diagram has no schema".to_string())?;
+    let (schema_id, diagram_id) = (store.uuid(schema).map_err(|e| e.to_string())?, store.uuid(diagram).map_err(|e| e.to_string())?);
+    let out = session
+        .batch("Add table", |b| {
+            let e = b.execute("er.entity.add", &json!({ "schema": schema_id.to_string(), "name": "Entity" }))?;
+            let entity = e.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string();
+            b.execute(
+                "diagram.place",
+                &json!({ "diagram": diagram_id.to_string(), "element": entity, "x": 200, "y": 360, "width": crate::editing::ENTITY_WIDTH, "height": crate::editing::ENTITY_EMPTY_HEIGHT }),
+            )?;
+            Ok(())
+        })
+        .map_err(|e| format!("Add table: {e:?}"))?;
+    let id_at = |i: usize| out.value.get(i).and_then(|v| v.get("id")).and_then(|v| v.as_str()).and_then(archforge_mof::Uuid::parse);
+    let (Some(entity), Some(node)) = (id_at(0), id_at(1)) else { return Err("the sample's table has no id".to_string()) };
+    session.execute("view.select", &json!({ "ids": [entity.to_string()] })).map_err(|e| format!("view.select: {e:?}"))?;
+    session.mark_saved().map_err(|e| format!("mark_saved: {e:?}"))?;
+    shell.canvas.tool = crate::canvas::Tool::Entity;
+    shell.canvas.rename = Some(crate::editing::NodeRename { node, entity, text: "Entity".to_string(), opened: true, refused: None });
     Ok(())
 }

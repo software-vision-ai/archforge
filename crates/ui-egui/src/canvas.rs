@@ -12,14 +12,14 @@
 //! the bottom centre. The grid dots sit 32 units apart and thin out as the zoom falls.
 
 use archforge_diagram::grid::bounds_of;
-use archforge_diagram::{DIAGRAM, Grid, Hit, LabelPlace, diagram, edge, label, node, point};
+use archforge_diagram::{DIAGRAM, Grid, LabelPlace, diagram, edge, label, node, point};
 use archforge_er::Cardinality;
 use archforge_mof::{Obj, Store, Uuid, Value};
 use egui::{Pos2, Rect, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
 use crate::home::control;
-use crate::i18n::{fmt, tr};
+use crate::i18n::{fmt, tr, trn};
 use crate::ux::{self, Palette, icons, types};
 use crate::{Shell, widgets};
 
@@ -44,9 +44,9 @@ const TOOLBAR: Vec2 = vec2(342.0, 50.0);
 const TOOLBAR_GAP: f32 = 14.0;
 /// An entity node: its header's height, its first row's baseline, the pitch between rows, the
 /// text inset and the badge column.
-const ENTITY_HEADER: f32 = 66.0;
-const ENTITY_FIRST_ROW: f32 = 77.0;
-const ENTITY_ROW: f32 = 20.0;
+pub(crate) const ENTITY_HEADER: f32 = 66.0;
+pub(crate) const ENTITY_FIRST_ROW: f32 = 77.0;
+pub(crate) const ENTITY_ROW: f32 = 20.0;
 const ENTITY_INSET: f32 = 18.0;
 const ENTITY_TEXT: f32 = 42.0;
 /// Below this zoom a node shows its name only.
@@ -58,6 +58,8 @@ pub enum Tool {
     #[default]
     Select,
     Pan,
+    /// Places a table where the canvas is clicked (slice E1).
+    Entity,
 }
 
 /// What the centre keeps between frames: the open tabs, the view and the toggles.
@@ -81,6 +83,12 @@ pub struct State {
     pub key_status: bool,
     /// The last refusal, shown at the canvas's top left until the next action.
     pub notice: Option<String>,
+    /// Editing (slice E1): a name typed in a node, the pointer gesture under way, the entity menu,
+    /// and whether the canvas has the keyboard.
+    pub rename: Option<crate::editing::NodeRename>,
+    pub gesture: Option<crate::editing::Gesture>,
+    pub menu: Option<crate::editing::EntityMenu>,
+    pub focused: bool,
 }
 
 impl Default for State {
@@ -97,6 +105,10 @@ impl Default for State {
             grid: true,
             key_status: true,
             notice: None,
+            rename: None,
+            gesture: None,
+            menu: None,
+            focused: false,
         }
     }
 }
@@ -149,6 +161,7 @@ pub fn retain_valid(state: &mut State, store: &Store) {
         state.active = state.tabs.last().copied();
         state.reopen_pending = state.active.is_some();
     }
+    crate::editing::retain_valid(state, store);
 }
 
 /// The active diagram, when the store still has it.
@@ -193,20 +206,20 @@ fn diagram_bounds(store: &Store, d: Obj) -> Option<Rect> {
 
 /// The view's mapping between diagram units and the screen.
 #[derive(Debug, Clone, Copy)]
-struct View {
-    origin: Pos2,
-    pan: Vec2,
-    zoom: f32,
+pub(crate) struct View {
+    pub origin: Pos2,
+    pub pan: Vec2,
+    pub zoom: f32,
 }
 
 impl View {
-    fn to_screen(self, x: f64, y: f64) -> Pos2 {
+    pub fn to_screen(self, x: f64, y: f64) -> Pos2 {
         self.origin + self.pan + vec2(x as f32, y as f32) * self.zoom
     }
-    fn rect(self, b: &archforge_diagram::Rect) -> Rect {
+    pub fn rect(self, b: &archforge_diagram::Rect) -> Rect {
         Rect::from_min_size(self.to_screen(b.x, b.y), vec2(b.width as f32, b.height as f32) * self.zoom)
     }
-    fn to_canvas(self, at: Pos2) -> (f64, f64) {
+    pub fn to_canvas(self, at: Pos2) -> (f64, f64) {
         let v = (at - self.origin - self.pan) / self.zoom;
         (v.x as f64, v.y as f64)
     }
@@ -344,11 +357,16 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     // The pointer: the pan tool or the middle button drag the view, the wheel scrolls it, a pinch
     // or the wheel with the command key zoom it about the pointer, a click selects what it hits.
     let resp = ui.interact(r, widgets::egui_id("workspace.canvas"), Sense::click_and_drag());
-    if shell.canvas.tool == Tool::Pan {
-        resp.clone().on_hover_cursor(if resp.dragged() { egui::CursorIcon::Grabbing } else { egui::CursorIcon::Grab });
+    match shell.canvas.tool {
+        Tool::Pan => {
+            resp.clone().on_hover_cursor(if resp.dragged() { egui::CursorIcon::Grabbing } else { egui::CursorIcon::Grab });
+        }
+        Tool::Entity => {
+            resp.clone().on_hover_cursor(egui::CursorIcon::Crosshair);
+        }
+        Tool::Select => {}
     }
-    let middle = ui.input(|i| i.pointer.button_down(egui::PointerButton::Middle));
-    if resp.dragged() && (shell.canvas.tool == Tool::Pan || middle) {
+    if (resp.dragged_by(egui::PointerButton::Primary) && shell.canvas.tool == Tool::Pan) || resp.dragged_by(egui::PointerButton::Middle) {
         shell.canvas.pan += resp.drag_delta();
     }
     if resp.hovered() {
@@ -369,36 +387,34 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
         grid_dots(&clip, p, r, &view);
     }
     let selection: Vec<Obj> = shell.session.as_ref().map(|s| s.view().selection.clone()).unwrap_or_default();
-    let mut hit = None;
-    if let Some(session) = shell.session.as_ref() {
+    // A gesture under way is previewed: its nodes draw where the pointer has them.
+    let pointer = resp.interact_pointer_pos().or_else(|| ui.input(|i| i.pointer.hover_pos()));
+    let overrides = crate::editing::preview_rects(shell, view, pointer);
+    let renaming = shell.canvas.rename.as_ref().map(|rn| rn.node);
+    let grid = shell.session.as_ref().map(|s| Grid::build(s.doc(), d));
+    if let (Some(session), Some(grid)) = (shell.session.as_ref(), grid.as_ref()) {
         let store = session.doc();
-        let grid = Grid::build(store, d);
         let (x0, y0) = view.to_canvas(r.min);
         let (x1, y1) = view.to_canvas(r.max);
-        let visible = grid.visible(archforge_diagram::Rect::new(x0, y0, x1 - x0, y1 - y0));
+        let mut visible = grid.visible(archforge_diagram::Rect::new(x0, y0, x1 - x0, y1 - y0));
+        // Nodes dragged into view draw too.
+        for n in refs(store, d, diagram::NODE) {
+            if !visible.nodes.contains(&n) && store.uuid(n).ok().is_some_and(|id| overrides.contains_key(&id)) {
+                visible.nodes.push(n);
+            }
+        }
+        let draw = Drawing { p, store, view: &view, selection: &selection, overrides: &overrides, key_status: shell.canvas.key_status, renaming };
         for e in &visible.edges {
-            draw_edge(&clip, p, store, &view, *e, &selection, &mut shell.registry, ui);
+            draw_edge(&clip, &draw, *e, &mut shell.registry, ui);
         }
         for n in &visible.nodes {
-            draw_node(&clip, p, store, &view, *n, &selection, shell.canvas.key_status, &mut shell.registry, ui);
-        }
-        if resp.clicked()
-            && shell.canvas.tool == Tool::Select
-            && let Some(pos) = resp.interact_pointer_pos()
-        {
-            let (x, y) = view.to_canvas(pos);
-            hit = Some(match grid.hit(x, y) {
-                Some(Hit::Node(n)) => element_of(store, n, node::ELEMENT).unwrap_or(n),
-                Some(Hit::Edge(e)) => element_of(store, e, edge::ELEMENT).unwrap_or(e),
-                None => d,
-            });
+            draw_node(&clip, &draw, *n, &mut shell.registry, ui);
         }
     }
-    if let Some(target) = hit
-        && let Some(id) = shell.session.as_ref().and_then(|s| s.doc().uuid(target).ok())
-    {
-        select(shell, vec![id]);
+    if let Some(grid) = grid.as_ref() {
+        crate::editing::pointer(shell, ui, &resp, view, grid, d);
     }
+    crate::editing::overlays(shell, ui, p, r, view, d, &overrides);
     if shell.canvas.minimap_open {
         minimap(shell, ui, p, r, bounds, &view);
     } else {
@@ -451,27 +467,38 @@ fn badge(store: &Store, entity: Obj, column: Obj) -> Option<&'static str> {
     foreign.then_some("FK")
 }
 
-/// One node: an entity card with its eyebrow, name and columns, a note, or a plain card.
-#[allow(clippy::too_many_arguments, reason = "the drawing takes the view, the store and the registry apart")]
-fn draw_node(
-    paint: &egui::Painter,
-    p: &Palette,
-    store: &Store,
-    view: &View,
-    n: Obj,
-    selection: &[Obj],
+/// What one frame's drawing reads: the palette, the store, the view, the selection, the rectangles
+/// a gesture previews, the key status toggle and the node whose name is being typed.
+struct Drawing<'a> {
+    p: &'a Palette,
+    store: &'a Store,
+    view: &'a View,
+    selection: &'a [Obj],
+    overrides: &'a std::collections::BTreeMap<Uuid, Rect>,
     key_status: bool,
-    registry: &mut widgets::Registry,
-    ui: &egui::Ui,
-) {
-    let rect = view.rect(&bounds_of(store, n));
+    renaming: Option<Uuid>,
+}
+
+impl Drawing<'_> {
+    /// A node's rectangle on screen: the gesture's preview when it has one, else as stored.
+    fn node_rect(&self, n: Obj) -> Rect {
+        self.store.uuid(n).ok().and_then(|id| self.overrides.get(&id).copied()).unwrap_or_else(|| self.view.rect(&bounds_of(self.store, n)))
+    }
+}
+
+/// One node: an entity card with its eyebrow, name and columns, a note, or a plain card.
+fn draw_node(paint: &egui::Painter, d: &Drawing<'_>, n: Obj, registry: &mut widgets::Registry, ui: &egui::Ui) {
+    let (p, store, view, selection, key_status) = (d.p, d.store, d.view, d.selection, d.key_status);
+    let rect = d.node_rect(n);
     if !rect.is_finite() || rect.width() <= 0.0 || rect.height() <= 0.0 {
         return;
     }
     let z = view.zoom;
-    if let Ok(id) = store.uuid(n) {
+    let id = store.uuid(n).ok();
+    if let Some(id) = id {
         widgets::record_visible(ui, registry, &format!("workspace.canvas.node.{id}"), "node", rect);
     }
+    let renaming = id.is_some() && id == d.renaming;
     let element = element_of(store, n, node::ELEMENT);
     let selected = selection.contains(&n) || element.is_some_and(|e| selection.contains(&e));
     let inner = paint.with_clip_rect(rect.intersect(paint.clip_rect()));
@@ -483,14 +510,25 @@ fn draw_node(
             let room = Some((rect.width() - 2.0 * ENTITY_INSET * z).max(0.0));
             if z >= DETAIL_ZOOM {
                 ux::text(&inner, rect.min + vec2(ENTITY_INSET, 12.0) * z, &tr("Entity").to_uppercase(), types::EYEBROW.scaled(z), p.entity_ink, room);
-                ux::text(&inner, rect.min + vec2(ENTITY_INSET, 30.0) * z, &name, types::SECTION.scaled(z), p.text, room);
+                if !renaming {
+                    ux::text(&inner, rect.min + vec2(ENTITY_INSET, 30.0) * z, &name, types::SECTION.scaled(z), p.text, room);
+                }
                 let line_y = rect.top() + ENTITY_HEADER * z;
                 if line_y < rect.bottom() {
                     inner.rect_filled(Rect::from_min_size(pos2(rect.left(), line_y), vec2(rect.width(), 1.0)), 0.0, p.entity_line);
                 }
-                for (i, column) in refs(store, e, archforge_er::entity::ATTRIBUTE).iter().enumerate() {
+                let columns = refs(store, e, archforge_er::entity::ATTRIBUTE);
+                for (i, column) in columns.iter().enumerate() {
                     let y = rect.top() + (ENTITY_FIRST_ROW + i as f32 * ENTITY_ROW) * z;
-                    if y > rect.bottom() {
+                    let last_shown = i + 1 < columns.len() && y + 2.0 * ENTITY_ROW * z > rect.bottom();
+                    if y + ENTITY_ROW * z > rect.bottom() + z {
+                        break;
+                    }
+                    if last_shown {
+                        // The columns past the node's height, said in one row.
+                        let more = columns.len() - i;
+                        let text = trn("+ {n} more column", "+ {n} more columns", more as u64);
+                        ux::text(&inner, pos2(rect.left() + ENTITY_TEXT * z, y), &text, types::UI.scaled(z), p.text_muted, room);
                         break;
                     }
                     if key_status && let Some(b) = badge(store, e, *column) {
@@ -606,21 +644,12 @@ fn along(points: &[Pos2], t: f32) -> Pos2 {
 
 /// One edge: the line between its nodes' borders through its waypoints, the ER end glyphs with
 /// their cardinalities, and its labels.
-#[allow(clippy::too_many_arguments, reason = "the drawing takes the view, the store and the registry apart")]
-fn draw_edge(
-    paint: &egui::Painter,
-    p: &Palette,
-    store: &Store,
-    view: &View,
-    e: Obj,
-    selection: &[Obj],
-    registry: &mut widgets::Registry,
-    ui: &egui::Ui,
-) {
+fn draw_edge(paint: &egui::Painter, d: &Drawing<'_>, e: Obj, registry: &mut widgets::Registry, ui: &egui::Ui) {
+    let (p, store, view, selection) = (d.p, d.store, d.view, d.selection);
     let (Some(source), Some(target)) = (element_of(store, e, edge::SOURCE), element_of(store, e, edge::TARGET)) else { return };
     let z = view.zoom;
-    let s_rect = view.rect(&bounds_of(store, source));
-    let t_rect = view.rect(&bounds_of(store, target));
+    let s_rect = d.node_rect(source);
+    let t_rect = d.node_rect(target);
     let mut points: Vec<Pos2> = vec![s_rect.center()];
     for w in refs(store, e, edge::WAYPOINT) {
         points.push(view.to_screen(real(store, w, point::X), real(store, w, point::Y)));
@@ -796,7 +825,7 @@ fn pos2_of((x, y): (f64, f64)) -> Pos2 {
 const TOOLS: [(&str, &ux::Icon, &str, bool); 6] = [
     ("select", &icons::TOOL_SELECT, "Select", true),
     ("pan", &icons::TOOL_PAN, "Pan", true),
-    ("entity", &icons::TOOL_ENTITY, "Entity", false),
+    ("entity", &icons::TOOL_ENTITY, "Entity", true),
     ("relationship", &icons::TOOL_RELATIONSHIP, "Relationship", false),
     ("note", &icons::TOOL_NOTE, "Note", false),
     ("group", &icons::TOOL_GROUP, "Group", false),
@@ -821,7 +850,7 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     let xs = [7.0, 41.0, 86.0, 120.0, 170.0, 204.0];
     for ((key, icon, hint, live), x) in TOOLS.iter().zip(xs) {
         let b = button(x);
-        let active = (*key == "select" && shell.canvas.tool == Tool::Select) || (*key == "pan" && shell.canvas.tool == Tool::Pan);
+        let active = matches!((*key, shell.canvas.tool), ("select", Tool::Select) | ("pan", Tool::Pan) | ("entity", Tool::Entity));
         if active {
             paint.rect_filled(b, 8.0, p.accent_tint);
         }
@@ -837,6 +866,7 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
             match *key {
                 "select" => shell.canvas.tool = Tool::Select,
                 "pan" => shell.canvas.tool = Tool::Pan,
+                "entity" => shell.canvas.tool = Tool::Entity,
                 _ => {}
             }
         }

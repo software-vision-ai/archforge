@@ -570,3 +570,49 @@ pub const ER_DIAGRAM: Icon = Icon {
 
 /// The minus of the minimap's collapse button.
 pub const MINUS: Icon = Icon { size: [6.0, 1.0], stroke: 1.0, segments: &[L([0.0, 0.5], [6.0, 0.5])] };
+
+/// The Arrange bar's actions, from the design's `Chrome / Selection toolbar`: align left.
+pub const ARRANGE_LEFT: Icon =
+    Icon { size: [16.0, 14.0], stroke: 1.2, segments: &[L([0.0, 0.0], [0.0, 14.0]), L([3.0, 4.0], [16.0, 4.0]), L([3.0, 10.0], [11.0, 10.0])] };
+/// Align centres.
+pub const ARRANGE_CENTRE: Icon =
+    Icon { size: [14.0, 14.0], stroke: 1.2, segments: &[L([7.0, 0.0], [7.0, 14.0]), L([0.0, 4.0], [14.0, 4.0]), L([3.0, 10.0], [11.0, 10.0])] };
+/// Align right.
+pub const ARRANGE_RIGHT: Icon =
+    Icon { size: [16.0, 14.0], stroke: 1.2, segments: &[L([16.0, 0.0], [16.0, 14.0]), L([0.0, 4.0], [13.0, 4.0]), L([5.0, 10.0], [13.0, 10.0])] };
+/// Distribute horizontally.
+pub const ARRANGE_DISTRIBUTE: Icon =
+    Icon { size: [14.0, 10.0], stroke: 1.6, segments: &[L([0.0, 0.0], [0.0, 10.0]), L([7.0, 0.0], [7.0, 10.0]), L([14.0, 0.0], [14.0, 10.0])] };
+/// Stack vertically.
+pub const ARRANGE_STACK: Icon =
+    Icon { size: [12.0, 10.0], stroke: 1.6, segments: &[L([0.0, 0.0], [12.0, 0.0]), L([0.0, 5.0], [12.0, 5.0]), L([0.0, 10.0], [12.0, 10.0])] };
+
+/// A selected entity's adorners: connect (two boxes joined), from the design's "New entity".
+pub const ADORN_CONNECT: Icon = Icon {
+    size: [14.0, 14.0],
+    stroke: 1.25,
+    segments: &[
+        L([5.0, 2.5], [11.5, 2.5]),
+        L([11.5, 2.5], [11.5, 9.0]),
+        L([0.0, 0.0], [5.0, 0.0]),
+        L([5.0, 0.0], [5.0, 5.0]),
+        L([5.0, 5.0], [0.0, 5.0]),
+        L([0.0, 5.0], [0.0, 0.0]),
+        L([9.0, 9.0], [14.0, 9.0]),
+        L([14.0, 9.0], [14.0, 14.0]),
+        L([14.0, 14.0], [9.0, 14.0]),
+        L([9.0, 14.0], [9.0, 9.0]),
+    ],
+};
+/// Add column: three rows and a plus.
+pub const ADORN_ADD: Icon = Icon {
+    size: [13.0, 12.0],
+    stroke: 1.25,
+    segments: &[
+        L([0.0, 0.0], [10.0, 0.0]),
+        L([0.0, 4.0], [7.0, 4.0]),
+        L([0.0, 8.0], [5.0, 8.0]),
+        L([10.0, 6.0], [10.0, 12.0]),
+        L([7.0, 9.0], [13.0, 9.0]),
+    ],
+};

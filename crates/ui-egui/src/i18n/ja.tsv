@@ -24,6 +24,8 @@ str		Delete {name} from the model?	{name} をモデルから削除しますか�
 str		Narrow the filter to see more	もっと見るにはフィルターを絞り込んでください
 str		No free name is left	空いている名前がありません
 str		What it holds goes with it.	含まれるものも一緒に削除されます。
+str		Remove from this diagram only	この図からのみ削除
+plural		It disappears from {n} diagram.	{n} 個の図から消えます。
 plural		{n} relationship goes with it.	{n} 件のリレーションシップが一緒に削除されます。
 plural		{n} key goes with it.	{n} 件のキーが一緒に削除されます。
 plural		{n} foreign key goes with it.	{n} 件の外部キーが一緒に削除されます。
@@ -94,6 +96,21 @@ str		Group	グループ
 str		Group kinds	グループの種類
 str		Key status	キーの状態
 str		Grid	グリッド
+str		Add table	テーブルを追加
+str		Resize	サイズ変更
+str		Arrange	整列
+str		Connect	接続
+str		Align left	左揃え
+str		Align centres	中央揃え
+str		Align right	右揃え
+str		Distribute horizontally	水平に分布
+str		Stack vertically	垂直に積む
+str		Show related tables	関連テーブルを表示
+str		Open in Models	モデルで開く
+str		Remove from this diagram	この図から削除
+str		Delete from the model…	モデルから削除…
+str		The diagram is of no schema	この図はどのスキーマにも属していません
+plural		+ {n} more column	+ 他 {n} 列
 str		Minimap	ミニマップ
 str		Hide minimap	ミニマップを隠す
 str		Show minimap	ミニマップを表示

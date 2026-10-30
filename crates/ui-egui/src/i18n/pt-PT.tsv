@@ -24,6 +24,8 @@ str		Delete {name} from the model?	Eliminar {name} do modelo?
 str		Narrow the filter to see more	Restrinja o filtro para ver mais
 str		No free name is left	Não resta nenhum nome livre
 str		What it holds goes with it.	O que contém vai com ele.
+str		Remove from this diagram only	Remover apenas deste diagrama
+plural		It disappears from {n} diagram.	Desaparece de {n} diagrama.|Desaparece de {n} diagramas.
 plural		{n} relationship goes with it.	{n} relação vai com ele.|{n} relações vão com ele.
 plural		{n} key goes with it.	{n} chave vai com ele.|{n} chaves vão com ele.
 plural		{n} foreign key goes with it.	{n} chave estrangeira vai com ele.|{n} chaves estrangeiras vão com ele.
@@ -94,6 +96,21 @@ str		Group	Grupo
 str		Group kinds	Tipos de grupo
 str		Key status	Estado das chaves
 str		Grid	Grelha
+str		Add table	Adicionar tabela
+str		Resize	Redimensionar
+str		Arrange	Organizar
+str		Connect	Ligar
+str		Align left	Alinhar à esquerda
+str		Align centres	Alinhar ao centro
+str		Align right	Alinhar à direita
+str		Distribute horizontally	Distribuir horizontalmente
+str		Stack vertically	Empilhar verticalmente
+str		Show related tables	Mostrar tabelas relacionadas
+str		Open in Models	Abrir em Modelos
+str		Remove from this diagram	Remover deste diagrama
+str		Delete from the model…	Eliminar do modelo…
+str		The diagram is of no schema	O diagrama não é de nenhum esquema
+plural		+ {n} more column	+ {n} coluna mais|+ {n} colunas mais
 str		Minimap	Minimapa
 str		Hide minimap	Ocultar minimapa
 str		Show minimap	Mostrar minimapa

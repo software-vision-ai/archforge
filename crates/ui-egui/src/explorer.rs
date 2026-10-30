@@ -77,6 +77,9 @@ pub struct Delete {
     pub relationships: usize,
     pub keys: usize,
     pub foreign_keys: usize,
+    /// The diagrams it disappears from, and the node the canvas asked from, when it did.
+    pub diagrams: usize,
+    pub node: Option<Uuid>,
 }
 
 /// What a row shows.
@@ -256,6 +259,8 @@ pub fn add(shell: &mut Shell, kind: Kind) {
     let sel = selected(shell);
     // The parents the new row sits under, opened so it is seen; the filter goes, so it is listed.
     let mut parents: Vec<Uuid> = Vec::new();
+    // The table a column is added to: its nodes grow with the column, in the same step.
+    let mut grow: Option<Uuid> = None;
     let no_name = || tr("No free name is left");
     let (cmd, params) = match kind {
         Kind::Schema => {
@@ -291,11 +296,25 @@ pub fn add(shell: &mut Shell, kind: Kind) {
             let Some(entity_id) = uuid_of(store, entity) else { return };
             parents.extend(archforge_er::rules::schema_of(store, entity).and_then(|s| uuid_of(store, s)));
             parents.push(entity_id);
+            grow = Some(entity_id);
             ("er.attribute.add", json!({ "entity": entity_id.to_string(), "name": name, "type": "TEXT" }))
         }
         Kind::Skill => return,
     };
-    match run(shell, cmd, params) {
+    let out = match (kind, grow) {
+        // A table lands on an open diagram of its schema too, in the same step.
+        (Kind::Entity, _) => {
+            let schema = params.get("schema").and_then(|v| v.as_str()).and_then(Uuid::parse);
+            let name = params.get("name").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+            match schema {
+                Some(schema) => crate::editing::add_entity(shell, schema, &name).map(|id| json!({ "id": id.to_string() })),
+                None => run(shell, cmd, params),
+            }
+        }
+        (_, Some(entity)) => crate::editing::run_growing(shell, &tr("Add column"), cmd, params, entity),
+        _ => run(shell, cmd, params),
+    };
+    match out {
         Ok(out) => {
             if let Some(id) = out.get("id").and_then(|v| v.as_str()).and_then(Uuid::parse) {
                 for parent in parents {
@@ -348,7 +367,7 @@ fn commit_rename(shell: &mut Shell) {
 
 /// What goes with `obj` when it is removed: the relationships that reach it, and the keys and
 /// foreign keys the ER cascade takes.
-fn consequences(store: &Store, obj: Obj) -> (usize, usize, usize) {
+pub(crate) fn consequences(store: &Store, obj: Obj) -> (usize, usize, usize) {
     let relationships = match store.class_of(obj).ok() {
         Some(c) if c == archforge_er::ENTITY => store
             .referrers(obj)
@@ -393,7 +412,9 @@ pub fn remove_selection(shell: &mut Shell) {
         }
         return;
     }
-    shell.explorer.delete = Some(Delete { ids: vec![id], name: name_of(store, obj), relationships, keys, foreign_keys });
+    let (diagrams, _, _) = archforge_diagram::views_of(store, obj);
+    shell.explorer.delete =
+        Some(Delete { ids: vec![id], name: name_of(store, obj), relationships, keys, foreign_keys, diagrams: diagrams.len(), node: None });
 }
 
 /// Drops what the store no longer has, so a rename or a dialog never points at a gone element.
@@ -731,6 +752,9 @@ pub(crate) fn delete_dialog(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette) {
 
 fn delete_dialog_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: &egui::Painter, window: Rect, d: &Delete) {
     let mut lines: Vec<String> = Vec::new();
+    if d.diagrams > 0 {
+        lines.push(trn("It disappears from {n} diagram.", "It disappears from {n} diagrams.", d.diagrams as u64));
+    }
     if d.relationships > 0 {
         lines.push(trn("{n} relationship goes with it.", "{n} relationships go with it.", d.relationships as u64));
     }
@@ -752,8 +776,11 @@ fn delete_dialog_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: 
         ux::text(paint, at(20.0, 58.0 + i as f32 * 20.0), line, types::UI, p.text_secondary, Some(size.x - 40.0));
     }
     let mut x = dialog.right() - 20.0;
-    for (id, label, primary) in [("workspace.explorer.delete.confirm", tr("Delete"), true), ("workspace.explorer.delete.cancel", tr("Cancel"), false)]
-    {
+    let mut buttons = vec![("workspace.explorer.delete.confirm", tr("Delete"), true), ("workspace.explorer.delete.cancel", tr("Cancel"), false)];
+    if d.node.is_some() {
+        buttons.push(("workspace.explorer.delete.unplace", tr("Remove from this diagram only"), false));
+    }
+    for (id, label, primary) in buttons {
         let g = ux::galley(paint, &label, types::SMALL, p.text, None);
         let b = Rect::from_min_max(pos2(x - g.size().x - 24.0, dialog.bottom() - 48.0), pos2(x, dialog.bottom() - 20.0));
         paint.rect_filled(b, 6.0, if primary { p.danger } else { p.field });
@@ -765,6 +792,11 @@ fn delete_dialog_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: 
                 if let Err(e) = run(shell, "er.remove", json!({ "ids": ids })) {
                     shell.explorer.notice = Some(e);
                 }
+            } else if id == "workspace.explorer.delete.unplace"
+                && let Some(node) = d.node
+                && let Err(e) = run(shell, "diagram.unplace", json!({ "nodes": [node.to_string()] }))
+            {
+                shell.canvas.notice = Some(e);
             }
             return;
         }

@@ -23,6 +23,8 @@ str		Delete {name} from the model?	Delete {name} from the model?
 str		Narrow the filter to see more	Narrow the filter to see more
 str		No free name is left	No free name is left
 str		What it holds goes with it.	What it holds goes with it.
+str		Remove from this diagram only	Remove from this diagram only
+plural		It disappears from {n} diagram.	It disappears from {n} diagram.|It disappears from {n} diagrams.
 plural		{n} relationship goes with it.	{n} relationship goes with it.|{n} relationships go with it.
 plural		{n} key goes with it.	{n} key goes with it.|{n} keys go with it.
 plural		{n} foreign key goes with it.	{n} foreign key goes with it.|{n} foreign keys go with it.
@@ -93,6 +95,21 @@ str		Group	Group
 str		Group kinds	Group kinds
 str		Key status	Key status
 str		Grid	Grid
+str		Add table	Add table
+str		Resize	Resize
+str		Arrange	Arrange
+str		Connect	Connect
+str		Align left	Align left
+str		Align centres	Align centres
+str		Align right	Align right
+str		Distribute horizontally	Distribute horizontally
+str		Stack vertically	Stack vertically
+str		Show related tables	Show related tables
+str		Open in Models	Open in Models
+str		Remove from this diagram	Remove from this diagram
+str		Delete from the model…	Delete from the model…
+str		The diagram is of no schema	The diagram is of no schema
+plural		+ {n} more column	+ {n} more column|+ {n} more columns
 str		Minimap	Minimap
 str		Hide minimap	Hide minimap
 str		Show minimap	Show minimap

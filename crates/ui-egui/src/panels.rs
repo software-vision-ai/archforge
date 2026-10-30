@@ -581,7 +581,7 @@ fn entity_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
 }
 
 /// Opens the column editor on `target`, or on a column to add to `entity`.
-fn open_column(shell: &mut Shell, entity: Uuid, target: Option<Uuid>) {
+pub(crate) fn open_column(shell: &mut Shell, entity: Uuid, target: Option<Uuid>) {
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
     let edit = match target.and_then(|t| store.by_uuid(t)) {
         Some(a) => ColumnEdit {
@@ -700,10 +700,12 @@ fn set_column_refusal(shell: &mut Shell, why: String) {
 fn commit_column(shell: &mut Shell, edit: &ColumnEdit) {
     let nullable = if edit.not_null { "no" } else { "yes" };
     let outcome = match edit.target {
-        None => run(
+        None => crate::editing::run_growing(
             shell,
+            &tr("Add column"),
             "er.attribute.add",
             json!({ "entity": edit.entity.to_string(), "name": edit.name.trim(), "type": edit.ty.trim(), "primary_key": edit.primary_key, "nullable": nullable, "unique": edit.unique }),
+            edit.entity,
         )
         .map(|_| ()),
         Some(t) => {

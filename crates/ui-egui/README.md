@@ -8,7 +8,9 @@ the Diagrams explorer (`diagrams`: the model's folders and diagrams, the model b
 diagram, the New diagram dialog from its `+` and the tab strip's), the centre (`canvas`: the
 diagram tabs, the open diagram drawn read-only from the diagram metamodel in the design's style
 with entity cards, ER edges and labels, pan and zoom, the minimap with the zoom control, the canvas
-toolbar with Select and Pan working; a click selects what it hits), the right rail between the
+toolbar; a click selects what it hits; `editing`: the Entity tool places a table named in place,
+Select drags, resizes, marquees, nudges and arranges nodes, the entity menu removes from the
+diagram or deletes from the model after the dialog, a node grows with its columns), the right rail between the
 canvas and its panel with Properties (`panels`: a schema's name; a table's name, kind, columns
 with the in-place column editor, keys; a diagram's name and schema) and Skills (the skills on the
 selection, the inherited ones, the skill editor) following the selection, the status bar), drawn
@@ -49,11 +51,12 @@ or explorer with nothing to show says so in one line, never with a help text.
 | `explorer::{State, add, remove_selection, rows, fresh_name, Kind}` | the Models explorer's state and the actions the tests and the host drive |
 | `panels::{State, draw, retain_valid, ColumnEdit, SkillEdit, Applies, Menu}` | the right panels' state and body; every change goes through `er.*` and `skill.*` commands |
 | `diagrams::{State, rows, open_new, retain_valid, diagram_name, schema_of}` | the Diagrams explorer's state, its rows and the New diagram dialog |
-| `canvas::{State, Tool, open, close_tab, retain_valid}` | the centre's state: the tabs, the view (pan, zoom), the tool and the toggles; `open` shows a diagram through `view.open-diagram` |
+| `canvas::{State, Tool, open, close_tab, retain_valid}` | the centre's state: the tabs, the view (pan, zoom), the tool, the toggles and the editing state; `open` shows a diagram through `view.open-diagram` |
+| `editing::{add_entity, run_growing, content_height, diagrams_showing, NodeRename, Gesture, EntityMenu}` | canvas editing: a table added (and placed on an open diagram) as one step, a column command that grows the table's nodes with it, the gesture and menu state |
 | `new_project::{open, name_problem, file_name}` | the New project dialog: open it, a name's problem in words, the file a name gives |
 | `Folder` | a folder as the shell shows it: its path and its label |
 
 **Non-goals.** The screens behind Home's other controls, the Source Control explorer's contents,
 the Agent and Appearance panels, relationships and foreign keys in Properties, key editing beyond
-the column flags, and editing on the canvas (placing, drawing, moving, the drawing tools' menus,
-folders and renaming in the Diagrams tree): their own rows.
+the column flags, drawing relationships and notes on the canvas (slices E2 to E4), the drawing
+tools' menus, folders and renaming in the Diagrams tree: their own rows.

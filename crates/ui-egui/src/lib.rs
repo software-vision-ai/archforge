@@ -8,6 +8,7 @@
 
 pub mod canvas;
 pub mod diagrams;
+pub mod editing;
 pub mod explorer;
 pub mod fonts;
 pub mod home;
