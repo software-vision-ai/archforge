@@ -44,6 +44,11 @@
       <ownedLiteral xmi:type="uml:EnumerationLiteral" xmi:id="Generation-computedStored" name="computedStored"/>
       <ownedLiteral xmi:type="uml:EnumerationLiteral" xmi:id="Generation-computedVirtual" name="computedVirtual"/>
     </packagedElement>
+    <packagedElement xmi:type="uml:Enumeration" xmi:id="SubtypeMapping" name="SubtypeMapping">
+      <ownedLiteral xmi:type="uml:EnumerationLiteral" xmi:id="SubtypeMapping-tablePerType" name="tablePerType"/>
+      <ownedLiteral xmi:type="uml:EnumerationLiteral" xmi:id="SubtypeMapping-singleTable" name="singleTable"/>
+      <ownedLiteral xmi:type="uml:EnumerationLiteral" xmi:id="SubtypeMapping-tablePerConcreteType" name="tablePerConcreteType"/>
+    </packagedElement>
     <packagedElement xmi:type="uml:Enumeration" xmi:id="SortDirection" name="SortDirection">
       <ownedLiteral xmi:type="uml:EnumerationLiteral" xmi:id="SortDirection-ascending" name="ascending"/>
       <ownedLiteral xmi:type="uml:EnumerationLiteral" xmi:id="SortDirection-descending" name="descending"/>
@@ -88,6 +93,10 @@
         <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Schema-enumType-_lowerValue"/>
         <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="Schema-enumType-_upperValue" value="*"/>
       </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Schema-generalization" name="generalization" type="Generalization" isOrdered="true" aggregation="composite" subsettedProperty="Element-ownedElement">
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Schema-generalization-_lowerValue"/>
+        <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="Schema-generalization-_upperValue" value="*"/>
+      </ownedAttribute>
     </packagedElement>
     <packagedElement xmi:type="uml:Class" xmi:id="Entity" name="Entity">
       <generalization xmi:type="uml:Generalization" xmi:id="Entity-_generalization" general="NamedElement"/>
@@ -116,6 +125,20 @@
       <ownedAttribute xmi:type="uml:Property" xmi:id="Entity-tableIndex" name="tableIndex" type="TableIndex" isOrdered="true" aggregation="composite" subsettedProperty="Element-ownedElement">
         <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Entity-tableIndex-_lowerValue"/>
         <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="Entity-tableIndex-_upperValue" value="*"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Entity-subtypesComplete" name="subtypesComplete">
+        <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Boolean"/>
+        <defaultValue xmi:type="uml:LiteralBoolean" xmi:id="Entity-subtypesComplete-_defaultValue" value="false"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Entity-subtypesDisjoint" name="subtypesDisjoint">
+        <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Boolean"/>
+        <defaultValue xmi:type="uml:LiteralBoolean" xmi:id="Entity-subtypesDisjoint-_defaultValue" value="true"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Entity-discriminator" name="discriminator" type="Attribute">
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Entity-discriminator-_lowerValue"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Entity-subtypeMapping" name="subtypeMapping" type="SubtypeMapping">
+        <defaultValue xmi:type="uml:InstanceValue" xmi:id="Entity-subtypeMapping-_defaultValue" type="SubtypeMapping" instance="SubtypeMapping-tablePerType"/>
       </ownedAttribute>
     </packagedElement>
     <packagedElement xmi:type="uml:Class" xmi:id="Attribute" name="Attribute">
@@ -335,6 +358,18 @@
       <ownedAttribute xmi:type="uml:Property" xmi:id="EnumType-literal" name="literal" isOrdered="true">
         <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String"/>
         <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="EnumType-literal-_upperValue" value="*"/>
+      </ownedAttribute>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Class" xmi:id="Generalization" name="Generalization">
+      <generalization xmi:type="uml:Generalization" xmi:id="Generalization-_generalization" general="Element"/>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Generalization-supertype" name="supertype" type="Entity">
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Generalization-supertype-_lowerValue"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Generalization-subtype" name="subtype" type="Entity">
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Generalization-subtype-_lowerValue"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Generalization-keyRelationship" name="keyRelationship" type="Relationship">
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Generalization-keyRelationship-_lowerValue"/>
       </ownedAttribute>
     </packagedElement>
   </uml:Package>

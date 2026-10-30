@@ -40,7 +40,7 @@ const FIT_MARGIN: f32 = 48.0;
 /// The minimap's box and the toolbar's pill.
 const MINIMAP: Vec2 = vec2(200.0, 156.0);
 const MINIMAP_GAP: Vec2 = vec2(16.0, 14.0);
-const TOOLBAR: Vec2 = vec2(342.0, 50.0);
+const TOOLBAR: Vec2 = vec2(376.0, 50.0);
 const TOOLBAR_GAP: f32 = 14.0;
 /// An entity node: its header's height, its first row's baseline, the pitch between rows, the
 /// text inset and the badge column.
@@ -62,6 +62,8 @@ pub enum Tool {
     Entity,
     /// Drags a relationship from one table to another (slice E2).
     Relationship,
+    /// Drags from a subtype to its supertype (slice S6).
+    Generalization,
     /// Places a note where the canvas is clicked (slice E4).
     Note,
 }
@@ -381,7 +383,7 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
         Tool::Pan => {
             resp.clone().on_hover_cursor(if resp.dragged() { egui::CursorIcon::Grabbing } else { egui::CursorIcon::Grab });
         }
-        Tool::Entity | Tool::Relationship | Tool::Note => {
+        Tool::Entity | Tool::Relationship | Tool::Generalization | Tool::Note => {
             resp.clone().on_hover_cursor(egui::CursorIcon::Crosshair);
         }
         Tool::Select => {}
@@ -740,6 +742,34 @@ fn draw_edge(
         points[n - 1] = exit_point(t_rect, points[n - 2]);
     }
     let selected = selection.contains(&e) || element.is_some_and(|el| selection.contains(&el));
+    // A generalization (slice S6): slate, solid, no ends but a hollow triangle at the supertype.
+    if let Some(g) = element.filter(|el| store.class_of(*el).ok() == Some(archforge_er::GENERALIZATION)) {
+        let ink = if selected { p.accent } else { p.text_secondary };
+        let stroke = Stroke::new((1.3 * z).clamp(1.0, 3.0), ink);
+        let tip = points[n - 1];
+        let back = points[n - 2];
+        let dir = if (tip - back).length() > f32::EPSILON { (tip - back).normalized() } else { vec2(0.0, -1.0) };
+        let (len, half) = (12.0 * z.max(0.6), 7.5 * z.max(0.6));
+        let base = tip - dir * len;
+        let side = vec2(-dir.y, dir.x) * half;
+        let mut line = points.clone();
+        line[n - 1] = base;
+        paint.add(egui::Shape::line(line, stroke));
+        paint.add(egui::Shape::convex_polygon(vec![tip, base + side, base - side], p.canvas, stroke));
+        // The set's facts, once per supertype, beside its first subtype's triangle.
+        if let Some(sup) = crate::subtypes::supertype_of_link(store, g)
+            && archforge_er::rules::subtype_links(store, sup).first() == Some(&g)
+            && let Some(text) = crate::subtypes::set_label(store, sup)
+        {
+            let gal = ux::galley(paint, &text, types::SMALL.scaled(z), p.text_secondary, None);
+            paint.galley(base + vec2(10.0 * z, -gal.size().y / 2.0) - dir * 14.0 * z, gal, p.text_secondary);
+        }
+        if let Ok(id) = store.uuid(e) {
+            let bounds = Rect::from_points(&points).expand(6.0);
+            widgets::record_visible(ui, registry, &format!("workspace.canvas.edge.{id}"), "edge", bounds);
+        }
+        return None;
+    }
     // The line's colour says its key status while the toggle is on: green with its foreign key,
     // orange without one or while many-to-many waits for its mapping table.
     let (identifying, many_to_many, with_key) = match relationship {
@@ -942,11 +972,12 @@ fn pos2_of((x, y): (f64, f64)) -> Pos2 {
 }
 
 /// The tools of the toolbar: automation id, icon, hover text, whether it works in this slice.
-const TOOLS: [(&str, &ux::Icon, &str, bool); 6] = [
+const TOOLS: [(&str, &ux::Icon, &str, bool); 7] = [
     ("select", &icons::TOOL_SELECT, "Select", true),
     ("pan", &icons::TOOL_PAN, "Pan", true),
     ("entity", &icons::TOOL_ENTITY, "Entity", true),
     ("relationship", &icons::TOOL_RELATIONSHIP, "Relationship", true),
+    ("generalization", &icons::TOOL_GENERALIZATION, "Generalization", true),
     ("note", &icons::TOOL_NOTE, "Note", true),
     ("group", &icons::TOOL_GROUP, "Group", false),
 ];
@@ -967,12 +998,17 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     paint.rect_stroke(t, 12.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
     let button = |x: f32| Rect::from_min_size(pos2(t.left() + x, t.top() + 9.0), Vec2::splat(32.0));
     let divider = |x: f32| Rect::from_min_size(pos2(t.left() + x, t.top() + 15.0), vec2(1.0, 20.0));
-    let xs = [7.0, 41.0, 86.0, 120.0, 170.0, 204.0];
+    let xs = [7.0, 41.0, 86.0, 120.0, 170.0, 204.0, 238.0];
     for ((key, icon, hint, live), x) in TOOLS.iter().zip(xs) {
         let b = button(x);
         let active = matches!(
             (*key, shell.canvas.tool),
-            ("select", Tool::Select) | ("pan", Tool::Pan) | ("entity", Tool::Entity) | ("relationship", Tool::Relationship) | ("note", Tool::Note)
+            ("select", Tool::Select)
+                | ("pan", Tool::Pan)
+                | ("entity", Tool::Entity)
+                | ("relationship", Tool::Relationship)
+                | ("generalization", Tool::Generalization)
+                | ("note", Tool::Note)
         );
         if active {
             paint.rect_filled(b, 8.0, p.accent_tint);
@@ -991,16 +1027,17 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
                 "pan" => shell.canvas.tool = Tool::Pan,
                 "entity" => shell.canvas.tool = Tool::Entity,
                 "relationship" => shell.canvas.tool = Tool::Relationship,
+                "generalization" => shell.canvas.tool = Tool::Generalization,
                 "note" => shell.canvas.tool = Tool::Note,
                 _ => {}
             }
         }
     }
-    for x in [75.0, 254.0] {
+    for x in [75.0, 288.0] {
         paint.rect_filled(divider(x), 0.0, p.border);
     }
     let mut chevron = None;
-    for (key, x, hint, live) in [("relationship-types", 154.0, "Relationship types", true), ("group-kinds", 238.0, "Group kinds", false)] {
+    for (key, x, hint, live) in [("relationship-types", 154.0, "Relationship types", true), ("group-kinds", 272.0, "Group kinds", false)] {
         let b = Rect::from_min_size(pos2(t.left() + x, t.top() + 9.0), vec2(14.0, 32.0));
         let open = live && shell.canvas.popover;
         ux::icon_in(
@@ -1026,9 +1063,9 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
         }
     }
     // The view group: key status and grid.
-    let group = Rect::from_min_size(pos2(t.left() + 265.0, t.top() + 7.0), vec2(70.0, 36.0));
+    let group = Rect::from_min_size(pos2(t.left() + 299.0, t.top() + 7.0), vec2(70.0, 36.0));
     paint.rect_filled(group, 8.0, p.page);
-    for (key, x, hint, on) in [("key-status", 267.0, "Key status", shell.canvas.key_status), ("grid", 301.0, "Grid", shell.canvas.grid)] {
+    for (key, x, hint, on) in [("key-status", 301.0, "Key status", shell.canvas.key_status), ("grid", 335.0, "Grid", shell.canvas.grid)] {
         let b = button(x);
         if on {
             paint.rect_filled(b, 8.0, p.accent_tint);
@@ -1059,5 +1096,13 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
 /// Every hover text of the tables, for the catalogue tests.
 #[cfg(test)]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
-    TOOLS.iter().map(|(_, _, hint, _)| *hint).chain(["Relationship types", "Group kinds", "Key status", "Grid"])
+    TOOLS.iter().map(|(_, _, hint, _)| *hint).chain([
+        "Relationship types",
+        "Group kinds",
+        "Key status",
+        "Grid",
+        "complete",
+        "disjoint",
+        "overlapping",
+    ])
 }

@@ -104,11 +104,11 @@ fn the_registry_and_the_metamodel_are_what_the_spec_says() {
     let reg = registry().unwrap();
     assert!(reg.len() > 20);
     let m = metamodel().unwrap();
-    assert_eq!(m.classes.len(), 16);
+    assert_eq!(m.classes.len(), 17);
     assert_eq!(
         m.data_types.len(),
-        13,
-        "the five primitives and the enumerations Cardinality, EntityKind, ReferentialAction, MatchType, Deferrability, Generation, SortDirection and NullsOrder"
+        14,
+        "the five primitives and the enumerations Cardinality, EntityKind, ReferentialAction, MatchType, Deferrability, Generation, SubtypeMapping, SortDirection and NullsOrder"
     );
     assert_eq!(Cardinality::from_index(1), Some(Cardinality::ExactlyOne));
     assert_eq!(commands::cardinality_name(Cardinality::ZeroOrMore), "zero-or-more");
@@ -965,7 +965,24 @@ fn the_sweep_finds_nothing() {
     let en = run(&mut s, "er.enum.add", json!({ "schema": sm.schema, "name": "state", "literals": ["open", "closed"] }));
     run(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": "amount", "domain": dom }));
     run(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": "state", "enum": en, "default": "'open'" }));
-    let ids = [&sm.schema, &sm.customer, &sm.key, &sm.places, &pk, &u, &fk, &skill, &dom, &en, "not-an-id", "00000000-0000-7000-8000-000000000000"];
+    let sub = run(&mut s, "er.entity.add", json!({ "schema": sm.schema, "name": "VipCustomer" }));
+    let generalization = run(&mut s, "er.generalization.add", json!({ "supertype": sm.customer, "subtype": sub }));
+    let ids = [
+        &sm.schema,
+        &sm.customer,
+        &sm.key,
+        &sm.places,
+        &pk,
+        &u,
+        &fk,
+        &skill,
+        &dom,
+        &en,
+        &sub,
+        &generalization,
+        "not-an-id",
+        "00000000-0000-7000-8000-000000000000",
+    ];
     let calls = sweep_with(&mut s, &ids, picture).unwrap();
     assert!(calls > 1000, "{calls}");
     assert_eq!(problems(s.doc()), Vec::<String>::new());
@@ -1488,4 +1505,224 @@ fn domains_and_enum_types_type_columns_under_the_schemas_rules() {
     run(&mut s, "er.attribute.remove", json!({ "attribute": status }));
     round_trip(&mut s, "er.enum.remove", &json!({ "enum": en }));
     all_rules_hold(s.doc());
+}
+
+#[test]
+fn subtypes_share_their_supertypes_key_and_keep_it_in_step() {
+    let mut s = session();
+    let sm = sample(&mut s);
+    let party = run(&mut s, "er.entity.add", json!({ "schema": sm.schema, "name": "Party" }));
+    let pid = run(&mut s, "er.attribute.add", json!({ "entity": party, "name": "party_id", "type": "BIGINT", "primary_key": true }));
+    let kind = run(&mut s, "er.attribute.add", json!({ "entity": party, "name": "party_type", "type": "TEXT" }));
+    let person = run(&mut s, "er.entity.add", json!({ "schema": sm.schema, "name": "Person" }));
+    let company = run(&mut s, "er.entity.add", json!({ "schema": sm.schema, "name": "Company" }));
+    // Table per type: each subtype gets the supertype's key as its own, linked and identifying.
+    round_trip(&mut s, "er.generalization.add", &json!({ "supertype": party, "subtype": person }));
+    let g_company = run(&mut s, "er.generalization.add", json!({ "supertype": party, "subtype": company }));
+    let g_person = get(&mut s, "er.schema.get", json!({ "schema": sm.schema }))["generalizations"][0]["id"].as_str().unwrap().to_string();
+    let p = get(&mut s, "er.entity.get", json!({ "entity": person }));
+    assert_eq!(p["attributes"][0]["name"], "party_id");
+    assert_eq!(p["attributes"][0]["linked_to"], pid);
+    assert_eq!(p["primary_key"]["columns"], json!([p["attributes"][0]["id"]]));
+    let sg = get(&mut s, "er.schema.get", json!({ "schema": sm.schema }));
+    let gens = sg["generalizations"].as_array().unwrap();
+    assert_eq!(gens.len(), 2);
+    let key_rel = gens[0]["key_relationship"].as_str().unwrap().to_string();
+    let r = relationship(&mut s, &sm.schema, &key_rel);
+    assert_eq!((r["from_end"].as_str(), r["to_end"].as_str(), r["identifying"].as_bool()), (Some("exactly-one"), Some("zero-or-one"), Some(true)));
+    all_rules_hold(s.doc());
+    // The key follows the supertype: a rename reaches the subtypes' key columns.
+    run(&mut s, "er.attribute.rename", json!({ "attribute": pid, "name": "id" }));
+    assert_eq!(get(&mut s, "er.entity.get", json!({ "entity": company }))["attributes"][0]["name"], "id");
+    run(&mut s, "er.attribute.rename", json!({ "attribute": pid, "name": "party_id" }));
+    // The set facts live on the supertype; a mapping change removes and brings back the keys.
+    round_trip(
+        &mut s,
+        "er.entity.set-subtyping",
+        &json!({ "entity": party, "complete": true, "disjoint": true, "discriminator": kind, "mapping": "single-table" }),
+    );
+    run(
+        &mut s,
+        "er.entity.set-subtyping",
+        json!({ "entity": party, "complete": true, "disjoint": true, "discriminator": kind, "mapping": "single-table" }),
+    );
+    assert_eq!(
+        get(&mut s, "er.entity.get", json!({ "entity": person }))["attributes"].as_array().map(Vec::len),
+        Some(0),
+        "single table: no key of its own"
+    );
+    assert_eq!(get(&mut s, "er.entity.get", json!({ "entity": party }))["subtyping"]["mapping"], "single-table");
+    all_rules_hold(s.doc());
+    run(
+        &mut s,
+        "er.entity.set-subtyping",
+        json!({ "entity": party, "complete": true, "disjoint": true, "discriminator": kind, "mapping": "table-per-type" }),
+    );
+    assert_eq!(get(&mut s, "er.entity.get", json!({ "entity": person }))["attributes"][0]["name"], "party_id");
+    all_rules_hold(s.doc());
+    // A supertype without a key gives its subtypes theirs when it gets one.
+    let asset = run(&mut s, "er.entity.add", json!({ "schema": sm.schema, "name": "Asset" }));
+    let car = run(&mut s, "er.entity.add", json!({ "schema": sm.schema, "name": "Car" }));
+    run(&mut s, "er.generalization.add", json!({ "supertype": asset, "subtype": car }));
+    assert_eq!(get(&mut s, "er.entity.get", json!({ "entity": car }))["attributes"].as_array().map(Vec::len), Some(0));
+    run(&mut s, "er.attribute.add", json!({ "entity": asset, "name": "asset_id", "type": "UUID", "primary_key": true }));
+    assert_eq!(get(&mut s, "er.entity.get", json!({ "entity": car }))["attributes"][0]["name"], "asset_id");
+    all_rules_hold(s.doc());
+    // Refusals: itself, a second supertype, a circle, another schema, a foreign discriminator,
+    // a mapping word, and the subtype key on its own.
+    let other = run(&mut s, "er.schema.add", json!({ "name": "other" }));
+    let elsewhere = run(&mut s, "er.entity.add", json!({ "schema": other, "name": "Elsewhere" }));
+    for (cmd, p, key) in [
+        ("er.generalization.add", json!({ "supertype": party, "subtype": party }), "subtype"),
+        ("er.generalization.add", json!({ "supertype": asset, "subtype": person }), "subtype"),
+        ("er.generalization.add", json!({ "supertype": person, "subtype": party }), "supertype"),
+        ("er.generalization.add", json!({ "supertype": party, "subtype": elsewhere }), "subtype"),
+        ("er.entity.set-subtyping", json!({ "entity": party, "discriminator": sm.key, "mapping": "table-per-type" }), "discriminator"),
+        ("er.relationship.remove", json!({ "relationship": key_rel }), "relationship"),
+        ("er.remove", json!({ "ids": [key_rel] }), "ids"),
+    ] {
+        assert_eq!(refused_on(&mut s, cmd, p.clone()), key, "{cmd} {p}");
+    }
+    // A generalization draws on a diagram from the subtype to the supertype.
+    let d = run(&mut s, "diagram.add", json!({ "kind": "er", "element": sm.schema }));
+    let n_party = run(&mut s, "diagram.place", json!({ "diagram": d, "element": party, "x": 200, "y": 0 }));
+    let n_person = run(&mut s, "diagram.place", json!({ "diagram": d, "element": person, "x": 0, "y": 300 }));
+    round_trip(&mut s, "diagram.connect", &json!({ "diagram": d, "element": g_person, "source": n_person, "target": n_party }));
+    // Removing a generalization takes its key; removing the supertype takes its generalizations.
+    round_trip(&mut s, "er.generalization.remove", &json!({ "generalization": g_company }));
+    assert_eq!(get(&mut s, "er.entity.get", json!({ "entity": company }))["attributes"].as_array().map(Vec::len), Some(0));
+    round_trip(&mut s, "er.entity.remove", &json!({ "entity": party }));
+    let sg = get(&mut s, "er.schema.get", json!({ "schema": sm.schema }));
+    assert_eq!(sg["generalizations"].as_array().map(Vec::len), Some(1), "only Asset and Car stay");
+    all_rules_hold(s.doc());
+}
+
+#[test]
+fn subtype_keys_hold_through_chains_later_keys_removals_and_circles() {
+    let mut s = session();
+    let sm = sample(&mut s);
+    let table = |s: &mut Session, name: &str| run(s, "er.entity.add", json!({ "schema": sm.schema, "name": name }));
+    // A key set later with er.primary-key.set reaches the subtypes.
+    let party = table(&mut s, "Party");
+    let pid = run(&mut s, "er.attribute.add", json!({ "entity": party, "name": "party_id", "type": "BIGINT" }));
+    let person = table(&mut s, "Person");
+    let employee = table(&mut s, "Employee");
+    run(&mut s, "er.generalization.add", json!({ "supertype": party, "subtype": person }));
+    run(&mut s, "er.generalization.add", json!({ "supertype": person, "subtype": employee }));
+    round_trip(&mut s, "er.primary-key.set", &json!({ "entity": party, "columns": [pid], "name": "" }));
+    assert_eq!(get(&mut s, "er.entity.get", json!({ "entity": employee }))["attributes"][0]["name"], "party_id", "three levels down");
+    all_rules_hold(s.doc());
+    // A piece of a subtype key does not go on its own; a call that takes its table along may.
+    let follower = get(&mut s, "er.entity.get", json!({ "entity": person }))["attributes"][0]["id"].as_str().unwrap().to_string();
+    for (cmd, p, key) in [
+        ("er.attribute.remove", json!({ "attribute": follower }), "attribute"),
+        ("er.primary-key.remove", json!({ "entity": person }), "entity"),
+        ("er.remove", json!({ "ids": [follower, sm.order] }), "ids"),
+    ] {
+        assert_eq!(refused_on(&mut s, cmd, p.clone()), key, "{cmd} {p}");
+    }
+    // Removing the upper link of a three-level chain takes the keys below it cleanly.
+    let g_upper = get(&mut s, "er.schema.get", json!({ "schema": sm.schema }))["generalizations"][0]["id"].as_str().unwrap().to_string();
+    round_trip(&mut s, "er.generalization.remove", &json!({ "generalization": g_upper }));
+    assert_eq!(get(&mut s, "er.entity.get", json!({ "entity": employee }))["attributes"].as_array().map(Vec::len), Some(0));
+    all_rules_hold(s.doc());
+    s.undo().unwrap();
+    // Removing the supertype's key column takes the subtype keys with it and leaves no broken link.
+    round_trip(&mut s, "er.attribute.remove", &json!({ "attribute": pid }));
+    all_rules_hold(s.doc());
+    s.undo().unwrap();
+    round_trip(&mut s, "er.primary-key.remove", &json!({ "entity": party }));
+    all_rules_hold(s.doc());
+    s.undo().unwrap();
+    round_trip(&mut s, "er.entity.remove", &json!({ "entity": party }));
+    all_rules_hold(s.doc());
+    s.undo().unwrap();
+    // A table identified by another cannot become that table's supertype.
+    let a = table(&mut s, "A");
+    run(&mut s, "er.attribute.add", json!({ "entity": a, "name": "a_id", "type": "INT", "primary_key": true }));
+    let b = table(&mut s, "B");
+    run(&mut s, "er.attribute.add", json!({ "entity": b, "name": "b_id", "type": "INT", "primary_key": true }));
+    run(
+        &mut s,
+        "er.relationship.add",
+        json!({ "from": b, "to": a, "from_end": "exactly-one", "to_end": "zero-or-more", "create_foreign_key": true, "identifying": true }),
+    );
+    assert_eq!(refused_on(&mut s, "er.generalization.add", json!({ "supertype": a, "subtype": b })), "subtype");
+    all_rules_hold(s.doc());
+    // A chain deeper than the budget is refused, without a deep recursion.
+    let mut chain = vec![table(&mut s, "L0")];
+    for i in 1..=31 {
+        let next = table(&mut s, &format!("L{i}"));
+        run(&mut s, "er.generalization.add", json!({ "supertype": chain[i - 1], "subtype": next }));
+        chain.push(next);
+    }
+    let last = table(&mut s, "L32");
+    assert_eq!(refused_on(&mut s, "er.generalization.add", json!({ "supertype": chain[31], "subtype": last })), "subtype");
+    // Thirty-one levels take a key added at the top in one step, all the way down, and a second
+    // key column after it.
+    run(&mut s, "er.attribute.add", json!({ "entity": chain[0], "name": "id", "type": "INT", "primary_key": true }));
+    run(&mut s, "er.attribute.add", json!({ "entity": chain[0], "name": "region", "type": "TEXT", "primary_key": true }));
+    assert_eq!(get(&mut s, "er.entity.get", json!({ "entity": chain[31] }))["attributes"].as_array().map(Vec::len), Some(2));
+    all_rules_hold(s.doc());
+    // A wider subtype's own key column cannot go: its key goes whole, and the subtype key with it.
+    let wide = table(&mut s, "Wide");
+    run(&mut s, "er.attribute.add", json!({ "entity": wide, "name": "wide_id", "type": "INT", "primary_key": true }));
+    run(&mut s, "er.generalization.add", json!({ "supertype": a, "subtype": wide }));
+    let own = get(&mut s, "er.entity.get", json!({ "entity": wide }))["attributes"][0]["id"].as_str().unwrap().to_string();
+    assert_eq!(refused_on(&mut s, "er.attribute.remove", json!({ "attribute": own })), "attribute");
+    all_rules_hold(s.doc());
+}
+
+#[test]
+fn removing_the_top_of_a_very_deep_loaded_chain_is_refused_not_a_crash() {
+    // Two hundred keyed subtype levels built straight into a store, past the commands' limit, as a
+    // loaded document could carry them.
+    let (mut st, _) = rooted_store();
+    let m = st.alive().find(|o| st.class_of(*o).ok() == Some(MODEL)).unwrap();
+    let s = st.create(SCHEMA).unwrap();
+    st.set(s, named_element::NAME, Value::str("deep")).unwrap();
+    st.push(m, model::MEMBER, Value::Ref(s)).unwrap();
+    let mut prev: Option<(Obj, Obj, Obj)> = None;
+    let mut top = None;
+    for i in 0..200 {
+        let e = st.create(ENTITY).unwrap();
+        st.set(e, named_element::NAME, Value::str(&format!("T{i}"))).unwrap();
+        st.push(s, schema::ENTITY, Value::Ref(e)).unwrap();
+        let a = st.create(ATTRIBUTE).unwrap();
+        st.set(a, named_element::NAME, Value::str("id")).unwrap();
+        st.set(a, attribute::TYPE, Value::str("INT")).unwrap();
+        st.set(a, attribute::NULLABLE, Value::Bool(false)).unwrap();
+        st.push(e, entity::ATTRIBUTE, Value::Ref(a)).unwrap();
+        let pk = st.create(PRIMARY_KEY).unwrap();
+        st.set(e, entity::PRIMARY_KEY, Value::Ref(pk)).unwrap();
+        st.push(pk, key::COLUMN, Value::Ref(a)).unwrap();
+        if let Some((pe, pa, ppk)) = prev {
+            st.set(a, attribute::LINKED_TO, Value::Ref(pa)).unwrap();
+            let r = st.create(RELATIONSHIP).unwrap();
+            st.set(r, relationship::FROM, Value::Ref(pe)).unwrap();
+            st.set(r, relationship::TO, Value::Ref(e)).unwrap();
+            st.set(r, relationship::FROM_END, Value::Enum(Cardinality::ExactlyOne.index())).unwrap();
+            st.set(r, relationship::TO_END, Value::Enum(Cardinality::ZeroOrOne.index())).unwrap();
+            st.set(r, relationship::IDENTIFYING, Value::Bool(true)).unwrap();
+            st.push(s, schema::RELATIONSHIP, Value::Ref(r)).unwrap();
+            let fk = st.create(FOREIGN_KEY).unwrap();
+            st.set(fk, foreign_key::REFERENCES, Value::Ref(ppk)).unwrap();
+            st.push(fk, foreign_key::COLUMN, Value::Ref(a)).unwrap();
+            st.set(fk, foreign_key::RELATIONSHIP, Value::Ref(r)).unwrap();
+            st.push(e, entity::FOREIGN_KEY, Value::Ref(fk)).unwrap();
+            let g = st.create(GENERALIZATION).unwrap();
+            st.set(g, generalization::SUPERTYPE, Value::Ref(pe)).unwrap();
+            st.set(g, generalization::SUBTYPE, Value::Ref(e)).unwrap();
+            st.set(g, generalization::KEY_RELATIONSHIP, Value::Ref(r)).unwrap();
+            st.push(s, schema::GENERALIZATION, Value::Ref(g)).unwrap();
+        } else {
+            top = Some(st.uuid(e).unwrap().to_string());
+        }
+        prev = Some((e, a, pk));
+    }
+    let mut session = Session::new(registry().unwrap(), st, 1, Options::default());
+    let before = picture(session.doc());
+    let e = session.execute("er.primary-key.remove", &json!({ "entity": top.unwrap() })).expect_err("too deep to cascade");
+    assert!(e.to_string().contains("deeper than") && e.to_string().contains("entity"), "{e}");
+    assert_eq!(picture(session.doc()), before, "nothing of the attempt stays");
 }

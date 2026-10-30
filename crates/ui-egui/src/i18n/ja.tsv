@@ -39,6 +39,10 @@ str		On this domain · {n}	このドメインに · {n}
 str		Enum type · model	列挙型 · モデル
 str		This enum type	この列挙型
 str		On this enum type · {n}	この列挙型に · {n}
+str		Subtype · {sub} is a {super}	サブタイプ · {sub} は {super} の一種
+str		Subtype	サブタイプ
+str		This subtype	このサブタイプ
+str		On this subtype · {n}	このサブタイプに · {n}
 str		Element · model	要素 · モデル
 str		Skill · model	スキル · モデル
 str		Columns · {n}	列 · {n}
@@ -57,6 +61,20 @@ str		Base type	基底型
 str		Checks	チェック制約
 str		Add a check	チェック制約を追加
 str		Literals, in order	リテラル（順序どおり）
+str		Subtypes · {n}	サブタイプ · {n}
+str		Add subtype	サブタイプを追加
+str		Complete	完全
+str		Disjoint	排他
+str		Discriminator	識別子
+str		Mapping	マッピング
+str		Table per type	型ごとのテーブル
+str		Single table	単一テーブル
+str		Table per concrete type	具象型ごとのテーブル
+str		key on {columns}	{columns} のキー
+str		complete	完全
+str		disjoint	排他
+str		overlapping	重複あり
+str		A subtype joins two tables	サブタイプは 2 つのテーブルを結びます
 str		Add a literal	リテラルを追加
 str		Pick a type	型を選ぶ
 str		domain	ドメイン
@@ -82,6 +100,7 @@ str		{from} to {to} is many to many	{from} から {to} は多対多です
 str		{from} to {to}: one or more is not enforced by a key	{from} から {to}: 1 以上はキーでは保証されません
 str		{key}: {problem}	{key}: {problem}
 str		{name} has no primary key	{name} に主キーがありません
+str		{name} has subtypes but no primary key to share	{name} にはサブタイプがありますが、共有する主キーがありません
 str		{name} removed · {keys} went with it	{name} を削除しました · {keys} も削除されました
 str		Add column	列を追加
 str		Edit column	列を編集
@@ -155,6 +174,7 @@ str		Select	選択
 str		Pan	パン
 str		Entity	エンティティ
 str		Relationship	リレーションシップ
+str		Generalization	汎化
 str		Relationship types	リレーションシップの種類
 str		Note	ノート
 str		Group	グループ

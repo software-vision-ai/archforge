@@ -110,8 +110,18 @@ for typed columns, and `type_display` shows the type's name. An enum column's de
 literals; a column on a domain takes no own size, default or collation. A type in use cannot be
 removed (`er.domain.remove`, `er.enum.remove` name the columns); changing one re-checks its columns.
 
-**The metaclasses.** `Schema` (entity, relationship, domain, enumType), `Entity` (attribute, kind, primaryKey,
-uniqueConstraint, foreignKey, checkConstraint, tableIndex), `Attribute` (type with length, precision and scale, nullable, default, generation with an expression, collation, linkedTo, domain, enumType), `Relationship` (name, from, to,
+Subtypes (slice S6): a `Generalization` owned by the schema says a subtype is a kind of its
+supertype, one element per subtype, so a diagram draws each as one line from the subtype to the
+supertype. The facts of the whole set live once on the supertype: complete, disjoint, the
+discriminator column and the mapping (table per type, single table, table per concrete type).
+Under table per type, a supertype with a primary key gives each subtype an identifying one to
+zero-or-one key relationship with follower columns named like its key columns
+(`commands::ensure_subtype_key`); the generalization owns that key, which goes with it or with a
+mapping change and cannot be removed on its own; a key that appears later reaches the subtypes then.
+A table has one supertype and generalizations never close a circle (`rules::generalization_problem`).
+
+**The metaclasses.** `Schema` (entity, relationship, domain, enumType, generalization), `Entity` (attribute, kind, primaryKey,
+uniqueConstraint, foreignKey, checkConstraint, tableIndex, subtypesComplete, subtypesDisjoint, discriminator, subtypeMapping), `Attribute` (type with length, precision and scale, nullable, default, generation with an expression, collation, linkedTo, domain, enumType), `Relationship` (name, from, to,
 fromEnd, toEnd, fromRole, toRole, identifying), the abstract `Key` (name, column) with `PrimaryKey` and
 `UniqueConstraint` (nullsDistinct), `ForeignKey` (name, references a Key, column, onDelete,
 onUpdate, relationship, match, deferrable) and the enumerations `Cardinality` (zeroOrOne,
@@ -121,7 +131,8 @@ exactlyOne, zeroOrMore, oneOrMore), `EntityKind` (regular, associative), `Refere
 expression), `TableIndex` (name, unique, column, where, method), `IndexColumn` (attribute or
 expression, direction, nulls) with `SortDirection` (ascending, descending) and `NullsOrder` (default,
 first, last); `Domain` (name, baseType, length, precision, scale, default, notNull, check), `DomainCheck`
-(name, expression), `EnumType` (name, literal).
+(name, expression), `EnumType` (name, literal), `Generalization` (supertype, subtype, keyRelationship) with
+`SubtypeMapping` (tablePerType, singleTable, tablePerConcreteType).
 
 **Public API.**
 
@@ -133,8 +144,8 @@ first, last); `Domain` (name, baseType, length, precision, scale, default, notNu
 | `DIAGRAM_KIND`, `ENTITY_SIZE` | `"er"`; an entity node's default size |
 | `new_project_session` | `pub fn new_project_session(name: &str, ids: Box<dyn FnMut() -> Uuid + Send>) -> Result<Session, String>`: a session over a store with the project's Model root named `name`; the host supplies the ids |
 | `universe_with`, `slabs`, `store` | a universe of the shared core, the diagram metamodel, ER and others; the slabs of the three; a store over them |
-| `rules::{name_problem, entity_name_free, attribute_name_free, constraint_name_free, schema_of, problems, notices, key_problem, key_columns_problem, associative_problem, key_parts, primary_key_of, primary_key, unique_constraints, keys_of, key_columns, keys_onto, in_primary_key, is_unique, checks_of, indexes_of, index_columns, index_specs, index_column_spec, IndexColumnSpec, is_unique_index, index_columns_problem, check_problem, display_name, linked_to, linked_from, collapse_problem, child_end_one_or_more, identifying_parents, identifying_cycle, own_type_of, own_size_of, domain_of, enum_of, domains_of, enums_of, literals_of, domain_checks, type_columns, literals_problem, domain_problem, enum_default_problem, enum_default_check}` | the rules, for commands and for a whole store |
-| `commands::{remove_element, remove_entity, dependents, index_dependents, keys_on, resolve, collapse, cardinality_name, action_name, match_name, deferrability_name, direction_name, nulls_name, DIRECTION_WORDS, NULLS_WORDS, specs}` | the cascades, the resolve step, the names in parameters, the command table |
+| `rules::{name_problem, entity_name_free, attribute_name_free, constraint_name_free, schema_of, problems, notices, key_problem, key_columns_problem, associative_problem, key_parts, primary_key_of, primary_key, unique_constraints, keys_of, key_columns, keys_onto, in_primary_key, is_unique, checks_of, indexes_of, index_columns, index_specs, index_column_spec, IndexColumnSpec, is_unique_index, index_columns_problem, check_problem, display_name, linked_to, linked_from, collapse_problem, child_end_one_or_more, identifying_parents, identifying_cycle, generalization_parts, supertype_links, subtype_links, supertype_of, is_supertype_or_self, mapping_of, discriminator_of, subtyping_flags, generalization_problem, own_type_of, own_size_of, domain_of, enum_of, domains_of, enums_of, literals_of, domain_checks, type_columns, literals_problem, domain_problem, enum_default_problem, enum_default_check}` | the rules, for commands and for a whole store |
+| `commands::{remove_element, remove_entity, dependents, index_dependents, keys_on, resolve, collapse, cardinality_name, action_name, match_name, deferrability_name, direction_name, nulls_name, DIRECTION_WORDS, NULLS_WORDS, mapping_name, MAPPING_WORDS, specs}` | the cascades, the resolve step, the names in parameters, the command table |
 | the generated constants, structs, `Cardinality`, `TABLES`, `JUNCTIONS` | as every generated metamodel |
 
 Commands: `er.schema.{add, rename, remove}`, `er.entity.{add, rename, remove, set-kind}`,

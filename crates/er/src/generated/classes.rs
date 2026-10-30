@@ -200,6 +200,36 @@ impl Generation {
     }
 }
 
+/// The enumeration SubtypeMapping.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SubtypeMapping {
+    TablePerType,
+    SingleTable,
+    TablePerConcreteType,
+}
+
+impl SubtypeMapping {
+    pub const DATA_TYPE: DataId = SUBTYPE_MAPPING;
+    pub fn from_index(i: u32) -> Option<Self> {
+        match i {
+            0 => Some(Self::TablePerType),
+            1 => Some(Self::SingleTable),
+            2 => Some(Self::TablePerConcreteType),
+            _ => None,
+        }
+    }
+    pub fn index(self) -> u32 {
+        self as u32
+    }
+    pub fn literal(self) -> &'static str {
+        match self {
+            Self::TablePerType => "tablePerType",
+            Self::SingleTable => "singleTable",
+            Self::TablePerConcreteType => "tablePerConcreteType",
+        }
+    }
+}
+
 /// The enumeration SortDirection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SortDirection {
@@ -268,6 +298,7 @@ pub struct SchemaObj {
     pub relationship: Vec<Value>,
     pub domain: Vec<Value>,
     pub enum_type: Vec<Value>,
+    pub generalization: Vec<Value>,
 }
 
 impl Reflect for SchemaObj {
@@ -308,6 +339,7 @@ impl Reflect for SchemaObj {
             schema::RELATIONSHIP => Some(&self.relationship),
             schema::DOMAIN => Some(&self.domain),
             schema::ENUM_TYPE => Some(&self.enum_type),
+            schema::GENERALIZATION => Some(&self.generalization),
             _ => None,
         }
     }
@@ -317,6 +349,7 @@ impl Reflect for SchemaObj {
             schema::RELATIONSHIP => Some(&mut self.relationship),
             schema::DOMAIN => Some(&mut self.domain),
             schema::ENUM_TYPE => Some(&mut self.enum_type),
+            schema::GENERALIZATION => Some(&mut self.generalization),
             _ => None,
         }
     }
@@ -341,6 +374,9 @@ impl SchemaObj {
     pub fn enum_type(&self) -> &[Value] {
         &self.enum_type
     }
+    pub fn generalization(&self) -> &[Value] {
+        &self.generalization
+    }
     pub fn set_description(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
         store.set(obj, element::DESCRIPTION, v.map_or(Value::Null, Value::str))
     }
@@ -359,10 +395,13 @@ impl SchemaObj {
     pub fn push_enum_type(store: &mut Store, obj: Obj, value: Value) -> Result<u32, Invalid> {
         store.push(obj, schema::ENUM_TYPE, value)
     }
+    pub fn push_generalization(store: &mut Store, obj: Obj, value: Value) -> Result<u32, Invalid> {
+        store.push(obj, schema::GENERALIZATION, value)
+    }
 }
 
 /// An object of Entity, with every inherited stored property as a field.
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct EntityObj {
     pub description: Option<Arc<str>>,
     pub name: Option<Arc<str>>,
@@ -373,6 +412,30 @@ pub struct EntityObj {
     pub foreign_key: Vec<Value>,
     pub check_constraint: Vec<Value>,
     pub table_index: Vec<Value>,
+    pub subtypes_complete: bool,
+    pub subtypes_disjoint: bool,
+    pub discriminator: Option<Obj>,
+    pub subtype_mapping: u32,
+}
+
+impl Default for EntityObj {
+    fn default() -> Self {
+        Self {
+            description: None,
+            name: None,
+            attribute: Vec::new(),
+            kind: 0,
+            primary_key: None,
+            unique_constraint: Vec::new(),
+            foreign_key: Vec::new(),
+            check_constraint: Vec::new(),
+            table_index: Vec::new(),
+            subtypes_complete: false,
+            subtypes_disjoint: true,
+            discriminator: None,
+            subtype_mapping: 0,
+        }
+    }
 }
 
 impl Reflect for EntityObj {
@@ -385,6 +448,10 @@ impl Reflect for EntityObj {
             named_element::NAME => Some(self.name.clone().map_or(Value::Null, Value::Str)),
             entity::KIND => Some(Value::Enum(self.kind)),
             entity::PRIMARY_KEY => Some(self.primary_key.map_or(Value::Null, Value::Ref)),
+            entity::SUBTYPES_COMPLETE => Some(Value::Bool(self.subtypes_complete)),
+            entity::SUBTYPES_DISJOINT => Some(Value::Bool(self.subtypes_disjoint)),
+            entity::DISCRIMINATOR => Some(self.discriminator.map_or(Value::Null, Value::Ref)),
+            entity::SUBTYPE_MAPPING => Some(Value::Enum(self.subtype_mapping)),
             _ => None,
         }
     }
@@ -418,6 +485,35 @@ impl Reflect for EntityObj {
                     Value::Null => self.primary_key = None,
                     Value::Ref(v) => self.primary_key = Some(v),
                     other => return Err(format!("not a reference: {other}")),
+                }
+                Ok(())
+            }
+            entity::SUBTYPES_COMPLETE => {
+                match value {
+                    Value::Bool(v) => self.subtypes_complete = v,
+                    other => return Err(format!("not a boolean: {other}")),
+                }
+                Ok(())
+            }
+            entity::SUBTYPES_DISJOINT => {
+                match value {
+                    Value::Bool(v) => self.subtypes_disjoint = v,
+                    other => return Err(format!("not a boolean: {other}")),
+                }
+                Ok(())
+            }
+            entity::DISCRIMINATOR => {
+                match value {
+                    Value::Null => self.discriminator = None,
+                    Value::Ref(v) => self.discriminator = Some(v),
+                    other => return Err(format!("not a reference: {other}")),
+                }
+                Ok(())
+            }
+            entity::SUBTYPE_MAPPING => {
+                match value {
+                    Value::Enum(v) => self.subtype_mapping = v,
+                    other => return Err(format!("not a literal: {other}")),
                 }
                 Ok(())
             }
@@ -474,6 +570,18 @@ impl EntityObj {
     pub fn table_index(&self) -> &[Value] {
         &self.table_index
     }
+    pub fn subtypes_complete(&self) -> bool {
+        self.subtypes_complete
+    }
+    pub fn subtypes_disjoint(&self) -> bool {
+        self.subtypes_disjoint
+    }
+    pub fn discriminator(&self) -> Option<Obj> {
+        self.discriminator
+    }
+    pub fn subtype_mapping(&self) -> u32 {
+        self.subtype_mapping
+    }
     pub fn set_description(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
         store.set(obj, element::DESCRIPTION, v.map_or(Value::Null, Value::str))
     }
@@ -500,6 +608,18 @@ impl EntityObj {
     }
     pub fn push_table_index(store: &mut Store, obj: Obj, value: Value) -> Result<u32, Invalid> {
         store.push(obj, entity::TABLE_INDEX, value)
+    }
+    pub fn set_subtypes_complete(store: &mut Store, obj: Obj, v: bool) -> Result<(), Invalid> {
+        store.set(obj, entity::SUBTYPES_COMPLETE, Value::Bool(v))
+    }
+    pub fn set_subtypes_disjoint(store: &mut Store, obj: Obj, v: bool) -> Result<(), Invalid> {
+        store.set(obj, entity::SUBTYPES_DISJOINT, Value::Bool(v))
+    }
+    pub fn set_discriminator(store: &mut Store, obj: Obj, v: Option<Obj>) -> Result<(), Invalid> {
+        store.set(obj, entity::DISCRIMINATOR, v.map_or(Value::Null, Value::Ref))
+    }
+    pub fn set_subtype_mapping(store: &mut Store, obj: Obj, v: u32) -> Result<(), Invalid> {
+        store.set(obj, entity::SUBTYPE_MAPPING, Value::Enum(v))
     }
 }
 
@@ -1913,5 +2033,99 @@ impl EnumTypeObj {
     }
     pub fn push_literal(store: &mut Store, obj: Obj, value: Value) -> Result<u32, Invalid> {
         store.push(obj, enum_type::LITERAL, value)
+    }
+}
+
+/// An object of Generalization, with every inherited stored property as a field.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct GeneralizationObj {
+    pub description: Option<Arc<str>>,
+    pub supertype: Option<Obj>,
+    pub subtype: Option<Obj>,
+    pub key_relationship: Option<Obj>,
+}
+
+impl Reflect for GeneralizationObj {
+    fn class(&self) -> ClassId {
+        GENERALIZATION
+    }
+    fn get(&self, prop: PropId) -> Option<Value> {
+        match prop {
+            element::DESCRIPTION => Some(self.description.clone().map_or(Value::Null, Value::Str)),
+            generalization::SUPERTYPE => Some(self.supertype.map_or(Value::Null, Value::Ref)),
+            generalization::SUBTYPE => Some(self.subtype.map_or(Value::Null, Value::Ref)),
+            generalization::KEY_RELATIONSHIP => Some(self.key_relationship.map_or(Value::Null, Value::Ref)),
+            _ => None,
+        }
+    }
+    fn set(&mut self, prop: PropId, value: Value) -> Result<(), String> {
+        match prop {
+            element::DESCRIPTION => {
+                match value {
+                    Value::Null => self.description = None,
+                    Value::Str(v) => self.description = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
+            generalization::SUPERTYPE => {
+                match value {
+                    Value::Null => self.supertype = None,
+                    Value::Ref(v) => self.supertype = Some(v),
+                    other => return Err(format!("not a reference: {other}")),
+                }
+                Ok(())
+            }
+            generalization::SUBTYPE => {
+                match value {
+                    Value::Null => self.subtype = None,
+                    Value::Ref(v) => self.subtype = Some(v),
+                    other => return Err(format!("not a reference: {other}")),
+                }
+                Ok(())
+            }
+            generalization::KEY_RELATIONSHIP => {
+                match value {
+                    Value::Null => self.key_relationship = None,
+                    Value::Ref(v) => self.key_relationship = Some(v),
+                    other => return Err(format!("not a reference: {other}")),
+                }
+                Ok(())
+            }
+            _ => Err(format!("no single-valued property {} on Generalization", prop.0)),
+        }
+    }
+    fn list(&self, _prop: PropId) -> Option<&[Value]> {
+        None
+    }
+    fn list_mut(&mut self, _prop: PropId) -> Option<&mut Vec<Value>> {
+        None
+    }
+}
+
+impl GeneralizationObj {
+    pub fn description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
+    pub fn supertype(&self) -> Option<Obj> {
+        self.supertype
+    }
+    pub fn subtype(&self) -> Option<Obj> {
+        self.subtype
+    }
+    pub fn key_relationship(&self) -> Option<Obj> {
+        self.key_relationship
+    }
+    pub fn set_description(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, element::DESCRIPTION, v.map_or(Value::Null, Value::str))
+    }
+    pub fn set_supertype(store: &mut Store, obj: Obj, v: Option<Obj>) -> Result<(), Invalid> {
+        store.set(obj, generalization::SUPERTYPE, v.map_or(Value::Null, Value::Ref))
+    }
+    pub fn set_subtype(store: &mut Store, obj: Obj, v: Option<Obj>) -> Result<(), Invalid> {
+        store.set(obj, generalization::SUBTYPE, v.map_or(Value::Null, Value::Ref))
+    }
+    pub fn set_key_relationship(store: &mut Store, obj: Obj, v: Option<Obj>) -> Result<(), Invalid> {
+        store.set(obj, generalization::KEY_RELATIONSHIP, v.map_or(Value::Null, Value::Ref))
     }
 }

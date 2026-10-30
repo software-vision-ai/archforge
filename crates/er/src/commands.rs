@@ -11,9 +11,9 @@ use serde_json::{Value as Json, json};
 use crate::rules::{self, IndexColumnSpec, MAX_NAME, MAX_TEXT, MAX_TYPE, name_of};
 use crate::{
     ATTRIBUTE, CHECK_CONSTRAINT, Cardinality, DOMAIN, DOMAIN_CHECK, Deferrability, ELEMENT, ENTITY, ENTITY_SIZE, ENUM_TYPE, EntityKind, ErView,
-    FOREIGN_KEY, Generation, INDEX_COLUMN, MatchType, NullsOrder, PRIMARY_KEY, RELATIONSHIP, ReferentialAction, SCHEMA, SortDirection, TABLE_INDEX,
-    UNIQUE_CONSTRAINT, attribute, check_constraint, domain, domain_check, element, entity, enum_type, foreign_key, index_column, key, named_element,
-    relationship, schema, table_index, unique_constraint,
+    FOREIGN_KEY, GENERALIZATION, Generation, INDEX_COLUMN, MatchType, NullsOrder, PRIMARY_KEY, RELATIONSHIP, ReferentialAction, SCHEMA,
+    SortDirection, SubtypeMapping, TABLE_INDEX, UNIQUE_CONSTRAINT, attribute, check_constraint, domain, domain_check, element, entity, enum_type,
+    foreign_key, generalization, index_column, key, named_element, relationship, schema, table_index, unique_constraint,
 };
 
 type C<'a> = Ctx<'a, Store, ErView>;
@@ -48,6 +48,44 @@ fn text<'a>(p: &'a Params, key: &str) -> &'a str {
     p.str(key).unwrap_or_default()
 }
 
+/// A store refusal as a refusal of `key`; anything else as the command's failure.
+fn refused_as(key: &'static str) -> impl Fn(Invalid) -> CommandError {
+    move |e| match e {
+        Invalid::Refused(why) => refuse(key, why),
+        other => fail(other),
+    }
+}
+
+/// At most 40 characters of a value for an error text.
+fn short(s: &str) -> String {
+    s.chars().take(40).collect()
+}
+
+/// The generalization that owns relationship `r` as a subtype's key (slice S6).
+fn subtype_key_owner(store: &Store, r: Obj) -> Option<Obj> {
+    store.referrers(r).into_iter().find(|(g, p)| *p == generalization::KEY_RELATIONSHIP && store.is_alive(*g)).map(|(g, _)| g)
+}
+
+/// The generalization whose subtype key `obj` is a piece of: the key relationship, its foreign
+/// key, one of its columns, or the subtype's primary key that holds them.
+fn subtype_key_piece(store: &Store, obj: Obj) -> Option<Obj> {
+    let owned_fk = |fk: Obj| rules::key_parts(store, fk).relationship.and_then(|r| subtype_key_owner(store, r));
+    match store.class_of(obj).ok()? {
+        c if c == RELATIONSHIP => subtype_key_owner(store, obj),
+        c if c == FOREIGN_KEY => owned_fk(obj),
+        c if c == ATTRIBUTE => store.referrers(obj).into_iter().filter(|(_, p)| *p == foreign_key::COLUMN).find_map(|(fk, _)| owned_fk(fk)),
+        c if c == PRIMARY_KEY => {
+            let e = rules::entity_of(store, obj)?;
+            let pk = rules::key_columns(store, obj);
+            rules::foreign_keys(store, e)
+                .into_iter()
+                .filter(|fk| rules::key_parts(store, *fk).columns.iter().any(|a| pk.contains(a)))
+                .find_map(owned_fk)
+        }
+        _ => None,
+    }
+}
+
 fn uuid_of(store: &Store, obj: Obj) -> Result<String, CommandError> {
     store.uuid(obj).map(|u| u.to_string()).map_err(fail)
 }
@@ -55,8 +93,8 @@ fn uuid_of(store: &Store, obj: Obj) -> Result<String, CommandError> {
 /// The element the id under `key` names, of any class of the ER model.
 fn element_of_any(ctx: &C<'_>, p: &Params, key: &str) -> Result<Obj, CommandError> {
     let id = text(p, key);
-    let Some(uuid) = Uuid::parse(id) else { return Err(refuse(key, format!("{id:?} is not an id"))) };
-    let o = ctx.doc.by_uuid(uuid).filter(|o| ctx.doc.is_alive(*o)).ok_or_else(|| refuse(key, format!("there is no element {id}")))?;
+    let Some(uuid) = Uuid::parse(id) else { return Err(refuse(key, format!("{:?} is not an id", short(id)))) };
+    let o = ctx.doc.by_uuid(uuid).filter(|o| ctx.doc.is_alive(*o)).ok_or_else(|| refuse(key, format!("there is no element {}", short(id))))?;
     let class = ctx.doc.class_of(o).map_err(fail)?;
     if !ctx.doc.universe().conforms(class, TypeRef::Class(ELEMENT)) {
         return Err(refuse(key, format!("{id} is not an element of the ER model")));
@@ -67,8 +105,8 @@ fn element_of_any(ctx: &C<'_>, p: &Params, key: &str) -> Result<Obj, CommandErro
 /// The element the id under `key` names, of `class`.
 fn id_of(ctx: &C<'_>, p: &Params, key: &str, class: ClassId) -> Result<Obj, CommandError> {
     let id = text(p, key);
-    let Some(uuid) = Uuid::parse(id) else { return Err(refuse(key, format!("{id:?} is not an id"))) };
-    let Some(obj) = ctx.doc.by_uuid(uuid) else { return Err(refuse(key, format!("there is no element {id}"))) };
+    let Some(uuid) = Uuid::parse(id) else { return Err(refuse(key, format!("{:?} is not an id", short(id)))) };
+    let Some(obj) = ctx.doc.by_uuid(uuid) else { return Err(refuse(key, format!("there is no element {}", short(id)))) };
     if ctx.doc.class_of(obj).ok() != Some(class) {
         return Err(refuse(
             key,
@@ -85,6 +123,7 @@ fn id_of(ctx: &C<'_>, p: &Params, key: &str, class: ClassId) -> Result<Obj, Comm
                     .replace("entity", "an entity")
                     .replace("attribute", "an attribute")
                     .replace("schema", "a schema")
+                    .replace("generalization", "a generalization")
             ),
         ));
     }
@@ -205,6 +244,10 @@ fn entity_rename(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, e)? }))
 }
 
+/// How deep a removal may cascade through keys built on each other: four nested removals per level
+/// of the longest chain the commands build.
+const REMOVAL_DEPTH: u32 = 4 * rules::MAX_KEY_COLUMNS as u32;
+
 /// What outside `obj` depends on it or on anything it contains: the keys that list one of its
 /// attributes, and the foreign keys that point at one of its keys or at one of those, or list one
 /// of its attributes. As in SQL, a key loses all of itself with any of its columns.
@@ -320,12 +363,42 @@ fn relationships_of(store: &Store, e: Obj) -> Vec<Obj> {
 /// identifying relationship that loses its key, or whose key leaves the primary key, a
 /// non-identifying one.
 pub fn remove_element(store: &mut Store, obj: Obj) -> Result<usize, Invalid> {
+    // A removal cascades through the keys built on what goes (a chain of subtype keys, level by
+    // level); its nesting has a budget, so a deep chain in a loaded document is refused, never a
+    // stack overflow.
+    thread_local! { static DEPTH: std::cell::Cell<u32> = const { std::cell::Cell::new(0) }; }
+    struct Deeper;
+    impl Drop for Deeper {
+        fn drop(&mut self) {
+            DEPTH.with(|d| d.set(d.get().saturating_sub(1)));
+        }
+    }
+    if DEPTH.with(|d| d.get()) >= REMOVAL_DEPTH {
+        return Err(Invalid::Refused(format!("the removal reaches deeper than {REMOVAL_DEPTH} levels of keys built on each other")));
+    }
+    DEPTH.with(|d| d.set(d.get() + 1));
+    let _deeper = Deeper;
     store.transaction(|st| {
         let mut gone = 0;
         let mut owners: BTreeSet<Obj> = BTreeSet::new();
         let mut relationships: BTreeSet<Obj> = BTreeSet::new();
         let (keys, fks) = dependents(st, obj)?;
         let index_parts = index_dependents(st, obj)?;
+        // A subtype key that goes as a dependent takes its relationship along, and its generalization
+        // forgets it (slice S6).
+        let mut orphaned: BTreeSet<Obj> = BTreeSet::new();
+        let mut orphan_columns: Vec<Obj> = Vec::new();
+        for x in fks.iter().copied().chain([obj]) {
+            let (rel, columns) = match st.class_of(x)? {
+                c if c == FOREIGN_KEY => (rules::key_parts(st, x).relationship, rules::key_parts(st, x).columns),
+                c if c == RELATIONSHIP => (Some(x), Vec::new()),
+                _ => (None, Vec::new()),
+            };
+            if let Some(g) = rel.and_then(|r| subtype_key_owner(st, r)) {
+                orphaned.insert(g);
+                orphan_columns.extend(columns);
+            }
+        }
         // A follower loses its link when its target goes; a column loses the type that goes.
         for o in subtree_of(st, obj)?.0 {
             for c in rules::linked_from(st, o) {
@@ -360,6 +433,23 @@ pub fn remove_element(store: &mut Store, obj: Obj) -> Result<usize, Invalid> {
         }
         gone += archforge_diagram::remove_views_of(st, obj)?;
         gone += archforge_core::destroy_with_links(st, obj)?;
+        for g in orphaned {
+            if st.is_alive(g)
+                && let (_, _, key_rel) = rules::generalization_parts(st, g)
+            {
+                st.set(g, generalization::KEY_RELATIONSHIP, Value::Null)?;
+                if let Some(r) = key_rel.filter(|r| st.is_alive(*r)) {
+                    gone += remove_element(st, r)?;
+                }
+            }
+        }
+        // The columns that followed an orphaned subtype key and that nothing else holds go too.
+        for c in orphan_columns {
+            let held = st.referrers(c).iter().any(|(_, p)| *p == foreign_key::COLUMN);
+            if st.is_alive(c) && rules::linked_to(st, c).is_some() && !held && rules::unique_on(st, c).is_empty() {
+                gone += remove_follower(st, c)?;
+            }
+        }
         demote_broken(st, &owners)?;
         unidentify_broken(st, &relationships)?;
         Ok(gone)
@@ -371,6 +461,13 @@ pub fn remove_element(store: &mut Store, obj: Obj) -> Result<usize, Invalid> {
 pub fn remove_entity(store: &mut Store, e: Obj) -> Result<usize, Invalid> {
     store.transaction(|st| {
         let mut gone = 0;
+        // Its generalizations go first, with the subtype keys they made.
+        let links: Vec<Obj> = rules::supertype_links(st, e).into_iter().chain(rules::subtype_links(st, e)).collect();
+        for g in links {
+            if st.is_alive(g) {
+                gone += remove_generalization(st, g)?;
+            }
+        }
         let relationships: BTreeSet<Obj> =
             st.referrers(e).into_iter().filter(|(_, prop)| *prop == relationship::FROM || *prop == relationship::TO).map(|(r, _)| r).collect();
         for r in relationships {
@@ -385,7 +482,7 @@ pub fn remove_entity(store: &mut Store, e: Obj) -> Result<usize, Invalid> {
 
 fn entity_remove(ctx: &mut C<'_>, p: &Params) -> R {
     let e = id_of(ctx, p, "entity", ENTITY)?;
-    let gone = remove_entity(ctx.doc, e).map_err(fail)?;
+    let gone = remove_entity(ctx.doc, e).map_err(refused_as("entity"))?;
     Ok(json!({ "removed": gone }))
 }
 
@@ -477,6 +574,7 @@ fn attribute_add(ctx: &mut C<'_>, p: &Params) -> R {
                 new_unique(st, e, &[a], "", true)?;
             }
             keys_still_hold(st, &keys, &entities)?;
+            subtypes_hold(st, e)?;
             Ok(a)
         })
         .map_err(|e| refuse("primary_key", e.to_string()))?;
@@ -530,9 +628,14 @@ fn follow_rename(st: &mut Store, a: Obj, old: &str, new: &str) -> Result<(), Inv
                 continue;
             }
             let current = name_of(st, c);
-            let Some(prefix) = current.strip_suffix(&suffix) else { continue };
             let Some(e) = rules::entity_of(st, c) else { continue };
-            let base = format!("{prefix}_{}", snake(&new));
+            let base = if current == snake(&old) {
+                // A follower that took the target's own name, as a subtype's key does.
+                snake(&new)
+            } else {
+                let Some(prefix) = current.strip_suffix(&suffix) else { continue };
+                format!("{prefix}_{}", snake(&new))
+            };
             let name = first_free(&base, |n| rules::attribute_name_free(st, e, n, Some(c))).map_err(|e| Invalid::Refused(e.message))?;
             st.set(c, named_element::NAME, Value::str(&name))?;
             // A follower's own followers (an identifying chain) follow on.
@@ -578,12 +681,14 @@ fn removable_follower(st: &Store, c: Obj, fk: Obj) -> bool {
 
 /// Removes a follower column from its table: out of the primary key first, then with everything
 /// that depended on it (index columns, views, links), as any removal does.
-fn remove_follower(st: &mut Store, c: Obj) -> Result<(), Invalid> {
+fn remove_follower(st: &mut Store, c: Obj) -> Result<usize, Invalid> {
     if let Some(e) = rules::entity_of(st, c) {
         leave_primary_key(st, e, c)?;
     }
-    remove_element(st, c)?;
-    Ok(())
+    if !st.is_alive(c) {
+        return Ok(0);
+    }
+    remove_element(st, c)
 }
 
 /// What a foreign key's new columns take from its relationship: in the child's primary key when it
@@ -622,8 +727,15 @@ fn grow_foreign_keys(st: &mut Store, k: Obj, old: &[Obj], new: &[Obj]) -> Result
         let parts = rules::key_parts(st, fk);
         let Some(child) = parts.entity else { continue };
         let (in_key, optional, role) = follower_shape(st, fk);
+        let subtype_key = parts.relationship.is_some_and(|r| subtype_key_owner(st, r).is_some());
         let parent = rules::entity_of(st, k).map(|e| name_of(st, e)).unwrap_or_default();
-        let prefix = if role.is_empty() { snake(&parent) } else { snake(&role) };
+        let prefix = if subtype_key {
+            String::new()
+        } else if role.is_empty() {
+            snake(&parent)
+        } else {
+            snake(&role)
+        };
         let mut columns = Vec::with_capacity(new.len());
         for t in new {
             match old.iter().position(|o| o == t).and_then(|i| parts.columns.get(i)) {
@@ -741,7 +853,9 @@ fn join_primary_key(store: &mut Store, e: Obj, a: Obj) -> Result<(), Invalid> {
         let new = rules::key_columns(store, pk);
         grow_foreign_keys(store, pk, &old, &new)?;
     }
-    store.set(a, attribute::NULLABLE, Value::Bool(false))
+    store.set(a, attribute::NULLABLE, Value::Bool(false))?;
+    // A supertype that has a key now gives it to its subtypes under table per type.
+    ensure_subtype_keys(store, e)
 }
 
 /// Takes `a` out of its entity's primary key; a key left without columns goes.
@@ -751,7 +865,8 @@ fn leave_primary_key(store: &mut Store, e: Obj, a: Obj) -> Result<(), Invalid> {
     store.remove_value(pk, key::COLUMN, &Value::Ref(a))?;
     let new = rules::key_columns(store, pk);
     if new.is_empty() {
-        archforge_core::destroy_with_links(store, pk)?;
+        // An emptied key goes whole, with the foreign keys onto it (a subtype's below, too).
+        remove_element(store, pk)?;
     } else {
         grow_foreign_keys(store, pk, &old, &new)?;
     }
@@ -1291,7 +1406,8 @@ fn attribute_set_flags(ctx: &mut C<'_>, p: &Params) -> R {
             if let Some(problem) = rules::generation_problem(st, a) {
                 return Err(Invalid::Refused(problem));
             }
-            keys_still_hold(st, &fks, &entities)
+            keys_still_hold(st, &fks, &entities)?;
+            subtypes_hold(st, e)
         })
         .map_err(|e| refuse("attribute", e.to_string()))?;
     Ok(json!({ "id": uuid_of(ctx.doc, a)? }))
@@ -1313,7 +1429,8 @@ fn attribute_move(ctx: &mut C<'_>, p: &Params) -> R {
 
 fn attribute_remove(ctx: &mut C<'_>, p: &Params) -> R {
     let a = id_of(ctx, p, "attribute", ATTRIBUTE)?;
-    let gone = remove_element(ctx.doc, a).map_err(fail)?;
+    not_piece(ctx.doc, a, "attribute")?;
+    let gone = remove_element(ctx.doc, a).map_err(refused_as("attribute"))?;
     Ok(json!({ "removed": gone }))
 }
 
@@ -1439,7 +1556,8 @@ fn new_key_columns(store: &mut Store, child: Obj, k: Obj, role: &str, in_key: bo
 /// it, linked to it, in the child's primary key when `in_key`, nullable when `optional` and not in
 /// the key.
 fn new_key_column(store: &mut Store, child: Obj, t: Obj, prefix: &str, in_key: bool, optional: bool) -> Result<Obj, Invalid> {
-    let base = format!("{prefix}_{}", snake(&name_of(store, t)));
+    // An empty prefix keeps the key column's own name (a subtype's key is its supertype's).
+    let base = if prefix.is_empty() { snake(&name_of(store, t)) } else { format!("{prefix}_{}", snake(&name_of(store, t))) };
     let name = first_free(&base, |n| rules::attribute_name_free(store, child, n, None)).map_err(|e| Invalid::Refused(e.message))?;
     let a = store.create(ATTRIBUTE)?;
     store.set(a, named_element::NAME, Value::str(&name))?;
@@ -1598,6 +1716,7 @@ fn relationship_add(ctx: &mut C<'_>, p: &Params) -> R {
 
 fn relationship_set_identifying(ctx: &mut C<'_>, p: &Params) -> R {
     let r = id_of(ctx, p, "relationship", RELATIONSHIP)?;
+    not_subtype_key(ctx.doc, Some(r), "relationship")?;
     let identifying = p.bool("identifying").unwrap_or(false);
     let keys: Vec<Obj> = ctx.doc.referrers(r).into_iter().filter(|(_, prop)| *prop == foreign_key::RELATIONSHIP).map(|(fk, _)| fk).collect();
     if identifying && keys.is_empty() {
@@ -1804,6 +1923,237 @@ fn relationship_collapse(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, r)? }))
 }
 
+// Subtypes (slice S6).
+
+/// The mapping words, in the enumeration's order.
+pub const MAPPING_WORDS: [(SubtypeMapping, &str); 3] = [
+    (SubtypeMapping::TablePerType, "table-per-type"),
+    (SubtypeMapping::SingleTable, "single-table"),
+    (SubtypeMapping::TablePerConcreteType, "table-per-concrete-type"),
+];
+
+/// A mapping's name in parameters.
+pub fn mapping_name(m: SubtypeMapping) -> &'static str {
+    MAPPING_WORDS.iter().find(|(x, _)| *x == m).map_or("table-per-type", |(_, w)| *w)
+}
+
+/// Makes the key a subtype takes from its supertype under table per type, when the supertype has a
+/// primary key and the generalization has none yet: an identifying one to zero-or-one relationship
+/// from the supertype to the subtype with the foreign key and its columns, named like the
+/// supertype's key columns.
+fn ensure_subtype_key(st: &mut Store, g: Obj) -> Result<(), Invalid> {
+    let (Some(sup), Some(sub), key_rel) = rules::generalization_parts(st, g) else { return Ok(()) };
+    if key_rel.is_some() || rules::mapping_of(st, sup) != SubtypeMapping::TablePerType {
+        return Ok(());
+    }
+    let Some(pk) = rules::primary_key_of(st, sup) else { return Ok(()) };
+    if rules::key_columns(st, pk).is_empty() {
+        return Ok(());
+    }
+    // A chain of subtype keys is made level by level; its depth has a budget, and a circle of
+    // generalizations or of identifying keys is refused.
+    thread_local! { static DEPTH: std::cell::Cell<u32> = const { std::cell::Cell::new(0) }; }
+    struct Deeper;
+    impl Drop for Deeper {
+        fn drop(&mut self) {
+            DEPTH.with(|d| d.set(d.get().saturating_sub(1)));
+        }
+    }
+    if DEPTH.with(|d| d.get()) >= rules::MAX_KEY_COLUMNS as u32 {
+        return Err(Invalid::Refused(format!("the subtypes run deeper than {} levels", rules::MAX_KEY_COLUMNS)));
+    }
+    if rules::is_supertype_or_self(st, sub, sup) {
+        return Err(Invalid::Refused(format!("{} and {} are subtypes of each other", name_of(st, sub), name_of(st, sup))));
+    }
+    if rules::identifying_cycle(st, sub, pk) {
+        return Err(Invalid::Refused(cycle_text(st, sub, pk)));
+    }
+    DEPTH.with(|d| d.set(d.get() + 1));
+    let _deeper = Deeper;
+    let Some(s) = rules::schema_of(st, sup) else { return Ok(()) };
+    let r = new_relationship(st, s, sup, sub, [Cardinality::ExactlyOne, Cardinality::ZeroOrOne], ["", ""], "", true)?;
+    // Recorded before the columns, so a key appearing on the way does not make a second one.
+    st.set(g, generalization::KEY_RELATIONSHIP, Value::Ref(r))?;
+    let mut columns = Vec::new();
+    for t in rules::key_columns(st, pk) {
+        columns.push(new_key_column(st, sub, t, "", true, false)?);
+    }
+    let actions = [ReferentialAction::Cascade, ReferentialAction::NoAction];
+    new_foreign_key(st, sub, pk, &columns, "", actions, Some(r))?;
+    // One to zero-or-one: the inherited columns are unique even when the subtype's key is wider.
+    if rules::primary_key(st, sub) != columns {
+        new_unique(st, sub, &columns, "", true)?;
+    }
+    Ok(())
+}
+
+/// The keys of every subtype of `e` that has none yet.
+fn ensure_subtype_keys(st: &mut Store, e: Obj) -> Result<(), Invalid> {
+    for g in rules::subtype_links(st, e) {
+        ensure_subtype_key(st, g)?;
+    }
+    Ok(())
+}
+
+/// After a change to `e`'s subtyping or key: the keys around `e` and around each of its subtypes
+/// keep the rules, the new subtype keys included.
+fn subtypes_hold(st: &Store, e: Obj) -> Result<(), Invalid> {
+    let mut around = vec![e];
+    around.extend(rules::subtype_links(st, e).into_iter().filter_map(|g| rules::generalization_parts(st, g).1));
+    for x in around {
+        let (fks, entities) = keys_near(st, x)?;
+        keys_still_hold(st, &fks, &entities)?;
+    }
+    Ok(())
+}
+
+/// How many levels the generalizations above `e` and below `sub` would reach together.
+fn chain_depth(store: &Store, sup: Obj, sub: Obj) -> usize {
+    let mut up = 0;
+    let mut seen: BTreeSet<Obj> = BTreeSet::new();
+    let mut cur = Some(sup);
+    while let Some(c) = cur {
+        if !seen.insert(c) {
+            break;
+        }
+        up += 1;
+        cur = rules::supertype_of(store, c);
+    }
+    let mut down = 0;
+    let mut level = vec![sub];
+    let mut seen: BTreeSet<Obj> = BTreeSet::new();
+    while !level.is_empty() && down <= rules::MAX_KEY_COLUMNS {
+        down += 1;
+        let mut next = Vec::new();
+        for x in level {
+            if seen.insert(x) {
+                next.extend(rules::subtype_links(store, x).into_iter().filter_map(|g| rules::generalization_parts(store, g).1));
+            }
+        }
+        level = next;
+    }
+    up + down
+}
+
+/// Removes the key a generalization made: its foreign key, the columns that followed the
+/// supertype's key and nothing else holds, and the relationship.
+fn remove_subtype_key(st: &mut Store, g: Obj) -> Result<usize, Invalid> {
+    let (_, _, Some(r)) = rules::generalization_parts(st, g) else { return Ok(0) };
+    st.set(g, generalization::KEY_RELATIONSHIP, Value::Null)?;
+    let mut gone = 0;
+    let fks: Vec<Obj> = st.referrers(r).into_iter().filter(|(_, p)| *p == foreign_key::RELATIONSHIP).map(|(fk, _)| fk).collect();
+    for fk in fks {
+        let parts = rules::key_parts(st, fk);
+        let columns = parts.columns;
+        // The unique constraint the key made over its columns goes with it, unless a key points at it.
+        if let Some(child) = parts.entity {
+            for u in rules::unique_constraints(st, child) {
+                if rules::key_columns(st, u) == columns && rules::keys_onto(st, u).is_empty() {
+                    gone += archforge_core::destroy_with_links(st, u)?;
+                }
+            }
+        }
+        let keep: Vec<bool> = columns.iter().map(|c| !removable_follower(st, *c, fk)).collect();
+        gone += archforge_core::destroy_with_links(st, fk)?;
+        for (c, keep) in columns.into_iter().zip(keep) {
+            if !keep && st.is_alive(c) {
+                gone += remove_follower(st, c)?;
+            }
+        }
+    }
+    if st.is_alive(r) {
+        gone += remove_element(st, r)?;
+    }
+    Ok(gone)
+}
+
+/// Removes a generalization with the key it made and its views.
+fn remove_generalization(st: &mut Store, g: Obj) -> Result<usize, Invalid> {
+    let gone = remove_subtype_key(st, g)?;
+    Ok(gone + remove_element(st, g)?)
+}
+
+fn generalization_add(ctx: &mut C<'_>, p: &Params) -> R {
+    let sup = id_of(ctx, p, "supertype", ENTITY)?;
+    let sub = id_of(ctx, p, "subtype", ENTITY)?;
+    if let Some((key, problem)) = rules::generalization_problem(ctx.doc, sup, sub, None) {
+        return Err(refuse(key, problem));
+    }
+    let s = rules::schema_of(ctx.doc, sup).ok_or_else(|| refuse("supertype", "the table belongs to no schema"))?;
+    // Levels are links: the tables of the chain less one.
+    if chain_depth(ctx.doc, sup, sub).saturating_sub(1) >= rules::MAX_KEY_COLUMNS {
+        return Err(refuse("subtype", format!("the subtypes would run deeper than {} levels", rules::MAX_KEY_COLUMNS)));
+    }
+    let g = ctx
+        .doc
+        .transaction(|st| {
+            let g = st.create(GENERALIZATION)?;
+            st.set(g, generalization::SUPERTYPE, Value::Ref(sup))?;
+            st.set(g, generalization::SUBTYPE, Value::Ref(sub))?;
+            st.push(s, schema::GENERALIZATION, Value::Ref(g))?;
+            ensure_subtype_key(st, g)?;
+            subtypes_hold(st, sup)?;
+            Ok(g)
+        })
+        .map_err(|e| match e {
+            Invalid::Refused(why) => refuse("subtype", why),
+            other => fail(other),
+        })?;
+    select(ctx, vec![g]);
+    Ok(json!({ "id": uuid_of(ctx.doc, g)? }))
+}
+
+fn generalization_remove(ctx: &mut C<'_>, p: &Params) -> R {
+    let g = id_of(ctx, p, "generalization", GENERALIZATION)?;
+    let gone = ctx.doc.transaction(|st| remove_generalization(st, g)).map_err(refused_as("generalization"))?;
+    Ok(json!({ "removed": gone }))
+}
+
+/// Sets how a supertype's subtypes hold together: complete, disjoint, the discriminator and the
+/// mapping; a mapping change makes or removes every subtype's key in the same step.
+fn entity_set_subtyping(ctx: &mut C<'_>, p: &Params) -> R {
+    let e = id_of(ctx, p, "entity", ENTITY)?;
+    let complete = p.bool("complete").unwrap_or(false);
+    let disjoint = p.bool("disjoint").unwrap_or(true);
+    let discriminator = if text(p, "discriminator").is_empty() {
+        None
+    } else {
+        let a = id_of(ctx, p, "discriminator", ATTRIBUTE)?;
+        if rules::entity_of(ctx.doc, a) != Some(e) {
+            return Err(refuse("discriminator", format!("{} is not a column of {}", name_of(ctx.doc, a), name_of(ctx.doc, e))));
+        }
+        Some(a)
+    };
+    let word = text(p, "mapping");
+    let mapping = MAPPING_WORDS.iter().find(|(_, w)| *w == word).map(|(m, _)| *m).ok_or_else(|| {
+        let shown: String = word.chars().take(40).collect();
+        refuse("mapping", format!("{shown:?} is not one of {}", MAPPING_WORDS.iter().map(|(_, w)| *w).collect::<Vec<_>>().join(", ")))
+    })?;
+    let was = rules::mapping_of(ctx.doc, e);
+    ctx.doc
+        .transaction(|st| {
+            st.set(e, entity::SUBTYPES_COMPLETE, Value::Bool(complete))?;
+            st.set(e, entity::SUBTYPES_DISJOINT, Value::Bool(disjoint))?;
+            st.set(e, entity::DISCRIMINATOR, discriminator.map_or(Value::Null, Value::Ref))?;
+            st.set(e, entity::SUBTYPE_MAPPING, Value::Enum(mapping.index()))?;
+            if mapping != was {
+                for g in rules::subtype_links(st, e) {
+                    if mapping == SubtypeMapping::TablePerType {
+                        ensure_subtype_key(st, g)?;
+                    } else {
+                        remove_subtype_key(st, g)?;
+                    }
+                }
+            }
+            subtypes_hold(st, e)
+        })
+        .map_err(|e| match e {
+            Invalid::Refused(why) => refuse("mapping", why),
+            other => fail(other),
+        })?;
+    Ok(json!({ "id": uuid_of(ctx.doc, e)? }))
+}
+
 // Foreign keys.
 
 fn action(p: &Params, key: &str) -> Result<ReferentialAction, CommandError> {
@@ -1852,7 +2202,7 @@ fn attribute_list(ctx: &C<'_>, p: &Params, key: &str) -> Result<Vec<Obj>, Comman
 /// The key the id under `param` names: a primary key or a unique constraint.
 fn key_id(ctx: &C<'_>, p: &Params, param: &str) -> Result<Obj, CommandError> {
     let id = text(p, param);
-    let obj = Uuid::parse(id).and_then(|u| ctx.doc.by_uuid(u)).ok_or_else(|| refuse(param, format!("there is no element {id:?}")))?;
+    let obj = Uuid::parse(id).and_then(|u| ctx.doc.by_uuid(u)).ok_or_else(|| refuse(param, format!("there is no element {:?}", short(id))))?;
     if !rules::is_key(ctx.doc, obj) {
         return Err(refuse(param, format!("{id} is neither a primary key nor a unique constraint")));
     }
@@ -2000,6 +2350,7 @@ fn foreign_key_set_options(ctx: &mut C<'_>, p: &Params) -> R {
 /// stay.
 fn foreign_key_set_key(ctx: &mut C<'_>, p: &Params) -> R {
     let fk = id_of(ctx, p, "foreign_key", FOREIGN_KEY)?;
+    not_subtype_key(ctx.doc, rules::key_parts(ctx.doc, fk).relationship, "foreign_key")?;
     let k = key_id(ctx, p, "key")?;
     let given = attribute_list(ctx, p, "columns")?;
     let parts = rules::key_parts(ctx.doc, fk);
@@ -2059,6 +2410,7 @@ fn foreign_key_rename(ctx: &mut C<'_>, p: &Params) -> R {
 
 fn foreign_key_remove(ctx: &mut C<'_>, p: &Params) -> R {
     let fk = id_of(ctx, p, "foreign_key", FOREIGN_KEY)?;
+    not_subtype_key(ctx.doc, rules::key_parts(ctx.doc, fk).relationship, "foreign_key")?;
     let gone = remove_element(ctx.doc, fk).map_err(fail)?;
     Ok(json!({ "removed": gone }))
 }
@@ -2091,6 +2443,9 @@ fn primary_key_set(ctx: &mut C<'_>, p: &Params) -> R {
             }
             st.set(pk, key::NAME, if name.is_empty() { Value::Null } else { Value::str(&name) })?;
             keys_still_hold(st, &fks, &entities)?;
+            // A supertype that has a key now gives it to its subtypes.
+            ensure_subtype_keys(st, e)?;
+            subtypes_hold(st, e)?;
             Ok(pk)
         })
         .map_err(|e| refuse("columns", e.to_string()))?;
@@ -2099,8 +2454,11 @@ fn primary_key_set(ctx: &mut C<'_>, p: &Params) -> R {
 
 fn primary_key_remove(ctx: &mut C<'_>, p: &Params) -> R {
     let e = id_of(ctx, p, "entity", ENTITY)?;
+    if let Some(pk) = rules::primary_key_of(ctx.doc, e) {
+        not_piece(ctx.doc, pk, "entity")?;
+    }
     let pk = rules::primary_key_of(ctx.doc, e).ok_or_else(|| refuse("entity", format!("{} has no primary key", name_of(ctx.doc, e))))?;
-    let gone = remove_element(ctx.doc, pk).map_err(fail)?;
+    let gone = remove_element(ctx.doc, pk).map_err(refused_as("entity"))?;
     Ok(json!({ "removed": gone }))
 }
 
@@ -2285,8 +2643,12 @@ fn index_columns_param(ctx: &C<'_>, p: &Params, key: &str, entity: Obj) -> Resul
         };
         let attribute = match attribute {
             Some(id) => {
-                let uuid = Uuid::parse(id).ok_or_else(|| refuse(key, format!("{id:?} is not an id")))?;
-                let a = ctx.doc.by_uuid(uuid).filter(|a| ctx.doc.is_alive(*a)).ok_or_else(|| refuse(key, format!("there is no element {id}")))?;
+                let uuid = Uuid::parse(id).ok_or_else(|| refuse(key, format!("{:?} is not an id", short(id))))?;
+                let a = ctx
+                    .doc
+                    .by_uuid(uuid)
+                    .filter(|a| ctx.doc.is_alive(*a))
+                    .ok_or_else(|| refuse(key, format!("there is no element {}", short(id))))?;
                 Some(a)
             }
             None => None,
@@ -2392,6 +2754,7 @@ fn cycle_text(store: &Store, child: Obj, k: Obj) -> String {
 /// for zero-or-one, not null for exactly-one, a column in the child's primary key staying not null.
 fn relationship_set_ends(ctx: &mut C<'_>, p: &Params) -> R {
     let r = id_of(ctx, p, "relationship", RELATIONSHIP)?;
+    not_subtype_key(ctx.doc, Some(r), "relationship")?;
     let (from_end, to_end) = (cardinality(p, "from_end")?, cardinality(p, "to_end")?);
     let (was_from, was_to) = (rules::cardinality_of(ctx.doc, r, relationship::FROM_END), rules::cardinality_of(ctx.doc, r, relationship::TO_END));
     let (was_from, was_to) = (was_from.unwrap_or(from_end), was_to.unwrap_or(to_end));
@@ -2454,6 +2817,7 @@ fn follow_nullability(st: &mut Store, a: Obj, nullable: bool) -> Result<(), Inva
 
 fn relationship_set_roles(ctx: &mut C<'_>, p: &Params) -> R {
     let r = id_of(ctx, p, "relationship", RELATIONSHIP)?;
+    not_subtype_key(ctx.doc, Some(r), "relationship")?;
     let roles = [role(p, "from_role")?, role(p, "to_role")?];
     ctx.doc
         .transaction(|st| {
@@ -2473,8 +2837,33 @@ fn relationship_rename(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, r)? }))
 }
 
+/// Refuses to remove or reshape a piece of a subtype's key on its own: the generalization owns it.
+fn not_piece(store: &Store, obj: Obj, key: &str) -> Result<(), CommandError> {
+    if breaks_subtype_key(store, obj).is_some() {
+        return Err(refuse(key, "it is part of a subtype's key; remove the generalization or change the mapping instead"));
+    }
+    Ok(())
+}
+
+/// The generalization whose subtype key `obj` is a piece of, or whose subtype's primary key goes
+/// with `obj` (a key goes whole with any of its columns).
+fn breaks_subtype_key(store: &Store, obj: Obj) -> Option<Obj> {
+    subtype_key_piece(store, obj).or_else(|| dependents(store, obj).ok()?.0.into_iter().find_map(|k| subtype_key_piece(store, k)))
+}
+
+/// Refuses to remove a relationship or foreign key that is a subtype's key: the generalization owns it.
+fn not_subtype_key(store: &Store, r: Option<Obj>, key: &str) -> Result<(), CommandError> {
+    let Some(r) = r else { return Ok(()) };
+    let owned = store.referrers(r).into_iter().any(|(g, p)| p == generalization::KEY_RELATIONSHIP && store.is_alive(g));
+    if owned {
+        return Err(refuse(key, "it is a subtype's key; remove the generalization instead"));
+    }
+    Ok(())
+}
+
 fn relationship_remove(ctx: &mut C<'_>, p: &Params) -> R {
     let r = id_of(ctx, p, "relationship", RELATIONSHIP)?;
+    not_subtype_key(ctx.doc, Some(r), "relationship")?;
     let gone = remove_element(ctx.doc, r).map_err(fail)?;
     Ok(json!({ "removed": gone }))
 }
@@ -2489,8 +2878,8 @@ fn id_list(ctx: &C<'_>, p: &Params, key: &str) -> Result<Vec<Obj>, CommandError>
     let mut out = Vec::with_capacity(items.len());
     for v in &items {
         let id = v.as_str().ok_or_else(|| refuse(key, "every id must be a string"))?;
-        let uuid = Uuid::parse(id).ok_or_else(|| refuse(key, format!("{id:?} is not an id")))?;
-        let obj = ctx.doc.by_uuid(uuid).ok_or_else(|| refuse(key, format!("there is no element {id}")))?;
+        let uuid = Uuid::parse(id).ok_or_else(|| refuse(key, format!("{:?} is not an id", short(id))))?;
+        let obj = ctx.doc.by_uuid(uuid).ok_or_else(|| refuse(key, format!("there is no element {}", short(id))))?;
         if !seen.insert(obj) {
             return Err(refuse(key, format!("{id} is listed twice")));
         }
@@ -2510,17 +2899,34 @@ fn remove_many(ctx: &mut C<'_>, p: &Params) -> R {
     let mut by_class: Vec<(ClassId, Obj)> = Vec::new();
     for o in &ids {
         let class = ctx.doc.class_of(*o).map_err(fail)?;
-        if ![FOREIGN_KEY, PRIMARY_KEY, UNIQUE_CONSTRAINT, RELATIONSHIP, ATTRIBUTE, ENTITY, SCHEMA].contains(&class) {
+        if ![GENERALIZATION, FOREIGN_KEY, PRIMARY_KEY, UNIQUE_CONSTRAINT, RELATIONSHIP, ATTRIBUTE, ENTITY, SCHEMA].contains(&class) {
             return Err(refuse("ids", format!("{} is not an ER element", uuid_of(ctx.doc, *o)?)));
         }
         by_class.push((class, *o));
     }
-    let order = [FOREIGN_KEY, UNIQUE_CONSTRAINT, PRIMARY_KEY, RELATIONSHIP, ATTRIBUTE, ENTITY, SCHEMA];
+    // A piece of a subtype key goes only with its own generalization, one of its two tables, or
+    // their schema in the same call.
+    for (_, o) in &by_class {
+        if let Some(g) = breaks_subtype_key(ctx.doc, *o) {
+            let (sup, sub, _) = rules::generalization_parts(ctx.doc, g);
+            let schema = rules::schema_of(ctx.doc, g);
+            let covered = ids.iter().any(|x| Some(*x) == Some(g) || Some(*x) == sup || Some(*x) == sub || Some(*x) == schema);
+            if !covered {
+                return Err(refuse("ids", "a part of a subtype's key goes only with its generalization"));
+            }
+        }
+    }
+    let order = [GENERALIZATION, FOREIGN_KEY, UNIQUE_CONSTRAINT, PRIMARY_KEY, RELATIONSHIP, ATTRIBUTE, ENTITY, SCHEMA];
     let mut gone = 0;
     for class in order {
         for (c, o) in &by_class {
             if *c == class && ctx.doc.is_alive(*o) {
-                gone += if class == ENTITY { remove_entity(ctx.doc, *o) } else { remove_element(ctx.doc, *o) }.map_err(fail)?;
+                gone += match class {
+                    ENTITY => remove_entity(ctx.doc, *o),
+                    GENERALIZATION => ctx.doc.transaction(|st| remove_generalization(st, *o)),
+                    _ => remove_element(ctx.doc, *o),
+                }
+                .map_err(refused_as("ids"))?;
             }
         }
     }
@@ -2640,6 +3046,12 @@ fn entity_json(store: &Store, e: Obj) -> Json {
         "foreign_keys": keys,
         "checks": checks,
         "indexes": indexes,
+        "subtyping": {
+            "complete": rules::subtyping_flags(store, e).0,
+            "disjoint": rules::subtyping_flags(store, e).1,
+            "discriminator": rules::discriminator_of(store, e).map(|a| uuid_json(store, a)).unwrap_or(Json::Null),
+            "mapping": mapping_name(rules::mapping_of(store, e)),
+        },
     })
 }
 
@@ -2703,6 +3115,18 @@ fn schema_get(ctx: &mut C<'_>, p: &Params) -> R {
         .filter(|(r, _)| rules::schema_of(ctx.doc, *r) == Some(s))
         .map(|(r, notice)| json!({ "relationship": uuid_json(ctx.doc, r), "notice": notice }))
         .collect();
+    let generalizations: Vec<Json> = ctx
+        .doc
+        .list(s, schema::GENERALIZATION)
+        .map_err(fail)?
+        .iter()
+        .filter_map(Value::as_ref)
+        .map(|g| {
+            let (sup, sub, key) = rules::generalization_parts(ctx.doc, g);
+            let id = |o: Option<Obj>| o.map(|o| uuid_json(ctx.doc, o)).unwrap_or(Json::Null);
+            json!({ "id": uuid_json(ctx.doc, g), "supertype": id(sup), "subtype": id(sub), "key_relationship": id(key) })
+        })
+        .collect();
     let domains: Vec<Json> = rules::domains_of(ctx.doc, s).into_iter().map(|d| domain_json(ctx.doc, d)).collect();
     let enums: Vec<Json> = rules::enums_of(ctx.doc, s).into_iter().map(|e| enum_json(ctx.doc, e)).collect();
     Ok(json!({
@@ -2710,6 +3134,7 @@ fn schema_get(ctx: &mut C<'_>, p: &Params) -> R {
         "name": name_of(ctx.doc, s),
         "entities": entities,
         "relationships": relationships,
+        "generalizations": generalizations,
         "domains": domains,
         "enums": enums,
         "notices": notices,
@@ -3015,6 +3440,33 @@ pub fn specs() -> Vec<CommandSpec<Store, ErView>> {
             "entity: string; the id of a mapping table that holds nothing but its two keys",
             has_entities,
             relationship_collapse
+        ),
+        cmd!(
+            "er.generalization.add",
+            "Add subtype",
+            &["Entity"],
+            None,
+            "supertype: string; the id of the general table\nsubtype: string; the id of the table that is a kind of it",
+            has_entities,
+            generalization_add
+        ),
+        cmd!(
+            "er.generalization.remove",
+            "Remove subtype",
+            &["Entity"],
+            None,
+            "generalization: string; the generalization's id; the key it made goes with it",
+            has_entities,
+            generalization_remove
+        ),
+        cmd!(
+            "er.entity.set-subtyping",
+            "Set subtyping",
+            &["Entity"],
+            None,
+            "entity: string; the supertype's id\ncomplete: bool = false; every row is one of the subtypes\ndisjoint: bool = true; no row is two of them\ndiscriminator: string = \"\"; the id of the column that names the subtype, or nothing\nmapping: string = \"table-per-type\", table-per-type|single-table|table-per-concrete-type; how the subtypes become tables",
+            has_entities,
+            entity_set_subtyping
         ),
         cmd!("er.remove", "Remove", &["Edit"], Some("Delete"), "ids: array; the ids of what goes", has_schemas, remove_many),
         cmd!(noundo "view.select", "Select", &["View"], None, "ids: array = []; the ids selected", always, view_select),

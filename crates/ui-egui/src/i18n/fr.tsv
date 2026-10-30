@@ -39,6 +39,10 @@ str		On this domain · {n}	Sur ce domaine · {n}
 str		Enum type · model	Type énuméré · modèle
 str		This enum type	Ce type énuméré
 str		On this enum type · {n}	Sur ce type énuméré · {n}
+str		Subtype · {sub} is a {super}	Sous-type · {sub} est un {super}
+str		Subtype	Sous-type
+str		This subtype	Ce sous-type
+str		On this subtype · {n}	Sur ce sous-type · {n}
 str		Element · model	Élément · modèle
 str		Skill · model	Compétence · modèle
 str		Columns · {n}	Colonnes · {n}
@@ -57,6 +61,20 @@ str		Base type	Type de base
 str		Checks	Contrôles
 str		Add a check	Ajouter un contrôle
 str		Literals, in order	Littéraux dans l’ordre
+str		Subtypes · {n}	Sous-types · {n}
+str		Add subtype	Ajouter un sous-type
+str		Complete	Complète
+str		Disjoint	Disjointe
+str		Discriminator	Discriminant
+str		Mapping	Correspondance
+str		Table per type	Table par type
+str		Single table	Table unique
+str		Table per concrete type	Table par type concret
+str		key on {columns}	clé sur {columns}
+str		complete	complète
+str		disjoint	disjointe
+str		overlapping	chevauchante
+str		A subtype joins two tables	Un sous-type relie deux tables
 str		Add a literal	Ajouter un littéral
 str		Pick a type	Choisir un type
 str		domain	domaine
@@ -82,6 +100,7 @@ str		{from} to {to} is many to many	{from} vers {to} est plusieurs à plusieurs
 str		{from} to {to}: one or more is not enforced by a key	{from} vers {to} : un ou plusieurs n’est garanti par aucune clé
 str		{key}: {problem}	{key}: {problem}
 str		{name} has no primary key	{name} n’a pas de clé primaire
+str		{name} has subtypes but no primary key to share	{name} a des sous-types mais aucune clé primaire à partager
 str		{name} removed · {keys} went with it	{name} supprimée · {keys} est parti avec
 str		Add column	Ajouter une colonne
 str		Edit column	Modifier la colonne
@@ -155,6 +174,7 @@ str		Select	Sélectionner
 str		Pan	Déplacer
 str		Entity	Entité
 str		Relationship	Relation
+str		Generalization	Généralisation
 str		Relationship types	Types de relation
 str		Note	Note
 str		Group	Groupe

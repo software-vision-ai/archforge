@@ -39,6 +39,10 @@ str		On this domain · {n}	Neste domínio · {n}
 str		Enum type · model	Tipo enumerado · modelo
 str		This enum type	Este tipo enumerado
 str		On this enum type · {n}	Neste tipo enumerado · {n}
+str		Subtype · {sub} is a {super}	Subtipo · {sub} é um {super}
+str		Subtype	Subtipo
+str		This subtype	Este subtipo
+str		On this subtype · {n}	Neste subtipo · {n}
 str		Element · model	Elemento · modelo
 str		Skill · model	Competência · modelo
 str		Columns · {n}	Colunas · {n}
@@ -57,6 +61,20 @@ str		Base type	Tipo base
 str		Checks	Verificações
 str		Add a check	Adicionar verificação
 str		Literals, in order	Literais por ordem
+str		Subtypes · {n}	Subtipos · {n}
+str		Add subtype	Adicionar subtipo
+str		Complete	Completa
+str		Disjoint	Disjunta
+str		Discriminator	Discriminador
+str		Mapping	Mapeamento
+str		Table per type	Tabela por tipo
+str		Single table	Tabela única
+str		Table per concrete type	Tabela por tipo concreto
+str		key on {columns}	chave em {columns}
+str		complete	completa
+str		disjoint	disjunta
+str		overlapping	sobreposta
+str		A subtype joins two tables	Um subtipo liga duas tabelas
 str		Add a literal	Adicionar literal
 str		Pick a type	Escolher um tipo
 str		domain	domínio
@@ -82,6 +100,7 @@ str		{from} to {to} is many to many	{from} para {to} é muitos para muitos
 str		{from} to {to}: one or more is not enforced by a key	{from} para {to}: um ou mais não é garantido por nenhuma chave
 str		{key}: {problem}	{key}: {problem}
 str		{name} has no primary key	{name} não tem chave primária
+str		{name} has subtypes but no primary key to share	{name} tem subtipos mas nenhuma chave primária para partilhar
 str		{name} removed · {keys} went with it	{name} removida · {keys} foi com ela
 str		Add column	Adicionar coluna
 str		Edit column	Editar coluna
@@ -155,6 +174,7 @@ str		Select	Selecionar
 str		Pan	Deslocar
 str		Entity	Entidade
 str		Relationship	Relação
+str		Generalization	Generalização
 str		Relationship types	Tipos de relação
 str		Note	Nota
 str		Group	Grupo

@@ -24,6 +24,10 @@ pub const TABLES: &[Table] = &[
             Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
             Column { name: "kind", prop: Some(entity::KIND), sql: "INT NOT NULL" },
             Column { name: "primary_key", prop: Some(entity::PRIMARY_KEY), sql: "BINARY(16) NULL" },
+            Column { name: "subtypes_complete", prop: Some(entity::SUBTYPES_COMPLETE), sql: "TINYINT NOT NULL" },
+            Column { name: "subtypes_disjoint", prop: Some(entity::SUBTYPES_DISJOINT), sql: "TINYINT NOT NULL" },
+            Column { name: "discriminator", prop: Some(entity::DISCRIMINATOR), sql: "BINARY(16) NULL" },
+            Column { name: "subtype_mapping", prop: Some(entity::SUBTYPE_MAPPING), sql: "INT NOT NULL" },
         ],
     },
     Table {
@@ -165,6 +169,17 @@ pub const TABLES: &[Table] = &[
             Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
         ],
     },
+    Table {
+        name: "er_generalization",
+        class: GENERALIZATION,
+        columns: &[
+            Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
+            Column { name: "description", prop: Some(element::DESCRIPTION), sql: "TEXT NULL" },
+            Column { name: "supertype", prop: Some(generalization::SUPERTYPE), sql: "BINARY(16) NULL" },
+            Column { name: "subtype", prop: Some(generalization::SUBTYPE), sql: "BINARY(16) NULL" },
+            Column { name: "key_relationship", prop: Some(generalization::KEY_RELATIONSHIP), sql: "BINARY(16) NULL" },
+        ],
+    },
 ];
 
 /// One table per multi-valued stored property.
@@ -173,6 +188,7 @@ pub const JUNCTIONS: &[Junction] = &[
     Junction { name: "er_schema_relationship", class: SCHEMA, prop: schema::RELATIONSHIP, ordered: true, reference: true },
     Junction { name: "er_schema_domain", class: SCHEMA, prop: schema::DOMAIN, ordered: true, reference: true },
     Junction { name: "er_schema_enum_type", class: SCHEMA, prop: schema::ENUM_TYPE, ordered: true, reference: true },
+    Junction { name: "er_schema_generalization", class: SCHEMA, prop: schema::GENERALIZATION, ordered: true, reference: true },
     Junction { name: "er_entity_attribute", class: ENTITY, prop: entity::ATTRIBUTE, ordered: true, reference: true },
     Junction { name: "er_entity_unique_constraint", class: ENTITY, prop: entity::UNIQUE_CONSTRAINT, ordered: true, reference: true },
     Junction { name: "er_entity_foreign_key", class: ENTITY, prop: entity::FOREIGN_KEY, ordered: true, reference: true },
