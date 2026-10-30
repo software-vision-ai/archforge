@@ -110,6 +110,22 @@ str		Open in Models	Abrir em Modelos
 str		Remove from this diagram	Remover deste diagrama
 str		Delete from the model…	Eliminar do modelo…
 str		The diagram is of no schema	O diagrama não é de nenhum esquema
+str		A relationship joins two tables	Uma relação liga duas tabelas
+str		Add relationship	Adicionar relação
+str		Cardinality	Cardinalidade
+str		Presets	Predefinições
+str		Start	Início
+str		End	Fim
+str		Identifying	Identificadora
+str		Identifying needs the parent's primary key; drawn as not identifying	Identificadora precisa da chave primária da tabela pai; desenhada como não identificadora
+str		Many to many · add a mapping table	Muitos para muitos · adicionar tabela de mapeamento
+str		Many to many · {from} and {to}	Muitos para muitos · {from} e {to}
+str		Add mapping table	Adicionar tabela de mapeamento
+str		Keep the line	Manter a linha
+str		Columns	Colunas
+str		Relationship removed	Relação removida
+str		{name} removed	{name} removida
+str		Undo	Anular
 plural		+ {n} more column	+ {n} coluna mais|+ {n} colunas mais
 str		Minimap	Minimapa
 str		Hide minimap	Ocultar minimapa
@@ -216,3 +232,6 @@ str		Diagram	Diagrama
 str		Diagram · of {schema}	Diagrama · de {schema}
 str		This diagram	Este diagrama
 str		On this diagram · {n}	Neste diagrama · {n}
+str		Relationship · {from} to {to}	Relação · {from} para {to}
+str		This relationship	Esta relação
+str		On this relationship · {n}	Nesta relação · {n}

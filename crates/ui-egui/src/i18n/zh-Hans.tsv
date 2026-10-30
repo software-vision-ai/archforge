@@ -110,6 +110,22 @@ str		Open in Models	在模型中打开
 str		Remove from this diagram	从此图中移除
 str		Delete from the model…	从模型中删除…
 str		The diagram is of no schema	此图不属于任何架构
+str		A relationship joins two tables	关系连接两张表
+str		Add relationship	添加关系
+str		Cardinality	基数
+str		Presets	预设
+str		Start	起点
+str		End	终点
+str		Identifying	标识
+str		Identifying needs the parent's primary key; drawn as not identifying	标识关系需要父表的主键；已按非标识绘制
+str		Many to many · add a mapping table	多对多 · 添加映射表
+str		Many to many · {from} and {to}	多对多 · {from} 和 {to}
+str		Add mapping table	添加映射表
+str		Keep the line	保留连线
+str		Columns	列
+str		Relationship removed	已删除关系
+str		{name} removed	已删除 {name}
+str		Undo	撤销
 plural		+ {n} more column	+ 另 {n} 列
 str		Minimap	缩略图
 str		Hide minimap	隐藏缩略图
@@ -216,3 +232,6 @@ str		Diagram	图
 str		Diagram · of {schema}	图 · 属于 {schema}
 str		This diagram	此图
 str		On this diagram · {n}	此图上 · {n}
+str		Relationship · {from} to {to}	关系 · {from} 到 {to}
+str		This relationship	此关系
+str		On this relationship · {n}	此关系上 · {n}

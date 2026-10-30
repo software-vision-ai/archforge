@@ -60,6 +60,8 @@ pub enum Tool {
     Pan,
     /// Places a table where the canvas is clicked (slice E1).
     Entity,
+    /// Drags a relationship from one table to another (slice E2).
+    Relationship,
 }
 
 /// What the centre keeps between frames: the open tabs, the view and the toggles.
@@ -89,6 +91,12 @@ pub struct State {
     pub gesture: Option<crate::editing::Gesture>,
     pub menu: Option<crate::editing::EntityMenu>,
     pub focused: bool,
+    /// Relationships (slice E2): the ends a new line gets, whether the cardinality popover is
+    /// open, the mapping table offer and the toast with Undo.
+    pub relationship: crate::connect::RelKind,
+    pub popover: bool,
+    pub mapping: Option<crate::connect::MappingOffer>,
+    pub toast: Option<crate::connect::Toast>,
 }
 
 impl Default for State {
@@ -109,6 +117,10 @@ impl Default for State {
             gesture: None,
             menu: None,
             focused: false,
+            relationship: crate::connect::RelKind::default(),
+            popover: false,
+            mapping: None,
+            toast: None,
         }
     }
 }
@@ -162,6 +174,9 @@ pub fn retain_valid(state: &mut State, store: &Store) {
         state.reopen_pending = state.active.is_some();
     }
     crate::editing::retain_valid(state, store);
+    if state.mapping.as_ref().is_some_and(|m| store.by_uuid(m.relationship).is_none_or(|o| !store.is_alive(o))) {
+        state.mapping = None;
+    }
 }
 
 /// The active diagram, when the store still has it.
@@ -361,7 +376,7 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
         Tool::Pan => {
             resp.clone().on_hover_cursor(if resp.dragged() { egui::CursorIcon::Grabbing } else { egui::CursorIcon::Grab });
         }
-        Tool::Entity => {
+        Tool::Entity | Tool::Relationship => {
             resp.clone().on_hover_cursor(egui::CursorIcon::Crosshair);
         }
         Tool::Select => {}
@@ -392,6 +407,7 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     let overrides = crate::editing::preview_rects(shell, view, pointer);
     let renaming = shell.canvas.rename.as_ref().map(|rn| rn.node);
     let grid = shell.session.as_ref().map(|s| Grid::build(s.doc(), d));
+    let mut pending_badges: Vec<(Pos2, Uuid)> = Vec::new();
     if let (Some(session), Some(grid)) = (shell.session.as_ref(), grid.as_ref()) {
         let store = session.doc();
         let (x0, y0) = view.to_canvas(r.min);
@@ -403,18 +419,27 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
                 visible.nodes.push(n);
             }
         }
+        let mut badges: Vec<(Pos2, Uuid)> = Vec::new();
         let draw = Drawing { p, store, view: &view, selection: &selection, overrides: &overrides, key_status: shell.canvas.key_status, renaming };
         for e in &visible.edges {
-            draw_edge(&clip, &draw, *e, &mut shell.registry, ui);
+            if let Some(badge) = draw_edge(&clip, &draw, *e, &mut shell.registry, ui) {
+                badges.push(badge);
+            }
         }
         for n in &visible.nodes {
             draw_node(&clip, &draw, *n, &mut shell.registry, ui);
         }
+        pending_badges = badges;
+    }
+    for (at, rel) in pending_badges {
+        crate::connect::badge(shell, ui, p, at, rel);
     }
     if let Some(grid) = grid.as_ref() {
         crate::editing::pointer(shell, ui, &resp, view, grid, d);
     }
     crate::editing::overlays(shell, ui, p, r, view, d, &overrides);
+    crate::connect::mapping_offer(shell, ui, p, r);
+    crate::connect::toast(shell, ui, p, r);
     if shell.canvas.minimap_open {
         minimap(shell, ui, p, r, bounds, &view);
     } else {
@@ -586,7 +611,7 @@ fn selection_ring(paint: &egui::Painter, p: &Palette, rect: Rect) {
 }
 
 /// Where a line from a rectangle's centre towards `toward` leaves the rectangle.
-fn exit_point(rect: Rect, toward: Pos2) -> Pos2 {
+pub(crate) fn exit_point(rect: Rect, toward: Pos2) -> Pos2 {
     let c = rect.center();
     let d = toward - c;
     if d == Vec2::ZERO || !d.is_finite() {
@@ -612,7 +637,7 @@ fn slot_text(store: &Store, rel: Obj, kind: &str) -> String {
 }
 
 /// A cardinality as the design writes it beside an end.
-fn cardinality_text(c: Cardinality) -> String {
+pub(crate) fn cardinality_text(c: Cardinality) -> String {
     match c {
         Cardinality::ZeroOrOne => "0..1",
         Cardinality::ExactlyOne => "1",
@@ -644,28 +669,63 @@ fn along(points: &[Pos2], t: f32) -> Pos2 {
 
 /// One edge: the line between its nodes' borders through its waypoints, the ER end glyphs with
 /// their cardinalities, and its labels.
-fn draw_edge(paint: &egui::Painter, d: &Drawing<'_>, e: Obj, registry: &mut widgets::Registry, ui: &egui::Ui) {
+/// Gives the point and relationship of a many-to-many badge to draw, when the line needs one.
+fn draw_edge(paint: &egui::Painter, d: &Drawing<'_>, e: Obj, registry: &mut widgets::Registry, ui: &egui::Ui) -> Option<(Pos2, Uuid)> {
     let (p, store, view, selection) = (d.p, d.store, d.view, d.selection);
-    let (Some(source), Some(target)) = (element_of(store, e, edge::SOURCE), element_of(store, e, edge::TARGET)) else { return };
+    let (Some(source), Some(target)) = (element_of(store, e, edge::SOURCE), element_of(store, e, edge::TARGET)) else { return None };
     let z = view.zoom;
     let s_rect = d.node_rect(source);
     let t_rect = d.node_rect(target);
-    let mut points: Vec<Pos2> = vec![s_rect.center()];
-    for w in refs(store, e, edge::WAYPOINT) {
-        points.push(view.to_screen(real(store, w, point::X), real(store, w, point::Y)));
-    }
-    points.push(t_rect.center());
+    let element = element_of(store, e, edge::ELEMENT);
+    let relationship = element.filter(|el| store.class_of(*el).ok() == Some(archforge_er::RELATIONSHIP));
+    let mut points: Vec<Pos2> = if source == target {
+        // A relationship of a table with itself loops out of its right side.
+        crate::connect::self_loop(s_rect, z)
+    } else {
+        let mut points = vec![s_rect.center()];
+        for w in refs(store, e, edge::WAYPOINT) {
+            points.push(view.to_screen(real(store, w, point::X), real(store, w, point::Y)));
+        }
+        points.push(t_rect.center());
+        points
+    };
     if points.iter().any(|q| !q.is_finite()) {
-        return;
+        return None;
     }
     let n = points.len();
-    points[0] = exit_point(s_rect, points[1]);
-    points[n - 1] = exit_point(t_rect, points[n - 2]);
-    let element = element_of(store, e, edge::ELEMENT);
+    if source != target {
+        points[0] = exit_point(s_rect, points[1]);
+        points[n - 1] = exit_point(t_rect, points[n - 2]);
+    }
     let selected = selection.contains(&e) || element.is_some_and(|el| selection.contains(&el));
-    let ink = if selected { p.accent } else { p.green };
+    // The line's colour says its key status while the toggle is on: green with its foreign key,
+    // orange without one or while many-to-many waits for its mapping table.
+    let (identifying, many_to_many, with_key) = match relationship {
+        Some(rel) => (
+            matches!(store.get(rel, archforge_er::relationship::IDENTIFYING), Ok(Value::Bool(true))),
+            archforge_er::rules::is_many_to_many(store, rel),
+            crate::connect::has_foreign_key(store, rel),
+        ),
+        None => (true, false, true),
+    };
+    let ink = if selected {
+        p.accent
+    } else if !d.key_status {
+        p.text_secondary
+    } else if with_key && !many_to_many {
+        p.green
+    } else {
+        p.key_foreign
+    };
     let stroke = Stroke::new((1.5 * z).clamp(1.0, 3.0), ink);
-    paint.add(egui::Shape::line(points.clone(), stroke));
+    crate::connect::line(paint, &points, stroke, identifying, z);
+    let mut badge = None;
+    if many_to_many
+        && let Some(rel) = relationship
+        && let Ok(id) = store.uuid(rel)
+    {
+        badge = Some((along(&points, 0.5) + vec2(0.0, -14.0 * z.max(0.5)), id));
+    }
     if let Ok(id) = store.uuid(e) {
         let bounds = Rect::from_points(&points).expand(6.0);
         widgets::record_visible(ui, registry, &format!("workspace.canvas.edge.{id}"), "edge", bounds);
@@ -674,8 +734,21 @@ fn draw_edge(paint: &egui::Painter, d: &Drawing<'_>, e: Obj, registry: &mut widg
     if let Some(rel) = element.filter(|el| store.class_of(*el).ok() == Some(archforge_er::RELATIONSHIP)) {
         let from = archforge_er::rules::cardinality_of(store, rel, archforge_er::relationship::FROM_END);
         let to = archforge_er::rules::cardinality_of(store, rel, archforge_er::relationship::TO_END);
-        end_glyph(paint, p, points[0], points[1], from, stroke, z);
-        end_glyph(paint, p, points[n - 1], points[n - 2], to, stroke, z);
+        end_glyph(paint, p, points[0], points[1], from, stroke, z, true);
+        end_glyph(paint, p, points[n - 1], points[n - 2], to, stroke, z, true);
+        // The roles, above the line near their ends.
+        for (role, end, towards) in
+            [(archforge_er::relationship::FROM_ROLE, points[0], points[1]), (archforge_er::relationship::TO_ROLE, points[n - 1], points[n - 2])]
+        {
+            let text = string(store, rel, role);
+            if text.is_empty() || (towards - end).length() <= f32::EPSILON {
+                continue;
+            }
+            let dir = (towards - end).normalized();
+            let g = ux::galley(paint, &text, types::SMALL.scaled(z), p.text_secondary, None);
+            let at = end + dir * 44.0 * z - vec2(g.size().x / 2.0, g.size().y + 8.0 * z);
+            paint.galley(at, g, p.text_secondary);
+        }
         for l in refs(store, e, edge::LABEL) {
             let kind = string(store, l, label::KIND);
             let text = slot_text(store, rel, &kind);
@@ -703,11 +776,13 @@ fn draw_edge(paint: &egui::Painter, d: &Drawing<'_>, e: Obj, registry: &mut widg
             paint.rect_stroke(h, 1.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
         }
     }
+    badge
 }
 
 /// An ER end at `end`, the line coming from `from`: a bar for one, a crow's foot for many, a
 /// circle for zero, and the cardinality written under the line.
-fn end_glyph(paint: &egui::Painter, p: &Palette, end: Pos2, from: Pos2, c: Option<Cardinality>, stroke: Stroke, z: f32) {
+#[allow(clippy::too_many_arguments, reason = "an end is drawn from its line, its cardinality and the view")]
+pub(crate) fn end_glyph(paint: &egui::Painter, p: &Palette, end: Pos2, from: Pos2, c: Option<Cardinality>, stroke: Stroke, z: f32, with_text: bool) {
     let Some(c) = c else { return };
     let d = from - end;
     if d.length() <= f32::EPSILON || !d.is_finite() {
@@ -729,6 +804,9 @@ fn end_glyph(paint: &egui::Painter, p: &Palette, end: Pos2, from: Pos2, c: Optio
         let centre = end + d * (if many { 20.0 } else { 18.0 }) * z;
         paint.circle_filled(centre, 4.0 * z, p.canvas);
         paint.circle_stroke(centre, 4.0 * z, stroke);
+    }
+    if !with_text {
+        return;
     }
     let text = cardinality_text(c);
     let g = ux::galley(paint, &text, types::SMALL.scaled(z), p.text_secondary, None);
@@ -826,7 +904,7 @@ const TOOLS: [(&str, &ux::Icon, &str, bool); 6] = [
     ("select", &icons::TOOL_SELECT, "Select", true),
     ("pan", &icons::TOOL_PAN, "Pan", true),
     ("entity", &icons::TOOL_ENTITY, "Entity", true),
-    ("relationship", &icons::TOOL_RELATIONSHIP, "Relationship", false),
+    ("relationship", &icons::TOOL_RELATIONSHIP, "Relationship", true),
     ("note", &icons::TOOL_NOTE, "Note", false),
     ("group", &icons::TOOL_GROUP, "Group", false),
 ];
@@ -850,7 +928,10 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     let xs = [7.0, 41.0, 86.0, 120.0, 170.0, 204.0];
     for ((key, icon, hint, live), x) in TOOLS.iter().zip(xs) {
         let b = button(x);
-        let active = matches!((*key, shell.canvas.tool), ("select", Tool::Select) | ("pan", Tool::Pan) | ("entity", Tool::Entity));
+        let active = matches!(
+            (*key, shell.canvas.tool),
+            ("select", Tool::Select) | ("pan", Tool::Pan) | ("entity", Tool::Entity) | ("relationship", Tool::Relationship)
+        );
         if active {
             paint.rect_filled(b, 8.0, p.accent_tint);
         }
@@ -867,6 +948,7 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
                 "select" => shell.canvas.tool = Tool::Select,
                 "pan" => shell.canvas.tool = Tool::Pan,
                 "entity" => shell.canvas.tool = Tool::Entity,
+                "relationship" => shell.canvas.tool = Tool::Relationship,
                 _ => {}
             }
         }
@@ -874,10 +956,31 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     for x in [75.0, 254.0] {
         paint.rect_filled(divider(x), 0.0, p.border);
     }
-    for (key, x, hint) in [("relationship-types", 154.0, "Relationship types"), ("group-kinds", 238.0, "Group kinds")] {
+    let mut chevron = None;
+    for (key, x, hint, live) in [("relationship-types", 154.0, "Relationship types", true), ("group-kinds", 238.0, "Group kinds", false)] {
         let b = Rect::from_min_size(pos2(t.left() + x, t.top() + 9.0), vec2(14.0, 32.0));
-        ux::icon_in(&paint, b, &icons::CHEVRON_SMALL, p.text_muted);
-        control(shell, ui, &format!("workspace.tools.{key}"), "button", b, false).on_hover_text(tr(hint));
+        let open = live && shell.canvas.popover;
+        ux::icon_in(
+            &paint,
+            b,
+            &icons::CHEVRON_SMALL,
+            if open {
+                p.accent
+            } else if live {
+                p.text_secondary
+            } else {
+                p.text_muted
+            },
+        );
+        if control(shell, ui, &format!("workspace.tools.{key}"), "button", b, live).on_hover_text(tr(hint)).clicked() && live {
+            shell.canvas.popover = !shell.canvas.popover;
+            if shell.canvas.popover {
+                shell.canvas.tool = Tool::Relationship;
+            }
+        }
+        if live {
+            chevron = Some(b);
+        }
     }
     // The view group: key status and grid.
     let group = Rect::from_min_size(pos2(t.left() + 265.0, t.top() + 7.0), vec2(70.0, 36.0));
@@ -902,6 +1005,11 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
                 _ => shell.canvas.key_status = !shell.canvas.key_status,
             }
         }
+    }
+    if shell.canvas.popover
+        && let Some(anchor) = chevron
+    {
+        crate::connect::popover(shell, ui, p, r, anchor);
     }
 }
 

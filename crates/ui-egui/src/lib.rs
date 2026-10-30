@@ -7,6 +7,7 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
 pub mod canvas;
+pub mod connect;
 pub mod diagrams;
 pub mod editing;
 pub mod explorer;

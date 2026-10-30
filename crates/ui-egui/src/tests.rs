@@ -1450,3 +1450,130 @@ fn double_click(h: &mut Harness<'static, Shell>, at: egui::Pos2) {
     }
     h.run();
 }
+
+/// The table harness with Order placed beside Customer on a diagram, and no relationship yet.
+fn two_tables_harness() -> (Harness<'static, Shell>, String, String) {
+    let (mut h, customer) = table_harness();
+    let (order, diagram) = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
+        let st = s.doc();
+        let schema = st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap()).unwrap().to_string();
+        let order = id(s.execute("er.entity.add", &serde_json::json!({ "schema": schema, "name": "Order" })).unwrap().value);
+        s.execute("er.attribute.add", &serde_json::json!({ "entity": order, "name": "order_id", "type": "BIGINT", "primary_key": true })).unwrap();
+        let diagram = id(s.execute("diagram.add", &serde_json::json!({ "kind": "er", "element": schema, "name": "Shop schema" })).unwrap().value);
+        s.execute("diagram.place", &serde_json::json!({ "diagram": diagram, "element": customer, "x": 100, "y": 100, "width": 240, "height": 166 }))
+            .unwrap();
+        s.execute("diagram.place", &serde_json::json!({ "diagram": diagram, "element": order, "x": 500, "y": 100, "width": 240, "height": 166 }))
+            .unwrap();
+        (order, diagram)
+    };
+    crate::canvas::open(h.state_mut(), archforge_mof::Uuid::parse(&diagram).unwrap());
+    h.run();
+    (h, customer, order)
+}
+
+fn relationships(h: &Harness<'static, Shell>) -> Vec<archforge_mof::Obj> {
+    let st = h.state().session.as_ref().unwrap().doc();
+    st.alive().filter(|o| st.class_of(*o).ok() == Some(archforge_er::RELATIONSHIP)).collect()
+}
+
+#[test]
+fn the_relationship_tool_draws_a_line_with_its_foreign_key_as_one_step_and_delete_offers_undo() {
+    let (mut h, customer, _order) = two_tables_harness();
+    let nodes = node_ids(&h);
+    let customer_node = nodes.iter().min_by(|a, b| rect_of(&h, a).left().total_cmp(&rect_of(&h, b).left())).unwrap().clone();
+    let order_node = nodes.iter().find(|n| **n != customer_node).unwrap().clone();
+    let at = rect_of(&h, "workspace.tools.relationship").center();
+    click(&mut h, at);
+    assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Relationship);
+    // Drag from Customer to Order: one to many, Customer has a primary key, so the key comes along.
+    let (from, to) = (rect_of(&h, &customer_node).center(), rect_of(&h, &order_node).center());
+    drag(&mut h, from, to);
+    let rels = relationships(&h);
+    assert_eq!(rels.len(), 1, "one relationship drawn");
+    let st = h.state().session.as_ref().unwrap().doc();
+    let rel = rels[0];
+    assert_eq!(st.get(rel, archforge_er::relationship::FROM).unwrap().as_ref().and_then(|o| st.uuid(o).ok()).unwrap().to_string(), customer);
+    assert!(crate::connect::has_foreign_key(st, rel), "the foreign key came with the line");
+    assert!(ids(&h).iter().any(|i| i.starts_with("workspace.canvas.edge.")), "the edge is drawn");
+    assert_eq!(h.state().session.as_ref().unwrap().view().selection, vec![rel], "the relationship is selected");
+    assert!(ids(&h).iter().any(|i| i == "workspace.properties.name"), "Properties shows its name field");
+    // The line, its edge and its label were one step.
+    let s = h.state_mut().session.as_mut().unwrap();
+    assert_eq!(s.undo_label(), Some("Add relationship"));
+    s.execute("edit.undo", &serde_json::Value::Null).unwrap();
+    h.run();
+    assert!(relationships(&h).is_empty());
+    let s = h.state_mut().session.as_mut().unwrap();
+    s.execute("edit.redo", &serde_json::Value::Null).unwrap();
+    h.run();
+    // Escape returns to Select; a click on the edge selects the relationship; Delete removes it with a toast.
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    let edge = ids(&h).into_iter().find(|i| i.starts_with("workspace.canvas.edge.")).unwrap();
+    let at = rect_of(&h, &edge).center();
+    click(&mut h, at);
+    assert_eq!(h.state().session.as_ref().unwrap().view().selection.len(), 1);
+    key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
+    assert!(relationships(&h).is_empty(), "the relationship went");
+    assert!(h.state().canvas.toast.is_some(), "the toast offers Undo");
+    let at = rect_of(&h, "workspace.toast.undo").center();
+    click(&mut h, at);
+    assert_eq!(relationships(&h).len(), 1, "Undo brings it back");
+    assert!(h.state().canvas.toast.is_none());
+    // A step after the removal takes the toast with it: Undo never undoes something else.
+    let edge = ids(&h).into_iter().find(|i| i.starts_with("workspace.canvas.edge.")).unwrap();
+    let at = rect_of(&h, &edge).center();
+    click(&mut h, at);
+    key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
+    assert!(h.state().canvas.toast.is_some());
+    let from = rect_of(&h, &customer_node).center();
+    drag(&mut h, from, from + egui::vec2(30.0, 0.0));
+    assert!(h.state().canvas.toast.is_none(), "the toast went with the move");
+    assert!(!ids(&h).iter().any(|i| i == "workspace.toast.undo"));
+}
+
+#[test]
+fn the_cardinality_popover_sets_the_ends_and_a_many_to_many_line_offers_its_mapping_table() {
+    let (mut h, _customer, _order) = two_tables_harness();
+    let nodes = node_ids(&h);
+    let customer_node = nodes.iter().min_by(|a, b| rect_of(&h, a).left().total_cmp(&rect_of(&h, b).left())).unwrap().clone();
+    let order_node = nodes.iter().find(|n| **n != customer_node).unwrap().clone();
+    let at = rect_of(&h, "workspace.tools.relationship-types").center();
+    click(&mut h, at);
+    assert!(h.state().canvas.popover && h.state().canvas.tool == crate::canvas::Tool::Relationship);
+    assert!(ids(&h).iter().any(|i| i == "workspace.cardinality.preset.3"), "{:?}", ids(&h));
+    let at = rect_of(&h, "workspace.cardinality.preset.3").center();
+    click(&mut h, at);
+    assert!(h.state().canvas.relationship.many_to_many());
+    let at = rect_of(&h, "workspace.cardinality.identifying").center();
+    click(&mut h, at);
+    assert!(h.state().canvas.relationship.identifying);
+    let at = rect_of(&h, "workspace.cardinality.end.1").center();
+    click(&mut h, at);
+    assert_eq!(h.state().canvas.relationship.to, archforge_er::Cardinality::ExactlyOne);
+    let at = rect_of(&h, "workspace.cardinality.preset.3").center();
+    click(&mut h, at);
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    assert!(!h.state().canvas.popover, "Escape closes the popover");
+    // The pick stays: the connect adorner of the selected Customer draws a many-to-many line.
+    h.state_mut().canvas.tool = crate::canvas::Tool::Select;
+    let at = rect_of(&h, &customer_node).center();
+    click(&mut h, at);
+    let from = rect_of(&h, "workspace.canvas.adorn.connect").center();
+    let to = rect_of(&h, &order_node).center();
+    drag(&mut h, from, to);
+    let rels = relationships(&h);
+    assert_eq!(rels.len(), 1);
+    let st = h.state().session.as_ref().unwrap().doc();
+    assert!(archforge_er::rules::is_many_to_many(st, rels[0]));
+    assert!(!crate::connect::has_foreign_key(st, rels[0]), "no key for a many-to-many line");
+    let offer = h.state().canvas.mapping.clone().expect("the mapping table is offered");
+    assert_eq!(offer.name, "CustomerOrder");
+    assert!(ids(&h).iter().any(|i| i == "workspace.mapping.add"));
+    let at = rect_of(&h, "workspace.mapping.add").center();
+    click(&mut h, at);
+    assert!(h.state().canvas.mapping.is_none(), "{:?}", h.state().canvas.mapping);
+    let st = h.state().session.as_ref().unwrap().doc();
+    assert!(st.alive().any(|o| archforge_er::rules::name_of(st, o) == "CustomerOrder"), "the mapping table exists");
+}
