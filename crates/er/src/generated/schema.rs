@@ -11,6 +11,7 @@ pub const TABLES: &[Table] = &[
         class: SCHEMA,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
+            Column { name: "description", prop: Some(element::DESCRIPTION), sql: "TEXT NULL" },
             Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
         ],
     },
@@ -19,6 +20,7 @@ pub const TABLES: &[Table] = &[
         class: ENTITY,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
+            Column { name: "description", prop: Some(element::DESCRIPTION), sql: "TEXT NULL" },
             Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
             Column { name: "kind", prop: Some(entity::KIND), sql: "INT NOT NULL" },
             Column { name: "primary_key", prop: Some(entity::PRIMARY_KEY), sql: "BINARY(16) NULL" },
@@ -29,9 +31,17 @@ pub const TABLES: &[Table] = &[
         class: ATTRIBUTE,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
+            Column { name: "description", prop: Some(element::DESCRIPTION), sql: "TEXT NULL" },
             Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
             Column { name: "type", prop: Some(attribute::TYPE), sql: "TEXT NULL" },
             Column { name: "nullable", prop: Some(attribute::NULLABLE), sql: "TINYINT NOT NULL" },
+            Column { name: "length", prop: Some(attribute::LENGTH), sql: "BIGINT NOT NULL" },
+            Column { name: "precision", prop: Some(attribute::PRECISION), sql: "BIGINT NOT NULL" },
+            Column { name: "scale", prop: Some(attribute::SCALE), sql: "BIGINT NOT NULL" },
+            Column { name: "default", prop: Some(attribute::DEFAULT), sql: "TEXT NULL" },
+            Column { name: "generation", prop: Some(attribute::GENERATION), sql: "INT NOT NULL" },
+            Column { name: "expression", prop: Some(attribute::EXPRESSION), sql: "TEXT NULL" },
+            Column { name: "collation", prop: Some(attribute::COLLATION), sql: "TEXT NULL" },
         ],
     },
     Table {
@@ -39,6 +49,7 @@ pub const TABLES: &[Table] = &[
         class: RELATIONSHIP,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
+            Column { name: "description", prop: Some(element::DESCRIPTION), sql: "TEXT NULL" },
             Column { name: "name", prop: Some(relationship::NAME), sql: "TEXT NULL" },
             Column { name: "from", prop: Some(relationship::FROM), sql: "BINARY(16) NULL" },
             Column { name: "to", prop: Some(relationship::TO), sql: "BINARY(16) NULL" },
@@ -54,6 +65,7 @@ pub const TABLES: &[Table] = &[
         class: PRIMARY_KEY,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
+            Column { name: "description", prop: Some(element::DESCRIPTION), sql: "TEXT NULL" },
             Column { name: "name", prop: Some(key::NAME), sql: "TEXT NULL" },
         ],
     },
@@ -62,6 +74,7 @@ pub const TABLES: &[Table] = &[
         class: UNIQUE_CONSTRAINT,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
+            Column { name: "description", prop: Some(element::DESCRIPTION), sql: "TEXT NULL" },
             Column { name: "name", prop: Some(key::NAME), sql: "TEXT NULL" },
             Column { name: "nulls_distinct", prop: Some(unique_constraint::NULLS_DISTINCT), sql: "TINYINT NOT NULL" },
         ],
@@ -71,6 +84,7 @@ pub const TABLES: &[Table] = &[
         class: FOREIGN_KEY,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
+            Column { name: "description", prop: Some(element::DESCRIPTION), sql: "TEXT NULL" },
             Column { name: "name", prop: Some(foreign_key::NAME), sql: "TEXT NULL" },
             Column { name: "references", prop: Some(foreign_key::REFERENCES), sql: "BINARY(16) NULL" },
             Column { name: "on_delete", prop: Some(foreign_key::ON_DELETE), sql: "INT NOT NULL" },

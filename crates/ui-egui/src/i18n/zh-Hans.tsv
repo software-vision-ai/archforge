@@ -49,6 +49,7 @@ str		{key}: {problem}	{key}: {problem}
 str		{name} has no primary key	{name} 没有主键
 str		{name} removed · {keys} went with it	已删除 {name} · {keys} 随之删除
 str		Add column	添加列
+str		Edit column	编辑列
 str		Add skill	添加技能
 str		Kind	种类
 str		Regular	常规
@@ -57,6 +58,20 @@ str		Type	类型
 str		Primary key	主键
 str		Not null	非空
 str		Unique	唯一
+str		Length	长度
+str		Precision	精度
+str		Scale	小数位数
+str		Default	默认值
+str		Generation	生成方式
+str		Expression	表达式
+str		Collation	排序规则
+str		Description	描述
+str		{text} is not a number	{text} 不是数字
+str		None	无
+str		Identity, always	标识列，始终
+str		Identity, by default	标识列，默认
+str		Computed, stored	计算列，存储
+str		Computed, virtual	计算列，虚拟
 str		Remove	移除
 str		Apply	应用
 str		Inherited · {n}	继承 · {n}

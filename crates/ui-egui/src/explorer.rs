@@ -177,7 +177,7 @@ pub fn rows(store: &Store, state: &State) -> Vec<Row> {
             }
             for a in &attributes {
                 let label = name_of(store, *a);
-                let ty = store.get(*a, archforge_er::attribute::TYPE).ok().and_then(|v| v.as_str().map(str::to_string)).filter(|t| !t.is_empty());
+                let ty = Some(archforge_er::rules::type_display(store, *a)).filter(|t| !t.is_empty());
                 if matches(&label) {
                     push(&mut under_entity, *a, 2, Kind::Attribute, label, ty, false, false);
                 }

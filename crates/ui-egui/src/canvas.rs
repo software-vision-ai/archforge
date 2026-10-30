@@ -585,7 +585,7 @@ fn draw_node(
                     if key_status && let Some(b) = badge(store, e, *column) {
                         ux::text(&inner, pos2(rect.left() + ENTITY_INSET * z, y + z), b, types::CAPTION.scaled(z), p.entity_ink, None);
                     }
-                    let ty = string(store, *column, archforge_er::attribute::TYPE);
+                    let ty = archforge_er::rules::type_display(store, *column);
                     let text = if ty.is_empty() {
                         archforge_er::rules::name_of(store, *column)
                     } else {

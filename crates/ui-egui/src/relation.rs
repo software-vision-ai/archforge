@@ -278,19 +278,19 @@ fn fk_view(store: &Store, rel: &Rel, fk: &Fk, open_pair: Option<usize>, child_na
         key_columns.iter().enumerate().map(|(i, kc)| (name(store, *kc), fk.columns.get(i).map(|c| name(store, *c)).unwrap_or_default())).collect();
     let pair_menu = open_pair.and_then(|i| {
         let kc = *key_columns.get(i)?;
-        let wanted = archforge_er::rules::type_of(store, kc);
+        let wanted = archforge_er::rules::type_display(store, kc);
         let current = fk.columns.get(i).copied();
         let mut items = Vec::new();
         let mut targets = Vec::new();
         if let Some(c) = current {
-            items.push(Item { label: name(store, c), detail: archforge_er::rules::type_of(store, c), enabled: true, on: true });
+            items.push(Item { label: name(store, c), detail: archforge_er::rules::type_display(store, c), enabled: true, on: true });
             targets.push(store.uuid(c).ok()?);
         }
         for c in store.list(rel.child, archforge_er::entity::ATTRIBUTE).unwrap_or_default().iter().filter_map(Value::as_ref) {
             if !store.is_alive(c) || Some(c) == current || fk.columns.contains(&c) {
                 continue;
             }
-            let ty = archforge_er::rules::type_of(store, c);
+            let ty = archforge_er::rules::type_display(store, c);
             let same = ty.eq_ignore_ascii_case(&wanted);
             items.push(Item {
                 label: name(store, c),

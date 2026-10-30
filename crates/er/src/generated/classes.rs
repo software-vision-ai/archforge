@@ -164,11 +164,48 @@ impl Deferrability {
     }
 }
 
+/// The enumeration Generation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Generation {
+    NoneKind,
+    IdentityAlways,
+    IdentityByDefault,
+    ComputedStored,
+    ComputedVirtual,
+}
+
+impl Generation {
+    pub const DATA_TYPE: DataId = GENERATION;
+    pub fn from_index(i: u32) -> Option<Self> {
+        match i {
+            0 => Some(Self::NoneKind),
+            1 => Some(Self::IdentityAlways),
+            2 => Some(Self::IdentityByDefault),
+            3 => Some(Self::ComputedStored),
+            4 => Some(Self::ComputedVirtual),
+            _ => None,
+        }
+    }
+    pub fn index(self) -> u32 {
+        self as u32
+    }
+    pub fn literal(self) -> &'static str {
+        match self {
+            Self::NoneKind => "none",
+            Self::IdentityAlways => "identityAlways",
+            Self::IdentityByDefault => "identityByDefault",
+            Self::ComputedStored => "computedStored",
+            Self::ComputedVirtual => "computedVirtual",
+        }
+    }
+}
+
 use archforge_mof::DataId;
 
 /// An object of Schema, with every inherited stored property as a field.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SchemaObj {
+    pub description: Option<Arc<str>>,
     pub name: Option<Arc<str>>,
     pub entity: Vec<Value>,
     pub relationship: Vec<Value>,
@@ -180,12 +217,21 @@ impl Reflect for SchemaObj {
     }
     fn get(&self, prop: PropId) -> Option<Value> {
         match prop {
+            element::DESCRIPTION => Some(self.description.clone().map_or(Value::Null, Value::Str)),
             named_element::NAME => Some(self.name.clone().map_or(Value::Null, Value::Str)),
             _ => None,
         }
     }
     fn set(&mut self, prop: PropId, value: Value) -> Result<(), String> {
         match prop {
+            element::DESCRIPTION => {
+                match value {
+                    Value::Null => self.description = None,
+                    Value::Str(v) => self.description = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
             named_element::NAME => {
                 match value {
                     Value::Null => self.name = None,
@@ -214,6 +260,9 @@ impl Reflect for SchemaObj {
 }
 
 impl SchemaObj {
+    pub fn description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
     pub fn name(&self) -> Option<&str> {
         self.name.as_deref()
     }
@@ -222,6 +271,9 @@ impl SchemaObj {
     }
     pub fn relationship(&self) -> &[Value] {
         &self.relationship
+    }
+    pub fn set_description(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, element::DESCRIPTION, v.map_or(Value::Null, Value::str))
     }
     pub fn set_name(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
         store.set(obj, named_element::NAME, v.map_or(Value::Null, Value::str))
@@ -237,6 +289,7 @@ impl SchemaObj {
 /// An object of Entity, with every inherited stored property as a field.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct EntityObj {
+    pub description: Option<Arc<str>>,
     pub name: Option<Arc<str>>,
     pub attribute: Vec<Value>,
     pub kind: u32,
@@ -251,6 +304,7 @@ impl Reflect for EntityObj {
     }
     fn get(&self, prop: PropId) -> Option<Value> {
         match prop {
+            element::DESCRIPTION => Some(self.description.clone().map_or(Value::Null, Value::Str)),
             named_element::NAME => Some(self.name.clone().map_or(Value::Null, Value::Str)),
             entity::KIND => Some(Value::Enum(self.kind)),
             entity::PRIMARY_KEY => Some(self.primary_key.map_or(Value::Null, Value::Ref)),
@@ -259,6 +313,14 @@ impl Reflect for EntityObj {
     }
     fn set(&mut self, prop: PropId, value: Value) -> Result<(), String> {
         match prop {
+            element::DESCRIPTION => {
+                match value {
+                    Value::Null => self.description = None,
+                    Value::Str(v) => self.description = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
             named_element::NAME => {
                 match value {
                     Value::Null => self.name = None,
@@ -304,6 +366,9 @@ impl Reflect for EntityObj {
 }
 
 impl EntityObj {
+    pub fn description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
     pub fn name(&self) -> Option<&str> {
         self.name.as_deref()
     }
@@ -321,6 +386,9 @@ impl EntityObj {
     }
     pub fn foreign_key(&self) -> &[Value] {
         &self.foreign_key
+    }
+    pub fn set_description(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, element::DESCRIPTION, v.map_or(Value::Null, Value::str))
     }
     pub fn set_name(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
         store.set(obj, named_element::NAME, v.map_or(Value::Null, Value::str))
@@ -345,14 +413,34 @@ impl EntityObj {
 /// An object of Attribute, with every inherited stored property as a field.
 #[derive(Debug, Clone, PartialEq)]
 pub struct AttributeObj {
+    pub description: Option<Arc<str>>,
     pub name: Option<Arc<str>>,
     pub type_: Option<Arc<str>>,
     pub nullable: bool,
+    pub length: i64,
+    pub precision: i64,
+    pub scale: i64,
+    pub default: Option<Arc<str>>,
+    pub generation: u32,
+    pub expression: Option<Arc<str>>,
+    pub collation: Option<Arc<str>>,
 }
 
 impl Default for AttributeObj {
     fn default() -> Self {
-        Self { name: None, type_: None, nullable: true }
+        Self {
+            description: None,
+            name: None,
+            type_: None,
+            nullable: true,
+            length: 0,
+            precision: 0,
+            scale: 0,
+            default: None,
+            generation: 0,
+            expression: None,
+            collation: None,
+        }
     }
 }
 
@@ -362,14 +450,30 @@ impl Reflect for AttributeObj {
     }
     fn get(&self, prop: PropId) -> Option<Value> {
         match prop {
+            element::DESCRIPTION => Some(self.description.clone().map_or(Value::Null, Value::Str)),
             named_element::NAME => Some(self.name.clone().map_or(Value::Null, Value::Str)),
             attribute::TYPE => Some(self.type_.clone().map_or(Value::Null, Value::Str)),
             attribute::NULLABLE => Some(Value::Bool(self.nullable)),
+            attribute::LENGTH => Some(Value::Int(self.length)),
+            attribute::PRECISION => Some(Value::Int(self.precision)),
+            attribute::SCALE => Some(Value::Int(self.scale)),
+            attribute::DEFAULT => Some(self.default.clone().map_or(Value::Null, Value::Str)),
+            attribute::GENERATION => Some(Value::Enum(self.generation)),
+            attribute::EXPRESSION => Some(self.expression.clone().map_or(Value::Null, Value::Str)),
+            attribute::COLLATION => Some(self.collation.clone().map_or(Value::Null, Value::Str)),
             _ => None,
         }
     }
     fn set(&mut self, prop: PropId, value: Value) -> Result<(), String> {
         match prop {
+            element::DESCRIPTION => {
+                match value {
+                    Value::Null => self.description = None,
+                    Value::Str(v) => self.description = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
             named_element::NAME => {
                 match value {
                     Value::Null => self.name = None,
@@ -393,6 +497,58 @@ impl Reflect for AttributeObj {
                 }
                 Ok(())
             }
+            attribute::LENGTH => {
+                match value {
+                    Value::Int(v) => self.length = v,
+                    other => return Err(format!("not an integer: {other}")),
+                }
+                Ok(())
+            }
+            attribute::PRECISION => {
+                match value {
+                    Value::Int(v) => self.precision = v,
+                    other => return Err(format!("not an integer: {other}")),
+                }
+                Ok(())
+            }
+            attribute::SCALE => {
+                match value {
+                    Value::Int(v) => self.scale = v,
+                    other => return Err(format!("not an integer: {other}")),
+                }
+                Ok(())
+            }
+            attribute::DEFAULT => {
+                match value {
+                    Value::Null => self.default = None,
+                    Value::Str(v) => self.default = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
+            attribute::GENERATION => {
+                match value {
+                    Value::Enum(v) => self.generation = v,
+                    other => return Err(format!("not a literal: {other}")),
+                }
+                Ok(())
+            }
+            attribute::EXPRESSION => {
+                match value {
+                    Value::Null => self.expression = None,
+                    Value::Str(v) => self.expression = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
+            attribute::COLLATION => {
+                match value {
+                    Value::Null => self.collation = None,
+                    Value::Str(v) => self.collation = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
             _ => Err(format!("no single-valued property {} on Attribute", prop.0)),
         }
     }
@@ -405,6 +561,9 @@ impl Reflect for AttributeObj {
 }
 
 impl AttributeObj {
+    pub fn description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
     pub fn name(&self) -> Option<&str> {
         self.name.as_deref()
     }
@@ -413,6 +572,30 @@ impl AttributeObj {
     }
     pub fn nullable(&self) -> bool {
         self.nullable
+    }
+    pub fn length(&self) -> i64 {
+        self.length
+    }
+    pub fn precision(&self) -> i64 {
+        self.precision
+    }
+    pub fn scale(&self) -> i64 {
+        self.scale
+    }
+    pub fn default(&self) -> Option<&str> {
+        self.default.as_deref()
+    }
+    pub fn generation(&self) -> u32 {
+        self.generation
+    }
+    pub fn expression(&self) -> Option<&str> {
+        self.expression.as_deref()
+    }
+    pub fn collation(&self) -> Option<&str> {
+        self.collation.as_deref()
+    }
+    pub fn set_description(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, element::DESCRIPTION, v.map_or(Value::Null, Value::str))
     }
     pub fn set_name(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
         store.set(obj, named_element::NAME, v.map_or(Value::Null, Value::str))
@@ -423,11 +606,33 @@ impl AttributeObj {
     pub fn set_nullable(store: &mut Store, obj: Obj, v: bool) -> Result<(), Invalid> {
         store.set(obj, attribute::NULLABLE, Value::Bool(v))
     }
+    pub fn set_length(store: &mut Store, obj: Obj, v: i64) -> Result<(), Invalid> {
+        store.set(obj, attribute::LENGTH, Value::Int(v))
+    }
+    pub fn set_precision(store: &mut Store, obj: Obj, v: i64) -> Result<(), Invalid> {
+        store.set(obj, attribute::PRECISION, Value::Int(v))
+    }
+    pub fn set_scale(store: &mut Store, obj: Obj, v: i64) -> Result<(), Invalid> {
+        store.set(obj, attribute::SCALE, Value::Int(v))
+    }
+    pub fn set_default(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, attribute::DEFAULT, v.map_or(Value::Null, Value::str))
+    }
+    pub fn set_generation(store: &mut Store, obj: Obj, v: u32) -> Result<(), Invalid> {
+        store.set(obj, attribute::GENERATION, Value::Enum(v))
+    }
+    pub fn set_expression(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, attribute::EXPRESSION, v.map_or(Value::Null, Value::str))
+    }
+    pub fn set_collation(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, attribute::COLLATION, v.map_or(Value::Null, Value::str))
+    }
 }
 
 /// An object of Relationship, with every inherited stored property as a field.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RelationshipObj {
+    pub description: Option<Arc<str>>,
     pub name: Option<Arc<str>>,
     pub from: Option<Obj>,
     pub to: Option<Obj>,
@@ -440,7 +645,7 @@ pub struct RelationshipObj {
 
 impl Default for RelationshipObj {
     fn default() -> Self {
-        Self { name: None, from: None, to: None, from_end: 1, to_end: 2, from_role: None, to_role: None, identifying: false }
+        Self { description: None, name: None, from: None, to: None, from_end: 1, to_end: 2, from_role: None, to_role: None, identifying: false }
     }
 }
 
@@ -450,6 +655,7 @@ impl Reflect for RelationshipObj {
     }
     fn get(&self, prop: PropId) -> Option<Value> {
         match prop {
+            element::DESCRIPTION => Some(self.description.clone().map_or(Value::Null, Value::Str)),
             relationship::NAME => Some(self.name.clone().map_or(Value::Null, Value::Str)),
             relationship::FROM => Some(self.from.map_or(Value::Null, Value::Ref)),
             relationship::TO => Some(self.to.map_or(Value::Null, Value::Ref)),
@@ -463,6 +669,14 @@ impl Reflect for RelationshipObj {
     }
     fn set(&mut self, prop: PropId, value: Value) -> Result<(), String> {
         match prop {
+            element::DESCRIPTION => {
+                match value {
+                    Value::Null => self.description = None,
+                    Value::Str(v) => self.description = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
             relationship::NAME => {
                 match value {
                     Value::Null => self.name = None,
@@ -536,6 +750,9 @@ impl Reflect for RelationshipObj {
 }
 
 impl RelationshipObj {
+    pub fn description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
     pub fn name(&self) -> Option<&str> {
         self.name.as_deref()
     }
@@ -559,6 +776,9 @@ impl RelationshipObj {
     }
     pub fn identifying(&self) -> bool {
         self.identifying
+    }
+    pub fn set_description(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, element::DESCRIPTION, v.map_or(Value::Null, Value::str))
     }
     pub fn set_name(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
         store.set(obj, relationship::NAME, v.map_or(Value::Null, Value::str))
@@ -589,6 +809,7 @@ impl RelationshipObj {
 /// An object of PrimaryKey, with every inherited stored property as a field.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PrimaryKeyObj {
+    pub description: Option<Arc<str>>,
     pub name: Option<Arc<str>>,
     pub column: Vec<Value>,
 }
@@ -599,12 +820,21 @@ impl Reflect for PrimaryKeyObj {
     }
     fn get(&self, prop: PropId) -> Option<Value> {
         match prop {
+            element::DESCRIPTION => Some(self.description.clone().map_or(Value::Null, Value::Str)),
             key::NAME => Some(self.name.clone().map_or(Value::Null, Value::Str)),
             _ => None,
         }
     }
     fn set(&mut self, prop: PropId, value: Value) -> Result<(), String> {
         match prop {
+            element::DESCRIPTION => {
+                match value {
+                    Value::Null => self.description = None,
+                    Value::Str(v) => self.description = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
             key::NAME => {
                 match value {
                     Value::Null => self.name = None,
@@ -631,11 +861,17 @@ impl Reflect for PrimaryKeyObj {
 }
 
 impl PrimaryKeyObj {
+    pub fn description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
     pub fn name(&self) -> Option<&str> {
         self.name.as_deref()
     }
     pub fn column(&self) -> &[Value] {
         &self.column
+    }
+    pub fn set_description(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, element::DESCRIPTION, v.map_or(Value::Null, Value::str))
     }
     pub fn set_name(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
         store.set(obj, key::NAME, v.map_or(Value::Null, Value::str))
@@ -648,6 +884,7 @@ impl PrimaryKeyObj {
 /// An object of UniqueConstraint, with every inherited stored property as a field.
 #[derive(Debug, Clone, PartialEq)]
 pub struct UniqueConstraintObj {
+    pub description: Option<Arc<str>>,
     pub name: Option<Arc<str>>,
     pub column: Vec<Value>,
     pub nulls_distinct: bool,
@@ -655,7 +892,7 @@ pub struct UniqueConstraintObj {
 
 impl Default for UniqueConstraintObj {
     fn default() -> Self {
-        Self { name: None, column: Vec::new(), nulls_distinct: true }
+        Self { description: None, name: None, column: Vec::new(), nulls_distinct: true }
     }
 }
 
@@ -665,6 +902,7 @@ impl Reflect for UniqueConstraintObj {
     }
     fn get(&self, prop: PropId) -> Option<Value> {
         match prop {
+            element::DESCRIPTION => Some(self.description.clone().map_or(Value::Null, Value::Str)),
             key::NAME => Some(self.name.clone().map_or(Value::Null, Value::Str)),
             unique_constraint::NULLS_DISTINCT => Some(Value::Bool(self.nulls_distinct)),
             _ => None,
@@ -672,6 +910,14 @@ impl Reflect for UniqueConstraintObj {
     }
     fn set(&mut self, prop: PropId, value: Value) -> Result<(), String> {
         match prop {
+            element::DESCRIPTION => {
+                match value {
+                    Value::Null => self.description = None,
+                    Value::Str(v) => self.description = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
             key::NAME => {
                 match value {
                     Value::Null => self.name = None,
@@ -705,6 +951,9 @@ impl Reflect for UniqueConstraintObj {
 }
 
 impl UniqueConstraintObj {
+    pub fn description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
     pub fn name(&self) -> Option<&str> {
         self.name.as_deref()
     }
@@ -713,6 +962,9 @@ impl UniqueConstraintObj {
     }
     pub fn nulls_distinct(&self) -> bool {
         self.nulls_distinct
+    }
+    pub fn set_description(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, element::DESCRIPTION, v.map_or(Value::Null, Value::str))
     }
     pub fn set_name(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
         store.set(obj, key::NAME, v.map_or(Value::Null, Value::str))
@@ -728,6 +980,7 @@ impl UniqueConstraintObj {
 /// An object of ForeignKey, with every inherited stored property as a field.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ForeignKeyObj {
+    pub description: Option<Arc<str>>,
     pub name: Option<Arc<str>>,
     pub references: Option<Obj>,
     pub column: Vec<Value>,
@@ -744,6 +997,7 @@ impl Reflect for ForeignKeyObj {
     }
     fn get(&self, prop: PropId) -> Option<Value> {
         match prop {
+            element::DESCRIPTION => Some(self.description.clone().map_or(Value::Null, Value::Str)),
             foreign_key::NAME => Some(self.name.clone().map_or(Value::Null, Value::Str)),
             foreign_key::REFERENCES => Some(self.references.map_or(Value::Null, Value::Ref)),
             foreign_key::ON_DELETE => Some(Value::Enum(self.on_delete)),
@@ -756,6 +1010,14 @@ impl Reflect for ForeignKeyObj {
     }
     fn set(&mut self, prop: PropId, value: Value) -> Result<(), String> {
         match prop {
+            element::DESCRIPTION => {
+                match value {
+                    Value::Null => self.description = None,
+                    Value::Str(v) => self.description = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
             foreign_key::NAME => {
                 match value {
                     Value::Null => self.name = None,
@@ -826,6 +1088,9 @@ impl Reflect for ForeignKeyObj {
 }
 
 impl ForeignKeyObj {
+    pub fn description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
     pub fn name(&self) -> Option<&str> {
         self.name.as_deref()
     }
@@ -849,6 +1114,9 @@ impl ForeignKeyObj {
     }
     pub fn deferrable(&self) -> u32 {
         self.deferrable
+    }
+    pub fn set_description(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, element::DESCRIPTION, v.map_or(Value::Null, Value::str))
     }
     pub fn set_name(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
         store.set(obj, foreign_key::NAME, v.map_or(Value::Null, Value::str))

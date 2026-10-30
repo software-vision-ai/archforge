@@ -22,6 +22,8 @@ pub enum Screen {
     WorkspaceSkills,
     /// The same table with the key editor open on its unique constraint.
     WorkspaceKeyEditor,
+    /// The same table with the column editor open on its email column, More open.
+    WorkspaceColumnEditor,
     /// A first diagram of a schema, just created and open, empty.
     WorkspaceDiagramEmpty,
     /// A diagram of two tables and their relationship, the first table selected.
@@ -76,9 +78,26 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
         shell.adopt_project();
         crate::explorer::add(&mut shell, crate::explorer::Kind::Schema);
     }
-    if matches!(screen, Screen::WorkspaceTable | Screen::WorkspaceSkills | Screen::WorkspaceKeyEditor) {
+    if matches!(screen, Screen::WorkspaceTable | Screen::WorkspaceSkills | Screen::WorkspaceKeyEditor | Screen::WorkspaceColumnEditor) {
         shell.adopt_project();
         sample_table(&mut shell, screen == Screen::WorkspaceSkills)?;
+        if screen == Screen::WorkspaceColumnEditor
+            && let Some(session) = shell.session.as_ref()
+        {
+            let store = session.doc();
+            let email = store
+                .alive()
+                .find(|o| archforge_er::rules::name_of(store, *o) == "email")
+                .and_then(|a| Some((store.uuid(a).ok()?, archforge_er::rules::entity_of(store, a)?)));
+            if let Some((column, entity)) = email
+                && let Ok(entity) = store.uuid(entity)
+            {
+                crate::panels::open_column(&mut shell, entity, Some(column));
+                if let Some(c) = shell.panels.column.as_mut() {
+                    c.more = true;
+                }
+            }
+        }
         if screen == Screen::WorkspaceKeyEditor
             && let Some(session) = shell.session.as_ref()
         {
@@ -150,8 +169,8 @@ fn sample_table(shell: &mut Shell, skills: bool) -> Result<(), String> {
     let schema = run(session, "er.schema.add", json!({ "name": "Shop" }))?;
     let customer = run(session, "er.entity.add", json!({ "schema": schema, "name": "Customer" }))?;
     run(session, "er.attribute.add", json!({ "entity": customer, "name": "customer_id", "type": "BIGINT", "primary_key": true }))?;
-    run(session, "er.attribute.add", json!({ "entity": customer, "name": "email", "type": "VARCHAR(255)", "unique": true }))?;
-    run(session, "er.attribute.add", json!({ "entity": customer, "name": "name", "type": "VARCHAR(120)" }))?;
+    run(session, "er.attribute.add", json!({ "entity": customer, "name": "email", "type": "VARCHAR", "length": 255, "unique": true }))?;
+    run(session, "er.attribute.add", json!({ "entity": customer, "name": "name", "type": "VARCHAR", "length": 120 }))?;
     if skills {
         run(
             session,
@@ -189,8 +208,8 @@ fn sample_diagram(shell: &mut Shell, filled: bool) -> Result<(), String> {
         let customer = run(session, "er.entity.add", json!({ "schema": schema, "name": "Customer" }))?;
         run(session, "er.attribute.add", json!({ "entity": customer, "name": "customer_id", "type": "BIGINT", "primary_key": true }))?;
         run(session, "er.attribute.add", json!({ "entity": customer, "name": "region", "type": "TEXT", "primary_key": true }))?;
-        run(session, "er.attribute.add", json!({ "entity": customer, "name": "email", "type": "VARCHAR(255)", "unique": true }))?;
-        run(session, "er.attribute.add", json!({ "entity": customer, "name": "name", "type": "VARCHAR(120)" }))?;
+        run(session, "er.attribute.add", json!({ "entity": customer, "name": "email", "type": "VARCHAR", "length": 255, "unique": true }))?;
+        run(session, "er.attribute.add", json!({ "entity": customer, "name": "name", "type": "VARCHAR", "length": 120 }))?;
         let order = run(session, "er.entity.add", json!({ "schema": schema, "name": "Order" }))?;
         run(session, "er.attribute.add", json!({ "entity": order, "name": "order_id", "type": "BIGINT", "primary_key": true }))?;
         run(session, "er.attribute.add", json!({ "entity": order, "name": "placed_at", "type": "TIMESTAMP" }))?;

@@ -53,7 +53,7 @@ pub fn rows(store: &Store, e: Obj) -> Vec<KeyRow> {
             name: name(store, k),
             columns: archforge_er::rules::key_columns(store, k)
                 .into_iter()
-                .filter_map(|a| Some((store.uuid(a).ok()?, name(store, a), archforge_er::rules::type_of(store, a))))
+                .filter_map(|a| Some((store.uuid(a).ok()?, name(store, a), archforge_er::rules::type_display(store, a))))
                 .collect(),
             nulls_distinct: !primary && archforge_er::rules::nulls_distinct(store, k),
         })
@@ -149,7 +149,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
             .iter()
             .filter_map(Value::as_ref)
             .filter(|a| store.is_alive(*a))
-            .filter_map(|a| Some((store.uuid(a).ok()?, name(store, a), archforge_er::rules::type_of(store, a))))
+            .filter_map(|a| Some((store.uuid(a).ok()?, name(store, a), archforge_er::rules::type_display(store, a))))
             .collect(),
         None => return y,
     };

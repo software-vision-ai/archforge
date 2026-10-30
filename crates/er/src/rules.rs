@@ -6,15 +6,34 @@ use std::collections::BTreeSet;
 use archforge_mof::{Obj, Store, Value};
 
 use crate::{
-    ATTRIBUTE, Cardinality, Deferrability, ENTITY, EntityKind, FOREIGN_KEY, MatchType, PRIMARY_KEY, RELATIONSHIP, ReferentialAction, SCHEMA,
-    UNIQUE_CONSTRAINT, attribute, entity, foreign_key, key, named_element, relationship, schema, unique_constraint,
+    ATTRIBUTE, Cardinality, Deferrability, ENTITY, EntityKind, FOREIGN_KEY, Generation, MatchType, PRIMARY_KEY, RELATIONSHIP, ReferentialAction,
+    SCHEMA, UNIQUE_CONSTRAINT, attribute, entity, foreign_key, key, named_element, relationship, schema, unique_constraint,
 };
 
 /// The most characters in a name, and in an attribute's type.
 pub const MAX_NAME: usize = 128;
 pub const MAX_TYPE: usize = 64;
+/// The most characters a default, an expression or a description may have.
+pub const MAX_TEXT: usize = 4096;
 /// The most columns in one key or foreign key.
 pub const MAX_KEY_COLUMNS: usize = 32;
+
+/// Why a text is not acceptable, or none: an empty text is nothing and always fine.
+pub fn text_problem(text: &str, max: usize) -> Option<String> {
+    if text.is_empty() {
+        return None;
+    }
+    if text.chars().count() > max {
+        return Some(format!("is longer than {max} characters"));
+    }
+    if text.chars().any(|c| c.is_control() && c != '\n' && c != '\t') {
+        return Some("holds a control character".into());
+    }
+    if text.trim() != text {
+        return Some("starts or ends with a space".into());
+    }
+    None
+}
 
 /// Why a name is not acceptable, as the end of the sentence "the name ...".
 pub fn name_problem(name: &str, max: usize) -> Option<String> {
@@ -145,6 +164,148 @@ fn refs(store: &Store, obj: Obj, prop: archforge_mof::PropId) -> Vec<Obj> {
 /// An attribute's type, or empty.
 pub fn type_of(store: &Store, a: Obj) -> String {
     store.get(a, attribute::TYPE).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default()
+}
+
+/// What a type takes after its name, in the PostgreSQL list (owner decision 2026-10-30: this
+/// list first, other dialects behind a dialect setting later).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TypeShape {
+    /// Nothing: `INTEGER`, `TEXT`, `BOOLEAN`, `DATE`, `UUID`, …
+    Plain,
+    /// A length: `VARCHAR(n)`, `CHAR(n)`, `BIT(n)`, `VARBIT(n)`.
+    Length,
+    /// A precision: `TIME(p)`, `TIMESTAMP(p)`, `INTERVAL(p)`.
+    Precision,
+    /// A precision and a scale: `NUMERIC(p, s)`, `DECIMAL(p, s)`.
+    PrecisionScale,
+}
+
+/// The shape of a type name in the PostgreSQL list; a name not in the list is free text and takes
+/// nothing. Case and the `character varying` spellings are read as PostgreSQL reads them.
+pub fn type_shape(kind: &str) -> TypeShape {
+    let k = kind.trim().to_ascii_lowercase();
+    let k = k.split('(').next().unwrap_or("").trim();
+    match k {
+        "varchar" | "character varying" | "char" | "character" | "bpchar" | "bit" | "bit varying" | "varbit" => TypeShape::Length,
+        "time"
+        | "timetz"
+        | "timestamp"
+        | "timestamptz"
+        | "interval"
+        | "time with time zone"
+        | "time without time zone"
+        | "timestamp with time zone"
+        | "timestamp without time zone" => TypeShape::Precision,
+        "numeric" | "decimal" => TypeShape::PrecisionScale,
+        _ => TypeShape::Plain,
+    }
+}
+
+/// Whether a type name is an integer type, which an identity column needs.
+pub fn is_integer_type(kind: &str) -> bool {
+    matches!(
+        kind.trim().to_ascii_lowercase().as_str(),
+        "smallint" | "integer" | "int" | "int2" | "int4" | "int8" | "bigint" | "smallserial" | "serial" | "bigserial"
+    )
+}
+
+/// A column's size as stored: length, precision, scale.
+pub fn size_of(store: &Store, a: Obj) -> (Option<i64>, Option<i64>, Option<i64>) {
+    // 0 is none: the generated integers take no null.
+    let int = |p| match store.get(a, p) {
+        Ok(Value::Int(i)) if i > 0 => Some(i),
+        _ => None,
+    };
+    (int(attribute::LENGTH), int(attribute::PRECISION), int(attribute::SCALE))
+}
+
+/// A column's type as DDL writes it: the name with its length, or precision and scale, when set.
+pub fn type_display(store: &Store, a: Obj) -> String {
+    let kind = type_of(store, a);
+    match size_of(store, a) {
+        (Some(n), _, _) => format!("{kind}({n})"),
+        (None, Some(p), Some(s)) => format!("{kind}({p}, {s})"),
+        (None, Some(p), None) => format!("{kind}({p})"),
+        _ => kind,
+    }
+}
+
+/// The generation of a column.
+pub fn generation_of(store: &Store, a: Obj) -> Generation {
+    match store.get(a, attribute::GENERATION) {
+        Ok(Value::Enum(i)) => Generation::from_index(i).unwrap_or(Generation::NoneKind),
+        _ => Generation::NoneKind,
+    }
+}
+
+/// A string property of an element, or empty.
+pub fn text_of(store: &Store, o: Obj, prop: archforge_mof::PropId) -> String {
+    store.get(o, prop).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default()
+}
+
+/// Why a column's size does not fit its type, or none: a length only where the type takes one,
+/// precision and scale likewise, each 1 to 65535 and the scale no more than the precision.
+pub fn size_problem(kind: &str, length: Option<i64>, precision: Option<i64>, scale: Option<i64>) -> Option<(&'static str, String)> {
+    let shape = type_shape(kind);
+    for (key, value) in [("length", length), ("precision", precision), ("scale", scale)] {
+        if let Some(v) = value
+            && !(1..=65_535).contains(&v)
+        {
+            return Some((key, format!("{v} is not between 1 and 65535")));
+        }
+    }
+    let kind = if kind.is_empty() { "a type without a name" } else { kind };
+    if length.is_some() && shape != TypeShape::Length {
+        return Some(("length", format!("{kind} takes no length")));
+    }
+    if precision.is_some() && !matches!(shape, TypeShape::Precision | TypeShape::PrecisionScale) {
+        return Some(("precision", format!("{kind} takes no precision")));
+    }
+    if scale.is_some() && shape != TypeShape::PrecisionScale {
+        return Some(("scale", format!("{kind} takes no scale")));
+    }
+    if let (Some(p), Some(s)) = (precision, scale)
+        && s > p
+    {
+        return Some(("scale", "the scale is more than the precision".into()));
+    }
+    if scale.is_some() && precision.is_none() {
+        return Some(("scale", "a scale needs a precision".into()));
+    }
+    None
+}
+
+/// Why a column's generation does not fit, or none: a computed column has an expression and no
+/// default; an identity column is an integer type, not nullable, and has no default.
+pub fn generation_problem(store: &Store, a: Obj) -> Option<String> {
+    let generation = generation_of(store, a);
+    let expression = text_of(store, a, attribute::EXPRESSION);
+    let default = text_of(store, a, attribute::DEFAULT);
+    match generation {
+        Generation::NoneKind => (!expression.is_empty()).then(|| "an expression needs a computed generation".to_string()),
+        Generation::ComputedStored | Generation::ComputedVirtual => {
+            if expression.is_empty() {
+                Some("a computed column needs its expression".into())
+            } else if !default.is_empty() {
+                Some("a computed column takes no default".into())
+            } else {
+                None
+            }
+        }
+        Generation::IdentityAlways | Generation::IdentityByDefault => {
+            if !is_integer_type(&type_of(store, a)) {
+                Some("an identity column needs an integer type".into())
+            } else if is_nullable(store, a) {
+                Some("an identity column cannot be nullable".into())
+            } else if !default.is_empty() {
+                Some("an identity column takes no default".into())
+            } else if !expression.is_empty() {
+                Some("an identity column takes no expression".into())
+            } else {
+                None
+            }
+        }
+    }
 }
 
 /// The entity an attribute, key or foreign key belongs to.
@@ -457,6 +618,13 @@ pub fn problems(store: &Store) -> Vec<String> {
         if class == ATTRIBUTE {
             if in_primary_key(store, o) && is_nullable(store, o) {
                 out.push(format!("{o} is a key and nullable"));
+            }
+            let (length, precision, scale) = size_of(store, o);
+            if let Some((_, p)) = size_problem(&type_of(store, o), length, precision, scale) {
+                out.push(format!("the size of {o}: {p}"));
+            }
+            if let Some(p) = generation_problem(store, o) {
+                out.push(format!("the generation of {o}: {p}"));
             }
             if let Some(t) = store.get(o, attribute::TYPE).ok().and_then(|v| v.as_str().map(str::to_string))
                 && let Some(p) = name_problem(&t, MAX_TYPE)

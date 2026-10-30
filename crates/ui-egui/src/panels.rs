@@ -48,6 +48,8 @@ pub struct State {
     pub no_key_card: Option<Uuid>,
     /// The key editor, open on a key or on a unique constraint about to be added (slice E4).
     pub key: Option<crate::keys::KeyEdit>,
+    /// A description being typed under the heading (slice S2).
+    pub description: Option<NameEdit>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -63,9 +65,19 @@ pub struct ColumnEdit {
     pub entity: Uuid,
     pub name: String,
     pub ty: String,
+    /// The size fields as typed: a length, or a precision and a scale, empty for none.
+    pub length: String,
+    pub precision: String,
+    pub scale: String,
+    pub default: String,
+    pub generation: archforge_er::Generation,
+    pub expression: String,
+    pub collation: String,
     pub primary_key: bool,
     pub not_null: bool,
     pub unique: bool,
+    /// Whether More (the collation) is open.
+    pub more: bool,
     pub refused: Option<String>,
     pub opened: bool,
 }
@@ -110,6 +122,8 @@ pub enum Menu {
     Match,
     /// The key editor's Add a column select (slice E4).
     KeyColumn,
+    /// The column editor's Generation select (slice S2).
+    Generation,
 }
 
 /// The selection the panels describe.
@@ -215,6 +229,9 @@ pub fn retain_valid(state: &mut State, store: &Store) {
     crate::relation::retain_valid(state, store);
     if state.key.as_ref().is_some_and(|k| store.by_uuid(k.entity).is_none() || k.target.is_some_and(|t| store.by_uuid(t).is_none())) {
         state.key = None;
+    }
+    if state.description.as_ref().is_some_and(|d| store.by_uuid(d.target).is_none()) {
+        state.description = None;
     }
 }
 
@@ -480,6 +497,43 @@ pub(crate) fn name_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: 
     }
 }
 
+/// The description under the heading: typed in place, committed through `er.describe` on Enter
+/// or when the keyboard leaves it.
+fn description_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: egui::Pos2, width: f32, subject: &Subject) {
+    let (Some(id), Some(obj)) = (subject.id, subject.obj) else { return };
+    let current = shell.session.as_ref().map(|s| archforge_er::rules::text_of(s.doc(), obj, archforge_er::element::DESCRIPTION)).unwrap_or_default();
+    let mut text = match &shell.panels.description {
+        Some(d) if d.target == id => d.text.clone(),
+        _ => current.clone(),
+    };
+    let committed = text_field(
+        shell,
+        ui,
+        p,
+        at,
+        width,
+        "workspace.properties.description",
+        &tr("Description"),
+        &mut text,
+        archforge_er::rules::MAX_TEXT,
+        false,
+        true,
+    );
+    if committed {
+        shell.panels.description = None;
+        if text.trim() != current {
+            match run(shell, "er.describe", json!({ "element": id.to_string(), "text": text.trim() })) {
+                Ok(_) => shell.panels.notice = None,
+                Err(e) => shell.panels.notice = Some(e),
+            }
+        }
+    } else if text != current {
+        shell.panels.description = Some(NameEdit { target: id, text });
+    } else if shell.panels.description.as_ref().is_some_and(|d| d.target == id) {
+        shell.panels.description = None;
+    }
+}
+
 /// One column as the panel lists it.
 struct ColumnRow {
     id: Uuid,
@@ -497,7 +551,7 @@ fn entity_rows(store: &Store, e: Obj) -> (Vec<ColumnRow>, bool) {
             Some(ColumnRow {
                 id: store.uuid(a).ok()?,
                 name: archforge_er::rules::name_of(store, a),
-                ty: string_of(store, a, archforge_er::attribute::TYPE),
+                ty: archforge_er::rules::type_display(store, a),
                 primary: archforge_er::rules::in_primary_key(store, a),
                 unique: archforge_er::rules::is_unique(store, a),
                 foreign: store.referrers(a).iter().any(|(_, p)| *p == archforge_er::foreign_key::COLUMN),
@@ -599,18 +653,30 @@ fn entity_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
 /// Opens the column editor on `target`, or on a column to add to `entity`.
 pub(crate) fn open_column(shell: &mut Shell, entity: Uuid, target: Option<Uuid>) {
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+    let number = |v: Option<i64>| v.map(|n| n.to_string()).unwrap_or_default();
     let edit = match target.and_then(|t| store.by_uuid(t)) {
-        Some(a) => ColumnEdit {
-            target,
-            entity,
-            name: archforge_er::rules::name_of(store, a),
-            ty: string_of(store, a, archforge_er::attribute::TYPE),
-            primary_key: archforge_er::rules::in_primary_key(store, a),
-            not_null: !archforge_er::rules::is_nullable(store, a),
-            unique: archforge_er::rules::is_unique(store, a),
-            refused: None,
-            opened: true,
-        },
+        Some(a) => {
+            let (length, precision, scale) = archforge_er::rules::size_of(store, a);
+            ColumnEdit {
+                target,
+                entity,
+                name: archforge_er::rules::name_of(store, a),
+                ty: string_of(store, a, archforge_er::attribute::TYPE),
+                length: number(length),
+                precision: number(precision),
+                scale: number(scale),
+                default: string_of(store, a, archforge_er::attribute::DEFAULT),
+                generation: archforge_er::rules::generation_of(store, a),
+                expression: string_of(store, a, archforge_er::attribute::EXPRESSION),
+                collation: string_of(store, a, archforge_er::attribute::COLLATION),
+                primary_key: archforge_er::rules::in_primary_key(store, a),
+                not_null: !archforge_er::rules::is_nullable(store, a),
+                unique: archforge_er::rules::is_unique(store, a),
+                more: false,
+                refused: None,
+                opened: true,
+            }
+        }
         None => {
             let taken = store
                 .by_uuid(entity)
@@ -627,9 +693,17 @@ pub(crate) fn open_column(shell: &mut Shell, entity: Uuid, target: Option<Uuid>)
                 entity,
                 name,
                 ty: "TEXT".into(),
+                length: String::new(),
+                precision: String::new(),
+                scale: String::new(),
+                default: String::new(),
+                generation: archforge_er::Generation::NoneKind,
+                expression: String::new(),
+                collation: String::new(),
                 primary_key: false,
                 not_null: false,
                 unique: false,
+                more: false,
                 refused: None,
                 opened: true,
             }
@@ -639,36 +713,205 @@ pub(crate) fn open_column(shell: &mut Shell, entity: Uuid, target: Option<Uuid>)
     shell.panels.menu = None;
 }
 
-/// The column editor card, as the design's; gives the y under it.
+/// The generation choices, in the engine's order, with their words for the select.
+const GENERATIONS: [(archforge_er::Generation, &str); 5] = [
+    (archforge_er::Generation::NoneKind, "None"),
+    (archforge_er::Generation::IdentityAlways, "Identity, always"),
+    (archforge_er::Generation::IdentityByDefault, "Identity, by default"),
+    (archforge_er::Generation::ComputedStored, "Computed, stored"),
+    (archforge_er::Generation::ComputedVirtual, "Computed, virtual"),
+];
+
+fn is_computed(g: archforge_er::Generation) -> bool {
+    matches!(g, archforge_er::Generation::ComputedStored | archforge_er::Generation::ComputedVirtual)
+}
+
+/// The column editor card, as the design's (slice S2 adds the size, default, generation and,
+/// under More, the collation); gives the y under it.
 fn column_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 {
     let paint = ui.painter().clone();
     let width = r.width() - 2.0 * PAD;
     let Some(mut edit) = shell.panels.column.clone() else { return y };
-    let card = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width.max(0.0), 206.0 + if edit.refused.is_some() { 20.0 } else { 0.0 }));
+    let shape = archforge_er::rules::type_shape(&edit.ty);
+    let computed = is_computed(edit.generation);
+    // The card's height from its rows.
+    let row = 17.0 + FIELD + 10.0;
+    let mut height = 12.0 + row * 4.0 + 20.0 + 8.0 + 20.0 + 14.0 + 24.0 + 10.0 + FIELD + 12.0;
+    if computed {
+        height += row;
+    }
+    if edit.more {
+        height += row;
+    }
+    if edit.refused.is_some() {
+        height += 20.0;
+    }
+    let card = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width.max(0.0), height));
     paint.rect_filled(card, 8.0, p.surface);
     paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
     let inner = (width - 24.0).max(0.0);
     let at = |x: f32, dy: f32| card.min + vec2(12.0 + x, dy);
-    let take = edit.opened;
-    edit.opened = false;
-    let name_done =
-        text_field(shell, ui, p, at(0.0, 12.0), inner, "workspace.properties.column.name", &tr("Name"), &mut edit.name, MAX_NAME, take, false);
-    let type_done =
-        text_field(shell, ui, p, at(0.0, 68.0), inner, "workspace.properties.column.type", &tr("Type"), &mut edit.ty, MAX_TYPE, false, false);
+    let take = std::mem::take(&mut edit.opened);
+    let mut cy = 12.0;
+    let mut enter =
+        text_field(shell, ui, p, at(0.0, cy), inner, "workspace.properties.column.name", &tr("Name"), &mut edit.name, MAX_NAME, take, false);
+    cy += row;
+    // The type, with the size fields its shape takes beside it.
+    let (type_w, size_w) = match shape {
+        archforge_er::rules::TypeShape::Plain => (inner, 0.0),
+        archforge_er::rules::TypeShape::PrecisionScale => ((inner - 2.0 * 64.0 - 16.0).max(60.0), 64.0),
+        _ => ((inner - 80.0 - 8.0).max(60.0), 80.0),
+    };
+    enter |= text_field(shell, ui, p, at(0.0, cy), type_w, "workspace.properties.column.type", &tr("Type"), &mut edit.ty, MAX_TYPE, false, false);
+    match shape {
+        archforge_er::rules::TypeShape::Length => {
+            enter |= text_field(
+                shell,
+                ui,
+                p,
+                at(type_w + 8.0, cy),
+                size_w,
+                "workspace.properties.column.length",
+                &tr("Length"),
+                &mut edit.length,
+                5,
+                false,
+                false,
+            );
+        }
+        archforge_er::rules::TypeShape::Precision => {
+            enter |= text_field(
+                shell,
+                ui,
+                p,
+                at(type_w + 8.0, cy),
+                size_w,
+                "workspace.properties.column.precision",
+                &tr("Precision"),
+                &mut edit.precision,
+                5,
+                false,
+                false,
+            );
+        }
+        archforge_er::rules::TypeShape::PrecisionScale => {
+            enter |= text_field(
+                shell,
+                ui,
+                p,
+                at(type_w + 8.0, cy),
+                size_w,
+                "workspace.properties.column.precision",
+                &tr("Precision"),
+                &mut edit.precision,
+                5,
+                false,
+                false,
+            );
+            enter |= text_field(
+                shell,
+                ui,
+                p,
+                at(type_w + 8.0 + size_w + 8.0, cy),
+                size_w,
+                "workspace.properties.column.scale",
+                &tr("Scale"),
+                &mut edit.scale,
+                5,
+                false,
+                false,
+            );
+        }
+        archforge_er::rules::TypeShape::Plain => {}
+    }
+    cy += row;
+    enter |= text_field(
+        shell,
+        ui,
+        p,
+        at(0.0, cy),
+        inner,
+        "workspace.properties.column.default",
+        &tr("Default"),
+        &mut edit.default,
+        archforge_er::rules::MAX_TEXT,
+        false,
+        false,
+    );
+    cy += row;
+    let generation_word = GENERATIONS.iter().find(|(g, _)| *g == edit.generation).map(|(_, w)| tr(w)).unwrap_or_default();
+    let generation_field = select_field(
+        shell,
+        ui,
+        p,
+        at(0.0, cy),
+        inner,
+        "workspace.properties.column.generation",
+        &tr("Generation"),
+        &generation_word,
+        Menu::Generation,
+    );
+    cy += row;
+    if computed {
+        enter |= text_field(
+            shell,
+            ui,
+            p,
+            at(0.0, cy),
+            inner,
+            "workspace.properties.column.expression",
+            &tr("Expression"),
+            &mut edit.expression,
+            archforge_er::rules::MAX_TEXT,
+            false,
+            false,
+        );
+        cy += row;
+    }
     // The checks in a row: the second starts where the first's label ended.
-    let next_x = check(shell, ui, p, at(0.0, 126.0), "workspace.properties.column.primary-key", &tr("Primary key"), &mut edit.primary_key);
-    check(shell, ui, p, pos2(next_x - 12.0, card.top() + 126.0), "workspace.properties.column.not-null", &tr("Not null"), &mut edit.not_null);
-    check(shell, ui, p, at(0.0, 154.0), "workspace.properties.column.unique", &tr("Unique"), &mut edit.unique);
-    let actions_y = 166.0 + 14.0;
+    let next_x = check(shell, ui, p, at(0.0, cy), "workspace.properties.column.primary-key", &tr("Primary key"), &mut edit.primary_key);
+    check(shell, ui, p, pos2(next_x - 12.0, card.top() + cy), "workspace.properties.column.not-null", &tr("Not null"), &mut edit.not_null);
+    cy += 28.0;
+    check(shell, ui, p, at(0.0, cy), "workspace.properties.column.unique", &tr("Unique"), &mut edit.unique);
+    cy += 20.0 + 14.0;
+    // More: the collation.
+    let more = Rect::from_min_size(at(0.0, cy), vec2(inner, 24.0));
+    ux::icon_in(
+        &paint,
+        Rect::from_min_size(more.min + vec2(0.0, 4.0), Vec2::splat(16.0)),
+        if edit.more { &icons::CHEVRON_DOWN } else { &icons::CHEVRON_RIGHT },
+        p.text_secondary,
+    );
+    ux::text(&paint, more.min + vec2(22.0, 2.0), &tr("More"), types::UI, p.text, Some((inner - 22.0).max(0.0)));
+    if control(shell, ui, "workspace.properties.column.more", "disclosure", more, true).clicked() {
+        edit.more = !edit.more;
+    }
+    cy += 24.0 + 10.0;
+    if edit.more {
+        enter |= text_field(
+            shell,
+            ui,
+            p,
+            at(0.0, cy),
+            inner,
+            "workspace.properties.column.collation",
+            &tr("Collation"),
+            &mut edit.collation,
+            MAX_NAME,
+            false,
+            false,
+        );
+        cy += row;
+    }
     let mut remove = false;
     if edit.target.is_some() {
-        remove = icon_button(shell, ui, p, at(0.0, actions_y), "workspace.properties.column.remove", &icons::TRASH, p.danger, None, "Remove");
+        remove = icon_button(shell, ui, p, at(0.0, cy), "workspace.properties.column.remove", &icons::TRASH, p.danger, None, "Remove");
     }
     let cancel = icon_button(
         shell,
         ui,
         p,
-        pos2(card.right() - 12.0 - 2.0 * FIELD - 8.0, card.top() + actions_y),
+        pos2(card.right() - 12.0 - 2.0 * FIELD - 8.0, card.top() + cy),
         "workspace.properties.column.cancel",
         &icons::CLOSE,
         p.text_secondary,
@@ -679,7 +922,7 @@ fn column_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: 
         shell,
         ui,
         p,
-        pos2(card.right() - 12.0 - FIELD, card.top() + actions_y),
+        pos2(card.right() - 12.0 - FIELD, card.top() + cy),
         "workspace.properties.column.apply",
         &icons::TICK,
         p.on_accent,
@@ -687,9 +930,17 @@ fn column_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: 
         "Apply",
     );
     if let Some(why) = &edit.refused {
-        ux::text(&paint, at(0.0, 206.0), why, types::CAPTION, p.amber, Some(inner));
+        ux::text(&paint, at(0.0, cy + FIELD + 8.0), why, types::CAPTION, p.amber, Some(inner));
     }
-    let enter = name_done || type_done;
+    // The generation menu, over the card.
+    if shell.panels.menu == Some(Menu::Generation) {
+        let items: Vec<String> = GENERATIONS.iter().map(|(_, w)| tr(w)).collect();
+        if let Some(i) = menu(shell, ui, p, generation_field, "workspace.properties.column.generation", &items)
+            && let Some((g, _)) = GENERATIONS.get(i)
+        {
+            edit.generation = *g;
+        }
+    }
     shell.panels.column = Some(edit.clone());
     if cancel || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
         shell.panels.column = None;
@@ -732,39 +983,95 @@ fn set_column_refusal(shell: &mut Shell, why: String) {
     }
 }
 
-/// Writes the column editor through the commands: add, or rename, type and flags.
+/// A size field as typed: empty is none, else a number.
+fn size_value(text: &str) -> Result<i64, String> {
+    let t = text.trim();
+    if t.is_empty() {
+        return Ok(0);
+    }
+    t.parse::<i64>().map_err(|_| fmt(&tr("{text} is not a number"), &[("text", t)]))
+}
+
+/// Writes the column editor through the commands: add, or rename, type with its size, default,
+/// generation, collation and flags, each only when it changed.
 fn commit_column(shell: &mut Shell, edit: &ColumnEdit) {
     let nullable = if edit.not_null { "no" } else { "yes" };
+    let size = match (size_value(&edit.length), size_value(&edit.precision), size_value(&edit.scale)) {
+        (Ok(l), Ok(p), Ok(s)) => (l, p, s),
+        (Err(e), _, _) | (_, Err(e), _) | (_, _, Err(e)) => {
+            set_column_refusal(shell, e);
+            return;
+        }
+    };
+    let generation = archforge_er::commands::GENERATION_WORDS.iter().find(|(g, _)| *g == edit.generation).map(|(_, w)| *w).unwrap_or("none");
     let outcome = match edit.target {
         None => crate::editing::run_growing(
             shell,
             &tr("Add column"),
             "er.attribute.add",
-            json!({ "entity": edit.entity.to_string(), "name": edit.name.trim(), "type": edit.ty.trim(), "primary_key": edit.primary_key, "nullable": nullable, "unique": edit.unique }),
+            json!({
+                "entity": edit.entity.to_string(), "name": edit.name.trim(), "type": edit.ty.trim(),
+                "length": size.0, "precision": size.1, "scale": size.2,
+                "default": edit.default.trim(), "generation": generation, "expression": edit.expression.trim(), "collation": edit.collation.trim(),
+                "primary_key": edit.primary_key, "nullable": nullable, "unique": edit.unique,
+            }),
             edit.entity,
         )
         .map(|_| ()),
         Some(t) => {
-            let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+            // Every changed field in one batch: a refusal rolls the whole card back, so what the
+            // card shows and what landed never drift apart.
+            let Some(session) = shell.session.as_mut() else { return };
+            let store = session.doc();
             let Some(a) = store.by_uuid(t) else { return };
-            let (old_name, old_type) = (archforge_er::rules::name_of(store, a), string_of(store, a, archforge_er::attribute::TYPE));
+            let old_name = archforge_er::rules::name_of(store, a);
+            let old_type = string_of(store, a, archforge_er::attribute::TYPE);
+            let (ol, op, os) = archforge_er::rules::size_of(store, a);
+            let old_size = (ol.unwrap_or(0), op.unwrap_or(0), os.unwrap_or(0));
+            let old_default = string_of(store, a, archforge_er::attribute::DEFAULT);
+            let old_generation = archforge_er::rules::generation_of(store, a);
+            let old_expression = string_of(store, a, archforge_er::attribute::EXPRESSION);
+            let old_collation = string_of(store, a, archforge_er::attribute::COLLATION);
             let id = t.to_string();
-            let mut result = Ok(());
+            let mut steps: Vec<(&str, serde_json::Value)> = Vec::new();
             if edit.name.trim() != old_name {
-                result = run(shell, "er.attribute.rename", json!({ "attribute": id, "name": edit.name.trim() })).map(|_| ());
+                steps.push(("er.attribute.rename", json!({ "attribute": id, "name": edit.name.trim() })));
             }
-            if result.is_ok() && edit.ty.trim() != old_type {
-                result = run(shell, "er.attribute.set-type", json!({ "attribute": id, "type": edit.ty.trim() })).map(|_| ());
+            if edit.ty.trim() != old_type || size != old_size {
+                steps.push((
+                    "er.attribute.set-type",
+                    json!({ "attribute": id, "type": edit.ty.trim(), "length": size.0, "precision": size.1, "scale": size.2 }),
+                ));
             }
-            if result.is_ok() {
-                result = run(
-                    shell,
-                    "er.attribute.set-flags",
-                    json!({ "attribute": id, "primary_key": edit.primary_key, "nullable": nullable, "unique": edit.unique }),
-                )
-                .map(|_| ());
+            if edit.default.trim() != old_default {
+                steps.push(("er.attribute.set-default", json!({ "attribute": id, "default": edit.default.trim() })));
             }
-            result
+            if edit.generation != old_generation || edit.expression.trim() != old_expression {
+                steps.push((
+                    "er.attribute.set-generation",
+                    json!({ "attribute": id, "generation": generation, "expression": edit.expression.trim() }),
+                ));
+            }
+            if edit.collation.trim() != old_collation {
+                steps.push(("er.attribute.set-collation", json!({ "attribute": id, "collation": edit.collation.trim() })));
+            }
+            steps.push((
+                "er.attribute.set-flags",
+                json!({ "attribute": id, "primary_key": edit.primary_key, "nullable": nullable, "unique": edit.unique }),
+            ));
+            if steps.len() == 1 {
+                session.execute(steps[0].0, &steps[0].1).map(|_| ()).map_err(|e| e.to_string())
+            } else {
+                session
+                    .batch(&tr("Edit column"), |b| {
+                        for (cmd, params) in &steps {
+                            b.execute(cmd, params)?;
+                        }
+                        Ok(())
+                    })
+                    .map(|_| ())
+                    .map_err(|e| e.to_string())
+            }
         }
     };
     match outcome {
@@ -1191,7 +1498,9 @@ fn commit_skill(shell: &mut Shell, edit: &SkillEdit) {
 /// trigger toggles, for the catalogue tests.
 #[cfg(test)]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
-    ["Add column", "Add skill", "Remove", "Cancel", "Apply", "Modelling", "Drawing", "Naming", "Export"].into_iter()
+    ["Add column", "Add skill", "Remove", "Cancel", "Apply", "Modelling", "Drawing", "Naming", "Export"]
+        .into_iter()
+        .chain(GENERATIONS.iter().map(|(_, w)| *w))
 }
 
 // The panel.
@@ -1214,7 +1523,12 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, 
     }
     ux::text(&paint, r.min + vec2(PAD, y), &s.name, types::CARD_TITLE, p.text, Some((r.width() - 2.0 * PAD).max(0.0)));
     ux::text(&paint, r.min + vec2(PAD, y + 26.0), &s.kind, types::CAPTION, p.text_secondary, Some((r.width() - 2.0 * PAD).max(0.0)));
-    let body_y = r.top() + y + 51.0;
+    // Every element of the model takes a description, the text DDL writes as its comment.
+    let mut body_y = r.top() + y + 51.0;
+    if panel == Panel::Properties && s.obj.is_some() && s.class != Some(archforge_diagram::DIAGRAM) {
+        description_field(shell, ui, p, pos2(r.left() + PAD, r.top() + y + 49.0), (r.width() - 2.0 * PAD).max(0.0), &s);
+        body_y += 17.0 + FIELD + 14.0;
+    }
     let mut clip = ui.new_child(egui::UiBuilder::new().max_rect(Rect::from_min_max(pos2(r.left(), body_y), r.max)));
     clip.set_clip_rect(Rect::from_min_max(pos2(r.left(), body_y), r.max));
     match panel {

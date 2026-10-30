@@ -49,6 +49,7 @@ str		{key}: {problem}	{key}: {problem}
 str		{name} has no primary key	{name} に主キーがありません
 str		{name} removed · {keys} went with it	{name} を削除しました · {keys} も削除されました
 str		Add column	列を追加
+str		Edit column	列を編集
 str		Add skill	スキルを追加
 str		Kind	種類
 str		Regular	通常
@@ -57,6 +58,20 @@ str		Type	型
 str		Primary key	主キー
 str		Not null	NOT NULL
 str		Unique	一意
+str		Length	長さ
+str		Precision	精度
+str		Scale	小数桁
+str		Default	既定値
+str		Generation	生成
+str		Expression	式
+str		Collation	照合順序
+str		Description	説明
+str		{text} is not a number	{text} は数値ではありません
+str		None	なし
+str		Identity, always	識別列、常に
+str		Identity, by default	識別列、既定で
+str		Computed, stored	計算列、保存
+str		Computed, virtual	計算列、仮想
 str		Remove	削除
 str		Apply	適用
 str		Inherited · {n}	継承 · {n}

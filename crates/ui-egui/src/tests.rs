@@ -1856,3 +1856,77 @@ fn problems_badge_the_canvas_and_a_note_is_placed_and_typed_in_place() {
     let toast = h.state().canvas.toast.clone().expect("the toast");
     assert!(toast.text.starts_with("customer_id removed · "), "{}", toast.text);
 }
+
+#[test]
+fn the_column_editor_sets_the_size_default_and_generation_and_the_heading_takes_a_description() {
+    let (mut h, customer) = table_harness();
+    // email becomes VARCHAR with a length of 255 and a default; the row shows VARCHAR(255).
+    let rows: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.column.0")).collect();
+    let at = rect_of(&h, &rows[1]).center();
+    click(&mut h, at);
+    h.state_mut().panels.column.as_mut().unwrap().ty = "VARCHAR".into();
+    h.run();
+    assert!(ids(&h).iter().any(|i| i == "workspace.properties.column.length"), "a varchar takes a length: {:?}", ids(&h));
+    assert!(!ids(&h).iter().any(|i| i == "workspace.properties.column.scale"));
+    {
+        let c = h.state_mut().panels.column.as_mut().unwrap();
+        c.length = "255".into();
+        c.default = "''".into();
+    }
+    let at = rect_of(&h, "workspace.properties.column.apply").center();
+    click(&mut h, at);
+    assert!(h.state().panels.column.is_none(), "{:?}", h.state().panels.column);
+    let st = h.state().session.as_ref().unwrap().doc();
+    let email = st.alive().find(|o| archforge_er::rules::name_of(st, *o) == "email").unwrap();
+    assert_eq!(archforge_er::rules::type_display(st, email), "VARCHAR(255)");
+    assert_eq!(archforge_er::rules::text_of(st, email, archforge_er::attribute::DEFAULT), "''");
+    // A numeric takes precision and scale; the scale above the precision is refused and the editor stays open.
+    let rows: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.column.0")).collect();
+    let at = rect_of(&h, &rows[1]).center();
+    click(&mut h, at);
+    {
+        let c = h.state_mut().panels.column.as_mut().unwrap();
+        c.ty = "NUMERIC".into();
+        c.length.clear();
+        c.precision = "4".into();
+        c.scale = "6".into();
+    }
+    h.run();
+    assert!(ids(&h).iter().any(|i| i == "workspace.properties.column.scale"));
+    let at = rect_of(&h, "workspace.properties.column.apply").center();
+    click(&mut h, at);
+    assert!(h.state().panels.column.as_ref().is_some_and(|c| c.refused.is_some()), "the refusal stays in the editor");
+    h.state_mut().panels.column.as_mut().unwrap().scale = "2".into();
+    let at = rect_of(&h, "workspace.properties.column.apply").center();
+    click(&mut h, at);
+    assert!(h.state().panels.column.is_none(), "{:?}", h.state().panels.column);
+    let st = h.state().session.as_ref().unwrap().doc();
+    assert_eq!(archforge_er::rules::type_display(st, email), "NUMERIC(4, 2)");
+    // Generation: computed with an expression through the select and the expression field.
+    let rows: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.column.0")).collect();
+    let at = rect_of(&h, &rows[1]).center();
+    click(&mut h, at);
+    h.state_mut().panels.column.as_mut().unwrap().default.clear();
+    let at = rect_of(&h, "workspace.properties.column.generation").center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.properties.column.generation.3").center();
+    click(&mut h, at);
+    assert!(ids(&h).iter().any(|i| i == "workspace.properties.column.expression"), "a computed column takes an expression");
+    h.state_mut().panels.column.as_mut().unwrap().expression = "lower(name)".into();
+    let at = rect_of(&h, "workspace.properties.column.apply").center();
+    click(&mut h, at);
+    assert!(h.state().panels.column.is_none(), "{:?}", h.state().panels.column);
+    let st = h.state().session.as_ref().unwrap().doc();
+    assert_eq!(archforge_er::rules::generation_of(st, email), archforge_er::Generation::ComputedStored);
+    assert_eq!(archforge_er::rules::text_of(st, email, archforge_er::attribute::EXPRESSION), "lower(name)");
+    // The heading's description field describes the table.
+    assert!(ids(&h).iter().any(|i| i == "workspace.properties.description"));
+    let at = rect_of(&h, "workspace.properties.description").center();
+    click(&mut h, at);
+    h.event(egui::Event::Text("People who buy.".into()));
+    h.run();
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    let st = h.state().session.as_ref().unwrap().doc();
+    let customer_obj = st.by_uuid(archforge_mof::Uuid::parse(&customer).unwrap()).unwrap();
+    assert_eq!(archforge_er::rules::text_of(st, customer_obj, archforge_er::element::DESCRIPTION), "People who buy.");
+}

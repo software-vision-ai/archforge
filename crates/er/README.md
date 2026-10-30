@@ -73,7 +73,7 @@ non-identifying one; an entity's removal takes the relationships that reach it t
 (`commands::remove_entity`).
 
 **The metaclasses.** `Schema` (entity, relationship), `Entity` (attribute, kind, primaryKey,
-uniqueConstraint, foreignKey), `Attribute` (type, nullable), `Relationship` (name, from, to,
+uniqueConstraint, foreignKey), `Attribute` (type with length, precision and scale, nullable, default, generation with an expression, collation), `Relationship` (name, from, to,
 fromEnd, toEnd, fromRole, toRole, identifying), the abstract `Key` (name, column) with `PrimaryKey` and
 `UniqueConstraint` (nullsDistinct), `ForeignKey` (name, references a Key, column, onDelete,
 onUpdate, relationship, match, deferrable) and the enumerations `Cardinality` (zeroOrOne,
@@ -123,6 +123,6 @@ view; the grid; the sweep; random sequences over model and diagram commands toge
 
 **Known lacks.** Nothing persists an ER model or its diagrams until gm2.31. No indexes, checks or
 views. A mapping table cannot yet be collapsed back into a many-to-many relationship.
-Attribute types are free text; a dialect-aware list is a later decision.
+Attribute types are free text; the PostgreSQL names decide what size a type takes (`rules::type_shape`: a length for `VARCHAR`, `CHAR`, `BIT`; a precision for `TIME`, `TIMESTAMP`, `INTERVAL`; precision and scale for `NUMERIC`, `DECIMAL`), other dialects follow behind a dialect setting (owner, 2026-10-30). Every element takes a `description`, the text DDL writes as its comment.
 
 **Non-goals.** Drawing, storage, the canvas, MCP tools, the class model.

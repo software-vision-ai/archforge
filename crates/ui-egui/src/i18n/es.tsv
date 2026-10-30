@@ -49,6 +49,7 @@ str		{key}: {problem}	{key}: {problem}
 str		{name} has no primary key	{name} no tiene clave primaria
 str		{name} removed · {keys} went with it	{name} eliminada · {keys} se fue con ella
 str		Add column	Añadir columna
+str		Edit column	Editar columna
 str		Add skill	Añadir habilidad
 str		Kind	Tipo
 str		Regular	Normal
@@ -57,6 +58,20 @@ str		Type	Tipo de dato
 str		Primary key	Clave primaria
 str		Not null	No nulo
 str		Unique	Único
+str		Length	Longitud
+str		Precision	Precisión
+str		Scale	Escala
+str		Default	Valor por defecto
+str		Generation	Generación
+str		Expression	Expresión
+str		Collation	Intercalación
+str		Description	Descripción
+str		{text} is not a number	{text} no es un número
+str		None	Ninguna
+str		Identity, always	Identidad, siempre
+str		Identity, by default	Identidad, por defecto
+str		Computed, stored	Calculada, almacenada
+str		Computed, virtual	Calculada, virtual
 str		Remove	Quitar
 str		Apply	Aplicar
 str		Inherited · {n}	Heredadas · {n}
