@@ -47,6 +47,39 @@ impl LinkKind {
     }
 }
 
+/// The enumeration SkillTrigger.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SkillTrigger {
+    Modelling,
+    Drawing,
+    Naming,
+    Export,
+}
+
+impl SkillTrigger {
+    pub const DATA_TYPE: DataId = SKILL_TRIGGER;
+    pub fn from_index(i: u32) -> Option<Self> {
+        match i {
+            0 => Some(Self::Modelling),
+            1 => Some(Self::Drawing),
+            2 => Some(Self::Naming),
+            3 => Some(Self::Export),
+            _ => None,
+        }
+    }
+    pub fn index(self) -> u32 {
+        self as u32
+    }
+    pub fn literal(self) -> &'static str {
+        match self {
+            Self::Modelling => "modelling",
+            Self::Drawing => "drawing",
+            Self::Naming => "naming",
+            Self::Export => "export",
+        }
+    }
+}
+
 use archforge_mof::DataId;
 
 /// An object of Model, with every inherited stored property as a field.
@@ -58,6 +91,7 @@ pub struct ModelObj {
     pub comment: Vec<Value>,
     pub tag: Vec<Value>,
     pub link: Vec<Value>,
+    pub skill: Vec<Value>,
 }
 
 impl Reflect for ModelObj {
@@ -90,6 +124,7 @@ impl Reflect for ModelObj {
             model::COMMENT => Some(&self.comment),
             model::TAG => Some(&self.tag),
             model::LINK => Some(&self.link),
+            model::SKILL => Some(&self.skill),
             _ => None,
         }
     }
@@ -100,6 +135,7 @@ impl Reflect for ModelObj {
             model::COMMENT => Some(&mut self.comment),
             model::TAG => Some(&mut self.tag),
             model::LINK => Some(&mut self.link),
+            model::SKILL => Some(&mut self.skill),
             _ => None,
         }
     }
@@ -124,6 +160,9 @@ impl ModelObj {
     pub fn link(&self) -> &[Value] {
         &self.link
     }
+    pub fn skill(&self) -> &[Value] {
+        &self.skill
+    }
     pub fn push_owned_comment(store: &mut Store, obj: Obj, value: Value) -> Result<u32, Invalid> {
         store.push(obj, element::OWNED_COMMENT, value)
     }
@@ -141,6 +180,9 @@ impl ModelObj {
     }
     pub fn push_link(store: &mut Store, obj: Obj, value: Value) -> Result<u32, Invalid> {
         store.push(obj, model::LINK, value)
+    }
+    pub fn push_skill(store: &mut Store, obj: Obj, value: Value) -> Result<u32, Invalid> {
+        store.push(obj, model::SKILL, value)
     }
 }
 
@@ -476,5 +518,169 @@ impl LinkObj {
     }
     pub fn set_note(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
         store.set(obj, link::NOTE, v.map_or(Value::Null, Value::str))
+    }
+}
+
+/// An object of Skill, with every inherited stored property as a field.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct SkillObj {
+    pub owned_comment: Vec<Value>,
+    pub name: Option<Arc<str>>,
+    pub description: Option<Arc<str>>,
+    pub body: Option<Arc<str>>,
+    pub trigger: Vec<Value>,
+    pub dialect: Option<Arc<str>>,
+    pub subject: Option<Obj>,
+    pub applies_to: Option<Arc<str>>,
+    pub type_pattern: Option<Arc<str>>,
+}
+
+impl Reflect for SkillObj {
+    fn class(&self) -> ClassId {
+        SKILL
+    }
+    fn get(&self, prop: PropId) -> Option<Value> {
+        match prop {
+            named_element::NAME => Some(self.name.clone().map_or(Value::Null, Value::Str)),
+            skill::DESCRIPTION => Some(self.description.clone().map_or(Value::Null, Value::Str)),
+            skill::BODY => Some(self.body.clone().map_or(Value::Null, Value::Str)),
+            skill::DIALECT => Some(self.dialect.clone().map_or(Value::Null, Value::Str)),
+            skill::SUBJECT => Some(self.subject.map_or(Value::Null, Value::Ref)),
+            skill::APPLIES_TO => Some(self.applies_to.clone().map_or(Value::Null, Value::Str)),
+            skill::TYPE_PATTERN => Some(self.type_pattern.clone().map_or(Value::Null, Value::Str)),
+            _ => None,
+        }
+    }
+    fn set(&mut self, prop: PropId, value: Value) -> Result<(), String> {
+        match prop {
+            named_element::NAME => {
+                match value {
+                    Value::Null => self.name = None,
+                    Value::Str(v) => self.name = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
+            skill::DESCRIPTION => {
+                match value {
+                    Value::Null => self.description = None,
+                    Value::Str(v) => self.description = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
+            skill::BODY => {
+                match value {
+                    Value::Null => self.body = None,
+                    Value::Str(v) => self.body = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
+            skill::DIALECT => {
+                match value {
+                    Value::Null => self.dialect = None,
+                    Value::Str(v) => self.dialect = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
+            skill::SUBJECT => {
+                match value {
+                    Value::Null => self.subject = None,
+                    Value::Ref(v) => self.subject = Some(v),
+                    other => return Err(format!("not a reference: {other}")),
+                }
+                Ok(())
+            }
+            skill::APPLIES_TO => {
+                match value {
+                    Value::Null => self.applies_to = None,
+                    Value::Str(v) => self.applies_to = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
+            skill::TYPE_PATTERN => {
+                match value {
+                    Value::Null => self.type_pattern = None,
+                    Value::Str(v) => self.type_pattern = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
+            _ => Err(format!("no single-valued property {} on Skill", prop.0)),
+        }
+    }
+    fn list(&self, prop: PropId) -> Option<&[Value]> {
+        match prop {
+            element::OWNED_COMMENT => Some(&self.owned_comment),
+            skill::TRIGGER => Some(&self.trigger),
+            _ => None,
+        }
+    }
+    fn list_mut(&mut self, prop: PropId) -> Option<&mut Vec<Value>> {
+        match prop {
+            element::OWNED_COMMENT => Some(&mut self.owned_comment),
+            skill::TRIGGER => Some(&mut self.trigger),
+            _ => None,
+        }
+    }
+}
+
+impl SkillObj {
+    pub fn owned_comment(&self) -> &[Value] {
+        &self.owned_comment
+    }
+    pub fn name(&self) -> Option<&str> {
+        self.name.as_deref()
+    }
+    pub fn description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
+    pub fn body(&self) -> Option<&str> {
+        self.body.as_deref()
+    }
+    pub fn trigger(&self) -> &[Value] {
+        &self.trigger
+    }
+    pub fn dialect(&self) -> Option<&str> {
+        self.dialect.as_deref()
+    }
+    pub fn subject(&self) -> Option<Obj> {
+        self.subject
+    }
+    pub fn applies_to(&self) -> Option<&str> {
+        self.applies_to.as_deref()
+    }
+    pub fn type_pattern(&self) -> Option<&str> {
+        self.type_pattern.as_deref()
+    }
+    pub fn push_owned_comment(store: &mut Store, obj: Obj, value: Value) -> Result<u32, Invalid> {
+        store.push(obj, element::OWNED_COMMENT, value)
+    }
+    pub fn set_name(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, named_element::NAME, v.map_or(Value::Null, Value::str))
+    }
+    pub fn set_description(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, skill::DESCRIPTION, v.map_or(Value::Null, Value::str))
+    }
+    pub fn set_body(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, skill::BODY, v.map_or(Value::Null, Value::str))
+    }
+    pub fn push_trigger(store: &mut Store, obj: Obj, value: Value) -> Result<u32, Invalid> {
+        store.push(obj, skill::TRIGGER, value)
+    }
+    pub fn set_dialect(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, skill::DIALECT, v.map_or(Value::Null, Value::str))
+    }
+    pub fn set_subject(store: &mut Store, obj: Obj, v: Option<Obj>) -> Result<(), Invalid> {
+        store.set(obj, skill::SUBJECT, v.map_or(Value::Null, Value::Ref))
+    }
+    pub fn set_applies_to(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, skill::APPLIES_TO, v.map_or(Value::Null, Value::str))
+    }
+    pub fn set_type_pattern(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, skill::TYPE_PATTERN, v.map_or(Value::Null, Value::str))
     }
 }

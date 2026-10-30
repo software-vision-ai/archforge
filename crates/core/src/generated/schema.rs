@@ -50,6 +50,20 @@ pub const TABLES: &[Table] = &[
             Column { name: "note", prop: Some(link::NOTE), sql: "TEXT NULL" },
         ],
     },
+    Table {
+        name: "core_skill",
+        class: SKILL,
+        columns: &[
+            Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "description", prop: Some(skill::DESCRIPTION), sql: "TEXT NULL" },
+            Column { name: "body", prop: Some(skill::BODY), sql: "TEXT NULL" },
+            Column { name: "dialect", prop: Some(skill::DIALECT), sql: "TEXT NULL" },
+            Column { name: "subject", prop: Some(skill::SUBJECT), sql: "BINARY(16) NULL" },
+            Column { name: "applies_to", prop: Some(skill::APPLIES_TO), sql: "TEXT NULL" },
+            Column { name: "type_pattern", prop: Some(skill::TYPE_PATTERN), sql: "TEXT NULL" },
+        ],
+    },
 ];
 
 /// One table per multi-valued stored property.
@@ -59,6 +73,7 @@ pub const JUNCTIONS: &[Junction] = &[
     Junction { name: "core_model_comment", class: MODEL, prop: model::COMMENT, ordered: false, reference: true },
     Junction { name: "core_model_tag", class: MODEL, prop: model::TAG, ordered: false, reference: true },
     Junction { name: "core_model_link", class: MODEL, prop: model::LINK, ordered: false, reference: true },
+    Junction { name: "core_model_skill", class: MODEL, prop: model::SKILL, ordered: true, reference: true },
     Junction { name: "core_folder_owned_comment", class: FOLDER, prop: element::OWNED_COMMENT, ordered: false, reference: true },
     Junction { name: "core_folder_member", class: FOLDER, prop: folder::MEMBER, ordered: true, reference: true },
     Junction { name: "core_folder_tag", class: FOLDER, prop: folder::TAG, ordered: false, reference: true },
@@ -67,4 +82,6 @@ pub const JUNCTIONS: &[Junction] = &[
     Junction { name: "core_tag_owned_comment", class: TAG, prop: element::OWNED_COMMENT, ordered: false, reference: true },
     Junction { name: "core_tag_element", class: TAG, prop: tag::ELEMENT, ordered: false, reference: true },
     Junction { name: "core_link_owned_comment", class: LINK, prop: element::OWNED_COMMENT, ordered: false, reference: true },
+    Junction { name: "core_skill_owned_comment", class: SKILL, prop: element::OWNED_COMMENT, ordered: false, reference: true },
+    Junction { name: "core_skill_trigger", class: SKILL, prop: skill::TRIGGER, ordered: true, reference: false },
 ];

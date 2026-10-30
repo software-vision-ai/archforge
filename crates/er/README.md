@@ -87,6 +87,7 @@ exactlyOne, zeroOrMore, oneOrMore), `EntityKind` (regular, associative), `Refere
 |---|---|
 | `registry` | `pub fn registry() -> Result<Arc<Registry<Store, ErView>>, String>`: the edit area, the ER commands and the diagram commands |
 | `Session`, `ErView` | `Session<Store, ErView>`; the view holds the selection and the open diagram, and implements `DiagramView` |
+| `ErView` as `archforge_core::skills::SkillHost` | a skill sits on a schema, an entity or an attribute; it aims at every table, relationship or column below; a column skill may name a type (`attribute::TYPE`); the skill commands join `registry()` |
 | `DIAGRAM_KIND`, `ENTITY_SIZE` | `"er"`; an entity node's default size |
 | `universe_with`, `slabs`, `store` | a universe of the shared core, the diagram metamodel, ER and others; the slabs of the three; a store over them |
 | `rules::{name_problem, entity_name_free, attribute_name_free, constraint_name_free, schema_of, problems, notices, key_problem, key_columns_problem, associative_problem, key_parts, primary_key_of, primary_key, unique_constraints, keys_of, key_columns, keys_onto, in_primary_key, is_unique}` | the rules, for commands and for a whole store |

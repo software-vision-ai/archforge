@@ -1482,7 +1482,7 @@ mod tests {
         let target = |name: &str| TARGETS.iter().find(|t| t.name == name).unwrap_or_else(|| panic!("no target {name}"));
         let core = build(target("core"), &std::fs::read(util::root().join("crates/core/core.xmi")).unwrap_or_default(), false)
             .unwrap_or_else(|e| panic!("{e}"));
-        assert_eq!(core.metamodel.classes.len(), 7);
+        assert_eq!(core.metamodel.classes.len(), 8);
         let er =
             build(target("er"), &std::fs::read(util::root().join("crates/er/er.xmi")).unwrap_or_default(), false).unwrap_or_else(|e| panic!("{e}"));
         let names: Vec<&str> = er.metamodel.classes.iter().map(|c| &*c.name).collect();

@@ -111,13 +111,36 @@ impl DiagramView for ErView {
     }
 }
 
+/// What may carry a skill in ER and what a skill may aim at (spec archforge-zer.2): a skill sits
+/// on a schema, an entity or an attribute; it aims at every table, every relationship or every
+/// column below its subject, and a column skill may name a type.
+impl archforge_core::skills::SkillHost for ErView {
+    fn selection_mut(&mut self) -> &mut Vec<Obj> {
+        &mut self.selection
+    }
+
+    fn skill_subjects() -> &'static [ClassId] {
+        &[SCHEMA, ENTITY, ATTRIBUTE]
+    }
+
+    fn skill_kinds() -> &'static [(ClassId, &'static str)] {
+        &[(ENTITY, "table"), (RELATIONSHIP, "relationship"), (ATTRIBUTE, "column")]
+    }
+
+    fn typed_class() -> Option<(ClassId, PropId)> {
+        Some((ATTRIBUTE, attribute::TYPE))
+    }
+}
+
 /// The ER notation's session: the store of the project, the selection, the ER commands.
 pub type Session = archforge_engine::Session<Store, ErView>;
 
-/// The ER notation's command registry: the edit area, the ER commands and the diagram commands.
+/// The ER notation's command registry: the edit area, the ER commands, the diagram commands and
+/// the skill commands.
 pub fn registry() -> Result<Arc<archforge_engine::Registry<Store, ErView>>, String> {
     let mut specs = commands::specs();
     specs.extend(archforge_diagram::commands::specs::<ErView>());
+    specs.extend(archforge_core::skills::specs::<ErView>());
     archforge_engine::Registry::new(specs)
 }
 

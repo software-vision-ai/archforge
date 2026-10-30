@@ -9,7 +9,9 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+archforge-engine.workspace = true
 archforge-mof.workspace = true
+serde_json.workspace = true
 
 # The tests over the core and a notation together live with the notation (archforge-uml), since a
 # dependency only ever points down a layer.

@@ -13,6 +13,7 @@ pub struct CoreSlabs {
     pub comments: Vec<CommentObj>,
     pub tags: Vec<TagObj>,
     pub links: Vec<LinkObj>,
+    pub skills: Vec<SkillObj>,
 }
 
 fn push<T: Default>(v: &mut Vec<T>) -> Option<u32> {
@@ -37,6 +38,7 @@ impl Slabs for CoreSlabs {
             COMMENT => push(&mut self.comments),
             TAG => push(&mut self.tags),
             LINK => push(&mut self.links),
+            SKILL => push(&mut self.skills),
             _ => None,
         }
     }
@@ -47,6 +49,7 @@ impl Slabs for CoreSlabs {
             COMMENT => at(&self.comments, slot),
             TAG => at(&self.tags, slot),
             LINK => at(&self.links, slot),
+            SKILL => at(&self.skills, slot),
             _ => None,
         }
     }
@@ -57,6 +60,7 @@ impl Slabs for CoreSlabs {
             COMMENT => at_mut(&mut self.comments, slot),
             TAG => at_mut(&mut self.tags, slot),
             LINK => at_mut(&mut self.links, slot),
+            SKILL => at_mut(&mut self.skills, slot),
             _ => None,
         }
     }
@@ -67,5 +71,6 @@ impl Slabs for CoreSlabs {
             .saturating_add(self.comments.capacity().saturating_mul(size_of::<CommentObj>()))
             .saturating_add(self.tags.capacity().saturating_mul(size_of::<TagObj>()))
             .saturating_add(self.links.capacity().saturating_mul(size_of::<LinkObj>()))
+            .saturating_add(self.skills.capacity().saturating_mul(size_of::<SkillObj>()))
     }
 }

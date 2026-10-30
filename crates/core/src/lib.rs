@@ -9,6 +9,7 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
 mod generated;
+pub mod skills;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -109,8 +110,9 @@ pub fn link(store: &mut Store, owner: Obj, kind: LinkKind, source: Obj, target: 
 }
 
 /// The links whose source or target is `obj`, anything it contains, or one of those links (a
-/// link set through the store alone may point at a link): everything that has to go before `obj`,
-/// in the order it can go (a link pointing at a link comes before the link it points at).
+/// link set through the store alone may point at a link), and the skills whose subject is one of
+/// them: everything that has to go before `obj`, in the order it can go (a link pointing at a
+/// link comes before the link it points at).
 pub fn links_of(store: &Store, obj: Obj) -> Result<Vec<Obj>, Invalid> {
     let mut links = Vec::new();
     let mut found = BTreeSet::new();
@@ -121,7 +123,7 @@ pub fn links_of(store: &Store, obj: Obj) -> Result<Vec<Obj>, Invalid> {
             continue;
         }
         for (src, prop) in store.referrers(o) {
-            if (prop == link::SOURCE || prop == link::TARGET) && found.insert(src) {
+            if (prop == link::SOURCE || prop == link::TARGET || prop == skill::SUBJECT) && found.insert(src) {
                 links.push(src);
                 stack.push(src);
             }
@@ -133,8 +135,11 @@ pub fn links_of(store: &Store, obj: Obj) -> Result<Vec<Obj>, Invalid> {
 }
 
 /// Destroys `obj` with everything it contains, and first every link that has one of them as an
-/// end: a link without its end is meaningless, and the MOF core alone would refuse the destroy
-/// because the ends are required. All or nothing. Gives how many objects went.
+/// end and every skill that sits on one of them. A link without its end is meaningless, and the
+/// MOF core alone would refuse the destroy because a link's ends are required; a skill's subject
+/// is optional, so without this cascade the MOF core would null it and a skill on one table would
+/// silently apply to the whole model. Every notation removes through this function. All or
+/// nothing. Gives how many objects went.
 pub fn destroy_with_links(store: &mut Store, obj: Obj) -> Result<usize, Invalid> {
     let links = links_of(store, obj)?;
     store.transaction(|st| {
