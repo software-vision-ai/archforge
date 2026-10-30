@@ -13,6 +13,9 @@ publish = false
 snapshot = ["dep:egui_kittest"]
 
 [dependencies]
+archforge-engine.workspace = true
+archforge-er.workspace = true
+archforge-mof.workspace = true
 archforge-names.workspace = true
 egui.workspace = true
 egui_kittest = { workspace = true, optional = true, features = ["wgpu"] }

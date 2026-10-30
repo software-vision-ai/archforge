@@ -144,6 +144,20 @@ pub fn registry() -> Result<Arc<archforge_engine::Registry<Store, ErView>>, Stri
     archforge_engine::Registry::new(specs)
 }
 
+/// The id counter a new project's session starts at: ids below it are the store's own.
+const FIRST_COUNTER: u64 = 1;
+
+/// The session of a project that has nothing yet: a store over the shared core, the diagram
+/// metamodel and ER, the project's Model root named `name`, and the ER registry. `ids` mints the
+/// elements' ids; the host supplies it, since only the host may read the clock.
+pub fn new_project_session(name: &str, ids: Box<dyn FnMut() -> Uuid + Send>) -> Result<Session, String> {
+    let registry = registry()?;
+    let mut st = store(ids)?;
+    let model = st.create(archforge_core::MODEL).map_err(|e| e.to_string())?;
+    st.set(model, archforge_core::named_element::NAME, archforge_mof::Value::str(name)).map_err(|e| e.to_string())?;
+    Ok(Session::new(registry, st, FIRST_COUNTER, archforge_engine::Options::default()))
+}
+
 /// A universe of the shared core, the diagram metamodel, ER and the metamodels given.
 pub fn universe_with(others: Vec<Arc<Metamodel>>) -> Result<Arc<Universe>, MetaError> {
     let mut all = vec![metamodel()?, archforge_diagram::metamodel()?];

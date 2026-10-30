@@ -45,6 +45,10 @@ pub struct Palette {
     pub focus: Color32,
     /// A dialog's edge: none in Light, where its shadow sets it off, a hairline in Dark.
     pub dialog_edge: Color32,
+    /// The canvas behind a diagram, a shade off the surface.
+    pub canvas: Color32,
+    /// A filled field in a panel.
+    pub field: Color32,
 }
 
 const fn rgb(hex: u32) -> Color32 {
@@ -75,6 +79,8 @@ pub const LIGHT: Palette = Palette {
     shadow: Color32::from_rgba_premultiplied(4, 9, 12, 51),
     focus: rgb(0x7999EF),
     dialog_edge: Color32::TRANSPARENT,
+    canvas: rgb(0xFBFCFE),
+    field: rgb(0xF2F4F7),
 };
 
 pub const DARK: Palette = Palette {
@@ -101,6 +107,8 @@ pub const DARK: Palette = Palette {
     shadow: Color32::from_rgba_premultiplied(0, 0, 0, 128),
     focus: rgb(0x5B7EE8),
     dialog_edge: rgb(0x2A3441),
+    canvas: rgb(0x151B23),
+    field: rgb(0x232C38),
 };
 
 /// The palette of an appearance.

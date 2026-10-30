@@ -40,7 +40,7 @@ fn home_draws_in_both_appearances_with_every_control_registered() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let h = harness(theme);
         let ids = ids(&h);
-        for id in ["home.tab.home", "home.theme", "home.header.search", "home.open-project", "home.pin-folder", "home.banner.close"] {
+        for id in ["strip.home", "strip.theme", "home.header.search", "home.open-project", "home.pin-folder", "home.banner.close"] {
             assert!(ids.iter().any(|i| i == id), "{theme:?}: {id} in {ids:?}");
         }
         assert_eq!(ids.iter().filter(|i| i.starts_with("home.start.")).count(), 4, "the four start cards");
@@ -83,7 +83,7 @@ fn the_theme_switch_flips_the_appearance_and_the_banner_stays_closed() {
     let centre = |h: &Harness<'static, Shell>, id: &str| {
         h.state().widgets().iter().find(|w| w.id == id).map(|w| egui::pos2((w.rect[0] + w.rect[2]) / 2.0, (w.rect[1] + w.rect[3]) / 2.0)).unwrap()
     };
-    let at = centre(&h, "home.theme");
+    let at = centre(&h, "strip.theme");
     click(&mut h, at);
     assert_eq!(h.state().state.theme, ThemeKind::Dark);
     let at = centre(&h, "home.banner.close");
@@ -151,7 +151,7 @@ fn create_project_waits_for_creating_projects_and_home_takes_no_click_behind_the
     let at = centre_of(&h, "new-project.create");
     click(&mut h, at);
     assert!(h.state().new_project.is_some(), "Create project is not available yet and leaves the dialog open");
-    let at = centre_of(&h, "home.theme");
+    let at = centre_of(&h, "strip.theme");
     click(&mut h, at);
     assert_eq!(h.state().state.theme, ThemeKind::Light, "the theme switch behind the veil took the click");
 }
@@ -562,4 +562,176 @@ fn the_bundled_faces_draw_every_character_of_the_latin_script_catalogues() {
         });
         assert!(missing.is_empty(), "{}: {missing:?}", lang.code);
     }
+}
+
+/// The shell with a project open, in the harness at the design's frame size or another.
+fn workspace_harness(theme: ThemeKind, size: egui::Vec2) -> Harness<'static, Shell> {
+    crate::i18n::set_language("en");
+    let mut shell = Shell::new(Services { user_name: Some("Robin Meyer".into()), ids: Some(test_ids()), ..Services::default() });
+    shell.state.theme = theme;
+    shell.open_project(crate::Opened { name: "Commerce platform".into(), path: "/tmp/Commerce platform.archforge".into() });
+    let mut h = Harness::builder().with_size(size).build_ui_state(
+        |ui, shell: &mut Shell| {
+            shell.logic(ui.ctx());
+            shell.ui(ui);
+        },
+        shell,
+    );
+    h.run();
+    h
+}
+
+/// Ids for a test's model: version 7 from a counter, no clock.
+fn test_ids() -> std::sync::Arc<dyn Fn() -> archforge_mof::Uuid + Send + Sync> {
+    let n = std::sync::atomic::AtomicU64::new(0);
+    std::sync::Arc::new(move || {
+        let i = n.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+        let mut r = [0u8; 10];
+        r[2..].copy_from_slice(&i.to_be_bytes());
+        archforge_mof::Uuid::v7(1_761_670_800_000, r)
+    })
+}
+
+fn rect_of(h: &Harness<'static, Shell>, id: &str) -> egui::Rect {
+    let w = h.state().widgets().iter().find(|w| w.id == id).unwrap_or_else(|| panic!("no control {id}"));
+    egui::Rect::from_min_max(egui::pos2(w.rect[0], w.rect[1]), egui::pos2(w.rect[2], w.rect[3]))
+}
+
+#[test]
+fn an_open_project_shows_the_workspace_with_its_session_and_every_control() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        let shell = h.state();
+        assert!(shell.session.is_some(), "the project's model opens with it");
+        let found = ids(&h);
+        for id in [
+            "strip.home",
+            "workspace.header.home",
+            "workspace.header.project",
+            "workspace.header.search",
+            "workspace.header.help",
+            "workspace.header.account",
+            "workspace.explorers.models",
+            "workspace.explorers.diagrams",
+            "workspace.explorers.source-control",
+            "workspace.explorer.add",
+            "workspace.explorer.filter",
+            "workspace.explorer.resize",
+            "workspace.tabs.add",
+            "workspace.properties.name",
+            "workspace.panels.agent",
+            "workspace.panels.appearance",
+            "workspace.panels.properties",
+            "workspace.panels.skills",
+            "workspace.panel.collapse",
+            "workspace.panel.resize",
+        ] {
+            assert!(found.iter().any(|i| i == id), "{theme:?}: {id} in {found:?}");
+        }
+        assert!(!found.iter().any(|i| i.starts_with("home.start.")), "Home is not drawn under the workspace");
+    }
+}
+
+#[test]
+fn the_rails_switch_the_explorer_and_the_panel_and_home_closes_the_project() {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1120.0));
+    assert_eq!(h.state().state.panel, crate::state::Panel::Properties);
+    let at = rect_of(&h, "workspace.panels.skills").center();
+    click(&mut h, at);
+    assert_eq!(h.state().state.panel, crate::state::Panel::Skills);
+    assert_eq!(h.state().state.explorer, crate::state::Explorer::Models);
+    let at = rect_of(&h, "workspace.explorers.diagrams").center();
+    click(&mut h, at);
+    assert_eq!(h.state().state.explorer, crate::state::Explorer::Diagrams);
+    // A control whose slice is not built takes no click: the project stays open.
+    let at = rect_of(&h, "workspace.tabs.add").center();
+    click(&mut h, at);
+    assert!(h.state().project.is_some());
+    let at = rect_of(&h, "workspace.header.home").center();
+    click(&mut h, at);
+    assert!(h.state().project.is_none() && h.state().session.is_none(), "Home closes the project and its session");
+    assert!(ids(&h).iter().any(|i| i == "home.open-project"), "Home is back");
+}
+
+#[test]
+fn a_narrow_window_keeps_the_rails_and_drops_the_panel_then_the_explorer() {
+    let h = workspace_harness(ThemeKind::Light, egui::vec2(900.0, 700.0));
+    let found = ids(&h);
+    assert!(found.iter().any(|i| i == "workspace.explorer.filter"));
+    assert!(!found.iter().any(|i| i == "workspace.panel.collapse"), "the panel gives way first");
+    assert!(found.iter().any(|i| i == "workspace.panels.properties"), "the rail stays");
+    let h = workspace_harness(ThemeKind::Dark, egui::vec2(480.0, 600.0));
+    let found = ids(&h);
+    assert!(!found.iter().any(|i| i == "workspace.explorer.filter"), "then the explorer");
+    assert!(found.iter().any(|i| i == "workspace.explorers.models") && found.iter().any(|i| i == "workspace.tabs.add"));
+}
+
+#[test]
+fn the_dividers_resize_within_their_ranges_and_the_state_keeps_the_widths() {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1120.0));
+    let before = h.state().state.explorer_width;
+    let from = rect_of(&h, "workspace.explorer.resize").center();
+    h.event(egui::Event::PointerMoved(from));
+    h.event(egui::Event::PointerButton { pos: from, button: egui::PointerButton::Primary, pressed: true, modifiers: egui::Modifiers::NONE });
+    h.run();
+    let to = from + egui::vec2(60.0, 0.0);
+    h.event(egui::Event::PointerMoved(to));
+    h.run();
+    h.event(egui::Event::PointerButton { pos: to, button: egui::PointerButton::Primary, pressed: false, modifiers: egui::Modifiers::NONE });
+    h.run();
+    let after = h.state().state.explorer_width;
+    assert!(after > before, "{before} -> {after}");
+    assert!(after <= 560.0);
+    let json = serde_json::to_string(&h.state().state).unwrap();
+    let back: crate::UiState = serde_json::from_str(&json).unwrap();
+    assert_eq!(back.explorer_width, after);
+}
+
+#[test]
+fn without_an_id_source_the_status_bar_says_the_model_could_not_open_once() {
+    crate::i18n::set_language("en");
+    let mut shell = Shell::new(Services::default());
+    shell.open_project(crate::Opened { name: "Commerce platform".into(), path: "/tmp/Commerce platform.archforge".into() });
+    let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1120.0)).build_ui_state(
+        |ui, shell: &mut Shell| {
+            shell.logic(ui.ctx());
+            shell.ui(ui);
+        },
+        shell,
+    );
+    h.run();
+    h.run();
+    assert!(h.state().session.is_none());
+    assert_eq!(h.state().session_error, Some(crate::SessionError::NoIdSource));
+}
+
+#[test]
+fn a_long_project_name_keeps_the_chip_left_of_the_bar_controls_at_every_size_and_language() {
+    for lang in crate::i18n::LANGUAGES {
+        for (w, h_) in [(1600.0, 1120.0), (900.0, 700.0), (480.0, 600.0), (80.0, 80.0)] {
+            crate::i18n::set_language(lang.code);
+            let mut shell = Shell::new(Services { user_name: Some("Robin Meyer".into()), ids: Some(test_ids()), ..Services::default() });
+            shell.open_project(crate::Opened {
+                name: "A project with a very long name that goes on and on".into(),
+                path: "/tmp/long.archforge".into(),
+            });
+            let mut h = Harness::builder().with_size(egui::vec2(w, h_)).build_ui_state(
+                |ui, shell: &mut Shell| {
+                    shell.logic(ui.ctx());
+                    shell.ui(ui);
+                },
+                shell,
+            );
+            h.run();
+            for e in h.state().widgets() {
+                assert!(e.rect.iter().all(|v| v.is_finite()), "{} at {w}x{h_}: {:?}", e.id, e.rect);
+            }
+            if w >= 480.0 {
+                let chip = rect_of(&h, "workspace.header.project");
+                let help = rect_of(&h, "workspace.header.help");
+                assert!(chip.right() <= help.left(), "{}: chip {chip:?} runs under help {help:?} at {w}", lang.code);
+            }
+        }
+    }
+    crate::i18n::set_language("en");
 }

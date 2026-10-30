@@ -10,6 +10,31 @@ str		Open project	Abrir proyecto
 str		Close	Cerrar
 str		Home	Inicio
 str		Search projects and actions	Buscar proyectos y acciones
+# Espacio de trabajo
+str		Find an element, view, or action	Buscar un elemento, vista o acción
+str		No schemas yet	Aún no hay esquemas
+str		New diagram	Nuevo diagrama
+str		Project created	Proyecto creado
+str		Model · the project's root	Modelo · la raíz del proyecto
+str		Model	Modelo
+str		Name	Nombre
+str		Models	Modelos
+str		Source Control	Control de versiones
+str		Agent	Agente
+str		Appearance	Apariencia
+str		Properties	Propiedades
+str		Skills	Habilidades
+str		Filter models…	Filtrar modelos…
+str		Filter diagrams…	Filtrar diagramas…
+str		Filter changes…	Filtrar cambios…
+str		No diagrams yet	Aún no hay diagramas
+str		No changes yet	Aún no hay cambios
+str		Nothing selected	Nada seleccionado
+str		No agent connected	Ningún agente conectado
+str		Not saved to the project yet	Aún no guardado en el proyecto
+str		The model could not be opened	No se pudo abrir el modelo
+str		The host gives no ids for the model's elements	El host no proporciona ids para los elementos del modelo
+str		Collapse panel	Contraer el panel
 str		Not available yet	Aún no disponible
 str		Welcome home	Inicio
 str		Welcome to Archforge	Le damos la bienvenida a Archforge

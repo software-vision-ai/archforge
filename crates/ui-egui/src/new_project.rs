@@ -154,7 +154,7 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
     match answer(&mut dialog) {
         Some(Ok(opened)) => {
             remember(shell, &opened);
-            shell.project = Some(opened);
+            shell.open_project(opened);
             return;
         }
         Some(Err(e)) => dialog.failed = Some((dialog.name.clone(), e)),
