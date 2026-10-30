@@ -33,6 +33,12 @@ str		Delete	削除
 str		Schema · model	スキーマ · モデル
 str		Table · model, in every diagram	テーブル · モデル、すべての図に
 str		Column · model	列 · モデル
+str		Domain · model	ドメイン · モデル
+str		This domain	このドメイン
+str		On this domain · {n}	このドメインに · {n}
+str		Enum type · model	列挙型 · モデル
+str		This enum type	この列挙型
+str		On this enum type · {n}	この列挙型に · {n}
 str		Element · model	要素 · モデル
 str		Skill · model	スキル · モデル
 str		Columns · {n}	列 · {n}
@@ -41,6 +47,21 @@ str		Add a column	列を追加
 str		Add unique constraint	一意制約を追加
 str		Columns, in key order	キーの順の列
 str		Nulls distinct	NULL を区別
+str		Types · {n}	型 · {n}
+plural		{n} check	{n} 件のチェック制約
+plural		{n} literal	{n} 件のリテラル
+str		Add type	型を追加
+str		Domain	ドメイン
+str		Enum type	列挙型
+str		Base type	基底型
+str		Checks	チェック制約
+str		Add a check	チェック制約を追加
+str		Literals, in order	リテラル（順序どおり）
+str		Add a literal	リテラルを追加
+str		Pick a type	型を選ぶ
+str		domain	ドメイン
+str		enum	列挙
+str		not null	NOT NULL
 str		Checks · {n}	チェック制約 · {n}
 str		Indexes · {n}	インデックス · {n}
 str		Add check constraint	チェック制約を追加

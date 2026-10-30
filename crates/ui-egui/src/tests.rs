@@ -2105,3 +2105,118 @@ fn key_columns_follow_their_target_until_unlinked_and_a_pure_mapping_table_colla
     let relationships = st.alive().filter(|o| st.class_of(*o).ok() == Some(archforge_er::RELATIONSHIP)).count();
     assert_eq!(relationships, 2, "Customer to Order and the many-to-many line");
 }
+
+#[test]
+fn the_schema_lists_its_types_and_a_column_takes_an_enum_type_from_the_type_menu() {
+    let (mut h, customer) = table_harness();
+    let schema = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let st = s.doc();
+        let schema = st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap()).unwrap().to_string();
+        s.execute(
+            "er.domain.add",
+            &serde_json::json!({ "schema": schema, "name": "email_address", "base_type": "VARCHAR", "length": 255, "checks": ["position('@' in value) > 1"] }),
+        )
+        .unwrap();
+        s.execute("view.select", &serde_json::json!({ "ids": [schema] })).unwrap();
+        schema
+    };
+    h.run();
+    // The schema's Properties list the domain; + offers the kinds; the enum editor takes its
+    // literals and Apply writes the enum type.
+    let rows: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.type.row.")).collect();
+    assert_eq!(rows.len(), 1, "{rows:?}");
+    let at = rect_of(&h, "workspace.properties.types.add").center();
+    click(&mut h, at);
+    assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::TypeKind));
+    let at = rect_of(&h, "workspace.properties.types.add.1").center();
+    click(&mut h, at);
+    assert!(h.state().panels.type_edit.as_ref().is_some_and(|t| t.kind == crate::types::TypeKind::Enum && t.target.is_none()));
+    let at = rect_of(&h, "workspace.properties.enum.literal.add").center();
+    click(&mut h, at);
+    click(&mut h, at);
+    {
+        let edit = h.state_mut().panels.type_edit.as_mut().unwrap();
+        edit.name = "customer_status".into();
+        edit.literals = vec!["active".into(), "dormant".into()];
+    }
+    h.run();
+    let at = rect_of(&h, "workspace.properties.type.apply").center();
+    click(&mut h, at);
+    assert!(h.state().panels.type_edit.is_none(), "{:?}", h.state().panels.type_edit);
+    let (schema_obj, enum_id) = {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let schema_obj = st.by_uuid(archforge_mof::Uuid::parse(&schema).unwrap()).unwrap();
+        let enums = archforge_er::rules::enums_of(st, schema_obj);
+        assert_eq!(enums.len(), 1);
+        assert_eq!(archforge_er::rules::literals_of(st, enums[0]), ["active", "dormant"]);
+        (schema_obj, st.uuid(enums[0]).unwrap())
+    };
+    assert_eq!(selected_name(&h), "Shop", "the schema stays selected");
+    assert_eq!(ids(&h).iter().filter(|i| i.starts_with("workspace.properties.type.row.")).count(), 2);
+    // The Models tree lists both types under the schema.
+    assert!(ids(&h).iter().any(|i| *i == format!("workspace.explorer.row.{enum_id}")), "{:?}", ids(&h));
+    // A column takes the enum type from its editor's type menu; the row shows the type's name.
+    {
+        let s = h.state_mut().session.as_mut().unwrap();
+        s.execute("view.select", &serde_json::json!({ "ids": [customer] })).unwrap();
+    }
+    h.run();
+    let rows: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.column.0")).collect();
+    let at = rect_of(&h, &rows[1]).center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.properties.column.type.menu").center();
+    click(&mut h, at);
+    assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::ColumnType));
+    let items: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.column.type.menu.")).collect();
+    assert!(items.len() > 10, "the schema's two types and the base types: {items:?}");
+    let at = rect_of(&h, &items[1]).center();
+    click(&mut h, at);
+    assert_eq!(h.state().panels.column.as_ref().and_then(|c| c.enum_type), Some(enum_id));
+    let at = rect_of(&h, "workspace.properties.column.apply").center();
+    click(&mut h, at);
+    assert!(h.state().panels.column.is_none(), "{:?}", h.state().panels.column);
+    let st = h.state().session.as_ref().unwrap().doc();
+    let customer_obj = st.by_uuid(archforge_mof::Uuid::parse(&customer).unwrap()).unwrap();
+    let email = st.list(customer_obj, archforge_er::entity::ATTRIBUTE).unwrap().iter().filter_map(archforge_mof::Value::as_ref).nth(1).unwrap();
+    assert_eq!(archforge_er::rules::type_display(st, email), "customer_status");
+    // A column on a sized domain applies a change of its own (Not null) without touching the size.
+    let domain = archforge_er::rules::domains_of(st, schema_obj)[0];
+    let domain = st.uuid(domain).unwrap().to_string();
+    let email_id = st.uuid(email).unwrap().to_string();
+    {
+        let s = h.state_mut().session.as_mut().unwrap();
+        s.execute("er.attribute.set-type", &serde_json::json!({ "attribute": email_id, "domain": domain })).unwrap();
+    }
+    h.run();
+    let rows: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.column.0")).collect();
+    let at = rect_of(&h, &rows[1]).center();
+    click(&mut h, at);
+    assert!(!ids(&h).iter().any(|i| i == "workspace.properties.column.default"), "a domain column shows no default of its own");
+    h.state_mut().panels.column.as_mut().unwrap().not_null = true;
+    h.run();
+    let at = rect_of(&h, "workspace.properties.column.apply").center();
+    click(&mut h, at);
+    assert!(h.state().panels.column.is_none(), "{:?}", h.state().panels.column);
+    let st = h.state().session.as_ref().unwrap().doc();
+    assert!(!archforge_er::rules::is_nullable(st, email));
+    assert_eq!(archforge_er::rules::type_display(st, email), "email_address");
+    // A new column typed with a default, then put on the domain from the menu, adds cleanly: the
+    // domain's default counts and the typed one goes with the pick.
+    let at = rect_of(&h, "workspace.properties.columns.add").center();
+    click(&mut h, at);
+    h.state_mut().panels.column.as_mut().unwrap().default = "'x'".into();
+    h.run();
+    let at = rect_of(&h, "workspace.properties.column.type.menu").center();
+    click(&mut h, at);
+    let items: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.column.type.menu.")).collect();
+    let at = rect_of(&h, &items[0]).center();
+    click(&mut h, at);
+    assert!(h.state().panels.column.as_ref().is_some_and(|c| c.domain.is_some() && c.default.is_empty()));
+    let at = rect_of(&h, "workspace.properties.column.apply").center();
+    click(&mut h, at);
+    // The add selects the new column, whose editor opens on it without a refusal.
+    assert!(h.state().panels.column.as_ref().is_none_or(|c| c.refused.is_none() && c.target.is_some()), "{:?}", h.state().panels.column);
+    let st = h.state().session.as_ref().unwrap().doc();
+    assert_eq!(st.list(customer_obj, archforge_er::entity::ATTRIBUTE).unwrap().len(), 3);
+}

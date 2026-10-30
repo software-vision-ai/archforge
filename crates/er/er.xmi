@@ -80,6 +80,14 @@
         <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Schema-relationship-_lowerValue"/>
         <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="Schema-relationship-_upperValue" value="*"/>
       </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Schema-domain" name="domain" type="Domain" isOrdered="true" aggregation="composite" subsettedProperty="Element-ownedElement">
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Schema-domain-_lowerValue"/>
+        <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="Schema-domain-_upperValue" value="*"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Schema-enumType" name="enumType" type="EnumType" isOrdered="true" aggregation="composite" subsettedProperty="Element-ownedElement">
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Schema-enumType-_lowerValue"/>
+        <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="Schema-enumType-_upperValue" value="*"/>
+      </ownedAttribute>
     </packagedElement>
     <packagedElement xmi:type="uml:Class" xmi:id="Entity" name="Entity">
       <generalization xmi:type="uml:Generalization" xmi:id="Entity-_generalization" general="NamedElement"/>
@@ -149,6 +157,12 @@
       </ownedAttribute>
       <ownedAttribute xmi:type="uml:Property" xmi:id="Attribute-linkedTo" name="linkedTo" type="Attribute">
         <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Attribute-linkedTo-_lowerValue"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Attribute-domain" name="domain" type="Domain">
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Attribute-domain-_lowerValue"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Attribute-enumType" name="enumType" type="EnumType">
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Attribute-enumType-_lowerValue"/>
       </ownedAttribute>
     </packagedElement>
     <packagedElement xmi:type="uml:Class" xmi:id="Relationship" name="Relationship">
@@ -272,6 +286,55 @@
       </ownedAttribute>
       <ownedAttribute xmi:type="uml:Property" xmi:id="IndexColumn-nulls" name="nulls" type="NullsOrder">
         <defaultValue xmi:type="uml:InstanceValue" xmi:id="IndexColumn-nulls-_defaultValue" type="NullsOrder" instance="NullsOrder-default"/>
+      </ownedAttribute>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Class" xmi:id="Domain" name="Domain">
+      <generalization xmi:type="uml:Generalization" xmi:id="Domain-_generalization" general="NamedElement"/>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Domain-baseType" name="baseType">
+        <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String"/>
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Domain-baseType-_lowerValue"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Domain-length" name="length">
+        <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Integer"/>
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Domain-length-_lowerValue"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Domain-precision" name="precision">
+        <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Integer"/>
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Domain-precision-_lowerValue"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Domain-scale" name="scale">
+        <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Integer"/>
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Domain-scale-_lowerValue"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Domain-default" name="default">
+        <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String"/>
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Domain-default-_lowerValue"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Domain-notNull" name="notNull">
+        <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Boolean"/>
+        <defaultValue xmi:type="uml:LiteralBoolean" xmi:id="Domain-notNull-_defaultValue" value="false"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Domain-check" name="check" type="DomainCheck" isOrdered="true" aggregation="composite" subsettedProperty="Element-ownedElement">
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Domain-check-_lowerValue"/>
+        <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="Domain-check-_upperValue" value="*"/>
+      </ownedAttribute>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Class" xmi:id="DomainCheck" name="DomainCheck">
+      <generalization xmi:type="uml:Generalization" xmi:id="DomainCheck-_generalization" general="Element"/>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="DomainCheck-name" name="name">
+        <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String"/>
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="DomainCheck-name-_lowerValue"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="DomainCheck-expression" name="expression">
+        <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String"/>
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="DomainCheck-expression-_lowerValue"/>
+      </ownedAttribute>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Class" xmi:id="EnumType" name="EnumType">
+      <generalization xmi:type="uml:Generalization" xmi:id="EnumType-_generalization" general="NamedElement"/>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="EnumType-literal" name="literal" isOrdered="true">
+        <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String"/>
+        <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="EnumType-literal-_upperValue" value="*"/>
       </ownedAttribute>
     </packagedElement>
   </uml:Package>

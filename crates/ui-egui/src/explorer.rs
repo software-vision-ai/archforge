@@ -89,6 +89,9 @@ pub enum Kind {
     Entity,
     Attribute,
     Skill,
+    /// A schema's domain or enum type (slice S5).
+    Domain,
+    Enum,
 }
 
 /// One row of the tree as drawn.
@@ -164,6 +167,20 @@ pub fn rows(store: &Store, state: &State) -> Vec<Row> {
                 push(&mut rows_under, *s, 1, Kind::Skill, label, None, false, false);
             }
         }
+        for d in archforge_er::rules::domains_of(store, schema) {
+            let label = name_of(store, d);
+            if matches(&label) {
+                let base = Some(archforge_er::rules::text_of(store, d, archforge_er::domain::BASE_TYPE)).filter(|t| !t.is_empty());
+                push(&mut rows_under, d, 1, Kind::Domain, label, base, false, false);
+            }
+        }
+        for en in archforge_er::rules::enums_of(store, schema) {
+            let label = name_of(store, en);
+            if matches(&label) {
+                let n = archforge_er::rules::literals_of(store, en).len();
+                push(&mut rows_under, en, 1, Kind::Enum, label, Some(trn("{n} literal", "{n} literals", n as u64)), false, false);
+            }
+        }
         for e in &entities {
             let e_label = name_of(store, *e);
             let entity_skills = skills.get(e).unwrap_or(&none);
@@ -192,7 +209,8 @@ pub fn rows(store: &Store, state: &State) -> Vec<Row> {
             }
         }
         let s_label = name_of(store, schema);
-        let expandable = if filter.is_empty() { !schema_skills.is_empty() || !entities.is_empty() } else { !rows_under.is_empty() };
+        let has_types = !archforge_er::rules::domains_of(store, schema).is_empty() || !archforge_er::rules::enums_of(store, schema).is_empty();
+        let expandable = if filter.is_empty() { !schema_skills.is_empty() || !entities.is_empty() || has_types } else { !rows_under.is_empty() };
         if matches(&s_label) || !rows_under.is_empty() {
             let expanded = expandable && open(schema);
             push(&mut out, schema, 0, Kind::Schema, s_label, None, expandable, expanded);
@@ -229,6 +247,8 @@ fn kind_word(kind: Kind) -> String {
         Kind::Entity => tr("Table"),
         Kind::Attribute => tr("Column"),
         Kind::Skill => tr("Skill"),
+        Kind::Domain => tr("Domain"),
+        Kind::Enum => tr("Enum type"),
     }
 }
 
@@ -299,7 +319,7 @@ pub fn add(shell: &mut Shell, kind: Kind) {
             grow = Some(entity_id);
             ("er.attribute.add", json!({ "entity": entity_id.to_string(), "name": name, "type": "TEXT" }))
         }
-        Kind::Skill => return,
+        Kind::Skill | Kind::Domain | Kind::Enum => return,
     };
     let out = match (kind, grow) {
         // A table lands on an open diagram of its schema too, in the same step.
@@ -564,6 +584,8 @@ fn tree_row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, column: Rect, y: 
         Kind::Schema => ux::icon_in(&paint, icon_at, &icons::SCHEMA, if is_selected { p.accent } else { p.text_secondary }),
         Kind::Entity => ux::icon_in(&paint, icon_at, &icons::TABLE, if is_selected { p.accent } else { p.text_secondary }),
         Kind::Skill => ux::icon_in(&paint, icon_at, &icons::SKILL, if is_selected { p.accent } else { p.text_secondary }),
+        Kind::Domain => ux::icon_in(&paint, icon_at, &icons::DOMAIN, if is_selected { p.accent } else { p.text_secondary }),
+        Kind::Enum => ux::icon_in(&paint, icon_at, &icons::ENUM, if is_selected { p.accent } else { p.text_secondary }),
         Kind::Attribute => {
             ux::text(&paint, pos2(icon_at.left() + 1.0, y - 1.0), "a", types::CAPTION, p.text_muted, None);
         }
@@ -710,6 +732,8 @@ fn add_menu(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, anchor: Rect) {
             Some(Kind::Entity) => "workspace.explorer.add.table",
             Some(Kind::Attribute) => "workspace.explorer.add.column",
             Some(Kind::Skill) => "workspace.explorer.add.skill",
+            Some(Kind::Domain) => "workspace.explorer.add.domain",
+            Some(Kind::Enum) => "workspace.explorer.add.enum",
             None => "workspace.explorer.add.folder",
         };
         let resp = control(shell, ui, id, "menu-item", row, kind.is_some());

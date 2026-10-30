@@ -18,6 +18,9 @@ pub struct ErSlabs {
     pub check_constraints: Vec<CheckConstraintObj>,
     pub table_indexes: Vec<TableIndexObj>,
     pub index_columns: Vec<IndexColumnObj>,
+    pub domains: Vec<DomainObj>,
+    pub domain_checks: Vec<DomainCheckObj>,
+    pub enum_types: Vec<EnumTypeObj>,
 }
 
 fn push<T: Default>(v: &mut Vec<T>) -> Option<u32> {
@@ -47,6 +50,9 @@ impl Slabs for ErSlabs {
             CHECK_CONSTRAINT => push(&mut self.check_constraints),
             TABLE_INDEX => push(&mut self.table_indexes),
             INDEX_COLUMN => push(&mut self.index_columns),
+            DOMAIN => push(&mut self.domains),
+            DOMAIN_CHECK => push(&mut self.domain_checks),
+            ENUM_TYPE => push(&mut self.enum_types),
             _ => None,
         }
     }
@@ -62,6 +68,9 @@ impl Slabs for ErSlabs {
             CHECK_CONSTRAINT => at(&self.check_constraints, slot),
             TABLE_INDEX => at(&self.table_indexes, slot),
             INDEX_COLUMN => at(&self.index_columns, slot),
+            DOMAIN => at(&self.domains, slot),
+            DOMAIN_CHECK => at(&self.domain_checks, slot),
+            ENUM_TYPE => at(&self.enum_types, slot),
             _ => None,
         }
     }
@@ -77,6 +86,9 @@ impl Slabs for ErSlabs {
             CHECK_CONSTRAINT => at_mut(&mut self.check_constraints, slot),
             TABLE_INDEX => at_mut(&mut self.table_indexes, slot),
             INDEX_COLUMN => at_mut(&mut self.index_columns, slot),
+            DOMAIN => at_mut(&mut self.domains, slot),
+            DOMAIN_CHECK => at_mut(&mut self.domain_checks, slot),
+            ENUM_TYPE => at_mut(&mut self.enum_types, slot),
             _ => None,
         }
     }
@@ -92,5 +104,8 @@ impl Slabs for ErSlabs {
             .saturating_add(self.check_constraints.capacity().saturating_mul(size_of::<CheckConstraintObj>()))
             .saturating_add(self.table_indexes.capacity().saturating_mul(size_of::<TableIndexObj>()))
             .saturating_add(self.index_columns.capacity().saturating_mul(size_of::<IndexColumnObj>()))
+            .saturating_add(self.domains.capacity().saturating_mul(size_of::<DomainObj>()))
+            .saturating_add(self.domain_checks.capacity().saturating_mul(size_of::<DomainCheckObj>()))
+            .saturating_add(self.enum_types.capacity().saturating_mul(size_of::<EnumTypeObj>()))
     }
 }

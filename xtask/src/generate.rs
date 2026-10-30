@@ -1501,14 +1501,17 @@ mod tests {
                 "ForeignKey",
                 "CheckConstraint",
                 "TableIndex",
-                "IndexColumn"
+                "IndexColumn",
+                "Domain",
+                "DomainCheck",
+                "EnumType"
             ]
         );
         let name = er.metamodel.props.iter().find(|p| &*p.name == "name" && er.universe.class_name(p.owner) == "NamedElement").unwrap();
         assert!(name.is_name && name.lower == 1, "an entity's name is required and indexed");
         let rel_name = er.metamodel.props.iter().find(|p| &*p.name == "name" && er.universe.class_name(p.owner) == "Relationship").unwrap();
         assert!(rel_name.lower == 0, "a relationship's name is optional");
-        assert_eq!(er.metamodel.props.iter().filter(|p| p.is_composite).count(), 10);
+        assert_eq!(er.metamodel.props.iter().filter(|p| p.is_composite).count(), 13);
         let diagram = build(target("diagram"), &std::fs::read(util::root().join("crates/diagram/diagram.xmi")).unwrap_or_default(), false)
             .unwrap_or_else(|e| panic!("{e}"));
         let names: Vec<&str> = diagram.metamodel.classes.iter().map(|c| &*c.name).collect();

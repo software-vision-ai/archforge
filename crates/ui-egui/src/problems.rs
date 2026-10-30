@@ -49,6 +49,11 @@ pub fn all(store: &Store) -> Vec<Problem> {
                     out.push(Problem { element: o, text: fmt(&tr("{key}: {problem}"), &[("key", &r::label(store, k)), ("problem", &p)]) });
                 }
             }
+            for a in members(store, o, archforge_er::entity::ATTRIBUTE) {
+                if let Some(p) = r::enum_default_problem(store, a) {
+                    out.push(Problem { element: o, text: fmt(&tr("{key}: {problem}"), &[("key", &name(store, a)), ("problem", &p)]) });
+                }
+            }
             for c in r::checks_of(store, o) {
                 if let Some(p) = r::check_problem(&r::text_of(store, c, archforge_er::check_constraint::EXPRESSION)) {
                     out.push(Problem { element: o, text: fmt(&tr("{key}: {problem}"), &[("key", &r::display_name(store, c)), ("problem", &p)]) });
@@ -71,6 +76,16 @@ pub fn all(store: &Store) -> Vec<Problem> {
                     out.push(Problem { element: o, text: fmt(&tr("{key}: {problem}"), &[("key", &r::label(store, fk)), ("problem", &p)]) });
                 }
             }
+        }
+        if class == archforge_er::DOMAIN
+            && let Some(p) = r::domain_problem(store, o)
+        {
+            out.push(Problem { element: o, text: fmt(&tr("{key}: {problem}"), &[("key", &name(store, o)), ("problem", &p)]) });
+        }
+        if class == archforge_er::ENUM_TYPE
+            && let Some(p) = r::literals_problem(&r::literals_of(store, o))
+        {
+            out.push(Problem { element: o, text: fmt(&tr("{key}: {problem}"), &[("key", &name(store, o)), ("problem", &p)]) });
         }
         if class == archforge_er::RELATIONSHIP {
             let end = |p| store.get(o, p).ok().and_then(|v| v.as_ref()).map(|e| name(store, e)).unwrap_or_default();

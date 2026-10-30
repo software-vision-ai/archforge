@@ -10,9 +10,10 @@ use serde_json::{Value as Json, json};
 
 use crate::rules::{self, IndexColumnSpec, MAX_NAME, MAX_TEXT, MAX_TYPE, name_of};
 use crate::{
-    ATTRIBUTE, CHECK_CONSTRAINT, Cardinality, Deferrability, ELEMENT, ENTITY, ENTITY_SIZE, EntityKind, ErView, FOREIGN_KEY, Generation, INDEX_COLUMN,
-    MatchType, NullsOrder, PRIMARY_KEY, RELATIONSHIP, ReferentialAction, SCHEMA, SortDirection, TABLE_INDEX, UNIQUE_CONSTRAINT, attribute,
-    check_constraint, element, entity, foreign_key, index_column, key, named_element, relationship, schema, table_index, unique_constraint,
+    ATTRIBUTE, CHECK_CONSTRAINT, Cardinality, DOMAIN, DOMAIN_CHECK, Deferrability, ELEMENT, ENTITY, ENTITY_SIZE, ENUM_TYPE, EntityKind, ErView,
+    FOREIGN_KEY, Generation, INDEX_COLUMN, MatchType, NullsOrder, PRIMARY_KEY, RELATIONSHIP, ReferentialAction, SCHEMA, SortDirection, TABLE_INDEX,
+    UNIQUE_CONSTRAINT, attribute, check_constraint, domain, domain_check, element, entity, enum_type, foreign_key, index_column, key, named_element,
+    relationship, schema, table_index, unique_constraint,
 };
 
 type C<'a> = Ctx<'a, Store, ErView>;
@@ -325,10 +326,15 @@ pub fn remove_element(store: &mut Store, obj: Obj) -> Result<usize, Invalid> {
         let mut relationships: BTreeSet<Obj> = BTreeSet::new();
         let (keys, fks) = dependents(st, obj)?;
         let index_parts = index_dependents(st, obj)?;
-        // A follower loses its link when its target goes.
+        // A follower loses its link when its target goes; a column loses the type that goes.
         for o in subtree_of(st, obj)?.0 {
             for c in rules::linked_from(st, o) {
                 st.set(c, attribute::LINKED_TO, Value::Null)?;
+            }
+            for (a, prop) in st.referrers(o) {
+                if (prop == attribute::DOMAIN || prop == attribute::ENUM_TYPE) && st.is_alive(a) {
+                    st.set(a, prop, Value::Null)?;
+                }
             }
         }
         for x in fks.iter().chain(&keys).copied().chain([obj]) {
@@ -414,13 +420,28 @@ fn attribute_add(ctx: &mut C<'_>, p: &Params) -> R {
     }
     let kind = text(p, "type");
     check_type(kind)?;
+    let typed = column_type(ctx, p, e, kind)?;
     let size = size_params(p, kind)?;
+    size_allowed(typed, size)?;
     let default = text(p, "default");
     check_text("default", rules::text_problem(default, MAX_TEXT))?;
+    if let Typed::Enum(en) = typed
+        && let Some(problem) = rules::enum_default_check(ctx.doc, en, default)
+    {
+        return Err(refuse("default", problem));
+    }
     let (generation, expression) = generation_params(p)?;
     let collation = text(p, "collation");
     if !collation.is_empty() {
         check_name("collation", collation, MAX_NAME)?;
+    }
+    if matches!(typed, Typed::Domain(_)) {
+        if !default.is_empty() {
+            return Err(refuse("default", "a column on a domain takes the domain's default"));
+        }
+        if !collation.is_empty() {
+            return Err(refuse("collation", "a column on a domain takes the domain's collation"));
+        }
     }
     let key = p.bool("primary_key").unwrap_or(false);
     let null = nullable(p, key || is_identity(generation))?;
@@ -438,16 +459,13 @@ fn attribute_add(ctx: &mut C<'_>, p: &Params) -> R {
         .transaction(|st| {
             let a = st.create(ATTRIBUTE)?;
             st.set(a, named_element::NAME, Value::str(name))?;
-            if !kind.is_empty() {
-                st.set(a, attribute::TYPE, Value::str(kind))?;
-            }
-            set_size(st, a, size)?;
+            set_column_type(st, a, kind, typed, size)?;
             st.set(a, attribute::NULLABLE, Value::Bool(null))?;
             st.set(a, attribute::DEFAULT, text_or_null(default))?;
             st.set(a, attribute::GENERATION, Value::Enum(generation.index()))?;
             st.set(a, attribute::EXPRESSION, text_or_null(expression))?;
             st.set(a, attribute::COLLATION, text_or_null(collation))?;
-            if let Some(problem) = rules::generation_problem(st, a) {
+            if let Some(problem) = rules::generation_problem(st, a).or_else(|| rules::enum_default_problem(st, a)) {
                 return Err(Invalid::Refused(problem));
             }
             st.insert(e, entity::ATTRIBUTE, at, Value::Ref(a))?;
@@ -526,8 +544,9 @@ fn follow_rename(st: &mut Store, a: Obj, old: &str, new: &str) -> Result<(), Inv
 
 /// Gives the columns that follow `a`, and theirs, its type and size.
 fn follow_type(st: &mut Store, a: Obj) -> Result<(), Invalid> {
-    let kind = rules::type_of(st, a);
-    let size = rules::size_of(st, a);
+    let kind = rules::own_type_of(st, a);
+    let size = rules::own_size_of(st, a);
+    let (d, en) = (rules::domain_of(st, a), rules::enum_of(st, a));
     let mut seen: BTreeSet<Obj> = BTreeSet::from([a]);
     let mut queue = vec![a];
     while let Some(a) = queue.pop() {
@@ -535,6 +554,13 @@ fn follow_type(st: &mut Store, a: Obj) -> Result<(), Invalid> {
             if seen.insert(c) {
                 st.set(c, attribute::TYPE, text_or_null(&kind))?;
                 set_size(st, c, size)?;
+                st.set(c, attribute::DOMAIN, d.map_or(Value::Null, Value::Ref))?;
+                st.set(c, attribute::ENUM_TYPE, en.map_or(Value::Null, Value::Ref))?;
+                if d.is_some() {
+                    // The domain brings the default and the collation.
+                    st.set(c, attribute::DEFAULT, Value::Null)?;
+                    st.set(c, attribute::COLLATION, Value::Null)?;
+                }
                 queue.push(c);
             }
         }
@@ -761,19 +787,20 @@ fn attribute_set_type(ctx: &mut C<'_>, p: &Params) -> R {
     let a = id_of(ctx, p, "attribute", ATTRIBUTE)?;
     let kind = text(p, "type");
     check_type(kind)?;
+    let e = rules::entity_of(ctx.doc, a).ok_or_else(|| refuse("attribute", "the attribute belongs to no entity"))?;
+    let typed = column_type(ctx, p, e, kind)?;
     let size = size_params(p, kind)?;
+    size_allowed(typed, size)?;
     let (keys, entities) = keys_around(ctx.doc, a).map_err(fail)?;
-    let value = text_or_null(kind);
-    let old = (rules::type_of(ctx.doc, a), rules::size_of(ctx.doc, a));
+    let old = (rules::type_of(ctx.doc, a), rules::size_of(ctx.doc, a), rules::domain_of(ctx.doc, a), rules::enum_of(ctx.doc, a));
     ctx.doc
         .transaction(|st| {
-            st.set(a, attribute::TYPE, value)?;
-            set_size(st, a, size)?;
-            if (rules::type_of(st, a), rules::size_of(st, a)) != old {
+            set_column_type(st, a, kind, typed, size)?;
+            if (rules::type_of(st, a), rules::size_of(st, a), rules::domain_of(st, a), rules::enum_of(st, a)) != old {
                 clear_link(st, a)?;
                 follow_type(st, a)?;
             }
-            if let Some(problem) = rules::generation_problem(st, a) {
+            if let Some(problem) = rules::generation_problem(st, a).or_else(|| rules::enum_default_problem(st, a)) {
                 return Err(Invalid::Refused(problem));
             }
             keys_still_hold(st, &keys, &entities)
@@ -800,11 +827,345 @@ fn set_size(st: &mut Store, a: Obj, size: (Option<i64>, Option<i64>, Option<i64>
     Ok(())
 }
 
+// Domains and enum types (slice S5).
+
+/// What a column is typed by besides a type name: a domain or an enum type of its schema.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Typed {
+    Name,
+    Domain(Obj),
+    Enum(Obj),
+}
+
+/// The `domain` or `enum` parameter beside `type`: exactly one of the three, in the entity's schema.
+fn column_type(ctx: &C<'_>, p: &Params, e: Obj, kind: &str) -> Result<Typed, CommandError> {
+    let given = |key: &str, class: ClassId| -> Result<Option<Obj>, CommandError> {
+        if text(p, key).is_empty() {
+            return Ok(None);
+        }
+        let t = id_of(ctx, p, key, class)?;
+        if rules::schema_of(ctx.doc, t) != rules::schema_of(ctx.doc, e) {
+            return Err(refuse(key, format!("{} is in another schema", name_of(ctx.doc, t))));
+        }
+        Ok(Some(t))
+    };
+    let (d, en) = (given("domain", DOMAIN)?, given("enum", ENUM_TYPE)?);
+    match (kind.is_empty(), d, en) {
+        (_, Some(_), Some(_)) => Err(refuse("enum", "a column takes a domain or an enum type, not both")),
+        (false, Some(_), _) => Err(refuse("type", "a column on a domain takes no type name of its own")),
+        (false, _, Some(_)) => Err(refuse("type", "a column of an enum type takes no type name of its own")),
+        (_, Some(d), None) => Ok(Typed::Domain(d)),
+        (_, None, Some(en)) => Ok(Typed::Enum(en)),
+        (_, None, None) => Ok(Typed::Name),
+    }
+}
+
+/// A size given beside a domain or an enum type is refused up front, under its own key.
+fn size_allowed(typed: Typed, size: (Option<i64>, Option<i64>, Option<i64>)) -> Result<(), CommandError> {
+    if typed == Typed::Name || size == (None, None, None) {
+        return Ok(());
+    }
+    let key = if size.0.is_some() {
+        "length"
+    } else if size.1.is_some() {
+        "precision"
+    } else {
+        "scale"
+    };
+    Err(refuse(
+        key,
+        match typed {
+            Typed::Domain(_) => "a column on a domain takes the domain's size",
+            _ => "a column of an enum type takes no size",
+        },
+    ))
+}
+
+/// Writes a column's type: its own name and size, or the domain or enum type it takes instead.
+fn set_column_type(st: &mut Store, a: Obj, kind: &str, typed: Typed, size: (Option<i64>, Option<i64>, Option<i64>)) -> Result<(), Invalid> {
+    match typed {
+        Typed::Name => {
+            st.set(a, attribute::TYPE, text_or_null(kind))?;
+            set_size(st, a, size)?;
+            st.set(a, attribute::DOMAIN, Value::Null)?;
+            st.set(a, attribute::ENUM_TYPE, Value::Null)
+        }
+        Typed::Domain(d) => {
+            if size != (None, None, None) {
+                return Err(Invalid::Refused("a column on a domain takes the domain's size".into()));
+            }
+            st.set(a, attribute::TYPE, Value::Null)?;
+            set_size(st, a, (None, None, None))?;
+            // The domain's default and collation count: the column's own go.
+            st.set(a, attribute::DEFAULT, Value::Null)?;
+            st.set(a, attribute::COLLATION, Value::Null)?;
+            st.set(a, attribute::DOMAIN, Value::Ref(d))?;
+            st.set(a, attribute::ENUM_TYPE, Value::Null)
+        }
+        Typed::Enum(e) => {
+            if size != (None, None, None) {
+                return Err(Invalid::Refused("a column of an enum type takes no size".into()));
+            }
+            st.set(a, attribute::TYPE, Value::Null)?;
+            set_size(st, a, (None, None, None))?;
+            st.set(a, attribute::DOMAIN, Value::Null)?;
+            st.set(a, attribute::ENUM_TYPE, Value::Ref(e))
+        }
+    }
+}
+
+/// The name of a type the schema names once: free among its entities, domains and enum types.
+fn type_name(ctx: &C<'_>, p: &Params, s: Obj, except: Option<Obj>) -> Result<String, CommandError> {
+    let name = text(p, "name");
+    check_name("name", name, MAX_NAME)?;
+    if !rules::entity_name_free(ctx.doc, s, name, except) {
+        return Err(refuse("name", format!("the schema has an entity or type named {name:?} already")));
+    }
+    Ok(name.to_string())
+}
+
+/// A domain's fields from the parameters: base type, size, default, not null and checks.
+struct DomainFields {
+    base: String,
+    size: (Option<i64>, Option<i64>, Option<i64>),
+    default: String,
+    not_null: bool,
+    checks: Vec<(String, String)>,
+}
+
+fn domain_fields(p: &Params) -> Result<DomainFields, CommandError> {
+    let base = text(p, "base_type");
+    check_name("base_type", base, MAX_TYPE)?;
+    if base.contains('(') {
+        return Err(refuse("base_type", "carries its own size; give length, precision or scale instead"));
+    }
+    let size = size_params(p, base)?;
+    let default = text(p, "default");
+    check_text("default", rules::text_problem(default, MAX_TEXT))?;
+    let not_null = p.bool("not_null").unwrap_or(false);
+    let mut checks = Vec::new();
+    match p.get("checks") {
+        None | Some(Json::Null) => {}
+        Some(Json::Array(items)) => {
+            if items.len() > rules::MAX_KEY_COLUMNS {
+                return Err(refuse("checks", format!("at most {} checks", rules::MAX_KEY_COLUMNS)));
+            }
+            for item in items {
+                let (expression, name) = match item {
+                    Json::String(s) => (s.clone(), String::new()),
+                    Json::Object(fields) => {
+                        if let Some(unknown) = fields.keys().find(|k| k.as_str() != "expression" && k.as_str() != "name") {
+                            let unknown: String = unknown.chars().take(40).collect();
+                            return Err(refuse("checks", format!("a check takes no {unknown:?}; it takes expression, name")));
+                        }
+                        let expression = match item.get("expression") {
+                            Some(Json::String(s)) => s.clone(),
+                            None | Some(Json::Null) => String::new(),
+                            Some(other) => return Err(refuse("checks", format!("expression is {}, not text", shown(other)))),
+                        };
+                        let name = match item.get("name") {
+                            Some(Json::String(s)) => s.clone(),
+                            None | Some(Json::Null) => String::new(),
+                            Some(other) => return Err(refuse("checks", format!("name is {}, not text", shown(other)))),
+                        };
+                        (expression, name)
+                    }
+                    other => return Err(refuse("checks", format!("{} is not a check", shown(other)))),
+                };
+                if let Some(problem) = rules::check_problem(&expression) {
+                    return Err(refuse("checks", problem));
+                }
+                if !name.is_empty() {
+                    check_name("checks", &name, MAX_NAME)?;
+                }
+                checks.push((expression, name));
+            }
+        }
+        Some(_) => return Err(refuse("checks", "an array of checks")),
+    }
+    Ok(DomainFields { base: base.to_string(), size, default: default.to_string(), not_null, checks })
+}
+
+/// Writes a domain's fields and checks; the old checks go.
+fn set_domain(st: &mut Store, d: Obj, name: &str, f: &DomainFields) -> Result<(), Invalid> {
+    st.set(d, named_element::NAME, Value::str(name))?;
+    st.set(d, domain::BASE_TYPE, Value::str(&f.base))?;
+    for (prop, value) in [(domain::LENGTH, f.size.0), (domain::PRECISION, f.size.1), (domain::SCALE, f.size.2)] {
+        st.set(d, prop, Value::Int(value.unwrap_or(0)))?;
+    }
+    st.set(d, domain::DEFAULT, text_or_null(&f.default))?;
+    st.set(d, domain::NOT_NULL, Value::Bool(f.not_null))?;
+    for old in rules::domain_checks(st, d) {
+        archforge_core::destroy_with_links(st, old)?;
+    }
+    for (expression, check_name) in &f.checks {
+        let c = st.create(DOMAIN_CHECK)?;
+        st.set(c, domain_check::EXPRESSION, Value::str(expression))?;
+        st.set(c, domain_check::NAME, text_or_null(check_name))?;
+        st.push(d, domain::CHECK, Value::Ref(c))?;
+    }
+    Ok(())
+}
+
+/// After a domain changed: the columns on it keep every rule (keys pair types, identity needs an
+/// integer).
+fn columns_still_hold(st: &Store, t: Obj) -> Result<(), Invalid> {
+    let columns = rules::type_columns(st, t);
+    let mut fks: BTreeSet<Obj> = BTreeSet::new();
+    let mut entities: BTreeSet<Obj> = BTreeSet::new();
+    for a in &columns {
+        if let Some(problem) = rules::generation_problem(st, *a).or_else(|| rules::enum_default_problem(st, *a)) {
+            return Err(Invalid::Refused(format!("{}: {problem}", rules::label(st, *a))));
+        }
+        let (k, e) = keys_around(st, *a)?;
+        fks.extend(k);
+        entities.extend(e);
+    }
+    let fks: Vec<Obj> = fks.into_iter().collect();
+    keys_still_hold(st, &fks, &entities)
+}
+
+fn domain_add(ctx: &mut C<'_>, p: &Params) -> R {
+    let s = id_of(ctx, p, "schema", SCHEMA)?;
+    let name = type_name(ctx, p, s, None)?;
+    let f = domain_fields(p)?;
+    let d = ctx
+        .doc
+        .transaction(|st| {
+            let d = st.create(DOMAIN)?;
+            set_domain(st, d, &name, &f)?;
+            st.push(s, schema::DOMAIN, Value::Ref(d))?;
+            Ok(d)
+        })
+        .map_err(fail)?;
+    select(ctx, vec![d]);
+    Ok(json!({ "id": uuid_of(ctx.doc, d)? }))
+}
+
+fn domain_set(ctx: &mut C<'_>, p: &Params) -> R {
+    let d = id_of(ctx, p, "domain", DOMAIN)?;
+    let s = rules::schema_of(ctx.doc, d).ok_or_else(|| refuse("domain", "the domain belongs to no schema"))?;
+    let name = type_name(ctx, p, s, Some(d))?;
+    let f = domain_fields(p)?;
+    ctx.doc
+        .transaction(|st| {
+            set_domain(st, d, &name, &f)?;
+            columns_still_hold(st, d)
+        })
+        .map_err(|e| match e {
+            Invalid::Refused(why) => refuse("base_type", why),
+            other => fail(other),
+        })?;
+    Ok(json!({ "id": uuid_of(ctx.doc, d)? }))
+}
+
+/// Refuses to remove a type that columns still take.
+fn type_unused(store: &Store, t: Obj, key: &str) -> Result<(), CommandError> {
+    let columns = rules::type_columns(store, t);
+    if columns.is_empty() {
+        return Ok(());
+    }
+    let names: Vec<String> = columns
+        .iter()
+        .take(5)
+        .map(|a| match rules::entity_of(store, *a) {
+            Some(e) => format!("{}.{}", name_of(store, e), name_of(store, *a)),
+            None => rules::label(store, *a),
+        })
+        .collect();
+    Err(refuse(key, format!("{} columns take {}: {}; retype them first", columns.len(), name_of(store, t), names.join(", "))))
+}
+
+fn domain_remove(ctx: &mut C<'_>, p: &Params) -> R {
+    let d = id_of(ctx, p, "domain", DOMAIN)?;
+    type_unused(ctx.doc, d, "domain")?;
+    let gone = remove_element(ctx.doc, d).map_err(fail)?;
+    Ok(json!({ "removed": gone }))
+}
+
+/// The `literals` array parameter: names, none twice.
+fn literals_param(p: &Params) -> Result<Vec<String>, CommandError> {
+    let items = match p.get("literals") {
+        Some(Json::Array(items)) => items,
+        _ => return Err(refuse("literals", "an array of literals")),
+    };
+    if items.len() > rules::MAX_LITERALS {
+        return Err(refuse("literals", format!("at most {} literals", rules::MAX_LITERALS)));
+    }
+    let mut out = Vec::with_capacity(items.len());
+    for item in items {
+        match item {
+            Json::String(s) => out.push(s.clone()),
+            other => return Err(refuse("literals", format!("{} is not a literal", shown(other)))),
+        }
+    }
+    if let Some(problem) = rules::literals_problem(&out) {
+        return Err(refuse("literals", problem));
+    }
+    Ok(out)
+}
+
+fn set_literals(st: &mut Store, e: Obj, literals: &[String]) -> Result<(), Invalid> {
+    for i in (0..rules::literals_of(st, e).len()).rev() {
+        st.remove_at(e, enum_type::LITERAL, u32::try_from(i).map_err(|_| Invalid::Refused("too many literals".into()))?)?;
+    }
+    for l in literals {
+        st.push(e, enum_type::LITERAL, Value::str(l))?;
+    }
+    Ok(())
+}
+
+fn enum_add(ctx: &mut C<'_>, p: &Params) -> R {
+    let s = id_of(ctx, p, "schema", SCHEMA)?;
+    let name = type_name(ctx, p, s, None)?;
+    let literals = literals_param(p)?;
+    let e = ctx
+        .doc
+        .transaction(|st| {
+            let e = st.create(ENUM_TYPE)?;
+            st.set(e, named_element::NAME, Value::str(&name))?;
+            set_literals(st, e, &literals)?;
+            st.push(s, schema::ENUM_TYPE, Value::Ref(e))?;
+            Ok(e)
+        })
+        .map_err(fail)?;
+    select(ctx, vec![e]);
+    Ok(json!({ "id": uuid_of(ctx.doc, e)? }))
+}
+
+fn enum_set(ctx: &mut C<'_>, p: &Params) -> R {
+    let e = id_of(ctx, p, "enum", ENUM_TYPE)?;
+    let s = rules::schema_of(ctx.doc, e).ok_or_else(|| refuse("enum", "the enum type belongs to no schema"))?;
+    let name = type_name(ctx, p, s, Some(e))?;
+    let literals = literals_param(p)?;
+    ctx.doc
+        .transaction(|st| {
+            st.set(e, named_element::NAME, Value::str(&name))?;
+            set_literals(st, e, &literals)?;
+            columns_still_hold(st, e)
+        })
+        .map_err(|e| match e {
+            Invalid::Refused(why) => refuse("literals", why),
+            other => fail(other),
+        })?;
+    Ok(json!({ "id": uuid_of(ctx.doc, e)? }))
+}
+
+fn enum_remove(ctx: &mut C<'_>, p: &Params) -> R {
+    let e = id_of(ctx, p, "enum", ENUM_TYPE)?;
+    type_unused(ctx.doc, e, "enum")?;
+    let gone = remove_element(ctx.doc, e).map_err(fail)?;
+    Ok(json!({ "removed": gone }))
+}
+
 /// Sets a column's default: an SQL expression, or nothing.
 fn attribute_set_default(ctx: &mut C<'_>, p: &Params) -> R {
     let a = id_of(ctx, p, "attribute", ATTRIBUTE)?;
     let default = text(p, "default");
     check_text("default", rules::text_problem(default, MAX_TEXT))?;
+    if rules::domain_of(ctx.doc, a).is_some() && !default.is_empty() {
+        return Err(refuse("default", "the column takes its domain's default"));
+    }
     let old = rules::text_of(ctx.doc, a, attribute::DEFAULT);
     ctx.doc
         .transaction(|st| {
@@ -812,7 +1173,7 @@ fn attribute_set_default(ctx: &mut C<'_>, p: &Params) -> R {
             if old != default {
                 clear_link(st, a)?;
             }
-            match rules::generation_problem(st, a) {
+            match rules::generation_problem(st, a).or_else(|| rules::enum_default_problem(st, a)) {
                 Some(problem) => Err(Invalid::Refused(problem)),
                 None => Ok(()),
             }
@@ -857,6 +1218,9 @@ fn attribute_set_collation(ctx: &mut C<'_>, p: &Params) -> R {
     let collation = text(p, "collation");
     if !collation.is_empty() {
         check_name("collation", collation, MAX_NAME)?;
+    }
+    if rules::domain_of(ctx.doc, a).is_some() && !collation.is_empty() {
+        return Err(refuse("collation", "the column takes its domain's collation"));
     }
     let old = rules::text_of(ctx.doc, a, attribute::COLLATION);
     ctx.doc
@@ -1079,11 +1443,13 @@ fn new_key_column(store: &mut Store, child: Obj, t: Obj, prefix: &str, in_key: b
     let name = first_free(&base, |n| rules::attribute_name_free(store, child, n, None)).map_err(|e| Invalid::Refused(e.message))?;
     let a = store.create(ATTRIBUTE)?;
     store.set(a, named_element::NAME, Value::str(&name))?;
-    let kind = rules::type_of(store, t);
+    let kind = rules::own_type_of(store, t);
     if !kind.is_empty() {
         store.set(a, attribute::TYPE, Value::str(&kind))?;
     }
-    set_size(store, a, rules::size_of(store, t))?;
+    set_size(store, a, rules::own_size_of(store, t))?;
+    store.set(a, attribute::DOMAIN, rules::domain_of(store, t).map_or(Value::Null, Value::Ref))?;
+    store.set(a, attribute::ENUM_TYPE, rules::enum_of(store, t).map_or(Value::Null, Value::Ref))?;
     store.set(a, attribute::NULLABLE, Value::Bool(optional && !in_key))?;
     store.set(a, attribute::LINKED_TO, Value::Ref(t))?;
     store.push(child, entity::ATTRIBUTE, Value::Ref(a))?;
@@ -2184,6 +2550,8 @@ fn attribute_json(store: &Store, a: Obj) -> Json {
         "nullable": rules::is_nullable(store, a),
         "unique": rules::is_unique(store, a),
         "linked_to": rules::linked_to(store, a).map(|t| uuid_json(store, t)).unwrap_or(Json::Null),
+        "domain": rules::domain_of(store, a).map(|d| uuid_json(store, d)).unwrap_or(Json::Null),
+        "enum": rules::enum_of(store, a).map(|e| uuid_json(store, e)).unwrap_or(Json::Null),
     })
 }
 
@@ -2335,7 +2703,48 @@ fn schema_get(ctx: &mut C<'_>, p: &Params) -> R {
         .filter(|(r, _)| rules::schema_of(ctx.doc, *r) == Some(s))
         .map(|(r, notice)| json!({ "relationship": uuid_json(ctx.doc, r), "notice": notice }))
         .collect();
-    Ok(json!({ "id": uuid_json(ctx.doc, s), "name": name_of(ctx.doc, s), "entities": entities, "relationships": relationships, "notices": notices }))
+    let domains: Vec<Json> = rules::domains_of(ctx.doc, s).into_iter().map(|d| domain_json(ctx.doc, d)).collect();
+    let enums: Vec<Json> = rules::enums_of(ctx.doc, s).into_iter().map(|e| enum_json(ctx.doc, e)).collect();
+    Ok(json!({
+        "id": uuid_json(ctx.doc, s),
+        "name": name_of(ctx.doc, s),
+        "entities": entities,
+        "relationships": relationships,
+        "domains": domains,
+        "enums": enums,
+        "notices": notices,
+    }))
+}
+
+fn domain_json(store: &Store, d: Obj) -> Json {
+    let (l, p, s) = rules::own_size_of(store, d);
+    let checks: Vec<Json> = rules::domain_checks(store, d)
+        .into_iter()
+        .map(|c| {
+            json!({ "id": uuid_json(store, c), "name": optional_name_of(store, c, domain_check::NAME), "expression": rules::text_of(store, c, domain_check::EXPRESSION) })
+        })
+        .collect();
+    json!({
+        "id": uuid_json(store, d),
+        "name": name_of(store, d),
+        "base_type": rules::text_of(store, d, domain::BASE_TYPE),
+        "length": l,
+        "precision": p,
+        "scale": s,
+        "default": optional_name_of(store, d, domain::DEFAULT),
+        "not_null": store.get(d, domain::NOT_NULL).ok().and_then(|v| v.as_bool()).unwrap_or(false),
+        "checks": checks,
+    })
+}
+
+fn enum_json(store: &Store, e: Obj) -> Json {
+    json!({ "id": uuid_json(store, e), "name": name_of(store, e), "literals": rules::literals_of(store, e) })
+}
+
+/// A text property as JSON: null when empty.
+fn optional_name_of(store: &Store, o: Obj, prop: archforge_mof::PropId) -> Json {
+    let t = rules::text_of(store, o, prop);
+    if t.is_empty() { Json::Null } else { Json::String(t) }
 }
 
 /// The ER notation's command table, with the edit area.
@@ -2353,7 +2762,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ErView>> {
             "Add attribute",
             &["Entity"],
             None,
-            "entity: string; the entity's id\nname: string; the attribute's name\ntype: string = \"\"; its type, free text\nlength: integer = 0, 0..65535; a length for a type that takes one, 0 for none\nprecision: integer = 0, 0..65535; a precision for a type that takes one, 0 for none\nscale: integer = 0, 0..65535; a scale beside the precision, 0 for none\ndefault: string = \"\"; an SQL expression, or nothing\ngeneration: string = \"none\", none|identity-always|identity-by-default|computed-stored|computed-virtual; how the value comes about\nexpression: string = \"\"; the expression of a computed column, or nothing\ncollation: string = \"\"; a collation name, or nothing\nprimary_key: bool = false; joins the primary key\nnullable: string = \"auto\", auto|yes|no; nullable (auto: a key or identity column is not)\nunique: bool = false; a unique constraint on it alone\nat: integer = -1, -1..1000000; where in the entity, -1 for the end",
+            "entity: string; the entity's id\nname: string; the attribute's name\ntype: string = \"\"; its type, free text\ndomain: string = \"\"; a domain of the schema instead of a type\nenum: string = \"\"; an enum type of the schema instead of a type\nlength: integer = 0, 0..65535; a length for a type that takes one, 0 for none\nprecision: integer = 0, 0..65535; a precision for a type that takes one, 0 for none\nscale: integer = 0, 0..65535; a scale beside the precision, 0 for none\ndefault: string = \"\"; an SQL expression, or nothing\ngeneration: string = \"none\", none|identity-always|identity-by-default|computed-stored|computed-virtual; how the value comes about\nexpression: string = \"\"; the expression of a computed column, or nothing\ncollation: string = \"\"; a collation name, or nothing\nprimary_key: bool = false; joins the primary key\nnullable: string = \"auto\", auto|yes|no; nullable (auto: a key or identity column is not)\nunique: bool = false; a unique constraint on it alone\nat: integer = -1, -1..1000000; where in the entity, -1 for the end",
             has_entities,
             attribute_add
         ),
@@ -2363,7 +2772,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ErView>> {
             "Set attribute type",
             &["Entity"],
             None,
-            "attribute: string; the attribute's id\ntype: string = \"\"; its type, free text\nlength: integer = 0, 0..65535; a length for a type that takes one, 0 for none\nprecision: integer = 0, 0..65535; a precision for a type that takes one, 0 for none\nscale: integer = 0, 0..65535; a scale beside the precision, 0 for none",
+            "attribute: string; the attribute's id\ntype: string = \"\"; its type, free text\ndomain: string = \"\"; a domain of the schema instead of a type\nenum: string = \"\"; an enum type of the schema instead of a type\nlength: integer = 0, 0..65535; a length for a type that takes one, 0 for none\nprecision: integer = 0, 0..65535; a precision for a type that takes one, 0 for none\nscale: integer = 0, 0..65535; a scale beside the precision, 0 for none",
             has_entities,
             attribute_set_type
         ),
@@ -2404,6 +2813,44 @@ pub fn specs() -> Vec<CommandSpec<Store, ErView>> {
             has_entities,
             attribute_set_flags
         ),
+        cmd!(
+            "er.domain.add",
+            "Add domain",
+            &["Schema"],
+            None,
+            "schema: string; the schema's id\nname: string; the domain's name\nbase_type: string; the type it is built on\nlength: integer = 0, 0..65535; a length for a base type that takes one, 0 for none\nprecision: integer = 0, 0..65535; a precision for a base type that takes one, 0 for none\nscale: integer = 0, 0..65535; a scale beside the precision, 0 for none\ndefault: string = \"\"; an SQL expression, or nothing\nnot_null: bool = false; its columns take no null\nchecks: array = []; SQL conditions, each text or {expression, name}",
+            has_schemas,
+            domain_add
+        ),
+        cmd!(
+            "er.domain.set",
+            "Set domain",
+            &["Schema"],
+            None,
+            "domain: string; the domain's id\nname: string; the domain's name\nbase_type: string; the type it is built on\nlength: integer = 0, 0..65535; a length for a base type that takes one, 0 for none\nprecision: integer = 0, 0..65535; a precision for a base type that takes one, 0 for none\nscale: integer = 0, 0..65535; a scale beside the precision, 0 for none\ndefault: string = \"\"; an SQL expression, or nothing\nnot_null: bool = false; its columns take no null\nchecks: array = []; SQL conditions, each text or {expression, name}",
+            has_schemas,
+            domain_set
+        ),
+        cmd!("er.domain.remove", "Remove domain", &["Schema"], None, "domain: string; the domain's id", has_schemas, domain_remove),
+        cmd!(
+            "er.enum.add",
+            "Add enum type",
+            &["Schema"],
+            None,
+            "schema: string; the schema's id\nname: string; the enum type's name\nliterals: array; its literals, in order",
+            has_schemas,
+            enum_add
+        ),
+        cmd!(
+            "er.enum.set",
+            "Set enum type",
+            &["Schema"],
+            None,
+            "enum: string; the enum type's id\nname: string; the enum type's name\nliterals: array; its literals, in order",
+            has_schemas,
+            enum_set
+        ),
+        cmd!("er.enum.remove", "Remove enum type", &["Schema"], None, "enum: string; the enum type's id", has_schemas, enum_remove),
         cmd!("er.attribute.unlink", "Unlink attribute", &["Entity"], None, "attribute: string; the id of a key column that follows the column it points at", has_entities, attribute_unlink),
         cmd!("er.attribute.move", "Move attribute", &["Entity"], None, "attribute: string; the attribute's id\nto: integer, 0..1000000; its new place", has_entities, attribute_move),
         cmd!("er.attribute.remove", "Remove attribute", &["Entity"], None, "attribute: string; the attribute's id", has_entities, attribute_remove),

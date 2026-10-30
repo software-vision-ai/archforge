@@ -33,6 +33,12 @@ str		Delete	删除
 str		Schema · model	架构 · 模型
 str		Table · model, in every diagram	表 · 模型，出现在每张图中
 str		Column · model	列 · 模型
+str		Domain · model	域 · 模型
+str		This domain	此域
+str		On this domain · {n}	此域上 · {n}
+str		Enum type · model	枚举类型 · 模型
+str		This enum type	此枚举类型
+str		On this enum type · {n}	此枚举类型上 · {n}
 str		Element · model	元素 · 模型
 str		Skill · model	技能 · 模型
 str		Columns · {n}	列 · {n}
@@ -41,6 +47,21 @@ str		Add a column	添加一列
 str		Add unique constraint	添加唯一约束
 str		Columns, in key order	按键顺序的列
 str		Nulls distinct	空值视为不同
+str		Types · {n}	类型 · {n}
+plural		{n} check	{n} 个检查约束
+plural		{n} literal	{n} 个字面量
+str		Add type	添加类型
+str		Domain	域
+str		Enum type	枚举类型
+str		Base type	基础类型
+str		Checks	检查约束
+str		Add a check	添加检查约束
+str		Literals, in order	按顺序排列的字面量
+str		Add a literal	添加字面量
+str		Pick a type	选择类型
+str		domain	域
+str		enum	枚举
+str		not null	非空
 str		Checks · {n}	检查约束 · {n}
 str		Indexes · {n}	索引 · {n}
 str		Add check constraint	添加检查约束

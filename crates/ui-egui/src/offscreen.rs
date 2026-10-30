@@ -26,6 +26,9 @@ pub enum Screen {
     WorkspaceColumnEditor,
     /// The same table with the index editor open on its index, More open.
     WorkspaceIndexEditor,
+    /// The table's schema selected, with a domain and an enum type in its Types section and in
+    /// the Models tree.
+    WorkspaceSchemaTypes,
     /// The diagram of two tables with a mapping table between Order and Tag selected: its
     /// Properties offer to collapse it, Order's key column shows its link mark.
     WorkspaceMappingTable,
@@ -85,10 +88,18 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
     }
     if matches!(
         screen,
-        Screen::WorkspaceTable | Screen::WorkspaceSkills | Screen::WorkspaceKeyEditor | Screen::WorkspaceColumnEditor | Screen::WorkspaceIndexEditor
+        Screen::WorkspaceTable
+            | Screen::WorkspaceSkills
+            | Screen::WorkspaceKeyEditor
+            | Screen::WorkspaceColumnEditor
+            | Screen::WorkspaceIndexEditor
+            | Screen::WorkspaceSchemaTypes
     ) {
         shell.adopt_project();
         sample_table(&mut shell, screen == Screen::WorkspaceSkills)?;
+        if screen == Screen::WorkspaceSchemaTypes {
+            sample_types(&mut shell)?;
+        }
         if screen == Screen::WorkspaceColumnEditor
             && let Some(session) = shell.session.as_ref()
         {
@@ -231,6 +242,34 @@ fn sample_table(shell: &mut Shell, skills: bool) -> Result<(), String> {
     if skills {
         shell.state.panel = crate::state::Panel::Skills;
     }
+    Ok(())
+}
+
+/// Adds a domain and an enum type to the sample table's schema, puts email on the domain and a
+/// status column on the enum type, and selects the schema.
+fn sample_types(shell: &mut Shell) -> Result<(), String> {
+    use serde_json::json;
+    let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
+    let run = |session: &mut archforge_er::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
+        let out = session.execute(command, &params).map_err(|e| format!("{command}: {e:?}"))?;
+        Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
+    };
+    let store = session.doc();
+    let by_name =
+        |name: &str| store.alive().find(|o| archforge_er::rules::name_of(store, *o) == name).and_then(|o| store.uuid(o).ok()).map(|u| u.to_string());
+    let (Some(schema), Some(customer), Some(email)) = (by_name("Shop"), by_name("Customer"), by_name("email")) else {
+        return Err("the sample table".into());
+    };
+    let domain = run(
+        session,
+        "er.domain.add",
+        json!({ "schema": schema, "name": "email_address", "base_type": "VARCHAR", "length": 255, "not_null": true, "checks": ["position('@' in value) > 1"] }),
+    )?;
+    let status = run(session, "er.enum.add", json!({ "schema": schema, "name": "customer_status", "literals": ["active", "dormant", "closed"] }))?;
+    run(session, "er.attribute.set-type", json!({ "attribute": email, "domain": domain }))?;
+    run(session, "er.attribute.add", json!({ "entity": customer, "name": "status", "enum": status, "default": "'active'" }))?;
+    run(session, "view.select", json!({ "ids": [schema] }))?;
+    session.mark_saved().map_err(|e| format!("mark_saved: {e:?}"))?;
     Ok(())
 }
 
