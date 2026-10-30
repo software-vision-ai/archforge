@@ -104,7 +104,7 @@ fn the_registry_and_the_metamodel_are_what_the_spec_says() {
     let reg = registry().unwrap();
     assert!(reg.len() > 20);
     let m = metamodel().unwrap();
-    assert_eq!(m.classes.len(), 17);
+    assert_eq!(m.classes.len(), 19);
     assert_eq!(
         m.data_types.len(),
         14,
@@ -468,7 +468,8 @@ fn foreign_key_refusals_name_the_parameter_at_fault() {
         (fk(json!([a, a])), "columns"),
         (fk(json!([sku, b])), "columns"),
         (fk(json!(vec![a.clone(); 33])), "columns"),
-        (json!({ "entity": sm.order, "references": invoice, "columns": [a] }), "key"),
+        // A key in another schema is fine (slice S7); its types still pair up.
+        (json!({ "entity": sm.order, "references": invoice, "columns": [sm.total] }), "columns"),
         (json!({ "entity": sm.order, "key": sm.order, "columns": [a] }), "key"),
         (json!({ "entity": sm.order, "references": product, "columns": [a, b], "relationship": sm.places }), "relationship"),
     ] {
@@ -967,6 +968,16 @@ fn the_sweep_finds_nothing() {
     run(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": "state", "enum": en, "default": "'open'" }));
     let sub = run(&mut s, "er.entity.add", json!({ "schema": sm.schema, "name": "VipCustomer" }));
     let generalization = run(&mut s, "er.generalization.add", json!({ "supertype": sm.customer, "subtype": sub }));
+    let seq =
+        run(&mut s, "er.sequence.add", json!({ "schema": sm.schema, "name": "order_no", "minimum": "1", "maximum": "1000", "owned_by": sm.key }));
+    let view = run(&mut s, "er.view.add", json!({ "schema": sm.schema, "name": "big_orders", "query": "select * from orders" }));
+    let crm = run(&mut s, "er.schema.add", json!({ "name": "crm" }));
+    let contact = run(&mut s, "er.entity.add", json!({ "schema": crm, "name": "Contact" }));
+    let across = run(
+        &mut s,
+        "er.relationship.add",
+        json!({ "from": sm.customer, "to": contact, "from_end": "exactly-one", "to_end": "zero-or-more", "create_foreign_key": true }),
+    );
     let ids = [
         &sm.schema,
         &sm.customer,
@@ -980,6 +991,11 @@ fn the_sweep_finds_nothing() {
         &en,
         &sub,
         &generalization,
+        &seq,
+        &view,
+        &crm,
+        &contact,
+        &across,
         "not-an-id",
         "00000000-0000-7000-8000-000000000000",
     ];
@@ -1023,7 +1039,12 @@ fn random_call(rng: &mut Rng, s: &Session) -> (&'static str, Json) {
     let ends = ["zero-or-one", "exactly-one", "zero-or-more", "one-or-more"];
     let end = |r: &mut Rng| ends[(r.next() % 4) as usize];
     let pair = |r: &mut Rng| json!([r.pick(&attributes), r.pick(&attributes)]);
-    match rng.below(22) {
+    match rng.below(24) {
+        22 => (
+            "er.sequence.add",
+            json!({ "schema": rng.pick(&schemas), "name": name, "increment": if n.is_multiple_of(2) { 1 } else { -1 }, "owned_by": rng.pick(&attributes) }),
+        ),
+        23 => ("er.view.add", json!({ "schema": rng.pick(&schemas), "name": name, "query": "select 1", "materialized": n.is_multiple_of(2) })),
         16 => ("er.primary-key.set", json!({ "entity": rng.pick(&entities), "columns": pair(rng), "name": "" })),
         17 => ("er.unique.add", json!({ "entity": rng.pick(&entities), "columns": pair(rng), "nulls_distinct": n.is_multiple_of(2) })),
         18 => ("er.foreign-key.set-key", json!({ "foreign_key": rng.pick(&keys), "key": rng.pick(&all_keys) })),
@@ -1725,4 +1746,165 @@ fn removing_the_top_of_a_very_deep_loaded_chain_is_refused_not_a_crash() {
     let e = session.execute("er.primary-key.remove", &json!({ "entity": top.unwrap() })).expect_err("too deep to cascade");
     assert!(e.to_string().contains("deeper than") && e.to_string().contains("entity"), "{e}");
     assert_eq!(picture(session.doc()), before, "nothing of the attempt stays");
+}
+
+#[test]
+fn sequences_and_views_belong_to_a_schema_under_its_rules() {
+    let mut s = session();
+    let sm = sample(&mut s);
+    let other = run(&mut s, "er.schema.add", json!({ "name": "crm" }));
+    let elsewhere = run(&mut s, "er.entity.add", json!({ "schema": other, "name": "Contact" }));
+    let foreign_col = run(&mut s, "er.attribute.add", json!({ "entity": elsewhere, "name": "id", "type": "BIGINT" }));
+    // A sequence owned by a column of its schema; its bounds are whole numbers kept as text.
+    let seq = json!({
+        "schema": sm.schema, "name": "order_no", "start": 1000, "increment": 1, "minimum": "1000", "maximum": "+99999999", "owned_by": sm.key,
+    });
+    round_trip(&mut s, "er.sequence.add", &seq);
+    let view = json!({ "schema": sm.schema, "name": "big_orders", "query": "select *\nfrom \"Order\"\nwhere total > 100", "materialized": true });
+    round_trip(&mut s, "er.view.add", &view);
+    let sg = get(&mut s, "er.schema.get", json!({ "schema": sm.schema }));
+    let q = sg["sequences"][0]["id"].as_str().unwrap().to_string();
+    let v = sg["views"][0]["id"].as_str().unwrap().to_string();
+    assert_eq!(
+        (&sg["sequences"][0]["start"], &sg["sequences"][0]["minimum"], &sg["sequences"][0]["maximum"], &sg["sequences"][0]["owned_by"]),
+        (&json!(1000), &json!(1000), &json!(99_999_999), &json!(sm.key))
+    );
+    assert_eq!((&sg["views"][0]["materialized"], sg["views"][0]["query"].as_str().map(|q| q.lines().count())), (&json!(true), Some(3)));
+    all_rules_hold(s.doc());
+    // Tables, types, sequences and views share one namespace; the numbers keep their rules.
+    for (cmd, p, key) in [
+        ("er.sequence.add", json!({ "schema": sm.schema, "name": "customer" }), "name"),
+        ("er.view.add", json!({ "schema": sm.schema, "name": "ORDER_NO", "query": "select 1" }), "name"),
+        ("er.entity.add", json!({ "schema": sm.schema, "name": "big_orders" }), "name"),
+        ("er.domain.add", json!({ "schema": sm.schema, "name": "order_no", "base_type": "TEXT" }), "name"),
+        ("er.sequence.add", json!({ "schema": sm.schema, "name": "s", "increment": 0 }), "increment"),
+        ("er.sequence.add", json!({ "schema": sm.schema, "name": "s", "minimum": "one" }), "minimum"),
+        ("er.sequence.add", json!({ "schema": sm.schema, "name": "s", "maximum": "99999999999999999999" }), "maximum"),
+        ("er.sequence.add", json!({ "schema": sm.schema, "name": "s", "minimum": "10", "maximum": "10" }), "maximum"),
+        ("er.sequence.add", json!({ "schema": sm.schema, "name": "s", "start": 5, "minimum": "10" }), "start"),
+        ("er.sequence.add", json!({ "schema": sm.schema, "name": "s", "start": 50, "maximum": "10" }), "start"),
+        ("er.sequence.add", json!({ "schema": sm.schema, "name": "s", "owned_by": foreign_col }), "owned_by"),
+        ("er.sequence.add", json!({ "schema": sm.schema, "name": "s", "owned_by": sm.customer }), "owned_by"),
+        ("er.sequence.set", json!({ "sequence": v, "name": "s" }), "sequence"),
+        ("er.view.add", json!({ "schema": sm.schema, "name": "w", "query": "" }), "query"),
+        ("er.view.add", json!({ "schema": sm.schema, "name": "w", "query": " select 1" }), "query"),
+        ("er.view.set", json!({ "view": v, "name": "Customer", "query": "select 1" }), "name"),
+        ("er.view.remove", json!({ "view": q }), "view"),
+    ] {
+        assert_eq!(refused_on(&mut s, cmd, p.clone()), key, "{cmd} {p}");
+    }
+    // A sequence counts down and cycles; a view changes its query and drops its rows.
+    round_trip(
+        &mut s,
+        "er.sequence.set",
+        &json!({ "sequence": q, "name": "countdown", "start": 10, "increment": -1, "minimum": "-5", "maximum": "10", "cycle": true }),
+    );
+    round_trip(&mut s, "er.view.set", &json!({ "view": v, "name": "all_orders", "query": "select * from \"Order\"" }));
+    let sg = get(&mut s, "er.schema.get", json!({ "schema": sm.schema }));
+    assert_eq!((&sg["sequences"][0]["owned_by"], &sg["sequences"][0]["minimum"]), (&Json::Null, &json!(-5)));
+    assert_eq!(sg["views"][0]["materialized"], json!(false));
+    // The column that owns a sequence goes; the sequence stays and forgets it, and undo brings it back.
+    let no = run(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": "no", "type": "BIGINT" }));
+    run(&mut s, "er.sequence.set", json!({ "sequence": q, "name": "countdown", "owned_by": no }));
+    round_trip(&mut s, "er.attribute.remove", &json!({ "attribute": no }));
+    assert_eq!(get(&mut s, "er.schema.get", json!({ "schema": sm.schema }))["sequences"][0]["owned_by"], Json::Null);
+    s.undo().unwrap();
+    assert_eq!(get(&mut s, "er.schema.get", json!({ "schema": sm.schema }))["sequences"][0]["owned_by"], json!(no));
+    run(&mut s, "er.entity.remove", json!({ "entity": sm.order }));
+    assert_eq!(get(&mut s, "er.schema.get", json!({ "schema": sm.schema }))["sequences"][0]["owned_by"], Json::Null);
+    all_rules_hold(s.doc());
+    // They go one at a time or together with the Delete key's command.
+    round_trip(&mut s, "er.remove", &json!({ "ids": [q, v] }));
+    s.undo().unwrap();
+    round_trip(&mut s, "er.sequence.remove", &json!({ "sequence": q }));
+    round_trip(&mut s, "er.view.remove", &json!({ "view": v }));
+    all_rules_hold(s.doc());
+}
+
+#[test]
+fn keys_and_relationships_cross_schemas_and_go_with_either_schema() {
+    let mut s = session();
+    let sm = sample(&mut s);
+    let crm = run(&mut s, "er.schema.add", json!({ "name": "crm" }));
+    let contact = run(&mut s, "er.entity.add", json!({ "schema": crm, "name": "Contact" }));
+    // A relationship from a table of shop to one of crm brings its key; it lives in the child's schema.
+    let across = json!({ "from": sm.customer, "to": contact, "from_end": "exactly-one", "to_end": "zero-or-more", "create_foreign_key": true });
+    round_trip(&mut s, "er.relationship.add", &across);
+    let r = get(&mut s, "er.schema.get", json!({ "schema": crm }))["relationships"][0]["id"].as_str().unwrap().to_string();
+    assert!(!relationship(&mut s, &crm, &r).is_null(), "the relationship is crm's");
+    assert!(relationship(&mut s, &sm.schema, &r).is_null(), "and not shop's");
+    let c = get(&mut s, "er.entity.get", json!({ "entity": contact }));
+    assert_eq!(c["attributes"][0]["name"], "customer_id");
+    // A foreign key of its own points into the other schema too.
+    let owner = run(&mut s, "er.attribute.add", json!({ "entity": contact, "name": "owner", "type": "BIGINT" }));
+    round_trip(&mut s, "er.foreign-key.add", &json!({ "entity": contact, "references": sm.customer, "columns": [owner] }));
+    all_rules_hold(s.doc());
+    // A many-to-many relationship across schemas resolves into a mapping table of its schema.
+    let tag = run(&mut s, "er.entity.add", json!({ "schema": crm, "name": "Tag" }));
+    run(&mut s, "er.attribute.add", json!({ "entity": tag, "name": "id", "type": "BIGINT", "primary_key": true }));
+    let tagged = run(&mut s, "er.relationship.add", json!({ "from": sm.customer, "to": tag, "from_end": "zero-or-more", "to_end": "zero-or-more" }));
+    round_trip(&mut s, "er.relationship.resolve", &json!({ "relationship": tagged }));
+    let names: Vec<String> = get(&mut s, "er.schema.get", json!({ "schema": crm }))["entities"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["name"].as_str().unwrap_or_default().to_string())
+        .collect();
+    assert!(names.iter().any(|n| n == "customer_tag"), "{names:?}");
+    all_rules_hold(s.doc());
+    // Generalizations stay inside one schema.
+    assert_eq!(refused_on(&mut s, "er.generalization.add", json!({ "supertype": sm.customer, "subtype": contact })), "subtype");
+    // Either schema goes with everything that reaches into it; undo brings it all back.
+    round_trip(&mut s, "er.schema.remove", &json!({ "schema": crm }));
+    all_rules_hold(s.doc());
+    s.undo().unwrap();
+    round_trip(&mut s, "er.schema.remove", &json!({ "schema": sm.schema }));
+    all_rules_hold(s.doc());
+    // Only Tag's own relationship to the mapping table stays; the table is a regular one again.
+    let left = get(&mut s, "er.schema.get", json!({ "schema": crm }));
+    assert_eq!(left["relationships"].as_array().map(Vec::len), Some(1));
+    let mapping = left["entities"].as_array().unwrap().iter().find(|e| e["name"] == "customer_tag").cloned().unwrap();
+    assert_eq!(mapping["kind"], "regular");
+    assert!(get(&mut s, "er.entity.get", json!({ "entity": contact }))["foreign_keys"].as_array().unwrap().is_empty());
+}
+
+#[test]
+fn view_queries_sequence_owners_and_types_of_another_schema_keep_their_limits() {
+    let mut s = session();
+    let sm = sample(&mut s);
+    // A query as long as the store keeps is fine; one character more is refused under its name.
+    let longest = "x".repeat(rules::MAX_QUERY);
+    run(&mut s, "er.view.add", json!({ "schema": sm.schema, "name": "v", "query": longest }));
+    let longer = "x".repeat(rules::MAX_QUERY + 1);
+    assert_eq!(refused_on(&mut s, "er.view.add", json!({ "schema": sm.schema, "name": "w", "query": longer })), "query");
+    assert_eq!(refused_on(&mut s, "er.view.add", json!({ "schema": sm.schema, "name": "w", "query": "select 1\u{202E}" })), "query");
+    // A sequence is owned by a whole-number column only.
+    let note = run(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": "note", "type": "TEXT" }));
+    assert_eq!(refused_on(&mut s, "er.sequence.add", json!({ "schema": sm.schema, "name": "q", "owned_by": note })), "owned_by");
+    // An owner retyped later stays, and the sequence still saves with it unchanged.
+    let no = run(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": "no", "type": "BIGINT" }));
+    let q = run(&mut s, "er.sequence.add", json!({ "schema": sm.schema, "name": "q", "owned_by": no }));
+    run(&mut s, "er.attribute.set-type", json!({ "attribute": no, "type": "TEXT" }));
+    run(&mut s, "er.sequence.set", json!({ "sequence": q, "name": "q_renamed", "owned_by": no }));
+    assert_eq!(refused_on(&mut s, "er.sequence.set", json!({ "sequence": q, "name": "q_renamed", "owned_by": note })), "owned_by");
+    run(&mut s, "er.sequence.remove", json!({ "sequence": q }));
+    // A key column in another schema follows its target's domain; when the domain's schema goes,
+    // the column keeps the base type and size.
+    let ident = run(&mut s, "er.domain.add", json!({ "schema": sm.schema, "name": "ident", "base_type": "NUMERIC", "precision": 18, "scale": 0 }));
+    run(&mut s, "er.attribute.set-type", json!({ "attribute": sm.key, "domain": ident }));
+    let crm = run(&mut s, "er.schema.add", json!({ "name": "crm" }));
+    let contact = run(&mut s, "er.entity.add", json!({ "schema": crm, "name": "Contact" }));
+    run(
+        &mut s,
+        "er.relationship.add",
+        json!({ "from": sm.customer, "to": contact, "from_end": "exactly-one", "to_end": "zero-or-more", "create_foreign_key": true }),
+    );
+    let follower = get(&mut s, "er.entity.get", json!({ "entity": contact }))["attributes"][0].clone();
+    assert_eq!(follower["domain"], json!(ident));
+    let mine = run(&mut s, "er.attribute.add", json!({ "entity": contact, "name": "own_ident", "domain": ident }));
+    all_rules_hold(s.doc());
+    run(&mut s, "er.schema.remove", json!({ "schema": sm.schema }));
+    let a = obj(s.doc(), &mine);
+    assert_eq!((rules::type_of(s.doc(), a), rules::size_of(s.doc(), a)), ("NUMERIC".to_string(), (None, Some(18), None)));
+    all_rules_hold(s.doc());
 }

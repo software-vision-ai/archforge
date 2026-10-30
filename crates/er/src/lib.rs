@@ -84,10 +84,11 @@ impl DiagramView for ErView {
         class == ENTITY
     }
 
-    /// A schema's diagram shows that schema's entities only.
+    /// A schema's diagram shows any table of the model (slice S7: one of another schema draws
+    /// dimmed, with its schema named).
     fn may_show(store: &Store, diagram: Obj, element: Obj) -> bool {
         let of = store.get(diagram, archforge_diagram::diagram::ELEMENT).ok().and_then(|v| v.as_ref());
-        of.is_some() && rules::schema_of(store, element) == of
+        of.is_some_and(|s| store.class_of(s).ok() == Some(SCHEMA)) && rules::schema_of(store, element).is_some()
     }
 
     /// Relationships, and generalizations (slice S6) drawn from the subtype to the supertype.

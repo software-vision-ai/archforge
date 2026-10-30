@@ -2268,3 +2268,137 @@ fn the_generalization_tool_draws_a_subtype_and_the_supertype_lists_it() {
     assert!(!st.is_alive(generalization));
     assert_eq!(selected_name(&h), "Customer");
 }
+
+#[test]
+fn the_schema_adds_and_edits_sequences_and_views_and_a_selected_one_opens_its_editor() {
+    let (mut h, _) = table_harness();
+    let (schema, key) = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let st = s.doc();
+        let schema = st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap()).unwrap().to_string();
+        let key = st.uuid(st.alive().find(|o| archforge_er::rules::name_of(st, *o) == "customer_id").unwrap()).unwrap();
+        s.execute("view.select", &serde_json::json!({ "ids": [schema] })).unwrap();
+        (schema, key)
+    };
+    h.run();
+    // + opens the sequence editor; Owned by offers the whole-number columns; Apply writes it.
+    let at = rect_of(&h, "workspace.properties.sequences.add").center();
+    click(&mut h, at);
+    assert!(h.state().panels.object_edit.as_ref().is_some_and(|e| e.kind == crate::objects::ObjectKind::Sequence && e.target.is_none()));
+    let at = rect_of(&h, "workspace.properties.sequence.owned-by").center();
+    click(&mut h, at);
+    assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::OwnedBy));
+    let offered: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.sequence.owned-by.")).collect();
+    assert_eq!(offered.len(), 2, "None and Customer.customer_id, not the text column: {offered:?}");
+    let at = rect_of(&h, "workspace.properties.sequence.owned-by.1").center();
+    click(&mut h, at);
+    assert_eq!(h.state().panels.object_edit.as_ref().and_then(|e| e.owned_by), Some(key));
+    {
+        let edit = h.state_mut().panels.object_edit.as_mut().unwrap();
+        edit.name = "customer_id_seq".into();
+        edit.start = "one".into();
+    }
+    h.run();
+    let at = rect_of(&h, "workspace.properties.object.apply").center();
+    click(&mut h, at);
+    assert!(h.state().panels.object_edit.as_ref().is_some_and(|e| e.refused.is_some()), "a start that is no number is refused");
+    {
+        let edit = h.state_mut().panels.object_edit.as_mut().unwrap();
+        edit.start = "1000".into();
+        edit.minimum = "1000".into();
+    }
+    h.run();
+    click(&mut h, at);
+    assert!(h.state().panels.object_edit.is_none(), "{:?}", h.state().panels.object_edit);
+    // The view editor takes the query over several lines.
+    let at = rect_of(&h, "workspace.properties.views.add").center();
+    click(&mut h, at);
+    {
+        let edit = h.state_mut().panels.object_edit.as_mut().unwrap();
+        assert_eq!(edit.kind, crate::objects::ObjectKind::View);
+        edit.name = "recent_customers".into();
+        edit.query = "SELECT customer_id\nFROM \"Customer\"\n".into();
+        edit.materialized = true;
+    }
+    h.run();
+    let at = rect_of(&h, "workspace.properties.object.apply").center();
+    click(&mut h, at);
+    assert!(h.state().panels.object_edit.is_none(), "{:?}", h.state().panels.object_edit);
+    let (seq, view) = {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let s = st.by_uuid(archforge_mof::Uuid::parse(&schema).unwrap()).unwrap();
+        let (seqs, views) = (archforge_er::rules::sequences_of(st, s), archforge_er::rules::views_of(st, s));
+        assert_eq!((seqs.len(), views.len()), (1, 1));
+        let n = archforge_er::rules::sequence_numbers(st, seqs[0]);
+        assert_eq!((n.start, n.minimum.as_str()), (1000, "1000"));
+        assert_eq!(archforge_er::rules::owner_of_sequence(st, seqs[0]).and_then(|a| st.uuid(a).ok()), Some(key));
+        assert_eq!(archforge_er::rules::text_of(st, views[0], archforge_er::view::QUERY), "SELECT customer_id\nFROM \"Customer\"");
+        (st.uuid(seqs[0]).unwrap(), st.uuid(views[0]).unwrap())
+    };
+    assert_eq!(selected_name(&h), "Shop", "the schema stays selected");
+    // Both show in the Models tree; a click on one opens its editor under its schema's section.
+    for id in [seq, view] {
+        assert!(ids(&h).iter().any(|i| *i == format!("workspace.explorer.row.{id}")), "{:?}", ids(&h));
+    }
+    let at = rect_of(&h, &format!("workspace.explorer.row.{view}")).center();
+    click(&mut h, at);
+    assert!(h.state().panels.object_edit.as_ref().is_some_and(|e| e.target == Some(view) && e.materialized));
+    // The bin removes it; the schema is selected again.
+    let at = rect_of(&h, "workspace.properties.object.remove").center();
+    click(&mut h, at);
+    let st = h.state().session.as_ref().unwrap().doc();
+    assert!(st.by_uuid(view).is_none_or(|v| !st.is_alive(v)));
+    assert_eq!(selected_name(&h), "Shop");
+}
+
+#[test]
+fn a_table_of_another_schema_dragged_from_the_explorer_lands_with_its_line_once() {
+    let (mut h, _, order) = two_tables_harness();
+    let (account, diagram) = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
+        let crm = id(s.execute("er.schema.add", &serde_json::json!({ "name": "CRM" })).unwrap().value);
+        let account = id(s.execute("er.entity.add", &serde_json::json!({ "schema": crm, "name": "Account" })).unwrap().value);
+        s.execute("er.attribute.add", &serde_json::json!({ "entity": account, "name": "account_id", "type": "BIGINT", "primary_key": true }))
+            .unwrap();
+        s.execute(
+            "er.relationship.add",
+            &serde_json::json!({ "from": account, "to": order, "from_end": "exactly-one", "to_end": "zero-or-more", "create_foreign_key": true }),
+        )
+        .unwrap();
+        let st = s.doc();
+        let d = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_diagram::DIAGRAM)).unwrap();
+        (account, d)
+    };
+    h.run();
+    let shown = |h: &Harness<'static, Shell>| {
+        let st = h.state().session.as_ref().unwrap().doc();
+        (st.list(diagram, archforge_diagram::diagram::NODE).unwrap().len(), st.list(diagram, archforge_diagram::diagram::EDGE).unwrap().len())
+    };
+    assert_eq!(shown(&h), (2, 0));
+    let row = rect_of(&h, &format!("workspace.explorer.row.{account}")).center();
+    let canvas = rect_of(&h, "workspace.canvas");
+    let to = egui::pos2(canvas.center().x, canvas.bottom() - 200.0);
+    drag(&mut h, row, to);
+    assert_eq!(shown(&h), (3, 1), "the table and its relationship to Order, drawn together");
+    assert_eq!(selected_name(&h), "Account");
+    assert!(ids(&h).iter().any(|i| i.starts_with("workspace.canvas.node.")));
+    // One undo takes both; a second drop of the same table is said and changes nothing.
+    {
+        let s = h.state_mut().session.as_mut().unwrap();
+        s.execute("edit.undo", &serde_json::Value::Null).unwrap();
+        s.execute("edit.redo", &serde_json::Value::Null).unwrap();
+    }
+    h.run();
+    assert_eq!(shown(&h), (3, 1));
+    let row = rect_of(&h, &format!("workspace.explorer.row.{account}")).center();
+    drag(&mut h, row, to);
+    assert_eq!(shown(&h), (3, 1));
+    assert_eq!(h.state().canvas.notice.as_deref(), Some("Already on this diagram"));
+    {
+        let s = h.state_mut().session.as_mut().unwrap();
+        s.execute("edit.undo", &serde_json::Value::Null).unwrap();
+    }
+    h.run();
+    assert_eq!(shown(&h), (2, 0));
+}

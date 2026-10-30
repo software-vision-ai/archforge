@@ -180,6 +180,32 @@ pub const TABLES: &[Table] = &[
             Column { name: "key_relationship", prop: Some(generalization::KEY_RELATIONSHIP), sql: "BINARY(16) NULL" },
         ],
     },
+    Table {
+        name: "er_sequence",
+        class: SEQUENCE,
+        columns: &[
+            Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
+            Column { name: "description", prop: Some(element::DESCRIPTION), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "start", prop: Some(sequence::START), sql: "BIGINT NOT NULL" },
+            Column { name: "increment", prop: Some(sequence::INCREMENT), sql: "BIGINT NOT NULL" },
+            Column { name: "minimum", prop: Some(sequence::MINIMUM), sql: "TEXT NULL" },
+            Column { name: "maximum", prop: Some(sequence::MAXIMUM), sql: "TEXT NULL" },
+            Column { name: "cycle", prop: Some(sequence::CYCLE), sql: "TINYINT NOT NULL" },
+            Column { name: "owned_by", prop: Some(sequence::OWNED_BY), sql: "BINARY(16) NULL" },
+        ],
+    },
+    Table {
+        name: "er_view",
+        class: VIEW,
+        columns: &[
+            Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
+            Column { name: "description", prop: Some(element::DESCRIPTION), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "query", prop: Some(view::QUERY), sql: "TEXT NULL" },
+            Column { name: "materialized", prop: Some(view::MATERIALIZED), sql: "TINYINT NOT NULL" },
+        ],
+    },
 ];
 
 /// One table per multi-valued stored property.
@@ -189,6 +215,8 @@ pub const JUNCTIONS: &[Junction] = &[
     Junction { name: "er_schema_domain", class: SCHEMA, prop: schema::DOMAIN, ordered: true, reference: true },
     Junction { name: "er_schema_enum_type", class: SCHEMA, prop: schema::ENUM_TYPE, ordered: true, reference: true },
     Junction { name: "er_schema_generalization", class: SCHEMA, prop: schema::GENERALIZATION, ordered: true, reference: true },
+    Junction { name: "er_schema_sequence", class: SCHEMA, prop: schema::SEQUENCE, ordered: true, reference: true },
+    Junction { name: "er_schema_view", class: SCHEMA, prop: schema::VIEW, ordered: true, reference: true },
     Junction { name: "er_entity_attribute", class: ENTITY, prop: entity::ATTRIBUTE, ordered: true, reference: true },
     Junction { name: "er_entity_unique_constraint", class: ENTITY, prop: entity::UNIQUE_CONSTRAINT, ordered: true, reference: true },
     Junction { name: "er_entity_foreign_key", class: ENTITY, prop: entity::FOREIGN_KEY, ordered: true, reference: true },
