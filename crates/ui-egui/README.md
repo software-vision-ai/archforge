@@ -18,7 +18,9 @@ with a toast's Undo; `relation`: a relationship's Properties — Identifying, th
 cardinality buttons and roles, the Foreign key switch that adds or removes the key with its
 columns in one step, Points to, the key pairs with a child column chosen among those of the same
 type, On delete / On update, More with Deferrable and Match, and the card for a parent without a
-key with Add id column), the right rail between the
+key with Add id column; `keys`: a table's keys with the key editor — name, the columns in key
+order, Add a column, Nulls distinct — and the Problems section that lists what the rules find on
+the selection; `problems`: those problems by element, badged on the canvas), the right rail between the
 canvas and its panel with Properties (`panels`: a schema's name; a table's name, kind, columns
 with the in-place column editor, keys; a diagram's name and schema) and Skills (the skills on the
 selection, the inherited ones, the skill editor) following the selection, the status bar), drawn
@@ -63,10 +65,12 @@ or explorer with nothing to show says so in one line, never with a help text.
 | `editing::{add_entity, run_growing, content_height, diagrams_showing, NodeRename, Gesture, EntityMenu}` | canvas editing: a table added (and placed on an open diagram) as one step, a column command that grows the table's nodes with it, the gesture and menu state |
 | `connect::{RelKind, MappingOffer, Toast, connect, offer_mapping, has_foreign_key, remove_selected_relationship}` | relationships drawn on the canvas: the ends a new line gets, the mapping table offer, the toast |
 | `relation::{RoleEdit, retain_valid}` | a relationship's Properties state: a role being typed; the body itself is drawn by `panels` |
+| `keys::{KeyEdit, KeyRow, rows, open}` | a table's keys and the key editor's state |
+| `problems::{Problem, all, by_element, of}` | the problems the shell shows, on the element the user would fix them on |
 | `new_project::{open, name_problem, file_name}` | the New project dialog: open it, a name's problem in words, the file a name gives |
 | `Folder` | a folder as the shell shows it: its path and its label |
 
 **Non-goals.** The screens behind Home's other controls, the Source Control explorer's contents,
 the Agent and Appearance panels, relationships and foreign keys in Properties, key editing beyond
-the column flags, the key editor, problems and notes on the canvas (slice E4), the drawing
+key editing past name, columns and Nulls distinct, the drawing
 tools' menus, folders and renaming in the Diagrams tree: their own rows.

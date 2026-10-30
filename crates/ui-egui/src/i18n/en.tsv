@@ -36,6 +36,17 @@ str		Element · model	Element · model
 str		Skill · model	Skill · model
 str		Columns · {n}	Columns · {n}
 str		Keys · {n}	Keys · {n}
+str		Add a column	Add a column
+str		Add unique constraint	Add unique constraint
+str		Columns, in key order	Columns, in key order
+str		Nulls distinct	Nulls distinct
+str		Problems · {n}	Problems · {n}
+str		lacks its table or its key	lacks its table or its key
+str		{column} is a key column and may be null	{column} is a key column and may be null
+str		{from} to {to} is many to many	{from} to {to} is many to many
+str		{key}: {problem}	{key}: {problem}
+str		{name} has no primary key	{name} has no primary key
+str		{name} removed · {keys} went with it	{name} removed · {keys} went with it
 str		Add column	Add column
 str		Add skill	Add skill
 str		Kind	Kind

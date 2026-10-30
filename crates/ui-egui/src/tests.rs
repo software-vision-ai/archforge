@@ -1747,3 +1747,112 @@ fn a_parent_without_a_key_gets_the_card_and_add_id_column_makes_the_key() {
     assert!(st.referrers(rel_obj).into_iter().any(|(_, p)| p == archforge_er::foreign_key::RELATIONSHIP), "the foreign key exists");
     assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add id column"));
 }
+
+#[test]
+fn the_key_editor_adds_a_unique_constraint_and_removes_the_primary_key() {
+    let (mut h, customer) = table_harness();
+    let found = ids(&h);
+    assert!(found.iter().any(|i| i == "workspace.properties.keys.add"), "{found:?}");
+    let key_rows: Vec<String> = found.iter().filter(|i| i.starts_with("workspace.properties.key.row.")).cloned().collect();
+    assert_eq!(key_rows.len(), 1, "the primary key: {key_rows:?}");
+    // + opens the editor for a new unique constraint; a column is added from the menu; Apply.
+    let at = rect_of(&h, "workspace.properties.keys.add").center();
+    click(&mut h, at);
+    assert!(h.state().panels.key.as_ref().is_some_and(|k| k.target.is_none() && !k.primary));
+    let at = rect_of(&h, "workspace.properties.key.column.add").center();
+    click(&mut h, at);
+    assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::KeyColumn));
+    let items: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.key.column.add.")).collect();
+    assert!(!items.is_empty());
+    let at = rect_of(&h, &items[0]).center();
+    click(&mut h, at);
+    assert_eq!(h.state().panels.key.as_ref().unwrap().columns.len(), 1);
+    let at = rect_of(&h, "workspace.properties.key.apply").center();
+    click(&mut h, at);
+    assert!(h.state().panels.key.is_none(), "{:?}", h.state().panels.key);
+    let st = h.state().session.as_ref().unwrap().doc();
+    let customer_obj = st.by_uuid(archforge_mof::Uuid::parse(&customer).unwrap()).unwrap();
+    assert_eq!(archforge_er::rules::unique_constraints(st, customer_obj).len(), 1, "the unique constraint was added");
+    assert_eq!(selected_name(&h), "Customer", "the table stays selected");
+    // The primary key's row opens its editor; the bin removes the key, and the table gains a problem.
+    let pk_row = ids(&h).into_iter().find(|i| i.starts_with("workspace.properties.key.row.")).unwrap();
+    let at = rect_of(&h, &pk_row).center();
+    click(&mut h, at);
+    assert!(h.state().panels.key.as_ref().is_some_and(|k| k.primary));
+    let at = rect_of(&h, "workspace.properties.key.remove").center();
+    click(&mut h, at);
+    let st = h.state().session.as_ref().unwrap().doc();
+    assert!(archforge_er::rules::primary_key_of(st, customer_obj).is_none(), "{:?}", h.state().panels.notice);
+    assert!(ids(&h).iter().any(|i| i == "workspace.properties.problem.0"), "Problems lists the missing key: {:?}", ids(&h));
+    let problems = crate::problems::of(st, &crate::problems::by_element(st), customer_obj);
+    assert_eq!(problems.len(), 1);
+    assert_eq!(problems[0].text, "Customer has no primary key");
+}
+
+#[test]
+fn problems_badge_the_canvas_and_a_note_is_placed_and_typed_in_place() {
+    let (mut h, _customer, _diagram) = diagram_harness();
+    // Order's primary key goes: its node gets a badge; the schema's Properties lists and selects.
+    {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let (order, schema) = {
+            let st = s.doc();
+            let order = st.uuid(st.alive().find(|o| archforge_er::rules::name_of(st, *o) == "Order").unwrap()).unwrap().to_string();
+            let schema = st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap()).unwrap().to_string();
+            (order, schema)
+        };
+        s.execute("er.primary-key.remove", &serde_json::json!({ "entity": order })).unwrap();
+        s.execute("view.select", &serde_json::json!({ "ids": [schema] })).unwrap();
+    }
+    h.run();
+    let badges: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.canvas.problem.")).collect();
+    assert_eq!(badges.len(), 1, "one badge on Order: {badges:?}");
+    let at = rect_of(&h, "workspace.properties.problem.0").center();
+    click(&mut h, at);
+    assert_eq!(selected_name(&h), "Order", "the problem row selects its table");
+    // The Note tool places a note and opens its text; typing and Cmd+Enter set it.
+    let at = rect_of(&h, "workspace.tools.note").center();
+    click(&mut h, at);
+    assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Note);
+    let canvas = rect_of(&h, "workspace.canvas");
+    let before = node_ids(&h).len();
+    click(&mut h, canvas.left_top() + egui::vec2(canvas.width() - 120.0, 80.0));
+    assert_eq!(node_ids(&h).len(), before + 1, "the note is a node: {:?}", h.state().canvas.notice);
+    assert!(h.state().canvas.note_edit.is_some(), "its text is open");
+    assert!(ids(&h).iter().any(|i| i == "workspace.canvas.note"));
+    h.state_mut().canvas.note_edit.as_mut().unwrap().text = "Product.sku is unique per supplier".into();
+    key(&mut h, egui::Key::Enter, egui::Modifiers::COMMAND);
+    assert!(h.state().canvas.note_edit.is_none(), "{:?}", h.state().canvas.note_edit);
+    let st = h.state().session.as_ref().unwrap().doc();
+    let note = st
+        .alive()
+        .find(|o| {
+            st.class_of(*o).ok() == Some(archforge_diagram::NODE)
+                && st.get(*o, archforge_diagram::node::ELEMENT).ok().and_then(|v| v.as_ref()).is_none()
+        })
+        .unwrap();
+    assert_eq!(st.get(note, archforge_diagram::node::TEXT).unwrap().as_str(), Some("Product.sku is unique per supplier"));
+    // Removing a column with its key says so in a toast.
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    let st = h.state().session.as_ref().unwrap().doc();
+    let customer_id = st
+        .uuid(
+            st.alive()
+                .find(|o| {
+                    archforge_er::rules::name_of(st, *o) == "customer_id"
+                        && archforge_er::rules::entity_of(st, *o).is_some_and(|e| archforge_er::rules::name_of(st, e) == "Customer")
+                })
+                .unwrap(),
+        )
+        .unwrap();
+    crate::panels::open_column(h.state_mut(), archforge_mof::Uuid::parse(&_customer).unwrap(), Some(customer_id));
+    {
+        let s = h.state_mut().session.as_mut().unwrap();
+        s.execute("view.select", &serde_json::json!({ "ids": [_customer] })).unwrap();
+    }
+    h.run();
+    let at = rect_of(&h, "workspace.properties.column.remove").center();
+    click(&mut h, at);
+    let toast = h.state().canvas.toast.clone().expect("the toast");
+    assert!(toast.text.starts_with("customer_id removed · "), "{}", toast.text);
+}

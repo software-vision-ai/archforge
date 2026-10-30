@@ -58,6 +58,18 @@ pub struct NodeRename {
     pub refused: Option<String>,
 }
 
+/// A note's text being typed in place.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NoteEdit {
+    pub node: Uuid,
+    pub text: String,
+    pub opened: bool,
+    pub refused: Option<String>,
+}
+
+/// A note's size when placed, in diagram units.
+const NOTE_SIZE: (f64, f64) = (200.0, 72.0);
+
 /// A corner handle of a selected node.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Corner {
@@ -99,6 +111,8 @@ enum Action {
     Menu(EntityMenu),
     Rename(Uuid, Uuid),
     OpenColumn(Uuid, Option<Uuid>),
+    PlaceNote(f64, f64),
+    EditNote(Uuid),
 }
 
 fn run(shell: &mut Shell, id: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
@@ -274,6 +288,16 @@ fn decide(
             }
             Action::Nothing
         }
+        Tool::Note => match (resp.clicked(), pos) {
+            (true, Some(pos)) => match hit_node(pos) {
+                Some(n) => Action::Select(uuid(store, element_of(store, n).unwrap_or(n)).into_iter().collect()),
+                None => {
+                    let (x, y) = view.to_canvas(pos);
+                    Action::PlaceNote(x, y)
+                }
+            },
+            _ => Action::Nothing,
+        },
         Tool::Entity => match (resp.clicked(), pos) {
             (true, Some(pos)) => match hit_node(pos) {
                 Some(n) => Action::Select(uuid(store, element_of(store, n).unwrap_or(n)).into_iter().collect()),
@@ -321,6 +345,13 @@ fn decide(
                 return Action::Menu(EntityMenu { node, entity, at: pos });
             }
             // A third click in a row still opens; egui counts it as a triple click.
+            if (resp.double_clicked() || resp.triple_clicked())
+                && let Some(n) = hit_node(pos)
+                && element_of(store, n).is_none()
+                && let Some(node) = uuid(store, n)
+            {
+                return Action::EditNote(node);
+            }
             if (resp.double_clicked() || resp.triple_clicked())
                 && let Some(n) = hit_node(pos)
                 && let Some(entity) = entity_of_node(store, n)
@@ -395,6 +426,15 @@ pub(crate) fn pointer(shell: &mut Shell, ui: &egui::Ui, resp: &egui::Response, v
         Action::Place(x, y) => place_entity(shell, d, x, y),
         Action::Menu(m) => shell.canvas.menu = Some(m),
         Action::Rename(node, entity) => open_rename(shell, node, entity),
+        Action::PlaceNote(x, y) => place_note(shell, d, x, y),
+        Action::EditNote(node) => {
+            let text = shell.session.as_ref().and_then(|s| {
+                s.doc().by_uuid(node).map(|n| s.doc().get(n, node::TEXT).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default())
+            });
+            if let Some(text) = text {
+                shell.canvas.note_edit = Some(NoteEdit { node, text, opened: true, refused: None });
+            }
+        }
         Action::OpenColumn(entity, column) => {
             crate::panels::open_column(shell, entity, column);
             shell.state.panel = crate::state::Panel::Properties;
@@ -471,6 +511,78 @@ fn node_at(shell: &Shell, view: View, d: Obj, at: Pos2) -> Option<Uuid> {
         .rev()
         .find(|n| entity_of_node(store, *n).is_some() && view.rect(&bounds_of(store, *n)).contains(at))
         .and_then(|n| uuid(store, n))
+}
+
+/// Places a note at `(x, y)`, its centre under the click, and opens its text for typing.
+fn place_note(shell: &mut Shell, d: Obj, x: f64, y: f64) {
+    shell.canvas.notice = None;
+    let Some(diagram_id) = shell.session.as_ref().and_then(|s| s.doc().uuid(d).ok()) else { return };
+    let text = tr("Note");
+    let params = json!({ "diagram": diagram_id.to_string(), "text": text, "x": (x - NOTE_SIZE.0 / 2.0).round(), "y": (y - NOTE_SIZE.1 / 2.0).round(), "width": NOTE_SIZE.0, "height": NOTE_SIZE.1 });
+    match run(shell, "diagram.note", params) {
+        Ok(v) => {
+            if let Some(node) = v.get("id").and_then(|i| i.as_str()).and_then(Uuid::parse) {
+                shell.canvas.note_edit = Some(NoteEdit { node, text, opened: true, refused: None });
+                shell.canvas.focused = true;
+            }
+        }
+        Err(e) => shell.canvas.notice = Some(e),
+    }
+}
+
+/// Commits the note's text; an empty text is refused by the engine and stays open.
+fn commit_note(shell: &mut Shell) {
+    let Some(edit) = shell.canvas.note_edit.clone() else { return };
+    let current = shell.session.as_ref().and_then(|s| {
+        s.doc().by_uuid(edit.node).map(|n| s.doc().get(n, node::TEXT).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default())
+    });
+    if current.as_deref() == Some(edit.text.trim()) {
+        shell.canvas.note_edit = None;
+        return;
+    }
+    match run(shell, "diagram.set-text", json!({ "node": edit.node.to_string(), "text": edit.text.trim() })) {
+        Ok(_) => shell.canvas.note_edit = None,
+        Err(e) => {
+            if let Some(ne) = shell.canvas.note_edit.as_mut() {
+                ne.refused = Some(e);
+                ne.opened = true;
+            }
+        }
+    }
+}
+
+/// The note's text typed in place: a field over the note; Cmd/Ctrl+Enter or the keyboard
+/// leaving commits, Escape closes, a refusal stays under it.
+fn note_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, rect: Rect, z: f32) {
+    let paint = ui.painter().clone();
+    let field = rect.shrink(6.0 * z);
+    paint.rect_filled(field, 2.0 * z, p.surface);
+    widgets::record_visible(ui, &mut shell.registry, "workspace.canvas.note", "field", field);
+    let Some(ne) = shell.canvas.note_edit.as_mut() else { return };
+    let fresh = std::mem::take(&mut ne.opened);
+    let id = widgets::egui_id("workspace.canvas.note");
+    let edit = egui::TextEdit::multiline(&mut ne.text)
+        .id(id)
+        .frame(egui::Frame::NONE)
+        .font(types::UI.scaled(z).font())
+        .text_color(p.text)
+        .char_limit(archforge_diagram::rules::MAX_TEXT)
+        .desired_width(field.width().max(0.0));
+    let out = edit.show(&mut ui.new_child(egui::UiBuilder::new().max_rect(field.shrink(4.0 * z))));
+    if fresh {
+        out.response.request_focus();
+    }
+    if let Some(refused) = ne.refused.clone() {
+        ux::text(&paint, pos2(rect.left(), rect.bottom() + 4.0 * z), &refused, types::CAPTION, p.amber, Some(rect.width().max(0.0)));
+    }
+    let has_focus = out.response.has_focus();
+    let (enter, escape) = ui.input(|i| (i.modifiers.command && i.key_pressed(egui::Key::Enter), i.key_pressed(egui::Key::Escape)));
+    let nothing_focused = ui.memory(|m| m.focused().is_none());
+    if escape && (has_focus || out.response.lost_focus() || nothing_focused) {
+        shell.canvas.note_edit = None;
+    } else if (has_focus && enter) || (!fresh && out.response.lost_focus()) {
+        commit_note(shell);
+    }
 }
 
 /// The name a new entity gets: "Entity", then "Entity 2" and on, never one its schema has.
@@ -722,6 +834,13 @@ pub(crate) fn overlays(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rec
     if let Some(rect) = rename_rect {
         rename_field(shell, ui, p, rect, view.zoom);
     }
+    let note_rect = shell
+        .session
+        .as_ref()
+        .and_then(|s| shell.canvas.note_edit.as_ref().and_then(|ne| s.doc().by_uuid(ne.node)).map(|n| view.rect(&bounds_of(s.doc(), n))));
+    if let Some(rect) = note_rect {
+        note_field(shell, ui, p, rect, view.zoom);
+    }
     if let Some(menu) = shell.canvas.menu.clone() {
         entity_menu(shell, ui, p, r, &menu);
     }
@@ -960,6 +1079,7 @@ fn entity_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, menu: &En
 fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
     if !shell.canvas.focused
         || shell.canvas.rename.is_some()
+        || shell.canvas.note_edit.is_some()
         || shell.canvas.menu.is_some()
         || shell.explorer.delete.is_some()
         || shell.diagrams.new.is_some()
@@ -1042,6 +1162,9 @@ pub fn retain_valid(state: &mut crate::canvas::State, store: &Store) {
     let alive = |id: &Uuid| store.by_uuid(*id).is_some_and(|o| store.is_alive(o));
     if state.rename.as_ref().is_some_and(|r| !alive(&r.node) || !alive(&r.entity)) {
         state.rename = None;
+    }
+    if state.note_edit.as_ref().is_some_and(|ne| !alive(&ne.node)) {
+        state.note_edit = None;
     }
     if state.menu.as_ref().is_some_and(|m| !alive(&m.node)) {
         state.menu = None;

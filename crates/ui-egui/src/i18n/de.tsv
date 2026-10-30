@@ -37,6 +37,17 @@ str		Element · model	Element · Modell
 str		Skill · model	Skill · Modell
 str		Columns · {n}	Spalten · {n}
 str		Keys · {n}	Schlüssel · {n}
+str		Add a column	Spalte hinzufügen
+str		Add unique constraint	Eindeutigkeitsbedingung hinzufügen
+str		Columns, in key order	Spalten in Schlüsselreihenfolge
+str		Nulls distinct	Nullwerte verschieden
+str		Problems · {n}	Probleme · {n}
+str		lacks its table or its key	hat keine Tabelle oder keinen Schlüssel
+str		{column} is a key column and may be null	{column} ist eine Schlüsselspalte und darf leer sein
+str		{from} to {to} is many to many	{from} zu {to} ist viele zu viele
+str		{key}: {problem}	{key}: {problem}
+str		{name} has no primary key	{name} hat keinen Primärschlüssel
+str		{name} removed · {keys} went with it	{name} entfernt · {keys} ging mit
 str		Add column	Spalte hinzufügen
 str		Add skill	Skill hinzufügen
 str		Kind	Art

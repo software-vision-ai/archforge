@@ -20,6 +20,8 @@ pub enum Screen {
     WorkspaceTable,
     /// The same table with the Skills tab open on it, a skill on the schema inherited.
     WorkspaceSkills,
+    /// The same table with the key editor open on its unique constraint.
+    WorkspaceKeyEditor,
     /// A first diagram of a schema, just created and open, empty.
     WorkspaceDiagramEmpty,
     /// A diagram of two tables and their relationship, the first table selected.
@@ -74,9 +76,21 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
         shell.adopt_project();
         crate::explorer::add(&mut shell, crate::explorer::Kind::Schema);
     }
-    if matches!(screen, Screen::WorkspaceTable | Screen::WorkspaceSkills) {
+    if matches!(screen, Screen::WorkspaceTable | Screen::WorkspaceSkills | Screen::WorkspaceKeyEditor) {
         shell.adopt_project();
         sample_table(&mut shell, screen == Screen::WorkspaceSkills)?;
+        if screen == Screen::WorkspaceKeyEditor
+            && let Some(session) = shell.session.as_ref()
+        {
+            let store = session.doc();
+            let customer = store.alive().find(|o| archforge_er::rules::name_of(store, *o) == "Customer");
+            if let Some(e) = customer
+                && let Ok(entity) = store.uuid(e)
+                && let Some(unique) = crate::keys::rows(store, e).into_iter().find(|k| !k.primary)
+            {
+                crate::keys::open(&mut shell, entity, Some(&unique));
+            }
+        }
     }
     if matches!(
         screen,

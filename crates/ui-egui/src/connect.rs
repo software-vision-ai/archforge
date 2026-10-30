@@ -440,18 +440,24 @@ pub(crate) fn toast(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     }
 }
 
-/// The many-to-many badge at a line's middle: a click opens the mapping table offer.
-pub(crate) fn badge(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: Pos2, relationship: Uuid) {
+/// A problem badge on the canvas: the problems on hover; for a many-to-many relationship a click
+/// opens the mapping table offer.
+#[allow(clippy::too_many_arguments, reason = "a badge is drawn from its place, its control id, its element and its texts")]
+pub(crate) fn badge(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: Pos2, control_id: Uuid, element: Uuid, texts: &[String], many_to_many: bool) {
     let paint = ui.painter().clone();
     let b = Rect::from_center_size(at, Vec2::splat(18.0));
     paint.circle_filled(b.center(), 9.0, p.surface);
     paint.circle_stroke(b.center(), 9.0, Stroke::new(1.2, p.key_foreign));
-    ux::icon_in(&paint, Rect::from_center_size(b.center(), Vec2::splat(10.0)), &icons::PLUS, p.key_foreign);
-    if control(shell, ui, &format!("workspace.canvas.edge.{relationship}.resolve"), "button", b, true)
-        .on_hover_text(tr("Many to many · add a mapping table"))
-        .clicked()
-    {
-        offer_mapping(shell, relationship);
+    if many_to_many {
+        ux::icon_in(&paint, Rect::from_center_size(b.center(), Vec2::splat(10.0)), &icons::PLUS, p.key_foreign);
+    } else {
+        let g = ux::galley(&paint, "!", types::CAPTION, p.key_foreign, None);
+        paint.galley(b.center() - g.size() / 2.0, g, p.key_foreign);
+    }
+    let hint = if many_to_many { tr("Many to many · add a mapping table") } else { texts.join("\n") };
+    // Live for its hover; only a many-to-many badge acts on a click.
+    if control(shell, ui, &format!("workspace.canvas.problem.{control_id}"), "badge", b, true).on_hover_text(hint).clicked() && many_to_many {
+        offer_mapping(shell, element);
     }
 }
 
