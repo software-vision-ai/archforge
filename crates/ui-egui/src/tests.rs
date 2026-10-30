@@ -2402,3 +2402,55 @@ fn a_table_of_another_schema_dragged_from_the_explorer_lands_with_its_line_once(
     h.run();
     assert_eq!(shown(&h), (2, 0));
 }
+
+#[test]
+fn the_properties_body_scrolls_and_an_editor_opened_below_the_fold_comes_into_view() {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1440.0, 760.0));
+    let customer = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
+        let schema = id(s.execute("er.schema.add", &serde_json::json!({ "name": "Shop" })).unwrap().value);
+        let customer = id(s.execute("er.entity.add", &serde_json::json!({ "schema": schema, "name": "Customer" })).unwrap().value);
+        for i in 0..14 {
+            s.execute(
+                "er.attribute.add",
+                &serde_json::json!({ "entity": customer, "name": format!("column_{i}"), "type": "BIGINT", "primary_key": i == 0 }),
+            )
+            .unwrap();
+        }
+        s.execute("view.select", &serde_json::json!({ "ids": [customer] })).unwrap();
+        customer
+    };
+    let _ = customer;
+    h.run();
+    // The sections past the window's foot are out of reach until the body scrolls.
+    assert!(!ids(&h).iter().any(|i| i == "workspace.properties.indexes.add"), "the Indexes section starts below the fold");
+    assert!(h.state().panels.content > h.state().panels.body.unwrap().height());
+    let body = h.state().panels.body.unwrap();
+    h.event(egui::Event::PointerMoved(body.center()));
+    h.event(egui::Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Point,
+        delta: egui::vec2(0.0, -2000.0),
+        modifiers: egui::Modifiers::NONE,
+        phase: egui::TouchPhase::Move,
+    });
+    // The wheel scrolls smoothly over several frames.
+    h.run_steps(30);
+    assert!(h.state().panels.scroll > 0.0);
+    let at = rect_of(&h, "workspace.properties.indexes.add").center();
+    click(&mut h, at);
+    h.run();
+    // The index editor opened at the foot is brought into view with its Apply.
+    let apply = rect_of(&h, "workspace.properties.index.apply");
+    let body = h.state().panels.body.unwrap();
+    assert!(body.contains_rect(apply), "{apply:?} in {body:?}");
+    // Another table starts at the top again.
+    {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let st = s.doc();
+        let schema = st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap()).unwrap().to_string();
+        s.execute("view.select", &serde_json::json!({ "ids": [schema] })).unwrap();
+    }
+    h.run();
+    assert_eq!(h.state().panels.scroll, 0.0);
+}

@@ -18,6 +18,9 @@ pub struct Entry {
 pub struct Registry {
     current: Vec<Entry>,
     last: Vec<Entry>,
+    /// The lowest edge of any control laid out since `reach_from`, recorded or scrolled out of
+    /// view: how far a scrolling body's content goes.
+    reach: f32,
 }
 
 impl Registry {
@@ -29,6 +32,16 @@ impl Registry {
         self.current.push(Entry { id: id.to_string(), kind, rect: [rect.min.x, rect.min.y, rect.max.x, rect.max.y] });
     }
 
+    /// Starts measuring how far the controls laid out from here reach, from `top`.
+    pub fn reach_from(&mut self, top: f32) {
+        self.reach = top;
+    }
+
+    /// The lowest edge of the controls laid out since `reach_from`.
+    pub fn reach(&self) -> f32 {
+        self.reach
+    }
+
     /// The widgets of the most recent frame (the frame in progress once it has drawn any).
     pub fn entries(&self) -> &[Entry] {
         if self.current.is_empty() { &self.last } else { &self.current }
@@ -38,6 +51,9 @@ impl Registry {
 /// Records a widget only while it is inside its clip rectangle, so a control scrolled out of view
 /// is neither listed nor clickable.
 pub fn record_visible(ui: &Ui, reg: &mut Registry, id: &str, kind: &'static str, rect: Rect) {
+    if rect.bottom().is_finite() {
+        reg.reach = reg.reach.max(rect.bottom());
+    }
     if ui.clip_rect().intersects(rect) {
         reg.record(id, kind, rect);
     }

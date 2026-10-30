@@ -59,6 +59,47 @@ pub struct State {
     /// The sequence or view editor (slice S7), and the element whose selection opened it.
     pub object_edit: Option<crate::objects::ObjectEdit>,
     pub selected_object: Option<Uuid>,
+    /// The body's scroll (archforge-gm2.36): how far it is scrolled, how tall its content was last
+    /// frame, what it was scrolled for (a new panel or selection starts at the top), the editors
+    /// open last frame, whether an editor that just opened is still to be brought into view, and
+    /// the body's visible rectangle.
+    pub scroll: f32,
+    pub content: f32,
+    pub scrolled_for: Option<(Panel, Option<Uuid>)>,
+    pub open_editors: Vec<Option<Option<Uuid>>>,
+    pub reveal: bool,
+    pub body: Option<Rect>,
+}
+
+/// What is left under the last control of a scrolled body, for its trailing text.
+const SCROLL_TAIL: f32 = 48.0;
+
+/// The editors open, by what they edit, to tell when one opens.
+fn open_editors(s: &State) -> Vec<Option<Option<Uuid>>> {
+    vec![
+        s.column.as_ref().map(|e| e.target),
+        s.skill.as_ref().map(|e| e.target),
+        s.key.as_ref().map(|e| e.target),
+        s.check.as_ref().map(|e| e.target),
+        s.index.as_ref().map(|e| e.target),
+        s.type_edit.as_ref().map(|e| e.target),
+        s.object_edit.as_ref().map(|e| e.target),
+    ]
+}
+
+/// Brings an editor card that just opened into the scrolled body's view: its foot if it fits,
+/// else its top. Editors call it with their card once drawn.
+pub(crate) fn reveal(shell: &mut Shell, ui: &egui::Ui, card: Rect) {
+    let Some(body) = shell.panels.body.filter(|_| shell.panels.reveal) else { return };
+    shell.panels.reveal = false;
+    let down = (card.bottom() + 8.0 - body.bottom()).min(card.top() - 8.0 - body.top());
+    let up = body.top() + 8.0 - card.top();
+    if down > 0.0 {
+        shell.panels.scroll += down;
+    } else if up > 0.0 {
+        shell.panels.scroll -= up;
+    }
+    ui.ctx().request_repaint();
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -963,6 +1004,7 @@ fn column_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: 
     let card = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width.max(0.0), height));
     paint.rect_filled(card, 8.0, p.surface);
     paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
+    reveal(shell, ui, card);
     let inner = (width - 24.0).max(0.0);
     let at = |x: f32, dy: f32| card.min + vec2(12.0 + x, dy);
     let take = std::mem::take(&mut edit.opened);
@@ -1626,6 +1668,7 @@ fn skill_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f
     let card = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width.max(0.0), height));
     paint.rect_filled(card, 8.0, p.surface);
     paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
+    reveal(shell, ui, card);
     let at = |x: f32, dy: f32| card.min + vec2(12.0 + x, dy);
     let take = edit.opened;
     edit.opened = false;
@@ -1856,12 +1899,48 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, 
         description_field(shell, ui, p, pos2(r.left() + PAD, r.top() + y + 49.0), (r.width() - 2.0 * PAD).max(0.0), &s);
         body_y += 17.0 + FIELD + 14.0;
     }
-    let mut clip = ui.new_child(egui::UiBuilder::new().max_rect(Rect::from_min_max(pos2(r.left(), body_y), r.max)));
-    clip.set_clip_rect(Rect::from_min_max(pos2(r.left(), body_y), r.max));
+    // The body scrolls under the pinned heading and description (archforge-gm2.36): a new panel
+    // or selection starts at the top, an editor that opens is brought into view, the wheel over
+    // the body moves it within its content.
+    let body = Rect::from_min_max(pos2(r.left(), body_y), r.max);
+    if shell.panels.scrolled_for != Some((panel, s.id)) {
+        shell.panels.scrolled_for = Some((panel, s.id));
+        shell.panels.scroll = 0.0;
+    }
+    let open = open_editors(&shell.panels);
+    if open != shell.panels.open_editors {
+        let opened = open.iter().zip(shell.panels.open_editors.iter().chain(std::iter::repeat(&None))).any(|(now, was)| now.is_some() && now != was);
+        shell.panels.reveal |= opened;
+        shell.panels.open_editors = open;
+    }
+    let room = (shell.panels.content - body.height()).max(0.0);
+    shell.panels.scroll = shell.panels.scroll.clamp(0.0, room);
+    shell.panels.body = Some(body);
+    let top = body_y - shell.panels.scroll;
+    let mut clip = ui.new_child(egui::UiBuilder::new().max_rect(body));
+    clip.set_clip_rect(body);
+    shell.registry.reach_from(top);
     match panel {
-        Panel::Properties => properties(shell, &mut clip, p, r, body_y, &s),
-        Panel::Skills => skills(shell, &mut clip, p, r, body_y, &s),
+        Panel::Properties => properties(shell, &mut clip, p, r, top, &s),
+        Panel::Skills => skills(shell, &mut clip, p, r, top, &s),
         _ => {}
+    }
+    shell.panels.content = (shell.registry.reach() - top + SCROLL_TAIL).max(0.0);
+    shell.panels.reveal = false;
+    if ui.rect_contains_pointer(body) && shell.panels.menu.is_none() {
+        let dy = ui.input(|i| i.smooth_scroll_delta.y);
+        if dy != 0.0 {
+            shell.panels.scroll = (shell.panels.scroll - dy).clamp(0.0, (shell.panels.content - body.height()).max(0.0));
+        }
+    }
+    // A thin thumb at the right edge while the content overflows (the design has no scroll bar;
+    // owner-delegated UX).
+    if shell.panels.content > body.height() + 1.0 {
+        let track = body.shrink2(vec2(0.0, 6.0));
+        let h = (track.height() * body.height() / shell.panels.content).max(24.0).min(track.height());
+        let at = shell.panels.scroll / (shell.panels.content - body.height()).max(1.0);
+        let thumb = Rect::from_min_size(pos2(r.right() - 6.0, track.top() + at * (track.height() - h)), vec2(4.0, h));
+        paint.rect_filled(thumb, 2.0, p.border_hover);
     }
     if let Some(notice) = shell.panels.notice.clone() {
         ux::text(&paint, pos2(r.left() + PAD, r.bottom() - 36.0), &notice, types::CAPTION, p.amber, Some((r.width() - 2.0 * PAD).max(0.0)));
