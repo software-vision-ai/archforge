@@ -34,7 +34,7 @@ goes into the design first. `crates/ui-egui/README.md` lists the crate's public 
 ## Controls
 - Every interactive control is registered with an automation id, its kind and its rectangle, as
   `control` in `crates/ui-egui/src/home.rs` does through `crates/ui-egui/src/widgets.rs`. Ids are
-  dotted, lower-case and stable: `<screen>.<area>.<thing>`, such as `home.tab.home`. The tests find
+  dotted, lower-case and stable: `<screen>.<area>.<thing>`, such as `strip.home`. The tests find
   controls by id, never by position.
 - A control whose screen does not exist yet says "Not available yet" on hover.
 - The interface never touches the file system: what it needs from the host comes through

@@ -16,6 +16,7 @@ pub mod state;
 pub mod theme;
 pub mod ux;
 pub mod widgets;
+pub mod workspace;
 
 pub use fonts::{FontEntry, FontSource};
 pub use state::UiState;
@@ -33,6 +34,9 @@ pub struct Services {
     pub projects_folder: Option<Folder>,
     /// Creates projects; none keeps Create project unavailable.
     pub projects: Option<std::sync::Arc<dyn ProjectHost>>,
+    /// Mints ids for the elements of an open project's model (version 7, from the host's clock
+    /// and randomness); none keeps a project's model from opening, and the status bar says so.
+    pub ids: Option<std::sync::Arc<dyn Fn() -> archforge_mof::Uuid + Send + Sync>>,
 }
 
 /// The host's part in making projects. The shell never touches a project's files or its database:
@@ -69,6 +73,14 @@ pub enum CreateError {
     },
 }
 
+/// Why an open project's model could not be made: the host gave no id source, or the engine
+/// refused with its own words, which the status bar shows small and untranslated.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SessionError {
+    NoIdSource,
+    Engine(String),
+}
+
 /// A folder as the shell shows it: where it is, and how the interface names it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Folder {
@@ -99,6 +111,14 @@ pub struct Shell {
     pub new_project: Option<new_project::Dialog>,
     /// The open project, once one is created.
     pub project: Option<Opened>,
+    /// The open project's model: the ER session over a store with the project's Model root, made
+    /// once when the project opens and dropped when it closes. Nothing reaches the project's
+    /// database yet; the status bar says so.
+    pub session: Option<archforge_er::Session>,
+    /// Why the session could not be made, when it could not.
+    pub session_error: Option<SessionError>,
+    /// The project the session was made for, so it is made once.
+    adopted: Option<std::path::PathBuf>,
     /// Set by `request_quit`; the next frame closes the window.
     quit_requested: bool,
 }
@@ -119,7 +139,63 @@ impl Shell {
             home: home::Data::default(),
             new_project: None,
             project: None,
+            session: None,
+            session_error: None,
+            adopted: None,
             quit_requested: false,
+        }
+    }
+
+    /// Opens a project in the window: the workspace replaces Home at the next frame.
+    pub fn open_project(&mut self, opened: Opened) {
+        self.project = Some(opened);
+        self.session = None;
+        self.session_error = None;
+        self.adopted = None;
+    }
+
+    /// Closes the open project: Home comes back at the next frame.
+    pub fn close_project(&mut self) {
+        self.project = None;
+        self.session = None;
+        self.session_error = None;
+        self.adopted = None;
+    }
+
+    /// Where the open project lives, as the status bar says it: the label of the folder new
+    /// projects go in when the project is inside it, else its parent folder's name.
+    pub fn location(&self) -> Option<String> {
+        let path = &self.project.as_ref()?.path;
+        if let Some(folder) = &self.services.projects_folder
+            && path.starts_with(&folder.path)
+        {
+            return Some(folder.label.clone());
+        }
+        path.parent().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().into_owned())
+    }
+
+    /// The session of the open project, made once per project through the ER crate, with the
+    /// host's ids. Without an id source, or when the engine refuses, the reason is kept for the
+    /// status bar and said once in the log.
+    fn adopt_project(&mut self) {
+        let Some(project) = &self.project else { return };
+        if self.adopted.as_ref() == Some(&project.path) {
+            return;
+        }
+        self.adopted = Some(project.path.clone());
+        let built = match &self.services.ids {
+            Some(source) => {
+                let source = source.clone();
+                archforge_er::new_project_session(&project.name, Box::new(move || source())).map_err(SessionError::Engine)
+            }
+            None => Err(SessionError::NoIdSource),
+        };
+        match built {
+            Ok(s) => self.session = Some(s),
+            Err(e) => {
+                log::error!("the project's model could not be opened: {e:?}");
+                self.session_error = Some(e);
+            }
         }
     }
 
@@ -153,6 +229,7 @@ impl Shell {
             theme::apply(ctx, self.state.theme);
             self.applied_theme = Some(self.state.theme);
         }
+        self.adopt_project();
         if std::mem::take(&mut self.quit_requested) {
             // Quitting goes through the normal close path, so the exit hook runs.
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -167,7 +244,8 @@ impl Shell {
         }
     }
 
-    /// Draws the window: Home, the start screen, and the New project dialog over it when open.
+    /// Draws the window: the workspace when a project is open, otherwise Home, and the New project
+    /// dialog over Home while it is open.
     pub fn ui(&mut self, ui: &mut egui::Ui) {
         self.registry.begin_frame();
         // The OS window title follows the in-app title; on a host with a native title bar it is
@@ -177,7 +255,11 @@ impl Shell {
             ui.ctx().send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
             self.last_title = title;
         }
-        home::show(self, ui);
+        if self.project.is_some() {
+            workspace::show(self, ui);
+        } else {
+            home::show(self, ui);
+        }
         new_project::show(self, ui);
     }
 }

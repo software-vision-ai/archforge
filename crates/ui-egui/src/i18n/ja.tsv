@@ -10,6 +10,31 @@ str		Open project	プロジェクトを開く
 str		Close	閉じる
 str		Home	ホーム
 str		Search projects and actions	プロジェクトと操作を検索
+# ワークスペース
+str		Find an element, view, or action	要素、ビュー、操作を検索
+str		No schemas yet	スキーマはまだありません
+str		New diagram	新しい図
+str		Project created	プロジェクトを作成しました
+str		Model · the project's root	モデル · プロジェクトのルート
+str		Model	モデル
+str		Name	名前
+str		Models	モデル
+str		Source Control	ソース管理
+str		Agent	エージェント
+str		Appearance	外観
+str		Properties	プロパティ
+str		Skills	スキル
+str		Filter models…	モデルを絞り込む…
+str		Filter diagrams…	図を絞り込む…
+str		Filter changes…	変更を絞り込む…
+str		No diagrams yet	図はまだありません
+str		No changes yet	変更はまだありません
+str		Nothing selected	何も選択されていません
+str		No agent connected	エージェントは接続されていません
+str		Not saved to the project yet	プロジェクトにはまだ保存されていません
+str		The model could not be opened	モデルを開けませんでした
+str		The host gives no ids for the model's elements	ホストがモデル要素の ID を提供していません
+str		Collapse panel	パネルを折りたたむ
 str		Not available yet	まだ利用できません
 str		Welcome home	ホーム
 str		Welcome to Archforge	Archforge へようこそ

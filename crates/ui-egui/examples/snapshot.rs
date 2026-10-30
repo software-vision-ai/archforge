@@ -1,5 +1,5 @@
 //! Renders the window offscreen to a PNG, without opening one. Usage:
-//! `cargo run -p archforge-ui-egui --features snapshot --example snapshot -- <out.png> [light|dark] [width height [scale]] [--screen home|new-project|new-project-failed]`
+//! `cargo run -p archforge-ui-egui --features snapshot --example snapshot -- <out.png> [light|dark] [width height [scale]] [--screen home|new-project|new-project-failed|workspace]`
 
 use archforge_ui_egui::offscreen::Screen;
 use archforge_ui_egui::theme::ThemeKind;
@@ -12,7 +12,7 @@ fn main() {
 }
 
 fn run() -> Result<(), String> {
-    const USAGE: &str = "usage: snapshot <out.png> [light|dark] [width height [scale]] [--screen home|new-project|new-project-failed]";
+    const USAGE: &str = "usage: snapshot <out.png> [light|dark] [width height [scale]] [--screen home|new-project|new-project-failed|workspace]";
     let mut args: Vec<String> = std::env::args().skip(1).collect();
     let mut screen = Screen::Home;
     if let Some(at) = args.iter().position(|a| a == "--screen") {
@@ -20,7 +20,8 @@ fn run() -> Result<(), String> {
             Some("home") => Screen::Home,
             Some("new-project") => Screen::NewProject,
             Some("new-project-failed") => Screen::NewProjectFailed,
-            other => return Err(format!("--screen {other:?} is not home or new-project; {USAGE}")),
+            Some("workspace") => Screen::Workspace,
+            other => return Err(format!("--screen {other:?} is not home, new-project, new-project-failed or workspace; {USAGE}")),
         };
         args.drain(at..(at + 2).min(args.len()));
     }

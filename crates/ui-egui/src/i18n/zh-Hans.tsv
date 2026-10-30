@@ -10,6 +10,31 @@ str		Open project	打开项目
 str		Close	关闭
 str		Home	主页
 str		Search projects and actions	搜索项目和操作
+# 工作区
+str		Find an element, view, or action	查找元素、视图或操作
+str		No schemas yet	还没有架构
+str		New diagram	新建图
+str		Project created	项目已创建
+str		Model · the project's root	模型 · 项目的根
+str		Model	模型
+str		Name	名称
+str		Models	模型
+str		Source Control	源代码管理
+str		Agent	代理
+str		Appearance	外观
+str		Properties	属性
+str		Skills	技能
+str		Filter models…	筛选模型…
+str		Filter diagrams…	筛选图…
+str		Filter changes…	筛选更改…
+str		No diagrams yet	还没有图
+str		No changes yet	还没有更改
+str		Nothing selected	未选择任何内容
+str		No agent connected	未连接代理
+str		Not saved to the project yet	尚未保存到项目
+str		The model could not be opened	无法打开模型
+str		The host gives no ids for the model's elements	宿主未提供模型元素的 ID
+str		Collapse panel	折叠面板
 str		Not available yet	尚不可用
 str		Welcome home	主页
 str		Welcome to Archforge	欢迎使用 Archforge

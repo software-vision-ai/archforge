@@ -224,7 +224,12 @@ mod tests {
     #[test]
     fn every_preference_is_applied_and_a_damaged_file_is_set_aside() {
         let stored = prefs::Prefs {
-            ui: archforge_ui_egui::UiState { theme: archforge_ui_egui::theme::ThemeKind::Dark, language: "de".to_string(), home_banner_closed: true },
+            ui: archforge_ui_egui::UiState {
+                theme: archforge_ui_egui::theme::ThemeKind::Dark,
+                language: "de".to_string(),
+                home_banner_closed: true,
+                ..archforge_ui_egui::UiState::default()
+            },
         };
         let mut shell = Shell::new(archforge_ui_egui::Services::default());
         prefs::apply(&stored, &mut shell);

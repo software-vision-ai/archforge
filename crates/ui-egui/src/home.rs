@@ -20,12 +20,12 @@ use crate::ux::{self, Palette, icons, types};
 use crate::{Shell, widgets};
 
 /// The title strip's height: the macOS title bar's, where the strip is that bar.
-const STRIP: f32 = 28.0;
+pub(crate) const STRIP: f32 = 28.0;
 /// Where the strip's controls start beside the traffic lights on macOS, and elsewhere.
 const STRIP_LEFT_MAC: f32 = 70.0;
 const STRIP_LEFT: f32 = 10.0;
 /// The bar's height, its bottom divider included.
-const BAR: f32 = 48.0;
+pub(crate) const BAR: f32 = 48.0;
 /// The page's side margins.
 const MARGIN: f32 = 72.0;
 /// The gap between start cards.
@@ -130,7 +130,7 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
         let bar = Rect::from_min_size(pos2(full.left(), strip.bottom()), vec2(full.width(), BAR));
         // The bar first, so the strip's drag area does not cover it.
         bar_row(shell, ui, &p, bar);
-        title_strip(shell, ui, &p, strip);
+        title_strip(shell, ui, &p, strip, true);
         let body = Rect::from_min_max(pos2(full.left(), bar.bottom()), full.max);
         let mut page = ui.new_child(egui::UiBuilder::new().max_rect(body).layout(egui::Layout::top_down(egui::Align::Min)));
         page.set_clip_rect(body);
@@ -147,7 +147,7 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
 
 /// A control's hit area, recorded for automation. A control whose screen is not built yet says so
 /// on hover and its click is never taken.
-fn control(shell: &mut Shell, ui: &egui::Ui, id: &str, kind: &'static str, rect: Rect, live: bool) -> egui::Response {
+pub(crate) fn control(shell: &mut Shell, ui: &egui::Ui, id: &str, kind: &'static str, rect: Rect, live: bool) -> egui::Response {
     widgets::record_visible(ui, &mut shell.registry, id, kind, rect);
     let resp = ui.interact(rect, widgets::egui_id(id), Sense::click());
     if live { resp.on_hover_cursor(egui::CursorIcon::PointingHand) } else { resp.on_hover_text(tr("Not available yet")) }
@@ -156,7 +156,8 @@ fn control(shell: &mut Shell, ui: &egui::Ui, id: &str, kind: &'static str, rect:
 /// The title strip: the active Home button and Open project at the left, beside the traffic
 /// lights on macOS, and the theme switch at the right. On macOS the strip is the window's title
 /// bar, so dragging it moves the window and a double click zooms it.
-fn title_strip(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
+/// False when the Home button closed the project.
+pub(crate) fn title_strip(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, home_active: bool) -> bool {
     let paint = ui.painter();
     paint.rect_filled(r, 0.0, p.title_strip);
     if shell.top_inset > 0.0 {
@@ -170,10 +171,14 @@ fn title_strip(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
         }
     }
     let left = r.left() + if shell.top_inset > 0.0 { STRIP_LEFT_MAC } else { STRIP_LEFT };
-    // Home, the active place: its icon in the accent colour, straight on the strip.
+    // Home: the active place on the start screen, in the accent colour; in the workspace the way
+    // back to it.
     let home = Rect::from_min_size(pos2(left, r.top() + 2.0), Vec2::splat(24.0));
-    ux::icon(paint, home.min + vec2(4.0, 4.0), &icons::HOME, 16.0, p.accent);
-    control(shell, ui, "home.tab.home", "tab", home, true).on_hover_text(tr("Home"));
+    ux::icon(paint, home.min + vec2(4.0, 4.0), &icons::HOME, 16.0, if home_active { p.accent } else { p.text_secondary });
+    if control(shell, ui, "strip.home", "tab", home, true).on_hover_text(tr("Home")).clicked() && !home_active {
+        shell.close_project();
+        return false;
+    }
     // Open project, a ghost button beside it.
     let ghost = home.right() + 5.0;
     ux::icon_weighted(paint, pos2(ghost + 6.0, r.top() + 7.0), &icons::PLUS, 14.0, 1.5, p.text_secondary);
@@ -181,7 +186,7 @@ fn title_strip(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     control(
         shell,
         ui,
-        "home.header.open-project",
+        "strip.open-project",
         "button",
         Rect::from_min_max(pos2(ghost, r.top() + 2.0), pos2(label.right() + 8.0, r.top() + 26.0)),
         false,
@@ -190,7 +195,7 @@ fn title_strip(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     let dark = shell.state.theme.is_dark();
     let switch = Rect::from_min_size(pos2(r.right() - 42.0, r.top() + 2.0), Vec2::splat(24.0));
     let hint = if dark { tr("Switch to the light appearance") } else { tr("Switch to the dark appearance") };
-    let resp = control(shell, ui, "home.theme", "button", switch, true).on_hover_text(hint);
+    let resp = control(shell, ui, "strip.theme", "button", switch, true).on_hover_text(hint);
     if resp.hovered() {
         paint.rect_filled(switch, 6.0, p.border);
     }
@@ -198,6 +203,7 @@ fn title_strip(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     if resp.clicked() {
         shell.state.theme = if dark { ThemeKind::Light } else { ThemeKind::Dark };
     }
+    true
 }
 
 /// The bar: the brand at the left; the search field, help and the avatar at the right.
@@ -241,7 +247,7 @@ fn bar_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
 
 /// Two letters for the avatar: the first of the first and the last name, or the first two of a
 /// single name; none for a name with no letters.
-fn initials(name: &str) -> Option<String> {
+pub(crate) fn initials(name: &str) -> Option<String> {
     let words: Vec<&str> = name.split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()).collect();
     let first = |w: &str| w.chars().next();
     let out: String = match words.as_slice() {

@@ -9,6 +9,31 @@ str		Open project	Open project
 str		Close	Close
 str		Home	Home
 str		Search projects and actions	Search projects and actions
+# Workspace
+str		Find an element, view, or action	Find an element, view, or action
+str		No schemas yet	No schemas yet
+str		New diagram	New diagram
+str		Project created	Project created
+str		Model · the project's root	Model · the project's root
+str		Model	Model
+str		Name	Name
+str		Models	Models
+str		Source Control	Source Control
+str		Agent	Agent
+str		Appearance	Appearance
+str		Properties	Properties
+str		Skills	Skills
+str		Filter models…	Filter models…
+str		Filter diagrams…	Filter diagrams…
+str		Filter changes…	Filter changes…
+str		No diagrams yet	No diagrams yet
+str		No changes yet	No changes yet
+str		Nothing selected	Nothing selected
+str		No agent connected	No agent connected
+str		Not saved to the project yet	Not saved to the project yet
+str		The model could not be opened	The model could not be opened
+str		The host gives no ids for the model's elements	The host gives no ids for the model's elements
+str		Collapse panel	Collapse panel
 str		Not available yet	Not available yet
 str		Welcome home	Welcome home
 str		Welcome to Archforge	Welcome to Archforge
