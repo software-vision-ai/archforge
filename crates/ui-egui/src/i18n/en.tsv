@@ -31,6 +31,38 @@ str		Schema · model	Schema · model
 str		Table · model, in every diagram	Table · model, in every diagram
 str		Column · model	Column · model
 str		Element · model	Element · model
+str		Skill · model	Skill · model
+str		Columns · {n}	Columns · {n}
+str		Keys · {n}	Keys · {n}
+str		Add column	Add column
+str		Add skill	Add skill
+str		Kind	Kind
+str		Regular	Regular
+str		Mapping table	Mapping table
+str		Type	Type
+str		Primary key	Primary key
+str		Not null	Not null
+str		Unique	Unique
+str		Remove	Remove
+str		Apply	Apply
+str		Inherited · {n}	Inherited · {n}
+str		every table	every table
+str		every relationship	every relationship
+str		every column	every column
+str		project	project
+str		overridden below	overridden below
+str		Every table below	Every table below
+str		Every relationship below	Every relationship below
+str		Columns of a type	Columns of a type
+str		Applies to	Applies to
+str		Column type	Column type
+str		When	When
+str		Modelling	Modelling
+str		Drawing	Drawing
+str		Naming	Naming
+str		Export	Export
+str		Dialect	Dialect
+str		Guidance	Guidance
 str		Element	Element
 str		New diagram	New diagram
 str		Project created	Project created
@@ -126,3 +158,15 @@ str		Help & shortcuts	Help & shortcuts
 str		Switch to the dark appearance	Switch to the dark appearance
 str		Switch to the light appearance	Switch to the light appearance
 str		Last view: {view}	Last view: {view}
+str		This model	This model
+str		This schema	This schema
+str		This table	This table
+str		This column	This column
+str		This skill	This skill
+str		This element	This element
+str		On this model · {n}	On this model · {n}
+str		On this schema · {n}	On this schema · {n}
+str		On this table · {n}	On this table · {n}
+str		On this column · {n}	On this column · {n}
+str		On this skill · {n}	On this skill · {n}
+str		On this element · {n}	On this element · {n}

@@ -1,5 +1,5 @@
 //! Renders the window offscreen to a PNG, without opening one. Usage:
-//! `cargo run -p archforge-ui-egui --features snapshot --example snapshot -- <out.png> [light|dark] [width height [scale]] [--screen home|new-project|new-project-failed|workspace|workspace-schema]`
+//! `cargo run -p archforge-ui-egui --features snapshot --example snapshot -- <out.png> [light|dark] [width height [scale]] [--screen home|new-project|new-project-failed|workspace|workspace-schema|workspace-table|workspace-skills]`
 
 use archforge_ui_egui::offscreen::Screen;
 use archforge_ui_egui::theme::ThemeKind;
@@ -23,7 +23,13 @@ fn run() -> Result<(), String> {
             Some("new-project-failed") => Screen::NewProjectFailed,
             Some("workspace") => Screen::Workspace,
             Some("workspace-schema") => Screen::WorkspaceSchema,
-            other => return Err(format!("--screen {other:?} is not home, new-project, new-project-failed, workspace or workspace-schema; {USAGE}")),
+            Some("workspace-table") => Screen::WorkspaceTable,
+            Some("workspace-skills") => Screen::WorkspaceSkills,
+            other => {
+                return Err(format!(
+                    "--screen {other:?} is not home, new-project, new-project-failed, workspace, workspace-schema, workspace-table or workspace-skills; {USAGE}"
+                ));
+            }
         };
         args.drain(at..(at + 2).min(args.len()));
     }

@@ -80,6 +80,7 @@ fn required() -> (Vec<(String, String)>, Vec<String>) {
     // The start cards' texts, which `tr` takes through a table.
     strings.extend(crate::home::start_texts().map(|s| (String::new(), s.to_string())));
     strings.extend(crate::workspace::texts().map(|s| (String::new(), s.to_string())));
+    strings.extend(crate::panels::texts().map(|s| (String::new(), s.to_string())));
     strings.sort();
     strings.dedup();
     plurals.sort();

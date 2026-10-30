@@ -32,6 +32,38 @@ str		Schema · model	スキーマ · モデル
 str		Table · model, in every diagram	テーブル · モデル、すべての図に
 str		Column · model	列 · モデル
 str		Element · model	要素 · モデル
+str		Skill · model	スキル · モデル
+str		Columns · {n}	列 · {n}
+str		Keys · {n}	キー · {n}
+str		Add column	列を追加
+str		Add skill	スキルを追加
+str		Kind	種類
+str		Regular	通常
+str		Mapping table	対応テーブル
+str		Type	型
+str		Primary key	主キー
+str		Not null	NOT NULL
+str		Unique	一意
+str		Remove	削除
+str		Apply	適用
+str		Inherited · {n}	継承 · {n}
+str		every table	すべてのテーブル
+str		every relationship	すべてのリレーションシップ
+str		every column	すべての列
+str		project	プロジェクト
+str		overridden below	下で上書き
+str		Every table below	配下のすべてのテーブル
+str		Every relationship below	配下のすべてのリレーションシップ
+str		Columns of a type	特定の型の列
+str		Applies to	適用先
+str		Column type	列の型
+str		When	いつ
+str		Modelling	モデリング
+str		Drawing	描画
+str		Naming	命名
+str		Export	エクスポート
+str		Dialect	方言
+str		Guidance	内容
 str		Element	要素
 str		New diagram	新しい図
 str		Project created	プロジェクトを作成しました
@@ -127,3 +159,15 @@ str		Help & shortcuts	ヘルプとショートカット
 str		Switch to the dark appearance	ダーク表示に切り替え
 str		Switch to the light appearance	ライト表示に切り替え
 str		Last view: {view}	前回のビュー: {view}
+str		This model	このモデル
+str		This schema	このスキーマ
+str		This table	このテーブル
+str		This column	この列
+str		This skill	このスキル
+str		This element	この要素
+str		On this model · {n}	このモデルに · {n}
+str		On this schema · {n}	このスキーマに · {n}
+str		On this table · {n}	このテーブルに · {n}
+str		On this column · {n}	この列に · {n}
+str		On this skill · {n}	このスキルに · {n}
+str		On this element · {n}	この要素に · {n}

@@ -844,3 +844,146 @@ fn the_filter_narrows_the_tree_and_the_keys_walk_it() {
     key(&mut h, egui::Key::F2, egui::Modifiers::NONE);
     assert!(h.state().explorer.rename.as_ref().is_some_and(|r| r.text == "Schema 2"));
 }
+
+/// A harness with a schema, a table of two columns, the table selected.
+fn table_harness() -> (Harness<'static, Shell>, String) {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1120.0));
+    let (schema, customer) = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
+        let schema = id(s.execute("er.schema.add", &serde_json::json!({ "name": "Shop" })).unwrap().value);
+        let customer = id(s.execute("er.entity.add", &serde_json::json!({ "schema": schema, "name": "Customer" })).unwrap().value);
+        s.execute("er.attribute.add", &serde_json::json!({ "entity": customer, "name": "customer_id", "type": "BIGINT", "primary_key": true }))
+            .unwrap();
+        s.execute("er.attribute.add", &serde_json::json!({ "entity": customer, "name": "email", "type": "TEXT" })).unwrap();
+        s.execute("view.select", &serde_json::json!({ "ids": [customer] })).unwrap();
+        (schema, customer)
+    };
+    let _ = schema;
+    h.run();
+    (h, customer)
+}
+
+#[test]
+fn properties_lists_a_tables_columns_and_the_editor_changes_them_through_the_engine() {
+    let (mut h, customer) = table_harness();
+    let found = ids(&h);
+    let rows: Vec<String> = found.iter().filter(|i| i.starts_with("workspace.properties.column.0")).cloned().collect();
+    assert_eq!(rows.len(), 2, "two column rows: {found:?}");
+    assert!(found.iter().any(|i| i == "workspace.properties.kind"));
+    // Open the second column's editor and make it unique and not null.
+    let at = rect_of(&h, &rows[1]).center();
+    click(&mut h, at);
+    assert!(h.state().panels.column.is_some(), "the editor opened");
+    let at = rect_of(&h, "workspace.properties.column.unique").center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.properties.column.not-null").center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.properties.column.apply").center();
+    click(&mut h, at);
+    assert!(h.state().panels.column.is_none(), "{:?}", h.state().panels.column);
+    let s = h.state().session.as_ref().unwrap();
+    let st = s.doc();
+    let email_obj = st.alive().find(|o| archforge_er::rules::name_of(st, *o) == "email").unwrap();
+    assert!(archforge_er::rules::is_unique(st, email_obj));
+    assert!(!archforge_er::rules::is_nullable(st, email_obj));
+    assert!(s.can_undo());
+    // The + adds a column through the editor.
+    let at = rect_of(&h, "workspace.properties.columns.add").center();
+    click(&mut h, at);
+    assert!(h.state().panels.column.as_ref().is_some_and(|c| c.target.is_none() && c.name == "column_1"));
+    let at = rect_of(&h, "workspace.properties.column.apply").center();
+    click(&mut h, at);
+    let st = h.state().session.as_ref().unwrap().doc();
+    let customer_obj = st.by_uuid(archforge_mof::Uuid::parse(&customer).unwrap()).unwrap();
+    assert_eq!(st.list(customer_obj, archforge_er::entity::ATTRIBUTE).unwrap().len(), 3);
+    // The kind select makes a mapping table.
+    let at = rect_of(&h, "workspace.properties.kind").center();
+    click(&mut h, at);
+    assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::Kind));
+    let at = rect_of(&h, "workspace.properties.kind.1").center();
+    click(&mut h, at);
+    // A mapping table needs its foreign keys: the engine refuses, and the panel says so.
+    assert!(h.state().panels.menu.is_none());
+    assert!(h.state().panels.notice.is_some(), "the refusal is shown");
+    let st = h.state().session.as_ref().unwrap().doc();
+    assert_eq!(st.get(customer_obj, archforge_er::entity::KIND).unwrap(), archforge_mof::Value::Enum(archforge_er::EntityKind::Regular.index()));
+}
+
+#[test]
+fn a_selected_column_opens_its_editor_once_so_cancel_and_add_stay_closed_and_open() {
+    let (mut h, customer) = table_harness();
+    let email = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let st = s.doc();
+        let email = st.alive().find(|o| archforge_er::rules::name_of(st, *o) == "email").unwrap();
+        let email = st.uuid(email).unwrap().to_string();
+        s.execute("view.select", &serde_json::json!({ "ids": [email] })).unwrap();
+        email
+    };
+    h.run();
+    assert!(h.state().panels.column.as_ref().is_some_and(|c| c.target.map(|t| t.to_string()) == Some(email.clone())), "the column's editor opened");
+    let at = rect_of(&h, "workspace.properties.column.cancel").center();
+    click(&mut h, at);
+    h.run();
+    assert!(h.state().panels.column.is_none(), "Cancel stays closed: {:?}", h.state().panels.column);
+    let at = rect_of(&h, "workspace.properties.columns.add").center();
+    click(&mut h, at);
+    h.run();
+    assert!(h.state().panels.column.as_ref().is_some_and(|c| c.target.is_none()), "the + opens an editor for a new column");
+    // Selecting the table and the column again opens the column's editor once more.
+    {
+        let s = h.state_mut().session.as_mut().unwrap();
+        s.execute("view.select", &serde_json::json!({ "ids": [customer] })).unwrap();
+    }
+    h.run();
+    {
+        let s = h.state_mut().session.as_mut().unwrap();
+        s.execute("view.select", &serde_json::json!({ "ids": [email] })).unwrap();
+    }
+    h.run();
+    assert!(h.state().panels.column.as_ref().is_some_and(|c| c.target.map(|t| t.to_string()) == Some(email)));
+}
+
+#[test]
+fn the_skills_tab_adds_a_skill_on_the_table_and_shows_the_schemas_as_inherited() {
+    let (mut h, customer) = table_harness();
+    {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let st = s.doc();
+        let schema = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap();
+        let schema_id = st.uuid(schema).unwrap().to_string();
+        s.execute("skill.add", &serde_json::json!({ "subject": schema_id, "name": "Table naming", "applies_to": "table", "triggers": ["naming"] }))
+            .unwrap();
+        // Adding selected the skill; the panel shows the table again.
+        s.execute("view.select", &serde_json::json!({ "ids": [customer] })).unwrap();
+    }
+    let at = rect_of(&h, "workspace.panels.skills").center();
+    click(&mut h, at);
+    let found = ids(&h);
+    assert_eq!(found.iter().filter(|i| i.starts_with("workspace.skills.row.")).count(), 1, "the schema's skill is inherited: {found:?}");
+    let at = rect_of(&h, "workspace.skills.add").center();
+    click(&mut h, at);
+    assert!(h.state().panels.skill.as_ref().is_some_and(|e| e.target.is_none() && e.name == "Skill 1"));
+    let at = rect_of(&h, "workspace.skills.when.naming").center();
+    click(&mut h, at);
+    assert!(h.state().panels.skill.as_ref().unwrap().triggers[2]);
+    let at = rect_of(&h, "workspace.skills.apply").center();
+    click(&mut h, at);
+    assert!(h.state().panels.skill.is_none(), "{:?}", h.state().panels.skill);
+    let st = h.state().session.as_ref().unwrap().doc();
+    let customer_obj = st.by_uuid(archforge_mof::Uuid::parse(&customer).unwrap()).unwrap();
+    let own: Vec<_> =
+        archforge_core::skills::skills(st).into_iter().filter(|s| archforge_core::skills::subject_of(st, *s) == Some(customer_obj)).collect();
+    assert_eq!(own.len(), 1);
+    assert_eq!(archforge_core::skills::triggers_of(st, own[0]), [archforge_core::SkillTrigger::Naming]);
+    let found = ids(&h);
+    assert_eq!(found.iter().filter(|i| i.starts_with("workspace.skills.row.")).count(), 2, "own and inherited: {found:?}");
+    // A refusal stays with the editor: a second skill of the same name on the table.
+    let at = rect_of(&h, "workspace.skills.add").center();
+    click(&mut h, at);
+    h.state_mut().panels.skill.as_mut().unwrap().name = "Skill 1".into();
+    let at = rect_of(&h, "workspace.skills.apply").center();
+    click(&mut h, at);
+    assert!(h.state().panels.skill.as_ref().is_some_and(|e| e.refused.is_some()));
+}

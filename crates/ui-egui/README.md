@@ -5,7 +5,9 @@ workspace once a project is open (`workspace`: the project bar, the activity rai
 explorer over the session (`explorer`: schemas, tables, columns and skills; `+` adds, a name is
 typed in place, Delete asks when other things go with it),
 the diagram tab strip with its new-diagram control over the empty canvas, the right rail between
-the canvas and its panel, the status bar), drawn from the design with its own palette, type and
+the canvas and its panel with Properties (`panels`: a schema's name; a table's name, kind, columns
+with the in-place column editor, keys) and Skills (the skills on the selection, the inherited ones,
+the skill editor) following the selection, the status bar), drawn from the design with its own palette, type and
 icons (`ux`). An open project has an in-memory ER session (`Shell::session`); nothing reaches the
 project's database yet, and the status bar says so once there is something unsaved.
 
@@ -39,11 +41,13 @@ or explorer with nothing to show says so in one line, never with a help text.
 | the title strip's controls | `strip.home`, `strip.open-project`, `strip.theme` on every screen; on the workspace `strip.home` closes the project |
 | `i18n::{tr, tr_ctx, trn, set_language}` | catalogue lookups at draw time |
 | `offscreen::render` | `pub fn render(width: f32, height: f32, scale: f32, theme: ThemeKind) -> Result<(u32, u32, Vec<u8>), String>` (feature `snapshot`) |
-| `offscreen::render_screen` | the same for a `Screen`: Home, the New project dialog over it, the workspace, or the workspace with its first schema being named |
+| `offscreen::render_screen` | the same for a `Screen`: Home, the New project dialog over it, the workspace, its first schema being named, a table's Properties, or the Skills tab |
 | `explorer::{State, add, remove_selection, rows, fresh_name, Kind}` | the Models explorer's state and the actions the tests and the host drive |
+| `panels::{State, draw, retain_valid, ColumnEdit, SkillEdit, Applies, Menu}` | the right panels' state and body; every change goes through `er.*` and `skill.*` commands |
 | `new_project::{open, name_problem, file_name}` | the New project dialog: open it, a name's problem in words, the file a name gives |
 | `Folder` | a folder as the shell shows it: its path and its label |
 
 **Non-goals.** The screens behind Home's other controls, the Diagrams and Source Control
-explorers' contents, the panels' fields and the canvas: slices W3 and W4 of the workspace chrome,
-then their own rows.
+explorers' contents, the Agent and Appearance panels, relationships and foreign keys in Properties
+(they need the canvas), key editing beyond the column flags, and the canvas: slice W4 of the
+workspace chrome, then their own rows.
