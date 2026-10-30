@@ -126,10 +126,17 @@ fn subject(shell: &Shell, project: &str) -> Subject {
                 }
                 Some(c) if c == archforge_er::ATTRIBUTE => (tr("Column · model"), tr("Column"), tr("This column"), tr("On this column · {n}")),
                 Some(c) if c == archforge_core::SKILL => (tr("Skill · model"), tr("Skill"), tr("This skill"), tr("On this skill · {n}")),
+                Some(c) if c == archforge_diagram::DIAGRAM => {
+                    let schema = crate::diagrams::schema_of(store, o).map(|s| archforge_er::rules::name_of(store, s)).unwrap_or_default();
+                    (fmt(&tr("Diagram · of {schema}"), &[("schema", &schema)]), tr("Diagram"), tr("This diagram"), tr("On this diagram · {n}"))
+                }
                 _ => (tr("Element · model"), tr("Element"), tr("This element"), tr("On this element · {n}")),
             };
-            let name =
-                if class == Some(archforge_core::SKILL) { archforge_core::skills::name_of(store, o) } else { archforge_er::rules::name_of(store, o) };
+            let name = match class {
+                Some(c) if c == archforge_core::SKILL => archforge_core::skills::name_of(store, o),
+                Some(c) if c == archforge_diagram::DIAGRAM => crate::diagrams::diagram_name(store, o),
+                _ => archforge_er::rules::name_of(store, o),
+            };
             Subject { obj: Some(o), id: store.uuid(o).ok(), class, name, kind, word, this, on_this }
         }
         None => Subject::root(project),
@@ -349,6 +356,26 @@ fn properties(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y:
             name_field(shell, ui, p, pos2(r.left() + PAD, y), width, subject, "er.schema.rename", "schema");
         }
         Some(c) if c == archforge_er::ENTITY => entity_body(shell, ui, p, r, y, subject),
+        Some(c) if c == archforge_diagram::DIAGRAM => {
+            // A diagram: its name, and the schema it is of, which does not change.
+            let half = (width - 16.0) / 2.0;
+            name_field(shell, ui, p, pos2(r.left() + PAD, y), half, subject, "diagram.rename", "diagram");
+            let schema = shell
+                .session
+                .as_ref()
+                .and_then(|s| {
+                    let store = s.doc();
+                    Some(archforge_er::rules::name_of(store, crate::diagrams::schema_of(store, subject.obj?)?))
+                })
+                .unwrap_or_default();
+            let at = pos2(r.left() + PAD + half + 16.0, y);
+            ux::text(&paint, at, &tr("Schema"), types::CAPTION, p.text_secondary, Some(half.max(0.0)));
+            let field = Rect::from_min_size(at + vec2(0.0, 17.0), vec2(half.max(0.0), FIELD));
+            paint.rect_filled(field, 6.0, p.field);
+            ux::text(&paint, field.min + vec2(8.0, 5.0), &schema, types::SMALL, p.text, Some((half - 36.0).max(0.0)));
+            ux::icon(&paint, pos2(field.right() - 22.0, field.top() + 6.0), &icons::CHEVRON_DOWN, 16.0, p.text_muted);
+            control(shell, ui, "workspace.properties.schema", "select", field, false);
+        }
         Some(c) if c == archforge_er::ATTRIBUTE => {
             // A column: its table's panel, the column's editor open on it.
             let (entity, entity_id) = shell

@@ -66,6 +66,10 @@ str		Dialect	方言
 str		Guidance	内容
 str		Element	要素
 str		New diagram	新しい図
+str		Create	作成
+str		ER diagram	ER図
+str		New schema	新しいスキーマ
+str		Name the diagram	図に名前を付けてください
 str		Project created	プロジェクトを作成しました
 str		Model · the project's root	モデル · プロジェクトのルート
 str		Model	モデル
@@ -80,6 +84,26 @@ str		Filter models…	モデルを絞り込む…
 str		Filter diagrams…	図を絞り込む…
 str		Filter changes…	変更を絞り込む…
 str		No diagrams yet	図はまだありません
+str		Select	選択
+str		Pan	パン
+str		Entity	エンティティ
+str		Relationship	リレーションシップ
+str		Relationship types	リレーションシップの種類
+str		Note	ノート
+str		Group	グループ
+str		Group kinds	グループの種類
+str		Key status	キーの状態
+str		Grid	グリッド
+str		Minimap	ミニマップ
+str		Hide minimap	ミニマップを隠す
+str		Show minimap	ミニマップを表示
+str		Whole diagram	図全体
+str		Zoom in	拡大
+str		Zoom out	縮小
+str		{n} %	{n} %
+str		Empty diagram	空の図
+str		Unnamed diagram	名前のない図
+str		Model behind this diagram	この図の背後にあるモデル
 str		No changes yet	変更はまだありません
 str		Nothing selected	何も選択されていません
 str		No agent connected	エージェントは接続されていません
@@ -171,3 +195,7 @@ str		On this table · {n}	このテーブルに · {n}
 str		On this column · {n}	この列に · {n}
 str		On this skill · {n}	このスキルに · {n}
 str		On this element · {n}	この要素に · {n}
+str		Diagram	図
+str		Diagram · of {schema}	図 · {schema} の
+str		This diagram	この図
+str		On this diagram · {n}	この図に · {n}

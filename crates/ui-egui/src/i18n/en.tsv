@@ -65,6 +65,10 @@ str		Dialect	Dialect
 str		Guidance	Guidance
 str		Element	Element
 str		New diagram	New diagram
+str		Create	Create
+str		ER diagram	ER diagram
+str		New schema	New schema
+str		Name the diagram	Name the diagram
 str		Project created	Project created
 str		Model · the project's root	Model · the project's root
 str		Model	Model
@@ -79,6 +83,26 @@ str		Filter models…	Filter models…
 str		Filter diagrams…	Filter diagrams…
 str		Filter changes…	Filter changes…
 str		No diagrams yet	No diagrams yet
+str		Select	Select
+str		Pan	Pan
+str		Entity	Entity
+str		Relationship	Relationship
+str		Relationship types	Relationship types
+str		Note	Note
+str		Group	Group
+str		Group kinds	Group kinds
+str		Key status	Key status
+str		Grid	Grid
+str		Minimap	Minimap
+str		Hide minimap	Hide minimap
+str		Show minimap	Show minimap
+str		Whole diagram	Whole diagram
+str		Zoom in	Zoom in
+str		Zoom out	Zoom out
+str		{n} %	{n} %
+str		Empty diagram	Empty diagram
+str		Unnamed diagram	Unnamed diagram
+str		Model behind this diagram	Model behind this diagram
 str		No changes yet	No changes yet
 str		Nothing selected	Nothing selected
 str		No agent connected	No agent connected
@@ -170,3 +194,7 @@ str		On this table · {n}	On this table · {n}
 str		On this column · {n}	On this column · {n}
 str		On this skill · {n}	On this skill · {n}
 str		On this element · {n}	On this element · {n}
+str		Diagram	Diagram
+str		Diagram · of {schema}	Diagram · of {schema}
+str		This diagram	This diagram
+str		On this diagram · {n}	On this diagram · {n}

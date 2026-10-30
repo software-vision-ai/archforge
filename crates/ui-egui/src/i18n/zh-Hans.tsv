@@ -66,6 +66,10 @@ str		Dialect	方言
 str		Guidance	内容
 str		Element	元素
 str		New diagram	新建图
+str		Create	创建
+str		ER diagram	ER图
+str		New schema	新架构
+str		Name the diagram	请为图命名
 str		Project created	项目已创建
 str		Model · the project's root	模型 · 项目的根
 str		Model	模型
@@ -80,6 +84,26 @@ str		Filter models…	筛选模型…
 str		Filter diagrams…	筛选图…
 str		Filter changes…	筛选更改…
 str		No diagrams yet	还没有图
+str		Select	选择
+str		Pan	平移
+str		Entity	实体
+str		Relationship	关系
+str		Relationship types	关系类型
+str		Note	备注
+str		Group	分组
+str		Group kinds	分组类型
+str		Key status	键状态
+str		Grid	网格
+str		Minimap	缩略图
+str		Hide minimap	隐藏缩略图
+str		Show minimap	显示缩略图
+str		Whole diagram	整个图
+str		Zoom in	放大
+str		Zoom out	缩小
+str		{n} %	{n} %
+str		Empty diagram	空图
+str		Unnamed diagram	未命名的图
+str		Model behind this diagram	此图背后的模型
 str		No changes yet	还没有更改
 str		Nothing selected	未选择任何内容
 str		No agent connected	未连接代理
@@ -171,3 +195,7 @@ str		On this table · {n}	此表上 · {n}
 str		On this column · {n}	此列上 · {n}
 str		On this skill · {n}	此技能上 · {n}
 str		On this element · {n}	此元素上 · {n}
+str		Diagram	图
+str		Diagram · of {schema}	图 · 属于 {schema}
+str		This diagram	此图
+str		On this diagram · {n}	此图上 · {n}
