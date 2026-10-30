@@ -644,6 +644,64 @@ fn place_entity(shell: &mut Shell, d: Obj, x: f64, y: f64) {
     }
 }
 
+/// Places a table dragged from the Models explorer on diagram `d`, centred on `at`; a table of
+/// another schema is welcome (slice S7), one already on the diagram is said so and left.
+pub(crate) fn place_dropped(shell: &mut Shell, d: Obj, entity: Uuid, at: (f64, f64)) {
+    shell.canvas.notice = None;
+    let Some(session) = shell.session.as_ref() else { return };
+    let store = session.doc();
+    let Some(e) = store.by_uuid(entity).filter(|e| store.class_of(*e).ok() == Some(archforge_er::ENTITY)) else { return };
+    if nodes_of(store, d).into_iter().any(|n| element_of(store, n) == Some(e)) {
+        shell.canvas.notice = Some(tr("Already on this diagram"));
+        return;
+    }
+    let Some(diagram_id) = uuid(store, d) else { return };
+    let columns = store.list(e, archforge_er::entity::ATTRIBUTE).map(|l| l.len()).unwrap_or(0);
+    // A very wide table lands as tall as a node may be; its rows past that say how many more.
+    let height = content_height(columns).min(archforge_diagram::rules::MAX_SIZE);
+    let (x, y) = ((at.0 - ENTITY_WIDTH / 2.0).round(), (at.1 - height / 2.0).round());
+    let place = json!({ "diagram": diagram_id.to_string(), "element": entity.to_string(), "x": x, "y": y, "width": ENTITY_WIDTH, "height": height });
+    // Its relationships and subtype lines to the tables the diagram shows draw with it: (line's
+    // element, source, target), None for the table being placed.
+    let shown = |t: Obj| nodes_of(store, d).into_iter().find(|n| element_of(store, *n) == Some(t)).and_then(|n| uuid(store, n));
+    let mut lines: Vec<(Uuid, Option<Uuid>, Option<Uuid>)> = Vec::new();
+    let links = store
+        .referrers(e)
+        .into_iter()
+        .filter(|(_, prop)| *prop == archforge_er::relationship::FROM || *prop == archforge_er::relationship::TO)
+        .map(|(r, _)| r)
+        .chain(archforge_er::rules::supertype_links(store, e))
+        .chain(archforge_er::rules::subtype_links(store, e));
+    for l in links {
+        let Some((from, to)) = <archforge_er::ErView as archforge_diagram::DiagramView>::ends(store, l) else { continue };
+        let end = |t: Obj| if t == e { Some(None) } else { shown(t).map(Some) };
+        if let (Some(a), Some(b), Some(id)) = (end(from), end(to), uuid(store, l))
+            && !lines.iter().any(|(x, _, _)| *x == id)
+        {
+            lines.push((id, a, b));
+        }
+    }
+    let out = shell.session.as_mut().map(|session| {
+        session.batch(&tr("Place table"), |b| {
+            let placed = b.execute("diagram.place", &place)?;
+            let node = placed.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string();
+            for (element, source, target) in &lines {
+                let end = |x: &Option<Uuid>| x.map_or(node.clone(), |u| u.to_string());
+                b.execute(
+                    "diagram.connect",
+                    &json!({ "diagram": diagram_id.to_string(), "element": element.to_string(), "source": end(source), "target": end(target) }),
+                )?;
+            }
+            Ok(())
+        })
+    });
+    match out {
+        Some(Ok(_)) => select(shell, vec![entity]),
+        Some(Err(e)) => shell.canvas.notice = Some(e.to_string()),
+        None => {}
+    }
+}
+
 /// Where a new table lands on the open diagram when the diagram is of `schema`: to the right of
 /// the rightmost node, or near the top left of an empty diagram; none when no such diagram is open.
 fn free_place(shell: &Shell, schema: Obj) -> Option<(Uuid, f64, f64)> {

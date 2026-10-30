@@ -75,6 +75,33 @@ str		disjoint	disjoint
 str		overlapping	overlapping
 str		A subtype joins two tables	A subtype joins two tables
 str		Add a literal	Add a literal
+str		Sequences · {n}	Sequences · {n}
+str		Add sequence	Add sequence
+str		Sequence	Sequence
+str		Sequence · model	Sequence · model
+str		This sequence	This sequence
+str		On this sequence · {n}	On this sequence · {n}
+str		from {start} by {increment}	from {start} by {increment}
+str		cycles	cycles
+str		owned by {column}	owned by {column}
+str	sequence	Start	Start
+str		Increment	Increment
+str		Minimum	Minimum
+str		Maximum	Maximum
+str		Cycle	Cycle
+str		Owned by	Owned by
+plural		{n} more column, not listed	{n} more column, not listed|{n} more columns, not listed
+str		{field} takes a whole number	{field} takes a whole number
+str		Views · {n}	Views · {n}
+str		Add view	Add view
+str		View	View
+str		View · model	View · model
+str		This view	This view
+str		On this view · {n}	On this view · {n}
+str		view	view
+str		materialized	materialized
+str		Materialized	Materialized
+str		Query	Query
 str		Pick a type	Pick a type
 str		domain	domain
 str		enum	enum
@@ -172,6 +199,7 @@ str		No diagrams yet	No diagrams yet
 str		Select	Select
 str		Pan	Pan
 str		Entity	Entity
+str		Entity · {schema}	Entity · {schema}
 str		Relationship	Relationship
 str		Generalization	Generalization
 str		Relationship types	Relationship types
@@ -181,6 +209,8 @@ str		Group kinds	Group kinds
 str		Key status	Key status
 str		Grid	Grid
 str		Add table	Add table
+str		Place table	Place table
+str		Already on this diagram	Already on this diagram
 str		Resize	Resize
 str		Arrange	Arrange
 str		Connect	Connect

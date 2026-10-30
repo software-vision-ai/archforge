@@ -76,6 +76,33 @@ str		disjoint	disjointe
 str		overlapping	chevauchante
 str		A subtype joins two tables	Un sous-type relie deux tables
 str		Add a literal	Ajouter un littéral
+str		Sequences · {n}	Séquences · {n}
+str		Add sequence	Ajouter une séquence
+str		Sequence	Séquence
+str		Sequence · model	Séquence · modèle
+str		This sequence	Cette séquence
+str		On this sequence · {n}	Sur cette séquence · {n}
+str		from {start} by {increment}	à partir de {start}, pas de {increment}
+str		cycles	cyclique
+str		owned by {column}	appartient à {column}
+str	sequence	Start	Valeur initiale
+str		Increment	Incrément
+str		Minimum	Minimum
+str		Maximum	Maximum
+str		Cycle	Cyclique
+str		Owned by	Appartient à
+plural		{n} more column, not listed	{n} colonne de plus, non listée|{n} colonnes de plus, non listées
+str		{field} takes a whole number	{field} attend un nombre entier
+str		Views · {n}	Vues · {n}
+str		Add view	Ajouter une vue
+str		View	Vue
+str		View · model	Vue · modèle
+str		This view	Cette vue
+str		On this view · {n}	Sur cette vue · {n}
+str		view	vue
+str		materialized	matérialisée
+str		Materialized	Matérialisée
+str		Query	Requête
 str		Pick a type	Choisir un type
 str		domain	domaine
 str		enum	énumération
@@ -173,6 +200,7 @@ str		No diagrams yet	Aucun diagramme pour l’instant
 str		Select	Sélectionner
 str		Pan	Déplacer
 str		Entity	Entité
+str		Entity · {schema}	Entité · {schema}
 str		Relationship	Relation
 str		Generalization	Généralisation
 str		Relationship types	Types de relation
@@ -182,6 +210,8 @@ str		Group kinds	Types de groupe
 str		Key status	État des clés
 str		Grid	Grille
 str		Add table	Ajouter une table
+str		Place table	Placer la table
+str		Already on this diagram	Déjà dans ce diagramme
 str		Resize	Redimensionner
 str		Arrange	Disposer
 str		Connect	Relier

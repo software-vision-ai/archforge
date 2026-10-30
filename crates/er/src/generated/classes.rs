@@ -299,6 +299,8 @@ pub struct SchemaObj {
     pub domain: Vec<Value>,
     pub enum_type: Vec<Value>,
     pub generalization: Vec<Value>,
+    pub sequence: Vec<Value>,
+    pub view: Vec<Value>,
 }
 
 impl Reflect for SchemaObj {
@@ -340,6 +342,8 @@ impl Reflect for SchemaObj {
             schema::DOMAIN => Some(&self.domain),
             schema::ENUM_TYPE => Some(&self.enum_type),
             schema::GENERALIZATION => Some(&self.generalization),
+            schema::SEQUENCE => Some(&self.sequence),
+            schema::VIEW => Some(&self.view),
             _ => None,
         }
     }
@@ -350,6 +354,8 @@ impl Reflect for SchemaObj {
             schema::DOMAIN => Some(&mut self.domain),
             schema::ENUM_TYPE => Some(&mut self.enum_type),
             schema::GENERALIZATION => Some(&mut self.generalization),
+            schema::SEQUENCE => Some(&mut self.sequence),
+            schema::VIEW => Some(&mut self.view),
             _ => None,
         }
     }
@@ -377,6 +383,12 @@ impl SchemaObj {
     pub fn generalization(&self) -> &[Value] {
         &self.generalization
     }
+    pub fn sequence(&self) -> &[Value] {
+        &self.sequence
+    }
+    pub fn view(&self) -> &[Value] {
+        &self.view
+    }
     pub fn set_description(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
         store.set(obj, element::DESCRIPTION, v.map_or(Value::Null, Value::str))
     }
@@ -397,6 +409,12 @@ impl SchemaObj {
     }
     pub fn push_generalization(store: &mut Store, obj: Obj, value: Value) -> Result<u32, Invalid> {
         store.push(obj, schema::GENERALIZATION, value)
+    }
+    pub fn push_sequence(store: &mut Store, obj: Obj, value: Value) -> Result<u32, Invalid> {
+        store.push(obj, schema::SEQUENCE, value)
+    }
+    pub fn push_view(store: &mut Store, obj: Obj, value: Value) -> Result<u32, Invalid> {
+        store.push(obj, schema::VIEW, value)
     }
 }
 
@@ -2127,5 +2145,259 @@ impl GeneralizationObj {
     }
     pub fn set_key_relationship(store: &mut Store, obj: Obj, v: Option<Obj>) -> Result<(), Invalid> {
         store.set(obj, generalization::KEY_RELATIONSHIP, v.map_or(Value::Null, Value::Ref))
+    }
+}
+
+/// An object of Sequence, with every inherited stored property as a field.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SequenceObj {
+    pub description: Option<Arc<str>>,
+    pub name: Option<Arc<str>>,
+    pub start: i64,
+    pub increment: i64,
+    pub minimum: Option<Arc<str>>,
+    pub maximum: Option<Arc<str>>,
+    pub cycle: bool,
+    pub owned_by: Option<Obj>,
+}
+
+impl Default for SequenceObj {
+    fn default() -> Self {
+        Self { description: None, name: None, start: 1, increment: 1, minimum: None, maximum: None, cycle: false, owned_by: None }
+    }
+}
+
+impl Reflect for SequenceObj {
+    fn class(&self) -> ClassId {
+        SEQUENCE
+    }
+    fn get(&self, prop: PropId) -> Option<Value> {
+        match prop {
+            element::DESCRIPTION => Some(self.description.clone().map_or(Value::Null, Value::Str)),
+            named_element::NAME => Some(self.name.clone().map_or(Value::Null, Value::Str)),
+            sequence::START => Some(Value::Int(self.start)),
+            sequence::INCREMENT => Some(Value::Int(self.increment)),
+            sequence::MINIMUM => Some(self.minimum.clone().map_or(Value::Null, Value::Str)),
+            sequence::MAXIMUM => Some(self.maximum.clone().map_or(Value::Null, Value::Str)),
+            sequence::CYCLE => Some(Value::Bool(self.cycle)),
+            sequence::OWNED_BY => Some(self.owned_by.map_or(Value::Null, Value::Ref)),
+            _ => None,
+        }
+    }
+    fn set(&mut self, prop: PropId, value: Value) -> Result<(), String> {
+        match prop {
+            element::DESCRIPTION => {
+                match value {
+                    Value::Null => self.description = None,
+                    Value::Str(v) => self.description = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
+            named_element::NAME => {
+                match value {
+                    Value::Null => self.name = None,
+                    Value::Str(v) => self.name = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
+            sequence::START => {
+                match value {
+                    Value::Int(v) => self.start = v,
+                    other => return Err(format!("not an integer: {other}")),
+                }
+                Ok(())
+            }
+            sequence::INCREMENT => {
+                match value {
+                    Value::Int(v) => self.increment = v,
+                    other => return Err(format!("not an integer: {other}")),
+                }
+                Ok(())
+            }
+            sequence::MINIMUM => {
+                match value {
+                    Value::Null => self.minimum = None,
+                    Value::Str(v) => self.minimum = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
+            sequence::MAXIMUM => {
+                match value {
+                    Value::Null => self.maximum = None,
+                    Value::Str(v) => self.maximum = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
+            sequence::CYCLE => {
+                match value {
+                    Value::Bool(v) => self.cycle = v,
+                    other => return Err(format!("not a boolean: {other}")),
+                }
+                Ok(())
+            }
+            sequence::OWNED_BY => {
+                match value {
+                    Value::Null => self.owned_by = None,
+                    Value::Ref(v) => self.owned_by = Some(v),
+                    other => return Err(format!("not a reference: {other}")),
+                }
+                Ok(())
+            }
+            _ => Err(format!("no single-valued property {} on Sequence", prop.0)),
+        }
+    }
+    fn list(&self, _prop: PropId) -> Option<&[Value]> {
+        None
+    }
+    fn list_mut(&mut self, _prop: PropId) -> Option<&mut Vec<Value>> {
+        None
+    }
+}
+
+impl SequenceObj {
+    pub fn description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
+    pub fn name(&self) -> Option<&str> {
+        self.name.as_deref()
+    }
+    pub fn start(&self) -> i64 {
+        self.start
+    }
+    pub fn increment(&self) -> i64 {
+        self.increment
+    }
+    pub fn minimum(&self) -> Option<&str> {
+        self.minimum.as_deref()
+    }
+    pub fn maximum(&self) -> Option<&str> {
+        self.maximum.as_deref()
+    }
+    pub fn cycle(&self) -> bool {
+        self.cycle
+    }
+    pub fn owned_by(&self) -> Option<Obj> {
+        self.owned_by
+    }
+    pub fn set_description(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, element::DESCRIPTION, v.map_or(Value::Null, Value::str))
+    }
+    pub fn set_name(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, named_element::NAME, v.map_or(Value::Null, Value::str))
+    }
+    pub fn set_start(store: &mut Store, obj: Obj, v: i64) -> Result<(), Invalid> {
+        store.set(obj, sequence::START, Value::Int(v))
+    }
+    pub fn set_increment(store: &mut Store, obj: Obj, v: i64) -> Result<(), Invalid> {
+        store.set(obj, sequence::INCREMENT, Value::Int(v))
+    }
+    pub fn set_minimum(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, sequence::MINIMUM, v.map_or(Value::Null, Value::str))
+    }
+    pub fn set_maximum(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, sequence::MAXIMUM, v.map_or(Value::Null, Value::str))
+    }
+    pub fn set_cycle(store: &mut Store, obj: Obj, v: bool) -> Result<(), Invalid> {
+        store.set(obj, sequence::CYCLE, Value::Bool(v))
+    }
+    pub fn set_owned_by(store: &mut Store, obj: Obj, v: Option<Obj>) -> Result<(), Invalid> {
+        store.set(obj, sequence::OWNED_BY, v.map_or(Value::Null, Value::Ref))
+    }
+}
+
+/// An object of View, with every inherited stored property as a field.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ViewObj {
+    pub description: Option<Arc<str>>,
+    pub name: Option<Arc<str>>,
+    pub query: Option<Arc<str>>,
+    pub materialized: bool,
+}
+
+impl Reflect for ViewObj {
+    fn class(&self) -> ClassId {
+        VIEW
+    }
+    fn get(&self, prop: PropId) -> Option<Value> {
+        match prop {
+            element::DESCRIPTION => Some(self.description.clone().map_or(Value::Null, Value::Str)),
+            named_element::NAME => Some(self.name.clone().map_or(Value::Null, Value::Str)),
+            view::QUERY => Some(self.query.clone().map_or(Value::Null, Value::Str)),
+            view::MATERIALIZED => Some(Value::Bool(self.materialized)),
+            _ => None,
+        }
+    }
+    fn set(&mut self, prop: PropId, value: Value) -> Result<(), String> {
+        match prop {
+            element::DESCRIPTION => {
+                match value {
+                    Value::Null => self.description = None,
+                    Value::Str(v) => self.description = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
+            named_element::NAME => {
+                match value {
+                    Value::Null => self.name = None,
+                    Value::Str(v) => self.name = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
+            view::QUERY => {
+                match value {
+                    Value::Null => self.query = None,
+                    Value::Str(v) => self.query = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
+            view::MATERIALIZED => {
+                match value {
+                    Value::Bool(v) => self.materialized = v,
+                    other => return Err(format!("not a boolean: {other}")),
+                }
+                Ok(())
+            }
+            _ => Err(format!("no single-valued property {} on View", prop.0)),
+        }
+    }
+    fn list(&self, _prop: PropId) -> Option<&[Value]> {
+        None
+    }
+    fn list_mut(&mut self, _prop: PropId) -> Option<&mut Vec<Value>> {
+        None
+    }
+}
+
+impl ViewObj {
+    pub fn description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
+    pub fn name(&self) -> Option<&str> {
+        self.name.as_deref()
+    }
+    pub fn query(&self) -> Option<&str> {
+        self.query.as_deref()
+    }
+    pub fn materialized(&self) -> bool {
+        self.materialized
+    }
+    pub fn set_description(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, element::DESCRIPTION, v.map_or(Value::Null, Value::str))
+    }
+    pub fn set_name(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, named_element::NAME, v.map_or(Value::Null, Value::str))
+    }
+    pub fn set_query(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, view::QUERY, v.map_or(Value::Null, Value::str))
+    }
+    pub fn set_materialized(store: &mut Store, obj: Obj, v: bool) -> Result<(), Invalid> {
+        store.set(obj, view::MATERIALIZED, Value::Bool(v))
     }
 }

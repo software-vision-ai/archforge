@@ -76,6 +76,33 @@ str		disjoint	互斥
 str		overlapping	重叠
 str		A subtype joins two tables	子类型连接两个表
 str		Add a literal	添加字面量
+str		Sequences · {n}	序列 · {n}
+str		Add sequence	添加序列
+str		Sequence	序列
+str		Sequence · model	序列 · 模型
+str		This sequence	此序列
+str		On this sequence · {n}	此序列上 · {n}
+str		from {start} by {increment}	从 {start} 起，步长 {increment}
+str		cycles	循环
+str		owned by {column}	属于 {column}
+str	sequence	Start	起始值
+str		Increment	增量
+str		Minimum	最小值
+str		Maximum	最大值
+str		Cycle	循环
+str		Owned by	所属列
+plural		{n} more column, not listed	另有 {n} 列未列出
+str		{field} takes a whole number	{field} 须为整数
+str		Views · {n}	视图 · {n}
+str		Add view	添加视图
+str		View	视图
+str		View · model	视图 · 模型
+str		This view	此视图
+str		On this view · {n}	此视图上 · {n}
+str		view	视图
+str		materialized	物化
+str		Materialized	物化
+str		Query	查询
 str		Pick a type	选择类型
 str		domain	域
 str		enum	枚举
@@ -173,6 +200,7 @@ str		No diagrams yet	还没有图
 str		Select	选择
 str		Pan	平移
 str		Entity	实体
+str		Entity · {schema}	实体 · {schema}
 str		Relationship	关系
 str		Generalization	泛化
 str		Relationship types	关系类型
@@ -182,6 +210,8 @@ str		Group kinds	分组类型
 str		Key status	键状态
 str		Grid	网格
 str		Add table	添加表
+str		Place table	放置表
+str		Already on this diagram	已在此图中
 str		Resize	调整大小
 str		Arrange	排列
 str		Connect	连接

@@ -49,6 +49,10 @@ pub struct State {
     pub focused: bool,
     /// The last refusal of an add or a removal, shown under the tree until the next action.
     pub notice: Option<String>,
+    /// A table row being dragged towards the canvas, and where one was let go this frame, for the
+    /// canvas to place (slice S7).
+    pub dragging: Option<Uuid>,
+    pub dropped: Option<(Uuid, egui::Pos2)>,
 }
 
 /// A name being typed in place: the element, the text so far, whether the element was just made
@@ -92,6 +96,9 @@ pub enum Kind {
     /// A schema's domain or enum type (slice S5).
     Domain,
     Enum,
+    /// A schema's sequence or view (slice S7).
+    Sequence,
+    View,
 }
 
 /// One row of the tree as drawn.
@@ -181,6 +188,18 @@ pub fn rows(store: &Store, state: &State) -> Vec<Row> {
                 push(&mut rows_under, en, 1, Kind::Enum, label, Some(trn("{n} literal", "{n} literals", n as u64)), false, false);
             }
         }
+        for q in archforge_er::rules::sequences_of(store, schema) {
+            let label = name_of(store, q);
+            if matches(&label) {
+                push(&mut rows_under, q, 1, Kind::Sequence, label, None, false, false);
+            }
+        }
+        for v in archforge_er::rules::views_of(store, schema) {
+            let label = name_of(store, v);
+            if matches(&label) {
+                push(&mut rows_under, v, 1, Kind::View, label, None, false, false);
+            }
+        }
         for e in &entities {
             let e_label = name_of(store, *e);
             let entity_skills = skills.get(e).unwrap_or(&none);
@@ -209,7 +228,10 @@ pub fn rows(store: &Store, state: &State) -> Vec<Row> {
             }
         }
         let s_label = name_of(store, schema);
-        let has_types = !archforge_er::rules::domains_of(store, schema).is_empty() || !archforge_er::rules::enums_of(store, schema).is_empty();
+        let has_types = !archforge_er::rules::domains_of(store, schema).is_empty()
+            || !archforge_er::rules::enums_of(store, schema).is_empty()
+            || !archforge_er::rules::sequences_of(store, schema).is_empty()
+            || !archforge_er::rules::views_of(store, schema).is_empty();
         let expandable = if filter.is_empty() { !schema_skills.is_empty() || !entities.is_empty() || has_types } else { !rows_under.is_empty() };
         if matches(&s_label) || !rows_under.is_empty() {
             let expanded = expandable && open(schema);
@@ -249,6 +271,8 @@ fn kind_word(kind: Kind) -> String {
         Kind::Skill => tr("Skill"),
         Kind::Domain => tr("Domain"),
         Kind::Enum => tr("Enum type"),
+        Kind::Sequence => tr("Sequence"),
+        Kind::View => tr("View"),
     }
 }
 
@@ -319,7 +343,7 @@ pub fn add(shell: &mut Shell, kind: Kind) {
             grow = Some(entity_id);
             ("er.attribute.add", json!({ "entity": entity_id.to_string(), "name": name, "type": "TEXT" }))
         }
-        Kind::Skill | Kind::Domain | Kind::Enum => return,
+        Kind::Skill | Kind::Domain | Kind::Enum | Kind::Sequence | Kind::View => return,
     };
     let out = match (kind, grow) {
         // A table lands on an open diagram of its schema too, in the same step.
@@ -424,8 +448,17 @@ pub fn remove_selection(shell: &mut Shell) {
     }
     let Some(id) = uuid_of(store, obj) else { return };
     let (relationships, keys, foreign_keys) = consequences(store, obj);
-    let has_children =
-        !children_of(store, obj, archforge_er::schema::ENTITY).is_empty() || !children_of(store, obj, archforge_er::entity::ATTRIBUTE).is_empty();
+    // A schema's types, sequences and views count as what goes with it too (slices S5 and S7).
+    let has_children = [
+        archforge_er::schema::ENTITY,
+        archforge_er::schema::DOMAIN,
+        archforge_er::schema::ENUM_TYPE,
+        archforge_er::schema::SEQUENCE,
+        archforge_er::schema::VIEW,
+        archforge_er::entity::ATTRIBUTE,
+    ]
+    .into_iter()
+    .any(|prop| !children_of(store, obj, prop).is_empty());
     if relationships + keys + foreign_keys == 0 && !has_children {
         if let Err(e) = run(shell, "er.remove", json!({ "ids": [id.to_string()] })) {
             shell.explorer.notice = Some(e);
@@ -455,6 +488,8 @@ pub fn retain_valid(state: &mut State, store: &Store) {
 pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     let paint = ui.painter().clone();
     let at = |x: f32, y: f32| r.min + vec2(x, y);
+    // A drop the canvas did not take last frame is gone.
+    shell.explorer.dropped = None;
     ux::text(&paint, at(20.0, 25.0), &tr("Models").to_uppercase(), types::EYEBROW, p.text, Some((r.width() - 80.0).max(0.0)));
     let add = Rect::from_min_size(pos2(r.right() - 40.0, r.top() + 20.0), Vec2::splat(24.0));
     let menu_open = shell.explorer.menu_open;
@@ -531,6 +566,25 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     if shell.explorer.menu_open {
         add_menu(shell, ui, p, add);
     }
+    drag_ghost(shell, ui, p, &rows);
+    // A drag whose row was not drawn when the button went up has ended all the same.
+    if shell.explorer.dragging.is_some() && !ui.input(|i| i.pointer.primary_down()) {
+        shell.explorer.dragging = None;
+    }
+}
+
+/// The table being dragged, as a chip at the pointer above everything.
+fn drag_ghost(shell: &Shell, ui: &egui::Ui, p: &Palette, rows: &[Row]) {
+    let (Some(id), Some(at)) = (shell.explorer.dragging, ui.input(|i| i.pointer.latest_pos())) else { return };
+    let Some(row) = rows.iter().find(|r| r.id == id) else { return };
+    let paint = ui.ctx().layer_painter(egui::LayerId::new(egui::Order::Tooltip, widgets::egui_id("workspace.explorer.drag")));
+    let g = ux::galley(&paint, &row.label, types::SMALL, p.text, Some(220.0));
+    let chip = Rect::from_min_size(at + vec2(12.0, 10.0), vec2(36.0 + g.size().x, 28.0));
+    paint.rect_filled(chip.expand(2.0), 8.0, p.shadow);
+    paint.rect_filled(chip, 6.0, p.surface);
+    paint.rect_stroke(chip, 6.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
+    ux::icon_in(&paint, Rect::from_min_size(chip.min + vec2(10.0, 7.0), Vec2::splat(14.0)), &icons::TABLE, p.accent);
+    paint.galley(chip.min + vec2(30.0, (28.0 - g.size().y) / 2.0), g, p.text);
 }
 
 /// The filter field: a real text field narrowing the tree as it is typed.
@@ -565,6 +619,19 @@ fn tree_row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, column: Rect, y: 
         paint.rect_filled(hit, 6.0, p.accent_tint);
     }
     let id = format!("workspace.explorer.row.{}", row.id);
+    // A table row drags onto the canvas; its click still selects.
+    if row.kind == Kind::Entity {
+        let drag = ui.interact(hit, widgets::egui_id(&format!("{id}.drag")), Sense::drag());
+        if drag.drag_started() {
+            shell.explorer.dragging = Some(row.id);
+        }
+        if drag.drag_stopped() && shell.explorer.dragging == Some(row.id) {
+            shell.explorer.dragging = None;
+            if let Some(at) = ui.input(|i| i.pointer.latest_pos()) {
+                shell.explorer.dropped = Some((row.id, at));
+            }
+        }
+    }
     let resp = control(shell, ui, &id, "row", hit, true);
     if row.expandable {
         let chevron = Rect::from_min_size(pos2(column.left() + 13.0 + indent, y), Vec2::splat(16.0));
@@ -586,6 +653,8 @@ fn tree_row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, column: Rect, y: 
         Kind::Skill => ux::icon_in(&paint, icon_at, &icons::SKILL, if is_selected { p.accent } else { p.text_secondary }),
         Kind::Domain => ux::icon_in(&paint, icon_at, &icons::DOMAIN, if is_selected { p.accent } else { p.text_secondary }),
         Kind::Enum => ux::icon_in(&paint, icon_at, &icons::ENUM, if is_selected { p.accent } else { p.text_secondary }),
+        Kind::Sequence => ux::icon_in(&paint, icon_at, &icons::SEQUENCE, if is_selected { p.accent } else { p.text_secondary }),
+        Kind::View => ux::icon_in(&paint, icon_at, &icons::VIEW, if is_selected { p.accent } else { p.text_secondary }),
         Kind::Attribute => {
             ux::text(&paint, pos2(icon_at.left() + 1.0, y - 1.0), "a", types::CAPTION, p.text_muted, None);
         }
@@ -734,6 +803,8 @@ fn add_menu(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, anchor: Rect) {
             Some(Kind::Skill) => "workspace.explorer.add.skill",
             Some(Kind::Domain) => "workspace.explorer.add.domain",
             Some(Kind::Enum) => "workspace.explorer.add.enum",
+            Some(Kind::Sequence) => "workspace.explorer.add.sequence",
+            Some(Kind::View) => "workspace.explorer.add.view",
             None => "workspace.explorer.add.folder",
         };
         let resp = control(shell, ui, id, "menu-item", row, kind.is_some());

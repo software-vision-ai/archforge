@@ -49,6 +49,8 @@ pub(crate) const ENTITY_FIRST_ROW: f32 = 77.0;
 pub(crate) const ENTITY_ROW: f32 = 20.0;
 const ENTITY_INSET: f32 = 18.0;
 const ENTITY_TEXT: f32 = 42.0;
+/// How strongly a table of another schema shows: the design's 60 %.
+const FOREIGN_ALPHA: f32 = 0.6;
 /// Below this zoom a node shows its name only.
 const DETAIL_ZOOM: f32 = 0.5;
 
@@ -404,6 +406,12 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
         shell.canvas.pan = Vec2::ZERO;
     }
     let view = View { origin: r.min, pan: shell.canvas.pan, zoom: shell.canvas.zoom };
+    // A table dragged from the Models explorer lands where it was let go (slice S7).
+    if let Some((entity, at)) = shell.explorer.dropped.take()
+        && r.contains(at)
+    {
+        crate::editing::place_dropped(shell, d, entity, view.to_canvas(at));
+    }
     let clip = paint.with_clip_rect(r);
     if shell.canvas.grid {
         grid_dots(&clip, p, r, &view);
@@ -436,6 +444,7 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
             key_status: shell.canvas.key_status,
             renaming,
             problems: &shell.problems,
+            schema: crate::diagrams::schema_of(store, d),
         };
         for e in &visible.edges {
             if let Some(badge) = draw_edge(&clip, &draw, *e, &mut shell.registry, ui) {
@@ -523,6 +532,8 @@ struct Drawing<'a> {
     renaming: Option<Uuid>,
     /// The problems the rules find, by the element they sit on.
     problems: &'a std::collections::BTreeMap<Obj, Vec<String>>,
+    /// The schema the diagram is of: a table of another schema draws dimmed (slice S7).
+    schema: Option<Obj>,
 }
 
 impl Drawing<'_> {
@@ -557,12 +568,33 @@ fn draw_node(
     let inner = paint.with_clip_rect(rect.intersect(paint.clip_rect()));
     match element {
         Some(e) if store.class_of(e).ok() == Some(archforge_er::ENTITY) => {
+            // A table of another schema: dimmed, dashed, its schema named after the eyebrow.
+            let elsewhere = archforge_er::rules::schema_of(store, e).filter(|s| d.schema.is_some_and(|here| here != *s));
+            let dim = |c: egui::Color32| if elsewhere.is_some() { c.gamma_multiply(FOREIGN_ALPHA) } else { c };
+            let p = &Palette {
+                entity: dim(p.entity),
+                entity_edge: dim(p.entity_edge),
+                entity_ink: dim(p.entity_ink),
+                entity_line: dim(p.entity_line),
+                text: dim(p.text),
+                text_muted: dim(p.text_muted),
+                text_secondary: dim(p.text_secondary),
+                ..*p
+            };
             paint.rect_filled(rect, 6.0 * z, p.entity);
-            paint.rect_stroke(rect, 6.0 * z, Stroke::new(1.0, p.entity_edge), StrokeKind::Inside);
+            if elsewhere.is_some() {
+                dashed_rect(paint, rect, Stroke::new(1.0, p.entity_edge), 4.0 * z, 3.0 * z);
+            } else {
+                paint.rect_stroke(rect, 6.0 * z, Stroke::new(1.0, p.entity_edge), StrokeKind::Inside);
+            }
             let name = archforge_er::rules::name_of(store, e);
             let room = Some((rect.width() - 2.0 * ENTITY_INSET * z).max(0.0));
             if z >= DETAIL_ZOOM {
-                ux::text(&inner, rect.min + vec2(ENTITY_INSET, 12.0) * z, &tr("Entity").to_uppercase(), types::EYEBROW.scaled(z), p.entity_ink, room);
+                let eyebrow = match elsewhere {
+                    Some(s) => fmt(&tr("Entity · {schema}"), &[("schema", &archforge_er::rules::name_of(store, s))]).to_uppercase(),
+                    None => tr("Entity").to_uppercase(),
+                };
+                ux::text(&inner, rect.min + vec2(ENTITY_INSET, 12.0) * z, &eyebrow, types::EYEBROW.scaled(z), p.entity_ink, room);
                 if !renaming {
                     ux::text(&inner, rect.min + vec2(ENTITY_INSET, 30.0) * z, &name, types::SECTION.scaled(z), p.text, room);
                 }
@@ -635,6 +667,14 @@ fn draw_node(
     }
     let e = element.filter(|e| d.problems.contains_key(e))?;
     Some((rect.right_top() + vec2(-2.0, 2.0), id?, store.uuid(e).ok()?, e, false))
+}
+
+/// A rectangle's outline in dashes of `dash` with gaps of `gap`, as the design draws a table of
+/// another schema.
+fn dashed_rect(paint: &egui::Painter, rect: Rect, stroke: Stroke, dash: f32, gap: f32) {
+    let r = rect.shrink(stroke.width / 2.0);
+    let path = [r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom(), r.left_top()];
+    paint.extend(egui::Shape::dashed_line(&path, stroke, dash.max(1.0), gap.max(1.0)));
 }
 
 /// The accent ring and the four corner handles of a selected node.

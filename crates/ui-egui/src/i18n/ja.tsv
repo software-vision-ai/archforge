@@ -76,6 +76,33 @@ str		disjoint	排他
 str		overlapping	重複あり
 str		A subtype joins two tables	サブタイプは 2 つのテーブルを結びます
 str		Add a literal	リテラルを追加
+str		Sequences · {n}	シーケンス · {n}
+str		Add sequence	シーケンスを追加
+str		Sequence	シーケンス
+str		Sequence · model	シーケンス · モデル
+str		This sequence	このシーケンス
+str		On this sequence · {n}	このシーケンスに · {n}
+str		from {start} by {increment}	{start} から {increment} ずつ
+str		cycles	循環
+str		owned by {column}	{column} が所有
+str	sequence	Start	開始値
+str		Increment	増分
+str		Minimum	最小値
+str		Maximum	最大値
+str		Cycle	循環する
+str		Owned by	所有者
+plural		{n} more column, not listed	ほか {n} 列（一覧にありません）
+str		{field} takes a whole number	{field} には整数を入力してください
+str		Views · {n}	ビュー · {n}
+str		Add view	ビューを追加
+str		View	ビュー
+str		View · model	ビュー · モデル
+str		This view	このビュー
+str		On this view · {n}	このビューに · {n}
+str		view	ビュー
+str		materialized	マテリアライズド
+str		Materialized	マテリアライズド
+str		Query	クエリ
 str		Pick a type	型を選ぶ
 str		domain	ドメイン
 str		enum	列挙
@@ -173,6 +200,7 @@ str		No diagrams yet	図はまだありません
 str		Select	選択
 str		Pan	パン
 str		Entity	エンティティ
+str		Entity · {schema}	エンティティ · {schema}
 str		Relationship	リレーションシップ
 str		Generalization	汎化
 str		Relationship types	リレーションシップの種類
@@ -182,6 +210,8 @@ str		Group kinds	グループの種類
 str		Key status	キーの状態
 str		Grid	グリッド
 str		Add table	テーブルを追加
+str		Place table	テーブルを配置
+str		Already on this diagram	この図にはすでにあります
 str		Resize	サイズ変更
 str		Arrange	整列
 str		Connect	接続

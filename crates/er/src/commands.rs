@@ -11,9 +11,9 @@ use serde_json::{Value as Json, json};
 use crate::rules::{self, IndexColumnSpec, MAX_NAME, MAX_TEXT, MAX_TYPE, name_of};
 use crate::{
     ATTRIBUTE, CHECK_CONSTRAINT, Cardinality, DOMAIN, DOMAIN_CHECK, Deferrability, ELEMENT, ENTITY, ENTITY_SIZE, ENUM_TYPE, EntityKind, ErView,
-    FOREIGN_KEY, GENERALIZATION, Generation, INDEX_COLUMN, MatchType, NullsOrder, PRIMARY_KEY, RELATIONSHIP, ReferentialAction, SCHEMA,
-    SortDirection, SubtypeMapping, TABLE_INDEX, UNIQUE_CONSTRAINT, attribute, check_constraint, domain, domain_check, element, entity, enum_type,
-    foreign_key, generalization, index_column, key, named_element, relationship, schema, table_index, unique_constraint,
+    FOREIGN_KEY, GENERALIZATION, Generation, INDEX_COLUMN, MatchType, NullsOrder, PRIMARY_KEY, RELATIONSHIP, ReferentialAction, SCHEMA, SEQUENCE,
+    SortDirection, SubtypeMapping, TABLE_INDEX, UNIQUE_CONSTRAINT, VIEW, attribute, check_constraint, domain, domain_check, element, entity,
+    enum_type, foreign_key, generalization, index_column, key, named_element, relationship, schema, sequence, table_index, unique_constraint, view,
 };
 
 type C<'a> = Ctx<'a, Store, ErView>;
@@ -124,6 +124,8 @@ fn id_of(ctx: &C<'_>, p: &Params, key: &str, class: ClassId) -> Result<Obj, Comm
                     .replace("attribute", "an attribute")
                     .replace("schema", "a schema")
                     .replace("generalization", "a generalization")
+                    .replace("sequence", "a sequence")
+                    .replace("view", "a view")
             ),
         ));
     }
@@ -211,8 +213,23 @@ fn schema_rename(ctx: &mut C<'_>, p: &Params) -> R {
 
 fn schema_remove(ctx: &mut C<'_>, p: &Params) -> R {
     let s = id_of(ctx, p, "schema", SCHEMA)?;
-    let gone = remove_element(ctx.doc, s).map_err(fail)?;
+    let gone = remove_schema(ctx.doc, s).map_err(refused_as("schema"))?;
     Ok(json!({ "removed": gone }))
+}
+
+/// Removes a schema with everything in it. Its tables go one by one first, so the relationships of
+/// other schemas that reach them go too (slice S7: relationships may cross schemas).
+pub fn remove_schema(store: &mut Store, s: Obj) -> Result<usize, Invalid> {
+    store.transaction(|st| {
+        let mut gone = 0;
+        let tables: Vec<Obj> = st.list(s, schema::ENTITY)?.iter().filter_map(Value::as_ref).collect();
+        for e in tables {
+            if st.is_alive(e) {
+                gone += remove_entity(st, e)?;
+            }
+        }
+        Ok(gone + remove_element(st, s)?)
+    })
 }
 
 // Entities.
@@ -405,7 +422,18 @@ pub fn remove_element(store: &mut Store, obj: Obj) -> Result<usize, Invalid> {
                 st.set(c, attribute::LINKED_TO, Value::Null)?;
             }
             for (a, prop) in st.referrers(o) {
-                if (prop == attribute::DOMAIN || prop == attribute::ENUM_TYPE) && st.is_alive(a) {
+                if (prop == attribute::DOMAIN || prop == attribute::ENUM_TYPE || prop == sequence::OWNED_BY) && st.is_alive(a) {
+                    // A column of another schema keeps a type of its own (slice S7): the domain's
+                    // base type, size and not null, or text for an enum type.
+                    if prop == attribute::DOMAIN {
+                        st.set(a, attribute::TYPE, text_or_null(&rules::text_of(st, o, domain::BASE_TYPE)))?;
+                        set_size(st, a, rules::own_size_of(st, o))?;
+                        if st.get(o, domain::NOT_NULL)?.as_bool() == Some(true) {
+                            st.set(a, attribute::NULLABLE, Value::Bool(false))?;
+                        }
+                    } else if prop == attribute::ENUM_TYPE {
+                        st.set(a, attribute::TYPE, Value::str("TEXT"))?;
+                    }
                     st.set(a, prop, Value::Null)?;
                 }
             }
@@ -952,15 +980,16 @@ enum Typed {
     Enum(Obj),
 }
 
-/// The `domain` or `enum` parameter beside `type`: exactly one of the three, in the entity's schema.
-fn column_type(ctx: &C<'_>, p: &Params, e: Obj, kind: &str) -> Result<Typed, CommandError> {
+/// The `domain` or `enum` parameter beside `type`: exactly one of the three, of any schema of the
+/// model (slice S7: a key column in one schema follows its target's type from another).
+fn column_type(ctx: &C<'_>, p: &Params, _e: Obj, kind: &str) -> Result<Typed, CommandError> {
     let given = |key: &str, class: ClassId| -> Result<Option<Obj>, CommandError> {
         if text(p, key).is_empty() {
             return Ok(None);
         }
         let t = id_of(ctx, p, key, class)?;
-        if rules::schema_of(ctx.doc, t) != rules::schema_of(ctx.doc, e) {
-            return Err(refuse(key, format!("{} is in another schema", name_of(ctx.doc, t))));
+        if rules::schema_of(ctx.doc, t).is_none() {
+            return Err(refuse(key, format!("{} belongs to no schema", name_of(ctx.doc, t))));
         }
         Ok(Some(t))
     };
@@ -1034,7 +1063,7 @@ fn type_name(ctx: &C<'_>, p: &Params, s: Obj, except: Option<Obj>) -> Result<Str
     let name = text(p, "name");
     check_name("name", name, MAX_NAME)?;
     if !rules::entity_name_free(ctx.doc, s, name, except) {
-        return Err(refuse("name", format!("the schema has an entity or type named {name:?} already")));
+        return Err(refuse("name", format!("the schema has a table, type, sequence or view named {name:?} already")));
     }
     Ok(name.to_string())
 }
@@ -1270,6 +1299,131 @@ fn enum_remove(ctx: &mut C<'_>, p: &Params) -> R {
     let e = id_of(ctx, p, "enum", ENUM_TYPE)?;
     type_unused(ctx.doc, e, "enum")?;
     let gone = remove_element(ctx.doc, e).map_err(fail)?;
+    Ok(json!({ "removed": gone }))
+}
+
+// Sequences and views (slice S7).
+
+/// A sequence's numbers, owner and flag from the parameters; the bounds kept as their numbers.
+/// `current` is the owner the sequence has: kept as it is, it needs no whole-number type again.
+fn sequence_params(ctx: &C<'_>, p: &Params, s: Obj, current: Option<Obj>) -> Result<(rules::SequenceNumbers, Option<Obj>), CommandError> {
+    let mut n = rules::SequenceNumbers {
+        start: p.integer("start").unwrap_or(1),
+        increment: p.integer("increment").unwrap_or(1),
+        minimum: text(p, "minimum").to_string(),
+        maximum: text(p, "maximum").to_string(),
+        cycle: p.bool("cycle").unwrap_or(false),
+    };
+    if let Some((key, why)) = rules::sequence_problem(&n) {
+        return Err(refuse(key, why));
+    }
+    // A bound is kept as its number: "+5" and "05" become "5".
+    for bound in [&mut n.minimum, &mut n.maximum] {
+        if let Ok(Some(v)) = rules::bound_of(bound) {
+            *bound = v.to_string();
+        }
+    }
+    let owned_by = if text(p, "owned_by").is_empty() {
+        None
+    } else {
+        let a = id_of(ctx, p, "owned_by", ATTRIBUTE)?;
+        let new_owner = Some(a) != current;
+        if let Some(why) = rules::owned_by_problem(ctx.doc, s, a).or_else(|| if new_owner { rules::owner_type_problem(ctx.doc, a) } else { None }) {
+            return Err(refuse("owned_by", why));
+        }
+        Some(a)
+    };
+    Ok((n, owned_by))
+}
+
+fn set_sequence(st: &mut Store, q: Obj, name: &str, n: &rules::SequenceNumbers, owned_by: Option<Obj>) -> Result<(), Invalid> {
+    st.set(q, named_element::NAME, Value::str(name))?;
+    st.set(q, sequence::START, Value::Int(n.start))?;
+    st.set(q, sequence::INCREMENT, Value::Int(n.increment))?;
+    st.set(q, sequence::MINIMUM, text_or_null(&n.minimum))?;
+    st.set(q, sequence::MAXIMUM, text_or_null(&n.maximum))?;
+    st.set(q, sequence::CYCLE, Value::Bool(n.cycle))?;
+    st.set(q, sequence::OWNED_BY, owned_by.map_or(Value::Null, Value::Ref))
+}
+
+fn sequence_add(ctx: &mut C<'_>, p: &Params) -> R {
+    let s = id_of(ctx, p, "schema", SCHEMA)?;
+    let name = type_name(ctx, p, s, None)?;
+    let (n, owned_by) = sequence_params(ctx, p, s, None)?;
+    let q = ctx
+        .doc
+        .transaction(|st| {
+            let q = st.create(SEQUENCE)?;
+            set_sequence(st, q, &name, &n, owned_by)?;
+            st.push(s, schema::SEQUENCE, Value::Ref(q))?;
+            Ok(q)
+        })
+        .map_err(fail)?;
+    select(ctx, vec![q]);
+    Ok(json!({ "id": uuid_of(ctx.doc, q)? }))
+}
+
+fn sequence_set(ctx: &mut C<'_>, p: &Params) -> R {
+    let q = id_of(ctx, p, "sequence", SEQUENCE)?;
+    let s = rules::schema_of(ctx.doc, q).ok_or_else(|| refuse("sequence", "the sequence belongs to no schema"))?;
+    let name = type_name(ctx, p, s, Some(q))?;
+    let (n, owned_by) = sequence_params(ctx, p, s, rules::owner_of_sequence(ctx.doc, q))?;
+    ctx.doc.transaction(|st| set_sequence(st, q, &name, &n, owned_by)).map_err(fail)?;
+    Ok(json!({ "id": uuid_of(ctx.doc, q)? }))
+}
+
+fn sequence_remove(ctx: &mut C<'_>, p: &Params) -> R {
+    let q = id_of(ctx, p, "sequence", SEQUENCE)?;
+    let gone = remove_element(ctx.doc, q).map_err(refused_as("sequence"))?;
+    Ok(json!({ "removed": gone }))
+}
+
+/// A view's query from the parameters: SQL text, not parsed.
+fn query_param(p: &Params) -> Result<&str, CommandError> {
+    let query = text(p, "query");
+    match rules::query_problem(query) {
+        Some(why) => Err(refuse("query", why)),
+        None => Ok(query),
+    }
+}
+
+fn set_view(st: &mut Store, v: Obj, name: &str, query: &str, materialized: bool) -> Result<(), Invalid> {
+    st.set(v, named_element::NAME, Value::str(name))?;
+    st.set(v, view::QUERY, Value::str(query))?;
+    st.set(v, view::MATERIALIZED, Value::Bool(materialized))
+}
+
+fn view_add(ctx: &mut C<'_>, p: &Params) -> R {
+    let s = id_of(ctx, p, "schema", SCHEMA)?;
+    let name = type_name(ctx, p, s, None)?;
+    let query = query_param(p)?;
+    let materialized = p.bool("materialized").unwrap_or(false);
+    let v = ctx
+        .doc
+        .transaction(|st| {
+            let v = st.create(VIEW)?;
+            set_view(st, v, &name, query, materialized)?;
+            st.push(s, schema::VIEW, Value::Ref(v))?;
+            Ok(v)
+        })
+        .map_err(refused_as("query"))?;
+    select(ctx, vec![v]);
+    Ok(json!({ "id": uuid_of(ctx.doc, v)? }))
+}
+
+fn view_set(ctx: &mut C<'_>, p: &Params) -> R {
+    let v = id_of(ctx, p, "view", VIEW)?;
+    let s = rules::schema_of(ctx.doc, v).ok_or_else(|| refuse("view", "the view belongs to no schema"))?;
+    let name = type_name(ctx, p, s, Some(v))?;
+    let query = query_param(p)?;
+    let materialized = p.bool("materialized").unwrap_or(false);
+    ctx.doc.transaction(|st| set_view(st, v, &name, query, materialized)).map_err(refused_as("query"))?;
+    Ok(json!({ "id": uuid_of(ctx.doc, v)? }))
+}
+
+fn view_remove(ctx: &mut C<'_>, p: &Params) -> R {
+    let v = id_of(ctx, p, "view", VIEW)?;
+    let gone = remove_element(ctx.doc, v).map_err(refused_as("view"))?;
     Ok(json!({ "removed": gone }))
 }
 
@@ -1639,10 +1793,8 @@ fn relationship_add(ctx: &mut C<'_>, p: &Params) -> R {
     let to = id_of(ctx, p, "to", ENTITY)?;
     let (from_end, to_end) = (cardinality(p, "from_end")?, cardinality(p, "to_end")?);
     let name = relationship_name(p)?.to_string();
-    let s = rules::schema_of(ctx.doc, from).ok_or_else(|| refuse("from", "the entity belongs to no schema"))?;
-    if rules::schema_of(ctx.doc, to) != Some(s) {
-        return Err(refuse("to", "the entities belong to different schemas"));
-    }
+    let from_schema = rules::schema_of(ctx.doc, from).ok_or_else(|| refuse("from", "the entity belongs to no schema"))?;
+    let to_schema = rules::schema_of(ctx.doc, to).ok_or_else(|| refuse("to", "the entity belongs to no schema"))?;
     let roles = [role(p, "from_role")?, role(p, "to_role")?];
     let identifying = p.bool("identifying").unwrap_or(false);
     let with_key = p.bool("create_foreign_key").unwrap_or(false);
@@ -1658,6 +1810,9 @@ fn relationship_add(ctx: &mut C<'_>, p: &Params) -> R {
     } else {
         (to, from, from_end, false, roles[0].clone())
     };
+    // The relationship may join two schemas (slice S7); it belongs to its child's, as its foreign
+    // key does.
+    let s = if child == from { from_schema } else { to_schema };
     let points_to = if text(p, "points_to").is_empty() { None } else { Some(key_id(ctx, p, "points_to")?) };
     if points_to.is_some() && !with_key {
         return Err(refuse("points_to", "only a relationship that brings its foreign key points at a key; set create_foreign_key"));
@@ -1857,7 +2012,7 @@ pub fn collapse(store: &mut Store, m: Obj) -> Result<Obj, Invalid> {
     if let Some(problem) = rules::collapse_problem(store, m) {
         return Err(Invalid::Refused(problem));
     }
-    let s = rules::schema_of(store, m).ok_or_else(|| Invalid::Refused("the table belongs to no schema".into()))?;
+    let here = rules::schema_of(store, m).ok_or_else(|| Invalid::Refused("the table belongs to no schema".into()))?;
     let fks = rules::foreign_keys(store, m);
     let mut ends: Vec<(Obj, Obj, String)> = Vec::with_capacity(2);
     for fk in &fks {
@@ -1869,6 +2024,12 @@ pub fn collapse(store: &mut Store, m: Obj) -> Result<Obj, Invalid> {
         ends.push((r, parent, rules::role_of(store, r, role)));
     }
     let [(r1, from, from_role), (r2, to, to_role)] = <[_; 2]>::try_from(ends).map_err(|_| Invalid::Refused("two foreign keys".into()))?;
+    // The relationship stays in the table's schema when an end is there, else goes to its `to` end's.
+    let s = if [from, to].iter().any(|e| rules::schema_of(store, *e) == Some(here)) {
+        here
+    } else {
+        rules::schema_of(store, to).ok_or_else(|| Invalid::Refused("the table belongs to no schema".into()))?
+    };
     // Where the table is drawn: (diagram, node of `from`, node of `to`) through its two lines.
     let other_end = |edge: Obj, n: Obj| {
         let src = store.get(edge, archforge_diagram::edge::SOURCE).ok()?.as_ref()?;
@@ -2899,7 +3060,7 @@ fn remove_many(ctx: &mut C<'_>, p: &Params) -> R {
     let mut by_class: Vec<(ClassId, Obj)> = Vec::new();
     for o in &ids {
         let class = ctx.doc.class_of(*o).map_err(fail)?;
-        if ![GENERALIZATION, FOREIGN_KEY, PRIMARY_KEY, UNIQUE_CONSTRAINT, RELATIONSHIP, ATTRIBUTE, ENTITY, SCHEMA].contains(&class) {
+        if ![GENERALIZATION, FOREIGN_KEY, PRIMARY_KEY, UNIQUE_CONSTRAINT, RELATIONSHIP, ATTRIBUTE, ENTITY, SEQUENCE, VIEW, SCHEMA].contains(&class) {
             return Err(refuse("ids", format!("{} is not an ER element", uuid_of(ctx.doc, *o)?)));
         }
         by_class.push((class, *o));
@@ -2916,7 +3077,7 @@ fn remove_many(ctx: &mut C<'_>, p: &Params) -> R {
             }
         }
     }
-    let order = [GENERALIZATION, FOREIGN_KEY, UNIQUE_CONSTRAINT, PRIMARY_KEY, RELATIONSHIP, ATTRIBUTE, ENTITY, SCHEMA];
+    let order = [GENERALIZATION, FOREIGN_KEY, UNIQUE_CONSTRAINT, PRIMARY_KEY, RELATIONSHIP, ATTRIBUTE, ENTITY, SEQUENCE, VIEW, SCHEMA];
     let mut gone = 0;
     for class in order {
         for (c, o) in &by_class {
@@ -2924,6 +3085,7 @@ fn remove_many(ctx: &mut C<'_>, p: &Params) -> R {
                 gone += match class {
                     ENTITY => remove_entity(ctx.doc, *o),
                     GENERALIZATION => ctx.doc.transaction(|st| remove_generalization(st, *o)),
+                    SCHEMA => remove_schema(ctx.doc, *o),
                     _ => remove_element(ctx.doc, *o),
                 }
                 .map_err(refused_as("ids"))?;
@@ -3129,6 +3291,8 @@ fn schema_get(ctx: &mut C<'_>, p: &Params) -> R {
         .collect();
     let domains: Vec<Json> = rules::domains_of(ctx.doc, s).into_iter().map(|d| domain_json(ctx.doc, d)).collect();
     let enums: Vec<Json> = rules::enums_of(ctx.doc, s).into_iter().map(|e| enum_json(ctx.doc, e)).collect();
+    let sequences: Vec<Json> = rules::sequences_of(ctx.doc, s).into_iter().map(|q| sequence_json(ctx.doc, q)).collect();
+    let views: Vec<Json> = rules::views_of(ctx.doc, s).into_iter().map(|v| view_json(ctx.doc, v)).collect();
     Ok(json!({
         "id": uuid_json(ctx.doc, s),
         "name": name_of(ctx.doc, s),
@@ -3137,6 +3301,8 @@ fn schema_get(ctx: &mut C<'_>, p: &Params) -> R {
         "generalizations": generalizations,
         "domains": domains,
         "enums": enums,
+        "sequences": sequences,
+        "views": views,
         "notices": notices,
     }))
 }
@@ -3159,6 +3325,34 @@ fn domain_json(store: &Store, d: Obj) -> Json {
         "default": optional_name_of(store, d, domain::DEFAULT),
         "not_null": store.get(d, domain::NOT_NULL).ok().and_then(|v| v.as_bool()).unwrap_or(false),
         "checks": checks,
+    })
+}
+
+fn sequence_json(store: &Store, q: Obj) -> Json {
+    let n = rules::sequence_numbers(store, q);
+    // A bound a loaded document holds that is no number shows as its text, never as no bound.
+    let bound = |t: &str| match rules::bound_of(t) {
+        Ok(b) => b.map_or(Json::Null, Json::from),
+        Err(_) => Json::String(t.chars().take(rules::MAX_NAME).collect()),
+    };
+    json!({
+        "id": uuid_json(store, q),
+        "name": name_of(store, q),
+        "start": n.start,
+        "increment": n.increment,
+        "minimum": bound(&n.minimum),
+        "maximum": bound(&n.maximum),
+        "cycle": n.cycle,
+        "owned_by": rules::owner_of_sequence(store, q).map_or(Json::Null, |a| uuid_json(store, a)),
+    })
+}
+
+fn view_json(store: &Store, v: Obj) -> Json {
+    json!({
+        "id": uuid_json(store, v),
+        "name": name_of(store, v),
+        "query": rules::text_of(store, v, view::QUERY),
+        "materialized": store.get(v, view::MATERIALIZED).ok().and_then(|x| x.as_bool()).unwrap_or(false),
     })
 }
 
@@ -3276,6 +3470,12 @@ pub fn specs() -> Vec<CommandSpec<Store, ErView>> {
             enum_set
         ),
         cmd!("er.enum.remove", "Remove enum type", &["Schema"], None, "enum: string; the enum type's id", has_schemas, enum_remove),
+        cmd!("er.sequence.add", "Add sequence", &["Schema"], None, "schema: string; the schema's id\nname: string; the sequence's name\nstart: integer = 1; its first number\nincrement: integer = 1; the step, negative to count down, never 0\nminimum: string = \"\"; the least number as text, or nothing for the type's\nmaximum: string = \"\"; the greatest number as text, or nothing for the type's\ncycle: bool = false; it starts over past its bound\nowned_by: string = \"\"; the id of a column of the schema it belongs to, or nothing", has_schemas, sequence_add),
+        cmd!("er.sequence.set", "Set sequence", &["Schema"], None, "sequence: string; the sequence's id\nname: string; the sequence's name\nstart: integer = 1; its first number\nincrement: integer = 1; the step, negative to count down, never 0\nminimum: string = \"\"; the least number as text, or nothing for the type's\nmaximum: string = \"\"; the greatest number as text, or nothing for the type's\ncycle: bool = false; it starts over past its bound\nowned_by: string = \"\"; the id of a column of the schema it belongs to, or nothing", has_schemas, sequence_set),
+        cmd!("er.sequence.remove", "Remove sequence", &["Schema"], None, "sequence: string; the sequence's id", has_schemas, sequence_remove),
+        cmd!("er.view.add", "Add view", &["Schema"], None, "schema: string; the schema's id\nname: string; the view's name\nquery: string; its SQL query, not parsed\nmaterialized: bool = false; its rows are stored", has_schemas, view_add),
+        cmd!("er.view.set", "Set view", &["Schema"], None, "view: string; the view's id\nname: string; the view's name\nquery: string; its SQL query, not parsed\nmaterialized: bool = false; its rows are stored", has_schemas, view_set),
+        cmd!("er.view.remove", "Remove view", &["Schema"], None, "view: string; the view's id", has_schemas, view_remove),
         cmd!("er.attribute.unlink", "Unlink attribute", &["Entity"], None, "attribute: string; the id of a key column that follows the column it points at", has_entities, attribute_unlink),
         cmd!("er.attribute.move", "Move attribute", &["Entity"], None, "attribute: string; the attribute's id\nto: integer, 0..1000000; its new place", has_entities, attribute_move),
         cmd!("er.attribute.remove", "Remove attribute", &["Entity"], None, "attribute: string; the attribute's id", has_entities, attribute_remove),

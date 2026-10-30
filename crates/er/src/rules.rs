@@ -7,9 +7,9 @@ use archforge_mof::{Obj, Store, Value};
 
 use crate::{
     ATTRIBUTE, CHECK_CONSTRAINT, Cardinality, DOMAIN, Deferrability, ENTITY, ENUM_TYPE, EntityKind, FOREIGN_KEY, GENERALIZATION, Generation,
-    MatchType, NullsOrder, PRIMARY_KEY, RELATIONSHIP, ReferentialAction, SCHEMA, SortDirection, SubtypeMapping, TABLE_INDEX, UNIQUE_CONSTRAINT,
-    attribute, check_constraint, domain, domain_check, entity, enum_type, foreign_key, generalization, index_column, key, named_element,
-    relationship, schema, table_index, unique_constraint,
+    MatchType, NullsOrder, PRIMARY_KEY, RELATIONSHIP, ReferentialAction, SCHEMA, SEQUENCE, SortDirection, SubtypeMapping, TABLE_INDEX,
+    UNIQUE_CONSTRAINT, VIEW, attribute, check_constraint, domain, domain_check, entity, enum_type, foreign_key, generalization, index_column, key,
+    named_element, relationship, schema, sequence, table_index, unique_constraint, view,
 };
 
 /// The most literals of an enum type.
@@ -84,7 +84,8 @@ fn name_free_under(store: &Store, parent: Obj, name: &str, except: Option<Obj>) 
         .any(|o| Some(o) != except && store.container(o).ok().flatten().map(|(c, _)| c) == Some(parent))
 }
 
-/// Whether `name` is free among the entities of `schema`, except for `except`.
+/// Whether `name` is free in `schema`, except for `except`: tables, domains, enum types, sequences
+/// and views share one namespace, as relations and types do in SQL.
 pub fn entity_name_free(store: &Store, schema: Obj, name: &str, except: Option<Obj>) -> bool {
     name_free_under(store, schema, name, except)
 }
@@ -293,6 +294,129 @@ pub fn literals_of(store: &Store, e: Obj) -> Vec<String> {
 /// A domain's checks, in order.
 pub fn domain_checks(store: &Store, d: Obj) -> Vec<Obj> {
     refs(store, d, domain::CHECK)
+}
+
+// Sequences and views (slice S7).
+
+/// The most characters of a view's query: the store's limit for a text.
+pub const MAX_QUERY: usize = archforge_mof::MAX_STRING;
+
+/// A schema's sequences, in order.
+pub fn sequences_of(store: &Store, s: Obj) -> Vec<Obj> {
+    refs(store, s, schema::SEQUENCE)
+}
+
+/// A schema's views, in order.
+pub fn views_of(store: &Store, s: Obj) -> Vec<Obj> {
+    refs(store, s, schema::VIEW)
+}
+
+/// A sequence's numbers and flag as stored: start, increment, minimum and maximum (text, empty for
+/// none) and cycle.
+pub struct SequenceNumbers {
+    pub start: i64,
+    pub increment: i64,
+    pub minimum: String,
+    pub maximum: String,
+    pub cycle: bool,
+}
+
+/// What a sequence holds.
+pub fn sequence_numbers(store: &Store, q: Obj) -> SequenceNumbers {
+    let int = |prop| store.get(q, prop).ok().and_then(|v| v.as_int()).unwrap_or(1);
+    SequenceNumbers {
+        start: int(sequence::START),
+        increment: int(sequence::INCREMENT),
+        minimum: text_of(store, q, sequence::MINIMUM),
+        maximum: text_of(store, q, sequence::MAXIMUM),
+        cycle: flag(store, q, sequence::CYCLE),
+    }
+}
+
+/// The column that owns a sequence: the sequence goes when its column does in SQL; here it forgets
+/// the column.
+pub fn owner_of_sequence(store: &Store, q: Obj) -> Option<Obj> {
+    reference(store, q, sequence::OWNED_BY).filter(|a| store.is_alive(*a))
+}
+
+/// A bound kept as text: none when empty, else a 64-bit whole number; the error is the sentence.
+pub fn bound_of(text: &str) -> Result<Option<i64>, String> {
+    if text.is_empty() {
+        return Ok(None);
+    }
+    text.parse::<i64>().map(Some).map_err(|_| {
+        let shown: String = text.chars().take(40).collect();
+        format!("{shown:?} is not a whole number between {} and {}", i64::MIN, i64::MAX)
+    })
+}
+
+/// Why a sequence's numbers break the rules: the parameter it concerns and a sentence; none when
+/// they keep them.
+pub fn sequence_problem(n: &SequenceNumbers) -> Option<(&'static str, String)> {
+    if n.increment == 0 {
+        return Some(("increment", "is 0; a sequence moves by at least 1".into()));
+    }
+    let minimum = match bound_of(&n.minimum) {
+        Ok(m) => m,
+        Err(why) => return Some(("minimum", why)),
+    };
+    let maximum = match bound_of(&n.maximum) {
+        Ok(m) => m,
+        Err(why) => return Some(("maximum", why)),
+    };
+    if let (Some(lo), Some(hi)) = (minimum, maximum)
+        && lo >= hi
+    {
+        return Some(("maximum", format!("{hi} is not greater than the minimum {lo}")));
+    }
+    if let Some(lo) = minimum
+        && n.start < lo
+    {
+        return Some(("start", format!("{} is below the minimum {lo}", n.start)));
+    }
+    if let Some(hi) = maximum
+        && n.start > hi
+    {
+        return Some(("start", format!("{} is above the maximum {hi}", n.start)));
+    }
+    None
+}
+
+/// Why `column` cannot own a sequence of schema `s`: it is no table's column, or a table's of
+/// another schema. Setting an owner also wants a whole-number column (`owner_type_problem`); a
+/// column retyped later keeps its sequence.
+pub fn owned_by_problem(store: &Store, s: Obj, column: Obj) -> Option<String> {
+    if store.class_of(column).ok() != Some(ATTRIBUTE) {
+        return Some(format!("{} is not a column", label(store, column)));
+    }
+    match entity_of(store, column) {
+        Some(e) if schema_of(store, e) == Some(s) => None,
+        Some(e) => Some(format!("{}.{} is a column of another schema", name_of(store, e), name_of(store, column))),
+        None => Some(format!("{} belongs to no table", label(store, column))),
+    }
+}
+
+/// Why `column` cannot be made the owner of a sequence: it is not of a whole-number type.
+pub fn owner_type_problem(store: &Store, column: Obj) -> Option<String> {
+    let kind = type_of(store, column);
+    if is_integer_type(&kind) {
+        None
+    } else {
+        let shown: String = kind.chars().take(40).collect();
+        Some(format!("{} is {:?}, not a whole-number type", label(store, column), shown))
+    }
+}
+
+/// Why a view's query is not acceptable: it is SQL text, not parsed, never empty, with no hidden
+/// direction or zero-width characters a DDL export would carry.
+pub fn query_problem(query: &str) -> Option<String> {
+    if query.trim().is_empty() {
+        return Some("a view needs its query".into());
+    }
+    if query.chars().any(|c| matches!(c, '\u{061C}' | '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2060}'..='\u{2069}' | '\u{FEFF}')) {
+        return Some("the query holds a hidden direction or zero-width character".into());
+    }
+    text_problem(query, MAX_QUERY).map(|p| format!("the query {p}"))
 }
 
 /// The columns that take a domain or an enum type.
@@ -930,8 +1054,9 @@ pub fn key_problem(
         return Some(("key", format!("{} is neither a primary key nor a unique constraint", label(store, k))));
     }
     let Some(references) = entity_of(store, k) else { return Some(("key", "the key belongs to no entity".into())) };
-    if schema_of(store, entity).is_none() || schema_of(store, entity) != schema_of(store, references) {
-        return Some(("key", "the key is in another schema".into()));
+    // A foreign key may point into another schema of the model (slice S7).
+    if schema_of(store, entity).is_none() || schema_of(store, references).is_none() {
+        return Some(("key", "the key or the foreign key belongs to no schema".into()));
     }
     let targets = key_columns(store, k);
     if targets.is_empty() {
@@ -1045,17 +1170,20 @@ pub fn problems(store: &Store) -> Vec<String> {
     let mut out = Vec::new();
     for o in store.alive() {
         let Ok(class) = store.class_of(o) else { continue };
-        if class == SCHEMA || class == ENTITY || class == ATTRIBUTE || class == DOMAIN || class == ENUM_TYPE {
+        if class == SCHEMA || class == ENTITY || class == ATTRIBUTE || class == DOMAIN || class == ENUM_TYPE || class == SEQUENCE || class == VIEW {
             let name = name_of(store, o);
             if let Some(p) = name_problem(&name, MAX_NAME) {
                 out.push(format!("the name of {o} {p}"));
             }
         }
         if class == SCHEMA {
-            // Entities, domains and enum types share one namespace in a schema, as in SQL.
+            // Entities, domains, enum types, sequences and views share one namespace in a schema, as
+            // relations and types do in SQL.
             let mut members: Vec<Obj> = store.list(o, schema::ENTITY).unwrap_or_default().iter().filter_map(Value::as_ref).collect();
             members.extend(domains_of(store, o));
             members.extend(enums_of(store, o));
+            members.extend(sequences_of(store, o));
+            members.extend(views_of(store, o));
             for name in duplicate_names(store, &members) {
                 out.push(format!("the name {name:?} is used twice in {o}"));
             }
@@ -1157,6 +1285,21 @@ pub fn problems(store: &Store) -> Vec<String> {
         {
             out.push(format!("the domain {}: {p}", label(store, o)));
         }
+        if class == SEQUENCE {
+            if let Some((_, p)) = sequence_problem(&sequence_numbers(store, o)) {
+                out.push(format!("the sequence {}: {p}", label(store, o)));
+            }
+            if let (Some(s), Some(a)) = (schema_of(store, o), owner_of_sequence(store, o))
+                && let Some(p) = owned_by_problem(store, s, a)
+            {
+                out.push(format!("the sequence {}: {p}", label(store, o)));
+            }
+        }
+        if class == VIEW
+            && let Some(p) = query_problem(&text_of(store, o, view::QUERY))
+        {
+            out.push(format!("the view {}: {p}", label(store, o)));
+        }
         if class == ENUM_TYPE
             && let Some(p) = literals_problem(&literals_of(store, o))
         {
@@ -1206,14 +1349,15 @@ pub fn problems(store: &Store) -> Vec<String> {
                     out.push(format!("a role of {o} {p}"));
                 }
             }
-            let ends = [store.get(o, relationship::FROM), store.get(o, relationship::TO)];
+            // A relationship may join tables of two schemas (slice S7); it belongs to the schema of
+            // one of its ends.
+            let ends: Vec<Option<Obj>> =
+                [relationship::FROM, relationship::TO].into_iter().map(|p| store.get(o, p).ok().and_then(|v| v.as_ref())).collect();
             let here = schema_of(store, o);
-            for end in ends {
-                match end.ok().and_then(|v| v.as_ref()) {
-                    Some(e) if schema_of(store, e) == here && here.is_some() => {}
-                    Some(e) => out.push(format!("{o} reaches {e} outside its schema")),
-                    None => out.push(format!("{o} lacks an end")),
-                }
+            if ends.iter().any(Option::is_none) {
+                out.push(format!("{o} lacks an end"));
+            } else if here.is_none() || !ends.iter().flatten().any(|e| schema_of(store, *e) == here) {
+                out.push(format!("{o} belongs to neither of its ends' schemas"));
             }
         }
     }

@@ -56,6 +56,9 @@ pub struct State {
     /// The domain or enum editor (slice S5), and the type whose selection opened it.
     pub type_edit: Option<crate::types::TypeEdit>,
     pub selected_type: Option<Uuid>,
+    /// The sequence or view editor (slice S7), and the element whose selection opened it.
+    pub object_edit: Option<crate::objects::ObjectEdit>,
+    pub selected_object: Option<Uuid>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -154,6 +157,8 @@ pub enum Menu {
     SubtypeAdd,
     Discriminator,
     Mapping,
+    /// The sequence editor's Owned by select (slice S7).
+    OwnedBy,
 }
 
 /// The selection the panels describe.
@@ -190,6 +195,8 @@ fn subject(shell: &Shell, project: &str) -> Subject {
                 Some(c) if c == archforge_er::ENUM_TYPE => {
                     (tr("Enum type · model"), tr("Enum type"), tr("This enum type"), tr("On this enum type · {n}"))
                 }
+                Some(c) if c == archforge_er::SEQUENCE => (tr("Sequence · model"), tr("Sequence"), tr("This sequence"), tr("On this sequence · {n}")),
+                Some(c) if c == archforge_er::VIEW => (tr("View · model"), tr("View"), tr("This view"), tr("On this view · {n}")),
                 Some(c) if c == archforge_core::SKILL => (tr("Skill · model"), tr("Skill"), tr("This skill"), tr("On this skill · {n}")),
                 Some(c) if c == archforge_er::GENERALIZATION => {
                     let (sup, sub, _) = archforge_er::rules::generalization_parts(store, o);
@@ -284,6 +291,9 @@ pub fn retain_valid(state: &mut State, store: &Store) {
     }
     if state.type_edit.as_ref().is_some_and(|t| store.by_uuid(t.schema).is_none() || t.target.is_some_and(|t| store.by_uuid(t).is_none())) {
         state.type_edit = None;
+    }
+    if state.object_edit.as_ref().is_some_and(|o| store.by_uuid(o.schema).is_none() || o.target.is_some_and(|t| store.by_uuid(t).is_none())) {
+        state.object_edit = None;
     }
 }
 
@@ -470,6 +480,9 @@ fn properties(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y:
     if subject.class != Some(archforge_er::DOMAIN) && subject.class != Some(archforge_er::ENUM_TYPE) {
         shell.panels.selected_type = None;
     }
+    if subject.class != Some(archforge_er::SEQUENCE) && subject.class != Some(archforge_er::VIEW) {
+        shell.panels.selected_object = None;
+    }
     if subject.class != Some(archforge_er::ATTRIBUTE) {
         shell.panels.selected_column = None;
     }
@@ -486,6 +499,8 @@ fn properties(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y:
             name_field(shell, ui, p, pos2(r.left() + PAD, y), width, subject, "er.schema.rename", "schema");
             if let (Some(o), Some(id)) = (subject.obj, subject.id) {
                 let y = crate::types::types_section(shell, ui, p, r, y + 17.0 + FIELD + 16.0, o, id);
+                let y = crate::objects::section_of(shell, ui, p, r, y, o, id, crate::objects::ObjectKind::Sequence);
+                let y = crate::objects::section_of(shell, ui, p, r, y, o, id, crate::objects::ObjectKind::View);
                 crate::keys::problems_section(shell, ui, p, r, y + 4.0, o);
             }
         }
@@ -514,6 +529,22 @@ fn properties(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y:
                     crate::types::open(shell, schema_id, kind, Some(id));
                 }
                 let y = crate::types::types_section(shell, ui, p, r, y, schema, schema_id);
+                crate::keys::problems_section(shell, ui, p, r, y + 4.0, schema);
+            }
+        }
+        Some(c) if c == archforge_er::SEQUENCE || c == archforge_er::VIEW => {
+            // A sequence or view: its schema's section with its editor open, once per selection.
+            let schema = shell.session.as_ref().and_then(|s| {
+                let store = s.doc();
+                let schema = archforge_er::rules::schema_of(store, subject.obj?)?;
+                Some((schema, store.uuid(schema).ok()?, crate::objects::kind_of(store, subject.obj?)?))
+            });
+            if let (Some((schema, schema_id, kind)), Some(id)) = (schema, subject.id) {
+                if shell.panels.selected_object != Some(id) {
+                    shell.panels.selected_object = Some(id);
+                    crate::objects::open(shell, schema_id, kind, Some(id));
+                }
+                let y = crate::objects::section_of(shell, ui, p, r, y, schema, schema_id, kind);
                 crate::keys::problems_section(shell, ui, p, r, y + 4.0, schema);
             }
         }

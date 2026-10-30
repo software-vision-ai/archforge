@@ -90,6 +90,7 @@ fn required() -> (Vec<(String, String)>, Vec<String>) {
     strings.extend(crate::indexes::texts().map(|s| (String::new(), s.to_string())));
     strings.extend(crate::types::texts().map(|s| (String::new(), s.to_string())));
     strings.extend(crate::subtypes::texts().map(|s| (String::new(), s.to_string())));
+    strings.extend(crate::objects::texts().map(|s| (String::new(), s.to_string())));
     strings.sort();
     strings.dedup();
     plurals.sort();

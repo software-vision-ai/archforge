@@ -32,6 +32,12 @@ pub enum Screen {
     /// The table's schema selected, with a domain and an enum type in its Types section and in
     /// the Models tree.
     WorkspaceSchemaTypes,
+    /// The table's schema selected, with a sequence owned by its key and a view in its Sequences
+    /// and Views sections and in the Models tree (slice S7).
+    WorkspaceSchemaObjects,
+    /// The diagram of two tables with a table of the CRM schema placed beside them, dimmed and
+    /// dashed, its relationship to Order drawn (slice S7).
+    WorkspaceCrossSchema,
     /// The diagram of two tables with a mapping table between Order and Tag selected: its
     /// Properties offer to collapse it, Order's key column shows its link mark.
     WorkspaceMappingTable,
@@ -97,11 +103,15 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
             | Screen::WorkspaceColumnEditor
             | Screen::WorkspaceIndexEditor
             | Screen::WorkspaceSchemaTypes
+            | Screen::WorkspaceSchemaObjects
     ) {
         shell.adopt_project();
         sample_table(&mut shell, screen == Screen::WorkspaceSkills)?;
         if screen == Screen::WorkspaceSchemaTypes {
             sample_types(&mut shell)?;
+        }
+        if screen == Screen::WorkspaceSchemaObjects {
+            sample_objects(&mut shell)?;
         }
         if screen == Screen::WorkspaceColumnEditor
             && let Some(session) = shell.session.as_ref()
@@ -157,12 +167,23 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
             | Screen::WorkspaceRelationship
             | Screen::WorkspaceMappingTable
             | Screen::WorkspaceSubtypes
+            | Screen::WorkspaceCrossSchema
     ) {
         shell.adopt_project();
         sample_diagram(
             &mut shell,
-            matches!(screen, Screen::WorkspaceDiagram | Screen::WorkspaceCardinality | Screen::WorkspaceRelationship | Screen::WorkspaceMappingTable),
+            matches!(
+                screen,
+                Screen::WorkspaceDiagram
+                    | Screen::WorkspaceCardinality
+                    | Screen::WorkspaceRelationship
+                    | Screen::WorkspaceMappingTable
+                    | Screen::WorkspaceCrossSchema
+            ),
         )?;
+        if screen == Screen::WorkspaceCrossSchema {
+            sample_cross_schema(&mut shell)?;
+        }
         if screen == Screen::WorkspaceMappingTable {
             sample_mapping_table(&mut shell)?;
         }
@@ -313,6 +334,72 @@ fn sample_mapping_table(shell: &mut Shell) -> Result<(), String> {
     run(session, "diagram.connect", json!({ "diagram": diagram, "element": line, "source": order_node, "target": t }))?;
     run(session, "er.relationship.resolve", json!({ "relationship": line }))?;
     session.mark_saved().map_err(|e| format!("mark_saved: {e:?}"))?;
+    Ok(())
+}
+
+/// A sequence owned by the sample table's key and a view of its schema; the schema selected.
+fn sample_objects(shell: &mut Shell) -> Result<(), String> {
+    use serde_json::json;
+    let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
+    let run = |session: &mut archforge_er::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
+        let out = session.execute(command, &params).map_err(|e| format!("{command}: {e:?}"))?;
+        Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
+    };
+    let store = session.doc();
+    let by_name =
+        |name: &str| store.alive().find(|o| archforge_er::rules::name_of(store, *o) == name).and_then(|o| store.uuid(o).ok()).map(|u| u.to_string());
+    let (Some(schema), Some(key)) = (by_name("Shop"), by_name("customer_id")) else {
+        return Err("the sample table".into());
+    };
+    run(session, "er.sequence.add", json!({ "schema": schema, "name": "customer_id_seq", "start": 1000, "minimum": "1000", "owned_by": key }))?;
+    run(
+        session,
+        "er.view.add",
+        json!({ "schema": schema, "name": "recent_customers", "query": "SELECT customer_id, email\nFROM \"Customer\"\nWHERE created_at > now() - interval '30 days'" }),
+    )?;
+    run(session, "view.select", json!({ "ids": [schema] }))?;
+    session.mark_saved().map_err(|e| format!("mark_saved: {e:?}"))?;
+    Ok(())
+}
+
+/// A CRM schema whose Account each Order of the shop belongs to, placed on the shop's diagram.
+fn sample_cross_schema(shell: &mut Shell) -> Result<(), String> {
+    use serde_json::json;
+    let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
+    let run = |session: &mut archforge_er::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
+        let out = session.execute(command, &params).map_err(|e| format!("{command}: {e:?}"))?;
+        Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
+    };
+    let store = session.doc();
+    let by_name =
+        |name: &str| store.alive().find(|o| archforge_er::rules::name_of(store, *o) == name).and_then(|o| store.uuid(o).ok()).map(|u| u.to_string());
+    let (Some(order), Some(diagram)) = (by_name("Order"), shell.canvas.active.map(|d| d.to_string())) else {
+        return Err("the sample diagram".into());
+    };
+    let order_node = {
+        let store = session.doc();
+        let o = store.by_uuid(archforge_mof::Uuid::parse(&order).ok_or("the order's id")?).ok_or("the order")?;
+        archforge_diagram::views_of(store, o).2.first().and_then(|n| store.uuid(*n).ok()).map(|u| u.to_string()).ok_or("the order's node")?
+    };
+    let crm = run(session, "er.schema.add", json!({ "name": "CRM" }))?;
+    let account = run(session, "er.entity.add", json!({ "schema": crm, "name": "Account" }))?;
+    run(session, "er.attribute.add", json!({ "entity": account, "name": "account_id", "type": "BIGINT", "primary_key": true }))?;
+    let owns = run(
+        session,
+        "er.relationship.add",
+        json!({ "from": account, "to": order, "from_end": "exactly-one", "to_end": "zero-or-more", "name": "owns", "create_foreign_key": true }),
+    )?;
+    let a = run(
+        session,
+        "diagram.place",
+        json!({ "diagram": diagram, "element": account, "x": 560, "y": 680, "width": 240, "height": crate::editing::content_height(1) }),
+    )?;
+    let edge = run(session, "diagram.connect", json!({ "diagram": diagram, "element": owns, "source": a, "target": order_node }))?;
+    run(session, "diagram.label", json!({ "edge": edge, "kind": "name", "at": "middle" }))?;
+    run(session, "view.select", json!({ "ids": [order] }))?;
+    session.mark_saved().map_err(|e| format!("mark_saved: {e:?}"))?;
+    // The three tables framed on the canvas.
+    shell.canvas.pan = egui::vec2(-150.0, -280.0);
     Ok(())
 }
 

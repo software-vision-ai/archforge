@@ -18,6 +18,7 @@ pub mod i18n;
 pub mod indexes;
 pub mod keys;
 pub mod new_project;
+pub mod objects;
 #[cfg(feature = "snapshot")]
 pub mod offscreen;
 pub mod panels;

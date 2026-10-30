@@ -76,6 +76,33 @@ str		disjoint	disjunta
 str		overlapping	sobreposta
 str		A subtype joins two tables	Um subtipo liga duas tabelas
 str		Add a literal	Adicionar literal
+str		Sequences · {n}	Sequências · {n}
+str		Add sequence	Adicionar sequência
+str		Sequence	Sequência
+str		Sequence · model	Sequência · modelo
+str		This sequence	Esta sequência
+str		On this sequence · {n}	Nesta sequência · {n}
+str		from {start} by {increment}	a partir de {start}, passo {increment}
+str		cycles	cíclica
+str		owned by {column}	pertence a {column}
+str	sequence	Start	Valor inicial
+str		Increment	Incremento
+str		Minimum	Mínimo
+str		Maximum	Máximo
+str		Cycle	Cíclica
+str		Owned by	Pertence a
+plural		{n} more column, not listed	mais {n} coluna, não listada|mais {n} colunas, não listadas
+str		{field} takes a whole number	{field} tem de ser um número inteiro
+str		Views · {n}	Vistas · {n}
+str		Add view	Adicionar vista
+str		View	Vista
+str		View · model	Vista · modelo
+str		This view	Esta vista
+str		On this view · {n}	Nesta vista · {n}
+str		view	vista
+str		materialized	materializada
+str		Materialized	Materializada
+str		Query	Consulta
 str		Pick a type	Escolher um tipo
 str		domain	domínio
 str		enum	enumerado
@@ -173,6 +200,7 @@ str		No diagrams yet	Ainda sem diagramas
 str		Select	Selecionar
 str		Pan	Deslocar
 str		Entity	Entidade
+str		Entity · {schema}	Entidade · {schema}
 str		Relationship	Relação
 str		Generalization	Generalização
 str		Relationship types	Tipos de relação
@@ -182,6 +210,8 @@ str		Group kinds	Tipos de grupo
 str		Key status	Estado das chaves
 str		Grid	Grelha
 str		Add table	Adicionar tabela
+str		Place table	Colocar tabela
+str		Already on this diagram	Já está neste diagrama
 str		Resize	Redimensionar
 str		Arrange	Organizar
 str		Connect	Ligar

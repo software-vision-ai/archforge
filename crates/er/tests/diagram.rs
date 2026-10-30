@@ -123,7 +123,7 @@ fn the_er_policy_is_what_the_spec_says() {
     let reg = registry().unwrap();
     assert!(reg.ids().any(|i| i == "diagram.place") && reg.ids().any(|i| i == "er.entity.add"));
     let m = metamodel().unwrap();
-    assert_eq!(m.classes.len(), 17, "the diagram metaclasses are the diagram metamodel's, not ER's");
+    assert_eq!(m.classes.len(), 19, "the diagram metaclasses are the diagram metamodel's, not ER's");
 }
 
 #[test]
@@ -184,7 +184,6 @@ fn refusals_follow_the_er_policy_and_change_nothing() {
         ("diagram.add", json!({ "kind": "uml.class", "element": sm.schema })),
         ("diagram.add", json!({ "kind": "er", "element": sm.customer })),
         ("diagram.add", json!({ "kind": "er" })),
-        ("diagram.place", json!({ "diagram": sm.diagram, "element": elsewhere, "x": 0, "y": 0 })),
         ("diagram.place", json!({ "diagram": sm.diagram, "element": key, "x": 0, "y": 0 })),
         ("diagram.place", json!({ "diagram": sm.diagram, "element": sm.schema, "x": 0, "y": 0 })),
         ("diagram.place", json!({ "diagram": sm.diagram, "element": sm.customer, "x": 0, "y": 0 })),
@@ -207,6 +206,9 @@ fn refusals_follow_the_er_policy_and_change_nothing() {
         }
         assert_eq!((picture(s.doc()), s.view().clone(), s.counter()), before, "{cmd} {p} changed something");
     }
+    // A schema's diagram may show a table of another schema (slice S7).
+    let node = run(&mut s, "diagram.place", json!({ "diagram": sm.diagram, "element": elsewhere, "x": 0, "y": 0 }));
+    assert!(!node.is_empty());
 }
 
 #[test]
