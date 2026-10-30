@@ -22,7 +22,9 @@ key with Add id column; `keys`: a table's keys with the key editor — name, the
 order, Add a column, Nulls distinct — and the Problems section that lists what the rules find on
 the selection; `problems`: those problems by element, badged on the canvas), the right rail between the
 canvas and its panel with Properties (`panels`: a schema's name; a table's name, kind, columns
-with the in-place column editor, keys; a diagram's name and schema) and Skills (the skills on the
+with the in-place column editor — type with its length or precision and scale, default,
+generation with the expression of a computed column, collation under More — keys; a diagram's
+name and schema; a description under every heading, the text DDL writes as a comment) and Skills (the skills on the
 selection, the inherited ones, the skill editor) following the selection, the status bar), drawn
 from the design with its own palette, type and icons (`ux`). An open project has an in-memory ER session (`Shell::session`); nothing reaches the
 project's database yet, and the status bar says so once there is something unsaved.

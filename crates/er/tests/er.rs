@@ -56,7 +56,7 @@ fn sample(s: &mut Session) -> Sample {
     let customer = run(s, "er.entity.add", json!({ "schema": schema, "name": "Customer" }));
     let order = run(s, "er.entity.add", json!({ "schema": schema, "name": "Order" }));
     let key = run(s, "er.attribute.add", json!({ "entity": customer, "name": "id", "type": "BIGINT", "primary_key": true }));
-    let total = run(s, "er.attribute.add", json!({ "entity": order, "name": "total", "type": "DECIMAL(10,2)" }));
+    let total = run(s, "er.attribute.add", json!({ "entity": order, "name": "total", "type": "DECIMAL", "precision": 10, "scale": 2 }));
     let places = run(
         s,
         "er.relationship.add",
@@ -107,8 +107,8 @@ fn the_registry_and_the_metamodel_are_what_the_spec_says() {
     assert_eq!(m.classes.len(), 10);
     assert_eq!(
         m.data_types.len(),
-        10,
-        "the five primitives and the enumerations Cardinality, EntityKind, ReferentialAction, MatchType and Deferrability"
+        11,
+        "the five primitives and the enumerations Cardinality, EntityKind, ReferentialAction, MatchType, Deferrability and Generation"
     );
     assert_eq!(Cardinality::from_index(1), Some(Cardinality::ExactlyOne));
     assert_eq!(commands::cardinality_name(Cardinality::ZeroOrMore), "zero-or-more");
@@ -1055,4 +1055,78 @@ fn a_foreign_key_without_columns_gets_new_ones_named_after_the_parent() {
     all_rules_hold(st);
     s.execute("edit.undo", &Json::Null).unwrap();
     assert_eq!(picture(s.doc()), before, "one undo takes the key and its column");
+}
+
+#[test]
+fn a_column_takes_its_size_default_generation_collation_and_description_with_the_rules() {
+    let mut s = session();
+    let sm = sample(&mut s);
+    // A varchar takes a length; a numeric a precision and a scale; an integer neither.
+    let code = run(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": "code", "type": "VARCHAR", "length": 32 }));
+    let price = run(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": "price", "type": "NUMERIC", "precision": 10, "scale": 2 }));
+    assert_eq!(rules::type_display(s.doc(), obj(s.doc(), &code)), "VARCHAR(32)");
+    assert_eq!(rules::type_display(s.doc(), obj(s.doc(), &price)), "NUMERIC(10, 2)");
+    assert_eq!(rules::type_display(s.doc(), obj(s.doc(), &sm.key)), "BIGINT");
+    let skill = run(&mut s, "skill.add", json!({ "subject": sm.schema, "name": "Table naming", "applies_to": "table", "triggers": ["naming"] }));
+    let before = picture(s.doc());
+    for (cmd, p) in [
+        ("er.attribute.add", json!({ "entity": sm.order, "name": "x", "type": "INTEGER", "length": 10 })),
+        ("er.attribute.add", json!({ "entity": sm.order, "name": "x", "type": "NUMERIC", "precision": 2, "scale": 5 })),
+        ("er.attribute.add", json!({ "entity": sm.order, "name": "x", "type": "VARCHAR", "scale": 5 })),
+        ("er.attribute.set-type", json!({ "attribute": code, "type": "TEXT", "length": 32 })),
+        ("er.attribute.set-generation", json!({ "attribute": code, "generation": "identity-always" })),
+        ("er.attribute.set-generation", json!({ "attribute": code, "generation": "computed-stored" })),
+        ("er.attribute.set-generation", json!({ "attribute": code, "generation": "sometimes" })),
+        ("er.describe", json!({ "element": sm.order, "text": " padded " })),
+        // A size belongs in its own parameter, never in the type's name.
+        ("er.attribute.add", json!({ "entity": sm.order, "name": "x", "type": "VARCHAR(255)", "length": 255 })),
+        ("er.attribute.set-type", json!({ "attribute": code, "type": "VARCHAR(255)" })),
+        // A new column takes its default and generation in the same call, under the same rules.
+        ("er.attribute.add", json!({ "entity": sm.order, "name": "x", "type": "TEXT", "generation": "identity-always" })),
+        (
+            "er.attribute.add",
+            json!({ "entity": sm.order, "name": "x", "type": "INTEGER", "generation": "computed-stored", "expression": "1", "default": "0" }),
+        ),
+        // Only elements of the ER model take a description.
+        ("er.describe", json!({ "element": skill, "text": "A skill is no element" })),
+    ] {
+        let e = s.execute(cmd, &p).expect_err(&format!("{cmd} {p} was accepted"));
+        assert!(!e.to_string().is_empty());
+        assert_eq!(picture(s.doc()), before, "{cmd} {p} changed something");
+    }
+    // A column lands with its default, generation and collation in one step.
+    let total = run(
+        &mut s,
+        "er.attribute.add",
+        json!({ "entity": sm.order, "name": "doubled", "type": "NUMERIC", "precision": 12, "scale": 2, "generation": "computed-virtual", "expression": "price * 2", "collation": "" }),
+    );
+    assert_eq!(rules::generation_of(s.doc(), obj(s.doc(), &total)), Generation::ComputedVirtual);
+    assert_eq!(rules::text_of(s.doc(), obj(s.doc(), &total), attribute::EXPRESSION), "price * 2");
+    run(&mut s, "er.attribute.remove", json!({ "attribute": total }));
+    // An identity column stays not null, whichever command would make it nullable.
+    let qty = run(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": "qty", "type": "INTEGER", "generation": "identity-by-default" }));
+    let held = picture(s.doc());
+    let e = s
+        .execute("er.attribute.set-flags", &json!({ "attribute": qty, "primary_key": false, "nullable": "yes", "unique": false }))
+        .expect_err("an identity column was made nullable");
+    assert!(e.to_string().contains("identity"), "{e}");
+    assert_eq!(picture(s.doc()), held);
+    assert!(!rules::is_nullable(s.doc(), obj(s.doc(), &qty)), "auto keeps an identity column not null");
+    run(&mut s, "er.attribute.remove", json!({ "attribute": qty }));
+    // Default, a computed column, an identity column, a collation and descriptions round-trip.
+    round_trip(&mut s, "er.attribute.set-default", &json!({ "attribute": code, "default": "'none'" }));
+    round_trip(
+        &mut s,
+        "er.attribute.set-generation",
+        &json!({ "attribute": price, "generation": "computed-stored", "expression": "quantity * unit_price" }),
+    );
+    round_trip(&mut s, "er.attribute.set-generation", &json!({ "attribute": sm.key, "generation": "identity-always" }));
+    round_trip(&mut s, "er.attribute.set-collation", &json!({ "attribute": code, "collation": "en_US" }));
+    round_trip(&mut s, "er.describe", &json!({ "element": sm.order, "text": "One purchase by a customer." }));
+    run(&mut s, "er.attribute.set-generation", json!({ "attribute": price, "generation": "computed-stored", "expression": "quantity * unit_price" }));
+    let e = s.execute("er.attribute.set-default", &json!({ "attribute": price, "default": "0" })).expect_err("a computed column takes no default");
+    assert!(e.to_string().contains("default"));
+    run(&mut s, "er.describe", json!({ "element": sm.order, "text": "One purchase by a customer." }));
+    assert_eq!(rules::text_of(s.doc(), obj(s.doc(), &sm.order), element::DESCRIPTION), "One purchase by a customer.");
+    all_rules_hold(s.doc());
 }

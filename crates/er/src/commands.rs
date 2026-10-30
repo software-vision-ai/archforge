@@ -5,13 +5,14 @@
 use std::collections::BTreeSet;
 
 use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, always, cmd};
-use archforge_mof::{ClassId, Invalid, Obj, Store, Uuid, Value};
+use archforge_mof::{ClassId, Invalid, Obj, Store, TypeRef, Uuid, Value};
 use serde_json::{Value as Json, json};
 
-use crate::rules::{self, MAX_NAME, MAX_TYPE, name_of};
+use crate::rules::{self, MAX_NAME, MAX_TEXT, MAX_TYPE, name_of};
 use crate::{
-    ATTRIBUTE, Cardinality, Deferrability, ENTITY, ENTITY_SIZE, EntityKind, ErView, FOREIGN_KEY, MatchType, PRIMARY_KEY, RELATIONSHIP,
-    ReferentialAction, SCHEMA, UNIQUE_CONSTRAINT, attribute, entity, foreign_key, key, named_element, relationship, schema, unique_constraint,
+    ATTRIBUTE, Cardinality, Deferrability, ELEMENT, ENTITY, ENTITY_SIZE, EntityKind, ErView, FOREIGN_KEY, Generation, MatchType, PRIMARY_KEY,
+    RELATIONSHIP, ReferentialAction, SCHEMA, UNIQUE_CONSTRAINT, attribute, element, entity, foreign_key, key, named_element, relationship, schema,
+    unique_constraint,
 };
 
 type C<'a> = Ctx<'a, Store, ErView>;
@@ -50,6 +51,18 @@ fn uuid_of(store: &Store, obj: Obj) -> Result<String, CommandError> {
     store.uuid(obj).map(|u| u.to_string()).map_err(fail)
 }
 
+/// The element the id under `key` names, of any class of the ER model.
+fn element_of_any(ctx: &C<'_>, p: &Params, key: &str) -> Result<Obj, CommandError> {
+    let id = text(p, key);
+    let Some(uuid) = Uuid::parse(id) else { return Err(refuse(key, format!("{id:?} is not an id"))) };
+    let o = ctx.doc.by_uuid(uuid).filter(|o| ctx.doc.is_alive(*o)).ok_or_else(|| refuse(key, format!("there is no element {id}")))?;
+    let class = ctx.doc.class_of(o).map_err(fail)?;
+    if !ctx.doc.universe().conforms(class, TypeRef::Class(ELEMENT)) {
+        return Err(refuse(key, format!("{id} is not an element of the ER model")));
+    }
+    Ok(o)
+}
+
 /// The element the id under `key` names, of `class`.
 fn id_of(ctx: &C<'_>, p: &Params, key: &str, class: ClassId) -> Result<Obj, CommandError> {
     let id = text(p, key);
@@ -75,6 +88,41 @@ fn id_of(ctx: &C<'_>, p: &Params, key: &str, class: ClassId) -> Result<Obj, Comm
         ));
     }
     Ok(obj)
+}
+
+/// Refuses with `key` when a text problem is found.
+fn check_text(key: &str, problem: Option<String>) -> Result<(), CommandError> {
+    match problem {
+        Some(p) => Err(refuse(key, format!("the text {p}"))),
+        None => Ok(()),
+    }
+}
+
+/// A type name: free text, but its size goes into the size parameters, never into the name.
+fn check_type(kind: &str) -> Result<(), CommandError> {
+    if kind.is_empty() {
+        return Ok(());
+    }
+    check_name("type", kind, MAX_TYPE)?;
+    if kind.contains('(') {
+        return Err(refuse("type", "carries its own size; give length, precision or scale instead"));
+    }
+    Ok(())
+}
+
+/// The generation word under `generation` and the expression under `expression`.
+fn generation_params(p: &Params) -> Result<(Generation, &str), CommandError> {
+    let word = text(p, "generation");
+    let generation = GENERATION_WORDS.iter().find(|(_, w)| *w == word).map(|(g, _)| *g).ok_or_else(|| {
+        refuse("generation", format!("{word:?} is not one of {}", GENERATION_WORDS.iter().map(|(_, w)| *w).collect::<Vec<_>>().join(", ")))
+    })?;
+    let expression = text(p, "expression");
+    check_text("expression", rules::text_problem(expression, MAX_TEXT))?;
+    Ok((generation, expression))
+}
+
+fn text_or_null(s: &str) -> Value {
+    if s.is_empty() { Value::Null } else { Value::str(s) }
 }
 
 fn check_name(key: &str, name: &str, max: usize) -> Result<(), CommandError> {
@@ -296,13 +344,18 @@ fn entity_remove(ctx: &mut C<'_>, p: &Params) -> R {
 
 // Attributes.
 
-/// Whether a key may be nullable: `auto` makes a key not nullable and anything else nullable.
-fn nullable(p: &Params, primary_key: bool) -> Result<bool, CommandError> {
+/// Whether a column's value is generated as an identity, which keeps it not null.
+fn is_identity(g: Generation) -> bool {
+    matches!(g, Generation::IdentityAlways | Generation::IdentityByDefault)
+}
+
+/// The nullable parameter: `auto` follows the column (a key or identity column is not nullable).
+fn nullable(p: &Params, held_not_null: bool) -> Result<bool, CommandError> {
     match text(p, "nullable") {
-        "auto" | "" => Ok(!primary_key),
+        "auto" | "" => Ok(!held_not_null),
         "yes" => {
-            if primary_key {
-                return Err(refuse("nullable", "a key cannot be nullable"));
+            if held_not_null {
+                return Err(refuse("nullable", "a key or identity column cannot be nullable"));
             }
             Ok(true)
         }
@@ -319,11 +372,17 @@ fn attribute_add(ctx: &mut C<'_>, p: &Params) -> R {
         return Err(refuse("name", format!("the entity has an attribute named {name:?} already")));
     }
     let kind = text(p, "type");
-    if !kind.is_empty() {
-        check_name("type", kind, MAX_TYPE)?;
+    check_type(kind)?;
+    let size = size_params(p, kind)?;
+    let default = text(p, "default");
+    check_text("default", rules::text_problem(default, MAX_TEXT))?;
+    let (generation, expression) = generation_params(p)?;
+    let collation = text(p, "collation");
+    if !collation.is_empty() {
+        check_name("collation", collation, MAX_NAME)?;
     }
     let key = p.bool("primary_key").unwrap_or(false);
-    let null = nullable(p, key)?;
+    let null = nullable(p, key || is_identity(generation))?;
     let len = ctx.doc.list(e, entity::ATTRIBUTE).map_err(fail)?.len();
     let at = match p.integer("at") {
         Some(i) if i < 0 => len,
@@ -345,7 +404,15 @@ fn attribute_add(ctx: &mut C<'_>, p: &Params) -> R {
             if !kind.is_empty() {
                 st.set(a, attribute::TYPE, Value::str(kind))?;
             }
+            set_size(st, a, size)?;
             st.set(a, attribute::NULLABLE, Value::Bool(null))?;
+            st.set(a, attribute::DEFAULT, text_or_null(default))?;
+            st.set(a, attribute::GENERATION, Value::Enum(generation.index()))?;
+            st.set(a, attribute::EXPRESSION, text_or_null(expression))?;
+            st.set(a, attribute::COLLATION, text_or_null(collation))?;
+            if let Some(problem) = rules::generation_problem(st, a) {
+                return Err(Invalid::Refused(problem));
+            }
             st.insert(e, entity::ATTRIBUTE, at, Value::Ref(a))?;
             if key {
                 join_primary_key(st, e, a)?;
@@ -502,24 +569,108 @@ fn new_unique(store: &mut Store, e: Obj, columns: &[Obj], name: &str, nulls_dist
 fn attribute_set_type(ctx: &mut C<'_>, p: &Params) -> R {
     let a = id_of(ctx, p, "attribute", ATTRIBUTE)?;
     let kind = text(p, "type");
-    if !kind.is_empty() {
-        check_name("type", kind, MAX_TYPE)?;
-    }
+    check_type(kind)?;
+    let size = size_params(p, kind)?;
     let (keys, entities) = keys_around(ctx.doc, a).map_err(fail)?;
-    let value = if kind.is_empty() { Value::Null } else { Value::str(kind) };
+    let value = text_or_null(kind);
     ctx.doc
         .transaction(|st| {
             st.set(a, attribute::TYPE, value)?;
+            set_size(st, a, size)?;
+            if let Some(problem) = rules::generation_problem(st, a) {
+                return Err(Invalid::Refused(problem));
+            }
             keys_still_hold(st, &keys, &entities)
         })
         .map_err(|e| refuse("type", e.to_string()))?;
     Ok(json!({ "id": uuid_of(ctx.doc, a)? }))
 }
 
+/// The size parameters of a type command, checked against the type: 0 means none.
+fn size_params(p: &Params, kind: &str) -> Result<(Option<i64>, Option<i64>, Option<i64>), CommandError> {
+    let read = |key: &str| p.integer(key).filter(|v| *v != 0);
+    let size = (read("length"), read("precision"), read("scale"));
+    if let Some((key, problem)) = rules::size_problem(kind, size.0, size.1, size.2) {
+        return Err(refuse(key, problem));
+    }
+    Ok(size)
+}
+
+fn set_size(st: &mut Store, a: Obj, size: (Option<i64>, Option<i64>, Option<i64>)) -> Result<(), Invalid> {
+    // The generated integers take no null: 0 is none.
+    for (prop, value) in [(attribute::LENGTH, size.0), (attribute::PRECISION, size.1), (attribute::SCALE, size.2)] {
+        st.set(a, prop, Value::Int(value.unwrap_or(0)))?;
+    }
+    Ok(())
+}
+
+/// Sets a column's default: an SQL expression, or nothing.
+fn attribute_set_default(ctx: &mut C<'_>, p: &Params) -> R {
+    let a = id_of(ctx, p, "attribute", ATTRIBUTE)?;
+    let default = text(p, "default");
+    check_text("default", rules::text_problem(default, MAX_TEXT))?;
+    ctx.doc
+        .transaction(|st| {
+            st.set(a, attribute::DEFAULT, text_or_null(default))?;
+            match rules::generation_problem(st, a) {
+                Some(problem) => Err(Invalid::Refused(problem)),
+                None => Ok(()),
+            }
+        })
+        .map_err(|e| refuse("default", e.to_string()))?;
+    Ok(json!({ "id": uuid_of(ctx.doc, a)? }))
+}
+
+/// The generation words, in the enumeration's order.
+pub const GENERATION_WORDS: [(Generation, &str); 5] = [
+    (Generation::NoneKind, "none"),
+    (Generation::IdentityAlways, "identity-always"),
+    (Generation::IdentityByDefault, "identity-by-default"),
+    (Generation::ComputedStored, "computed-stored"),
+    (Generation::ComputedVirtual, "computed-virtual"),
+];
+
+/// Sets how a column's value comes about, with the expression of a computed column.
+fn attribute_set_generation(ctx: &mut C<'_>, p: &Params) -> R {
+    let a = id_of(ctx, p, "attribute", ATTRIBUTE)?;
+    let (generation, expression) = generation_params(p)?;
+    ctx.doc
+        .transaction(|st| {
+            st.set(a, attribute::GENERATION, Value::Enum(generation.index()))?;
+            st.set(a, attribute::EXPRESSION, text_or_null(expression))?;
+            match rules::generation_problem(st, a) {
+                Some(problem) => Err(Invalid::Refused(problem)),
+                None => Ok(()),
+            }
+        })
+        .map_err(|e| refuse("generation", e.to_string()))?;
+    Ok(json!({ "id": uuid_of(ctx.doc, a)? }))
+}
+
+/// Sets a column's collation, or clears it.
+fn attribute_set_collation(ctx: &mut C<'_>, p: &Params) -> R {
+    let a = id_of(ctx, p, "attribute", ATTRIBUTE)?;
+    let collation = text(p, "collation");
+    if !collation.is_empty() {
+        check_name("collation", collation, MAX_NAME)?;
+    }
+    set_name(ctx, a, attribute::COLLATION, collation)?;
+    Ok(json!({ "id": uuid_of(ctx.doc, a)? }))
+}
+
+/// Describes any element of the model: the text DDL writes as its comment, or nothing.
+fn describe(ctx: &mut C<'_>, p: &Params) -> R {
+    let o = element_of_any(ctx, p, "element")?;
+    let description = text(p, "text");
+    check_text("text", rules::text_problem(description, MAX_TEXT))?;
+    set_name(ctx, o, element::DESCRIPTION, description)?;
+    Ok(json!({ "id": uuid_of(ctx.doc, o)? }))
+}
+
 fn attribute_set_flags(ctx: &mut C<'_>, p: &Params) -> R {
     let a = id_of(ctx, p, "attribute", ATTRIBUTE)?;
     let key = p.bool("primary_key").unwrap_or(false);
-    let null = nullable(p, key)?;
+    let null = nullable(p, key || is_identity(rules::generation_of(ctx.doc, a)))?;
     let unique = p.bool("unique").unwrap_or(false);
     let e = rules::entity_of(ctx.doc, a).ok_or_else(|| refuse("attribute", "the attribute belongs to no entity"))?;
     let was_key = rules::in_primary_key(ctx.doc, a);
@@ -551,9 +702,12 @@ fn attribute_set_flags(ctx: &mut C<'_>, p: &Params) -> R {
                     archforge_core::destroy_with_links(st, *u)?;
                 }
             }
+            if let Some(problem) = rules::generation_problem(st, a) {
+                return Err(Invalid::Refused(problem));
+            }
             keys_still_hold(st, &fks, &entities)
         })
-        .map_err(|e| refuse("primary_key", e.to_string()))?;
+        .map_err(|e| refuse("attribute", e.to_string()))?;
     Ok(json!({ "id": uuid_of(ctx.doc, a)? }))
 }
 
@@ -1545,18 +1699,54 @@ pub fn specs() -> Vec<CommandSpec<Store, ErView>> {
             "Add attribute",
             &["Entity"],
             None,
-            "entity: string; the entity's id\nname: string; the attribute's name\ntype: string = \"\"; its type, free text\nprimary_key: bool = false; joins the primary key\nnullable: string = \"auto\", auto|yes|no; nullable (auto: a key column is not)\nunique: bool = false; a unique constraint on it alone\nat: integer = -1, -1..1000000; where in the entity, -1 for the end",
+            "entity: string; the entity's id\nname: string; the attribute's name\ntype: string = \"\"; its type, free text\nlength: integer = 0, 0..65535; a length for a type that takes one, 0 for none\nprecision: integer = 0, 0..65535; a precision for a type that takes one, 0 for none\nscale: integer = 0, 0..65535; a scale beside the precision, 0 for none\ndefault: string = \"\"; an SQL expression, or nothing\ngeneration: string = \"none\", none|identity-always|identity-by-default|computed-stored|computed-virtual; how the value comes about\nexpression: string = \"\"; the expression of a computed column, or nothing\ncollation: string = \"\"; a collation name, or nothing\nprimary_key: bool = false; joins the primary key\nnullable: string = \"auto\", auto|yes|no; nullable (auto: a key or identity column is not)\nunique: bool = false; a unique constraint on it alone\nat: integer = -1, -1..1000000; where in the entity, -1 for the end",
             has_entities,
             attribute_add
         ),
         cmd!("er.attribute.rename", "Rename attribute", &["Entity"], None, "attribute: string; the attribute's id\nname: string; the new name", has_entities, attribute_rename),
-        cmd!("er.attribute.set-type", "Set attribute type", &["Entity"], None, "attribute: string; the attribute's id\ntype: string = \"\"; its type, free text", has_entities, attribute_set_type),
+        cmd!(
+            "er.attribute.set-type",
+            "Set attribute type",
+            &["Entity"],
+            None,
+            "attribute: string; the attribute's id\ntype: string = \"\"; its type, free text\nlength: integer = 0, 0..65535; a length for a type that takes one, 0 for none\nprecision: integer = 0, 0..65535; a precision for a type that takes one, 0 for none\nscale: integer = 0, 0..65535; a scale beside the precision, 0 for none",
+            has_entities,
+            attribute_set_type
+        ),
+        cmd!(
+            "er.attribute.set-default",
+            "Set attribute default",
+            &["Entity"],
+            None,
+            "attribute: string; the attribute's id\ndefault: string = \"\"; an SQL expression, or nothing",
+            has_entities,
+            attribute_set_default
+        ),
+        cmd!(
+            "er.attribute.set-generation",
+            "Set attribute generation",
+            &["Entity"],
+            None,
+            "attribute: string; the attribute's id\ngeneration: string, none|identity-always|identity-by-default|computed-stored|computed-virtual; how the value comes about\nexpression: string = \"\"; the expression of a computed column, or nothing",
+            has_entities,
+            attribute_set_generation
+        ),
+        cmd!(
+            "er.attribute.set-collation",
+            "Set attribute collation",
+            &["Entity"],
+            None,
+            "attribute: string; the attribute's id\ncollation: string = \"\"; a collation name, or nothing",
+            has_entities,
+            attribute_set_collation
+        ),
+        cmd!("er.describe", "Describe", &["Edit"], None, "element: string; the element's id\ntext: string = \"\"; its description, or nothing", has_schemas, describe),
         cmd!(
             "er.attribute.set-flags",
             "Set attribute flags",
             &["Entity"],
             None,
-            "attribute: string; the attribute's id\nprimary_key: bool; in the primary key\nnullable: string, auto|yes|no; nullable (auto: a key column is not)\nunique: bool; a unique constraint on it alone",
+            "attribute: string; the attribute's id\nprimary_key: bool; in the primary key\nnullable: string, auto|yes|no; nullable (auto: a key or identity column is not)\nunique: bool; a unique constraint on it alone",
             has_entities,
             attribute_set_flags
         ),

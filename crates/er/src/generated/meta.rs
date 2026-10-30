@@ -9,7 +9,7 @@ use archforge_mof::{Builder, ClassId, DataId, DataKind, MetaError, Metamodel, Pr
 pub const INDEX: u16 = 3;
 pub const URI: &str = "archforge:er";
 pub const VERSION: &str = "1";
-pub const CONTENT_HASH: &str = "a9b6e22f4593b0d8";
+pub const CONTENT_HASH: &str = "e8ec9a14fb8860a9";
 
 pub const BOOLEAN: DataId = DataId::new(INDEX, 0);
 pub const INTEGER: DataId = DataId::new(INDEX, 1);
@@ -21,6 +21,7 @@ pub const ENTITY_KIND: DataId = DataId::new(INDEX, 6);
 pub const REFERENTIAL_ACTION: DataId = DataId::new(INDEX, 7);
 pub const MATCH_TYPE: DataId = DataId::new(INDEX, 8);
 pub const DEFERRABILITY: DataId = DataId::new(INDEX, 9);
+pub const GENERATION: DataId = DataId::new(INDEX, 10);
 
 pub const ELEMENT: ClassId = ClassId::new(INDEX, 0);
 pub const NAMED_ELEMENT: ClassId = ClassId::new(INDEX, 1);
@@ -38,75 +39,83 @@ pub mod element {
     use super::INDEX;
     use super::PropId;
     pub const OWNED_ELEMENT: PropId = PropId::new(INDEX, 0);
+    pub const DESCRIPTION: PropId = PropId::new(INDEX, 1);
 }
 /// The properties NamedElement declares.
 pub mod named_element {
     use super::INDEX;
     use super::PropId;
-    pub const NAME: PropId = PropId::new(INDEX, 1);
+    pub const NAME: PropId = PropId::new(INDEX, 2);
 }
 /// The properties Schema declares.
 pub mod schema {
     use super::INDEX;
     use super::PropId;
-    pub const ENTITY: PropId = PropId::new(INDEX, 2);
-    pub const RELATIONSHIP: PropId = PropId::new(INDEX, 3);
+    pub const ENTITY: PropId = PropId::new(INDEX, 3);
+    pub const RELATIONSHIP: PropId = PropId::new(INDEX, 4);
 }
 /// The properties Entity declares.
 pub mod entity {
     use super::INDEX;
     use super::PropId;
-    pub const ATTRIBUTE: PropId = PropId::new(INDEX, 4);
-    pub const KIND: PropId = PropId::new(INDEX, 5);
-    pub const PRIMARY_KEY: PropId = PropId::new(INDEX, 6);
-    pub const UNIQUE_CONSTRAINT: PropId = PropId::new(INDEX, 7);
-    pub const FOREIGN_KEY: PropId = PropId::new(INDEX, 8);
+    pub const ATTRIBUTE: PropId = PropId::new(INDEX, 5);
+    pub const KIND: PropId = PropId::new(INDEX, 6);
+    pub const PRIMARY_KEY: PropId = PropId::new(INDEX, 7);
+    pub const UNIQUE_CONSTRAINT: PropId = PropId::new(INDEX, 8);
+    pub const FOREIGN_KEY: PropId = PropId::new(INDEX, 9);
 }
 /// The properties Attribute declares.
 pub mod attribute {
     use super::INDEX;
     use super::PropId;
-    pub const TYPE: PropId = PropId::new(INDEX, 9);
-    pub const NULLABLE: PropId = PropId::new(INDEX, 10);
+    pub const TYPE: PropId = PropId::new(INDEX, 10);
+    pub const NULLABLE: PropId = PropId::new(INDEX, 11);
+    pub const LENGTH: PropId = PropId::new(INDEX, 12);
+    pub const PRECISION: PropId = PropId::new(INDEX, 13);
+    pub const SCALE: PropId = PropId::new(INDEX, 14);
+    pub const DEFAULT: PropId = PropId::new(INDEX, 15);
+    pub const GENERATION: PropId = PropId::new(INDEX, 16);
+    pub const EXPRESSION: PropId = PropId::new(INDEX, 17);
+    pub const COLLATION: PropId = PropId::new(INDEX, 18);
 }
 /// The properties Relationship declares.
 pub mod relationship {
     use super::INDEX;
     use super::PropId;
-    pub const NAME: PropId = PropId::new(INDEX, 11);
-    pub const FROM: PropId = PropId::new(INDEX, 12);
-    pub const TO: PropId = PropId::new(INDEX, 13);
-    pub const FROM_END: PropId = PropId::new(INDEX, 14);
-    pub const TO_END: PropId = PropId::new(INDEX, 15);
-    pub const FROM_ROLE: PropId = PropId::new(INDEX, 16);
-    pub const TO_ROLE: PropId = PropId::new(INDEX, 17);
-    pub const IDENTIFYING: PropId = PropId::new(INDEX, 18);
+    pub const NAME: PropId = PropId::new(INDEX, 19);
+    pub const FROM: PropId = PropId::new(INDEX, 20);
+    pub const TO: PropId = PropId::new(INDEX, 21);
+    pub const FROM_END: PropId = PropId::new(INDEX, 22);
+    pub const TO_END: PropId = PropId::new(INDEX, 23);
+    pub const FROM_ROLE: PropId = PropId::new(INDEX, 24);
+    pub const TO_ROLE: PropId = PropId::new(INDEX, 25);
+    pub const IDENTIFYING: PropId = PropId::new(INDEX, 26);
 }
 /// The properties Key declares.
 pub mod key {
     use super::INDEX;
     use super::PropId;
-    pub const NAME: PropId = PropId::new(INDEX, 19);
-    pub const COLUMN: PropId = PropId::new(INDEX, 20);
+    pub const NAME: PropId = PropId::new(INDEX, 27);
+    pub const COLUMN: PropId = PropId::new(INDEX, 28);
 }
 /// The properties UniqueConstraint declares.
 pub mod unique_constraint {
     use super::INDEX;
     use super::PropId;
-    pub const NULLS_DISTINCT: PropId = PropId::new(INDEX, 21);
+    pub const NULLS_DISTINCT: PropId = PropId::new(INDEX, 29);
 }
 /// The properties ForeignKey declares.
 pub mod foreign_key {
     use super::INDEX;
     use super::PropId;
-    pub const NAME: PropId = PropId::new(INDEX, 22);
-    pub const REFERENCES: PropId = PropId::new(INDEX, 23);
-    pub const COLUMN: PropId = PropId::new(INDEX, 24);
-    pub const ON_DELETE: PropId = PropId::new(INDEX, 25);
-    pub const ON_UPDATE: PropId = PropId::new(INDEX, 26);
-    pub const RELATIONSHIP: PropId = PropId::new(INDEX, 27);
-    pub const MATCH: PropId = PropId::new(INDEX, 28);
-    pub const DEFERRABLE: PropId = PropId::new(INDEX, 29);
+    pub const NAME: PropId = PropId::new(INDEX, 30);
+    pub const REFERENCES: PropId = PropId::new(INDEX, 31);
+    pub const COLUMN: PropId = PropId::new(INDEX, 32);
+    pub const ON_DELETE: PropId = PropId::new(INDEX, 33);
+    pub const ON_UPDATE: PropId = PropId::new(INDEX, 34);
+    pub const RELATIONSHIP: PropId = PropId::new(INDEX, 35);
+    pub const MATCH: PropId = PropId::new(INDEX, 36);
+    pub const DEFERRABLE: PropId = PropId::new(INDEX, 37);
 }
 
 fn build() -> Result<Arc<Metamodel>, MetaError> {
@@ -125,6 +134,17 @@ fn build() -> Result<Arc<Metamodel>, MetaError> {
     )?;
     b.data_type("MatchType", DataKind::Enumeration(vec!["simple".into(), "full".into(), "partial".into()]), "")?;
     b.data_type("Deferrability", DataKind::Enumeration(vec!["notDeferrable".into(), "initiallyImmediate".into(), "initiallyDeferred".into()]), "")?;
+    b.data_type(
+        "Generation",
+        DataKind::Enumeration(vec![
+            "none".into(),
+            "identityAlways".into(),
+            "identityByDefault".into(),
+            "computedStored".into(),
+            "computedVirtual".into(),
+        ]),
+        "",
+    )?;
     b.class("Element", true, &[], "")?;
     b.class("NamedElement", true, &[ELEMENT], "")?;
     b.class("Schema", false, &[NAMED_ELEMENT], "")?;
@@ -155,6 +175,26 @@ fn build() -> Result<Arc<Metamodel>, MetaError> {
         default: None,
         doc: "",
     })?; // element::OWNED_ELEMENT
+    b.property(PropertySpec {
+        name: "description",
+        owner: ELEMENT,
+        ty: TypeRef::Data(STRING),
+        lower: 0,
+        upper: Some(1),
+        is_ordered: false,
+        is_unique: true,
+        is_composite: false,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[],
+        redefines: &[],
+        default: None,
+        doc: "",
+    })?; // element::DESCRIPTION
     b.property(PropertySpec {
         name: "name",
         owner: NAMED_ELEMENT,
@@ -355,6 +395,146 @@ fn build() -> Result<Arc<Metamodel>, MetaError> {
         default: Some(Value::Bool(true)),
         doc: "",
     })?; // attribute::NULLABLE
+    b.property(PropertySpec {
+        name: "length",
+        owner: ATTRIBUTE,
+        ty: TypeRef::Data(INTEGER),
+        lower: 0,
+        upper: Some(1),
+        is_ordered: false,
+        is_unique: true,
+        is_composite: false,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[],
+        redefines: &[],
+        default: None,
+        doc: "",
+    })?; // attribute::LENGTH
+    b.property(PropertySpec {
+        name: "precision",
+        owner: ATTRIBUTE,
+        ty: TypeRef::Data(INTEGER),
+        lower: 0,
+        upper: Some(1),
+        is_ordered: false,
+        is_unique: true,
+        is_composite: false,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[],
+        redefines: &[],
+        default: None,
+        doc: "",
+    })?; // attribute::PRECISION
+    b.property(PropertySpec {
+        name: "scale",
+        owner: ATTRIBUTE,
+        ty: TypeRef::Data(INTEGER),
+        lower: 0,
+        upper: Some(1),
+        is_ordered: false,
+        is_unique: true,
+        is_composite: false,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[],
+        redefines: &[],
+        default: None,
+        doc: "",
+    })?; // attribute::SCALE
+    b.property(PropertySpec {
+        name: "default",
+        owner: ATTRIBUTE,
+        ty: TypeRef::Data(STRING),
+        lower: 0,
+        upper: Some(1),
+        is_ordered: false,
+        is_unique: true,
+        is_composite: false,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[],
+        redefines: &[],
+        default: None,
+        doc: "",
+    })?; // attribute::DEFAULT
+    b.property(PropertySpec {
+        name: "generation",
+        owner: ATTRIBUTE,
+        ty: TypeRef::Data(GENERATION),
+        lower: 1,
+        upper: Some(1),
+        is_ordered: false,
+        is_unique: true,
+        is_composite: false,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[],
+        redefines: &[],
+        default: Some(Value::Enum(0)),
+        doc: "",
+    })?; // attribute::GENERATION
+    b.property(PropertySpec {
+        name: "expression",
+        owner: ATTRIBUTE,
+        ty: TypeRef::Data(STRING),
+        lower: 0,
+        upper: Some(1),
+        is_ordered: false,
+        is_unique: true,
+        is_composite: false,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[],
+        redefines: &[],
+        default: None,
+        doc: "",
+    })?; // attribute::EXPRESSION
+    b.property(PropertySpec {
+        name: "collation",
+        owner: ATTRIBUTE,
+        ty: TypeRef::Data(STRING),
+        lower: 0,
+        upper: Some(1),
+        is_ordered: false,
+        is_unique: true,
+        is_composite: false,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[],
+        redefines: &[],
+        default: None,
+        doc: "",
+    })?; // attribute::COLLATION
     b.property(PropertySpec {
         name: "name",
         owner: RELATIONSHIP,

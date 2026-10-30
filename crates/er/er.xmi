@@ -35,11 +35,22 @@
       <ownedLiteral xmi:type="uml:EnumerationLiteral" xmi:id="Deferrability-initiallyImmediate" name="initiallyImmediate"/>
       <ownedLiteral xmi:type="uml:EnumerationLiteral" xmi:id="Deferrability-initiallyDeferred" name="initiallyDeferred"/>
     </packagedElement>
+    <packagedElement xmi:type="uml:Enumeration" xmi:id="Generation" name="Generation">
+      <ownedLiteral xmi:type="uml:EnumerationLiteral" xmi:id="Generation-none" name="none"/>
+      <ownedLiteral xmi:type="uml:EnumerationLiteral" xmi:id="Generation-identityAlways" name="identityAlways"/>
+      <ownedLiteral xmi:type="uml:EnumerationLiteral" xmi:id="Generation-identityByDefault" name="identityByDefault"/>
+      <ownedLiteral xmi:type="uml:EnumerationLiteral" xmi:id="Generation-computedStored" name="computedStored"/>
+      <ownedLiteral xmi:type="uml:EnumerationLiteral" xmi:id="Generation-computedVirtual" name="computedVirtual"/>
+    </packagedElement>
     <packagedElement xmi:type="uml:Class" xmi:id="Element" name="Element" isAbstract="true">
       <ownedAttribute xmi:type="uml:Property" xmi:id="Element-ownedElement" name="ownedElement" isReadOnly="true" isDerived="true" isDerivedUnion="true" aggregation="composite">
         <type href="archforge:mof#Any"/>
         <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Element-ownedElement-_lowerValue"/>
         <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="Element-ownedElement-_upperValue" value="*"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Element-description" name="description">
+        <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String"/>
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Element-description-_lowerValue"/>
       </ownedAttribute>
     </packagedElement>
     <packagedElement xmi:type="uml:Class" xmi:id="NamedElement" name="NamedElement" isAbstract="true">
@@ -89,6 +100,33 @@
       <ownedAttribute xmi:type="uml:Property" xmi:id="Attribute-nullable" name="nullable">
         <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Boolean"/>
         <defaultValue xmi:type="uml:LiteralBoolean" xmi:id="Attribute-nullable-_defaultValue" value="true"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Attribute-length" name="length">
+        <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Integer"/>
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Attribute-length-_lowerValue"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Attribute-precision" name="precision">
+        <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Integer"/>
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Attribute-precision-_lowerValue"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Attribute-scale" name="scale">
+        <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Integer"/>
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Attribute-scale-_lowerValue"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Attribute-default" name="default">
+        <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String"/>
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Attribute-default-_lowerValue"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Attribute-generation" name="generation" type="Generation">
+        <defaultValue xmi:type="uml:InstanceValue" xmi:id="Attribute-generation-_defaultValue" type="Generation" instance="Generation-none"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Attribute-expression" name="expression">
+        <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String"/>
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Attribute-expression-_lowerValue"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Attribute-collation" name="collation">
+        <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String"/>
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Attribute-collation-_lowerValue"/>
       </ownedAttribute>
     </packagedElement>
     <packagedElement xmi:type="uml:Class" xmi:id="Relationship" name="Relationship">

@@ -48,6 +48,7 @@ str		{key}: {problem}	{key}: {problem}
 str		{name} has no primary key	{name} has no primary key
 str		{name} removed · {keys} went with it	{name} removed · {keys} went with it
 str		Add column	Add column
+str		Edit column	Edit column
 str		Add skill	Add skill
 str		Kind	Kind
 str		Regular	Regular
@@ -56,6 +57,20 @@ str		Type	Type
 str		Primary key	Primary key
 str		Not null	Not null
 str		Unique	Unique
+str		Length	Length
+str		Precision	Precision
+str		Scale	Scale
+str		Default	Default
+str		Generation	Generation
+str		Expression	Expression
+str		Collation	Collation
+str		Description	Description
+str		{text} is not a number	{text} is not a number
+str		None	None
+str		Identity, always	Identity, always
+str		Identity, by default	Identity, by default
+str		Computed, stored	Computed, stored
+str		Computed, virtual	Computed, virtual
 str		Remove	Remove
 str		Apply	Apply
 str		Inherited · {n}	Inherited · {n}
