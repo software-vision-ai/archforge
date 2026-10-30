@@ -942,10 +942,12 @@ fn the_sweep_finds_nothing() {
     let o = get(&mut s, "er.entity.get", json!({ "entity": sm.order }));
     let u = o["unique_constraints"][0]["id"].as_str().unwrap().to_string();
     let pk = get(&mut s, "er.entity.get", json!({ "entity": sm.customer }))["primary_key"]["id"].as_str().unwrap().to_string();
-    let ids = [&sm.schema, &sm.customer, &sm.key, &sm.places, &pk, &u, &fk, "not-an-id", "00000000-0000-7000-8000-000000000000"];
+    let skill = run(&mut s, "skill.add", json!({ "subject": sm.schema, "name": "Table naming", "applies_to": "table", "triggers": ["naming"] }));
+    let ids = [&sm.schema, &sm.customer, &sm.key, &sm.places, &pk, &u, &fk, &skill, "not-an-id", "00000000-0000-7000-8000-000000000000"];
     let calls = sweep_with(&mut s, &ids, picture).unwrap();
     assert!(calls > 1000, "{calls}");
     assert_eq!(problems(s.doc()), Vec::<String>::new());
+    assert!(archforge_core::skills::problems(s.doc()).is_empty());
 }
 
 struct Rng(u64);

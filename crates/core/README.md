@@ -1,24 +1,36 @@
 # archforge-core
 
 **Purpose.** The shared core metamodel: a project's one root (`Model`), folders that organise
-elements of any notation, comments and tags on any element, and trace links between elements of
-any notations, which make the notations viewpoints of one model (decision gm2.20). Generated from
-`core.xmi` by `cargo xtask generate core`; `lib.rs` holds the rules the MOF core cannot know.
+elements of any notation, comments and tags on any element, trace links between elements of
+any notations, which make the notations viewpoints of one model (decision gm2.20), and skills:
+text the user writes on an element to guide the AI (spec archforge-zer.2). Generated from
+`core.xmi` by `cargo xtask generate core`; `lib.rs` holds the rules the MOF core cannot know and
+`skills.rs` the skill rules and commands.
 
-**Layer.** 5, above `archforge-mof`; pure, builds for the portable target. Depends on no notation:
-everything that refers to another notation's element is typed Any.
+**Layer.** 5, above `archforge-mof` and `archforge-engine`; pure, builds for the portable target.
+Depends on no notation: everything that refers to another notation's element is typed Any, and what
+a skill may sit on or aim at comes from the notation's view through `skills::SkillHost`.
 
 **Binding rules.** The metamodel is data compiled in (gm2.18); the XMI is ours and lives in the
 repository, so the gate's `generated` step checks it everywhere. The MOF core enforces types,
 bounds, containment and the derived union `ownedElement`; this crate adds: a tag's name is unique
 among the tags on one element (`tag_name_free`), a link's ends differ (`link`), links die with
-their ends (`destroy_with_links`: the MOF core alone refuses to destroy an element a link
-requires), and a project has one Model and nothing else without a container (`problems`).
+their ends and skills with their subjects (`destroy_with_links`: the MOF core alone refuses to
+destroy an element a link requires, and would null a skill's optional subject, turning a table's
+skill into a model-wide one; every notation removes through it), and a project has one Model and nothing else without a
+container (`problems`). Skills (`skills`): a name is plain and unique among the skills on one
+subject; a skill aims at a kind the notation declares, and names a type only for the typed kind; a
+dialect belongs to an export skill; a body has at most 4,000 characters; the effective skills of an
+element (`skills::effective_skills`) are those of its containers outermost first, then its own,
+the least specific first within a level (everything below the subject, then a kind, then a kind
+with a type), filtered by trigger, with a skill named like an earlier one marked as overriding it.
 
-**The metaclasses.** `Model` (member, comment, tag, link), `Folder` (member, tag), `Comment` (body,
-annotatedElement), `Tag` (name, value, element), `Link` (kind, source, target, note) and the
-enumeration `LinkKind` (trace, realization, persistence, derivation, satisfaction, refinement);
-`Element` and `NamedElement` abstract above them.
+**The metaclasses.** `Model` (member, comment, tag, link, skill), `Folder` (member, tag), `Comment`
+(body, annotatedElement), `Tag` (name, value, element), `Link` (kind, source, target, note), `Skill`
+(name, description, body, trigger, dialect, subject, appliesTo, typePattern) and the enumerations
+`LinkKind` (trace, realization, persistence, derivation, satisfaction, refinement) and
+`SkillTrigger` (modelling, drawing, naming, export); `Element` and `NamedElement` abstract above
+them. A skill's `appliesTo` holds a class key such as `er.Entity` (`skills::class_key`).
 
 **Public API.**
 
@@ -29,9 +41,15 @@ enumeration `LinkKind` (trace, realization, persistence, derivation, satisfactio
 | `link` | `pub fn link(store, owner, kind, source, target, note) -> Result<Obj, Invalid>` |
 | `destroy_with_links`, `links_of` | destroy with the links on the subtree first; those links |
 | `tag_name_free`, `problems`, `CoreProblem` | the rules |
+| `skills::SkillHost` | what a notation's view declares: `selection_mut`, `skill_subjects`, `skill_kinds`, `typed_class` |
+| `skills::specs::<V>()` | the commands `skill.add`, `skill.set`, `skill.rename`, `skill.remove`, `skill.move` and the queries `skill.list`, `skill.effective`, for a notation's registry |
+| `skills::{effective_skills, EffectiveSkill, levels, aims_at, skills, skills_on, subject_of, triggers_of, name_of, model_of, skill_name_free, name_problem, text_problem, hidden, trigger_named, trigger_words, class_key, kind_by_key, class_by_key, category_of, type_matches, skill_json, problems, SkillProblem}` | the skill rules and lookups |
+| `skills::{MAX_NAME, MAX_DESCRIPTION, MAX_BODY, MAX_DIALECT, MAX_TYPE_PATTERN, MAX_TRIGGERS, CATEGORIES, NO_MODEL, NO_SKILLS}` | the limits, the type categories, the reasons a command is unavailable |
 | the generated constants, structs, `LinkKind`, `TABLES`, `JUNCTIONS` | as every generated metamodel |
 
-**Tests.** `crates/uml/tests/core_over_uml.rs` (with the notation, since a dependency only points
+**Tests.** `crates/er/tests/skills.rs` (skills over ER: every command's round trip, refusals, the
+effective skills over four levels with kinds, types, triggers and an override, the cascade with a
+subject). `crates/uml/tests/core_over_uml.rs` (with the notation, since a dependency only points
 down a layer), over the core and UML in one store: a Model with a Folder holding a UML
 Package (containment across metamodels), a comment and a tag on elements of two notations, a
 realization link between two classes; the rules refuse and change nothing; destroy with links and

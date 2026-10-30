@@ -9,7 +9,7 @@ use archforge_mof::{Builder, ClassId, DataId, DataKind, MetaError, Metamodel, Pr
 pub const INDEX: u16 = 1;
 pub const URI: &str = "archforge:core";
 pub const VERSION: &str = "1";
-pub const CONTENT_HASH: &str = "6271793cb17d6847";
+pub const CONTENT_HASH: &str = "c3b38075539852e0";
 
 pub const BOOLEAN: DataId = DataId::new(INDEX, 0);
 pub const INTEGER: DataId = DataId::new(INDEX, 1);
@@ -17,6 +17,7 @@ pub const REAL: DataId = DataId::new(INDEX, 2);
 pub const STRING: DataId = DataId::new(INDEX, 3);
 pub const UNLIMITED_NATURAL: DataId = DataId::new(INDEX, 4);
 pub const LINK_KIND: DataId = DataId::new(INDEX, 5);
+pub const SKILL_TRIGGER: DataId = DataId::new(INDEX, 6);
 
 pub const ELEMENT: ClassId = ClassId::new(INDEX, 0);
 pub const NAMED_ELEMENT: ClassId = ClassId::new(INDEX, 1);
@@ -25,6 +26,7 @@ pub const FOLDER: ClassId = ClassId::new(INDEX, 3);
 pub const COMMENT: ClassId = ClassId::new(INDEX, 4);
 pub const TAG: ClassId = ClassId::new(INDEX, 5);
 pub const LINK: ClassId = ClassId::new(INDEX, 6);
+pub const SKILL: ClassId = ClassId::new(INDEX, 7);
 
 /// The properties Element declares.
 pub mod element {
@@ -47,37 +49,50 @@ pub mod model {
     pub const COMMENT: PropId = PropId::new(INDEX, 4);
     pub const TAG: PropId = PropId::new(INDEX, 5);
     pub const LINK: PropId = PropId::new(INDEX, 6);
+    pub const SKILL: PropId = PropId::new(INDEX, 7);
 }
 /// The properties Folder declares.
 pub mod folder {
     use super::INDEX;
     use super::PropId;
-    pub const MEMBER: PropId = PropId::new(INDEX, 7);
-    pub const TAG: PropId = PropId::new(INDEX, 8);
+    pub const MEMBER: PropId = PropId::new(INDEX, 8);
+    pub const TAG: PropId = PropId::new(INDEX, 9);
 }
 /// The properties Comment declares.
 pub mod comment {
     use super::INDEX;
     use super::PropId;
-    pub const BODY: PropId = PropId::new(INDEX, 9);
-    pub const ANNOTATED_ELEMENT: PropId = PropId::new(INDEX, 10);
+    pub const BODY: PropId = PropId::new(INDEX, 10);
+    pub const ANNOTATED_ELEMENT: PropId = PropId::new(INDEX, 11);
 }
 /// The properties Tag declares.
 pub mod tag {
     use super::INDEX;
     use super::PropId;
-    pub const NAME: PropId = PropId::new(INDEX, 11);
-    pub const VALUE: PropId = PropId::new(INDEX, 12);
-    pub const ELEMENT: PropId = PropId::new(INDEX, 13);
+    pub const NAME: PropId = PropId::new(INDEX, 12);
+    pub const VALUE: PropId = PropId::new(INDEX, 13);
+    pub const ELEMENT: PropId = PropId::new(INDEX, 14);
 }
 /// The properties Link declares.
 pub mod link {
     use super::INDEX;
     use super::PropId;
-    pub const KIND: PropId = PropId::new(INDEX, 14);
-    pub const SOURCE: PropId = PropId::new(INDEX, 15);
-    pub const TARGET: PropId = PropId::new(INDEX, 16);
-    pub const NOTE: PropId = PropId::new(INDEX, 17);
+    pub const KIND: PropId = PropId::new(INDEX, 15);
+    pub const SOURCE: PropId = PropId::new(INDEX, 16);
+    pub const TARGET: PropId = PropId::new(INDEX, 17);
+    pub const NOTE: PropId = PropId::new(INDEX, 18);
+}
+/// The properties Skill declares.
+pub mod skill {
+    use super::INDEX;
+    use super::PropId;
+    pub const DESCRIPTION: PropId = PropId::new(INDEX, 19);
+    pub const BODY: PropId = PropId::new(INDEX, 20);
+    pub const TRIGGER: PropId = PropId::new(INDEX, 21);
+    pub const DIALECT: PropId = PropId::new(INDEX, 22);
+    pub const SUBJECT: PropId = PropId::new(INDEX, 23);
+    pub const APPLIES_TO: PropId = PropId::new(INDEX, 24);
+    pub const TYPE_PATTERN: PropId = PropId::new(INDEX, 25);
 }
 
 fn build() -> Result<Arc<Metamodel>, MetaError> {
@@ -99,6 +114,7 @@ fn build() -> Result<Arc<Metamodel>, MetaError> {
         ]),
         "",
     )?;
+    b.data_type("SkillTrigger", DataKind::Enumeration(vec!["modelling".into(), "drawing".into(), "naming".into(), "export".into()]), "")?;
     b.class("Element", true, &[], "")?;
     b.class("NamedElement", true, &[ELEMENT], "")?;
     b.class("Model", false, &[NAMED_ELEMENT], "")?;
@@ -106,6 +122,7 @@ fn build() -> Result<Arc<Metamodel>, MetaError> {
     b.class("Comment", false, &[ELEMENT], "")?;
     b.class("Tag", false, &[ELEMENT], "")?;
     b.class("Link", false, &[ELEMENT], "")?;
+    b.class("Skill", false, &[NAMED_ELEMENT], "")?;
     b.property(PropertySpec {
         name: "ownedElement",
         owner: ELEMENT,
@@ -246,6 +263,26 @@ fn build() -> Result<Arc<Metamodel>, MetaError> {
         default: None,
         doc: "",
     })?; // model::LINK
+    b.property(PropertySpec {
+        name: "skill",
+        owner: MODEL,
+        ty: TypeRef::Class(SKILL),
+        lower: 0,
+        upper: None,
+        is_ordered: true,
+        is_unique: true,
+        is_composite: true,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[element::OWNED_ELEMENT],
+        redefines: &[],
+        default: None,
+        doc: "",
+    })?; // model::SKILL
     b.property(PropertySpec {
         name: "member",
         owner: FOLDER,
@@ -466,6 +503,146 @@ fn build() -> Result<Arc<Metamodel>, MetaError> {
         default: None,
         doc: "",
     })?; // link::NOTE
+    b.property(PropertySpec {
+        name: "description",
+        owner: SKILL,
+        ty: TypeRef::Data(STRING),
+        lower: 0,
+        upper: Some(1),
+        is_ordered: false,
+        is_unique: true,
+        is_composite: false,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[],
+        redefines: &[],
+        default: None,
+        doc: "",
+    })?; // skill::DESCRIPTION
+    b.property(PropertySpec {
+        name: "body",
+        owner: SKILL,
+        ty: TypeRef::Data(STRING),
+        lower: 0,
+        upper: Some(1),
+        is_ordered: false,
+        is_unique: true,
+        is_composite: false,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[],
+        redefines: &[],
+        default: None,
+        doc: "",
+    })?; // skill::BODY
+    b.property(PropertySpec {
+        name: "trigger",
+        owner: SKILL,
+        ty: TypeRef::Data(SKILL_TRIGGER),
+        lower: 0,
+        upper: None,
+        is_ordered: true,
+        is_unique: true,
+        is_composite: false,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[],
+        redefines: &[],
+        default: None,
+        doc: "",
+    })?; // skill::TRIGGER
+    b.property(PropertySpec {
+        name: "dialect",
+        owner: SKILL,
+        ty: TypeRef::Data(STRING),
+        lower: 0,
+        upper: Some(1),
+        is_ordered: false,
+        is_unique: true,
+        is_composite: false,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[],
+        redefines: &[],
+        default: None,
+        doc: "",
+    })?; // skill::DIALECT
+    b.property(PropertySpec {
+        name: "subject",
+        owner: SKILL,
+        ty: TypeRef::Any,
+        lower: 0,
+        upper: Some(1),
+        is_ordered: false,
+        is_unique: true,
+        is_composite: false,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[],
+        redefines: &[],
+        default: None,
+        doc: "",
+    })?; // skill::SUBJECT
+    b.property(PropertySpec {
+        name: "appliesTo",
+        owner: SKILL,
+        ty: TypeRef::Data(STRING),
+        lower: 0,
+        upper: Some(1),
+        is_ordered: false,
+        is_unique: true,
+        is_composite: false,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[],
+        redefines: &[],
+        default: None,
+        doc: "",
+    })?; // skill::APPLIES_TO
+    b.property(PropertySpec {
+        name: "typePattern",
+        owner: SKILL,
+        ty: TypeRef::Data(STRING),
+        lower: 0,
+        upper: Some(1),
+        is_ordered: false,
+        is_unique: true,
+        is_composite: false,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[],
+        redefines: &[],
+        default: None,
+        doc: "",
+    })?; // skill::TYPE_PATTERN
     Ok(b.finish())
 }
 

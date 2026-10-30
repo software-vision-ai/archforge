@@ -12,6 +12,12 @@
       <ownedLiteral xmi:type="uml:EnumerationLiteral" xmi:id="LinkKind-satisfaction" name="satisfaction"/>
       <ownedLiteral xmi:type="uml:EnumerationLiteral" xmi:id="LinkKind-refinement" name="refinement"/>
     </packagedElement>
+    <packagedElement xmi:type="uml:Enumeration" xmi:id="SkillTrigger" name="SkillTrigger">
+      <ownedLiteral xmi:type="uml:EnumerationLiteral" xmi:id="SkillTrigger-modelling" name="modelling"/>
+      <ownedLiteral xmi:type="uml:EnumerationLiteral" xmi:id="SkillTrigger-drawing" name="drawing"/>
+      <ownedLiteral xmi:type="uml:EnumerationLiteral" xmi:id="SkillTrigger-naming" name="naming"/>
+      <ownedLiteral xmi:type="uml:EnumerationLiteral" xmi:id="SkillTrigger-export" name="export"/>
+    </packagedElement>
     <packagedElement xmi:type="uml:Class" xmi:id="Element" name="Element" isAbstract="true">
       <ownedAttribute xmi:type="uml:Property" xmi:id="Element-ownedElement" name="ownedElement" isReadOnly="true" isDerived="true" isDerivedUnion="true" aggregation="composite">
         <type href="archforge:mof#Any"/>
@@ -48,6 +54,10 @@
       <ownedAttribute xmi:type="uml:Property" xmi:id="Model-link" name="link" type="Link" aggregation="composite" subsettedProperty="Element-ownedElement">
         <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Model-link-_lowerValue"/>
         <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="Model-link-_upperValue" value="*"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Model-skill" name="skill" type="Skill" isOrdered="true" aggregation="composite" subsettedProperty="Element-ownedElement">
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Model-skill-_lowerValue"/>
+        <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="Model-skill-_upperValue" value="*"/>
       </ownedAttribute>
     </packagedElement>
     <packagedElement xmi:type="uml:Class" xmi:id="Folder" name="Folder">
@@ -103,6 +113,37 @@
       <ownedAttribute xmi:type="uml:Property" xmi:id="Link-note" name="note">
         <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String"/>
         <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Link-note-_lowerValue"/>
+      </ownedAttribute>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Class" xmi:id="Skill" name="Skill">
+      <generalization xmi:type="uml:Generalization" xmi:id="Skill-_generalization" general="NamedElement"/>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Skill-description" name="description">
+        <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String"/>
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Skill-description-_lowerValue"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Skill-body" name="body">
+        <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String"/>
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Skill-body-_lowerValue"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Skill-trigger" name="trigger" type="SkillTrigger" isOrdered="true">
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Skill-trigger-_lowerValue"/>
+        <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="Skill-trigger-_upperValue" value="*"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Skill-dialect" name="dialect">
+        <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String"/>
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Skill-dialect-_lowerValue"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Skill-subject" name="subject">
+        <type href="archforge:mof#Any"/>
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Skill-subject-_lowerValue"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Skill-appliesTo" name="appliesTo">
+        <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String"/>
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Skill-appliesTo-_lowerValue"/>
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Skill-typePattern" name="typePattern">
+        <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String"/>
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Skill-typePattern-_lowerValue"/>
       </ownedAttribute>
     </packagedElement>
   </uml:Package>
