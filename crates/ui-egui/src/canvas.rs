@@ -62,6 +62,8 @@ pub enum Tool {
     Entity,
     /// Drags a relationship from one table to another (slice E2).
     Relationship,
+    /// Places a note where the canvas is clicked (slice E4).
+    Note,
 }
 
 /// What the centre keeps between frames: the open tabs, the view and the toggles.
@@ -97,6 +99,8 @@ pub struct State {
     pub popover: bool,
     pub mapping: Option<crate::connect::MappingOffer>,
     pub toast: Option<crate::connect::Toast>,
+    /// A note's text being typed in place (slice E4).
+    pub note_edit: Option<crate::editing::NoteEdit>,
 }
 
 impl Default for State {
@@ -121,6 +125,7 @@ impl Default for State {
             popover: false,
             mapping: None,
             toast: None,
+            note_edit: None,
         }
     }
 }
@@ -376,7 +381,7 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
         Tool::Pan => {
             resp.clone().on_hover_cursor(if resp.dragged() { egui::CursorIcon::Grabbing } else { egui::CursorIcon::Grab });
         }
-        Tool::Entity | Tool::Relationship => {
+        Tool::Entity | Tool::Relationship | Tool::Note => {
             resp.clone().on_hover_cursor(egui::CursorIcon::Crosshair);
         }
         Tool::Select => {}
@@ -405,9 +410,9 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     // A gesture under way is previewed: its nodes draw where the pointer has them.
     let pointer = resp.interact_pointer_pos().or_else(|| ui.input(|i| i.pointer.hover_pos()));
     let overrides = crate::editing::preview_rects(shell, view, pointer);
-    let renaming = shell.canvas.rename.as_ref().map(|rn| rn.node);
+    let renaming = shell.canvas.rename.as_ref().map(|rn| rn.node).or_else(|| shell.canvas.note_edit.as_ref().map(|ne| ne.node));
     let grid = shell.session.as_ref().map(|s| Grid::build(s.doc(), d));
-    let mut pending_badges: Vec<(Pos2, Uuid)> = Vec::new();
+    let mut pending_badges: Vec<(Pos2, Uuid, Uuid, Obj, bool)> = Vec::new();
     if let (Some(session), Some(grid)) = (shell.session.as_ref(), grid.as_ref()) {
         let store = session.doc();
         let (x0, y0) = view.to_canvas(r.min);
@@ -419,20 +424,32 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
                 visible.nodes.push(n);
             }
         }
-        let mut badges: Vec<(Pos2, Uuid)> = Vec::new();
-        let draw = Drawing { p, store, view: &view, selection: &selection, overrides: &overrides, key_status: shell.canvas.key_status, renaming };
+        let mut badges: Vec<(Pos2, Uuid, Uuid, Obj, bool)> = Vec::new();
+        let draw = Drawing {
+            p,
+            store,
+            view: &view,
+            selection: &selection,
+            overrides: &overrides,
+            key_status: shell.canvas.key_status,
+            renaming,
+            problems: &shell.problems,
+        };
         for e in &visible.edges {
             if let Some(badge) = draw_edge(&clip, &draw, *e, &mut shell.registry, ui) {
                 badges.push(badge);
             }
         }
         for n in &visible.nodes {
-            draw_node(&clip, &draw, *n, &mut shell.registry, ui);
+            if let Some(badge) = draw_node(&clip, &draw, *n, &mut shell.registry, ui) {
+                badges.push(badge);
+            }
         }
         pending_badges = badges;
     }
-    for (at, rel) in pending_badges {
-        crate::connect::badge(shell, ui, p, at, rel);
+    for (at, control_id, element, element_obj, many) in pending_badges {
+        let texts = shell.problems.get(&element_obj).cloned().unwrap_or_default();
+        crate::connect::badge(shell, ui, p, at, control_id, element, &texts, many);
     }
     if let Some(grid) = grid.as_ref() {
         crate::editing::pointer(shell, ui, &resp, view, grid, d);
@@ -502,6 +519,8 @@ struct Drawing<'a> {
     overrides: &'a std::collections::BTreeMap<Uuid, Rect>,
     key_status: bool,
     renaming: Option<Uuid>,
+    /// The problems the rules find, by the element they sit on.
+    problems: &'a std::collections::BTreeMap<Obj, Vec<String>>,
 }
 
 impl Drawing<'_> {
@@ -512,11 +531,18 @@ impl Drawing<'_> {
 }
 
 /// One node: an entity card with its eyebrow, name and columns, a note, or a plain card.
-fn draw_node(paint: &egui::Painter, d: &Drawing<'_>, n: Obj, registry: &mut widgets::Registry, ui: &egui::Ui) {
+/// Gives the problem badge to draw at the node's corner, when its element has problems.
+fn draw_node(
+    paint: &egui::Painter,
+    d: &Drawing<'_>,
+    n: Obj,
+    registry: &mut widgets::Registry,
+    ui: &egui::Ui,
+) -> Option<(Pos2, Uuid, Uuid, Obj, bool)> {
     let (p, store, view, selection, key_status) = (d.p, d.store, d.view, d.selection, d.key_status);
     let rect = d.node_rect(n);
     if !rect.is_finite() || rect.width() <= 0.0 || rect.height() <= 0.0 {
-        return;
+        return None;
     }
     let z = view.zoom;
     let id = store.uuid(n).ok();
@@ -590,13 +616,18 @@ fn draw_node(paint: &egui::Painter, d: &Drawing<'_>, n: Obj, registry: &mut widg
             // A note: its own text on the amber tint.
             paint.rect_filled(rect, 4.0 * z, p.amber_tint);
             paint.rect_stroke(rect, 4.0 * z, Stroke::new(1.0, p.amber), StrokeKind::Inside);
-            let text = string(store, n, node::TEXT);
-            ux::text(&inner, rect.min + vec2(12.0, 10.0) * z, &text, types::UI.scaled(z), p.text, Some((rect.width() - 24.0 * z).max(0.0)));
+            if !renaming {
+                let text = string(store, n, node::TEXT);
+                let g = ux::galley_rows(&inner, &text, types::UI.scaled(z), p.text, Some((rect.width() - 24.0 * z).max(0.0)), 8);
+                inner.galley(rect.min + vec2(12.0, 10.0) * z, g, p.text);
+            }
         }
     }
     if selected {
         selection_ring(paint, p, rect);
     }
+    let e = element.filter(|e| d.problems.contains_key(e))?;
+    Some((rect.right_top() + vec2(-2.0, 2.0), id?, store.uuid(e).ok()?, e, false))
 }
 
 /// The accent ring and the four corner handles of a selected node.
@@ -670,7 +701,13 @@ fn along(points: &[Pos2], t: f32) -> Pos2 {
 /// One edge: the line between its nodes' borders through its waypoints, the ER end glyphs with
 /// their cardinalities, and its labels.
 /// Gives the point and relationship of a many-to-many badge to draw, when the line needs one.
-fn draw_edge(paint: &egui::Painter, d: &Drawing<'_>, e: Obj, registry: &mut widgets::Registry, ui: &egui::Ui) -> Option<(Pos2, Uuid)> {
+fn draw_edge(
+    paint: &egui::Painter,
+    d: &Drawing<'_>,
+    e: Obj,
+    registry: &mut widgets::Registry,
+    ui: &egui::Ui,
+) -> Option<(Pos2, Uuid, Uuid, Obj, bool)> {
     let (p, store, view, selection) = (d.p, d.store, d.view, d.selection);
     let (Some(source), Some(target)) = (element_of(store, e, edge::SOURCE), element_of(store, e, edge::TARGET)) else { return None };
     let z = view.zoom;
@@ -720,11 +757,11 @@ fn draw_edge(paint: &egui::Painter, d: &Drawing<'_>, e: Obj, registry: &mut widg
     let stroke = Stroke::new((1.5 * z).clamp(1.0, 3.0), ink);
     crate::connect::line(paint, &points, stroke, identifying, z);
     let mut badge = None;
-    if many_to_many
-        && let Some(rel) = relationship
-        && let Ok(id) = store.uuid(rel)
+    if let Some(rel) = relationship
+        && d.problems.contains_key(&rel)
+        && let (Ok(id), Ok(edge_id)) = (store.uuid(rel), store.uuid(e))
     {
-        badge = Some((along(&points, 0.5) + vec2(0.0, -14.0 * z.max(0.5)), id));
+        badge = Some((along(&points, 0.5) + vec2(0.0, -14.0 * z.max(0.5)), edge_id, id, rel, many_to_many));
     }
     if let Ok(id) = store.uuid(e) {
         let bounds = Rect::from_points(&points).expand(6.0);
@@ -905,7 +942,7 @@ const TOOLS: [(&str, &ux::Icon, &str, bool); 6] = [
     ("pan", &icons::TOOL_PAN, "Pan", true),
     ("entity", &icons::TOOL_ENTITY, "Entity", true),
     ("relationship", &icons::TOOL_RELATIONSHIP, "Relationship", true),
-    ("note", &icons::TOOL_NOTE, "Note", false),
+    ("note", &icons::TOOL_NOTE, "Note", true),
     ("group", &icons::TOOL_GROUP, "Group", false),
 ];
 
@@ -930,7 +967,7 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
         let b = button(x);
         let active = matches!(
             (*key, shell.canvas.tool),
-            ("select", Tool::Select) | ("pan", Tool::Pan) | ("entity", Tool::Entity) | ("relationship", Tool::Relationship)
+            ("select", Tool::Select) | ("pan", Tool::Pan) | ("entity", Tool::Entity) | ("relationship", Tool::Relationship) | ("note", Tool::Note)
         );
         if active {
             paint.rect_filled(b, 8.0, p.accent_tint);
@@ -949,6 +986,7 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
                 "pan" => shell.canvas.tool = Tool::Pan,
                 "entity" => shell.canvas.tool = Tool::Entity,
                 "relationship" => shell.canvas.tool = Tool::Relationship,
+                "note" => shell.canvas.tool = Tool::Note,
                 _ => {}
             }
         }

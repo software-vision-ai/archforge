@@ -37,6 +37,17 @@ str		Element · model	元素 · 模型
 str		Skill · model	技能 · 模型
 str		Columns · {n}	列 · {n}
 str		Keys · {n}	键 · {n}
+str		Add a column	添加一列
+str		Add unique constraint	添加唯一约束
+str		Columns, in key order	按键顺序的列
+str		Nulls distinct	空值视为不同
+str		Problems · {n}	问题 · {n}
+str		lacks its table or its key	缺少其表或其键
+str		{column} is a key column and may be null	{column} 是键列但允许为空
+str		{from} to {to} is many to many	{from} 到 {to} 是多对多
+str		{key}: {problem}	{key}: {problem}
+str		{name} has no primary key	{name} 没有主键
+str		{name} removed · {keys} went with it	已删除 {name} · {keys} 随之删除
 str		Add column	添加列
 str		Add skill	添加技能
 str		Kind	种类

@@ -37,6 +37,17 @@ str		Element · model	Elemento · modelo
 str		Skill · model	Habilidad · modelo
 str		Columns · {n}	Columnas · {n}
 str		Keys · {n}	Claves · {n}
+str		Add a column	Añadir una columna
+str		Add unique constraint	Añadir restricción de unicidad
+str		Columns, in key order	Columnas, en orden de clave
+str		Nulls distinct	Nulos distintos
+str		Problems · {n}	Problemas · {n}
+str		lacks its table or its key	le falta su tabla o su clave
+str		{column} is a key column and may be null	{column} es columna clave y admite nulos
+str		{from} to {to} is many to many	{from} a {to} es muchos a muchos
+str		{key}: {problem}	{key}: {problem}
+str		{name} has no primary key	{name} no tiene clave primaria
+str		{name} removed · {keys} went with it	{name} eliminada · {keys} se fue con ella
 str		Add column	Añadir columna
 str		Add skill	Añadir habilidad
 str		Kind	Tipo

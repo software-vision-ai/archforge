@@ -46,6 +46,8 @@ pub struct State {
     pub role: Option<crate::relation::RoleEdit>,
     pub more_open: bool,
     pub no_key_card: Option<Uuid>,
+    /// The key editor, open on a key or on a unique constraint about to be added (slice E4).
+    pub key: Option<crate::keys::KeyEdit>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -106,6 +108,8 @@ pub enum Menu {
     OnUpdate,
     Deferrable,
     Match,
+    /// The key editor's Add a column select (slice E4).
+    KeyColumn,
 }
 
 /// The selection the panels describe.
@@ -209,6 +213,9 @@ pub fn retain_valid(state: &mut State, store: &Store) {
         state.skill = None;
     }
     crate::relation::retain_valid(state, store);
+    if state.key.as_ref().is_some_and(|k| store.by_uuid(k.entity).is_none() || k.target.is_some_and(|t| store.by_uuid(t).is_none())) {
+        state.key = None;
+    }
 }
 
 // Shared drawing.
@@ -296,7 +303,7 @@ pub(crate) fn select_field(
 
 /// A menu under `anchor` with `items`; gives the index picked, closing the menu on a pick or a
 /// click elsewhere.
-fn menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, id: &str, items: &[String]) -> Option<usize> {
+pub(crate) fn menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, id: &str, items: &[String]) -> Option<usize> {
     let paint = ui.painter();
     let height = 8.0 + items.len() as f32 * 30.0;
     let r = Rect::from_min_size(pos2(anchor.left(), anchor.bottom() + 4.0), vec2(anchor.width(), height));
@@ -340,7 +347,7 @@ pub(crate) fn check(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: egui::Pos
 }
 
 /// An icon button of 28 px: quiet, bordered or primary.
-fn icon_button(
+pub(crate) fn icon_button(
     shell: &mut Shell,
     ui: &egui::Ui,
     p: &Palette,
@@ -386,6 +393,9 @@ fn properties(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y:
         }
         Some(c) if c == archforge_er::SCHEMA => {
             name_field(shell, ui, p, pos2(r.left() + PAD, y), width, subject, "er.schema.rename", "schema");
+            if let Some(o) = subject.obj {
+                crate::keys::problems_section(shell, ui, p, r, y + 17.0 + FIELD + 16.0, o);
+            }
         }
         Some(c) if c == archforge_er::ENTITY => entity_body(shell, ui, p, r, y, subject),
         Some(c) if c == archforge_er::RELATIONSHIP => crate::relation::body(shell, ui, p, r, y, subject),
@@ -408,6 +418,9 @@ fn properties(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y:
             ux::text(&paint, field.min + vec2(8.0, 5.0), &schema, types::SMALL, p.text, Some((half - 36.0).max(0.0)));
             ux::icon(&paint, pos2(field.right() - 22.0, field.top() + 6.0), &icons::CHEVRON_DOWN, 16.0, p.text_muted);
             control(shell, ui, "workspace.properties.schema", "select", field, false);
+            if let Some(o) = subject.obj {
+                crate::keys::problems_section(shell, ui, p, r, y + 17.0 + FIELD + 16.0, o);
+            }
         }
         Some(c) if c == archforge_er::ATTRIBUTE => {
             // A column: its table's panel, the column's editor open on it.
@@ -477,14 +490,7 @@ struct ColumnRow {
     foreign: bool,
 }
 
-/// One key as the panel lists it.
-struct KeyRow {
-    primary: bool,
-    name: String,
-    columns: String,
-}
-
-fn entity_rows(store: &Store, e: Obj) -> (Vec<ColumnRow>, Vec<KeyRow>, bool) {
+fn entity_rows(store: &Store, e: Obj) -> (Vec<ColumnRow>, bool) {
     let columns = children(store, e, archforge_er::entity::ATTRIBUTE)
         .into_iter()
         .filter_map(|a| {
@@ -498,22 +504,11 @@ fn entity_rows(store: &Store, e: Obj) -> (Vec<ColumnRow>, Vec<KeyRow>, bool) {
             })
         })
         .collect();
-    let key_row = |k: Obj, primary: bool| KeyRow {
-        primary,
-        name: archforge_er::rules::name_of(store, k),
-        columns: archforge_er::rules::key_columns(store, k)
-            .into_iter()
-            .map(|a| archforge_er::rules::name_of(store, a))
-            .collect::<Vec<_>>()
-            .join(", "),
-    };
-    let mut keys: Vec<KeyRow> = archforge_er::rules::primary_key_of(store, e).map(|k| key_row(k, true)).into_iter().collect();
-    keys.extend(archforge_er::rules::unique_constraints(store, e).into_iter().map(|k| key_row(k, false)));
     let associative = store.get(e, archforge_er::entity::KIND).ok().and_then(|v| match v {
         Value::Enum(i) => archforge_er::EntityKind::from_index(i),
         _ => None,
     }) == Some(archforge_er::EntityKind::Associative);
-    (columns, keys, associative)
+    (columns, associative)
 }
 
 /// A table: name and kind, its columns with the editor, its keys.
@@ -521,7 +516,7 @@ fn entity_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
     let paint = ui.painter().clone();
     let width = r.width() - 2.0 * PAD;
     let (Some(entity), Some(entity_id)) = (subject.obj, subject.id) else { return };
-    let (columns, keys, associative) = match shell.session.as_ref() {
+    let (columns, associative) = match shell.session.as_ref() {
         Some(s) => entity_rows(s.doc(), entity),
         None => return,
     };
@@ -585,21 +580,9 @@ fn entity_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
         y = column_editor(shell, ui, p, r, y);
     }
     y += 10.0;
-    // Keys.
-    let title = fmt(&tr("Keys · {n}"), &[("n", &keys.len().to_string())]);
-    y = section(shell, ui, p, r, y, &title, None).unwrap_or(y + 50.0) - 6.0;
-    for key in &keys {
-        let row = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width.max(0.0), 44.0));
-        let (b, tint, ink) = if key.primary { ("PK", p.amber_tint, p.amber) } else { ("UQ", p.accent_tint, p.accent) };
-        let br = Rect::from_min_size(row.min + vec2(2.0, 6.0), vec2(26.0, 16.0));
-        paint.rect_filled(br, 4.0, tint);
-        let g = ux::galley(&paint, b, types::TINY, ink, None);
-        paint.galley(br.center() - g.size() / 2.0, g, ink);
-        let name = if key.name.is_empty() { if key.primary { tr("Primary key") } else { tr("Unique") } } else { key.name.clone() };
-        ux::text(&paint, row.min + vec2(38.0, 4.0), &name, types::UI, p.text, Some((width - 38.0).max(0.0)));
-        ux::text(&paint, row.min + vec2(38.0, 23.0), &key.columns, types::CAPTION, p.text_secondary, Some((width - 38.0).max(0.0)));
-        y += 44.0;
-    }
+    // Keys, then the problems the rules find on the table.
+    y = crate::keys::keys_section(shell, ui, p, r, y, entity, entity_id);
+    crate::keys::problems_section(shell, ui, p, r, y + 4.0, entity);
     // The kind menu last, over the rows.
     if shell.panels.menu == Some(Menu::Kind) {
         let items = [tr("Regular"), tr("Mapping table")];
@@ -712,8 +695,28 @@ fn column_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: 
         shell.panels.column = None;
     } else if remove {
         if let Some(t) = edit.target {
+            // What goes with the column, named for the toast.
+            let went: Vec<String> = shell
+                .session
+                .as_ref()
+                .and_then(|s| {
+                    let store = s.doc();
+                    let a = store.by_uuid(t)?;
+                    let (keys, fks) = archforge_er::commands::dependents(store, a).ok()?;
+                    Some(keys.iter().chain(fks.iter()).filter(|k| **k != a).map(|k| archforge_er::rules::label(store, *k)).collect())
+                })
+                .unwrap_or_default();
             match run(shell, "er.attribute.remove", json!({ "attribute": t.to_string() })) {
-                Ok(_) => shell.panels.column = None,
+                Ok(_) => {
+                    shell.panels.column = None;
+                    let text = if went.is_empty() {
+                        fmt(&tr("{name} removed"), &[("name", &edit.name)])
+                    } else {
+                        fmt(&tr("{name} removed · {keys} went with it"), &[("name", &edit.name), ("keys", &went.join(", "))])
+                    };
+                    let undo_label = shell.session.as_ref().and_then(|s| s.undo_label().map(str::to_string));
+                    shell.canvas.toast = Some(crate::connect::Toast { text, until: shell.frames.saturating_add(300), undo_label });
+                }
                 Err(e) => set_column_refusal(shell, e),
             }
         }

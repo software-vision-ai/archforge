@@ -14,10 +14,12 @@ pub mod explorer;
 pub mod fonts;
 pub mod home;
 pub mod i18n;
+pub mod keys;
 pub mod new_project;
 #[cfg(feature = "snapshot")]
 pub mod offscreen;
 pub mod panels;
+pub mod problems;
 pub mod relation;
 pub mod state;
 pub mod theme;
@@ -134,6 +136,8 @@ pub struct Shell {
     pub canvas: canvas::State,
     /// The right panels' own state: the open editors and the last refusal.
     pub panels: panels::State,
+    /// The problems the rules find, by element, read once per frame while a session is open.
+    pub problems: std::collections::BTreeMap<archforge_mof::Obj, Vec<String>>,
     /// Set by `request_quit`; the next frame closes the window.
     quit_requested: bool,
 }
@@ -161,6 +165,7 @@ impl Shell {
             diagrams: diagrams::State::default(),
             canvas: canvas::State::default(),
             panels: panels::State::default(),
+            problems: Default::default(),
             quit_requested: false,
         }
     }
@@ -183,6 +188,7 @@ impl Shell {
         self.diagrams = diagrams::State::default();
         self.canvas = canvas::State::default();
         self.panels = panels::State::default();
+        self.problems.clear();
     }
 
     /// Where the open project lives, as the status bar says it: the label of the folder new
@@ -258,6 +264,7 @@ impl Shell {
             diagrams::retain_valid(&mut self.diagrams, session.doc());
             canvas::retain_valid(&mut self.canvas, session.doc());
             panels::retain_valid(&mut self.panels, session.doc());
+            self.problems = problems::by_element(session.doc());
         }
         if std::mem::take(&mut self.quit_requested) {
             // Quitting goes through the normal close path, so the exit hook runs.

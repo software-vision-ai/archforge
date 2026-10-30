@@ -37,6 +37,17 @@ str		Element · model	要素 · モデル
 str		Skill · model	スキル · モデル
 str		Columns · {n}	列 · {n}
 str		Keys · {n}	キー · {n}
+str		Add a column	列を追加
+str		Add unique constraint	一意制約を追加
+str		Columns, in key order	キーの順の列
+str		Nulls distinct	NULL を区別
+str		Problems · {n}	問題 · {n}
+str		lacks its table or its key	テーブルまたはキーがありません
+str		{column} is a key column and may be null	{column} はキー列ですが NULL を許可しています
+str		{from} to {to} is many to many	{from} から {to} は多対多です
+str		{key}: {problem}	{key}: {problem}
+str		{name} has no primary key	{name} に主キーがありません
+str		{name} removed · {keys} went with it	{name} を削除しました · {keys} も削除されました
 str		Add column	列を追加
 str		Add skill	スキルを追加
 str		Kind	種類
