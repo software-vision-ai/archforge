@@ -13,6 +13,26 @@ str		Search projects and actions	搜索项目和操作
 # 工作区
 str		Find an element, view, or action	查找元素、视图或操作
 str		No schemas yet	还没有架构
+str		Add	添加
+str		Schema	架构
+str		Folder	文件夹
+str		Table	表
+str		Column	列
+str		Skill	技能
+str		Nothing matches the filter	没有与筛选匹配的内容
+str		Delete {name} from the model?	从模型中删除 {name}？
+str		Narrow the filter to see more	缩小筛选范围以查看更多
+str		No free name is left	没有可用的名称了
+str		What it holds goes with it.	它包含的内容也会一并删除。
+plural		{n} relationship goes with it.	{n} 个关系将一并删除。
+plural		{n} key goes with it.	{n} 个键将一并删除。
+plural		{n} foreign key goes with it.	{n} 个外键将一并删除。
+str		Delete	删除
+str		Schema · model	架构 · 模型
+str		Table · model, in every diagram	表 · 模型，出现在每张图中
+str		Column · model	列 · 模型
+str		Element · model	元素 · 模型
+str		Element	元素
 str		New diagram	新建图
 str		Project created	项目已创建
 str		Model · the project's root	模型 · 项目的根

@@ -10,10 +10,9 @@ use crate::util;
 
 const DEFAULT_MAX_EDGE: u32 = 1024;
 const DEFAULT_SIZE: (u32, u32) = (1440, 900);
-const USAGE: &str =
-    "usage: cargo xtask shot [light|dark] [--size <width>x<height>] [--max-edge <pixels>] [--screen home|new-project|new-project-failed|workspace]";
+const USAGE: &str = "usage: cargo xtask shot [light|dark] [--size <width>x<height>] [--max-edge <pixels>] [--screen home|new-project|new-project-failed|workspace|workspace-schema]";
 /// The screens a shot can show.
-const SCREENS: &[&str] = &["home", "new-project", "new-project-failed", "workspace"];
+const SCREENS: &[&str] = &["home", "new-project", "new-project-failed", "workspace", "workspace-schema"];
 
 #[derive(Debug, PartialEq)]
 pub struct Options {

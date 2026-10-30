@@ -49,6 +49,8 @@ pub struct Palette {
     pub canvas: Color32,
     /// A filled field in a panel.
     pub field: Color32,
+    /// A destructive button.
+    pub danger: Color32,
 }
 
 const fn rgb(hex: u32) -> Color32 {
@@ -81,6 +83,7 @@ pub const LIGHT: Palette = Palette {
     dialog_edge: Color32::TRANSPARENT,
     canvas: rgb(0xFBFCFE),
     field: rgb(0xF2F4F7),
+    danger: rgb(0xC0392B),
 };
 
 pub const DARK: Palette = Palette {
@@ -109,6 +112,7 @@ pub const DARK: Palette = Palette {
     dialog_edge: rgb(0x2A3441),
     canvas: rgb(0x151B23),
     field: rgb(0x232C38),
+    danger: rgb(0xD9534F),
 };
 
 /// The palette of an appearance.

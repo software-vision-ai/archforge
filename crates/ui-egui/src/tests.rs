@@ -735,3 +735,112 @@ fn a_long_project_name_keeps_the_chip_left_of_the_bar_controls_at_every_size_and
     }
     crate::i18n::set_language("en");
 }
+
+fn key(h: &mut Harness<'static, Shell>, key: egui::Key, modifiers: egui::Modifiers) {
+    h.key_down_modifiers(modifiers, key);
+    h.key_up_modifiers(modifiers, key);
+    h.run();
+}
+
+fn schema_names(h: &Harness<'static, Shell>) -> Vec<String> {
+    let s = h.state().session.as_ref().unwrap();
+    let st = s.doc();
+    st.alive().filter(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).map(|o| archforge_er::rules::name_of(st, o)).collect()
+}
+
+#[test]
+fn the_plus_adds_a_schema_named_in_place_and_enter_renames_it() {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1120.0));
+    let at = rect_of(&h, "workspace.explorer.add").center();
+    click(&mut h, at);
+    assert!(h.state().explorer.menu_open);
+    let at = rect_of(&h, "workspace.explorer.add.schema").center();
+    click(&mut h, at);
+    h.run();
+    assert_eq!(schema_names(&h), ["Schema 1"]);
+    assert!(h.state().explorer.rename.is_some(), "the new schema's name is open for typing");
+    assert!(ids(&h).iter().any(|i| i == "workspace.explorer.rename"));
+    assert!(h.state().session.as_ref().unwrap().is_dirty());
+    // The default name is selected: typing replaces it.
+    h.run();
+    h.event(egui::Event::Text("Shop".into()));
+    h.run();
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    assert!(h.state().explorer.rename.is_none(), "{:?}", h.state().explorer.rename);
+    assert_eq!(schema_names(&h), ["Shop"]);
+    assert!(ids(&h).iter().any(|i| i.starts_with("workspace.explorer.row.")), "the schema has a row");
+    // Undo takes the rename back, redo the other way.
+    key(&mut h, egui::Key::Z, egui::Modifiers::COMMAND);
+    assert_eq!(schema_names(&h), ["Schema 1"]);
+    key(&mut h, egui::Key::Z, egui::Modifiers::COMMAND | egui::Modifiers::SHIFT);
+    assert_eq!(schema_names(&h), ["Shop"]);
+}
+
+#[test]
+fn with_a_schema_selected_the_plus_adds_a_table_and_delete_asks_before_the_schema_goes() {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1120.0));
+    crate::explorer::add(h.state_mut(), crate::explorer::Kind::Schema);
+    h.run();
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    assert!(h.state().explorer.rename.is_none());
+    // The new schema is selected: + offers a table first.
+    crate::explorer::add(h.state_mut(), crate::explorer::Kind::Entity);
+    h.run();
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    let rows = crate::explorer::rows(h.state().session.as_ref().unwrap().doc(), &h.state().explorer);
+    assert_eq!(rows.iter().map(|r| r.label.as_str()).collect::<Vec<_>>(), ["Schema 1", "Table 1"]);
+    assert_eq!(rows[1].depth, 1);
+    // A column under the table.
+    crate::explorer::add(h.state_mut(), crate::explorer::Kind::Attribute);
+    h.run();
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    let rows = crate::explorer::rows(h.state().session.as_ref().unwrap().doc(), &h.state().explorer);
+    assert_eq!(rows.iter().map(|r| r.label.as_str()).collect::<Vec<_>>(), ["Schema 1", "Table 1", "column_1"]);
+    assert_eq!(rows[2].detail.as_deref(), Some("TEXT"));
+    // Select the schema by its row and press Delete: it holds a table, so the dialog asks.
+    let schema_row = format!("workspace.explorer.row.{}", rows[0].id);
+    let at = rect_of(&h, &schema_row).center();
+    click(&mut h, at);
+    h.state_mut().explorer.focused = true;
+    key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
+    assert!(h.state().explorer.delete.is_some(), "the dialog asks");
+    let at = rect_of(&h, "workspace.explorer.delete.cancel").center();
+    click(&mut h, at);
+    assert!(h.state().explorer.delete.is_none());
+    assert_eq!(schema_names(&h), ["Schema 1"]);
+    h.state_mut().explorer.focused = true;
+    key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
+    let at = rect_of(&h, "workspace.explorer.delete.confirm").center();
+    click(&mut h, at);
+    assert!(schema_names(&h).is_empty(), "the schema and its table are gone");
+    key(&mut h, egui::Key::Z, egui::Modifiers::COMMAND);
+    assert_eq!(schema_names(&h), ["Schema 1"], "undo brings them back");
+}
+
+#[test]
+fn the_filter_narrows_the_tree_and_the_keys_walk_it() {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1120.0));
+    for _ in 0..2 {
+        crate::explorer::add(h.state_mut(), crate::explorer::Kind::Schema);
+        h.run();
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [] })).unwrap();
+    }
+    crate::explorer::add(h.state_mut(), crate::explorer::Kind::Schema);
+    h.run();
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    assert_eq!(schema_names(&h).len(), 3);
+    h.state_mut().explorer.filter = "schema 2".into();
+    h.run();
+    let rows = crate::explorer::rows(h.state().session.as_ref().unwrap().doc(), &h.state().explorer);
+    assert_eq!(rows.iter().map(|r| r.label.as_str()).collect::<Vec<_>>(), ["Schema 2"]);
+    h.state_mut().explorer.filter.clear();
+    h.run();
+    // Down from the selected third schema stays on it; up goes to the second.
+    h.state_mut().explorer.focused = true;
+    key(&mut h, egui::Key::ArrowUp, egui::Modifiers::NONE);
+    let selected = h.state().session.as_ref().unwrap().view().selection[0];
+    assert_eq!(archforge_er::rules::name_of(h.state().session.as_ref().unwrap().doc(), selected), "Schema 2");
+    key(&mut h, egui::Key::F2, egui::Modifiers::NONE);
+    assert!(h.state().explorer.rename.as_ref().is_some_and(|r| r.text == "Schema 2"));
+}
