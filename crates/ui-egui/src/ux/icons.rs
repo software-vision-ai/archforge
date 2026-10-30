@@ -144,6 +144,33 @@ pub const MERGE_LINE: Icon = Icon {
     ],
 };
 
+/// A domain (the design's Icon / Domain): a typed box with a rule.
+pub const DOMAIN: Icon = Icon {
+    size: [11.0, 7.0],
+    stroke: 1.1,
+    segments: &[
+        L([0.0, 0.0], [11.0, 0.0]),
+        L([11.0, 0.0], [11.0, 7.0]),
+        L([11.0, 7.0], [0.0, 7.0]),
+        L([0.0, 7.0], [0.0, 0.0]),
+        L([3.0, 3.5], [8.0, 3.5]),
+    ],
+};
+
+/// An enum type (Icon / Enum): three marked lines.
+pub const ENUM: Icon = Icon {
+    size: [9.5, 7.0],
+    stroke: 1.1,
+    segments: &[
+        L([0.0, 0.0], [0.5, 0.0]),
+        L([3.0, 0.0], [9.5, 0.0]),
+        L([0.0, 3.5], [0.5, 3.5]),
+        L([3.0, 3.5], [9.5, 3.5]),
+        L([0.0, 7.0], [0.5, 7.0]),
+        L([3.0, 7.0], [9.5, 7.0]),
+    ],
+};
+
 /// The arrow pointing right.
 pub const ARROW: Icon =
     Icon { size: [16.0, 16.0], stroke: 1.7, segments: &[L([0.0, 8.0], [16.0, 8.0]), L([9.778, 0.0], [16.0, 8.0]), L([16.0, 8.0], [9.778, 16.0])] };

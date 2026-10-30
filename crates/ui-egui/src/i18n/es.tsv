@@ -33,6 +33,12 @@ str		Delete	Eliminar
 str		Schema · model	Esquema · modelo
 str		Table · model, in every diagram	Tabla · modelo, en todos los diagramas
 str		Column · model	Columna · modelo
+str		Domain · model	Dominio · modelo
+str		This domain	Este dominio
+str		On this domain · {n}	En este dominio · {n}
+str		Enum type · model	Tipo enumerado · modelo
+str		This enum type	Este tipo enumerado
+str		On this enum type · {n}	En este tipo enumerado · {n}
 str		Element · model	Elemento · modelo
 str		Skill · model	Habilidad · modelo
 str		Columns · {n}	Columnas · {n}
@@ -41,6 +47,21 @@ str		Add a column	Añadir una columna
 str		Add unique constraint	Añadir restricción de unicidad
 str		Columns, in key order	Columnas, en orden de clave
 str		Nulls distinct	Nulos distintos
+str		Types · {n}	Tipos · {n}
+plural		{n} check	{n} comprobación|{n} comprobaciones
+plural		{n} literal	{n} literal|{n} literales
+str		Add type	Añadir tipo
+str		Domain	Dominio
+str		Enum type	Tipo enumerado
+str		Base type	Tipo base
+str		Checks	Comprobaciones
+str		Add a check	Añadir comprobación
+str		Literals, in order	Literales en orden
+str		Add a literal	Añadir literal
+str		Pick a type	Elegir un tipo
+str		domain	dominio
+str		enum	enumerado
+str		not null	no nulo
 str		Checks · {n}	Comprobaciones · {n}
 str		Indexes · {n}	Índices · {n}
 str		Add check constraint	Añadir restricción de comprobación

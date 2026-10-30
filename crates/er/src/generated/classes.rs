@@ -266,6 +266,8 @@ pub struct SchemaObj {
     pub name: Option<Arc<str>>,
     pub entity: Vec<Value>,
     pub relationship: Vec<Value>,
+    pub domain: Vec<Value>,
+    pub enum_type: Vec<Value>,
 }
 
 impl Reflect for SchemaObj {
@@ -304,6 +306,8 @@ impl Reflect for SchemaObj {
         match prop {
             schema::ENTITY => Some(&self.entity),
             schema::RELATIONSHIP => Some(&self.relationship),
+            schema::DOMAIN => Some(&self.domain),
+            schema::ENUM_TYPE => Some(&self.enum_type),
             _ => None,
         }
     }
@@ -311,6 +315,8 @@ impl Reflect for SchemaObj {
         match prop {
             schema::ENTITY => Some(&mut self.entity),
             schema::RELATIONSHIP => Some(&mut self.relationship),
+            schema::DOMAIN => Some(&mut self.domain),
+            schema::ENUM_TYPE => Some(&mut self.enum_type),
             _ => None,
         }
     }
@@ -329,6 +335,12 @@ impl SchemaObj {
     pub fn relationship(&self) -> &[Value] {
         &self.relationship
     }
+    pub fn domain(&self) -> &[Value] {
+        &self.domain
+    }
+    pub fn enum_type(&self) -> &[Value] {
+        &self.enum_type
+    }
     pub fn set_description(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
         store.set(obj, element::DESCRIPTION, v.map_or(Value::Null, Value::str))
     }
@@ -340,6 +352,12 @@ impl SchemaObj {
     }
     pub fn push_relationship(store: &mut Store, obj: Obj, value: Value) -> Result<u32, Invalid> {
         store.push(obj, schema::RELATIONSHIP, value)
+    }
+    pub fn push_domain(store: &mut Store, obj: Obj, value: Value) -> Result<u32, Invalid> {
+        store.push(obj, schema::DOMAIN, value)
+    }
+    pub fn push_enum_type(store: &mut Store, obj: Obj, value: Value) -> Result<u32, Invalid> {
+        store.push(obj, schema::ENUM_TYPE, value)
     }
 }
 
@@ -500,6 +518,8 @@ pub struct AttributeObj {
     pub expression: Option<Arc<str>>,
     pub collation: Option<Arc<str>>,
     pub linked_to: Option<Obj>,
+    pub domain: Option<Obj>,
+    pub enum_type: Option<Obj>,
 }
 
 impl Default for AttributeObj {
@@ -517,6 +537,8 @@ impl Default for AttributeObj {
             expression: None,
             collation: None,
             linked_to: None,
+            domain: None,
+            enum_type: None,
         }
     }
 }
@@ -539,6 +561,8 @@ impl Reflect for AttributeObj {
             attribute::EXPRESSION => Some(self.expression.clone().map_or(Value::Null, Value::Str)),
             attribute::COLLATION => Some(self.collation.clone().map_or(Value::Null, Value::Str)),
             attribute::LINKED_TO => Some(self.linked_to.map_or(Value::Null, Value::Ref)),
+            attribute::DOMAIN => Some(self.domain.map_or(Value::Null, Value::Ref)),
+            attribute::ENUM_TYPE => Some(self.enum_type.map_or(Value::Null, Value::Ref)),
             _ => None,
         }
     }
@@ -635,6 +659,22 @@ impl Reflect for AttributeObj {
                 }
                 Ok(())
             }
+            attribute::DOMAIN => {
+                match value {
+                    Value::Null => self.domain = None,
+                    Value::Ref(v) => self.domain = Some(v),
+                    other => return Err(format!("not a reference: {other}")),
+                }
+                Ok(())
+            }
+            attribute::ENUM_TYPE => {
+                match value {
+                    Value::Null => self.enum_type = None,
+                    Value::Ref(v) => self.enum_type = Some(v),
+                    other => return Err(format!("not a reference: {other}")),
+                }
+                Ok(())
+            }
             _ => Err(format!("no single-valued property {} on Attribute", prop.0)),
         }
     }
@@ -683,6 +723,12 @@ impl AttributeObj {
     pub fn linked_to(&self) -> Option<Obj> {
         self.linked_to
     }
+    pub fn domain(&self) -> Option<Obj> {
+        self.domain
+    }
+    pub fn enum_type(&self) -> Option<Obj> {
+        self.enum_type
+    }
     pub fn set_description(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
         store.set(obj, element::DESCRIPTION, v.map_or(Value::Null, Value::str))
     }
@@ -718,6 +764,12 @@ impl AttributeObj {
     }
     pub fn set_linked_to(store: &mut Store, obj: Obj, v: Option<Obj>) -> Result<(), Invalid> {
         store.set(obj, attribute::LINKED_TO, v.map_or(Value::Null, Value::Ref))
+    }
+    pub fn set_domain(store: &mut Store, obj: Obj, v: Option<Obj>) -> Result<(), Invalid> {
+        store.set(obj, attribute::DOMAIN, v.map_or(Value::Null, Value::Ref))
+    }
+    pub fn set_enum_type(store: &mut Store, obj: Obj, v: Option<Obj>) -> Result<(), Invalid> {
+        store.set(obj, attribute::ENUM_TYPE, v.map_or(Value::Null, Value::Ref))
     }
 }
 
@@ -1541,5 +1593,325 @@ impl IndexColumnObj {
     }
     pub fn set_nulls(store: &mut Store, obj: Obj, v: u32) -> Result<(), Invalid> {
         store.set(obj, index_column::NULLS, Value::Enum(v))
+    }
+}
+
+/// An object of Domain, with every inherited stored property as a field.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct DomainObj {
+    pub description: Option<Arc<str>>,
+    pub name: Option<Arc<str>>,
+    pub base_type: Option<Arc<str>>,
+    pub length: i64,
+    pub precision: i64,
+    pub scale: i64,
+    pub default: Option<Arc<str>>,
+    pub not_null: bool,
+    pub check: Vec<Value>,
+}
+
+impl Reflect for DomainObj {
+    fn class(&self) -> ClassId {
+        DOMAIN
+    }
+    fn get(&self, prop: PropId) -> Option<Value> {
+        match prop {
+            element::DESCRIPTION => Some(self.description.clone().map_or(Value::Null, Value::Str)),
+            named_element::NAME => Some(self.name.clone().map_or(Value::Null, Value::Str)),
+            domain::BASE_TYPE => Some(self.base_type.clone().map_or(Value::Null, Value::Str)),
+            domain::LENGTH => Some(Value::Int(self.length)),
+            domain::PRECISION => Some(Value::Int(self.precision)),
+            domain::SCALE => Some(Value::Int(self.scale)),
+            domain::DEFAULT => Some(self.default.clone().map_or(Value::Null, Value::Str)),
+            domain::NOT_NULL => Some(Value::Bool(self.not_null)),
+            _ => None,
+        }
+    }
+    fn set(&mut self, prop: PropId, value: Value) -> Result<(), String> {
+        match prop {
+            element::DESCRIPTION => {
+                match value {
+                    Value::Null => self.description = None,
+                    Value::Str(v) => self.description = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
+            named_element::NAME => {
+                match value {
+                    Value::Null => self.name = None,
+                    Value::Str(v) => self.name = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
+            domain::BASE_TYPE => {
+                match value {
+                    Value::Null => self.base_type = None,
+                    Value::Str(v) => self.base_type = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
+            domain::LENGTH => {
+                match value {
+                    Value::Int(v) => self.length = v,
+                    other => return Err(format!("not an integer: {other}")),
+                }
+                Ok(())
+            }
+            domain::PRECISION => {
+                match value {
+                    Value::Int(v) => self.precision = v,
+                    other => return Err(format!("not an integer: {other}")),
+                }
+                Ok(())
+            }
+            domain::SCALE => {
+                match value {
+                    Value::Int(v) => self.scale = v,
+                    other => return Err(format!("not an integer: {other}")),
+                }
+                Ok(())
+            }
+            domain::DEFAULT => {
+                match value {
+                    Value::Null => self.default = None,
+                    Value::Str(v) => self.default = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
+            domain::NOT_NULL => {
+                match value {
+                    Value::Bool(v) => self.not_null = v,
+                    other => return Err(format!("not a boolean: {other}")),
+                }
+                Ok(())
+            }
+            _ => Err(format!("no single-valued property {} on Domain", prop.0)),
+        }
+    }
+    fn list(&self, prop: PropId) -> Option<&[Value]> {
+        match prop {
+            domain::CHECK => Some(&self.check),
+            _ => None,
+        }
+    }
+    fn list_mut(&mut self, prop: PropId) -> Option<&mut Vec<Value>> {
+        match prop {
+            domain::CHECK => Some(&mut self.check),
+            _ => None,
+        }
+    }
+}
+
+impl DomainObj {
+    pub fn description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
+    pub fn name(&self) -> Option<&str> {
+        self.name.as_deref()
+    }
+    pub fn base_type(&self) -> Option<&str> {
+        self.base_type.as_deref()
+    }
+    pub fn length(&self) -> i64 {
+        self.length
+    }
+    pub fn precision(&self) -> i64 {
+        self.precision
+    }
+    pub fn scale(&self) -> i64 {
+        self.scale
+    }
+    pub fn default(&self) -> Option<&str> {
+        self.default.as_deref()
+    }
+    pub fn not_null(&self) -> bool {
+        self.not_null
+    }
+    pub fn check(&self) -> &[Value] {
+        &self.check
+    }
+    pub fn set_description(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, element::DESCRIPTION, v.map_or(Value::Null, Value::str))
+    }
+    pub fn set_name(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, named_element::NAME, v.map_or(Value::Null, Value::str))
+    }
+    pub fn set_base_type(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, domain::BASE_TYPE, v.map_or(Value::Null, Value::str))
+    }
+    pub fn set_length(store: &mut Store, obj: Obj, v: i64) -> Result<(), Invalid> {
+        store.set(obj, domain::LENGTH, Value::Int(v))
+    }
+    pub fn set_precision(store: &mut Store, obj: Obj, v: i64) -> Result<(), Invalid> {
+        store.set(obj, domain::PRECISION, Value::Int(v))
+    }
+    pub fn set_scale(store: &mut Store, obj: Obj, v: i64) -> Result<(), Invalid> {
+        store.set(obj, domain::SCALE, Value::Int(v))
+    }
+    pub fn set_default(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, domain::DEFAULT, v.map_or(Value::Null, Value::str))
+    }
+    pub fn set_not_null(store: &mut Store, obj: Obj, v: bool) -> Result<(), Invalid> {
+        store.set(obj, domain::NOT_NULL, Value::Bool(v))
+    }
+    pub fn push_check(store: &mut Store, obj: Obj, value: Value) -> Result<u32, Invalid> {
+        store.push(obj, domain::CHECK, value)
+    }
+}
+
+/// An object of DomainCheck, with every inherited stored property as a field.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct DomainCheckObj {
+    pub description: Option<Arc<str>>,
+    pub name: Option<Arc<str>>,
+    pub expression: Option<Arc<str>>,
+}
+
+impl Reflect for DomainCheckObj {
+    fn class(&self) -> ClassId {
+        DOMAIN_CHECK
+    }
+    fn get(&self, prop: PropId) -> Option<Value> {
+        match prop {
+            element::DESCRIPTION => Some(self.description.clone().map_or(Value::Null, Value::Str)),
+            domain_check::NAME => Some(self.name.clone().map_or(Value::Null, Value::Str)),
+            domain_check::EXPRESSION => Some(self.expression.clone().map_or(Value::Null, Value::Str)),
+            _ => None,
+        }
+    }
+    fn set(&mut self, prop: PropId, value: Value) -> Result<(), String> {
+        match prop {
+            element::DESCRIPTION => {
+                match value {
+                    Value::Null => self.description = None,
+                    Value::Str(v) => self.description = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
+            domain_check::NAME => {
+                match value {
+                    Value::Null => self.name = None,
+                    Value::Str(v) => self.name = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
+            domain_check::EXPRESSION => {
+                match value {
+                    Value::Null => self.expression = None,
+                    Value::Str(v) => self.expression = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
+            _ => Err(format!("no single-valued property {} on DomainCheck", prop.0)),
+        }
+    }
+    fn list(&self, _prop: PropId) -> Option<&[Value]> {
+        None
+    }
+    fn list_mut(&mut self, _prop: PropId) -> Option<&mut Vec<Value>> {
+        None
+    }
+}
+
+impl DomainCheckObj {
+    pub fn description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
+    pub fn name(&self) -> Option<&str> {
+        self.name.as_deref()
+    }
+    pub fn expression(&self) -> Option<&str> {
+        self.expression.as_deref()
+    }
+    pub fn set_description(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, element::DESCRIPTION, v.map_or(Value::Null, Value::str))
+    }
+    pub fn set_name(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, domain_check::NAME, v.map_or(Value::Null, Value::str))
+    }
+    pub fn set_expression(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, domain_check::EXPRESSION, v.map_or(Value::Null, Value::str))
+    }
+}
+
+/// An object of EnumType, with every inherited stored property as a field.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct EnumTypeObj {
+    pub description: Option<Arc<str>>,
+    pub name: Option<Arc<str>>,
+    pub literal: Vec<Value>,
+}
+
+impl Reflect for EnumTypeObj {
+    fn class(&self) -> ClassId {
+        ENUM_TYPE
+    }
+    fn get(&self, prop: PropId) -> Option<Value> {
+        match prop {
+            element::DESCRIPTION => Some(self.description.clone().map_or(Value::Null, Value::Str)),
+            named_element::NAME => Some(self.name.clone().map_or(Value::Null, Value::Str)),
+            _ => None,
+        }
+    }
+    fn set(&mut self, prop: PropId, value: Value) -> Result<(), String> {
+        match prop {
+            element::DESCRIPTION => {
+                match value {
+                    Value::Null => self.description = None,
+                    Value::Str(v) => self.description = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
+            named_element::NAME => {
+                match value {
+                    Value::Null => self.name = None,
+                    Value::Str(v) => self.name = Some(v),
+                    other => return Err(format!("not a string: {other}")),
+                }
+                Ok(())
+            }
+            _ => Err(format!("no single-valued property {} on EnumType", prop.0)),
+        }
+    }
+    fn list(&self, prop: PropId) -> Option<&[Value]> {
+        match prop {
+            enum_type::LITERAL => Some(&self.literal),
+            _ => None,
+        }
+    }
+    fn list_mut(&mut self, prop: PropId) -> Option<&mut Vec<Value>> {
+        match prop {
+            enum_type::LITERAL => Some(&mut self.literal),
+            _ => None,
+        }
+    }
+}
+
+impl EnumTypeObj {
+    pub fn description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
+    pub fn name(&self) -> Option<&str> {
+        self.name.as_deref()
+    }
+    pub fn literal(&self) -> &[Value] {
+        &self.literal
+    }
+    pub fn set_description(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, element::DESCRIPTION, v.map_or(Value::Null, Value::str))
+    }
+    pub fn set_name(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
+        store.set(obj, named_element::NAME, v.map_or(Value::Null, Value::str))
+    }
+    pub fn push_literal(store: &mut Store, obj: Obj, value: Value) -> Result<u32, Invalid> {
+        store.push(obj, enum_type::LITERAL, value)
     }
 }

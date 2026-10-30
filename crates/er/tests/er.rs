@@ -104,7 +104,7 @@ fn the_registry_and_the_metamodel_are_what_the_spec_says() {
     let reg = registry().unwrap();
     assert!(reg.len() > 20);
     let m = metamodel().unwrap();
-    assert_eq!(m.classes.len(), 13);
+    assert_eq!(m.classes.len(), 16);
     assert_eq!(
         m.data_types.len(),
         13,
@@ -961,7 +961,11 @@ fn the_sweep_finds_nothing() {
     let u = o["unique_constraints"][0]["id"].as_str().unwrap().to_string();
     let pk = get(&mut s, "er.entity.get", json!({ "entity": sm.customer }))["primary_key"]["id"].as_str().unwrap().to_string();
     let skill = run(&mut s, "skill.add", json!({ "subject": sm.schema, "name": "Table naming", "applies_to": "table", "triggers": ["naming"] }));
-    let ids = [&sm.schema, &sm.customer, &sm.key, &sm.places, &pk, &u, &fk, &skill, "not-an-id", "00000000-0000-7000-8000-000000000000"];
+    let dom = run(&mut s, "er.domain.add", json!({ "schema": sm.schema, "name": "money", "base_type": "NUMERIC", "precision": 12, "scale": 2 }));
+    let en = run(&mut s, "er.enum.add", json!({ "schema": sm.schema, "name": "state", "literals": ["open", "closed"] }));
+    run(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": "amount", "domain": dom }));
+    run(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": "state", "enum": en, "default": "'open'" }));
+    let ids = [&sm.schema, &sm.customer, &sm.key, &sm.places, &pk, &u, &fk, &skill, &dom, &en, "not-an-id", "00000000-0000-7000-8000-000000000000"];
     let calls = sweep_with(&mut s, &ids, picture).unwrap();
     assert!(calls > 1000, "{calls}");
     assert_eq!(problems(s.doc()), Vec::<String>::new());
@@ -1406,5 +1410,82 @@ fn a_cycle_of_identifying_keys_in_a_loaded_document_cannot_grow_and_a_self_key_o
     let _ = code;
     let own = json!({ "from": sm.customer, "to": sm.customer, "from_end": "exactly-one", "to_end": "zero-or-more", "create_foreign_key": true, "identifying": true, "from_role": "parent", "points_to": uq });
     run(&mut s, "er.relationship.add", own);
+    all_rules_hold(s.doc());
+}
+
+#[test]
+fn domains_and_enum_types_type_columns_under_the_schemas_rules() {
+    let mut s = session();
+    let sm = sample(&mut s);
+    // A domain and an enum type, each named once in the schema's namespace with the tables.
+    let domain = json!({
+        "schema": sm.schema, "name": "email_address", "base_type": "VARCHAR", "length": 255, "not_null": true,
+        "checks": ["position('@' in value) > 1", { "expression": "length(value) > 3", "name": "ck_email_len" }],
+    });
+    round_trip(&mut s, "er.domain.add", &domain);
+    let sg = get(&mut s, "er.schema.get", json!({ "schema": sm.schema }));
+    let dom = sg["domains"][0]["id"].as_str().unwrap().to_string();
+    assert_eq!((sg["domains"][0]["checks"].as_array().map(Vec::len), sg["domains"][0]["length"].as_i64()), (Some(2), Some(255)));
+    let en = run(&mut s, "er.enum.add", json!({ "schema": sm.schema, "name": "order_status", "literals": ["pending", "paid", "shipped"] }));
+    let sg = get(&mut s, "er.schema.get", json!({ "schema": sm.schema }));
+    assert_eq!(sg["enums"][0]["literals"], json!(["pending", "paid", "shipped"]));
+    // Columns take them: rows show the type's name, the rules see the base type and its size.
+    let email = run(&mut s, "er.attribute.add", json!({ "entity": sm.customer, "name": "email", "domain": dom }));
+    let status = run(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": "status", "enum": en, "default": "'paid'" }));
+    assert_eq!(rules::type_display(s.doc(), obj(s.doc(), &email)), "email_address");
+    assert_eq!(rules::type_of(s.doc(), obj(s.doc(), &email)), "VARCHAR");
+    assert_eq!(rules::size_of(s.doc(), obj(s.doc(), &email)), (Some(255), None, None));
+    assert_eq!(rules::type_display(s.doc(), obj(s.doc(), &status)), "order_status");
+    all_rules_hold(s.doc());
+    for (cmd, p, key) in [
+        ("er.domain.add", json!({ "schema": sm.schema, "name": "Customer", "base_type": "TEXT" }), "name"),
+        ("er.enum.add", json!({ "schema": sm.schema, "name": "email_address", "literals": ["a"] }), "name"),
+        ("er.entity.add", json!({ "schema": sm.schema, "name": "order_status" }), "name"),
+        ("er.domain.add", json!({ "schema": sm.schema, "name": "d", "base_type": "VARCHAR(10)" }), "base_type"),
+        ("er.domain.add", json!({ "schema": sm.schema, "name": "d", "base_type": "INTEGER", "length": 4 }), "length"),
+        ("er.domain.add", json!({ "schema": sm.schema, "name": "d", "base_type": "TEXT", "checks": [" "] }), "checks"),
+        ("er.domain.add", json!({ "schema": sm.schema, "name": "d", "base_type": "TEXT", "checks": [{ "expresion": "1 = 1" }] }), "checks"),
+        ("er.enum.add", json!({ "schema": sm.schema, "name": "e", "literals": [] }), "literals"),
+        ("er.enum.add", json!({ "schema": sm.schema, "name": "e", "literals": ["a", "A"] }), "literals"),
+        ("er.attribute.add", json!({ "entity": sm.order, "name": "x", "domain": dom, "enum": en }), "enum"),
+        ("er.attribute.add", json!({ "entity": sm.order, "name": "x", "type": "TEXT", "domain": dom }), "type"),
+        ("er.attribute.add", json!({ "entity": sm.order, "name": "x", "domain": dom, "length": 10 }), "length"),
+        ("er.attribute.add", json!({ "entity": sm.order, "name": "x", "enum": en, "default": "'cancelled'" }), "default"),
+        ("er.attribute.set-default", json!({ "attribute": email, "default": "'a@b'" }), "default"),
+        ("er.attribute.add", json!({ "entity": sm.order, "name": "x", "domain": dom, "default": "''" }), "default"),
+        ("er.attribute.add", json!({ "entity": sm.order, "name": "x", "domain": dom, "collation": "C" }), "collation"),
+        ("er.attribute.set-default", json!({ "attribute": status, "default": "'cancelled'" }), "default"),
+        ("er.attribute.set-collation", json!({ "attribute": email, "collation": "C" }), "collation"),
+        ("er.domain.remove", json!({ "domain": dom }), "domain"),
+        ("er.enum.remove", json!({ "enum": en }), "enum"),
+        ("er.enum.set", json!({ "enum": en, "name": "order_status", "literals": ["pending"] }), "literals"),
+        ("er.domain.set", json!({ "domain": dom, "name": "email_address", "base_type": "INTEGER", "length": 255 }), "length"),
+    ] {
+        assert_eq!(refused_on(&mut s, cmd, p.clone()), key, "{cmd} {p}");
+    }
+    // Clearing a domain column's own default is fine; moving a column with a default onto a domain
+    // drops the default, since the domain's counts.
+    run(&mut s, "er.attribute.set-default", json!({ "attribute": email, "default": "" }));
+    let dated = run(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": "dated", "type": "TEXT", "default": "'x'", "collation": "C" }));
+    run(&mut s, "er.attribute.set-type", json!({ "attribute": dated, "domain": dom }));
+    let o = get(&mut s, "er.entity.get", json!({ "entity": sm.order }));
+    let dated_json = o["attributes"].as_array().unwrap().iter().find(|a| a["id"] == dated).unwrap().clone();
+    assert_eq!(dated_json["domain"], dom);
+    assert_eq!(rules::text_of(s.doc(), obj(s.doc(), &dated), attribute::DEFAULT), "");
+    assert_eq!(rules::text_of(s.doc(), obj(s.doc(), &dated), attribute::COLLATION), "");
+    run(&mut s, "er.attribute.remove", json!({ "attribute": dated }));
+    // A type name takes the domain's place and back; the enum's literals change under its default.
+    round_trip(&mut s, "er.attribute.set-type", &json!({ "attribute": email, "type": "TEXT" }));
+    run(&mut s, "er.attribute.set-type", json!({ "attribute": email, "type": "TEXT" }));
+    assert_eq!(get(&mut s, "er.entity.get", json!({ "entity": sm.customer }))["attributes"][1]["domain"], Json::Null);
+    round_trip(&mut s, "er.attribute.set-type", &json!({ "attribute": email, "domain": dom }));
+    round_trip(&mut s, "er.enum.set", &json!({ "enum": en, "name": "order_state", "literals": ["pending", "paid"] }));
+    round_trip(&mut s, "er.domain.set", &json!({ "domain": dom, "name": "email_address", "base_type": "VARCHAR", "length": 320, "default": "''" }));
+    all_rules_hold(s.doc());
+    // Unused types go; a used one stays until its columns are retyped.
+    run(&mut s, "er.attribute.set-type", json!({ "attribute": email, "type": "TEXT" }));
+    round_trip(&mut s, "er.domain.remove", &json!({ "domain": dom }));
+    run(&mut s, "er.attribute.remove", json!({ "attribute": status }));
+    round_trip(&mut s, "er.enum.remove", &json!({ "enum": en }));
     all_rules_hold(s.doc());
 }

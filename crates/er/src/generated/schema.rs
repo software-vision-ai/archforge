@@ -43,6 +43,8 @@ pub const TABLES: &[Table] = &[
             Column { name: "expression", prop: Some(attribute::EXPRESSION), sql: "TEXT NULL" },
             Column { name: "collation", prop: Some(attribute::COLLATION), sql: "TEXT NULL" },
             Column { name: "linked_to", prop: Some(attribute::LINKED_TO), sql: "BINARY(16) NULL" },
+            Column { name: "domain", prop: Some(attribute::DOMAIN), sql: "BINARY(16) NULL" },
+            Column { name: "enum_type", prop: Some(attribute::ENUM_TYPE), sql: "BINARY(16) NULL" },
         ],
     },
     Table {
@@ -129,12 +131,48 @@ pub const TABLES: &[Table] = &[
             Column { name: "nulls", prop: Some(index_column::NULLS), sql: "INT NOT NULL" },
         ],
     },
+    Table {
+        name: "er_domain",
+        class: DOMAIN,
+        columns: &[
+            Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
+            Column { name: "description", prop: Some(element::DESCRIPTION), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "base_type", prop: Some(domain::BASE_TYPE), sql: "TEXT NULL" },
+            Column { name: "length", prop: Some(domain::LENGTH), sql: "BIGINT NOT NULL" },
+            Column { name: "precision", prop: Some(domain::PRECISION), sql: "BIGINT NOT NULL" },
+            Column { name: "scale", prop: Some(domain::SCALE), sql: "BIGINT NOT NULL" },
+            Column { name: "default", prop: Some(domain::DEFAULT), sql: "TEXT NULL" },
+            Column { name: "not_null", prop: Some(domain::NOT_NULL), sql: "TINYINT NOT NULL" },
+        ],
+    },
+    Table {
+        name: "er_domain_check",
+        class: DOMAIN_CHECK,
+        columns: &[
+            Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
+            Column { name: "description", prop: Some(element::DESCRIPTION), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(domain_check::NAME), sql: "TEXT NULL" },
+            Column { name: "expression", prop: Some(domain_check::EXPRESSION), sql: "TEXT NULL" },
+        ],
+    },
+    Table {
+        name: "er_enum_type",
+        class: ENUM_TYPE,
+        columns: &[
+            Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
+            Column { name: "description", prop: Some(element::DESCRIPTION), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+        ],
+    },
 ];
 
 /// One table per multi-valued stored property.
 pub const JUNCTIONS: &[Junction] = &[
     Junction { name: "er_schema_entity", class: SCHEMA, prop: schema::ENTITY, ordered: true, reference: true },
     Junction { name: "er_schema_relationship", class: SCHEMA, prop: schema::RELATIONSHIP, ordered: true, reference: true },
+    Junction { name: "er_schema_domain", class: SCHEMA, prop: schema::DOMAIN, ordered: true, reference: true },
+    Junction { name: "er_schema_enum_type", class: SCHEMA, prop: schema::ENUM_TYPE, ordered: true, reference: true },
     Junction { name: "er_entity_attribute", class: ENTITY, prop: entity::ATTRIBUTE, ordered: true, reference: true },
     Junction { name: "er_entity_unique_constraint", class: ENTITY, prop: entity::UNIQUE_CONSTRAINT, ordered: true, reference: true },
     Junction { name: "er_entity_foreign_key", class: ENTITY, prop: entity::FOREIGN_KEY, ordered: true, reference: true },
@@ -144,4 +182,6 @@ pub const JUNCTIONS: &[Junction] = &[
     Junction { name: "er_unique_constraint_column", class: UNIQUE_CONSTRAINT, prop: key::COLUMN, ordered: true, reference: true },
     Junction { name: "er_foreign_key_column", class: FOREIGN_KEY, prop: foreign_key::COLUMN, ordered: true, reference: true },
     Junction { name: "er_table_index_column", class: TABLE_INDEX, prop: table_index::COLUMN, ordered: true, reference: true },
+    Junction { name: "er_domain_check", class: DOMAIN, prop: domain::CHECK, ordered: true, reference: true },
+    Junction { name: "er_enum_type_literal", class: ENUM_TYPE, prop: enum_type::LITERAL, ordered: true, reference: false },
 ];

@@ -33,6 +33,12 @@ str		Delete	Löschen
 str		Schema · model	Schema · Modell
 str		Table · model, in every diagram	Tabelle · Modell, in jedem Diagramm
 str		Column · model	Spalte · Modell
+str		Domain · model	Domäne · Modell
+str		This domain	Diese Domäne
+str		On this domain · {n}	Zu dieser Domäne · {n}
+str		Enum type · model	Aufzählungstyp · Modell
+str		This enum type	Dieser Aufzählungstyp
+str		On this enum type · {n}	Zu diesem Aufzählungstyp · {n}
 str		Element · model	Element · Modell
 str		Skill · model	Skill · Modell
 str		Columns · {n}	Spalten · {n}
@@ -41,6 +47,21 @@ str		Add a column	Spalte hinzufügen
 str		Add unique constraint	Eindeutigkeitsbedingung hinzufügen
 str		Columns, in key order	Spalten in Schlüsselreihenfolge
 str		Nulls distinct	Nullwerte verschieden
+str		Types · {n}	Typen · {n}
+plural		{n} check	{n} Prüfbedingung|{n} Prüfbedingungen
+plural		{n} literal	{n} Literal|{n} Literale
+str		Add type	Typ hinzufügen
+str		Domain	Domäne
+str		Enum type	Aufzählungstyp
+str		Base type	Basistyp
+str		Checks	Prüfbedingungen
+str		Add a check	Prüfbedingung hinzufügen
+str		Literals, in order	Literale in Reihenfolge
+str		Add a literal	Literal hinzufügen
+str		Pick a type	Typ wählen
+str		domain	Domäne
+str		enum	Aufzählung
+str		not null	nicht null
 str		Checks · {n}	Prüfbedingungen · {n}
 str		Indexes · {n}	Indizes · {n}
 str		Add check constraint	Prüfbedingung hinzufügen

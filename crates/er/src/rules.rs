@@ -6,10 +6,13 @@ use std::collections::BTreeSet;
 use archforge_mof::{Obj, Store, Value};
 
 use crate::{
-    ATTRIBUTE, CHECK_CONSTRAINT, Cardinality, Deferrability, ENTITY, EntityKind, FOREIGN_KEY, Generation, MatchType, NullsOrder, PRIMARY_KEY,
-    RELATIONSHIP, ReferentialAction, SCHEMA, SortDirection, TABLE_INDEX, UNIQUE_CONSTRAINT, attribute, check_constraint, entity, foreign_key,
-    index_column, key, named_element, relationship, schema, table_index, unique_constraint,
+    ATTRIBUTE, CHECK_CONSTRAINT, Cardinality, DOMAIN, Deferrability, ENTITY, ENUM_TYPE, EntityKind, FOREIGN_KEY, Generation, MatchType, NullsOrder,
+    PRIMARY_KEY, RELATIONSHIP, ReferentialAction, SCHEMA, SortDirection, TABLE_INDEX, UNIQUE_CONSTRAINT, attribute, check_constraint, domain,
+    domain_check, entity, enum_type, foreign_key, index_column, key, named_element, relationship, schema, table_index, unique_constraint,
 };
+
+/// The most literals of an enum type.
+pub const MAX_LITERALS: usize = 256;
 
 /// The most characters in a name, and in an attribute's type.
 pub const MAX_NAME: usize = 128;
@@ -166,7 +169,124 @@ fn refs(store: &Store, obj: Obj, prop: archforge_mof::PropId) -> Vec<Obj> {
 
 /// An attribute's type, or empty.
 pub fn type_of(store: &Store, a: Obj) -> String {
+    if let Some(d) = domain_of(store, a) {
+        return text_of(store, d, domain::BASE_TYPE);
+    }
+    if let Some(e) = enum_of(store, a) {
+        return name_of(store, e);
+    }
+    own_type_of(store, a)
+}
+
+/// A column's own type name, empty when it takes a domain or an enum type.
+pub fn own_type_of(store: &Store, a: Obj) -> String {
     store.get(a, attribute::TYPE).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default()
+}
+
+// Domains and enum types (slice S5).
+
+/// The domain a column takes its type from.
+pub fn domain_of(store: &Store, a: Obj) -> Option<Obj> {
+    reference(store, a, attribute::DOMAIN).filter(|d| store.is_alive(*d))
+}
+
+/// The enum type a column takes its values from.
+pub fn enum_of(store: &Store, a: Obj) -> Option<Obj> {
+    reference(store, a, attribute::ENUM_TYPE).filter(|e| store.is_alive(*e))
+}
+
+/// A schema's domains, in order.
+pub fn domains_of(store: &Store, s: Obj) -> Vec<Obj> {
+    refs(store, s, schema::DOMAIN)
+}
+
+/// A schema's enum types, in order.
+pub fn enums_of(store: &Store, s: Obj) -> Vec<Obj> {
+    refs(store, s, schema::ENUM_TYPE)
+}
+
+/// An enum type's literals, in order.
+pub fn literals_of(store: &Store, e: Obj) -> Vec<String> {
+    store.list(e, enum_type::LITERAL).unwrap_or_default().iter().filter_map(|v| v.as_str().map(str::to_string)).collect()
+}
+
+/// A domain's checks, in order.
+pub fn domain_checks(store: &Store, d: Obj) -> Vec<Obj> {
+    refs(store, d, domain::CHECK)
+}
+
+/// The columns that take a domain or an enum type.
+pub fn type_columns(store: &Store, t: Obj) -> Vec<Obj> {
+    store
+        .referrers(t)
+        .into_iter()
+        .filter(|(_, p)| *p == attribute::DOMAIN || *p == attribute::ENUM_TYPE)
+        .map(|(a, _)| a)
+        .filter(|a| store.is_alive(*a))
+        .collect()
+}
+
+/// Why `literals` cannot be an enum type's: at least one, at most 256, each a name, none twice.
+pub fn literals_problem(literals: &[String]) -> Option<String> {
+    if literals.is_empty() {
+        return Some("an enum type needs at least one literal".into());
+    }
+    if literals.len() > MAX_LITERALS {
+        return Some(format!("an enum type has at most {MAX_LITERALS} literals"));
+    }
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    for l in literals {
+        let shown: String = l.chars().take(40).collect();
+        if let Some(p) = name_problem(l, MAX_NAME) {
+            return Some(format!("the literal {shown:?} {p}"));
+        }
+        if !seen.insert(l.to_lowercase()) {
+            return Some(format!("the literal {shown:?} appears twice"));
+        }
+    }
+    None
+}
+
+/// Why a domain's base type and size do not hold together; None when they do.
+pub fn domain_problem(store: &Store, d: Obj) -> Option<String> {
+    let base = text_of(store, d, domain::BASE_TYPE);
+    if let Some(p) = name_problem(&base, MAX_TYPE) {
+        return Some(format!("the base type {p}"));
+    }
+    if base.contains('(') {
+        return Some("the base type carries its own size; give length, precision or scale instead".into());
+    }
+    let (l, p, s) = own_size_of(store, d);
+    if let Some((_, problem)) = size_problem(&base, l, p, s) {
+        return Some(problem);
+    }
+    for c in domain_checks(store, d) {
+        if let Some(p) = check_problem(&text_of(store, c, domain_check::EXPRESSION)) {
+            return Some(p);
+        }
+    }
+    None
+}
+
+/// Why a column's default does not fit its enum type: it is none of the literals (quoted or not);
+/// None when it fits or the column has no enum type or no default.
+pub fn enum_default_problem(store: &Store, a: Obj) -> Option<String> {
+    let e = enum_of(store, a)?;
+    enum_default_check(store, e, &text_of(store, a, attribute::DEFAULT))
+}
+
+/// Why `default` does not fit enum type `e`: it is none of the literals (quoted or not); None when
+/// it fits or is empty.
+pub fn enum_default_check(store: &Store, e: Obj, default: &str) -> Option<String> {
+    if default.is_empty() {
+        return None;
+    }
+    let bare = default.trim().trim_matches('\'');
+    if literals_of(store, e).iter().any(|l| l == bare) {
+        return None;
+    }
+    let shown: String = default.chars().take(40).collect();
+    Some(format!("the default {shown:?} is not a literal of {}", name_of(store, e)))
 }
 
 /// What a type takes after its name, in the PostgreSQL list (owner decision 2026-10-30: this
@@ -214,16 +334,34 @@ pub fn is_integer_type(kind: &str) -> bool {
 
 /// A column's size as stored: length, precision, scale.
 pub fn size_of(store: &Store, a: Obj) -> (Option<i64>, Option<i64>, Option<i64>) {
-    // 0 is none: the generated integers take no null.
-    let int = |p| match store.get(a, p) {
-        Ok(Value::Int(i)) if i > 0 => Some(i),
+    if let Some(d) = domain_of(store, a) {
+        return own_size_of(store, d);
+    }
+    own_size_of(store, a)
+}
+
+/// A column's or a domain's own size as stored: length, precision, scale (the properties share
+/// their names).
+pub fn own_size_of(store: &Store, a: Obj) -> (Option<i64>, Option<i64>, Option<i64>) {
+    let is_domain = store.class_of(a).ok() == Some(DOMAIN);
+    let props =
+        if is_domain { [domain::LENGTH, domain::PRECISION, domain::SCALE] } else { [attribute::LENGTH, attribute::PRECISION, attribute::SCALE] };
+    let read = |p| match store.get(a, p) {
+        Ok(Value::Int(n)) if n > 0 => Some(n),
         _ => None,
     };
-    (int(attribute::LENGTH), int(attribute::PRECISION), int(attribute::SCALE))
+    // 0 is none: the generated integers take no null.
+    (read(props[0]), read(props[1]), read(props[2]))
 }
 
 /// A column's type as DDL writes it: the name with its length, or precision and scale, when set.
 pub fn type_display(store: &Store, a: Obj) -> String {
+    if let Some(d) = domain_of(store, a) {
+        return name_of(store, d);
+    }
+    if let Some(e) = enum_of(store, a) {
+        return name_of(store, e);
+    }
     let kind = type_of(store, a);
     match size_of(store, a) {
         (Some(n), _, _) => format!("{kind}({n})"),
@@ -827,16 +965,19 @@ pub fn problems(store: &Store) -> Vec<String> {
     let mut out = Vec::new();
     for o in store.alive() {
         let Ok(class) = store.class_of(o) else { continue };
-        if class == SCHEMA || class == ENTITY || class == ATTRIBUTE {
+        if class == SCHEMA || class == ENTITY || class == ATTRIBUTE || class == DOMAIN || class == ENUM_TYPE {
             let name = name_of(store, o);
             if let Some(p) = name_problem(&name, MAX_NAME) {
                 out.push(format!("the name of {o} {p}"));
             }
         }
         if class == SCHEMA {
-            let entities: Vec<Obj> = store.list(o, schema::ENTITY).unwrap_or_default().iter().filter_map(Value::as_ref).collect();
-            for name in duplicate_names(store, &entities) {
-                out.push(format!("the entity name {name:?} is used twice in {o}"));
+            // Entities, domains and enum types share one namespace in a schema, as in SQL.
+            let mut members: Vec<Obj> = store.list(o, schema::ENTITY).unwrap_or_default().iter().filter_map(Value::as_ref).collect();
+            members.extend(domains_of(store, o));
+            members.extend(enums_of(store, o));
+            for name in duplicate_names(store, &members) {
+                out.push(format!("the name {name:?} is used twice in {o}"));
             }
             let mut seen: BTreeSet<String> = BTreeSet::new();
             for (_, name) in constraint_names(store, o) {
@@ -877,6 +1018,29 @@ pub fn problems(store: &Store) -> Vec<String> {
                 }
                 None => out.push(format!("the key {} belongs to no entity", label(store, o))),
             }
+        }
+        if class == ATTRIBUTE {
+            if let Some(p) = enum_default_problem(store, o) {
+                out.push(format!("{o}: {p}"));
+            }
+            if domain_of(store, o).is_some() && (enum_of(store, o).is_some() || !own_type_of(store, o).is_empty()) {
+                out.push(format!("{o} has more than one type"));
+            }
+            if domain_of(store, o).is_some()
+                && (!text_of(store, o, attribute::DEFAULT).is_empty() || !text_of(store, o, attribute::COLLATION).is_empty())
+            {
+                out.push(format!("{o} is on a domain and has a default or collation of its own"));
+            }
+        }
+        if class == DOMAIN
+            && let Some(p) = domain_problem(store, o)
+        {
+            out.push(format!("the domain {}: {p}", label(store, o)));
+        }
+        if class == ENUM_TYPE
+            && let Some(p) = literals_problem(&literals_of(store, o))
+        {
+            out.push(format!("the enum type {}: {p}", label(store, o)));
         }
         if class == CHECK_CONSTRAINT {
             if entity_of(store, o).is_none() {

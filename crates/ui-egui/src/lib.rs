@@ -25,6 +25,7 @@ pub mod problems;
 pub mod relation;
 pub mod state;
 pub mod theme;
+pub mod types;
 pub mod ux;
 pub mod widgets;
 pub mod workspace;
