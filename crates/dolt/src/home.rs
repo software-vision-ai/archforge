@@ -1,6 +1,7 @@
 //! Archforge's own dolt home: the folder dolt keeps its global configuration and usage records in
 //! (`DOLT_ROOT_PATH`). It is private to this user, and usage metrics and the online version check
-//! are off before dolt ever runs. The user's own `~/.dolt` is never read or written.
+//! are off before dolt ever runs; every call also turns off dolt's detached event flush, a process
+//! that would outlive the call and write here. The user's own `~/.dolt` is never read or written.
 
 use std::io::Read;
 use std::path::{Path, PathBuf};

@@ -68,6 +68,8 @@ impl Dolt {
 fn env(home: &Path) -> Vec<(OsString, OsString)> {
     let mut e = runner::base_env();
     e.push(("DOLT_ROOT_PATH".into(), home.as_os_str().to_owned()));
+    // No detached event flush: it outlives the call that started it and writes into the home.
+    e.push(("DOLT_DISABLE_EVENT_FLUSH".into(), "true".into()));
     e
 }
 
@@ -102,6 +104,13 @@ mod tests {
         for refused in [(2, 5, 9), (1, 99, 0), (3, 0, 0)] {
             assert!(matches!(accept(refused), Err(Error::VersionRefused { .. })), "{refused:?}");
         }
+    }
+
+    #[test]
+    fn every_dolt_call_runs_in_its_own_home_with_no_detached_event_flush() {
+        let e = env(Path::new("/h"));
+        let has = |k: &str, v: &str| e.iter().any(|(a, b)| a == k && b == v);
+        assert!(has("DOLT_ROOT_PATH", "/h") && has("DOLT_DISABLE_EVENT_FLUSH", "true"), "{e:?}");
     }
 
     #[test]
