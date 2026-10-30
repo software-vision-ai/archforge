@@ -24,6 +24,8 @@ pub enum Screen {
     WorkspaceKeyEditor,
     /// The same table with the column editor open on its email column, More open.
     WorkspaceColumnEditor,
+    /// The same table with the index editor open on its index, More open.
+    WorkspaceIndexEditor,
     /// A first diagram of a schema, just created and open, empty.
     WorkspaceDiagramEmpty,
     /// A diagram of two tables and their relationship, the first table selected.
@@ -78,7 +80,10 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
         shell.adopt_project();
         crate::explorer::add(&mut shell, crate::explorer::Kind::Schema);
     }
-    if matches!(screen, Screen::WorkspaceTable | Screen::WorkspaceSkills | Screen::WorkspaceKeyEditor | Screen::WorkspaceColumnEditor) {
+    if matches!(
+        screen,
+        Screen::WorkspaceTable | Screen::WorkspaceSkills | Screen::WorkspaceKeyEditor | Screen::WorkspaceColumnEditor | Screen::WorkspaceIndexEditor
+    ) {
         shell.adopt_project();
         sample_table(&mut shell, screen == Screen::WorkspaceSkills)?;
         if screen == Screen::WorkspaceColumnEditor
@@ -95,6 +100,21 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
                 crate::panels::open_column(&mut shell, entity, Some(column));
                 if let Some(c) = shell.panels.column.as_mut() {
                     c.more = true;
+                }
+            }
+        }
+        if screen == Screen::WorkspaceIndexEditor
+            && let Some(session) = shell.session.as_ref()
+        {
+            let store = session.doc();
+            let customer = store.alive().find(|o| archforge_er::rules::name_of(store, *o) == "Customer");
+            if let Some(e) = customer
+                && let Ok(entity) = store.uuid(e)
+                && let Some(index) = crate::indexes::rows(store, e).into_iter().next()
+            {
+                crate::indexes::open(&mut shell, entity, Some(&index));
+                if let Some(i) = shell.panels.index.as_mut() {
+                    i.more = true;
                 }
             }
         }
@@ -171,6 +191,19 @@ fn sample_table(shell: &mut Shell, skills: bool) -> Result<(), String> {
     run(session, "er.attribute.add", json!({ "entity": customer, "name": "customer_id", "type": "BIGINT", "primary_key": true }))?;
     run(session, "er.attribute.add", json!({ "entity": customer, "name": "email", "type": "VARCHAR", "length": 255, "unique": true }))?;
     run(session, "er.attribute.add", json!({ "entity": customer, "name": "name", "type": "VARCHAR", "length": 120 }))?;
+    let created = run(session, "er.attribute.add", json!({ "entity": customer, "name": "created_at", "type": "TIMESTAMP" }))?;
+    run(session, "er.check.add", json!({ "entity": customer, "expression": "email <> ''", "name": "ck_customer_email" }))?;
+    run(
+        session,
+        "er.index.add",
+        json!({
+            "entity": customer,
+            "columns": [{ "expression": "lower(email)" }, { "attribute": created, "direction": "descending" }],
+            "name": "ix_customer_email_created",
+            "where": "email <> ''",
+            "method": "btree",
+        }),
+    )?;
     if skills {
         run(
             session,

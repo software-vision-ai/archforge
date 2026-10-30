@@ -8,11 +8,11 @@ use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, always, cm
 use archforge_mof::{ClassId, Invalid, Obj, Store, TypeRef, Uuid, Value};
 use serde_json::{Value as Json, json};
 
-use crate::rules::{self, MAX_NAME, MAX_TEXT, MAX_TYPE, name_of};
+use crate::rules::{self, IndexColumnSpec, MAX_NAME, MAX_TEXT, MAX_TYPE, name_of};
 use crate::{
-    ATTRIBUTE, Cardinality, Deferrability, ELEMENT, ENTITY, ENTITY_SIZE, EntityKind, ErView, FOREIGN_KEY, Generation, MatchType, PRIMARY_KEY,
-    RELATIONSHIP, ReferentialAction, SCHEMA, UNIQUE_CONSTRAINT, attribute, element, entity, foreign_key, key, named_element, relationship, schema,
-    unique_constraint,
+    ATTRIBUTE, CHECK_CONSTRAINT, Cardinality, Deferrability, ELEMENT, ENTITY, ENTITY_SIZE, EntityKind, ErView, FOREIGN_KEY, Generation, INDEX_COLUMN,
+    MatchType, NullsOrder, PRIMARY_KEY, RELATIONSHIP, ReferentialAction, SCHEMA, SortDirection, TABLE_INDEX, UNIQUE_CONSTRAINT, attribute,
+    check_constraint, element, entity, foreign_key, index_column, key, named_element, relationship, schema, table_index, unique_constraint,
 };
 
 type C<'a> = Ctx<'a, Store, ErView>;
@@ -208,17 +208,7 @@ fn entity_rename(ctx: &mut C<'_>, p: &Params) -> R {
 /// attributes, and the foreign keys that point at one of its keys or at one of those, or list one
 /// of its attributes. As in SQL, a key loses all of itself with any of its columns.
 pub fn dependents(store: &Store, obj: Obj) -> Result<(Vec<Obj>, Vec<Obj>), Invalid> {
-    let mut subtree = vec![obj];
-    let mut seen = BTreeSet::from([obj]);
-    let mut i = 0;
-    while let Some(o) = subtree.get(i).copied() {
-        for child in store.owned_elements(o)? {
-            if seen.insert(child) {
-                subtree.push(child);
-            }
-        }
-        i += 1;
-    }
+    let (subtree, seen) = subtree_of(store, obj)?;
     let outside = |x: Obj| x != obj && !seen.contains(&x);
     let mut keys = BTreeSet::new();
     let mut fks = BTreeSet::new();
@@ -235,6 +225,50 @@ pub fn dependents(store: &Store, obj: Obj) -> Result<(Vec<Obj>, Vec<Obj>), Inval
         fks.extend(rules::keys_onto(store, k).into_iter().filter(|fk| outside(*fk)));
     }
     Ok((keys.into_iter().collect(), fks.into_iter().collect()))
+}
+
+/// `obj` with everything it contains, in discovery order, and the same as a set.
+fn subtree_of(store: &Store, obj: Obj) -> Result<(Vec<Obj>, BTreeSet<Obj>), Invalid> {
+    let mut subtree = vec![obj];
+    let mut seen = BTreeSet::from([obj]);
+    let mut i = 0;
+    while let Some(o) = subtree.get(i).copied() {
+        for child in store.owned_elements(o)? {
+            if seen.insert(child) {
+                subtree.push(child);
+            }
+        }
+        i += 1;
+    }
+    Ok((subtree, seen))
+}
+
+/// What of the indexes outside `obj` goes with it: the index columns on any attribute it contains,
+/// or the whole index when every column of it goes (slice S3).
+pub fn index_dependents(store: &Store, obj: Obj) -> Result<Vec<Obj>, Invalid> {
+    let (subtree, seen) = subtree_of(store, obj)?;
+    let mut columns: BTreeSet<Obj> = BTreeSet::new();
+    for o in &subtree {
+        for (src, prop) in store.referrers(*o) {
+            if prop == index_column::ATTRIBUTE && !seen.contains(&src) {
+                columns.insert(src);
+            }
+        }
+    }
+    let mut out: Vec<Obj> = Vec::new();
+    let mut indexes: BTreeSet<Obj> = BTreeSet::new();
+    for c in &columns {
+        let Some((ix, _)) = store.container(*c)? else { continue };
+        if !indexes.insert(ix) {
+            continue;
+        }
+        if rules::index_columns(store, ix).iter().all(|c| columns.contains(c)) {
+            out.push(ix);
+        } else {
+            out.extend(rules::index_columns(store, ix).into_iter().filter(|c| columns.contains(c)));
+        }
+    }
+    Ok(out)
 }
 
 /// The foreign keys outside `obj` that depend on it or on anything it contains.
@@ -290,6 +324,7 @@ pub fn remove_element(store: &mut Store, obj: Obj) -> Result<usize, Invalid> {
         let mut owners: BTreeSet<Obj> = BTreeSet::new();
         let mut relationships: BTreeSet<Obj> = BTreeSet::new();
         let (keys, fks) = dependents(st, obj)?;
+        let index_parts = index_dependents(st, obj)?;
         for x in fks.iter().chain(&keys).copied().chain([obj]) {
             let class = st.class_of(x)?;
             if class == FOREIGN_KEY {
@@ -306,7 +341,7 @@ pub fn remove_element(store: &mut Store, obj: Obj) -> Result<usize, Invalid> {
                 relationships.extend(relationships_of(st, e));
             }
         }
-        for x in fks.into_iter().chain(keys) {
+        for x in fks.into_iter().chain(keys).chain(index_parts) {
             if st.is_alive(x) {
                 gone += archforge_core::destroy_with_links(st, x)?;
             }
@@ -1443,6 +1478,222 @@ fn unique_remove(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "removed": gone }))
 }
 
+// Checks and indexes (slice S3).
+
+/// The expression under `key`, which a check needs.
+fn check_expression<'a>(p: &'a Params, key: &str) -> Result<&'a str, CommandError> {
+    let expression = text(p, key);
+    match rules::check_problem(expression) {
+        Some(problem) => Err(refuse(key, problem)),
+        None => Ok(expression),
+    }
+}
+
+fn check_add(ctx: &mut C<'_>, p: &Params) -> R {
+    let e = id_of(ctx, p, "entity", ENTITY)?;
+    let expression = check_expression(p, "expression")?;
+    let name = constraint_name(ctx, p, e, None)?;
+    let c = ctx
+        .doc
+        .transaction(|st| {
+            let c = st.create(CHECK_CONSTRAINT)?;
+            st.set(c, check_constraint::NAME, text_or_null(&name))?;
+            st.set(c, check_constraint::EXPRESSION, Value::str(expression))?;
+            let at = u32::try_from(st.list(e, entity::CHECK_CONSTRAINT)?.len()).unwrap_or(u32::MAX);
+            st.insert(e, entity::CHECK_CONSTRAINT, at, Value::Ref(c))?;
+            Ok(c)
+        })
+        .map_err(fail)?;
+    select(ctx, vec![c]);
+    Ok(json!({ "id": uuid_of(ctx.doc, c)? }))
+}
+
+fn check_set(ctx: &mut C<'_>, p: &Params) -> R {
+    let c = id_of(ctx, p, "check", CHECK_CONSTRAINT)?;
+    let expression = check_expression(p, "expression")?;
+    let name = constraint_name(ctx, p, c, Some(c))?;
+    ctx.doc
+        .transaction(|st| {
+            st.set(c, check_constraint::NAME, text_or_null(&name))?;
+            st.set(c, check_constraint::EXPRESSION, Value::str(expression))
+        })
+        .map_err(fail)?;
+    Ok(json!({ "id": uuid_of(ctx.doc, c)? }))
+}
+
+fn check_remove(ctx: &mut C<'_>, p: &Params) -> R {
+    let c = id_of(ctx, p, "check", CHECK_CONSTRAINT)?;
+    let gone = remove_element(ctx.doc, c).map_err(fail)?;
+    Ok(json!({ "removed": gone }))
+}
+
+/// The direction words, in the enumeration's order.
+pub const DIRECTION_WORDS: [(SortDirection, &str); 2] = [(SortDirection::Ascending, "ascending"), (SortDirection::Descending, "descending")];
+
+/// The nulls-order words, in the enumeration's order.
+pub const NULLS_WORDS: [(NullsOrder, &str); 3] = [(NullsOrder::Default, "default"), (NullsOrder::First, "first"), (NullsOrder::Last, "last")];
+
+/// A direction's name in parameters.
+pub fn direction_name(d: SortDirection) -> &'static str {
+    DIRECTION_WORDS.iter().find(|(x, _)| *x == d).map_or("ascending", |(_, w)| *w)
+}
+
+/// A nulls order's name in parameters.
+pub fn nulls_name(n: NullsOrder) -> &'static str {
+    NULLS_WORDS.iter().find(|(x, _)| *x == n).map_or("default", |(_, w)| *w)
+}
+
+/// A JSON value for an error text: its kind, with a short string's text.
+fn shown(value: &Json) -> String {
+    match value {
+        Json::Null => "null".into(),
+        Json::Bool(b) => b.to_string(),
+        Json::Number(n) => n.to_string(),
+        Json::String(s) if s.chars().count() <= 40 => format!("{s:?}"),
+        Json::String(_) => "a long text".into(),
+        Json::Array(_) => "an array".into(),
+        Json::Object(_) => "an object".into(),
+    }
+}
+
+/// The keys an index column object takes.
+const INDEX_COLUMN_KEYS: [&str; 4] = ["attribute", "expression", "direction", "nulls"];
+
+/// A word from a table, or the default when the field is missing.
+fn word_of<T: Copy>(item: &Json, field: &str, words: &[(T, &str)], default: T, key: &str) -> Result<T, CommandError> {
+    match item.get(field) {
+        None | Some(Json::Null) => Ok(default),
+        Some(Json::String(s)) => words
+            .iter()
+            .find(|(_, w)| w == s)
+            .map(|(v, _)| *v)
+            .ok_or_else(|| refuse(key, format!("{s:?} is not one of {}", words.iter().map(|(_, w)| *w).collect::<Vec<_>>().join(", ")))),
+        Some(other) => Err(refuse(key, format!("{field} is {}, not a word", shown(other)))),
+    }
+}
+
+/// The index columns the array parameter `key` gives: objects with `attribute` (an id) or
+/// `expression`, `direction` (ascending unless given) and `nulls` (default unless given), or bare
+/// attribute ids with both defaults; an unknown key in an object is refused; checked against
+/// `entity`.
+fn index_columns_param(ctx: &C<'_>, p: &Params, key: &str, entity: Obj) -> Result<Vec<IndexColumnSpec>, CommandError> {
+    let items = match p.get(key) {
+        Some(Json::Array(items)) => items,
+        _ => return Err(refuse(key, "an array of columns")),
+    };
+    if items.len() > rules::MAX_KEY_COLUMNS {
+        return Err(refuse(key, format!("at most {} columns", rules::MAX_KEY_COLUMNS)));
+    }
+    let mut out = Vec::with_capacity(items.len());
+    for item in items {
+        let (attribute, expression, direction, nulls) = match item {
+            Json::String(id) => (Some(id.as_str()), String::new(), SortDirection::Ascending, NullsOrder::Default),
+            Json::Object(fields) => {
+                if let Some(unknown) = fields.keys().find(|k| !INDEX_COLUMN_KEYS.contains(&k.as_str())) {
+                    let unknown: String = unknown.chars().take(40).collect();
+                    return Err(refuse(key, format!("a column takes no {unknown:?}; it takes {}", INDEX_COLUMN_KEYS.join(", "))));
+                }
+                (
+                    match item.get("attribute") {
+                        None | Some(Json::Null) => None,
+                        Some(Json::String(s)) if s.is_empty() => None,
+                        Some(Json::String(s)) => Some(s.as_str()),
+                        Some(other) => return Err(refuse(key, format!("attribute is {}, not an id", shown(other)))),
+                    },
+                    match item.get("expression") {
+                        None | Some(Json::Null) => String::new(),
+                        Some(Json::String(s)) => s.clone(),
+                        Some(other) => return Err(refuse(key, format!("expression is {}, not text", shown(other)))),
+                    },
+                    word_of(item, "direction", &DIRECTION_WORDS, SortDirection::Ascending, key)?,
+                    word_of(item, "nulls", &NULLS_WORDS, NullsOrder::Default, key)?,
+                )
+            }
+            other => return Err(refuse(key, format!("{} is not a column", shown(other)))),
+        };
+        let attribute = match attribute {
+            Some(id) => {
+                let uuid = Uuid::parse(id).ok_or_else(|| refuse(key, format!("{id:?} is not an id")))?;
+                let a = ctx.doc.by_uuid(uuid).filter(|a| ctx.doc.is_alive(*a)).ok_or_else(|| refuse(key, format!("there is no element {id}")))?;
+                Some(a)
+            }
+            None => None,
+        };
+        out.push(IndexColumnSpec { attribute, expression, direction, nulls });
+    }
+    if let Some(problem) = rules::index_columns_problem(ctx.doc, entity, &out) {
+        return Err(refuse(key, problem));
+    }
+    Ok(out)
+}
+
+/// An index's `where` and `method`, checked.
+fn index_options(p: &Params) -> Result<(bool, &str, &str), CommandError> {
+    let unique = p.bool("unique").unwrap_or(false);
+    let where_ = text(p, "where");
+    check_text("where", rules::text_problem(where_, MAX_TEXT))?;
+    let method = text(p, "method");
+    if !method.is_empty() {
+        check_name("method", method, MAX_NAME)?;
+    }
+    Ok((unique, where_, method))
+}
+
+/// Writes an index's fields and columns; the old columns go.
+fn set_index(st: &mut Store, ix: Obj, name: &str, unique: bool, where_: &str, method: &str, columns: &[IndexColumnSpec]) -> Result<(), Invalid> {
+    st.set(ix, table_index::NAME, text_or_null(name))?;
+    st.set(ix, table_index::UNIQUE, Value::Bool(unique))?;
+    st.set(ix, table_index::WHERE, text_or_null(where_))?;
+    st.set(ix, table_index::METHOD, text_or_null(method))?;
+    for old in rules::index_columns(st, ix) {
+        archforge_core::destroy_with_links(st, old)?;
+    }
+    for (i, spec) in columns.iter().enumerate() {
+        let c = st.create(INDEX_COLUMN)?;
+        st.set(c, index_column::ATTRIBUTE, spec.attribute.map_or(Value::Null, Value::Ref))?;
+        st.set(c, index_column::EXPRESSION, text_or_null(&spec.expression))?;
+        st.set(c, index_column::DIRECTION, Value::Enum(spec.direction.index()))?;
+        st.set(c, index_column::NULLS, Value::Enum(spec.nulls.index()))?;
+        st.insert(ix, table_index::COLUMN, u32::try_from(i).unwrap_or(u32::MAX), Value::Ref(c))?;
+    }
+    Ok(())
+}
+
+fn index_add(ctx: &mut C<'_>, p: &Params) -> R {
+    let e = id_of(ctx, p, "entity", ENTITY)?;
+    let columns = index_columns_param(ctx, p, "columns", e)?;
+    let name = constraint_name(ctx, p, e, None)?;
+    let (unique, where_, method) = index_options(p)?;
+    let ix = ctx
+        .doc
+        .transaction(|st| {
+            let ix = st.create(TABLE_INDEX)?;
+            set_index(st, ix, &name, unique, where_, method, &columns)?;
+            let at = u32::try_from(st.list(e, entity::TABLE_INDEX)?.len()).unwrap_or(u32::MAX);
+            st.insert(e, entity::TABLE_INDEX, at, Value::Ref(ix))?;
+            Ok(ix)
+        })
+        .map_err(fail)?;
+    select(ctx, vec![ix]);
+    Ok(json!({ "id": uuid_of(ctx.doc, ix)? }))
+}
+
+fn index_set(ctx: &mut C<'_>, p: &Params) -> R {
+    let ix = id_of(ctx, p, "index", TABLE_INDEX)?;
+    let e = rules::entity_of(ctx.doc, ix).ok_or_else(|| refuse("index", "the index belongs to no entity"))?;
+    let columns = index_columns_param(ctx, p, "columns", e)?;
+    let name = constraint_name(ctx, p, ix, Some(ix))?;
+    let (unique, where_, method) = index_options(p)?;
+    ctx.doc.transaction(|st| set_index(st, ix, &name, unique, where_, method, &columns)).map_err(fail)?;
+    Ok(json!({ "id": uuid_of(ctx.doc, ix)? }))
+}
+
+fn index_remove(ctx: &mut C<'_>, p: &Params) -> R {
+    let ix = id_of(ctx, p, "index", TABLE_INDEX)?;
+    let gone = remove_element(ctx.doc, ix).map_err(fail)?;
+    Ok(json!({ "removed": gone }))
+}
+
 fn entity_set_kind(ctx: &mut C<'_>, p: &Params) -> R {
     let e = id_of(ctx, p, "entity", ENTITY)?;
     let kind = match text(p, "kind") {
@@ -1584,6 +1835,36 @@ fn key_json(store: &Store, k: Obj) -> Json {
     j
 }
 
+fn check_json(store: &Store, c: Obj) -> Json {
+    json!({ "id": uuid_json(store, c), "name": optional_name(store, c), "expression": rules::text_of(store, c, check_constraint::EXPRESSION) })
+}
+
+fn index_json(store: &Store, ix: Obj) -> Json {
+    let columns: Vec<Json> = rules::index_specs(store, ix)
+        .into_iter()
+        .map(|s| {
+            json!({
+                "attribute": s.attribute.map(|a| uuid_json(store, a)).unwrap_or(Json::Null),
+                "expression": if s.expression.is_empty() { Json::Null } else { Json::String(s.expression) },
+                "direction": direction_name(s.direction),
+                "nulls": nulls_name(s.nulls),
+            })
+        })
+        .collect();
+    let text = |prop| {
+        let t = rules::text_of(store, ix, prop);
+        if t.is_empty() { Json::Null } else { Json::String(t) }
+    };
+    json!({
+        "id": uuid_json(store, ix),
+        "name": optional_name(store, ix),
+        "unique": rules::is_unique_index(store, ix),
+        "columns": columns,
+        "where": text(table_index::WHERE),
+        "method": text(table_index::METHOD),
+    })
+}
+
 fn foreign_key_json(store: &Store, fk: Obj) -> Json {
     let parts = rules::key_parts(store, fk);
     json!({
@@ -1606,6 +1887,8 @@ fn entity_json(store: &Store, e: Obj) -> Json {
         store.list(e, entity::ATTRIBUTE).unwrap_or_default().iter().filter_map(Value::as_ref).map(|a| attribute_json(store, a)).collect();
     let uniques: Vec<Json> = rules::unique_constraints(store, e).into_iter().map(|u| key_json(store, u)).collect();
     let keys: Vec<Json> = rules::foreign_keys(store, e).into_iter().map(|fk| foreign_key_json(store, fk)).collect();
+    let checks: Vec<Json> = rules::checks_of(store, e).into_iter().map(|c| check_json(store, c)).collect();
+    let indexes: Vec<Json> = rules::indexes_of(store, e).into_iter().map(|ix| index_json(store, ix)).collect();
     let kind = match rules::kind_of(store, e) {
         EntityKind::Regular => "regular",
         EntityKind::Associative => "associative",
@@ -1618,6 +1901,8 @@ fn entity_json(store: &Store, e: Obj) -> Json {
         "primary_key": rules::primary_key_of(store, e).map(|k| key_json(store, k)).unwrap_or(Json::Null),
         "unique_constraints": uniques,
         "foreign_keys": keys,
+        "checks": checks,
+        "indexes": indexes,
     })
 }
 
@@ -1866,6 +2151,44 @@ pub fn specs() -> Vec<CommandSpec<Store, ErView>> {
             unique_set
         ),
         cmd!("er.unique.remove", "Remove unique constraint", &["Entity"], None, "unique: string; the unique constraint's id", has_entities, unique_remove),
+        cmd!(
+            "er.check.add",
+            "Add check constraint",
+            &["Entity"],
+            None,
+            "entity: string; the entity's id\nexpression: string; the SQL condition every row holds\nname: string = \"\"; a constraint name, or nothing",
+            has_entities,
+            check_add
+        ),
+        cmd!(
+            "er.check.set",
+            "Set check constraint",
+            &["Entity"],
+            None,
+            "check: string; the check constraint's id\nexpression: string; the SQL condition every row holds\nname: string = \"\"; a constraint name, or nothing",
+            has_entities,
+            check_set
+        ),
+        cmd!("er.check.remove", "Remove check constraint", &["Entity"], None, "check: string; the check constraint's id", has_entities, check_remove),
+        cmd!(
+            "er.index.add",
+            "Add index",
+            &["Entity"],
+            None,
+            "entity: string; the entity's id\ncolumns: array; the columns in index order, each an attribute id or {attribute | expression, direction: ascending|descending (ascending unless given), nulls: default|first|last (default unless given)}\nname: string = \"\"; an index name, or nothing\nunique: bool = false; a unique index\nwhere: string = \"\"; the condition of a partial index, or nothing\nmethod: string = \"\"; the access method, or nothing",
+            has_entities,
+            index_add
+        ),
+        cmd!(
+            "er.index.set",
+            "Set index",
+            &["Entity"],
+            None,
+            "index: string; the index's id\ncolumns: array; the columns in index order, each an attribute id or {attribute | expression, direction: ascending|descending (ascending unless given), nulls: default|first|last (default unless given)}\nname: string = \"\"; an index name, or nothing\nunique: bool = false; a unique index\nwhere: string = \"\"; the condition of a partial index, or nothing\nmethod: string = \"\"; the access method, or nothing",
+            has_entities,
+            index_set
+        ),
+        cmd!("er.index.remove", "Remove index", &["Entity"], None, "index: string; the index's id", has_entities, index_remove),
         cmd!("er.entity.set-kind", "Set entity kind", &["Entity"], None, "entity: string; the entity's id\nkind: string, regular|associative; associative for a mapping table", has_entities, entity_set_kind),
         cmd!("er.remove", "Remove", &["Edit"], Some("Delete"), "ids: array; the ids of what goes", has_schemas, remove_many),
         cmd!(noundo "view.select", "Select", &["View"], None, "ids: array = []; the ids selected", always, view_select),

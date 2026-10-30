@@ -104,11 +104,11 @@ fn the_registry_and_the_metamodel_are_what_the_spec_says() {
     let reg = registry().unwrap();
     assert!(reg.len() > 20);
     let m = metamodel().unwrap();
-    assert_eq!(m.classes.len(), 10);
+    assert_eq!(m.classes.len(), 13);
     assert_eq!(
         m.data_types.len(),
-        11,
-        "the five primitives and the enumerations Cardinality, EntityKind, ReferentialAction, MatchType, Deferrability and Generation"
+        13,
+        "the five primitives and the enumerations Cardinality, EntityKind, ReferentialAction, MatchType, Deferrability, Generation, SortDirection and NullsOrder"
     );
     assert_eq!(Cardinality::from_index(1), Some(Cardinality::ExactlyOne));
     assert_eq!(commands::cardinality_name(Cardinality::ZeroOrMore), "zero-or-more");
@@ -1128,5 +1128,77 @@ fn a_column_takes_its_size_default_generation_collation_and_description_with_the
     assert!(e.to_string().contains("default"));
     run(&mut s, "er.describe", json!({ "element": sm.order, "text": "One purchase by a customer." }));
     assert_eq!(rules::text_of(s.doc(), obj(s.doc(), &sm.order), element::DESCRIPTION), "One purchase by a customer.");
+    all_rules_hold(s.doc());
+}
+
+#[test]
+fn checks_and_indexes_are_named_constraints_of_a_table_and_go_with_their_columns() {
+    let mut s = session();
+    let sm = sample(&mut s);
+    let status = run(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": "status", "type": "TEXT" }));
+    let created = run(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": "created_at", "type": "TIMESTAMP" }));
+    // A check holds an expression; an index its columns in order, each with a direction and a
+    // nulls order, or an expression instead of a column.
+    round_trip(&mut s, "er.check.add", &json!({ "entity": sm.order, "expression": "total >= 0", "name": "ck_order_total_positive" }));
+    let check = run(&mut s, "er.check.add", json!({ "entity": sm.order, "expression": "total >= 0" }));
+    let index = json!({
+        "entity": sm.order,
+        "columns": [status, { "attribute": created, "direction": "descending", "nulls": "last" }, { "expression": "lower(status)" }],
+        "name": "ix_order_status_created",
+        "unique": false,
+        "where": "status <> 'cancelled'",
+        "method": "btree",
+    });
+    round_trip(&mut s, "er.index.add", &index);
+    let o = get(&mut s, "er.entity.get", json!({ "entity": sm.order }));
+    let ix = o["indexes"][0]["id"].as_str().unwrap().to_string();
+    assert_eq!(o["checks"].as_array().map(Vec::len), Some(2), "the redone named check and the unnamed one");
+    assert_eq!(o["checks"][1]["expression"], "total >= 0");
+    assert_eq!(o["indexes"][0]["columns"][1], json!({ "attribute": created, "expression": null, "direction": "descending", "nulls": "last" }));
+    assert_eq!(o["indexes"][0]["columns"][2]["expression"], "lower(status)");
+    assert_eq!((o["indexes"][0]["where"].as_str(), o["indexes"][0]["method"].as_str()), (Some("status <> 'cancelled'"), Some("btree")));
+    // Unnamed ones show a generated name; names are unique with the keys of the schema.
+    assert_eq!(rules::display_name(s.doc(), obj(s.doc(), &check)), "ck_order_2");
+    run(&mut s, "er.index.add", json!({ "entity": sm.order, "columns": [status] }));
+    let o = get(&mut s, "er.entity.get", json!({ "entity": sm.order }));
+    let ix2 = o["indexes"][1]["id"].as_str().unwrap().to_string();
+    assert_eq!(rules::display_name(s.doc(), obj(s.doc(), &ix2)), "ix_order_status");
+    all_rules_hold(s.doc());
+    for (cmd, p, key) in [
+        ("er.check.add", json!({ "entity": sm.order, "expression": "   " }), "expression"),
+        ("er.check.add", json!({ "entity": sm.order, "expression": "total > 0", "name": "IX_ORDER_STATUS_CREATED" }), "name"),
+        ("er.check.set", json!({ "check": ix, "expression": "total > 0" }), "check"),
+        ("er.index.add", json!({ "entity": sm.order, "columns": [] }), "columns"),
+        ("er.index.add", json!({ "entity": sm.order, "columns": [sm.key] }), "columns"),
+        ("er.index.add", json!({ "entity": sm.order, "columns": [status, status] }), "columns"),
+        ("er.index.add", json!({ "entity": sm.order, "columns": [{ "attribute": status, "expression": "lower(status)" }] }), "columns"),
+        ("er.index.add", json!({ "entity": sm.order, "columns": [{}] }), "columns"),
+        ("er.index.add", json!({ "entity": sm.order, "columns": [{ "attribute": status, "direction": "sideways" }] }), "columns"),
+        ("er.index.add", json!({ "entity": sm.order, "columns": [{ "attribute": status, "directon": "descending" }] }), "columns"),
+        ("er.index.add", json!({ "entity": sm.order, "columns": [{ "attribute": 7 }] }), "columns"),
+        ("er.index.add", json!({ "entity": sm.order, "columns": [status], "name": "ck_order_total_positive" }), "name"),
+        ("er.index.add", json!({ "entity": sm.order, "columns": [status], "method": " " }), "method"),
+        ("er.index.set", json!({ "index": check, "columns": [status] }), "index"),
+        ("er.unique.add", json!({ "entity": sm.order, "columns": [status], "name": "ix_order_status_created" }), "name"),
+    ] {
+        assert_eq!(refused_on(&mut s, cmd, p.clone()), key, "{cmd} {p}");
+    }
+    // Set replaces the columns and the fields; remove takes an index or a check whole.
+    round_trip(
+        &mut s,
+        "er.index.set",
+        &json!({ "index": ix, "columns": [{ "attribute": created, "direction": "descending" }], "name": "", "unique": true }),
+    );
+    round_trip(&mut s, "er.check.set", &json!({ "check": check, "expression": "total >= 1", "name": "ck_order_total" }));
+    round_trip(&mut s, "er.check.remove", &json!({ "check": check }));
+    round_trip(&mut s, "er.index.remove", &json!({ "index": ix2 }));
+    // A column that goes takes its index column; an index left without columns goes too.
+    run(&mut s, "er.index.set", json!({ "index": ix, "columns": [status, created], "name": "ix_order_status_created" }));
+    round_trip(&mut s, "er.attribute.remove", &json!({ "attribute": created }));
+    let o = get(&mut s, "er.entity.get", json!({ "entity": sm.order }));
+    assert_eq!(o["indexes"][0]["columns"].as_array().map(Vec::len), Some(1), "{}", o["indexes"]);
+    run(&mut s, "er.attribute.remove", json!({ "attribute": status }));
+    let o = get(&mut s, "er.entity.get", json!({ "entity": sm.order }));
+    assert_eq!(o["indexes"].as_array().map(Vec::len), Some(0), "{}", o["indexes"]);
     all_rules_hold(s.doc());
 }

@@ -15,6 +15,9 @@ pub struct ErSlabs {
     pub primary_keys: Vec<PrimaryKeyObj>,
     pub unique_constraints: Vec<UniqueConstraintObj>,
     pub foreign_keys: Vec<ForeignKeyObj>,
+    pub check_constraints: Vec<CheckConstraintObj>,
+    pub table_indexes: Vec<TableIndexObj>,
+    pub index_columns: Vec<IndexColumnObj>,
 }
 
 fn push<T: Default>(v: &mut Vec<T>) -> Option<u32> {
@@ -41,6 +44,9 @@ impl Slabs for ErSlabs {
             PRIMARY_KEY => push(&mut self.primary_keys),
             UNIQUE_CONSTRAINT => push(&mut self.unique_constraints),
             FOREIGN_KEY => push(&mut self.foreign_keys),
+            CHECK_CONSTRAINT => push(&mut self.check_constraints),
+            TABLE_INDEX => push(&mut self.table_indexes),
+            INDEX_COLUMN => push(&mut self.index_columns),
             _ => None,
         }
     }
@@ -53,6 +59,9 @@ impl Slabs for ErSlabs {
             PRIMARY_KEY => at(&self.primary_keys, slot),
             UNIQUE_CONSTRAINT => at(&self.unique_constraints, slot),
             FOREIGN_KEY => at(&self.foreign_keys, slot),
+            CHECK_CONSTRAINT => at(&self.check_constraints, slot),
+            TABLE_INDEX => at(&self.table_indexes, slot),
+            INDEX_COLUMN => at(&self.index_columns, slot),
             _ => None,
         }
     }
@@ -65,6 +74,9 @@ impl Slabs for ErSlabs {
             PRIMARY_KEY => at_mut(&mut self.primary_keys, slot),
             UNIQUE_CONSTRAINT => at_mut(&mut self.unique_constraints, slot),
             FOREIGN_KEY => at_mut(&mut self.foreign_keys, slot),
+            CHECK_CONSTRAINT => at_mut(&mut self.check_constraints, slot),
+            TABLE_INDEX => at_mut(&mut self.table_indexes, slot),
+            INDEX_COLUMN => at_mut(&mut self.index_columns, slot),
             _ => None,
         }
     }
@@ -77,5 +89,8 @@ impl Slabs for ErSlabs {
             .saturating_add(self.primary_keys.capacity().saturating_mul(size_of::<PrimaryKeyObj>()))
             .saturating_add(self.unique_constraints.capacity().saturating_mul(size_of::<UniqueConstraintObj>()))
             .saturating_add(self.foreign_keys.capacity().saturating_mul(size_of::<ForeignKeyObj>()))
+            .saturating_add(self.check_constraints.capacity().saturating_mul(size_of::<CheckConstraintObj>()))
+            .saturating_add(self.table_indexes.capacity().saturating_mul(size_of::<TableIndexObj>()))
+            .saturating_add(self.index_columns.capacity().saturating_mul(size_of::<IndexColumnObj>()))
     }
 }

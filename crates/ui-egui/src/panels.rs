@@ -50,6 +50,9 @@ pub struct State {
     pub key: Option<crate::keys::KeyEdit>,
     /// A description being typed under the heading (slice S2).
     pub description: Option<NameEdit>,
+    /// The check and index editors (slice S3).
+    pub check: Option<crate::checks::CheckEdit>,
+    pub index: Option<crate::indexes::IndexEdit>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -124,6 +127,9 @@ pub enum Menu {
     KeyColumn,
     /// The column editor's Generation select (slice S2).
     Generation,
+    /// The index editor's Add a column select, and a column row's nulls order (slice S3).
+    IndexColumn,
+    IndexNulls(usize),
 }
 
 /// The selection the panels describe.
@@ -232,6 +238,12 @@ pub fn retain_valid(state: &mut State, store: &Store) {
     }
     if state.description.as_ref().is_some_and(|d| store.by_uuid(d.target).is_none()) {
         state.description = None;
+    }
+    if state.check.as_ref().is_some_and(|c| store.by_uuid(c.entity).is_none() || c.target.is_some_and(|t| store.by_uuid(t).is_none())) {
+        state.check = None;
+    }
+    if state.index.as_ref().is_some_and(|i| store.by_uuid(i.entity).is_none() || i.target.is_some_and(|t| store.by_uuid(t).is_none())) {
+        state.index = None;
     }
 }
 
@@ -634,8 +646,10 @@ fn entity_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
         y = column_editor(shell, ui, p, r, y);
     }
     y += 10.0;
-    // Keys, then the problems the rules find on the table.
+    // Keys, checks and indexes, then the problems the rules find on the table.
     y = crate::keys::keys_section(shell, ui, p, r, y, entity, entity_id);
+    y = crate::checks::checks_section(shell, ui, p, r, y + 4.0, entity, entity_id);
+    y = crate::indexes::indexes_section(shell, ui, p, r, y + 4.0, entity, entity_id);
     crate::keys::problems_section(shell, ui, p, r, y + 4.0, entity);
     // The kind menu last, over the rows.
     if shell.panels.menu == Some(Menu::Kind) {

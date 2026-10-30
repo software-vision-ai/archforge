@@ -6,8 +6,9 @@ use std::collections::BTreeSet;
 use archforge_mof::{Obj, Store, Value};
 
 use crate::{
-    ATTRIBUTE, Cardinality, Deferrability, ENTITY, EntityKind, FOREIGN_KEY, Generation, MatchType, PRIMARY_KEY, RELATIONSHIP, ReferentialAction,
-    SCHEMA, UNIQUE_CONSTRAINT, attribute, entity, foreign_key, key, named_element, relationship, schema, unique_constraint,
+    ATTRIBUTE, CHECK_CONSTRAINT, Cardinality, Deferrability, ENTITY, EntityKind, FOREIGN_KEY, Generation, MatchType, NullsOrder, PRIMARY_KEY,
+    RELATIONSHIP, ReferentialAction, SCHEMA, SortDirection, TABLE_INDEX, UNIQUE_CONSTRAINT, attribute, check_constraint, entity, foreign_key,
+    index_column, key, named_element, relationship, schema, table_index, unique_constraint,
 };
 
 /// The most characters in a name, and in an attribute's type.
@@ -63,6 +64,8 @@ pub fn name_of(store: &Store, obj: Obj) -> String {
         Some(c) if c == RELATIONSHIP => relationship::NAME,
         Some(c) if c == FOREIGN_KEY => foreign_key::NAME,
         Some(c) if c == PRIMARY_KEY || c == UNIQUE_CONSTRAINT => key::NAME,
+        Some(c) if c == CHECK_CONSTRAINT => check_constraint::NAME,
+        Some(c) if c == TABLE_INDEX => table_index::NAME,
         _ => named_element::NAME,
     };
     store.get(obj, prop).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default()
@@ -368,6 +371,138 @@ pub fn nulls_distinct(store: &Store, u: Obj) -> bool {
     store.get(u, unique_constraint::NULLS_DISTINCT).ok().and_then(|v| v.as_bool()).unwrap_or(true)
 }
 
+// Checks and indexes (slice S3).
+
+/// An entity's check constraints, in order.
+pub fn checks_of(store: &Store, e: Obj) -> Vec<Obj> {
+    refs(store, e, entity::CHECK_CONSTRAINT)
+}
+
+/// An entity's indexes, in order.
+pub fn indexes_of(store: &Store, e: Obj) -> Vec<Obj> {
+    refs(store, e, entity::TABLE_INDEX)
+}
+
+/// An index's columns, in index order.
+pub fn index_columns(store: &Store, ix: Obj) -> Vec<Obj> {
+    refs(store, ix, table_index::COLUMN)
+}
+
+/// Whether an index is unique.
+pub fn is_unique_index(store: &Store, ix: Obj) -> bool {
+    flag(store, ix, table_index::UNIQUE)
+}
+
+/// One column of an index: the attribute or the expression it sorts by, and how.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IndexColumnSpec {
+    pub attribute: Option<Obj>,
+    pub expression: String,
+    pub direction: SortDirection,
+    pub nulls: NullsOrder,
+}
+
+/// An index column as stored.
+pub fn index_column_spec(store: &Store, c: Obj) -> IndexColumnSpec {
+    IndexColumnSpec {
+        attribute: reference(store, c, index_column::ATTRIBUTE).filter(|a| store.is_alive(*a)),
+        expression: text_of(store, c, index_column::EXPRESSION),
+        direction: match store.get(c, index_column::DIRECTION) {
+            Ok(Value::Enum(i)) => SortDirection::from_index(i).unwrap_or(SortDirection::Ascending),
+            _ => SortDirection::Ascending,
+        },
+        nulls: match store.get(c, index_column::NULLS) {
+            Ok(Value::Enum(i)) => NullsOrder::from_index(i).unwrap_or(NullsOrder::Default),
+            _ => NullsOrder::Default,
+        },
+    }
+}
+
+/// An index's columns as specs, in index order.
+pub fn index_specs(store: &Store, ix: Obj) -> Vec<IndexColumnSpec> {
+    index_columns(store, ix).into_iter().map(|c| index_column_spec(store, c)).collect()
+}
+
+/// Why `columns` cannot be the columns of an index of `entity`, as a sentence; None when they can.
+pub fn index_columns_problem(store: &Store, entity: Obj, columns: &[IndexColumnSpec]) -> Option<String> {
+    if columns.is_empty() {
+        return Some("an index needs at least one column".into());
+    }
+    if columns.len() > MAX_KEY_COLUMNS {
+        return Some(format!("an index has at most {MAX_KEY_COLUMNS} columns"));
+    }
+    let mut seen = BTreeSet::new();
+    for c in columns {
+        match (c.attribute, c.expression.is_empty()) {
+            (Some(a), true) => {
+                if store.class_of(a).ok() != Some(ATTRIBUTE) || entity_of(store, a) != Some(entity) {
+                    return Some(format!("{} is not an attribute of {}", label(store, a), label(store, entity)));
+                }
+                if !seen.insert(a) {
+                    return Some(format!("{} appears twice in the index", label(store, a)));
+                }
+            }
+            (None, false) => {
+                if let Some(p) = text_problem(&c.expression, MAX_TEXT) {
+                    return Some(format!("the expression {p}"));
+                }
+            }
+            (Some(a), false) => return Some(format!("{} has both an attribute and an expression", label(store, a))),
+            (None, true) => return Some("a column needs an attribute or an expression".into()),
+        }
+    }
+    None
+}
+
+/// Why `expression` cannot be a check constraint's, as a sentence; None when it can.
+pub fn check_problem(expression: &str) -> Option<String> {
+    if expression.trim().is_empty() {
+        return Some("a check needs an expression".into());
+    }
+    text_problem(expression, MAX_TEXT).map(|p| format!("the expression {p}"))
+}
+
+/// A name in lower snake case for generated constraint names.
+fn snake_lower(name: &str) -> String {
+    let mut out = String::new();
+    for ch in name.chars() {
+        if ch.is_alphanumeric() {
+            out.extend(ch.to_lowercase());
+        } else if !out.ends_with('_') && !out.is_empty() {
+            out.push('_');
+        }
+    }
+    out.trim_end_matches('_').to_string()
+}
+
+/// A constraint's or index's name to show: its own, or one made from its table the way DDL export
+/// names an unnamed one (`pk_<table>`, `uq_<table>_<columns>`, `ck_<table>_<n>`,
+/// `ix_<table>_<columns>`, an expression column counting as `expr`).
+pub fn display_name(store: &Store, obj: Obj) -> String {
+    let own = name_of(store, obj);
+    if !own.is_empty() {
+        return own;
+    }
+    let Some(e) = entity_of(store, obj) else { return label(store, obj) };
+    let table = snake_lower(&name_of(store, e));
+    let columns = |names: Vec<String>| names.into_iter().map(|n| snake_lower(&n)).collect::<Vec<_>>().join("_");
+    match store.class_of(obj).ok() {
+        Some(c) if c == PRIMARY_KEY => format!("pk_{table}"),
+        Some(c) if c == UNIQUE_CONSTRAINT => {
+            format!("uq_{table}_{}", columns(key_columns(store, obj).into_iter().map(|a| name_of(store, a)).collect()))
+        }
+        Some(c) if c == CHECK_CONSTRAINT => {
+            let n = checks_of(store, e).iter().position(|c| *c == obj).map_or(1, |i| i + 1);
+            format!("ck_{table}_{n}")
+        }
+        Some(c) if c == TABLE_INDEX => format!(
+            "ix_{table}_{}",
+            columns(index_specs(store, obj).into_iter().map(|s| s.attribute.map(|a| name_of(store, a)).unwrap_or_else(|| "expr".into())).collect())
+        ),
+        _ => label(store, obj),
+    }
+}
+
 /// An entity's kind.
 pub fn kind_of(store: &Store, e: Obj) -> EntityKind {
     match store.get(e, entity::KIND) {
@@ -531,14 +666,14 @@ pub fn key_problem(
 fn constraint_names(store: &Store, s: Obj) -> Vec<(Obj, String)> {
     refs(store, s, schema::ENTITY)
         .into_iter()
-        .flat_map(|e| keys_of(store, e).into_iter().chain(foreign_keys(store, e)))
+        .flat_map(|e| keys_of(store, e).into_iter().chain(foreign_keys(store, e)).chain(checks_of(store, e)).chain(indexes_of(store, e)))
         .map(|c| (c, name_of(store, c)))
         .filter(|(_, n)| !n.is_empty())
         .collect()
 }
 
-/// Whether `name` is free among the constraint names of `schema` (keys and foreign keys), ignoring
-/// case, except for `except`.
+/// Whether `name` is free among the constraint names of `schema` (keys, foreign keys, checks and
+/// indexes), ignoring case, except for `except`.
 pub fn constraint_name_free(store: &Store, s: Obj, name: &str, except: Option<Obj>) -> bool {
     !constraint_names(store, s).into_iter().any(|(c, n)| Some(c) != except && same_name(&n, name))
 }
@@ -640,6 +775,24 @@ pub fn problems(store: &Store) -> Vec<String> {
                     }
                 }
                 None => out.push(format!("the key {} belongs to no entity", label(store, o))),
+            }
+        }
+        if class == CHECK_CONSTRAINT {
+            if entity_of(store, o).is_none() {
+                out.push(format!("the check {} belongs to no entity", label(store, o)));
+            }
+            if let Some(p) = check_problem(&text_of(store, o, check_constraint::EXPRESSION)) {
+                out.push(format!("the check {}: {p}", label(store, o)));
+            }
+        }
+        if class == TABLE_INDEX {
+            match entity_of(store, o) {
+                Some(e) => {
+                    if let Some(p) = index_columns_problem(store, e, &index_specs(store, o)) {
+                        out.push(format!("the index {}: {p}", label(store, o)));
+                    }
+                }
+                None => out.push(format!("the index {} belongs to no entity", label(store, o))),
             }
         }
         if class == ENTITY

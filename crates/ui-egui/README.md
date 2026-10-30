@@ -20,7 +20,9 @@ columns in one step, Points to, the key pairs with a child column chosen among t
 type, On delete / On update, More with Deferrable and Match, and the card for a parent without a
 key with Add id column; `keys`: a table's keys with the key editor — name, the columns in key
 order, Add a column, Nulls distinct — and the Problems section that lists what the rules find on
-the selection; `problems`: those problems by element, badged on the canvas), the right rail between the
+the selection; `checks` and `indexes`: a table's check constraints (name, expression) and indexes
+(name, Unique, the columns in index order with a direction button and a nulls order from the row's
+menu, an expression typed in place, Where and Method under More) with their editors; `problems`: those problems by element, badged on the canvas), the right rail between the
 canvas and its panel with Properties (`panels`: a schema's name; a table's name, kind, columns
 with the in-place column editor — type with its length or precision and scale, default,
 generation with the expression of a computed column, collation under More — keys; a diagram's
@@ -68,6 +70,8 @@ or explorer with nothing to show says so in one line, never with a help text.
 | `connect::{RelKind, MappingOffer, Toast, connect, offer_mapping, has_foreign_key, remove_selected_relationship}` | relationships drawn on the canvas: the ends a new line gets, the mapping table offer, the toast |
 | `relation::{RoleEdit, retain_valid}` | a relationship's Properties state: a role being typed; the body itself is drawn by `panels` |
 | `keys::{KeyEdit, KeyRow, rows, open}` | a table's keys and the key editor's state |
+| `checks::{CheckEdit, CheckRow, rows, open}` | a table's check constraints and the check editor's state |
+| `indexes::{IndexEdit, IndexRow, ColumnSpec, rows, open}` | a table's indexes and the index editor's state |
 | `problems::{Problem, all, by_element, of}` | the problems the shell shows, on the element the user would fix them on |
 | `new_project::{open, name_problem, file_name}` | the New project dialog: open it, a name's problem in words, the file a name gives |
 | `Folder` | a folder as the shell shows it: its path and its label |

@@ -41,6 +41,19 @@ str		Add a column	Spalte hinzufügen
 str		Add unique constraint	Eindeutigkeitsbedingung hinzufügen
 str		Columns, in key order	Spalten in Schlüsselreihenfolge
 str		Nulls distinct	Nullwerte verschieden
+str		Checks · {n}	Prüfbedingungen · {n}
+str		Indexes · {n}	Indizes · {n}
+str		Add check constraint	Prüfbedingung hinzufügen
+str		Add index	Index hinzufügen
+str		Columns, in index order	Spalten in Indexreihenfolge
+str		An expression	Ein Ausdruck
+str		Where	Where
+str		Method	Methode
+str		Ascending	Aufsteigend
+str		Descending	Absteigend
+str		Nulls default	Nullwerte standardmäßig
+str		Nulls first	Nullwerte zuerst
+str		Nulls last	Nullwerte zuletzt
 str		Problems · {n}	Probleme · {n}
 str		lacks its table or its key	hat keine Tabelle oder keinen Schlüssel
 str		{column} is a key column and may be null	{column} ist eine Schlüsselspalte und darf leer sein

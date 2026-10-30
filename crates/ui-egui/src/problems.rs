@@ -49,6 +49,16 @@ pub fn all(store: &Store) -> Vec<Problem> {
                     out.push(Problem { element: o, text: fmt(&tr("{key}: {problem}"), &[("key", &r::label(store, k)), ("problem", &p)]) });
                 }
             }
+            for c in r::checks_of(store, o) {
+                if let Some(p) = r::check_problem(&r::text_of(store, c, archforge_er::check_constraint::EXPRESSION)) {
+                    out.push(Problem { element: o, text: fmt(&tr("{key}: {problem}"), &[("key", &r::display_name(store, c)), ("problem", &p)]) });
+                }
+            }
+            for ix in r::indexes_of(store, o) {
+                if let Some(p) = r::index_columns_problem(store, o, &r::index_specs(store, ix)) {
+                    out.push(Problem { element: o, text: fmt(&tr("{key}: {problem}"), &[("key", &r::display_name(store, ix)), ("problem", &p)]) });
+                }
+            }
             for fk in members(store, o, archforge_er::entity::FOREIGN_KEY) {
                 let parts = r::key_parts(store, fk);
                 let text = match (parts.entity, parts.key) {
