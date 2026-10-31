@@ -203,6 +203,12 @@ impl<D: Document, V: View<D>> Session<D, V> {
         self.redo.last().map(|s| s.label.as_str())
     }
 
+    /// The document's state: it changes with every change, and undo and redo bring an earlier
+    /// state's back, so a host can tell when there is something new to write.
+    pub fn revision(&self) -> u64 {
+        self.id
+    }
+
     /// Whether the document differs from the state last marked saved.
     pub fn is_dirty(&self) -> bool {
         self.saved != Some(self.id)
@@ -249,6 +255,17 @@ impl<D: Document, V: View<D>> Session<D, V> {
         self.healthy()?;
         self.saved = Some(self.id);
         self.chain = None;
+        Ok(())
+    }
+
+    /// Marks an earlier state as saved: the one a save wrote, when edits followed it before it
+    /// finished. The session stays dirty until it is back at that state or saved again.
+    pub fn mark_saved_at(&mut self, revision: u64) -> Result<(), EngineError> {
+        self.healthy()?;
+        self.saved = Some(revision);
+        if revision == self.id {
+            self.chain = None;
+        }
         Ok(())
     }
 

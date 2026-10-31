@@ -11,7 +11,7 @@ pub const TABLES: &[Table] = &[
         class: MODEL,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
         ],
     },
     Table {
@@ -19,7 +19,7 @@ pub const TABLES: &[Table] = &[
         class: FOLDER,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
         ],
     },
     Table {
@@ -27,7 +27,7 @@ pub const TABLES: &[Table] = &[
         class: COMMENT,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "body", prop: Some(comment::BODY), sql: "TEXT NULL" },
+            Column { name: "body", prop: Some(comment::BODY), sql: "MEDIUMTEXT NULL" },
         ],
     },
     Table {
@@ -35,8 +35,8 @@ pub const TABLES: &[Table] = &[
         class: TAG,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(tag::NAME), sql: "TEXT NULL" },
-            Column { name: "value", prop: Some(tag::VALUE), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(tag::NAME), sql: "MEDIUMTEXT NULL" },
+            Column { name: "value", prop: Some(tag::VALUE), sql: "MEDIUMTEXT NULL" },
         ],
     },
     Table {
@@ -47,7 +47,7 @@ pub const TABLES: &[Table] = &[
             Column { name: "kind", prop: Some(link::KIND), sql: "INT NOT NULL" },
             Column { name: "source", prop: Some(link::SOURCE), sql: "BINARY(16) NULL" },
             Column { name: "target", prop: Some(link::TARGET), sql: "BINARY(16) NULL" },
-            Column { name: "note", prop: Some(link::NOTE), sql: "TEXT NULL" },
+            Column { name: "note", prop: Some(link::NOTE), sql: "MEDIUMTEXT NULL" },
         ],
     },
     Table {
@@ -55,13 +55,13 @@ pub const TABLES: &[Table] = &[
         class: SKILL,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
-            Column { name: "description", prop: Some(skill::DESCRIPTION), sql: "TEXT NULL" },
-            Column { name: "body", prop: Some(skill::BODY), sql: "TEXT NULL" },
-            Column { name: "dialect", prop: Some(skill::DIALECT), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
+            Column { name: "description", prop: Some(skill::DESCRIPTION), sql: "MEDIUMTEXT NULL" },
+            Column { name: "body", prop: Some(skill::BODY), sql: "MEDIUMTEXT NULL" },
+            Column { name: "dialect", prop: Some(skill::DIALECT), sql: "MEDIUMTEXT NULL" },
             Column { name: "subject", prop: Some(skill::SUBJECT), sql: "BINARY(16) NULL" },
-            Column { name: "applies_to", prop: Some(skill::APPLIES_TO), sql: "TEXT NULL" },
-            Column { name: "type_pattern", prop: Some(skill::TYPE_PATTERN), sql: "TEXT NULL" },
+            Column { name: "applies_to", prop: Some(skill::APPLIES_TO), sql: "MEDIUMTEXT NULL" },
+            Column { name: "type_pattern", prop: Some(skill::TYPE_PATTERN), sql: "MEDIUMTEXT NULL" },
         ],
     },
 ];

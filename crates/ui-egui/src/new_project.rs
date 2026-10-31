@@ -138,7 +138,7 @@ fn answer(dialog: &mut Dialog) -> Option<Result<Opened, CreateError>> {
 }
 
 /// The open project goes to the top of Home's recent list, once.
-fn remember(shell: &mut Shell, opened: &Opened) {
+pub(crate) fn remember(shell: &mut Shell, opened: &Opened) {
     shell.home.recent.retain(|r| r.name != opened.name);
     shell.home.recent.insert(0, crate::home::Recent { name: opened.name.clone(), last_view: tr("Nothing yet"), elements: 0, opened: tr("Just now") });
 }

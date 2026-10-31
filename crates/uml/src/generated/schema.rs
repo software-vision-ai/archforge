@@ -11,7 +11,7 @@ pub const TABLES: &[Table] = &[
         class: CLASS,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
@@ -31,7 +31,7 @@ pub const TABLES: &[Table] = &[
         class: ACTIVITY,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
@@ -55,7 +55,7 @@ pub const TABLES: &[Table] = &[
         class: ACTIVITY_FINAL_NODE,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -68,7 +68,7 @@ pub const TABLES: &[Table] = &[
         class: ACTIVITY_PARAMETER_NODE,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "type", prop: Some(typed_element::TYPE), sql: "BINARY(16) NULL" },
@@ -87,7 +87,7 @@ pub const TABLES: &[Table] = &[
         class: ACTIVITY_PARTITION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "in_activity", prop: Some(activity_group::IN_ACTIVITY), sql: "BINARY(16) NULL" },
@@ -102,7 +102,7 @@ pub const TABLES: &[Table] = &[
         class: CENTRAL_BUFFER_NODE,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "type", prop: Some(typed_element::TYPE), sql: "BINARY(16) NULL" },
@@ -120,7 +120,7 @@ pub const TABLES: &[Table] = &[
         class: CONTROL_FLOW,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -138,7 +138,7 @@ pub const TABLES: &[Table] = &[
         class: DATA_STORE_NODE,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "type", prop: Some(typed_element::TYPE), sql: "BINARY(16) NULL" },
@@ -156,7 +156,7 @@ pub const TABLES: &[Table] = &[
         class: DECISION_NODE,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -181,7 +181,7 @@ pub const TABLES: &[Table] = &[
         class: FLOW_FINAL_NODE,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -194,7 +194,7 @@ pub const TABLES: &[Table] = &[
         class: FORK_NODE,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -207,7 +207,7 @@ pub const TABLES: &[Table] = &[
         class: INITIAL_NODE,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -220,7 +220,7 @@ pub const TABLES: &[Table] = &[
         class: INTERRUPTIBLE_ACTIVITY_REGION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "in_activity", prop: Some(activity_group::IN_ACTIVITY), sql: "BINARY(16) NULL" },
@@ -231,7 +231,7 @@ pub const TABLES: &[Table] = &[
         class: JOIN_NODE,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -246,7 +246,7 @@ pub const TABLES: &[Table] = &[
         class: MERGE_NODE,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -259,7 +259,7 @@ pub const TABLES: &[Table] = &[
         class: OBJECT_FLOW,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -281,7 +281,7 @@ pub const TABLES: &[Table] = &[
         class: VARIABLE,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "type", prop: Some(typed_element::TYPE), sql: "BINARY(16) NULL" },
@@ -300,7 +300,7 @@ pub const TABLES: &[Table] = &[
         class: DURATION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "type", prop: Some(typed_element::TYPE), sql: "BINARY(16) NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
@@ -316,7 +316,7 @@ pub const TABLES: &[Table] = &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "template_parameter", prop: Some(parameterable_element::TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "context", prop: Some(constraint::CONTEXT), sql: "BINARY(16) NULL" },
@@ -330,7 +330,7 @@ pub const TABLES: &[Table] = &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "template_parameter", prop: Some(parameterable_element::TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "context", prop: Some(constraint::CONTEXT), sql: "BINARY(16) NULL" },
@@ -344,7 +344,7 @@ pub const TABLES: &[Table] = &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "template_parameter", prop: Some(parameterable_element::TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "context", prop: Some(constraint::CONTEXT), sql: "BINARY(16) NULL" },
@@ -356,7 +356,7 @@ pub const TABLES: &[Table] = &[
         class: INTERVAL,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "type", prop: Some(typed_element::TYPE), sql: "BINARY(16) NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
@@ -371,7 +371,7 @@ pub const TABLES: &[Table] = &[
         class: DURATION_INTERVAL,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "type", prop: Some(typed_element::TYPE), sql: "BINARY(16) NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
@@ -388,7 +388,7 @@ pub const TABLES: &[Table] = &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "template_parameter", prop: Some(parameterable_element::TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
         ],
@@ -398,13 +398,13 @@ pub const TABLES: &[Table] = &[
         class: EXPRESSION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "type", prop: Some(typed_element::TYPE), sql: "BINARY(16) NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "template_parameter", prop: Some(parameterable_element::TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
-            Column { name: "symbol", prop: Some(expression::SYMBOL), sql: "TEXT NULL" },
+            Column { name: "symbol", prop: Some(expression::SYMBOL), sql: "MEDIUMTEXT NULL" },
         ],
     },
     Table {
@@ -412,7 +412,7 @@ pub const TABLES: &[Table] = &[
         class: LITERAL_BOOLEAN,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "type", prop: Some(typed_element::TYPE), sql: "BINARY(16) NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
@@ -426,7 +426,7 @@ pub const TABLES: &[Table] = &[
         class: LITERAL_INTEGER,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "type", prop: Some(typed_element::TYPE), sql: "BINARY(16) NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
@@ -440,7 +440,7 @@ pub const TABLES: &[Table] = &[
         class: LITERAL_NULL,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "type", prop: Some(typed_element::TYPE), sql: "BINARY(16) NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
@@ -453,7 +453,7 @@ pub const TABLES: &[Table] = &[
         class: LITERAL_REAL,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "type", prop: Some(typed_element::TYPE), sql: "BINARY(16) NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
@@ -467,13 +467,13 @@ pub const TABLES: &[Table] = &[
         class: LITERAL_STRING,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "type", prop: Some(typed_element::TYPE), sql: "BINARY(16) NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "template_parameter", prop: Some(parameterable_element::TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
-            Column { name: "value", prop: Some(literal_string::VALUE), sql: "TEXT NULL" },
+            Column { name: "value", prop: Some(literal_string::VALUE), sql: "MEDIUMTEXT NULL" },
         ],
     },
     Table {
@@ -481,7 +481,7 @@ pub const TABLES: &[Table] = &[
         class: LITERAL_UNLIMITED_NATURAL,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "type", prop: Some(typed_element::TYPE), sql: "BINARY(16) NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
@@ -495,7 +495,7 @@ pub const TABLES: &[Table] = &[
         class: OPAQUE_EXPRESSION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "type", prop: Some(typed_element::TYPE), sql: "BINARY(16) NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
@@ -510,13 +510,13 @@ pub const TABLES: &[Table] = &[
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
             Column { name: "owned_template_signature", prop: Some(templateable_element::OWNED_TEMPLATE_SIGNATURE), sql: "BINARY(16) NULL" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "type", prop: Some(typed_element::TYPE), sql: "BINARY(16) NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "template_parameter", prop: Some(parameterable_element::TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
-            Column { name: "symbol", prop: Some(expression::SYMBOL), sql: "TEXT NULL" },
+            Column { name: "symbol", prop: Some(expression::SYMBOL), sql: "MEDIUMTEXT NULL" },
             Column { name: "owning_expression", prop: Some(string_expression::OWNING_EXPRESSION), sql: "BINARY(16) NULL" },
         ],
     },
@@ -527,7 +527,7 @@ pub const TABLES: &[Table] = &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "template_parameter", prop: Some(parameterable_element::TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "context", prop: Some(constraint::CONTEXT), sql: "BINARY(16) NULL" },
@@ -540,7 +540,7 @@ pub const TABLES: &[Table] = &[
         class: TIME_EXPRESSION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "type", prop: Some(typed_element::TYPE), sql: "BINARY(16) NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
@@ -554,7 +554,7 @@ pub const TABLES: &[Table] = &[
         class: TIME_INTERVAL,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "type", prop: Some(typed_element::TYPE), sql: "BINARY(16) NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
@@ -571,7 +571,7 @@ pub const TABLES: &[Table] = &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "template_parameter", prop: Some(parameterable_element::TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "event", prop: Some(time_observation::EVENT), sql: "BINARY(16) NULL" },
@@ -583,7 +583,7 @@ pub const TABLES: &[Table] = &[
         class: ACTOR,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
@@ -602,7 +602,7 @@ pub const TABLES: &[Table] = &[
         class: EXTEND,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "condition", prop: Some(extend::CONDITION), sql: "BINARY(16) NULL" },
@@ -615,7 +615,7 @@ pub const TABLES: &[Table] = &[
         class: EXTENSION_POINT,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -627,7 +627,7 @@ pub const TABLES: &[Table] = &[
         class: INCLUDE,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "addition", prop: Some(include::ADDITION), sql: "BINARY(16) NULL" },
@@ -639,7 +639,7 @@ pub const TABLES: &[Table] = &[
         class: USE_CASE,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
@@ -658,7 +658,7 @@ pub const TABLES: &[Table] = &[
         class: ASSOCIATION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
@@ -677,7 +677,7 @@ pub const TABLES: &[Table] = &[
         class: ASSOCIATION_CLASS,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
@@ -698,7 +698,7 @@ pub const TABLES: &[Table] = &[
         class: COLLABORATION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
@@ -717,7 +717,7 @@ pub const TABLES: &[Table] = &[
         class: COLLABORATION_USE,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "type", prop: Some(collaboration_use::TYPE), sql: "BINARY(16) NULL" },
@@ -728,7 +728,7 @@ pub const TABLES: &[Table] = &[
         class: COMPONENT,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
@@ -751,7 +751,7 @@ pub const TABLES: &[Table] = &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "template_parameter", prop: Some(parameterable_element::TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
         ],
@@ -763,7 +763,7 @@ pub const TABLES: &[Table] = &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "template_parameter", prop: Some(parameterable_element::TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "mapping", prop: Some(abstraction::MAPPING), sql: "BINARY(16) NULL" },
@@ -776,7 +776,7 @@ pub const TABLES: &[Table] = &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "template_parameter", prop: Some(parameterable_element::TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "mapping", prop: Some(abstraction::MAPPING), sql: "BINARY(16) NULL" },
@@ -789,7 +789,7 @@ pub const TABLES: &[Table] = &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "template_parameter", prop: Some(parameterable_element::TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "mapping", prop: Some(abstraction::MAPPING), sql: "BINARY(16) NULL" },
@@ -825,7 +825,7 @@ pub const TABLES: &[Table] = &[
         class: CONNECTOR,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -851,7 +851,7 @@ pub const TABLES: &[Table] = &[
         class: PROPERTY,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "type", prop: Some(typed_element::TYPE), sql: "BINARY(16) NULL" },
@@ -882,7 +882,7 @@ pub const TABLES: &[Table] = &[
         class: PORT,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "type", prop: Some(typed_element::TYPE), sql: "BINARY(16) NULL" },
@@ -917,7 +917,7 @@ pub const TABLES: &[Table] = &[
         class: CONNECTION_POINT_REFERENCE,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -931,7 +931,7 @@ pub const TABLES: &[Table] = &[
         class: STATE,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -949,7 +949,7 @@ pub const TABLES: &[Table] = &[
         class: FINAL_STATE,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -976,7 +976,7 @@ pub const TABLES: &[Table] = &[
         class: STATE_MACHINE,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
@@ -998,7 +998,7 @@ pub const TABLES: &[Table] = &[
         class: PROTOCOL_STATE_MACHINE,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
@@ -1020,7 +1020,7 @@ pub const TABLES: &[Table] = &[
         class: TRANSITION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -1038,7 +1038,7 @@ pub const TABLES: &[Table] = &[
         class: PROTOCOL_TRANSITION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -1058,7 +1058,7 @@ pub const TABLES: &[Table] = &[
         class: PSEUDOSTATE,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -1074,7 +1074,7 @@ pub const TABLES: &[Table] = &[
         class: REGION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -1088,7 +1088,7 @@ pub const TABLES: &[Table] = &[
         class: DATA_TYPE,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
@@ -1106,7 +1106,7 @@ pub const TABLES: &[Table] = &[
         class: ENUMERATION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
@@ -1124,7 +1124,7 @@ pub const TABLES: &[Table] = &[
         class: INSTANCE_SPECIFICATION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "template_parameter", prop: Some(parameterable_element::TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
@@ -1137,7 +1137,7 @@ pub const TABLES: &[Table] = &[
         class: ENUMERATION_LITERAL,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "template_parameter", prop: Some(parameterable_element::TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
@@ -1151,7 +1151,7 @@ pub const TABLES: &[Table] = &[
         class: INTERFACE,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
@@ -1172,7 +1172,7 @@ pub const TABLES: &[Table] = &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "template_parameter", prop: Some(parameterable_element::TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "mapping", prop: Some(abstraction::MAPPING), sql: "BINARY(16) NULL" },
@@ -1185,7 +1185,7 @@ pub const TABLES: &[Table] = &[
         class: PRIMITIVE_TYPE,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
@@ -1203,7 +1203,7 @@ pub const TABLES: &[Table] = &[
         class: RECEPTION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -1218,7 +1218,7 @@ pub const TABLES: &[Table] = &[
         class: SIGNAL,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
@@ -1236,7 +1236,7 @@ pub const TABLES: &[Table] = &[
         class: EXTENSION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
@@ -1256,7 +1256,7 @@ pub const TABLES: &[Table] = &[
         class: EXTENSION_END,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
@@ -1287,9 +1287,9 @@ pub const TABLES: &[Table] = &[
         class: IMAGE,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "content", prop: Some(image::CONTENT), sql: "TEXT NULL" },
-            Column { name: "format", prop: Some(image::FORMAT), sql: "TEXT NULL" },
-            Column { name: "location", prop: Some(image::LOCATION), sql: "TEXT NULL" },
+            Column { name: "content", prop: Some(image::CONTENT), sql: "MEDIUMTEXT NULL" },
+            Column { name: "format", prop: Some(image::FORMAT), sql: "MEDIUMTEXT NULL" },
+            Column { name: "location", prop: Some(image::LOCATION), sql: "MEDIUMTEXT NULL" },
         ],
     },
     Table {
@@ -1299,11 +1299,11 @@ pub const TABLES: &[Table] = &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "template_parameter", prop: Some(parameterable_element::TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "owned_template_signature", prop: Some(templateable_element::OWNED_TEMPLATE_SIGNATURE), sql: "BINARY(16) NULL" },
-            Column { name: "uri", prop: Some(package::URI), sql: "TEXT NULL" },
+            Column { name: "uri", prop: Some(package::URI), sql: "MEDIUMTEXT NULL" },
             Column { name: "nesting_package", prop: Some(package::NESTING_PACKAGE), sql: "BINARY(16) NULL" },
         ],
     },
@@ -1314,13 +1314,13 @@ pub const TABLES: &[Table] = &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "template_parameter", prop: Some(parameterable_element::TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "owned_template_signature", prop: Some(templateable_element::OWNED_TEMPLATE_SIGNATURE), sql: "BINARY(16) NULL" },
-            Column { name: "uri", prop: Some(package::URI), sql: "TEXT NULL" },
+            Column { name: "uri", prop: Some(package::URI), sql: "MEDIUMTEXT NULL" },
             Column { name: "nesting_package", prop: Some(package::NESTING_PACKAGE), sql: "BINARY(16) NULL" },
-            Column { name: "viewpoint", prop: Some(model::VIEWPOINT), sql: "TEXT NULL" },
+            Column { name: "viewpoint", prop: Some(model::VIEWPOINT), sql: "MEDIUMTEXT NULL" },
         ],
     },
     Table {
@@ -1339,11 +1339,11 @@ pub const TABLES: &[Table] = &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "template_parameter", prop: Some(parameterable_element::TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "owned_template_signature", prop: Some(templateable_element::OWNED_TEMPLATE_SIGNATURE), sql: "BINARY(16) NULL" },
-            Column { name: "uri", prop: Some(package::URI), sql: "TEXT NULL" },
+            Column { name: "uri", prop: Some(package::URI), sql: "MEDIUMTEXT NULL" },
             Column { name: "nesting_package", prop: Some(package::NESTING_PACKAGE), sql: "BINARY(16) NULL" },
         ],
     },
@@ -1362,7 +1362,7 @@ pub const TABLES: &[Table] = &[
         class: STEREOTYPE,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
@@ -1382,7 +1382,7 @@ pub const TABLES: &[Table] = &[
         class: ACTION_EXECUTION_SPECIFICATION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "enclosing_interaction", prop: Some(interaction_fragment::ENCLOSING_INTERACTION), sql: "BINARY(16) NULL" },
@@ -1397,7 +1397,7 @@ pub const TABLES: &[Table] = &[
         class: BEHAVIOR_EXECUTION_SPECIFICATION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "enclosing_interaction", prop: Some(interaction_fragment::ENCLOSING_INTERACTION), sql: "BINARY(16) NULL" },
@@ -1412,7 +1412,7 @@ pub const TABLES: &[Table] = &[
         class: COMBINED_FRAGMENT,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "enclosing_interaction", prop: Some(interaction_fragment::ENCLOSING_INTERACTION), sql: "BINARY(16) NULL" },
@@ -1425,7 +1425,7 @@ pub const TABLES: &[Table] = &[
         class: CONSIDER_IGNORE_FRAGMENT,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "enclosing_interaction", prop: Some(interaction_fragment::ENCLOSING_INTERACTION), sql: "BINARY(16) NULL" },
@@ -1438,7 +1438,7 @@ pub const TABLES: &[Table] = &[
         class: CONTINUATION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "enclosing_interaction", prop: Some(interaction_fragment::ENCLOSING_INTERACTION), sql: "BINARY(16) NULL" },
@@ -1451,7 +1451,7 @@ pub const TABLES: &[Table] = &[
         class: OCCURRENCE_SPECIFICATION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "enclosing_interaction", prop: Some(interaction_fragment::ENCLOSING_INTERACTION), sql: "BINARY(16) NULL" },
@@ -1464,7 +1464,7 @@ pub const TABLES: &[Table] = &[
         class: MESSAGE_OCCURRENCE_SPECIFICATION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "message", prop: Some(message_end::MESSAGE), sql: "BINARY(16) NULL" },
@@ -1478,7 +1478,7 @@ pub const TABLES: &[Table] = &[
         class: DESTRUCTION_OCCURRENCE_SPECIFICATION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "message", prop: Some(message_end::MESSAGE), sql: "BINARY(16) NULL" },
@@ -1492,7 +1492,7 @@ pub const TABLES: &[Table] = &[
         class: EXECUTION_OCCURRENCE_SPECIFICATION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "enclosing_interaction", prop: Some(interaction_fragment::ENCLOSING_INTERACTION), sql: "BINARY(16) NULL" },
@@ -1506,7 +1506,7 @@ pub const TABLES: &[Table] = &[
         class: GATE,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "message", prop: Some(message_end::MESSAGE), sql: "BINARY(16) NULL" },
@@ -1517,7 +1517,7 @@ pub const TABLES: &[Table] = &[
         class: GENERAL_ORDERING,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "after", prop: Some(general_ordering::AFTER), sql: "BINARY(16) NULL" },
@@ -1529,7 +1529,7 @@ pub const TABLES: &[Table] = &[
         class: INTERACTION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "enclosing_interaction", prop: Some(interaction_fragment::ENCLOSING_INTERACTION), sql: "BINARY(16) NULL" },
             Column { name: "enclosing_operand", prop: Some(interaction_fragment::ENCLOSING_OPERAND), sql: "BINARY(16) NULL" },
@@ -1555,7 +1555,7 @@ pub const TABLES: &[Table] = &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "template_parameter", prop: Some(parameterable_element::TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "context", prop: Some(constraint::CONTEXT), sql: "BINARY(16) NULL" },
@@ -1569,7 +1569,7 @@ pub const TABLES: &[Table] = &[
         class: INTERACTION_OPERAND,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "enclosing_interaction", prop: Some(interaction_fragment::ENCLOSING_INTERACTION), sql: "BINARY(16) NULL" },
@@ -1582,7 +1582,7 @@ pub const TABLES: &[Table] = &[
         class: INTERACTION_USE,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "enclosing_interaction", prop: Some(interaction_fragment::ENCLOSING_INTERACTION), sql: "BINARY(16) NULL" },
@@ -1597,7 +1597,7 @@ pub const TABLES: &[Table] = &[
         class: LIFELINE,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "decomposed_as", prop: Some(lifeline::DECOMPOSED_AS), sql: "BINARY(16) NULL" },
@@ -1611,7 +1611,7 @@ pub const TABLES: &[Table] = &[
         class: MESSAGE,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "connector", prop: Some(message::CONNECTOR), sql: "BINARY(16) NULL" },
@@ -1627,7 +1627,7 @@ pub const TABLES: &[Table] = &[
         class: PART_DECOMPOSITION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "enclosing_interaction", prop: Some(interaction_fragment::ENCLOSING_INTERACTION), sql: "BINARY(16) NULL" },
@@ -1642,7 +1642,7 @@ pub const TABLES: &[Table] = &[
         class: STATE_INVARIANT,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "enclosing_interaction", prop: Some(interaction_fragment::ENCLOSING_INTERACTION), sql: "BINARY(16) NULL" },
@@ -1658,7 +1658,7 @@ pub const TABLES: &[Table] = &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "template_parameter", prop: Some(parameterable_element::TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
         ],
@@ -1668,7 +1668,7 @@ pub const TABLES: &[Table] = &[
         class: INFORMATION_ITEM,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
@@ -1686,7 +1686,7 @@ pub const TABLES: &[Table] = &[
         class: ARTIFACT,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
@@ -1697,7 +1697,7 @@ pub const TABLES: &[Table] = &[
             Column { name: "owned_template_signature", prop: Some(classifier::OWNED_TEMPLATE_SIGNATURE), sql: "BINARY(16) NULL" },
             Column { name: "representation", prop: Some(classifier::REPRESENTATION), sql: "BINARY(16) NULL" },
             Column { name: "template_parameter", prop: Some(classifier::TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
-            Column { name: "file_name", prop: Some(artifact::FILE_NAME), sql: "TEXT NULL" },
+            Column { name: "file_name", prop: Some(artifact::FILE_NAME), sql: "MEDIUMTEXT NULL" },
         ],
     },
     Table {
@@ -1705,7 +1705,7 @@ pub const TABLES: &[Table] = &[
         class: COMMUNICATION_PATH,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
@@ -1726,7 +1726,7 @@ pub const TABLES: &[Table] = &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "template_parameter", prop: Some(parameterable_element::TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "location", prop: Some(deployment::LOCATION), sql: "BINARY(16) NULL" },
@@ -1737,7 +1737,7 @@ pub const TABLES: &[Table] = &[
         class: DEPLOYMENT_SPECIFICATION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
@@ -1748,10 +1748,10 @@ pub const TABLES: &[Table] = &[
             Column { name: "owned_template_signature", prop: Some(classifier::OWNED_TEMPLATE_SIGNATURE), sql: "BINARY(16) NULL" },
             Column { name: "representation", prop: Some(classifier::REPRESENTATION), sql: "BINARY(16) NULL" },
             Column { name: "template_parameter", prop: Some(classifier::TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
-            Column { name: "file_name", prop: Some(artifact::FILE_NAME), sql: "TEXT NULL" },
+            Column { name: "file_name", prop: Some(artifact::FILE_NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "deployment", prop: Some(deployment_specification::DEPLOYMENT), sql: "BINARY(16) NULL" },
-            Column { name: "deployment_location", prop: Some(deployment_specification::DEPLOYMENT_LOCATION), sql: "TEXT NULL" },
-            Column { name: "execution_location", prop: Some(deployment_specification::EXECUTION_LOCATION), sql: "TEXT NULL" },
+            Column { name: "deployment_location", prop: Some(deployment_specification::DEPLOYMENT_LOCATION), sql: "MEDIUMTEXT NULL" },
+            Column { name: "execution_location", prop: Some(deployment_specification::EXECUTION_LOCATION), sql: "MEDIUMTEXT NULL" },
         ],
     },
     Table {
@@ -1759,7 +1759,7 @@ pub const TABLES: &[Table] = &[
         class: NODE,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
@@ -1779,7 +1779,7 @@ pub const TABLES: &[Table] = &[
         class: DEVICE,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
@@ -1799,7 +1799,7 @@ pub const TABLES: &[Table] = &[
         class: EXECUTION_ENVIRONMENT,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
@@ -1821,7 +1821,7 @@ pub const TABLES: &[Table] = &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "template_parameter", prop: Some(parameterable_element::TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "mapping", prop: Some(abstraction::MAPPING), sql: "BINARY(16) NULL" },
@@ -1833,7 +1833,7 @@ pub const TABLES: &[Table] = &[
         class: COMMENT,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "body", prop: Some(comment::BODY), sql: "TEXT NULL" },
+            Column { name: "body", prop: Some(comment::BODY), sql: "MEDIUMTEXT NULL" },
         ],
     },
     Table {
@@ -1841,7 +1841,7 @@ pub const TABLES: &[Table] = &[
         class: ELEMENT_IMPORT,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "alias", prop: Some(element_import::ALIAS), sql: "TEXT NULL" },
+            Column { name: "alias", prop: Some(element_import::ALIAS), sql: "MEDIUMTEXT NULL" },
             Column { name: "imported_element", prop: Some(element_import::IMPORTED_ELEMENT), sql: "BINARY(16) NULL" },
             Column { name: "importing_namespace", prop: Some(element_import::IMPORTING_NAMESPACE), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(element_import::VISIBILITY), sql: "INT NOT NULL" },
@@ -1892,7 +1892,7 @@ pub const TABLES: &[Table] = &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "template_parameter", prop: Some(parameterable_element::TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
         ],
@@ -1904,7 +1904,7 @@ pub const TABLES: &[Table] = &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "template_parameter", prop: Some(parameterable_element::TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
         ],
@@ -1916,7 +1916,7 @@ pub const TABLES: &[Table] = &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "template_parameter", prop: Some(parameterable_element::TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "operation", prop: Some(call_event::OPERATION), sql: "BINARY(16) NULL" },
@@ -1929,7 +1929,7 @@ pub const TABLES: &[Table] = &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "template_parameter", prop: Some(parameterable_element::TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "change_expression", prop: Some(change_event::CHANGE_EXPRESSION), sql: "BINARY(16) NULL" },
@@ -1940,7 +1940,7 @@ pub const TABLES: &[Table] = &[
         class: OPAQUE_BEHAVIOR,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
@@ -1962,7 +1962,7 @@ pub const TABLES: &[Table] = &[
         class: FUNCTION_BEHAVIOR,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
@@ -1986,7 +1986,7 @@ pub const TABLES: &[Table] = &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "template_parameter", prop: Some(parameterable_element::TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "signal", prop: Some(signal_event::SIGNAL), sql: "BINARY(16) NULL" },
@@ -1999,7 +1999,7 @@ pub const TABLES: &[Table] = &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "template_parameter", prop: Some(parameterable_element::TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_relative", prop: Some(time_event::IS_RELATIVE), sql: "TINYINT NOT NULL" },
@@ -2011,7 +2011,7 @@ pub const TABLES: &[Table] = &[
         class: TRIGGER,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "event", prop: Some(trigger::EVENT), sql: "BINARY(16) NULL" },
@@ -2024,7 +2024,7 @@ pub const TABLES: &[Table] = &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "template_parameter", prop: Some(parameterable_element::TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "mapping", prop: Some(abstraction::MAPPING), sql: "BINARY(16) NULL" },
@@ -2062,7 +2062,7 @@ pub const TABLES: &[Table] = &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
             Column { name: "template_parameter", prop: Some(parameterable_element::TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(packageable_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_covering", prop: Some(generalization_set::IS_COVERING), sql: "TINYINT NOT NULL" },
@@ -2075,7 +2075,7 @@ pub const TABLES: &[Table] = &[
         class: INSTANCE_VALUE,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "type", prop: Some(typed_element::TYPE), sql: "BINARY(16) NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
@@ -2091,7 +2091,7 @@ pub const TABLES: &[Table] = &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
             Column { name: "owned_template_signature", prop: Some(templateable_element::OWNED_TEMPLATE_SIGNATURE), sql: "BINARY(16) NULL" },
             Column { name: "owning_template_parameter", prop: Some(parameterable_element::OWNING_TEMPLATE_PARAMETER), sql: "BINARY(16) NULL" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -2127,7 +2127,7 @@ pub const TABLES: &[Table] = &[
             Column { name: "is_unique", prop: Some(multiplicity_element::IS_UNIQUE), sql: "TINYINT NOT NULL" },
             Column { name: "lower_value", prop: Some(multiplicity_element::LOWER_VALUE), sql: "BINARY(16) NULL" },
             Column { name: "upper_value", prop: Some(multiplicity_element::UPPER_VALUE), sql: "BINARY(16) NULL" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "type", prop: Some(typed_element::TYPE), sql: "BINARY(16) NULL" },
@@ -2146,7 +2146,7 @@ pub const TABLES: &[Table] = &[
         class: PARAMETER_SET,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
         ],
@@ -2156,7 +2156,7 @@ pub const TABLES: &[Table] = &[
         class: REDEFINABLE_TEMPLATE_SIGNATURE,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -2177,7 +2177,7 @@ pub const TABLES: &[Table] = &[
         class: VALUE_SPECIFICATION_ACTION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -2193,7 +2193,7 @@ pub const TABLES: &[Table] = &[
         class: ACCEPT_EVENT_ACTION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -2208,7 +2208,7 @@ pub const TABLES: &[Table] = &[
         class: ACCEPT_CALL_ACTION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -2224,7 +2224,7 @@ pub const TABLES: &[Table] = &[
         class: INPUT_PIN,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "type", prop: Some(typed_element::TYPE), sql: "BINARY(16) NULL" },
@@ -2247,7 +2247,7 @@ pub const TABLES: &[Table] = &[
         class: ACTION_INPUT_PIN,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "type", prop: Some(typed_element::TYPE), sql: "BINARY(16) NULL" },
@@ -2271,7 +2271,7 @@ pub const TABLES: &[Table] = &[
         class: ADD_STRUCTURAL_FEATURE_VALUE_ACTION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -2291,7 +2291,7 @@ pub const TABLES: &[Table] = &[
         class: ADD_VARIABLE_VALUE_ACTION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -2309,7 +2309,7 @@ pub const TABLES: &[Table] = &[
         class: BROADCAST_SIGNAL_ACTION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -2325,7 +2325,7 @@ pub const TABLES: &[Table] = &[
         class: CALL_BEHAVIOR_ACTION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -2342,7 +2342,7 @@ pub const TABLES: &[Table] = &[
         class: CALL_OPERATION_ACTION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -2368,7 +2368,7 @@ pub const TABLES: &[Table] = &[
         class: CLEAR_ASSOCIATION_ACTION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -2384,7 +2384,7 @@ pub const TABLES: &[Table] = &[
         class: CLEAR_STRUCTURAL_FEATURE_ACTION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -2401,7 +2401,7 @@ pub const TABLES: &[Table] = &[
         class: CLEAR_VARIABLE_ACTION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -2416,7 +2416,7 @@ pub const TABLES: &[Table] = &[
         class: STRUCTURED_ACTIVITY_NODE,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -2431,7 +2431,7 @@ pub const TABLES: &[Table] = &[
         class: CONDITIONAL_NODE,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -2448,7 +2448,7 @@ pub const TABLES: &[Table] = &[
         class: CREATE_LINK_ACTION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -2462,7 +2462,7 @@ pub const TABLES: &[Table] = &[
         class: CREATE_LINK_OBJECT_ACTION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -2477,7 +2477,7 @@ pub const TABLES: &[Table] = &[
         class: CREATE_OBJECT_ACTION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -2493,7 +2493,7 @@ pub const TABLES: &[Table] = &[
         class: DESTROY_LINK_ACTION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -2507,7 +2507,7 @@ pub const TABLES: &[Table] = &[
         class: DESTROY_OBJECT_ACTION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -2524,7 +2524,7 @@ pub const TABLES: &[Table] = &[
         class: EXPANSION_NODE,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "type", prop: Some(typed_element::TYPE), sql: "BINARY(16) NULL" },
@@ -2544,7 +2544,7 @@ pub const TABLES: &[Table] = &[
         class: EXPANSION_REGION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -2591,7 +2591,7 @@ pub const TABLES: &[Table] = &[
         class: LOOP_NODE,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -2608,7 +2608,7 @@ pub const TABLES: &[Table] = &[
         class: OPAQUE_ACTION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -2622,7 +2622,7 @@ pub const TABLES: &[Table] = &[
         class: OUTPUT_PIN,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "type", prop: Some(typed_element::TYPE), sql: "BINARY(16) NULL" },
@@ -2654,7 +2654,7 @@ pub const TABLES: &[Table] = &[
         class: RAISE_EXCEPTION_ACTION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -2669,7 +2669,7 @@ pub const TABLES: &[Table] = &[
         class: READ_EXTENT_ACTION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -2685,7 +2685,7 @@ pub const TABLES: &[Table] = &[
         class: READ_IS_CLASSIFIED_OBJECT_ACTION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -2703,7 +2703,7 @@ pub const TABLES: &[Table] = &[
         class: READ_LINK_ACTION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -2718,7 +2718,7 @@ pub const TABLES: &[Table] = &[
         class: READ_LINK_OBJECT_END_ACTION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -2735,7 +2735,7 @@ pub const TABLES: &[Table] = &[
         class: READ_LINK_OBJECT_END_QUALIFIER_ACTION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -2752,7 +2752,7 @@ pub const TABLES: &[Table] = &[
         class: READ_SELF_ACTION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -2767,7 +2767,7 @@ pub const TABLES: &[Table] = &[
         class: READ_STRUCTURAL_FEATURE_ACTION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -2784,7 +2784,7 @@ pub const TABLES: &[Table] = &[
         class: READ_VARIABLE_ACTION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -2800,7 +2800,7 @@ pub const TABLES: &[Table] = &[
         class: RECLASSIFY_OBJECT_ACTION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -2816,7 +2816,7 @@ pub const TABLES: &[Table] = &[
         class: REDUCE_ACTION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -2834,7 +2834,7 @@ pub const TABLES: &[Table] = &[
         class: REMOVE_STRUCTURAL_FEATURE_VALUE_ACTION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -2858,7 +2858,7 @@ pub const TABLES: &[Table] = &[
         class: REMOVE_VARIABLE_VALUE_ACTION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -2876,7 +2876,7 @@ pub const TABLES: &[Table] = &[
         class: REPLY_ACTION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -2892,7 +2892,7 @@ pub const TABLES: &[Table] = &[
         class: SEND_OBJECT_ACTION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -2909,7 +2909,7 @@ pub const TABLES: &[Table] = &[
         class: SEND_SIGNAL_ACTION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -2926,7 +2926,7 @@ pub const TABLES: &[Table] = &[
         class: SEQUENCE_NODE,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -2941,7 +2941,7 @@ pub const TABLES: &[Table] = &[
         class: START_CLASSIFIER_BEHAVIOR_ACTION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -2956,7 +2956,7 @@ pub const TABLES: &[Table] = &[
         class: START_OBJECT_BEHAVIOR_ACTION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -2973,7 +2973,7 @@ pub const TABLES: &[Table] = &[
         class: TEST_IDENTITY_ACTION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -2990,7 +2990,7 @@ pub const TABLES: &[Table] = &[
         class: UNMARSHALL_ACTION,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "is_leaf", prop: Some(redefinable_element::IS_LEAF), sql: "TINYINT NOT NULL" },
@@ -3006,7 +3006,7 @@ pub const TABLES: &[Table] = &[
         class: VALUE_PIN,
         columns: &[
             Column { name: "id", prop: None, sql: "BINARY(16) NOT NULL PRIMARY KEY" },
-            Column { name: "name", prop: Some(named_element::NAME), sql: "TEXT NULL" },
+            Column { name: "name", prop: Some(named_element::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "name_expression", prop: Some(named_element::NAME_EXPRESSION), sql: "BINARY(16) NULL" },
             Column { name: "visibility", prop: Some(named_element::VISIBILITY), sql: "INT NOT NULL" },
             Column { name: "type", prop: Some(typed_element::TYPE), sql: "BINARY(16) NULL" },
@@ -3093,7 +3093,7 @@ pub const JUNCTIONS: &[Junction] = &[
     Junction { name: "uml_activity_edge", class: ACTIVITY, prop: activity::EDGE, ordered: false, reference: true },
     Junction { name: "uml_activity_group", class: ACTIVITY, prop: activity::GROUP, ordered: false, reference: true },
     Junction { name: "uml_activity_node", class: ACTIVITY, prop: activity::NODE, ordered: false, reference: true },
-    Junction { name: "uml_activity_partition", class: ACTIVITY, prop: activity::PARTITION, ordered: false, reference: true },
+    Junction { name: "uml_activity_partition_list", class: ACTIVITY, prop: activity::PARTITION, ordered: false, reference: true },
     Junction { name: "uml_activity_structured_node", class: ACTIVITY, prop: activity::STRUCTURED_NODE, ordered: false, reference: true },
     Junction { name: "uml_activity_variable", class: ACTIVITY, prop: activity::VARIABLE, ordered: false, reference: true },
     Junction {
@@ -3356,7 +3356,7 @@ pub const JUNCTIONS: &[Junction] = &[
     Junction { name: "uml_object_flow_redefined_edge", class: OBJECT_FLOW, prop: activity_edge::REDEFINED_EDGE, ordered: false, reference: true },
     Junction { name: "uml_variable_owned_comment", class: VARIABLE, prop: element::OWNED_COMMENT, ordered: false, reference: true },
     Junction { name: "uml_duration_owned_comment", class: DURATION, prop: element::OWNED_COMMENT, ordered: false, reference: true },
-    Junction { name: "uml_duration_observation", class: DURATION, prop: duration::OBSERVATION, ordered: false, reference: true },
+    Junction { name: "uml_duration_observation_list", class: DURATION, prop: duration::OBSERVATION, ordered: false, reference: true },
     Junction { name: "uml_constraint_owned_comment", class: CONSTRAINT, prop: element::OWNED_COMMENT, ordered: false, reference: true },
     Junction { name: "uml_constraint_constrained_element", class: CONSTRAINT, prop: constraint::CONSTRAINED_ELEMENT, ordered: true, reference: true },
     Junction {
@@ -3796,7 +3796,7 @@ pub const JUNCTIONS: &[Junction] = &[
     Junction { name: "uml_component_owned_operation", class: COMPONENT, prop: class::OWNED_OPERATION, ordered: true, reference: true },
     Junction { name: "uml_component_owned_reception", class: COMPONENT, prop: class::OWNED_RECEPTION, ordered: false, reference: true },
     Junction { name: "uml_component_packaged_element", class: COMPONENT, prop: component::PACKAGED_ELEMENT, ordered: false, reference: true },
-    Junction { name: "uml_component_realization", class: COMPONENT, prop: component::REALIZATION, ordered: false, reference: true },
+    Junction { name: "uml_component_realization_list", class: COMPONENT, prop: component::REALIZATION, ordered: false, reference: true },
     Junction { name: "uml_dependency_owned_comment", class: DEPENDENCY, prop: element::OWNED_COMMENT, ordered: false, reference: true },
     Junction { name: "uml_dependency_client", class: DEPENDENCY, prop: dependency::CLIENT, ordered: false, reference: true },
     Junction { name: "uml_dependency_supplier", class: DEPENDENCY, prop: dependency::SUPPLIER, ordered: false, reference: true },
@@ -3844,7 +3844,7 @@ pub const JUNCTIONS: &[Junction] = &[
     },
     Junction { name: "uml_connector_owned_comment", class: CONNECTOR, prop: element::OWNED_COMMENT, ordered: false, reference: true },
     Junction { name: "uml_connector_contract", class: CONNECTOR, prop: connector::CONTRACT, ordered: false, reference: true },
-    Junction { name: "uml_connector_end", class: CONNECTOR, prop: connector::END, ordered: true, reference: true },
+    Junction { name: "uml_connector_end_list", class: CONNECTOR, prop: connector::END, ordered: true, reference: true },
     Junction { name: "uml_connector_redefined_connector", class: CONNECTOR, prop: connector::REDEFINED_CONNECTOR, ordered: false, reference: true },
     Junction { name: "uml_connector_end_owned_comment", class: CONNECTOR_END, prop: element::OWNED_COMMENT, ordered: false, reference: true },
     Junction { name: "uml_property_owned_comment", class: PROPERTY, prop: element::OWNED_COMMENT, ordered: false, reference: true },

@@ -659,6 +659,26 @@ impl Store {
         })
     }
 
+    /// A new object of `class` with the id it was saved under, for reading a project back; an id
+    /// the store holds already is refused.
+    pub fn create_with_uuid(&mut self, class: ClassId, uuid: Uuid) -> R<Obj> {
+        let c = self.universe.class(class).ok_or_else(|| Invalid::Internal(format!("there is no class {}", class.0)))?;
+        if c.is_abstract {
+            return Err(Invalid::Abstract(c.name.to_string()));
+        }
+        if self.live >= MAX_OBJECTS || self.reg.class.len() >= u32::MAX as usize - 1 {
+            return Err(Invalid::TooManyObjects);
+        }
+        if self.by_uuid.contains_key(&uuid) {
+            return Err(Invalid::Refused(format!("the id {uuid} is there twice")));
+        }
+        self.atomic(|st| {
+            let obj = Obj(st.reg.class.len() as u32);
+            st.perform(Op::Create { obj, class, uuid })?;
+            Ok(obj)
+        })
+    }
+
     /// Sets a single-valued property, keeping containment and the opposite consistent.
     pub fn set(&mut self, obj: Obj, prop: PropId, value: Value) -> R<()> {
         let p = self.writable(obj, prop)?;
@@ -702,6 +722,17 @@ impl Store {
     /// Inserts into a multi-valued property at `index`, keeping uniqueness, the upper bound,
     /// containment, the opposite and the subsetted properties consistent.
     pub fn insert(&mut self, obj: Obj, prop: PropId, index: u32, value: Value) -> R<()> {
+        self.insert_checked(obj, prop, index, value, false)
+    }
+
+    /// Appends a value the caller has proven is not in the list yet, without looking for it: a
+    /// reading builds long lists in linear time this way. Everything else is checked as by `push`.
+    pub(crate) fn push_new(&mut self, obj: Obj, prop: PropId, value: Value) -> R<()> {
+        let len = self.list_len(obj, prop)? as u32;
+        self.insert_checked(obj, prop, len, value, true)
+    }
+
+    fn insert_checked(&mut self, obj: Obj, prop: PropId, index: u32, value: Value, known_new: bool) -> R<()> {
         let p = self.writable(obj, prop)?;
         if !p.is_many() {
             return Err(Invalid::SingleValued(self.pname(prop)));
@@ -715,7 +746,7 @@ impl Store {
             return Err(Invalid::IndexOutOfRange { prop: self.pname(prop), index, len });
         }
         self.room_for(prop, &p, len)?;
-        if p.is_unique && self.position(obj, prop, &value)?.is_some() {
+        if p.is_unique && !known_new && self.position(obj, prop, &value)?.is_some() {
             return Err(Invalid::Duplicate(self.pname(prop)));
         }
         if p.is_composite && matches!(value, Value::Ref(child) if child == obj || self.contains(child, obj)) {

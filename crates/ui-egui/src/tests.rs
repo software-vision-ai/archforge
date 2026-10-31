@@ -248,7 +248,7 @@ fn create_project_asks_the_host_and_opens_the_project_it_made() {
     assert!(h.state().new_project.is_some());
     assert_eq!(host.asked.lock().unwrap().len(), 1);
     let path = std::path::PathBuf::from("/Users/robin/Documents/Archforge/Commerce platform.archforge");
-    answer(&mut h, &host, Ok(crate::Opened { name: "Commerce platform".into(), path: path.clone() }));
+    answer(&mut h, &host, Ok(crate::Opened { name: "Commerce platform".into(), path: path.clone(), ..Default::default() }));
     assert!(h.state().new_project.is_none(), "success closes the dialog");
     assert_eq!(h.state().project.as_ref().map(|p| p.path.clone()), Some(path));
     assert_eq!(h.state().title(), "Commerce platform — Archforge");
@@ -286,6 +286,200 @@ fn a_failed_creation_keeps_the_dialog_and_the_name_and_says_why() {
     host.pending.lock().unwrap().clear();
     h.run_steps(4);
     assert!(h.state().new_project.as_ref().is_some_and(|d| !d.creating()));
+}
+
+/// A host that writes and saves (archforge-kjz.3): it keeps every hand-over of rows, and each
+/// save's and opening's sender, so a test answers when it chooses.
+#[derive(Default)]
+struct SavingHost {
+    written: std::sync::Mutex<Vec<(std::path::PathBuf, archforge_mof::rows::Rows)>>,
+    saves: std::sync::Mutex<Vec<std::sync::mpsc::Sender<Result<bool, String>>>>,
+    opens: std::sync::Mutex<Vec<(std::path::PathBuf, std::sync::mpsc::Sender<Result<crate::Opened, crate::CreateError>>)>>,
+}
+
+impl crate::ProjectHost for SavingHost {
+    fn create(&self, _folder: &std::path::Path, _name: &str) -> std::sync::mpsc::Receiver<Result<crate::Opened, crate::CreateError>> {
+        std::sync::mpsc::channel().1
+    }
+
+    fn open(&self, path: &std::path::Path) -> std::sync::mpsc::Receiver<Result<crate::Opened, crate::CreateError>> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.opens.lock().unwrap().push((path.to_path_buf(), tx));
+        rx
+    }
+
+    fn write(&self, project: &std::path::Path, rows: archforge_mof::rows::Rows) {
+        self.written.lock().unwrap().push((project.to_path_buf(), rows));
+    }
+
+    fn save(&self, project: &std::path::Path) -> std::sync::mpsc::Receiver<Result<bool, String>> {
+        assert_eq!(project, std::path::Path::new("/tmp/Commerce platform.archforge"), "the save names the open project");
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.saves.lock().unwrap().push(tx);
+        rx
+    }
+}
+
+/// The shell over a saving host, with a picker that chooses `picked`, and a project open when
+/// `opened` is given.
+fn saving_harness(opened: Option<crate::Opened>, picked: Option<&str>) -> (Harness<'static, Shell>, std::sync::Arc<SavingHost>) {
+    crate::i18n::set_language("en");
+    let host = std::sync::Arc::new(SavingHost::default());
+    let picked = picked.map(std::path::PathBuf::from);
+    let services = Services {
+        projects: Some(host.clone()),
+        ids: Some(test_ids()),
+        pick_project: Some(std::sync::Arc::new(move || picked.clone())),
+        ..Services::default()
+    };
+    let mut shell = Shell::new(services);
+    if let Some(opened) = opened {
+        shell.open_project(opened);
+    }
+    let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1120.0)).build_ui_state(
+        |ui, shell: &mut Shell| {
+            shell.logic(ui.ctx());
+            shell.ui(ui);
+        },
+        shell,
+    );
+    h.run_steps(4);
+    (h, host)
+}
+
+fn commerce() -> crate::Opened {
+    crate::Opened { name: "Commerce platform".into(), path: "/tmp/Commerce platform.archforge".into(), ..Default::default() }
+}
+
+fn add_schema(h: &mut Harness<'static, Shell>, name: &str) {
+    h.state_mut().session.as_mut().unwrap().execute("er.schema.add", &serde_json::json!({ "name": name })).unwrap();
+    h.run_steps(2);
+}
+
+fn dirty(h: &Harness<'static, Shell>) -> bool {
+    h.state().session.as_ref().unwrap().is_dirty()
+}
+
+#[test]
+fn every_edit_is_handed_to_the_host_and_save_marks_only_what_it_wrote_saved() {
+    let (mut h, host) = saving_harness(Some(commerce()), None);
+    // A new project's model is handed over once, then each change once.
+    assert_eq!(host.written.lock().unwrap().len(), 1);
+    assert_eq!(host.written.lock().unwrap()[0].0, std::path::PathBuf::from("/tmp/Commerce platform.archforge"), "rows name their project");
+    add_schema(&mut h, "shop");
+    assert_eq!(host.written.lock().unwrap().len(), 2);
+    h.run_steps(4);
+    assert_eq!(host.written.lock().unwrap().len(), 2, "an unchanged model is not handed over again");
+    assert!(dirty(&h));
+    // Cmd+S asks the host to save; an edit made while it works stays unsaved after it answers.
+    h.event(egui::Event::Key { key: egui::Key::S, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::COMMAND });
+    h.run_steps(2);
+    assert!(h.state().is_saving());
+    assert_eq!(host.saves.lock().unwrap().len(), 1);
+    add_schema(&mut h, "crm");
+    host.saves.lock().unwrap().pop().unwrap().send(Ok(true)).unwrap();
+    h.run_steps(2);
+    assert!(!h.state().is_saving());
+    assert!(dirty(&h), "the edit made during the save is not saved");
+    // Undo back to the state the save wrote is saved; a second save covers the rest.
+    h.state_mut().session.as_mut().unwrap().undo().unwrap();
+    h.run_steps(2);
+    assert!(!dirty(&h));
+    h.state_mut().session.as_mut().unwrap().redo().unwrap();
+    h.run_steps(2);
+    h.state_mut().save();
+    host.saves.lock().unwrap().pop().unwrap().send(Ok(true)).unwrap();
+    h.run_steps(2);
+    assert!(!dirty(&h));
+    // A failed save says why and leaves the changes unsaved.
+    add_schema(&mut h, "billing");
+    h.state_mut().save();
+    host.saves.lock().unwrap().pop().unwrap().send(Err("the disk is full".into())).unwrap();
+    h.run_steps(2);
+    assert_eq!(h.state().save_error.as_deref(), Some("the disk is full"));
+    assert!(dirty(&h));
+}
+
+#[test]
+fn open_project_asks_the_picker_and_the_host_and_shows_the_model_it_read() {
+    // A model made elsewhere, as the host reads it from a project.
+    let rows = {
+        let (mut h, host) = saving_harness(Some(commerce()), None);
+        add_schema(&mut h, "shop");
+        host.written.lock().unwrap().pop().unwrap().1
+    };
+    let (mut h, host) = saving_harness(None, Some("/Users/robin/Documents/Archforge/Shop.archforge"));
+    let at = rect_of(&h, "home.open-project").center();
+    click(&mut h, at);
+    h.run_steps(2);
+    let (path, tx) = host.opens.lock().unwrap().pop().expect("the host was asked to open");
+    assert_eq!(path, std::path::PathBuf::from("/Users/robin/Documents/Archforge/Shop.archforge"));
+    let opened = crate::Opened { name: "Shop".into(), path, model: Some(std::sync::Arc::new(rows)), unsaved: true };
+    tx.send(Ok(opened)).unwrap();
+    h.run_steps(4);
+    let shell = h.state();
+    assert_eq!(shell.title(), "Shop — Archforge");
+    assert_eq!(shell.home.recent.first().map(|r| r.name.as_str()), Some("Shop"));
+    let session = shell.session.as_ref().expect("the model read opens");
+    assert!(session.doc().alive().any(|o| archforge_er::rules::name_of(session.doc(), o) == "shop"));
+    // Changes the project held but never committed show as unsaved; what was read is not handed
+    // back to be written.
+    assert!(session.is_dirty());
+    assert!(host.written.lock().unwrap().is_empty());
+}
+
+#[test]
+fn a_failed_opening_says_why_on_home_and_a_cancelled_picker_opens_nothing() {
+    let (mut h, host) = saving_harness(None, None);
+    let at = rect_of(&h, "home.open-project").center();
+    click(&mut h, at);
+    assert!(host.opens.lock().unwrap().is_empty(), "no folder chosen, nothing asked");
+    let (mut h, host) = saving_harness(None, Some("/tmp/Broken.archforge"));
+    click(&mut h, at);
+    let (_, tx) = host.opens.lock().unwrap().pop().unwrap();
+    tx.send(Err(crate::CreateError::Failed { detail: "the project's model is damaged".into() })).unwrap();
+    h.run_steps(4);
+    assert!(h.state().project.is_none());
+    assert_eq!(h.state().open_error.as_deref(), Some("the project's model is damaged"));
+    // An opening whose worker ended without answering says so.
+    click(&mut h, at);
+    host.opens.lock().unwrap().clear();
+    h.run_steps(4);
+    assert_eq!(h.state().open_error.as_deref(), Some("The opening stopped without an answer"));
+}
+
+#[test]
+fn opening_from_the_workspace_says_it_waits_and_why_it_failed_and_keeps_the_project() {
+    let (mut h, host) = saving_harness(Some(commerce()), Some("/tmp/Broken.archforge"));
+    h.state_mut().open_from_picker();
+    h.run_steps(2);
+    assert!(h.state().is_opening());
+    let (_, tx) = host.opens.lock().unwrap().pop().expect("the host was asked to open");
+    tx.send(Err(crate::CreateError::Failed { detail: "the open project's last changes could not be written".into() })).unwrap();
+    h.run_steps(4);
+    let shell = h.state();
+    assert!(!shell.is_opening());
+    assert_eq!(shell.title(), "Commerce platform — Archforge", "the open project stays");
+    assert!(shell.session.is_some());
+    assert_eq!(shell.open_error.as_deref(), Some("the open project's last changes could not be written"));
+    // The next change to the open project clears it.
+    add_schema(&mut h, "shop");
+    assert!(h.state().open_error.is_none());
+}
+
+#[test]
+fn a_save_of_the_project_open_before_never_marks_the_next_one_saved() {
+    let (mut h, host) = saving_harness(Some(commerce()), None);
+    add_schema(&mut h, "shop");
+    h.state_mut().save();
+    let late = host.saves.lock().unwrap().pop().unwrap();
+    h.state_mut().open_project(crate::Opened { name: "Library".into(), path: "/tmp/Library.archforge".into(), ..Default::default() });
+    h.run_steps(2);
+    assert!(!h.state().is_saving());
+    add_schema(&mut h, "books");
+    let _ = late.send(Ok(true));
+    h.run_steps(2);
+    assert!(dirty(&h), "the old project's save answers for it alone");
 }
 
 #[test]
@@ -569,7 +763,7 @@ fn workspace_harness(theme: ThemeKind, size: egui::Vec2) -> Harness<'static, She
     crate::i18n::set_language("en");
     let mut shell = Shell::new(Services { user_name: Some("Robin Meyer".into()), ids: Some(test_ids()), ..Services::default() });
     shell.state.theme = theme;
-    shell.open_project(crate::Opened { name: "Commerce platform".into(), path: "/tmp/Commerce platform.archforge".into() });
+    shell.open_project(crate::Opened { name: "Commerce platform".into(), path: "/tmp/Commerce platform.archforge".into(), ..Default::default() });
     // Frames a sixtieth of a second apart, as on screen, so two clicks in a row read as a double click.
     let mut h = Harness::builder().with_size(size).with_step_dt(1.0 / 60.0).build_ui_state(
         |ui, shell: &mut Shell| {
@@ -695,7 +889,7 @@ fn the_dividers_resize_within_their_ranges_and_the_state_keeps_the_widths() {
 fn without_an_id_source_the_status_bar_says_the_model_could_not_open_once() {
     crate::i18n::set_language("en");
     let mut shell = Shell::new(Services::default());
-    shell.open_project(crate::Opened { name: "Commerce platform".into(), path: "/tmp/Commerce platform.archforge".into() });
+    shell.open_project(crate::Opened { name: "Commerce platform".into(), path: "/tmp/Commerce platform.archforge".into(), ..Default::default() });
     let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1120.0)).build_ui_state(
         |ui, shell: &mut Shell| {
             shell.logic(ui.ctx());
@@ -718,6 +912,7 @@ fn a_long_project_name_keeps_the_chip_left_of_the_bar_controls_at_every_size_and
             shell.open_project(crate::Opened {
                 name: "A project with a very long name that goes on and on".into(),
                 path: "/tmp/long.archforge".into(),
+                ..Default::default()
             });
             let mut h = Harness::builder().with_size(egui::vec2(w, h_)).build_ui_state(
                 |ui, shell: &mut Shell| {

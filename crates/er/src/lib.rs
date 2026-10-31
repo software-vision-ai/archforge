@@ -161,6 +161,32 @@ pub fn new_project_session(name: &str, ids: Box<dyn FnMut() -> Uuid + Send>) -> 
     Ok(Session::new(registry, st, FIRST_COUNTER, archforge_engine::Options::default()))
 }
 
+/// The tables a project stores its model in: the shared core's, the diagram metamodel's and ER's,
+/// in that order. The shell writes rows for them and the host stores them, so both name them here.
+pub fn storage() -> (Vec<archforge_mof::schema::Table>, Vec<archforge_mof::schema::Junction>) {
+    let tables = archforge_core::TABLES.iter().chain(archforge_diagram::TABLES).chain(TABLES).copied().collect();
+    let junctions = archforge_core::JUNCTIONS.iter().chain(archforge_diagram::JUNCTIONS).chain(JUNCTIONS).copied().collect();
+    (tables, junctions)
+}
+
+/// The session of a project read back from its rows: the store rebuilt from them and checked,
+/// the ER registry, saved as it is. `ids` mints the ids of the elements made from now on.
+pub fn session_from_rows(rows: &archforge_mof::rows::Rows, ids: Box<dyn FnMut() -> Uuid + Send>) -> Result<Session, String> {
+    let registry = registry()?;
+    let mut st = store(ids)?;
+    let (tables, junctions) = storage();
+    archforge_mof::rows::restore(&mut st, rows, &tables, &junctions).map_err(|e| e.to_string())?;
+    if let Some(problem) = st.validate_all().first() {
+        return Err(format!("the model does not hold together: {problem:?}"));
+    }
+    if !st.alive().any(|o| st.class_of(o).ok() == Some(archforge_core::MODEL)) {
+        return Err("the project has no model root".into());
+    }
+    let mut session = Session::new(registry, st, FIRST_COUNTER, archforge_engine::Options::default());
+    session.mark_saved().map_err(|e| e.to_string())?;
+    Ok(session)
+}
+
 /// A universe of the shared core, the diagram metamodel, ER and the metamodels given.
 pub fn universe_with(others: Vec<Arc<Metamodel>>) -> Result<Arc<Universe>, MetaError> {
     let mut all = vec![metamodel()?, archforge_diagram::metamodel()?];

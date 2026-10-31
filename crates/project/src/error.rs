@@ -54,6 +54,12 @@ pub enum Error {
         found: u32,
         supported: u32,
     },
+    /// The project's model tables were made for other metamodels than this Archforge's.
+    OtherModel {
+        path: PathBuf,
+        found: String,
+        expected: String,
+    },
     Damaged {
         path: PathBuf,
         why: String,
@@ -100,6 +106,11 @@ impl fmt::Display for Error {
             Error::NotYours { path } => write!(f, "the project folder {} belongs to another user", path.display()),
             Error::Foreign { path, entry } => write!(f, "the project {} carries server settings ({entry}) Archforge does not use", path.display()),
             Error::NewerFormat { found, supported } => write!(f, "the project is in format {found}; this Archforge reads up to format {supported}"),
+            Error::OtherModel { path, found, expected } => write!(
+                f,
+                "the project {} holds model tables {found} where this Archforge has {expected}: it was made by another version",
+                path.display()
+            ),
             Error::Damaged { path, why } => write!(f, "the project {} is damaged: {why}", path.display()),
             Error::Scripted { path, what } => write!(f, "the project {} holds {what}, which Archforge does not run", path.display()),
 

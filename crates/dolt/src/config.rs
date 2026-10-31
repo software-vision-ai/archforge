@@ -41,6 +41,10 @@ const NO_REPLICATION: &[(&str, &str)] = &[
     ("event_scheduler", "\"OFF\""),
 ];
 
+/// The largest packet the server and the client exchange, in bytes: pinned on both sides, so a
+/// value planted in a project's `config.json` cannot make one reply as large as it likes.
+pub const MAX_PACKET: usize = 64 << 20;
+
 /// `server.yaml`: loopback only, a socket on unix, a fresh privileges file for this start, no file
 /// access from SQL, no scheduled events (an event can push to a remote) and no replication.
 pub(crate) fn server_yaml(s: &Settings<'_>) -> String {
@@ -59,6 +63,7 @@ pub(crate) fn server_yaml(s: &Settings<'_>) -> String {
     for (name, value) in NO_REPLICATION {
         y.push_str(&format!("  {name}: {value}\n"));
     }
+    y.push_str(&format!("  max_allowed_packet: {MAX_PACKET}\n"));
     y
 }
 

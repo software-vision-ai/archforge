@@ -2,6 +2,9 @@
 # Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit.
 # アプリケーションメニュー
 str		Quit Archforge	Archforge を終了
+str		File	ファイル
+str		Open…	開く…
+str		Save	保存
 str		{name} — Archforge	{name} — Archforge
 # ホーム
 plural		{n} element	{n} 個の要素
@@ -183,7 +186,15 @@ str		Create	作成
 str		ER diagram	ER図
 str		New schema	新しいスキーマ
 str		Name the diagram	図に名前を付けてください
-str		Project created	プロジェクトを作成しました
+str		Saving…	保存中…
+str		Opening…	開いています…
+str		Saved	保存済み
+str		Unsaved changes · {chord} saves	未保存の変更 · {chord} で保存
+str		Not saved	保存されていません
+str		Changes could not be written to the project	変更をプロジェクトに書き込めませんでした
+str		The save stopped without an answer	保存が応答なしで終了しました
+str		The opening stopped without an answer	開く処理が応答なしで終了しました
+str		The project could not be opened: {why}	プロジェクトを開けませんでした: {why}
 str		Model · the project's root	モデル · プロジェクトのルート
 str		Model	モデル
 str		Name	名前
@@ -256,7 +267,6 @@ str		Model behind this diagram	この図の背後にあるモデル
 str		No changes yet	変更はまだありません
 str		Nothing selected	何も選択されていません
 str		No agent connected	エージェントは接続されていません
-str		Not saved to the project yet	プロジェクトにはまだ保存されていません
 str		The model could not be opened	モデルを開けませんでした
 str		The host gives no ids for the model's elements	ホストがモデル要素の ID を提供していません
 str		Collapse panel	パネルを折りたたむ

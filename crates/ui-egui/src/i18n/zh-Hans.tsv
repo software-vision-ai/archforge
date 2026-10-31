@@ -2,6 +2,9 @@
 # Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit.
 # 应用程序菜单
 str		Quit Archforge	退出 Archforge
+str		File	文件
+str		Open…	打开…
+str		Save	存储
 str		{name} — Archforge	{name} — Archforge
 # 主页
 plural		{n} element	{n} 个元素
@@ -183,7 +186,15 @@ str		Create	创建
 str		ER diagram	ER图
 str		New schema	新架构
 str		Name the diagram	请为图命名
-str		Project created	项目已创建
+str		Saving…	正在保存…
+str		Opening…	正在打开…
+str		Saved	已保存
+str		Unsaved changes · {chord} saves	有未保存的更改 · {chord} 保存
+str		Not saved	未保存
+str		Changes could not be written to the project	无法将更改写入项目
+str		The save stopped without an answer	保存未返回结果即已停止
+str		The opening stopped without an answer	打开未返回结果即已停止
+str		The project could not be opened: {why}	无法打开项目：{why}
 str		Model · the project's root	模型 · 项目的根
 str		Model	模型
 str		Name	名称
@@ -256,7 +267,6 @@ str		Model behind this diagram	此图背后的模型
 str		No changes yet	还没有更改
 str		Nothing selected	未选择任何内容
 str		No agent connected	未连接代理
-str		Not saved to the project yet	尚未保存到项目
 str		The model could not be opened	无法打开模型
 str		The host gives no ids for the model's elements	宿主未提供模型元素的 ID
 str		Collapse panel	折叠面板
