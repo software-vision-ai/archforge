@@ -657,22 +657,12 @@ pub const TOOL_NOTE: Icon = Icon {
     ],
 };
 
-/// The link-note tool, and a selected note's link handle: a chain of two open loops and the bar
-/// that joins them, the link mark of a key column drawn larger.
+/// The link-note tool, and a selected note's link handle: the dashed line a note's link is drawn
+/// with, corner to corner.
 pub const TOOL_LINK_NOTE: Icon = Icon {
-    size: [16.0, 8.0],
+    size: [14.0, 14.0],
     stroke: 1.2,
-    segments: &[
-        L([6.0, 0.0], [4.0, 0.0]),
-        C([4.0, 0.0], [1.791, 0.0], [0.0, 1.791], [0.0, 4.0]),
-        C([0.0, 4.0], [0.0, 6.209], [1.791, 8.0], [4.0, 8.0]),
-        L([4.0, 8.0], [6.0, 8.0]),
-        L([10.0, 0.0], [12.0, 0.0]),
-        C([12.0, 0.0], [14.209, 0.0], [16.0, 1.791], [16.0, 4.0]),
-        C([16.0, 4.0], [16.0, 6.209], [14.209, 8.0], [12.0, 8.0]),
-        L([12.0, 8.0], [10.0, 8.0]),
-        L([5.0, 4.0], [11.0, 4.0]),
-    ],
+    segments: &[L([0.0, 14.0], [2.121, 11.879]), L([3.96, 10.04], [6.081, 7.919]), L([7.92, 6.08], [10.041, 3.959]), L([11.879, 2.121], [14.0, 0.0])],
 };
 
 /// The small chevron beside a tool that has kinds.
