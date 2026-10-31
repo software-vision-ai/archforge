@@ -47,20 +47,6 @@ const BUTTON: f32 = 40.0;
 const BUTTON_PAD: f32 = 16.0;
 const BUTTON_GAP: f32 = 8.0;
 
-/// A pinned folder: its name and where it is, as the page shows them.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Pinned {
-    pub name: String,
-    pub path: String,
-}
-
-/// What Home lists besides the recent projects (kept with the preferences): the pinned folders,
-/// none so far.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct Data {
-    pub pinned: Vec<Pinned>,
-}
-
 /// How long ago `then` was at `now` (seconds since 1970), as a recent project's row says it.
 pub(crate) fn ago(then: u64, now: u64) -> String {
     let s = now.saturating_sub(then);
@@ -382,7 +368,7 @@ fn content(shell: &mut Shell, ui: &egui::Ui, p: &Palette, origin: Pos2, width: f
     ux::text(&paint, at(0.0, y + 30.0), &tr("Keep your project locations close."), types::UI, p.text_secondary, Some(inner));
     let mut x = 0.0;
     let mut tiles_top = y + 70.0;
-    for (i, folder) in shell.home.pinned.clone().iter().enumerate() {
+    for (i, folder) in shell.state.pinned.clone().iter().enumerate() {
         if x > 0.0 && x + 328.0 > inner {
             x = 0.0;
             tiles_top += 86.0;
@@ -394,11 +380,17 @@ fn content(shell: &mut Shell, ui: &egui::Ui, p: &Palette, origin: Pos2, width: f
         x = 0.0;
         tiles_top += 86.0;
     }
-    let pin = Rect::from_min_size(at(x, tiles_top), vec2(234.0f32.min(inner), 66.0));
-    paint.rect_stroke(pin, 10.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
-    ux::icon(&paint, pin.min + vec2(20.0, 24.0), &icons::PLUS, 18.0, p.text_secondary);
-    ux::text(&paint, pin.min + vec2(52.0, 23.0), &tr("Pin a folder"), types::BODY, p.text_secondary, Some(pin.width() - 62.0));
-    control(shell, ui, "home.pin-folder", "button", pin, false);
+    if shell.state.pinned.len() < crate::state::MAX_PINNED {
+        let pin = Rect::from_min_size(at(x, tiles_top), vec2(234.0f32.min(inner), 66.0));
+        let live = shell.services.pick_folder.is_some();
+        let resp = control(shell, ui, "home.pin-folder", "button", pin, live);
+        paint.rect_stroke(pin, 10.0, Stroke::new(1.0, if live && resp.hovered() { p.border_hover } else { p.border }), StrokeKind::Inside);
+        ux::icon(&paint, pin.min + vec2(20.0, 24.0), &icons::PLUS, 18.0, p.text_secondary);
+        ux::text(&paint, pin.min + vec2(52.0, 23.0), &tr("Pin a folder"), types::BODY, p.text_secondary, Some(pin.width() - 62.0));
+        if live && resp.clicked() {
+            shell.pin_from_picker();
+        }
+    }
     y = tiles_top + 106.0;
     // Recent projects: the heading at the left, sorting and the view switch on its line.
     ux::text(&paint, at(0.0, y), &tr("Recent projects"), types::SECTION, p.text, Some(inner - 280.0));
@@ -567,14 +559,46 @@ fn start_card(
     ux::icon(paint, pos2(r.right() - 36.0, r.top() + 132.5), &icons::ARROW, 16.0, hue.ink(p));
 }
 
-fn pinned_tile(shell: &mut Shell, ui: &egui::Ui, p: &Palette, paint: &egui::Painter, r: Rect, i: usize, folder: &Pinned) {
-    control(shell, ui, &format!("home.pinned.{i}"), "card", r, false);
+/// A pinned folder's tile: its name and the folder it is in. A click opens the project picker in
+/// it; its menu opens a project there too, or unpins it.
+fn pinned_tile(shell: &mut Shell, ui: &egui::Ui, p: &Palette, paint: &egui::Painter, r: Rect, i: usize, folder: &std::path::Path) {
+    let live = can_open(shell);
+    let resp = control(shell, ui, &format!("home.pinned.{i}"), "card", r, live).on_hover_text(folder.display().to_string());
     paint.rect_filled(r, 10.0, p.surface);
-    paint.rect_stroke(r, 10.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
+    paint.rect_stroke(r, 10.0, Stroke::new(1.0, if live && resp.hovered() { p.border_hover } else { p.border }), StrokeKind::Inside);
     ux::icon(paint, r.min + vec2(20.0, 21.5), &icons::FOLDER, 23.0, p.text_secondary);
-    ux::text(paint, r.min + vec2(57.0, 13.0), &folder.name, types::BODY_STRONG, p.text, Some(r.width() - 106.0));
-    ux::text(paint, r.min + vec2(57.0, 37.0), &folder.path, types::CAPTION, p.text_secondary, Some(r.width() - 106.0));
-    ux::icon(paint, pos2(r.right() - 33.0, r.top() + 33.0), &icons::MORE, 17.0, p.text_muted);
+    let name = folder.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let place = match folder.parent().and_then(|p| p.file_name()) {
+        Some(parent) => format!("{} / {name}", parent.to_string_lossy()),
+        None => folder.display().to_string(),
+    };
+    ux::text(paint, r.min + vec2(57.0, 13.0), &name, types::BODY_STRONG, p.text, Some(r.width() - 106.0));
+    ux::text(paint, r.min + vec2(57.0, 37.0), &place, types::CAPTION, p.text_secondary, Some(r.width() - 106.0));
+    let more = Rect::from_center_size(pos2(r.right() - 24.5, r.center().y), Vec2::splat(28.0));
+    let menu = crate::panels::Menu::Pinned(i);
+    let open = shell.panels.menu == Some(menu);
+    let more_resp = control(shell, ui, &format!("home.pinned.{i}.more"), "button", more, true).on_hover_text(tr("More"));
+    if more_resp.hovered() || open {
+        paint.rect_filled(more, 6.0, p.page);
+    }
+    ux::icon_mid(paint, more.center(), &icons::MORE, if more_resp.hovered() || open { p.text_secondary } else { p.text_muted });
+    if more_resp.clicked() {
+        shell.panels.menu = if open { None } else { Some(menu) };
+    } else if live && resp.clicked() {
+        shell.open_from_picker_in(Some(folder));
+    }
+    if shell.panels.menu == Some(menu) {
+        let anchor = Rect::from_min_max(pos2(more.right() - 180.0, more.top()), more.max);
+        // Opening is offered only while a project can open; unpinning always.
+        let items: Vec<String> = if live { vec![tr("Open a project here"), tr("Unpin")] } else { vec![tr("Unpin")] };
+        if let Some(k) = crate::panels::menu(shell, ui, p, anchor, &format!("home.pinned.{i}.menu"), &items) {
+            if live && k == 0 {
+                shell.open_from_picker_in(Some(folder));
+            } else {
+                shell.state.unpin(folder);
+            }
+        }
+    }
 }
 
 /// The time now, in seconds since 1970, as the recent list records it.

@@ -23,6 +23,10 @@ pub struct UiState {
     /// shape the window does not read is left out, not the whole file.
     #[serde(deserialize_with = "lenient_recent")]
     pub recent: Vec<RecentProject>,
+    /// The folders pinned on Home, in the order they were pinned. A path a preferences file
+    /// holds that the window does not take is left out by [`UiState::sanitize`].
+    #[serde(deserialize_with = "lenient_pinned")]
+    pub pinned: Vec<std::path::PathBuf>,
     /// How Home shows the recent projects, and in which order; kept as the user left them.
     pub recent_view: RecentView,
     pub recent_sort: RecentSort,
@@ -48,15 +52,42 @@ fn lenient_recent<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<RecentPr
         .collect())
 }
 
-/// The most projects Home's recent list keeps.
+/// The pinned folders as a file holds them: an entry that is not a path is left out, not the
+/// whole file.
+fn lenient_pinned<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<std::path::PathBuf>, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Entry {
+        Read(std::path::PathBuf),
+        Unread(serde::de::IgnoredAny),
+    }
+    let entries: Vec<Entry> = Vec::deserialize(d)?;
+    Ok(entries
+        .into_iter()
+        .map(|e| match e {
+            Entry::Read(p) => p,
+            // Left out and counted by sanitize: it is not absolute.
+            Entry::Unread(_) => std::path::PathBuf::new(),
+        })
+        .collect())
+}
+
+/// The most projects Home's recent list keeps, and the most folders it pins.
 pub const MAX_RECENT: usize = 12;
+pub const MAX_PINNED: usize = 8;
 /// The longest folder path, in bytes, a recent entry may have: longer ones in a preferences file
 /// are dropped. Names follow the project name rule.
 const MAX_RECENT_PATH: usize = 4096;
 
 /// Whether a recent entry fits the list: a project name and an absolute folder of bounded length.
 fn recent_ok(name: &str, path: &std::path::Path) -> bool {
-    archforge_names::problem(name).is_none() && path.is_absolute() && path.as_os_str().len() <= MAX_RECENT_PATH
+    archforge_names::problem(name).is_none() && path.is_absolute() && path.as_os_str().len() <= MAX_RECENT_PATH && path.to_str().is_some()
+}
+
+/// Whether a folder fits Home's pinned list: absolute, of bounded length, with a name, and
+/// readable as text, as the preferences file must write it.
+fn pin_ok(path: &std::path::Path) -> bool {
+    path.is_absolute() && path.as_os_str().len() <= MAX_RECENT_PATH && path.file_name().is_some() && path.to_str().is_some()
 }
 
 /// A project opened before: its name, its folder, and when it was last opened (seconds since 1970).
@@ -81,6 +112,7 @@ impl Default for UiState {
             explorer_collapsed: false,
             panel_collapsed: false,
             recent: Vec::new(),
+            pinned: Vec::new(),
             recent_view: RecentView::List,
             recent_sort: RecentSort::LastOpened,
         }
@@ -99,10 +131,40 @@ impl UiState {
         self.recent.truncate(MAX_RECENT);
     }
 
+    /// Pins the folder at `path` on Home, after the folders pinned already; a folder pinned
+    /// already, one that does not fit the list or one past the most it keeps is not added.
+    pub fn pin(&mut self, path: &std::path::Path) {
+        if self.pinned.iter().any(|p| p == path) {
+            return;
+        }
+        if !pin_ok(path) {
+            log::warn!("{} is not pinned on Home: the folder does not fit the list", path.display());
+            return;
+        }
+        if self.pinned.len() >= MAX_PINNED {
+            log::warn!("{} is not pinned: Home pins at most {MAX_PINNED} folders", path.display());
+            return;
+        }
+        self.pinned.push(path.to_path_buf());
+    }
+
+    /// Takes the folder at `path` off Home.
+    pub fn unpin(&mut self, path: &std::path::Path) {
+        self.pinned.retain(|p| p != path);
+    }
+
     /// Drops what a preferences file may hold that the window does not take: recent entries whose
     /// name breaks the project name rule, whose folder is not absolute or too long, or that are
-    /// listed twice; more than the list keeps. Says in the log how many went.
+    /// listed twice; pinned folders that are not absolute, too long or pinned twice; more than
+    /// either list keeps. Says in the log how many went.
     pub fn sanitize(&mut self) {
+        let pins = self.pinned.len();
+        let mut pinned = std::collections::HashSet::new();
+        self.pinned.retain(|p| pin_ok(p) && pinned.insert(p.clone()));
+        self.pinned.truncate(MAX_PINNED);
+        if self.pinned.len() < pins {
+            log::warn!("{} of {pins} pinned folders in the preferences were left out", pins - self.pinned.len());
+        }
         let before = self.recent.len();
         let mut seen = std::collections::HashSet::new();
         self.recent.retain(|r| recent_ok(&r.name, &r.path) && seen.insert(r.path.clone()));

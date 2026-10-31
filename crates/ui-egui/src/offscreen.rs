@@ -8,7 +8,7 @@ use crate::{Folder, Services, Shell};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Screen {
     Home,
-    /// Home with four recent projects, shown as a gallery.
+    /// Home with a pinned folder and four recent projects, shown as a gallery.
     HomeGallery,
     /// The New project dialog over Home, a name typed and the usual folder.
     NewProject,
@@ -83,6 +83,7 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
             shell.state.remember(name, std::path::Path::new(&format!("/Users/robin/Documents/Archforge/{name}.archforge")), now - ago);
         }
         shell.state.recent_view = crate::state::RecentView::Gallery;
+        shell.state.pin(std::path::Path::new("/Users/robin/Projects/Architecture"));
     }
     if !matches!(screen, Screen::Home | Screen::HomeGallery | Screen::NewProject | Screen::NewProjectFailed) {
         shell.services.projects_folder = Some(Folder { path: "/Users/robin/Documents/Archforge".into(), label: "Documents / Archforge".into() });

@@ -334,6 +334,8 @@ str		Choose a file	Datei auswählen
 str		Pinned folders	Angeheftete Ordner
 str		Keep your project locations close.	Halten Sie Ihre Projektorte griffbereit.
 str		Pin a folder	Ordner anheften
+str		Open a project here	Hier ein Projekt öffnen
+str		Unpin	Lösen
 str		Pick up in the exact view you left.	Machen Sie genau in der Ansicht weiter, die Sie verlassen haben.
 str		Just now	Gerade eben
 plural		{n} minute ago	vor {n} Minute|vor {n} Minuten

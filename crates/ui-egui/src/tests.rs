@@ -55,7 +55,7 @@ fn home_lists_its_pinned_folders_and_recent_projects_in_both_appearances() {
         crate::i18n::set_language("en");
         let mut shell = Shell::new(Services::default());
         shell.state.theme = theme;
-        shell.home.pinned.push(crate::home::Pinned { name: "Models".into(), path: "~/Documents/Models".into() });
+        shell.state.pin(std::path::Path::new("/Users/robin/Documents/Models"));
         shell.state.remember("Library system", std::path::Path::new("/Users/robin/Documents/Archforge/Library system.archforge"), 1_761_670_800);
         let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1400.0)).build_ui_state(
             |ui, shell: &mut Shell| {
@@ -335,7 +335,7 @@ fn saving_harness(opened: Option<crate::Opened>, picked: Option<&str>) -> (Harne
     let services = Services {
         projects: Some(host.clone()),
         ids: Some(test_ids()),
-        pick_project: Some(std::sync::Arc::new(move || picked.clone())),
+        pick_project: Some(std::sync::Arc::new(move |_| picked.clone())),
         ..Services::default()
     };
     let mut shell = Shell::new(services);
@@ -687,6 +687,77 @@ fn home_sorts_the_recent_projects_by_name_and_shows_them_as_a_gallery() {
     let saved = serde_json::to_string(&h.state().state).unwrap();
     let read: crate::state::UiState = serde_json::from_str(&saved).unwrap();
     assert_eq!((read.recent_view, read.recent_sort), (crate::state::RecentView::Gallery, crate::state::RecentSort::Name));
+}
+
+#[test]
+fn a_pinned_folder_is_pinned_from_the_picker_opens_the_project_picker_in_it_and_unpins_from_its_menu() {
+    crate::i18n::set_language("en");
+    let host = std::sync::Arc::new(SavingHost::default());
+    let started_in: std::sync::Arc<std::sync::Mutex<Vec<Option<std::path::PathBuf>>>> = std::sync::Arc::default();
+    let seen = started_in.clone();
+    let services = Services {
+        projects: Some(host.clone()),
+        ids: Some(test_ids()),
+        pick_project: Some(std::sync::Arc::new(move |start: Option<&std::path::Path>| {
+            seen.lock().unwrap().push(start.map(std::path::Path::to_path_buf));
+            None
+        })),
+        pick_folder: Some(std::sync::Arc::new(|| Some(std::path::PathBuf::from("/Users/robin/Work/Models")))),
+        ..Services::default()
+    };
+    let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1120.0)).build_ui_state(
+        |ui, shell: &mut Shell| {
+            shell.logic(ui.ctx());
+            shell.ui(ui);
+        },
+        Shell::new(services),
+    );
+    h.run_steps(2);
+    let at = rect_of(&h, "home.pin-folder").center();
+    click(&mut h, at);
+    h.run_steps(2);
+    assert_eq!(h.state().state.pinned, [std::path::PathBuf::from("/Users/robin/Work/Models")]);
+    // Pinning it again adds nothing.
+    let at = rect_of(&h, "home.pin-folder").center();
+    click(&mut h, at);
+    h.run_steps(2);
+    assert_eq!(h.state().state.pinned.len(), 1);
+    // A click on the tile starts the project picker in the folder.
+    let at = rect_of(&h, "home.pinned.0").center();
+    click(&mut h, at);
+    h.run_steps(2);
+    assert_eq!(started_in.lock().unwrap().pop(), Some(Some(std::path::PathBuf::from("/Users/robin/Work/Models"))));
+    // Its menu unpins it, and the tile goes.
+    let at = rect_of(&h, "home.pinned.0.more").center();
+    click(&mut h, at);
+    h.run_steps(2);
+    assert!(started_in.lock().unwrap().is_empty(), "the menu button opens no picker");
+    let at = rect_of(&h, "home.pinned.0.menu.1").center();
+    click(&mut h, at);
+    h.run_steps(2);
+    assert!(h.state().state.pinned.is_empty());
+    assert!(!ids(&h).iter().any(|i| i == "home.pinned.0"));
+    // A preferences file's pins are checked like its recent projects.
+    let mut state: crate::state::UiState = serde_json::from_str(r#"{"pinned":["/a/Models","relative/x","/a/Models",7,"/"]}"#).unwrap();
+    state.sanitize();
+    assert_eq!(state.pinned, [std::path::PathBuf::from("/a/Models")]);
+}
+
+/// A folder whose path is not text is never pinned or listed, so the preferences file can always
+/// be written.
+#[cfg(unix)]
+#[test]
+fn a_folder_whose_path_is_not_text_is_neither_pinned_nor_listed_and_the_preferences_still_write() {
+    use std::os::unix::ffi::OsStrExt as _;
+    let odd = std::path::Path::new(std::ffi::OsStr::from_bytes(b"/tmp/odd\xff"));
+    let mut state = crate::state::UiState::default();
+    state.pin(odd);
+    state.remember("Odd", &odd.join("Odd.archforge"), 1);
+    assert!(state.pinned.is_empty() && state.recent.is_empty());
+    state.pinned.push(odd.to_path_buf());
+    state.sanitize();
+    assert!(state.pinned.is_empty(), "a preferences file cannot hold one either");
+    assert!(serde_json::to_vec(&state).is_ok());
 }
 
 #[test]
