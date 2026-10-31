@@ -26,7 +26,7 @@ path = "assets/app-icon/icon.png"
 author = "Dejan Siedle"
 source = "original artwork, the app icon: a beaver in pen and ink on a blue tile, made with ArtCraft for Archforge"
 licence = "Archforge brand mark, all rights reserved"
-sha256 = "ef81f293a51e5751e19c0a4407a0ba8de627b1ce0fbcf69f510543222190c655"
+sha256 = "67e2e06b43e5bd7f4336badd0519936845487bfe0922be03f9eb9bbe743997c5"
 
 [licences]
 "Archforge brand mark, all rights reserved" = "licenses/brand/archforge-icon.txt"

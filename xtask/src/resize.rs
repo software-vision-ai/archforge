@@ -55,13 +55,18 @@ fn read(path: &str) -> Result<(usize, Vec<u8>), String> {
     let side = w as usize;
     let pixels = side * side;
     let rgba = match frame.color_type {
-        png::ColorType::Rgba => buf[..pixels * 4].to_vec(),
-        png::ColorType::Rgb => buf[..pixels * 3].chunks_exact(3).flat_map(|p| [p[0], p[1], p[2], 255]).collect(),
-        png::ColorType::GrayscaleAlpha => buf[..pixels * 2].chunks_exact(2).flat_map(|p| [p[0], p[0], p[0], p[1]]).collect(),
-        png::ColorType::Grayscale => buf[..pixels].iter().flat_map(|g| [*g, *g, *g, 255]).collect(),
+        png::ColorType::Rgba => short(&buf, pixels * 4, path)?.to_vec(),
+        png::ColorType::Rgb => short(&buf, pixels * 3, path)?.chunks_exact(3).flat_map(|p| [p[0], p[1], p[2], 255]).collect(),
+        png::ColorType::GrayscaleAlpha => short(&buf, pixels * 2, path)?.chunks_exact(2).flat_map(|p| [p[0], p[0], p[0], p[1]]).collect(),
+        png::ColorType::Grayscale => short(&buf, pixels, path)?.iter().flat_map(|g| [*g, *g, *g, 255]).collect(),
         png::ColorType::Indexed => return Err(format!("{path}: the palette was not expanded")),
     };
     Ok((side, rgba))
+}
+
+/// The first `len` bytes of a decoded picture, or why there are fewer.
+fn short<'a>(buf: &'a [u8], len: usize, path: &str) -> Result<&'a [u8], String> {
+    buf.get(..len).ok_or_else(|| format!("{path}: the picture is shorter than its header says"))
 }
 
 /// The source pixels each of `to` pixels covers along `from`, with the share each gives.
@@ -84,7 +89,8 @@ fn weights(from: usize, to: usize) -> Vec<Vec<(usize, f32)>> {
         .collect()
 }
 
-/// `rgba`, `from` pixels a side, averaged down to `to` pixels a side.
+/// `rgba`, `from` pixels a side, averaged down to `to` pixels a side. The same average as the
+/// app's window icon (apps/archforge/src/app_icon.rs); keep the two in step.
 fn scale(rgba: &[u8], from: usize, to: usize) -> Vec<u8> {
     let w = weights(from, to);
     // Premultiplied, across first, then down.

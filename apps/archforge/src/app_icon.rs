@@ -69,7 +69,8 @@ fn decode(bytes: &[u8]) -> Result<(usize, Vec<u8>), String> {
 }
 
 /// `rgba`, `from` pixels a side, averaged down to `to` pixels a side, alpha premultiplied so a
-/// clear edge stays clean.
+/// clear edge stays clean. The same average as `cargo xtask resize` (xtask/src/resize.rs), which
+/// the packaging sizes come from; keep the two in step.
 fn scale(rgba: &[u8], from: usize, to: usize) -> Vec<u8> {
     let step = from as f32 / to as f32;
     let weights: Vec<Vec<(usize, f32)>> = (0..to)
@@ -129,7 +130,15 @@ mod tests {
         let icon = picture().unwrap();
         assert_eq!((icon.width, icon.height, icon.rgba.len()), (256, 256, 256 * 256 * 4));
         assert_eq!(pixel(&icon, 0, 0)[3], 0, "the margin is clear");
-        assert_eq!(pixel(&icon, 128, 10)[3], 0, "above the tile too");
+        // The tile fills the grid's square, 206 pixels from 25, centred: opaque just inside each
+        // edge's middle, clear just outside.
+        let (lo, hi) = (25, 25 + TILE - 1);
+        for (x, y) in [(lo + 3, 128), (hi - 3, 128), (128, lo + 3), (128, hi - 3)] {
+            assert!(pixel(&icon, x, y)[3] > 200, "the tile reaches the grid at ({x}, {y}): {:?}", pixel(&icon, x, y));
+        }
+        for (x, y) in [(lo - 2, 128), (hi + 2, 128), (128, lo - 2), (128, hi + 2)] {
+            assert_eq!(pixel(&icon, x, y)[3], 0, "and no further, at ({x}, {y})");
+        }
         // The blue of the tile, high up at the left, where the beaver is not.
         let blue = pixel(&icon, 50, 60);
         assert!(blue[3] > 240, "the tile is opaque: {blue:?}");
