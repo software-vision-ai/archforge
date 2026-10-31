@@ -245,6 +245,7 @@ plural		+ {n} more column	+ 另 {n} 列
 str		Minimap	缩略图
 str		Hide minimap	隐藏缩略图
 str		Show minimap	显示缩略图
+str		Widen the canvas to show the minimap	加宽画布以显示小地图
 str		Whole diagram	整个图
 str		Zoom in	放大
 str		Zoom out	缩小

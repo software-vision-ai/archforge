@@ -26,7 +26,8 @@ archforge-project = { path = "crates/project" }
 egui = { version = "0.37", features = ["default_fonts", "monochrome_emoji_fonts"] }
 # eframe 0.37's defaults add system_fonts, a provider that scans and memory-maps the system's font
 # files and loads fontconfig: the app reads installed fonts itself, never mapped (apps/archforge
-# src/fonts.rs). So the defaults are off and 0.36's set is named, winit's defaults through winit.
+# src/fonts.rs). So the defaults are off and 0.36's set is named, with clipboard, which egui-winit
+# enabled then, and winit's defaults through winit.
 eframe = { version = "0.37", default-features = false, features = ["accesskit", "clipboard", "default_fonts", "links", "wayland", "web_screen_reader", "wgpu", "x11"] }
 # eframe's winit, with its defaults (raw-window-handle 0.6, x11, wayland with client-side
 # decorations), as eframe's own default features gave it.

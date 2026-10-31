@@ -478,8 +478,9 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
         paint.rect_filled(b, 7.0, p.surface);
         paint.rect_stroke(b, 7.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
         ux::icon_in(&paint, Rect::from_center_size(b.center(), Vec2::splat(14.0)), &icons::MAP, if folded { p.text_secondary } else { p.text_muted });
-        let resp = control(shell, ui, "workspace.minimap.toggle", "button", b, folded);
-        if folded && resp.on_hover_text(tr("Show minimap")).clicked() {
+        let resp = control(shell, ui, "workspace.minimap.toggle", "button", b, true);
+        let hint = if folded { tr("Show minimap") } else { tr("Widen the canvas to show the minimap") };
+        if resp.on_hover_text(hint).clicked() && folded {
             shell.canvas.minimap_open = true;
         }
     }
@@ -1035,7 +1036,8 @@ fn minimap_shown(shell: &Shell, r: Rect) -> bool {
 /// The floating toolbar at the canvas's bottom centre: Select and Pan, the drawing tools, and
 /// the key status and grid toggles.
 fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
-    let paint = ui.painter().clone();
+    // Kept to the canvas: in the narrowest window the toolbar's end is cut, never drawn over a panel.
+    let paint = ui.painter().with_clip_rect(r);
     // Centred under the canvas; moved left of the minimap, or of its button; never hidden.
     let minimap_left = if minimap_shown(shell, r) { r.right() - MINIMAP_GAP.x - MINIMAP.x } else { r.right() - MINIMAP_GAP.x - 28.0 };
     let x = (r.center().x - TOOLBAR.x / 2.0).min(minimap_left - 16.0 - TOOLBAR.x).max(r.left() + 16.0);
