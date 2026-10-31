@@ -896,10 +896,28 @@ fn draw_edge(
     badge
 }
 
-/// An ER end at `end`, the line coming from `from`: a bar for one, a crow's foot for many, a
-/// circle for zero, and the cardinality written under the line.
+/// An ER end at `end`, the line coming from `from`, in crow's foot: the outer mark is the most
+/// (a bar for one, a crow's foot for many), the inner mark the fewest (a circle for zero, a bar
+/// for one), so exactly one is two bars and one or more a bar and a crow's foot; the cardinality
+/// is written under the line.
 #[allow(clippy::too_many_arguments, reason = "an end is drawn from its line, its cardinality and the view")]
 pub(crate) fn end_glyph(paint: &egui::Painter, p: &Palette, end: Pos2, from: Pos2, c: Option<Cardinality>, stroke: Stroke, z: f32, with_text: bool) {
+    end_glyph_on(paint, p, end, from, c, stroke, z, with_text, p.canvas);
+}
+
+/// [`end_glyph`] over a background `fill`, which the circle for zero is filled with.
+#[allow(clippy::too_many_arguments, reason = "an end is drawn from its line, its cardinality, the view and what it is drawn on")]
+pub(crate) fn end_glyph_on(
+    paint: &egui::Painter,
+    p: &Palette,
+    end: Pos2,
+    from: Pos2,
+    c: Option<Cardinality>,
+    stroke: Stroke,
+    z: f32,
+    with_text: bool,
+    fill: egui::Color32,
+) {
     let Some(c) = c else { return };
     let d = from - end;
     if d.length() <= f32::EPSILON || !d.is_finite() {
@@ -917,10 +935,13 @@ pub(crate) fn end_glyph(paint: &egui::Painter, p: &Palette, end: Pos2, from: Pos
         let bar = end + d * 10.0 * z;
         paint.line_segment([bar + n * 7.0 * z, bar - n * 7.0 * z], stroke);
     }
+    // The inner mark: a circle for zero, a bar for one.
+    let inner = end + d * (if many { 20.0 } else { 18.0 }) * z;
     if zero {
-        let centre = end + d * (if many { 20.0 } else { 18.0 }) * z;
-        paint.circle_filled(centre, 4.0 * z, p.canvas);
-        paint.circle_stroke(centre, 4.0 * z, stroke);
+        paint.circle_filled(inner, 4.0 * z, fill);
+        paint.circle_stroke(inner, 4.0 * z, stroke);
+    } else {
+        paint.line_segment([inner + n * 7.0 * z, inner - n * 7.0 * z], stroke);
     }
     if !with_text {
         return;
@@ -1072,7 +1093,14 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
         } else {
             p.text_muted
         };
-        ux::icon_in(&paint, b, icon, ink);
+        if *key == "relationship" {
+            // The relationship tool shows the ends it draws, as the cardinality popover sets them.
+            let kind = shell.canvas.relationship;
+            let fill = if active { p.accent_tint } else { p.surface };
+            crate::connect::tool_line(&paint, p, b.center(), kind.from, kind.to, ink, fill);
+        } else {
+            ux::icon_in(&paint, b, icon, ink);
+        }
         if control(shell, ui, &format!("workspace.tools.{key}"), "button", b, *live).on_hover_text(tr(hint)).clicked() {
             match *key {
                 "select" => shell.canvas.tool = Tool::Select,
