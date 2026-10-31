@@ -813,6 +813,60 @@ fn homes_search_finds_projects_and_actions_and_runs_them_from_the_keyboard() {
 }
 
 #[test]
+fn homes_search_finds_the_projects_in_the_pinned_folders_and_opens_them() {
+    crate::i18n::set_language("en");
+    let host = std::sync::Arc::new(SavingHost::default());
+    let asked: std::sync::Arc<std::sync::Mutex<Vec<Vec<std::path::PathBuf>>>> = std::sync::Arc::default();
+    let seen = asked.clone();
+    let services = Services {
+        projects: Some(host.clone()),
+        ids: Some(test_ids()),
+        pick_project: Some(std::sync::Arc::new(|_| None)),
+        find_projects: Some(std::sync::Arc::new(move |folders: Vec<std::path::PathBuf>| {
+            seen.lock().unwrap().push(folders);
+            let (tx, rx) = std::sync::mpsc::channel();
+            tx.send(vec!["/Users/robin/Work/Client/Billing.archforge".into(), "/tmp/Shop.archforge".into()]).unwrap();
+            rx
+        })),
+        ..Services::default()
+    };
+    let mut shell = Shell::new(services);
+    shell.state.pin(std::path::Path::new("/Users/robin/Work"));
+    shell.state.remember("Shop", std::path::Path::new("/tmp/Shop.archforge"), 1);
+    let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1120.0)).build_ui_state(
+        |ui, shell: &mut Shell| {
+            shell.logic(ui.ctx());
+            shell.ui(ui);
+        },
+        shell,
+    );
+    h.run_steps(2);
+    key(&mut h, egui::Key::K, egui::Modifiers::COMMAND);
+    h.run_steps(3);
+    assert_eq!(asked.lock().unwrap().as_slice(), [vec![std::path::PathBuf::from("/Users/robin/Work")]], "the host looks in the pinned folders");
+    // A project of a pinned folder is found by its name; one that is a recent project is listed once.
+    let results = |h: &Harness<'static, Shell>| ids(h).iter().filter(|i| i.starts_with("home.header.search.result.")).count();
+    h.event(egui::Event::Text("billing".into()));
+    h.run_steps(2);
+    assert_eq!(results(&h), 1, "{:?}", ids(&h));
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    key(&mut h, egui::Key::K, egui::Modifiers::COMMAND);
+    h.run_steps(3);
+    h.event(egui::Event::Text("shop".into()));
+    h.run_steps(2);
+    assert_eq!(results(&h), 1, "Shop once: {:?}", ids(&h));
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    key(&mut h, egui::Key::K, egui::Modifiers::COMMAND);
+    h.run_steps(3);
+    h.event(egui::Event::Text("client bill".into()));
+    h.run_steps(2);
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    h.run_steps(2);
+    let (path, _tx) = host.opens.lock().unwrap().pop().expect("Enter opened the project found");
+    assert_eq!(path, std::path::PathBuf::from("/Users/robin/Work/Client/Billing.archforge"));
+}
+
+#[test]
 fn at_most_eight_projects_open_at_once() {
     let (mut h, host) = saving_harness(None, Some("/tmp/Ninth.archforge"));
     for i in 0..crate::MAX_TABS {

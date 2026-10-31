@@ -194,6 +194,44 @@ fn text<'a>(path: &'a Path, what: &str) -> Result<&'a str, String> {
     path.to_str().filter(|s| !s.chars().any(char::is_control)).ok_or_else(|| format!("the {what} path is not plain text"))
 }
 
+/// The most entries [`find`] reads in one folder: a folder holding more is read only that far.
+const FIND_ENTRIES: usize = 2_000;
+
+/// The projects in `folder` and the folders below it, down to `depth` levels under it, at most
+/// `limit` of them, in name order within each folder: folders named `<name>.archforge`, with a
+/// name that is text, that are not a creation that did not finish. Links are not followed, hidden
+/// folders and projects' own folders are not entered, and a folder that cannot be read is passed.
+pub fn find(folder: &Path, depth: usize, limit: usize) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    find_in(folder, depth, limit, &mut out);
+    out
+}
+
+fn find_in(folder: &Path, depth: usize, limit: usize, out: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(folder) else { return };
+    let mut dirs: Vec<PathBuf> = entries
+        .take(FIND_ENTRIES)
+        .filter_map(Result::ok)
+        .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
+        .map(|e| e.path())
+        .filter(|p| p.file_name().and_then(|n| n.to_str()).is_some_and(|n| !n.starts_with('.')))
+        .collect();
+    dirs.sort();
+    for dir in dirs {
+        if out.len() >= limit {
+            return;
+        }
+        if dir.extension().is_some_and(|e| e == EXTENSION) {
+            let named = dir.file_stem().and_then(|n| n.to_str()).is_some_and(|n| !n.is_empty());
+            if named && !unfinished(&dir) {
+                out.push(dir);
+            }
+        } else if depth > 0 {
+            find_in(&dir, depth - 1, limit, out);
+        }
+    }
+}
+
 /// Whether a project folder is a creation that did not finish: it holds the marker, or it is empty
 /// and named as a project (any other empty folder is simply not a project).
 fn unfinished(path: &Path) -> bool {
@@ -418,4 +456,42 @@ fn own_dot_dolt(path: &Path) -> Result<(), Error> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn find_lists_finished_projects_down_to_its_depth_and_no_further() {
+        let root = std::env::temp_dir().join(format!("af-find-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let dir = |p: &str| {
+            let d = root.join(p);
+            std::fs::create_dir_all(&d).unwrap();
+            d
+        };
+        let file = |p: &str| std::fs::write(root.join(p), b"x").unwrap();
+        dir("Shop.archforge");
+        file("Shop.archforge/config.yaml");
+        dir("Client/Billing.archforge");
+        file("Client/Billing.archforge/config.yaml");
+        dir("Client/Deep/Far.archforge");
+        file("Client/Deep/Far.archforge/config.yaml");
+        dir("Empty.archforge");
+        dir("Half.archforge");
+        file(&format!("Half.archforge/{MARKER}"));
+        dir(".hidden/Secret.archforge");
+        file(".hidden/Secret.archforge/config.yaml");
+        dir("Shop.archforge/Inner.archforge");
+        file("Shop.archforge/Inner.archforge/config.yaml");
+        file("Loose.archforge");
+        let names = |found: Vec<PathBuf>| found.iter().map(|p| p.strip_prefix(&root).unwrap().to_string_lossy().into_owned()).collect::<Vec<_>>();
+        assert_eq!(names(find(&root, 1, 50)), ["Client/Billing.archforge", "Shop.archforge"]);
+        assert_eq!(names(find(&root, 2, 50)), ["Client/Billing.archforge", "Client/Deep/Far.archforge", "Shop.archforge"]);
+        assert_eq!(names(find(&root, 0, 50)), ["Shop.archforge"]);
+        assert_eq!(find(&root, 2, 1).len(), 1, "the limit holds");
+        assert!(find(&root.join("missing"), 2, 50).is_empty());
+        let _ = std::fs::remove_dir_all(&root);
+    }
 }

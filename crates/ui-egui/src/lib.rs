@@ -55,10 +55,16 @@ pub struct Services {
     /// Asks the user for a project to open (the native folder picker), starting in the folder
     /// given or else in the projects folder; none, or none chosen, opens nothing.
     pub pick_project: Option<std::sync::Arc<dyn Fn(Option<&std::path::Path>) -> Option<std::path::PathBuf> + Send + Sync>>,
+    /// Finds the projects in the folders given (Home's pinned folders) on the host's own thread and
+    /// sends them once; none leaves Home's search to the recent projects.
+    pub find_projects: Option<std::sync::Arc<FindProjects>>,
     /// Asks the user for a folder to pin on Home (the native folder picker); none keeps Pin a
     /// folder unavailable.
     pub pick_folder: Option<std::sync::Arc<dyn Fn() -> Option<std::path::PathBuf> + Send + Sync>>,
 }
+
+/// The host's search for projects in folders: the folders in, the projects found sent once.
+pub type FindProjects = dyn Fn(Vec<std::path::PathBuf>) -> std::sync::mpsc::Receiver<Vec<std::path::PathBuf>> + Send + Sync;
 
 /// How writing the open project's model stands: rows waiting to be written, and why the last
 /// write failed, if it did.

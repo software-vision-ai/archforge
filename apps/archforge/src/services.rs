@@ -14,6 +14,7 @@ pub fn native(projects: std::sync::Arc<crate::projects::Projects>) -> Services {
         projects: Some(projects),
         pick_project: Some(std::sync::Arc::new(pick_project)),
         pick_folder: Some(std::sync::Arc::new(pick_folder)),
+        find_projects: Some(std::sync::Arc::new(find_projects)),
         ids: Some(std::sync::Arc::new(fresh_id)),
     }
 }
@@ -31,6 +32,36 @@ fn pick_project(start: Option<&std::path::Path>) -> Option<PathBuf> {
         }
     }
     dialog.pick_folder()
+}
+
+/// How deep below a pinned folder Home's search looks for projects, and the most it lists.
+const FIND_DEPTH: usize = 2;
+const FIND_LIMIT: usize = 200;
+
+/// The projects in Home's pinned folders, looked for on a thread of their own so a slow disk
+/// never holds the window; the answer is sent once. A thread that cannot start sends nothing, and
+/// the search keeps to the recent projects.
+fn find_projects(folders: Vec<PathBuf>) -> std::sync::mpsc::Receiver<Vec<PathBuf>> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let started = std::thread::Builder::new().name("find-projects".into()).spawn(move || {
+        let mut found: Vec<PathBuf> = Vec::new();
+        for folder in folders {
+            let room = FIND_LIMIT.saturating_sub(found.len());
+            if room == 0 {
+                break;
+            }
+            for project in archforge_project::find(&folder, FIND_DEPTH, room) {
+                if !found.contains(&project) {
+                    found.push(project);
+                }
+            }
+        }
+        let _ = tx.send(found);
+    });
+    if let Err(e) = started {
+        log::warn!("the pinned folders could not be searched for projects: {e}");
+    }
+    rx
 }
 
 /// The platform's folder picker, for Pin a folder on Home: it starts in the user's Documents.
