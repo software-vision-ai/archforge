@@ -1855,6 +1855,79 @@ fn the_skills_tab_adds_a_skill_on_the_table_and_shows_the_schemas_as_inherited()
     assert!(h.state().panels.skill.as_ref().is_some_and(|e| e.refused.is_some()));
 }
 
+#[test]
+fn a_skill_opens_in_its_own_tab_and_keeps_its_markdown() {
+    let (mut h, customer) = table_harness();
+    let skill = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let out = s.execute("skill.add", &serde_json::json!({ "subject": customer, "name": "Customer naming", "body": "Use names." })).unwrap();
+        s.execute("view.select", &serde_json::json!({ "ids": [customer] })).unwrap();
+        out.value["id"].as_str().unwrap().to_string()
+    };
+    let uuid = archforge_mof::Uuid::parse(&skill).unwrap();
+    let body = |h: &Harness<'static, Shell>| {
+        let st = h.state().session.as_ref().unwrap().doc();
+        st.get(st.by_uuid(uuid).unwrap(), archforge_core::skill::BODY).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default()
+    };
+    let at = rect_of(&h, "workspace.panels.skills").center();
+    click(&mut h, at);
+    // A click on the row opens the skill in its tab, beside the diagrams.
+    let at = rect_of(&h, &format!("workspace.skills.row.{skill}")).left_center() + egui::vec2(40.0, 0.0);
+    click(&mut h, at);
+    assert_eq!(h.state().canvas.active, Some(uuid));
+    assert!(h.state().canvas.tabs.contains(&uuid));
+    let found = ids(&h);
+    for id in ["workspace.skill.text", "workspace.skill.format.bold", "workspace.skill.preview", &format!("workspace.tabs.{skill}")] {
+        assert!(found.iter().any(|f| f == id), "{id} in {found:?}");
+    }
+    // Bold wraps the selected word.
+    h.state_mut().canvas.skills[0].selection = Some((4, 9));
+    let at = rect_of(&h, "workspace.skill.format.bold").center();
+    click(&mut h, at);
+    assert_eq!(h.state().canvas.skills[0].text, "Use **names**.");
+    // Preview keeps the text at once, as one undo step.
+    let at = rect_of(&h, "workspace.skill.preview").center();
+    click(&mut h, at);
+    assert!(h.state().canvas.skills[0].preview);
+    assert_eq!(body(&h), "Use **names**.");
+    // A text changed elsewhere, here by undo, shows in the tab.
+    h.state_mut().session.as_mut().unwrap().undo().unwrap();
+    h.run();
+    assert_eq!(h.state().canvas.skills[0].text, "Use names.");
+    // The pencil opens the skill's settings in the panel.
+    let at = rect_of(&h, &format!("workspace.skills.edit.{skill}")).center();
+    click(&mut h, at);
+    assert_eq!(h.state().panels.skill.as_ref().and_then(|e| e.target), Some(uuid));
+    // A link clicked in Preview waits for the confirmation; Cancel drops it.
+    let at = rect_of(&h, "workspace.skill.preview").center();
+    click(&mut h, at);
+    h.state_mut().canvas.skills[0].link = Some("https://example.com/naming".into());
+    h.run();
+    assert!(ids(&h).iter().any(|i| i == "workspace.skill.link.open"));
+    let at = rect_of(&h, "workspace.skill.link.cancel").center();
+    click(&mut h, at);
+    assert_eq!(h.state().canvas.skills[0].link, None);
+    // A text the store refuses keeps its tab open, saying why, instead of being lost.
+    h.state_mut().canvas.skills[0].text = "Use\u{200B}names".into();
+    let at = rect_of(&h, &format!("workspace.tabs.{skill}.close")).center();
+    click(&mut h, at);
+    assert_eq!(h.state().canvas.active, Some(uuid), "the refused text stays open");
+    assert!(h.state().canvas.skills[0].refused.is_some());
+    // So does closing the project: it stays open on the skill and says why.
+    let project = h.state().active.unwrap();
+    h.state_mut().close_tab(project);
+    h.run();
+    assert_eq!(h.state().active, Some(project));
+    assert!(h.state().tabs[project].close_error.is_some() && !h.state().tabs[project].closing());
+    assert_eq!(h.state().canvas.active, Some(uuid));
+    // Closing the tab keeps what was typed.
+    h.state_mut().canvas.skills[0].text = "# Naming".into();
+    let at = rect_of(&h, &format!("workspace.tabs.{skill}.close")).center();
+    click(&mut h, at);
+    assert!(h.state().canvas.tabs.is_empty());
+    assert_eq!(body(&h), "# Naming");
+}
+
 /// The table harness with Order, the relationship `places` and an ER diagram of the schema
 /// showing both tables and the relationship, open in the centre: `(harness, customer, diagram)`.
 fn diagram_harness() -> (Harness<'static, Shell>, String, String) {

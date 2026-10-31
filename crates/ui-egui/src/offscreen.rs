@@ -24,6 +24,12 @@ pub enum Screen {
     WorkspaceTable,
     /// The same table with the Skills tab open on it, a skill on the schema inherited.
     WorkspaceSkills,
+    /// The table's naming skill open in its tab, its Markdown in Write.
+    WorkspaceSkillTab,
+    /// The same skill in Preview.
+    WorkspaceSkillPreview,
+    /// The same Preview with a link clicked, its confirmation open.
+    WorkspaceSkillLink,
     /// The same table with the key editor open on its unique constraint.
     WorkspaceKeyEditor,
     /// The same table with the column editor open on its email column, More open.
@@ -117,6 +123,9 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
         screen,
         Screen::WorkspaceTable
             | Screen::WorkspaceSkills
+            | Screen::WorkspaceSkillTab
+            | Screen::WorkspaceSkillPreview
+            | Screen::WorkspaceSkillLink
             | Screen::WorkspaceKeyEditor
             | Screen::WorkspaceColumnEditor
             | Screen::WorkspaceIndexEditor
@@ -124,7 +133,16 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
             | Screen::WorkspaceSchemaObjects
     ) {
         shell.adopt_project();
-        sample_table(&mut shell, screen == Screen::WorkspaceSkills)?;
+        let skill_tab = matches!(screen, Screen::WorkspaceSkillTab | Screen::WorkspaceSkillPreview | Screen::WorkspaceSkillLink);
+        sample_table(&mut shell, screen == Screen::WorkspaceSkills || skill_tab)?;
+        if skill_tab {
+            sample_skill_tab(&mut shell, screen != Screen::WorkspaceSkillTab)?;
+        }
+        if screen == Screen::WorkspaceSkillLink
+            && let Some(doc) = shell.canvas.skills.first_mut()
+        {
+            doc.link = Some("https://docs.example.com.sign-in.accounts.verify.example.org/naming/columns?section=keys".into());
+        }
         if screen == Screen::WorkspaceSchemaTypes {
             sample_types(&mut shell)?;
         }
@@ -291,6 +309,27 @@ fn sample_table(shell: &mut Shell, skills: bool) -> Result<(), String> {
     session.mark_saved().map_err(|e| format!("mark_saved: {e:?}"))?;
     if skills {
         shell.state.show_panel(crate::state::Panel::Skills);
+    }
+    Ok(())
+}
+
+/// Writes the table's naming skill out in Markdown and opens it in its tab, in Preview when
+/// `preview`.
+fn sample_skill_tab(shell: &mut Shell, preview: bool) -> Result<(), String> {
+    use serde_json::json;
+    const TEXT: &str = "# Customer naming\n\nName every column of **Customer** in `snake_case`, and keep each name under 30 characters.\n\n## Keys\n\n- The primary key is `customer_id`.\n- A foreign key to another table is named `<table>_id`.\n\n## Words\n\n> Prefer plain words over abbreviations: `address`, not `addr`.\n\n1. Singular table names: `Customer`, not `Customers`.\n2. No prefixes such as `tbl_` or `t_`.\n";
+    let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
+    let store = session.doc();
+    let skill = archforge_core::skills::skills(store)
+        .into_iter()
+        .find(|s| archforge_core::skills::name_of(store, *s) == "Customer naming")
+        .and_then(|s| store.uuid(s).ok())
+        .ok_or_else(|| "the sample has no Customer naming skill".to_string())?;
+    session.execute("skill.set-body", &json!({ "skill": skill.to_string(), "body": TEXT })).map_err(|e| format!("skill.set-body: {e:?}"))?;
+    session.mark_saved().map_err(|e| format!("mark_saved: {e:?}"))?;
+    crate::canvas::open(shell, skill);
+    if let Some(doc) = shell.canvas.skills.iter_mut().find(|d| d.skill == skill) {
+        doc.preview = preview;
     }
     Ok(())
 }

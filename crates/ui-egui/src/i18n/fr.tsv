@@ -188,7 +188,27 @@ str		Drawing	Dessiner
 str		Naming	Nommer
 str		Export	Exporter
 str		Dialect	Dialecte
-str		Guidance	Texte
+str		Open the skill	Ouvrir la compétence
+str		Skill settings	Réglages de la compétence
+str		Skill · on {subject}	Compétence · sur {subject}
+str		Skill · on the project	Compétence · sur le projet
+str		Skill text	Texte de la compétence
+str		Write the guidance in Markdown	Rédigez le texte en Markdown
+str		Bold	Gras
+str		Italic	Italique
+str		Heading	Titre
+str		Bulleted list	Liste à puces
+str		Numbered list	Liste numérotée
+str		Code	Code
+str		Link	Lien
+str		Quote	Citation
+str		Write	Rédiger
+str		Preview	Aperçu
+str		Open this link?	Ouvrir ce lien ?
+str		Open link	Ouvrir le lien
+str		This text is too long or nested too deeply to preview.	Ce texte est trop long ou trop imbriqué pour l’aperçu.
+str		A skill's text is at most {n} characters.	Le texte d’une compétence compte au plus {n} caractères.
+str		A skill's text could not be kept; its tab says why.	Le texte d’une compétence n’a pas pu être conservé ; son onglet indique pourquoi.
 str		Element	Élément
 str		New diagram	Nouveau diagramme
 str		Create	Créer

@@ -45,7 +45,8 @@ the change, and update this file in the same change.
   avatar. Projects open as tabs, up to eight, each with its name and a close button; showing Home
   closes none of them. In a narrow window the tabs shrink, then turn into icons. A project whose
   changes cannot be written does not close; it stays open and says why.
-- Diagrams open as tabs inside the project; the + that makes a new diagram sits in that tab strip.
+- Diagrams and skills open as tabs inside the project; the + that makes a new diagram sits in
+  that tab strip.
 - The left rail holds Models, Diagrams and Source Control; the right rail, between the canvas and
   the panel, holds Agent, Appearance, Properties and Skills.
 - Clicking the open column's own rail icon folds it; any rail icon opens a folded column on its
@@ -162,6 +163,26 @@ the change, and update this file in the same change.
 - A linked column follows the name and type of the column it points at; any direct edit unlinks
   it, and the editor offers Unlink.
 - The column type menu lists the schema's domains and enum types, then the built-in types.
+
+## Skills
+- A skill's text is Markdown, and it is written in the skill's own tab in the centre, beside the
+  diagrams. The page shows the skill's name, where it sits, a formatting toolbar (bold, italic,
+  heading, bulleted list, numbered list, code, link, quote) and a Write / Preview switch.
+- Write edits the Markdown source itself, styled as it is typed: markers dimmed, headings larger,
+  strong text semibold, emphasis slanted, code in purple, quotes and links in their colours. What
+  is typed is what is kept. Preview draws the page the text makes.
+- A toolbar button wraps the selection (bold, italic, code, link) or marks every line it touches
+  (lists, quote); pressed again it takes the mark away. Heading goes one level deeper on each press,
+  to three, then back to text. Cmd B, Cmd I and Cmd K work while writing.
+- The text is kept a moment after typing pauses, when the tab closes, on Save and on quitting,
+  each time one undo step. A text the model refuses keeps its tab, and its project, open, saying
+  why.
+- A link in Preview opens only after a confirmation that names its site and shows the whole
+  address, and only when it is a web or mail address. Pictures in a skill are never loaded. A
+  text too long or nested too deeply is shown plain in Write and not rendered in Preview.
+- The Skills panel lists the skills and holds their settings: a click on a row opens the skill's
+  tab, the pencil that shows on hover opens its settings (name, applies to, column type, when,
+  dialect), + adds a skill and opens its tab.
 
 ## Messages
 - Problems show as an orange badge on the table or line and in a Problems section of Properties,

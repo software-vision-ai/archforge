@@ -105,6 +105,8 @@ pub struct State {
     pub toast: Option<crate::connect::Toast>,
     /// A note's text being typed in place (slice E4).
     pub note_edit: Option<crate::editing::NoteEdit>,
+    /// The texts of the skills with a tab, as typed.
+    pub skills: Vec<crate::skill_tab::Doc>,
 }
 
 impl Default for State {
@@ -130,6 +132,7 @@ impl Default for State {
             mapping: None,
             toast: None,
             note_edit: None,
+            skills: Vec::new(),
         }
     }
 }
@@ -147,8 +150,13 @@ fn select(shell: &mut Shell, ids: Vec<Uuid>) {
 }
 
 /// Opens a diagram in the centre: its tab, added when it has none, becomes the active one, the
-/// view's open diagram follows, and the diagram is selected so Properties shows it.
+/// view's open diagram follows, and the diagram is selected so Properties shows it. A skill opens
+/// in its own tab the same way, with its text in place of the canvas.
 pub fn open(shell: &mut Shell, id: Uuid) {
+    if shell.session.as_ref().is_some_and(|s| crate::skill_tab::is_skill(s.doc(), id)) {
+        crate::skill_tab::open(shell, id);
+        return;
+    }
     shell.canvas.notice = None;
     if let Err(e) = run(shell, "view.open-diagram", json!({ "diagram": id.to_string() })) {
         shell.canvas.notice = Some(e);
@@ -162,9 +170,15 @@ pub fn open(shell: &mut Shell, id: Uuid) {
     shell.canvas.active = Some(id);
 }
 
-/// Closes a tab; when it was the active one, the tab before it (else after it) takes over.
+/// Closes a tab; when it was the active one, the tab before it (else after it) takes over. A
+/// skill's tab whose text the store refused stays open on it, showing why, so nothing typed is lost.
 pub fn close_tab(shell: &mut Shell, id: Uuid) {
     let Some(i) = shell.canvas.tabs.iter().position(|t| *t == id) else { return };
+    crate::skill_tab::sync(shell, 0.0, true, Some(id));
+    if shell.canvas.skills.iter().any(|d| d.skill == id && d.text != d.saved) {
+        crate::skill_tab::open(shell, id);
+        return;
+    }
     shell.canvas.tabs.remove(i);
     if shell.canvas.active == Some(id) {
         let next = shell.canvas.tabs.get(i.saturating_sub(1)).or_else(|| shell.canvas.tabs.get(i)).copied();
@@ -289,10 +303,13 @@ pub fn centre(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     let tabs = Rect::from_min_size(r.min, vec2(r.width(), TABS));
     let canvas_rect = Rect::from_min_max(pos2(r.left(), tabs.bottom()), r.max);
     tab_strip(shell, ui, p, tabs);
-    canvas(shell, ui, p, canvas_rect);
+    match shell.canvas.active.filter(|id| shell.session.as_ref().is_some_and(|s| crate::skill_tab::is_skill(s.doc(), *id))) {
+        Some(skill) => crate::skill_tab::draw(shell, ui, p, canvas_rect, skill),
+        None => canvas(shell, ui, p, canvas_rect),
+    }
 }
 
-/// The tab strip: the new-diagram `+` at the left, then a tab per open diagram.
+/// The tab strip: the new-diagram `+` at the left, then a tab per open diagram or skill.
 fn tab_strip(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     let paint = ui.painter().clone();
     paint.rect_filled(r, 0.0, p.page);
@@ -304,14 +321,17 @@ fn tab_strip(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
         crate::diagrams::open_new(shell);
     }
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
-    let tabs: Vec<(Uuid, String)> = shell
+    let tabs: Vec<(Uuid, String, &ux::Icon)> = shell
         .canvas
         .tabs
         .iter()
         .filter_map(|id| {
             let d = store.by_uuid(*id)?;
+            if crate::skill_tab::is_skill(store, *id) {
+                return Some((*id, archforge_core::skills::name_of(store, d), &icons::SKILL));
+            }
             let name = crate::diagrams::diagram_name(store, d);
-            Some((*id, if name.is_empty() { tr("Unnamed diagram") } else { name }))
+            Some((*id, if name.is_empty() { tr("Unnamed diagram") } else { name }, &icons::ER_DIAGRAM))
         })
         .collect();
     let active = shell.canvas.active;
@@ -320,7 +340,7 @@ fn tab_strip(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     clip.set_clip_rect(strip);
     let mut x = strip.left();
     let mut action: Option<(Uuid, bool)> = None;
-    for (id, name) in &tabs {
+    for (id, name, icon) in &tabs {
         let g = ux::galley(&paint, name, types::UI, p.text, Some(TAB_TEXT_MAX));
         let width = 34.0 + g.size().x.min(TAB_TEXT_MAX) + 29.0;
         let tab = Rect::from_min_size(pos2(x, r.top() + 3.0), vec2(width, TAB_HEIGHT));
@@ -337,7 +357,7 @@ fn tab_strip(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
             paint.rect_filled(tab, 6.0, p.surface);
         }
         let ink = if is_active { p.text } else { p.text_secondary };
-        ux::icon_in(&paint, Rect::from_min_size(pos2(tab.left() + 11.0, tab.top() + 9.0), Vec2::splat(15.0)), &icons::ER_DIAGRAM, p.text_secondary);
+        ux::icon_in(&paint, Rect::from_min_size(pos2(tab.left() + 11.0, tab.top() + 9.0), Vec2::splat(15.0)), icon, p.text_secondary);
         paint.galley(pos2(tab.left() + 34.0, tab.top() + (TAB_HEIGHT - g.size().y) / 2.0), g, ink);
         let close = Rect::from_center_size(pos2(tab.right() - 15.0, tab.center().y), Vec2::splat(16.0));
         let close_resp = control(shell, &clip, &format!("{tab_id}.close"), "button", close, true).on_hover_text(tr("Close"));

@@ -18,6 +18,7 @@ pub mod home_search;
 pub mod i18n;
 pub mod indexes;
 pub mod keys;
+pub mod markdown;
 pub mod new_project;
 pub mod objects;
 #[cfg(feature = "snapshot")]
@@ -25,6 +26,7 @@ pub mod offscreen;
 pub mod panels;
 pub mod problems;
 pub mod relation;
+pub mod skill_tab;
 pub mod state;
 pub mod subtypes;
 pub mod theme;
@@ -266,6 +268,8 @@ pub struct Shell {
     pub canvas: canvas::State,
     /// The right panels' own state: the open editors and the last refusal.
     pub panels: panels::State,
+    /// The rendered Markdown pages' cache, for a skill's Preview.
+    pub(crate) markdown: egui_commonmark::CommonMarkCache,
     /// The problems the rules find, by element, read once per frame while a session is open.
     pub problems: std::collections::BTreeMap<archforge_mof::Obj, Vec<String>>,
     /// Set by `request_quit`; the next frame closes the window.
@@ -303,6 +307,7 @@ impl Shell {
             diagrams: diagrams::State::default(),
             canvas: canvas::State::default(),
             panels: panels::State::default(),
+            markdown: Default::default(),
             problems: Default::default(),
             quit_requested: false,
         }
@@ -365,6 +370,14 @@ impl Shell {
         }
         self.tabs[i].close_error = None;
         let handed = if self.active == Some(i) {
+            // The skill text still being typed goes with the last changes, before the host closes;
+            // a text the store refused keeps the project open on its tab, which says why.
+            skill_tab::sync(self, 0.0, true, None);
+            if let Some((skill, _)) = skill_tab::unkept(&self.canvas).first().copied() {
+                canvas::open(self, skill);
+                self.tabs[i].close_error = Some(skill_tab::unkept_reason());
+                return;
+            }
             self.write_changes();
             let current = self.session.as_ref().map(|s| s.revision());
             if current.is_some() && self.refused == current { Err(self.save_error.clone().unwrap_or_default()) } else { Ok(()) }
@@ -398,6 +411,9 @@ impl Shell {
     /// The model of parked tab `i`, handed to the host when it changed since its last hand-over.
     fn hand_over_parked(&mut self, i: usize) -> Result<(), String> {
         let path = self.tabs[i].path.clone();
+        if self.tabs[i].parked.as_ref().is_some_and(|p| !skill_tab::unkept(&p.canvas).is_empty()) {
+            return Err(skill_tab::unkept_reason());
+        }
         let (Some(host), Some(parked)) = (&self.services.projects, self.tabs[i].parked.as_mut()) else { return Ok(()) };
         let Some(session) = &parked.session else { return Ok(()) };
         let revision = session.revision();
@@ -446,6 +462,7 @@ impl Shell {
     /// Parks the project shown in its tab, its last changes handed to the host first; Home shows.
     fn park(&mut self) {
         let Some(i) = self.active else { return };
+        skill_tab::sync(self, 0.0, true, None);
         self.write_changes();
         let Some(project) = self.project.take() else { return };
         let parked = Parked {
@@ -746,6 +763,17 @@ impl Shell {
         self.saving.is_some()
     }
 
+    /// At exit, before the host writes what waits: the skill text still being typed is kept and
+    /// handed over with the rest.
+    pub fn before_exit(&mut self) {
+        skill_tab::sync(self, 0.0, true, None);
+        let parked = self.tabs.iter().filter_map(|t| t.parked.as_ref()).map(|p| &p.canvas);
+        for (skill, chars) in std::iter::once(&self.canvas).chain(parked).flat_map(skill_tab::unkept) {
+            log::warn!("at exit: the text of skill {skill} ({chars} characters) was refused and is not kept");
+        }
+        self.write_changes();
+    }
+
     /// Asks the window to quit through the normal close path at the next frame.
     pub fn request_quit(&mut self) {
         self.quit_requested = true;
@@ -795,17 +823,25 @@ impl Shell {
         }
         // Cmd+S (Ctrl+S) saves the open project and Cmd+O (Ctrl+O) opens one; on macOS the menu
         // bar takes both first.
+        let now = ctx.input(|i| i.time);
         if self.session.is_some() && ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::S)) {
+            skill_tab::sync(self, now, true, None);
             self.save();
         }
         if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::O)) {
             self.open_from_picker();
+        }
+        // A skill's text is kept once its typing pauses, and all of it before quitting.
+        skill_tab::sync(self, now, self.quit_requested, None);
+        if skill_tab::waiting(self) {
+            ctx.request_repaint_after(std::time::Duration::from_millis(300));
         }
         self.write_changes();
         if let Some(session) = &self.session {
             explorer::retain_valid(&mut self.explorer, session.doc());
             diagrams::retain_valid(&mut self.diagrams, session.doc());
             canvas::retain_valid(&mut self.canvas, session.doc());
+            skill_tab::retain_valid(&mut self.canvas);
             panels::retain_valid(&mut self.panels, session.doc());
             self.problems = problems::by_element(session.doc());
         }

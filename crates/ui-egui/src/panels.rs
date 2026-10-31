@@ -161,7 +161,6 @@ pub struct SkillEdit {
     pub subject: Option<Uuid>,
     pub name: String,
     pub description: String,
-    pub body: String,
     pub triggers: [bool; 4],
     pub applies: Applies,
     pub type_pattern: String,
@@ -1538,7 +1537,7 @@ struct SkillRow {
     own: bool,
 }
 
-fn target_word(store: &Store, s: Obj) -> String {
+pub(crate) fn target_word(store: &Store, s: Obj) -> String {
     let applies = string_of(store, s, archforge_core::skill::APPLIES_TO);
     let pattern = string_of(store, s, archforge_core::skill::TYPE_PATTERN);
     match archforge_core::skills::kind_by_key::<archforge_er::ErView>(store, &applies).map(|(_, w)| w) {
@@ -1634,20 +1633,33 @@ fn skills(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32
 
 fn skill_row(shell: &mut Shell, ui: &egui::Ui, paint: &egui::Painter, p: &Palette, r: Rect, y: f32, row: &SkillRow, width: f32) -> f32 {
     let rect = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width.max(0.0), 30.0));
-    let resp = control(shell, ui, &format!("workspace.skills.row.{}", row.id), "row", rect, row.own);
-    if resp.hovered() && row.own {
+    let resp = control(shell, ui, &format!("workspace.skills.row.{}", row.id), "row", rect, true).on_hover_text(tr("Open the skill"));
+    // The settings of a skill of the subject's own, at the row's right.
+    let edit = Rect::from_min_size(pos2(rect.right() - 30.0, rect.top() + 3.0), Vec2::splat(24.0));
+    let edit_resp =
+        row.own.then(|| control(shell, ui, &format!("workspace.skills.edit.{}", row.id), "button", edit, true).on_hover_text(tr("Skill settings")));
+    let hovered = resp.hovered() || edit_resp.as_ref().is_some_and(|r| r.hovered());
+    if shell.canvas.active == Some(row.id) {
+        paint.rect_filled(rect, 5.0, p.accent_tint);
+    } else if hovered {
         paint.rect_filled(rect, 5.0, p.page);
     }
     ux::icon_in(paint, Rect::from_min_size(rect.min + vec2(8.0, 6.0), Vec2::splat(18.0)), &icons::SKILL, p.text_secondary);
     let detail = ux::galley(paint, &row.detail, types::CAPTION, p.text_muted, Some((width / 2.0).max(0.0)));
-    let trigger_w = if row.trigger.is_some() { 26.0 } else { 0.0 };
+    let trigger_w = if row.trigger.is_some() || row.own { 26.0 } else { 0.0 };
     let name_room = (width - 34.0 - detail.size().x - 16.0 - trigger_w).max(0.0);
     ux::text(paint, rect.min + vec2(34.0, 6.5), &row.name, types::SMALL, p.text, Some(name_room));
     paint.galley(pos2(rect.right() - 8.0 - trigger_w - detail.size().x, rect.top() + 8.0), detail, p.text_muted);
-    if let Some(icon) = trigger_icon(row.trigger) {
+    if row.own && hovered {
+        let ink = if edit_resp.as_ref().is_some_and(|r| r.hovered()) { p.text } else { p.text_secondary };
+        ux::icon_in(paint, Rect::from_center_size(edit.center(), Vec2::splat(14.0)), &icons::EDIT, ink);
+    } else if let Some(icon) = trigger_icon(row.trigger) {
         ux::icon_in(paint, Rect::from_min_size(pos2(rect.right() - 8.0 - 18.0, rect.top() + 6.0), Vec2::splat(18.0)), icon, p.text_secondary);
     }
-    if resp.clicked() && row.own {
+    if resp.clicked() && !edit_resp.as_ref().is_some_and(|r| r.clicked()) {
+        crate::canvas::open(shell, row.id);
+    }
+    if edit_resp.is_some_and(|r| r.clicked()) {
         let subject_id = shell
             .panels
             .skill
@@ -1672,7 +1684,6 @@ fn open_skill(shell: &mut Shell, subject: Option<Uuid>, target: Option<Uuid>) {
                 subject: archforge_core::skills::subject_of(store, s).and_then(|o| store.uuid(o).ok()),
                 name: archforge_core::skills::name_of(store, s),
                 description: string_of(store, s, archforge_core::skill::DESCRIPTION),
-                body: string_of(store, s, archforge_core::skill::BODY),
                 triggers: [
                     triggers.contains(&SkillTrigger::Modelling),
                     triggers.contains(&SkillTrigger::Drawing),
@@ -1701,7 +1712,6 @@ fn open_skill(shell: &mut Shell, subject: Option<Uuid>, target: Option<Uuid>) {
                 subject,
                 name: crate::explorer::fresh_name("Skill", taken, false).unwrap_or_default(),
                 description: String::new(),
-                body: String::new(),
                 triggers: [false; 4],
                 applies: Applies::Subject,
                 type_pattern: String::new(),
@@ -1732,7 +1742,7 @@ fn skill_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f
     let inner = (width - 24.0).max(0.0);
     let export = edit.triggers[3];
     let columns = edit.applies == Applies::Columns;
-    let mut height = 12.0 + 45.0 + 10.0 + 45.0 + 10.0 + 17.0 + 32.0 + 10.0 + 17.0 + 120.0 + 10.0 + FIELD + 12.0;
+    let mut height = 12.0 + 45.0 + 10.0 + 45.0 + 10.0 + 17.0 + 32.0 + 10.0 + FIELD + 12.0;
     if columns {
         height += 55.0;
     }
@@ -1819,26 +1829,6 @@ fn skill_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f
         );
         dy += 55.0;
     }
-    ux::text(&paint, at(0.0, dy), &tr("Guidance"), types::CAPTION, p.text_secondary, Some(inner));
-    dy += 17.0;
-    let body = Rect::from_min_size(at(0.0, dy), vec2(inner, 120.0));
-    paint.rect_filled(body, 6.0, p.field);
-    widgets::record_visible(ui, &mut shell.registry, "workspace.skills.body", "field", body);
-    let body_inner = body.shrink(8.0);
-    let out = egui::TextEdit::multiline(&mut edit.body)
-        .id(widgets::egui_id("workspace.skills.body"))
-        .frame(egui::Frame::NONE)
-        .font(types::SMALL.font())
-        .text_color(p.text)
-        .char_limit(archforge_core::skills::MAX_BODY)
-        .desired_width(body_inner.width())
-        .desired_rows(5)
-        .show(&mut ui.new_child(egui::UiBuilder::new().max_rect(body_inner)));
-    let _ = (*out.response).clone().accessible_name(tr("Guidance"));
-    if out.response.has_focus() {
-        paint.rect_stroke(body, 6.0, Stroke::new(1.0, p.focus), StrokeKind::Inside);
-    }
-    dy += 130.0;
     let mut remove = false;
     if edit.target.is_some() {
         remove = icon_button(shell, ui, p, at(0.0, dy), "workspace.skills.remove", &icons::TRASH, p.danger, None, "Remove");
@@ -1899,8 +1889,16 @@ fn set_skill_refusal(shell: &mut Shell, why: String) {
     }
 }
 
-/// Writes the skill editor through `skill.add` or `skill.set`.
+/// Writes the skill editor through `skill.add` or `skill.set`; the text stays as its tab has
+/// kept it, and a skill just added opens in its tab.
 fn commit_skill(shell: &mut Shell, edit: &SkillEdit) {
+    if let Some(t) = edit.target {
+        crate::skill_tab::sync(shell, 0.0, true, Some(t));
+    }
+    let body = match (edit.target, shell.session.as_ref()) {
+        (Some(t), Some(s)) => s.doc().by_uuid(t).map(|o| string_of(s.doc(), o, archforge_core::skill::BODY)).unwrap_or_default(),
+        _ => String::new(),
+    };
     let triggers: Vec<&str> = [SkillTrigger::Modelling, SkillTrigger::Drawing, SkillTrigger::Naming, SkillTrigger::Export]
         .iter()
         .zip(edit.triggers)
@@ -1916,7 +1914,7 @@ fn commit_skill(shell: &mut Shell, edit: &SkillEdit) {
     let type_pattern = if edit.applies == Applies::Columns { edit.type_pattern.trim() } else { "" };
     let dialect = if edit.triggers[3] { edit.dialect.trim() } else { "" };
     let fields = json!({
-        "name": edit.name.trim(), "description": edit.description, "body": edit.body, "triggers": triggers,
+        "name": edit.name.trim(), "description": edit.description, "body": body, "triggers": triggers,
         "dialect": dialect, "applies_to": applies_to, "type_pattern": type_pattern,
     });
     let outcome = match edit.target {
@@ -1932,11 +1930,16 @@ fn commit_skill(shell: &mut Shell, edit: &SkillEdit) {
         }
     };
     match outcome {
-        Ok(_) => {
+        Ok(out) => {
             shell.panels.skill = None;
             // skill.add selects the new skill; the panel stays on the element it sits on.
             let ids: Vec<String> = edit.subject.into_iter().map(|s| s.to_string()).collect();
             let _ = run(shell, "view.select", json!({ "ids": ids }));
+            if edit.target.is_none()
+                && let Some(id) = out["id"].as_str().and_then(Uuid::parse)
+            {
+                crate::canvas::open(shell, id);
+            }
         }
         Err(e) => set_skill_refusal(shell, e),
     }

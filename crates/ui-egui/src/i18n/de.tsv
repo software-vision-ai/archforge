@@ -188,7 +188,27 @@ str		Drawing	Zeichnen
 str		Naming	Benennen
 str		Export	Exportieren
 str		Dialect	Dialekt
-str		Guidance	Hinweise
+str		Open the skill	Skill öffnen
+str		Skill settings	Skill-Einstellungen
+str		Skill · on {subject}	Skill · an {subject}
+str		Skill · on the project	Skill · am Projekt
+str		Skill text	Skill-Text
+str		Write the guidance in Markdown	Hinweise in Markdown schreiben
+str		Bold	Fett
+str		Italic	Kursiv
+str		Heading	Überschrift
+str		Bulleted list	Aufzählung
+str		Numbered list	Nummerierte Liste
+str		Code	Code
+str		Link	Link
+str		Quote	Zitat
+str		Write	Schreiben
+str		Preview	Vorschau
+str		Open this link?	Diesen Link öffnen?
+str		Open link	Link öffnen
+str		This text is too long or nested too deeply to preview.	Dieser Text ist für die Vorschau zu lang oder zu tief verschachtelt.
+str		A skill's text is at most {n} characters.	Der Text eines Skills hat höchstens {n} Zeichen.
+str		A skill's text could not be kept; its tab says why.	Der Text eines Skills konnte nicht gesichert werden; sein Tab sagt, warum.
 str		Element	Element
 str		New diagram	Neues Diagramm
 str		Create	Erstellen

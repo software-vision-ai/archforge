@@ -43,6 +43,12 @@ serde_json = "1"
 # Writes the snapshot example's picture; already in the lockfile through eframe's icon loading,
 # MIT OR Apache-2.0, pure Rust under forbid(unsafe_code).
 png = "=0.18.1"
+# Skills are written in Markdown: the parser that places every element for the styled source, and
+# the viewer that draws the rendered page. MIT, and MIT OR Apache-2.0; both pure Rust, the viewer
+# without its image, regex and network features (deny.toml bans those). Pinned exactly, as both
+# read text from project files.
+pulldown-cmark = { version = "=0.13.6", default-features = false }
+egui_commonmark = { version = "=0.26.0", default-features = false, features = ["pulldown_cmark"] }
 # Checks an installed font's bytes before egui loads them: the parser egui 0.37 itself loads fonts
 # with, so a face it would refuse never reaches it; pinned exactly and moved with epaint's
 # own skrifa whenever egui moves. MIT OR Apache-2.0.

@@ -589,6 +589,17 @@ fn skill_rename<V: SkillHost>(ctx: &mut C<'_, V>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, s)? }))
 }
 
+/// Writes a skill's text alone, as its editor saves it while it is written.
+fn skill_set_body<V: SkillHost>(ctx: &mut C<'_, V>, p: &Params) -> R {
+    let s = skill_of(ctx.doc, p, "skill")?;
+    let body = text(p, "body");
+    if let Some(problem) = text_problem(body, MAX_BODY) {
+        return Err(refuse("body", format!("the body {problem}")));
+    }
+    ctx.doc.set(s, skill::BODY, opt(body)).map_err(fail)?;
+    Ok(json!({ "id": uuid_of(ctx.doc, s)? }))
+}
+
 fn skill_remove<V: SkillHost>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let s = skill_of(ctx.doc, p, "skill")?;
     let gone = crate::destroy_with_links(ctx.doc, s).map_err(fail)?;
@@ -683,6 +694,15 @@ pub fn specs<V: SkillHost>() -> Vec<CommandSpec<Store, V>> {
             "skill: string; the skill's id\nname: string; the new name",
             has_skills::<V>,
             skill_rename::<V>
+        ),
+        cmd!(
+            "skill.set-body",
+            "Edit skill text",
+            &["Skills"],
+            None,
+            "skill: string; the skill's id\nbody: string; the instructions, Markdown, or empty",
+            has_skills::<V>,
+            skill_set_body::<V>
         ),
         cmd!("skill.remove", "Remove skill", &["Skills"], None, "skill: string; the skill's id", has_skills::<V>, skill_remove::<V>),
         cmd!(

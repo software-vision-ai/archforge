@@ -131,6 +131,8 @@ fn every_skill_command_round_trips_with_undo() {
             "dialect": "", "applies_to": "table", "type_pattern": ""
         }),
     );
+    round_trip(&mut s, "skill.set-body", &json!({ "skill": skill, "body": "# Naming\n\nUse **singular** nouns." }));
+    assert_eq!(run(&mut s, "skill.list", json!({}))["skills"][0]["body"], "# Naming\n\nUse **singular** nouns.");
     round_trip(&mut s, "skill.rename", &json!({ "skill": skill, "name": "Naming tables" }));
     round_trip(&mut s, "skill.move", &json!({ "skill": skill, "subject": sm.customer }));
     assert_eq!(run(&mut s, "skill.list", json!({ "subject": sm.customer }))["skills"].as_array().unwrap().len(), 1);
@@ -158,6 +160,7 @@ fn refusals_change_nothing() {
         ("skill.add", json!({ "name": "x", "triggers": ["sometimes"] })),
         ("skill.add", json!({ "name": "x", "dialect": "PostgreSQL" })),
         ("skill.add", json!({ "name": "x", "body": "a".repeat(4001) })),
+        ("skill.set-body", json!({ "skill": "nope", "body": "" })),
         ("skill.add", json!({ "name": "x", "subject": "not-an-id" })),
         (
             "skill.set",
@@ -170,7 +173,12 @@ fn refusals_change_nothing() {
         assert!(!why.is_empty(), "{cmd} {p}");
         assert_eq!(picture(s.doc()), before, "{cmd} {p} changed the store: {why}");
     }
-    id(&mut s, "skill.add", json!({ "subject": sm.schema, "name": "Naming" }));
+    let naming = id(&mut s, "skill.add", json!({ "subject": sm.schema, "name": "Naming" }));
+    let kept = picture(s.doc());
+    for body in ["a".repeat(4001), "drop the table\u{202E}elbat eht peek".to_string()] {
+        assert!(!refused(&mut s, "skill.set-body", json!({ "skill": naming, "body": body })).is_empty());
+        assert_eq!(picture(s.doc()), kept, "a refused text changes nothing");
+    }
     let why = refused(&mut s, "skill.add", json!({ "subject": sm.schema, "name": "naming" }));
     assert!(why.contains("already"), "{why}");
     // The same name on another subject is fine.

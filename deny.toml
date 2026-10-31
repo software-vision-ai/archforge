@@ -48,6 +48,20 @@ wildcards = "deny"
 # and [sources] limits to that one repository. Registry dependencies stay wildcard-denied.
 allow-wildcard-paths = true
 
+# A skill's Preview must never read files or the network for a picture in its text: the Markdown
+# viewer and the egui extras it draws with stay without their loaders.
+[[bans.features]]
+crate = "egui_commonmark"
+deny = ["load-images", "fetch", "svg", "embedded_image", "better_syntax_highlighting", "macros"]
+
+[[bans.features]]
+crate = "egui_commonmark_backend"
+deny = ["embedded_image", "better_syntax_highlighting"]
+
+[[bans.features]]
+crate = "egui_extras"
+deny = ["default", "file", "http", "image", "svg", "svg_images", "gif", "webp", "all_loaders", "syntect"]
+
 [sources]
 # Only the default registry and craft-libs.
 unknown-registry = "deny"

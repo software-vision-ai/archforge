@@ -187,7 +187,27 @@ str		Drawing	Drawing
 str		Naming	Naming
 str		Export	Export
 str		Dialect	Dialect
-str		Guidance	Guidance
+str		Open the skill	Open the skill
+str		Skill settings	Skill settings
+str		Skill · on {subject}	Skill · on {subject}
+str		Skill · on the project	Skill · on the project
+str		Skill text	Skill text
+str		Write the guidance in Markdown	Write the guidance in Markdown
+str		Bold	Bold
+str		Italic	Italic
+str		Heading	Heading
+str		Bulleted list	Bulleted list
+str		Numbered list	Numbered list
+str		Code	Code
+str		Link	Link
+str		Quote	Quote
+str		Write	Write
+str		Preview	Preview
+str		Open this link?	Open this link?
+str		Open link	Open link
+str		This text is too long or nested too deeply to preview.	This text is too long or nested too deeply to preview.
+str		A skill's text is at most {n} characters.	A skill's text is at most {n} characters.
+str		A skill's text could not be kept; its tab says why.	A skill's text could not be kept; its tab says why.
 str		Element	Element
 str		New diagram	New diagram
 str		Create	Create
