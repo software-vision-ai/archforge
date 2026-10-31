@@ -12,7 +12,7 @@
 //! the bottom centre. The grid dots sit 32 units apart and thin out as the zoom falls.
 
 use archforge_diagram::grid::bounds_of;
-use archforge_diagram::{DIAGRAM, Grid, LabelPlace, diagram, edge, label, node, point};
+use archforge_diagram::{DIAGRAM, Grid, LabelPlace, diagram, edge, label, node, point, style};
 use archforge_er::Cardinality;
 use archforge_mof::{Obj, Store, Uuid, Value};
 use egui::{Pos2, Rect, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
@@ -222,6 +222,44 @@ fn string(store: &Store, o: Obj, prop: archforge_mof::PropId) -> String {
 
 fn refs(store: &Store, o: Obj, prop: archforge_mof::PropId) -> Vec<Obj> {
     store.list(o, prop).unwrap_or_default().iter().filter_map(Value::as_ref).filter(|r| store.is_alive(*r)).collect()
+}
+
+/// A node's or an edge's own look on this diagram (the Appearance panel): its colours and width,
+/// each none when the diagram's look holds.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub(crate) struct Look {
+    pub fill: Option<egui::Color32>,
+    pub stroke: Option<egui::Color32>,
+    pub text: Option<egui::Color32>,
+    /// The border's or the line's width; none for the diagram's.
+    pub width: Option<f32>,
+}
+
+/// A colour `#rrggbb` as drawn, or none for anything else.
+pub(crate) fn colour(hex: &str) -> Option<egui::Color32> {
+    let h = hex.strip_prefix('#').filter(|h| h.len() == 6 && h.is_ascii())?;
+    let byte = |i: usize| u8::from_str_radix(h.get(i..i + 2)?, 16).ok();
+    Some(egui::Color32::from_rgb(byte(0)?, byte(2)?, byte(4)?))
+}
+
+/// A colour as `#rrggbb`.
+pub(crate) fn hex(c: egui::Color32) -> String {
+    format!("#{:02X}{:02X}{:02X}", c.r(), c.g(), c.b())
+}
+
+/// The palette whose text reads on `fill`: Light's dark text on a light fill, Dark's light text on
+/// a dark one, so a node's own fill never hides its words.
+pub(crate) fn ink_for(fill: egui::Color32) -> &'static Palette {
+    let luma = 0.2126 * fill.r() as f32 + 0.7152 * fill.g() as f32 + 0.0722 * fill.b() as f32;
+    ux::palette(luma < 140.0)
+}
+
+/// The look a node (`node::STYLE`) or an edge (`edge::STYLE`) carries.
+pub(crate) fn look_of(store: &Store, o: Obj, prop: archforge_mof::PropId) -> Look {
+    let Some(s) = element_of(store, o, prop) else { return Look::default() };
+    let c = |p| colour(&string(store, s, p));
+    let width = real(store, s, style::LINE) as f32;
+    Look { fill: c(style::FILL), stroke: c(style::STROKE), text: c(style::TEXT), width: (width > 0.0 && width.is_finite()).then_some(width) }
 }
 
 fn element_of(store: &Store, o: Obj, prop: archforge_mof::PropId) -> Option<Obj> {
@@ -596,21 +634,29 @@ fn draw_node(
             // A table of another schema: dimmed, dashed, its schema named after the eyebrow.
             let elsewhere = archforge_er::rules::schema_of(store, e).filter(|s| d.schema.is_some_and(|here| here != *s));
             let dim = |c: egui::Color32| if elsewhere.is_some() { c.gamma_multiply(FOREIGN_ALPHA) } else { c };
+            // The node's own look on this diagram, where it has one.
+            let look = look_of(store, n, node::STYLE);
+            // Its own fill brings the text that reads on it, unless it has its own text colour too.
+            let ink: &Palette = match look.fill {
+                Some(f) => ink_for(f),
+                None => p,
+            };
             let p = &Palette {
-                entity: dim(p.entity),
-                entity_edge: dim(p.entity_edge),
-                entity_ink: dim(p.entity_ink),
-                entity_line: dim(p.entity_line),
-                text: dim(p.text),
-                text_muted: dim(p.text_muted),
-                text_secondary: dim(p.text_secondary),
+                entity: dim(look.fill.unwrap_or(p.entity)),
+                entity_edge: dim(look.stroke.unwrap_or(p.entity_edge)),
+                entity_ink: dim(ink.entity_ink),
+                entity_line: dim(look.stroke.map_or(p.entity_line, |c| c.gamma_multiply(0.5))),
+                text: dim(look.text.unwrap_or(ink.text)),
+                text_muted: dim(ink.text_muted),
+                text_secondary: dim(ink.text_secondary),
                 ..*p
             };
+            let border = look.width.map_or(1.0, |w| (w * z).max(1.0));
             paint.rect_filled(rect, 6.0 * z, p.entity);
             if elsewhere.is_some() {
-                dashed_rect(paint, rect, Stroke::new(1.0, p.entity_edge), 4.0 * z, 3.0 * z);
+                dashed_rect(paint, rect, Stroke::new(border, p.entity_edge), 4.0 * z, 3.0 * z);
             } else {
-                paint.rect_stroke(rect, 6.0 * z, Stroke::new(1.0, p.entity_edge), StrokeKind::Inside);
+                paint.rect_stroke(rect, 6.0 * z, Stroke::new(border, p.entity_edge), StrokeKind::Inside);
             }
             let name = archforge_er::rules::name_of(store, e);
             let room = Some((rect.width() - 2.0 * ENTITY_INSET * z).max(0.0));
@@ -664,26 +710,31 @@ fn draw_node(
             }
         }
         Some(e) => {
-            paint.rect_filled(rect, 6.0 * z, p.surface);
-            paint.rect_stroke(rect, 6.0 * z, Stroke::new(1.0, p.border), StrokeKind::Inside);
+            let look = look_of(store, n, node::STYLE);
+            let border = look.width.map_or(1.0, |w| (w * z).max(1.0));
+            paint.rect_filled(rect, 6.0 * z, look.fill.unwrap_or(p.surface));
+            paint.rect_stroke(rect, 6.0 * z, Stroke::new(border, look.stroke.unwrap_or(p.border)), StrokeKind::Inside);
             let name = archforge_er::rules::name_of(store, e);
             ux::text(
                 &inner,
                 rect.min + vec2(ENTITY_INSET, 12.0) * z,
                 &name,
                 types::UI.scaled(z),
-                p.text,
+                look.text.unwrap_or_else(|| look.fill.map_or(p.text, |f| ink_for(f).text)),
                 Some((rect.width() - 2.0 * ENTITY_INSET * z).max(0.0)),
             );
         }
         None => {
-            // A note: its own text on the amber tint.
-            paint.rect_filled(rect, 4.0 * z, p.amber_tint);
-            paint.rect_stroke(rect, 4.0 * z, Stroke::new(1.0, p.amber), StrokeKind::Inside);
+            // A note: its own text on the amber tint, or in its own look.
+            let look = look_of(store, n, node::STYLE);
+            let border = look.width.map_or(1.0, |w| (w * z).max(1.0));
+            paint.rect_filled(rect, 4.0 * z, look.fill.unwrap_or(p.amber_tint));
+            paint.rect_stroke(rect, 4.0 * z, Stroke::new(border, look.stroke.unwrap_or(p.amber)), StrokeKind::Inside);
             if !renaming {
+                let ink = look.text.unwrap_or_else(|| look.fill.map_or(p.text, |f| ink_for(f).text));
                 let text = string(store, n, node::TEXT);
-                let g = ux::galley_rows(&inner, &text, types::UI.scaled(z), p.text, Some((rect.width() - 24.0 * z).max(0.0)), 8);
-                inner.galley(rect.min + vec2(12.0, 10.0) * z, g, p.text);
+                let g = ux::galley_rows(&inner, &text, types::UI.scaled(z), ink, Some((rect.width() - 24.0 * z).max(0.0)), 8);
+                inner.galley(rect.min + vec2(12.0, 10.0) * z, g, ink);
             }
         }
     }
@@ -829,16 +880,19 @@ fn draw_edge(
         ),
         None => (true, false, true),
     };
+    // A line's own colour shows while the key status is off; its own width shows always.
+    let look = look_of(store, e, edge::STYLE);
     let ink = if selected {
         p.accent
     } else if !d.key_status {
-        p.text_secondary
+        look.stroke.unwrap_or(p.text_secondary)
     } else if with_key && !many_to_many {
         p.green
     } else {
         p.key_foreign
     };
-    let stroke = Stroke::new((1.5 * z).clamp(1.0, 3.0), ink);
+    let width = look.width.map_or((1.5 * z).clamp(1.0, 3.0), |w| (w * z).clamp(1.0, 6.0));
+    let stroke = Stroke::new(width, ink);
     crate::connect::line(paint, &points, stroke, identifying, z);
     let mut badge = None;
     if let Some(rel) = relationship

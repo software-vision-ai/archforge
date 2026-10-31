@@ -293,7 +293,23 @@ str		Empty diagram	空の図
 str		Unnamed diagram	名前のない図
 str		Model behind this diagram	この図の背後にあるモデル
 str		No changes yet	変更はまだありません
-str		Nothing selected	何も選択されていません
+str		Style	スタイル
+str		Fill	塗り
+str		Border	枠線
+str		Text colour	文字色
+str		Border width	枠線の太さ
+str		Line colour	線の色
+str		Line width	線の太さ
+str		Diagram default	図の既定
+str		Your own colour	任意の色
+str		Colour code	カラーコード
+str		Use diagram defaults	図の既定に戻す
+str		Show line colours	線の色を表示
+str		Change appearance	外観を変更
+str		Select a table or a line on the diagram	図のテーブルか線を選択してください
+str		Selection · this diagram	選択 · この図
+str		{kind} · this diagram	{kind} · この図
+plural		{n} item	{n} 個の項目
 str		No agent connected	エージェントは接続されていません
 str		The model could not be opened	モデルを開けませんでした
 str		The host gives no ids for the model's elements	ホストがモデル要素の ID を提供していません

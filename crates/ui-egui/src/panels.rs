@@ -34,6 +34,8 @@ pub struct State {
     pub column: Option<ColumnEdit>,
     /// The select menu that is open.
     pub menu: Option<Menu>,
+    /// The Appearance panel's colour picker, while it is open.
+    pub picker: Option<crate::appearance::Picker>,
     /// The last refusal of a change, shown at the panel's foot until the next change.
     pub notice: Option<String>,
     /// The selection the open editors belong to: selecting anything else closes them.
@@ -1628,7 +1630,7 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, 
             return;
         }
         Panel::Appearance => {
-            ux::text(&paint, r.min + vec2(PAD, y), &tr("Nothing selected"), types::UI, p.text_muted, Some((r.width() - 2.0 * PAD).max(0.0)));
+            crate::appearance::draw(shell, ui, p, r, y);
             return;
         }
         Panel::Properties | Panel::Skills => {}
