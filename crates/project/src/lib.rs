@@ -194,6 +194,67 @@ fn text<'a>(path: &'a Path, what: &str) -> Result<&'a str, String> {
     path.to_str().filter(|s| !s.chars().any(char::is_control)).ok_or_else(|| format!("the {what} path is not plain text"))
 }
 
+/// The most entries [`find`] reads in one folder: a folder holding more is read only that far.
+const FIND_ENTRIES: usize = 2_000;
+
+/// What [`find`] found, and whether it saw everything: the projects; whether a limit stopped it
+/// short (the projects it may list, the entries it may read in all or in one folder); how many
+/// folders it could not read.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct Found {
+    pub projects: Vec<PathBuf>,
+    pub cut_short: bool,
+    pub unreadable: usize,
+}
+
+/// The projects in `folder` and the folders below it, down to `depth` levels under it, at most
+/// `limit` of them, in name order within each folder: folders named `<name>.archforge` whose path
+/// is plain text, that are not a creation that did not finish. Every entry read spends one of
+/// `budget`, shared by the calls of one search; when it runs out the walk stops. Links are not
+/// followed; hidden folders, folders whose path is not plain text and projects' own folders are
+/// not entered.
+pub fn find(folder: &Path, depth: usize, limit: usize, budget: &mut usize) -> Found {
+    let mut found = Found::default();
+    find_in(folder, depth, limit, budget, &mut found);
+    found
+}
+
+fn find_in(folder: &Path, depth: usize, limit: usize, budget: &mut usize, found: &mut Found) {
+    let Ok(entries) = std::fs::read_dir(folder) else {
+        found.unreadable += 1;
+        return;
+    };
+    let mut dirs = Vec::new();
+    for (n, entry) in entries.enumerate() {
+        if n >= FIND_ENTRIES || *budget == 0 {
+            found.cut_short = true;
+            break;
+        }
+        *budget -= 1;
+        let Ok(entry) = entry else { continue };
+        let path = entry.path();
+        let shown = path.file_name().and_then(|n| n.to_str()).is_some_and(|n| !n.starts_with('.'));
+        if shown && entry.file_type().is_ok_and(|t| t.is_dir()) && text(&path, "folder").is_ok() {
+            dirs.push(path);
+        }
+    }
+    dirs.sort();
+    for dir in dirs {
+        if found.projects.len() >= limit || *budget == 0 {
+            found.cut_short = true;
+            return;
+        }
+        if dir.extension().is_some_and(|e| e == EXTENSION) {
+            let named = dir.file_stem().is_some_and(|n| !n.is_empty());
+            if named && !unfinished(&dir) {
+                found.projects.push(dir);
+            }
+        } else if depth > 0 {
+            find_in(&dir, depth - 1, limit, budget, found);
+        }
+    }
+}
+
 /// Whether a project folder is a creation that did not finish: it holds the marker, or it is empty
 /// and named as a project (any other empty folder is simply not a project).
 fn unfinished(path: &Path) -> bool {
@@ -418,4 +479,50 @@ fn own_dot_dolt(path: &Path) -> Result<(), Error> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn find_lists_finished_projects_down_to_its_depth_and_no_further() {
+        let root = std::env::temp_dir().join(format!("af-find-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let dir = |p: &str| {
+            let d = root.join(p);
+            std::fs::create_dir_all(&d).unwrap();
+            d
+        };
+        let file = |p: &str| std::fs::write(root.join(p), b"x").unwrap();
+        dir("Shop.archforge");
+        file("Shop.archforge/config.yaml");
+        dir("Client/Billing.archforge");
+        file("Client/Billing.archforge/config.yaml");
+        dir("Client/Deep/Far.archforge");
+        file("Client/Deep/Far.archforge/config.yaml");
+        dir("Empty.archforge");
+        dir("Half.archforge");
+        file(&format!("Half.archforge/{MARKER}"));
+        dir(".hidden/Secret.archforge");
+        file(".hidden/Secret.archforge/config.yaml");
+        dir("Shop.archforge/Inner.archforge");
+        file("Shop.archforge/Inner.archforge/config.yaml");
+        file("Loose.archforge");
+        dir("Odd\nname/Hidden.archforge");
+        file("Odd\nname/Hidden.archforge/config.yaml");
+        let names = |found: &Found| found.projects.iter().map(|p| p.strip_prefix(&root).unwrap().to_string_lossy().into_owned()).collect::<Vec<_>>();
+        let all = find(&root, 1, 50, &mut 1_000);
+        assert_eq!(names(&all), ["Client/Billing.archforge", "Shop.archforge"], "a folder whose name is not plain text is passed");
+        assert!(!all.cut_short);
+        assert_eq!(names(&find(&root, 2, 50, &mut 1_000)), ["Client/Billing.archforge", "Client/Deep/Far.archforge", "Shop.archforge"]);
+        assert_eq!(names(&find(&root, 0, 50, &mut 1_000)), ["Shop.archforge"]);
+        let one = find(&root, 2, 1, &mut 1_000);
+        assert_eq!((one.projects.len(), one.cut_short), (1, true), "the limit holds and says so");
+        let mut budget = 3;
+        assert!(find(&root, 2, 50, &mut budget).cut_short, "so does the budget");
+        assert_eq!(budget, 0);
+        assert_eq!(find(&root.join("missing"), 2, 50, &mut 1_000), Found { unreadable: 1, ..Found::default() });
+        let _ = std::fs::remove_dir_all(&root);
+    }
 }
