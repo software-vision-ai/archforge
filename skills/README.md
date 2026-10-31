@@ -8,6 +8,7 @@ rules in one line each and routes to these files for the detail; people can read
 |---|---|
 | [`archforge-ground-rules`](archforge-ground-rules/SKILL.md) | add a dependency, asset or wording, or are unsure what may be copied or named |
 | [`archforge-crash-safety`](archforge-crash-safety/SKILL.md) | write non-test Rust, read input, write a file or look into a crash |
+| [`archforge-design`](archforge-design/SKILL.md) | design or change how a screen, tool, editor, notation, message or icon looks or behaves |
 | [`archforge-ui`](archforge-ui/SKILL.md) | change what the interface draws or says, or add a translation |
 | [`archforge-tests`](archforge-tests/SKILL.md) | write, place or run tests, or the gate fails |
 

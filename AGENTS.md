@@ -64,6 +64,7 @@ cargo xtask shot dark                     # an offscreen screenshot and a small 
 |---|---|
 | Licences, dependencies, assets, the clean room, the name | `skills/archforge-ground-rules/SKILL.md` |
 | Non-test Rust, input, writing files, a crash | `skills/archforge-crash-safety/SKILL.md` |
+| How the interface looks and behaves: the design decisions so far | `skills/archforge-design/SKILL.md` |
 | What the interface draws or says, translations | `skills/archforge-ui/SKILL.md` |
 | Writing or running tests, a failing gate | `skills/archforge-tests/SKILL.md` |
 
