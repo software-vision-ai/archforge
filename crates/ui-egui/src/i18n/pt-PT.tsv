@@ -221,8 +221,6 @@ str		Relationship	Relação
 str		Relationship types	Tipos de relação
 str		Note	Nota
 str		Link note	Ligar nota
-str		Group	Grupo
-str		Group kinds	Tipos de grupo
 str		Key status	Estado das chaves
 str		Grid	Grelha
 str		Add table	Adicionar tabela
