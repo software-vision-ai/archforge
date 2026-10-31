@@ -259,6 +259,7 @@ str		Many to many · {from} and {to}	多对多 · {from} 和 {to}
 str		Add mapping table	添加映射表
 str		Keep the line	保留连线
 str		Columns	列
+str		Remove relationship	删除关系
 str		Relationship removed	已删除关系
 str		{name} removed	已删除 {name}
 str		Undo	撤销
@@ -378,6 +379,7 @@ str		On this diagram · {n}	此图上 · {n}
 str		Relationship · {from} to {to}	关系 · {from} 到 {to}
 str		This relationship	此关系
 str		On this relationship · {n}	此关系上 · {n}
+str		Add foreign key	添加外键
 str		Remove foreign key	移除外键
 str		Add id column	添加 id 列
 str		Choose key columns	选择键列

@@ -258,6 +258,7 @@ str		Many to many · {from} and {to}	Many to many · {from} and {to}
 str		Add mapping table	Add mapping table
 str		Keep the line	Keep the line
 str		Columns	Columns
+str		Remove relationship	Remove relationship
 str		Relationship removed	Relationship removed
 str		{name} removed	{name} removed
 str		Undo	Undo
@@ -377,6 +378,7 @@ str		On this diagram · {n}	On this diagram · {n}
 str		Relationship · {from} to {to}	Relationship · {from} to {to}
 str		This relationship	This relationship
 str		On this relationship · {n}	On this relationship · {n}
+str		Add foreign key	Add foreign key
 str		Remove foreign key	Remove foreign key
 str		Add id column	Add id column
 str		Choose key columns	Choose key columns

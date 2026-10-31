@@ -306,7 +306,8 @@ pub fn connect(shell: &mut Shell, d: Obj, from_node: Uuid, to_node: Uuid) {
         )?;
         let edge = e.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string();
         b.execute("diagram.label", &json!({ "edge": edge, "kind": "name", "at": "middle" }))?;
-        Ok(())
+        // The key columns the foreign key added stay in sight.
+        crate::editing::grow_to_fit(b, &[from_id, to_id])
     });
     match out {
         Ok(o) => {
@@ -427,7 +428,9 @@ pub(crate) fn mapping_offer(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r
     }
 }
 
-/// Removes the selected relationship from the model and says so with Undo.
+/// Removes the selected relationship from the model and says so with Undo. Its foreign key and the
+/// key columns that key brought go with it, as the foreign key switch takes them off, all one undo
+/// step: a line deleted leaves no key behind that nothing draws.
 pub fn remove_selected_relationship(shell: &mut Shell) -> bool {
     let Some(session) = shell.session.as_ref() else { return false };
     let store = session.doc();
@@ -439,7 +442,20 @@ pub fn remove_selected_relationship(shell: &mut Shell) -> bool {
     let Some(rel) = rel.filter(|r| store.class_of(*r).ok() == Some(archforge_er::RELATIONSHIP)) else { return false };
     let Some(id) = store.uuid(rel).ok() else { return false };
     let name = archforge_er::rules::name_of(store, rel);
-    match run(shell, "er.relationship.remove", json!({ "relationship": id.to_string() })) {
+    let mut ids: Vec<String> = Vec::new();
+    for (fk, _) in store.referrers(rel).into_iter().filter(|(_, p)| *p == archforge_er::foreign_key::RELATIONSHIP) {
+        ids.extend(store.uuid(fk).ok().map(|u| u.to_string()));
+        for c in store.list(fk, archforge_er::foreign_key::COLUMN).unwrap_or_default().iter().filter_map(archforge_mof::Value::as_ref) {
+            if store.is_alive(c) {
+                ids.extend(store.uuid(c).ok().map(|u| u.to_string()));
+            }
+        }
+    }
+    ids.push(id.to_string());
+    let Some(session) = shell.session.as_mut() else { return false };
+    let removed =
+        session.batch(&tr("Remove relationship"), |b| b.execute("er.remove", &json!({ "ids": ids })).map(|_| ())).map_err(|e| e.to_string());
+    match removed {
         Ok(_) => {
             let text = if name.is_empty() { tr("Relationship removed") } else { fmt(&tr("{name} removed"), &[("name", &name)]) };
             let undo_label = shell.session.as_ref().and_then(|s| s.undo_label().map(str::to_string));

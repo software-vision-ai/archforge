@@ -926,6 +926,63 @@ pub fn run_growing(shell: &mut Shell, label: &str, cmd: &str, params: serde_json
         .map_err(|e| e.to_string())
 }
 
+/// Grows, inside batch `b`, every node of the tables `entities` whose height would hide the
+/// columns the table has now: a command that adds key columns (a foreign key, a shared subtype
+/// key) keeps them in sight in the same undo step.
+pub(crate) fn grow_to_fit(
+    b: &mut archforge_engine::Batch<'_, Store, archforge_er::ErView>,
+    entities: &[Uuid],
+) -> Result<(), archforge_engine::EngineError> {
+    let mut grow: Vec<(String, f64, f64)> = Vec::new();
+    {
+        let store = b.doc();
+        for id in entities {
+            let Some(e) = store.by_uuid(*id) else { continue };
+            let columns = store
+                .list(e, archforge_er::entity::ATTRIBUTE)
+                .unwrap_or_default()
+                .iter()
+                .filter_map(archforge_mof::Value::as_ref)
+                .filter(|a| store.is_alive(*a))
+                .count();
+            let needed = content_height(columns);
+            let (_, _, nodes) = archforge_diagram::views_of(store, e);
+            for n in nodes {
+                let bounds = bounds_of(store, n);
+                if bounds.height < needed
+                    && let Some(node) = uuid(store, n)
+                    && !grow.iter().any(|(g, _, _)| *g == node.to_string())
+                {
+                    grow.push((node.to_string(), bounds.width, needed));
+                }
+            }
+        }
+    }
+    for (node, width, height) in grow {
+        b.execute("diagram.resize", &json!({ "node": node, "width": width, "height": height }))?;
+    }
+    Ok(())
+}
+
+/// Runs `cmd` and grows the nodes of `entities` to show their columns, as one undo step named
+/// `label`; gives the command's result.
+pub(crate) fn run_fitting(
+    shell: &mut Shell,
+    label: &str,
+    cmd: &str,
+    params: serde_json::Value,
+    entities: &[Uuid],
+) -> Result<serde_json::Value, String> {
+    let Some(session) = shell.session.as_mut() else { return Err(tr("The model could not be opened")) };
+    session
+        .batch(label, |b| {
+            b.execute(cmd, &params)?;
+            grow_to_fit(b, entities)
+        })
+        .map(|o| o.value.get(0).cloned().unwrap_or(serde_json::Value::Null))
+        .map_err(|e| e.to_string())
+}
+
 fn open_rename(shell: &mut Shell, node: Uuid, entity: Uuid) {
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
     let Some(e) = store.by_uuid(entity) else { return };

@@ -259,6 +259,7 @@ str		Many to many · {from} and {to}	Muitos para muitos · {from} e {to}
 str		Add mapping table	Adicionar tabela de mapeamento
 str		Keep the line	Manter a linha
 str		Columns	Colunas
+str		Remove relationship	Remover relação
 str		Relationship removed	Relação removida
 str		{name} removed	{name} removida
 str		Undo	Anular
@@ -378,6 +379,7 @@ str		On this diagram · {n}	Neste diagrama · {n}
 str		Relationship · {from} to {to}	Relação · {from} para {to}
 str		This relationship	Esta relação
 str		On this relationship · {n}	Nesta relação · {n}
+str		Add foreign key	Adicionar chave estrangeira
 str		Remove foreign key	Remover chave estrangeira
 str		Add id column	Adicionar coluna id
 str		Choose key columns	Escolher colunas chave

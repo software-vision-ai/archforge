@@ -120,6 +120,8 @@ the change, and update this file in the same change.
 - Cardinality is chosen in one place, the popover from the Relationship tool's chevron, with
   glyphs, not words; the choice stays for the next line. An existing line's ends change there or
   in Properties.
+- Key columns a foreign key adds grow every box of their table to show them, in the same undo
+  step; deleting a relationship takes its foreign key and those key columns with it.
 - Many-to-many offers a mapping table; a mapping table that holds only its two keys offers to
   collapse back into a line.
 - ER has no generalization tool. Subtypes are added from the supertype's Properties and drawn as a

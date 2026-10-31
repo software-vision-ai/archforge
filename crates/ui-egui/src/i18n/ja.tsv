@@ -259,6 +259,7 @@ str		Many to many · {from} and {to}	多対多 · {from} と {to}
 str		Add mapping table	マッピングテーブルを追加
 str		Keep the line	線のままにする
 str		Columns	列
+str		Remove relationship	リレーションシップを削除
 str		Relationship removed	リレーションシップを削除しました
 str		{name} removed	{name} を削除しました
 str		Undo	元に戻す
@@ -378,6 +379,7 @@ str		On this diagram · {n}	この図に · {n}
 str		Relationship · {from} to {to}	リレーションシップ · {from} から {to}
 str		This relationship	このリレーションシップ
 str		On this relationship · {n}	このリレーションシップに · {n}
+str		Add foreign key	外部キーを追加
 str		Remove foreign key	外部キーを削除
 str		Add id column	id 列を追加
 str		Choose key columns	キー列を選択
