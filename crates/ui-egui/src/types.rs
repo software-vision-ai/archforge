@@ -153,16 +153,19 @@ pub(crate) fn types_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r
     };
     y = next - 6.0;
     let editing_new = shell.panels.type_edit.as_ref().is_some_and(|t| t.target.is_none() && t.schema == schema_id);
+    let chosen = crate::panels::selected_id(shell);
     for row in &list {
         if shell.panels.type_edit.as_ref().is_some_and(|t| t.target == Some(row.id)) {
             y = editor(shell, ui, p, r, y);
             continue;
         }
         let rect = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width, 44.0));
-        let resp = control(shell, ui, &format!("workspace.properties.type.row.{}", row.id), "row", rect, true);
-        if resp.hovered() {
+        let id = format!("workspace.properties.type.row.{}", row.id);
+        let resp = control(shell, ui, &id, "row", rect, true);
+        if Some(row.id) == chosen {
+            paint.rect_filled(rect, 6.0, p.accent_tint);
+        } else if resp.contains_pointer() {
             paint.rect_filled(rect, 6.0, p.page);
-            ux::icon_mid(&paint, pos2(rect.right() - 16.0, rect.center().y), &icons::EDIT, p.text_secondary);
         }
         match row.kind {
             TypeKind::Domain => badge(&paint, rect.min + vec2(2.0, 6.0), "DM", p.green_tint, p.green),
@@ -170,7 +173,7 @@ pub(crate) fn types_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r
         }
         ux::text(&paint, rect.min + vec2(38.0, 4.0), &row.name, types::UI, p.text, Some((width - 70.0).max(0.0)));
         ux::text(&paint, rect.min + vec2(38.0, 23.0), &row.detail, types::CAPTION, p.text_secondary, Some((width - 70.0).max(0.0)));
-        if resp.clicked() {
+        if crate::panels::edit_button(shell, ui, p, rect, &id, resp.contains_pointer()) || resp.double_clicked() {
             open(shell, schema_id, row.kind, Some(row.id));
         }
         y += 44.0;

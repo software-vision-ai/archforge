@@ -39,8 +39,8 @@ pub struct State {
     pub menu: Option<Menu>,
     /// The last refusal of a change, shown at the panel's foot until the next change.
     pub notice: Option<String>,
-    /// The column whose selection opened the editor, so Cancel and + are not undone next frame.
-    pub selected_column: Option<Uuid>,
+    /// The selection the open editors belong to: selecting anything else closes them.
+    pub editors_for: Option<Uuid>,
     /// A relationship's Properties (slice E3): a role being typed, whether More is open, and the
     /// relationship whose switch asked for a key its parent cannot give.
     pub role: Option<crate::relation::RoleEdit>,
@@ -53,12 +53,10 @@ pub struct State {
     /// The check and index editors (slice S3).
     pub check: Option<crate::checks::CheckEdit>,
     pub index: Option<crate::indexes::IndexEdit>,
-    /// The domain or enum editor (slice S5), and the type whose selection opened it.
+    /// The domain or enum editor (slice S5).
     pub type_edit: Option<crate::types::TypeEdit>,
-    pub selected_type: Option<Uuid>,
-    /// The sequence or view editor (slice S7), and the element whose selection opened it.
+    /// The sequence or view editor (slice S7).
     pub object_edit: Option<crate::objects::ObjectEdit>,
-    pub selected_object: Option<Uuid>,
     /// The body's scroll (archforge-gm2.36): how far it is scrolled, how tall its content was last
     /// frame, what it was scrolled for (a new panel or selection starts at the top), the editors
     /// open last frame, whether an editor that just opened is still to be brought into view, and
@@ -535,14 +533,9 @@ fn properties(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y:
     // A column's panel shows its table's fields, so their section says Table.
     let word = if subject.class == Some(archforge_er::ATTRIBUTE) { tr("Table") } else { subject.word.clone() };
     y = section(shell, ui, p, r, y, &word, None).unwrap_or(y + 50.0);
-    if subject.class != Some(archforge_er::DOMAIN) && subject.class != Some(archforge_er::ENUM_TYPE) {
-        shell.panels.selected_type = None;
-    }
-    if subject.class != Some(archforge_er::SEQUENCE) && subject.class != Some(archforge_er::VIEW) {
-        shell.panels.selected_object = None;
-    }
-    if subject.class != Some(archforge_er::ATTRIBUTE) {
-        shell.panels.selected_column = None;
+    if shell.panels.editors_for != subject.id {
+        shell.panels.editors_for = subject.id;
+        close_editors(shell);
     }
     match subject.class {
         None => {
@@ -575,33 +568,25 @@ fn properties(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y:
             }
         }
         Some(c) if c == archforge_er::DOMAIN || c == archforge_er::ENUM_TYPE => {
-            // A type: its schema's Types section with this type's editor open, once per selection.
+            // A type: its schema's Types section, this type's row marked.
             let schema = shell.session.as_ref().and_then(|s| {
                 let store = s.doc();
                 let schema = archforge_er::rules::schema_of(store, subject.obj?)?;
                 Some((schema, store.uuid(schema).ok()?, crate::types::kind_of(store, subject.obj?)?))
             });
-            if let (Some((schema, schema_id, kind)), Some(id)) = (schema, subject.id) {
-                if shell.panels.selected_type != Some(id) {
-                    shell.panels.selected_type = Some(id);
-                    crate::types::open(shell, schema_id, kind, Some(id));
-                }
+            if let Some((schema, schema_id, _)) = schema {
                 let y = crate::types::types_section(shell, ui, p, r, y, schema, schema_id);
                 crate::keys::problems_section(shell, ui, p, r, y + 4.0, schema);
             }
         }
         Some(c) if c == archforge_er::SEQUENCE || c == archforge_er::VIEW => {
-            // A sequence or view: its schema's section with its editor open, once per selection.
+            // A sequence or view: its schema's section, its row marked.
             let schema = shell.session.as_ref().and_then(|s| {
                 let store = s.doc();
                 let schema = archforge_er::rules::schema_of(store, subject.obj?)?;
                 Some((schema, store.uuid(schema).ok()?, crate::objects::kind_of(store, subject.obj?)?))
             });
-            if let (Some((schema, schema_id, kind)), Some(id)) = (schema, subject.id) {
-                if shell.panels.selected_object != Some(id) {
-                    shell.panels.selected_object = Some(id);
-                    crate::objects::open(shell, schema_id, kind, Some(id));
-                }
+            if let Some((schema, schema_id, kind)) = schema {
                 let y = crate::objects::section_of(shell, ui, p, r, y, schema, schema_id, kind);
                 crate::keys::problems_section(shell, ui, p, r, y + 4.0, schema);
             }
@@ -632,7 +617,7 @@ fn properties(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y:
             }
         }
         Some(c) if c == archforge_er::ATTRIBUTE => {
-            // A column: its table's panel, the column's editor open on it.
+            // A column: its table's panel, the column's row marked.
             let (entity, entity_id) = shell
                 .session
                 .as_ref()
@@ -642,11 +627,7 @@ fn properties(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y:
                     Some((e, store.uuid(e).ok()?))
                 })
                 .unzip();
-            if let (Some(entity), Some(entity_id), Some(id)) = (entity, entity_id, subject.id) {
-                if shell.panels.selected_column != Some(id) {
-                    shell.panels.selected_column = Some(id);
-                    open_column(shell, entity_id, Some(id));
-                }
+            if let (Some(entity), Some(entity_id)) = (entity, entity_id) {
                 let store = shell.session.as_ref().map(|s| s.doc());
                 let name = store.map(|st| archforge_er::rules::name_of(st, entity)).unwrap_or_default();
                 let table = Subject {
@@ -787,6 +768,7 @@ fn entity_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
         return;
     };
     y = next - 6.0;
+    let chosen = selected_id(shell);
     for col in &columns {
         if shell.panels.column.as_ref().is_some_and(|c| c.target == Some(col.id)) {
             y = column_editor(shell, ui, p, r, y);
@@ -794,7 +776,9 @@ fn entity_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
         }
         let row = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width.max(0.0), ROW));
         let resp = control(shell, ui, &format!("workspace.properties.column.{}", col.id), "row", row, true);
-        if resp.hovered() {
+        if Some(col.id) == chosen {
+            paint.rect_filled(row, 6.0, p.accent_tint);
+        } else if resp.contains_pointer() {
             paint.rect_filled(row, 6.0, p.page);
         }
         ux::icon_mid(&paint, pos2(row.left() + 8.0, row.center().y), &icons::GRIP, p.text_muted);
@@ -826,10 +810,8 @@ fn entity_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
             after += 20.0;
         }
         ux::text_mid(&paint, after, mid + 0.5, &col.ty, types::CAPTION, p.text_secondary, Some((row.right() - after - 32.0).max(0.0)));
-        if resp.hovered() {
-            ux::icon_mid(&paint, pos2(row.right() - 16.0, row.center().y), &icons::EDIT, p.text_secondary);
-        }
-        if resp.clicked() {
+        let id = format!("workspace.properties.column.{}", col.id);
+        if edit_button(shell, ui, p, row, &id, resp.contains_pointer()) || resp.double_clicked() {
             open_column(shell, entity_id, Some(col.id));
         }
         y += ROW;
@@ -854,6 +836,50 @@ fn entity_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
                 Err(e) => shell.panels.notice = Some(e),
             }
         }
+    }
+}
+
+/// The first selected element's id, which a list in Properties marks.
+pub(crate) fn selected_id(shell: &Shell) -> Option<Uuid> {
+    let s = shell.session.as_ref()?;
+    s.view().selection.first().and_then(|o| s.doc().uuid(*o).ok())
+}
+
+/// A list row's edit button at its right end. Only it, or a double click on the row, opens the
+/// row's editor: selecting an element never does. True when it was pressed.
+pub(crate) fn edit_button(shell: &mut Shell, ui: &egui::Ui, p: &Palette, row: Rect, id: &str, row_hovered: bool) -> bool {
+    let at = Rect::from_center_size(pos2(row.right() - 16.0, row.center().y), vec2(24.0, 24.0));
+    let resp = control(shell, ui, &format!("{id}.edit"), "button", at, true).on_hover_text(tr("Edit"));
+    let paint = ui.painter();
+    if resp.hovered() {
+        paint.rect_filled(at, 6.0, p.border);
+    }
+    let ink = if resp.hovered() || row_hovered { p.text_secondary } else { p.text_muted };
+    ux::icon_mid(paint, at.center(), &icons::EDIT, ink);
+    resp.clicked()
+}
+
+/// Closes every Properties editor, as Cancel would, except one opened this frame and not yet
+/// shown: an editor belongs to the selection it was opened on.
+fn close_editors(shell: &mut Shell) {
+    let panels = &mut shell.panels;
+    if panels.column.as_ref().is_some_and(|e| !e.opened) {
+        panels.column = None;
+    }
+    if panels.key.as_ref().is_some_and(|e| !e.opened) {
+        panels.key = None;
+    }
+    if panels.check.as_ref().is_some_and(|e| !e.opened) {
+        panels.check = None;
+    }
+    if panels.index.as_ref().is_some_and(|e| !e.opened) {
+        panels.index = None;
+    }
+    if panels.type_edit.as_ref().is_some_and(|e| !e.opened) {
+        panels.type_edit = None;
+    }
+    if panels.object_edit.as_ref().is_some_and(|e| !e.opened) {
+        panels.object_edit = None;
     }
 }
 
@@ -1403,13 +1429,7 @@ fn commit_column(shell: &mut Shell, edit: &ColumnEdit) {
             }),
             edit.entity,
         )
-        .map(|added| {
-            // Adding selects the new column; its editor was this one, so the selection does not
-            // open it again.
-            if let Some(id) = added.get("id").and_then(serde_json::Value::as_str).and_then(Uuid::parse) {
-                shell.panels.selected_column = Some(id);
-            }
-        }),
+        .map(|_| ()),
         Some(t) => {
             // Every changed field in one batch: a refusal rolls the whole card back, so what the
             // card shows and what landed never drift apart.

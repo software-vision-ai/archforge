@@ -111,10 +111,10 @@ pub(crate) fn keys_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r:
             continue;
         }
         let row = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width, 44.0));
-        let resp = control(shell, ui, &format!("workspace.properties.key.row.{}", key.id), "row", row, true);
-        if resp.hovered() {
+        let id = format!("workspace.properties.key.row.{}", key.id);
+        let resp = control(shell, ui, &id, "row", row, true);
+        if resp.contains_pointer() {
             paint.rect_filled(row, 6.0, p.page);
-            ux::icon_mid(&paint, pos2(row.right() - 16.0, row.center().y), &icons::EDIT, p.text_secondary);
         }
         let (b, tint, ink) = if key.primary { ("PK", p.amber_tint, p.amber) } else { ("UQ", p.accent_tint, p.accent) };
         let br = Rect::from_min_size(row.min + vec2(2.0, 6.0), vec2(26.0, 16.0));
@@ -125,7 +125,7 @@ pub(crate) fn keys_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r:
         let columns = key.columns.iter().map(|(_, n, _)| n.as_str()).collect::<Vec<_>>().join(", ");
         ux::text(&paint, row.min + vec2(38.0, 4.0), &label, types::UI, p.text, Some((width - 70.0).max(0.0)));
         ux::text(&paint, row.min + vec2(38.0, 23.0), &columns, types::CAPTION, p.text_secondary, Some((width - 70.0).max(0.0)));
-        if resp.clicked() {
+        if crate::panels::edit_button(shell, ui, p, row, &id, resp.contains_pointer()) || resp.double_clicked() {
             open(shell, entity_id, Some(key));
         }
         y += 44.0;

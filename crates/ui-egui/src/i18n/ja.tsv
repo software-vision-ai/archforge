@@ -162,6 +162,7 @@ str		Identity, by default	識別列、既定で
 str		Computed, stored	計算列、保存
 str		Computed, virtual	計算列、仮想
 str		Remove	削除
+str		Edit	編集
 str		Apply	適用
 str		Inherited · {n}	継承 · {n}
 str		every table	すべてのテーブル

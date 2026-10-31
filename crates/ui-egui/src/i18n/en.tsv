@@ -161,6 +161,7 @@ str		Identity, by default	Identity, by default
 str		Computed, stored	Computed, stored
 str		Computed, virtual	Computed, virtual
 str		Remove	Remove
+str		Edit	Edit
 str		Apply	Apply
 str		Inherited · {n}	Inherited · {n}
 str		every table	every table

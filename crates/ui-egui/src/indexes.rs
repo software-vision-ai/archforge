@@ -144,15 +144,15 @@ pub(crate) fn indexes_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette,
             continue;
         }
         let row = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width, 44.0));
-        let resp = control(shell, ui, &format!("workspace.properties.index.row.{}", index.id), "row", row, true);
-        if resp.hovered() {
+        let id = format!("workspace.properties.index.row.{}", index.id);
+        let resp = control(shell, ui, &id, "row", row, true);
+        if resp.contains_pointer() {
             paint.rect_filled(row, 6.0, p.page);
-            ux::icon_mid(&paint, pos2(row.right() - 16.0, row.center().y), &icons::EDIT, p.text_secondary);
         }
         badge(&paint, row.min + vec2(2.0, 6.0), "IX", p.purple_tint, p.purple);
         ux::text(&paint, row.min + vec2(38.0, 4.0), &index.label, types::UI, p.text, Some((width - 70.0).max(0.0)));
         ux::text(&paint, row.min + vec2(38.0, 23.0), &index.summary, types::CAPTION, p.text_secondary, Some((width - 70.0).max(0.0)));
-        if resp.clicked() {
+        if crate::panels::edit_button(shell, ui, p, row, &id, resp.contains_pointer()) || resp.double_clicked() {
             open(shell, entity_id, Some(index));
         }
         y += 44.0;

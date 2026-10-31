@@ -162,6 +162,7 @@ str		Identity, by default	Identität, standardmäßig
 str		Computed, stored	Berechnet, gespeichert
 str		Computed, virtual	Berechnet, virtuell
 str		Remove	Entfernen
+str		Edit	Bearbeiten
 str		Apply	Übernehmen
 str		Inherited · {n}	Geerbt · {n}
 str		every table	jede Tabelle
