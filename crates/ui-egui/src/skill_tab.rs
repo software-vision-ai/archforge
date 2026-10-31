@@ -3,8 +3,10 @@
 //! formatting toolbar, the Write / Preview switch, and its text. Write edits the Markdown source,
 //! styled as it is typed (`crate::markdown`); Preview draws the page it makes. The text is kept
 //! through `skill.set-body` once typing pauses, when the tab closes, on Save and before the
-//! project is parked or the window quits; each keeping is one undo step. The name, the target and
-//! the triggers stay in the Skills panel.
+//! project is parked or the window quits; each keeping is one undo step. Above the text sit the
+//! skill's settings: its name as the page's title, what it applies to and when; each is kept as
+//! it is chosen. The Skills panel lists the skills; its + makes one and opens it here, its name
+//! ready to type.
 
 use archforge_mof::{Obj, Store, Uuid};
 use egui::{Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
@@ -13,6 +15,7 @@ use serde_json::json;
 use crate::home::control;
 use crate::i18n::{fmt, tr};
 use crate::markdown::{self, Format};
+use crate::panels::{Applies, Menu};
 use crate::ux::{self, Palette, icons, types};
 use crate::{Shell, widgets};
 
@@ -45,6 +48,14 @@ pub struct Doc {
     pub notice: Option<String>,
     /// A link clicked in Preview, waiting for the confirmation to open it.
     pub link: Option<String>,
+    /// The name, column type and dialect as typed in their fields.
+    pub name: String,
+    pub type_pattern: String,
+    pub dialect: String,
+    /// The name takes the keyboard, all of it selected, at the next frame: a skill just made.
+    pub focus_name: bool,
+    /// Why the last change of a setting was refused; cleared by the next one kept.
+    pub settings_refused: Option<String>,
 }
 
 impl Doc {
@@ -73,7 +84,13 @@ pub fn open(shell: &mut Shell, id: Uuid) {
     let Some(s) = skill_obj(store, id) else { return };
     if !shell.canvas.skills.iter().any(|d| d.skill == id) {
         let body = body_of(store, s);
+        let set = settings(store, s);
         shell.canvas.skills.push(Doc {
+            name: set.name,
+            type_pattern: set.type_pattern,
+            dialect: set.dialect,
+            focus_name: false,
+            settings_refused: None,
             skill: id,
             text: body.clone(),
             saved: body,
@@ -91,6 +108,120 @@ pub fn open(shell: &mut Shell, id: Uuid) {
     shell.canvas.active = Some(id);
     shell.canvas.notice = None;
     shell.canvas.focused = false;
+}
+
+/// Makes a skill on `subject` (the model when none) under a fresh name and opens it in its tab,
+/// the name selected for typing.
+pub fn create(shell: &mut Shell, subject: Option<Uuid>) {
+    let Some(session) = shell.session.as_mut() else { return };
+    let store = session.doc();
+    let taken = archforge_core::skills::skills(store)
+        .into_iter()
+        .filter(|s| archforge_core::skills::subject_of(store, *s).and_then(|o| store.uuid(o).ok()) == subject)
+        .map(|s| archforge_core::skills::name_of(store, s));
+    let name = crate::explorer::fresh_name(&tr("Skill"), taken, false).unwrap_or_default();
+    let subject_id = subject.map(|s| s.to_string()).unwrap_or_default();
+    match session.execute("skill.add", &json!({ "subject": subject_id, "name": name })) {
+        Ok(out) => {
+            // skill.add selects the new skill; the panel stays on the element it sits on.
+            let ids: Vec<String> = subject.into_iter().map(|s| s.to_string()).collect();
+            let _ = session.execute("view.select", &json!({ "ids": ids }));
+            let Some(id) = out.value["id"].as_str().and_then(Uuid::parse) else { return };
+            crate::canvas::open(shell, id);
+            if let Some(doc) = shell.canvas.skills.iter_mut().find(|d| d.skill == id) {
+                doc.focus_name = true;
+            }
+        }
+        Err(e) => shell.canvas.notice = Some(e.to_string()),
+    }
+}
+
+/// A skill's settings, as its tab shows and writes them.
+struct Settings {
+    name: String,
+    description: String,
+    body: String,
+    triggers: [bool; 4],
+    dialect: String,
+    applies: Applies,
+    type_pattern: String,
+}
+
+/// The triggers in the order of the When chips, with their automation keys, icons and words.
+const TRIGGERS: [(archforge_core::SkillTrigger, &str, &ux::Icon, &str); 4] = [
+    (archforge_core::SkillTrigger::Modelling, "modelling", &icons::TABLE, "Modelling"),
+    (archforge_core::SkillTrigger::Drawing, "drawing", &icons::BRUSH, "Drawing"),
+    (archforge_core::SkillTrigger::Naming, "naming", &icons::NAMING, "Naming"),
+    (archforge_core::SkillTrigger::Export, "export", &icons::EXPORT, "Export"),
+];
+
+fn string(store: &Store, s: Obj, prop: archforge_mof::PropId) -> String {
+    store.get(s, prop).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default()
+}
+
+fn settings(store: &Store, s: Obj) -> Settings {
+    use archforge_core::skill;
+    let on = archforge_core::skills::triggers_of(store, s);
+    let applies = string(store, s, skill::APPLIES_TO);
+    Settings {
+        name: archforge_core::skills::name_of(store, s),
+        description: string(store, s, skill::DESCRIPTION),
+        body: body_of(store, s),
+        triggers: TRIGGERS.map(|(t, ..)| on.contains(&t)),
+        dialect: string(store, s, skill::DIALECT),
+        applies: match archforge_core::skills::kind_by_key::<archforge_er::ErView>(store, &applies).map(|(_, w)| w) {
+            Some("table") => Applies::Tables,
+            Some("relationship") => Applies::Relationships,
+            Some(_) => Applies::Columns,
+            None => Applies::Subject,
+        },
+        type_pattern: string(store, s, skill::TYPE_PATTERN),
+    }
+}
+
+/// Writes a skill's settings through `skill.set`; a dialect only with Export, a column type only
+/// for columns.
+fn write_settings(shell: &mut Shell, id: Uuid, f: &Settings) -> Result<(), String> {
+    let session = shell.session.as_mut().ok_or_else(|| tr("The model could not be opened"))?;
+    let triggers: Vec<&str> = TRIGGERS.iter().zip(f.triggers).filter(|(_, on)| *on).map(|((t, ..), _)| t.literal()).collect();
+    let applies_to = match f.applies {
+        Applies::Subject => "",
+        Applies::Tables => "table",
+        Applies::Relationships => "relationship",
+        Applies::Columns => "column",
+    };
+    let params = json!({
+        "skill": id.to_string(), "name": f.name, "description": f.description, "body": f.body, "triggers": triggers,
+        "dialect": if f.triggers[3] { f.dialect.trim() } else { "" },
+        "applies_to": applies_to,
+        "type_pattern": if f.applies == Applies::Columns { f.type_pattern.trim() } else { "" },
+    });
+    session.execute("skill.set", &params).map(|_| ()).map_err(|e| e.to_string())
+}
+
+/// Changes one setting of the skill and keeps it, or says why not.
+fn change(shell: &mut Shell, i: usize, s: Obj, edit: impl FnOnce(&mut Settings)) {
+    let Some(store) = shell.session.as_ref().map(|x| x.doc()) else { return };
+    let mut f = settings(store, s);
+    edit(&mut f);
+    let id = shell.canvas.skills[i].skill;
+    shell.canvas.skills[i].settings_refused = write_settings(shell, id, &f).err();
+}
+
+/// "This table" and the like: the word for the element the skill sits on.
+fn this_word(store: &Store, subject: Option<Obj>) -> String {
+    let Some(o) = subject else { return tr("This model") };
+    match store.class_of(o).ok() {
+        Some(c) if c == archforge_er::SCHEMA => tr("This schema"),
+        Some(c) if c == archforge_er::ENTITY => tr("This table"),
+        Some(c) if c == archforge_er::ATTRIBUTE => tr("This column"),
+        Some(c) if c == archforge_er::RELATIONSHIP => tr("This relationship"),
+        Some(c) if c == archforge_er::DOMAIN => tr("This domain"),
+        Some(c) if c == archforge_er::ENUM_TYPE => tr("This enum type"),
+        Some(c) if c == archforge_er::VIEW => tr("This view"),
+        Some(c) if c == archforge_er::SEQUENCE => tr("This sequence"),
+        _ => tr("This element"),
+    }
 }
 
 /// Keeps every open skill's text the store does not have yet: the ones whose typing paused, or
@@ -139,14 +270,197 @@ pub fn retain_valid(state: &mut crate::canvas::State) {
     state.skills.retain(|d| tabs.contains(&d.skill));
 }
 
-/// Where the skill sits and what it aims at, as the page's second line.
+/// Where the skill sits, as the line under its name.
 fn place(store: &Store, s: Obj) -> String {
-    let on = match archforge_core::skills::subject_of(store, s) {
+    match archforge_core::skills::subject_of(store, s) {
         Some(o) => fmt(&tr("Skill · on {subject}"), &[("subject", &archforge_er::rules::name_of(store, o))]),
         None => tr("Skill · on the project"),
-    };
-    let target = crate::panels::target_word(store, s);
-    if target.is_empty() { on } else { format!("{on} · {target}") }
+    }
+}
+
+/// The settings above the text: the name as the title with the bin at its right, where the skill
+/// sits, what it applies to and when. Gives the y under them.
+#[allow(clippy::too_many_arguments)]
+fn header(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, left: f32, width: f32, mut y: f32, i: usize, s: Obj) -> f32 {
+    let paint = ui.painter().clone();
+    let ctx = ui.ctx().clone();
+    let Some(store) = shell.session.as_ref().map(|x| x.doc()) else { return y };
+    let set = settings(store, s);
+    let place = place(store, s);
+    let this = this_word(store, archforge_core::skills::subject_of(store, s));
+    let id = shell.canvas.skills[i].skill;
+
+    // The name, typed in place as the title.
+    let name_id = widgets::egui_id("workspace.skill.name");
+    let typing = ctx.memory(|m| m.has_focus(name_id));
+    if !typing && !shell.canvas.skills[i].focus_name {
+        shell.canvas.skills[i].name = set.name.clone();
+    }
+    let field = Rect::from_min_size(pos2(left - 8.0, y), vec2((width - 28.0).max(0.0), 40.0));
+    widgets::record_visible(ui, &mut shell.registry, "workspace.skill.name", "field", field);
+    if typing {
+        paint.rect_filled(field, 6.0, p.field);
+        paint.rect_stroke(field, 6.0, Stroke::new(1.0, p.focus), StrokeKind::Inside);
+    } else if ui.rect_contains_pointer(field) {
+        paint.rect_filled(field, 6.0, p.field);
+    }
+    if std::mem::take(&mut shell.canvas.skills[i].focus_name) {
+        ctx.memory_mut(|m| m.request_focus(name_id));
+        let mut state = egui::text_edit::TextEditState::load(&ctx, name_id).unwrap_or_default();
+        let all = shell.canvas.skills[i].name.chars().count();
+        state.cursor.set_char_range(Some(egui::text::CCursorRange::two(egui::text::CCursor::new(0), egui::text::CCursor::new(all))));
+        state.store(&ctx, name_id);
+    }
+    let inner = Rect::from_min_max(field.min + vec2(8.0, 6.0), field.max - vec2(8.0, 6.0));
+    let mut name = shell.canvas.skills[i].name.clone();
+    let out = egui::TextEdit::singleline(&mut name)
+        .id(name_id)
+        .frame(egui::Frame::NONE)
+        .margin(egui::Margin::ZERO)
+        .font(types::SECTION.font())
+        .text_color(p.text)
+        .char_limit(archforge_core::skills::MAX_NAME)
+        .hint_text(tr("Skill name"))
+        .desired_width(inner.width())
+        .show(&mut ui.new_child(egui::UiBuilder::new().max_rect(inner)));
+    let _ = (*out.response).clone().accessible_name(tr("Skill name"));
+    shell.canvas.skills[i].name = name.clone();
+    let escape = ctx.input(|inp| inp.key_pressed(egui::Key::Escape));
+    let enter = out.response.has_focus() && ctx.input(|inp| inp.key_pressed(egui::Key::Enter));
+    if (out.response.lost_focus() || enter) && !escape && name.trim() != set.name {
+        let outcome = shell.session.as_mut().map(|x| x.execute("skill.rename", &json!({ "skill": id.to_string(), "name": name.trim() })));
+        shell.canvas.skills[i].settings_refused = match outcome {
+            Some(Err(e)) => Some(e.to_string()),
+            _ => None,
+        };
+    } else if escape && out.response.lost_focus() {
+        shell.canvas.skills[i].name = set.name.clone();
+    }
+    if crate::panels::icon_button(shell, ui, p, pos2(left + width - 28.0, y + 6.0), "workspace.skill.remove", &icons::TRASH, p.danger, None, "Remove")
+    {
+        if let Some(Err(e)) = shell.session.as_mut().map(|x| x.execute("skill.remove", &json!({ "skill": id.to_string() }))) {
+            shell.canvas.skills[i].settings_refused = Some(e.to_string());
+        }
+        return y;
+    }
+    y += 44.0;
+    ux::text(&paint, pos2(left, y), &place, types::CAPTION, p.text_muted, Some(width));
+    y += 26.0;
+
+    // What it applies to, and a column type for columns.
+    let anchor = crate::panels::select_field(
+        shell,
+        ui,
+        p,
+        pos2(left, y),
+        240.0,
+        "workspace.skill.applies",
+        &tr("Applies to"),
+        &crate::panels::applies_word(set.applies, &this),
+        Menu::Applies,
+    );
+    if set.applies == Applies::Columns {
+        let type_id = widgets::egui_id("workspace.skill.type");
+        if !ctx.memory(|m| m.has_focus(type_id)) {
+            shell.canvas.skills[i].type_pattern = set.type_pattern.clone();
+        }
+        let mut typed = shell.canvas.skills[i].type_pattern.clone();
+        let done = crate::panels::text_field(
+            shell,
+            ui,
+            p,
+            pos2(left + 256.0, y),
+            200.0,
+            "workspace.skill.type",
+            &tr("Column type"),
+            &mut typed,
+            archforge_core::skills::MAX_TYPE_PATTERN,
+            false,
+            true,
+        );
+        shell.canvas.skills[i].type_pattern = typed.clone();
+        if done && typed.trim() != set.type_pattern {
+            change(shell, i, s, |f| f.type_pattern = typed);
+        }
+    }
+    y += 55.0;
+
+    // When it applies: a chip per trigger, none on meaning always.
+    ux::text(&paint, pos2(left, y), &tr("When"), types::CAPTION, p.text_secondary, Some(width));
+    let mut x = left;
+    let mut flip: Option<usize> = None;
+    for (n, (_, key, icon, word)) in TRIGGERS.iter().enumerate() {
+        let on = set.triggers[n];
+        let g = ux::galley(&paint, &tr(word), types::SMALL, if on { p.accent } else { p.text }, None);
+        let chip = Rect::from_min_size(pos2(x, y + 17.0), vec2(10.0 + 16.0 + 6.0 + g.size().x + 12.0, crate::panels::FIELD));
+        let resp = control(shell, ui, &format!("workspace.skill.when.{key}"), "toggle", chip, true);
+        paint.rect_filled(
+            chip,
+            8.0,
+            if on {
+                p.accent_tint
+            } else if resp.hovered() {
+                p.page
+            } else {
+                p.surface
+            },
+        );
+        if !on {
+            paint.rect_stroke(chip, 8.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
+        }
+        ux::icon_in(
+            &paint,
+            Rect::from_min_size(pos2(chip.left() + 10.0, chip.center().y - 8.0), Vec2::splat(16.0)),
+            icon,
+            if on { p.accent } else { p.text_secondary },
+        );
+        paint.galley(pos2(chip.left() + 32.0, chip.center().y - g.size().y / 2.0), g, p.text);
+        if resp.clicked() {
+            flip = Some(n);
+        }
+        x = chip.right() + 8.0;
+    }
+    if set.triggers[3] {
+        let dialect_id = widgets::egui_id("workspace.skill.dialect");
+        if !ctx.memory(|m| m.has_focus(dialect_id)) {
+            shell.canvas.skills[i].dialect = set.dialect.clone();
+        }
+        let mut typed = shell.canvas.skills[i].dialect.clone();
+        let done = crate::panels::text_field(
+            shell,
+            ui,
+            p,
+            pos2(x + 8.0, y),
+            (left + width - x - 8.0).clamp(0.0, 180.0),
+            "workspace.skill.dialect",
+            &tr("Dialect"),
+            &mut typed,
+            archforge_core::skills::MAX_DIALECT,
+            false,
+            true,
+        );
+        shell.canvas.skills[i].dialect = typed.clone();
+        if done && typed.trim() != set.dialect {
+            change(shell, i, s, |f| f.dialect = typed);
+        }
+    } else if !set.triggers.contains(&true) {
+        ux::text_mid(&paint, x + 4.0, y + 17.0 + crate::panels::FIELD / 2.0, &tr("None chosen: always"), types::CAPTION, p.text_muted, None);
+    }
+    if let Some(n) = flip {
+        change(shell, i, s, |f| f.triggers[n] = !f.triggers[n]);
+    }
+    y += 55.0;
+    if let Some(why) = shell.canvas.skills[i].settings_refused.clone() {
+        y = ux::text(&paint, pos2(left, y), &why, types::CAPTION, p.amber, Some(width)).bottom() + 6.0;
+    }
+    if shell.panels.menu == Some(Menu::Applies) {
+        let choices = [Applies::Subject, Applies::Tables, Applies::Relationships, Applies::Columns];
+        let items = choices.map(|a| crate::panels::applies_word(a, &this));
+        if let Some(k) = crate::panels::menu(shell, ui, p, anchor, "workspace.skill.applies", &items) {
+            change(shell, i, s, |f| f.applies = choices[k.min(3)]);
+        }
+    }
+    y
 }
 
 /// Draws the open skill over `r`, the centre under the tab strip.
@@ -157,15 +471,12 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, id: Uuid
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
     let Some(s) = skill_obj(store, id) else { return };
     let Some(i) = shell.canvas.skills.iter().position(|d| d.skill == id) else { return };
-    let name = archforge_core::skills::name_of(store, s);
-    let place = place(store, s);
     let left = r.left() + MARGIN;
     let width = (r.width() - 2.0 * MARGIN).clamp(0.0, COLUMN);
-    let mut y = r.top() + 36.0;
-    ux::text(&paint, pos2(left, y), &name, types::SECTION, p.text, Some(width));
-    y += 30.0;
-    ux::text(&paint, pos2(left, y), &place, types::CAPTION, p.text_muted, Some(width));
-    y += 34.0;
+    let mut y = header(shell, ui, p, left, width, r.top() + 28.0, i, s) + 6.0;
+    if shell.session.as_ref().is_none_or(|x| skill_obj(x.doc(), id).is_none()) {
+        return;
+    }
 
     // The toolbar, and the Write / Preview switch at its right.
     let editor_id = widgets::egui_id("workspace.skill.text");
@@ -483,7 +794,7 @@ fn glyph(paint: &egui::Painter, b: Rect, f: Format, ink: egui::Color32) {
 /// Every text that reaches `tr` through a variable, for the catalogue tests.
 #[cfg(test)]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
-    Format::ALL.iter().map(|(_, _, hint)| *hint).chain(["Write", "Preview", "Open link"])
+    Format::ALL.iter().map(|(_, _, hint)| *hint).chain(["Write", "Preview", "Open link", "Remove"]).chain(TRIGGERS.iter().map(|(.., w)| *w))
 }
 
 #[cfg(test)]

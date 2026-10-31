@@ -189,7 +189,8 @@ str		Naming	命名
 str		Export	エクスポート
 str		Dialect	方言
 str		Open the skill	スキルを開く
-str		Skill settings	スキルの設定
+str		Skill name	スキル名
+str		None chosen: always	未選択: 常に
 str		Skill · on {subject}	スキル · {subject} に設定
 str		Skill · on the project	スキル · プロジェクトに設定
 str		Skill text	スキルのテキスト
