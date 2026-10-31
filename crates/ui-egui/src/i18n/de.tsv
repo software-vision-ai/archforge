@@ -177,20 +177,8 @@ str		every relationship	jede Beziehung
 str		every column	jede Spalte
 str		project	Projekt
 str		overridden below	weiter unten überschrieben
-str		Every table below	Jede Tabelle darunter
-str		Every relationship below	Jede Beziehung darunter
-str		Columns of a type	Spalten eines Typs
-str		Applies to	Gilt für
-str		Column type	Spaltentyp
-str		When	Wann
-str		Modelling	Modellieren
-str		Drawing	Zeichnen
-str		Naming	Benennen
-str		Export	Exportieren
-str		Dialect	Dialekt
 str		Open the skill	Skill öffnen
 str		Skill name	Skill-Name
-str		None chosen: always	Keine gewählt: immer
 str		Skill · on {subject}	Skill · an {subject}
 str		Skill · on the project	Skill · am Projekt
 str		Skill text	Skill-Text

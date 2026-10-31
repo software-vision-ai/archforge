@@ -1813,7 +1813,7 @@ fn a_column_row_selects_its_column_only_its_edit_button_opens_the_editor_and_sel
 }
 
 #[test]
-fn the_skills_plus_makes_a_skill_and_its_tab_holds_the_settings() {
+fn the_skills_plus_makes_a_skill_and_opens_it_with_the_name_ready() {
     let (mut h, customer) = table_harness();
     {
         let s = h.state_mut().session.as_mut().unwrap();
@@ -1848,26 +1848,9 @@ fn the_skills_plus_makes_a_skill_and_its_tab_holds_the_settings() {
     h.run();
     let st = h.state().session.as_ref().unwrap().doc();
     assert_eq!(archforge_core::skills::name_of(st, st.by_uuid(skill).unwrap()), "Customer naming");
-    // A chip turns its trigger on at once.
-    let at = rect_of(&h, "workspace.skill.when.naming").center();
-    click(&mut h, at);
-    let st = h.state().session.as_ref().unwrap().doc();
-    assert_eq!(archforge_core::skills::triggers_of(st, st.by_uuid(skill).unwrap()), [archforge_core::SkillTrigger::Naming]);
-    // Applies to Columns of a type shows the column type field, and keeps what is typed there.
-    let at = rect_of(&h, "workspace.skill.applies").center();
-    click(&mut h, at);
-    let at = rect_of(&h, "workspace.skill.applies.3").center();
-    click(&mut h, at);
-    h.run();
-    let at = rect_of(&h, "workspace.skill.type").center();
-    click(&mut h, at);
-    h.event(egui::Event::Text("TIMESTAMP".into()));
-    h.run();
-    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
-    h.run();
-    let st = h.state().session.as_ref().unwrap().doc();
-    let obj = st.by_uuid(skill).unwrap();
-    assert_eq!(st.get(obj, archforge_core::skill::TYPE_PATTERN).ok().and_then(|v| v.as_str().map(str::to_string)).as_deref(), Some("TIMESTAMP"));
+    // The tab holds the name and the text only.
+    let found = ids(&h);
+    assert!(!found.iter().any(|i| i.starts_with("workspace.skill.when") || i == "workspace.skill.applies"), "{found:?}");
     let found = ids(&h);
     assert_eq!(found.iter().filter(|i| i.starts_with("workspace.skills.row.")).count(), 2, "own and inherited: {found:?}");
     // A refused name stays as typed and says why: a second skill of the same name on the table.

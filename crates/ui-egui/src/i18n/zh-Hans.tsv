@@ -177,20 +177,8 @@ str		every relationship	所有关系
 str		every column	所有列
 str		project	项目
 str		overridden below	被下方覆盖
-str		Every table below	下方的所有表
-str		Every relationship below	下方的所有关系
-str		Columns of a type	某一类型的列
-str		Applies to	适用于
-str		Column type	列类型
-str		When	何时
-str		Modelling	建模
-str		Drawing	绘图
-str		Naming	命名
-str		Export	导出
-str		Dialect	方言
 str		Open the skill	打开技能
 str		Skill name	技能名称
-str		None chosen: always	未选择：始终
 str		Skill · on {subject}	技能 · 位于 {subject}
 str		Skill · on the project	技能 · 位于项目
 str		Skill text	技能文本

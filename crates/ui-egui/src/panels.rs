@@ -9,7 +9,6 @@
 //! line over it, a field is 28 px tall and filled, its label 11 px above, a row 36 px, an editor
 //! a bordered card.
 
-use archforge_core::SkillTrigger;
 use archforge_mof::{Obj, Store, Uuid, Value};
 use egui::{Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
@@ -141,22 +140,12 @@ fn linked_label(store: &Store, a: Obj) -> Option<String> {
     Some(format!("{table}.{}", archforge_er::rules::name_of(store, t)))
 }
 
-/// What a skill aims at, as its tab's select offers it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Applies {
-    Subject,
-    Tables,
-    Relationships,
-    Columns,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Menu {
     /// Home's order of the recent projects, and a pinned folder's menu.
     RecentSort,
     Pinned(usize),
     Kind,
-    Applies,
     /// A relationship's foreign key (slice E3): what it points to, one key pair's child column,
     /// the two referential actions, deferrability and match.
     Points,
@@ -1507,7 +1496,6 @@ struct SkillRow {
     name: String,
     /// What it aims at, or where it comes from.
     detail: String,
-    trigger: Option<SkillTrigger>,
 }
 
 pub(crate) fn target_word(store: &Store, s: Obj) -> String {
@@ -1534,7 +1522,6 @@ fn skill_rows(store: &Store, subject: &Subject) -> (Vec<SkillRow>, Vec<SkillRow>
                 id: store.uuid(s).ok()?,
                 name: archforge_core::skills::name_of(store, s),
                 detail: if target.is_empty() { this.clone() } else { target },
-                trigger: archforge_core::skills::triggers_of(store, s).first().copied(),
             })
         })
         .collect();
@@ -1551,22 +1538,12 @@ fn skill_rows(store: &Store, subject: &Subject) -> (Vec<SkillRow>, Vec<SkillRow>
                     id: store.uuid(e.skill).ok()?,
                     name: archforge_core::skills::name_of(store, e.skill),
                     detail: if e.overridden_by.is_some() { tr("overridden below") } else { origin },
-                    trigger: archforge_core::skills::triggers_of(store, e.skill).first().copied(),
                 })
             })
             .collect(),
         None => Vec::new(),
     };
     (own, inherited)
-}
-
-fn trigger_icon(t: Option<SkillTrigger>) -> Option<&'static ux::Icon> {
-    match t? {
-        SkillTrigger::Modelling => Some(&icons::TABLE),
-        SkillTrigger::Drawing => Some(&icons::BRUSH),
-        SkillTrigger::Naming => Some(&icons::NAMING),
-        SkillTrigger::Export => Some(&icons::EXPORT),
-    }
 }
 
 /// Draws the Skills panel's body under the header, from `y`.
@@ -1604,30 +1581,17 @@ fn skill_row(shell: &mut Shell, ui: &egui::Ui, paint: &egui::Painter, p: &Palett
     }
     ux::icon_in(paint, Rect::from_min_size(rect.min + vec2(8.0, 6.0), Vec2::splat(18.0)), &icons::SKILL, p.text_secondary);
     let detail = ux::galley(paint, &row.detail, types::CAPTION, p.text_muted, Some((width / 2.0).max(0.0)));
-    let trigger_w = if row.trigger.is_some() { 26.0 } else { 0.0 };
-    let name_room = (width - 34.0 - detail.size().x - 16.0 - trigger_w).max(0.0);
+    let name_room = (width - 34.0 - detail.size().x - 16.0).max(0.0);
     ux::text(paint, rect.min + vec2(34.0, 6.5), &row.name, types::SMALL, p.text, Some(name_room));
-    paint.galley(pos2(rect.right() - 8.0 - trigger_w - detail.size().x, rect.top() + 8.0), detail, p.text_muted);
-    if let Some(icon) = trigger_icon(row.trigger) {
-        ux::icon_in(paint, Rect::from_min_size(pos2(rect.right() - 8.0 - 18.0, rect.top() + 6.0), Vec2::splat(18.0)), icon, p.text_secondary);
-    }
+    paint.galley(pos2(rect.right() - 8.0 - detail.size().x, rect.top() + 8.0), detail, p.text_muted);
     if resp.clicked() {
         crate::canvas::open(shell, row.id);
     }
     y + 30.0
 }
 
-pub(crate) fn applies_word(a: Applies, this: &str) -> String {
-    match a {
-        Applies::Subject => this.to_string(),
-        Applies::Tables => tr("Every table below"),
-        Applies::Relationships => tr("Every relationship below"),
-        Applies::Columns => tr("Columns of a type"),
-    }
-}
-
-/// Every text that reaches `tr` through a variable: the hover hints of the icon buttons and the
-/// trigger toggles, for the catalogue tests.
+/// Every text that reaches `tr` through a variable: the hover hints of the icon buttons, for the
+/// catalogue tests.
 #[cfg(test)]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
     ["Add column", "Add skill", "Remove", "Cancel", "Apply", "Unlink", "Pick a type"].into_iter().chain(GENERATIONS.iter().map(|(_, w)| *w))

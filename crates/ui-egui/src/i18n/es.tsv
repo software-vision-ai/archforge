@@ -177,20 +177,8 @@ str		every relationship	todas las relaciones
 str		every column	todas las columnas
 str		project	proyecto
 str		overridden below	anulada más abajo
-str		Every table below	Todas las tablas inferiores
-str		Every relationship below	Todas las relaciones inferiores
-str		Columns of a type	Columnas de un tipo
-str		Applies to	Se aplica a
-str		Column type	Tipo de columna
-str		When	Cuándo
-str		Modelling	Modelar
-str		Drawing	Dibujar
-str		Naming	Nombrar
-str		Export	Exportar
-str		Dialect	Dialecto
 str		Open the skill	Abrir la habilidad
 str		Skill name	Nombre de la habilidad
-str		None chosen: always	Ninguna elegida: siempre
 str		Skill · on {subject}	Habilidad · en {subject}
 str		Skill · on the project	Habilidad · en el proyecto
 str		Skill text	Texto de la habilidad
