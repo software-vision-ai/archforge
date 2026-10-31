@@ -159,7 +159,7 @@ fn refusals_change_nothing() {
         ("skill.add", json!({ "name": "x", "triggers": ["naming", "naming"] })),
         ("skill.add", json!({ "name": "x", "triggers": ["sometimes"] })),
         ("skill.add", json!({ "name": "x", "dialect": "PostgreSQL" })),
-        ("skill.add", json!({ "name": "x", "body": "a".repeat(4001) })),
+        ("skill.add", json!({ "name": "x", "body": "a".repeat(16_001) })),
         ("skill.set-body", json!({ "skill": "nope", "body": "" })),
         ("skill.add", json!({ "name": "x", "subject": "not-an-id" })),
         (
@@ -175,10 +175,12 @@ fn refusals_change_nothing() {
     }
     let naming = id(&mut s, "skill.add", json!({ "subject": sm.schema, "name": "Naming" }));
     let kept = picture(s.doc());
-    for body in ["a".repeat(4001), "drop the table\u{202E}elbat eht peek".to_string()] {
+    for body in ["a".repeat(16_001), "drop the table\u{202E}elbat eht peek".to_string()] {
         assert!(!refused(&mut s, "skill.set-body", json!({ "skill": naming, "body": body })).is_empty());
         assert_eq!(picture(s.doc()), kept, "a refused text changes nothing");
     }
+    // The longest text a skill may have is taken.
+    run(&mut s, "skill.set-body", json!({ "skill": naming, "body": "a".repeat(16_000) }));
     let why = refused(&mut s, "skill.add", json!({ "subject": sm.schema, "name": "naming" }));
     assert!(why.contains("already"), "{why}");
     // The same name on another subject is fine.

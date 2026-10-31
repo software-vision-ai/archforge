@@ -21,7 +21,7 @@ type R = Result<Json, CommandError>;
 /// The most characters in a skill's name, description, body, dialect and type pattern.
 pub const MAX_NAME: usize = 128;
 pub const MAX_DESCRIPTION: usize = 256;
-pub const MAX_BODY: usize = 4000;
+pub const MAX_BODY: usize = 16_000;
 pub const MAX_DIALECT: usize = 32;
 pub const MAX_TYPE_PATTERN: usize = 64;
 /// The most triggers one skill names: every literal once.
