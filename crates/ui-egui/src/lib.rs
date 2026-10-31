@@ -51,9 +51,12 @@ pub struct Services {
     /// Mints ids for the elements of an open project's model (version 7, from the host's clock
     /// and randomness); none keeps a project's model from opening, and the status bar says so.
     pub ids: Option<std::sync::Arc<dyn Fn() -> archforge_mof::Uuid + Send + Sync>>,
-    /// Asks the user for a project to open (the native folder picker); none, or none chosen,
-    /// opens nothing.
-    pub pick_project: Option<std::sync::Arc<dyn Fn() -> Option<std::path::PathBuf> + Send + Sync>>,
+    /// Asks the user for a project to open (the native folder picker), starting in the folder
+    /// given or else in the projects folder; none, or none chosen, opens nothing.
+    pub pick_project: Option<std::sync::Arc<dyn Fn(Option<&std::path::Path>) -> Option<std::path::PathBuf> + Send + Sync>>,
+    /// Asks the user for a folder to pin on Home (the native folder picker); none keeps Pin a
+    /// folder unavailable.
+    pub pick_folder: Option<std::sync::Arc<dyn Fn() -> Option<std::path::PathBuf> + Send + Sync>>,
 }
 
 /// How writing the open project's model stands: rows waiting to be written, and why the last
@@ -207,8 +210,6 @@ pub struct Shell {
     last_title: String,
     /// Logical pixels at the top the host draws over (a full-size-content title bar).
     pub top_inset: f32,
-    /// What Home lists: the pinned folders and the recent projects.
-    pub home: home::Data,
     /// The New project dialog, while it is open over Home.
     pub new_project: Option<new_project::Dialog>,
     /// The open projects, one tab each, in the bar's order; the one shown has its state in the
@@ -264,7 +265,6 @@ impl Shell {
             applied_theme: None,
             last_title: String::new(),
             top_inset: 0.0,
-            home: home::Data::default(),
             new_project: None,
             tabs: Vec::new(),
             active: None,
@@ -584,13 +584,26 @@ impl Shell {
 
     /// Open project: asks the user for a project, then the host opens it.
     pub fn open_from_picker(&mut self) {
+        self.open_from_picker_in(None);
+    }
+
+    /// [`Shell::open_from_picker`] with the picker starting in `folder` (a pinned folder).
+    pub fn open_from_picker_in(&mut self, folder: Option<&std::path::Path>) {
         // One opening at a time, and none behind the New project dialog.
         if !self.can_open_project() {
             return;
         }
         let Some(pick) = self.services.pick_project.clone() else { return };
-        if let Some(path) = pick() {
+        if let Some(path) = pick(folder) {
             self.open_path(&path);
+        }
+    }
+
+    /// Pin a folder: asks the user for a folder and pins it on Home.
+    pub fn pin_from_picker(&mut self) {
+        let Some(pick) = self.services.pick_folder.clone() else { return };
+        if let Some(path) = pick() {
+            self.state.pin(&path);
         }
     }
 

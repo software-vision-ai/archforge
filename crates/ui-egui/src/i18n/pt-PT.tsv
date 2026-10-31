@@ -334,6 +334,8 @@ str		Choose a file	Escolher um ficheiro
 str		Pinned folders	Pastas afixadas
 str		Keep your project locations close.	Mantenha as localizações dos seus projetos à mão.
 str		Pin a folder	Afixar uma pasta
+str		Open a project here	Abrir um projeto aqui
+str		Unpin	Desafixar
 str		Pick up in the exact view you left.	Retome exatamente na vista onde ficou.
 str		Just now	Agora mesmo
 plural		{n} minute ago	há {n} minuto|há {n} minutos

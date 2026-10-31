@@ -13,15 +13,31 @@ pub fn native(projects: std::sync::Arc<crate::projects::Projects>) -> Services {
         projects_folder: projects_folder(),
         projects: Some(projects),
         pick_project: Some(std::sync::Arc::new(pick_project)),
+        pick_folder: Some(std::sync::Arc::new(pick_folder)),
         ids: Some(std::sync::Arc::new(fresh_id)),
     }
 }
 
-/// The platform's folder picker, for Open project: it starts in the projects folder.
-fn pick_project() -> Option<PathBuf> {
+/// The platform's folder picker, for Open project: it starts in the folder given (a pinned
+/// folder), else in the projects folder.
+fn pick_project(start: Option<&std::path::Path>) -> Option<PathBuf> {
     let mut dialog = rfd::FileDialog::new();
-    if let Some(folder) = projects_folder().filter(|f| f.path.is_dir()) {
-        dialog = dialog.set_directory(folder.path);
+    match start.filter(|s| s.is_dir()) {
+        Some(start) => dialog = dialog.set_directory(start),
+        None => {
+            if let Some(folder) = projects_folder().filter(|f| f.path.is_dir()) {
+                dialog = dialog.set_directory(folder.path);
+            }
+        }
+    }
+    dialog.pick_folder()
+}
+
+/// The platform's folder picker, for Pin a folder on Home: it starts in the user's Documents.
+fn pick_folder() -> Option<PathBuf> {
+    let mut dialog = rfd::FileDialog::new().set_title(archforge_ui_egui::i18n::tr("Pin a folder"));
+    if let Some(documents) = projects_folder().and_then(|f| f.path.parent().map(PathBuf::from)) {
+        dialog = dialog.set_directory(documents);
     }
     dialog.pick_folder()
 }

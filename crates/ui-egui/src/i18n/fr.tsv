@@ -334,6 +334,8 @@ str		Choose a file	Choisir un fichier
 str		Pinned folders	Dossiers épinglés
 str		Keep your project locations close.	Gardez vos emplacements de projets à portée de main.
 str		Pin a folder	Épingler un dossier
+str		Open a project here	Ouvrir un projet ici
+str		Unpin	Désépingler
 str		Pick up in the exact view you left.	Reprenez exactement dans la vue où vous vous étiez arrêté.
 str		Just now	À l’instant
 plural		{n} minute ago	il y a {n} minute|il y a {n} minutes

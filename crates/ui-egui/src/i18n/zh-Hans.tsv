@@ -334,6 +334,8 @@ str		Choose a file	选择文件
 str		Pinned folders	已固定的文件夹
 str		Keep your project locations close.	让项目位置触手可及。
 str		Pin a folder	固定文件夹
+str		Open a project here	在此打开项目
+str		Unpin	取消固定
 str		Pick up in the exact view you left.	从你离开时的视图继续。
 str		Just now	刚刚
 plural		{n} minute ago	{n} 分钟前
