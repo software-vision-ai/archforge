@@ -2342,12 +2342,20 @@ fn the_relationship_tool_draws_a_line_with_its_foreign_key_as_one_step_and_delet
     let at = rect_of(&h, &edge).center();
     click(&mut h, at);
     assert_eq!(h.state().session.as_ref().unwrap().view().selection.len(), 1);
+    let keys_and_columns = |h: &Harness<'static, Shell>| {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let count = |c| st.alive().filter(|o| st.class_of(*o).ok() == Some(c)).count();
+        (count(archforge_er::FOREIGN_KEY), count(archforge_er::ATTRIBUTE))
+    };
+    let with_line = keys_and_columns(&h);
     key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
     assert!(relationships(&h).is_empty(), "the relationship went");
+    assert_eq!(keys_and_columns(&h), (with_line.0 - 1, with_line.1 - 1), "its foreign key and its key column went with it");
     assert!(h.state().canvas.toast.is_some(), "the toast offers Undo");
     let at = rect_of(&h, "workspace.toast.undo").center();
     click(&mut h, at);
     assert_eq!(relationships(&h).len(), 1, "Undo brings it back");
+    assert_eq!(keys_and_columns(&h), with_line, "with its key and column");
     assert!(h.state().canvas.toast.is_none());
     // A step after the removal takes the toast with it: Undo never undoes something else.
     let edge = ids(&h).into_iter().find(|i| i.starts_with("workspace.canvas.edge.")).unwrap();
@@ -3395,4 +3403,43 @@ fn the_link_note_tool_drags_a_link_from_a_note_to_a_table_and_hands_back_to_sele
         .count();
     assert_eq!(links, 1, "{:?}", h.state().canvas.notice);
     assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Select, "the tool hands back to Select");
+}
+
+#[test]
+fn key_columns_a_line_adds_grow_the_table_to_show_them_in_the_same_step() {
+    let (mut h, _customer, order) = two_tables_harness();
+    // Order's box just fits its one column.
+    let order_node = {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let e = st.by_uuid(archforge_mof::Uuid::parse(&order).unwrap()).unwrap();
+        let n = st
+            .alive()
+            .find(|n| {
+                st.class_of(*n).ok() == Some(archforge_diagram::NODE) && st.get(*n, archforge_diagram::node::ELEMENT).unwrap().as_ref() == Some(e)
+            })
+            .unwrap();
+        st.uuid(n).unwrap().to_string()
+    };
+    let snug = crate::editing::content_height(1);
+    h.state_mut()
+        .session
+        .as_mut()
+        .unwrap()
+        .execute("diagram.resize", &serde_json::json!({ "node": order_node, "width": 240, "height": snug }))
+        .unwrap();
+    h.run_steps(2);
+    let nodes = node_ids(&h);
+    let customer_node = nodes.iter().min_by(|a, b| rect_of(&h, a).left().total_cmp(&rect_of(&h, b).left())).unwrap().clone();
+    let at = rect_of(&h, "workspace.tools.relationship").center();
+    click(&mut h, at);
+    let (a, b) = (rect_of(&h, &customer_node).center(), rect_of(&h, &format!("workspace.canvas.node.{order_node}")).center());
+    drag(&mut h, a, b);
+    let rels = relationships(&h);
+    let st = h.state().session.as_ref().unwrap().doc();
+    assert!(crate::connect::has_foreign_key(st, rels[0]), "both tables have columns and Customer its key: the key comes on");
+    let grown = node_bounds(&h, &order_node).height;
+    assert_eq!(grown, crate::editing::content_height(2), "Order grew to show its new key column");
+    h.state_mut().session.as_mut().unwrap().undo().unwrap();
+    h.run_steps(2);
+    assert_eq!(node_bounds(&h, &order_node).height, snug, "one undo takes the line and the growth back");
 }

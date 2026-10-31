@@ -225,7 +225,8 @@ pub(crate) fn subtypes_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette
             if let Some(i) = menu(shell, ui, p, anchor, "workspace.properties.subtypes.add", &items)
                 && let Some((sub, _)) = cands.get(i)
             {
-                match run(shell, "er.generalization.add", json!({ "supertype": e_id.to_string(), "subtype": sub.to_string() })) {
+                let params = json!({ "supertype": e_id.to_string(), "subtype": sub.to_string() });
+                match crate::editing::run_fitting(shell, &tr("Add subtype"), "er.generalization.add", params, &[*sub]) {
                     Ok(_) => {
                         shell.panels.notice = None;
                         reselect(shell, keep);

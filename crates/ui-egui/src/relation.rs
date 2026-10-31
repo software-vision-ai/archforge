@@ -463,7 +463,9 @@ fn foreign_key(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
             if let Some(i) = menu(shell, ui, p, points, "workspace.properties.points-to", &items, None)
                 && let Some((key, _, _, _)) = v.keys.get(i)
             {
-                let out = run(shell, "er.foreign-key.set-key", json!({ "foreign_key": v.fk_id, "key": key.to_string() }));
+                let child: Vec<Uuid> = shell.session.as_ref().and_then(|s| s.doc().uuid(rel.child).ok()).into_iter().collect();
+                let params = json!({ "foreign_key": v.fk_id, "key": key.to_string() });
+                let out = crate::editing::run_fitting(shell, &tr("Points to"), "er.foreign-key.set-key", params, &child);
                 apply(shell, rel.id, out);
             }
         }
@@ -485,7 +487,9 @@ fn foreign_key(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
                     && *slot != target.to_string()
                 {
                     *slot = target.to_string();
-                    let out = run(shell, "er.foreign-key.set-key", json!({ "foreign_key": v.fk_id, "key": key.to_string(), "columns": columns }));
+                    let child: Vec<Uuid> = shell.session.as_ref().and_then(|s| s.doc().uuid(rel.child).ok()).into_iter().collect();
+                    let params = json!({ "foreign_key": v.fk_id, "key": key.to_string(), "columns": columns });
+                    let out = crate::editing::run_fitting(shell, &tr("Points to"), "er.foreign-key.set-key", params, &child);
                     apply(shell, rel.id, out);
                 }
             }
@@ -602,7 +606,7 @@ fn set_identifying(shell: &mut Shell, rel: &Rel, on: bool) {
             b.execute("er.primary-key.set", &json!({ "entity": child.to_string(), "columns": column_ids, "name": pk_name }))?;
         }
         b.execute("er.relationship.set-identifying", &json!({ "relationship": rel_id, "identifying": on }))?;
-        Ok(())
+        crate::editing::grow_to_fit(b, &[child])
     });
     apply(shell, rel.id, out.map(|o| o.value).map_err(|e| e.to_string()));
 }
@@ -617,7 +621,7 @@ fn add_id_column(shell: &mut Shell, rel: &Rel, _parent_name: &str) {
     let out = session.batch(&tr("Add id column"), |b| {
         b.execute("er.attribute.add", &json!({ "entity": parent.to_string(), "name": "id", "type": "BIGINT", "primary_key": true }))?;
         b.execute("er.foreign-key.add", &json!({ "entity": child.to_string(), "references": parent.to_string(), "relationship": rel_id }))?;
-        Ok(())
+        crate::editing::grow_to_fit(b, &[parent, child])
     });
     apply(shell, rel.id, out.map(|o| o.value).map_err(|e| e.to_string()));
 }
@@ -633,10 +637,8 @@ fn add_foreign_key(shell: &mut Shell, rel: &Rel, _parent_name: &str) {
         return;
     }
     let (Some(parent), Some(child)) = (store.uuid(rel.parent).ok(), store.uuid(rel.child).ok()) else { return };
-    let out = session
-        .execute("er.foreign-key.add", &json!({ "entity": child.to_string(), "references": parent.to_string(), "relationship": rel.id.to_string() }))
-        .map(|o| o.value)
-        .map_err(|e| e.to_string());
+    let params = json!({ "entity": child.to_string(), "references": parent.to_string(), "relationship": rel.id.to_string() });
+    let out = crate::editing::run_fitting(shell, &tr("Add foreign key"), "er.foreign-key.add", params, &[child]);
     apply(shell, rel.id, out);
 }
 
