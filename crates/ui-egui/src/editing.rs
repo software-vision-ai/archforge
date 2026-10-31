@@ -727,8 +727,8 @@ fn place_entity(shell: &mut Shell, d: Obj, x: f64, y: f64) {
 
 /// A connection dropped on empty canvas: a new table centred there, joined to the table of
 /// `from_node` by the relationship the tool is set to, all one undo step; then the new table's name
-/// is open for typing. The new table has no key yet, so a foreign key comes along only when the
-/// table the drag began on is the parent and has its primary key.
+/// is open for typing. The relationship's foreign key starts off (and so it is not identifying):
+/// the new table is still to be shaped, and its keys come when the user turns the key on.
 fn connect_to_new(shell: &mut Shell, d: Obj, from_node: Uuid, x: f64, y: f64) {
     use crate::connect::cardinality_word;
     shell.canvas.notice = None;
@@ -748,8 +748,6 @@ fn connect_to_new(shell: &mut Shell, d: Obj, from_node: Uuid, x: f64, y: f64) {
         shell.canvas.notice = Some(tr("No free name is left"));
         return;
     };
-    let new_is_parent = archforge_er::rules::is_many(kind.from) && !archforge_er::rules::is_many(kind.to);
-    let with_key = !kind.many_to_many() && !new_is_parent && archforge_er::rules::primary_key_of(store, from).is_some();
     let (px, py) = ((x - ENTITY_WIDTH / 2.0).round(), (y - ENTITY_EMPTY_HEIGHT / 2.0).round());
     let name_for_batch = name.clone();
     let out = session.batch(&tr("Add table"), |b| {
@@ -767,8 +765,8 @@ fn connect_to_new(shell: &mut Shell, d: Obj, from_node: Uuid, x: f64, y: f64) {
                 "to": &entity,
                 "from_end": cardinality_word(kind.from),
                 "to_end": cardinality_word(kind.to),
-                "identifying": kind.identifying && with_key,
-                "create_foreign_key": with_key,
+                "identifying": false,
+                "create_foreign_key": false,
             }),
         )?;
         let rel = r.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string();

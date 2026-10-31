@@ -913,6 +913,7 @@ fn a_connection_dropped_on_empty_canvas_makes_a_new_table_joined_to_it_in_one_st
     let rel = relationships(&h)[0];
     let to = st.get(rel, archforge_er::relationship::TO).unwrap().as_ref().unwrap();
     assert_eq!(st.uuid(to).unwrap(), rename.entity, "the line joins the new table");
+    assert!(!crate::connect::has_foreign_key(st, rel), "the new table's relationship starts with its foreign key off");
     // One undo takes the table, its node and its line away together.
     let undo = h.state().session.as_ref().unwrap().undo_label();
     assert_eq!(undo, Some("Add table"));
