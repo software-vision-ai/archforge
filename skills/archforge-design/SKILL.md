@@ -113,7 +113,8 @@ the change, and update this file in the same change.
 - An identifying relationship's line is solid; a non-identifying one is dashed. With Key status
   on, a line is green when its foreign key is on and orange when it is off.
 - Relationships are drawn by dragging from table to table, never click by click, and drawing never
-  blocks: without a parent key the line is drawn with its foreign key off.
+  blocks: without a parent key, or when either table has no columns at all, the line is drawn
+  with its foreign key off.
 - A relationship dragged from a table and dropped on empty canvas makes a new table there, joined
   by the line with its foreign key off, as one undo step, the new table's name open for typing.
 - Cardinality is chosen in one place, the popover from the Relationship tool's chevron, with

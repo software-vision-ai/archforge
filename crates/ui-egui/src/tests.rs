@@ -924,6 +924,43 @@ fn a_connection_dropped_on_empty_canvas_makes_a_new_table_joined_to_it_in_one_st
 }
 
 #[test]
+fn a_line_to_a_table_without_columns_starts_with_its_foreign_key_off() {
+    let (mut h, customer, _order) = two_tables_harness();
+    // A third table with no columns at all, beside the other two.
+    let empty = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let st = s.doc();
+        let schema = st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap()).unwrap().to_string();
+        let d = st.uuid(s.view().open_diagram.unwrap()).unwrap().to_string();
+        let e =
+            s.execute("er.entity.add", &serde_json::json!({ "schema": schema, "name": "Note" })).unwrap().value["id"].as_str().unwrap().to_string();
+        s.execute("diagram.place", &serde_json::json!({ "diagram": d, "element": e, "x": 100, "y": 420, "width": 240, "height": 72 })).unwrap();
+        e
+    };
+    h.run_steps(2);
+    let node_of = |h: &Harness<'static, Shell>, element: &str| {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let e = st.by_uuid(archforge_mof::Uuid::parse(element).unwrap()).unwrap();
+        let n = st
+            .alive()
+            .find(|n| {
+                st.class_of(*n).ok() == Some(archforge_diagram::NODE) && st.get(*n, archforge_diagram::node::ELEMENT).unwrap().as_ref() == Some(e)
+            })
+            .unwrap();
+        format!("workspace.canvas.node.{}", st.uuid(n).unwrap())
+    };
+    let (from, to) = (node_of(&h, &customer), node_of(&h, &empty));
+    let at = rect_of(&h, "workspace.tools.relationship").center();
+    click(&mut h, at);
+    let (a, b) = (rect_of(&h, &from).center(), rect_of(&h, &to).center());
+    drag(&mut h, a, b);
+    let rels = relationships(&h);
+    assert_eq!(rels.len(), 1, "{:?}", h.state().canvas.notice);
+    let st = h.state().session.as_ref().unwrap().doc();
+    assert!(!crate::connect::has_foreign_key(st, rels[0]), "Customer has its key, but Note has no columns: the key starts off");
+}
+
+#[test]
 fn at_most_eight_projects_open_at_once() {
     let (mut h, host) = saving_harness(None, Some("/tmp/Ninth.archforge"));
     for i in 0..crate::MAX_TABS {
