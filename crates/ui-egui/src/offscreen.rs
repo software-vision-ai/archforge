@@ -79,6 +79,7 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
         shell.open_project(crate::Opened {
             name: "Commerce platform".into(),
             path: "/Users/robin/Documents/Archforge/Commerce platform.archforge".into(),
+            ..Default::default()
         });
     }
     if matches!(screen, Screen::NewProject | Screen::NewProjectFailed) {

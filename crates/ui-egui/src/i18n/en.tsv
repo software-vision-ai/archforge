@@ -1,6 +1,9 @@
 # English catalogue. Columns: kind, context, key, text (see i18n/mod.rs). Rows go beside related entries.
 # Application menu
 str		Quit Archforge	Quit Archforge
+str		File	File
+str		Open…	Open…
+str		Save	Save
 str		{name} — Archforge	{name} — Archforge
 # Home
 plural		{n} element	{n} element|{n} elements
@@ -182,7 +185,15 @@ str		Create	Create
 str		ER diagram	ER diagram
 str		New schema	New schema
 str		Name the diagram	Name the diagram
-str		Project created	Project created
+str		Saving…	Saving…
+str		Opening…	Opening…
+str		Saved	Saved
+str		Unsaved changes · {chord} saves	Unsaved changes · {chord} saves
+str		Not saved	Not saved
+str		Changes could not be written to the project	Changes could not be written to the project
+str		The save stopped without an answer	The save stopped without an answer
+str		The opening stopped without an answer	The opening stopped without an answer
+str		The project could not be opened: {why}	The project could not be opened: {why}
 str		Model · the project's root	Model · the project's root
 str		Model	Model
 str		Name	Name
@@ -255,7 +266,6 @@ str		Model behind this diagram	Model behind this diagram
 str		No changes yet	No changes yet
 str		Nothing selected	Nothing selected
 str		No agent connected	No agent connected
-str		Not saved to the project yet	Not saved to the project yet
 str		The model could not be opened	The model could not be opened
 str		The host gives no ids for the model's elements	The host gives no ids for the model's elements
 str		Collapse panel	Collapse panel

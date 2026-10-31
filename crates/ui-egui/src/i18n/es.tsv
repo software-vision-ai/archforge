@@ -2,6 +2,9 @@
 # Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit.
 # Menú de la aplicación
 str		Quit Archforge	Salir de Archforge
+str		File	Archivo
+str		Open…	Abrir…
+str		Save	Guardar
 str		{name} — Archforge	{name} — Archforge
 # Inicio
 plural		{n} element	{n} elemento|{n} elementos
@@ -183,7 +186,15 @@ str		Create	Crear
 str		ER diagram	Diagrama ER
 str		New schema	Nuevo esquema
 str		Name the diagram	Ponga nombre al diagrama
-str		Project created	Proyecto creado
+str		Saving…	Guardando…
+str		Opening…	Abriendo…
+str		Saved	Guardado
+str		Unsaved changes · {chord} saves	Cambios sin guardar · {chord} guarda
+str		Not saved	No guardado
+str		Changes could not be written to the project	No se pudieron escribir los cambios en el proyecto
+str		The save stopped without an answer	El guardado terminó sin respuesta
+str		The opening stopped without an answer	La apertura terminó sin respuesta
+str		The project could not be opened: {why}	No se pudo abrir el proyecto: {why}
 str		Model · the project's root	Modelo · la raíz del proyecto
 str		Model	Modelo
 str		Name	Nombre
@@ -256,7 +267,6 @@ str		Model behind this diagram	Modelo detrás de este diagrama
 str		No changes yet	Aún no hay cambios
 str		Nothing selected	Nada seleccionado
 str		No agent connected	Ningún agente conectado
-str		Not saved to the project yet	Aún no guardado en el proyecto
 str		The model could not be opened	No se pudo abrir el modelo
 str		The host gives no ids for the model's elements	El host no proporciona ids para los elementos del modelo
 str		Collapse panel	Contraer el panel

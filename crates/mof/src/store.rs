@@ -722,6 +722,17 @@ impl Store {
     /// Inserts into a multi-valued property at `index`, keeping uniqueness, the upper bound,
     /// containment, the opposite and the subsetted properties consistent.
     pub fn insert(&mut self, obj: Obj, prop: PropId, index: u32, value: Value) -> R<()> {
+        self.insert_checked(obj, prop, index, value, false)
+    }
+
+    /// Appends a value the caller has proven is not in the list yet, without looking for it: a
+    /// reading builds long lists in linear time this way. Everything else is checked as by `push`.
+    pub(crate) fn push_new(&mut self, obj: Obj, prop: PropId, value: Value) -> R<()> {
+        let len = self.list_len(obj, prop)? as u32;
+        self.insert_checked(obj, prop, len, value, true)
+    }
+
+    fn insert_checked(&mut self, obj: Obj, prop: PropId, index: u32, value: Value, known_new: bool) -> R<()> {
         let p = self.writable(obj, prop)?;
         if !p.is_many() {
             return Err(Invalid::SingleValued(self.pname(prop)));
@@ -735,7 +746,7 @@ impl Store {
             return Err(Invalid::IndexOutOfRange { prop: self.pname(prop), index, len });
         }
         self.room_for(prop, &p, len)?;
-        if p.is_unique && self.position(obj, prop, &value)?.is_some() {
+        if p.is_unique && !known_new && self.position(obj, prop, &value)?.is_some() {
             return Err(Invalid::Duplicate(self.pname(prop)));
         }
         if p.is_composite && matches!(value, Value::Ref(child) if child == obj || self.contains(child, obj)) {

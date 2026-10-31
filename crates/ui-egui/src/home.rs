@@ -99,8 +99,13 @@ impl Hue {
 
 /// Whether a start card leads anywhere yet: New project opens its dialog; the others open screens
 /// not built so far, so they take no click and show no hover border.
-fn start_live(id: &str) -> bool {
-    id == "new-project"
+fn start_live(shell: &Shell, id: &str) -> bool {
+    id == "new-project" || (id == "open-project" && can_open(shell))
+}
+
+/// Whether projects can be opened: the host picks and opens them.
+pub(crate) fn can_open(shell: &Shell) -> bool {
+    shell.services.pick_project.is_some() && shell.services.projects.is_some()
 }
 
 /// The four start cards: automation id, title, line, link, icon and colour.
@@ -191,7 +196,11 @@ pub(crate) fn title_strip(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect
     let ghost = home.right() + 6.0;
     ux::icon_mid(paint, pos2(ghost + 13.0, mid), &icons::PLUS, p.text_secondary);
     let label = ux::text_mid(paint, ghost + 24.0, mid, &tr("Open project"), types::UI, p.text, None);
-    control(shell, ui, "strip.open-project", "button", Rect::from_min_max(pos2(ghost, mid - 12.0), pos2(label.right() + 8.0, mid + 12.0)), false);
+    let ghost_rect = Rect::from_min_max(pos2(ghost, mid - 12.0), pos2(label.right() + 8.0, mid + 12.0));
+    let live = can_open(shell);
+    if control(shell, ui, "strip.open-project", "button", ghost_rect, live).clicked() && live {
+        shell.open_from_picker();
+    }
     // The theme switch: the moon in Light, the sun in Dark; a click changes the appearance.
     let dark = shell.state.theme.is_dark();
     let switch = Rect::from_center_size(pos2(r.right() - 24.0, mid), Vec2::splat(24.0));
@@ -320,7 +329,17 @@ fn content(shell: &mut Shell, ui: &egui::Ui, p: &Palette, origin: Pos2, width: f
     paint.rect_filled(open, 8.0, p.accent_fill);
     ux::icon(&paint, open.min + vec2(BUTTON_PAD, 11.0), &icons::FOLDER, 18.0, p.on_accent);
     ux::text(&paint, open.min + vec2(BUTTON_PAD + 18.0 + BUTTON_GAP, 10.5), &label, types::UI_STRONG, p.on_accent, None);
-    control(shell, ui, "home.open-project", "button", open, false);
+    let live = can_open(shell);
+    if control(shell, ui, "home.open-project", "button", open, live).clicked() && live {
+        shell.open_from_picker();
+    }
+    // Why the last opening failed: the host's words, under the button.
+    if let Some(why) = shell.open_error.clone() {
+        let line = crate::i18n::fmt(&tr("The project could not be opened: {why}"), &[("why", &why)]);
+        let width = (open.right() - at(0.0, 0.0).x).clamp(0.0, 480.0);
+        let g = ux::galley_rows(&paint, &line, types::CAPTION, p.danger, Some(width), 2);
+        paint.galley(pos2(open.right() - g.size().x, open.bottom() + 8.0), g, p.danger);
+    }
     let mut y = 175.0;
     if !shell.state.home_banner_closed {
         banner(shell, ui, p, &paint, Rect::from_min_size(at(0.0, y), vec2(inner, 92.0)));
@@ -470,11 +489,15 @@ fn start_card(
     r: Rect,
     (id, title, line, link, icon, hue): &(&str, &str, &str, &str, &ux::Icon, Hue),
 ) {
-    let live = start_live(id);
+    let live = start_live(shell, id);
     let resp = control(shell, ui, &format!("home.start.{id}"), "card", r, live);
     let border = if live && resp.hovered() { p.border_hover } else { p.border };
     if live && resp.clicked() {
-        crate::new_project::open(shell);
+        if *id == "open-project" {
+            shell.open_from_picker();
+        } else {
+            crate::new_project::open(shell);
+        }
     }
     paint.rect_filled(r, 12.0, p.surface);
     paint.rect_stroke(r, 12.0, Stroke::new(1.0, border), StrokeKind::Inside);

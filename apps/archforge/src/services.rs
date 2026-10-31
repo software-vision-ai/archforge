@@ -1,5 +1,5 @@
 //! The host services the shell may call: the installed fonts, the account's name, the folder new
-//! projects go in, and the projects themselves.
+//! projects go in, the folder picker, and the projects themselves.
 
 use std::path::PathBuf;
 
@@ -12,8 +12,18 @@ pub fn native(projects: std::sync::Arc<crate::projects::Projects>) -> Services {
         user_name: user_name(),
         projects_folder: projects_folder(),
         projects: Some(projects),
+        pick_project: Some(std::sync::Arc::new(pick_project)),
         ids: Some(std::sync::Arc::new(fresh_id)),
     }
+}
+
+/// The platform's folder picker, for Open project: it starts in the projects folder.
+fn pick_project() -> Option<PathBuf> {
+    let mut dialog = rfd::FileDialog::new();
+    if let Some(folder) = projects_folder().filter(|f| f.path.is_dir()) {
+        dialog = dialog.set_directory(folder.path);
+    }
+    dialog.pick_folder()
 }
 
 /// A version 7 id from the clock, a process-wide counter and the platform's randomness: the

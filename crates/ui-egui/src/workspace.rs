@@ -310,10 +310,31 @@ fn status_bar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     let paint = ui.painter();
     paint.rect_filled(r, 0.0, p.surface);
     paint.rect_filled(Rect::from_min_size(r.min, vec2(r.width(), 1.0)), 0.0, p.border);
+    // Saving (archforge-kjz.3): every change is written to the project a moment after it is made;
+    // Save commits it. The status says which, and why a write or a save failed.
+    let writing = shell.services.projects.as_ref().map(|h| h.writing()).unwrap_or_default();
+    let chord = if ui.ctx().os() == egui::os::OperatingSystem::Mac { "⌘S" } else { "Ctrl S" };
+    let mut detail: Option<String> = None;
     let (dot, text) = match &shell.session {
-        Some(s) if s.is_dirty() => (p.amber, tr("Not saved to the project yet")),
-        Some(_) => (p.green, tr("Project created")),
         None => (p.text_muted, tr("The model could not be opened")),
+        Some(_) if shell.is_saving() => (p.accent, tr("Saving…")),
+        // Open works from the workspace too (Cmd+O, File ▸ Open…): its wait and its failure show
+        // here, and the project stays open.
+        Some(_) if shell.is_opening() => (p.accent, tr("Opening…")),
+        Some(_) if shell.open_error.is_some() => {
+            let why = shell.open_error.clone().unwrap_or_default();
+            (p.danger, crate::i18n::fmt(&tr("The project could not be opened: {why}"), &[("why", &why)]))
+        }
+        Some(_) if shell.save_error.is_some() => {
+            detail = shell.save_error.clone();
+            (p.danger, tr("Not saved"))
+        }
+        Some(_) if writing.error.is_some() => {
+            detail = writing.error.clone();
+            (p.danger, tr("Changes could not be written to the project"))
+        }
+        Some(s) if s.is_dirty() => (p.amber, crate::i18n::fmt(&tr("Unsaved changes · {chord} saves"), &[("chord", chord)])),
+        Some(_) => (p.green, tr("Saved")),
     };
     paint.circle_filled(pos2(r.left() + 24.0, r.center().y), 3.0, dot);
     let y = r.center().y - 8.0;
@@ -327,6 +348,10 @@ fn status_bar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     }
     let start = r.left() + 36.0;
     let status = ux::text(paint, pos2(start, y), &text, types::CAPTION, p.text_secondary, room(right - start));
+    if let Some(why) = detail {
+        // The host's own words, small and untranslated.
+        ux::text(paint, pos2(status.right() + 12.0, y), &why, types::CAPTION, p.text_muted, room(right - status.right() - 12.0));
+    }
     if shell.session.is_none()
         && let Some(why) = &shell.session_error
     {

@@ -183,3 +183,122 @@ fn damaged_rows_are_refused_whole_and_change_nothing() {
     other.tables.pop();
     assert!(refused(&other).contains("do not match"));
 }
+
+/// Nodes nested in a chain `n` deep under the diagram's first node, or in a loop of their own.
+fn nested(n: u64, looped: bool) -> Rows {
+    let s = rich_session();
+    let mut saved = rows::snapshot(s.doc(), &tables(), &junctions()).unwrap();
+    let nodes = tables().iter().position(|t| t.name == "diagram_node").unwrap();
+    let children = junctions().iter().position(|j| j.name == "diagram_node_child").unwrap();
+    let template = saved.tables[nodes][0].clone();
+    let Cell::Id(top) = template[0] else { panic!("a node row starts with its id") };
+    let id = |i: u64| {
+        let mut r = [0u8; 10];
+        r[2..].copy_from_slice(&(i + (1 << 50)).to_be_bytes());
+        Uuid::v7(1_761_670_800_000, r)
+    };
+    let mut parent = top;
+    for i in 0..n {
+        let mut row = template.clone();
+        row[0] = Cell::Id(id(i));
+        row[1] = Cell::Null;
+        saved.tables[nodes].push(row);
+        if i > 0 || !looped {
+            saved.junctions[children].push((parent, 0, Cell::Id(id(i))));
+        }
+        parent = id(i);
+    }
+    if looped {
+        saved.junctions[children].push((parent, 0, Cell::Id(id(0))));
+    }
+    saved
+}
+
+#[test]
+fn a_nesting_too_deep_or_in_a_loop_is_refused_before_anything_is_built() {
+    let started = std::time::Instant::now();
+    assert!(refused(&nested(100_000, false)).contains("nests deeper"));
+    assert!(refused(&nested(40, true)).contains("nests deeper"));
+    assert!(started.elapsed() < std::time::Duration::from_secs(20), "the refusal took {:?}", started.elapsed());
+    // A nesting within the limit is not refused for its depth.
+    let mut back = store(other_ids()).unwrap();
+    let within = rows::restore(&mut back, &nested(40, false), &tables(), &junctions());
+    assert!(within.as_ref().err().is_none_or(|e| !e.to_string().contains("nests deeper")), "{within:?}");
+}
+
+/// `n` nodes all in the diagram's first node's list of children.
+fn wide(n: u64) -> Rows {
+    let mut saved = nested(0, false);
+    let nodes = tables().iter().position(|t| t.name == "diagram_node").unwrap();
+    let children = junctions().iter().position(|j| j.name == "diagram_node_child").unwrap();
+    let template = saved.tables[nodes][0].clone();
+    let Cell::Id(top) = template[0] else { panic!("a node row starts with its id") };
+    let before = saved.junctions[children].iter().filter(|(o, _, _)| *o == top).count() as u32;
+    for i in 0..n {
+        let mut r = [0u8; 10];
+        r[2..].copy_from_slice(&(i + (1 << 51)).to_be_bytes());
+        let id = Uuid::v7(1_761_670_800_000, r);
+        let mut row = template.clone();
+        row[0] = Cell::Id(id);
+        row[1] = Cell::Null;
+        saved.tables[nodes].push(row);
+        saved.junctions[children].push((top, before + i as u32, Cell::Id(id)));
+    }
+    saved
+}
+
+#[test]
+fn a_long_list_is_built_in_linear_time_and_a_value_twice_in_it_is_refused() {
+    // No stored property of these metamodels has a stored opposite or subsets another, so adding
+    // to a list never searches another list: building is linear.
+    let st = store(other_ids()).unwrap();
+    for t in archforge_er::storage().0 {
+        let info = st.universe().info(t.class).unwrap();
+        assert!(info.subsetted.is_empty(), "{} has stored subsets", t.name);
+        assert!(info.stored.iter().all(|p| st.universe().prop(*p).unwrap().opposite.is_none()), "{} has a stored opposite", t.name);
+    }
+    // A list as long as one reading can build (the store's step cap bounds a reading): searching
+    // the list for each value would take billions of comparisons.
+    let rows = wide(80_000);
+    let started = std::time::Instant::now();
+    let mut back = store(other_ids()).unwrap();
+    rows::restore(&mut back, &rows, &tables(), &junctions()).unwrap();
+    // Linear, it takes a fraction of a second; searching the list for each value takes seconds.
+    assert!(started.elapsed() < std::time::Duration::from_secs(2), "building took {:?}", started.elapsed());
+    let mut twice = wide(3);
+    let children = junctions().iter().position(|j| j.name == "diagram_node_child").unwrap();
+    let (owner, at, cell) = twice.junctions[children].last().unwrap().clone();
+    twice.junctions[children].push((owner, at + 1, cell));
+    assert!(refused(&twice).contains("twice"));
+}
+
+#[test]
+fn an_object_in_two_containers_is_refused_before_anything_is_built() {
+    // A deep chain hidden behind a shallow listing of the same nodes: the store would keep the
+    // deep one.
+    let mut saved = nested(100_000, false);
+    let children = junctions().iter().position(|j| j.name == "diagram_node_child").unwrap();
+    let chain: Vec<_> = saved.junctions[children].iter().rev().take(100_000).map(|(_, _, c)| c.clone()).collect();
+    let nodes = tables().iter().position(|t| t.name == "diagram_node").unwrap();
+    let Cell::Id(top) = saved.tables[nodes][0][0] else { panic!("a node row starts with its id") };
+    let before = saved.junctions[children].iter().filter(|(o, _, _)| *o == top).count() as u32;
+    let mut shallow: Vec<_> = chain.into_iter().enumerate().map(|(k, c)| (top, before + k as u32, c)).collect();
+    shallow.append(&mut saved.junctions[children]);
+    saved.junctions[children] = shallow;
+    let started = std::time::Instant::now();
+    assert!(refused(&saved).contains("listed twice"));
+    assert!(started.elapsed() < std::time::Duration::from_secs(20), "the refusal took {:?}", started.elapsed());
+}
+
+#[test]
+fn a_part_listed_twice_by_one_owner_is_refused() {
+    // The Model lists its members and its comments in two lists; a part in both would be moved
+    // from one to the other while the model is built, and come back changed.
+    let mut saved = rows::snapshot(rich_session().doc(), &tables(), &junctions()).unwrap();
+    let members = junctions().iter().position(|j| j.name == "core_model_member").unwrap();
+    let comments = junctions().iter().position(|j| j.name == "core_model_owned_comment").unwrap();
+    let (owner, _, part) = saved.junctions[members][0].clone();
+    let at = saved.junctions[comments].iter().filter(|(o, _, _)| *o == owner).count() as u32;
+    saved.junctions[comments].push((owner, at, part));
+    assert!(refused(&saved).contains("listed twice"));
+}

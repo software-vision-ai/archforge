@@ -474,7 +474,8 @@ fn options(socket: Option<&Path>, port: u16, password: &Secret, connect: Duratio
         .prefer_socket(false)
         .tcp_connect_timeout(Some(connect))
         .read_timeout(Some(query))
-        .write_timeout(Some(query));
+        .write_timeout(Some(query))
+        .max_allowed_packet(Some(crate::config::MAX_PACKET));
     let b = match socket {
         Some(s) => b.socket(Some(s.to_string_lossy())),
         None => b.ip_or_hostname(Some("127.0.0.1")).tcp_port(port),

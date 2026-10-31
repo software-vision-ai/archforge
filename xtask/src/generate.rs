@@ -1339,6 +1339,10 @@ fn emit_schema(t: &Target, b: &Built) -> String {
     let _ = writeln!(s, "use archforge_mof::schema::{{Column, Junction, Table}};\n\nuse super::meta::*;\n");
     let mut tables = String::new();
     let mut junctions = String::new();
+    // A list's table is named after its class and property, unless a class's table has that name
+    // (Domain's check list and the class DomainCheck): then it ends in _list.
+    let table_names: std::collections::BTreeSet<String> =
+        m.classes.iter().filter(|c| !c.is_abstract).map(|c| format!("{}_{}", t.name, snake(&c.name).trim_end_matches('_'))).collect();
     for (ci, c) in m.classes.iter().enumerate() {
         if c.is_abstract {
             continue;
@@ -1355,10 +1359,13 @@ fn emit_schema(t: &Target, b: &Built) -> String {
             let kind = b.kind(p);
             if kind == Kind::List {
                 let reference = matches!(prop.ty, TypeRef::Class(_) | TypeRef::Any);
+                let mut name = format!("{table}_{}", f.trim_end_matches('_'));
+                if table_names.contains(&name) {
+                    name.push_str("_list");
+                }
                 let _ = writeln!(
                     junctions,
-                    "    Junction {{ name: \"{table}_{}\", class: {}, prop: {}, ordered: {}, reference: {reference} }},",
-                    f.trim_end_matches('_'),
+                    "    Junction {{ name: {name:?}, class: {}, prop: {}, ordered: {}, reference: {reference} }},",
                     b.class_const(class),
                     b.prop_const(p),
                     prop.is_ordered
@@ -1369,7 +1376,7 @@ fn emit_schema(t: &Target, b: &Built) -> String {
                 Kind::Bool => "TINYINT NOT NULL",
                 Kind::Int => "BIGINT NOT NULL",
                 Kind::Real => "DOUBLE NOT NULL",
-                Kind::Str => "TEXT NULL",
+                Kind::Str => "MEDIUMTEXT NULL",
                 Kind::Unlimited => "BIGINT NULL",
                 Kind::Enum => "INT NOT NULL",
                 Kind::Ref => "BINARY(16) NULL",
@@ -1385,7 +1392,7 @@ fn emit_schema(t: &Target, b: &Built) -> String {
 }
 
 fn unreachable_sql() -> &'static str {
-    "TEXT NULL"
+    "MEDIUMTEXT NULL"
 }
 
 #[cfg(test)]

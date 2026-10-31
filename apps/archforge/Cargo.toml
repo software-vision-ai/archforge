@@ -15,11 +15,13 @@ path = "src/main.rs"
 
 [dependencies]
 archforge-dolt.workspace = true
+archforge-er.workspace = true
+archforge-mof.workspace = true
 archforge-project.workspace = true
 archforge-ui-egui.workspace = true
-archforge-mof.workspace = true
 getrandom.workspace = true
 eframe.workspace = true
+rfd.workspace = true
 winit.workspace = true
 fontdb.workspace = true
 egui.workspace = true

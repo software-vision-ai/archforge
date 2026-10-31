@@ -13,6 +13,7 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
 mod error;
+mod model;
 mod time;
 
 use std::path::{Path, PathBuf};
@@ -23,6 +24,7 @@ use archforge_dolt::{Dolt, Server, ServerOptions};
 use mysql::prelude::Queryable;
 
 pub use error::Error;
+pub use model::ModelSchema;
 pub use time::timestamp;
 
 /// The project format this Archforge writes and the newest it reads.
@@ -38,7 +40,7 @@ const MAX_ROWS: usize = 1000;
 const MAX_KEY: usize = 64;
 const MAX_VALUE: usize = 1024;
 /// The author of the creation commit.
-const AUTHOR: &str = "Archforge <archforge@localhost>";
+pub(crate) const AUTHOR: &str = "Archforge <archforge@localhost>";
 
 /// What the `settings` table says.
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -21,6 +21,7 @@ mod secret;
 mod server;
 
 pub use binary::Dolt;
+pub use config::MAX_PACKET;
 pub use error::Error;
 pub use home::Home;
 pub use secret::Secret;
