@@ -70,6 +70,17 @@ pub enum Tool {
     Link,
 }
 
+/// A drag of the minimap's viewport: the minimap's mapping frozen as the drag began (the part of
+/// the diagram it shows, its scale and where that sits on screen), so the box does not rescale under
+/// the pointer, and where on the viewport the pointer took hold of it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MinimapDrag {
+    shown: Rect,
+    scale: f32,
+    origin: Pos2,
+    grab: Vec2,
+}
+
 /// What the centre keeps between frames: the open tabs, the view and the toggles.
 #[derive(Debug, Clone, PartialEq)]
 pub struct State {
@@ -87,6 +98,8 @@ pub struct State {
     /// engine, so the view's open diagram and the canvas agree.
     pub reopen_pending: bool,
     pub minimap_open: bool,
+    /// The minimap's viewport being dragged: its mapping as it was when the drag began.
+    pub minimap_drag: Option<MinimapDrag>,
     pub grid: bool,
     pub key_status: bool,
     /// The last refusal, shown at the canvas's top left until the next action.
@@ -120,6 +133,7 @@ impl Default for State {
             fit_pending: false,
             reopen_pending: false,
             minimap_open: true,
+            minimap_drag: None,
             grid: true,
             key_status: true,
             notice: None,
@@ -1123,16 +1137,39 @@ fn minimap(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, bounds: Optio
     }
     let vp = Rect::from_min_max(map(viewport.min), map(viewport.max));
     boxed.rect_stroke(vp, 2.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
-    // A click in the box centres the view there.
-    let resp = control(shell, ui, "workspace.minimap.view", "map", bx, true);
-    if resp.clicked()
-        && let Some(pos) = resp.interact_pointer_pos()
-        && scale > 0.0
-        && scale.is_finite()
+    // Dragging the viewport moves the view; a press elsewhere in the box centres the view there
+    // first and goes on from there. The box keeps its scale while the drag lasts.
+    widgets::record_visible(ui, &mut shell.registry, "workspace.minimap.view", "map", bx);
+    let resp = ui.interact(bx, widgets::egui_id("workspace.minimap.view"), Sense::click_and_drag());
+    let usable = scale > 0.0 && scale.is_finite();
+    let press = ui.input(|i| i.pointer.press_origin());
+    if usable
+        && (resp.drag_started() || resp.clicked())
+        && let Some(at) = press.or(resp.interact_pointer_pos())
     {
-        let centre_offset = (inner.size() - shown.size() * scale) / 2.0;
-        let target = shown.min + (pos - inner.min - centre_offset) / scale;
-        shell.canvas.pan = r.size() / 2.0 - target.to_vec2() * shell.canvas.zoom;
+        let grab = if vp.contains(at) { at - vp.center() } else { Vec2::ZERO };
+        let origin = inner.min + (inner.size() - shown.size() * scale) / 2.0;
+        shell.canvas.minimap_drag = Some(MinimapDrag { shown, scale, origin, grab });
+    }
+    if let Some(d) = shell.canvas.minimap_drag
+        && (resp.dragged() || resp.clicked())
+        && let Some(pos) = resp.interact_pointer_pos()
+    {
+        let target = d.shown.min + (pos - d.grab - d.origin) / d.scale;
+        let pan = r.size() / 2.0 - target.to_vec2() * shell.canvas.zoom;
+        if pan.is_finite() {
+            shell.canvas.pan = pan;
+        }
+    }
+    if resp.drag_stopped() || resp.clicked() || !(resp.dragged() || resp.is_pointer_button_down_on()) {
+        shell.canvas.minimap_drag = None;
+    }
+    if shell.canvas.minimap_drag.is_some() && resp.dragged() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+    } else if resp.hover_pos().is_some_and(|q| vp.contains(q)) {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
+    } else if resp.hovered() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
     }
     // The footer: Whole diagram, then − 100 % +.
     let fit_text = ux::text(&paint, m.min + vec2(12.0, 134.0), &tr("Whole diagram"), types::SMALL, p.text_secondary, Some(90.0));

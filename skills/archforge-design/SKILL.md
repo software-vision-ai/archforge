@@ -108,7 +108,10 @@ the change, and update this file in the same change.
   drawn region.
 - A table of another schema is drawn faded with a dashed border and its schema in its header, and
   stays editable.
-- The minimap sits at the canvas's right edge; the zoom control is in its footer.
+- The minimap sits at the canvas's right edge; the zoom control is in its footer. Its viewport
+  rectangle is dragged to move the view (a hand over it, a closed hand while dragging); a press
+  elsewhere in the map centres the view there and the drag goes on from there. The map keeps its
+  scale while a drag lasts, so it never shifts under the pointer.
 
 ## Relationships and notation
 - Crow's foot. Each end draws two marks: the outer one the most (a bar for one, a foot for many),
