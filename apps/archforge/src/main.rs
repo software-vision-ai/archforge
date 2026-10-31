@@ -28,24 +28,70 @@ use std::rc::Rc;
 
 use archforge_ui_egui::Shell;
 
-const USAGE: &str = "usage: archforge [--version | --help]";
+const USAGE: &str = "usage: archforge [--version | --help | --control <port>]
+  --control <port>  turn agent access on for this start: archforge-cli mcp --bridge <port> drives this window";
 
 #[derive(Debug, Default)]
 struct Args {
     version: bool,
     help: bool,
+    /// The loopback port of the control channel, when agent access is on for this start.
+    control: Option<u16>,
 }
 
-fn parse_args(it: impl Iterator<Item = String>) -> Result<Args, String> {
+fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
     let mut a = Args::default();
-    for arg in it {
+    while let Some(arg) = it.next() {
         match arg.as_str() {
             "--version" | "-V" => a.version = true,
             "--help" | "-h" => a.help = true,
+            "--control" => {
+                let port = it.next().ok_or("--control needs a port")?;
+                a.control = Some(port.parse::<u16>().ok().filter(|p| *p > 0).ok_or_else(|| format!("{port:?} is not a port (1 to 65535)"))?);
+            }
             other => return Err(format!("unknown argument {other:?}")),
         }
     }
     Ok(a)
+}
+
+/// Turns agent access on: listens on `port` of the loopback interface and hands each request to
+/// the shell, nudging a frame so it is answered at once. Gives the server, which removes its token
+/// file when dropped, the requests' receiving end for the shell, and the slot the window's context
+/// goes into once it exists.
+type ContextSlot = std::sync::Arc<std::sync::Mutex<Option<egui::Context>>>;
+
+fn start_control(
+    port: u16,
+    settings: &std::path::Path,
+) -> Result<(archforge_control::Server, std::sync::mpsc::Receiver<archforge_ui_egui::control::ControlRequest>, ContextSlot), String> {
+    let (requests, receiver) = std::sync::mpsc::channel::<archforge_ui_egui::control::ControlRequest>();
+    let slot: ContextSlot = std::sync::Arc::new(std::sync::Mutex::new(None));
+    let window = slot.clone();
+    let handler: archforge_control::Handler = std::sync::Arc::new(move |method, params| {
+        use archforge_ui_egui::control::{ControlRequest, abandon};
+        let (reply, answer) = std::sync::mpsc::channel();
+        let state = std::sync::Arc::new(std::sync::atomic::AtomicU8::new(archforge_ui_egui::control::WAITING));
+        requests
+            .send(ControlRequest { method: method.to_string(), params, reply, state: state.clone() })
+            .map_err(|_| "Archforge is closing".to_string())?;
+        if let Some(ctx) = window.lock().ok().and_then(|g| g.clone()) {
+            ctx.request_repaint();
+        }
+        if let Ok(answer) = answer.recv_timeout(archforge_control::TIMEOUT) {
+            return answer;
+        }
+        // Given up before the window took it: it never runs. Taken and still running: a few more
+        // seconds, then the truth that it may have been applied.
+        if abandon(&state) {
+            return Err("Archforge did not answer in time (its window may be busy or hidden); the request was not run".into());
+        }
+        answer
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .unwrap_or_else(|_| Err("Archforge did not answer in time; the request may have been applied".into()))
+    });
+    let server = archforge_control::Server::start(port, settings, handler)?;
+    Ok((server, receiver, slot))
 }
 
 /// The frame host: forwards per-frame logic, drawing and exit to the shell.
@@ -55,6 +101,8 @@ struct DesktopApp {
     settings: PathBuf,
     /// The projects the shell creates: their servers stop on exit.
     projects: std::sync::Arc<projects::Projects>,
+    /// The control channel while agent access is on; dropping it removes its token file.
+    _control: Option<archforge_control::Server>,
     /// The preferences as last saved, and when the next save may run, so a change is saved a
     /// moment after it is made (Home's recent list survives a crash), not on every frame of a drag.
     saved: prefs::Prefs,
@@ -154,6 +202,22 @@ fn run() -> i32 {
     logging::set_dir(&dirs.logs());
     log::info!("{}", build_info::version_line());
 
+    // Agent access: the port is opened before the window, so a port in use exits 3 at once.
+    let control = match args.control.map(|port| start_control(port, &dirs.settings)) {
+        None => None,
+        Some(Ok(started)) => Some(started),
+        Some(Err(e)) => {
+            log::error!("agent access could not be turned on: {e}");
+            let _ = writeln_stderr(&format!("archforge: agent access could not be turned on: {e}"));
+            return 3;
+        }
+    };
+    let (server, requests, window_slot) = match control {
+        Some((s, r, w)) => (Some(s), Some(r), Some(w)),
+        None => (None, None, None),
+    };
+    let server = Rc::new(RefCell::new(server));
+    let requests = Rc::new(RefCell::new(requests));
     let (stored, warning) = prefs::load(&dirs.settings);
     if let Some(w) = warning {
         log::warn!("{w}");
@@ -166,14 +230,23 @@ fn run() -> i32 {
         let mut options = native_options();
         graphics::configure(&mut options, choice);
         let (cell, marker, settings) = (start.clone(), marker.clone(), dirs.settings.clone());
+        let (server, requests, window_slot) = (server.clone(), requests.clone(), window_slot.clone());
         let result = eframe::run_native(
             "Archforge",
             options,
-            Box::new(move |_cc| {
+            Box::new(move |cc| {
                 let stored = cell.borrow_mut().take().ok_or("the application was already started")?;
                 let projects = std::sync::Arc::new(projects::Projects::new(&settings, build_info::version_line()));
                 let mut shell = Shell::new(services::native(projects.clone()));
                 prefs::apply(&stored, &mut shell);
+                if let Some(rx) = requests.borrow_mut().take() {
+                    shell.attach_control(rx);
+                }
+                if let Some(slot) = &window_slot
+                    && let Ok(mut g) = slot.lock()
+                {
+                    *g = Some(cc.egui_ctx.clone());
+                }
                 #[cfg(target_os = "macos")]
                 let menu = native_menu(&mut shell);
                 let saved = prefs::capture(&shell);
@@ -182,6 +255,7 @@ fn run() -> i32 {
                     marker,
                     settings,
                     projects,
+                    _control: server.borrow_mut().take(),
                     saved,
                     next_save: std::time::Instant::now() + PREFS_SETTLE,
                     #[cfg(target_os = "macos")]
@@ -247,6 +321,32 @@ mod tests {
     #[test]
     fn the_window_never_installs_the_system_font_scanner() {
         assert!(!native_options().system_font_fallback, "installed fonts come from fonts.rs, never mapped");
+    }
+
+    #[test]
+    fn the_mcp_tools_and_the_shells_methods_never_drift_apart() {
+        let shell: Vec<&str> = archforge_ui_egui::control::METHODS.iter().map(|(m, _)| *m).collect();
+        let (tools, call_app) = archforge_mcp::tool_methods();
+        for (m, keys) in &tools {
+            let taken = archforge_ui_egui::control::METHODS.iter().find(|(name, _)| name == m).map(|(_, k)| *k);
+            let taken = taken.unwrap_or_else(|| panic!("the tool's method {m} is not one the shell answers"));
+            let mut a: Vec<&str> = keys.iter().map(String::as_str).collect();
+            let mut b: Vec<&str> = taken.to_vec();
+            a.sort();
+            b.sort();
+            assert_eq!(a, b, "the tool for {m} and the shell differ in its keys");
+        }
+        for m in &shell {
+            assert!(call_app.contains(m), "call_app does not name the method {m}");
+        }
+    }
+
+    #[test]
+    fn control_takes_a_port() {
+        assert_eq!(args(&["--control", "47000"]).unwrap().control, Some(47000));
+        for bad in [&["--control"][..], &["--control", "0"], &["--control", "port"], &["--control", "70000"]] {
+            assert!(args(bad).is_err(), "{bad:?}");
+        }
     }
 
     #[test]

@@ -10,6 +10,7 @@ pub mod appearance;
 pub mod canvas;
 pub mod checks;
 pub mod connect;
+pub mod control;
 pub mod diagrams;
 pub mod editing;
 pub mod explorer;
@@ -275,6 +276,8 @@ pub struct Shell {
     pub problems: std::collections::BTreeMap<archforge_mof::Obj, Vec<String>>,
     /// Set by `request_quit`; the next frame closes the window.
     quit_requested: bool,
+    /// The control channel's requests, while agent access is on.
+    pub(crate) control: Option<std::sync::mpsc::Receiver<control::ControlRequest>>,
 }
 
 impl Shell {
@@ -311,6 +314,7 @@ impl Shell {
             markdown: Default::default(),
             problems: Default::default(),
             quit_requested: false,
+            control: None,
         }
     }
 
@@ -775,6 +779,11 @@ impl Shell {
         self.write_changes();
     }
 
+    /// Turns agent access on: the shell answers the requests `requests` brings once per frame.
+    pub fn attach_control(&mut self, requests: std::sync::mpsc::Receiver<control::ControlRequest>) {
+        self.control = Some(requests);
+    }
+
     /// Asks the window to quit through the normal close path at the next frame.
     pub fn request_quit(&mut self) {
         self.quit_requested = true;
@@ -807,6 +816,7 @@ impl Shell {
         }
         self.adopt_project();
         self.poll_host();
+        control::drain(self);
         // While the host works on an opening, a save or a write, the window looks again soon, so
         // its answer shows without waiting for the pointer to move.
         // A write that failed waits for the next change or Save, and the status bar already says

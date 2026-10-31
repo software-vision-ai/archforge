@@ -1,0 +1,23 @@
+[package]
+name = "archforge-cli"
+description = "Archforge's command-line tool: the MCP server for agents and requests to the running application"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[[bin]]
+name = "archforge-cli"
+path = "src/main.rs"
+
+[dependencies]
+archforge-control.workspace = true
+archforge-er.workspace = true
+archforge-mcp.workspace = true
+archforge-mof.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

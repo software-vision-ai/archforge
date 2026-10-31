@@ -1,0 +1,20 @@
+[package]
+name = "archforge-control"
+description = "The control channel agents drive the running application through: its token, its loopback server and client"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+getrandom.workspace = true
+log.workspace = true
+serde_json.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+rustix.workspace = true
+
+[lints]
+workspace = true

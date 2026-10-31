@@ -47,6 +47,10 @@ pub const TABLE: &[(&str, Class)] = &[
     // them, so the portable-target check, which builds the layers below the shell, leaves them out.
     ("dolt", Class::Layer(8)),
     ("project", Class::Layer(9)),
+    // Agent access: the control channel's token, loopback server and client, and the MCP server
+    // bridged to it. Host services like the two above, never built for the portable target.
+    ("control", Class::Layer(8)),
+    ("mcp", Class::Layer(9)),
 ];
 
 /// The shell crate: the highest crate the portable-target check builds.

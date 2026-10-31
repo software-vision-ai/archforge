@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "archforge": {
+      "command": "./target/debug/archforge-cli",
+      "args": ["mcp", "--bridge", "47000"]
+    }
+  }
+}
