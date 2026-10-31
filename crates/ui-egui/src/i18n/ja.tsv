@@ -77,7 +77,6 @@ str		key on {columns}	{columns} のキー
 str		complete	完全
 str		disjoint	排他
 str		overlapping	重複あり
-str		A subtype joins two tables	サブタイプは 2 つのテーブルを結びます
 str		Add a literal	リテラルを追加
 str		Sequences · {n}	シーケンス · {n}
 str		Add sequence	シーケンスを追加
@@ -216,7 +215,6 @@ str		Pan	パン
 str		Entity	エンティティ
 str		Entity · {schema}	エンティティ · {schema}
 str		Relationship	リレーションシップ
-str		Generalization	汎化
 str		Relationship types	リレーションシップの種類
 str		Note	ノート
 str		Group	グループ

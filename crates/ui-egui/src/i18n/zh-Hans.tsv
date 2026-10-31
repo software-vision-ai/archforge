@@ -77,7 +77,6 @@ str		key on {columns}	键在 {columns}
 str		complete	完全
 str		disjoint	互斥
 str		overlapping	重叠
-str		A subtype joins two tables	子类型连接两个表
 str		Add a literal	添加字面量
 str		Sequences · {n}	序列 · {n}
 str		Add sequence	添加序列
@@ -216,7 +215,6 @@ str		Pan	平移
 str		Entity	实体
 str		Entity · {schema}	实体 · {schema}
 str		Relationship	关系
-str		Generalization	泛化
 str		Relationship types	关系类型
 str		Note	备注
 str		Group	分组
