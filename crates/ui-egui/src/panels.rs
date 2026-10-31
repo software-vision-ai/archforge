@@ -376,17 +376,18 @@ pub(crate) fn text_field(
     let field = Rect::from_min_size(at + vec2(0.0, 17.0), vec2(width.max(0.0), FIELD));
     paint.rect_filled(field, 6.0, p.field);
     widgets::record_visible(ui, &mut shell.registry, id, "field", field);
-    let inner =
-        Rect::from_min_max(pos2(field.left() + 8.0, field.top() + 4.0), pos2((field.right() - 8.0).max(field.left() + 8.0), field.bottom() - 4.0));
+    let inner = field_inner(ui, field);
     let eid = widgets::egui_id(id);
     let edit = egui::TextEdit::singleline(text)
         .id(eid)
         .frame(egui::Frame::NONE)
+        .margin(egui::Margin::ZERO)
         .font(types::SMALL.font())
         .text_color(p.text)
         .char_limit(limit)
         .desired_width(inner.width());
     let out = edit.show(&mut ui.new_child(egui::UiBuilder::new().max_rect(inner)));
+    let _ = (*out.response).clone().accessible_name(label);
     if take_focus {
         out.response.request_focus();
     }
@@ -395,6 +396,16 @@ pub(crate) fn text_field(
     }
     let enter = out.response.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
     enter || (commit_on_blur && out.response.lost_focus())
+}
+
+/// Where a field's one line of text goes: 8 points in from the sides, its row centred on the
+/// field's middle line, as a select's value is.
+pub(crate) fn field_inner(ui: &egui::Ui, field: Rect) -> Rect {
+    let row = ui.fonts_mut(|f| f.row_height(&types::SMALL.font()));
+    Rect::from_min_max(
+        pos2(field.left() + 8.0, field.center().y - row / 2.0),
+        pos2((field.right() - 8.0).max(field.left() + 8.0), field.center().y + row / 2.0),
+    )
 }
 
 /// A filled select showing `value`; a click opens or closes `menu`.
@@ -413,8 +424,8 @@ pub(crate) fn select_field(
     ux::text(paint, at, label, types::CAPTION, p.text_secondary, Some(width.max(0.0)));
     let field = Rect::from_min_size(at + vec2(0.0, 17.0), vec2(width.max(0.0), FIELD));
     paint.rect_filled(field, 6.0, p.field);
-    ux::text(paint, field.min + vec2(8.0, 5.0), value, types::SMALL, p.text, Some((width - 36.0).max(0.0)));
-    ux::icon(paint, pos2(field.right() - 22.0, field.top() + 6.0), &icons::CHEVRON_DOWN, 16.0, p.text_secondary);
+    ux::text_mid(paint, field.left() + 8.0, field.center().y, value, types::SMALL, p.text, Some((width - 36.0).max(0.0)));
+    ux::icon_mid(paint, pos2(field.right() - 14.0, field.center().y), &icons::CHEVRON_DOWN, p.text_secondary);
     if control(shell, ui, id, "select", field, true).clicked() {
         shell.panels.menu = if shell.panels.menu == Some(menu) { None } else { Some(menu) };
     }
@@ -427,7 +438,7 @@ pub(crate) fn menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, 
     let paint = ui.painter();
     let height = 8.0 + items.len() as f32 * 30.0;
     let r = Rect::from_min_size(pos2(anchor.left(), anchor.bottom() + 4.0), vec2(anchor.width(), height));
-    paint.rect_filled(r.expand(2.0), 10.0, p.shadow);
+    ux::shadow(paint, r, 8.0, p.shadow);
     paint.rect_filled(r, 8.0, p.surface);
     paint.rect_stroke(r, 8.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
     let mut picked = None;
@@ -517,7 +528,9 @@ const BASE_TYPES: [&str; 12] =
 fn properties(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, subject: &Subject) {
     let paint = ui.painter().clone();
     let width = r.width() - 2.0 * PAD;
-    y = section(shell, ui, p, r, y, &subject.word, None).unwrap_or(y + 50.0);
+    // A column's panel shows its table's fields, so their section says Table.
+    let word = if subject.class == Some(archforge_er::ATTRIBUTE) { tr("Table") } else { subject.word.clone() };
+    y = section(shell, ui, p, r, y, &word, None).unwrap_or(y + 50.0);
     if subject.class != Some(archforge_er::DOMAIN) && subject.class != Some(archforge_er::ENUM_TYPE) {
         shell.panels.selected_type = None;
     }
@@ -533,7 +546,7 @@ fn properties(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y:
             ux::text(&paint, pos2(r.left() + PAD, y), &tr("Name"), types::CAPTION, p.text_secondary, Some(width.max(0.0)));
             let field = Rect::from_min_size(pos2(r.left() + PAD, y + 17.0), vec2(width.max(0.0), FIELD));
             paint.rect_filled(field, 6.0, p.field);
-            ux::text(&paint, field.min + vec2(8.0, 5.0), &subject.name, types::SMALL, p.text, Some((width - 16.0).max(0.0)));
+            ux::text_mid(&paint, field.left() + 8.0, field.center().y, &subject.name, types::SMALL, p.text, Some((width - 16.0).max(0.0)));
             control(shell, ui, "workspace.properties.name", "button", field, false);
         }
         Some(c) if c == archforge_er::SCHEMA => {
@@ -607,8 +620,8 @@ fn properties(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y:
             ux::text(&paint, at, &tr("Schema"), types::CAPTION, p.text_secondary, Some(half.max(0.0)));
             let field = Rect::from_min_size(at + vec2(0.0, 17.0), vec2(half.max(0.0), FIELD));
             paint.rect_filled(field, 6.0, p.field);
-            ux::text(&paint, field.min + vec2(8.0, 5.0), &schema, types::SMALL, p.text, Some((half - 36.0).max(0.0)));
-            ux::icon(&paint, pos2(field.right() - 22.0, field.top() + 6.0), &icons::CHEVRON_DOWN, 16.0, p.text_muted);
+            ux::text_mid(&paint, field.left() + 8.0, field.center().y, &schema, types::SMALL, p.text, Some((half - 36.0).max(0.0)));
+            ux::icon_mid(&paint, pos2(field.right() - 14.0, field.center().y), &icons::CHEVRON_DOWN, p.text_muted);
             control(shell, ui, "workspace.properties.schema", "select", field, false);
             if let Some(o) = subject.obj {
                 crate::keys::problems_section(shell, ui, p, r, y + 17.0 + FIELD + 16.0, o);
@@ -780,7 +793,7 @@ fn entity_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
         if resp.hovered() {
             paint.rect_filled(row, 6.0, p.page);
         }
-        ux::text(&paint, row.min + vec2(2.0, 10.0), "⋮⋮", types::CAPTION, p.text_muted, None);
+        ux::icon_mid(&paint, pos2(row.left() + 8.0, row.center().y), &icons::GRIP, p.text_muted);
         let (badge, tint, ink) = if col.primary {
             (Some("PK"), p.amber_tint, p.amber)
         } else if col.foreign {
@@ -790,25 +803,27 @@ fn entity_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
         } else {
             (None, p.surface, p.text)
         };
+        // Badge, name, link mark and type share the row's middle line.
+        let mid = row.center().y;
         if let Some(b) = badge {
-            let br = Rect::from_min_size(row.min + vec2(24.0, 10.0), vec2(26.0, 16.0));
+            let br = Rect::from_center_size(pos2(row.left() + 37.0, mid), vec2(26.0, 16.0));
             paint.rect_filled(br, 4.0, tint);
             let g = ux::galley(&paint, b, types::TINY, ink, None);
             paint.galley(br.center() - g.size() / 2.0, g, ink);
         }
-        let name = ux::text(&paint, row.min + vec2(58.0, 8.5), &col.name, types::UI, p.text, Some((width - 58.0 - 40.0).max(0.0)));
+        let name = ux::text_mid(&paint, row.left() + 58.0, mid, &col.name, types::UI, p.text, Some((width - 58.0 - 40.0).max(0.0)));
         let mut after = name.right() + 8.0;
         if let Some(target) = &col.linked {
             // The link mark of a key column that follows the column it points at.
-            let mark = Rect::from_min_size(pos2(after, row.top() + 11.0), vec2(14.0, 14.0));
+            let mark = Rect::from_min_size(pos2(after, mid - 7.0), vec2(14.0, 14.0));
             ux::icon_in(&paint, mark, &icons::LINK, p.text_secondary);
             control(shell, ui, &format!("workspace.properties.column.{}.link", col.id), "mark", mark.expand(3.0), true)
                 .on_hover_text(fmt(&tr("Follows {target}"), &[("target", target)]));
             after += 20.0;
         }
-        ux::text(&paint, pos2(after, row.top() + 10.5), &col.ty, types::CAPTION, p.text_secondary, Some((row.right() - after - 32.0).max(0.0)));
+        ux::text_mid(&paint, after, mid + 0.5, &col.ty, types::CAPTION, p.text_secondary, Some((row.right() - after - 32.0).max(0.0)));
         if resp.hovered() {
-            ux::icon_in(&paint, Rect::from_min_size(pos2(row.right() - 24.0, row.top() + 10.0), Vec2::splat(16.0)), &icons::EDIT, p.text_secondary);
+            ux::icon_mid(&paint, pos2(row.right() - 16.0, row.center().y), &icons::EDIT, p.text_secondary);
         }
         if resp.clicked() {
             open_column(shell, entity_id, Some(col.id));
@@ -1757,6 +1772,7 @@ fn skill_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f
         .desired_width(body_inner.width())
         .desired_rows(5)
         .show(&mut ui.new_child(egui::UiBuilder::new().max_rect(body_inner)));
+    let _ = (*out.response).clone().accessible_name(tr("Guidance"));
     if out.response.has_focus() {
         paint.rect_stroke(body, 6.0, Stroke::new(1.0, p.focus), StrokeKind::Inside);
     }
@@ -1940,7 +1956,7 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, 
         let h = (track.height() * body.height() / shell.panels.content).max(24.0).min(track.height());
         let at = shell.panels.scroll / (shell.panels.content - body.height()).max(1.0);
         let thumb = Rect::from_min_size(pos2(r.right() - 6.0, track.top() + at * (track.height() - h)), vec2(4.0, h));
-        paint.rect_filled(thumb, 2.0, p.border_hover);
+        paint.rect_filled(thumb, 2.0, p.text_muted.gamma_multiply(0.45));
     }
     if let Some(notice) = shell.panels.notice.clone() {
         ux::text(&paint, pos2(r.left() + PAD, r.bottom() - 36.0), &notice, types::CAPTION, p.amber, Some((r.width() - 2.0 * PAD).max(0.0)));

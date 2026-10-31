@@ -573,6 +573,7 @@ fn note_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, rect: Rect, z: 
         .char_limit(archforge_diagram::rules::MAX_TEXT)
         .desired_width(field.width().max(0.0));
     let out = edit.show(&mut ui.new_child(egui::UiBuilder::new().max_rect(field.shrink(4.0 * z))));
+    let _ = (*out.response).clone().accessible_name(tr("Note"));
     if fresh {
         out.response.request_focus();
     }
@@ -952,7 +953,7 @@ fn arrange_bar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, view: Vie
     let x = (bounds.center().x - ARRANGE.x / 2.0).clamp(r.left() + 8.0, (r.right() - ARRANGE.x - 8.0).max(r.left() + 8.0));
     let y = (bounds.bottom() + ARRANGE_GAP).min(r.bottom() - ARRANGE.y - 8.0);
     let bar = Rect::from_min_size(pos2(x, y), ARRANGE);
-    paint.rect_filled(bar.expand(2.0), 12.0, p.shadow);
+    ux::shadow(&paint, bar, 10.0, p.shadow);
     paint.rect_filled(bar, 10.0, p.surface);
     paint.rect_stroke(bar, 10.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
     let buttons: [(&str, &ux::Icon, &str, f32); 5] = [
@@ -1044,6 +1045,7 @@ fn rename_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, rect: Rect, z
         .char_limit(MAX_NAME)
         .desired_width(inner.width());
     let out = edit.show(&mut ui.new_child(egui::UiBuilder::new().max_rect(inner)));
+    let _ = (*out.response).clone().accessible_name(tr("Name"));
     if fresh {
         out.response.request_focus();
         if let Some(mut state) = egui::TextEdit::load_state(ui.ctx(), id) {
@@ -1092,7 +1094,7 @@ fn entity_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, menu: &En
     let x = menu.at.x.min(r.right() - MENU_WIDTH - 8.0).max(r.left() + 8.0);
     let y = menu.at.y.min(r.bottom() - height - 8.0).max(r.top() + 8.0);
     let m = Rect::from_min_size(pos2(x, y), vec2(MENU_WIDTH, height));
-    paint.rect_filled(m.expand(2.0), 10.0, p.shadow);
+    ux::shadow(&paint, m, 8.0, p.shadow);
     paint.rect_filled(m, 8.0, p.surface);
     paint.rect_stroke(m, 8.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
     let mut picked = None;

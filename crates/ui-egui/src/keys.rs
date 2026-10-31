@@ -114,7 +114,7 @@ pub(crate) fn keys_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r:
         let resp = control(shell, ui, &format!("workspace.properties.key.row.{}", key.id), "row", row, true);
         if resp.hovered() {
             paint.rect_filled(row, 6.0, p.page);
-            ux::icon_in(&paint, Rect::from_min_size(pos2(row.right() - 24.0, row.top() + 10.0), Vec2::splat(16.0)), &icons::EDIT, p.text_secondary);
+            ux::icon_mid(&paint, pos2(row.right() - 16.0, row.center().y), &icons::EDIT, p.text_secondary);
         }
         let (b, tint, ink) = if key.primary { ("PK", p.amber_tint, p.amber) } else { ("UQ", p.accent_tint, p.accent) };
         let br = Rect::from_min_size(row.min + vec2(2.0, 6.0), vec2(26.0, 16.0));
@@ -184,7 +184,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     for (i, id) in edit.columns.iter().enumerate() {
         let row = Rect::from_min_size(at(0.0, cy), vec2(inner, FIELD));
         paint.rect_filled(row, 6.0, p.field);
-        ux::text(&paint, row.min + vec2(8.0, 8.0), "⋮⋮", types::CAPTION, p.text_muted, None);
+        ux::icon_mid(&paint, pos2(row.left() + 14.0, row.center().y), &icons::GRIP, p.text_muted);
         let (n, ty) = all_columns.iter().find(|(c, _, _)| c == id).map(|(_, n, t)| (n.clone(), t.clone())).unwrap_or_default();
         let name_rect = ux::text(&paint, row.min + vec2(28.0, 5.0), &n, types::SMALL, p.text, Some((inner - 80.0).max(0.0)));
         ux::text(
@@ -209,7 +209,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     let add = Rect::from_min_size(at(0.0, cy), vec2(inner, FIELD));
     paint.rect_filled(add, 6.0, p.field);
     ux::text(&paint, add.min + vec2(8.0, 5.0), &tr("Add a column"), types::SMALL, p.text_secondary, Some((inner - 36.0).max(0.0)));
-    ux::icon(&paint, pos2(add.right() - 22.0, add.top() + 6.0), &icons::CHEVRON_DOWN, 16.0, p.text_secondary);
+    ux::icon_mid(&paint, pos2(add.right() - 14.0, add.center().y), &icons::CHEVRON_DOWN, p.text_secondary);
     if control(shell, ui, "workspace.properties.key.column.add", "select", add, true).clicked() {
         shell.panels.menu = if shell.panels.menu == Some(Menu::KeyColumn) { None } else { Some(Menu::KeyColumn) };
     }

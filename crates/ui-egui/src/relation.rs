@@ -383,8 +383,8 @@ fn foreign_key(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
         ux::text(&paint, pos2(tag.right() + 6.0, y + 5.0), parent_col, types::SMALL, p.text, Some((half - 34.0).max(0.0)));
         let field = Rect::from_min_size(pos2(r.left() + PAD + half + 8.0, y), vec2(half, FIELD));
         paint.rect_filled(field, 6.0, p.field);
-        ux::text(&paint, field.min + vec2(8.0, 5.0), child_col, types::SMALL, p.text, Some((half - 36.0).max(0.0)));
-        ux::icon(&paint, pos2(field.right() - 22.0, field.top() + 6.0), &icons::CHEVRON_DOWN, 16.0, p.text_secondary);
+        ux::text_mid(&paint, field.left() + 8.0, field.center().y, child_col, types::SMALL, p.text, Some((half - 36.0).max(0.0)));
+        ux::icon_mid(&paint, pos2(field.right() - 14.0, field.center().y), &icons::CHEVRON_DOWN, p.text_secondary);
         if control(shell, ui, &format!("workspace.properties.pair.{i}"), "select", field, true).clicked() {
             shell.panels.menu = if shell.panels.menu == Some(Menu::Pair(i)) { None } else { Some(Menu::Pair(i)) };
         }
@@ -666,7 +666,7 @@ fn menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, id: &str, i
     let height = 8.0 + items.len() as f32 * 30.0 + heading_h;
     let width = anchor.width().max(200.0);
     let m = Rect::from_min_size(pos2(anchor.right() - width, anchor.bottom() + 4.0), vec2(width, height));
-    paint.rect_filled(m.expand(2.0), 10.0, p.shadow);
+    ux::shadow(&paint, m, 8.0, p.shadow);
     paint.rect_filled(m, 8.0, p.surface);
     paint.rect_stroke(m, 8.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
     let mut picked = None;
@@ -690,7 +690,7 @@ fn menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, id: &str, i
         let tick = if item.on { 20.0 } else { 0.0 };
         ux::text(&paint, row.min + vec2(10.0, 7.5), &item.label, types::SMALL, ink, Some((row.width() - 30.0 - detail.size().x - tick).max(0.0)));
         if item.on {
-            ux::icon_in(&paint, Rect::from_min_size(pos2(row.right() - 24.0, row.top() + 7.0), Vec2::splat(16.0)), &icons::TICK, p.accent);
+            ux::icon_mid(&paint, pos2(row.right() - 16.0, row.center().y), &icons::TICK, p.accent);
         }
         paint.galley(pos2(row.right() - 10.0 - tick - detail.size().x, row.top() + 9.0), detail, p.text_muted);
         if resp.clicked() && item.enabled {

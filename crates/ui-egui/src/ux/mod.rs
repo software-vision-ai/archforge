@@ -4,6 +4,7 @@
 //! shell's theme.
 
 pub mod icons;
+mod raster;
 
 use egui::{Color32, FontFamily, FontId, Pos2, Rect, Stroke, Vec2};
 
@@ -273,6 +274,37 @@ pub fn text(painter: &egui::Painter, at: Pos2, text: &str, ty: Type, color: Colo
     rect
 }
 
+/// A floating surface's soft shadow (menus, popovers, the toolbar, the minimap, dialogs), drawn
+/// before the surface: blurred and offset down, never a solid ring.
+pub fn shadow(painter: &egui::Painter, rect: Rect, radius: f32, color: Color32) {
+    let shape = egui::epaint::Shadow { offset: [0, 4], blur: 16, spread: 0, color: color.gamma_multiply(0.7) }
+        .as_shape(rect, egui::CornerRadius::same(radius.round().clamp(0.0, 255.0) as u8));
+    painter.add(shape);
+}
+
+/// Draws `text` starting at `x`, centred on the line `y`, as every row centres its content.
+pub fn text_mid(painter: &egui::Painter, x: f32, y: f32, text: &str, ty: Type, color: Color32, width: Option<f32>) -> Rect {
+    let g = galley(painter, text, ty, color, width);
+    let at = Pos2::new(x, y - g.size().y / 2.0);
+    let rect = Rect::from_min_size(at, g.size());
+    painter.galley(at, g, color);
+    rect
+}
+
+/// Draws `icon` centred in a coloured tile: its longer side half the tile's, the interface's
+/// stroke weight.
+pub fn icon_in_tile(painter: &egui::Painter, tile: Rect, icon: &Icon, color: Color32) {
+    let side = (tile.width().min(tile.height()) / 2.0).round();
+    let k = side / icon.size[0].max(icon.size[1]).max(f32::EPSILON);
+    let size = Vec2::new(icon.size[0], icon.size[1]) * k;
+    icon_exact(painter, tile.center() - size / 2.0, icon, size.x, STROKE, color);
+}
+
+/// Draws `icon` centred on `centre` at its role's size.
+pub fn icon_mid(painter: &egui::Painter, centre: Pos2, icon: &Icon, color: Color32) {
+    icon_in(painter, Rect::from_center_size(centre, Vec2::new(icon.size[0], icon.size[1])), icon, color);
+}
+
 /// One stroke of an icon, in the icon's own box.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Seg {
@@ -298,7 +330,85 @@ pub fn icon(painter: &egui::Painter, at: Pos2, icon: &Icon, width: f32, color: C
 
 /// [`icon`] with a stroke weight of its own, where the design gives an instance one.
 pub fn icon_weighted(painter: &egui::Painter, at: Pos2, icon: &Icon, width: f32, weight: f32, color: Color32) {
+    // An interface icon is drawn at its role's size, centred where the caller put its box, with
+    // one stroke weight, so no screen draws one larger or heavier than another (the ArtCraft
+    // apps' scale: chrome 15-16, rows and fields 13-14, small actions 10-12, chevrons 8).
+    let (at, width, weight) = match standard_size(icon) {
+        Some(side) => {
+            let requested = Vec2::new(width, if icon.size[0] > 0.0 { width * icon.size[1] / icon.size[0] } else { width });
+            let k = side / icon.size[0].max(icon.size[1]).max(f32::EPSILON);
+            let drawn = Vec2::new(icon.size[0], icon.size[1]) * k;
+            (at + requested / 2.0 - drawn / 2.0, drawn.x, STROKE)
+        }
+        None => (at, width, weight),
+    };
+    icon_exact(painter, at, icon, width, weight, color);
+}
+
+/// The stroke weight of every interface icon: two pixels on a retina screen, one on a standard
+/// one.
+pub const STROKE: f32 = 1.2;
+
+/// The longer side, in points, an interface icon is drawn at; none for the canvas's own glyphs,
+/// the brand mark and illustrations, which keep the size they are given.
+fn standard_size(icon: &Icon) -> Option<f32> {
+    use icons::*;
+    let table: [(&Icon, f32); 42] = [
+        (&COLUMN, 11.0),
+        (&PLUS, 10.0),
+        (&CLOSE, 9.0),
+        (&MINUS, 8.0),
+        (&TICK, 13.0),
+        (&EDIT, 14.0),
+        (&TRASH, 14.0),
+        (&CHEVRON_DOWN, 8.0),
+        (&CHEVRON_SMALL, 8.0),
+        (&CHEVRON_RIGHT, 9.0),
+        (&COLLAPSE, 14.0),
+        (&SEARCH, 12.0),
+        (&HOME, 15.0),
+        (&HELP, 16.0),
+        (&MOON, 14.0),
+        (&SUN, 14.0),
+        (&FOLDER, 14.0),
+        (&ARROW, 14.0),
+        (&MORE, 14.0),
+        (&MAP, 14.0),
+        (&LIST, 14.0),
+        (&GRID, 14.0),
+        (&IMPORT, 16.0),
+        (&CHAT, 16.0),
+        (&BRUSH, 16.0),
+        (&EXPORT, 20.0),
+        (&ISSUE, 17.0),
+        (&BUBBLE, 17.0),
+        (&HISTORY, 17.0),
+        (&CUBE, 17.0),
+        (&DIAGRAM, 17.0),
+        (&BRANCH, 17.0),
+        (&TABLE, 15.0),
+        (&SCHEMA, 16.0),
+        (&SKILL, 17.0),
+        (&NAMING, 17.0),
+        (&ER_DIAGRAM, 13.0),
+        (&DOMAIN, 11.0),
+        (&ENUM, 9.5),
+        (&SEQUENCE, 10.0),
+        (&VIEW, 12.0),
+        (&GRIP, 8.0),
+    ];
+    // By value: a `const` used in two places need not share one address.
+    table.iter().find(|(i, _)| i.size == icon.size && i.segments == icon.segments).map(|(_, side)| *side)
+}
+
+/// [`icon_weighted`] at exactly the size and weight given: the canvas's zoomed glyphs and
+/// illustrations.
+pub fn icon_exact(painter: &egui::Painter, at: Pos2, icon: &Icon, width: f32, weight: f32, color: Color32) {
     let scale = if icon.size[0] > 0.0 { width / icon.size[0] } else { 1.0 };
+    // Crisp at the screen's pixels as a mask; only an icon too large for one draws as strokes.
+    if raster::draw(painter, at, icon, scale, weight, color) {
+        return;
+    }
     let stroke = Stroke::new(weight, color);
     let p = |q: [f32; 2]| at + Vec2::new(q[0], q[1]) * scale;
     for seg in icon.segments {

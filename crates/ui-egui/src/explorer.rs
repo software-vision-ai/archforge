@@ -580,7 +580,7 @@ fn drag_ghost(shell: &Shell, ui: &egui::Ui, p: &Palette, rows: &[Row]) {
     let paint = ui.ctx().layer_painter(egui::LayerId::new(egui::Order::Tooltip, widgets::egui_id("workspace.explorer.drag")));
     let g = ux::galley(&paint, &row.label, types::SMALL, p.text, Some(220.0));
     let chip = Rect::from_min_size(at + vec2(12.0, 10.0), vec2(36.0 + g.size().x, 28.0));
-    paint.rect_filled(chip.expand(2.0), 8.0, p.shadow);
+    ux::shadow(&paint, chip, 6.0, p.shadow);
     paint.rect_filled(chip, 6.0, p.surface);
     paint.rect_stroke(chip, 6.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
     ux::icon_in(&paint, Rect::from_min_size(chip.min + vec2(10.0, 7.0), Vec2::splat(14.0)), &icons::TABLE, p.accent);
@@ -592,18 +592,20 @@ fn filter_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Rect) 
     let paint = ui.painter().clone();
     paint.rect_filled(field, 8.0, p.page);
     paint.rect_stroke(field, 8.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
-    ux::icon(&paint, field.min + vec2(10.0, 9.0), &icons::SEARCH, 13.0, p.text_secondary);
+    ux::icon_mid(&paint, pos2(field.left() + 17.0, field.center().y), &icons::SEARCH, p.text_secondary);
     widgets::record_visible(ui, &mut shell.registry, "workspace.explorer.filter", "field", field);
-    let inner = Rect::from_min_max(pos2(field.left() + 30.0, field.top() + 4.0), pos2(field.right() - 8.0, field.bottom() - 4.0));
+    let inner = crate::panels::field_inner(ui, field.with_min_x(field.left() + 22.0));
     let edit = egui::TextEdit::singleline(&mut shell.explorer.filter)
         .id(widgets::egui_id("workspace.explorer.filter"))
         .frame(egui::Frame::NONE)
+        .margin(egui::Margin::ZERO)
         .font(types::SMALL.font())
         .text_color(p.text)
         .hint_text(egui::RichText::new(tr("Filter models…")).color(p.text_secondary).font(types::SMALL.font()))
         .char_limit(MAX_NAME)
         .desired_width(inner.width());
     let resp = ui.put(inner, edit);
+    let _ = resp.clone().accessible_name(tr("Filter models…"));
     if resp.gained_focus() {
         shell.explorer.focused = false;
     }
@@ -634,7 +636,7 @@ fn tree_row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, column: Rect, y: 
     }
     let resp = control(shell, ui, &id, "row", hit, true);
     if row.expandable {
-        let chevron = Rect::from_min_size(pos2(column.left() + 13.0 + indent, y), Vec2::splat(16.0));
+        let chevron = Rect::from_center_size(pos2(column.left() + 21.0 + indent, hit.center().y), Vec2::splat(16.0));
         ux::icon_in(&paint, chevron, if row.expanded { &icons::CHEVRON_DOWN } else { &icons::CHEVRON_RIGHT }, p.text_secondary);
         if ui.interact(chevron.expand(4.0), widgets::egui_id(&format!("{id}.fold")), Sense::click()).clicked() {
             if row.expanded {
@@ -646,19 +648,20 @@ fn tree_row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, column: Rect, y: 
         }
     }
     let ink = if is_selected { p.accent } else { p.text };
-    let icon_at = Rect::from_min_size(pos2(column.left() + 31.0 + indent, y), Vec2::splat(15.0));
-    match row.kind {
-        Kind::Schema => ux::icon_in(&paint, icon_at, &icons::SCHEMA, if is_selected { p.accent } else { p.text_secondary }),
-        Kind::Entity => ux::icon_in(&paint, icon_at, &icons::TABLE, if is_selected { p.accent } else { p.text_secondary }),
-        Kind::Skill => ux::icon_in(&paint, icon_at, &icons::SKILL, if is_selected { p.accent } else { p.text_secondary }),
-        Kind::Domain => ux::icon_in(&paint, icon_at, &icons::DOMAIN, if is_selected { p.accent } else { p.text_secondary }),
-        Kind::Enum => ux::icon_in(&paint, icon_at, &icons::ENUM, if is_selected { p.accent } else { p.text_secondary }),
-        Kind::Sequence => ux::icon_in(&paint, icon_at, &icons::SEQUENCE, if is_selected { p.accent } else { p.text_secondary }),
-        Kind::View => ux::icon_in(&paint, icon_at, &icons::VIEW, if is_selected { p.accent } else { p.text_secondary }),
-        Kind::Attribute => {
-            ux::text(&paint, pos2(icon_at.left() + 1.0, y - 1.0), "a", types::CAPTION, p.text_muted, None);
-        }
-    }
+    // The icon and the name share the row's middle line.
+    let mid = hit.center().y;
+    let icon_ink = if is_selected { p.accent } else { p.text_secondary };
+    let icon = match row.kind {
+        Kind::Schema => &icons::SCHEMA,
+        Kind::Entity => &icons::TABLE,
+        Kind::Skill => &icons::SKILL,
+        Kind::Domain => &icons::DOMAIN,
+        Kind::Enum => &icons::ENUM,
+        Kind::Sequence => &icons::SEQUENCE,
+        Kind::View => &icons::VIEW,
+        Kind::Attribute => &icons::COLUMN,
+    };
+    ux::icon_mid(&paint, pos2(column.left() + 38.5 + indent, mid), icon, if row.kind == Kind::Attribute { p.text_muted } else { icon_ink });
     let name_x = column.left() + 53.0 + indent;
     let renaming = shell.explorer.rename.as_ref().is_some_and(|r| r.target == row.id);
     if renaming {
@@ -669,7 +672,7 @@ fn tree_row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, column: Rect, y: 
         Some(ty) => format!("{} : {ty}", row.label),
         None => row.label.clone(),
     };
-    ux::text(&paint, pos2(name_x, y - 1.0), &label, types::UI, ink, Some((column.right() - 16.0 - name_x).max(0.0)));
+    ux::text_mid(&paint, name_x, mid, &label, types::UI, ink, Some((column.right() - 16.0 - name_x).max(0.0)));
     if resp.clicked() {
         shell.explorer.focused = true;
         shell.explorer.menu_open = false;
@@ -702,15 +705,18 @@ fn rename_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Rect) 
     widgets::record_visible(ui, &mut shell.registry, "workspace.explorer.rename", "field", field);
     let Some(r) = shell.explorer.rename.as_mut() else { return };
     let fresh = r.fresh;
-    let inner = Rect::from_min_max(pos2(field.left() + 6.0, field.top() + 4.0), pos2(field.right() - 6.0, field.bottom() - 4.0));
+    let inner =
+        crate::panels::field_inner(ui, Rect::from_min_max(pos2(field.left() + -2.0, field.top()), pos2(field.right() - -2.0, field.bottom())));
     let edit = egui::TextEdit::singleline(&mut r.text)
         .id(id)
         .frame(egui::Frame::NONE)
+        .margin(egui::Margin::ZERO)
         .font(types::UI.font())
         .text_color(p.text)
         .char_limit(MAX_NAME)
         .desired_width(inner.width());
     let out = edit.show(&mut ui.new_child(egui::UiBuilder::new().max_rect(inner)));
+    let _ = (*out.response).clone().accessible_name(tr("Name"));
     if r.opened {
         // The first frame takes the keyboard once; a new element's default name is selected whole,
         // so typing replaces it. Nothing asks for the keyboard again: a click elsewhere commits.
@@ -790,7 +796,7 @@ fn add_menu(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, anchor: Rect) {
     let height = 8.0 + items.len() as f32 * 30.0;
     let menu = Rect::from_min_size(pos2((anchor.right() - width).max(0.0), anchor.bottom() + 4.0), vec2(width, height));
     let paint = ui.painter().clone();
-    paint.rect_filled(menu.expand(2.0), 10.0, p.shadow);
+    ux::shadow(&paint, menu, 8.0, p.shadow);
     paint.rect_filled(menu, 8.0, p.surface);
     paint.rect_stroke(menu, 8.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
     let mut picked = None;
@@ -862,7 +868,7 @@ fn delete_dialog_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: 
     lines.push(tr("What it holds goes with it."));
     let size = vec2(440.0_f32.min(window.width() - 32.0), 110.0 + lines.len() as f32 * 20.0);
     let dialog = Rect::from_center_size(window.center(), size);
-    paint.rect_filled(dialog.expand(4.0), 14.0, p.shadow);
+    ux::shadow(paint, dialog, 10.0, p.shadow);
     paint.rect_filled(dialog, 10.0, p.surface);
     paint.rect_stroke(dialog, 10.0, Stroke::new(1.0, p.dialog_edge), StrokeKind::Inside);
     let at = |x: f32, y: f32| dialog.min + vec2(x, y);

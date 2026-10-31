@@ -166,11 +166,11 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
     // While a creation runs nothing closes the dialog.
     let escape = ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
     let mut close = escape && !dialog.creating();
-    egui::Area::new(egui::Id::new("new-project")).order(egui::Order::Foreground).fixed_pos(window.min).show(ui.ctx(), |ui| {
+    egui::Area::new(egui::Id::unique("new-project")).order(egui::Order::Foreground).fixed_pos(window.min).show(ui.ctx(), |ui| {
         ui.set_min_size(window.size());
         // The veil takes every click behind the dialog; on macOS its title strip still moves the window.
         ui.painter().rect_filled(window, 0.0, p.scrim);
-        let veil = ui.interact(window, ui.id().with("new-project.veil"), Sense::click_and_drag());
+        let veil = ui.interact(window, ui.scope_id().with("new-project.veil"), Sense::click_and_drag());
         let strip = Rect::from_min_size(window.min, vec2(window.width(), 28.0));
         if shell.top_inset > 0.0 && veil.drag_started() && veil.interact_pointer_pos().is_some_and(|at| strip.contains(at)) {
             ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
@@ -182,7 +182,7 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
         paint.rect_filled(frame, 16.0, p.surface);
         paint.rect_stroke(frame, 16.0, Stroke::new(1.0, p.dialog_edge), StrokeKind::Inside);
         // The dialog's own area takes its clicks, so none reaches the veil.
-        let _ = ui.interact(frame, ui.id().with("new-project.frame"), Sense::click());
+        let _ = ui.interact(frame, ui.scope_id().with("new-project.frame"), Sense::click());
         if header(shell, ui, &p, frame, !dialog.creating()) {
             close = true;
         }
@@ -212,7 +212,7 @@ fn header(shell: &mut Shell, ui: &egui::Ui, p: &Palette, frame: Rect, live: bool
     let at = |x: f32, y: f32| frame.min + vec2(x, y);
     let tile = Rect::from_min_size(at(PAD, PAD), Vec2::splat(40.0));
     paint.rect_filled(tile, 10.0, p.accent_tint);
-    ux::icon(paint, tile.min + vec2(11.0, 11.0), &icons::FOLDER, 18.0, p.accent);
+    ux::icon_in_tile(paint, tile, &icons::FOLDER, p.accent);
     let room = (frame.width() - 88.0 - 72.0).max(0.0);
     ux::text(paint, at(88.0, 30.0), &tr("New project"), types::SECTION, p.text, Some(room));
     ux::text(
@@ -269,6 +269,7 @@ fn content(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, origin: Pos2, inne
         .char_limit(NAME_LIMIT)
         .desired_width(text_rect.width());
     let resp = ui.add_enabled_ui(!waiting, |ui| ui.put(text_rect, edit)).inner;
+    let _ = resp.clone().accessible_name(tr("Name your project"));
     widgets::record_visible(ui, &mut shell.registry, "new-project.name", "field", field);
     // Enter in the name field creates, as Create project does.
     if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) && can_create(shell, dialog) {
@@ -363,7 +364,7 @@ fn content(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, origin: Pos2, inne
         paint.rect_filled(r, 10.0, p.page);
         let tile = Rect::from_min_size(r.min + vec2(14.0, 14.0), Vec2::splat(32.0));
         paint.rect_filled(tile, 8.0, *tint);
-        ux::icon(&paint, tile.min + vec2(8.0, 8.0), icon, 16.0, *ink);
+        ux::icon_in_tile(&paint, tile, icon, *ink);
         ux::text(&paint, r.min + vec2(56.0, 14.0), title, types::UI_STRONG, p.text, Some((w - 70.0).max(0.0)));
         let rows = if three { 3 } else { 1 };
         let g = ux::galley_rows(&paint, body, types::SMALL, p.text_secondary, Some((w - 70.0).max(0.0)), rows);

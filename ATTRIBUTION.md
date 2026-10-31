@@ -16,7 +16,8 @@ The program carries these faces and draws its text with them; their licence text
 | Face | Author | Copyright | Source | Licence |
 |---|---|---|---|---|
 | Inter Regular, Inter SemiBold | The Inter Project Authors | Copyright (c) 2016 The Inter Project Authors (https://github.com/rsms/inter) | Inter 4.1 (release v4.1, github.com/rsms/inter), from craft-fonts (github.com/storytold/craft-fonts), the fonts input of the build | OFL-1.1 (Inter) |
-| Ubuntu Light | Canonical Ltd. | Copyright 2011 Canonical Ltd.  Licensed under the Ubuntu Font Licence 1.0 | epaint_default_fonts 0.36.2 (egui), fonts/Ubuntu-Light.ttf | Ubuntu Font Licence 1.0 |
-| Hack Regular | Source Foundry Authors, from DejaVu and Bitstream Vera | Copyright (c) 2018 Source Foundry Authors / Copyright (c) 2003 by Bitstream, Inc. All Rights Reserved. | epaint_default_fonts 0.36.2 (egui), fonts/Hack-Regular.ttf | MIT (Hack), Bitstream Vera Licence |
-| Noto Emoji Regular | Google Inc. | Copyright 2013 Google Inc. All Rights Reserved. | epaint_default_fonts 0.36.2 (egui), fonts/NotoEmoji-Regular.ttf | OFL-1.1 |
-| emoji-icon-font | John Slegers | Copyright (c) 2014 John Slegers | epaint_default_fonts 0.36.2 (egui), fonts/emoji-icon-font.ttf | MIT (emoji-icon-font) |
+| Ubuntu Light | Canonical Ltd. | Copyright 2011 Canonical Ltd.  Licensed under the Ubuntu Font Licence 1.0 | epaint_default_fonts 0.37.0 (egui), fonts/Ubuntu-Light.ttf | Ubuntu Font Licence 1.0 |
+| Hack Regular | Source Foundry Authors, from DejaVu and Bitstream Vera | Copyright (c) 2018 Source Foundry Authors / Copyright (c) 2003 by Bitstream, Inc. All Rights Reserved. | epaint_default_fonts 0.37.0 (egui), fonts/Hack-Regular.ttf | MIT (Hack), Bitstream Vera Licence |
+| Noto Emoji Regular | Google Inc. | Copyright 2013 Google Inc. All Rights Reserved. | epaint_default_fonts 0.37.0 (egui), fonts/NotoEmoji-Regular.ttf | OFL-1.1 |
+| egui-icons | John Slegers (emoji-icon-font), subset by the egui authors | Copyright (c) 2014 John Slegers | epaint_default_fonts 0.37.0 (egui), fonts/egui-icons.ttf: the five glyphs of egui::special_emojis cut from emoji-icon-font.ttf | MIT (emoji-icon-font) |
+| emoji-icon-font | John Slegers | Copyright (c) 2014 John Slegers | epaint_default_fonts 0.37.0 (egui), fonts/emoji-icon-font.ttf | MIT (emoji-icon-font) |

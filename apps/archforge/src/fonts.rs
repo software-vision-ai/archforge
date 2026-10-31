@@ -209,9 +209,9 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("nested")).unwrap();
         let defs = egui::FontDefinitions::default();
-        std::fs::write(dir.join("Hack-Regular.ttf"), &*defs.font_data["Hack"].font).unwrap();
-        std::fs::write(dir.join("nested").join("Ubuntu-Light.TTF"), &*defs.font_data["Ubuntu-Light"].font).unwrap();
-        std::fs::write(dir.join("truncated.ttf"), &defs.font_data["Hack"].font[..40]).unwrap();
+        std::fs::write(dir.join("Hack-Regular.ttf"), (*defs.font_data["Hack"].font).as_ref()).unwrap();
+        std::fs::write(dir.join("nested").join("Ubuntu-Light.TTF"), (*defs.font_data["Ubuntu-Light"].font).as_ref()).unwrap();
+        std::fs::write(dir.join("truncated.ttf"), &(*defs.font_data["Hack"].font).as_ref()[..40]).unwrap();
         std::fs::write(dir.join("not-a-font.ttf"), b"this is not a font").unwrap();
         std::fs::write(dir.join("readme.txt"), b"skipped by its extension").unwrap();
         // A collection claiming four billion faces in twelve bytes, and one claiming more

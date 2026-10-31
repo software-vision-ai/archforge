@@ -331,8 +331,8 @@ mod installed_fonts {
         let defs = egui::FontDefinitions::default();
         match key {
             // Cut inside its table directory: refused by the parser egui loads fonts with.
-            "broken" => defs.font_data["Hack"].font[..40].to_vec(),
-            key => defs.font_data[key].font.to_vec(),
+            "broken" => (*defs.font_data["Hack"].font).as_ref()[..40].to_vec(),
+            key => (*defs.font_data[key].font).as_ref().to_vec(),
         }
     }
 
@@ -533,7 +533,7 @@ mod installed_fonts {
                 .collect();
             wanted.extend(i18n::LANGUAGES.iter().flat_map(|l| l.native_name.chars()));
             let missing: Vec<char> = ctx.fonts_mut(|f| {
-                let covered = f.fonts.font(&egui::FontFamily::Proportional).characters().clone();
+                let covered = f.characters(&egui::FontFamily::Proportional).clone();
                 wanted.iter().copied().filter(|c| !c.is_whitespace() && !covered.contains_key(c)).collect()
             });
             assert!(missing.is_empty(), "{code}: {} character(s) drawn as boxes: {missing:?}", missing.len());
@@ -557,7 +557,7 @@ fn the_bundled_faces_draw_every_character_of_the_latin_script_catalogues() {
             text.lines().filter(|l| !l.starts_with('#')).flat_map(|l| l.split('\t').nth(3).unwrap_or_default().chars().collect::<Vec<_>>()).collect();
         wanted.extend(lang.native_name.chars());
         let missing: Vec<char> = ctx.fonts_mut(|f| {
-            let covered = f.fonts.font(&egui::FontFamily::Proportional).characters().clone();
+            let covered = f.characters(&egui::FontFamily::Proportional).clone();
             wanted.iter().copied().filter(|c| !matches!(c, ' ' | '\u{202F}') && !covered.contains_key(c)).collect()
         });
         assert!(missing.is_empty(), "{}: {missing:?}", lang.code);
@@ -2433,6 +2433,7 @@ fn the_properties_body_scrolls_and_an_editor_opened_below_the_fold_comes_into_vi
         delta: egui::vec2(0.0, -2000.0),
         modifiers: egui::Modifiers::NONE,
         phase: egui::TouchPhase::Move,
+        source: egui::MouseWheelSource::Wheel,
     });
     // The wheel scrolls smoothly over several frames.
     h.run_steps(30);

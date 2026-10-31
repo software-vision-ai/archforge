@@ -126,7 +126,7 @@ pub(crate) fn popover(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, an
     let x = (anchor.center().x - POPOVER.x / 2.0).clamp(r.left() + 8.0, (r.right() - POPOVER.x - 8.0).max(r.left() + 8.0));
     let y = (anchor.top() - 8.0 - POPOVER.y).max(r.top() + 8.0);
     let m = Rect::from_min_size(pos2(x, y), POPOVER);
-    paint.rect_filled(m.expand(2.0), 12.0, p.shadow);
+    ux::shadow(&paint, m, 10.0, p.shadow);
     paint.rect_filled(m, 10.0, p.surface);
     paint.rect_stroke(m, 10.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
     let at = |x: f32, y: f32| m.min + vec2(x, y);
@@ -360,7 +360,7 @@ pub(crate) fn mapping_offer(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r
     };
     let paint = ui.painter().clone();
     let m = Rect::from_center_size(r.center(), OFFER);
-    paint.rect_filled(m.expand(4.0), 14.0, p.shadow);
+    ux::shadow(&paint, m, 10.0, p.shadow);
     paint.rect_filled(m, 10.0, p.surface);
     paint.rect_stroke(m, 10.0, Stroke::new(1.0, p.dialog_edge), StrokeKind::Inside);
     let at = |x: f32, y: f32| m.min + vec2(x, y);
@@ -370,17 +370,18 @@ pub(crate) fn mapping_offer(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r
     let field = Rect::from_min_size(at(16.0, 61.0), vec2(width, 28.0));
     paint.rect_filled(field, 6.0, p.field);
     widgets::record_visible(ui, &mut shell.registry, "workspace.mapping.name", "field", field);
-    let inner =
-        Rect::from_min_max(pos2(field.left() + 8.0, field.top() + 4.0), pos2((field.right() - 8.0).max(field.left() + 8.0), field.bottom() - 4.0));
+    let inner = crate::panels::field_inner(ui, Rect::from_min_max(pos2(field.left() + 0.0, field.top()), pos2(field.right() - 0.0, field.bottom())));
     if let Some(o) = shell.canvas.mapping.as_mut() {
         let edit = egui::TextEdit::singleline(&mut o.name)
             .id(widgets::egui_id("workspace.mapping.name"))
             .frame(egui::Frame::NONE)
+            .margin(egui::Margin::ZERO)
             .font(types::SMALL.font())
             .text_color(p.text)
             .char_limit(archforge_er::rules::MAX_NAME)
             .desired_width(inner.width());
-        edit.show(&mut ui.new_child(egui::UiBuilder::new().max_rect(inner)));
+        let out = edit.show(&mut ui.new_child(egui::UiBuilder::new().max_rect(inner)));
+        let _ = (*out.response).clone().accessible_name(tr("Mapping table"));
     }
     ux::text(&paint, at(16.0, 101.0), &tr("Columns"), types::CAPTION, p.text_secondary, Some(width));
     let mut cx = at(16.0, 118.0).x;
@@ -462,7 +463,7 @@ pub(crate) fn toast(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     }
     let paint = ui.painter().clone();
     let m = Rect::from_min_size(pos2(r.center().x - TOAST.x / 2.0, r.bottom() - 78.0 - TOAST.y), TOAST);
-    paint.rect_filled(m.expand(2.0), 10.0, p.shadow);
+    ux::shadow(&paint, m, 8.0, p.shadow);
     paint.rect_filled(m, 8.0, p.text);
     let undo = ux::galley(&paint, &tr("Undo"), types::SMALL, p.accent_tint, None);
     let b = Rect::from_min_max(pos2(m.right() - 16.0 - undo.size().x - 8.0, m.top() + 6.0), pos2(m.right() - 8.0, m.bottom() - 6.0));

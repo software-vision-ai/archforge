@@ -5,7 +5,7 @@
 //! icons). Apply is one command, `er.check.add` or `er.check.set`; the bin runs `er.check.remove`.
 
 use archforge_mof::{Obj, Store, Uuid};
-use egui::{Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
+use egui::{Rect, Stroke, StrokeKind, pos2, vec2};
 use serde_json::json;
 
 use crate::home::control;
@@ -82,7 +82,7 @@ pub(crate) fn checks_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, 
         let resp = control(shell, ui, &format!("workspace.properties.check.row.{}", check.id), "row", row, true);
         if resp.hovered() {
             paint.rect_filled(row, 6.0, p.page);
-            ux::icon_in(&paint, Rect::from_min_size(pos2(row.right() - 24.0, row.top() + 10.0), Vec2::splat(16.0)), &icons::EDIT, p.text_secondary);
+            ux::icon_mid(&paint, pos2(row.right() - 16.0, row.center().y), &icons::EDIT, p.text_secondary);
         }
         badge(&paint, row.min + vec2(2.0, 6.0), "CK", p.green_tint, p.green);
         ux::text(&paint, row.min + vec2(38.0, 4.0), &check.label, types::UI, p.text, Some((width - 70.0).max(0.0)));
@@ -133,6 +133,7 @@ pub(crate) fn text_area(
         .desired_width(inner.width())
         .desired_rows(2)
         .show(&mut ui.new_child(egui::UiBuilder::new().max_rect(inner)));
+    let _ = (*out.response).clone().accessible_name(label);
     if out.response.has_focus() {
         paint.rect_stroke(body, 6.0, Stroke::new(1.0, p.focus), StrokeKind::Inside);
     }
