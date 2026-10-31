@@ -295,6 +295,9 @@ struct SavingHost {
     written: std::sync::Mutex<Vec<(std::path::PathBuf, archforge_mof::rows::Rows)>>,
     saves: std::sync::Mutex<Vec<std::sync::mpsc::Sender<Result<bool, String>>>>,
     opens: std::sync::Mutex<Vec<(std::path::PathBuf, std::sync::mpsc::Sender<Result<crate::Opened, crate::CreateError>>)>>,
+    closed: std::sync::Mutex<Vec<std::path::PathBuf>>,
+    /// Each closing's answer, sent by the test.
+    closings: std::sync::Mutex<Vec<std::sync::mpsc::Sender<Result<(), String>>>>,
 }
 
 impl crate::ProjectHost for SavingHost {
@@ -310,6 +313,13 @@ impl crate::ProjectHost for SavingHost {
 
     fn write(&self, project: &std::path::Path, rows: archforge_mof::rows::Rows) {
         self.written.lock().unwrap().push((project.to_path_buf(), rows));
+    }
+
+    fn close(&self, project: &std::path::Path) -> std::sync::mpsc::Receiver<Result<(), String>> {
+        self.closed.lock().unwrap().push(project.to_path_buf());
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.closings.lock().unwrap().push(tx);
+        rx
     }
 
     fn save(&self, project: &std::path::Path) -> std::sync::mpsc::Receiver<Result<bool, String>> {
@@ -478,6 +488,125 @@ fn opening_from_the_workspace_says_it_waits_and_why_it_failed_and_keeps_the_proj
     // The next change to the open project clears it.
     add_schema(&mut h, "shop");
     assert!(h.state().open_error.is_none());
+}
+
+#[test]
+fn projects_open_in_tabs_that_keep_their_models_and_home_keeps_them_open() {
+    let (mut h, host) = saving_harness(Some(commerce()), None);
+    add_schema(&mut h, "shop");
+    let library = crate::Opened { name: "Library".into(), path: "/tmp/Library.archforge".into(), ..Default::default() };
+    h.state_mut().open_project(library.clone());
+    h.run_steps(2);
+    assert_eq!(h.state().tabs.len(), 2);
+    assert_eq!(h.state().active, Some(1));
+    assert_eq!(h.state().title(), "Library — Archforge");
+    add_schema(&mut h, "books");
+    // The first tab shows its own model again, and its rows name it.
+    let at = rect_of(&h, "workspace.header.project.0").center();
+    click(&mut h, egui::pos2(at.x - 20.0, at.y));
+    h.run_steps(2);
+    assert_eq!(h.state().active, Some(0));
+    assert_eq!(schema_names(&h), ["shop"]);
+    add_schema(&mut h, "crm");
+    let last = host.written.lock().unwrap().last().unwrap().0.clone();
+    assert_eq!(last, std::path::PathBuf::from("/tmp/Commerce platform.archforge"));
+    // Home keeps both open; a tab on Home's bar shows its project again.
+    let at = rect_of(&h, "workspace.header.home").center();
+    click(&mut h, at);
+    h.run_steps(2);
+    assert!(h.state().project.is_none() && h.state().tabs.len() == 2);
+    assert!(ids(&h).iter().any(|i| i == "home.open-project"));
+    let at = rect_of(&h, "workspace.header.project.1").center();
+    click(&mut h, egui::pos2(at.x - 20.0, at.y));
+    h.run_steps(2);
+    assert_eq!(h.state().active, Some(1));
+    assert_eq!(schema_names(&h), ["books"]);
+    // Opening a project already open shows its tab.
+    h.state_mut().open_project(commerce());
+    assert_eq!(h.state().active, Some(0));
+    assert_eq!(h.state().tabs.len(), 2);
+    // The close button asks the host to close its project; the tab stays until it has, and stays
+    // when it could not, saying why.
+    let at = rect_of(&h, "workspace.header.project.0.close").center();
+    click(&mut h, at);
+    h.run_steps(2);
+    assert_eq!(host.closed.lock().unwrap().as_slice(), [std::path::PathBuf::from("/tmp/Commerce platform.archforge")]);
+    assert!(h.state().tabs.len() == 2 && h.state().tabs[0].closing());
+    // While it closes it steps aside: the tab beside it shows, and it cannot be shown.
+    assert_eq!(h.state().active, Some(1));
+    h.state_mut().activate(0);
+    assert_eq!(h.state().active, Some(1), "a closing tab is not shown");
+    host.closings.lock().unwrap().pop().unwrap().send(Err("the disk is full".into())).unwrap();
+    h.run_steps(2);
+    // Refused, it comes back to the front, saying why.
+    assert!(h.state().tabs.len() == 2 && !h.state().tabs[0].closing());
+    assert_eq!(h.state().active, Some(0));
+    assert_eq!(h.state().close_error(), Some("the disk is full"));
+    let mut kept = schema_names(&h);
+    kept.sort();
+    assert_eq!(kept, ["crm", "shop"], "the project stays shown with its model");
+    // Its next change clears the word; once closed, the tab beside it shows, and Home after the last.
+    add_schema(&mut h, "billing");
+    assert_eq!(h.state().close_error(), None);
+    let at = rect_of(&h, "workspace.header.project.0.close").center();
+    click(&mut h, at);
+    host.closings.lock().unwrap().pop().unwrap().send(Ok(())).unwrap();
+    h.run_steps(2);
+    assert_eq!(h.state().tabs.len(), 1);
+    assert_eq!(h.state().title(), "Library — Archforge");
+    assert_eq!(schema_names(&h), ["books"]);
+    let at = rect_of(&h, "workspace.header.project.0.close").center();
+    click(&mut h, at);
+    host.closings.lock().unwrap().pop().unwrap().send(Ok(())).unwrap();
+    h.run_steps(2);
+    assert!(h.state().tabs.is_empty() && h.state().project.is_none());
+    assert!(ids(&h).iter().any(|i| i == "home.open-project"), "Home after the last tab");
+}
+
+#[test]
+fn eight_tabs_stay_left_of_help_at_every_width_down_to_the_smallest_window() {
+    for w in [640.0, 900.0, 1600.0] {
+        crate::i18n::set_language("en");
+        let mut shell = Shell::new(Services { user_name: Some("Robin Meyer".into()), ids: Some(test_ids()), ..Services::default() });
+        for i in 0..crate::MAX_TABS {
+            shell.open_project(crate::Opened {
+                name: format!("A project with a rather long name {i}"),
+                path: format!("/tmp/P{i}.archforge").into(),
+                ..Default::default()
+            });
+        }
+        let mut h = Harness::builder().with_size(egui::vec2(w, 800.0)).build_ui_state(
+            |ui, shell: &mut Shell| {
+                shell.logic(ui.ctx());
+                shell.ui(ui);
+            },
+            shell,
+        );
+        h.run_steps(3);
+        let help = rect_of(&h, "workspace.header.help");
+        for i in 0..crate::MAX_TABS {
+            let tab = rect_of(&h, &format!("workspace.header.project.{i}"));
+            assert!(tab.right() <= help.left() && tab.left() >= 0.0, "{w}: tab {i} at {tab:?}, help at {help:?}");
+        }
+        let shown = rect_of(&h, &format!("workspace.header.project.{}.close", crate::MAX_TABS - 1));
+        assert!(shown.right() <= help.left(), "{w}: the shown tab's close button at {shown:?}");
+    }
+}
+
+#[test]
+fn at_most_eight_projects_open_at_once() {
+    let (mut h, host) = saving_harness(None, Some("/tmp/Ninth.archforge"));
+    for i in 0..crate::MAX_TABS {
+        h.state_mut().open_project(crate::Opened { name: format!("P{i}"), path: format!("/tmp/P{i}.archforge").into(), ..Default::default() });
+    }
+    h.run_steps(2);
+    assert_eq!(h.state().tabs.len(), crate::MAX_TABS);
+    assert!(!h.state().can_open_project(), "a ninth waits for a tab to close");
+    h.state_mut().close_tab(3);
+    assert!(!h.state().can_open_project(), "not before the project has closed");
+    host.closings.lock().unwrap().pop().unwrap().send(Ok(())).unwrap();
+    h.run_steps(2);
+    assert!(h.state().can_open_project());
 }
 
 #[test]
@@ -815,7 +944,7 @@ fn an_open_project_shows_the_workspace_with_its_session_and_every_control() {
         for id in [
             "strip.home",
             "workspace.header.home",
-            "workspace.header.project",
+            "workspace.header.project.0",
             "workspace.header.search",
             "workspace.header.help",
             "workspace.header.account",
@@ -896,8 +1025,9 @@ fn the_rails_switch_the_explorer_and_the_panel_and_home_closes_the_project() {
     assert!(h.state().project.is_some());
     let at = rect_of(&h, "workspace.header.home").center();
     click(&mut h, at);
-    assert!(h.state().project.is_none() && h.state().session.is_none(), "Home closes the project and its session");
+    assert!(h.state().project.is_none() && h.state().session.is_none(), "Home shows instead of the project");
     assert!(ids(&h).iter().any(|i| i == "home.open-project"), "Home is back");
+    assert_eq!(h.state().tabs.len(), 1, "the project stays open in its tab");
 }
 
 #[test]
@@ -975,7 +1105,7 @@ fn a_long_project_name_keeps_the_chip_left_of_the_bar_controls_at_every_size_and
                 assert!(e.rect.iter().all(|v| v.is_finite()), "{} at {w}x{h_}: {:?}", e.id, e.rect);
             }
             if w >= 480.0 {
-                let chip = rect_of(&h, "workspace.header.project");
+                let chip = rect_of(&h, "workspace.header.project.0");
                 let help = rect_of(&h, "workspace.header.help");
                 assert!(chip.right() <= help.left(), "{}: chip {chip:?} runs under help {help:?} at {w}", lang.code);
             }

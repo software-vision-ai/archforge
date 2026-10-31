@@ -122,8 +122,9 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
         let explorer_w = (!shell.state.explorer_collapsed).then_some(shell.state.explorer_width);
         let panel_w = (!shell.state.panel_collapsed).then_some(shell.state.panel_width);
         let cols = columns(body, explorer_w, panel_w);
-        // The bar and the strip first: a click on Home there closes the project, and the frame ends.
-        if !bar_row(shell, ui, &p, bar, &name) || !title_strip(shell, ui, &p, strip, false) {
+        // The bar and the strip first: a click on a tab or Home there changes what shows, and the
+        // frame ends.
+        if !bar_row(shell, ui, &p, bar) || !title_strip(shell, ui, &p, strip, false) {
             return;
         }
         activity_rail(shell, ui, &p, Rect::from_min_size(body.min, vec2(ACTIVITY, body.height())));
@@ -145,42 +146,148 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
     });
 }
 
-/// The bar: the brand and Home at the left, then the project; the search field, help and the
-/// avatar at the right. False when Home closed the project.
-fn bar_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, name: &str) -> bool {
+/// The bar: the brand and the tabs (Home and the open projects) at the left; the search field,
+/// help and the avatar at the right. False when a tab was clicked (the frame ends).
+fn bar_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) -> bool {
     let paint = ui.painter();
     paint.rect_filled(r, 0.0, p.surface);
     paint.rect_filled(Rect::from_min_max(pos2(r.left(), r.bottom() - 1.0), r.max), 0.0, p.border);
-    let mid = crate::home::bar_mid(r);
     let wordmark = crate::home::brand(paint, p, r);
-    paint.rect_filled(Rect::from_center_size(pos2(wordmark.right() + 16.5, mid), vec2(1.0, 20.0)), 0.0, p.border);
-    // Home, a ghost button: back to the start screen.
-    let home_x = wordmark.right() + 29.0;
-    let home_label = ux::galley(paint, &tr("Home"), types::UI, p.text, None);
-    let home = Rect::from_min_max(pos2(home_x, mid - 14.0), pos2(home_x + 8.0 + 16.0 + 6.0 + home_label.size().x + 10.0, mid + 14.0));
-    let home_resp = control(shell, ui, "workspace.header.home", "button", home, true);
-    if home_resp.hovered() {
-        paint.rect_filled(home, 6.0, p.page);
-    }
-    ux::icon_mid(paint, pos2(home.left() + 16.0, mid), &icons::HOME, p.text_secondary);
-    paint.galley(pos2(home.left() + 30.0, mid - home_label.size().y / 2.0), home_label, p.text);
-    if home_resp.clicked() {
-        shell.close_project();
+    let (end, changed) = project_tabs(shell, ui, p, r, wordmark.right());
+    if changed {
         return false;
     }
-    // The project, a chip with the folder, its name and a chevron; the project switcher comes
-    // later. The chip never runs under the controls at the right.
-    let chip_x = home.right() + 10.0;
-    let chip_room = (r.right() - 96.0 - chip_x - 74.0).max(40.0);
-    let g = ux::galley(paint, name, types::UI_STRONG, p.accent, Some(chip_room.min(260.0)));
-    let chip = Rect::from_min_max(pos2(chip_x, mid - 14.0), pos2(chip_x + 32.0 + g.size().x + 10.0 + 8.0 + 12.0, mid + 14.0));
-    paint.rect_filled(chip, 7.0, p.accent_tint);
-    ux::icon_mid(paint, pos2(chip.left() + 17.0, mid), &icons::FOLDER, p.accent);
-    paint.galley(pos2(chip.left() + 32.0, mid - g.size().y / 2.0), g, p.accent);
-    ux::icon_mid(paint, pos2(chip.right() - 16.0, mid + 0.5), &icons::CHEVRON_DOWN, p.accent);
-    control(shell, ui, "workspace.header.project", "button", chip, false);
-    crate::home::bar_tail(shell, ui, p, r, chip.right() + 24.0, "workspace.header", &tr("Find an element, view, or action"), "button");
+    crate::home::bar_tail(shell, ui, p, r, end + 24.0, "workspace.header", &tr("Find an element, view, or action"), "button");
     true
+}
+
+/// What a click on the bar's tabs asks for.
+enum TabClick {
+    Home,
+    Show(usize),
+    Close(usize),
+}
+
+/// The bar's tabs after the brand: Home, then one chip per open project with its folder, its name
+/// and its close button; the one shown is tinted. They keep left of help: names shrink first, and
+/// when even short names do not fit, Home and the tabs behind become icons (their names in the
+/// tooltip) while the shown tab keeps a short name and its close button. Gives where they end,
+/// and whether a click changed what the window shows (the frame then ends).
+pub(crate) fn project_tabs(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, after: f32) -> (f32, bool) {
+    const GAP: f32 = 6.0;
+    /// A chip's width beside its name: the folder, the paddings and the close button.
+    const CHROME: f32 = 32.0 + 8.0 + 24.0;
+    /// An icon tab, and the narrowest name a full tab shows.
+    const ICON: f32 = 32.0;
+    const NAME_MIN: f32 = 24.0;
+    let paint = ui.painter().clone();
+    let mid = crate::home::bar_mid(r);
+    paint.rect_filled(Rect::from_center_size(pos2(after + 16.5, mid), vec2(1.0, 20.0)), 0.0, p.border);
+    let mut click = None;
+    let tabs: Vec<(String, bool, bool)> =
+        shell.tabs.iter().enumerate().map(|(i, t)| (t.name.clone(), shell.active == Some(i), t.closing())).collect();
+    let widths: Vec<f32> = tabs.iter().map(|(name, ..)| ux::galley(&paint, name, types::UI_STRONG, p.text, None).size().x).collect();
+    let home_on = shell.active.is_none();
+    let home_label = ux::galley(&paint, &tr("Home"), types::UI, if home_on { p.accent } else { p.text }, None);
+    let home_full = 8.0 + 16.0 + 6.0 + home_label.size().x + 10.0;
+    // Help's left edge, less a margin: the tabs end before it.
+    let limit = r.right() - 96.0;
+    let start = after + 29.0;
+    let n = tabs.len() as f32;
+    let full_room = |home_w: f32| -> Option<f32> {
+        let room = ((limit - start - home_w - GAP - n * GAP) / n.max(1.0) - CHROME).min(220.0);
+        (tabs.is_empty() || room >= NAME_MIN).then_some(room)
+    };
+    // Compact: the shown tab takes what the icons leave, at most a short name; with less than the
+    // narrowest name it shows its folder and its close button alone.
+    let (home_w, room, compact) = match full_room(home_full) {
+        Some(room) => (home_full, room, false),
+        None => (ICON, (limit - start - ICON - GAP - (n - 1.0) * (ICON + GAP) - CHROME - GAP).min(60.0), true),
+    };
+    let named = room >= NAME_MIN;
+    // Home, a tab like the projects': tinted while it is shown.
+    let home = Rect::from_min_size(pos2(start, mid - 14.0), vec2(home_w, 28.0));
+    let home_resp = control(shell, ui, "workspace.header.home", "tab", home, true).on_hover_text(tr("Home"));
+    if home_on {
+        paint.rect_filled(home, 7.0, p.accent_tint);
+    } else if home_resp.hovered() {
+        paint.rect_filled(home, 7.0, p.page);
+    }
+    let home_ink = if home_on { p.accent } else { p.text_secondary };
+    if compact {
+        ux::icon_mid(&paint, home.center(), &icons::HOME, home_ink);
+    } else {
+        ux::icon_mid(&paint, pos2(home.left() + 16.0, mid), &icons::HOME, home_ink);
+        paint.galley(pos2(home.left() + 30.0, mid - home_label.size().y / 2.0), home_label, if home_on { p.accent } else { p.text });
+    }
+    if home_resp.clicked() && !home_on {
+        click = Some(TabClick::Home);
+    }
+    let mut x = home.right() + GAP;
+    for (i, (name, on, closing)) in tabs.iter().enumerate() {
+        // A tab whose project is closing stays, muted, until it has closed.
+        let ink = if *closing {
+            p.text_muted
+        } else if *on {
+            p.accent
+        } else {
+            p.text
+        };
+        let icon_ink = if *on && !*closing { p.accent } else { p.text_secondary };
+        let as_icon = compact && !*on;
+        let chip_w = if as_icon {
+            ICON
+        } else if named {
+            CHROME + widths[i].min(room)
+        } else {
+            CHROME - 8.0
+        };
+        let chip = Rect::from_min_size(pos2(x, mid - 14.0), vec2(chip_w, 28.0));
+        let resp = control(shell, ui, &format!("workspace.header.project.{i}"), "tab", chip, true).on_hover_text(name.clone());
+        if as_icon {
+            if *on {
+                paint.rect_filled(chip, 7.0, p.accent_tint);
+            } else if resp.hovered() {
+                paint.rect_filled(chip, 7.0, p.page);
+            }
+            ux::icon_mid(&paint, chip.center(), &icons::FOLDER, icon_ink);
+            if resp.clicked() && !*on {
+                click = Some(TabClick::Show(i));
+            }
+            x = chip.right() + GAP;
+            continue;
+        }
+        let close = Rect::from_center_size(pos2(chip.right() - 16.0, mid), Vec2::splat(20.0));
+        let close_resp = control(shell, ui, &format!("workspace.header.project.{i}.close"), "button", close, true).on_hover_text(tr("Close project"));
+        if *on {
+            paint.rect_filled(chip, 7.0, p.accent_tint);
+        } else if resp.hovered() || close_resp.hovered() {
+            paint.rect_filled(chip, 7.0, p.page);
+        }
+        if close_resp.hovered() {
+            paint.rect_filled(close, 5.0, if *on { p.surface } else { p.border });
+        }
+        ux::icon_mid(&paint, pos2(chip.left() + 17.0, mid), &icons::FOLDER, icon_ink);
+        if named {
+            let g = ux::galley(&paint, name, if *on { types::UI_STRONG } else { types::UI }, ink, Some(room));
+            paint.galley(pos2(chip.left() + 32.0, mid - g.size().y / 2.0), g, ink);
+        }
+        ux::icon_mid(&paint, close.center(), &icons::CLOSE, icon_ink);
+        if close_resp.clicked() {
+            click = Some(TabClick::Close(i));
+        } else if resp.clicked() && !*on {
+            click = Some(TabClick::Show(i));
+        }
+        x = chip.right() + GAP;
+    }
+    let changed = click.is_some();
+    match click {
+        Some(TabClick::Home) => shell.go_home(),
+        Some(TabClick::Show(i)) => shell.activate(i),
+        Some(TabClick::Close(i)) => shell.close_tab(i),
+        None => {}
+    }
+    (x, changed)
 }
 
 /// Undo and redo from the keyboard, through the engine, while no field has the keyboard.
@@ -325,7 +432,10 @@ fn status_bar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     paint.rect_filled(Rect::from_min_size(r.min, vec2(r.width(), 1.0)), 0.0, p.border);
     // Saving (archforge-kjz.3): every change is written to the project a moment after it is made;
     // Save commits it. The status says which, and why a write or a save failed.
-    let writing = shell.services.projects.as_ref().map(|h| h.writing()).unwrap_or_default();
+    let writing = match (&shell.services.projects, &shell.project) {
+        (Some(h), Some(project)) => h.writing(&project.path),
+        _ => Default::default(),
+    };
     let chord = if ui.ctx().os() == egui::os::OperatingSystem::Mac { "⌘S" } else { "Ctrl S" };
     let mut detail: Option<String> = None;
     let (dot, text) = match &shell.session {
@@ -334,6 +444,7 @@ fn status_bar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
         // Open works from the workspace too (Cmd+O, File ▸ Open…): its wait and its failure show
         // here, and the project stays open.
         Some(_) if shell.is_opening() => (p.accent, tr("Opening…")),
+
         Some(_) if shell.open_error.is_some() => {
             let why = shell.open_error.clone().unwrap_or_default();
             (p.danger, crate::i18n::fmt(&tr("The project could not be opened: {why}"), &[("why", &why)]))
@@ -345,6 +456,10 @@ fn status_bar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
         Some(_) if writing.error.is_some() => {
             detail = writing.error.clone();
             (p.danger, tr("Changes could not be written to the project"))
+        }
+        Some(_) if shell.close_error().is_some() => {
+            let why = shell.close_error().unwrap_or_default().to_string();
+            (p.danger, crate::i18n::fmt(&tr("The project could not be closed: {why}"), &[("why", &why)]))
         }
         Some(s) if s.is_dirty() => (p.amber, crate::i18n::fmt(&tr("Unsaved changes · {chord} saves"), &[("chord", chord)])),
         Some(_) => (p.green, tr("Saved")),

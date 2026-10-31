@@ -100,12 +100,12 @@ impl Hue {
 /// Whether a start card leads anywhere yet: New project opens its dialog; the others open screens
 /// not built so far, so they take no click and show no hover border.
 fn start_live(shell: &Shell, id: &str) -> bool {
-    id == "new-project" || (id == "open-project" && can_open(shell))
+    (id == "new-project" && shell.tabs.len() < crate::MAX_TABS) || (id == "open-project" && can_open(shell))
 }
 
-/// Whether projects can be opened: the host picks and opens them.
+/// Whether projects can be opened: the host picks and opens them, and a tab is free.
 pub(crate) fn can_open(shell: &Shell) -> bool {
-    shell.services.pick_project.is_some() && shell.services.projects.is_some()
+    shell.services.pick_project.is_some() && shell.services.projects.is_some() && shell.tabs.len() < crate::MAX_TABS
 }
 
 /// The four start cards: automation id, title, line, link, icon and colour.
@@ -135,8 +135,10 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
         }
         let strip = Rect::from_min_size(full.min, vec2(full.width(), STRIP));
         let bar = Rect::from_min_size(pos2(full.left(), strip.bottom()), vec2(full.width(), BAR));
-        // The bar first, so the strip's drag area does not cover it.
-        bar_row(shell, ui, &p, bar);
+        // The bar first, so the strip's drag area does not cover it; a tab clicked ends the frame.
+        if !bar_row(shell, ui, &p, bar) {
+            return;
+        }
         title_strip(shell, ui, &p, strip, true);
         let body = Rect::from_min_max(pos2(full.left(), bar.bottom()), full.max);
         let mut page = ui.new_child(egui::UiBuilder::new().max_rect(body).layout(egui::Layout::top_down(egui::Align::Min)));
@@ -189,7 +191,8 @@ pub(crate) fn title_strip(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect
     }
     ux::icon_mid(paint, home.center(), &icons::HOME, if home_active { p.accent } else { p.text_secondary });
     if home_resp.clicked() && !home_active {
-        shell.close_project();
+        // Home shows; the open projects stay open in their tabs.
+        shell.go_home();
         return false;
     }
     // Open project, a ghost button beside it: the plus and its label on the same line.
@@ -216,13 +219,23 @@ pub(crate) fn title_strip(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect
     true
 }
 
-/// The bar: the brand at the left; the search field, help and the avatar at the right.
-fn bar_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
+/// The bar: the brand at the left, then the tabs while projects are open; the search field, help
+/// and the avatar at the right. False when a tab was clicked (the frame ends).
+fn bar_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) -> bool {
     let paint = ui.painter();
     paint.rect_filled(r, 0.0, p.surface);
     paint.rect_filled(Rect::from_min_max(pos2(r.left(), r.bottom() - 1.0), r.max), 0.0, p.border);
     let wordmark = brand(paint, p, r);
-    bar_tail(shell, ui, p, r, wordmark.right() + 24.0, "home.header", &tr("Search projects and actions"), "field");
+    let mut end = wordmark.right();
+    if !shell.tabs.is_empty() {
+        let (tabs_end, changed) = crate::workspace::project_tabs(shell, ui, p, r, wordmark.right());
+        if changed {
+            return false;
+        }
+        end = tabs_end;
+    }
+    bar_tail(shell, ui, p, r, end + 24.0, "home.header", &tr("Search projects and actions"), "field");
+    true
 }
 
 /// The bar's middle line: everything on the bar is centred on it (its bottom divider excluded).

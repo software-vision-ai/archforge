@@ -72,7 +72,7 @@ pub trait ProjectHost: Send + Sync {
     fn create(&self, folder: &std::path::Path, name: &str) -> std::sync::mpsc::Receiver<Result<Opened, CreateError>>;
 
     /// Starts opening the project at `path` and returns at once, with its model's rows in the
-    /// answer; the project opened replaces the open one. Without it, opening is not available.
+    /// answer; the project opened shows in a tab of its own. Without it, opening is not available.
     fn open(&self, _path: &std::path::Path) -> std::sync::mpsc::Receiver<Result<Opened, CreateError>> {
         let (tx, rx) = std::sync::mpsc::channel();
         let _ = tx.send(Err(CreateError::Failed { detail: "this host opens no projects".into() }));
@@ -92,10 +92,58 @@ pub trait ProjectHost: Send + Sync {
         rx
     }
 
-    /// How writing stands now.
-    fn writing(&self) -> Writing {
+    /// How writing the project at `project` stands now.
+    fn writing(&self, _project: &std::path::Path) -> Writing {
         Writing::default()
     }
+
+    /// Starts closing the project at `project` and returns at once: what waits for it is written,
+    /// then it closes. The answer says why when it stays open (its changes could not be written).
+    fn close(&self, _project: &std::path::Path) -> std::sync::mpsc::Receiver<Result<(), String>> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let _ = tx.send(Ok(()));
+        rx
+    }
+}
+
+/// The most projects open at once, one tab each (the host runs a database server for each).
+pub const MAX_TABS: usize = 8;
+
+/// An open project's tab in the bar: its folder and name, and its window state while another tab
+/// is shown.
+pub struct Tab {
+    pub path: std::path::PathBuf,
+    pub name: String,
+    parked: Option<Box<Parked>>,
+    /// The host's answer to closing it, while it closes; the tab stays until it has closed, and
+    /// cannot be shown meanwhile, so nothing is changed in a project that is closing.
+    closing: Option<std::sync::mpsc::Receiver<Result<(), String>>>,
+    /// Why its project could not be closed, until its next change is handed over.
+    pub close_error: Option<String>,
+}
+
+impl Tab {
+    /// Whether its project is closing.
+    pub fn closing(&self) -> bool {
+        self.closing.is_some()
+    }
+}
+
+/// Everything the window keeps for a project whose tab is not the one shown.
+struct Parked {
+    project: Opened,
+    session: Option<archforge_er::Session>,
+    session_error: Option<SessionError>,
+    adopted: Option<std::path::PathBuf>,
+    written: Option<u64>,
+    refused: Option<u64>,
+    saving: Option<(std::sync::mpsc::Receiver<Result<bool, String>>, u64)>,
+    save_error: Option<String>,
+    explorer: explorer::State,
+    diagrams: diagrams::State,
+    canvas: canvas::State,
+    panels: panels::State,
+    problems: std::collections::BTreeMap<archforge_mof::Obj, Vec<String>>,
 }
 
 /// An open project as the shell shows it: its model's rows when it was opened from disk (none for
@@ -163,7 +211,12 @@ pub struct Shell {
     pub home: home::Data,
     /// The New project dialog, while it is open over Home.
     pub new_project: Option<new_project::Dialog>,
-    /// The open project, once one is created.
+    /// The open projects, one tab each, in the bar's order; the one shown has its state in the
+    /// fields below, the others keep theirs parked in their tab.
+    pub tabs: Vec<Tab>,
+    /// The tab shown; none while Home is.
+    pub active: Option<usize>,
+    /// The project shown, when a tab is.
     pub project: Option<Opened>,
     /// The open project's model: the ER session over a store with the project's Model root, made
     /// once when the project opens and dropped when it closes. Nothing reaches the project's
@@ -213,6 +266,8 @@ impl Shell {
             top_inset: 0.0,
             home: home::Data::default(),
             new_project: None,
+            tabs: Vec::new(),
+            active: None,
             project: None,
             session: None,
             session_error: None,
@@ -232,28 +287,172 @@ impl Shell {
         }
     }
 
-    /// Opens a project in the window: the workspace replaces Home at the next frame.
+    /// Opens a project in a new tab and shows it: the workspace replaces Home at the next frame. A
+    /// project already open in a tab is shown in it instead.
     pub fn open_project(&mut self, opened: Opened) {
-        self.project = Some(opened);
-        self.session = None;
-        self.session_error = None;
-        self.adopted = None;
-        self.written = None;
-        self.refused = None;
-        // A save of the project open before answers for that one, never for this.
-        self.saving = None;
-        self.save_error = None;
         self.open_error = None;
+        if let Some(i) = self.tabs.iter().position(|t| t.path == opened.path) {
+            self.activate(i);
+            return;
+        }
+        self.park();
+        self.tabs.push(Tab { path: opened.path.clone(), name: opened.name.clone(), parked: None, closing: None, close_error: None });
+        self.active = Some(self.tabs.len() - 1);
+        self.clear_workspace();
+        self.project = Some(opened);
     }
 
-    /// Closes the open project: Home comes back at the next frame.
+    /// Shows Home; the open projects stay open in their tabs.
+    pub fn go_home(&mut self) {
+        self.park();
+    }
+
+    /// Shows the project of tab `i`, parking the one shown.
+    pub fn activate(&mut self, i: usize) {
+        if self.active == Some(i) || i >= self.tabs.len() || self.tabs[i].closing.is_some() {
+            return;
+        }
+        self.park();
+        if let Some(parked) = self.tabs[i].parked.take() {
+            let p = *parked;
+            self.project = Some(p.project);
+            self.session = p.session;
+            self.session_error = p.session_error;
+            self.adopted = p.adopted;
+            self.written = p.written;
+            self.refused = p.refused;
+            self.saving = p.saving;
+            self.save_error = p.save_error;
+            self.explorer = p.explorer;
+            self.diagrams = p.diagrams;
+            self.canvas = p.canvas;
+            self.panels = p.panels;
+            self.problems = p.problems;
+            self.active = Some(i);
+        }
+    }
+
+    /// Closes the project of tab `i`: its last changes go to the host, which closes it; the tab
+    /// stays until the host answers, then the tab beside it is shown, or Home when it was the last.
+    /// When its changes cannot be handed over or written, it stays open and the reason shows.
+    pub fn close_tab(&mut self, i: usize) {
+        if i >= self.tabs.len() || self.tabs[i].closing.is_some() {
+            return;
+        }
+        self.tabs[i].close_error = None;
+        let handed = if self.active == Some(i) {
+            self.write_changes();
+            let current = self.session.as_ref().map(|s| s.revision());
+            if current.is_some() && self.refused == current { Err(self.save_error.clone().unwrap_or_default()) } else { Ok(()) }
+        } else {
+            self.hand_over_parked(i)
+        };
+        if let Err(e) = handed {
+            self.tabs[i].close_error = Some(e);
+            return;
+        }
+        let Some(rx) = self.services.projects.as_ref().map(|host| host.close(&self.tabs[i].path)) else {
+            self.closed(i);
+            return;
+        };
+        self.tabs[i].closing = Some(rx);
+        // While it closes it steps aside: the tab beside it shows, or Home.
+        if self.active == Some(i) {
+            self.park();
+            if let Some(next) = self.neighbour(i) {
+                self.activate(next);
+            }
+        }
+    }
+
+    /// The open tab nearest `i`, after it first, that is not closing.
+    fn neighbour(&self, i: usize) -> Option<usize> {
+        let open = |j: &usize| *j != i && self.tabs.get(*j).is_some_and(|t| t.closing.is_none());
+        (i + 1..self.tabs.len()).find(open).or_else(|| (0..i).rev().find(open))
+    }
+
+    /// The model of parked tab `i`, handed to the host when it changed since its last hand-over.
+    fn hand_over_parked(&mut self, i: usize) -> Result<(), String> {
+        let path = self.tabs[i].path.clone();
+        let (Some(host), Some(parked)) = (&self.services.projects, self.tabs[i].parked.as_mut()) else { return Ok(()) };
+        let Some(session) = &parked.session else { return Ok(()) };
+        let revision = session.revision();
+        if parked.written == Some(revision) {
+            return Ok(());
+        }
+        let (tables, junctions) = archforge_er::storage();
+        let rows = archforge_mof::rows::snapshot(session.doc(), &tables, &junctions).map_err(|e| e.to_string())?;
+        host.write(&path, rows);
+        parked.written = Some(revision);
+        Ok(())
+    }
+
+    /// Tab `i`'s project has closed: the tab goes, and the one beside it shows when it was shown
+    /// (only a tab closed without a host is still shown here).
+    fn closed(&mut self, i: usize) {
+        if i >= self.tabs.len() {
+            return;
+        }
+        if self.active == Some(i) {
+            self.clear_workspace();
+            self.project = None;
+            self.active = None;
+            let next = self.neighbour(i);
+            self.tabs.remove(i);
+            if let Some(next) = next {
+                self.activate(if next > i { next - 1 } else { next });
+            }
+        } else {
+            self.tabs.remove(i);
+            if let Some(a) = self.active
+                && a > i
+            {
+                self.active = Some(a - 1);
+            }
+        }
+    }
+
+    /// Closes the project shown, as its tab's close button does.
     pub fn close_project(&mut self) {
-        self.project = None;
+        if let Some(i) = self.active {
+            self.close_tab(i);
+        }
+    }
+
+    /// Parks the project shown in its tab, its last changes handed to the host first; Home shows.
+    fn park(&mut self) {
+        let Some(i) = self.active else { return };
+        self.write_changes();
+        let Some(project) = self.project.take() else { return };
+        let parked = Parked {
+            project,
+            session: self.session.take(),
+            session_error: self.session_error.take(),
+            adopted: self.adopted.take(),
+            written: self.written.take(),
+            refused: self.refused.take(),
+            saving: self.saving.take(),
+            save_error: self.save_error.take(),
+            explorer: std::mem::take(&mut self.explorer),
+            diagrams: std::mem::take(&mut self.diagrams),
+            canvas: std::mem::take(&mut self.canvas),
+            panels: std::mem::take(&mut self.panels),
+            problems: std::mem::take(&mut self.problems),
+        };
+        if let Some(tab) = self.tabs.get_mut(i) {
+            tab.parked = Some(Box::new(parked));
+        }
+        self.active = None;
+    }
+
+    /// Empties the fields of the project shown.
+    fn clear_workspace(&mut self) {
         self.session = None;
         self.session_error = None;
         self.adopted = None;
         self.written = None;
         self.refused = None;
+        // A save of another project answers for that one, never for this.
         self.saving = None;
         self.save_error = None;
         self.explorer = explorer::State::default();
@@ -338,6 +537,10 @@ impl Shell {
             Ok(rows) => {
                 host.write(&project.path, rows);
                 self.written = Some(revision);
+                // A change handed over replaces the word on a refused closing.
+                if let Some(tab) = self.active.and_then(|i| self.tabs.get_mut(i)) {
+                    tab.close_error = None;
+                }
                 // The model could not be turned into rows before; now it could.
                 if self.refused.take().is_some() {
                     self.save_error = None;
@@ -380,8 +583,12 @@ impl Shell {
         }
         let Some(pick) = self.services.pick_project.clone() else { return };
         if let Some(path) = pick() {
-            // The open model's newest state goes to the host first, so it is written before the
-            // project is replaced.
+            // A project open in a tab shows there; the host is not asked.
+            if let Some(i) = self.tabs.iter().position(|t| t.path == path) {
+                self.activate(i);
+                return;
+            }
+            // The shown model's newest state goes to the host first, as before every change of tab.
             self.write_changes();
             let Some(host) = &self.services.projects else { return };
             self.opening = Some(host.open(&path));
@@ -389,8 +596,22 @@ impl Shell {
         }
     }
 
-    /// The answers of a save and of an opening the host was working on.
+    /// The answers of a save, of an opening and of closings the host was working on.
     fn poll_host(&mut self) {
+        // Closings: a closed tab goes (from the last, so the others keep their places); a refused
+        // one stays, and says why.
+        for i in (0..self.tabs.len()).rev() {
+            let Some(rx) = &self.tabs[i].closing else { continue };
+            match rx.try_recv() {
+                Ok(Ok(())) => self.closed(i),
+                // A project that stays open comes back to the front, saying why.
+                Ok(Err(e)) => self.refused_close(i, e),
+                Err(std::sync::mpsc::TryRecvError::Empty) => {}
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    self.refused_close(i, crate::i18n::tr("The closing stopped without an answer"));
+                }
+            }
+        }
         if let Some((rx, revision)) = &self.saving {
             let revision = *revision;
             match rx.try_recv() {
@@ -442,10 +663,22 @@ impl Shell {
         self.session.is_some() && self.saving.is_none()
     }
 
-    /// Whether Open can act now: the host opens projects, no opening is under way and the New
-    /// project dialog is closed.
+    /// Whether Open can act now: the host opens projects, no opening is under way, the New
+    /// project dialog is closed and a tab is free.
     pub fn can_open_project(&self) -> bool {
         home::can_open(self) && self.opening.is_none() && self.new_project.is_none()
+    }
+
+    /// Tab `i`'s project stays open: it shows again, its status bar saying why.
+    fn refused_close(&mut self, i: usize, why: String) {
+        self.tabs[i].closing = None;
+        self.tabs[i].close_error = Some(why);
+        self.activate(i);
+    }
+
+    /// Why the project shown could not be closed, when it could not.
+    pub fn close_error(&self) -> Option<&str> {
+        self.active.and_then(|i| self.tabs.get(i)).and_then(|t| t.close_error.as_deref())
     }
 
     /// Whether an opening is under way.
@@ -494,11 +727,15 @@ impl Shell {
         // its answer shows without waiting for the pointer to move.
         // A write that failed waits for the next change or Save, and the status bar already says
         // why: nothing to look for until then.
-        let writing = self.services.projects.as_ref().is_some_and(|h| {
-            let w = h.writing();
-            w.pending && w.error.is_none()
-        });
-        if self.opening.is_some() || self.saving.is_some() || writing {
+        let writing = match (&self.services.projects, &self.project) {
+            (Some(h), Some(p)) => {
+                let w = h.writing(&p.path);
+                w.pending && w.error.is_none()
+            }
+            _ => false,
+        };
+        let closing = self.tabs.iter().any(Tab::closing);
+        if self.opening.is_some() || self.saving.is_some() || writing || closing {
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
         }
         // Cmd+S (Ctrl+S) saves the open project and Cmd+O (Ctrl+O) opens one; on macOS the menu
