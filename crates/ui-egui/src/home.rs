@@ -106,6 +106,15 @@ const STARTS: [(&str, &str, &str, &str, &ux::Icon, Hue); 4] = [
     ("import", "Import a model", "Bring existing elements into a project.", "Choose a file", &icons::IMPORT, Hue::Amber),
 ];
 
+/// The start cards left off Home while what they lead to cannot be done at all: importing a
+/// model. Their texts stay in the catalogues for when they come back.
+const HIDDEN_STARTS: [&str; 1] = ["import"];
+
+/// The start cards Home shows.
+fn shown_starts() -> Vec<&'static (&'static str, &'static str, &'static str, &'static str, &'static ux::Icon, Hue)> {
+    STARTS.iter().filter(|s| !HIDDEN_STARTS.contains(&s.0)).collect()
+}
+
 /// Every text of the start cards to translate: they reach `tr` through the table, where the
 /// catalogue tests cannot find them as literals.
 #[cfg(test)]
@@ -354,21 +363,24 @@ fn content(shell: &mut Shell, ui: &egui::Ui, p: &Palette, origin: Pos2, width: f
         p.text_secondary,
         Some(inner),
     );
+    let starts = shown_starts();
+    // As many a row as the width takes, and no more columns than cards.
     let per_row: usize = if inner >= TWO_UP {
         4
     } else if inner >= ONE_UP {
         2
     } else {
         1
-    };
+    }
+    .min(starts.len().max(1));
     let card_w = (inner - GAP * (per_row as f32 - 1.0)) / per_row as f32;
     let cards_top = y + 72.0;
-    for (i, start) in STARTS.iter().enumerate() {
+    for (i, start) in starts.iter().enumerate() {
         let (row, col) = (i / per_row, i % per_row);
         let r = Rect::from_min_size(at(col as f32 * (card_w + GAP), cards_top + row as f32 * (CARD.y + GAP)), vec2(card_w, CARD.y));
         start_card(shell, ui, p, &paint, r, start);
     }
-    let rows = STARTS.len().div_ceil(per_row);
+    let rows = starts.len().div_ceil(per_row);
     y = cards_top + rows as f32 * CARD.y + (rows as f32 - 1.0) * GAP + 38.0;
     // Pinned folders.
     ux::text(&paint, at(0.0, y), &tr("Pinned folders"), types::SUBSECTION, p.text, Some(inner));

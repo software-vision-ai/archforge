@@ -54,8 +54,10 @@ the change, and update this file in the same change.
   keeps its bundle's light and dark icon.
 
 ## Home and projects
-- Home fills the window on its own, without menu bar, toolbar or status bar. Its welcome has no button:
-  a project opens from the Open a project card or the title strip's + Open project.
+- Home fills the window on its own, without menu bar, toolbar or status bar. Its welcome has no
+  button: a project opens from the Open a project card or the title strip's + Open project.
+- A start card for what cannot be done at all yet (Import a model) is left off Home, and the
+  cards left share the row.
 - Recent projects keep the last twelve (name, folder, last opened) across restarts; a row opens
   its project, or shows its tab when it is open already.
 - Pin a folder picks a folder with the system's picker and pins it on Home, up to eight, kept in
