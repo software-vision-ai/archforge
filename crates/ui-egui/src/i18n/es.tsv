@@ -188,7 +188,27 @@ str		Drawing	Dibujar
 str		Naming	Nombrar
 str		Export	Exportar
 str		Dialect	Dialecto
-str		Guidance	Orientación
+str		Open the skill	Abrir la habilidad
+str		Skill settings	Ajustes de la habilidad
+str		Skill · on {subject}	Habilidad · en {subject}
+str		Skill · on the project	Habilidad · en el proyecto
+str		Skill text	Texto de la habilidad
+str		Write the guidance in Markdown	Escribe la orientación en Markdown
+str		Bold	Negrita
+str		Italic	Cursiva
+str		Heading	Encabezado
+str		Bulleted list	Lista con viñetas
+str		Numbered list	Lista numerada
+str		Code	Código
+str		Link	Enlace
+str		Quote	Cita
+str		Write	Escribir
+str		Preview	Vista previa
+str		Open this link?	¿Abrir este enlace?
+str		Open link	Abrir enlace
+str		This text is too long or nested too deeply to preview.	Este texto es demasiado largo o está demasiado anidado para la vista previa.
+str		A skill's text is at most {n} characters.	El texto de una habilidad tiene como máximo {n} caracteres.
+str		A skill's text could not be kept; its tab says why.	No se pudo guardar el texto de una habilidad; su pestaña indica por qué.
 str		Element	Elemento
 str		New diagram	Nuevo diagrama
 str		Create	Crear

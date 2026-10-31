@@ -105,6 +105,7 @@ impl eframe::App for DesktopApp {
     }
 
     fn on_exit(&mut self) {
+        self.shell.before_exit();
         if let Err(e) = prefs::save(&self.settings, &prefs::capture(&self.shell)) {
             log::error!("the preferences could not be saved: {e}");
         }

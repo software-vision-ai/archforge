@@ -188,7 +188,27 @@ str		Drawing	Desenhar
 str		Naming	Nomear
 str		Export	Exportar
 str		Dialect	Dialeto
-str		Guidance	Orientação
+str		Open the skill	Abrir a competência
+str		Skill settings	Definições da competência
+str		Skill · on {subject}	Competência · em {subject}
+str		Skill · on the project	Competência · no projeto
+str		Skill text	Texto da competência
+str		Write the guidance in Markdown	Escreva a orientação em Markdown
+str		Bold	Negrito
+str		Italic	Itálico
+str		Heading	Título
+str		Bulleted list	Lista com marcas
+str		Numbered list	Lista numerada
+str		Code	Código
+str		Link	Ligação
+str		Quote	Citação
+str		Write	Escrever
+str		Preview	Pré-visualização
+str		Open this link?	Abrir esta ligação?
+str		Open link	Abrir ligação
+str		This text is too long or nested too deeply to preview.	Este texto é demasiado longo ou demasiado aninhado para a pré-visualização.
+str		A skill's text is at most {n} characters.	O texto de uma competência tem no máximo {n} caracteres.
+str		A skill's text could not be kept; its tab says why.	Não foi possível guardar o texto de uma competência; o respetivo separador indica porquê.
 str		Element	Elemento
 str		New diagram	Novo diagrama
 str		Create	Criar
