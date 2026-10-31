@@ -268,7 +268,7 @@ fn decide(
     };
     match shell.canvas.tool {
         Tool::Pan => Action::Nothing,
-        Tool::Relationship | Tool::Generalization => {
+        Tool::Relationship => {
             if (resp.drag_stopped_by(egui::PointerButton::Primary) || released) && shell.canvas.gesture.is_some() {
                 return Action::Commit;
             }
@@ -479,11 +479,7 @@ fn commit(shell: &mut Shell, view: View, d: Obj, pointer: Option<Pos2>, shift: b
         }
         Gesture::Connect { from_node, .. } => {
             if let Some(to_node) = node_at(shell, view, d, pointer) {
-                if shell.canvas.tool == crate::canvas::Tool::Generalization {
-                    crate::connect::generalize(shell, d, from_node, to_node);
-                } else {
-                    crate::connect::connect(shell, d, from_node, to_node);
-                }
+                crate::connect::connect(shell, d, from_node, to_node);
                 // The line drawn, the tool hands back to Select, as the placing tools do.
                 shell.canvas.tool = Tool::Select;
             }

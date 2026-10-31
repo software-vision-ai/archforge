@@ -77,7 +77,6 @@ str		key on {columns}	clé sur {columns}
 str		complete	complète
 str		disjoint	disjointe
 str		overlapping	chevauchante
-str		A subtype joins two tables	Un sous-type relie deux tables
 str		Add a literal	Ajouter un littéral
 str		Sequences · {n}	Séquences · {n}
 str		Add sequence	Ajouter une séquence
@@ -216,7 +215,6 @@ str		Pan	Déplacer
 str		Entity	Entité
 str		Entity · {schema}	Entité · {schema}
 str		Relationship	Relation
-str		Generalization	Généralisation
 str		Relationship types	Types de relation
 str		Note	Note
 str		Group	Groupe

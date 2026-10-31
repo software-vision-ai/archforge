@@ -2707,20 +2707,21 @@ fn the_schema_lists_its_types_and_a_column_takes_an_enum_type_from_the_type_menu
 }
 
 #[test]
-fn the_generalization_tool_draws_a_subtype_and_the_supertype_lists_it() {
+fn a_subtype_shows_in_the_supertypes_properties_and_the_toolbar_draws_no_generalizations() {
     let (mut h, customer, order) = two_tables_harness();
-    let nodes = node_ids(&h);
-    let customer_node = nodes.iter().min_by(|a, b| rect_of(&h, a).left().total_cmp(&rect_of(&h, b).left())).unwrap().clone();
-    let order_node = nodes.iter().find(|n| **n != customer_node).unwrap().clone();
-    let at = rect_of(&h, "workspace.tools.generalization").center();
-    click(&mut h, at);
-    assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Generalization);
-    // Drag from Order to Customer: Order becomes a subtype of Customer, sharing its key.
-    let (from, to) = (rect_of(&h, &order_node).center(), rect_of(&h, &customer_node).center());
-    drag(&mut h, from, to);
+    // ER draws subtypes with the tools it has; the toolbar has no generalization tool.
+    assert!(!ids(&h).iter().any(|i| i == "workspace.tools.generalization"));
+    let generalization = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let out = s.execute("er.generalization.add", &serde_json::json!({ "supertype": customer, "subtype": order })).unwrap();
+        let id = out.value.get("id").and_then(|v| v.as_str()).unwrap().to_string();
+        s.execute("view.select", &serde_json::json!({ "ids": [id] })).unwrap();
+        archforge_mof::Uuid::parse(&id).unwrap()
+    };
+    h.run();
     let (generalization, customer_obj, order_obj) = {
         let st = h.state().session.as_ref().unwrap().doc();
-        let g = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::GENERALIZATION)).expect("a generalization");
+        let g = st.by_uuid(generalization).unwrap();
         let c = st.by_uuid(archforge_mof::Uuid::parse(&customer).unwrap()).unwrap();
         let o = st.by_uuid(archforge_mof::Uuid::parse(&order).unwrap()).unwrap();
         assert_eq!(archforge_er::rules::generalization_parts(st, g).0, Some(c));
@@ -2728,9 +2729,6 @@ fn the_generalization_tool_draws_a_subtype_and_the_supertype_lists_it() {
         assert!(archforge_er::rules::generalization_parts(st, g).2.is_some(), "table per type made the key");
         (g, c, o)
     };
-    assert!(ids(&h).iter().any(|i| i.starts_with("workspace.canvas.edge.")), "the line is drawn");
-    assert_eq!(h.state().session.as_ref().unwrap().view().selection, vec![generalization]);
-    assert_eq!(h.state_mut().session.as_mut().unwrap().undo_label(), Some("Add subtype"));
     // The generalization's Properties show the supertype's Subtypes section; Mapping single table
     // removes the shared key in one step.
     let rows: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.subtype.row.") && !i.ends_with(".remove")).collect();

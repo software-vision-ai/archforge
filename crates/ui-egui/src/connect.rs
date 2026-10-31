@@ -319,42 +319,6 @@ pub fn connect(shell: &mut Shell, d: Obj, from_node: Uuid, to_node: Uuid) {
     }
 }
 
-/// Makes the generalization a finished drag with the Generalization tool asks for: the table the
-/// drag started on is a subtype of the one it ended on; with its edge, as one undo step (slice S6).
-pub fn generalize(shell: &mut Shell, d: Obj, from_node: Uuid, to_node: Uuid) {
-    shell.canvas.notice = None;
-    let Some(session) = shell.session.as_mut() else { return };
-    let store = session.doc();
-    let node_entity = |id: Uuid| {
-        let n = store.by_uuid(id)?;
-        let e = store.get(n, archforge_diagram::node::ELEMENT).ok().and_then(|v| v.as_ref())?;
-        (store.class_of(e).ok() == Some(archforge_er::ENTITY)).then_some(e)
-    };
-    let (Some(sub), Some(sup)) = (node_entity(from_node), node_entity(to_node)) else {
-        shell.canvas.notice = Some(tr("A subtype joins two tables"));
-        return;
-    };
-    let (Some(sub_id), Some(sup_id), Some(diagram_id)) = (store.uuid(sub).ok(), store.uuid(sup).ok(), store.uuid(d).ok()) else { return };
-    let out = session.batch(&tr("Add subtype"), |b| {
-        let g = b.execute("er.generalization.add", &json!({ "supertype": sup_id.to_string(), "subtype": sub_id.to_string() }))?;
-        let g = g.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string();
-        b.execute(
-            "diagram.connect",
-            &json!({ "diagram": diagram_id.to_string(), "element": g, "source": from_node.to_string(), "target": to_node.to_string() }),
-        )?;
-        Ok(())
-    });
-    match out {
-        Ok(o) => {
-            let Some(g) = o.value.get(0).and_then(|v| v.get("id")).and_then(|v| v.as_str()).and_then(Uuid::parse) else { return };
-            if let Err(e) = run(shell, "view.select", json!({ "ids": [g.to_string()] })) {
-                shell.canvas.notice = Some(e);
-            }
-        }
-        Err(e) => shell.canvas.notice = Some(e.to_string()),
-    }
-}
-
 /// Opens the mapping table offer for a many-to-many relationship, named after its two tables.
 pub fn offer_mapping(shell: &mut Shell, relationship: Uuid) {
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
