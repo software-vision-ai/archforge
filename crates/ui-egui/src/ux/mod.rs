@@ -278,6 +278,43 @@ pub fn text(painter: &egui::Painter, at: Pos2, text: &str, ty: Type, color: Colo
     rect
 }
 
+/// Where a list of `size` opens from `anchor`, `left` its left edge: under the anchor, or above it
+/// when the window has no room below and has room above, so no entry is cut off.
+pub(crate) fn drop_rect(ui: &egui::Ui, anchor: Rect, left: f32, size: egui::Vec2) -> Rect {
+    let window = ui.ctx().content_rect();
+    let below = Rect::from_min_size(egui::pos2(left, anchor.bottom() + 4.0), size);
+    let above = Rect::from_min_size(egui::pos2(left, anchor.top() - 4.0 - size.y), size);
+    if below.bottom() > window.bottom() - 8.0 && above.top() >= window.top() + 8.0 { above } else { below }
+}
+
+/// Runs `add` on a layer above the window's content, covering `r`: a menu or a list drawn there is
+/// never painted over by what the frame draws after it, and the clicks over it are its own. The
+/// layer is told its size, so it shows and takes clicks on its first frame.
+pub(crate) fn overlay<R>(ui: &egui::Ui, id: egui::Id, r: Rect, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    let ctx = ui.ctx().clone();
+    let layer = egui::LayerId::new(egui::Order::Foreground, id);
+    let state = egui::AreaState {
+        pivot_pos: Some(r.min),
+        pivot: egui::Align2::LEFT_TOP,
+        size: Some(r.size()),
+        interactable: true,
+        last_became_visible_at: None,
+    };
+    ctx.memory_mut(|m| m.areas_mut().set_state(layer, state));
+    egui::Area::new(id)
+        .order(egui::Order::Foreground)
+        .fixed_pos(r.min)
+        .constrain(false)
+        .fade_in(false)
+        .show(&ctx, |ui| {
+            // The shadow reaches past the menu.
+            ui.set_clip_rect(ctx.content_rect());
+            ui.allocate_rect(r, egui::Sense::hover());
+            add(ui)
+        })
+        .inner
+}
+
 /// A floating surface's soft shadow (menus, popovers, the toolbar, the minimap, dialogs), drawn
 /// before the surface: blurred and offset down, never a solid ring.
 pub fn shadow(painter: &egui::Painter, rect: Rect, radius: f32, color: Color32) {

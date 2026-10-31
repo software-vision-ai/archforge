@@ -276,7 +276,7 @@ fn sample_table(shell: &mut Shell, skills: bool) -> Result<(), String> {
     run(session, "view.select", json!({ "ids": [customer] }))?;
     session.mark_saved().map_err(|e| format!("mark_saved: {e:?}"))?;
     if skills {
-        shell.state.panel = crate::state::Panel::Skills;
+        shell.state.show_panel(crate::state::Panel::Skills);
     }
     Ok(())
 }
@@ -367,7 +367,7 @@ fn sample_column_selected(shell: &mut Shell) -> Result<(), String> {
     crate::canvas::open(shell, d);
     let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
     run(session, "view.select", json!({ "ids": [id] }))?;
-    shell.state.explorer = crate::state::Explorer::Diagrams;
+    shell.state.show_explorer(crate::state::Explorer::Diagrams);
     shell.canvas.fit_pending = false;
     shell.canvas.zoom = 1.0;
     shell.canvas.pan = egui::Vec2::ZERO;

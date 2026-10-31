@@ -435,9 +435,13 @@ pub(crate) fn select_field(
 /// A menu under `anchor` with `items`; gives the index picked, closing the menu on a pick or a
 /// click elsewhere.
 pub(crate) fn menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, id: &str, items: &[String]) -> Option<usize> {
-    let paint = ui.painter();
     let height = 8.0 + items.len() as f32 * 30.0;
-    let r = Rect::from_min_size(pos2(anchor.left(), anchor.bottom() + 4.0), vec2(anchor.width(), height));
+    let r = ux::drop_rect(ui, anchor, anchor.left(), vec2(anchor.width(), height));
+    ux::overlay(ui, crate::widgets::egui_id(&format!("{id}.layer")), r, |ui| menu_body(shell, ui, p, anchor, r, id, items))
+}
+
+fn menu_body(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, r: Rect, id: &str, items: &[String]) -> Option<usize> {
+    let paint = ui.painter();
     ux::shadow(paint, r, 8.0, p.shadow);
     paint.rect_filled(r, 8.0, p.surface);
     paint.rect_stroke(r, 8.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
@@ -519,7 +523,7 @@ pub(crate) fn ghost_button(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: eg
 
 /// The base types the column type menu offers after the schema's own types: the names the size
 /// rules know, and the common plain ones.
-const BASE_TYPES: [&str; 12] =
+pub(crate) const BASE_TYPES: [&str; 12] =
     ["VARCHAR", "CHAR", "TEXT", "SMALLINT", "INTEGER", "BIGINT", "NUMERIC", "BOOLEAN", "DATE", "TIMESTAMP", "TIME", "UUID"];
 
 // Properties.
@@ -1175,8 +1179,18 @@ fn column_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: 
         cy += row;
     }
     // The checks in a row: the second starts where the first's label ended.
+    // A key column is never null: ticking Primary key ticks Not null, and unticking Not null
+    // unticks Primary key.
+    let was_key = edit.primary_key;
     let next_x = check(shell, ui, p, at(0.0, cy), "workspace.properties.column.primary-key", &tr("Primary key"), &mut edit.primary_key);
+    if edit.primary_key && !was_key {
+        edit.not_null = true;
+    }
+    let was_not_null = edit.not_null;
     check(shell, ui, p, pos2(next_x - 12.0, card.top() + cy), "workspace.properties.column.not-null", &tr("Not null"), &mut edit.not_null);
+    if was_not_null && !edit.not_null {
+        edit.primary_key = false;
+    }
     cy += 28.0;
     check(shell, ui, p, at(0.0, cy), "workspace.properties.column.unique", &tr("Unique"), &mut edit.unique);
     cy += 20.0 + 14.0;
@@ -1389,7 +1403,13 @@ fn commit_column(shell: &mut Shell, edit: &ColumnEdit) {
             }),
             edit.entity,
         )
-        .map(|_| ()),
+        .map(|added| {
+            // Adding selects the new column; its editor was this one, so the selection does not
+            // open it again.
+            if let Some(id) = added.get("id").and_then(serde_json::Value::as_str).and_then(Uuid::parse) {
+                shell.panels.selected_column = Some(id);
+            }
+        }),
         Some(t) => {
             // Every changed field in one batch: a refusal rolls the whole card back, so what the
             // card shows and what landed never drift apart.

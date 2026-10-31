@@ -794,6 +794,25 @@ fn add_menu(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, anchor: Rect) {
     let width = 200.0;
     let height = 8.0 + items.len() as f32 * 30.0;
     let menu = Rect::from_min_size(pos2((anchor.right() - width).max(0.0), anchor.bottom() + 4.0), vec2(width, height));
+    // On a layer of its own, over the tree and the columns drawn after the explorer.
+    let picked = ux::overlay(ui, crate::widgets::egui_id("workspace.explorer.add.layer"), menu, |ui| add_menu_rows(shell, ui, p, menu, &items));
+    if let Some(kind) = picked {
+        shell.explorer.menu_open = false;
+        if let Some(kind) = kind {
+            add(shell, kind);
+        }
+    } else {
+        let outside =
+            ui.input(|i| i.pointer.any_pressed() && !i.pointer.interact_pos().is_some_and(|pos| menu.contains(pos) || anchor.contains(pos)));
+        if outside || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+            shell.explorer.menu_open = false;
+        }
+    }
+}
+
+/// The add menu's rows; gives the row picked, a kind or the folder.
+fn add_menu_rows(shell: &mut Shell, ui: &egui::Ui, p: &Palette, menu: Rect, items: &[(Option<Kind>, String)]) -> Option<Option<Kind>> {
+    let width = menu.width();
     let paint = ui.painter().clone();
     ux::shadow(&paint, menu, 8.0, p.shadow);
     paint.rect_filled(menu, 8.0, p.surface);
@@ -821,18 +840,7 @@ fn add_menu(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, anchor: Rect) {
             picked = Some(*kind);
         }
     }
-    if let Some(kind) = picked {
-        shell.explorer.menu_open = false;
-        if let Some(kind) = kind {
-            add(shell, kind);
-        }
-    } else {
-        let outside =
-            ui.input(|i| i.pointer.any_pressed() && !i.pointer.interact_pos().is_some_and(|pos| menu.contains(pos) || anchor.contains(pos)));
-        if outside || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-            shell.explorer.menu_open = false;
-        }
-    }
+    picked
 }
 
 /// The dialog before a removal that takes other things with it, as the design's "Delete from the

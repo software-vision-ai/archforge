@@ -437,7 +437,7 @@ pub(crate) fn pointer(shell: &mut Shell, ui: &egui::Ui, resp: &egui::Response, v
         }
         Action::OpenColumn(entity, column) => {
             crate::panels::open_column(shell, entity, column);
-            shell.state.panel = crate::state::Panel::Properties;
+            shell.state.show_panel(crate::state::Panel::Properties);
         }
     }
 }
@@ -484,6 +484,8 @@ fn commit(shell: &mut Shell, view: View, d: Obj, pointer: Option<Pos2>, shift: b
                 } else {
                     crate::connect::connect(shell, d, from_node, to_node);
                 }
+                // The line drawn, the tool hands back to Select, as the placing tools do.
+                shell.canvas.tool = Tool::Select;
             }
         }
         Gesture::Marquee { from } => {
@@ -529,6 +531,8 @@ fn place_note(shell: &mut Shell, d: Obj, x: f64, y: f64) {
                 shell.canvas.note_edit = Some(NoteEdit { node, text, opened: true, refused: None });
                 shell.canvas.focused = true;
             }
+            // A creating tool makes one thing, then hands back to Select.
+            shell.canvas.tool = Tool::Select;
         }
         Err(e) => shell.canvas.notice = Some(e),
     }
@@ -640,6 +644,7 @@ fn place_entity(shell: &mut Shell, d: Obj, x: f64, y: f64) {
                 shell.canvas.rename = Some(NodeRename { node, entity, text: name, opened: true, refused: None });
                 shell.canvas.focused = true;
             }
+            shell.canvas.tool = Tool::Select;
         }
         Err(e) => shell.canvas.notice = Some(e.to_string()),
     }
@@ -935,7 +940,7 @@ fn adorners(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, rect: Rect, 
         };
         if resp.clicked() && key == "add-column" {
             crate::panels::open_column(shell, entity, None);
-            shell.state.panel = crate::state::Panel::Properties;
+            shell.state.show_panel(crate::state::Panel::Properties);
         }
         // Dragging the connect adorner draws a relationship from this entity.
         if key == "connect" && resp.drag_started_by(egui::PointerButton::Primary) && shell.canvas.gesture.is_none() {
@@ -1134,12 +1139,12 @@ fn entity_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, menu: &En
     shell.canvas.menu = None;
     match key {
         "open" => {
-            shell.state.explorer = crate::state::Explorer::Models;
+            shell.state.show_explorer(crate::state::Explorer::Models);
             select(shell, vec![menu.entity]);
         }
         "add-column" => {
             crate::panels::open_column(shell, menu.entity, None);
-            shell.state.panel = crate::state::Panel::Properties;
+            shell.state.show_panel(crate::state::Panel::Properties);
         }
         "collapse" => {
             // The command selects the relationship it makes.
@@ -1208,7 +1213,7 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
     if add_column {
         if let [(_, Some(entity))] = selected.as_slice() {
             crate::panels::open_column(shell, *entity, None);
-            shell.state.panel = crate::state::Panel::Properties;
+            shell.state.show_panel(crate::state::Panel::Properties);
         }
         return;
     }
