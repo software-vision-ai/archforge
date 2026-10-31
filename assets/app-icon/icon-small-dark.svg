@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
-  <!-- The Archforge app icon at 16 to 32 px, the dark appearance. Original
-       artwork. -->
-  <rect width="16" height="16" rx="3" fill="#202833"/>
-  <g transform="translate(0 0) scale(0.25)"><path d="M7 54 L26 10 L36 10 L18 54 Z" fill="#E3E9F1"/><path d="M28 10 L38 10 L57 54 L45 54 Z" fill="#E3E9F1"/><path d="M24 35 L40 35 L43 43 L21 43 Z" fill="#9ED8DE"/></g>
-</svg>

@@ -32,7 +32,9 @@ The rules a change cannot break. `AGENTS.md` lists them in one line each.
   licence and hash. Every face the program draws with has a `[[face]]` row, and every licence named
   has its text under `licenses/`. `cargo xtask assets` checks the rows and rewrites
   `ATTRIBUTION.md`; never edit that file by hand.
-- Fonts, samples and other binaries stay out of the repository. Inter is read at build time from
+- Fonts, samples and other binaries stay out of the repository; the one exception is the app
+  icon's picture, `assets/app-icon/icon.png`, a brand mark (`licenses/brand/archforge-icon.txt`)
+  that packaging scales with `cargo xtask resize`. Inter is read at build time from
   the craft-fonts checkout `CRAFT_FONTS_DIR` names (`crates/ui-egui/build.rs`); without it the
   toolkit's face stands in.
 - The interface's icons are drawn in code from the design's vector paths (`crates/ui-egui/src/ux/icons.rs`),

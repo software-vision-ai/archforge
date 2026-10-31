@@ -23,18 +23,18 @@ if [ "$sign" != "--sign" ]; then
   sed -e "s|__VERSION__|$version|g; s|__BUNDLE_ID__|$BUNDLE_ID|g" "$ROOT/packaging/macos/Info.plist.in" >"$bundle/Contents/Info.plist"
   # Inside the bundle, so signing covers them and a copy of the application carries them.
   ship_licences "$bundle/Contents/Resources"
-  if [ -f "$ROOT/assets/app-icon/icon.svg" ]; then
+  if [ -f "$ROOT/assets/app-icon/icon.png" ]; then
     sh "$ROOT/packaging/icons.sh"
-    # macOS 26 and later show the light or the dark icon from the asset catalog actool compiles
-    # from the Icon Composer document, with its own .icns for earlier systems;
-    # without actool the bundle carries the light .icns alone.
+    # macOS 26 and later show the icon from the asset catalog actool compiles from the Icon
+    # Composer document, with its own .icns for earlier systems; without actool the bundle carries
+    # the .icns alone.
     if xcrun --find actool >/dev/null 2>&1; then
       xcrun actool "$ROOT/dist/icons/AppIcon.icon" --compile "$bundle/Contents/Resources" --platform macosx \
         --minimum-deployment-target 11.0 --app-icon AppIcon --output-partial-info-plist "$out/icon-info.plist" >/dev/null
       plutil -replace CFBundleIconFile -string AppIcon "$bundle/Contents/Info.plist"
       plutil -replace CFBundleIconName -string AppIcon "$bundle/Contents/Info.plist"
     else
-      echo "package: Xcode's actool is missing; the bundle carries the light icon only" >&2
+      echo "package: Xcode's actool is missing; the bundle carries the .icns icon only" >&2
       cp "$ROOT/dist/icons/$APP.icns" "$bundle/Contents/Resources/$APP.icns"
     fi
   else
