@@ -20,9 +20,9 @@ use crate::ux::{self, Palette, icons, types};
 use crate::{Shell, widgets};
 
 /// The title strip's height: on macOS the strip is the title bar, and at 32 points the traffic
-/// lights sit on its middle line, as in the ArtCraft apps.
+/// lights sit on its middle line.
 pub(crate) const STRIP: f32 = 32.0;
-/// Where the strip's controls start: clear of the traffic lights on macOS (PhotoCraft's 78), and
+/// Where the strip's controls start: clear of the traffic lights on macOS, and
 /// elsewhere.
 const STRIP_LEFT_MAC: f32 = 78.0;
 const STRIP_LEFT: f32 = 10.0;

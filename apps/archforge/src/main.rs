@@ -179,7 +179,9 @@ fn native_options() -> eframe::NativeOptions {
         .with_min_inner_size([640.0, 400.0]);
     #[cfg(target_os = "macos")]
     let viewport = macos_window::style(viewport);
-    eframe::NativeOptions { viewport, ..Default::default() }
+    // The installed fonts come from fonts.rs, read and checked by the app, never mapped; eframe's
+    // own system-font scanner stays off whatever its features.
+    eframe::NativeOptions { viewport, system_font_fallback: false, ..Default::default() }
 }
 
 #[cfg(target_os = "macos")]
@@ -205,6 +207,11 @@ mod tests {
 
     fn args(list: &[&str]) -> Result<Args, String> {
         parse_args(list.iter().map(|s| s.to_string()))
+    }
+
+    #[test]
+    fn the_window_never_installs_the_system_font_scanner() {
+        assert!(!native_options().system_font_fallback, "installed fonts come from fonts.rs, never mapped");
     }
 
     #[test]

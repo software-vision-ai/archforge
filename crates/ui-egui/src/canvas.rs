@@ -470,12 +470,16 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     crate::connect::toast(shell, ui, p, r);
     if minimap_shown(shell, r) {
         minimap(shell, ui, p, r, bounds, &view);
-    } else {
+    } else if r.width() >= 16.0 + TOOLBAR.x + 16.0 + 28.0 + MINIMAP_GAP.x {
+        // Its button, where the toolbar leaves room for it: live when the user folded the minimap,
+        // not available when the canvas is too narrow for it.
         let b = Rect::from_min_size(pos2(r.right() - MINIMAP_GAP.x - 28.0, r.bottom() - MINIMAP_GAP.y - 26.0), vec2(28.0, 26.0));
+        let folded = !shell.canvas.minimap_open;
         paint.rect_filled(b, 7.0, p.surface);
         paint.rect_stroke(b, 7.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
-        ux::icon_in(&paint, Rect::from_center_size(b.center(), Vec2::splat(14.0)), &icons::MAP, p.text_secondary);
-        if control(shell, ui, "workspace.minimap.toggle", "button", b, true).on_hover_text(tr("Show minimap")).clicked() {
+        ux::icon_in(&paint, Rect::from_center_size(b.center(), Vec2::splat(14.0)), &icons::MAP, if folded { p.text_secondary } else { p.text_muted });
+        let resp = control(shell, ui, "workspace.minimap.toggle", "button", b, folded);
+        if folded && resp.on_hover_text(tr("Show minimap")).clicked() {
             shell.canvas.minimap_open = true;
         }
     }
@@ -1022,14 +1026,14 @@ const TOOLS: [(&str, &ux::Icon, &str, bool); 7] = [
     ("group", &icons::TOOL_GROUP, "Group", false),
 ];
 
-/// The floating toolbar at the canvas's bottom centre: Select and Pan, the drawing tools, and
-/// the key status and grid toggles.
 /// Whether the minimap is drawn open: when the user has it open and the canvas has room for it
 /// beside the toolbar; otherwise its button stands in, so the tools are never hidden.
 fn minimap_shown(shell: &Shell, r: Rect) -> bool {
     shell.canvas.minimap_open && r.width() >= 16.0 + TOOLBAR.x + 16.0 + MINIMAP.x + MINIMAP_GAP.x
 }
 
+/// The floating toolbar at the canvas's bottom centre: Select and Pan, the drawing tools, and
+/// the key status and grid toggles.
 fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     let paint = ui.painter().clone();
     // Centred under the canvas; moved left of the minimap, or of its button; never hidden.

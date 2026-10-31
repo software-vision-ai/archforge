@@ -20,6 +20,7 @@ archforge-ui-egui.workspace = true
 archforge-mof.workspace = true
 getrandom.workspace = true
 eframe.workspace = true
+winit.workspace = true
 fontdb.workspace = true
 egui.workspace = true
 craft-atomic.workspace = true

@@ -705,8 +705,7 @@ fn rename_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Rect) 
     widgets::record_visible(ui, &mut shell.registry, "workspace.explorer.rename", "field", field);
     let Some(r) = shell.explorer.rename.as_mut() else { return };
     let fresh = r.fresh;
-    let inner =
-        crate::panels::field_inner(ui, Rect::from_min_max(pos2(field.left() + -2.0, field.top()), pos2(field.right() - -2.0, field.bottom())));
+    let inner = crate::panels::field_inner(ui, field.expand2(vec2(2.0, 0.0)));
     let edit = egui::TextEdit::singleline(&mut r.text)
         .id(id)
         .frame(egui::Frame::NONE)

@@ -1956,7 +1956,7 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, 
         let h = (track.height() * body.height() / shell.panels.content).max(24.0).min(track.height());
         let at = shell.panels.scroll / (shell.panels.content - body.height()).max(1.0);
         let thumb = Rect::from_min_size(pos2(r.right() - 6.0, track.top() + at * (track.height() - h)), vec2(4.0, h));
-        paint.rect_filled(thumb, 2.0, p.text_muted.gamma_multiply(0.45));
+        paint.rect_filled(thumb, 2.0, p.scroll_thumb);
     }
     if let Some(notice) = shell.panels.notice.clone() {
         ux::text(&paint, pos2(r.left() + PAD, r.bottom() - 36.0), &notice, types::CAPTION, p.amber, Some((r.width() - 2.0 * PAD).max(0.0)));

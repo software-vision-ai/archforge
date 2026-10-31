@@ -171,7 +171,7 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
         // The veil takes every click behind the dialog; on macOS its title strip still moves the window.
         ui.painter().rect_filled(window, 0.0, p.scrim);
         let veil = ui.interact(window, ui.scope_id().with("new-project.veil"), Sense::click_and_drag());
-        let strip = Rect::from_min_size(window.min, vec2(window.width(), 28.0));
+        let strip = Rect::from_min_size(window.min, vec2(window.width(), crate::home::STRIP));
         if shell.top_inset > 0.0 && veil.drag_started() && veil.interact_pointer_pos().is_some_and(|at| strip.contains(at)) {
             ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
         }

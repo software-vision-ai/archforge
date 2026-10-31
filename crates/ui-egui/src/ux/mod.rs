@@ -21,6 +21,8 @@ pub struct Palette {
     pub border: Color32,
     /// A card's border under the pointer.
     pub border_hover: Color32,
+    /// A scrolled panel's thumb.
+    pub scroll_thumb: Color32,
     pub text: Color32,
     pub text_secondary: Color32,
     pub text_muted: Color32,
@@ -71,6 +73,7 @@ pub const LIGHT: Palette = Palette {
     title_strip: rgb(0xE9EDF2),
     border: rgb(0xDFE5ED),
     border_hover: rgb(0xB9C9F9),
+    scroll_thumb: rgb(0xC5CDD7),
     text: rgb(0x1B2B3C),
     text_secondary: rgb(0x657386),
     text_muted: rgb(0x8A96A7),
@@ -105,6 +108,7 @@ pub const DARK: Palette = Palette {
     title_strip: rgb(0x0D1117),
     border: rgb(0x2A3441),
     border_hover: rgb(0x3B5498),
+    scroll_thumb: rgb(0x4A5466),
     text: rgb(0xE6EBF2),
     text_secondary: rgb(0x9AA7B8),
     text_muted: rgb(0x7F8C9E),
@@ -331,8 +335,8 @@ pub fn icon(painter: &egui::Painter, at: Pos2, icon: &Icon, width: f32, color: C
 /// [`icon`] with a stroke weight of its own, where the design gives an instance one.
 pub fn icon_weighted(painter: &egui::Painter, at: Pos2, icon: &Icon, width: f32, weight: f32, color: Color32) {
     // An interface icon is drawn at its role's size, centred where the caller put its box, with
-    // one stroke weight, so no screen draws one larger or heavier than another (the ArtCraft
-    // apps' scale: chrome 15-16, rows and fields 13-14, small actions 10-12, chevrons 8).
+    // one stroke weight, so no screen draws one larger or heavier than another (chrome 15-17,
+    // rows and fields 13-15, small actions 10-14, chevrons 8).
     let (at, width, weight) = match standard_size(icon) {
         Some(side) => {
             let requested = Vec2::new(width, if icon.size[0] > 0.0 { width * icon.size[1] / icon.size[0] } else { width });

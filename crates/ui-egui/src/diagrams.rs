@@ -402,7 +402,7 @@ fn new_dialog_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: &eg
     let field = Rect::from_min_size(at(20.0, 73.0), vec2(width, 28.0));
     paint.rect_filled(field, 6.0, p.field);
     widgets::record_visible(ui, &mut shell.registry, "workspace.new-diagram.name", "field", field);
-    let inner = crate::panels::field_inner(ui, Rect::from_min_max(pos2(field.left() + 0.0, field.top()), pos2(field.right() - 0.0, field.bottom())));
+    let inner = crate::panels::field_inner(ui, Rect::from_min_max(pos2(field.left(), field.top()), pos2(field.right(), field.bottom())));
     let Some(edit) = shell.diagrams.new.as_mut() else { return };
     let text_edit = egui::TextEdit::singleline(&mut edit.name)
         .id(widgets::egui_id("workspace.new-diagram.name"))

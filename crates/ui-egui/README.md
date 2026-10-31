@@ -28,8 +28,7 @@ with the in-place column editor — type with its length or precision and scale,
 generation with the expression of a computed column, collation under More — keys; a diagram's
 name and schema; a description under every heading, the text DDL writes as a comment) and Skills (the skills on the
 selection, the inherited ones, the skill editor) following the selection, the status bar), drawn
-from the design with its own palette, type and icons (`ux`). Icons are drawn as the ArtCraft apps
-draw theirs: each is rasterised once per size into an alpha mask at the screen's own pixels, its
+from the design with its own palette, type and icons (`ux`). Icons are drawn crisp: each is rasterised once per size into an alpha mask at the screen's own pixels, its
 strokes a whole number of pixels on the pixel grid (`ux::raster`), and drawn at a standard size by
 role with one stroke weight (`ux::icon_weighted`: chrome 15-17 pt, rows 13-15, small actions 10-14,
 chevrons 8); rows, fields and bars centre their content on their middle line (`ux::text_mid`,

@@ -370,7 +370,7 @@ pub(crate) fn mapping_offer(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r
     let field = Rect::from_min_size(at(16.0, 61.0), vec2(width, 28.0));
     paint.rect_filled(field, 6.0, p.field);
     widgets::record_visible(ui, &mut shell.registry, "workspace.mapping.name", "field", field);
-    let inner = crate::panels::field_inner(ui, Rect::from_min_max(pos2(field.left() + 0.0, field.top()), pos2(field.right() - 0.0, field.bottom())));
+    let inner = crate::panels::field_inner(ui, Rect::from_min_max(pos2(field.left(), field.top()), pos2(field.right(), field.bottom())));
     if let Some(o) = shell.canvas.mapping.as_mut() {
         let edit = egui::TextEdit::singleline(&mut o.name)
             .id(widgets::egui_id("workspace.mapping.name"))
