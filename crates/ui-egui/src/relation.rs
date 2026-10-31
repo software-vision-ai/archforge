@@ -186,7 +186,15 @@ pub(crate) fn body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, m
                 paint.rect_stroke(b, 6.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
             }
             let (f, t) = if i == 0 { (Some(*c), None) } else { (None, Some(*c)) };
-            crate::connect::sample_line(&paint, p, b.center(), f, t, if on { p.accent } else { p.text_secondary });
+            crate::connect::sample_line(
+                &paint,
+                p,
+                b.center(),
+                f,
+                t,
+                if on { p.accent } else { p.text_secondary },
+                if on { p.accent_tint } else { p.field },
+            );
             let id = format!("workspace.properties.end.{}.{j}", if i == 0 { "from" } else { "to" });
             if control(shell, ui, &id, "button", b, true).on_hover_text(cardinality_text(*c)).clicked() {
                 picked = Some(*c);

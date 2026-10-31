@@ -2940,3 +2940,28 @@ fn the_properties_body_scrolls_and_an_editor_opened_below_the_fold_comes_into_vi
     h.run();
     assert_eq!(h.state().panels.scroll, 0.0);
 }
+
+#[test]
+fn every_relationship_end_draws_its_two_crows_foot_marks() {
+    use archforge_er::Cardinality as C;
+    // The shapes an end draws: its line segments and its circles.
+    let marks = |c: C| {
+        let ctx = egui::Context::default();
+        let mut out = ctx.run_ui(Default::default(), |ui| {
+            let p = crate::ux::palette(false);
+            let stroke = egui::Stroke::new(1.2, p.text);
+            crate::canvas::end_glyph(ui.painter(), p, egui::pos2(100.0, 100.0), egui::pos2(200.0, 100.0), Some(c), stroke, 1.0, false);
+        });
+        out.textures_delta.clear();
+        let shapes: Vec<egui::Shape> = out.shapes.into_iter().map(|s| s.shape).collect();
+        let lines = shapes.iter().filter(|s| matches!(s, egui::Shape::LineSegment { .. })).count();
+        let circles = shapes.iter().filter(|s| matches!(s, egui::Shape::Circle(c) if c.stroke.width > 0.0)).count();
+        (lines, circles)
+    };
+    // The outer mark is the most (a bar, or a crow's foot of two lines), the inner the fewest (a
+    // circle for zero, a bar for one).
+    assert_eq!(marks(C::ZeroOrOne), (1, 1));
+    assert_eq!(marks(C::ExactlyOne), (2, 0), "exactly one is two bars");
+    assert_eq!(marks(C::ZeroOrMore), (2, 1));
+    assert_eq!(marks(C::OneOrMore), (3, 0), "one or more is a bar and a crow's foot");
+}

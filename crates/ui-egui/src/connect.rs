@@ -110,14 +110,42 @@ pub fn self_loop(rect: Rect, z: f32) -> Vec<Pos2> {
     ]
 }
 
-/// Draws the ends of a short sample line, as the popover's choices and the live line show them.
-pub(crate) fn sample_line(paint: &egui::Painter, p: &Palette, centre: Pos2, from: Option<Cardinality>, to: Option<Cardinality>, ink: egui::Color32) {
+/// Draws the ends of a short sample line over `fill`, as the popover's choices show them.
+#[allow(clippy::too_many_arguments, reason = "a sample is drawn from its ends, its ink and what it is drawn on")]
+pub(crate) fn sample_line(
+    paint: &egui::Painter,
+    p: &Palette,
+    centre: Pos2,
+    from: Option<Cardinality>,
+    to: Option<Cardinality>,
+    ink: egui::Color32,
+    fill: egui::Color32,
+) {
     let z = 0.7;
     let (a, b) = (centre - vec2(18.0, 0.0), centre + vec2(18.0, 0.0));
     let stroke = Stroke::new(1.2, ink);
     paint.line_segment([a, b], stroke);
-    end_glyph(paint, p, a, b, from, stroke, z, false);
-    end_glyph(paint, p, b, a, to, stroke, z, false);
+    crate::canvas::end_glyph_on(paint, p, a, b, from, stroke, z, false, fill);
+    crate::canvas::end_glyph_on(paint, p, b, a, to, stroke, z, false, fill);
+}
+
+/// The relationship tool's icon: a short line with the ends the tool draws, small enough for its
+/// button, over `fill`.
+pub(crate) fn tool_line(
+    paint: &egui::Painter,
+    p: &Palette,
+    centre: Pos2,
+    from: Cardinality,
+    to: Cardinality,
+    ink: egui::Color32,
+    fill: egui::Color32,
+) {
+    let z = 0.5;
+    let (a, b) = (centre - vec2(14.0, 0.0), centre + vec2(14.0, 0.0));
+    let stroke = Stroke::new(1.2, ink);
+    paint.line_segment([a, b], stroke);
+    crate::canvas::end_glyph_on(paint, p, a, b, Some(from), stroke, z, false, fill);
+    crate::canvas::end_glyph_on(paint, p, b, a, Some(to), stroke, z, false, fill);
 }
 
 /// The cardinality popover above the toolbar's Relationship chevron.
@@ -151,7 +179,7 @@ pub(crate) fn popover(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, an
             if on {
                 paint.rect_stroke(b, 6.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
             }
-            sample_line(&paint, p, b.center(), from, to, if on { p.accent } else { p.text_secondary });
+            sample_line(&paint, p, b.center(), from, to, if on { p.accent } else { p.text_secondary }, if on { p.accent_tint } else { p.field });
             let key = ["preset", "start", "end"][row];
             let hint = match (from, to) {
                 (Some(f), Some(t)) => format!("{} — {}", cardinality_text(f), cardinality_text(t)),
