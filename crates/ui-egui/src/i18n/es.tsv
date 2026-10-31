@@ -179,13 +179,14 @@ str		project	proyecto
 str		overridden below	anulada más abajo
 str		Open the skill	Abrir la habilidad
 str		Skill name	Nombre de la habilidad
-str		What this skill is for and when it applies, in a sentence or two.	Para qué sirve esta habilidad y cuándo se aplica, en una o dos frases.
-str		Guidance	Orientación
+str		Use when …: say when this skill should be read and what it covers.	Use when …: indica cuándo debe leerse esta habilidad y qué cubre.
+str		One or two sentences on what this skill is for.	Una o dos frases sobre para qué sirve esta habilidad.
+str		Rules	Reglas
+str		Do: an example that follows the rules.	Sí: un ejemplo que sigue las reglas.
+str		Avoid: an example that breaks them.	Evitar: un ejemplo que las incumple.
 str		A rule to follow.	Una regla a seguir.
 str		Another rule.	Otra regla.
 str		Examples	Ejemplos
-str		Do: an example that follows the guidance.	Sí: un ejemplo que sigue la orientación.
-str		Avoid: an example that breaks it.	Evitar: un ejemplo que la incumple.
 str		Skill · on {subject}	Habilidad · en {subject}
 str		Skill · on the project	Habilidad · en el proyecto
 str		Skill text	Texto de la habilidad

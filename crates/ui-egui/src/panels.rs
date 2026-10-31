@@ -1496,6 +1496,8 @@ struct SkillRow {
     name: String,
     /// What it aims at, or where it comes from.
     detail: String,
+    /// The subject's own, which the row can remove; an inherited one is removed where it sits.
+    own: bool,
 }
 
 pub(crate) fn target_word(store: &Store, s: Obj) -> String {
@@ -1522,6 +1524,7 @@ fn skill_rows(store: &Store, subject: &Subject) -> (Vec<SkillRow>, Vec<SkillRow>
                 id: store.uuid(s).ok()?,
                 name: archforge_core::skills::name_of(store, s),
                 detail: if target.is_empty() { this.clone() } else { target },
+                own: true,
             })
         })
         .collect();
@@ -1538,6 +1541,7 @@ fn skill_rows(store: &Store, subject: &Subject) -> (Vec<SkillRow>, Vec<SkillRow>
                     id: store.uuid(e.skill).ok()?,
                     name: archforge_core::skills::name_of(store, e.skill),
                     detail: if e.overridden_by.is_some() { tr("overridden below") } else { origin },
+                    own: false,
                 })
             })
             .collect(),
@@ -1574,17 +1578,31 @@ fn skills(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32
 fn skill_row(shell: &mut Shell, ui: &egui::Ui, paint: &egui::Painter, p: &Palette, r: Rect, y: f32, row: &SkillRow, width: f32) -> f32 {
     let rect = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width.max(0.0), 30.0));
     let resp = control(shell, ui, &format!("workspace.skills.row.{}", row.id), "row", rect, true).on_hover_text(tr("Open the skill"));
+    // The subject's own skill can be removed from its row, the bin showing while the row is hovered.
+    let bin = Rect::from_min_size(pos2(rect.right() - 28.0, rect.top() + 3.0), Vec2::splat(24.0));
+    let bin_resp =
+        row.own.then(|| control(shell, ui, &format!("workspace.skills.remove.{}", row.id), "button", bin, true).on_hover_text(tr("Remove")));
+    let hovered = resp.hovered() || bin_resp.as_ref().is_some_and(|b| b.hovered());
     if shell.canvas.active == Some(row.id) {
         paint.rect_filled(rect, 5.0, p.accent_tint);
-    } else if resp.hovered() {
+    } else if hovered {
         paint.rect_filled(rect, 5.0, p.page);
     }
     ux::icon_in(paint, Rect::from_min_size(rect.min + vec2(8.0, 6.0), Vec2::splat(18.0)), &icons::SKILL, p.text_secondary);
+    let bin_w = if row.own { 26.0 } else { 0.0 };
     let detail = ux::galley(paint, &row.detail, types::CAPTION, p.text_muted, Some((width / 2.0).max(0.0)));
-    let name_room = (width - 34.0 - detail.size().x - 16.0).max(0.0);
+    let name_room = (width - 34.0 - detail.size().x - 16.0 - bin_w).max(0.0);
     ux::text(paint, rect.min + vec2(34.0, 6.5), &row.name, types::SMALL, p.text, Some(name_room));
-    paint.galley(pos2(rect.right() - 8.0 - detail.size().x, rect.top() + 8.0), detail, p.text_muted);
-    if resp.clicked() {
+    paint.galley(pos2(rect.right() - 8.0 - bin_w - detail.size().x, rect.top() + 8.0), detail, p.text_muted);
+    if row.own && hovered {
+        let ink = if bin_resp.as_ref().is_some_and(|b| b.hovered()) { p.danger } else { p.text_secondary };
+        ux::icon_in(paint, Rect::from_center_size(bin.center(), Vec2::splat(14.0)), &icons::TRASH, ink);
+    }
+    if bin_resp.is_some_and(|b| b.clicked()) {
+        if let Err(e) = run(shell, "skill.remove", json!({ "skill": row.id.to_string() })) {
+            shell.panels.notice = Some(e);
+        }
+    } else if resp.clicked() {
         crate::canvas::open(shell, row.id);
     }
     y + 30.0

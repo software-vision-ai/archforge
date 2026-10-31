@@ -1857,7 +1857,17 @@ fn the_skills_plus_makes_a_skill_and_opens_it_with_the_name_ready() {
     // It started from the template, whose title followed the name into the store.
     h.run();
     let body = st_body(&h, skill);
-    assert!(body.starts_with("# Customer naming\n") && body.contains("## Guidance"), "{body}");
+    assert!(body.starts_with("---\nname: customer-naming\n") && body.contains("\n# Customer naming\n") && body.contains("## Rules"), "{body}");
+    // The subject's own skill can be removed from its row without opening it.
+    let at = rect_of(&h, &format!("workspace.skills.remove.{skill}")).center();
+    click(&mut h, at);
+    h.run();
+    assert!(h.state().session.as_ref().unwrap().doc().by_uuid(skill).is_none_or(|o| !h.state().session.as_ref().unwrap().doc().is_alive(o)));
+    assert!(!h.state().canvas.tabs.contains(&skill), "its tab went with it");
+    h.state_mut().session.as_mut().unwrap().undo().unwrap();
+    h.run();
+    crate::canvas::open(h.state_mut(), skill);
+    h.run();
     // The tab holds the name and the text only.
     let found = ids(&h);
     assert!(!found.iter().any(|i| i.starts_with("workspace.skill.when") || i == "workspace.skill.applies"), "{found:?}");

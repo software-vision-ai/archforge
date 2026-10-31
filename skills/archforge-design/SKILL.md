@@ -181,11 +181,15 @@ the change, and update this file in the same change.
 - A link in Preview opens only after a confirmation that names its site and shows the whole
   address, and only when it is a web or mail address. Pictures in a skill are never loaded. A
   text too long or nested too deeply is shown plain in Write and not rendered in Preview.
-- The Skills panel only lists the skills: a click on a row opens the skill's tab; + makes a skill
-  on the selected element and opens its tab with the name selected, ready to type. A new skill's
-  text starts from a template in the interface's language: the name as its title, a line on what
-  it is for, Guidance and Examples, each with a hint to write over. While the title is still
-  `# <name>`, it follows a rename.
+- The Skills panel lists the skills: a click on a row opens the skill's tab; the bin that shows on
+  a hovered row of the element's own skills removes it without opening it (undo brings it back);
+  + makes a skill on the selected element and opens its tab with the name selected, ready to type.
+- A new skill's text starts from a template shaped as an agent's skill, in the interface's
+  language: a header between `---` lines with `name` (the name as a slug) and a `description`
+  that says when to read it, the name as the `#` title, a line on what it is for, then Rules and
+  Examples, each with a hint to write over. A rename carries into the header's name and the
+  title while they still match the old name. Write shows the header in a quiet monospace face;
+  Preview leaves it out and shows its description as the lead.
 - A skill's tab holds, top to bottom: the name as the page's title (Enter or leaving the field
   keeps it, Esc puts it back) with the bin at its right, where it sits, then the toolbar and the
   text. Where a skill applies and when are not shown for now (owner, 2026-10-31): skills will be
