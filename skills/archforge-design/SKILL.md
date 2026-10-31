@@ -54,7 +54,8 @@ the change, and update this file in the same change.
   keeps its bundle's light and dark icon.
 
 ## Home and projects
-- Home fills the window on its own, without menu bar, toolbar or status bar.
+- Home fills the window on its own, without menu bar, toolbar or status bar. Its welcome has no button:
+  a project opens from the Open a project card or the title strip's + Open project.
 - Recent projects keep the last twelve (name, folder, last opened) across restarts; a row opens
   its project, or shows its tab when it is open already.
 - The recent projects show as rows or as a gallery of cards standing in the start cards' columns,

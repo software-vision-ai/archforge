@@ -329,12 +329,9 @@ fn content(shell: &mut Shell, ui: &egui::Ui, p: &Palette, origin: Pos2, width: f
     let right = origin.x + width - MARGIN;
     let inner = (right - left).max(0.0);
     let at = |x: f32, y: f32| pos2(left + x, origin.y + y);
-    // The welcome, and Open project level with its title.
+    // The welcome. Opening a project is the start card's and the title strip's.
     ux::text(&paint, at(0.0, 39.0), &tr("Welcome home").to_uppercase(), types::EYEBROW, p.accent, None);
-    let label = tr("Open project");
-    let (probe, _) = button_rect(&paint, Pos2::ZERO, &label, true);
-    let open = Rect::from_min_size(pos2(right - probe.width(), origin.y + 73.0), probe.size());
-    ux::text(&paint, at(0.0, 67.0), &tr("Welcome to Archforge"), types::DISPLAY, p.text, Some((open.left() - left - 24.0).max(0.0)));
+    ux::text(&paint, at(0.0, 67.0), &tr("Welcome to Archforge"), types::DISPLAY, p.text, Some(inner));
     ux::text(
         &paint,
         at(0.0, 124.0),
@@ -343,19 +340,11 @@ fn content(shell: &mut Shell, ui: &egui::Ui, p: &Palette, origin: Pos2, width: f
         p.text_secondary,
         Some(inner),
     );
-    paint.rect_filled(open, 8.0, p.accent_fill);
-    ux::icon(&paint, open.min + vec2(BUTTON_PAD, 11.0), &icons::FOLDER, 18.0, p.on_accent);
-    ux::text(&paint, open.min + vec2(BUTTON_PAD + 18.0 + BUTTON_GAP, 10.5), &label, types::UI_STRONG, p.on_accent, None);
-    let live = can_open(shell);
-    if control(shell, ui, "home.open-project", "button", open, live).clicked() && live {
-        shell.open_from_picker();
-    }
-    // Why the last opening failed: the host's words, under the button.
+    // Why the last opening failed: the host's words, at the right, level with the title.
     if let Some(why) = shell.open_error.clone() {
         let line = crate::i18n::fmt(&tr("The project could not be opened: {why}"), &[("why", &why)]);
-        let width = (open.right() - at(0.0, 0.0).x).clamp(0.0, 480.0);
-        let g = ux::galley_rows(&paint, &line, types::CAPTION, p.danger, Some(width), 2);
-        paint.galley(pos2(open.right() - g.size().x, open.bottom() + 8.0), g, p.danger);
+        let g = ux::galley_rows(&paint, &line, types::CAPTION, p.danger, Some(inner.clamp(0.0, 480.0)), 2);
+        paint.galley(pos2(right - g.size().x, origin.y + 81.0), g, p.danger);
     }
     let mut y = 175.0;
     if !shell.state.home_banner_closed {
