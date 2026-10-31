@@ -743,6 +743,23 @@ fn a_pinned_folder_is_pinned_from_the_picker_opens_the_project_picker_in_it_and_
     assert_eq!(state.pinned, [std::path::PathBuf::from("/a/Models")]);
 }
 
+/// A folder whose path is not text is never pinned or listed, so the preferences file can always
+/// be written.
+#[cfg(unix)]
+#[test]
+fn a_folder_whose_path_is_not_text_is_neither_pinned_nor_listed_and_the_preferences_still_write() {
+    use std::os::unix::ffi::OsStrExt as _;
+    let odd = std::path::Path::new(std::ffi::OsStr::from_bytes(b"/tmp/odd\xff"));
+    let mut state = crate::state::UiState::default();
+    state.pin(odd);
+    state.remember("Odd", &odd.join("Odd.archforge"), 1);
+    assert!(state.pinned.is_empty() && state.recent.is_empty());
+    state.pinned.push(odd.to_path_buf());
+    state.sanitize();
+    assert!(state.pinned.is_empty(), "a preferences file cannot hold one either");
+    assert!(serde_json::to_vec(&state).is_ok());
+}
+
 #[test]
 fn at_most_eight_projects_open_at_once() {
     let (mut h, host) = saving_harness(None, Some("/tmp/Ninth.archforge"));

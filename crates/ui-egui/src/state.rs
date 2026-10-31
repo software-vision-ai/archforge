@@ -64,9 +64,10 @@ fn lenient_pinned<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<std::pat
     let entries: Vec<Entry> = Vec::deserialize(d)?;
     Ok(entries
         .into_iter()
-        .filter_map(|e| match e {
-            Entry::Read(p) => Some(p),
-            Entry::Unread(_) => None,
+        .map(|e| match e {
+            Entry::Read(p) => p,
+            // Left out and counted by sanitize: it is not absolute.
+            Entry::Unread(_) => std::path::PathBuf::new(),
         })
         .collect())
 }
@@ -80,12 +81,13 @@ const MAX_RECENT_PATH: usize = 4096;
 
 /// Whether a recent entry fits the list: a project name and an absolute folder of bounded length.
 fn recent_ok(name: &str, path: &std::path::Path) -> bool {
-    archforge_names::problem(name).is_none() && path.is_absolute() && path.as_os_str().len() <= MAX_RECENT_PATH
+    archforge_names::problem(name).is_none() && path.is_absolute() && path.as_os_str().len() <= MAX_RECENT_PATH && path.to_str().is_some()
 }
 
-/// Whether a folder fits Home's pinned list: absolute, of bounded length, with a name.
+/// Whether a folder fits Home's pinned list: absolute, of bounded length, with a name, and
+/// readable as text, as the preferences file must write it.
 fn pin_ok(path: &std::path::Path) -> bool {
-    path.is_absolute() && path.as_os_str().len() <= MAX_RECENT_PATH && path.file_name().is_some()
+    path.is_absolute() && path.as_os_str().len() <= MAX_RECENT_PATH && path.file_name().is_some() && path.to_str().is_some()
 }
 
 /// A project opened before: its name, its folder, and when it was last opened (seconds since 1970).
@@ -132,7 +134,11 @@ impl UiState {
     /// Pins the folder at `path` on Home, after the folders pinned already; a folder pinned
     /// already, one that does not fit the list or one past the most it keeps is not added.
     pub fn pin(&mut self, path: &std::path::Path) {
-        if !pin_ok(path) || self.pinned.iter().any(|p| p == path) {
+        if self.pinned.iter().any(|p| p == path) {
+            return;
+        }
+        if !pin_ok(path) {
+            log::warn!("{} is not pinned on Home: the folder does not fit the list", path.display());
             return;
         }
         if self.pinned.len() >= MAX_PINNED {

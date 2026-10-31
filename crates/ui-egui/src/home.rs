@@ -589,11 +589,14 @@ fn pinned_tile(shell: &mut Shell, ui: &egui::Ui, p: &Palette, paint: &egui::Pain
     }
     if shell.panels.menu == Some(menu) {
         let anchor = Rect::from_min_max(pos2(more.right() - 180.0, more.top()), more.max);
-        let items = [tr("Open a project here"), tr("Unpin")];
-        match crate::panels::menu(shell, ui, p, anchor, &format!("home.pinned.{i}.menu"), &items) {
-            Some(0) => shell.open_from_picker_in(Some(folder)),
-            Some(_) => shell.state.unpin(folder),
-            None => {}
+        // Opening is offered only while a project can open; unpinning always.
+        let items: Vec<String> = if live { vec![tr("Open a project here"), tr("Unpin")] } else { vec![tr("Unpin")] };
+        if let Some(k) = crate::panels::menu(shell, ui, p, anchor, &format!("home.pinned.{i}.menu"), &items) {
+            if live && k == 0 {
+                shell.open_from_picker_in(Some(folder));
+            } else {
+                shell.state.unpin(folder);
+            }
         }
     }
 }
