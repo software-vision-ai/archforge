@@ -220,6 +220,7 @@ str		Entity · {schema}	Entidad · {schema}
 str		Relationship	Relación
 str		Relationship types	Tipos de relación
 str		Note	Nota
+str		Link note	Enlazar nota
 str		Group	Grupo
 str		Group kinds	Tipos de grupo
 str		Key status	Estado de claves

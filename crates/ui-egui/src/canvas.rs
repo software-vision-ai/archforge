@@ -40,7 +40,7 @@ const FIT_MARGIN: f32 = 48.0;
 /// The minimap's box and the toolbar's pill.
 const MINIMAP: Vec2 = vec2(200.0, 156.0);
 const MINIMAP_GAP: Vec2 = vec2(16.0, 14.0);
-const TOOLBAR: Vec2 = vec2(342.0, 50.0);
+const TOOLBAR: Vec2 = vec2(376.0, 50.0);
 const TOOLBAR_GAP: f32 = 14.0;
 /// An entity node: its header's height, its first row's baseline, the pitch between rows, the
 /// text inset and the badge column.
@@ -66,6 +66,8 @@ pub enum Tool {
     Relationship,
     /// Places a note where the canvas is clicked (slice E4).
     Note,
+    /// Drags a link from a note to a table or a relationship's line.
+    Link,
 }
 
 /// What the centre keeps between frames: the open tabs, the view and the toggles.
@@ -383,7 +385,7 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
         Tool::Pan => {
             resp.clone().on_hover_cursor(if resp.dragged() { egui::CursorIcon::Grabbing } else { egui::CursorIcon::Grab });
         }
-        Tool::Entity | Tool::Relationship | Tool::Note => {
+        Tool::Entity | Tool::Relationship | Tool::Note | Tool::Link => {
             resp.clone().on_hover_cursor(egui::CursorIcon::Crosshair);
         }
         Tool::Select => {}
@@ -1084,12 +1086,13 @@ fn pos2_of((x, y): (f64, f64)) -> Pos2 {
 }
 
 /// The tools of the toolbar: automation id, icon, hover text, whether it works in this slice.
-const TOOLS: [(&str, &ux::Icon, &str, bool); 6] = [
+const TOOLS: [(&str, &ux::Icon, &str, bool); 7] = [
     ("select", &icons::TOOL_SELECT, "Select", true),
     ("pan", &icons::TOOL_PAN, "Pan", true),
     ("entity", &icons::TOOL_ENTITY, "Entity", true),
     ("relationship", &icons::TOOL_RELATIONSHIP, "Relationship", true),
     ("note", &icons::TOOL_NOTE, "Note", true),
+    ("link", &icons::TOOL_LINK_NOTE, "Link note", true),
     ("group", &icons::TOOL_GROUP, "Group", false),
 ];
 
@@ -1116,12 +1119,17 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     paint.rect_stroke(t, 12.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
     let button = |x: f32| Rect::from_min_size(pos2(t.left() + x, t.top() + 9.0), Vec2::splat(32.0));
     let divider = |x: f32| Rect::from_min_size(pos2(t.left() + x, t.top() + 15.0), vec2(1.0, 20.0));
-    let xs = [7.0, 41.0, 86.0, 120.0, 170.0, 204.0];
+    let xs = [7.0, 41.0, 86.0, 120.0, 170.0, 204.0, 238.0];
     for ((key, icon, hint, live), x) in TOOLS.iter().zip(xs) {
         let b = button(x);
         let active = matches!(
             (*key, shell.canvas.tool),
-            ("select", Tool::Select) | ("pan", Tool::Pan) | ("entity", Tool::Entity) | ("relationship", Tool::Relationship) | ("note", Tool::Note)
+            ("select", Tool::Select)
+                | ("pan", Tool::Pan)
+                | ("entity", Tool::Entity)
+                | ("relationship", Tool::Relationship)
+                | ("note", Tool::Note)
+                | ("link", Tool::Link)
         );
         if active {
             paint.rect_filled(b, 8.0, p.accent_tint);
@@ -1148,15 +1156,16 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
                 "entity" => shell.canvas.tool = Tool::Entity,
                 "relationship" => shell.canvas.tool = Tool::Relationship,
                 "note" => shell.canvas.tool = Tool::Note,
+                "link" => shell.canvas.tool = Tool::Link,
                 _ => {}
             }
         }
     }
-    for x in [75.0, 254.0] {
+    for x in [75.0, 288.0] {
         paint.rect_filled(divider(x), 0.0, p.border);
     }
     let mut chevron = None;
-    for (key, x, hint, live) in [("relationship-types", 154.0, "Relationship types", true), ("group-kinds", 238.0, "Group kinds", false)] {
+    for (key, x, hint, live) in [("relationship-types", 154.0, "Relationship types", true), ("group-kinds", 272.0, "Group kinds", false)] {
         let b = Rect::from_min_size(pos2(t.left() + x, t.top() + 9.0), vec2(14.0, 32.0));
         let open = live && shell.canvas.popover;
         ux::icon_in(
@@ -1182,9 +1191,9 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
         }
     }
     // The view group: key status and grid.
-    let group = Rect::from_min_size(pos2(t.left() + 265.0, t.top() + 7.0), vec2(70.0, 36.0));
+    let group = Rect::from_min_size(pos2(t.left() + 299.0, t.top() + 7.0), vec2(70.0, 36.0));
     paint.rect_filled(group, 8.0, p.page);
-    for (key, x, hint, on) in [("key-status", 267.0, "Key status", shell.canvas.key_status), ("grid", 301.0, "Grid", shell.canvas.grid)] {
+    for (key, x, hint, on) in [("key-status", 301.0, "Key status", shell.canvas.key_status), ("grid", 335.0, "Grid", shell.canvas.grid)] {
         let b = button(x);
         if on {
             paint.rect_filled(b, 8.0, p.accent_tint);

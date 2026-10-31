@@ -220,6 +220,7 @@ str		Entity · {schema}	实体 · {schema}
 str		Relationship	关系
 str		Relationship types	关系类型
 str		Note	备注
+str		Link note	链接备注
 str		Group	分组
 str		Group kinds	分组类型
 str		Key status	键状态

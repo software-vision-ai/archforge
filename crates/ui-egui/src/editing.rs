@@ -290,6 +290,28 @@ fn decide(
             }
             Action::Nothing
         }
+        Tool::Link => {
+            // Pressed on a note and dragged onto a table or a relationship's line, as the note's
+            // own link handle does.
+            if (resp.drag_stopped_by(egui::PointerButton::Primary) || released) && shell.canvas.gesture.is_some() {
+                return Action::Commit;
+            }
+            let Some(pos) = pos else { return Action::Nothing };
+            if resp.drag_started_by(egui::PointerButton::Primary) && shell.canvas.gesture.is_none() {
+                let from = origin.filter(|o| o.is_finite()).unwrap_or(pos);
+                return match hit_node(from).filter(|n| element_of(store, *n).is_none()).and_then(|n| uuid(store, n)) {
+                    Some(note) => Action::Start(Gesture::LinkNote { note }, None),
+                    None => Action::Nothing,
+                };
+            }
+            if resp.clicked() {
+                return match hit_node(pos) {
+                    Some(n) => Action::Select(uuid(store, element_of(store, n).unwrap_or(n)).into_iter().collect()),
+                    None => Action::Nothing,
+                };
+            }
+            Action::Nothing
+        }
         Tool::Note => match (resp.clicked(), pos) {
             (true, Some(pos)) => match hit_node(pos) {
                 Some(n) => Action::Select(uuid(store, element_of(store, n).unwrap_or(n)).into_iter().collect()),
@@ -497,6 +519,9 @@ fn commit(shell: &mut Shell, view: View, d: Obj, pointer: Option<Pos2>, shift: b
                     )
                 {
                     shell.canvas.notice = Some(e);
+                } else {
+                    // The link drawn, the tool hands back to Select, as the placing tools do.
+                    shell.canvas.tool = Tool::Select;
                 }
             } else {
                 shell.canvas.notice = Some(tr("Drop the link on a table or a relationship's line"));
