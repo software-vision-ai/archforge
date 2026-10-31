@@ -2076,6 +2076,43 @@ fn appearance_styles_the_selection_on_this_diagram() {
     assert!(!h.state().canvas.key_status, "the line colours show");
 }
 
+/// Presses at `points[0]`, moves through the rest and lets go at the last.
+fn drag_through(h: &mut Harness<'static, Shell>, points: &[egui::Pos2]) {
+    h.event(egui::Event::PointerMoved(points[0]));
+    h.event(egui::Event::PointerButton { pos: points[0], button: egui::PointerButton::Primary, pressed: true, modifiers: egui::Modifiers::NONE });
+    h.run();
+    for p in &points[1..] {
+        h.event(egui::Event::PointerMoved(*p));
+        h.run();
+    }
+    let last = points[points.len() - 1];
+    h.event(egui::Event::PointerButton { pos: last, button: egui::PointerButton::Primary, pressed: false, modifiers: egui::Modifiers::NONE });
+    h.run();
+}
+
+#[test]
+fn the_minimap_viewport_drags_the_view_without_the_map_rescaling_under_it() {
+    let (mut h, _, _) = diagram_harness();
+    let map = rect_of(&h, "workspace.minimap.view");
+    let start = map.center();
+    // A click centres the view where it lands.
+    click(&mut h, start);
+    let centred = h.state().canvas.pan;
+    // Dragging from there moves the view the other way, as the viewport follows the pointer.
+    let to = start + egui::vec2(20.0, 8.0);
+    drag_through(&mut h, &[start, to]);
+    let one_step = h.state().canvas.pan;
+    assert!(one_step.x < centred.x - 1.0 && one_step.y < centred.y - 1.0, "{centred:?} -> {one_step:?}");
+    assert!(h.state().canvas.minimap_drag.is_none(), "letting go ends the drag");
+    // The same drag in steps, from the same start, lands in the same place: the map keeps its
+    // scale while it lasts.
+    let (mut h, _, _) = diagram_harness();
+    click(&mut h, start);
+    drag_through(&mut h, &[start, start + egui::vec2(7.0, 3.0), start + egui::vec2(14.0, 5.0), to]);
+    let stepped = h.state().canvas.pan;
+    assert!((stepped - one_step).length() < 0.5, "{one_step:?} vs {stepped:?}");
+}
+
 fn drag(h: &mut Harness<'static, Shell>, from: egui::Pos2, to: egui::Pos2) {
     h.event(egui::Event::PointerMoved(from));
     h.event(egui::Event::PointerButton { pos: from, button: egui::PointerButton::Primary, pressed: true, modifiers: egui::Modifiers::NONE });
