@@ -43,7 +43,8 @@ fn home_draws_in_both_appearances_with_every_control_registered() {
         for id in ["strip.home", "strip.theme", "home.header.search", "home.start.open-project", "home.pin-folder", "home.banner.close"] {
             assert!(ids.iter().any(|i| i == id), "{theme:?}: {id} in {ids:?}");
         }
-        assert_eq!(ids.iter().filter(|i| i.starts_with("home.start.")).count(), 4, "the four start cards");
+        assert_eq!(ids.iter().filter(|i| i.starts_with("home.start.")).count(), 3, "the three start cards");
+        assert!(!ids.iter().any(|i| i == "home.start.import"), "{theme:?}: Import a model is hidden until importing exists");
         assert!(!ids.iter().any(|i| i == "home.open-project"), "{theme:?}: no Open project button in the welcome");
         assert_eq!(h.ctx.theme(), if theme.is_dark() { egui::Theme::Dark } else { egui::Theme::Light });
     }
