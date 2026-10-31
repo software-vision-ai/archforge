@@ -179,13 +179,14 @@ str		project	projet
 str		overridden below	remplacée plus bas
 str		Open the skill	Ouvrir la compétence
 str		Skill name	Nom de la compétence
-str		What this skill is for and when it applies, in a sentence or two.	À quoi sert cette compétence et quand elle s’applique, en une ou deux phrases.
-str		Guidance	Consignes
+str		Use when …: say when this skill should be read and what it covers.	Use when … : indiquez quand lire cette compétence et ce qu’elle couvre.
+str		One or two sentences on what this skill is for.	Une ou deux phrases sur l’objet de cette compétence.
+str		Rules	Règles
+str		Do: an example that follows the rules.	À faire : un exemple qui suit les règles.
+str		Avoid: an example that breaks them.	À éviter : un exemple qui ne les respecte pas.
 str		A rule to follow.	Une règle à suivre.
 str		Another rule.	Une autre règle.
 str		Examples	Exemples
-str		Do: an example that follows the guidance.	À faire : un exemple qui suit les consignes.
-str		Avoid: an example that breaks it.	À éviter : un exemple qui ne les respecte pas.
 str		Skill · on {subject}	Compétence · sur {subject}
 str		Skill · on the project	Compétence · sur le projet
 str		Skill text	Texte de la compétence

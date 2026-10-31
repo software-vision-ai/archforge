@@ -178,13 +178,14 @@ str		project	project
 str		overridden below	overridden below
 str		Open the skill	Open the skill
 str		Skill name	Skill name
-str		What this skill is for and when it applies, in a sentence or two.	What this skill is for and when it applies, in a sentence or two.
-str		Guidance	Guidance
+str		Use when …: say when this skill should be read and what it covers.	Use when …: say when this skill should be read and what it covers.
+str		One or two sentences on what this skill is for.	One or two sentences on what this skill is for.
+str		Rules	Rules
+str		Do: an example that follows the rules.	Do: an example that follows the rules.
+str		Avoid: an example that breaks them.	Avoid: an example that breaks them.
 str		A rule to follow.	A rule to follow.
 str		Another rule.	Another rule.
 str		Examples	Examples
-str		Do: an example that follows the guidance.	Do: an example that follows the guidance.
-str		Avoid: an example that breaks it.	Avoid: an example that breaks it.
 str		Skill · on {subject}	Skill · on {subject}
 str		Skill · on the project	Skill · on the project
 str		Skill text	Skill text

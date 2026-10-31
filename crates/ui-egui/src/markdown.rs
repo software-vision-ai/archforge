@@ -26,6 +26,8 @@ struct Look {
     dim: bool,
     quote: bool,
     link: bool,
+    /// The header between `---` lines at the top: the skill's name and description.
+    meta: bool,
 }
 
 /// The deepest nesting styled or rendered: quotes, lists and spans inside one another.
@@ -33,7 +35,44 @@ pub const MAX_DEPTH: usize = 32;
 
 /// The extensions a skill's Markdown may use besides CommonMark.
 fn options() -> Options {
-    Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TASKLISTS | Options::ENABLE_TABLES
+    Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TASKLISTS | Options::ENABLE_TABLES | Options::ENABLE_YAML_STYLE_METADATA_BLOCKS
+}
+
+/// Where the text after the header starts: the header is a first line `---`, the lines after it,
+/// and the next line `---`. Zero when the text has no header.
+pub fn body_start(text: &str) -> usize {
+    let mut lines = text.split_inclusive('\n');
+    if lines.next().map(str::trim_end) != Some("---") {
+        return 0;
+    }
+    let mut at = text.find('\n').map_or(text.len(), |i| i + 1);
+    for line in lines {
+        at += line.len();
+        if line.trim_end() == "---" {
+            return at;
+        }
+    }
+    0
+}
+
+/// The header's value for `key` (`name`, `description`), without the quotes around it.
+pub fn header_value(text: &str, key: &str) -> Option<String> {
+    let header = text.get(..body_start(text))?;
+    header.lines().find_map(|l| l.strip_prefix(key)?.strip_prefix(':')).map(|v| v.trim().trim_matches('"').to_string())
+}
+
+/// A name as a header's `name`: lower case, words joined by hyphens.
+pub fn slug(name: &str) -> String {
+    let mut out = String::new();
+    for c in name.trim().chars().flat_map(char::to_lowercase) {
+        if c.is_alphanumeric() {
+            out.push(c);
+        } else if !out.ends_with('-') && !out.is_empty() {
+            out.push('-');
+        }
+    }
+    let out = out.trim_end_matches('-').to_string();
+    if out.is_empty() { "skill".to_string() } else { out }
 }
 
 /// The extensions the rendered page reads with (the viewer's own set): footnotes and definition
@@ -74,6 +113,17 @@ fn lead(bytes: &[u8], range: Range<usize>, f: impl Fn(u8) -> bool) -> usize {
 fn looks(text: &str) -> Vec<Look> {
     let mut out = vec![Look::default(); text.len()];
     let bytes = text.as_bytes();
+    // The header: its fences and keys dimmed, its values in the header's face.
+    let header = body_start(text);
+    let mut at = 0;
+    for line in text.get(..header).unwrap_or_default().split_inclusive('\n') {
+        let key = if line.trim_end() == "---" { line.len() } else { line.find(':').map_or(0, |i| i + 1) };
+        for (k, look) in out.iter_mut().enumerate().skip(at).take(line.len()) {
+            look.meta = true;
+            look.dim = k - at < key;
+        }
+        at += line.len();
+    }
     let mut set = |range: Range<usize>, f: &dyn Fn(&mut Look)| {
         for look in out.get_mut(range.start.min(text.len())..range.end.min(text.len())).into_iter().flatten() {
             f(look);
@@ -194,7 +244,7 @@ fn format(look: Look, p: &Palette) -> TextFormat {
         4 => (types::BODY.size, 22.0, true),
         _ => (types::BODY.size, 22.0, look.strong),
     };
-    let font = if look.code {
+    let font = if look.code || look.meta {
         FontId::new(size - 1.0, FontFamily::Monospace)
     } else if semibold {
         FontId::new(size, types::BODY_STRONG.font().family)
@@ -207,7 +257,7 @@ fn format(look: Look, p: &Palette) -> TextFormat {
         p.purple
     } else if look.link {
         p.accent
-    } else if look.quote {
+    } else if look.quote || look.meta {
         p.text_secondary
     } else {
         p.text

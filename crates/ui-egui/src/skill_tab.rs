@@ -103,29 +103,57 @@ pub fn open(shell: &mut Shell, id: Uuid) {
     shell.canvas.focused = false;
 }
 
-/// The text a new skill starts from, in the interface's language: its name as the title, a line on
-/// what it is for, the guidance and examples, each with a hint to write over.
+/// The text a new skill starts from, shaped as an agent's skill is, in the interface's language:
+/// a header with its name and a description that says when to read it, the name as the title, a
+/// line on what it is for, then Rules and Examples, each with a hint to write over.
 pub fn template(name: &str) -> String {
     format!(
-        "# {name}\n\n{purpose}\n\n## {guidance}\n\n- {rule}\n- {another}\n\n## {examples}\n\n- {good}\n- {bad}\n",
-        purpose = tr("What this skill is for and when it applies, in a sentence or two."),
-        guidance = tr("Guidance"),
+        "---\nname: {slug}\ndescription: \"{when}\"\n---\n\n# {name}\n\n{purpose}\n\n## {rules}\n\n- {rule}\n- {another}\n\n## {examples}\n\n- {good}\n- {bad}\n",
+        slug = markdown::slug(name),
+        when = tr("Use when …: say when this skill should be read and what it covers."),
+        purpose = tr("One or two sentences on what this skill is for."),
+        rules = tr("Rules"),
         rule = tr("A rule to follow."),
         another = tr("Another rule."),
         examples = tr("Examples"),
-        good = tr("Do: an example that follows the guidance."),
-        bad = tr("Avoid: an example that breaks it."),
+        good = tr("Do: an example that follows the rules."),
+        bad = tr("Avoid: an example that breaks them."),
     )
 }
 
-/// `text` with its title following a rename: a first line that is `# old` becomes `# new`; any
-/// other text is left as it is.
+/// `text` following a rename, or none when nothing in it names the skill: the header's
+/// `name: <old>` becomes `name: <new>` (as slugs), and a title `# <old>` (the first line after the
+/// header) becomes `# <new>`. Any other text is left as it is.
 pub fn retitle(text: &str, old: &str, new: &str) -> Option<String> {
-    let (first, rest) = text.split_once('\n').map_or((text, None), |(f, r)| (f, Some(r)));
-    (first.trim_end() == format!("# {old}")).then(|| match rest {
-        Some(rest) => format!("# {new}\n{rest}"),
-        None => format!("# {new}"),
-    })
+    let header = markdown::body_start(text);
+    let (old_slug, new_slug) = (markdown::slug(old), markdown::slug(new));
+    let mut out = String::with_capacity(text.len() + new.len());
+    let mut changed = false;
+    let mut titled = false;
+    let mut at = 0;
+    for line in text.split_inclusive('\n') {
+        let (content, end) = line.strip_suffix('\n').map_or((line, ""), |c| (c, "\n"));
+        let content = content.strip_suffix('\r').unwrap_or(content);
+        let end = if line.ends_with("\r\n") { "\r\n" } else { end };
+        let replaced = if at < header {
+            (content.trim_end() == format!("name: {old_slug}")).then(|| format!("name: {new_slug}"))
+        } else if !titled && !content.trim().is_empty() {
+            titled = true;
+            (content.trim_end() == format!("# {old}")).then(|| format!("# {new}"))
+        } else {
+            None
+        };
+        match replaced {
+            Some(r) => {
+                changed = true;
+                out.push_str(&r);
+                out.push_str(end);
+            }
+            None => out.push_str(line),
+        }
+        at += line.len();
+    }
+    changed.then_some(out)
 }
 
 /// Makes a skill on `subject` (the model when none) under a fresh name, its text the template, and
@@ -365,8 +393,20 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, id: Uuid
     if shell.canvas.skills[i].preview {
         let now = ui.input(|inp| inp.time);
         sync(shell, now, true, Some(id));
-        let text = shell.canvas.skills[i].text.clone();
+        let full = shell.canvas.skills[i].text.clone();
+        // The header is for the agent that reads the skill: the page shows its description as the
+        // lead, then the text under it.
+        let text = full.get(markdown::body_start(&full)..).unwrap_or_default().to_string();
         widgets::record_visible(ui, &mut shell.registry, "workspace.skill.page", "text", page);
+        let mut page = page;
+        if let Some(lead) = markdown::header_value(&full, "description").filter(|d| !d.is_empty()) {
+            let g = ux::galley_rows(&paint, &lead, types::BODY, p.text_secondary, Some(page.width()), 3);
+            let h = g.size().y;
+            paint.galley(page.min, g, p.text_secondary);
+            page.min.y += h + 12.0;
+            child = ui.new_child(egui::UiBuilder::new().max_rect(page).id_salt(("workspace.skill.page", id)));
+            child.set_clip_rect(page.intersect(r));
+        }
         if !markdown::within_budget(&text) {
             let why = tr("This text is too long or nested too deeply to preview.");
             ux::text(&paint, page.min, &why, types::BODY, p.text_secondary, Some(page.width()));
@@ -632,17 +672,27 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_new_skill_starts_from_a_template_whose_title_follows_the_name() {
+    fn a_new_skill_starts_from_a_template_whose_name_and_title_follow_a_rename() {
         crate::i18n::set_language("en");
         let text = template("Skill 1");
-        assert!(text.starts_with("# Skill 1\n\n") && text.contains("## Guidance") && text.contains("## Examples"), "{text}");
+        assert!(text.starts_with("---\nname: skill-1\ndescription: \"Use when"), "{text}");
+        assert!(text.contains("\n---\n\n# Skill 1\n") && text.contains("## Rules") && text.contains("## Examples"), "{text}");
+        assert_eq!(markdown::header_value(&text, "name").as_deref(), Some("skill-1"));
+        assert!(markdown::header_value(&text, "description").is_some_and(|d| d.starts_with("Use when")));
+        assert!(text[markdown::body_start(&text)..].starts_with("\n# Skill 1"));
         assert!(markdown::within_budget(&text));
         assert!(archforge_core::skills::text_problem(&text, archforge_core::skills::MAX_BODY).is_none());
-        assert_eq!(retitle(&text, "Skill 1", "Customer naming").unwrap(), text.replacen("# Skill 1", "# Customer naming", 1));
+        let renamed = retitle(&text, "Skill 1", "Customer naming").unwrap();
+        assert_eq!(renamed, text.replacen("name: skill-1", "name: customer-naming", 1).replacen("# Skill 1", "# Customer naming", 1));
         assert_eq!(retitle("# Skill 1", "Skill 1", "X").as_deref(), Some("# X"));
-        for other in ["# Something else\n", "Skill 1", "## Skill 1\n", ""] {
+        assert_eq!(retitle("# Skill 1\r\nrest", "Skill 1", "X").as_deref(), Some("# X\r\nrest"));
+        for other in ["# Something else\n", "Skill 1", "## Skill 1\n", "", "intro\n# Skill 1\n"] {
             assert_eq!(retitle(other, "Skill 1", "X"), None, "{other:?}");
         }
+        assert_eq!(markdown::slug("  Customer naming / Keys "), "customer-naming-keys");
+        assert_eq!(markdown::slug("顧客 命名"), "顧客-命名");
+        assert_eq!(markdown::slug("!!"), "skill");
+        assert_eq!(markdown::body_start("---\nname: x\n"), 0, "an unclosed header is text");
     }
 
     #[test]
