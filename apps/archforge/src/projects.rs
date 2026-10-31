@@ -1,16 +1,19 @@
-//! The host's projects: creates and opens them on a worker thread, keeps the one that is open, and
-//! writes its model as the user works (owner decision archforge-gm2.17) on a writer thread: the
-//! newest rows a moment after the last change, all of them in one transaction; Save writes what
-//! waits and commits it. A failed write keeps the rows and tries again with the next change or
-//! Save; the status bar says why meanwhile.
+//! The host's projects: creates and opens them on a worker thread, keeps those that are open (one
+//! per tab of the window, at most [`MAX_OPEN`], each with its own server), and writes their models
+//! as the user works (owner decision archforge-gm2.17) on a writer thread: each project's newest
+//! rows a moment after its last change, all of them in one transaction; Save writes what waits and
+//! commits it. A failed write keeps the rows and tries again with the next change or Save; the
+//! status bar says why meanwhile.
 //!
-//! One creation or opening runs at a time. A project replaces the open one only once it is ready,
-//! after the open one's pending writes reached it, so a failure leaves the open project as it was.
-//! Rows and saves name their project: any that arrive for one no longer open are dropped, never
-//! written into the next. Dolt is found on the worker the first time, never on the interface
-//! thread. On exit what waits is written, the running work is cancelled and waited for, then the
+//! One creation or opening runs at a time, and a project joins the open ones only once it is
+//! ready, so a failure changes nothing that is open. Rows and saves name their project: any that
+//! arrive for one no longer open are dropped, never written into another. Closing a project runs
+//! as an opening does, one at a time, and writes what waits for it first; when that fails the
+//! project stays open and the window is told, so its tab stays. Dolt is found on the worker the
+//! first time, never on the interface thread. On exit what waits is written, the running work is cancelled and waited for, then every
 //! open project's server is stopped.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
@@ -24,14 +27,18 @@ use archforge_ui_egui::{CreateError, Opened, ProjectHost, Writing};
 
 /// How long the writer waits after a change for the next one before it writes.
 const SETTLE: Duration = Duration::from_millis(300);
-/// How long a creation or an opening waits for the old project's pending writes.
+/// How long a closing, or the exit, waits for pending writes.
 const FLUSH_BUDGET: Duration = Duration::from_secs(10);
+/// The most projects open at once, one per tab: each runs a database server.
+const MAX_OPEN: usize = archforge_ui_egui::MAX_TABS;
 
-/// The writer's work: a project's rows to write, or a save (write what waits, then commit the
-/// project named, or only write when none is) with its answer.
+/// The writer's work: a project's rows to write; a save (write what waits, then commit the
+/// project named, or only write when none is) with its answer; or a flush of one project (write
+/// what waits, answer whether that project's rows reached it).
 enum Job {
     Write(PathBuf, Rows),
     Save(Option<PathBuf>, Sender<Result<bool, String>>),
+    Flush(PathBuf, Sender<Result<(), String>>),
 }
 
 pub struct Projects {
@@ -43,9 +50,10 @@ struct Inner {
     settings: PathBuf,
     /// Who creates projects, for their settings: the version line.
     created_by: String,
-    /// Held for a whole creation or opening, so two never race.
+    /// Held for a whole creation, opening or closing, so two never race.
     job: Mutex<()>,
-    open: Mutex<Option<Project>>,
+    /// The open projects, one per tab.
+    open: Mutex<Vec<Project>>,
     dolt: Mutex<Option<Dolt>>,
     cancel: Arc<AtomicBool>,
     worker: Mutex<Option<std::thread::JoinHandle<()>>>,
@@ -53,7 +61,10 @@ struct Inner {
     schema: Mutex<Option<Arc<ModelSchema>>>,
     /// The writer thread's inbox, started with the first write.
     writer: Mutex<Option<Sender<Job>>>,
-    writing: Mutex<Writing>,
+    /// How writing stands, per project with rows waiting or a failed write.
+    writing: Mutex<BTreeMap<PathBuf, Writing>>,
+    /// The closings under way, waited for at exit.
+    closers: Mutex<Vec<std::thread::JoinHandle<()>>>,
 }
 
 /// A lock that a panic elsewhere left poisoned is taken over: the data behind it is still whole.
@@ -68,19 +79,20 @@ impl Projects {
                 settings: settings.to_path_buf(),
                 created_by,
                 job: Mutex::new(()),
-                open: Mutex::new(None),
+                open: Mutex::new(Vec::new()),
                 dolt: Mutex::new(None),
                 cancel: Arc::new(AtomicBool::new(false)),
                 worker: Mutex::new(None),
                 schema: Mutex::new(None),
                 writer: Mutex::new(None),
-                writing: Mutex::new(Writing::default()),
+                writing: Mutex::new(BTreeMap::new()),
+                closers: Mutex::new(Vec::new()),
             }),
         }
     }
 
     /// Cancels a running creation and waits for it within the stop budget (std's join has no
-    /// timeout, so it polls), then stops the open project's server. Runs on exit, on the interface
+    /// timeout, so it polls), then stops every open project's server. Runs on exit, on the interface
     /// thread: it may hold it for up to about twice the stop budget.
     pub fn shutdown(&self) {
         // Whatever waits to be written reaches the project before it closes.
@@ -102,7 +114,17 @@ impl Projects {
                 log::warn!("a project creation was still running at exit; the next start recovers what it left");
             }
         }
-        if let Some(project) = lock(&self.inner.open).take() {
+        // A closing still stopping its server finishes within the same budget.
+        for closer in std::mem::take(&mut *lock(&self.inner.closers)) {
+            while !closer.is_finished() && started.elapsed() < budget {
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            if closer.is_finished() {
+                let _ = closer.join();
+            }
+        }
+        let open: Vec<Project> = std::mem::take(&mut *lock(&self.inner.open));
+        for project in open {
             let path = project.path().display().to_string();
             if let Err(e) = project.close() {
                 log::error!("the project {path} did not close cleanly: {e}");
@@ -127,10 +149,10 @@ impl ProjectHost for Projects {
     }
 
     fn write(&self, project: &Path, rows: Rows) {
-        lock(&self.inner.writing).pending = true;
+        lock(&self.inner.writing).entry(project.to_path_buf()).or_default().pending = true;
         if let Err(e) = writer(&self.inner).send(Job::Write(project.to_path_buf(), rows)) {
             log::error!("the model could not be handed to the writer: {e}");
-            lock(&self.inner.writing).error = Some("the writer stopped".into());
+            lock(&self.inner.writing).entry(project.to_path_buf()).or_default().error = Some("the writer stopped".into());
         }
     }
 
@@ -142,8 +164,27 @@ impl ProjectHost for Projects {
         rx
     }
 
-    fn writing(&self) -> Writing {
-        lock(&self.inner.writing).clone()
+    fn writing(&self, project: &Path) -> Writing {
+        lock(&self.inner.writing).get(project).cloned().unwrap_or_default()
+    }
+
+    fn close(&self, project: &Path) -> Receiver<Result<(), String>> {
+        let (tx, rx) = channel();
+        let inner = self.inner.clone();
+        let path = project.to_path_buf();
+        let reply = tx.clone();
+        // Its server stops off the interface thread; what waits for it is written first.
+        match std::thread::Builder::new().name("archforge-close".into()).spawn(move || close_job(&inner, &path, &reply)) {
+            Ok(handle) => {
+                let mut closers = lock(&self.inner.closers);
+                closers.retain(|c| !c.is_finished());
+                closers.push(handle);
+            }
+            Err(e) => {
+                let _ = tx.send(Err(format!("the work could not start: {e}")));
+            }
+        }
+        rx
     }
 
     fn create(&self, folder: &Path, name: &str) -> Receiver<Result<Opened, CreateError>> {
@@ -167,7 +208,7 @@ impl ProjectHost for Projects {
 /// One creation, on the worker thread.
 fn job(inner: &Inner, folder: &Path, name: &str, reply: &Sender<Result<Opened, CreateError>>) {
     let _job = lock(&inner.job);
-    if let Err(e) = flush(inner) {
+    if let Err(e) = room(inner) {
         let _ = reply.send(Err(e));
         return;
     }
@@ -211,24 +252,30 @@ fn job(inner: &Inner, folder: &Path, name: &str, reply: &Sender<Result<Opened, C
 /// One opening, on the worker thread: the project's server, its model's tables and rows.
 fn open_job(inner: &Inner, path: &Path, reply: &Sender<Result<Opened, CreateError>>) {
     let _job = lock(&inner.job);
-    if let Err(e) = flush(inner) {
-        let _ = reply.send(Err(e));
+    // A project already open is read where it is (the window shows its tab when it has one),
+    // after what waits for it was written.
+    let same = |p: &&Project| std::fs::canonicalize(path).is_ok_and(|c| c == p.path() || std::fs::canonicalize(p.path()).is_ok_and(|q| q == c));
+    let held = lock(&inner.open).iter().find(same).map(|p| p.path().to_path_buf());
+    if let Some(held) = held
+        && let Err(e) = flush_one(inner, &held)
+    {
+        let _ = reply.send(Err(CreateError::Failed { detail: e }));
         return;
     }
-    // The open project chosen again is read where it is.
-    let same = |p: &Project| std::fs::canonicalize(path).is_ok_and(|c| c == p.path() || std::fs::canonicalize(p.path()).is_ok_and(|q| q == c));
-    if lock(&inner.open).as_ref().is_some_and(same) {
-        let open = lock(&inner.open);
-        let answer = match open.as_ref() {
-            Some(project) => schema(inner).and_then(|s| {
-                let rows = project.read_model(&s).map_err(kind)?;
-                let unsaved = project.has_unsaved().map_err(kind)?;
-                Ok(Opened { name: project.settings().name.clone(), path: project.path().to_path_buf(), model: Some(Arc::new(rows)), unsaved })
-            }),
-            None => Err(CreateError::Failed { detail: "the project closed while it was read".into() }),
-        };
+    let open = lock(&inner.open);
+    if let Some(project) = open.iter().find(same) {
+        let answer = schema(inner).and_then(|s| {
+            let rows = project.read_model(&s).map_err(kind)?;
+            let unsaved = project.has_unsaved().map_err(kind)?;
+            Ok(Opened { name: project.settings().name.clone(), path: project.path().to_path_buf(), model: Some(Arc::new(rows)), unsaved })
+        });
         drop(open);
         let _ = reply.send(answer);
+        return;
+    }
+    drop(open);
+    if let Err(e) = room(inner) {
+        let _ = reply.send(Err(e));
         return;
     }
     let result = dolt(inner).and_then(|dolt| {
@@ -266,21 +313,48 @@ fn open_job(inner: &Inner, path: &Path, reply: &Sender<Result<Opened, CreateErro
     let _ = reply.send(answer);
 }
 
-/// A project ready to be the open one replaces it, once the open one's pending writes reached it;
-/// when they could not, the open one stays and the new one is closed again, so no edit is lost.
-fn adopt(inner: &Inner, project: Project) -> Result<(), CreateError> {
-    if let Err(e) = flush(inner) {
-        let _ = project.close();
-        return Err(e);
-    }
-    let old = lock(&inner.open).replace(project);
-    *lock(&inner.writing) = Writing::default();
-    if let Some(old) = old
-        && let Err(e) = old.close()
-    {
-        log::warn!("the project open before did not close cleanly: {e}");
+/// Refuses another project when [`MAX_OPEN`] are open.
+fn room(inner: &Inner) -> Result<(), CreateError> {
+    if lock(&inner.open).len() >= MAX_OPEN {
+        return Err(CreateError::Failed { detail: format!("{MAX_OPEN} projects are open; close one to open another") });
     }
     Ok(())
+}
+
+/// A project ready to be open joins the open ones.
+fn adopt(inner: &Inner, project: Project) -> Result<(), CreateError> {
+    let mut open = lock(&inner.open);
+    if open.len() >= MAX_OPEN {
+        drop(open);
+        let _ = project.close();
+        return Err(CreateError::Failed { detail: format!("{MAX_OPEN} projects are open; close one to open another") });
+    }
+    open.push(project);
+    Ok(())
+}
+
+/// Closes the project at `path`, one job at a time: what waits for it is written, then its server
+/// stops. When its changes cannot be written it stays open and the answer says why, so the window
+/// keeps its tab and nothing is lost.
+fn close_job(inner: &Inner, path: &Path, reply: &Sender<Result<(), String>>) {
+    let _job = lock(&inner.job);
+    if let Err(e) = flush_one(inner, path) {
+        log::error!("{} stays open: {e}", path.display());
+        let _ = reply.send(Err(e));
+        return;
+    }
+    let project = {
+        let mut open = lock(&inner.open);
+        open.iter().position(|p| p.path() == path).map(|i| open.remove(i))
+    };
+    lock(&inner.writing).remove(path);
+    if let Some(project) = project {
+        log::info!("closed the project {}", path.display());
+        if let Err(e) = project.close() {
+            log::warn!("the project {} did not close cleanly: {e}", path.display());
+        }
+    }
+    let _ = reply.send(Ok(()));
 }
 
 /// The model's tables, described once from the ER crate's storage.
@@ -312,13 +386,14 @@ fn writer(inner: &Arc<Inner>) -> Sender<Job> {
     tx
 }
 
-/// The writer: the newest rows once changes settle; a save writes what waits, then commits. Rows
-/// that failed to be written are tried again with the next change or Save, not on a timer.
+/// The writer: each project's newest rows once changes settle; a save writes what waits, then
+/// commits. Rows that failed to be written are tried again with the next change or Save, not on a
+/// timer. What waits is one set of rows per open project at most.
 fn write_loop(inner: &Inner, rx: &Receiver<Job>) {
-    let mut waiting: Option<(PathBuf, Rows)> = None;
+    let mut waiting: BTreeMap<PathBuf, Rows> = BTreeMap::new();
     let mut failed = false;
     loop {
-        let job = if waiting.is_some() && !failed {
+        let job = if !waiting.is_empty() && !failed {
             match rx.recv_timeout(SETTLE) {
                 Ok(job) => Some(job),
                 Err(std::sync::mpsc::RecvTimeoutError::Timeout) => None,
@@ -335,53 +410,72 @@ fn write_loop(inner: &Inner, rx: &Receiver<Job>) {
         };
         match job {
             Some(Job::Write(project, rows)) => {
-                waiting = Some((project, rows));
+                waiting.insert(project, rows);
                 failed = false;
             }
             None => {
                 write_waiting(inner, &mut waiting);
-                failed = waiting.is_some();
+                failed = !waiting.is_empty();
             }
             Some(Job::Save(project, reply)) => {
                 write_waiting(inner, &mut waiting);
-                failed = waiting.is_some();
-                let answer = if waiting.is_some() {
-                    Err(lock(&inner.writing).error.clone().unwrap_or_else(|| "the changes could not be written".into()))
-                } else {
-                    project.map_or(Ok(false), |p| commit(inner, &p))
+                failed = !waiting.is_empty();
+                let answer = match project {
+                    // A save needs its own project's rows written; a flush needs all.
+                    Some(p) if waiting.contains_key(&p) => Err(unwritten(inner, &p)),
+                    Some(p) => commit(inner, &p),
+                    None => match waiting.keys().next() {
+                        Some(p) => Err(unwritten(inner, p)),
+                        None => Ok(false),
+                    },
                 };
                 let _ = reply.send(answer);
+            }
+            Some(Job::Flush(project, reply)) => {
+                write_waiting(inner, &mut waiting);
+                failed = !waiting.is_empty();
+                let _ = reply.send(if waiting.contains_key(&project) { Err(unwritten(inner, &project)) } else { Ok(()) });
             }
         }
     }
 }
 
-/// Writes the waiting rows to their project; on a failure they stay waiting. Rows for a project
-/// that is no longer open are dropped.
-fn write_waiting(inner: &Inner, waiting: &mut Option<(PathBuf, Rows)>) {
-    let Some((target, rows)) = waiting.as_ref() else { return };
-    let open = lock(&inner.open);
-    let Some(project) = open.as_ref().filter(|p| p.path() == target) else {
-        log::warn!("changes for {} arrived after it closed and are dropped", target.display());
-        *waiting = None;
-        *lock(&inner.writing) = Writing::default();
-        return;
-    };
-    let result = schema(inner).map_err(|e| format!("{e:?}")).and_then(|s| project.write_model(&s, rows).map_err(|e| e.to_string()));
-    drop(open);
-    let mut state = lock(&inner.writing);
-    match result {
-        Ok(()) => {
-            *waiting = None;
-            *state = Writing::default();
-        }
-        Err(e) => {
-            // The same failure again is said once.
-            if state.error.as_deref() != Some(e.as_str()) {
-                log::error!("the model could not be written: {e}");
+/// Why `project`'s rows could not be written, as the last write said.
+fn unwritten(inner: &Inner, project: &Path) -> String {
+    lock(&inner.writing).get(project).and_then(|w| w.error.clone()).unwrap_or_else(|| "the changes could not be written".into())
+}
+
+/// Writes the waiting rows to their projects; those that fail stay waiting, and each project's
+/// state says how its own writing stands. Rows for a project that is no longer open are dropped.
+fn write_waiting(inner: &Inner, waiting: &mut BTreeMap<PathBuf, Rows>) {
+    let targets: Vec<PathBuf> = waiting.keys().cloned().collect();
+    for target in targets {
+        let open = lock(&inner.open);
+        let Some(project) = open.iter().find(|p| p.path() == target) else {
+            log::warn!("changes for {} arrived after it closed and are dropped", target.display());
+            waiting.remove(&target);
+            drop(open);
+            lock(&inner.writing).remove(&target);
+            continue;
+        };
+        let Some(rows) = waiting.get(&target) else { continue };
+        let result = schema(inner).map_err(|e| format!("{e:?}")).and_then(|s| project.write_model(&s, rows).map_err(|e| e.to_string()));
+        drop(open);
+        let mut states = lock(&inner.writing);
+        match result {
+            Ok(()) => {
+                waiting.remove(&target);
+                states.remove(&target);
             }
-            state.pending = true;
-            state.error = Some(e);
+            Err(e) => {
+                let state = states.entry(target.clone()).or_default();
+                // The same failure again is said once.
+                if state.error.as_deref() != Some(e.as_str()) {
+                    log::error!("the model of {} could not be written: {e}", target.display());
+                }
+                state.pending = true;
+                state.error = Some(e);
+            }
         }
     }
 }
@@ -390,9 +484,25 @@ fn write_waiting(inner: &Inner, waiting: &mut Option<(PathBuf, Rows)>) {
 fn commit(inner: &Inner, target: &Path) -> Result<bool, String> {
     let now = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
     let message = format!("Saved {}", archforge_project::timestamp(now));
-    match lock(&inner.open).as_ref().filter(|p| p.path() == target) {
+    match lock(&inner.open).iter().find(|p| p.path() == target) {
         Some(project) => project.commit(&message).map_err(|e| e.to_string()),
         None => Err(format!("{} is no longer open", target.display())),
+    }
+}
+
+/// Waits until the writer has written what waits for `project`, within the flush budget; fails when
+/// it could not, or did not answer in time. Nothing waits when no writer runs.
+fn flush_one(inner: &Inner, project: &Path) -> Result<(), String> {
+    let Some(tx) = lock(&inner.writer).clone() else { return Ok(()) };
+    let (reply, answer) = channel();
+    let unwritten = |why: String| format!("its last changes could not be written ({why})");
+    if tx.send(Job::Flush(project.to_path_buf(), reply)).is_err() {
+        return Err(unwritten("the writer stopped".into()));
+    }
+    match answer.recv_timeout(FLUSH_BUDGET) {
+        Ok(Ok(())) => Ok(()),
+        Ok(Err(e)) => Err(unwritten(e)),
+        Err(_) => Err(unwritten(format!("writing took longer than {} seconds", FLUSH_BUDGET.as_secs()))),
     }
 }
 
@@ -401,8 +511,7 @@ fn commit(inner: &Inner, target: &Path) -> Result<bool, String> {
 fn flush(inner: &Inner) -> Result<(), CreateError> {
     let Some(tx) = lock(&inner.writer).clone() else { return Ok(()) };
     let (reply, answer) = channel();
-    let unwritten =
-        |why: String| CreateError::Failed { detail: format!("the open project's last changes could not be written ({why}); it stays open") };
+    let unwritten = |why: String| CreateError::Failed { detail: format!("the last changes could not be written ({why})") };
     if tx.send(Job::Save(None, reply)).is_err() {
         return Err(unwritten("the writer stopped".into()));
     }
@@ -455,8 +564,25 @@ mod tests {
         rx.recv_timeout(Duration::from_secs(60)).expect("the host answers")
     }
 
+    fn open_paths(host: &Projects) -> Vec<PathBuf> {
+        lock(&host.inner.open).iter().map(|p| p.path().to_path_buf()).collect()
+    }
+
+    fn gone(pid: u32) -> bool {
+        !std::process::Command::new("/bin/kill")
+            .args(["-0", &pid.to_string()])
+            .stderr(std::process::Stdio::null())
+            .status()
+            .is_ok_and(|s| s.success())
+    }
+
+    /// Closes `path` and waits for the answer.
+    fn close(host: &Projects, path: &Path) -> Result<(), String> {
+        host.close(path).recv_timeout(Duration::from_secs(60)).expect("the closing answers")
+    }
+
     #[test]
-    fn the_host_creates_a_project_keeps_it_open_refuses_its_name_again_and_stops_it_on_exit() {
+    fn the_host_keeps_several_projects_open_closes_one_on_request_and_all_on_exit() {
         let base = std::env::temp_dir().join(format!("af-host-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();
@@ -464,25 +590,26 @@ mod tests {
         let folder = base.join("Documents/Archforge");
         let opened = wait(&host.create(&folder, "Commerce platform")).unwrap();
         assert_eq!(opened.path, folder.canonicalize().unwrap().join("Commerce platform.archforge"));
-        let pid = lock(&host.inner.open).as_ref().map(|p| p.server().pid()).expect("the project is open");
+        let first_pid = lock(&host.inner.open)[0].server().pid();
         // The same name again is refused, and the open project stays open.
         assert_eq!(wait(&host.create(&folder, "Commerce platform")), Err(CreateError::NameTaken));
-        assert!(lock(&host.inner.open).is_some());
-        // A second project replaces the first, whose server stops.
+        // A second project opens beside the first.
         let second = wait(&host.create(&folder, "Library")).unwrap();
         assert_eq!(second.name, "Library");
-        let gone = |pid: u32| {
-            !std::process::Command::new("/bin/kill")
-                .args(["-0", &pid.to_string()])
-                .stderr(std::process::Stdio::null())
-                .status()
-                .is_ok_and(|s| s.success())
-        };
-        assert!(gone(pid), "the first project's server stopped");
-        let pid = lock(&host.inner.open).as_ref().map(|p| p.server().pid()).unwrap();
+        assert_eq!(open_paths(&host), [opened.path.clone(), second.path.clone()]);
+        assert!(!gone(first_pid), "the first project's server still runs");
+        // Closing one stops its server and leaves the other open.
+        close(&host, &opened.path).unwrap();
+        let started = Instant::now();
+        while !gone(first_pid) && started.elapsed() < Duration::from_secs(30) {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(gone(first_pid), "the closed project's server stopped");
+        assert_eq!(open_paths(&host), std::slice::from_ref(&second.path));
+        let pid = lock(&host.inner.open)[0].server().pid();
         host.shutdown();
-        assert!(gone(pid), "exit stopped the open project's server");
-        assert!(lock(&host.inner.open).is_none());
+        assert!(gone(pid), "exit stopped every open project's server");
+        assert!(open_paths(&host).is_empty());
         std::fs::remove_dir_all(&base).unwrap();
     }
 
@@ -506,7 +633,7 @@ mod tests {
     }
 
     #[test]
-    fn the_host_writes_saves_and_reopens_a_model_and_drops_rows_for_a_closed_project() {
+    fn the_host_writes_saves_and_reopens_models_and_drops_rows_for_a_closed_project() {
         let base = std::env::temp_dir().join(format!("af-save-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();
@@ -517,37 +644,47 @@ mod tests {
         let shop = model("shop");
         host.write(&first, model("draft"));
         host.write(&first, shop.clone());
-        assert!(host.writing().pending, "the rows wait for the changes to settle");
+        assert!(host.writing(&first).pending, "the rows wait for the changes to settle");
         assert_eq!(saved(&host, &first), Ok(true));
-        assert_eq!(host.writing(), Writing::default());
+        assert_eq!(host.writing(&first), Writing::default());
         let second = wait(&host.create(&folder, "Library")).unwrap().path;
-        let back = wait(&host.open(&first)).unwrap();
-        assert_eq!(back.model.as_deref(), Some(&shop), "the newest rows were written, the earlier ones replaced");
-        assert!(!back.unsaved);
-        // Rows written but never saved come back as unsaved.
+        // Each project's rows wait apart: writes to the second never displace the first's.
         let crm = model("crm");
         host.write(&first, crm.clone());
-        wait(&host.open(&second)).unwrap();
+        host.write(&second, model("books"));
+        assert_eq!(saved(&host, &second), Ok(true));
+        // Closed and opened again, the first shows its saved rows and the written ones as unsaved.
+        close(&host, &first).unwrap();
         let back = wait(&host.open(&first)).unwrap();
-        assert_eq!(back.model.as_deref(), Some(&crm));
+        assert_eq!(back.model.as_deref(), Some(&crm), "the newest rows were written before it closed");
         assert!(back.unsaved);
-        // Rows and a save for a project no longer open never reach the open one.
+        // An open project chosen again is read where it is.
+        let again = wait(&host.open(&first)).unwrap();
+        assert_eq!(again.model.as_deref(), Some(&crm));
+        assert_eq!(open_paths(&host).len(), 2);
+        // Rows and a save for a project no longer open are dropped.
+        close(&host, &second).unwrap();
         host.write(&second, model("stray"));
         assert!(saved(&host, &second).is_err());
         assert_eq!(saved(&host, &first), Ok(true));
-        let again = wait(&host.open(&first)).unwrap();
-        assert_eq!(again.model.as_deref(), Some(&crm));
-        // Rows that cannot be written keep the open project open: another is not opened over them.
+        // Rows that cannot be written keep their project open, and the closing says why; the
+        // failure is that project's own.
+        let third = wait(&host.create(&folder, "Billing")).unwrap().path;
         host.write(&first, Rows::default());
         assert!(saved(&host, &first).is_err());
-        assert!(host.writing().error.is_some(), "the status bar says why");
-        assert!(wait(&host.open(&second)).is_err(), "opening another would lose the changes");
-        assert_eq!(lock(&host.inner.open).as_ref().map(|p| p.path().to_path_buf()), Some(first.clone()));
-        // Rows that can be written clear the failure, and the other project opens.
+        assert!(host.writing(&first).error.is_some(), "the status bar says why");
+        assert_eq!(host.writing(&third), Writing::default(), "another project's status is its own");
+        assert!(close(&host, &first).is_err());
+        assert!(open_paths(&host).contains(&first), "it stays open");
+        // Another project closes meanwhile; its own rows reached it.
+        host.write(&third, model("invoices"));
+        close(&host, &third).unwrap();
+        // Rows that can be written clear the failure, and it closes.
         host.write(&first, crm.clone());
         assert_eq!(saved(&host, &first), Ok(false), "the same rows again leave nothing to commit");
-        assert_eq!(host.writing(), Writing::default());
-        wait(&host.open(&second)).unwrap();
+        assert_eq!(host.writing(&first), Writing::default());
+        close(&host, &first).unwrap();
+        assert!(open_paths(&host).is_empty());
         host.shutdown();
         std::fs::remove_dir_all(&base).unwrap();
     }

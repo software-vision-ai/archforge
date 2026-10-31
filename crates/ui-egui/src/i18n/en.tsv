@@ -9,6 +9,7 @@ str		{name} — Archforge	{name} — Archforge
 plural		{n} element	{n} element|{n} elements
 str		Recent projects	Recent projects
 str		Open project	Open project
+str		Close project	Close project
 str		Close	Close
 str		Home	Home
 str		Search projects and actions	Search projects and actions
@@ -193,7 +194,9 @@ str		Not saved	Not saved
 str		Changes could not be written to the project	Changes could not be written to the project
 str		The save stopped without an answer	The save stopped without an answer
 str		The opening stopped without an answer	The opening stopped without an answer
+str		The closing stopped without an answer	The closing stopped without an answer
 str		The project could not be opened: {why}	The project could not be opened: {why}
+str		The project could not be closed: {why}	The project could not be closed: {why}
 str		Model · the project's root	Model · the project's root
 str		Model	Model
 str		Name	Name

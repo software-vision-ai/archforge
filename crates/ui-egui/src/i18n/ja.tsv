@@ -10,6 +10,7 @@ str		{name} — Archforge	{name} — Archforge
 plural		{n} element	{n} 個の要素
 str		Recent projects	最近使ったプロジェクト
 str		Open project	プロジェクトを開く
+str		Close project	プロジェクトを閉じる
 str		Close	閉じる
 str		Home	ホーム
 str		Search projects and actions	プロジェクトと操作を検索
@@ -194,7 +195,9 @@ str		Not saved	保存されていません
 str		Changes could not be written to the project	変更をプロジェクトに書き込めませんでした
 str		The save stopped without an answer	保存が応答なしで終了しました
 str		The opening stopped without an answer	開く処理が応答なしで終了しました
+str		The closing stopped without an answer	閉じる処理が応答なしで終了しました
 str		The project could not be opened: {why}	プロジェクトを開けませんでした: {why}
+str		The project could not be closed: {why}	プロジェクトを閉じられませんでした: {why}
 str		Model · the project's root	モデル · プロジェクトのルート
 str		Model	モデル
 str		Name	名前

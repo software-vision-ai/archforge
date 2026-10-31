@@ -10,6 +10,7 @@ str		{name} — Archforge	{name} — Archforge
 plural		{n} element	{n} 个元素
 str		Recent projects	最近的项目
 str		Open project	打开项目
+str		Close project	关闭项目
 str		Close	关闭
 str		Home	主页
 str		Search projects and actions	搜索项目和操作
@@ -194,7 +195,9 @@ str		Not saved	未保存
 str		Changes could not be written to the project	无法将更改写入项目
 str		The save stopped without an answer	保存未返回结果即已停止
 str		The opening stopped without an answer	打开未返回结果即已停止
+str		The closing stopped without an answer	关闭未返回结果即已停止
 str		The project could not be opened: {why}	无法打开项目：{why}
+str		The project could not be closed: {why}	无法关闭项目：{why}
 str		Model · the project's root	模型 · 项目的根
 str		Model	模型
 str		Name	名称

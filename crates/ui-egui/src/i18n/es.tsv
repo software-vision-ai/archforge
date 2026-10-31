@@ -10,6 +10,7 @@ str		{name} — Archforge	{name} — Archforge
 plural		{n} element	{n} elemento|{n} elementos
 str		Recent projects	Proyectos recientes
 str		Open project	Abrir proyecto
+str		Close project	Cerrar proyecto
 str		Close	Cerrar
 str		Home	Inicio
 str		Search projects and actions	Buscar proyectos y acciones
@@ -194,7 +195,9 @@ str		Not saved	No guardado
 str		Changes could not be written to the project	No se pudieron escribir los cambios en el proyecto
 str		The save stopped without an answer	El guardado terminó sin respuesta
 str		The opening stopped without an answer	La apertura terminó sin respuesta
+str		The closing stopped without an answer	El cierre terminó sin respuesta
 str		The project could not be opened: {why}	No se pudo abrir el proyecto: {why}
+str		The project could not be closed: {why}	No se pudo cerrar el proyecto: {why}
 str		Model · the project's root	Modelo · la raíz del proyecto
 str		Model	Modelo
 str		Name	Nombre
