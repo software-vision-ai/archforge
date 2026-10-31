@@ -950,6 +950,13 @@ fn a_line_to_a_table_without_columns_starts_with_its_foreign_key_off() {
         format!("workspace.canvas.node.{}", st.uuid(n).unwrap())
     };
     let (from, to) = (node_of(&h, &customer), node_of(&h, &empty));
+    let columns_of = |h: &Harness<'static, Shell>, element: &str| {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let e = st.by_uuid(archforge_mof::Uuid::parse(element).unwrap()).unwrap();
+        st.list(e, archforge_er::entity::ATTRIBUTE).unwrap().len()
+    };
+    let before = (columns_of(&h, &customer), columns_of(&h, &empty));
+    assert_eq!(before.1, 0);
     let at = rect_of(&h, "workspace.tools.relationship").center();
     click(&mut h, at);
     let (a, b) = (rect_of(&h, &from).center(), rect_of(&h, &to).center());
@@ -958,6 +965,7 @@ fn a_line_to_a_table_without_columns_starts_with_its_foreign_key_off() {
     assert_eq!(rels.len(), 1, "{:?}", h.state().canvas.notice);
     let st = h.state().session.as_ref().unwrap().doc();
     assert!(!crate::connect::has_foreign_key(st, rels[0]), "Customer has its key, but Note has no columns: the key starts off");
+    assert_eq!((columns_of(&h, &customer), columns_of(&h, &empty)), before, "and no column is made on either table");
 }
 
 #[test]
