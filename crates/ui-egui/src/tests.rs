@@ -436,6 +436,34 @@ fn open_project_asks_the_picker_and_the_host_and_shows_the_model_it_read() {
 }
 
 #[test]
+fn a_table_box_saved_too_short_for_its_columns_opens_grown_without_an_undo_step() {
+    // A project written by an earlier version: Account holds two columns in a box that shows none.
+    let rows = {
+        let (mut h, host) = saving_harness(Some(commerce()), None);
+        let s = h.state_mut().session.as_mut().unwrap();
+        let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
+        let schema = id(s.execute("er.schema.add", &serde_json::json!({ "name": "shop" })).unwrap().value);
+        let account = id(s.execute("er.entity.add", &serde_json::json!({ "schema": schema, "name": "Account" })).unwrap().value);
+        for name in ["employee_id", "employee_id_2"] {
+            s.execute("er.attribute.add", &serde_json::json!({ "entity": account, "name": name, "type": "UUID" })).unwrap();
+        }
+        let d = id(s.execute("diagram.add", &serde_json::json!({ "kind": "er", "element": schema, "name": "Shop" })).unwrap().value);
+        s.execute("diagram.place", &serde_json::json!({ "diagram": d, "element": account, "x": 0, "y": 0, "width": 240, "height": 72 })).unwrap();
+        h.run_steps(2);
+        host.written.lock().unwrap().pop().unwrap().1
+    };
+    let opened = crate::Opened { model: Some(std::sync::Arc::new(rows)), ..commerce() };
+    let (h, host) = saving_harness(Some(opened), None);
+    let session = h.state().session.as_ref().expect("the model read opens");
+    let st = session.doc();
+    let node = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_diagram::NODE)).unwrap();
+    assert_eq!(archforge_diagram::grid::bounds_of(st, node).height, crate::editing::content_height(2), "the box shows both columns");
+    assert_eq!(session.undo_label(), None, "growing it is no step of the user's");
+    assert!(!session.is_dirty(), "nor a change to save");
+    assert!(host.written.lock().unwrap().is_empty());
+}
+
+#[test]
 fn a_project_that_never_held_a_model_opens_with_a_fresh_one() {
     // Its tables hold no row at all: made before projects were saved.
     let empty = crate::Opened { model: Some(std::sync::Arc::new(archforge_mof::rows::Rows::default())), ..commerce() };

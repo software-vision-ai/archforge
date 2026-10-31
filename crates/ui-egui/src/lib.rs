@@ -520,7 +520,7 @@ impl Shell {
                 let source = source.clone();
                 let ids = Box::new(move || source());
                 match rows {
-                    Some(rows) => archforge_er::session_from_rows(rows, ids).map(|mut s| {
+                    Some(rows) => archforge_er::session_from_rows_repaired(rows, ids, editing::fit_tables).map(|mut s| {
                         if project.unsaved {
                             s.mark_unsaved();
                         }
