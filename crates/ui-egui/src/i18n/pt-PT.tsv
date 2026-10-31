@@ -162,6 +162,7 @@ str		Identity, by default	Identidade, por predefinição
 str		Computed, stored	Calculada, armazenada
 str		Computed, virtual	Calculada, virtual
 str		Remove	Remover
+str		Edit	Editar
 str		Apply	Aplicar
 str		Inherited · {n}	Herdadas · {n}
 str		every table	todas as tabelas

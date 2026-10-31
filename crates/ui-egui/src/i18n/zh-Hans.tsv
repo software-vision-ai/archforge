@@ -162,6 +162,7 @@ str		Identity, by default	标识列，默认
 str		Computed, stored	计算列，存储
 str		Computed, virtual	计算列，虚拟
 str		Remove	移除
+str		Edit	编辑
 str		Apply	应用
 str		Inherited · {n}	继承 · {n}
 str		every table	所有表

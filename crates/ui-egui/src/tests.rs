@@ -1304,11 +1304,11 @@ fn table_harness() -> (Harness<'static, Shell>, String) {
 fn properties_lists_a_tables_columns_and_the_editor_changes_them_through_the_engine() {
     let (mut h, customer) = table_harness();
     let found = ids(&h);
-    let rows: Vec<String> = found.iter().filter(|i| i.starts_with("workspace.properties.column.0")).cloned().collect();
+    let rows: Vec<String> = found.iter().filter(|i| i.starts_with("workspace.properties.column.0") && !i.ends_with(".edit")).cloned().collect();
     assert_eq!(rows.len(), 2, "two column rows: {found:?}");
     assert!(found.iter().any(|i| i == "workspace.properties.kind"));
     // Open the second column's editor and make it unique and not null.
-    let at = rect_of(&h, &rows[1]).center();
+    let at = rect_of(&h, &format!("{}.edit", rows[1])).center();
     click(&mut h, at);
     assert!(h.state().panels.column.is_some(), "the editor opened");
     let at = rect_of(&h, "workspace.properties.column.unique").center();
@@ -1388,8 +1388,8 @@ fn apply_closes_a_new_columns_editor_after_a_type_is_picked_from_the_list() {
     let customer_obj = st.by_uuid(archforge_mof::Uuid::parse(&customer).unwrap()).unwrap();
     assert_eq!(st.list(customer_obj, archforge_er::entity::ATTRIBUTE).unwrap().len(), 3, "one column added");
     // Not null cannot be unticked under a key: it takes the key with it.
-    let rows: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.column.0")).collect();
-    let at = rect_of(&h, &rows[0]).center();
+    let rows: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.column.0") && !i.ends_with(".edit")).collect();
+    let at = rect_of(&h, &format!("{}.edit", rows[0])).center();
     click(&mut h, at);
     let at = rect_of(&h, "workspace.properties.column.not-null").center();
     click(&mut h, at);
@@ -1397,38 +1397,45 @@ fn apply_closes_a_new_columns_editor_after_a_type_is_picked_from_the_list() {
 }
 
 #[test]
-fn a_selected_column_opens_its_editor_once_so_cancel_and_add_stay_closed_and_open() {
+fn selecting_a_column_never_opens_its_editor_only_its_edit_button_does_and_selecting_elsewhere_closes_it() {
     let (mut h, customer) = table_harness();
-    let email = {
+    let select = |h: &mut Harness<'static, Shell>, id: &str| {
         let s = h.state_mut().session.as_mut().unwrap();
-        let st = s.doc();
-        let email = st.alive().find(|o| archforge_er::rules::name_of(st, *o) == "email").unwrap();
-        let email = st.uuid(email).unwrap().to_string();
-        s.execute("view.select", &serde_json::json!({ "ids": [email] })).unwrap();
-        email
+        s.execute("view.select", &serde_json::json!({ "ids": [id] })).unwrap();
     };
+    let email = {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let email = st.alive().find(|o| archforge_er::rules::name_of(st, *o) == "email").unwrap();
+        st.uuid(email).unwrap().to_string()
+    };
+    select(&mut h, &email);
     h.run();
-    assert!(h.state().panels.column.as_ref().is_some_and(|c| c.target.map(|t| t.to_string()) == Some(email.clone())), "the column's editor opened");
-    let at = rect_of(&h, "workspace.properties.column.cancel").center();
+    assert!(h.state().panels.column.is_none(), "selecting a column only marks its row: {:?}", h.state().panels.column);
+    let at = rect_of(&h, &format!("workspace.properties.column.{email}")).center();
     click(&mut h, at);
     h.run();
-    assert!(h.state().panels.column.is_none(), "Cancel stays closed: {:?}", h.state().panels.column);
+    assert!(h.state().panels.column.is_none(), "a click on the row does not open it either");
+    let at = rect_of(&h, &format!("workspace.properties.column.{email}.edit")).center();
+    click(&mut h, at);
+    h.run();
+    assert!(h.state().panels.column.as_ref().is_some_and(|c| c.target.map(|t| t.to_string()) == Some(email.clone())), "the edit button opens it");
+    // Selecting the table, then the column again: the editor closed and stays closed.
+    select(&mut h, &customer);
+    h.run();
+    assert!(h.state().panels.column.is_none(), "selecting elsewhere closes it");
+    select(&mut h, &email);
+    h.run();
+    assert!(h.state().panels.column.is_none(), "coming back does not reopen it");
+    // The + opens an editor for a new column; Cancel closes it and it stays closed.
     let at = rect_of(&h, "workspace.properties.columns.add").center();
     click(&mut h, at);
     h.run();
     assert!(h.state().panels.column.as_ref().is_some_and(|c| c.target.is_none()), "the + opens an editor for a new column");
-    // Selecting the table and the column again opens the column's editor once more.
-    {
-        let s = h.state_mut().session.as_mut().unwrap();
-        s.execute("view.select", &serde_json::json!({ "ids": [customer] })).unwrap();
-    }
+    let at = rect_of(&h, "workspace.properties.column.cancel").center();
+    click(&mut h, at);
     h.run();
-    {
-        let s = h.state_mut().session.as_mut().unwrap();
-        s.execute("view.select", &serde_json::json!({ "ids": [email] })).unwrap();
-    }
     h.run();
-    assert!(h.state().panels.column.as_ref().is_some_and(|c| c.target.map(|t| t.to_string()) == Some(email)));
+    assert!(h.state().panels.column.is_none(), "Cancel stays closed: {:?}", h.state().panels.column);
 }
 
 #[test]
@@ -2246,7 +2253,7 @@ fn the_key_editor_adds_a_unique_constraint_and_removes_the_primary_key() {
     let (mut h, customer) = table_harness();
     let found = ids(&h);
     assert!(found.iter().any(|i| i == "workspace.properties.keys.add"), "{found:?}");
-    let key_rows: Vec<String> = found.iter().filter(|i| i.starts_with("workspace.properties.key.row.")).cloned().collect();
+    let key_rows: Vec<String> = found.iter().filter(|i| i.starts_with("workspace.properties.key.row.") && !i.ends_with(".edit")).cloned().collect();
     assert_eq!(key_rows.len(), 1, "the primary key: {key_rows:?}");
     // + opens the editor for a new unique constraint; a column is added from the menu; Apply.
     let at = rect_of(&h, "workspace.properties.keys.add").center();
@@ -2268,8 +2275,8 @@ fn the_key_editor_adds_a_unique_constraint_and_removes_the_primary_key() {
     assert_eq!(archforge_er::rules::unique_constraints(st, customer_obj).len(), 1, "the unique constraint was added");
     assert_eq!(selected_name(&h), "Customer", "the table stays selected");
     // The primary key's row opens its editor; the bin removes the key, and the table gains a problem.
-    let pk_row = ids(&h).into_iter().find(|i| i.starts_with("workspace.properties.key.row.")).unwrap();
-    let at = rect_of(&h, &pk_row).center();
+    let pk_row = ids(&h).into_iter().find(|i| i.starts_with("workspace.properties.key.row.") && !i.ends_with(".edit")).unwrap();
+    let at = rect_of(&h, &format!("{pk_row}.edit")).center();
     click(&mut h, at);
     assert!(h.state().panels.key.as_ref().is_some_and(|k| k.primary));
     let at = rect_of(&h, "workspace.properties.key.remove").center();
@@ -2355,8 +2362,8 @@ fn problems_badge_the_canvas_and_a_note_is_placed_and_typed_in_place() {
 fn the_column_editor_sets_the_size_default_and_generation_and_the_heading_takes_a_description() {
     let (mut h, customer) = table_harness();
     // email becomes VARCHAR with a length of 255 and a default; the row shows VARCHAR(255).
-    let rows: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.column.0")).collect();
-    let at = rect_of(&h, &rows[1]).center();
+    let rows: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.column.0") && !i.ends_with(".edit")).collect();
+    let at = rect_of(&h, &format!("{}.edit", rows[1])).center();
     click(&mut h, at);
     h.state_mut().panels.column.as_mut().unwrap().ty = "VARCHAR".into();
     h.run();
@@ -2375,8 +2382,8 @@ fn the_column_editor_sets_the_size_default_and_generation_and_the_heading_takes_
     assert_eq!(archforge_er::rules::type_display(st, email), "VARCHAR(255)");
     assert_eq!(archforge_er::rules::text_of(st, email, archforge_er::attribute::DEFAULT), "''");
     // A numeric takes precision and scale; the scale above the precision is refused and the editor stays open.
-    let rows: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.column.0")).collect();
-    let at = rect_of(&h, &rows[1]).center();
+    let rows: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.column.0") && !i.ends_with(".edit")).collect();
+    let at = rect_of(&h, &format!("{}.edit", rows[1])).center();
     click(&mut h, at);
     {
         let c = h.state_mut().panels.column.as_mut().unwrap();
@@ -2397,8 +2404,8 @@ fn the_column_editor_sets_the_size_default_and_generation_and_the_heading_takes_
     let st = h.state().session.as_ref().unwrap().doc();
     assert_eq!(archforge_er::rules::type_display(st, email), "NUMERIC(4, 2)");
     // Generation: computed with an expression through the select and the expression field.
-    let rows: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.column.0")).collect();
-    let at = rect_of(&h, &rows[1]).center();
+    let rows: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.column.0") && !i.ends_with(".edit")).collect();
+    let at = rect_of(&h, &format!("{}.edit", rows[1])).center();
     click(&mut h, at);
     h.state_mut().panels.column.as_mut().unwrap().default.clear();
     let at = rect_of(&h, "workspace.properties.column.generation").center();
@@ -2452,7 +2459,7 @@ fn the_check_and_index_editors_write_through_the_engine_and_a_refusal_changes_no
     click(&mut h, at);
     assert!(h.state().panels.check.is_none(), "{:?}", h.state().panels.check);
     assert_eq!(archforge_er::rules::checks_of(h.state().session.as_ref().unwrap().doc(), customer_obj).len(), 1);
-    assert_eq!(ids(&h).iter().filter(|i| i.starts_with("workspace.properties.check.row.")).count(), 1);
+    assert_eq!(ids(&h).iter().filter(|i| i.starts_with("workspace.properties.check.row.") && !i.ends_with(".edit")).count(), 1);
     assert_eq!(selected_name(&h), "Customer");
     // + opens the index editor; two columns come from the menu, the second turns descending, the
     // first takes Nulls last from its right-click menu; Apply writes the index in one command.
@@ -2494,9 +2501,9 @@ fn the_check_and_index_editors_write_through_the_engine_and_a_refusal_changes_no
         assert_eq!(archforge_er::rules::display_name(st, indexes[0]), "ix_customer_customer_id_email");
     }
     assert_eq!(selected_name(&h), "Customer");
-    // The index row opens its editor; the bin removes the index.
-    let row = ids(&h).into_iter().find(|i| i.starts_with("workspace.properties.index.row.")).unwrap();
-    let at = rect_of(&h, &row).center();
+    // The index row's edit button opens its editor; the bin removes the index.
+    let row = ids(&h).into_iter().find(|i| i.starts_with("workspace.properties.index.row.") && !i.ends_with(".edit")).unwrap();
+    let at = rect_of(&h, &format!("{row}.edit")).center();
     click(&mut h, at);
     assert!(h.state().panels.index.as_ref().is_some_and(|i| i.target.is_some()));
     let at = rect_of(&h, "workspace.properties.index.remove").center();
@@ -2538,7 +2545,7 @@ fn key_columns_follow_their_target_until_unlinked_and_a_pure_mapping_table_colla
     let marks: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.column.") && i.ends_with(".link")).collect();
     assert_eq!(marks.len(), 1, "{marks:?}");
     let row = marks[0].trim_end_matches(".link").to_string();
-    let at = rect_of(&h, &row).center();
+    let at = rect_of(&h, &format!("{row}.edit")).center();
     click(&mut h, at);
     assert_eq!(h.state().panels.column.as_ref().and_then(|c| c.linked.as_deref()), Some("Customer.customer_id"));
     let at = rect_of(&h, "workspace.properties.column.unlink").center();
@@ -2548,7 +2555,7 @@ fn key_columns_follow_their_target_until_unlinked_and_a_pure_mapping_table_colla
     let at = rect_of(&h, "workspace.properties.column.cancel").center();
     click(&mut h, at);
     assert_eq!(ids(&h).iter().filter(|i| i.ends_with(".link")).count(), 1, "Cancel kept the link");
-    let at = rect_of(&h, &row).center();
+    let at = rect_of(&h, &format!("{row}.edit")).center();
     click(&mut h, at);
     let at = rect_of(&h, "workspace.properties.column.unlink").center();
     click(&mut h, at);
@@ -2609,7 +2616,7 @@ fn the_schema_lists_its_types_and_a_column_takes_an_enum_type_from_the_type_menu
     h.run();
     // The schema's Properties list the domain; + offers the kinds; the enum editor takes its
     // literals and Apply writes the enum type.
-    let rows: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.type.row.")).collect();
+    let rows: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.type.row.") && !i.ends_with(".edit")).collect();
     assert_eq!(rows.len(), 1, "{rows:?}");
     let at = rect_of(&h, "workspace.properties.types.add").center();
     click(&mut h, at);
@@ -2638,7 +2645,7 @@ fn the_schema_lists_its_types_and_a_column_takes_an_enum_type_from_the_type_menu
         (schema_obj, st.uuid(enums[0]).unwrap())
     };
     assert_eq!(selected_name(&h), "Shop", "the schema stays selected");
-    assert_eq!(ids(&h).iter().filter(|i| i.starts_with("workspace.properties.type.row.")).count(), 2);
+    assert_eq!(ids(&h).iter().filter(|i| i.starts_with("workspace.properties.type.row.") && !i.ends_with(".edit")).count(), 2);
     // The Models tree lists both types under the schema.
     assert!(ids(&h).iter().any(|i| *i == format!("workspace.explorer.row.{enum_id}")), "{:?}", ids(&h));
     // A column takes the enum type from its editor's type menu; the row shows the type's name.
@@ -2647,8 +2654,8 @@ fn the_schema_lists_its_types_and_a_column_takes_an_enum_type_from_the_type_menu
         s.execute("view.select", &serde_json::json!({ "ids": [customer] })).unwrap();
     }
     h.run();
-    let rows: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.column.0")).collect();
-    let at = rect_of(&h, &rows[1]).center();
+    let rows: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.column.0") && !i.ends_with(".edit")).collect();
+    let at = rect_of(&h, &format!("{}.edit", rows[1])).center();
     click(&mut h, at);
     let at = rect_of(&h, "workspace.properties.column.type.menu").center();
     click(&mut h, at);
@@ -2674,8 +2681,8 @@ fn the_schema_lists_its_types_and_a_column_takes_an_enum_type_from_the_type_menu
         s.execute("er.attribute.set-type", &serde_json::json!({ "attribute": email_id, "domain": domain })).unwrap();
     }
     h.run();
-    let rows: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.column.0")).collect();
-    let at = rect_of(&h, &rows[1]).center();
+    let rows: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.column.0") && !i.ends_with(".edit")).collect();
+    let at = rect_of(&h, &format!("{}.edit", rows[1])).center();
     click(&mut h, at);
     assert!(!ids(&h).iter().any(|i| i == "workspace.properties.column.default"), "a domain column shows no default of its own");
     h.state_mut().panels.column.as_mut().unwrap().not_null = true;
@@ -2753,7 +2760,7 @@ fn a_subtype_shows_in_the_supertypes_properties_and_the_toolbar_draws_no_general
 }
 
 #[test]
-fn the_schema_adds_and_edits_sequences_and_views_and_a_selected_one_opens_its_editor() {
+fn the_schema_adds_and_edits_sequences_and_views_and_a_selected_ones_edit_button_opens_its_editor() {
     let (mut h, _) = table_harness();
     let (schema, key) = {
         let s = h.state_mut().session.as_mut().unwrap();
@@ -2819,11 +2826,15 @@ fn the_schema_adds_and_edits_sequences_and_views_and_a_selected_one_opens_its_ed
         (st.uuid(seqs[0]).unwrap(), st.uuid(views[0]).unwrap())
     };
     assert_eq!(selected_name(&h), "Shop", "the schema stays selected");
-    // Both show in the Models tree; a click on one opens its editor under its schema's section.
+    // Both show in the Models tree; a click on one selects it under its schema's section, and its
+    // row's edit button opens its editor.
     for id in [seq, view] {
         assert!(ids(&h).iter().any(|i| *i == format!("workspace.explorer.row.{id}")), "{:?}", ids(&h));
     }
     let at = rect_of(&h, &format!("workspace.explorer.row.{view}")).center();
+    click(&mut h, at);
+    assert!(h.state().panels.object_edit.is_none(), "selecting it does not open its editor");
+    let at = rect_of(&h, &format!("workspace.properties.view.row.{view}.edit")).center();
     click(&mut h, at);
     assert!(h.state().panels.object_edit.as_ref().is_some_and(|e| e.target == Some(view) && e.materialized));
     // The bin removes it; the schema is selected again.
