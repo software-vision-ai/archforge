@@ -132,6 +132,8 @@ str		{name} has no primary key	{name} n’a pas de clé primaire
 str		{name} has subtypes but no primary key to share	{name} a des sous-types mais aucune clé primaire à partager
 str		{name} removed · {keys} went with it	{name} supprimée · {keys} est parti avec
 str		Add column	Ajouter une colonne
+str		Link to a table or a relationship	Lier à une table ou à une relation
+str		Drop the link on a table or a relationship's line	Déposez le lien sur une table ou sur la ligne d’une relation
 str		Edit column	Modifier la colonne
 str		Add skill	Ajouter une compétence
 str		Kind	Genre

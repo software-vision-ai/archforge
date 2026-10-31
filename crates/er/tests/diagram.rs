@@ -315,7 +315,8 @@ fn random_call(rng: &mut Rng, s: &Session) -> (&'static str, Json) {
     let nodes = ids_of(s, NODE);
     let edges = ids_of(s, EDGE);
     let name = format!("n{}", rng.next() % 30);
-    match rng.below(16) {
+    let views: Vec<String> = nodes.iter().chain(&edges).cloned().collect();
+    match rng.below(17) {
         0 if schemas.is_empty() => ("er.schema.add", json!({ "name": name })),
         0 | 1 => ("er.entity.add", json!({ "schema": rng.pick(&schemas), "name": name })),
         2 => (
@@ -337,6 +338,7 @@ fn random_call(rng: &mut Rng, s: &Session) -> (&'static str, Json) {
         13 => ("diagram.disconnect", json!({ "edge": rng.pick(&edges) })),
         14 if rng.below(8) == 0 => ("er.schema.remove", json!({ "schema": rng.pick(&schemas) })),
         14 => ("diagram.note", json!({ "diagram": rng.pick(&diagrams), "text": "n", "x": rng.coord(), "y": rng.coord() })),
+        15 => ("diagram.link-note", json!({ "diagram": rng.pick(&diagrams), "note": rng.pick(&nodes), "target": rng.pick(&views) })),
         _ => ("er.remove", json!({ "ids": [rng.pick(&entities).cloned().unwrap_or_default()] })),
     }
 }
@@ -361,4 +363,55 @@ fn random_sequences_keep_every_rule_and_undo_back_to_the_start() {
         }
         assert_eq!(picture(s.doc()), start, "seed {seed}: undo back to the start");
     }
+}
+
+#[test]
+fn a_note_linked_to_a_relationships_line_goes_with_every_command_that_removes_the_line() {
+    // Each command, from the sample with the note linked to the line; undo brings both back.
+    let link =
+        |s: &mut Session, sm: &Sample, edge: &str| run(s, "diagram.link-note", json!({ "diagram": sm.diagram, "note": sm.note, "target": edge }));
+    for which in ["remove relationship", "remove entity", "disconnect"] {
+        let mut s = session();
+        let sm = sample(&mut s);
+        let l = link(&mut s, &sm, &sm.edge);
+        let (cmd, p) = match which {
+            "remove relationship" => ("er.relationship.remove", json!({ "relationship": sm.places })),
+            "remove entity" => ("er.entity.remove", json!({ "entity": sm.order })),
+            _ => ("diagram.disconnect", json!({ "edge": sm.edge })),
+        };
+        round_trip(&mut s, cmd, &p);
+        assert!(!alive(s.doc(), &l), "{which}: the link went with the line");
+        no_problems(s.doc());
+    }
+    // Resolving a many-to-many into a mapping table, and collapsing it back.
+    let mut s = session();
+    let sm = sample(&mut s);
+    run(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": "id", "type": "BIGINT", "primary_key": true }));
+    let m2n = run(
+        &mut s,
+        "er.relationship.add",
+        json!({ "from": sm.customer, "to": sm.order, "from_end": "zero-or-more", "to_end": "zero-or-more", "name": "watches" }),
+    );
+    let line = run(&mut s, "diagram.connect", json!({ "diagram": sm.diagram, "element": m2n, "source": sm.customer_node, "target": sm.order_node }));
+    let l = link(&mut s, &sm, &line);
+    let resolve = json!({ "relationship": m2n });
+    round_trip(&mut s, "er.relationship.resolve", &resolve);
+    assert!(!alive(s.doc(), &l), "the link went with the many-to-many's line");
+    no_problems(s.doc());
+    let mapping = {
+        let st = s.doc();
+        let t = st.alive().find(|o| st.class_of(*o).ok() == Some(ENTITY) && rules::name_of(st, *o) == "customer_order").expect("the mapping table");
+        st.uuid(t).unwrap().to_string()
+    };
+    // A note linked to the mapping table's node goes when collapsing removes the table.
+    let node = {
+        let st = s.doc();
+        let t = obj(st, &mapping);
+        let n = archforge_diagram::views_of(st, t).2.first().copied().expect("the mapping table is placed");
+        st.uuid(n).unwrap().to_string()
+    };
+    let l = link(&mut s, &sm, &node);
+    round_trip(&mut s, "er.relationship.collapse", &json!({ "entity": mapping }));
+    assert!(!alive(s.doc(), &l));
+    no_problems(s.doc());
 }

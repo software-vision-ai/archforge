@@ -196,9 +196,9 @@ fn round_trip(s: &mut S, cmd: &str, p: &Json) {
 #[test]
 fn the_registry_and_the_metamodel_are_what_the_spec_says() {
     let reg = registry();
-    assert!(reg.ids().filter(|i| i.starts_with("diagram.")).count() == 18 && reg.ids().any(|i| i == "view.open-diagram"));
+    assert!(reg.ids().filter(|i| i.starts_with("diagram.")).count() == 19 && reg.ids().any(|i| i == "view.open-diagram"));
     let m = metamodel().unwrap();
-    assert_eq!(m.classes.len(), 7);
+    assert_eq!(m.classes.len(), 8, "with View, the abstract end of an edge");
     assert_eq!(m.data_types.len(), 6, "the five primitives and LabelPlace");
     assert_eq!(LabelPlace::from_index(1), Some(LabelPlace::Middle));
     assert_eq!(commands::place_name(LabelPlace::Target), "target");
@@ -550,7 +550,8 @@ fn random_call(rng: &mut Rng, s: &S) -> (&'static str, Json) {
     let classes = ids_of(s, CLASS);
     let gens = ids_of(s, GENERALIZATION);
     let places = ["source", "middle", "target"];
-    match rng.below(16) {
+    let views: Vec<String> = nodes.iter().chain(&edges).cloned().collect();
+    match rng.below(17) {
         0 if diagrams.len() < 2 => ("diagram.add", json!({ "kind": "toy.class", "name": format!("d{}", rng.next() % 9) })),
         0..=2 => ("diagram.place", json!({ "diagram": rng.pick(&diagrams), "element": rng.pick(&classes), "x": rng.coord(), "y": rng.coord() })),
         3 => (
@@ -571,6 +572,7 @@ fn random_call(rng: &mut Rng, s: &S) -> (&'static str, Json) {
         12 => ("diagram.style", json!({ "ids": [rng.pick(&nodes).cloned().unwrap_or_default()], "fill": "#abcdef", "line": rng.below(5) })),
         13 => ("diagram.disconnect", json!({ "edge": rng.pick(&edges) })),
         14 => ("diagram.unplace", json!({ "nodes": [rng.pick(&nodes).cloned().unwrap_or_default()] })),
+        15 => ("diagram.link-note", json!({ "diagram": rng.pick(&diagrams), "note": rng.pick(&nodes), "target": rng.pick(&views) })),
         _ if rng.below(10) == 0 => ("diagram.remove", json!({ "diagram": rng.pick(&diagrams) })),
         _ => ("diagram.style", json!({ "ids": [rng.pick(&edges).cloned().unwrap_or_default()] })),
     }
@@ -596,4 +598,103 @@ fn random_sequences_keep_every_rule_and_undo_back_to_the_start() {
         }
         assert_eq!(picture(s.doc()), start, "seed {seed}: undo back to the start");
     }
+}
+
+#[test]
+fn a_note_links_to_a_node_or_a_relationships_edge_and_goes_with_what_it_points_at() {
+    let (mut s, m) = session();
+    let sm = sample(&mut s, &m);
+    // A note links to the relationship's edge: an edge of its own, with no element.
+    let p = json!({ "diagram": sm.diagram, "note": sm.note, "target": sm.edge });
+    round_trip(&mut s, "diagram.link-note", &p);
+    s.undo().unwrap();
+    let link = run(&mut s, "diagram.link-note", p.clone());
+    assert_eq!(problems(s.doc()), Vec::<String>::new());
+    {
+        let st = s.doc();
+        let l = st.by_uuid(archforge_mof::Uuid::parse(&link).unwrap()).unwrap();
+        assert!(st.get(l, edge::ELEMENT).unwrap().as_ref().is_none(), "it changes no model element");
+        assert_eq!(st.get(l, edge::TARGET).unwrap().as_ref(), st.by_uuid(archforge_mof::Uuid::parse(&sm.edge).unwrap()));
+    }
+    // Twice, to itself, from a node that shows an element, or onto another link: refused.
+    let refused = |s: &mut S, p: Json| s.execute("diagram.link-note", &p).expect_err("refused").to_string();
+    assert!(refused(&mut s, p.clone()).contains("already"));
+    assert!(refused(&mut s, json!({ "diagram": sm.diagram, "note": sm.note, "target": sm.note })).contains("itself"));
+    assert!(refused(&mut s, json!({ "diagram": sm.diagram, "note": sm.a, "target": sm.b })).contains("only a note"));
+    assert!(refused(&mut s, json!({ "diagram": sm.diagram, "note": sm.note, "target": sm.anchor })).contains("another link"));
+    // A link to a node: the note to b.
+    let to_b = run(&mut s, "diagram.link-note", json!({ "diagram": sm.diagram, "note": sm.note, "target": sm.b }));
+    assert!(!to_b.is_empty());
+    // Disconnecting the relationship's edge takes the link on it; undo brings both back.
+    let before = picture(s.doc());
+    round_trip(&mut s, "diagram.disconnect", &json!({ "edge": sm.edge }));
+    assert!(s.doc().by_uuid(archforge_mof::Uuid::parse(&link).unwrap()).is_none(), "the link went with the edge");
+    assert_eq!(problems(s.doc()), Vec::<String>::new());
+    s.undo().unwrap();
+    assert_eq!(picture(s.doc()), before);
+    // Removing a node takes its edges and the links on them.
+    run(&mut s, "diagram.unplace", json!({ "nodes": [sm.a] }));
+    assert!(s.doc().by_uuid(archforge_mof::Uuid::parse(&link).unwrap()).is_none());
+    assert_eq!(problems(s.doc()), Vec::<String>::new());
+}
+
+#[test]
+fn shapes_only_a_file_can_hold_are_flagged_and_still_removed_whole() {
+    // Made in the store directly, as a damaged or merged file could hold them.
+    let mut st = store();
+    let d = st.create(DIAGRAM).unwrap();
+    let node = |st: &mut Store, element: Option<Obj>| {
+        let n = st.create(NODE).unwrap();
+        if let Some(el) = element {
+            st.set(n, node::ELEMENT, Value::Ref(el)).unwrap();
+        }
+        for (prop, v) in [(node::X, 0.0), (node::Y, 0.0), (node::WIDTH, 100.0), (node::HEIGHT, 60.0)] {
+            st.set(n, prop, Value::Real(v)).unwrap();
+        }
+        st.push(d, diagram::NODE, Value::Ref(n)).unwrap();
+        n
+    };
+    let line = |st: &mut Store, element: Option<Obj>, source: Obj, target: Option<Obj>| {
+        let e = st.create(EDGE).unwrap();
+        if let Some(el) = element {
+            st.set(e, edge::ELEMENT, Value::Ref(el)).unwrap();
+        }
+        st.set(e, edge::SOURCE, Value::Ref(source)).unwrap();
+        st.set(e, edge::TARGET, Value::Ref(target.unwrap_or(e))).unwrap();
+        st.push(d, diagram::EDGE, Value::Ref(e)).unwrap();
+        e
+    };
+    let (shown, other) = (st.create(CLASS).unwrap(), st.create(CLASS).unwrap());
+    let (a, b, note) = (node(&mut st, Some(shown)), node(&mut st, Some(other)), node(&mut st, None));
+    let relationship = line(&mut st, Some(shown), a, Some(b));
+    let anchor = line(&mut st, None, note, Some(a));
+    // A link onto a link, a link onto itself, and a line with an element that ends on a line.
+    let onto_link = line(&mut st, None, note, Some(anchor));
+    let onto_self = line(&mut st, None, note, None);
+    let elemental = line(&mut st, Some(other), a, Some(relationship));
+    let said = problems(&st).join("\n");
+    for (o, why) in [(onto_link, "links to another link"), (onto_self, "links to itself"), (elemental, "shows an element and ends on a line")] {
+        assert!(said.contains(&format!("{o} {why}")), "{o} {why} in:\n{said}");
+    }
+    // Each still goes, with what hangs on it: the anchor takes the link onto it, the self-link
+    // goes alone, the relationship's line takes the line onto it.
+    for o in [anchor, onto_self, relationship] {
+        destroy_edge_with_links(&mut st, o).unwrap();
+    }
+    for o in [anchor, onto_link, onto_self, relationship, elemental] {
+        assert!(!st.is_alive(o), "{o} went");
+    }
+}
+
+#[test]
+fn a_note_links_to_a_table_once_either_way_round_and_a_link_is_never_routed() {
+    let (mut s, m) = session();
+    let sm = sample(&mut s, &m);
+    // The sample's anchor runs from the note to a; linking again is a duplicate, and linking b to
+    // a, or the note to another note, is refused.
+    let refused = |s: &mut S, cmd: &str, p: Json| s.execute(cmd, &p).expect_err("refused").to_string();
+    assert!(refused(&mut s, "diagram.link-note", json!({ "diagram": sm.diagram, "note": sm.note, "target": sm.a })).contains("already"));
+    let other = run(&mut s, "diagram.note", json!({ "diagram": sm.diagram, "text": "two", "x": 600, "y": 300 }));
+    assert!(refused(&mut s, "diagram.link-note", json!({ "diagram": sm.diagram, "note": sm.note, "target": other })).contains("another note"));
+    assert!(refused(&mut s, "diagram.route", json!({ "edge": sm.anchor, "points": [{ "x": 1, "y": 2 }] })).contains("straight"));
 }

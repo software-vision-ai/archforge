@@ -169,6 +169,28 @@ pub fn problems(store: &Store) -> Vec<String> {
                     None => out.push(format!("{o} lacks a {what}")),
                 }
             }
+            // An edge's ends are nodes, but for a note link, which may end on a relationship's
+            // line (archforge-kjz.13): from a note, onto a line that shows an element, never onto
+            // itself or another link.
+            let end = |prop| store.get(o, prop).ok().and_then(|v| v.as_ref());
+            let is_line = |x: Obj| store.class_of(x).ok() == Some(EDGE);
+            let shows = |x: Obj, prop| store.get(x, prop).ok().and_then(|v| v.as_ref()).is_some();
+            if end(edge::SOURCE).is_some_and(is_line) {
+                out.push(format!("{o} starts on a line"));
+            }
+            if let Some(t) = end(edge::TARGET).filter(|t| is_line(*t)) {
+                if shows(o, edge::ELEMENT) {
+                    out.push(format!("{o} shows an element and ends on a line"));
+                }
+                if t == o {
+                    out.push(format!("{o} links to itself"));
+                } else if !shows(t, edge::ELEMENT) {
+                    out.push(format!("{o} links to another link"));
+                }
+                if end(edge::SOURCE).is_some_and(|s| is_line(s) || shows(s, node::ELEMENT)) {
+                    out.push(format!("{o} ends on a line but does not start at a note"));
+                }
+            }
             if store.list(o, edge::WAYPOINT).unwrap_or_default().len() > MAX_WAYPOINTS {
                 out.push(format!("{o} has more than {MAX_WAYPOINTS} waypoints"));
             }

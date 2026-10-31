@@ -132,6 +132,8 @@ str		{name} has no primary key	{name} に主キーがありません
 str		{name} has subtypes but no primary key to share	{name} にはサブタイプがありますが、共有する主キーがありません
 str		{name} removed · {keys} went with it	{name} を削除しました · {keys} も削除されました
 str		Add column	列を追加
+str		Link to a table or a relationship	テーブルまたはリレーションシップにリンク
+str		Drop the link on a table or a relationship's line	リンクはテーブルまたはリレーションシップの線の上で離してください
 str		Edit column	列を編集
 str		Add skill	スキルを追加
 str		Kind	種類

@@ -132,6 +132,8 @@ str		{name} has no primary key	{name} 没有主键
 str		{name} has subtypes but no primary key to share	{name} 有子类型，但没有可共享的主键
 str		{name} removed · {keys} went with it	已删除 {name} · {keys} 随之删除
 str		Add column	添加列
+str		Link to a table or a relationship	链接到表或关系
+str		Drop the link on a table or a relationship's line	请将链接放在表或关系的线上
 str		Edit column	编辑列
 str		Add skill	添加技能
 str		Kind	种类

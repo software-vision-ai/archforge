@@ -41,7 +41,7 @@
       </ownedAttribute>
     </packagedElement>
     <packagedElement xmi:type="uml:Class" xmi:id="Node" name="Node">
-      <generalization xmi:type="uml:Generalization" xmi:id="Node-_generalization" general="Element"/>
+      <generalization xmi:type="uml:Generalization" xmi:id="Node-_generalization" general="View"/>
       <ownedAttribute xmi:type="uml:Property" xmi:id="Node-element" name="element">
         <type href="archforge:mof#Any"/>
         <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Node-element-_lowerValue"/>
@@ -75,13 +75,13 @@
       </ownedAttribute>
     </packagedElement>
     <packagedElement xmi:type="uml:Class" xmi:id="Edge" name="Edge">
-      <generalization xmi:type="uml:Generalization" xmi:id="Edge-_generalization" general="Element"/>
+      <generalization xmi:type="uml:Generalization" xmi:id="Edge-_generalization" general="View"/>
       <ownedAttribute xmi:type="uml:Property" xmi:id="Edge-element" name="element">
         <type href="archforge:mof#Any"/>
         <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Edge-element-_lowerValue"/>
       </ownedAttribute>
-      <ownedAttribute xmi:type="uml:Property" xmi:id="Edge-source" name="source" type="Node"/>
-      <ownedAttribute xmi:type="uml:Property" xmi:id="Edge-target" name="target" type="Node"/>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Edge-source" name="source" type="View"/>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Edge-target" name="target" type="View"/>
       <ownedAttribute xmi:type="uml:Property" xmi:id="Edge-waypoint" name="waypoint" type="Point" isOrdered="true" aggregation="composite" subsettedProperty="Element-ownedElement">
         <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Edge-waypoint-_lowerValue"/>
         <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="Edge-waypoint-_upperValue" value="*"/>
@@ -139,6 +139,9 @@
       <ownedAttribute xmi:type="uml:Property" xmi:id="Style-line" name="line">
         <type href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Real"/>
       </ownedAttribute>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Class" xmi:id="View" name="View" isAbstract="true">
+      <generalization xmi:type="uml:Generalization" xmi:id="View-_generalization" general="Element"/>
     </packagedElement>
   </uml:Package>
 </xmi:XMI>
