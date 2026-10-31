@@ -997,6 +997,16 @@ fn a_line_to_a_table_without_columns_starts_with_its_foreign_key_off() {
 }
 
 #[test]
+fn the_app_icon_is_read_and_averaged_down_with_clean_clear_edges() {
+    let src = [255, 0, 0, 255, 0, 0, 255, 255, 0, 255, 0, 0, 0, 255, 0, 0];
+    assert_eq!(crate::ux::scale_rgba(&src, 2, 1), [128, 0, 128, 128], "colour and coverage kept, a clear pixel's colour left out");
+    let mark = crate::ux::app_icon_rgba(56).expect("the picture built in reads");
+    assert_eq!(mark.len(), 56 * 56 * 4);
+    assert!(mark[(28 * 56 + 5) * 4 + 3] > 200, "the tile fills the mark's square");
+    assert!(crate::ux::app_icon_rgba(4096).is_none(), "never scaled up");
+}
+
+#[test]
 fn at_most_eight_projects_open_at_once() {
     let (mut h, host) = saving_harness(None, Some("/tmp/Ninth.archforge"));
     for i in 0..crate::MAX_TABS {

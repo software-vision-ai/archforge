@@ -25,12 +25,12 @@ serde.workspace = true
 serde_json.workspace = true
 log.workspace = true
 skrifa.workspace = true
+# Reads the app icon built in for the bar's brand mark; it also writes the snapshot example's picture.
+png.workspace = true
 
 [dev-dependencies]
 egui_kittest = { workspace = true, features = ["wgpu"] }
 serde_json.workspace = true
-# Writes the snapshot example's picture.
-png.workspace = true
 
 [[example]]
 name = "snapshot"
