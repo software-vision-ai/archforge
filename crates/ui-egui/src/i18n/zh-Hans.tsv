@@ -341,6 +341,9 @@ plural		{n} hour ago	{n} 小时前
 str		Yesterday	昨天
 plural		{n} day ago	{n} 天前
 str		Last opened	上次打开
+str		Sort	排序
+str		List	列表
+str		Gallery	图库
 str		No recent projects yet	暂无最近的项目
 str		Projects you create or open will appear here.	你创建或打开的项目将显示在这里。
 str		Your models, your workspace.	你的模型，你的工作区。

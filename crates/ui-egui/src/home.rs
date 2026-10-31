@@ -15,6 +15,7 @@
 use egui::{Color32, Pos2, Rect, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
 
 use crate::i18n::tr;
+use crate::state::{RecentSort, RecentView};
 use crate::theme::ThemeKind;
 use crate::ux::{self, Palette, icons, types};
 use crate::{Shell, widgets};
@@ -39,6 +40,8 @@ const ONE_UP: f32 = 560.0;
 /// A recent project's row and the distance from one row's top to the next.
 const ROW: f32 = 52.0;
 const ROW_PITCH: f32 = 56.0;
+/// A gallery card's height.
+const CARD_HEIGHT: f32 = 200.0;
 /// A button's height, padding and the gap between its icon and its label.
 const BUTTON: f32 = 40.0;
 const BUTTON_PAD: f32 = 16.0;
@@ -414,36 +417,82 @@ fn content(shell: &mut Shell, ui: &egui::Ui, p: &Palette, origin: Pos2, width: f
     let line = origin.y + y + 14.5;
     let switch = Rect::from_min_size(pos2(right - 118.0, line - 19.0), vec2(118.0, 38.0));
     let chevron = Rect::from_min_size(pos2(switch.left() - 43.5, line - 8.0), Vec2::splat(16.0));
-    let sort_label = ux::galley(&paint, &tr("Last opened"), types::SMALL, p.text_secondary, None);
+    let sort_word = match shell.state.recent_sort {
+        RecentSort::LastOpened => tr("Last opened"),
+        RecentSort::Name => tr("Name"),
+    };
+    let sort_label = ux::galley(&paint, &sort_word, types::SMALL, p.text_secondary, None);
     let sort_at = pos2(chevron.left() - 20.5 - sort_label.size().x, line - 8.5);
     let sort = Rect::from_min_max(pos2(sort_at.x - 8.0, switch.top()), pos2(chevron.right() + 8.0, switch.bottom()));
+    let sort_open = shell.panels.menu == Some(crate::panels::Menu::RecentSort);
+    let sort_resp = control(shell, ui, "home.recent.sort", "button", sort, true).on_hover_text(tr("Sort"));
+    if sort_resp.hovered() || sort_open {
+        paint.rect_filled(sort, 8.0, p.surface);
+    }
     paint.galley(sort_at, sort_label, p.text_secondary);
     ux::icon(&paint, chevron.min + vec2(4.0, 6.0), &icons::CHEVRON_DOWN, 8.0, p.text_secondary);
-    control(shell, ui, "home.recent.sort", "button", sort, false);
+    if sort_resp.clicked() {
+        shell.panels.menu = if sort_open { None } else { Some(crate::panels::Menu::RecentSort) };
+    }
     paint.rect_filled(switch, 8.0, p.surface);
     paint.rect_stroke(switch, 8.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
     let list = Rect::from_min_size(switch.min + vec2(4.0, 4.0), vec2(51.0, 30.0));
     let grid = Rect::from_min_size(switch.min + vec2(63.0, 4.0), vec2(51.0, 30.0));
-    paint.rect_filled(list, 5.0, p.accent_tint);
-    ux::icon_in(&paint, list, &icons::LIST, p.accent);
-    ux::icon_in(&paint, grid, &icons::GRID, p.text_secondary);
-    control(shell, ui, "home.recent.list", "toggle", list, true);
-    control(shell, ui, "home.recent.grid", "toggle", grid, false);
+    for (b, view, icon, key, hint) in
+        [(list, RecentView::List, &icons::LIST, "list", tr("List")), (grid, RecentView::Gallery, &icons::GRID, "grid", tr("Gallery"))]
+    {
+        let on = shell.state.recent_view == view;
+        if on {
+            paint.rect_filled(b, 5.0, p.accent_tint);
+        }
+        ux::icon_in(&paint, b, icon, if on { p.accent } else { p.text_secondary });
+        if control(shell, ui, &format!("home.recent.{key}"), "toggle", b, true).on_hover_text(hint).clicked() {
+            shell.state.recent_view = view;
+        }
+    }
     let mut row_top = y + 75.0;
     if shell.state.recent.is_empty() {
         ux::text(&paint, at(0.0, row_top), &tr("No recent projects yet"), types::UI, p.text_secondary, Some(inner));
         ux::text(&paint, at(0.0, row_top + 28.0), &tr("Projects you create or open will appear here."), types::SMALL, p.text_secondary, Some(inner));
         row_top += 45.0 + 11.0;
     } else {
-        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
-        for (i, project) in shell.state.recent.clone().iter().enumerate() {
-            let row = Rect::from_min_size(at(0.0, row_top), vec2(inner, ROW));
-            if recent_row(shell, ui, p, &paint, row, i, project, now) {
-                shell.open_path(&project.path);
+        let now = now();
+        let projects = sorted_recent(&shell.state.recent, shell.state.recent_sort);
+        match shell.state.recent_view {
+            RecentView::List => {
+                for (i, project) in projects.iter().enumerate() {
+                    let row = Rect::from_min_size(at(0.0, row_top), vec2(inner, ROW));
+                    if recent_row(shell, ui, p, &paint, row, i, project, now) {
+                        shell.open_path(&project.path);
+                    }
+                    row_top += ROW_PITCH;
+                }
+                row_top += ROW - ROW_PITCH + 11.0;
             }
-            row_top += ROW_PITCH;
+            RecentView::Gallery => {
+                // The cards stand in the start cards' columns, so the page lines up.
+                let columns = per_row as f32;
+                let width = ((inner - (columns - 1.0) * GAP) / columns).max(0.0);
+                for (i, project) in projects.iter().enumerate() {
+                    let (row, column) = ((i as f32 / columns).floor(), i as f32 % columns);
+                    let card = Rect::from_min_size(at(column * (width + GAP), row_top + row * (CARD_HEIGHT + GAP)), vec2(width, CARD_HEIGHT));
+                    if recent_card(shell, ui, p, &paint, card, i, project, now) {
+                        shell.open_path(&project.path);
+                    }
+                }
+                let rows = (projects.len() as f32 / columns).ceil();
+                row_top += rows * (CARD_HEIGHT + GAP) - GAP + 11.0;
+            }
         }
-        row_top += ROW - ROW_PITCH + 11.0;
+    }
+    if shell.panels.menu == Some(crate::panels::Menu::RecentSort) {
+        let anchor = Rect::from_min_max(pos2((sort.right() - 160.0).min(sort.left()), sort.top()), sort.max);
+        let items = [tr("Last opened"), tr("Name")];
+        match crate::panels::menu(shell, ui, p, anchor, "home.recent.sort", &items) {
+            Some(0) => shell.state.recent_sort = RecentSort::LastOpened,
+            Some(_) => shell.state.recent_sort = RecentSort::Name,
+            None => {}
+        }
     }
     // The footer: a rule and two lines, after the page or at the window's bottom, whichever is
     // lower.
@@ -539,6 +588,66 @@ fn pinned_tile(shell: &mut Shell, ui: &egui::Ui, p: &Palette, paint: &egui::Pain
     ux::icon(paint, pos2(r.right() - 33.0, r.top() + 33.0), &icons::MORE, 17.0, p.text_muted);
 }
 
+/// The time now, in seconds since 1970, as the recent list records it.
+pub(crate) fn now() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
+}
+
+/// The recent projects in the order the user chose: the last opened first, or by name, A to Z
+/// whatever the case, the last opened first among equal names.
+fn sorted_recent(recent: &[crate::state::RecentProject], sort: RecentSort) -> Vec<crate::state::RecentProject> {
+    let mut out = recent.to_vec();
+    out.sort_by_key(|r| std::cmp::Reverse(r.opened));
+    if sort == RecentSort::Name {
+        out.sort_by_cached_key(|r| r.name.to_lowercase());
+    }
+    out
+}
+
+/// A recent project's model picture in `r`: the design's 82 by 48 thumbnail, scaled to fit `r`
+/// and centred in it, four tables joined by links on the hue's tint.
+fn model_thumb(p: &Palette, paint: &egui::Painter, r: Rect, hue: Hue) {
+    let k = (r.width() / 82.0).min(r.height() / 48.0);
+    let art = Rect::from_center_size(r.center(), vec2(82.0, 48.0) * k);
+    paint.rect_filled(r, 6.0, hue.tint(p));
+    ux::icon(paint, art.min + vec2(23.0, 14.0) * k, &icons::MODEL_LINKS, 36.0 * k, hue.ink(p));
+    for (x, y) in [(11.0, 7.0), (48.0, 7.0), (11.0, 28.0), (48.0, 28.0)] {
+        let e = Rect::from_min_size(art.min + vec2(x, y) * k, vec2(23.0, 13.0) * k);
+        paint.rect_filled(e, 2.0, p.surface);
+        paint.rect_stroke(e, 2.0, Stroke::new(1.0, hue.ink(p)), StrokeKind::Inside);
+    }
+}
+
+/// A recent project's card in the gallery: its model picture, its name, where it lives and when
+/// it was last opened; true when clicked.
+#[allow(clippy::too_many_arguments, reason = "a card takes its place in the gallery and the time it is read at")]
+fn recent_card(
+    shell: &mut Shell,
+    ui: &egui::Ui,
+    p: &Palette,
+    paint: &egui::Painter,
+    r: Rect,
+    i: usize,
+    project: &crate::state::RecentProject,
+    now: u64,
+) -> bool {
+    let live = shell.services.projects.is_some();
+    let mut resp = control(shell, ui, &format!("home.recent.{i}"), "card", r, live);
+    if live {
+        resp = resp.on_hover_text(project.path.display().to_string());
+    }
+    paint.rect_filled(r, 12.0, p.surface);
+    paint.rect_stroke(r, 12.0, Stroke::new(1.0, if resp.hovered() { p.border_hover } else { p.border }), StrokeKind::Inside);
+    let thumb = Rect::from_min_size(r.min + vec2(8.0, 8.0), vec2((r.width() - 16.0).max(0.0), 112.0));
+    model_thumb(p, paint, thumb, [Hue::Blue, Hue::Green, Hue::Purple][i % 3]);
+    let w = (r.width() - 32.0).max(0.0);
+    ux::text(paint, r.min + vec2(16.0, 132.0), &project.name, types::BODY_STRONG, p.text, Some(w));
+    let place = shell.location_of(&project.path).unwrap_or_default();
+    ux::text(paint, r.min + vec2(16.0, 156.0), &place, types::CAPTION, p.text_secondary, Some(w));
+    ux::text(paint, r.min + vec2(16.0, 176.0), &ago(project.opened, now), types::SMALL, p.text_secondary, Some(w));
+    live && resp.clicked()
+}
+
 /// A recent project's row: its name and where it lives, when it was last opened; true when clicked.
 #[allow(clippy::too_many_arguments, reason = "a row takes its place in the list and the time it is read at")]
 fn recent_row(
@@ -561,15 +670,7 @@ fn recent_row(
         paint.rect_filled(r, 8.0, p.surface);
         paint.rect_stroke(r, 8.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
     }
-    let hue = [Hue::Blue, Hue::Green, Hue::Purple][i % 3];
-    let thumb = Rect::from_min_size(r.min + vec2(12.0, 2.0), vec2(82.0, 48.0));
-    paint.rect_filled(thumb, 6.0, hue.tint(p));
-    ux::icon(paint, thumb.min + vec2(23.0, 14.0), &icons::MODEL_LINKS, 36.0, hue.ink(p));
-    for (x, y) in [(11.0, 7.0), (48.0, 7.0), (11.0, 28.0), (48.0, 28.0)] {
-        let e = Rect::from_min_size(thumb.min + vec2(x, y), vec2(23.0, 13.0));
-        paint.rect_filled(e, 2.0, p.surface);
-        paint.rect_stroke(e, 2.0, Stroke::new(1.0, hue.ink(p)), StrokeKind::Inside);
-    }
+    model_thumb(p, paint, Rect::from_min_size(r.min + vec2(12.0, 2.0), vec2(82.0, 48.0)), [Hue::Blue, Hue::Green, Hue::Purple][i % 3]);
     let w = r.width();
     ux::text(paint, r.min + vec2(112.0, 6.0), &project.name, types::BODY_STRONG, p.text, Some(w * 0.674 - 136.0));
     let place = shell.location_of(&project.path).unwrap_or_default();

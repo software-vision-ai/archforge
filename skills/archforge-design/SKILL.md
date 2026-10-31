@@ -57,6 +57,8 @@ the change, and update this file in the same change.
 - Home fills the window on its own, without menu bar, toolbar or status bar.
 - Recent projects keep the last twelve (name, folder, last opened) across restarts; a row opens
   its project, or shows its tab when it is open already.
+- The recent projects show as rows or as a gallery of cards standing in the start cards' columns,
+  sorted by last opened (newest first) or by name; both choices are kept in the preferences.
 - One project holds one model, named as the project. The New project dialog asks for a name and a
   location only; a taken or unfinished name is said in plain words under the field.
 - Open project uses the system's folder picker; a damaged, newer or foreign project is refused

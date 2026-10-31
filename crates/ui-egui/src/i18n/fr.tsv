@@ -341,6 +341,9 @@ plural		{n} hour ago	il y a {n} heure|il y a {n} heures
 str		Yesterday	Hier
 plural		{n} day ago	il y a {n} jour|il y a {n} jours
 str		Last opened	Dernière ouverture
+str		Sort	Trier
+str		List	Liste
+str		Gallery	Galerie
 str		No recent projects yet	Aucun projet récent pour l’instant
 str		Projects you create or open will appear here.	Les projets que vous créez ou ouvrez apparaîtront ici.
 str		Your models, your workspace.	Vos modèles, votre espace de travail.
