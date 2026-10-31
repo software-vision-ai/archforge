@@ -7,7 +7,8 @@ description: "Use when adding or changing anything Archforge draws or says: a sc
 
 The interface is `crates/ui-egui`, the only library crate that may use the toolkit. It draws the
 design: when the design changes, the code follows it, and a correction the owner makes to the look
-goes into the design first. `crates/ui-egui/README.md` lists the crate's public items.
+goes into the design first. `crates/ui-egui/README.md` lists the crate's public items. The
+decisions taken so far about how it looks and behaves are in `skills/archforge-design/SKILL.md`.
 
 ## Draw through `ux`
 - Colours come from the palette, `ux::palette(dark)` (`crates/ui-egui/src/ux/mod.rs`): `LIGHT` and
@@ -30,13 +31,17 @@ goes into the design first. `crates/ui-egui/README.md` lists the crate's public 
   sentence. When in doubt, draw the icon and show it beside the design before falling back to text.
 - An icon is a thin stroke at the design's weight and size, never a scaled-up copy; an icon without
   text always has a tooltip and an automation id.
+- An icon is our own drawing in Archforge's style, never a copy of a classic tool's. Draw it at its
+  natural size, so it matches its neighbours, and look at it at 1x as well as on a retina screen
+  before it is final: thin gaps, such as a dashed line's, close up at 1x.
 
 ## Controls
 - Every interactive control is registered with an automation id, its kind and its rectangle, as
   `control` in `crates/ui-egui/src/home.rs` does through `crates/ui-egui/src/widgets.rs`. Ids are
   dotted, lower-case and stable: `<screen>.<area>.<thing>`, such as `strip.home`. The tests find
   controls by id, never by position.
-- A control whose screen does not exist yet says "Not available yet" on hover.
+- A control whose screen does not exist yet says "Not available yet" on hover. A canvas tool that
+  is not built is left out of the toolbar instead.
 - The interface never touches the file system: what it needs from the host comes through
   `Services` (`skills/archforge-crash-safety/SKILL.md`).
 
