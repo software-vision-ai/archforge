@@ -108,12 +108,9 @@ pub fn all(store: &Store) -> Vec<Problem> {
                 } else {
                     (end(archforge_er::relationship::TO), end(archforge_er::relationship::FROM))
                 };
-                let text = fmt(
-                    &tr(
-                        "Every {one} has at least one {many} only on the diagram: no database key can require it. Choose zero or more if a {one} may have none.",
-                    ),
-                    &[("one", one.as_str()), ("many", many.as_str())],
-                );
+                #[rustfmt::skip]
+                let said = tr("Every {one} has at least one {many} only on the diagram: no database key can require it. Choose zero or more if a {one} may have none.");
+                let text = fmt(&said, &[("one", one.as_str()), ("many", many.as_str())]);
                 out.push(Problem { element: o, text });
             }
         }
