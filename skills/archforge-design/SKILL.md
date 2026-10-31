@@ -114,6 +114,8 @@ the change, and update this file in the same change.
   on, a line is green when its foreign key is on and orange when it is off.
 - Relationships are drawn by dragging from table to table, never click by click, and drawing never
   blocks: without a parent key the line is drawn with its foreign key off.
+- A relationship dragged from a table and dropped on empty canvas makes a new table there, joined
+  by the line, as one undo step, the new table's name open for typing.
 - Cardinality is chosen in one place, the popover from the Relationship tool's chevron, with
   glyphs, not words; the choice stays for the next line. An existing line's ends change there or
   in Properties.

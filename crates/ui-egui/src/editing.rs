@@ -446,7 +446,7 @@ pub(crate) fn pointer(shell: &mut Shell, ui: &egui::Ui, resp: &egui::Response, v
             }
             shell.canvas.gesture = Some(gesture);
         }
-        Action::Commit => commit(shell, view, d, pointer, shift),
+        Action::Commit => commit(shell, view, d, pointer, shift, resp.rect),
         Action::Place(x, y) => place_entity(shell, d, x, y),
         Action::Menu(m) => shell.canvas.menu = Some(m),
         Action::Rename(node, entity) => open_rename(shell, node, entity),
@@ -467,7 +467,7 @@ pub(crate) fn pointer(shell: &mut Shell, ui: &egui::Ui, resp: &egui::Response, v
 }
 
 /// Ends the gesture: a move or a resize as one engine step, a marquee as a selection.
-fn commit(shell: &mut Shell, view: View, d: Obj, pointer: Option<Pos2>, shift: bool) {
+fn commit(shell: &mut Shell, view: View, d: Obj, pointer: Option<Pos2>, shift: bool, canvas: Rect) {
     let Some(gesture) = shell.canvas.gesture.take() else { return };
     let Some(pointer) = pointer.filter(|p| p.is_finite()) else { return };
     match gesture {
@@ -501,10 +501,15 @@ fn commit(shell: &mut Shell, view: View, d: Obj, pointer: Option<Pos2>, shift: b
                 shell.canvas.notice = Some(e.to_string());
             }
         }
-        Gesture::Connect { from_node, .. } => {
+        Gesture::Connect { from_node, from } => {
             if let Some(to_node) = node_at(shell, view, d, pointer) {
                 crate::connect::connect(shell, d, from_node, to_node);
                 // The line drawn, the tool hands back to Select, as the placing tools do.
+                shell.canvas.tool = Tool::Select;
+            } else if canvas.contains(pointer) && (pointer - from).length() / view.zoom >= DRAG_MIN {
+                // Dropped on empty canvas: a new table there, joined to the one the drag began on.
+                let (x, y) = view.to_canvas(pointer);
+                connect_to_new(shell, d, from_node, x, y);
                 shell.canvas.tool = Tool::Select;
             }
         }
@@ -715,6 +720,74 @@ fn place_entity(shell: &mut Shell, d: Obj, x: f64, y: f64) {
                 shell.canvas.focused = true;
             }
             shell.canvas.tool = Tool::Select;
+        }
+        Err(e) => shell.canvas.notice = Some(e.to_string()),
+    }
+}
+
+/// A connection dropped on empty canvas: a new table centred there, joined to the table of
+/// `from_node` by the relationship the tool is set to, all one undo step; then the new table's name
+/// is open for typing. The new table has no key yet, so a foreign key comes along only when the
+/// table the drag began on is the parent and has its primary key.
+fn connect_to_new(shell: &mut Shell, d: Obj, from_node: Uuid, x: f64, y: f64) {
+    use crate::connect::cardinality_word;
+    shell.canvas.notice = None;
+    let kind = shell.canvas.relationship;
+    let Some(session) = shell.session.as_mut() else { return };
+    let store = session.doc();
+    let Some(schema) = crate::diagrams::schema_of(store, d) else {
+        shell.canvas.notice = Some(tr("The diagram is of no schema"));
+        return;
+    };
+    let Some(from) = store.by_uuid(from_node).and_then(|n| entity_of_node(store, n)) else {
+        shell.canvas.notice = Some(tr("A relationship joins two tables"));
+        return;
+    };
+    let (Some(schema_id), Some(diagram_id), Some(from_id)) = (uuid(store, schema), uuid(store, d), uuid(store, from)) else { return };
+    let Some(name) = entity_name(store, schema) else {
+        shell.canvas.notice = Some(tr("No free name is left"));
+        return;
+    };
+    let new_is_parent = archforge_er::rules::is_many(kind.from) && !archforge_er::rules::is_many(kind.to);
+    let with_key = !kind.many_to_many() && !new_is_parent && archforge_er::rules::primary_key_of(store, from).is_some();
+    let (px, py) = ((x - ENTITY_WIDTH / 2.0).round(), (y - ENTITY_EMPTY_HEIGHT / 2.0).round());
+    let name_for_batch = name.clone();
+    let out = session.batch(&tr("Add table"), |b| {
+        let e = b.execute("er.entity.add", &json!({ "schema": schema_id.to_string(), "name": name_for_batch }))?;
+        let entity = e.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string();
+        let n = b.execute(
+            "diagram.place",
+            &json!({ "diagram": diagram_id.to_string(), "element": &entity, "x": px, "y": py, "width": ENTITY_WIDTH, "height": ENTITY_EMPTY_HEIGHT }),
+        )?;
+        let node = n.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string();
+        let r = b.execute(
+            "er.relationship.add",
+            &json!({
+                "from": from_id.to_string(),
+                "to": &entity,
+                "from_end": cardinality_word(kind.from),
+                "to_end": cardinality_word(kind.to),
+                "identifying": kind.identifying && with_key,
+                "create_foreign_key": with_key,
+            }),
+        )?;
+        let rel = r.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string();
+        let edge = b.execute(
+            "diagram.connect",
+            &json!({ "diagram": diagram_id.to_string(), "element": rel, "source": from_node.to_string(), "target": node }),
+        )?;
+        let edge = edge.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string();
+        b.execute("diagram.label", &json!({ "edge": edge, "kind": "name", "at": "middle" }))?;
+        Ok(())
+    });
+    match out {
+        Ok(o) => {
+            let id_at = |i: usize| o.value.get(i).and_then(|v| v.get("id")).and_then(|v| v.as_str()).and_then(Uuid::parse);
+            if let (Some(entity), Some(node)) = (id_at(0), id_at(1)) {
+                select(shell, vec![entity]);
+                shell.canvas.rename = Some(NodeRename { node, entity, text: name, opened: true, refused: None });
+                shell.canvas.focused = true;
+            }
         }
         Err(e) => shell.canvas.notice = Some(e.to_string()),
     }

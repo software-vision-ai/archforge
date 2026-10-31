@@ -885,6 +885,44 @@ fn homes_search_finds_the_projects_in_the_pinned_folders_one_search_at_a_time_an
 }
 
 #[test]
+fn a_connection_dropped_on_empty_canvas_makes_a_new_table_joined_to_it_in_one_step() {
+    let (mut h, _customer, _order) = two_tables_harness();
+    let nodes = node_ids(&h);
+    let customer_node = nodes.iter().min_by(|a, b| rect_of(&h, a).left().total_cmp(&rect_of(&h, b).left())).unwrap().clone();
+    let tables = |h: &Harness<'static, Shell>| {
+        let st = h.state().session.as_ref().unwrap().doc();
+        st.alive().filter(|o| st.class_of(*o).ok() == Some(archforge_er::ENTITY)).count()
+    };
+    let before = (tables(&h), relationships(&h).len(), node_ids(&h).len());
+    let at = rect_of(&h, &customer_node).center();
+    click(&mut h, at);
+    // From the connect handle to a spot well below the tables, where nothing is drawn.
+    let from = rect_of(&h, "workspace.canvas.adorn.connect").center();
+    let empty = rect_of(&h, &customer_node).center() + egui::vec2(0.0, 320.0);
+    drag(&mut h, from, empty);
+    h.run_steps(2);
+    assert_eq!(
+        (tables(&h), relationships(&h).len(), node_ids(&h).len()),
+        (before.0 + 1, before.1 + 1, before.2 + 1),
+        "{:?}",
+        h.state().canvas.notice
+    );
+    let rename = h.state().canvas.rename.clone().expect("the new table's name is open for typing");
+    assert_eq!(rename.text, "Entity");
+    let st = h.state().session.as_ref().unwrap().doc();
+    let rel = relationships(&h)[0];
+    let to = st.get(rel, archforge_er::relationship::TO).unwrap().as_ref().unwrap();
+    assert_eq!(st.uuid(to).unwrap(), rename.entity, "the line joins the new table");
+    // One undo takes the table, its node and its line away together.
+    let undo = h.state().session.as_ref().unwrap().undo_label();
+    assert_eq!(undo, Some("Add table"));
+    h.state_mut().canvas.rename = None;
+    h.state_mut().session.as_mut().unwrap().undo().unwrap();
+    h.run_steps(2);
+    assert_eq!((tables(&h), relationships(&h).len(), node_ids(&h).len()), before);
+}
+
+#[test]
 fn at_most_eight_projects_open_at_once() {
     let (mut h, host) = saving_harness(None, Some("/tmp/Ninth.archforge"));
     for i in 0..crate::MAX_TABS {

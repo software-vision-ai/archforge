@@ -86,7 +86,7 @@ fn run(shell: &mut Shell, id: &str, params: serde_json::Value) -> Result<serde_j
     session.execute(id, &params).map(|o| o.value).map_err(|e| e.to_string())
 }
 
-fn cardinality_word(c: Cardinality) -> &'static str {
+pub(crate) fn cardinality_word(c: Cardinality) -> &'static str {
     match c {
         Cardinality::ZeroOrOne => "zero-or-one",
         Cardinality::ExactlyOne => "exactly-one",
