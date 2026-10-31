@@ -40,7 +40,7 @@ const FIT_MARGIN: f32 = 48.0;
 /// The minimap's box and the toolbar's pill.
 const MINIMAP: Vec2 = vec2(200.0, 156.0);
 const MINIMAP_GAP: Vec2 = vec2(16.0, 14.0);
-const TOOLBAR: Vec2 = vec2(326.0, 50.0);
+const TOOLBAR: Vec2 = vec2(358.0, 50.0);
 const TOOLBAR_GAP: f32 = 14.0;
 /// An entity node: its header's height, its first row's baseline, the pitch between rows, the
 /// text inset and the badge column.
@@ -1118,9 +1118,10 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     paint.rect_stroke(t, 12.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
     let button = |x: f32| Rect::from_min_size(pos2(t.left() + x, t.top() + 9.0), Vec2::splat(32.0));
     let divider = |x: f32| Rect::from_min_size(pos2(t.left() + x, t.top() + 15.0), vec2(1.0, 20.0));
-    let xs = [7.0, 41.0, 86.0, 120.0, 170.0, 204.0];
+    let xs = [7.0, 41.0, 86.0, 120.0, 202.0, 236.0];
     for ((key, icon, hint), x) in TOOLS.iter().zip(xs) {
-        let b = button(x);
+        // The relationship tool is twice as wide, so both ends of its line read.
+        let b = if *key == "relationship" { Rect::from_min_size(pos2(t.left() + x, t.top() + 9.0), vec2(64.0, 32.0)) } else { button(x) };
         let active = matches!(
             (*key, shell.canvas.tool),
             ("select", Tool::Select)
@@ -1154,11 +1155,11 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
             }
         }
     }
-    for x in [75.0, 238.0] {
+    for x in [75.0, 270.0] {
         paint.rect_filled(divider(x), 0.0, p.border);
     }
     // The relationship tool's chevron opens the kinds popover.
-    let chevron = Rect::from_min_size(pos2(t.left() + 154.0, t.top() + 9.0), vec2(14.0, 32.0));
+    let chevron = Rect::from_min_size(pos2(t.left() + 186.0, t.top() + 9.0), vec2(14.0, 32.0));
     ux::icon_in(&paint, chevron, &icons::CHEVRON_SMALL, if shell.canvas.popover { p.accent } else { p.text_secondary });
     if control(shell, ui, "workspace.tools.relationship-types", "button", chevron, true).on_hover_text(tr("Relationship types")).clicked() {
         shell.canvas.popover = !shell.canvas.popover;
@@ -1167,9 +1168,9 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
         }
     }
     // The view group: key status and grid.
-    let group = Rect::from_min_size(pos2(t.left() + 249.0, t.top() + 7.0), vec2(70.0, 36.0));
+    let group = Rect::from_min_size(pos2(t.left() + 281.0, t.top() + 7.0), vec2(70.0, 36.0));
     paint.rect_filled(group, 8.0, p.page);
-    for (key, x, hint, on) in [("key-status", 251.0, "Key status", shell.canvas.key_status), ("grid", 285.0, "Grid", shell.canvas.grid)] {
+    for (key, x, hint, on) in [("key-status", 283.0, "Key status", shell.canvas.key_status), ("grid", 317.0, "Grid", shell.canvas.grid)] {
         let b = button(x);
         if on {
             paint.rect_filled(b, 8.0, p.accent_tint);
