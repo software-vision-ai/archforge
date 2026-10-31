@@ -61,5 +61,5 @@ pub fn record_visible(ui: &Ui, reg: &mut Registry, id: &str, kind: &'static str,
 
 /// The toolkit id for an automation identifier.
 pub fn egui_id(id: &str) -> egui::Id {
-    egui::Id::new(("automation", id))
+    egui::Id::unique(("automation", id))
 }

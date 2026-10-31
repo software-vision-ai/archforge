@@ -162,7 +162,7 @@ pub(crate) fn types_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r
         let resp = control(shell, ui, &format!("workspace.properties.type.row.{}", row.id), "row", rect, true);
         if resp.hovered() {
             paint.rect_filled(rect, 6.0, p.page);
-            ux::icon_in(&paint, Rect::from_min_size(pos2(rect.right() - 24.0, rect.top() + 10.0), Vec2::splat(16.0)), &icons::EDIT, p.text_secondary);
+            ux::icon_mid(&paint, pos2(rect.right() - 16.0, rect.center().y), &icons::EDIT, p.text_secondary);
         }
         match row.kind {
             TypeKind::Domain => badge(&paint, rect.min + vec2(2.0, 6.0), "DM", p.green_tint, p.green),
@@ -327,17 +327,20 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
             for i in 0..edit.checks.len() {
                 let rect = Rect::from_min_size(at(0.0, cy), vec2(inner, FIELD));
                 paint.rect_filled(rect, 6.0, p.field);
-                let field = Rect::from_min_max(pos2(rect.left() + 8.0, rect.top() + 2.0), pos2(rect.right() - 30.0, rect.bottom() - 2.0));
+                let field =
+                    crate::panels::field_inner(ui, Rect::from_min_max(pos2(rect.left() + 0.0, rect.top()), pos2(rect.right() - 22.0, rect.bottom())));
                 let id = format!("workspace.properties.domain.check.{i}");
                 widgets::record_visible(ui, &mut shell.registry, &id, "field", field);
                 let out = egui::TextEdit::singleline(&mut edit.checks[i])
                     .id(widgets::egui_id(&id))
                     .frame(egui::Frame::NONE)
+                    .margin(egui::Margin::ZERO)
                     .font(types::SMALL.font())
                     .text_color(p.text)
                     .char_limit(archforge_er::rules::MAX_TEXT)
                     .desired_width(field.width())
                     .show(&mut ui.new_child(egui::UiBuilder::new().max_rect(field)));
+                let _ = (*out.response).clone().accessible_name(tr("Checks"));
                 if out.response.has_focus() {
                     paint.rect_stroke(rect, 6.0, Stroke::new(1.0, p.focus), StrokeKind::Inside);
                 }
@@ -366,18 +369,23 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
             for i in 0..edit.literals.len() {
                 let rect = Rect::from_min_size(at(0.0, cy), vec2(inner, FIELD));
                 paint.rect_filled(rect, 6.0, p.field);
-                ux::text(&paint, rect.min + vec2(8.0, 8.0), "⋮⋮", types::CAPTION, p.text_muted, None);
-                let field = Rect::from_min_max(pos2(rect.left() + 28.0, rect.top() + 2.0), pos2(rect.right() - 30.0, rect.bottom() - 2.0));
+                ux::icon_mid(&paint, pos2(rect.left() + 14.0, rect.center().y), &icons::GRIP, p.text_muted);
+                let field = crate::panels::field_inner(
+                    ui,
+                    Rect::from_min_max(pos2(rect.left() + 20.0, rect.top()), pos2(rect.right() - 22.0, rect.bottom())),
+                );
                 let id = format!("workspace.properties.enum.literal.{i}");
                 widgets::record_visible(ui, &mut shell.registry, &id, "field", field);
                 let out = egui::TextEdit::singleline(&mut edit.literals[i])
                     .id(widgets::egui_id(&id))
                     .frame(egui::Frame::NONE)
+                    .margin(egui::Margin::ZERO)
                     .font(types::SMALL.font())
                     .text_color(p.text)
                     .char_limit(archforge_er::rules::MAX_NAME)
                     .desired_width(field.width())
                     .show(&mut ui.new_child(egui::UiBuilder::new().max_rect(field)));
+                let _ = (*out.response).clone().accessible_name(tr("Literals, in order"));
                 if out.response.has_focus() {
                     paint.rect_stroke(rect, 6.0, Stroke::new(1.0, p.focus), StrokeKind::Inside);
                 }

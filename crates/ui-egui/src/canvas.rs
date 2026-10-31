@@ -468,14 +468,19 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     crate::editing::overlays(shell, ui, p, r, view, d, &overrides);
     crate::connect::mapping_offer(shell, ui, p, r);
     crate::connect::toast(shell, ui, p, r);
-    if shell.canvas.minimap_open {
+    if minimap_shown(shell, r) {
         minimap(shell, ui, p, r, bounds, &view);
-    } else {
+    } else if r.width() >= 16.0 + TOOLBAR.x + 16.0 + 28.0 + MINIMAP_GAP.x {
+        // Its button, where the toolbar leaves room for it: live when the user folded the minimap,
+        // not available when the canvas is too narrow for it.
         let b = Rect::from_min_size(pos2(r.right() - MINIMAP_GAP.x - 28.0, r.bottom() - MINIMAP_GAP.y - 26.0), vec2(28.0, 26.0));
+        let folded = !shell.canvas.minimap_open;
         paint.rect_filled(b, 7.0, p.surface);
         paint.rect_stroke(b, 7.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
-        ux::icon_in(&paint, Rect::from_center_size(b.center(), Vec2::splat(14.0)), &icons::MAP, p.text_secondary);
-        if control(shell, ui, "workspace.minimap.toggle", "button", b, true).on_hover_text(tr("Show minimap")).clicked() {
+        ux::icon_in(&paint, Rect::from_center_size(b.center(), Vec2::splat(14.0)), &icons::MAP, if folded { p.text_secondary } else { p.text_muted });
+        let resp = control(shell, ui, "workspace.minimap.toggle", "button", b, true);
+        let hint = if folded { tr("Show minimap") } else { tr("Widen the canvas to show the minimap") };
+        if resp.on_hover_text(hint).clicked() && folded {
             shell.canvas.minimap_open = true;
         }
     }
@@ -933,7 +938,7 @@ fn minimap(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, bounds: Optio
     if m.left() < r.left() || m.top() < r.top() {
         return;
     }
-    paint.rect_filled(m.expand(2.0), 10.0, p.shadow);
+    ux::shadow(&paint, m, 8.0, p.shadow);
     paint.rect_filled(m, 8.0, p.surface);
     paint.rect_stroke(m, 8.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
     ux::text(&paint, m.min + vec2(12.0, 11.0), &tr("Minimap").to_uppercase(), types::EYEBROW, p.text_secondary, Some(120.0));
@@ -1022,18 +1027,25 @@ const TOOLS: [(&str, &ux::Icon, &str, bool); 7] = [
     ("group", &icons::TOOL_GROUP, "Group", false),
 ];
 
+/// Whether the minimap is drawn open: when the user has it open and the canvas has room for it
+/// beside the toolbar; otherwise its button stands in, so the tools are never hidden.
+fn minimap_shown(shell: &Shell, r: Rect) -> bool {
+    shell.canvas.minimap_open && r.width() >= 16.0 + TOOLBAR.x + 16.0 + MINIMAP.x + MINIMAP_GAP.x
+}
+
 /// The floating toolbar at the canvas's bottom centre: Select and Pan, the drawing tools, and
 /// the key status and grid toggles.
 fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
-    let paint = ui.painter().clone();
-    // Centred under the canvas; moved left when the minimap would cover it.
-    let minimap_left = if shell.canvas.minimap_open { r.right() - MINIMAP_GAP.x - MINIMAP.x } else { r.right() - MINIMAP_GAP.x - 28.0 };
+    // Kept to the canvas: in the narrowest window the toolbar's end is cut, never drawn over a panel.
+    let paint = ui.painter().with_clip_rect(r);
+    // Centred under the canvas; moved left of the minimap, or of its button; never hidden.
+    let minimap_left = if minimap_shown(shell, r) { r.right() - MINIMAP_GAP.x - MINIMAP.x } else { r.right() - MINIMAP_GAP.x - 28.0 };
     let x = (r.center().x - TOOLBAR.x / 2.0).min(minimap_left - 16.0 - TOOLBAR.x).max(r.left() + 16.0);
     let t = Rect::from_min_size(pos2(x, r.bottom() - TOOLBAR_GAP - TOOLBAR.y), TOOLBAR);
-    if t.right() > minimap_left - 8.0 || t.top() < r.top() {
+    if t.top() < r.top() {
         return;
     }
-    paint.rect_filled(t.expand(2.0), 14.0, p.shadow);
+    ux::shadow(&paint, t, 12.0, p.shadow);
     paint.rect_filled(t, 12.0, p.surface);
     paint.rect_stroke(t, 12.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
     let button = |x: f32| Rect::from_min_size(pos2(t.left() + x, t.top() + 9.0), Vec2::splat(32.0));

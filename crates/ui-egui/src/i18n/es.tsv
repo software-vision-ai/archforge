@@ -245,6 +245,7 @@ plural		+ {n} more column	+ {n} columna más|+ {n} columnas más
 str		Minimap	Minimapa
 str		Hide minimap	Ocultar minimapa
 str		Show minimap	Mostrar minimapa
+str		Widen the canvas to show the minimap	Ensanche el lienzo para mostrar el minimapa
 str		Whole diagram	Diagrama completo
 str		Zoom in	Acercar
 str		Zoom out	Alejar

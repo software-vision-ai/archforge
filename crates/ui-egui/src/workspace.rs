@@ -12,7 +12,7 @@
 
 use egui::{Rect, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
 
-use crate::home::{BAR, STRIP, control, initials, title_strip};
+use crate::home::{BAR, STRIP, control, title_strip};
 use crate::i18n::tr;
 use crate::state::{Explorer, Panel};
 use crate::ux::{self, Palette, icons, types};
@@ -141,65 +141,35 @@ fn bar_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, name: &str) -
     let paint = ui.painter();
     paint.rect_filled(r, 0.0, p.surface);
     paint.rect_filled(Rect::from_min_max(pos2(r.left(), r.bottom() - 1.0), r.max), 0.0, p.border);
-    let at = |x: f32, y: f32| r.min + vec2(x, y);
-    let mark = Rect::from_min_size(at(16.0, 12.0), Vec2::splat(24.0));
-    paint.rect_filled(mark, 6.0, p.accent_fill);
-    ux::icon(paint, mark.min + vec2(6.33, 6.67), &icons::MARK_A, 11.33, p.on_accent);
-    let wordmark = ux::text(paint, at(50.0, 12.5), "Archforge", types::LEAD_STRONG, p.text, None);
-    paint.rect_filled(Rect::from_min_size(pos2(wordmark.right() + 16.0, r.top() + 14.0), vec2(1.0, 20.0)), 0.0, p.border);
+    let mid = crate::home::bar_mid(r);
+    let wordmark = crate::home::brand(paint, p, r);
+    paint.rect_filled(Rect::from_center_size(pos2(wordmark.right() + 16.5, mid), vec2(1.0, 20.0)), 0.0, p.border);
     // Home, a ghost button: back to the start screen.
-    let home_x = wordmark.right() + 33.0;
-    ux::icon(paint, pos2(home_x + 8.0, r.top() + 16.0), &icons::HOME, 16.0, p.text_secondary);
-    let home_label = ux::text(paint, pos2(home_x + 30.0, r.top() + 14.5), &tr("Home"), types::UI, p.text, None);
-    let home = Rect::from_min_max(pos2(home_x, r.top() + 8.0), pos2(home_label.right() + 10.0, r.bottom() - 8.0));
-    if control(shell, ui, "workspace.header.home", "button", home, true).clicked() {
+    let home_x = wordmark.right() + 29.0;
+    let home_label = ux::galley(paint, &tr("Home"), types::UI, p.text, None);
+    let home = Rect::from_min_max(pos2(home_x, mid - 14.0), pos2(home_x + 8.0 + 16.0 + 6.0 + home_label.size().x + 10.0, mid + 14.0));
+    let home_resp = control(shell, ui, "workspace.header.home", "button", home, true);
+    if home_resp.hovered() {
+        paint.rect_filled(home, 6.0, p.page);
+    }
+    ux::icon_mid(paint, pos2(home.left() + 16.0, mid), &icons::HOME, p.text_secondary);
+    paint.galley(pos2(home.left() + 30.0, mid - home_label.size().y / 2.0), home_label, p.text);
+    if home_resp.clicked() {
         shell.close_project();
         return false;
     }
     // The project, a chip with the folder, its name and a chevron; the project switcher comes
     // later. The chip never runs under the controls at the right.
-    let right = r.right();
-    let chip_x = home.right() + 12.0;
-    let chip_room = (right - 96.0 - chip_x - 74.0).max(40.0);
+    let chip_x = home.right() + 10.0;
+    let chip_room = (r.right() - 96.0 - chip_x - 74.0).max(40.0);
     let g = ux::galley(paint, name, types::UI_STRONG, p.accent, Some(chip_room.min(260.0)));
-    let chip = Rect::from_min_max(pos2(chip_x, r.top() + 8.0), pos2(chip_x + 38.0 + g.size().x + 8.0 + 28.0, r.bottom() - 8.0));
-    paint.rect_filled(chip, 8.0, p.accent_tint);
-    ux::icon(paint, chip.min + vec2(12.0, 7.0), &icons::FOLDER, 18.0, p.accent);
-    paint.galley(chip.min + vec2(38.0, (chip.height() - g.size().y) / 2.0), g, p.accent);
-    ux::icon(paint, pos2(chip.right() - 28.0, chip.top() + 8.0), &icons::CHEVRON_DOWN, 16.0, p.accent);
+    let chip = Rect::from_min_max(pos2(chip_x, mid - 14.0), pos2(chip_x + 32.0 + g.size().x + 10.0 + 8.0 + 12.0, mid + 14.0));
+    paint.rect_filled(chip, 7.0, p.accent_tint);
+    ux::icon_mid(paint, pos2(chip.left() + 17.0, mid), &icons::FOLDER, p.accent);
+    paint.galley(pos2(chip.left() + 32.0, mid - g.size().y / 2.0), g, p.accent);
+    ux::icon_mid(paint, pos2(chip.right() - 16.0, mid + 0.5), &icons::CHEVRON_DOWN, p.accent);
     control(shell, ui, "workspace.header.project", "button", chip, false);
-    if let Some(initials) = shell.services.user_name.as_deref().and_then(initials) {
-        let avatar = Rect::from_min_size(pos2(right - 44.0, r.top() + 10.0), Vec2::splat(28.0));
-        paint.rect_filled(avatar, 14.0, p.accent_tint);
-        let g = ux::galley(paint, &initials, types::CAPTION_STRONG, p.accent, None);
-        paint.galley(avatar.center() - g.size() / 2.0, g, p.accent);
-        control(shell, ui, "workspace.header.account", "button", avatar, false);
-    }
-    let help = Rect::from_min_size(pos2(right - 80.0, r.top() + 14.0), Vec2::splat(20.0));
-    ux::icon(paint, help.min, &icons::HELP, 20.0, p.text_secondary);
-    control(shell, ui, "workspace.header.help", "button", help.expand(6.0), false);
-    let end = right - 96.0;
-    let start = (end - 300.0).max(chip.right() + 24.0);
-    if end - start >= 160.0 {
-        let field = Rect::from_min_max(pos2(start, r.top() + 8.0), pos2(end, r.top() + 40.0));
-        paint.rect_filled(field, 16.0, p.page);
-        paint.rect_stroke(field, 16.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
-        ux::icon(paint, field.min + vec2(10.0, 8.0), &icons::SEARCH, 16.0, p.text_secondary);
-        let chord = if ui.ctx().os() == egui::os::OperatingSystem::Mac { "⌘K" } else { "Ctrl K" };
-        let key = ux::galley(paint, chord, types::CAPTION, p.text_muted, None);
-        let key_at = pos2(field.right() - 12.0 - key.size().x, field.top() + 8.0);
-        ux::text(
-            paint,
-            field.min + vec2(34.0, 6.5),
-            &tr("Find an element, view, or action"),
-            types::UI,
-            p.text_secondary,
-            room(key_at.x - 8.0 - (field.left() + 34.0)),
-        );
-        paint.galley(key_at, key, p.text_muted);
-        // Inert until the search is built: registered as a button, so nothing types into it.
-        control(shell, ui, "workspace.header.search", "button", field, false);
-    }
+    crate::home::bar_tail(shell, ui, p, r, chip.right() + 24.0, "workspace.header", &tr("Find an element, view, or action"), "button");
     true
 }
 
@@ -308,12 +278,11 @@ fn right_rail(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
             paint.rect_filled(button, 6.0, p.accent_tint);
             paint.rect_filled(Rect::from_min_size(pos2(r.left(), button.top() + 8.0), vec2(2.0, 20.0)), 1.0, p.accent);
         }
-        let ink = if *which == Panel::Agent {
-            p.purple
-        } else if on {
-            p.accent
-        } else {
-            p.text_secondary
+        // Every rail icon is grey until it is the open panel; the agent's then wears its purple.
+        let ink = match (on, *which == Panel::Agent) {
+            (true, true) => p.purple,
+            (true, false) => p.accent,
+            (false, _) => p.text_secondary,
         };
         ux::icon_in(paint, Rect::from_center_size(button.center(), Vec2::splat(18.0)), icon, ink);
         if control(shell, ui, &format!("workspace.panels.{id}"), "tab", button, true).on_hover_text(tr(title)).clicked() {

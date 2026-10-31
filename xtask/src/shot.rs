@@ -10,7 +10,7 @@ use crate::util;
 
 const DEFAULT_MAX_EDGE: u32 = 1024;
 const DEFAULT_SIZE: (u32, u32) = (1440, 900);
-const USAGE: &str = "usage: cargo xtask shot [light|dark] [--size <width>x<height>] [--max-edge <pixels>] [--screen home|new-project|new-project-failed|workspace|workspace-schema|workspace-table|workspace-skills|workspace-diagram-empty|workspace-diagram|workspace-entity-new|workspace-cardinality|workspace-relationship|workspace-key-editor|workspace-column-editor|workspace-index-editor|workspace-mapping-table|workspace-schema-types|workspace-subtypes|workspace-schema-objects|workspace-cross-schema]";
+const USAGE: &str = "usage: cargo xtask shot [light|dark] [--size <width>x<height>] [--max-edge <pixels>] [--screen home|new-project|new-project-failed|workspace|workspace-schema|workspace-table|workspace-skills|workspace-diagram-empty|workspace-diagram|workspace-entity-new|workspace-cardinality|workspace-relationship|workspace-key-editor|workspace-column-editor|workspace-index-editor|workspace-mapping-table|workspace-schema-types|workspace-subtypes|workspace-schema-objects|workspace-cross-schema|workspace-column-selected]";
 /// The screens a shot can show.
 const SCREENS: &[&str] = &[
     "home",
@@ -32,6 +32,7 @@ const SCREENS: &[&str] = &[
     "workspace-subtypes",
     "workspace-schema-objects",
     "workspace-cross-schema",
+    "workspace-column-selected",
     "workspace-column-editor",
 ];
 

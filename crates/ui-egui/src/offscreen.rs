@@ -38,6 +38,9 @@ pub enum Screen {
     /// The diagram of two tables with a table of the CRM schema placed beside them, dimmed and
     /// dashed, its relationship to Order drawn (slice S7).
     WorkspaceCrossSchema,
+    /// The Diagrams explorer with the diagram "dbo" open, its one table Company placed and its key
+    /// column selected: the owner's screen of 2026-10-31.
+    WorkspaceColumnSelected,
     /// The diagram of two tables with a mapping table between Order and Tag selected: its
     /// Properties offer to collapse it, Order's key column shows its link mark.
     WorkspaceMappingTable,
@@ -157,6 +160,10 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
                 crate::keys::open(&mut shell, entity, Some(&unique));
             }
         }
+    }
+    if screen == Screen::WorkspaceColumnSelected {
+        shell.adopt_project();
+        sample_column_selected(&mut shell)?;
     }
     if matches!(
         screen,
@@ -334,6 +341,35 @@ fn sample_mapping_table(shell: &mut Shell) -> Result<(), String> {
     run(session, "diagram.connect", json!({ "diagram": diagram, "element": line, "source": order_node, "target": t }))?;
     run(session, "er.relationship.resolve", json!({ "relationship": line }))?;
     session.mark_saved().map_err(|e| format!("mark_saved: {e:?}"))?;
+    Ok(())
+}
+
+/// A schema "dbo" with its diagram open in the Diagrams explorer, Company on it, its key column
+/// selected.
+fn sample_column_selected(shell: &mut Shell) -> Result<(), String> {
+    use serde_json::json;
+    let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
+    let run = |session: &mut archforge_er::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
+        let out = session.execute(command, &params).map_err(|e| format!("{command}: {e:?}"))?;
+        Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
+    };
+    let schema = run(session, "er.schema.add", json!({ "name": "dbo" }))?;
+    let diagram = run(session, "diagram.add", json!({ "kind": "er", "element": schema, "name": "dbo" }))?;
+    let company = run(session, "er.entity.add", json!({ "schema": schema, "name": "Company" }))?;
+    let id = run(session, "er.attribute.add", json!({ "entity": company, "name": "id", "type": "UUID", "primary_key": true }))?;
+    run(
+        session,
+        "diagram.place",
+        json!({ "diagram": diagram, "element": company, "x": 160, "y": 180, "width": 240, "height": crate::editing::content_height(1) }),
+    )?;
+    let d = archforge_mof::Uuid::parse(&diagram).ok_or_else(|| "the diagram's id does not parse".to_string())?;
+    crate::canvas::open(shell, d);
+    let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
+    run(session, "view.select", json!({ "ids": [id] }))?;
+    shell.state.explorer = crate::state::Explorer::Diagrams;
+    shell.canvas.fit_pending = false;
+    shell.canvas.zoom = 1.0;
+    shell.canvas.pan = egui::Vec2::ZERO;
     Ok(())
 }
 

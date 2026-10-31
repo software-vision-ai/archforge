@@ -23,7 +23,7 @@ confidence-threshold = 0.9
 # Licence permit that; ATTRIBUTION.md names the faces and licenses/fonts/ holds the texts.
 [[licenses.exceptions]]
 # Pinned like ATTRIBUTION.toml's rows, so an upgrade is reviewed before the exception covers it.
-crate = "epaint_default_fonts@0.36.2"
+crate = "epaint_default_fonts@0.37.0"
 allow = ["OFL-1.1", "Ubuntu-font-1.0"]
 
 [advisories]

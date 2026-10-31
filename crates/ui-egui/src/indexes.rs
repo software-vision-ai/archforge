@@ -147,7 +147,7 @@ pub(crate) fn indexes_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette,
         let resp = control(shell, ui, &format!("workspace.properties.index.row.{}", index.id), "row", row, true);
         if resp.hovered() {
             paint.rect_filled(row, 6.0, p.page);
-            ux::icon_in(&paint, Rect::from_min_size(pos2(row.right() - 24.0, row.top() + 10.0), Vec2::splat(16.0)), &icons::EDIT, p.text_secondary);
+            ux::icon_mid(&paint, pos2(row.right() - 16.0, row.center().y), &icons::EDIT, p.text_secondary);
         }
         badge(&paint, row.min + vec2(2.0, 6.0), "IX", p.purple_tint, p.purple);
         ux::text(&paint, row.min + vec2(38.0, 4.0), &index.label, types::UI, p.text, Some((width - 70.0).max(0.0)));
@@ -214,7 +214,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     for i in 0..edit.columns.len() {
         let row = Rect::from_min_size(at(0.0, cy), vec2(inner, FIELD));
         paint.rect_filled(row, 6.0, p.field);
-        ux::text(&paint, row.min + vec2(8.0, 8.0), "⋮⋮", types::CAPTION, p.text_muted, None);
+        ux::icon_mid(&paint, pos2(row.left() + 14.0, row.center().y), &icons::GRIP, p.text_muted);
         let spec = &mut edit.columns[i];
         let text_right = row.right() - 24.0 - 24.0 - 8.0;
         match spec.attribute {
@@ -239,12 +239,14 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
                 let out = egui::TextEdit::singleline(&mut spec.expression)
                     .id(widgets::egui_id(&id))
                     .frame(egui::Frame::NONE)
+                    .margin(egui::Margin::ZERO)
                     .font(types::SMALL.font())
                     .text_color(p.text)
                     .hint_text(tr("An expression"))
                     .char_limit(archforge_er::rules::MAX_TEXT)
                     .desired_width(field.width())
-                    .show(&mut ui.new_child(egui::UiBuilder::new().max_rect(field)));
+                    .show(&mut ui.new_child(egui::UiBuilder::new().max_rect(crate::panels::field_inner(ui, field))));
+                let _ = (*out.response).clone().accessible_name(tr("An expression"));
                 if out.response.has_focus() {
                     paint.rect_stroke(row, 6.0, Stroke::new(1.0, p.focus), StrokeKind::Inside);
                 }
@@ -287,7 +289,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     paint.rect_filled(add, 6.0, p.field);
     let ink = if full { p.text_muted } else { p.text_secondary };
     ux::text(&paint, add.min + vec2(8.0, 5.0), &tr("Add a column"), types::SMALL, ink, Some((inner - 36.0).max(0.0)));
-    ux::icon(&paint, pos2(add.right() - 22.0, add.top() + 6.0), &icons::CHEVRON_DOWN, 16.0, ink);
+    ux::icon_mid(&paint, pos2(add.right() - 14.0, add.center().y), &icons::CHEVRON_DOWN, ink);
     if control(shell, ui, "workspace.properties.index.column.add", "select", add, true).clicked() && !full {
         shell.panels.menu = if shell.panels.menu == Some(Menu::IndexColumn) { None } else { Some(Menu::IndexColumn) };
     }

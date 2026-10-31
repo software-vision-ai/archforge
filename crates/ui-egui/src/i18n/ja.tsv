@@ -245,6 +245,7 @@ plural		+ {n} more column	+ 他 {n} 列
 str		Minimap	ミニマップ
 str		Hide minimap	ミニマップを隠す
 str		Show minimap	ミニマップを表示
+str		Widen the canvas to show the minimap	ミニマップを表示するにはキャンバスを広げてください
 str		Whole diagram	図全体
 str		Zoom in	拡大
 str		Zoom out	縮小

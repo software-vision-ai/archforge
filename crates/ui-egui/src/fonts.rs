@@ -430,10 +430,10 @@ impl FontState {
         // Moved onto the bundled face's baseline, so it sits level with the Latin text beside it.
         let mut tweak = egui::FontTweak::default();
         if let Some(reference) = defs.families.get(&FontFamily::Proportional).and_then(|c| c.first()).and_then(|k| defs.font_data.get(k)) {
-            tweak.y_offset_factor = baseline_shift(data, index, &reference.font, reference.index);
+            tweak.y_offset_factor = baseline_shift(data, index, (*reference.font).as_ref(), reference.index);
         }
         let key = format!("fallback:{family}");
-        defs.font_data.insert(key.clone(), Arc::new(egui::FontData { font: std::borrow::Cow::Borrowed(data), index, tweak }));
+        defs.font_data.insert(key.clone(), Arc::new(egui::FontData { index, tweak, ..egui::FontData::from_static(data) }));
         self.fallbacks.insert(family.clone(), key);
         let order = self.fallback_keys(crate::i18n::language());
         let defs = self.defs.get_or_insert_with(definitions);

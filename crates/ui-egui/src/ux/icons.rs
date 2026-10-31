@@ -157,6 +157,33 @@ pub const DOMAIN: Icon = Icon {
     ],
 };
 
+/// A column of a table in the Models tree: a field with its leading cell.
+pub const COLUMN: Icon = Icon {
+    size: [12.0, 8.0],
+    stroke: 1.2,
+    segments: &[
+        L([0.0, 0.0], [12.0, 0.0]),
+        L([12.0, 0.0], [12.0, 8.0]),
+        L([12.0, 8.0], [0.0, 8.0]),
+        L([0.0, 8.0], [0.0, 0.0]),
+        L([4.0, 0.0], [4.0, 8.0]),
+    ],
+};
+
+/// A drag handle: two columns of three dots.
+pub const GRIP: Icon = Icon {
+    size: [4.0, 8.0],
+    stroke: 1.6,
+    segments: &[
+        L([0.0, 0.0], [0.0, 0.0]),
+        L([4.0, 0.0], [4.0, 0.0]),
+        L([0.0, 4.0], [0.0, 4.0]),
+        L([4.0, 4.0], [4.0, 4.0]),
+        L([0.0, 8.0], [0.0, 8.0]),
+        L([4.0, 8.0], [4.0, 8.0]),
+    ],
+};
+
 /// A sequence (Icon / Sequence): lines of numbers and a plus.
 pub const SEQUENCE: Icon = Icon {
     size: [10.0, 8.5],

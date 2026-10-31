@@ -10,7 +10,7 @@
 //! view shows its schema's section with its editor open.
 
 use archforge_mof::{Obj, Store, Uuid};
-use egui::{Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
+use egui::{Rect, Stroke, StrokeKind, pos2, vec2};
 use serde_json::json;
 
 use crate::checks::badge;
@@ -209,7 +209,7 @@ pub(crate) fn section_of(
         if resp.hovered() {
             paint.rect_filled(rect, 6.0, p.page);
         }
-        ux::icon_in(&paint, Rect::from_min_size(pos2(rect.right() - 24.0, rect.top() + 10.0), Vec2::splat(16.0)), &icons::EDIT, p.text_secondary);
+        ux::icon_mid(&paint, pos2(rect.right() - 16.0, rect.center().y), &icons::EDIT, p.text_secondary);
         badge(&paint, rect.min + vec2(2.0, 6.0), label, p.field, p.text_secondary);
         ux::text(&paint, rect.min + vec2(38.0, 4.0), &row.name, types::UI, p.text, Some((width - 70.0).max(0.0)));
         ux::text(&paint, rect.min + vec2(38.0, 23.0), &row.detail, types::CAPTION, p.text_secondary, Some((width - 70.0).max(0.0)));
@@ -337,6 +337,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, sc
                         .show(ui)
                 },
             );
+            let _ = (*out.inner.response).clone().accessible_name(tr("Query"));
             if out.inner.response.has_focus() {
                 paint.rect_stroke(body, 6.0, Stroke::new(1.0, p.focus), StrokeKind::Inside);
             }

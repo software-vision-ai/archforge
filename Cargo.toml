@@ -23,9 +23,16 @@ archforge-diagram = { path = "crates/diagram" }
 archforge-project = { path = "crates/project" }
 
 # External crates.
-egui = "0.36"
-eframe = { version = "0.36", features = ["wgpu"] }
-egui_kittest = "0.36"
+egui = { version = "0.37", features = ["default_fonts", "monochrome_emoji_fonts"] }
+# eframe 0.37's defaults add system_fonts, a provider that scans and memory-maps the system's font
+# files and loads fontconfig: the app reads installed fonts itself, never mapped (apps/archforge
+# src/fonts.rs). So the defaults are off and 0.36's set is named, with clipboard, which egui-winit
+# enabled then, and winit's defaults through winit.
+eframe = { version = "0.37", default-features = false, features = ["accesskit", "clipboard", "default_fonts", "links", "wayland", "web_screen_reader", "wgpu", "x11"] }
+# eframe's winit, with its defaults (raw-window-handle 0.6, x11, wayland with client-side
+# decorations), as eframe's own default features gave it.
+winit = "0.30"
+egui_kittest = "0.37"
 muda = "0.21"
 log = "0.4"
 serde = { version = "1", features = ["derive", "rc"] }
@@ -33,7 +40,7 @@ serde_json = "1"
 # Writes the snapshot example's picture; already in the lockfile through eframe's icon loading,
 # MIT OR Apache-2.0, pure Rust under forbid(unsafe_code).
 png = "=0.18.1"
-# Checks an installed font's bytes before egui loads them: the parser egui 0.36 itself loads fonts
+# Checks an installed font's bytes before egui loads them: the parser egui 0.37 itself loads fonts
 # with, so a face it would refuse never reaches it; pinned exactly and moved with epaint's
 # own skrifa whenever egui moves. MIT OR Apache-2.0.
 skrifa = { version = "=0.44.0", default-features = false, features = ["std"] }

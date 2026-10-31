@@ -19,10 +19,12 @@ use crate::theme::ThemeKind;
 use crate::ux::{self, Palette, icons, types};
 use crate::{Shell, widgets};
 
-/// The title strip's height: the macOS title bar's, where the strip is that bar.
-pub(crate) const STRIP: f32 = 28.0;
-/// Where the strip's controls start beside the traffic lights on macOS, and elsewhere.
-const STRIP_LEFT_MAC: f32 = 70.0;
+/// The title strip's height: on macOS the strip is the title bar, and at 32 points the traffic
+/// lights sit on its middle line.
+pub(crate) const STRIP: f32 = 32.0;
+/// Where the strip's controls start: clear of the traffic lights on macOS, and
+/// elsewhere.
+const STRIP_LEFT_MAC: f32 = 78.0;
 const STRIP_LEFT: f32 = 10.0;
 /// The bar's height, its bottom divider included.
 pub(crate) const BAR: f32 = 48.0;
@@ -161,7 +163,7 @@ pub(crate) fn title_strip(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect
     let paint = ui.painter();
     paint.rect_filled(r, 0.0, p.title_strip);
     if shell.top_inset > 0.0 {
-        let drag = ui.interact(r, ui.id().with("home.title-drag"), Sense::click_and_drag());
+        let drag = ui.interact(r, ui.scope_id().with("home.title-drag"), Sense::click_and_drag());
         if drag.drag_started() {
             ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
         }
@@ -171,35 +173,34 @@ pub(crate) fn title_strip(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect
         }
     }
     let left = r.left() + if shell.top_inset > 0.0 { STRIP_LEFT_MAC } else { STRIP_LEFT };
+    // Every control is centred on the strip's middle line, 24-point hit boxes.
+    let mid = r.center().y;
     // Home: the active place on the start screen, in the accent colour; in the workspace the way
     // back to it.
-    let home = Rect::from_min_size(pos2(left, r.top() + 2.0), Vec2::splat(24.0));
-    ux::icon(paint, home.min + vec2(4.0, 4.0), &icons::HOME, 16.0, if home_active { p.accent } else { p.text_secondary });
-    if control(shell, ui, "strip.home", "tab", home, true).on_hover_text(tr("Home")).clicked() && !home_active {
+    let home = Rect::from_center_size(pos2(left + 12.0, mid), Vec2::splat(24.0));
+    let home_resp = control(shell, ui, "strip.home", "tab", home, true).on_hover_text(tr("Home"));
+    if home_resp.hovered() && !home_active {
+        paint.rect_filled(home, 6.0, p.border);
+    }
+    ux::icon_mid(paint, home.center(), &icons::HOME, if home_active { p.accent } else { p.text_secondary });
+    if home_resp.clicked() && !home_active {
         shell.close_project();
         return false;
     }
-    // Open project, a ghost button beside it.
-    let ghost = home.right() + 5.0;
-    ux::icon_weighted(paint, pos2(ghost + 6.0, r.top() + 7.0), &icons::PLUS, 14.0, 1.5, p.text_secondary);
-    let label = ux::text(paint, pos2(ghost + 27.0, r.top() + 4.5), &tr("Open project"), types::UI, p.text, None);
-    control(
-        shell,
-        ui,
-        "strip.open-project",
-        "button",
-        Rect::from_min_max(pos2(ghost, r.top() + 2.0), pos2(label.right() + 8.0, r.top() + 26.0)),
-        false,
-    );
+    // Open project, a ghost button beside it: the plus and its label on the same line.
+    let ghost = home.right() + 6.0;
+    ux::icon_mid(paint, pos2(ghost + 13.0, mid), &icons::PLUS, p.text_secondary);
+    let label = ux::text_mid(paint, ghost + 24.0, mid, &tr("Open project"), types::UI, p.text, None);
+    control(shell, ui, "strip.open-project", "button", Rect::from_min_max(pos2(ghost, mid - 12.0), pos2(label.right() + 8.0, mid + 12.0)), false);
     // The theme switch: the moon in Light, the sun in Dark; a click changes the appearance.
     let dark = shell.state.theme.is_dark();
-    let switch = Rect::from_min_size(pos2(r.right() - 42.0, r.top() + 2.0), Vec2::splat(24.0));
+    let switch = Rect::from_center_size(pos2(r.right() - 24.0, mid), Vec2::splat(24.0));
     let hint = if dark { tr("Switch to the light appearance") } else { tr("Switch to the dark appearance") };
     let resp = control(shell, ui, "strip.theme", "button", switch, true).on_hover_text(hint);
     if resp.hovered() {
         paint.rect_filled(switch, 6.0, p.border);
     }
-    ux::icon(paint, switch.min + vec2(5.0, 5.0), if dark { &icons::SUN } else { &icons::MOON }, 14.0, p.text_secondary);
+    ux::icon_mid(paint, switch.center(), if dark { &icons::SUN } else { &icons::MOON }, p.text_secondary);
     if resp.clicked() {
         shell.state.theme = if dark { ThemeKind::Light } else { ThemeKind::Dark };
     }
@@ -211,37 +212,66 @@ fn bar_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     let paint = ui.painter();
     paint.rect_filled(r, 0.0, p.surface);
     paint.rect_filled(Rect::from_min_max(pos2(r.left(), r.bottom() - 1.0), r.max), 0.0, p.border);
-    let at = |x: f32, y: f32| r.min + vec2(x, y);
-    let mark = Rect::from_min_size(at(16.0, 12.0), Vec2::splat(24.0));
+    let wordmark = brand(paint, p, r);
+    bar_tail(shell, ui, p, r, wordmark.right() + 24.0, "home.header", &tr("Search projects and actions"), "field");
+}
+
+/// The bar's middle line: everything on the bar is centred on it (its bottom divider excluded).
+pub(crate) fn bar_mid(r: Rect) -> f32 {
+    r.top() + (r.height() - 1.0) / 2.0
+}
+
+/// The brand at the bar's left: the mark and the wordmark on the bar's middle line; gives the
+/// wordmark's rectangle.
+pub(crate) fn brand(paint: &egui::Painter, p: &Palette, r: Rect) -> Rect {
+    let mid = bar_mid(r);
+    let mark = Rect::from_center_size(pos2(r.left() + 28.0, mid), Vec2::splat(24.0));
     paint.rect_filled(mark, 6.0, p.accent_fill);
-    ux::icon(paint, mark.min + vec2(6.33, 6.67), &icons::MARK_A, 11.33, p.on_accent);
-    let wordmark = ux::text(paint, at(50.0, 12.5), "Archforge", types::LEAD_STRONG, p.text, None);
+    ux::icon_exact(paint, mark.center() - vec2(11.33, 10.67) / 2.0, &icons::MARK_A, 11.33, 1.6, p.on_accent);
+    ux::text_mid(paint, mark.right() + 10.0, mid, "Archforge", types::LEAD_STRONG, p.text, None)
+}
+
+/// The bar's right: the search field from `start` at the earliest, help and the avatar, all on
+/// the bar's middle line. The controls' ids start with `prefix`.
+#[allow(clippy::too_many_arguments, reason = "the bar's two screens differ in their ids, placeholder and search kind")]
+pub(crate) fn bar_tail(
+    shell: &mut Shell,
+    ui: &egui::Ui,
+    p: &Palette,
+    r: Rect,
+    start: f32,
+    prefix: &str,
+    placeholder: &str,
+    search_kind: &'static str,
+) {
+    let paint = ui.painter();
+    let mid = bar_mid(r);
     let right = r.right();
     if let Some(initials) = shell.services.user_name.as_deref().and_then(initials) {
-        let avatar = Rect::from_min_size(pos2(right - 44.0, r.top() + 10.0), Vec2::splat(28.0));
+        let avatar = Rect::from_center_size(pos2(right - 30.0, mid), Vec2::splat(28.0));
         paint.rect_filled(avatar, 14.0, p.accent_tint);
         let g = ux::galley(paint, &initials, types::CAPTION_STRONG, p.accent, None);
         paint.galley(avatar.center() - g.size() / 2.0, g, p.accent);
-        control(shell, ui, "home.header.account", "button", avatar, false);
+        control(shell, ui, &format!("{prefix}.account"), "button", avatar, false);
     }
-    let help = Rect::from_min_size(pos2(right - 80.0, r.top() + 14.0), Vec2::splat(20.0));
-    ux::icon(paint, help.min, &icons::HELP, 20.0, p.text_secondary);
-    control(shell, ui, "home.header.help", "button", help.expand(6.0), false);
-    // The search field keeps 24 px from the wordmark when the window is narrow.
-    let end = right - 96.0;
-    let start = (end - 300.0).max(wordmark.right() + 24.0);
+    let help = Rect::from_center_size(pos2(right - 68.0, mid), Vec2::splat(28.0));
+    ux::icon_mid(paint, help.center(), &icons::HELP, p.text_secondary);
+    control(shell, ui, &format!("{prefix}.help"), "button", help, false);
+    // The search field keeps its distance from the left part when the window is narrow.
+    let end = help.left() - 12.0;
+    let start = (end - 300.0).max(start);
     if end - start >= 160.0 {
-        let field = Rect::from_min_max(pos2(start, r.top() + 8.0), pos2(end, r.top() + 40.0));
-        paint.rect_filled(field, 16.0, p.page);
-        paint.rect_stroke(field, 16.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
-        ux::icon(paint, field.min + vec2(10.0, 8.0), &icons::SEARCH, 16.0, p.text_secondary);
+        let field = Rect::from_min_max(pos2(start, mid - 15.0), pos2(end, mid + 15.0));
+        paint.rect_filled(field, 15.0, p.page);
+        paint.rect_stroke(field, 15.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
+        ux::icon_mid(paint, pos2(field.left() + 18.0, mid), &icons::SEARCH, p.text_secondary);
         let chord = if ui.ctx().os() == egui::os::OperatingSystem::Mac { "⌘K" } else { "Ctrl K" };
         let key = ux::galley(paint, chord, types::CAPTION, p.text_muted, None);
-        let key_at = pos2(field.right() - 12.0 - key.size().x, field.top() + 8.0);
-        let room = (key_at.x - 8.0 - (field.left() + 34.0)).max(0.0);
-        ux::text(paint, field.min + vec2(34.0, 6.5), &tr("Search projects and actions"), types::UI, p.text_secondary, Some(room));
+        let key_at = pos2(field.right() - 14.0 - key.size().x, mid - key.size().y / 2.0);
+        let room = (key_at.x - 8.0 - (field.left() + 32.0)).max(0.0);
+        ux::text_mid(paint, field.left() + 32.0, mid, placeholder, types::UI, p.text_secondary, Some(room));
         paint.galley(key_at, key, p.text_muted);
-        control(shell, ui, "home.header.search", "field", field, false);
+        control(shell, ui, &format!("{prefix}.search"), search_kind, field, false);
     }
 }
 
@@ -397,7 +427,7 @@ fn banner(shell: &mut Shell, ui: &egui::Ui, p: &Palette, paint: &egui::Painter, 
     paint.rect_stroke(r, 12.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
     let tile = Rect::from_min_size(r.min + vec2(20.0, 22.0), Vec2::splat(48.0));
     paint.rect_filled(tile, 12.0, p.accent_tint);
-    ux::icon_in(paint, tile, &icons::CHAT, p.accent);
+    ux::icon_in_tile(paint, tile, &icons::CHAT, p.accent);
     // The two buttons hug their labels; the second ends 68 px before the banner's right edge.
     let (whats_new, new_label) = button_rect(paint, Pos2::ZERO, &tr("What’s new"), false);
     let whats_new = whats_new.translate(vec2(r.right() - 68.0 - whats_new.width(), r.top() + 26.0));
@@ -450,7 +480,7 @@ fn start_card(
     paint.rect_stroke(r, 12.0, Stroke::new(1.0, border), StrokeKind::Inside);
     let tile = Rect::from_min_size(r.min + vec2(20.0, 20.0), Vec2::splat(36.0));
     paint.rect_filled(tile, 9.0, hue.tint(p));
-    ux::icon_in(paint, tile, icon, hue.ink(p));
+    ux::icon_in_tile(paint, tile, icon, hue.ink(p));
     ux::text(paint, r.min + vec2(70.0, 25.5), &tr(title), types::CARD_TITLE, p.text, Some(r.width() - 90.0));
     let g = ux::galley_rows(paint, &tr(line), types::BODY, p.text_secondary, Some(r.width() - 40.0), 2);
     paint.galley(r.min + vec2(20.0, 76.0), g, p.text_secondary);
