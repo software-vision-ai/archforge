@@ -60,6 +60,12 @@ pub enum Screen {
     WorkspaceDiagramEmpty,
     /// A diagram of two tables and their relationship, the first table selected.
     WorkspaceDiagram,
+    /// The same with the Appearance panel open on the first table, its fill and border its own.
+    WorkspaceAppearance,
+    /// The same with the relationship selected and its own width.
+    WorkspaceAppearanceLine,
+    /// The first table's Appearance with the picker open on its fill.
+    WorkspaceAppearancePicker,
     /// An empty diagram with its first entity just placed, its name open for typing.
     WorkspaceEntityNew,
     /// The diagram of two tables with the Relationship tool active and the cardinality popover open.
@@ -209,6 +215,9 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
         screen,
         Screen::WorkspaceDiagramEmpty
             | Screen::WorkspaceDiagram
+            | Screen::WorkspaceAppearance
+            | Screen::WorkspaceAppearanceLine
+            | Screen::WorkspaceAppearancePicker
             | Screen::WorkspaceEntityNew
             | Screen::WorkspaceCardinality
             | Screen::WorkspaceRelationship
@@ -222,6 +231,9 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
             matches!(
                 screen,
                 Screen::WorkspaceDiagram
+                    | Screen::WorkspaceAppearance
+                    | Screen::WorkspaceAppearanceLine
+                    | Screen::WorkspaceAppearancePicker
                     | Screen::WorkspaceCardinality
                     | Screen::WorkspaceRelationship
                     | Screen::WorkspaceMappingTable
@@ -236,6 +248,9 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
         }
         if screen == Screen::WorkspaceSubtypes {
             sample_subtypes(&mut shell)?;
+        }
+        if matches!(screen, Screen::WorkspaceAppearance | Screen::WorkspaceAppearanceLine | Screen::WorkspaceAppearancePicker) {
+            sample_appearance(&mut shell, screen)?;
         }
         if screen == Screen::WorkspaceRelationship
             && let Some(session) = shell.session.as_mut()
@@ -431,6 +446,41 @@ fn sample_column_selected(shell: &mut Shell) -> Result<(), String> {
     shell.canvas.fit_pending = false;
     shell.canvas.zoom = 1.0;
     shell.canvas.pan = egui::Vec2::ZERO;
+    Ok(())
+}
+
+/// Gives the first table of the open diagram its own fill and border, and the relationship its own
+/// width, then opens Appearance on the table, on the relationship, or on the table with the picker.
+fn sample_appearance(shell: &mut Shell, screen: Screen) -> Result<(), String> {
+    use serde_json::json;
+    let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
+    let store = session.doc();
+    let class = |c| store.alive().find(|o| store.class_of(*o).ok() == Some(c));
+    let selected = session.view().selection.first().copied().ok_or_else(|| "nothing is selected".to_string())?;
+    let node = store
+        .alive()
+        .find(|o| {
+            store.class_of(*o).ok() == Some(archforge_diagram::NODE)
+                && store.get(*o, archforge_diagram::node::ELEMENT).ok().and_then(|v| v.as_ref()) == Some(selected)
+        })
+        .and_then(|o| store.uuid(o).ok())
+        .ok_or_else(|| "the selected table has no node".to_string())?;
+    let rel = class(archforge_er::RELATIONSHIP).and_then(|o| store.uuid(o).ok()).ok_or_else(|| "the sample has no relationship".to_string())?;
+    let edge = class(archforge_diagram::EDGE).and_then(|o| store.uuid(o).ok()).ok_or_else(|| "the sample has no line".to_string())?;
+    let run = |session: &mut archforge_er::Session, params: serde_json::Value| {
+        session.execute("diagram.style", &params).map(|_| ()).map_err(|e| format!("diagram.style: {e:?}"))
+    };
+    run(session, json!({ "ids": [node.to_string()], "fill": "#EBF0FE", "stroke": "#9EAFE7", "line": 1.5 }))?;
+    run(session, json!({ "ids": [edge.to_string()], "line": 2 }))?;
+    if screen == Screen::WorkspaceAppearanceLine {
+        session.execute("view.select", &json!({ "ids": [rel.to_string()] })).map_err(|e| format!("view.select: {e:?}"))?;
+    }
+    session.mark_saved().map_err(|e| format!("mark_saved: {e:?}"))?;
+    shell.state.show_panel(crate::state::Panel::Appearance);
+    if screen == Screen::WorkspaceAppearancePicker {
+        let c = egui::Color32::from_rgb(0xC2, 0x5E, 0x0A);
+        shell.panels.picker = Some(crate::appearance::Picker::new(crate::appearance::Group::Fill, c));
+    }
     Ok(())
 }
 

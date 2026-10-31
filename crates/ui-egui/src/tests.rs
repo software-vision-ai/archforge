@@ -1997,6 +1997,85 @@ fn diagram_harness() -> (Harness<'static, Shell>, String, String) {
     (h, customer, diagram)
 }
 
+/// The look the store keeps for diagram node or edge `o`: fill, stroke, text and width.
+fn look(h: &Harness<'static, Shell>, o: archforge_mof::Obj) -> crate::canvas::Look {
+    let st = h.state().session.as_ref().unwrap().doc();
+    let prop = if st.class_of(o).ok() == Some(archforge_diagram::NODE) { archforge_diagram::node::STYLE } else { archforge_diagram::edge::STYLE };
+    crate::canvas::look_of(st, o, prop)
+}
+
+#[test]
+fn appearance_styles_the_selection_on_this_diagram() {
+    let (mut h, customer, diagram) = diagram_harness();
+    let (node, edge, places) = {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let customer = st.by_uuid(archforge_mof::Uuid::parse(&customer).unwrap()).unwrap();
+        let d = st.by_uuid(archforge_mof::Uuid::parse(&diagram).unwrap()).unwrap();
+        let first = |p| st.list(d, p).unwrap().iter().filter_map(archforge_mof::Value::as_ref).next().unwrap();
+        let node = st
+            .list(d, archforge_diagram::diagram::NODE)
+            .unwrap()
+            .iter()
+            .filter_map(archforge_mof::Value::as_ref)
+            .find(|n| st.get(*n, archforge_diagram::node::ELEMENT).ok().and_then(|v| v.as_ref()) == Some(customer))
+            .unwrap();
+        let edge = first(archforge_diagram::diagram::EDGE);
+        let places = st.get(edge, archforge_diagram::edge::ELEMENT).unwrap().as_ref().unwrap();
+        (node, edge, st.uuid(places).unwrap().to_string())
+    };
+    let at = rect_of(&h, "workspace.panels.appearance").center();
+    click(&mut h, at);
+    // Nothing selected: the panel says what to select.
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [] })).unwrap();
+    h.run();
+    assert!(!ids(&h).iter().any(|i| i.starts_with("workspace.appearance.")), "nothing to style");
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [customer] })).unwrap();
+    h.run();
+    // A swatch sets the fill; a width keeps it.
+    let at = rect_of(&h, "workspace.appearance.fill.2").center();
+    click(&mut h, at);
+    assert_eq!(look(&h, node).fill, crate::canvas::colour("#EBF0FE"));
+    let at = rect_of(&h, "workspace.appearance.border-width.3").center();
+    click(&mut h, at);
+    assert_eq!((look(&h, node).fill, look(&h, node).width), (crate::canvas::colour("#EBF0FE"), Some(3.0)));
+    // The own colour: the picker changes nothing until Apply.
+    let at = rect_of(&h, "workspace.appearance.text.own").center();
+    click(&mut h, at);
+    assert!(h.state().panels.picker.is_some());
+    h.state_mut().panels.picker.as_mut().unwrap().hsv = [0.0, 1.0, 0.8];
+    h.run();
+    assert_eq!(look(&h, node).text, None, "nothing changes before Apply");
+    let at = rect_of(&h, "workspace.appearance.picker.apply").center();
+    click(&mut h, at);
+    assert!(h.state().panels.picker.is_none());
+    assert_eq!(look(&h, node).text, crate::canvas::colour("#CC0000"));
+    // The first swatch takes the row's own colour away and keeps the others.
+    let at = rect_of(&h, "workspace.appearance.text.diagram").center();
+    click(&mut h, at);
+    assert_eq!((look(&h, node).text, look(&h, node).fill), (None, crate::canvas::colour("#EBF0FE")));
+    // Use diagram defaults takes the own look away; undo brings it back.
+    let at = rect_of(&h, "workspace.appearance.defaults").center();
+    click(&mut h, at);
+    assert_eq!(look(&h, node), crate::canvas::Look::default());
+    h.state_mut().session.as_mut().unwrap().undo().unwrap();
+    h.run();
+    assert_eq!(look(&h, node).width, Some(3.0));
+    // A line: its colour and width, and the key status turned off to show the colour.
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [places] })).unwrap();
+    h.run();
+    assert!(!ids(&h).iter().any(|i| i.starts_with("workspace.appearance.fill.")), "a line has no fill");
+    let at = rect_of(&h, "workspace.appearance.line.1").center();
+    click(&mut h, at);
+    assert_eq!(look(&h, edge).stroke, crate::canvas::colour("#C25E0A"));
+    let at = rect_of(&h, "workspace.appearance.line-width.2").center();
+    click(&mut h, at);
+    assert_eq!(look(&h, edge).width, Some(2.0));
+    assert!(h.state().canvas.key_status);
+    let at = rect_of(&h, "workspace.appearance.key-status").center();
+    click(&mut h, at);
+    assert!(!h.state().canvas.key_status, "the line colours show");
+}
+
 fn drag(h: &mut Harness<'static, Shell>, from: egui::Pos2, to: egui::Pos2) {
     h.event(egui::Event::PointerMoved(from));
     h.event(egui::Event::PointerButton { pos: from, button: egui::PointerButton::Primary, pressed: true, modifiers: egui::Modifiers::NONE });

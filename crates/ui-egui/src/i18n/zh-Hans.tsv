@@ -293,7 +293,23 @@ str		Empty diagram	空图
 str		Unnamed diagram	未命名的图
 str		Model behind this diagram	此图背后的模型
 str		No changes yet	还没有更改
-str		Nothing selected	未选择任何内容
+str		Style	样式
+str		Fill	填充
+str		Border	边框
+str		Text colour	文字颜色
+str		Border width	边框粗细
+str		Line colour	线条颜色
+str		Line width	线条粗细
+str		Diagram default	图表默认
+str		Your own colour	自定义颜色
+str		Colour code	颜色代码
+str		Use diagram defaults	使用图表默认值
+str		Show line colours	显示线条颜色
+str		Change appearance	更改外观
+str		Select a table or a line on the diagram	在图表中选择一个表或一条线
+str		Selection · this diagram	所选内容 · 此图表
+str		{kind} · this diagram	{kind} · 此图表
+plural		{n} item	{n} 个项目
 str		No agent connected	未连接代理
 str		The model could not be opened	无法打开模型
 str		The host gives no ids for the model's elements	宿主未提供模型元素的 ID

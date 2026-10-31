@@ -164,6 +164,23 @@ the change, and update this file in the same change.
   it, and the editor offers Unlink.
 - The column type menu lists the schema's domains and enum types, then the built-in types.
 
+## Appearance
+- Appearance styles the selection on the diagram open in the centre, and on that diagram only.
+  For now it holds Style (owner, 2026-10-31): a table, a note or another card takes Fill, Border
+  and Text colour and a Border width; a line takes Line colour and Line width. Text size and
+  routing come later with their own model fields; a line style is never offered, since dashed
+  already means not identifying.
+- Each colour row starts with the diagram's own colour, drawn in the theme shown, which takes the
+  row's own colour away; then the design's colours; then Your own colour, which opens a picker
+  (a saturation and brightness field, a hue bar, the colour's code, Cancel and Apply). Nothing
+  changes until Apply; Esc or a click outside cancels.
+- A table or note with its own fill and no text colour of its own draws its text to read on that
+  fill: dark on a light fill, light on a dark one, in either theme.
+- A line's own colour shows while Key status is off; while it is on, the panel offers Show line
+  colours, which turns it off. A line's own width shows always.
+- Use diagram defaults takes the selection's own look away. Every change is one undo step for
+  the whole selection.
+
 ## Skills
 - A skill's text is Markdown, and it is written in the skill's own tab in the centre, beside the
   diagrams. The page shows the skill's name, where it sits, a formatting toolbar (bold, italic,

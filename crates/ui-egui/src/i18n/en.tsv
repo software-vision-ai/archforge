@@ -292,7 +292,23 @@ str		Empty diagram	Empty diagram
 str		Unnamed diagram	Unnamed diagram
 str		Model behind this diagram	Model behind this diagram
 str		No changes yet	No changes yet
-str		Nothing selected	Nothing selected
+str		Style	Style
+str		Fill	Fill
+str		Border	Border
+str		Text colour	Text colour
+str		Border width	Border width
+str		Line colour	Line colour
+str		Line width	Line width
+str		Diagram default	Diagram default
+str		Your own colour	Your own colour
+str		Colour code	Colour code
+str		Use diagram defaults	Use diagram defaults
+str		Show line colours	Show line colours
+str		Change appearance	Change appearance
+str		Select a table or a line on the diagram	Select a table or a line on the diagram
+str		Selection · this diagram	Selection · this diagram
+str		{kind} · this diagram	{kind} · this diagram
+plural		{n} item	{n} item|{n} items
 str		No agent connected	No agent connected
 str		The model could not be opened	The model could not be opened
 str		The host gives no ids for the model's elements	The host gives no ids for the model's elements

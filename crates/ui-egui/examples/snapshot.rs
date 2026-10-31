@@ -1,5 +1,5 @@
 //! Renders the window offscreen to a PNG, without opening one. Usage:
-//! `cargo run -p archforge-ui-egui --features snapshot --example snapshot -- <out.png> [light|dark] [width height [scale]] [--screen home|home-gallery|home-search|new-project|new-project-failed|workspace|workspace-schema|workspace-table|workspace-skills|workspace-skill-tab|workspace-skill-preview|workspace-skill-link|workspace-skill-new|workspace-diagram-empty|workspace-diagram|workspace-entity-new|workspace-cardinality|workspace-relationship|workspace-key-editor|workspace-column-editor|workspace-index-editor|workspace-mapping-table|workspace-schema-types|workspace-subtypes|workspace-schema-objects|workspace-cross-schema|workspace-column-selected]`
+//! `cargo run -p archforge-ui-egui --features snapshot --example snapshot -- <out.png> [light|dark] [width height [scale]] [--screen home|home-gallery|home-search|new-project|new-project-failed|workspace|workspace-schema|workspace-table|workspace-skills|workspace-skill-tab|workspace-skill-preview|workspace-skill-link|workspace-skill-new|workspace-diagram-empty|workspace-diagram|workspace-appearance|workspace-appearance-line|workspace-appearance-picker|workspace-entity-new|workspace-cardinality|workspace-relationship|workspace-key-editor|workspace-column-editor|workspace-index-editor|workspace-mapping-table|workspace-schema-types|workspace-subtypes|workspace-schema-objects|workspace-cross-schema|workspace-column-selected]`
 
 use archforge_ui_egui::offscreen::Screen;
 use archforge_ui_egui::theme::ThemeKind;
@@ -42,12 +42,15 @@ fn run() -> Result<(), String> {
             Some("workspace-column-editor") => Screen::WorkspaceColumnEditor,
             Some("workspace-diagram-empty") => Screen::WorkspaceDiagramEmpty,
             Some("workspace-diagram") => Screen::WorkspaceDiagram,
+            Some("workspace-appearance") => Screen::WorkspaceAppearance,
+            Some("workspace-appearance-line") => Screen::WorkspaceAppearanceLine,
+            Some("workspace-appearance-picker") => Screen::WorkspaceAppearancePicker,
             Some("workspace-entity-new") => Screen::WorkspaceEntityNew,
             Some("workspace-cardinality") => Screen::WorkspaceCardinality,
             Some("workspace-relationship") => Screen::WorkspaceRelationship,
             other => {
                 return Err(format!(
-                    "--screen {other:?} is not home, home-gallery, home-search, new-project, new-project-failed, workspace, workspace-schema, workspace-table, workspace-skills, workspace-skill-tab, workspace-skill-preview, workspace-skill-link, workspace-skill-new, workspace-diagram-empty, workspace-diagram, workspace-entity-new, workspace-cardinality, workspace-relationship, workspace-key-editor, workspace-column-editor, workspace-index-editor, workspace-mapping-table, workspace-schema-types, workspace-subtypes, workspace-schema-objects, workspace-cross-schema or workspace-column-selected; {USAGE}"
+                    "--screen {other:?} is not home, home-gallery, home-search, new-project, new-project-failed, workspace, workspace-schema, workspace-table, workspace-skills, workspace-skill-tab, workspace-skill-preview, workspace-skill-link, workspace-skill-new, workspace-diagram-empty, workspace-diagram, workspace-appearance, workspace-appearance-line, workspace-appearance-picker, workspace-entity-new, workspace-cardinality, workspace-relationship, workspace-key-editor, workspace-column-editor, workspace-index-editor, workspace-mapping-table, workspace-schema-types, workspace-subtypes, workspace-schema-objects, workspace-cross-schema or workspace-column-selected; {USAGE}"
                 ));
             }
         };

@@ -293,7 +293,23 @@ str		Empty diagram	Diagrama vazio
 str		Unnamed diagram	Diagrama sem nome
 str		Model behind this diagram	Modelo por trás deste diagrama
 str		No changes yet	Ainda sem alterações
-str		Nothing selected	Nada selecionado
+str		Style	Estilo
+str		Fill	Preenchimento
+str		Border	Contorno
+str		Text colour	Cor do texto
+str		Border width	Espessura do contorno
+str		Line colour	Cor da linha
+str		Line width	Espessura da linha
+str		Diagram default	Predefinição do diagrama
+str		Your own colour	A sua cor
+str		Colour code	Código da cor
+str		Use diagram defaults	Usar as predefinições do diagrama
+str		Show line colours	Mostrar cores das linhas
+str		Change appearance	Alterar o aspeto
+str		Select a table or a line on the diagram	Selecione uma tabela ou uma linha no diagrama
+str		Selection · this diagram	Seleção · este diagrama
+str		{kind} · this diagram	{kind} · este diagrama
+plural		{n} item	{n} item|{n} itens
 str		No agent connected	Nenhum agente ligado
 str		The model could not be opened	Não foi possível abrir o modelo
 str		The host gives no ids for the model's elements	O anfitrião não fornece ids para os elementos do modelo
