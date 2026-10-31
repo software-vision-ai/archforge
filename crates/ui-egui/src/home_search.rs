@@ -1,6 +1,6 @@
 //! Home's search field: a quick switcher over the recent projects, the projects in the pinned
-//! folders (the host looks for them each time the search opens), the pinned folders and what Home
-//! can do. A click on the field or the command key with K opens it; typing narrows the list
+//! folders (the host looks for them when the search opens, one search at a time), the pinned
+//! folders and what Home can do. A click on the field or the command key with K opens it; typing narrows the list
 //! under it, every word of the query found in a result's name (or, for a project or a folder, in
 //! where it lives); the arrow keys move the highlight, Enter runs it, Esc or a click elsewhere
 //! closes the list.
@@ -15,16 +15,27 @@ use crate::ux::{self, Palette, icons, types};
 use crate::widgets;
 
 /// The search's state between frames: whether its list is open, the query, the highlighted row,
-/// whether the field is still to take the keyboard, and the projects found in the pinned folders,
-/// or the host's answer still to come.
+/// whether the field is still to take the keyboard, the projects last found in the pinned folders
+/// and the host's answer still to come. Both outlive closing the list, so one search of the folders
+/// runs at a time however often the list opens.
 #[derive(Debug, Default)]
 pub struct Search {
     pub open: bool,
     pub query: String,
     pub highlight: usize,
     focus: bool,
-    found: Vec<std::path::PathBuf>,
-    finding: Option<std::sync::mpsc::Receiver<Vec<std::path::PathBuf>>>,
+    found: Vec<Found>,
+    finding: Option<std::sync::mpsc::Receiver<Vec<crate::FoundProject>>>,
+}
+
+/// A project found in a pinned folder, as its row shows it: where it is, its name, where it lives
+/// from its pinned folder down, and all three in small letters for matching.
+#[derive(Debug)]
+struct Found {
+    path: std::path::PathBuf,
+    label: String,
+    detail: String,
+    text: String,
 }
 
 /// The longest query kept, the most projects and folders the list shows, a row's height and the
@@ -64,51 +75,57 @@ struct Hit {
 /// Opens the search with the keyboard: the command key with K, while Home shows.
 pub(crate) fn shortcut(shell: &mut Shell, ctx: &egui::Context) {
     if ctx.input_mut(|i| i.consume_shortcut(&egui::KeyboardShortcut::new(egui::Modifiers::COMMAND, egui::Key::K))) {
-        open(shell);
+        open(shell, ctx);
     }
 }
 
-fn open(shell: &mut Shell) {
-    shell.home_search.open = true;
-    shell.home_search.focus = true;
-    shell.home_search.highlight = 0;
-    // The pinned folders' projects, looked for afresh each time: folders change between searches.
-    if let Some(find) = shell.services.find_projects.clone()
+fn open(shell: &mut Shell, ctx: &egui::Context) {
+    let search = &mut shell.home_search;
+    search.focus = true;
+    if search.open {
+        return;
+    }
+    search.open = true;
+    search.highlight = 0;
+    // The pinned folders' projects, looked for again each time the list opens (folders change),
+    // but never while a search of them is still running; its answer wakes the window.
+    if search.finding.is_none()
+        && let Some(find) = shell.services.find_projects.clone()
         && !shell.state.pinned.is_empty()
     {
-        shell.home_search.finding = Some(find(shell.state.pinned.clone()));
+        let ctx = ctx.clone();
+        shell.home_search.finding = Some(find(shell.state.pinned.clone(), Box::new(move || ctx.request_repaint())));
     }
 }
 
-/// Takes the host's answer when it has come; until then the frame is drawn again shortly.
-fn take_found(shell: &mut Shell, ctx: &egui::Context) {
+/// Takes the host's answer when it has come, its rows' words made once.
+fn take_found(shell: &mut Shell) {
     let Some(rx) = &shell.home_search.finding else { return };
-    match rx.try_recv() {
-        Ok(found) => {
-            shell.home_search.found = found;
-            shell.home_search.finding = None;
-        }
-        Err(std::sync::mpsc::TryRecvError::Empty) => ctx.request_repaint_after(std::time::Duration::from_millis(50)),
-        Err(std::sync::mpsc::TryRecvError::Disconnected) => shell.home_search.finding = None,
-    }
-}
-
-/// Where a project found in a pinned folder lives, from that folder down: `Work / Client`.
-fn place_in_pinned(shell: &Shell, project: &std::path::Path) -> String {
-    let parent = project.parent().unwrap_or(project);
-    let Some(pinned) = shell.state.pinned.iter().filter(|f| parent.starts_with(f)).max_by_key(|f| f.as_os_str().len()) else {
-        return String::new();
+    let found = match rx.try_recv() {
+        Ok(found) => found,
+        Err(std::sync::mpsc::TryRecvError::Empty) => return,
+        Err(std::sync::mpsc::TryRecvError::Disconnected) => Vec::new(),
     };
-    let base = pinned.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    let below = parent
-        .strip_prefix(pinned)
-        .map(|p| p.components().map(|c| c.as_os_str().to_string_lossy().into_owned()).collect::<Vec<_>>())
-        .unwrap_or_default();
-    std::iter::once(base).chain(below).collect::<Vec<_>>().join(" / ")
+    shell.home_search.finding = None;
+    shell.home_search.found = found
+        .into_iter()
+        .map(|f| {
+            let label = f.path.file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+            let base = shell.state.pinned.get(f.folder).and_then(|p| p.file_name()).map(|n| n.to_string_lossy().into_owned());
+            let detail = base.into_iter().chain(f.within).collect::<Vec<_>>().join(" / ");
+            let text = format!("{label}\n{detail}\n{}", f.path.to_string_lossy()).to_lowercase();
+            Found { path: f.path, label, detail, text }
+        })
+        .collect();
 }
 
+/// Closes the list and forgets the query; the projects found stay for the next time.
 fn close(shell: &mut Shell) {
-    shell.home_search = Search::default();
+    let search = &mut shell.home_search;
+    search.open = false;
+    search.query.clear();
+    search.highlight = 0;
+    search.focus = false;
 }
 
 /// Whether every word of `query` is in one of `texts`, whatever the case.
@@ -127,20 +144,18 @@ fn hits(shell: &Shell, query: &str) -> Vec<(String, Vec<Hit>)> {
         label: r.name.clone(),
         detail: shell.location_of(&r.path).unwrap_or_default(),
     });
-    let found = shell.home_search.found.iter().filter(|p| !shell.state.recent.iter().any(|r| &r.path == *p)).map(|p| Hit {
-        target: Target::Project(p.clone()),
-        icon: &icons::ER_DIAGRAM,
-        label: p.file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
-        detail: place_in_pinned(shell, p),
+    let recent = recent.filter(|h| match &h.target {
+        Target::Project(path) => matches(query, &[&h.label, &h.detail, &path.to_string_lossy()]),
+        _ => false,
     });
-    let projects: Vec<Hit> = recent
-        .chain(found)
-        .filter(|h| match &h.target {
-            Target::Project(path) => matches(query, &[&h.label, &h.detail, &path.to_string_lossy()]),
-            _ => false,
-        })
-        .take(MAX_PROJECTS)
-        .collect();
+    let words: Vec<String> = query.to_lowercase().split_whitespace().map(str::to_string).collect();
+    let found = shell
+        .home_search
+        .found
+        .iter()
+        .filter(|f| !shell.state.recent.iter().any(|r| r.path == f.path) && words.iter().all(|w| f.text.contains(w.as_str())))
+        .map(|f| Hit { target: Target::Project(f.path.clone()), icon: &icons::ER_DIAGRAM, label: f.label.clone(), detail: f.detail.clone() });
+    let projects: Vec<Hit> = recent.chain(found).take(MAX_PROJECTS).collect();
     if !projects.is_empty() {
         groups.push((tr("Projects"), projects));
     }
@@ -242,12 +257,11 @@ pub(crate) fn field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Re
         paint.galley(key_at, key, p.text_muted);
         ux::text_mid(&paint, text.left(), mid, placeholder, types::UI, p.text_secondary, Some(text.width()));
         if control(shell, ui, "home.header.search", "field", field, true).clicked() {
-            open(shell);
+            open(shell, ui.ctx());
         }
         return;
     }
     widgets::record_visible(ui, &mut shell.registry, "home.header.search", "field", field);
-    take_found(shell, ui.ctx());
     // The list's keys before the field sees them: the arrows move, Enter runs, Esc closes.
     let groups = hits(shell, &shell.home_search.query.clone());
     let count = groups.iter().map(|(_, h)| h.len()).sum::<usize>();
@@ -302,6 +316,13 @@ pub(crate) fn field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Re
         shell.home_search.highlight = 0;
     }
     list(shell, ui, p, field, &groups);
+    // The host's answer only now, so the rows a key or a click ran on are the rows drawn; a list
+    // that grows keeps its highlight on the first row.
+    let had = shell.home_search.found.len();
+    take_found(shell);
+    if shell.home_search.found.len() != had {
+        shell.home_search.highlight = 0;
+    }
 }
 
 /// The list under the field, its rows grouped under their headings; a click elsewhere closes it.

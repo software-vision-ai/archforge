@@ -813,19 +813,21 @@ fn homes_search_finds_projects_and_actions_and_runs_them_from_the_keyboard() {
 }
 
 #[test]
-fn homes_search_finds_the_projects_in_the_pinned_folders_and_opens_them() {
+fn homes_search_finds_the_projects_in_the_pinned_folders_one_search_at_a_time_and_opens_them() {
     crate::i18n::set_language("en");
     let host = std::sync::Arc::new(SavingHost::default());
+    type Pending = (std::sync::mpsc::Sender<Vec<crate::FoundProject>>, Box<dyn Fn() + Send>);
     let asked: std::sync::Arc<std::sync::Mutex<Vec<Vec<std::path::PathBuf>>>> = std::sync::Arc::default();
-    let seen = asked.clone();
+    let pending: std::sync::Arc<std::sync::Mutex<Vec<Pending>>> = std::sync::Arc::default();
+    let (seen, waiting) = (asked.clone(), pending.clone());
     let services = Services {
         projects: Some(host.clone()),
         ids: Some(test_ids()),
         pick_project: Some(std::sync::Arc::new(|_| None)),
-        find_projects: Some(std::sync::Arc::new(move |folders: Vec<std::path::PathBuf>| {
+        find_projects: Some(std::sync::Arc::new(move |folders: Vec<std::path::PathBuf>, wake: Box<dyn Fn() + Send>| {
             seen.lock().unwrap().push(folders);
             let (tx, rx) = std::sync::mpsc::channel();
-            tx.send(vec!["/Users/robin/Work/Client/Billing.archforge".into(), "/tmp/Shop.archforge".into()]).unwrap();
+            waiting.lock().unwrap().push((tx, wake));
             rx
         })),
         ..Services::default()
@@ -841,29 +843,44 @@ fn homes_search_finds_the_projects_in_the_pinned_folders_and_opens_them() {
         shell,
     );
     h.run_steps(2);
+    // However often the search opens, the folders are searched once while an answer is due.
+    for _ in 0..3 {
+        key(&mut h, egui::Key::K, egui::Modifiers::COMMAND);
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    }
     key(&mut h, egui::Key::K, egui::Modifiers::COMMAND);
-    h.run_steps(3);
-    assert_eq!(asked.lock().unwrap().as_slice(), [vec![std::path::PathBuf::from("/Users/robin/Work")]], "the host looks in the pinned folders");
-    // A project of a pinned folder is found by its name; one that is a recent project is listed once.
+    h.run_steps(2);
+    assert_eq!(asked.lock().unwrap().as_slice(), [vec![std::path::PathBuf::from("/Users/robin/Work")]], "one search of the pinned folders");
+    // The answer comes, and its wake is called: the projects found join the list.
+    let (tx, wake) = pending.lock().unwrap().pop().unwrap();
+    tx.send(vec![
+        crate::FoundProject { path: "/Users/robin/Work/Client/Billing.archforge".into(), folder: 0, within: vec!["Client".into()] },
+        crate::FoundProject { path: "/tmp/Shop.archforge".into(), folder: 0, within: vec![] },
+    ])
+    .unwrap();
+    wake();
+    h.run_steps(2);
     let results = |h: &Harness<'static, Shell>| ids(h).iter().filter(|i| i.starts_with("home.header.search.result.")).count();
     h.event(egui::Event::Text("billing".into()));
     h.run_steps(2);
     assert_eq!(results(&h), 1, "{:?}", ids(&h));
     key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    // A project that is a recent one too is listed once; one is found by where it lives as well.
     key(&mut h, egui::Key::K, egui::Modifiers::COMMAND);
-    h.run_steps(3);
+    h.run_steps(2);
     h.event(egui::Event::Text("shop".into()));
     h.run_steps(2);
     assert_eq!(results(&h), 1, "Shop once: {:?}", ids(&h));
     key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
     key(&mut h, egui::Key::K, egui::Modifiers::COMMAND);
-    h.run_steps(3);
+    h.run_steps(2);
     h.event(egui::Event::Text("client bill".into()));
     h.run_steps(2);
     key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
     h.run_steps(2);
     let (path, _tx) = host.opens.lock().unwrap().pop().expect("Enter opened the project found");
     assert_eq!(path, std::path::PathBuf::from("/Users/robin/Work/Client/Billing.archforge"));
+    assert_eq!(asked.lock().unwrap().len(), 2, "each opening after an answer searches again");
 }
 
 #[test]

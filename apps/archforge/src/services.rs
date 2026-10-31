@@ -34,29 +34,53 @@ fn pick_project(start: Option<&std::path::Path>) -> Option<PathBuf> {
     dialog.pick_folder()
 }
 
-/// How deep below a pinned folder Home's search looks for projects, and the most it lists.
+/// How deep below a pinned folder Home's search looks for projects, the most it lists, and the
+/// most folder entries one search reads in all its pinned folders together.
 const FIND_DEPTH: usize = 2;
 const FIND_LIMIT: usize = 200;
+const FIND_BUDGET: usize = 20_000;
 
 /// The projects in Home's pinned folders, looked for on a thread of their own so a slow disk
-/// never holds the window; the answer is sent once. A thread that cannot start sends nothing, and
-/// the search keeps to the recent projects.
-fn find_projects(folders: Vec<PathBuf>) -> std::sync::mpsc::Receiver<Vec<PathBuf>> {
+/// never holds the window: each folder is made canonical first, so a project found matches the
+/// same project in the recent list. The answer is sent once, then the window is woken. A search
+/// that saw only part of the folders says so in the log; a thread that cannot start sends
+/// nothing, and the search keeps to the recent projects.
+fn find_projects(folders: Vec<PathBuf>, wake: Box<dyn Fn() + Send>) -> std::sync::mpsc::Receiver<Vec<archforge_ui_egui::FoundProject>> {
     let (tx, rx) = std::sync::mpsc::channel();
     let started = std::thread::Builder::new().name("find-projects".into()).spawn(move || {
-        let mut found: Vec<PathBuf> = Vec::new();
-        for folder in folders {
+        let mut found: Vec<archforge_ui_egui::FoundProject> = Vec::new();
+        let (mut budget, mut cut_short, mut unreadable) = (FIND_BUDGET, false, 0);
+        for (i, folder) in folders.iter().enumerate() {
             let room = FIND_LIMIT.saturating_sub(found.len());
-            if room == 0 {
+            if room == 0 || budget == 0 {
+                cut_short = true;
                 break;
             }
-            for project in archforge_project::find(&folder, FIND_DEPTH, room) {
-                if !found.contains(&project) {
-                    found.push(project);
+            let root = folder.canonicalize().unwrap_or_else(|_| folder.clone());
+            let walk = archforge_project::find(&root, FIND_DEPTH, room, &mut budget);
+            cut_short |= walk.cut_short;
+            unreadable += walk.unreadable;
+            for path in walk.projects {
+                if found.iter().any(|f| f.path == path) {
+                    continue;
                 }
+                let within = path
+                    .parent()
+                    .and_then(|p| p.strip_prefix(&root).ok())
+                    .map(|p| p.components().map(|c| c.as_os_str().to_string_lossy().into_owned()).collect())
+                    .unwrap_or_default();
+                found.push(archforge_ui_egui::FoundProject { path, folder: i, within });
             }
         }
+        if cut_short || unreadable > 0 {
+            log::warn!(
+                "Home's search saw the pinned folders only in part: {} projects listed, {}, {unreadable} folders unreadable",
+                found.len(),
+                if cut_short { "a limit reached" } else { "no limit reached" }
+            );
+        }
         let _ = tx.send(found);
+        wake();
     });
     if let Err(e) = started {
         log::warn!("the pinned folders could not be searched for projects: {e}");
