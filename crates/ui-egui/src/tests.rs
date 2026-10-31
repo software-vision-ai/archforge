@@ -429,6 +429,19 @@ fn open_project_asks_the_picker_and_the_host_and_shows_the_model_it_read() {
 }
 
 #[test]
+fn a_project_that_never_held_a_model_opens_with_a_fresh_one() {
+    // Its tables hold no row at all: made before projects were saved.
+    let empty = crate::Opened { model: Some(std::sync::Arc::new(archforge_mof::rows::Rows::default())), ..commerce() };
+    let (mut h, host) = saving_harness(Some(empty), None);
+    assert!(h.state().session_error.is_none(), "{:?}", h.state().session_error);
+    assert!(h.state().session.is_some());
+    // The fresh model is written like a new project's, and takes a schema.
+    assert_eq!(host.written.lock().unwrap().len(), 1);
+    add_schema(&mut h, "shop");
+    assert_eq!(host.written.lock().unwrap().len(), 2);
+}
+
+#[test]
 fn a_failed_opening_says_why_on_home_and_a_cancelled_picker_opens_nothing() {
     let (mut h, host) = saving_harness(None, None);
     let at = rect_of(&h, "home.open-project").center();
