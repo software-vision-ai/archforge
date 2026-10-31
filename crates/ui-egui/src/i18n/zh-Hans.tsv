@@ -179,6 +179,13 @@ str		project	项目
 str		overridden below	被下方覆盖
 str		Open the skill	打开技能
 str		Skill name	技能名称
+str		What this skill is for and when it applies, in a sentence or two.	用一两句话说明此技能的用途及适用时机。
+str		Guidance	指引
+str		A rule to follow.	一条要遵循的规则。
+str		Another rule.	另一条规则。
+str		Examples	示例
+str		Do: an example that follows the guidance.	推荐：遵循指引的示例。
+str		Avoid: an example that breaks it.	避免：违反指引的示例。
 str		Skill · on {subject}	技能 · 位于 {subject}
 str		Skill · on the project	技能 · 位于项目
 str		Skill text	技能文本

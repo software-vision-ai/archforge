@@ -1812,6 +1812,12 @@ fn a_column_row_selects_its_column_only_its_edit_button_opens_the_editor_and_sel
     assert!(h.state().panels.column.is_none(), "Cancel stays closed: {:?}", h.state().panels.column);
 }
 
+/// The text the store has for skill `id`.
+fn st_body(h: &Harness<'static, Shell>, id: archforge_mof::Uuid) -> String {
+    let st = h.state().session.as_ref().unwrap().doc();
+    st.get(st.by_uuid(id).unwrap(), archforge_core::skill::BODY).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default()
+}
+
 #[test]
 fn the_skills_plus_makes_a_skill_and_opens_it_with_the_name_ready() {
     let (mut h, customer) = table_harness();
@@ -1848,6 +1854,10 @@ fn the_skills_plus_makes_a_skill_and_opens_it_with_the_name_ready() {
     h.run();
     let st = h.state().session.as_ref().unwrap().doc();
     assert_eq!(archforge_core::skills::name_of(st, st.by_uuid(skill).unwrap()), "Customer naming");
+    // It started from the template, whose title followed the name into the store.
+    h.run();
+    let body = st_body(&h, skill);
+    assert!(body.starts_with("# Customer naming\n") && body.contains("## Guidance"), "{body}");
     // The tab holds the name and the text only.
     let found = ids(&h);
     assert!(!found.iter().any(|i| i.starts_with("workspace.skill.when") || i == "workspace.skill.applies"), "{found:?}");

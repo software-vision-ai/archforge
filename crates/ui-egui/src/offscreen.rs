@@ -30,6 +30,8 @@ pub enum Screen {
     WorkspaceSkillPreview,
     /// The same Preview with a link clicked, its confirmation open.
     WorkspaceSkillLink,
+    /// A skill just made with the Skills panel's +: its tab, the template, the name selected.
+    WorkspaceSkillNew,
     /// The same table with the key editor open on its unique constraint.
     WorkspaceKeyEditor,
     /// The same table with the column editor open on its email column, More open.
@@ -126,6 +128,7 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
             | Screen::WorkspaceSkillTab
             | Screen::WorkspaceSkillPreview
             | Screen::WorkspaceSkillLink
+            | Screen::WorkspaceSkillNew
             | Screen::WorkspaceKeyEditor
             | Screen::WorkspaceColumnEditor
             | Screen::WorkspaceIndexEditor
@@ -134,9 +137,13 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
     ) {
         shell.adopt_project();
         let skill_tab = matches!(screen, Screen::WorkspaceSkillTab | Screen::WorkspaceSkillPreview | Screen::WorkspaceSkillLink);
-        sample_table(&mut shell, screen == Screen::WorkspaceSkills || skill_tab)?;
+        sample_table(&mut shell, screen == Screen::WorkspaceSkills || skill_tab || screen == Screen::WorkspaceSkillNew)?;
         if skill_tab {
             sample_skill_tab(&mut shell, screen != Screen::WorkspaceSkillTab)?;
+        }
+        if screen == Screen::WorkspaceSkillNew {
+            let customer = shell.session.as_ref().and_then(|s| s.view().selection.first().and_then(|o| s.doc().uuid(*o).ok()));
+            crate::skill_tab::create(&mut shell, customer);
         }
         if screen == Screen::WorkspaceSkillLink
             && let Some(doc) = shell.canvas.skills.first_mut()

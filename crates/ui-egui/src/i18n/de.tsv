@@ -179,6 +179,13 @@ str		project	Projekt
 str		overridden below	weiter unten überschrieben
 str		Open the skill	Skill öffnen
 str		Skill name	Skill-Name
+str		What this skill is for and when it applies, in a sentence or two.	Wofür dieser Skill da ist und wann er gilt, in ein oder zwei Sätzen.
+str		Guidance	Hinweise
+str		A rule to follow.	Eine Regel, die gilt.
+str		Another rule.	Eine weitere Regel.
+str		Examples	Beispiele
+str		Do: an example that follows the guidance.	So: ein Beispiel, das den Hinweisen folgt.
+str		Avoid: an example that breaks it.	Nicht so: ein Beispiel, das dagegen verstößt.
 str		Skill · on {subject}	Skill · an {subject}
 str		Skill · on the project	Skill · am Projekt
 str		Skill text	Skill-Text

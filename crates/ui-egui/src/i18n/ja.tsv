@@ -179,6 +179,13 @@ str		project	プロジェクト
 str		overridden below	下で上書き
 str		Open the skill	スキルを開く
 str		Skill name	スキル名
+str		What this skill is for and when it applies, in a sentence or two.	このスキルの目的と適用される場面を、1〜2 文で。
+str		Guidance	ガイダンス
+str		A rule to follow.	従うべきルール。
+str		Another rule.	別のルール。
+str		Examples	例
+str		Do: an example that follows the guidance.	良い例: ガイダンスに沿った例。
+str		Avoid: an example that breaks it.	避ける例: それに反する例。
 str		Skill · on {subject}	スキル · {subject} に設定
 str		Skill · on the project	スキル · プロジェクトに設定
 str		Skill text	スキルのテキスト
