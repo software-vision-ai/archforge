@@ -652,6 +652,43 @@ fn a_recent_project_opens_from_its_row_or_shows_its_tab() {
 }
 
 #[test]
+fn home_sorts_the_recent_projects_by_name_and_shows_them_as_a_gallery() {
+    let (mut h, host) = saving_harness(None, None);
+    for (name, opened) in [("beta", 3), ("Alpha", 1), ("Gamma", 2)] {
+        h.state_mut().state.remember(name, &std::path::PathBuf::from(format!("/tmp/{name}.archforge")), opened);
+    }
+    h.run_steps(2);
+    let first = |h: &mut Harness<'static, Shell>| {
+        let at = rect_of(h, "home.recent.0").center();
+        click(h, at);
+        h.run_steps(2);
+        let (path, _tx) = host.opens.lock().unwrap().pop().expect("the first entry asks the host to open its project");
+        path
+    };
+    assert_eq!(first(&mut h), std::path::PathBuf::from("/tmp/beta.archforge"), "the last opened first");
+    // Sorted by name, whatever the case.
+    let at = rect_of(&h, "home.recent.sort").center();
+    click(&mut h, at);
+    h.run_steps(2);
+    let at = rect_of(&h, "home.recent.sort.1").center();
+    click(&mut h, at);
+    h.run_steps(2);
+    assert_eq!(h.state().state.recent_sort, crate::state::RecentSort::Name);
+    assert_eq!(first(&mut h), std::path::PathBuf::from("/tmp/Alpha.archforge"));
+    // The gallery: one card a project, which opens it too; the choice is kept with the state.
+    let at = rect_of(&h, "home.recent.grid").center();
+    click(&mut h, at);
+    h.run_steps(2);
+    assert_eq!(h.state().state.recent_view, crate::state::RecentView::Gallery);
+    let cards = h.state().widgets().iter().filter(|w| w.id.starts_with("home.recent.") && w.kind == "card").count();
+    assert_eq!(cards, 3);
+    assert_eq!(first(&mut h), std::path::PathBuf::from("/tmp/Alpha.archforge"));
+    let saved = serde_json::to_string(&h.state().state).unwrap();
+    let read: crate::state::UiState = serde_json::from_str(&saved).unwrap();
+    assert_eq!((read.recent_view, read.recent_sort), (crate::state::RecentView::Gallery, crate::state::RecentSort::Name));
+}
+
+#[test]
 fn at_most_eight_projects_open_at_once() {
     let (mut h, host) = saving_harness(None, Some("/tmp/Ninth.archforge"));
     for i in 0..crate::MAX_TABS {

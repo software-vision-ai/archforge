@@ -340,6 +340,9 @@ plural		{n} hour ago	{n} hour ago|{n} hours ago
 str		Yesterday	Yesterday
 plural		{n} day ago	{n} day ago|{n} days ago
 str		Last opened	Last opened
+str		Sort	Sort
+str		List	List
+str		Gallery	Gallery
 str		No recent projects yet	No recent projects yet
 str		Projects you create or open will appear here.	Projects you create or open will appear here.
 str		Your models, your workspace.	Your models, your workspace.

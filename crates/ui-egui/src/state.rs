@@ -23,6 +23,9 @@ pub struct UiState {
     /// shape the window does not read is left out, not the whole file.
     #[serde(deserialize_with = "lenient_recent")]
     pub recent: Vec<RecentProject>,
+    /// How Home shows the recent projects, and in which order; kept as the user left them.
+    pub recent_view: RecentView,
+    pub recent_sort: RecentSort,
 }
 
 /// The recent list as a file holds it: the entries that read, the others left out (the next
@@ -78,6 +81,8 @@ impl Default for UiState {
             explorer_collapsed: false,
             panel_collapsed: false,
             recent: Vec::new(),
+            recent_view: RecentView::List,
+            recent_sort: RecentSort::LastOpened,
         }
     }
 }
@@ -137,6 +142,22 @@ impl UiState {
             self.show_panel(which);
         }
     }
+}
+
+/// Home's recent projects as rows or as a gallery of cards.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum RecentView {
+    #[default]
+    List,
+    Gallery,
+}
+
+/// The order of Home's recent projects: the last opened first, or by name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum RecentSort {
+    #[default]
+    LastOpened,
+    Name,
 }
 
 /// The explorers of the workspace's activity rail.

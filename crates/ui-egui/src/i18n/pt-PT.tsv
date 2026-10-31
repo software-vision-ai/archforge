@@ -341,6 +341,9 @@ plural		{n} hour ago	há {n} hora|há {n} horas
 str		Yesterday	Ontem
 plural		{n} day ago	há {n} dia|há {n} dias
 str		Last opened	Última abertura
+str		Sort	Ordenar
+str		List	Lista
+str		Gallery	Galeria
 str		No recent projects yet	Ainda não há projetos recentes
 str		Projects you create or open will appear here.	Os projetos que criar ou abrir aparecerão aqui.
 str		Your models, your workspace.	Os seus modelos, o seu espaço de trabalho.

@@ -172,6 +172,8 @@ pub struct SkillEdit {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Menu {
+    /// Home's order of the recent projects.
+    RecentSort,
     Kind,
     Applies,
     /// A relationship's foreign key (slice E3): what it points to, one key pair's child column,
