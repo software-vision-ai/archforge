@@ -926,6 +926,30 @@ pub fn run_growing(shell: &mut Shell, label: &str, cmd: &str, params: serde_json
         .map_err(|e| e.to_string())
 }
 
+/// Grows every table box of the model read that is too short for its columns, before the project's
+/// session starts: a box an earlier version left short (its key columns hidden below its edge)
+/// shows them all when the project opens, without an undo step.
+pub(crate) fn fit_tables(store: &mut Store) {
+    let mut grow: Vec<(Obj, f64)> = Vec::new();
+    for e in store.alive().filter(|o| store.class_of(*o).ok() == Some(archforge_er::ENTITY)) {
+        let columns = store
+            .list(e, archforge_er::entity::ATTRIBUTE)
+            .unwrap_or_default()
+            .iter()
+            .filter_map(archforge_mof::Value::as_ref)
+            .filter(|a| store.is_alive(*a))
+            .count();
+        let needed = content_height(columns);
+        let (_, _, nodes) = archforge_diagram::views_of(store, e);
+        grow.extend(nodes.into_iter().filter(|n| bounds_of(store, *n).height < needed).map(|n| (n, needed)));
+    }
+    for (n, height) in grow {
+        if let Err(e) = store.set(n, archforge_diagram::node::HEIGHT, archforge_mof::Value::Real(height)) {
+            log::warn!("a table box could not be grown to show its columns: {e}");
+        }
+    }
+}
+
 /// Grows, inside batch `b`, every node of the tables `entities` whose height would hide the
 /// columns the table has now: a command that adds key columns (a foreign key, a shared subtype
 /// key) keeps them in sight in the same undo step.

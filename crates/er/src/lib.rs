@@ -172,10 +172,22 @@ pub fn storage() -> (Vec<archforge_mof::schema::Table>, Vec<archforge_mof::schem
 /// The session of a project read back from its rows: the store rebuilt from them and checked,
 /// the ER registry, saved as it is. `ids` mints the ids of the elements made from now on.
 pub fn session_from_rows(rows: &archforge_mof::rows::Rows, ids: Box<dyn FnMut() -> Uuid + Send>) -> Result<Session, String> {
+    session_from_rows_repaired(rows, ids, |_| {})
+}
+
+/// [`session_from_rows`] with `repair` run on the model read before the session starts: for a
+/// layout the reader puts right (a box too small for what it shows) without an undo step; it is
+/// written with the next change.
+pub fn session_from_rows_repaired(
+    rows: &archforge_mof::rows::Rows,
+    ids: Box<dyn FnMut() -> Uuid + Send>,
+    repair: impl FnOnce(&mut Store),
+) -> Result<Session, String> {
     let registry = registry()?;
     let mut st = store(ids)?;
     let (tables, junctions) = storage();
     archforge_mof::rows::restore(&mut st, rows, &tables, &junctions).map_err(|e| e.to_string())?;
+    repair(&mut st);
     if let Some(problem) = st.validate_all().first() {
         return Err(format!("the model does not hold together: {problem:?}"));
     }
