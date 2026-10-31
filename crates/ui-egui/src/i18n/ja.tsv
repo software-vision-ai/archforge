@@ -177,20 +177,8 @@ str		every relationship	すべてのリレーションシップ
 str		every column	すべての列
 str		project	プロジェクト
 str		overridden below	下で上書き
-str		Every table below	配下のすべてのテーブル
-str		Every relationship below	配下のすべてのリレーションシップ
-str		Columns of a type	特定の型の列
-str		Applies to	適用先
-str		Column type	列の型
-str		When	いつ
-str		Modelling	モデリング
-str		Drawing	描画
-str		Naming	命名
-str		Export	エクスポート
-str		Dialect	方言
 str		Open the skill	スキルを開く
 str		Skill name	スキル名
-str		None chosen: always	未選択: 常に
 str		Skill · on {subject}	スキル · {subject} に設定
 str		Skill · on the project	スキル · プロジェクトに設定
 str		Skill text	スキルのテキスト

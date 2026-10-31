@@ -182,10 +182,11 @@ the change, and update this file in the same change.
   text too long or nested too deeply is shown plain in Write and not rendered in Preview.
 - The Skills panel only lists the skills: a click on a row opens the skill's tab; + makes a skill
   on the selected element and opens its tab with the name selected, ready to type.
-- A skill's tab holds everything about it, top to bottom: the name as the page's title (Enter or
-  leaving the field keeps it, Esc puts it back) with the bin at its right, where it sits, Applies
-  to (and the column type for columns), When as labelled chips (none on means always; Export adds
-  the dialect), then the toolbar and the text. Each setting is kept as soon as it is chosen.
+- A skill's tab holds, top to bottom: the name as the page's title (Enter or leaving the field
+  keeps it, Esc puts it back) with the bin at its right, where it sits, then the toolbar and the
+  text. Where a skill applies and when are not shown for now (owner, 2026-10-31): skills will be
+  used in contexts still to come, and a fixed list such as Export misleads. The model keeps those
+  fields; they come back when the contexts are known.
 
 ## Messages
 - Problems show as an orange badge on the table or line and in a Problems section of Properties,

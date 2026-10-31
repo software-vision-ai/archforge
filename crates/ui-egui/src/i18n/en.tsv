@@ -176,20 +176,8 @@ str		every relationship	every relationship
 str		every column	every column
 str		project	project
 str		overridden below	overridden below
-str		Every table below	Every table below
-str		Every relationship below	Every relationship below
-str		Columns of a type	Columns of a type
-str		Applies to	Applies to
-str		Column type	Column type
-str		When	When
-str		Modelling	Modelling
-str		Drawing	Drawing
-str		Naming	Naming
-str		Export	Export
-str		Dialect	Dialect
 str		Open the skill	Open the skill
 str		Skill name	Skill name
-str		None chosen: always	None chosen: always
 str		Skill · on {subject}	Skill · on {subject}
 str		Skill · on the project	Skill · on the project
 str		Skill text	Skill text
