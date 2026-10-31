@@ -130,8 +130,8 @@ pub(crate) fn sample_line(
     crate::canvas::end_glyph_on(paint, p, b, a, to, stroke, z, false, fill);
 }
 
-/// The relationship tool's icon: a short line with the ends the tool draws, small enough for its
-/// button, over `fill`.
+/// The relationship tool's icon: a line with the ends the tool draws, at the size the popover's
+/// samples show them, across its double-width button, over `fill`.
 pub(crate) fn tool_line(
     paint: &egui::Painter,
     p: &Palette,
@@ -141,8 +141,8 @@ pub(crate) fn tool_line(
     ink: egui::Color32,
     fill: egui::Color32,
 ) {
-    let z = 0.5;
-    let (a, b) = (centre - vec2(14.0, 0.0), centre + vec2(14.0, 0.0));
+    let z = 0.7;
+    let (a, b) = (centre - vec2(24.0, 0.0), centre + vec2(24.0, 0.0));
     let stroke = Stroke::new(1.2, ink);
     paint.line_segment([a, b], stroke);
     crate::canvas::end_glyph_on(paint, p, a, b, Some(from), stroke, z, false, fill);
