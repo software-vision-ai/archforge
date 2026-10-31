@@ -20,7 +20,7 @@ destroy an element a link requires, and would null a skill's optional subject, t
 skill into a model-wide one; every notation removes through it), and a project has one Model and nothing else without a
 container (`problems`). Skills (`skills`): a name is plain and unique among the skills on one
 subject; a skill aims at a kind the notation declares, and names a type only for the typed kind; a
-dialect belongs to an export skill; a body has at most 4,000 characters; the effective skills of an
+dialect belongs to an export skill; a body has at most 16,000 characters; the effective skills of an
 element (`skills::effective_skills`) are those of its containers outermost first, then its own,
 the least specific first within a level (everything below the subject, then a kind, then a kind
 with a type), filtered by trigger, with a skill named like an earlier one marked as overriding it.
