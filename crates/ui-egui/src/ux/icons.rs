@@ -658,11 +658,11 @@ pub const TOOL_NOTE: Icon = Icon {
 };
 
 /// The link-note tool, and a selected note's link handle: the dashed line a note's link is drawn
-/// with, corner to corner.
+/// with, corner to corner, in three dashes whose gaps stay open on a standard screen.
 pub const TOOL_LINK_NOTE: Icon = Icon {
     size: [14.0, 14.0],
     stroke: 1.2,
-    segments: &[L([0.0, 14.0], [2.121, 11.879]), L([3.96, 10.04], [6.081, 7.919]), L([7.92, 6.08], [10.041, 3.959]), L([11.879, 2.121], [14.0, 0.0])],
+    segments: &[L([0.0, 14.0], [2.404, 11.596]), L([5.798, 8.202], [8.202, 5.798]), L([11.596, 2.404], [14.0, 0.0])],
 };
 
 /// The small chevron beside a tool that has kinds.
