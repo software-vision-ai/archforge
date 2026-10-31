@@ -228,8 +228,10 @@ dependencies = [
 name = "archforge"
 version = "0.1.0"
 dependencies = [
+ "archforge-control",
  "archforge-dolt",
  "archforge-er",
+ "archforge-mcp",
  "archforge-mof",
  "archforge-project",
  "archforge-ui-egui",
@@ -244,6 +246,27 @@ dependencies = [
  "serde",
  "serde_json",
  "winit",
+]
+
+[[package]]
+name = "archforge-cli"
+version = "0.1.0"
+dependencies = [
+ "archforge-control",
+ "archforge-er",
+ "archforge-mcp",
+ "archforge-mof",
+ "serde_json",
+]
+
+[[package]]
+name = "archforge-control"
+version = "0.1.0"
+dependencies = [
+ "getrandom 0.3.4",
+ "log",
+ "rustix 1.1.5",
+ "serde_json",
 ]
 
 [[package]]
@@ -294,6 +317,14 @@ dependencies = [
  "archforge-diagram",
  "archforge-engine",
  "archforge-mof",
+ "serde_json",
+]
+
+[[package]]
+name = "archforge-mcp"
+version = "0.1.0"
+dependencies = [
+ "archforge-control",
  "serde_json",
 ]
 

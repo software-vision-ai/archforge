@@ -26,6 +26,23 @@ The interface is drawn in Inter. The build embeds it from a checkout of
 git clone https://github.com/storytold/craft-fonts ../craft-fonts
 ```
 
+## Agent access
+
+An agent can work in the open project while you watch: start Archforge with a control port, and
+let the agent run the MCP server of `archforge-cli`, bridged to that port.
+
+```sh
+cargo run -p archforge -- --control 47000
+cargo build -p archforge-cli
+```
+
+`.mcp.json` registers `target/debug/archforge-cli mcp --bridge 47000` for agents that read it. Every
+change the agent makes runs through Archforge's commands, so it shows in the window at once and
+undo takes it back. The port listens on the loopback interface only, and a token minted for each
+start, in a file only you can read in Archforge's settings folder, guards it. Without
+`--control` nothing listens. macOS and Linux for now. `archforge-cli app <method> [<json>] --port
+47000` sends one request by hand; `archforge-cli commands` lists the commands.
+
 ## Checking
 
 ```sh

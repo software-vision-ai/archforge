@@ -2076,6 +2076,59 @@ fn appearance_styles_the_selection_on_this_diagram() {
     assert!(!h.state().canvas.key_status, "the line colours show");
 }
 
+#[test]
+fn the_control_channel_runs_commands_through_the_open_session() {
+    use crate::control::answer;
+    use serde_json::json;
+    // Without a project: the methods say so, the inspection says nothing is open.
+    let mut home = harness(ThemeKind::Light);
+    assert_eq!(answer(home.state_mut(), "document.inspect", &json!({})).unwrap()["open"], false);
+    assert!(answer(home.state_mut(), "engine.commands", &json!({})).unwrap_err().contains("no project is open"));
+    let (mut h, _) = table_harness();
+    let schema = {
+        let st = h.state().session.as_ref().unwrap().doc();
+        st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap()).unwrap().to_string()
+    };
+    let count = |h: &Harness<'static, Shell>| {
+        let st = h.state().session.as_ref().unwrap().doc();
+        st.alive().filter(|o| st.class_of(*o).ok() == Some(archforge_er::ENTITY)).count()
+    };
+    let before = count(&h);
+    // Listing and describing.
+    let listed = answer(h.state_mut(), "engine.commands", &json!({ "filter": "entity" })).unwrap();
+    assert!(listed["commands"].as_array().unwrap().iter().any(|c| c["id"] == "er.entity.add"));
+    let described = answer(h.state_mut(), "engine.describe", &json!({ "command": "er.entity.add" })).unwrap();
+    assert!(described["params"].as_array().unwrap().iter().any(|p| p["key"] == "name"));
+    // A command runs in the session the window draws, and undo takes it back.
+    let out =
+        answer(h.state_mut(), "engine.execute", &json!({ "command": "er.entity.add", "params": { "schema": schema, "name": "Invoice" } })).unwrap();
+    assert!(out["result"]["id"].is_string());
+    assert_eq!(count(&h), before + 1);
+    answer(h.state_mut(), "engine.undo", &json!({})).unwrap();
+    assert_eq!(count(&h), before);
+    // A batch refers to an earlier step's result; a failing step rolls the whole batch back.
+    let steps = json!([
+        { "command": "er.entity.add", "params": { "schema": schema, "name": "Payment" } },
+        { "command": "er.attribute.add", "params": { "entity": "$0.id", "name": "payment_id", "type": "BIGINT" } },
+    ]);
+    let out = answer(h.state_mut(), "engine.batch", &json!({ "label": "Add payment", "steps": steps })).unwrap();
+    assert_eq!(out["results"].as_array().unwrap().len(), 2);
+    assert_eq!(count(&h), before + 1);
+    let bad = json!([
+        { "command": "er.entity.add", "params": { "schema": schema, "name": "Refund" } },
+        { "command": "er.attribute.add", "params": { "entity": "$5.id", "name": "x" } },
+    ]);
+    let why = answer(h.state_mut(), "engine.batch", &json!({ "steps": bad })).unwrap_err();
+    assert!(why.contains("rolled back") && why.contains("step 1"), "{why}");
+    assert_eq!(count(&h), before + 1, "nothing of the failed batch stays");
+    // Unknown methods and keys are refused, naming what there is.
+    assert!(answer(h.state_mut(), "engine.nope", &json!({})).unwrap_err().contains("engine.execute"));
+    assert!(answer(h.state_mut(), "engine.execute", &json!({ "cmd": "x" })).unwrap_err().contains("command, params"));
+    let inspected = answer(h.state_mut(), "document.inspect", &json!({})).unwrap();
+    assert_eq!((inspected["open"].clone(), inspected["undo"].clone()), (json!(true), json!("Add payment")));
+    assert!(answer(h.state_mut(), "ui.inspect", &json!({})).unwrap()["controls"].as_array().is_some_and(|c| !c.is_empty()));
+}
+
 /// Presses at `points[0]`, moves through the rest and lets go at the last.
 fn drag_through(h: &mut Harness<'static, Shell>, points: &[egui::Pos2]) {
     h.event(egui::Event::PointerMoved(points[0]));

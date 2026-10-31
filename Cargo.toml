@@ -21,6 +21,8 @@ archforge-uml = { path = "crates/uml" }
 archforge-core = { path = "crates/core" }
 archforge-diagram = { path = "crates/diagram" }
 archforge-project = { path = "crates/project" }
+archforge-control = { path = "crates/control" }
+archforge-mcp = { path = "crates/mcp" }
 
 # External crates.
 egui = { version = "0.37", features = ["default_fonts", "monochrome_emoji_fonts"] }
@@ -62,6 +64,10 @@ fontdb = { version = "=0.24.0", default-features = false, features = ["std"] }
 mysql = { version = "=28.0.4", default-features = false, features = ["minimal-rust"] }
 # Random passwords and run folder names for the Dolt server. MIT OR Apache-2.0.
 getrandom = "0.3"
+# The effective user id and the open flags for the control token file's checks (Unix), through a
+# safe API;
+# already in the lockfile, Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT.
+rustix = { version = "1", default-features = false, features = ["std", "process", "fs"] }
 
 # Shared crates from craft-libs (the ArtCraft team, MIT OR Apache-2.0), always at its latest main:
 # the gate's first step moves Cargo.lock to the newest commit. It is the only git source

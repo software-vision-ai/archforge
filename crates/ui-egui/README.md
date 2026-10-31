@@ -57,6 +57,8 @@ or explorer with nothing to show says so in one line, never with a help text.
 | `Shell::project`, `Shell::session`, `Shell::session_error` | the open project, its ER session (made once per project through `archforge_er::new_project_session`), why none could be made |
 | `Shell::location` | `pub fn location(&self) -> Option<String>`: where the project lives, as the status bar says it |
 | `state::{Explorer, Panel}` | the workspace's explorer and right panel, part of `UiState` |
+| `Shell::attach_control` | `pub fn attach_control(&mut self, requests: Receiver<control::ControlRequest>)`: agent access on; the shell answers once per frame |
+| `control::{ControlRequest, answer, abandon, WAITING, TAKEN, ABANDONED, METHODS, MAX_STEPS, MAX_REFERENCED, MAX_RESULTS}` | a request carries `state`: one given up (`abandon`) before the shell takes it is never run; a batch step's references bring in at most 1 MiB and its results at most 8 MiB in all; the control channel's methods (`engine.commands`, `engine.describe`, `engine.execute`, `engine.batch`, `engine.undo`, `engine.redo`, `document.inspect`, `ui.inspect`) answered through the open session; no network code here |
 | `Shell::widgets` | `pub fn widgets(&self) -> &[widgets::Entry]` (the controls of the last frame, by automation id) |
 | `Shell::top_inset` | `pub top_inset: f32`, a field: the logical pixels at the top the host draws over (the macOS title bar) |
 | `Services` | host functions: the installed fonts, the account's name, the folder new projects go in, the projects host, the id source for a model's elements |
