@@ -40,7 +40,7 @@ const FIT_MARGIN: f32 = 48.0;
 /// The minimap's box and the toolbar's pill.
 const MINIMAP: Vec2 = vec2(200.0, 156.0);
 const MINIMAP_GAP: Vec2 = vec2(16.0, 14.0);
-const TOOLBAR: Vec2 = vec2(376.0, 50.0);
+const TOOLBAR: Vec2 = vec2(326.0, 50.0);
 const TOOLBAR_GAP: f32 = 14.0;
 /// An entity node: its header's height, its first row's baseline, the pitch between rows, the
 /// text inset and the badge column.
@@ -1085,15 +1085,14 @@ fn pos2_of((x, y): (f64, f64)) -> Pos2 {
     pos2(x as f32, y as f32)
 }
 
-/// The tools of the toolbar: automation id, icon, hover text, whether it works in this slice.
-const TOOLS: [(&str, &ux::Icon, &str, bool); 7] = [
-    ("select", &icons::TOOL_SELECT, "Select", true),
-    ("pan", &icons::TOOL_PAN, "Pan", true),
-    ("entity", &icons::TOOL_ENTITY, "Entity", true),
-    ("relationship", &icons::TOOL_RELATIONSHIP, "Relationship", true),
-    ("note", &icons::TOOL_NOTE, "Note", true),
-    ("link", &icons::TOOL_LINK_NOTE, "Link note", true),
-    ("group", &icons::TOOL_GROUP, "Group", false),
+/// The tools of the toolbar: automation id, icon, hover text.
+const TOOLS: [(&str, &ux::Icon, &str); 6] = [
+    ("select", &icons::TOOL_SELECT, "Select"),
+    ("pan", &icons::TOOL_PAN, "Pan"),
+    ("entity", &icons::TOOL_ENTITY, "Entity"),
+    ("relationship", &icons::TOOL_RELATIONSHIP, "Relationship"),
+    ("note", &icons::TOOL_NOTE, "Note"),
+    ("link", &icons::TOOL_LINK_NOTE, "Link note"),
 ];
 
 /// Whether the minimap is drawn open: when the user has it open and the canvas has room for it
@@ -1119,8 +1118,8 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     paint.rect_stroke(t, 12.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
     let button = |x: f32| Rect::from_min_size(pos2(t.left() + x, t.top() + 9.0), Vec2::splat(32.0));
     let divider = |x: f32| Rect::from_min_size(pos2(t.left() + x, t.top() + 15.0), vec2(1.0, 20.0));
-    let xs = [7.0, 41.0, 86.0, 120.0, 170.0, 204.0, 238.0];
-    for ((key, icon, hint, live), x) in TOOLS.iter().zip(xs) {
+    let xs = [7.0, 41.0, 86.0, 120.0, 170.0, 204.0];
+    for ((key, icon, hint), x) in TOOLS.iter().zip(xs) {
         let b = button(x);
         let active = matches!(
             (*key, shell.canvas.tool),
@@ -1134,13 +1133,7 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
         if active {
             paint.rect_filled(b, 8.0, p.accent_tint);
         }
-        let ink = if active {
-            p.accent
-        } else if *live {
-            p.text_secondary
-        } else {
-            p.text_muted
-        };
+        let ink = if active { p.accent } else { p.text_secondary };
         if *key == "relationship" {
             // The relationship tool shows the ends it draws, as the cardinality popover sets them.
             let kind = shell.canvas.relationship;
@@ -1149,7 +1142,7 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
         } else {
             ux::icon_in(&paint, b, icon, ink);
         }
-        if control(shell, ui, &format!("workspace.tools.{key}"), "button", b, *live).on_hover_text(tr(hint)).clicked() {
+        if control(shell, ui, &format!("workspace.tools.{key}"), "button", b, true).on_hover_text(tr(hint)).clicked() {
             match *key {
                 "select" => shell.canvas.tool = Tool::Select,
                 "pan" => shell.canvas.tool = Tool::Pan,
@@ -1161,39 +1154,22 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
             }
         }
     }
-    for x in [75.0, 288.0] {
+    for x in [75.0, 238.0] {
         paint.rect_filled(divider(x), 0.0, p.border);
     }
-    let mut chevron = None;
-    for (key, x, hint, live) in [("relationship-types", 154.0, "Relationship types", true), ("group-kinds", 272.0, "Group kinds", false)] {
-        let b = Rect::from_min_size(pos2(t.left() + x, t.top() + 9.0), vec2(14.0, 32.0));
-        let open = live && shell.canvas.popover;
-        ux::icon_in(
-            &paint,
-            b,
-            &icons::CHEVRON_SMALL,
-            if open {
-                p.accent
-            } else if live {
-                p.text_secondary
-            } else {
-                p.text_muted
-            },
-        );
-        if control(shell, ui, &format!("workspace.tools.{key}"), "button", b, live).on_hover_text(tr(hint)).clicked() && live {
-            shell.canvas.popover = !shell.canvas.popover;
-            if shell.canvas.popover {
-                shell.canvas.tool = Tool::Relationship;
-            }
-        }
-        if live {
-            chevron = Some(b);
+    // The relationship tool's chevron opens the kinds popover.
+    let chevron = Rect::from_min_size(pos2(t.left() + 154.0, t.top() + 9.0), vec2(14.0, 32.0));
+    ux::icon_in(&paint, chevron, &icons::CHEVRON_SMALL, if shell.canvas.popover { p.accent } else { p.text_secondary });
+    if control(shell, ui, "workspace.tools.relationship-types", "button", chevron, true).on_hover_text(tr("Relationship types")).clicked() {
+        shell.canvas.popover = !shell.canvas.popover;
+        if shell.canvas.popover {
+            shell.canvas.tool = Tool::Relationship;
         }
     }
     // The view group: key status and grid.
-    let group = Rect::from_min_size(pos2(t.left() + 299.0, t.top() + 7.0), vec2(70.0, 36.0));
+    let group = Rect::from_min_size(pos2(t.left() + 249.0, t.top() + 7.0), vec2(70.0, 36.0));
     paint.rect_filled(group, 8.0, p.page);
-    for (key, x, hint, on) in [("key-status", 301.0, "Key status", shell.canvas.key_status), ("grid", 335.0, "Grid", shell.canvas.grid)] {
+    for (key, x, hint, on) in [("key-status", 251.0, "Key status", shell.canvas.key_status), ("grid", 285.0, "Grid", shell.canvas.grid)] {
         let b = button(x);
         if on {
             paint.rect_filled(b, 8.0, p.accent_tint);
@@ -1214,23 +1190,13 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
             }
         }
     }
-    if shell.canvas.popover
-        && let Some(anchor) = chevron
-    {
-        crate::connect::popover(shell, ui, p, r, anchor);
+    if shell.canvas.popover {
+        crate::connect::popover(shell, ui, p, r, chevron);
     }
 }
 
 /// Every hover text of the tables, for the catalogue tests.
 #[cfg(test)]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
-    TOOLS.iter().map(|(_, _, hint, _)| *hint).chain([
-        "Relationship types",
-        "Group kinds",
-        "Key status",
-        "Grid",
-        "complete",
-        "disjoint",
-        "overlapping",
-    ])
+    TOOLS.iter().map(|(_, _, hint)| *hint).chain(["Relationship types", "Key status", "Grid", "complete", "disjoint", "overlapping"])
 }

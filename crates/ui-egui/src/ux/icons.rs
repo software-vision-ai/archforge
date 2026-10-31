@@ -675,13 +675,6 @@ pub const TOOL_LINK_NOTE: Icon = Icon {
     ],
 };
 
-/// The group tool: a frame's corners.
-pub const TOOL_GROUP: Icon = Icon {
-    size: [14.0, 14.0],
-    stroke: 1.2,
-    segments: &[L([4.0, 0.0], [4.0, 14.0]), L([10.0, 0.0], [10.0, 14.0]), L([0.0, 4.0], [14.0, 4.0]), L([0.0, 10.0], [14.0, 10.0])],
-};
-
 /// The small chevron beside a tool that has kinds.
 pub const CHEVRON_SMALL: Icon = Icon { size: [8.0, 4.0], stroke: 1.25, segments: &[L([0.0, 0.0], [4.0, 4.0]), L([4.0, 4.0], [8.0, 0.0])] };
 

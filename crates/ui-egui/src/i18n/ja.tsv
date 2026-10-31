@@ -221,8 +221,6 @@ str		Relationship	リレーションシップ
 str		Relationship types	リレーションシップの種類
 str		Note	ノート
 str		Link note	ノートをリンク
-str		Group	グループ
-str		Group kinds	グループの種類
 str		Key status	キーの状態
 str		Grid	グリッド
 str		Add table	テーブルを追加

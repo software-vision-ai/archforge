@@ -220,8 +220,6 @@ str		Relationship	Relationship
 str		Relationship types	Relationship types
 str		Note	Note
 str		Link note	Link note
-str		Group	Group
-str		Group kinds	Group kinds
 str		Key status	Key status
 str		Grid	Grid
 str		Add table	Add table
