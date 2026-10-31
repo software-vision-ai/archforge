@@ -7,6 +7,7 @@
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
 mod app_dirs;
+mod app_icon;
 mod build_info;
 mod fonts;
 mod graphics;
@@ -208,7 +209,8 @@ fn native_options() -> eframe::NativeOptions {
         .with_title("Archforge")
         .with_app_id("archforge")
         .with_inner_size([1280.0, 800.0])
-        .with_min_inner_size([640.0, 400.0]);
+        .with_min_inner_size([640.0, 400.0])
+        .with_icon(app_icon::icon());
     #[cfg(target_os = "macos")]
     let viewport = macos_window::style(viewport);
     // The installed fonts come from fonts.rs, read and checked by the app, never mapped; eframe's
