@@ -179,6 +179,13 @@ str		project	projeto
 str		overridden below	substituída abaixo
 str		Open the skill	Abrir a competência
 str		Skill name	Nome da competência
+str		What this skill is for and when it applies, in a sentence or two.	Para que serve esta competência e quando se aplica, numa ou duas frases.
+str		Guidance	Orientação
+str		A rule to follow.	Uma regra a seguir.
+str		Another rule.	Outra regra.
+str		Examples	Exemplos
+str		Do: an example that follows the guidance.	Sim: um exemplo que segue a orientação.
+str		Avoid: an example that breaks it.	Evitar: um exemplo que a contraria.
 str		Skill · on {subject}	Competência · em {subject}
 str		Skill · on the project	Competência · no projeto
 str		Skill text	Texto da competência

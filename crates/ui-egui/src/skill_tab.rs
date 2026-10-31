@@ -103,8 +103,33 @@ pub fn open(shell: &mut Shell, id: Uuid) {
     shell.canvas.focused = false;
 }
 
-/// Makes a skill on `subject` (the model when none) under a fresh name and opens it in its tab,
-/// the name selected for typing.
+/// The text a new skill starts from, in the interface's language: its name as the title, a line on
+/// what it is for, the guidance and examples, each with a hint to write over.
+pub fn template(name: &str) -> String {
+    format!(
+        "# {name}\n\n{purpose}\n\n## {guidance}\n\n- {rule}\n- {another}\n\n## {examples}\n\n- {good}\n- {bad}\n",
+        purpose = tr("What this skill is for and when it applies, in a sentence or two."),
+        guidance = tr("Guidance"),
+        rule = tr("A rule to follow."),
+        another = tr("Another rule."),
+        examples = tr("Examples"),
+        good = tr("Do: an example that follows the guidance."),
+        bad = tr("Avoid: an example that breaks it."),
+    )
+}
+
+/// `text` with its title following a rename: a first line that is `# old` becomes `# new`; any
+/// other text is left as it is.
+pub fn retitle(text: &str, old: &str, new: &str) -> Option<String> {
+    let (first, rest) = text.split_once('\n').map_or((text, None), |(f, r)| (f, Some(r)));
+    (first.trim_end() == format!("# {old}")).then(|| match rest {
+        Some(rest) => format!("# {new}\n{rest}"),
+        None => format!("# {new}"),
+    })
+}
+
+/// Makes a skill on `subject` (the model when none) under a fresh name, its text the template, and
+/// opens it in its tab, the name selected for typing.
 pub fn create(shell: &mut Shell, subject: Option<Uuid>) {
     let Some(session) = shell.session.as_mut() else { return };
     let store = session.doc();
@@ -114,7 +139,7 @@ pub fn create(shell: &mut Shell, subject: Option<Uuid>) {
         .map(|s| archforge_core::skills::name_of(store, s));
     let name = crate::explorer::fresh_name(&tr("Skill"), taken, false).unwrap_or_default();
     let subject_id = subject.map(|s| s.to_string()).unwrap_or_default();
-    match session.execute("skill.add", &json!({ "subject": subject_id, "name": name })) {
+    match session.execute("skill.add", &json!({ "subject": subject_id, "name": name, "body": template(&name) })) {
         Ok(out) => {
             // skill.add selects the new skill; the panel stays on the element it sits on.
             let ids: Vec<String> = subject.into_iter().map(|s| s.to_string()).collect();
@@ -233,10 +258,18 @@ fn header(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, left: f32, width: f
     let enter = out.response.has_focus() && ctx.input(|inp| inp.key_pressed(egui::Key::Enter));
     if (out.response.lost_focus() || enter) && !escape && name.trim() != stored {
         let outcome = shell.session.as_mut().map(|x| x.execute("skill.rename", &json!({ "skill": id.to_string(), "name": name.trim() })));
-        shell.canvas.skills[i].settings_refused = match outcome {
+        let doc = &mut shell.canvas.skills[i];
+        doc.settings_refused = match outcome {
             Some(Err(e)) => Some(e.to_string()),
             _ => None,
         };
+        // The text's title follows the name, kept at the next frame.
+        if doc.settings_refused.is_none()
+            && let Some(text) = retitle(&doc.text, &stored, name.trim())
+        {
+            doc.text = text;
+            doc.changed_at = f64::NEG_INFINITY;
+        }
     } else if escape && out.response.lost_focus() {
         shell.canvas.skills[i].name = stored.clone();
     }
@@ -292,19 +325,23 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, id: Uuid
         }
         x += BUTTON + GAP;
     }
-    let switch = Rect::from_min_size(pos2(left + width - 172.0, y - 1.0), vec2(172.0, 30.0));
+    // Write and Preview as a pencil and an eye, their words on hover.
+    let switch = Rect::from_min_size(pos2(left + width - 76.0, y - 1.0), vec2(76.0, 30.0));
     paint.rect_filled(switch, 8.0, p.page);
     let mut choose: Option<bool> = None;
-    for (n, (key, word)) in [("write", "Write"), ("preview", "Preview")].iter().enumerate() {
-        let half = Rect::from_min_size(pos2(switch.left() + 2.0 + n as f32 * 84.0, switch.top() + 2.0), vec2(84.0, 26.0));
+    for (n, (key, word, icon, side)) in
+        [("write", "Write", &icons::EDIT, vec2(15.0, 15.0)), ("preview", "Preview", &icons::VIEW, vec2(16.0, 12.0))].iter().enumerate()
+    {
+        let half = Rect::from_min_size(pos2(switch.left() + 2.0 + n as f32 * 36.0, switch.top() + 2.0), vec2(36.0, 26.0));
         let on = preview == (n == 1);
+        let resp = control(shell, ui, &format!("workspace.skill.{key}"), "toggle", half, true).on_hover_text(tr(word));
         if on {
             paint.rect_filled(half, 6.0, p.surface);
             paint.rect_stroke(half, 6.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
         }
-        let g = ux::galley(&paint, &tr(word), types::SMALL, if on { p.text } else { p.text_secondary }, Some(80.0));
-        paint.galley(half.center() - g.size() / 2.0, g, p.text);
-        if control(shell, ui, &format!("workspace.skill.{key}"), "toggle", half, true).clicked() {
+        let ink = if on || resp.hovered() { p.text } else { p.text_secondary };
+        ux::icon_in(&paint, Rect::from_center_size(half.center(), *side), icon, ink);
+        if resp.clicked() {
             choose = Some(n == 1);
         }
     }
@@ -593,6 +630,20 @@ pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_new_skill_starts_from_a_template_whose_title_follows_the_name() {
+        crate::i18n::set_language("en");
+        let text = template("Skill 1");
+        assert!(text.starts_with("# Skill 1\n\n") && text.contains("## Guidance") && text.contains("## Examples"), "{text}");
+        assert!(markdown::within_budget(&text));
+        assert!(archforge_core::skills::text_problem(&text, archforge_core::skills::MAX_BODY).is_none());
+        assert_eq!(retitle(&text, "Skill 1", "Customer naming").unwrap(), text.replacen("# Skill 1", "# Customer naming", 1));
+        assert_eq!(retitle("# Skill 1", "Skill 1", "X").as_deref(), Some("# X"));
+        for other in ["# Something else\n", "Skill 1", "## Skill 1\n", ""] {
+            assert_eq!(retitle(other, "Skill 1", "X"), None, "{other:?}");
+        }
+    }
 
     #[test]
     fn only_plain_web_and_mail_links_are_offered() {

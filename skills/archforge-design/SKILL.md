@@ -167,7 +167,8 @@ the change, and update this file in the same change.
 ## Skills
 - A skill's text is Markdown, and it is written in the skill's own tab in the centre, beside the
   diagrams. The page shows the skill's name, where it sits, a formatting toolbar (bold, italic,
-  heading, bulleted list, numbered list, code, link, quote) and a Write / Preview switch.
+  heading, bulleted list, numbered list, code, link, quote) and a Write / Preview switch drawn as
+  a pencil and an eye, their words on hover.
 - Write edits the Markdown source itself, styled as it is typed: markers dimmed, headings larger,
   strong text semibold, emphasis slanted, code in purple, quotes and links in their colours. What
   is typed is what is kept. Preview draws the page the text makes.
@@ -181,7 +182,10 @@ the change, and update this file in the same change.
   address, and only when it is a web or mail address. Pictures in a skill are never loaded. A
   text too long or nested too deeply is shown plain in Write and not rendered in Preview.
 - The Skills panel only lists the skills: a click on a row opens the skill's tab; + makes a skill
-  on the selected element and opens its tab with the name selected, ready to type.
+  on the selected element and opens its tab with the name selected, ready to type. A new skill's
+  text starts from a template in the interface's language: the name as its title, a line on what
+  it is for, Guidance and Examples, each with a hint to write over. While the title is still
+  `# <name>`, it follows a rename.
 - A skill's tab holds, top to bottom: the name as the page's title (Enter or leaving the field
   keeps it, Esc puts it back) with the bin at its right, where it sits, then the toolbar and the
   text. Where a skill applies and when are not shown for now (owner, 2026-10-31): skills will be
