@@ -494,9 +494,14 @@ fn select(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: egui::Pos2, width: 
 
 /// A menu under `anchor`; gives the index picked, closing on a pick or a click elsewhere.
 fn menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, id: &str, items: &[String]) -> Option<usize> {
-    let paint = ui.painter();
     let height = 8.0 + items.len() as f32 * 30.0;
-    let r = Rect::from_min_size(pos2(anchor.left(), anchor.bottom() + 4.0), vec2(anchor.width(), height));
+    let r = ux::drop_rect(ui, anchor, anchor.left(), vec2(anchor.width(), height));
+    // Over the dialog's fields below it, on a layer of its own.
+    ux::overlay(ui, crate::widgets::egui_id(&format!("{id}.layer")), r, |ui| menu_body(shell, ui, p, anchor, r, id, items))
+}
+
+fn menu_body(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, r: Rect, id: &str, items: &[String]) -> Option<usize> {
+    let paint = ui.painter();
     ux::shadow(paint, r, 8.0, p.shadow);
     paint.rect_filled(r, 8.0, p.surface);
     paint.rect_stroke(r, 8.0, Stroke::new(1.0, p.border), StrokeKind::Inside);

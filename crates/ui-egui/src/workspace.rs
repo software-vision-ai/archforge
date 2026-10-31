@@ -66,7 +66,8 @@ struct Columns {
     rail: Rect,
 }
 
-fn columns(body: Rect, explorer: f32, panel: f32) -> Columns {
+/// The columns for the explorer's and the panel's widths; none for one the user folded away.
+fn columns(body: Rect, explorer: Option<f32>, panel: Option<f32>) -> Columns {
     // Left to right: the activity rail, the explorer, the centre, the right rail, the panel. The
     // right rail sits between the centre and the panel, as the design has it; without the panel
     // it closes the window's right edge.
@@ -75,17 +76,24 @@ fn columns(body: Rect, explorer: f32, panel: f32) -> Columns {
     // A width that is not a number (never from the preferences file, which cannot hold one) falls
     // back to the design's.
     let finite = |w: f32, default: f32| if w.is_finite() { w } else { default };
-    let explorer_w = finite(explorer, EXPLORER_DEFAULT).clamp(EXPLORER_RANGE.0, EXPLORER_RANGE.1);
-    let panel_w = finite(panel, PANEL_DEFAULT).clamp(PANEL_RANGE.0, PANEL_RANGE.1);
+    let explorer_w = explorer.map(|w| finite(w, EXPLORER_DEFAULT).clamp(EXPLORER_RANGE.0, EXPLORER_RANGE.1));
+    let panel_w = panel.map(|w| finite(w, PANEL_DEFAULT).clamp(PANEL_RANGE.0, PANEL_RANGE.1));
     let mut cols = Columns { explorer: None, centre: Rect::NOTHING, panel: None, rail: Rect::NOTHING };
-    if right - left - RAIL - panel_w >= CENTRE_MIN + explorer_w {
-        cols.explorer = Some(Rect::from_min_max(pos2(left, body.top()), pos2(left + explorer_w, body.bottom())));
-        left += explorer_w;
-        cols.panel = Some(Rect::from_min_max(pos2(right - panel_w, body.top()), pos2(right, body.bottom())));
-        right -= panel_w;
-    } else if right - left - RAIL - explorer_w >= CENTRE_MIN {
-        cols.explorer = Some(Rect::from_min_max(pos2(left, body.top()), pos2(left + explorer_w, body.bottom())));
-        left += explorer_w;
+    // What fits beside a centre of the least width; the panel gives way first, then the explorer.
+    let fits = |w: f32| right - left - RAIL - w >= CENTRE_MIN;
+    let (show_explorer, show_panel) = match (explorer_w, panel_w) {
+        (Some(e), Some(p)) if fits(e + p) => (Some(e), Some(p)),
+        (Some(e), _) if fits(e) => (Some(e), None),
+        (None, Some(p)) if fits(p) => (None, Some(p)),
+        _ => (None, None),
+    };
+    if let Some(w) = show_explorer {
+        cols.explorer = Some(Rect::from_min_max(pos2(left, body.top()), pos2(left + w, body.bottom())));
+        left += w;
+    }
+    if let Some(w) = show_panel {
+        cols.panel = Some(Rect::from_min_max(pos2(right - w, body.top()), pos2(right, body.bottom())));
+        right -= w;
     }
     cols.rail = Rect::from_min_max(pos2(right - RAIL, body.top()), pos2(right, body.bottom()));
     right -= RAIL;
@@ -111,7 +119,9 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
         let bar = Rect::from_min_size(pos2(full.left(), strip.bottom()), vec2(full.width(), BAR));
         let status = Rect::from_min_max(pos2(full.left(), full.bottom() - STATUS), full.max);
         let body = Rect::from_min_max(pos2(full.left(), bar.bottom()), pos2(full.right(), status.top()));
-        let cols = columns(body, shell.state.explorer_width, shell.state.panel_width);
+        let explorer_w = (!shell.state.explorer_collapsed).then_some(shell.state.explorer_width);
+        let panel_w = (!shell.state.panel_collapsed).then_some(shell.state.panel_width);
+        let cols = columns(body, explorer_w, panel_w);
         // The bar and the strip first: a click on Home there closes the project, and the frame ends.
         if !bar_row(shell, ui, &p, bar, &name) || !title_strip(shell, ui, &p, strip, false) {
             return;
@@ -199,14 +209,15 @@ fn activity_rail(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     let active = shell.state.explorer;
     for (i, (id, which, icon, title)) in EXPLORERS.iter().enumerate() {
         let button = Rect::from_min_size(pos2(r.left() + 10.0, r.top() + 8.0 + i as f32 * RAIL_PITCH), RAIL_BUTTON);
-        let on = *which == active;
+        // Marked while its explorer is open; a folded explorer marks none.
+        let on = *which == active && !shell.state.explorer_collapsed;
         if on {
             paint.rect_filled(button, 6.0, p.accent_tint);
             paint.rect_filled(Rect::from_min_size(pos2(r.left(), button.top() + 8.0), vec2(2.0, 20.0)), 1.0, p.accent);
         }
         ux::icon_in(paint, Rect::from_center_size(button.center(), Vec2::splat(18.0)), icon, if on { p.accent } else { p.text_secondary });
         if control(shell, ui, &format!("workspace.explorers.{id}"), "tab", button, true).on_hover_text(tr(title)).clicked() {
-            shell.state.explorer = *which;
+            shell.state.rail_explorer(*which);
         }
     }
 }
@@ -273,7 +284,7 @@ fn right_rail(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     let active = shell.state.panel;
     for (i, (id, which, icon, title)) in PANELS.iter().enumerate() {
         let button = Rect::from_min_size(pos2(r.left() + 4.0, r.top() + 8.0 + i as f32 * RAIL_PITCH), RAIL_BUTTON);
-        let on = *which == active;
+        let on = *which == active && !shell.state.panel_collapsed;
         if on {
             paint.rect_filled(button, 6.0, p.accent_tint);
             paint.rect_filled(Rect::from_min_size(pos2(r.left(), button.top() + 8.0), vec2(2.0, 20.0)), 1.0, p.accent);
@@ -286,7 +297,7 @@ fn right_rail(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
         };
         ux::icon_in(paint, Rect::from_center_size(button.center(), Vec2::splat(18.0)), icon, ink);
         if control(shell, ui, &format!("workspace.panels.{id}"), "tab", button, true).on_hover_text(tr(title)).clicked() {
-            shell.state.panel = *which;
+            shell.state.rail_panel(*which);
         }
     }
 }
@@ -299,7 +310,9 @@ fn panel(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, name: &str)
     ux::text(&paint, r.min + vec2(16.0, 12.0), &title, types::UI_STRONG, p.text, room(r.width() - 72.0));
     let collapse = Rect::from_min_size(pos2(r.right() - 36.0, r.top() + 8.0), vec2(28.0, 28.0));
     ux::icon_in(&paint, Rect::from_center_size(collapse.center(), Vec2::splat(16.0)), &icons::COLLAPSE, p.text_secondary);
-    control(shell, ui, "workspace.panel.collapse", "button", collapse, false).on_hover_text(tr("Collapse panel"));
+    if control(shell, ui, "workspace.panel.collapse", "button", collapse, true).on_hover_text(tr("Collapse panel")).clicked() {
+        shell.state.panel_collapsed = true;
+    }
     paint.rect_filled(Rect::from_min_size(pos2(r.left(), r.top() + 43.0), vec2(r.width(), 1.0)), 0.0, p.border);
     let which = shell.state.panel;
     crate::panels::draw(shell, ui, p, r, 58.0, which, name);
@@ -371,21 +384,29 @@ mod tests {
     #[test]
     fn the_columns_give_way_from_the_right_as_the_window_narrows() {
         let body = |w: f32| Rect::from_min_size(egui::Pos2::ZERO, vec2(w, 1000.0));
-        let wide = columns(body(1600.0), EXPLORER_DEFAULT, PANEL_DEFAULT);
+        let wide = columns(body(1600.0), Some(EXPLORER_DEFAULT), Some(PANEL_DEFAULT));
         assert!(wide.explorer.is_some() && wide.panel.is_some());
         assert_eq!(wide.centre.width(), 1600.0 - ACTIVITY - EXPLORER_DEFAULT - PANEL_DEFAULT - RAIL);
         // The rail stands between the centre and the panel, which closes the window's edge.
         assert_eq!(wide.rail.left(), wide.centre.right());
         assert_eq!(wide.panel.map(|r| r.left()), Some(wide.rail.right()));
         assert_eq!(wide.panel.map(|r| r.right()), Some(1600.0));
-        let medium = columns(body(900.0), EXPLORER_DEFAULT, PANEL_DEFAULT);
+        let medium = columns(body(900.0), Some(EXPLORER_DEFAULT), Some(PANEL_DEFAULT));
         assert!(medium.explorer.is_some() && medium.panel.is_none());
-        let narrow = columns(body(500.0), EXPLORER_DEFAULT, PANEL_DEFAULT);
+        let narrow = columns(body(500.0), Some(EXPLORER_DEFAULT), Some(PANEL_DEFAULT));
         assert!(narrow.explorer.is_none() && narrow.panel.is_none());
         assert_eq!(narrow.centre.width(), 500.0 - ACTIVITY - RAIL);
         assert_eq!(narrow.rail.right(), 500.0);
-        let clamped = columns(body(1600.0), 10_000.0, -5.0);
+        let clamped = columns(body(1600.0), Some(10_000.0), Some(-5.0));
         assert_eq!(clamped.explorer.map(|r| r.width()), Some(EXPLORER_RANGE.1));
         assert_eq!(clamped.panel.map(|r| r.width()), Some(PANEL_RANGE.0));
+        // A folded column gives its width to the centre; the panel alone fits where both did not.
+        let folded = columns(body(1600.0), None, Some(PANEL_DEFAULT));
+        assert!(folded.explorer.is_none());
+        assert_eq!(folded.centre.width(), 1600.0 - ACTIVITY - PANEL_DEFAULT - RAIL);
+        let panel_alone = columns(body(900.0), None, Some(PANEL_DEFAULT));
+        assert!(panel_alone.panel.is_some());
+        let none = columns(body(1600.0), None, None);
+        assert_eq!(none.centre.width(), 1600.0 - ACTIVITY - RAIL);
     }
 }

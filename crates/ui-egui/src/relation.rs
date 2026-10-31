@@ -661,11 +661,28 @@ struct Item {
 /// A menu under `anchor` with rich rows and an optional heading before row `at`; gives the index
 /// picked, closing on a pick or a click elsewhere.
 fn menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, id: &str, items: &[Item], heading: Option<(usize, String)>) -> Option<usize> {
-    let paint = ui.painter().clone();
     let heading_h = if heading.is_some() { 22.0 } else { 0.0 };
     let height = 8.0 + items.len() as f32 * 30.0 + heading_h;
     let width = anchor.width().max(200.0);
-    let m = Rect::from_min_size(pos2(anchor.right() - width, anchor.bottom() + 4.0), vec2(width, height));
+    let m = ux::drop_rect(ui, anchor, anchor.right() - width, vec2(width, height));
+    // Over the panel's rows below it, on a layer of its own.
+    ux::overlay(ui, crate::widgets::egui_id(&format!("{id}.layer")), m, |ui| menu_body(shell, ui, p, anchor, m, id, items, heading, heading_h))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn menu_body(
+    shell: &mut Shell,
+    ui: &egui::Ui,
+    p: &Palette,
+    anchor: Rect,
+    m: Rect,
+    id: &str,
+    items: &[Item],
+    heading: Option<(usize, String)>,
+    heading_h: f32,
+) -> Option<usize> {
+    let paint = ui.painter().clone();
+    let width = m.width();
     ux::shadow(&paint, m, 8.0, p.shadow);
     paint.rect_filled(m, 8.0, p.surface);
     paint.rect_stroke(m, 8.0, Stroke::new(1.0, p.border), StrokeKind::Inside);

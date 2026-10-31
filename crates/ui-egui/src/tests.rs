@@ -841,6 +841,42 @@ fn an_open_project_shows_the_workspace_with_its_session_and_every_control() {
 }
 
 #[test]
+fn the_open_rail_icon_and_the_collapse_button_fold_a_column_and_any_icon_opens_it_again() {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1120.0));
+    let rail = rect_of(&h, "workspace.panels.properties").left();
+    // The open panel's own icon folds it; the centre takes its width and the rail closes the edge.
+    let at = rect_of(&h, "workspace.panels.properties").center();
+    click(&mut h, at);
+    assert!(h.state().state.panel_collapsed);
+    assert!(!ids(&h).iter().any(|i| i == "workspace.panel.collapse"), "the panel is gone");
+    assert!(rect_of(&h, "workspace.panels.properties").left() > rail + 200.0);
+    // Another icon opens it on its own content.
+    let at = rect_of(&h, "workspace.panels.skills").center();
+    click(&mut h, at);
+    assert!(!h.state().state.panel_collapsed);
+    assert_eq!(h.state().state.panel, crate::state::Panel::Skills);
+    // The collapse button folds it too, and its own icon opens it again.
+    let at = rect_of(&h, "workspace.panel.collapse").center();
+    click(&mut h, at);
+    assert!(h.state().state.panel_collapsed);
+    let at = rect_of(&h, "workspace.panels.skills").center();
+    click(&mut h, at);
+    assert!(!h.state().state.panel_collapsed && h.state().state.panel == crate::state::Panel::Skills);
+    // The activity rail folds and opens the explorer the same way.
+    let at = rect_of(&h, "workspace.explorers.models").center();
+    click(&mut h, at);
+    assert!(h.state().state.explorer_collapsed);
+    assert!(!ids(&h).iter().any(|i| i == "workspace.explorer.add"), "the explorer is gone");
+    let at = rect_of(&h, "workspace.explorers.diagrams").center();
+    click(&mut h, at);
+    assert!(!h.state().state.explorer_collapsed && h.state().state.explorer == crate::state::Explorer::Diagrams);
+    // Opening a column's editor from the canvas opens a folded panel on Properties.
+    h.state_mut().state.panel_collapsed = true;
+    h.state_mut().state.show_panel(crate::state::Panel::Properties);
+    assert!(!h.state().state.panel_collapsed);
+}
+
+#[test]
 fn the_rails_switch_the_explorer_and_the_panel_and_home_closes_the_project() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1120.0));
     assert_eq!(h.state().state.panel, crate::state::Panel::Properties);
@@ -1120,6 +1156,56 @@ fn properties_lists_a_tables_columns_and_the_editor_changes_them_through_the_eng
     assert!(h.state().panels.notice.is_some(), "the refusal is shown");
     let st = h.state().session.as_ref().unwrap().doc();
     assert_eq!(st.get(customer_obj, archforge_er::entity::KIND).unwrap(), archforge_mof::Value::Enum(archforge_er::EntityKind::Regular.index()));
+}
+
+#[test]
+fn apply_closes_a_new_columns_editor_after_a_type_is_picked_from_the_list() {
+    let (mut h, customer) = table_harness();
+    let at = rect_of(&h, "workspace.properties.columns.add").center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.properties.column.name").center();
+    click(&mut h, at);
+    h.event(egui::Event::Key { key: egui::Key::A, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::COMMAND });
+    h.event(egui::Event::Text("id".into()));
+    h.run();
+    let at = rect_of(&h, "workspace.properties.column.type.menu").center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.properties.column.type.menu.2").center();
+    click(&mut h, at);
+    assert!(h.state().panels.menu.is_none(), "a pick closes the list");
+    // The list lies over the sections below the card; its last entry takes the click, not the
+    // section row under it.
+    let at = rect_of(&h, "workspace.properties.column.type.menu").center();
+    click(&mut h, at);
+    let n = crate::panels::BASE_TYPES.len() - 1;
+    let last = rect_of(&h, &format!("workspace.properties.column.type.menu.{n}"));
+    let keys_add = rect_of(&h, "workspace.properties.keys.add");
+    assert!(last.bottom() > keys_add.top(), "the list reaches over the keys: {last:?} {keys_add:?}");
+    click(&mut h, egui::pos2(keys_add.center().x.min(last.right() - 4.0), last.center().y));
+    assert_eq!(h.state().panels.column.as_ref().map(|c| c.ty.clone()), Some(crate::panels::BASE_TYPES[n].to_string()));
+    assert!(h.state().panels.key.is_none(), "the key editor under the list stayed closed");
+    let at = rect_of(&h, "workspace.properties.column.type.menu").center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.properties.column.type.menu.2").center();
+    click(&mut h, at);
+    // Primary key brings Not null with it.
+    let at = rect_of(&h, "workspace.properties.column.primary-key").center();
+    click(&mut h, at);
+    assert!(h.state().panels.column.as_ref().is_some_and(|c| c.primary_key && c.not_null));
+    let at = rect_of(&h, "workspace.properties.column.apply").center();
+    click(&mut h, at);
+    h.run();
+    assert!(h.state().panels.column.is_none(), "one Apply closes the editor: {:?}", h.state().panels.column);
+    let st = h.state().session.as_ref().unwrap().doc();
+    let customer_obj = st.by_uuid(archforge_mof::Uuid::parse(&customer).unwrap()).unwrap();
+    assert_eq!(st.list(customer_obj, archforge_er::entity::ATTRIBUTE).unwrap().len(), 3, "one column added");
+    // Not null cannot be unticked under a key: it takes the key with it.
+    let rows: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.column.0")).collect();
+    let at = rect_of(&h, &rows[0]).center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.properties.column.not-null").center();
+    click(&mut h, at);
+    assert!(h.state().panels.column.as_ref().is_some_and(|c| !c.primary_key && !c.not_null));
 }
 
 #[test]
@@ -1404,6 +1490,7 @@ fn the_entity_tool_places_a_table_named_in_place_as_one_undo_step() {
     click(&mut h, canvas.left_top() + egui::vec2(120.0, 320.0));
     let nodes = node_ids(&h);
     assert_eq!(nodes.len(), before + 1, "a node was placed: {nodes:?}");
+    assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Select, "placing hands back to Select");
     let rename = h.state().canvas.rename.clone().expect("the name is open for typing");
     assert_eq!(rename.text, "Entity");
     assert_eq!(selected_name(&h), "Entity");
@@ -1709,6 +1796,7 @@ fn the_relationship_tool_draws_a_line_with_its_foreign_key_as_one_step_and_delet
     drag(&mut h, from, to);
     let rels = relationships(&h);
     assert_eq!(rels.len(), 1, "one relationship drawn");
+    assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Select, "drawing hands back to Select");
     let st = h.state().session.as_ref().unwrap().doc();
     let rel = rels[0];
     assert_eq!(st.get(rel, archforge_er::relationship::FROM).unwrap().as_ref().and_then(|o| st.uuid(o).ok()).unwrap().to_string(), customer);
@@ -2035,6 +2123,7 @@ fn problems_badge_the_canvas_and_a_note_is_placed_and_typed_in_place() {
     let before = node_ids(&h).len();
     click(&mut h, canvas.left_top() + egui::vec2(canvas.width() - 120.0, 80.0));
     assert_eq!(node_ids(&h).len(), before + 1, "the note is a node: {:?}", h.state().canvas.notice);
+    assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Select, "placing hands back to Select");
     assert!(h.state().canvas.note_edit.is_some(), "its text is open");
     assert!(ids(&h).iter().any(|i| i == "workspace.canvas.note"));
     h.state_mut().canvas.note_edit.as_mut().unwrap().text = "Product.sku is unique per supplier".into();
