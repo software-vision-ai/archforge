@@ -217,7 +217,10 @@ pub(crate) fn section_of(
         ux::text(&paint, rect.min + vec2(38.0, 4.0), &row.name, types::UI, p.text, Some((width - 70.0).max(0.0)));
         ux::text(&paint, rect.min + vec2(38.0, 23.0), &row.detail, types::CAPTION, p.text_secondary, Some((width - 70.0).max(0.0)));
         if crate::panels::edit_button(shell, ui, p, rect, &id, resp.contains_pointer()) || resp.double_clicked() {
+            crate::panels::select_element(shell, row.id);
             open(shell, schema_id, kind, Some(row.id));
+        } else if resp.clicked() {
+            crate::panels::select_element(shell, row.id);
         }
         y += 44.0;
     }
