@@ -9,6 +9,7 @@
 
 mod id;
 pub mod meta;
+pub mod rows;
 pub mod schema;
 pub mod store;
 #[cfg(feature = "testing")]

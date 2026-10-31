@@ -659,6 +659,26 @@ impl Store {
         })
     }
 
+    /// A new object of `class` with the id it was saved under, for reading a project back; an id
+    /// the store holds already is refused.
+    pub fn create_with_uuid(&mut self, class: ClassId, uuid: Uuid) -> R<Obj> {
+        let c = self.universe.class(class).ok_or_else(|| Invalid::Internal(format!("there is no class {}", class.0)))?;
+        if c.is_abstract {
+            return Err(Invalid::Abstract(c.name.to_string()));
+        }
+        if self.live >= MAX_OBJECTS || self.reg.class.len() >= u32::MAX as usize - 1 {
+            return Err(Invalid::TooManyObjects);
+        }
+        if self.by_uuid.contains_key(&uuid) {
+            return Err(Invalid::Refused(format!("the id {uuid} is there twice")));
+        }
+        self.atomic(|st| {
+            let obj = Obj(st.reg.class.len() as u32);
+            st.perform(Op::Create { obj, class, uuid })?;
+            Ok(obj)
+        })
+    }
+
     /// Sets a single-valued property, keeping containment and the opposite consistent.
     pub fn set(&mut self, obj: Obj, prop: PropId, value: Value) -> R<()> {
         let p = self.writable(obj, prop)?;
