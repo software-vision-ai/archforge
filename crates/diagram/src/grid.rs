@@ -99,7 +99,8 @@ struct NodeItem {
 
 struct EdgeItem {
     obj: Obj,
-    /// The source's centre, the waypoints, the target's centre.
+    /// The line as drawn: from the source's edge through the waypoints to the target's edge; a
+    /// note link straight to a node's edge or to a line's middle.
     points: Vec<(f64, f64)>,
     bounds: Rect,
 }
@@ -113,13 +114,56 @@ pub struct Grid {
     edge_cells: BTreeMap<(i64, i64), Vec<usize>>,
 }
 
+/// How far a node's own line loops out of its right side, and half its height there.
+pub const LOOP_REACH: f64 = 40.0;
+pub const LOOP_HALF: f64 = 20.0;
+
+/// Where the line from `rect`'s centre towards `toward` leaves the rectangle; the centre for a
+/// point at the centre.
+pub fn exit_point(rect: &Rect, toward: (f64, f64)) -> (f64, f64) {
+    let c = rect.center();
+    let (dx, dy) = (toward.0 - c.0, toward.1 - c.1);
+    if (dx == 0.0 && dy == 0.0) || !dx.is_finite() || !dy.is_finite() {
+        return c;
+    }
+    let tx = if dx.abs() > f64::EPSILON { (rect.width / 2.0) / dx.abs() } else { f64::INFINITY };
+    let ty = if dy.abs() > f64::EPSILON { (rect.height / 2.0) / dy.abs() } else { f64::INFINITY };
+    let t = tx.min(ty);
+    if t.is_finite() { (c.0 + dx * t, c.1 + dy * t) } else { c }
+}
+
+/// A node's own line: out of its right side and back, a loop of [`LOOP_REACH`] by twice
+/// [`LOOP_HALF`].
+pub fn self_loop(rect: &Rect) -> Vec<(f64, f64)> {
+    let (right, cy) = (rect.x + rect.width, rect.y + rect.height / 2.0);
+    vec![(right, cy - LOOP_HALF), (right + LOOP_REACH, cy - LOOP_HALF), (right + LOOP_REACH, cy + LOOP_HALF), (right, cy + LOOP_HALF)]
+}
+
+/// The point halfway along a polyline, by length; its first point when it has no length.
+pub fn middle_of(points: &[(f64, f64)]) -> (f64, f64) {
+    let len = |a: (f64, f64), b: (f64, f64)| ((b.0 - a.0).powi(2) + (b.1 - a.1).powi(2)).sqrt();
+    let total: f64 = points.windows(2).map(|s| len(s[0], s[1])).sum();
+    let mut left = total / 2.0;
+    for s in points.windows(2) {
+        let l = len(s[0], s[1]);
+        if l > 0.0 && left <= l {
+            let t = left / l;
+            return (s[0].0 + (s[1].0 - s[0].0) * t, s[0].1 + (s[1].1 - s[0].1) * t);
+        }
+        left -= l;
+    }
+    points.first().copied().unwrap_or((0.0, 0.0))
+}
+
 /// A node's rectangle as stored.
 pub fn bounds_of(store: &Store, n: Obj) -> Rect {
     Rect::new(real(store, n, node::X), real(store, n, node::Y), real(store, n, node::WIDTH), real(store, n, node::HEIGHT))
 }
 
 impl Grid {
-    /// Indexes `diagram` as the store holds it now. An edge whose end is missing is left out.
+    /// Indexes `diagram` as the store holds it now. An edge whose end is missing is left out; a
+    /// note link that ends on an edge ends at that edge's middle, so it is indexed after the edges
+    /// between nodes.
     pub fn build(store: &Store, diagram: Obj) -> Grid {
         let mut nodes = Vec::new();
         let mut node_cells: BTreeMap<(i64, i64), Vec<usize>> = BTreeMap::new();
@@ -137,16 +181,47 @@ impl Grid {
         }
         let mut edges = Vec::new();
         let mut edge_cells: BTreeMap<(i64, i64), Vec<usize>> = BTreeMap::new();
-        for e in store.list(diagram, diagram::EDGE).unwrap_or_default().iter().filter_map(Value::as_ref) {
-            let end =
-                |prop| store.get(e, prop).ok().and_then(|v| v.as_ref()).and_then(|n| index_of.get(&n)).and_then(|i| nodes.get(*i)).map(|n| n.rect);
-            let (Some(src), Some(dst)) = (end(edge::SOURCE), end(edge::TARGET)) else { continue };
-            let mut points = vec![src.center()];
-            for w in store.list(e, edge::WAYPOINT).unwrap_or_default().iter().filter_map(Value::as_ref) {
-                points.push((real(store, w, point::X), real(store, w, point::Y)));
+        let all: Vec<Obj> = store.list(diagram, diagram::EDGE).unwrap_or_default().iter().filter_map(Value::as_ref).collect();
+        let on_edge =
+            |e: &Obj| store.get(*e, edge::TARGET).ok().and_then(|v| v.as_ref()).is_some_and(|t| store.class_of(t).ok() == Some(crate::EDGE));
+        let mut middles: BTreeMap<Obj, (f64, f64)> = BTreeMap::new();
+        for e in all.iter().filter(|e| !on_edge(e)).chain(all.iter().filter(|e| on_edge(e))).copied() {
+            let end_obj = |prop| store.get(e, prop).ok().and_then(|v| v.as_ref());
+            let rect_of = |o: Option<Obj>| o.and_then(|n| index_of.get(&n)).and_then(|i| nodes.get(*i)).map(|n| n.rect);
+            let (source, target) = (end_obj(edge::SOURCE), end_obj(edge::TARGET));
+            let Some(src) = rect_of(source) else { continue };
+            let element = store.get(e, edge::ELEMENT).ok().and_then(|v| v.as_ref());
+            // The line as the canvas draws it: cut at the nodes' edges, a node's own line looping
+            // out of its right side; a note link straight, to a node's edge or a line's middle.
+            let points = if element.is_none() {
+                let dst = match rect_of(target) {
+                    Some(t) => exit_point(&t, src.center()),
+                    None => match target.and_then(|t| middles.get(&t).copied()) {
+                        Some(m) => m,
+                        None => continue,
+                    },
+                };
+                vec![exit_point(&src, dst), dst]
+            } else if source == target {
+                self_loop(&src)
+            } else {
+                let Some(dst) = rect_of(target) else { continue };
+                let mut points = vec![src.center()];
+                for w in store.list(e, edge::WAYPOINT).unwrap_or_default().iter().filter_map(Value::as_ref) {
+                    points.push((real(store, w, point::X), real(store, w, point::Y)));
+                }
+                points.push(dst.center());
+                let n = points.len();
+                points[0] = exit_point(&src, points[1]);
+                points[n - 1] = exit_point(&dst, points[n - 2]);
+                points
+            };
+            if points.iter().any(|(x, y)| !x.is_finite() || !y.is_finite()) {
+                continue;
             }
-            points.push(dst.center());
-            let mut bounds = Rect::new(src.center().0, src.center().1, 0.0, 0.0);
+            middles.insert(e, middle_of(&points));
+            let first = points[0];
+            let mut bounds = Rect::new(first.0, first.1, 0.0, 0.0);
             for p in &points {
                 bounds = bounds.union(&Rect::new(p.0, p.1, 0.0, 0.0));
             }
@@ -172,6 +247,23 @@ impl Grid {
 
     pub fn is_empty(&self) -> bool {
         self.nodes.is_empty() && self.edges.is_empty()
+    }
+
+    /// The nearest edge within [`EDGE_TOLERANCE`] of a point that `keep` takes, nodes aside: a note
+    /// link dropped on a relationship's line looks past the links that end there.
+    pub fn hit_edge(&self, x: f64, y: f64, keep: impl Fn(Obj) -> bool) -> Option<Obj> {
+        if !x.is_finite() || !y.is_finite() {
+            return None;
+        }
+        let mut best: Option<(f64, usize)> = None;
+        for i in self.edge_cells.get(&(cell(x), cell(y))).into_iter().flatten() {
+            let Some(e) = self.edges.get(*i).filter(|e| keep(e.obj)) else { continue };
+            let d = e.points.windows(2).map(|s| if let [a, b] = s { distance(*a, *b, (x, y)) } else { f64::INFINITY }).fold(f64::INFINITY, f64::min);
+            if d <= EDGE_TOLERANCE && best.is_none_or(|(bd, bi)| d < bd || (d == bd && *i > bi)) {
+                best = Some((d, *i));
+            }
+        }
+        best.and_then(|(_, i)| self.edges.get(i)).map(|e| e.obj)
     }
 
     /// The topmost node at a point, else the nearest edge within [`EDGE_TOLERANCE`].

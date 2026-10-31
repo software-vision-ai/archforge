@@ -1525,7 +1525,8 @@ mod tests {
         let diagram = build(target("diagram"), &std::fs::read(util::root().join("crates/diagram/diagram.xmi")).unwrap_or_default(), false)
             .unwrap_or_else(|e| panic!("{e}"));
         let names: Vec<&str> = diagram.metamodel.classes.iter().map(|c| &*c.name).collect();
-        assert_eq!(names, ["Element", "Diagram", "Node", "Edge", "Point", "Label", "Style"]);
+        // View is the abstract end of an edge: a node, or an edge a note links to.
+        assert_eq!(names, ["Element", "Diagram", "View", "Node", "Edge", "Point", "Label", "Style"]);
         assert_eq!(
             diagram.metamodel.props.iter().filter(|p| p.is_composite).count(),
             8,

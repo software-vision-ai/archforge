@@ -759,31 +759,15 @@ fn draw_edge(
     ui: &egui::Ui,
 ) -> Option<(Pos2, Uuid, Uuid, Obj, bool)> {
     let (p, store, view, selection) = (d.p, d.store, d.view, d.selection);
-    let (Some(source), Some(target)) = (element_of(store, e, edge::SOURCE), element_of(store, e, edge::TARGET)) else { return None };
     let z = view.zoom;
-    let s_rect = d.node_rect(source);
-    let t_rect = d.node_rect(target);
     let element = element_of(store, e, edge::ELEMENT);
-    let relationship = element.filter(|el| store.class_of(*el).ok() == Some(archforge_er::RELATIONSHIP));
-    let mut points: Vec<Pos2> = if source == target {
-        // A relationship of a table with itself loops out of its right side.
-        crate::connect::self_loop(s_rect, z)
-    } else {
-        let mut points = vec![s_rect.center()];
-        for w in refs(store, e, edge::WAYPOINT) {
-            points.push(view.to_screen(real(store, w, point::X), real(store, w, point::Y)));
-        }
-        points.push(t_rect.center());
-        points
-    };
-    if points.iter().any(|q| !q.is_finite()) {
+    if element.is_none() {
+        draw_link(paint, d, e, registry, ui);
         return None;
     }
+    let relationship = element.filter(|el| store.class_of(*el).ok() == Some(archforge_er::RELATIONSHIP));
+    let points = edge_points(d, e)?;
     let n = points.len();
-    if source != target {
-        points[0] = exit_point(s_rect, points[1]);
-        points[n - 1] = exit_point(t_rect, points[n - 2]);
-    }
     let selected = selection.contains(&e) || element.is_some_and(|el| selection.contains(&el));
     // A generalization (slice S6): slate, solid, no ends but a hollow triangle at the supertype.
     if let Some(g) = element.filter(|el| store.class_of(*el).ok() == Some(archforge_er::GENERALIZATION)) {
@@ -892,6 +876,70 @@ fn draw_edge(
         }
     }
     badge
+}
+
+/// A line's points on screen, from its source's edge through its waypoints to its target's edge; a
+/// relationship of a table with itself loops out of its right side. None when an end is missing.
+fn edge_points(d: &Drawing<'_>, e: Obj) -> Option<Vec<Pos2>> {
+    let (store, view) = (d.store, d.view);
+    let (Some(source), Some(target)) = (element_of(store, e, edge::SOURCE), element_of(store, e, edge::TARGET)) else { return None };
+    let (s_rect, t_rect) = (d.node_rect(source), d.node_rect(target));
+    let mut points: Vec<Pos2> = if source == target {
+        crate::connect::self_loop(s_rect, view.zoom)
+    } else {
+        let mut points = vec![s_rect.center()];
+        for w in refs(store, e, edge::WAYPOINT) {
+            points.push(view.to_screen(real(store, w, point::X), real(store, w, point::Y)));
+        }
+        points.push(t_rect.center());
+        points
+    };
+    if points.iter().any(|q| !q.is_finite()) {
+        return None;
+    }
+    let n = points.len();
+    if source != target {
+        points[0] = exit_point(s_rect, points[1]);
+        points[n - 1] = exit_point(t_rect, points[n - 2]);
+    }
+    Some(points)
+}
+
+/// A note link (owner decision archforge-kjz.13): dashed and straight, from the note's edge to the
+/// edge of the table it points at, or to the middle of the relationship's line.
+fn draw_link(paint: &egui::Painter, d: &Drawing<'_>, e: Obj, registry: &mut widgets::Registry, ui: &egui::Ui) {
+    let (p, store, z) = (d.p, d.store, d.view.zoom);
+    let (Some(source), Some(target)) = (element_of(store, e, edge::SOURCE), element_of(store, e, edge::TARGET)) else { return };
+    let s_rect = d.node_rect(source);
+    let (from, to) = if store.class_of(target).ok() == Some(archforge_diagram::EDGE) {
+        let Some(line) = edge_points(d, target) else { return };
+        let middle = along(&line, 0.5);
+        (exit_point(s_rect, middle), middle)
+    } else {
+        let t_rect = d.node_rect(target);
+        (exit_point(s_rect, t_rect.center()), exit_point(t_rect, s_rect.center()))
+    };
+    if !from.is_finite() || !to.is_finite() {
+        return;
+    }
+    let selected = d.selection.contains(&e);
+    let ink = if selected { p.accent } else { p.text_secondary };
+    let stroke = Stroke::new((1.2 * z).clamp(1.0, 2.5), ink);
+    paint.extend(egui::Shape::dashed_line(&[from, to], stroke, 5.0 * z.max(0.5), 4.0 * z.max(0.5)));
+    // Where it meets a relationship's line, a dot says it points at the line.
+    if store.class_of(target).ok() == Some(archforge_diagram::EDGE) {
+        paint.circle_filled(to, 2.5 * z.max(0.6), ink);
+    }
+    if selected {
+        for q in [from, to] {
+            let h = Rect::from_center_size(q, Vec2::splat(6.0));
+            paint.rect_filled(h, 1.0, p.surface);
+            paint.rect_stroke(h, 1.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
+        }
+    }
+    if let Ok(id) = store.uuid(e) {
+        widgets::record_visible(ui, registry, &format!("workspace.canvas.edge.{id}"), "edge", Rect::from_two_pos(from, to).expand(6.0));
+    }
 }
 
 /// An ER end at `end`, the line coming from `from`, in crow's foot: the outer mark is the most

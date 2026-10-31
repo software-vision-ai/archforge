@@ -30,8 +30,9 @@ const OFFER: Vec2 = vec2(300.0, 200.0);
 const TOAST: Vec2 = vec2(440.0, 40.0);
 const TOAST_FRAMES: u64 = 300;
 /// How far a self relationship's loop reaches out of its entity.
-const LOOP_REACH: f32 = 40.0;
-const LOOP_HALF: f32 = 20.0;
+/// The diagram's self-loop, on screen (the grid hit-tests the same shape).
+const LOOP_REACH: f32 = archforge_diagram::grid::LOOP_REACH as f32;
+const LOOP_HALF: f32 = archforge_diagram::grid::LOOP_HALF as f32;
 
 /// The cardinalities a new relationship gets, and whether it is identifying.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

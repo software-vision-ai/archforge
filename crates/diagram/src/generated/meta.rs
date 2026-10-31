@@ -9,7 +9,7 @@ use archforge_mof::{Builder, ClassId, DataId, DataKind, MetaError, Metamodel, Pr
 pub const INDEX: u16 = 5;
 pub const URI: &str = "archforge:diagram";
 pub const VERSION: &str = "1";
-pub const CONTENT_HASH: &str = "9fcea52b3e16119a";
+pub const CONTENT_HASH: &str = "e1f53cf86fd4effd";
 
 pub const BOOLEAN: DataId = DataId::new(INDEX, 0);
 pub const INTEGER: DataId = DataId::new(INDEX, 1);
@@ -20,11 +20,12 @@ pub const LABEL_PLACE: DataId = DataId::new(INDEX, 5);
 
 pub const ELEMENT: ClassId = ClassId::new(INDEX, 0);
 pub const DIAGRAM: ClassId = ClassId::new(INDEX, 1);
-pub const NODE: ClassId = ClassId::new(INDEX, 2);
-pub const EDGE: ClassId = ClassId::new(INDEX, 3);
-pub const POINT: ClassId = ClassId::new(INDEX, 4);
-pub const LABEL: ClassId = ClassId::new(INDEX, 5);
-pub const STYLE: ClassId = ClassId::new(INDEX, 6);
+pub const VIEW: ClassId = ClassId::new(INDEX, 2);
+pub const NODE: ClassId = ClassId::new(INDEX, 3);
+pub const EDGE: ClassId = ClassId::new(INDEX, 4);
+pub const POINT: ClassId = ClassId::new(INDEX, 5);
+pub const LABEL: ClassId = ClassId::new(INDEX, 6);
+pub const STYLE: ClassId = ClassId::new(INDEX, 7);
 
 /// The properties Element declares.
 pub mod element {
@@ -104,8 +105,9 @@ fn build() -> Result<Arc<Metamodel>, MetaError> {
     b.data_type("LabelPlace", DataKind::Enumeration(vec!["source".into(), "middle".into(), "target".into()]), "")?;
     b.class("Element", true, &[], "")?;
     b.class("Diagram", false, &[ELEMENT], "")?;
-    b.class("Node", false, &[ELEMENT], "")?;
-    b.class("Edge", false, &[ELEMENT], "")?;
+    b.class("View", true, &[ELEMENT], "")?;
+    b.class("Node", false, &[VIEW], "")?;
+    b.class("Edge", false, &[VIEW], "")?;
     b.class("Point", false, &[ELEMENT], "")?;
     b.class("Label", false, &[ELEMENT], "")?;
     b.class("Style", false, &[ELEMENT], "")?;
@@ -432,7 +434,7 @@ fn build() -> Result<Arc<Metamodel>, MetaError> {
     b.property(PropertySpec {
         name: "source",
         owner: EDGE,
-        ty: TypeRef::Class(NODE),
+        ty: TypeRef::Class(VIEW),
         lower: 1,
         upper: Some(1),
         is_ordered: false,
@@ -452,7 +454,7 @@ fn build() -> Result<Arc<Metamodel>, MetaError> {
     b.property(PropertySpec {
         name: "target",
         owner: EDGE,
-        ty: TypeRef::Class(NODE),
+        ty: TypeRef::Class(VIEW),
         lower: 1,
         upper: Some(1),
         is_ordered: false,

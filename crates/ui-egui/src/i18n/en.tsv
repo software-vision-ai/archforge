@@ -131,6 +131,8 @@ str		{name} has no primary key	{name} has no primary key
 str		{name} has subtypes but no primary key to share	{name} has subtypes but no primary key to share
 str		{name} removed · {keys} went with it	{name} removed · {keys} went with it
 str		Add column	Add column
+str		Link to a table or a relationship	Link to a table or a relationship
+str		Drop the link on a table or a relationship's line	Drop the link on a table or a relationship's line
 str		Edit column	Edit column
 str		Add skill	Add skill
 str		Kind	Kind

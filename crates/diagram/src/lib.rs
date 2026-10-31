@@ -119,15 +119,50 @@ pub fn edges_on(store: &Store, node: Obj) -> Vec<Obj> {
     out
 }
 
-/// Destroys a node with the edges on it or on the nodes under it, all or nothing; gives how many
-/// objects went. The MOF core alone refuses the node while an edge requires it as an end.
+/// The note links that end on `edge`, and those that end on them in turn (an edge's end may be
+/// another edge: a note pointing at a relationship's line; a file may hold a chain or a loop of
+/// them, which a command never makes), each once and `edge` itself left out.
+pub fn links_on(store: &Store, edge: Obj) -> Vec<Obj> {
+    let mut found = BTreeSet::from([edge]);
+    let mut out = Vec::new();
+    let mut queue = vec![edge];
+    while let Some(on) = queue.pop() {
+        for (e, p) in store.referrers(on) {
+            if (p == self::edge::SOURCE || p == self::edge::TARGET) && found.insert(e) {
+                out.push(e);
+                queue.push(e);
+            }
+        }
+    }
+    out
+}
+
+/// Destroys an edge with the note links on it, all or nothing; gives how many objects went. The
+/// MOF core alone refuses the edge while a link requires it as an end.
+pub fn destroy_edge_with_links(store: &mut Store, edge: Obj) -> Result<usize, Invalid> {
+    let links = links_on(store, edge);
+    store.transaction(|st| {
+        let mut gone = 0;
+        for l in links {
+            if st.is_alive(l) {
+                gone += st.destroy(l)?;
+            }
+        }
+        gone += st.destroy(edge)?;
+        Ok(gone)
+    })
+}
+
+/// Destroys a node with the edges on it or on the nodes under it, and the note links on those
+/// edges, all or nothing; gives how many objects went. The MOF core alone refuses the node while
+/// an edge requires it as an end.
 pub fn destroy_node_with_edges(store: &mut Store, node: Obj) -> Result<usize, Invalid> {
     let edges = edges_on(store, node);
     store.transaction(|st| {
         let mut gone = 0;
         for e in edges {
             if st.is_alive(e) {
-                gone += st.destroy(e)?;
+                gone += destroy_edge_with_links(st, e)?;
             }
         }
         gone += st.destroy(node)?;
@@ -182,7 +217,7 @@ pub fn remove_views_of(store: &mut Store, element: Obj) -> Result<usize, Invalid
         }
         for e in edges {
             if st.is_alive(e) {
-                gone += st.destroy(e)?;
+                gone += destroy_edge_with_links(st, e)?;
             }
         }
         for n in nodes {

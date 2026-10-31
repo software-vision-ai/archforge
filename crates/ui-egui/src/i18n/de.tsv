@@ -132,6 +132,8 @@ str		{name} has no primary key	{name} hat keinen Primärschlüssel
 str		{name} has subtypes but no primary key to share	{name} hat Untertypen, aber keinen Primärschlüssel zum Teilen
 str		{name} removed · {keys} went with it	{name} entfernt · {keys} ging mit
 str		Add column	Spalte hinzufügen
+str		Link to a table or a relationship	Mit einer Tabelle oder einer Beziehung verbinden
+str		Drop the link on a table or a relationship's line	Den Link auf einer Tabelle oder der Linie einer Beziehung loslassen
 str		Edit column	Spalte bearbeiten
 str		Add skill	Skill hinzufügen
 str		Kind	Art

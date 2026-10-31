@@ -486,12 +486,60 @@ fn diagram_connect_all<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
 
 fn diagram_disconnect<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let e = one_of(ctx.doc, p, "edge", EDGE, "an edge")?;
-    let gone = ctx.doc.destroy(e).map_err(fail)?;
+    let gone = crate::destroy_edge_with_links(ctx.doc, e).map_err(fail)?;
     Ok(json!({ "removed": gone }))
+}
+
+/// Links a note to a node, or to an edge that shows a relationship, in its diagram: an edge with no
+/// element from the note (owner decision archforge-kjz.13). It changes no model element.
+fn diagram_link_note<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
+    let d = one_of(ctx.doc, p, "diagram", DIAGRAM, "a diagram")?;
+    let note = node_in(ctx.doc, p, "note", d)?;
+    if element_of(ctx.doc, note, node::ELEMENT).is_some() {
+        return Err(refuse("note", "the node shows an element; only a note links"));
+    }
+    let target = any_of(ctx.doc, p, "target")?;
+    if target == note {
+        return Err(refuse("target", "a note does not link to itself"));
+    }
+    match ctx.doc.class_of(target).ok() {
+        Some(c) if c == NODE => {
+            if element_of(ctx.doc, target, node::ELEMENT).is_none() {
+                return Err(refuse("target", "a note links to a table or a relationship, not to another note"));
+            }
+        }
+        Some(c) if c == EDGE => {
+            if element_of(ctx.doc, target, edge::ELEMENT).is_none() {
+                return Err(refuse("target", "a note links to a relationship's line, not to another link"));
+            }
+        }
+        _ => return Err(refuse("target", "a note links to a node or an edge")),
+    }
+    if diagram_of(ctx.doc, target) != Some(d) {
+        return Err(refuse("target", "the target is in another diagram"));
+    }
+    // Already linked, either way round (an older anchor may run from the table to the note).
+    let linked = ctx.doc.referrers(note).into_iter().any(|(e, prop)| {
+        let other = match prop {
+            p if p == edge::SOURCE => element_of(ctx.doc, e, edge::TARGET),
+            p if p == edge::TARGET => element_of(ctx.doc, e, edge::SOURCE),
+            _ => None,
+        };
+        ctx.doc.class_of(e).ok() == Some(EDGE) && element_of(ctx.doc, e, edge::ELEMENT).is_none() && other == Some(target)
+    });
+    if linked {
+        return Err(refuse("target", "the note is linked to it already"));
+    }
+    let e = new_edge(ctx.doc, d, None, note, target).map_err(fail)?;
+    select(ctx, vec![e]);
+    Ok(json!({ "id": uuid_of(ctx.doc, e)? }))
 }
 
 fn diagram_route<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let e = one_of(ctx.doc, p, "edge", EDGE, "an edge")?;
+    if element_of(ctx.doc, e, edge::ELEMENT).is_none() {
+        return Err(refuse("edge", "a note link is straight"));
+    }
     let items = p.get("points").and_then(Json::as_array).cloned().unwrap_or_default();
     if items.len() > MAX_WAYPOINTS {
         return Err(refuse("points", format!("at most {MAX_WAYPOINTS} waypoints")));
@@ -822,6 +870,15 @@ pub fn specs<V: DiagramView>() -> Vec<CommandSpec<Store, V>> {
             diagram_connect_all::<V>
         ),
         cmd!("diagram.disconnect", "Disconnect", &["Diagram"], None, "edge: string; the edge's id", has_diagrams::<V>, diagram_disconnect::<V>),
+        cmd!(
+            "diagram.link-note",
+            "Link note",
+            &["Diagram"],
+            None,
+            "diagram: string; the diagram's id\nnote: string; the note's node\ntarget: string; the node, or the edge of a relationship, it points at",
+            has_diagrams::<V>,
+            diagram_link_note::<V>
+        ),
         cmd!(
             "diagram.route",
             "Route edge",

@@ -90,6 +90,8 @@ pub enum Gesture {
     Marquee { from: Pos2 },
     /// A relationship drawn from a node, from the screen point the drag started at (slice E2).
     Connect { from_node: Uuid, from: Pos2 },
+    /// A note link drawn from a note's handle to a table or a relationship's line (kjz.13).
+    LinkNote { note: Uuid },
 }
 
 /// The entity menu, open at a screen point.
@@ -239,7 +241,7 @@ pub(crate) fn preview_rects(shell: &Shell, view: View, pointer: Option<Pos2>) ->
             let r = resized(*base, *corner, (pointer - *from) / view.zoom);
             out.insert(*node, Rect::from_min_size(view.to_screen(r.left() as f64, r.top() as f64), r.size() * view.zoom));
         }
-        Gesture::Marquee { .. } | Gesture::Connect { .. } => {}
+        Gesture::Marquee { .. } | Gesture::Connect { .. } | Gesture::LinkNote { .. } => {}
     }
     out
 }
@@ -484,6 +486,22 @@ fn commit(shell: &mut Shell, view: View, d: Obj, pointer: Option<Pos2>, shift: b
                 shell.canvas.tool = Tool::Select;
             }
         }
+        Gesture::LinkNote { note } => {
+            if let Some(target) = link_target(shell, view, d, pointer) {
+                let ids = shell.session.as_ref().and_then(|s| s.doc().uuid(d).ok());
+                if let Some(diagram) = ids
+                    && let Err(e) = run(
+                        shell,
+                        "diagram.link-note",
+                        json!({ "diagram": diagram.to_string(), "note": note.to_string(), "target": target.to_string() }),
+                    )
+                {
+                    shell.canvas.notice = Some(e);
+                }
+            } else {
+                shell.canvas.notice = Some(tr("Drop the link on a table or a relationship's line"));
+            }
+        }
         Gesture::Marquee { from } => {
             let area = Rect::from_two_pos(from, pointer);
             let Some(session) = shell.session.as_ref() else { return };
@@ -503,6 +521,37 @@ fn commit(shell: &mut Shell, view: View, d: Obj, pointer: Option<Pos2>, shift: b
             select(shell, ids);
         }
     }
+}
+
+/// What a note link dropped at `at` points at: the table under it, else the relationship's line
+/// nearest it.
+fn link_target(shell: &Shell, view: View, d: Obj, at: Pos2) -> Option<Uuid> {
+    if let Some(n) = node_at(shell, view, d, at) {
+        return Some(n);
+    }
+    let store = shell.session.as_ref()?.doc();
+    let (x, y) = view.to_canvas(at);
+    let shows_element = |e: Obj| store.get(e, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref()).is_some();
+    archforge_diagram::Grid::build(store, d).hit_edge(x, y, shows_element).and_then(|e| uuid(store, e))
+}
+
+/// Whether the selection is one note link; it is removed (Delete), and true is given.
+fn remove_selected_link(shell: &mut Shell) -> bool {
+    let Some(session) = shell.session.as_ref() else { return false };
+    let store = session.doc();
+    let link = match session.view().selection.as_slice() {
+        [e] if store.class_of(*e).ok() == Some(archforge_diagram::EDGE)
+            && store.get(*e, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref()).is_none() =>
+        {
+            uuid(store, *e)
+        }
+        _ => None,
+    };
+    let Some(link) = link else { return false };
+    if let Err(e) = run(shell, "diagram.disconnect", json!({ "edge": link.to_string() })) {
+        shell.canvas.notice = Some(e);
+    }
+    true
 }
 
 /// The topmost entity node of `d` under a screen point.
@@ -857,6 +906,16 @@ pub(crate) fn overlays(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rec
         });
         crate::connect::live_line(shell, &paint, p, view, from_node, pointer, target);
     }
+    // A note link being drawn: dashed from the note to the pointer.
+    if let Some(Gesture::LinkNote { note }) = shell.canvas.gesture
+        && let Some(pointer) = ui.input(|i| i.pointer.hover_pos())
+        && let Some(rect) = shell.session.as_ref().and_then(|s| s.doc().by_uuid(note).map(|n| view.rect(&bounds_of(s.doc(), n))))
+    {
+        let start = crate::canvas::exit_point(rect, pointer);
+        let z = view.zoom;
+        let stroke = Stroke::new((1.2 * z).clamp(1.0, 2.5), p.accent);
+        paint.extend(egui::Shape::dashed_line(&[start, pointer], stroke, 5.0 * z.max(0.5), 4.0 * z.max(0.5)));
+    }
     if let Some(Gesture::Marquee { from }) = shell.canvas.gesture
         && let Some(to) = ui.input(|i| i.pointer.hover_pos())
     {
@@ -865,7 +924,7 @@ pub(crate) fn overlays(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rec
         paint.rect_stroke(area, 2.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
     }
     // What is selected on this diagram, read once.
-    let (single, many, rename_rect) = match shell.session.as_ref() {
+    let (single, many, rename_rect, note) = match shell.session.as_ref() {
         Some(s) => {
             let store = s.doc();
             let selection = &s.view().selection;
@@ -881,16 +940,27 @@ pub(crate) fn overlays(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rec
                 [(n, id, rect)] => entity_of_node(store, *n).and_then(|e| uuid(store, e)).map(|e| (*id, e, *rect)),
                 _ => None,
             };
+            // A selected note alone: its link handle.
+            let note = match selected.as_slice() {
+                [(n, id, rect)] if element_of(store, *n).is_none() => Some((*id, *rect)),
+                _ => None,
+            };
             let many: Vec<(Uuid, Rect)> = if selected.len() >= 2 { selected.iter().map(|(_, id, rect)| (*id, *rect)).collect() } else { Vec::new() };
             let rename_rect = shell.canvas.rename.as_ref().and_then(|rn| store.by_uuid(rn.node)).map(|n| view.rect(&bounds_of(store, n)));
-            (single, many, rename_rect)
+            (single, many, rename_rect, note)
         }
-        None => (None, Vec::new(), None),
+        None => (None, Vec::new(), None, None),
     };
     if let Some((node, entity, rect)) = single
         && shell.canvas.gesture.is_none()
     {
         adorners(shell, ui, p, r, rect, node, entity);
+    }
+    if let Some((note, rect)) = note
+        && shell.canvas.gesture.is_none()
+        && shell.canvas.note_edit.is_none()
+    {
+        link_handle(shell, ui, p, r, rect, note);
     }
     if !many.is_empty() && shell.canvas.gesture.is_none() {
         arrange_bar(shell, ui, p, r, view, &many);
@@ -943,6 +1013,28 @@ fn adorners(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, rect: Rect, 
             let from = ui.input(|i| i.pointer.press_origin()).filter(|o| o.is_finite()).unwrap_or(b.center());
             shell.canvas.gesture = Some(Gesture::Connect { from_node: node, from });
         }
+    }
+}
+
+/// A selected note's link handle at its top right: dragged onto a table or a relationship's line,
+/// it links the note to it (owner decision archforge-kjz.13).
+fn link_handle(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, rect: Rect, note: Uuid) {
+    let paint = ui.painter().with_clip_rect(r);
+    let b = Rect::from_min_size(pos2(rect.right() + ADORNER_GAP, rect.top() - ADORNER - 6.0), Vec2::splat(ADORNER));
+    if !r.intersects(b) {
+        return;
+    }
+    paint.rect_filled(b, 4.0, p.surface);
+    paint.rect_stroke(b, 4.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
+    ux::icon_in(&paint, b, &icons::ADORN_CONNECT, p.text_secondary);
+    let id = "workspace.canvas.adorn.link";
+    widgets::record_visible(ui, &mut shell.registry, id, "button", b);
+    let resp = ui
+        .interact(b, widgets::egui_id(id), egui::Sense::click_and_drag())
+        .on_hover_cursor(egui::CursorIcon::Crosshair)
+        .on_hover_text(tr("Link to a table or a relationship"));
+    if resp.drag_started_by(egui::PointerButton::Primary) {
+        shell.canvas.gesture = Some(Gesture::LinkNote { note });
     }
 }
 
@@ -1188,7 +1280,7 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
         shell.canvas.mapping = None;
         return;
     }
-    if delete && !shift && crate::connect::remove_selected_relationship(shell) {
+    if delete && !shift && (remove_selected_link(shell) || crate::connect::remove_selected_relationship(shell)) {
         return;
     }
     let selected: Vec<(Uuid, Option<Uuid>)> = match shell.session.as_ref() {
@@ -1253,6 +1345,7 @@ pub fn retain_valid(state: &mut crate::canvas::State, store: &Store) {
         Some(Gesture::Move { nodes, .. }) => nodes.iter().any(|n| !alive(n)),
         Some(Gesture::Resize { node, .. }) => !alive(node),
         Some(Gesture::Connect { from_node, .. }) => !alive(from_node),
+        Some(Gesture::LinkNote { note }) => !alive(note),
         _ => false,
     };
     if gone {

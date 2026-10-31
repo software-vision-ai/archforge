@@ -2963,3 +2963,58 @@ fn every_relationship_end_draws_its_two_crows_foot_marks() {
     assert_eq!(marks(C::ZeroOrMore), (2, 1));
     assert_eq!(marks(C::OneOrMore), (3, 0), "one or more is a bar and a crow's foot");
 }
+
+#[test]
+fn a_selected_notes_handle_links_it_to_a_table_or_a_relationships_line_and_delete_removes_a_link() {
+    let (mut h, _customer, _order) = two_tables_harness();
+    let nodes = node_ids(&h);
+    let customer_node = nodes.iter().min_by(|a, b| rect_of(&h, a).left().total_cmp(&rect_of(&h, b).left())).unwrap().clone();
+    let order_node = nodes.iter().find(|n| **n != customer_node).unwrap().clone();
+    // A relationship between the two, and a note below them.
+    let at = rect_of(&h, "workspace.tools.relationship").center();
+    click(&mut h, at);
+    let (from, to) = (rect_of(&h, &customer_node).center(), rect_of(&h, &order_node).center());
+    drag(&mut h, from, to);
+    let note = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let d = s.view().open_diagram.unwrap();
+        let d = s.doc().uuid(d).unwrap().to_string();
+        let out = s.execute("diagram.note", &serde_json::json!({ "diagram": d, "text": "Why", "x": 380, "y": 400 })).unwrap();
+        let id = out.value["id"].as_str().unwrap().to_string();
+        s.execute("view.select", &serde_json::json!({ "ids": [id] })).unwrap();
+        id
+    };
+    h.run_steps(2);
+    let links = |h: &Harness<'static, Shell>| {
+        let st = h.state().session.as_ref().unwrap().doc();
+        st.alive()
+            .filter(|o| {
+                st.class_of(*o).ok() == Some(archforge_diagram::EDGE)
+                    && st.get(*o, archforge_diagram::edge::ELEMENT).unwrap().as_ref().is_none()
+                    && st.get(*o, archforge_diagram::edge::SOURCE).unwrap().as_ref() == st.by_uuid(archforge_mof::Uuid::parse(&note).unwrap())
+            })
+            .map(|o| st.class_of(st.get(o, archforge_diagram::edge::TARGET).unwrap().as_ref().unwrap()).unwrap())
+            .collect::<Vec<_>>()
+    };
+    // Its handle dragged onto Order links it to the table.
+    let handle = rect_of(&h, "workspace.canvas.adorn.link").center();
+    let onto = rect_of(&h, &order_node).center();
+    drag(&mut h, handle, onto);
+    assert_eq!(links(&h), [archforge_diagram::NODE], "{:?}", h.state().canvas.notice);
+    // Selected again, dragged onto the middle of the relationship's line: linked to the line.
+    {
+        let s = h.state_mut().session.as_mut().unwrap();
+        s.execute("view.select", &serde_json::json!({ "ids": [note] })).unwrap();
+    }
+    h.run_steps(2);
+    let middle = rect_of(&h, &customer_node).center().lerp(rect_of(&h, &order_node).center(), 0.5);
+    let handle = rect_of(&h, "workspace.canvas.adorn.link").center();
+    drag(&mut h, handle, middle);
+    let kinds = links(&h);
+    assert_eq!(kinds.len(), 2, "{:?}", h.state().canvas.notice);
+    assert!(kinds.contains(&archforge_diagram::EDGE), "one link ends on the relationship's line");
+    // The link is selected after drawing; Delete removes it alone.
+    key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
+    assert_eq!(links(&h), [archforge_diagram::NODE]);
+    assert_eq!(relationships(&h).len(), 1, "the relationship stays");
+}
