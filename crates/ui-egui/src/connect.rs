@@ -265,8 +265,9 @@ pub fn line(paint: &egui::Painter, points: &[Pos2], stroke: Stroke, identifying:
 }
 
 /// Makes the relationship a finished drag asks for, with its edge and its name label as one undo
-/// step; the foreign key comes along when the parent has a primary key. Selects the relationship;
-/// a many-to-many one opens the mapping table offer.
+/// step; the foreign key comes along when the parent has a primary key and neither table is
+/// without columns (one still to be shaped is not given key columns unasked). Selects the
+/// relationship; a many-to-many one opens the mapping table offer.
 pub fn connect(shell: &mut Shell, d: Obj, from_node: Uuid, to_node: Uuid) {
     shell.canvas.notice = None;
     let kind = shell.canvas.relationship;
@@ -284,7 +285,10 @@ pub fn connect(shell: &mut Shell, d: Obj, from_node: Uuid, to_node: Uuid) {
     let (Some(from_id), Some(to_id), Some(diagram_id)) = (store.uuid(from).ok(), store.uuid(to).ok(), store.uuid(d).ok()) else { return };
     // The parent is the one side; its primary key decides whether the foreign key comes now.
     let parent = if archforge_er::rules::is_many(kind.from) && !archforge_er::rules::is_many(kind.to) { to } else { from };
-    let with_key = !kind.many_to_many() && archforge_er::rules::primary_key_of(store, parent).is_some();
+    let has_columns = |e: Obj| {
+        store.list(e, archforge_er::entity::ATTRIBUTE).unwrap_or_default().iter().filter_map(archforge_mof::Value::as_ref).any(|a| store.is_alive(a))
+    };
+    let with_key = !kind.many_to_many() && archforge_er::rules::primary_key_of(store, parent).is_some() && has_columns(from) && has_columns(to);
     let add = json!({
         "from": from_id.to_string(),
         "to": to_id.to_string(),
