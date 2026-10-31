@@ -3053,3 +3053,37 @@ fn a_selected_notes_handle_links_it_to_a_table_or_a_relationships_line_and_delet
     assert_eq!(links(&h), [archforge_diagram::NODE]);
     assert_eq!(relationships(&h).len(), 1, "the relationship stays");
 }
+
+#[test]
+fn the_link_note_tool_drags_a_link_from_a_note_to_a_table_and_hands_back_to_select() {
+    let (mut h, _customer, _order) = two_tables_harness();
+    let nodes = node_ids(&h);
+    let order_node = nodes.iter().max_by(|a, b| rect_of(&h, a).left().total_cmp(&rect_of(&h, b).left())).unwrap().clone();
+    let note = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let d = s.view().open_diagram.unwrap();
+        let d = s.doc().uuid(d).unwrap().to_string();
+        let out = s.execute("diagram.note", &serde_json::json!({ "diagram": d, "text": "Why", "x": 380, "y": 400 })).unwrap();
+        out.value["id"].as_str().unwrap().to_string()
+    };
+    h.run_steps(2);
+    let note_node = format!("workspace.canvas.node.{note}");
+    let at = rect_of(&h, "workspace.tools.link").center();
+    click(&mut h, at);
+    assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Link);
+    // A drag that starts off a note draws nothing; one from the note onto Order links them.
+    let (from, onto) = (rect_of(&h, &order_node).center(), rect_of(&h, &note_node).center());
+    drag(&mut h, onto + egui::vec2(0.0, 200.0), from);
+    assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Link, "nothing linked, the tool stays");
+    drag(&mut h, onto, from);
+    let st = h.state().session.as_ref().unwrap().doc();
+    let note_obj = st.by_uuid(archforge_mof::Uuid::parse(&note).unwrap());
+    let links = st
+        .alive()
+        .filter(|o| {
+            st.class_of(*o).ok() == Some(archforge_diagram::EDGE) && st.get(*o, archforge_diagram::edge::SOURCE).unwrap().as_ref() == note_obj
+        })
+        .count();
+    assert_eq!(links, 1, "{:?}", h.state().canvas.notice);
+    assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Select, "the tool hands back to Select");
+}

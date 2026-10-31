@@ -220,6 +220,7 @@ str		Entity · {schema}	Entität · {schema}
 str		Relationship	Beziehung
 str		Relationship types	Beziehungsarten
 str		Note	Notiz
+str		Link note	Notiz verbinden
 str		Group	Gruppe
 str		Group kinds	Gruppenarten
 str		Key status	Schlüsselstatus
