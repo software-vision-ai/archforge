@@ -189,7 +189,8 @@ str		Naming	Nomear
 str		Export	Exportar
 str		Dialect	Dialeto
 str		Open the skill	Abrir a competência
-str		Skill settings	Definições da competência
+str		Skill name	Nome da competência
+str		None chosen: always	Nenhum escolhido: sempre
 str		Skill · on {subject}	Competência · em {subject}
 str		Skill · on the project	Competência · no projeto
 str		Skill text	Texto da competência

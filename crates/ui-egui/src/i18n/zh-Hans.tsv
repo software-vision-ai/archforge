@@ -189,7 +189,8 @@ str		Naming	命名
 str		Export	导出
 str		Dialect	方言
 str		Open the skill	打开技能
-str		Skill settings	技能设置
+str		Skill name	技能名称
+str		None chosen: always	未选择：始终
 str		Skill · on {subject}	技能 · 位于 {subject}
 str		Skill · on the project	技能 · 位于项目
 str		Skill text	技能文本

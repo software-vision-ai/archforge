@@ -189,7 +189,8 @@ str		Naming	Nommer
 str		Export	Exporter
 str		Dialect	Dialecte
 str		Open the skill	Ouvrir la compétence
-str		Skill settings	Réglages de la compétence
+str		Skill name	Nom de la compétence
+str		None chosen: always	Aucun choisi : toujours
 str		Skill · on {subject}	Compétence · sur {subject}
 str		Skill · on the project	Compétence · sur le projet
 str		Skill text	Texte de la compétence

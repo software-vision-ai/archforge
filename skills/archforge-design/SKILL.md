@@ -180,9 +180,12 @@ the change, and update this file in the same change.
 - A link in Preview opens only after a confirmation that names its site and shows the whole
   address, and only when it is a web or mail address. Pictures in a skill are never loaded. A
   text too long or nested too deeply is shown plain in Write and not rendered in Preview.
-- The Skills panel lists the skills and holds their settings: a click on a row opens the skill's
-  tab, the pencil that shows on hover opens its settings (name, applies to, column type, when,
-  dialect), + adds a skill and opens its tab.
+- The Skills panel only lists the skills: a click on a row opens the skill's tab; + makes a skill
+  on the selected element and opens its tab with the name selected, ready to type.
+- A skill's tab holds everything about it, top to bottom: the name as the page's title (Enter or
+  leaving the field keeps it, Esc puts it back) with the bin at its right, where it sits, Applies
+  to (and the column type for columns), When as labelled chips (none on means always; Export adds
+  the dialect), then the toolbar and the text. Each setting is kept as soon as it is chosen.
 
 ## Messages
 - Problems show as an orange badge on the table or line and in a Problems section of Properties,

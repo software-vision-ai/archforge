@@ -188,7 +188,8 @@ str		Naming	Naming
 str		Export	Export
 str		Dialect	Dialect
 str		Open the skill	Open the skill
-str		Skill settings	Skill settings
+str		Skill name	Skill name
+str		None chosen: always	None chosen: always
 str		Skill · on {subject}	Skill · on {subject}
 str		Skill · on the project	Skill · on the project
 str		Skill text	Skill text

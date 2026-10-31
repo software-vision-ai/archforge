@@ -189,7 +189,8 @@ str		Naming	Nombrar
 str		Export	Exportar
 str		Dialect	Dialecto
 str		Open the skill	Abrir la habilidad
-str		Skill settings	Ajustes de la habilidad
+str		Skill name	Nombre de la habilidad
+str		None chosen: always	Ninguna elegida: siempre
 str		Skill · on {subject}	Habilidad · en {subject}
 str		Skill · on the project	Habilidad · en el proyecto
 str		Skill text	Texto de la habilidad

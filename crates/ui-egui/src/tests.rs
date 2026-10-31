@@ -1813,7 +1813,7 @@ fn a_column_row_selects_its_column_only_its_edit_button_opens_the_editor_and_sel
 }
 
 #[test]
-fn the_skills_tab_adds_a_skill_on_the_table_and_shows_the_schemas_as_inherited() {
+fn the_skills_plus_makes_a_skill_and_its_tab_holds_the_settings() {
     let (mut h, customer) = table_harness();
     {
         let s = h.state_mut().session.as_mut().unwrap();
@@ -1829,30 +1829,63 @@ fn the_skills_tab_adds_a_skill_on_the_table_and_shows_the_schemas_as_inherited()
     click(&mut h, at);
     let found = ids(&h);
     assert_eq!(found.iter().filter(|i| i.starts_with("workspace.skills.row.")).count(), 1, "the schema's skill is inherited: {found:?}");
+    // + makes the skill on the table and opens its tab, the name selected for typing.
     let at = rect_of(&h, "workspace.skills.add").center();
     click(&mut h, at);
-    assert!(h.state().panels.skill.as_ref().is_some_and(|e| e.target.is_none() && e.name == "Skill 1"));
-    let at = rect_of(&h, "workspace.skills.when.naming").center();
-    click(&mut h, at);
-    assert!(h.state().panels.skill.as_ref().unwrap().triggers[2]);
-    let at = rect_of(&h, "workspace.skills.apply").center();
-    click(&mut h, at);
-    assert!(h.state().panels.skill.is_none(), "{:?}", h.state().panels.skill);
+    h.run();
+    let skill = h.state().canvas.active.expect("the new skill's tab is active");
+    let name_id = crate::widgets::egui_id("workspace.skill.name");
+    assert!(h.ctx.memory(|m| m.has_focus(name_id)), "the name has the keyboard");
     let st = h.state().session.as_ref().unwrap().doc();
+    let obj = st.by_uuid(skill).unwrap();
+    assert_eq!(archforge_core::skills::name_of(st, obj), "Skill 1");
     let customer_obj = st.by_uuid(archforge_mof::Uuid::parse(&customer).unwrap()).unwrap();
-    let own: Vec<_> =
-        archforge_core::skills::skills(st).into_iter().filter(|s| archforge_core::skills::subject_of(st, *s) == Some(customer_obj)).collect();
-    assert_eq!(own.len(), 1);
-    assert_eq!(archforge_core::skills::triggers_of(st, own[0]), [archforge_core::SkillTrigger::Naming]);
+    assert_eq!(archforge_core::skills::subject_of(st, obj), Some(customer_obj));
+    // Typing replaces the name; Enter keeps it.
+    h.event(egui::Event::Text("Customer naming".into()));
+    h.run();
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    h.run();
+    let st = h.state().session.as_ref().unwrap().doc();
+    assert_eq!(archforge_core::skills::name_of(st, st.by_uuid(skill).unwrap()), "Customer naming");
+    // A chip turns its trigger on at once.
+    let at = rect_of(&h, "workspace.skill.when.naming").center();
+    click(&mut h, at);
+    let st = h.state().session.as_ref().unwrap().doc();
+    assert_eq!(archforge_core::skills::triggers_of(st, st.by_uuid(skill).unwrap()), [archforge_core::SkillTrigger::Naming]);
+    // Applies to Columns of a type shows the column type field, and keeps what is typed there.
+    let at = rect_of(&h, "workspace.skill.applies").center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.skill.applies.3").center();
+    click(&mut h, at);
+    h.run();
+    let at = rect_of(&h, "workspace.skill.type").center();
+    click(&mut h, at);
+    h.event(egui::Event::Text("TIMESTAMP".into()));
+    h.run();
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    h.run();
+    let st = h.state().session.as_ref().unwrap().doc();
+    let obj = st.by_uuid(skill).unwrap();
+    assert_eq!(st.get(obj, archforge_core::skill::TYPE_PATTERN).ok().and_then(|v| v.as_str().map(str::to_string)).as_deref(), Some("TIMESTAMP"));
     let found = ids(&h);
     assert_eq!(found.iter().filter(|i| i.starts_with("workspace.skills.row.")).count(), 2, "own and inherited: {found:?}");
-    // A refusal stays with the editor: a second skill of the same name on the table.
+    // A refused name stays as typed and says why: a second skill of the same name on the table.
     let at = rect_of(&h, "workspace.skills.add").center();
     click(&mut h, at);
-    h.state_mut().panels.skill.as_mut().unwrap().name = "Skill 1".into();
-    let at = rect_of(&h, "workspace.skills.apply").center();
+    h.run();
+    h.event(egui::Event::Text("Customer naming".into()));
+    h.run();
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    h.run();
+    let doc = h.state().canvas.skills.iter().find(|d| Some(d.skill) == h.state().canvas.active).unwrap();
+    assert!(doc.settings_refused.is_some(), "{doc:?}");
+    // The bin removes the skill, and its tab goes with it.
+    let second = h.state().canvas.active.unwrap();
+    let at = rect_of(&h, "workspace.skill.remove").center();
     click(&mut h, at);
-    assert!(h.state().panels.skill.as_ref().is_some_and(|e| e.refused.is_some()));
+    h.run();
+    assert!(!h.state().canvas.tabs.contains(&second));
 }
 
 #[test]
@@ -1894,10 +1927,6 @@ fn a_skill_opens_in_its_own_tab_and_keeps_its_markdown() {
     h.state_mut().session.as_mut().unwrap().undo().unwrap();
     h.run();
     assert_eq!(h.state().canvas.skills[0].text, "Use names.");
-    // The pencil opens the skill's settings in the panel.
-    let at = rect_of(&h, &format!("workspace.skills.edit.{skill}")).center();
-    click(&mut h, at);
-    assert_eq!(h.state().panels.skill.as_ref().and_then(|e| e.target), Some(uuid));
     // A link clicked in Preview waits for the confirmation; Cancel drops it.
     let at = rect_of(&h, "workspace.skill.preview").center();
     click(&mut h, at);
