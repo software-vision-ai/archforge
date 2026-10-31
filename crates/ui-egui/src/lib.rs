@@ -284,12 +284,15 @@ impl Shell {
             return;
         }
         self.adopted = Some(project.path.clone());
-        // A project opened from disk is its rows read back; a new one starts with its Model root.
+        // A project opened from disk is its rows read back; a new one starts with its Model root,
+        // and so does one whose tables hold no row at all (made before projects were saved, or
+        // closed before its first change was written): it never held a model.
+        let rows = project.model.as_deref().filter(|rows| !rows.is_empty());
         let built = match &self.services.ids {
             Some(source) => {
                 let source = source.clone();
                 let ids = Box::new(move || source());
-                match &project.model {
+                match rows {
                     Some(rows) => archforge_er::session_from_rows(rows, ids).map(|mut s| {
                         if project.unsaved {
                             s.mark_unsaved();
@@ -302,7 +305,7 @@ impl Shell {
             }
             None => Err(SessionError::NoIdSource),
         };
-        let read = project.model.is_some();
+        let read = rows.is_some();
         // The rows read are not kept beside the model built from them.
         if let Some(p) = self.project.as_mut() {
             p.model = None;
