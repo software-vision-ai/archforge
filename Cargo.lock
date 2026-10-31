@@ -240,6 +240,7 @@ dependencies = [
  "getrandom 0.3.4",
  "log",
  "muda",
+ "png",
  "rfd",
  "serde",
  "serde_json",
@@ -5165,6 +5166,7 @@ name = "xtask"
 version = "0.1.0"
 dependencies = [
  "archforge-mof",
+ "png",
  "quick-xml",
  "serde_json",
 ]

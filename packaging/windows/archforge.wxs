@@ -36,6 +36,12 @@
               <File Id="FontLicenceEmojiIcon" Source="$(var.RootDir)\licenses\fonts\emoji-icon-font-MIT.txt" />
             </Component>
           </Directory>
+          <Directory Id="BrandLicensesFolder" Name="brand">
+            <!-- The terms of the application icon, a brand mark. -->
+            <Component Id="BrandLicences">
+              <File Id="BrandLicenceIcon" Source="$(var.RootDir)\licenses\brand\archforge-icon.txt" KeyPath="yes" />
+            </Component>
+          </Directory>
         </Directory>
       </Directory>
     </StandardDirectory>
@@ -45,6 +51,7 @@
       <ComponentRef Id="MainExecutable" />
       <ComponentRef Id="Licences" />
       <ComponentRef Id="FontLicences" />
+      <ComponentRef Id="BrandLicences" />
     </Feature>
   </Package>
 </Wix>

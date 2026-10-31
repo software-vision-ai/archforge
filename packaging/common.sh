@@ -52,12 +52,10 @@ fetch_verified() {
   fi
 }
 
-# The application icon: icon.svg, and icon-small.svg up to 32 px. Packaging that needs them stops
-# here when one is missing.
+# The application icon: icon.png, the one picture every size is scaled from. Packaging that needs
+# it stops here when it is missing.
 require_icon() {
-  for svg in icon.svg icon-small.svg; do
-    [ -f "$ROOT/assets/app-icon/$svg" ] || die "assets/app-icon/$svg is missing: the application icon is drawn from it, with its row in ATTRIBUTION.toml"
-  done
+  [ -f "$ROOT/assets/app-icon/icon.png" ] || die "assets/app-icon/icon.png is missing: the application icon is scaled from it, with its row in ATTRIBUTION.toml"
 }
 
 # The licences and notices every package carries: the project's licences

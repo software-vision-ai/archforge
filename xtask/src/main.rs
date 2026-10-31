@@ -10,6 +10,7 @@ mod brands;
 mod generate;
 mod ico;
 mod layers;
+mod resize;
 mod shot;
 mod skills;
 mod stats;
@@ -33,6 +34,7 @@ const USAGE: &str = "usage: cargo xtask <verb>
   generated          the check that the generated code is what the XMI gives
   version [x.y.z]    print or set the workspace version
   ico <out> <png>... pack PNGs into a Windows icon
+  resize <in> <out> <size> [--grid]  scale a square PNG down, on the icon grid with --grid
   shot [light|dark] [--size WxH] [--max-edge N]  a screenshot and a small copy under plan/shots
   stats              tests and lines per crate";
 
@@ -177,6 +179,7 @@ fn main() {
         Some("generated") => generate::check(),
         Some("version") => version::run(rest.first().map(String::as_str)),
         Some("ico") => ico::run(rest),
+        Some("resize") => resize::run(rest),
         Some("shot") => shot::run(rest),
         Some("stats") => stats::run(),
         Some("help" | "--help" | "-h") => {

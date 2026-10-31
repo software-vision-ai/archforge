@@ -1,39 +1,32 @@
-//! The window's and the Dock's icon: the Archforge app icon of `assets/app-icon/icon.svg`, drawn
-//! here from the same shapes, as the binary carries no SVG renderer. Without one the windowing
-//! layer shows its own default icon, even over a packaged app's. A packaged macOS app keeps its
-//! bundle's icon, which has the light and the dark appearance: it is given the empty icon, which
-//! leaves the system's alone. Keep the shapes in step with the SVG.
+//! The window's and the Dock's icon: the Archforge beaver of `assets/app-icon/icon.png`, built into
+//! the binary and set on the platform icon grid (its tile 824/1024 of the side, centred, a clear
+//! margin round it). Without one the windowing layer shows its own default icon, even over a
+//! packaged app's. A packaged macOS app keeps its bundle's icon: it is given the empty icon, which
+//! leaves the system's alone. A picture that cannot be read leaves the empty icon too, and says so.
 
+use std::io::Cursor;
 use std::sync::Arc;
 
-/// The side the icon is drawn at, and the samples per pixel along each axis.
+/// The picture, the tile filling a 1024 pixel square.
+const PICTURE: &[u8] = include_bytes!("../../../assets/app-icon/icon.png");
+
+/// The side the icon is set at, and its tile's side on the grid.
 const SIDE: usize = 256;
-const SAMPLES: usize = 4;
+const TILE: usize = SIDE * 824 / 1024;
 
-/// The SVG's canvas; its tile's edges and corner radius; the tile's border, inset by half its
-/// width; the grid's first line, spacing, count and half width.
-const CANVAS: f32 = 1024.0;
-const TILE: (f32, f32, f32) = (100.0, 924.0, 185.0);
-const BORDER: (f32, f32, f32, f32) = (101.5, 922.5, 183.5, 1.5);
-const GRID: (f32, f32, f32, f32) = (160.0, 64.0, 11.0, 1.0);
-/// The tile's gradient, top to bottom; the glow's centre, radius and strength; the mark's
-/// placement and scale, and the crossbar's teal.
-const TOP: [f32; 3] = [0x3A as f32 / 255.0, 0x5F as f32 / 255.0, 0x86 as f32 / 255.0];
-const BOTTOM: [f32; 3] = [0x22 as f32 / 255.0, 0x3B as f32 / 255.0, 0x55 as f32 / 255.0];
-const GLOW: (f32, f32, f32, f32) = (347.2, 264.8, 741.6, 0.10);
-const MARK_AT: (f32, f32) = (217.6, 225.6);
-const MARK_SCALE: f32 = 9.2;
-const TEAL: [f32; 3] = [0x9E as f32 / 255.0, 0xD8 as f32 / 255.0, 0xDE as f32 / 255.0];
-
-/// The mark in its own box: the A's two legs, then the crossbar over them.
-const LEGS: [[(f32, f32); 4]; 2] =
-    [[(7.0, 54.0), (26.0, 10.0), (36.0, 10.0), (18.0, 54.0)], [(28.0, 10.0), (38.0, 10.0), (57.0, 54.0), (45.0, 54.0)]];
-const BAR: [(f32, f32); 4] = [(24.0, 35.0), (40.0, 35.0), (43.0, 43.0), (21.0, 43.0)];
-
-/// The icon for the window and the Dock: the drawn app icon, or the empty icon inside a packaged
-/// macOS app.
+/// The icon for the window and the Dock: the beaver, or the empty icon inside a packaged macOS app
+/// or when the picture cannot be read.
 pub fn icon() -> Arc<egui::IconData> {
-    Arc::new(if in_bundle() { egui::IconData::default() } else { draw() })
+    if in_bundle() {
+        return Arc::new(egui::IconData::default());
+    }
+    Arc::new(match picture() {
+        Ok(icon) => icon,
+        Err(e) => {
+            log::warn!("the app icon could not be read: {e}");
+            egui::IconData::default()
+        }
+    })
 }
 
 /// Whether the app runs from a packaged macOS bundle, whose icon the system shows.
@@ -42,102 +35,85 @@ fn in_bundle() -> bool {
         && std::env::current_exe().is_ok_and(|exe| exe.components().any(|c| c.as_os_str().to_str().is_some_and(|s| s.ends_with(".app"))))
 }
 
-/// The app icon at `SIDE` pixels, each the average of its samples, with straight alpha.
-fn draw() -> egui::IconData {
-    let mut rgba = Vec::with_capacity(SIDE * SIDE * 4);
-    let unit = CANVAS / SIDE as f32;
-    let n = (SAMPLES * SAMPLES) as f32;
-    for py in 0..SIDE {
-        for px in 0..SIDE {
-            // Premultiplied sums, so the edge of the tile fades instead of darkening.
-            let mut sum = [0.0f32; 4];
-            for sy in 0..SAMPLES {
-                for sx in 0..SAMPLES {
-                    let x = (px as f32 + (sx as f32 + 0.5) / SAMPLES as f32) * unit;
-                    let y = (py as f32 + (sy as f32 + 0.5) / SAMPLES as f32) * unit;
-                    if let Some(c) = colour_at(x, y) {
-                        for (s, v) in sum.iter_mut().zip(c) {
-                            *s += v;
-                        }
-                        sum[3] += 1.0;
-                    }
+/// The picture at `SIDE` pixels on the grid, with straight alpha.
+fn picture() -> Result<egui::IconData, String> {
+    let (side, rgba) = decode(PICTURE)?;
+    let tile = scale(&rgba, side, TILE);
+    let mut out = vec![0u8; SIDE * SIDE * 4];
+    let at = (SIDE - TILE) / 2;
+    for y in 0..TILE {
+        let to = ((y + at) * SIDE + at) * 4;
+        out[to..to + TILE * 4].copy_from_slice(&tile[y * TILE * 4..(y + 1) * TILE * 4]);
+    }
+    Ok(egui::IconData { rgba: out, width: SIDE as u32, height: SIDE as u32 })
+}
+
+/// A square PNG's side and its pixels as 8-bit RGBA.
+fn decode(bytes: &[u8]) -> Result<(usize, Vec<u8>), String> {
+    let mut decoder = png::Decoder::new(Cursor::new(bytes));
+    decoder.set_transformations(png::Transformations::normalize_to_color8());
+    let mut reader = decoder.read_info().map_err(|e| e.to_string())?;
+    let (w, h) = (reader.info().width, reader.info().height);
+    if w != h || (w as usize) < SIDE {
+        return Err(format!("a {w}x{h} picture; a square of at least {SIDE} pixels is needed"));
+    }
+    let mut buf = vec![0u8; reader.output_buffer_size().ok_or("too large to read")?];
+    let frame = reader.next_frame(&mut buf).map_err(|e| e.to_string())?;
+    let pixels = (w as usize) * (w as usize);
+    let rgba = match frame.color_type {
+        png::ColorType::Rgba => buf.get(..pixels * 4).ok_or("short picture")?.to_vec(),
+        png::ColorType::Rgb => buf.get(..pixels * 3).ok_or("short picture")?.chunks_exact(3).flat_map(|p| [p[0], p[1], p[2], 255]).collect(),
+        other => return Err(format!("{other:?} pictures are not read")),
+    };
+    Ok((w as usize, rgba))
+}
+
+/// `rgba`, `from` pixels a side, averaged down to `to` pixels a side, alpha premultiplied so a
+/// clear edge stays clean. The same average as `cargo xtask resize` (xtask/src/resize.rs), which
+/// the packaging sizes come from; keep the two in step.
+fn scale(rgba: &[u8], from: usize, to: usize) -> Vec<u8> {
+    let step = from as f32 / to as f32;
+    let weights: Vec<Vec<(usize, f32)>> = (0..to)
+        .map(|i| {
+            let (lo, hi) = (i as f32 * step, (i + 1) as f32 * step);
+            (lo.floor() as usize..(hi.ceil() as usize).min(from))
+                .map(|j| (j, (hi.min(j as f32 + 1.0) - lo.max(j as f32)).max(0.0) / step))
+                .filter(|(_, k)| *k > 0.0)
+                .collect()
+        })
+        .collect();
+    let mut across = vec![0f32; from * to * 4];
+    for y in 0..from {
+        for (x, ws) in weights.iter().enumerate() {
+            let mut acc = [0f32; 4];
+            for &(j, k) in ws {
+                let p = &rgba[(y * from + j) * 4..(y * from + j) * 4 + 4];
+                let a = f32::from(p[3]) / 255.0;
+                for c in 0..3 {
+                    acc[c] += f32::from(p[c]) * a * k;
+                }
+                acc[3] += a * k;
+            }
+            across[(y * to + x) * 4..(y * to + x) * 4 + 4].copy_from_slice(&acc);
+        }
+    }
+    let mut out = vec![0u8; to * to * 4];
+    for (y, ws) in weights.iter().enumerate() {
+        for x in 0..to {
+            let mut acc = [0f32; 4];
+            for &(j, k) in ws {
+                for c in 0..4 {
+                    acc[c] += across[(j * to + x) * 4 + c] * k;
                 }
             }
-            let alpha = sum[3] / n;
-            for v in &sum[..3] {
-                rgba.push(if sum[3] > 0.0 { to_byte(v / sum[3]) } else { 0 });
+            let px = &mut out[(y * to + x) * 4..(y * to + x) * 4 + 4];
+            for c in 0..3 {
+                px[c] = if acc[3] > 0.0 { (acc[c] / acc[3]).round().clamp(0.0, 255.0) as u8 } else { 0 };
             }
-            rgba.push(to_byte(alpha));
+            px[3] = (acc[3] * 255.0).round().clamp(0.0, 255.0) as u8;
         }
     }
-    egui::IconData { rgba, width: SIDE as u32, height: SIDE as u32 }
-}
-
-fn to_byte(v: f32) -> u8 {
-    (v.clamp(0.0, 1.0) * 255.0).round() as u8
-}
-
-/// The colour at a point of the canvas, none outside the tile.
-fn colour_at(x: f32, y: f32) -> Option<[f32; 3]> {
-    let (lo, hi, radius) = TILE;
-    if rounded_rect(x, y, lo, hi, radius) > 0.0 {
-        return None;
-    }
-    let t = ((y - lo) / (hi - lo)).clamp(0.0, 1.0);
-    let mut c: [f32; 3] = std::array::from_fn(|i| TOP[i] + (BOTTOM[i] - TOP[i]) * t);
-    let (first, step, last, half) = GRID;
-    let on_grid = |v: f32| {
-        let k = ((v - first) / step).round();
-        (0.0..=last).contains(&k) && (v - (first + k * step)).abs() <= half
-    };
-    if on_grid(x) || on_grid(y) {
-        c = over(c, [1.0; 3], 0.06);
-    }
-    let (gx, gy, reach, strength) = GLOW;
-    let d = ((x - gx).powi(2) + (y - gy).powi(2)).sqrt() / reach;
-    c = over(c, [1.0; 3], strength * (1.0 - d.min(1.0)));
-    let (blo, bhi, bradius, bhalf) = BORDER;
-    if rounded_rect(x, y, blo, bhi, bradius).abs() <= bhalf {
-        c = over(c, [1.0; 3], 0.20);
-    }
-    let (u, v) = ((x - MARK_AT.0) / MARK_SCALE, (y - MARK_AT.1) / MARK_SCALE);
-    if LEGS.iter().any(|leg| inside(leg, u, v)) {
-        c = [1.0; 3];
-    }
-    if inside(&BAR, u, v) {
-        c = TEAL;
-    }
-    Some(c)
-}
-
-/// `top` laid over `base` at `alpha`.
-fn over(base: [f32; 3], top: [f32; 3], alpha: f32) -> [f32; 3] {
-    std::array::from_fn(|i| base[i] + (top[i] - base[i]) * alpha)
-}
-
-/// The signed distance from a point to a square rounded rectangle from `lo` to `hi` on both axes:
-/// negative inside.
-fn rounded_rect(x: f32, y: f32, lo: f32, hi: f32, radius: f32) -> f32 {
-    let centre = (lo + hi) / 2.0;
-    let half = (hi - lo) / 2.0 - radius;
-    let (qx, qy) = ((x - centre).abs() - half, (y - centre).abs() - half);
-    (qx.max(0.0).powi(2) + qy.max(0.0).powi(2)).sqrt() + qx.max(qy).min(0.0) - radius
-}
-
-/// Whether a point lies inside a convex polygon, whichever way round its corners run.
-fn inside(polygon: &[(f32, f32)], x: f32, y: f32) -> bool {
-    let mut sign = 0.0f32;
-    for (i, &(ax, ay)) in polygon.iter().enumerate() {
-        let (bx, by) = polygon[(i + 1) % polygon.len()];
-        let cross = (bx - ax) * (y - ay) - (by - ay) * (x - ax);
-        if cross != 0.0 {
-            if sign != 0.0 && cross.signum() != sign {
-                return false;
-            }
-            sign = cross.signum();
-        }
-    }
-    true
+    out
 }
 
 #[cfg(test)]
@@ -149,36 +125,29 @@ mod tests {
         [icon.rgba[i], icon.rgba[i + 1], icon.rgba[i + 2], icon.rgba[i + 3]]
     }
 
-    /// A canvas point's pixel.
-    fn at(icon: &egui::IconData, x: f32, y: f32) -> [u8; 4] {
-        let k = SIDE as f32 / CANVAS;
-        pixel(icon, (x * k) as usize, (y * k) as usize)
-    }
-
     #[test]
-    fn the_drawn_icon_is_the_slate_tile_with_the_white_a_and_its_teal_crossbar() {
-        let icon = draw();
+    fn the_icon_is_the_beaver_on_the_grid_with_a_clear_margin() {
+        let icon = picture().unwrap();
         assert_eq!((icon.width, icon.height, icon.rgba.len()), (256, 256, 256 * 256 * 4));
-        assert_eq!(pixel(&icon, 0, 0)[3], 0, "the corner outside the tile is clear");
-        assert_eq!(at(&icon, 105.0, 105.0)[3], 0, "the tile's rounded corner is clear");
-        let tile = at(&icon, 512.0, 880.0);
-        assert_eq!(tile[3], 255);
-        assert!(tile[2] > tile[0] && tile[0] < 80, "slate blue near the foot: {tile:?}");
-        // The crossbar's middle, in the mark's own units (32, 39), and a leg's (14, 40).
-        let bar = at(&icon, MARK_AT.0 + 32.0 * MARK_SCALE, MARK_AT.1 + 39.0 * MARK_SCALE);
-        assert_eq!(bar, [0x9E, 0xD8, 0xDE, 255]);
-        let leg = at(&icon, MARK_AT.0 + 14.0 * MARK_SCALE, MARK_AT.1 + 40.0 * MARK_SCALE);
-        assert_eq!(leg, [255, 255, 255, 255]);
+        assert_eq!(pixel(&icon, 0, 0)[3], 0, "the margin is clear");
+        // The tile fills the grid's square, 206 pixels from 25, centred: opaque just inside each
+        // edge's middle, clear just outside.
+        let (lo, hi) = (25, 25 + TILE - 1);
+        for (x, y) in [(lo + 3, 128), (hi - 3, 128), (128, lo + 3), (128, hi - 3)] {
+            assert!(pixel(&icon, x, y)[3] > 200, "the tile reaches the grid at ({x}, {y}): {:?}", pixel(&icon, x, y));
+        }
+        for (x, y) in [(lo - 2, 128), (hi + 2, 128), (128, lo - 2), (128, hi + 2)] {
+            assert_eq!(pixel(&icon, x, y)[3], 0, "and no further, at ({x}, {y})");
+        }
+        // The blue of the tile, high up at the left, where the beaver is not.
+        let blue = pixel(&icon, 50, 60);
+        assert!(blue[3] > 240, "the tile is opaque: {blue:?}");
+        assert!(blue[2] > blue[0] + 40, "the tile's blue: {blue:?}");
     }
 
     #[test]
-    fn a_point_is_inside_a_convex_polygon_either_way_round() {
-        let square = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)];
-        let mut reversed = square;
-        reversed.reverse();
-        for s in [square, reversed] {
-            assert!(inside(&s, 0.5, 0.5));
-            assert!(!inside(&s, 1.5, 0.5));
-        }
+    fn an_average_keeps_colour_and_coverage_and_a_clear_edge_stays_clean() {
+        let src = [255, 0, 0, 255, 0, 0, 255, 255, 0, 255, 0, 0, 0, 255, 0, 0];
+        assert_eq!(scale(&src, 2, 1), [128, 0, 128, 128]);
     }
 }

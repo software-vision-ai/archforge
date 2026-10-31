@@ -1,0 +1,9 @@
+The Archforge application icon
+
+The application icon in assets/app-icon/ (a beaver, drawn in pen and ink on a blue tile) is
+Copyright 2026 Dejan Siedle. All rights reserved.
+
+It is the Archforge brand mark. It is not covered by the MIT licence or the Apache License 2.0
+that cover the code, and no other licence to it is granted. It may be shown with unmodified
+copies of Archforge and in material about Archforge. A fork or a modified version that is
+distributed must replace it with an icon of its own.

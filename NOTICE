@@ -4,9 +4,13 @@ Copyright 2026 the Archforge contributors.
 The code is dual-licensed under the MIT licence (LICENSE-MIT) and the Apache License, Version 2.0
 (LICENSE-APACHE), at your option.
 
-The artwork in this repository, the application icon included, is licensed like the code. The name
+The artwork in this repository is licensed like the code, except the application icon. The name
 Archforge is a brand mark and is not covered by either licence: a fork that is distributed under
 another name may say that it is based on Archforge, but does not use the name as its own.
+
+The application icon (assets/app-icon/icon.png, a beaver by Dejan Siedle) is a brand mark too,
+all rights reserved, and is not covered by either licence: a fork or modified version that is
+distributed replaces it. Its terms are in licenses/brand/archforge-icon.txt.
 
 Third-party assets and their licences are listed in ATTRIBUTION.md, as are the fonts the program
 draws with: Inter, from craft-fonts, the fonts input of the build, and the fonts bundled with egui.

@@ -22,34 +22,14 @@
 # Every licence named in a row needs its text in the tree, listed here.
 
 [[asset]]
-path = "assets/app-icon/icon.svg"
-author = "The Archforge contributors"
-source = "original artwork, the app icon, drawn for Archforge"
-licence = "MIT OR Apache-2.0"
-sha256 = "8bc2bf8dbb1d93ad9f56a0c64650aaa7e46f09dac7f0703cf7168c855a939027"
-
-[[asset]]
-path = "assets/app-icon/icon-dark.svg"
-author = "The Archforge contributors"
-source = "original artwork, the app icon, dark appearance, drawn for Archforge"
-licence = "MIT OR Apache-2.0"
-sha256 = "75a6ba1f8a8c63fd7e25b6d60916ddaf0d3539e61794464681216d999178fd2f"
-
-[[asset]]
-path = "assets/app-icon/icon-small.svg"
-author = "The Archforge contributors"
-source = "original artwork, the app icon at 16 to 32 px, drawn for Archforge"
-licence = "MIT OR Apache-2.0"
-sha256 = "780e2ba571a11db97b8dc88591415152e47fba9cef84321d4ba6f03769e60a04"
-
-[[asset]]
-path = "assets/app-icon/icon-small-dark.svg"
-author = "The Archforge contributors"
-source = "original artwork, the app icon at 16 to 32 px, dark appearance, drawn for Archforge"
-licence = "MIT OR Apache-2.0"
-sha256 = "cf789be8baec957ee0e4d1f0d99e4c3ed8a2937e90f6862a22f8bfd7329c250c"
+path = "assets/app-icon/icon.png"
+author = "Dejan Siedle"
+source = "original artwork, the app icon: a beaver in pen and ink on a blue tile, made with ArtCraft for Archforge"
+licence = "Archforge brand mark, all rights reserved"
+sha256 = "67e2e06b43e5bd7f4336badd0519936845487bfe0922be03f9eb9bbe743997c5"
 
 [licences]
+"Archforge brand mark, all rights reserved" = "licenses/brand/archforge-icon.txt"
 "MIT OR Apache-2.0" = "LICENSE-MIT, LICENSE-APACHE"
 "Ubuntu Font Licence 1.0" = "licenses/fonts/Ubuntu-font-1.0.txt"
 "MIT (Hack), Bitstream Vera Licence" = "licenses/fonts/Hack.txt"

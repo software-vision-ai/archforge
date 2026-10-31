@@ -13,6 +13,8 @@ serde_json.workspace = true
 # in the lockfile through the desktop stack. Never a dependency of the application.
 quick-xml = "=0.41.0"
 archforge-mof.workspace = true
+# Scales the app icon to the packaging sizes (cargo xtask resize); already a workspace dependency.
+png.workspace = true
 
 [dev-dependencies]
 archforge-mof = { workspace = true, features = ["testing"] }

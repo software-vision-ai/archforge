@@ -55,7 +55,8 @@ cargo xtask shot dark                     # an offscreen screenshot and a small 
 - Hot files (the translation catalogues in `crates/ui-egui/src/i18n/`, `xtask/src/layers.rs`,
   `ATTRIBUTION.toml`) are edited surgically, with new rows placed beside related entries and never
   appended at the end of the file.
-- Fonts, samples and other binaries stay out of the repository; every file under `assets/` has its
+- Fonts, samples and other binaries stay out of the repository (the app icon's one picture,
+  `assets/app-icon/icon.png`, is the exception); every file under `assets/` has its
   row in `ATTRIBUTION.toml`.
 
 ## Working on something: read its skill first

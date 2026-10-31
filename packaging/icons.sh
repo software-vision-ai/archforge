@@ -1,19 +1,20 @@
 #!/bin/sh
-# Renders the application icon from its vector source into every raster size and bundle format,
-# reproducibly and at package time, never kept in the tree: PNGs, a macOS icon set, a Windows icon file.
+# Scales the application icon from its one source, assets/app-icon/icon.png (the tile filling a
+# 1024 px square), into every size and bundle format, reproducibly and at package time, never kept
+# in the tree: PNGs, a macOS icon set, a Windows icon file.
 # Output: dist/icons/.
 . "$(dirname "$0")/common.sh"
 
 require_icon
-need rsvg-convert
 out="$ROOT/dist/icons"
 rm -rf "$out"
 mkdir -p "$out/png"
-# Up to 32 px the full-bleed small icon keeps the mark legible; larger sizes use the macOS grid.
+# Up to 32 px the tile fills the square so the beaver stays legible; larger sizes stand on the
+# platform icon grid, the tile 824/1024 of the side with a clear margin.
 for size in 16 24 32 48 64 128 256 512 1024; do
-  svg="$ROOT/assets/app-icon/icon.svg"
-  [ "$size" -le 32 ] && svg="$ROOT/assets/app-icon/icon-small.svg"
-  rsvg-convert --width "$size" --height "$size" "$svg" -o "$out/png/$size.png"
+  grid="--grid"
+  [ "$size" -le 32 ] && grid=""
+  (cd "$ROOT" && cargo xtask resize "$ROOT/assets/app-icon/icon.png" "$out/png/$size.png" "$size" $grid)
 done
 
 # Windows: PNG-encoded entries packed by the task runner.
@@ -31,26 +32,19 @@ if command -v iconutil >/dev/null 2>&1; then
   iconutil --convert icns --output "$out/$APP.icns" "$set_dir"
 fi
 
-# macOS 26 and later: an Icon Composer document carrying the light and the dark appearance,
-# compiled into the bundle by packaging/macos/package.sh where Xcode's actool
-# is present. Each source's 824 px tile is scaled to fill the 1024 px canvas, as the system draws
-# the icon's shape itself.
+# macOS 26 and later: an Icon Composer document, compiled into the bundle by
+# packaging/macos/package.sh where Xcode's actool is present. Its layer is the tile filling the
+# canvas, as the system draws the icon's shape itself; the one picture serves both appearances.
 icon_doc="$out/AppIcon.icon"
 mkdir -p "$icon_doc/Assets"
-for name in icon icon-dark; do
-  sed -e '1s|$|<g transform="matrix(1.242718 0 0 1.242718 -124.2718 -124.2718)">|' -e 's|</svg>|</g></svg>|' \
-    "$ROOT/assets/app-icon/$name.svg" >"$icon_doc/Assets/$name.svg"
-done
+cp "$ROOT/assets/app-icon/icon.png" "$icon_doc/Assets/icon.png"
 cat >"$icon_doc/icon.json" <<'JSON'
 {
   "groups" : [
     {
       "layers" : [
         {
-          "image-name-specializations" : [
-            { "value" : "icon.svg" },
-            { "appearance" : "dark", "value" : "icon-dark.svg" }
-          ],
+          "image-name" : "icon.png",
           "name" : "icon"
         }
       ]
