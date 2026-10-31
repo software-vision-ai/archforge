@@ -90,7 +90,8 @@ fn weights(from: usize, to: usize) -> Vec<Vec<(usize, f32)>> {
 }
 
 /// `rgba`, `from` pixels a side, averaged down to `to` pixels a side. The same average as the
-/// app's window icon (apps/archforge/src/app_icon.rs); keep the two in step.
+/// shell's `ux::scale_rgba` (crates/ui-egui/src/ux/mod.rs), which draws the app icon in the window and
+/// the bar; keep the two in step.
 fn scale(rgba: &[u8], from: usize, to: usize) -> Vec<u8> {
     let w = weights(from, to);
     // Premultiplied, across first, then down.

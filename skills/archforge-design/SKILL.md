@@ -39,6 +39,8 @@ the change, and update this file in the same change.
 ## Shell
 - The title strip is 32 pt tall, clear of the macOS window buttons, and holds Home, + Open project
   and the theme switch; dragging it moves the window and a double click zooms it.
+- The brand at the bar's left is the app icon's beaver and the wordmark ArchForge: Arch in the
+  text colour, Forge in the icon's blue (a lighter blue in Dark).
 - The project bar holds the brand, Home, the project tabs, the search field (Ctrl K), help and the
   avatar. Projects open as tabs, up to eight, each with its name and a close button; showing Home
   closes none of them. In a narrow window the tabs shrink, then turn into icons. A project whose

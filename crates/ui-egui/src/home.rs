@@ -243,14 +243,25 @@ pub(crate) fn bar_mid(r: Rect) -> f32 {
     r.top() + (r.height() - 1.0) / 2.0
 }
 
-/// The brand at the bar's left: the mark and the wordmark on the bar's middle line; gives the
-/// wordmark's rectangle.
+/// The brand at the bar's left: the app icon's beaver and the wordmark ArchForge, Arch in the
+/// text colour and Forge in the icon's blue, on the bar's middle line; gives the wordmark's
+/// rectangle. Without the picture the blue tile with the A stands in.
 pub(crate) fn brand(paint: &egui::Painter, p: &Palette, r: Rect) -> Rect {
     let mid = bar_mid(r);
-    let mark = Rect::from_center_size(pos2(r.left() + 28.0, mid), Vec2::splat(24.0));
-    paint.rect_filled(mark, 6.0, p.accent_fill);
-    ux::icon_exact(paint, mark.center() - vec2(11.33, 10.67) / 2.0, &icons::MARK_A, 11.33, 1.6, p.on_accent);
-    ux::text_mid(paint, mark.right() + 10.0, mid, "Archforge", types::LEAD_STRONG, p.text, None)
+    let mark = Rect::from_center_size(pos2(r.left() + 28.0, mid), Vec2::splat(28.0));
+    let side = (mark.width() * paint.ctx().pixels_per_point()).round().max(1.0) as usize;
+    match ux::app_icon(paint.ctx(), side) {
+        Some(icon) => {
+            paint.image(icon.id(), mark, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
+        }
+        None => {
+            paint.rect_filled(mark, 6.0, p.accent_fill);
+            ux::icon_exact(paint, mark.center() - vec2(11.33, 10.67) / 2.0, &icons::MARK_A, 11.33, 1.6, p.on_accent);
+        }
+    }
+    let arch = ux::text_mid(paint, mark.right() + 10.0, mid, "Arch", types::LEAD_STRONG, p.text, None);
+    let forge = ux::text_mid(paint, arch.right(), mid, "Forge", types::LEAD_STRONG, p.brand, None);
+    arch.union(forge)
 }
 
 /// The bar's right: the search field from `start` at the earliest, help and the avatar, all on
