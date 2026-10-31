@@ -291,6 +291,9 @@ impl Shell {
     /// project already open in a tab is shown in it instead.
     pub fn open_project(&mut self, opened: Opened) {
         self.open_error = None;
+        // Home's recent list puts it first.
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+        self.state.remember(&opened.name, &opened.path, now);
         if let Some(i) = self.tabs.iter().position(|t| t.path == opened.path) {
             self.activate(i);
             return;
@@ -465,7 +468,11 @@ impl Shell {
     /// Where the open project lives, as the status bar says it: the label of the folder new
     /// projects go in when the project is inside it, else its parent folder's name.
     pub fn location(&self) -> Option<String> {
-        let path = &self.project.as_ref()?.path;
+        self.location_of(&self.project.as_ref()?.path)
+    }
+
+    /// Where a project lives, as the status bar and Home's recent list say it.
+    pub fn location_of(&self, path: &std::path::Path) -> Option<String> {
         if let Some(folder) = &self.services.projects_folder
             && path.starts_with(&folder.path)
         {
@@ -583,17 +590,32 @@ impl Shell {
         }
         let Some(pick) = self.services.pick_project.clone() else { return };
         if let Some(path) = pick() {
-            // A project open in a tab shows there; the host is not asked.
-            if let Some(i) = self.tabs.iter().position(|t| t.path == path) {
-                self.activate(i);
-                return;
-            }
-            // The shown model's newest state goes to the host first, as before every change of tab.
-            self.write_changes();
-            let Some(host) = &self.services.projects else { return };
-            self.opening = Some(host.open(&path));
-            self.open_error = None;
+            self.open_path(&path);
         }
+    }
+
+    /// Opens the project at `path` (from the picker or Home's recent list): a project open in a
+    /// tab shows there without asking the host; another opens in a tab of its own while one is free.
+    pub fn open_path(&mut self, path: &std::path::Path) {
+        if let Some(i) = self.tabs.iter().position(|t| t.path == path) {
+            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+            let name = self.tabs[i].name.clone();
+            self.state.remember(&name, path, now);
+            self.activate(i);
+            return;
+        }
+        if self.opening.is_some() || self.new_project.is_some() {
+            return;
+        }
+        if self.tabs.len() >= MAX_TABS {
+            self.open_error = Some(crate::i18n::tr("Close a project to open another"));
+            return;
+        }
+        // The shown model's newest state goes to the host first, as before every change of tab.
+        self.write_changes();
+        let Some(host) = &self.services.projects else { return };
+        self.opening = Some(host.open(path));
+        self.open_error = None;
     }
 
     /// The answers of a save, of an opening and of closings the host was working on.
@@ -639,7 +661,6 @@ impl Shell {
             match rx.try_recv() {
                 Ok(Ok(opened)) => {
                     self.opening = None;
-                    new_project::remember(self, &opened);
                     self.open_project(opened);
                 }
                 Ok(Err(e)) => {

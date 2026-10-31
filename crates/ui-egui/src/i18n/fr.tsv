@@ -7,7 +7,6 @@ str		Open…	Ouvrir…
 str		Save	Enregistrer
 str		{name} — Archforge	{name} — Archforge
 # Accueil
-plural		{n} element	{n} élément|{n} éléments
 str		Recent projects	Projets récents
 str		Open project	Ouvrir un projet
 str		Close project	Fermer le projet
@@ -195,6 +194,7 @@ str		Not saved	Non enregistré
 str		Changes could not be written to the project	Les modifications n’ont pas pu être écrites dans le projet
 str		The save stopped without an answer	L’enregistrement s’est arrêté sans réponse
 str		The opening stopped without an answer	L’ouverture s’est arrêtée sans réponse
+str		Close a project to open another	Fermez un projet pour en ouvrir un autre
 str		The closing stopped without an answer	La fermeture s’est arrêtée sans réponse
 str		The project could not be opened: {why}	Le projet n’a pas pu être ouvert : {why}
 str		The project could not be closed: {why}	Le projet n’a pas pu être fermé : {why}
@@ -335,8 +335,11 @@ str		Pinned folders	Dossiers épinglés
 str		Keep your project locations close.	Gardez vos emplacements de projets à portée de main.
 str		Pin a folder	Épingler un dossier
 str		Pick up in the exact view you left.	Reprenez exactement dans la vue où vous vous étiez arrêté.
-str		Nothing yet	Rien pour l’instant
 str		Just now	À l’instant
+plural		{n} minute ago	il y a {n} minute|il y a {n} minutes
+plural		{n} hour ago	il y a {n} heure|il y a {n} heures
+str		Yesterday	Hier
+plural		{n} day ago	il y a {n} jour|il y a {n} jours
 str		Last opened	Dernière ouverture
 str		No recent projects yet	Aucun projet récent pour l’instant
 str		Projects you create or open will appear here.	Les projets que vous créez ou ouvrez apparaîtront ici.
@@ -344,7 +347,6 @@ str		Your models, your workspace.	Vos modèles, votre espace de travail.
 str		Help & shortcuts	Aide et raccourcis
 str		Switch to the dark appearance	Passer à l’apparence sombre
 str		Switch to the light appearance	Passer à l’apparence claire
-str		Last view: {view}	Dernière vue : {view}
 str		This model	Ce modèle
 str		This schema	Ce schéma
 str		This table	Cette table

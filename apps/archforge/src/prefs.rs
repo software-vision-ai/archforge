@@ -1,5 +1,5 @@
 //! Preferences: the UI state, stored as `prefs.json` in the settings directory, loaded at start
-//! and saved by the exit hook. A file that cannot be read is set aside
+//! and saved a moment after it changes and by the exit hook. A file that cannot be read is set aside
 //! under a new name, never discarded, and the defaults are used. Every field is applied at
 //! start, so no preference goes unread.
 
@@ -55,15 +55,21 @@ fn set_aside(path: &Path) -> std::io::Result<PathBuf> {
     Err(std::io::Error::other("too many damaged preference files"))
 }
 
-/// Writes the preferences atomically.
+/// Writes the preferences atomically, readable by the account alone: they name the user's
+/// projects and where they are.
 pub fn save(dir: &Path, prefs: &Prefs) -> Result<(), String> {
     let bytes = serde_json::to_vec_pretty(prefs).map_err(|e| e.to_string())?;
-    craft_atomic::atomic_write(&dir.join(FILE), &bytes).map_err(|e| e.to_string())
+    craft_atomic::WriteOptions::default()
+        .with_new_file_permissions(craft_atomic::NewFilePermissions::Private)
+        .atomic_write(&dir.join(FILE), &bytes)
+        .map_err(|e| e.to_string())
 }
 
 /// Applies every field to the shell.
 pub fn apply(prefs: &Prefs, shell: &mut Shell) {
     shell.state = prefs.ui.clone();
+    // Recent entries the window does not take are dropped (a file from elsewhere may hold any).
+    shell.state.sanitize();
     if let Some(warning) = unknown_language(&shell.state.language) {
         log::warn!("{warning}");
         shell.state.language = UiState::default().language;
