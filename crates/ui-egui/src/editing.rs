@@ -1051,7 +1051,7 @@ fn link_handle(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, rect: Rec
     }
     paint.rect_filled(b, 4.0, p.surface);
     paint.rect_stroke(b, 4.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
-    ux::icon_in(&paint, b, &icons::ADORN_CONNECT, p.text_secondary);
+    ux::icon_in(&paint, b, &icons::TOOL_LINK_NOTE, p.text_secondary);
     let id = "workspace.canvas.adorn.link";
     widgets::record_visible(ui, &mut shell.registry, id, "button", b);
     let resp = ui
