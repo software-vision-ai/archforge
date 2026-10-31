@@ -7,7 +7,6 @@ str		Open…	Abrir…
 str		Save	Guardar
 str		{name} — Archforge	{name} — Archforge
 # Inicio
-plural		{n} element	{n} elemento|{n} elementos
 str		Recent projects	Proyectos recientes
 str		Open project	Abrir proyecto
 str		Close project	Cerrar proyecto
@@ -195,6 +194,7 @@ str		Not saved	No guardado
 str		Changes could not be written to the project	No se pudieron escribir los cambios en el proyecto
 str		The save stopped without an answer	El guardado terminó sin respuesta
 str		The opening stopped without an answer	La apertura terminó sin respuesta
+str		Close a project to open another	Cierra un proyecto para abrir otro
 str		The closing stopped without an answer	El cierre terminó sin respuesta
 str		The project could not be opened: {why}	No se pudo abrir el proyecto: {why}
 str		The project could not be closed: {why}	No se pudo cerrar el proyecto: {why}
@@ -335,8 +335,11 @@ str		Pinned folders	Carpetas fijadas
 str		Keep your project locations close.	Tenga a mano las ubicaciones de sus proyectos.
 str		Pin a folder	Fijar una carpeta
 str		Pick up in the exact view you left.	Continúe exactamente en la vista en la que lo dejó.
-str		Nothing yet	Nada todavía
 str		Just now	Ahora mismo
+plural		{n} minute ago	hace {n} minuto|hace {n} minutos
+plural		{n} hour ago	hace {n} hora|hace {n} horas
+str		Yesterday	Ayer
+plural		{n} day ago	hace {n} día|hace {n} días
 str		Last opened	Última apertura
 str		No recent projects yet	Aún no hay proyectos recientes
 str		Projects you create or open will appear here.	Los proyectos que cree o abra aparecerán aquí.
@@ -344,7 +347,6 @@ str		Your models, your workspace.	Sus modelos, su espacio de trabajo.
 str		Help & shortcuts	Ayuda y atajos
 str		Switch to the dark appearance	Cambiar a la apariencia oscura
 str		Switch to the light appearance	Cambiar a la apariencia clara
-str		Last view: {view}	Última vista: {view}
 str		This model	Este modelo
 str		This schema	Este esquema
 str		This table	Esta tabla

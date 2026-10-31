@@ -7,7 +7,6 @@ str		Open…	Öffnen …
 str		Save	Sichern
 str		{name} — Archforge	{name} — Archforge
 # Home
-plural		{n} element	{n} Element|{n} Elemente
 str		Recent projects	Zuletzt geöffnete Projekte
 str		Open project	Projekt öffnen
 str		Close project	Projekt schließen
@@ -195,6 +194,7 @@ str		Not saved	Nicht gesichert
 str		Changes could not be written to the project	Änderungen konnten nicht ins Projekt geschrieben werden
 str		The save stopped without an answer	Das Sichern endete ohne Antwort
 str		The opening stopped without an answer	Das Öffnen endete ohne Antwort
+str		Close a project to open another	Schließen Sie ein Projekt, um ein weiteres zu öffnen
 str		The closing stopped without an answer	Das Schließen endete ohne Antwort
 str		The project could not be opened: {why}	Das Projekt konnte nicht geöffnet werden: {why}
 str		The project could not be closed: {why}	Das Projekt konnte nicht geschlossen werden: {why}
@@ -335,8 +335,11 @@ str		Pinned folders	Angeheftete Ordner
 str		Keep your project locations close.	Halten Sie Ihre Projektorte griffbereit.
 str		Pin a folder	Ordner anheften
 str		Pick up in the exact view you left.	Machen Sie genau in der Ansicht weiter, die Sie verlassen haben.
-str		Nothing yet	Noch nichts
 str		Just now	Gerade eben
+plural		{n} minute ago	vor {n} Minute|vor {n} Minuten
+plural		{n} hour ago	vor {n} Stunde|vor {n} Stunden
+str		Yesterday	Gestern
+plural		{n} day ago	vor {n} Tag|vor {n} Tagen
 str		Last opened	Zuletzt geöffnet
 str		No recent projects yet	Noch keine zuletzt geöffneten Projekte
 str		Projects you create or open will appear here.	Projekte, die Sie erstellen oder öffnen, erscheinen hier.
@@ -344,7 +347,6 @@ str		Your models, your workspace.	Ihre Modelle, Ihr Arbeitsbereich.
 str		Help & shortcuts	Hilfe & Tastenkürzel
 str		Switch to the dark appearance	Zur dunklen Darstellung wechseln
 str		Switch to the light appearance	Zur hellen Darstellung wechseln
-str		Last view: {view}	Letzte Ansicht: {view}
 str		This model	Dieses Modell
 str		This schema	Dieses Schema
 str		This table	Diese Tabelle

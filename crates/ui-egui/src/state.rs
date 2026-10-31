@@ -19,6 +19,50 @@ pub struct UiState {
     /// The explorer and the panel folded away by the user: their rails stay, the centre widens.
     pub explorer_collapsed: bool,
     pub panel_collapsed: bool,
+    /// Home's recent projects, the last opened first. An entry a preferences file holds in a
+    /// shape the window does not read is left out, not the whole file.
+    #[serde(deserialize_with = "lenient_recent")]
+    pub recent: Vec<RecentProject>,
+}
+
+/// The recent list as a file holds it: the entries that read, the others left out (the next
+/// [`UiState::sanitize`] says how many went).
+fn lenient_recent<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<RecentProject>, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Entry {
+        Read(RecentProject),
+        Unread(serde::de::IgnoredAny),
+    }
+    let entries: Vec<Entry> = Vec::deserialize(d)?;
+    Ok(entries
+        .into_iter()
+        .map(|e| match e {
+            Entry::Read(r) => r,
+            // Left out by sanitize: it has no name.
+            Entry::Unread(_) => RecentProject::default(),
+        })
+        .collect())
+}
+
+/// The most projects Home's recent list keeps.
+pub const MAX_RECENT: usize = 12;
+/// The longest folder path, in bytes, a recent entry may have: longer ones in a preferences file
+/// are dropped. Names follow the project name rule.
+const MAX_RECENT_PATH: usize = 4096;
+
+/// Whether a recent entry fits the list: a project name and an absolute folder of bounded length.
+fn recent_ok(name: &str, path: &std::path::Path) -> bool {
+    archforge_names::problem(name).is_none() && path.is_absolute() && path.as_os_str().len() <= MAX_RECENT_PATH
+}
+
+/// A project opened before: its name, its folder, and when it was last opened (seconds since 1970).
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RecentProject {
+    pub name: String,
+    pub path: std::path::PathBuf,
+    pub opened: u64,
 }
 
 impl Default for UiState {
@@ -33,11 +77,36 @@ impl Default for UiState {
             panel_width: crate::workspace::PANEL_DEFAULT,
             explorer_collapsed: false,
             panel_collapsed: false,
+            recent: Vec::new(),
         }
     }
 }
 
 impl UiState {
+    /// Puts the project at `path` at the top of the recent list, opened at `now`.
+    pub fn remember(&mut self, name: &str, path: &std::path::Path, now: u64) {
+        if !recent_ok(name, path) {
+            log::warn!("the project {} is not listed on Home: its name or folder does not fit the list", path.display());
+            return;
+        }
+        self.recent.retain(|r| r.path != path);
+        self.recent.insert(0, RecentProject { name: name.to_string(), path: path.to_path_buf(), opened: now });
+        self.recent.truncate(MAX_RECENT);
+    }
+
+    /// Drops what a preferences file may hold that the window does not take: recent entries whose
+    /// name breaks the project name rule, whose folder is not absolute or too long, or that are
+    /// listed twice; more than the list keeps. Says in the log how many went.
+    pub fn sanitize(&mut self) {
+        let before = self.recent.len();
+        let mut seen = std::collections::HashSet::new();
+        self.recent.retain(|r| recent_ok(&r.name, &r.path) && seen.insert(r.path.clone()));
+        self.recent.truncate(MAX_RECENT);
+        if self.recent.len() < before {
+            log::warn!("{} of {before} recent projects in the preferences were left out", before - self.recent.len());
+        }
+    }
+
     /// Opens the explorer on `which`.
     pub fn show_explorer(&mut self, which: Explorer) {
         self.explorer = which;

@@ -137,12 +137,6 @@ fn answer(dialog: &mut Dialog) -> Option<Result<Opened, CreateError>> {
     Some(got)
 }
 
-/// The open project goes to the top of Home's recent list, once.
-pub(crate) fn remember(shell: &mut Shell, opened: &Opened) {
-    shell.home.recent.retain(|r| r.name != opened.name);
-    shell.home.recent.insert(0, crate::home::Recent { name: opened.name.clone(), last_view: tr("Nothing yet"), elements: 0, opened: tr("Just now") });
-}
-
 /// Draws the dialog over everything when it is open, and closes it on Cancel, the close button or
 /// Escape.
 pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
@@ -153,7 +147,6 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
     let Some(mut dialog) = shell.new_project.take() else { return };
     match answer(&mut dialog) {
         Some(Ok(opened)) => {
-            remember(shell, &opened);
             shell.open_project(opened);
             return;
         }

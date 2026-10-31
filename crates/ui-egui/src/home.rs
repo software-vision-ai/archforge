@@ -51,22 +51,23 @@ pub struct Pinned {
     pub path: String,
 }
 
-/// A recent project as its row shows it.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Recent {
-    pub name: String,
-    /// The view it was left in, as the row names it.
-    pub last_view: String,
-    pub elements: u64,
-    /// When it was last opened, as the page says it ("Today, 10:24").
-    pub opened: String,
-}
-
-/// What Home lists. Both start empty: none can be made or opened yet.
+/// What Home lists besides the recent projects (kept with the preferences): the pinned folders,
+/// none so far.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Data {
     pub pinned: Vec<Pinned>,
-    pub recent: Vec<Recent>,
+}
+
+/// How long ago `then` was at `now` (seconds since 1970), as a recent project's row says it.
+pub(crate) fn ago(then: u64, now: u64) -> String {
+    let s = now.saturating_sub(then);
+    match s {
+        0..60 => tr("Just now"),
+        60..3_600 => crate::i18n::trn("{n} minute ago", "{n} minutes ago", s / 60),
+        3_600..86_400 => crate::i18n::trn("{n} hour ago", "{n} hours ago", s / 3_600),
+        86_400..172_800 => tr("Yesterday"),
+        _ => crate::i18n::trn("{n} day ago", "{n} days ago", s / 86_400),
+    }
 }
 
 /// The colours of a start card or a model thumbnail: its ink and its tint.
@@ -429,13 +430,17 @@ fn content(shell: &mut Shell, ui: &egui::Ui, p: &Palette, origin: Pos2, width: f
     control(shell, ui, "home.recent.list", "toggle", list, true);
     control(shell, ui, "home.recent.grid", "toggle", grid, false);
     let mut row_top = y + 75.0;
-    if shell.home.recent.is_empty() {
+    if shell.state.recent.is_empty() {
         ux::text(&paint, at(0.0, row_top), &tr("No recent projects yet"), types::UI, p.text_secondary, Some(inner));
         ux::text(&paint, at(0.0, row_top + 28.0), &tr("Projects you create or open will appear here."), types::SMALL, p.text_secondary, Some(inner));
         row_top += 45.0 + 11.0;
     } else {
-        for (i, project) in shell.home.recent.clone().iter().enumerate() {
-            recent_row(shell, ui, p, &paint, Rect::from_min_size(at(0.0, row_top), vec2(inner, ROW)), i, project);
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+        for (i, project) in shell.state.recent.clone().iter().enumerate() {
+            let row = Rect::from_min_size(at(0.0, row_top), vec2(inner, ROW));
+            if recent_row(shell, ui, p, &paint, row, i, project, now) {
+                shell.open_path(&project.path);
+            }
             row_top += ROW_PITCH;
         }
         row_top += ROW - ROW_PITCH + 11.0;
@@ -534,8 +539,23 @@ fn pinned_tile(shell: &mut Shell, ui: &egui::Ui, p: &Palette, paint: &egui::Pain
     ux::icon(paint, pos2(r.right() - 33.0, r.top() + 33.0), &icons::MORE, 17.0, p.text_muted);
 }
 
-fn recent_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, paint: &egui::Painter, r: Rect, i: usize, project: &Recent) {
-    let resp = control(shell, ui, &format!("home.recent.{i}"), "row", r, false);
+/// A recent project's row: its name and where it lives, when it was last opened; true when clicked.
+#[allow(clippy::too_many_arguments, reason = "a row takes its place in the list and the time it is read at")]
+fn recent_row(
+    shell: &mut Shell,
+    ui: &egui::Ui,
+    p: &Palette,
+    paint: &egui::Painter,
+    r: Rect,
+    i: usize,
+    project: &crate::state::RecentProject,
+    now: u64,
+) -> bool {
+    let live = shell.services.projects.is_some();
+    let mut resp = control(shell, ui, &format!("home.recent.{i}"), "row", r, live);
+    if live {
+        resp = resp.on_hover_text(project.path.display().to_string());
+    }
     // The design draws the row under the pointer on the surface, with a border.
     if resp.hovered() {
         paint.rect_filled(r, 8.0, p.surface);
@@ -552,12 +572,11 @@ fn recent_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, paint: &egui::Paint
     }
     let w = r.width();
     ux::text(paint, r.min + vec2(112.0, 6.0), &project.name, types::BODY_STRONG, p.text, Some(w * 0.674 - 136.0));
-    let view = crate::i18n::fmt(&tr("Last view: {view}"), &[("view", &project.last_view)]);
-    ux::text(paint, r.min + vec2(112.0, 30.0), &view, types::CAPTION, p.text_secondary, Some(w * 0.674 - 136.0));
-    let elements = crate::i18n::trn("{n} element", "{n} elements", project.elements);
-    ux::text(paint, r.min + vec2(w * 0.674, 17.5), &elements, types::SMALL, p.text_secondary, Some(w * 0.126 - 12.0));
-    ux::text(paint, r.min + vec2(w * 0.801, 17.5), &project.opened, types::SMALL, p.text_secondary, Some(w * 0.12));
+    let place = shell.location_of(&project.path).unwrap_or_default();
+    ux::text(paint, r.min + vec2(112.0, 30.0), &place, types::CAPTION, p.text_secondary, Some(w * 0.674 - 136.0));
+    ux::text(paint, r.min + vec2(w * 0.801, 17.5), &ago(project.opened, now), types::SMALL, p.text_secondary, Some(w * 0.12));
     ux::icon(paint, pos2(r.right() - 32.0, r.top() + 18.0), &icons::ARROW, 16.0, p.accent);
+    live && resp.clicked()
 }
 
 #[cfg(test)]

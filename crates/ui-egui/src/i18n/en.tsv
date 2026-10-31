@@ -6,7 +6,6 @@ str		Open…	Open…
 str		Save	Save
 str		{name} — Archforge	{name} — Archforge
 # Home
-plural		{n} element	{n} element|{n} elements
 str		Recent projects	Recent projects
 str		Open project	Open project
 str		Close project	Close project
@@ -194,6 +193,7 @@ str		Not saved	Not saved
 str		Changes could not be written to the project	Changes could not be written to the project
 str		The save stopped without an answer	The save stopped without an answer
 str		The opening stopped without an answer	The opening stopped without an answer
+str		Close a project to open another	Close a project to open another
 str		The closing stopped without an answer	The closing stopped without an answer
 str		The project could not be opened: {why}	The project could not be opened: {why}
 str		The project could not be closed: {why}	The project could not be closed: {why}
@@ -334,8 +334,11 @@ str		Pinned folders	Pinned folders
 str		Keep your project locations close.	Keep your project locations close.
 str		Pin a folder	Pin a folder
 str		Pick up in the exact view you left.	Pick up in the exact view you left.
-str		Nothing yet	Nothing yet
 str		Just now	Just now
+plural		{n} minute ago	{n} minute ago|{n} minutes ago
+plural		{n} hour ago	{n} hour ago|{n} hours ago
+str		Yesterday	Yesterday
+plural		{n} day ago	{n} day ago|{n} days ago
 str		Last opened	Last opened
 str		No recent projects yet	No recent projects yet
 str		Projects you create or open will appear here.	Projects you create or open will appear here.
@@ -343,7 +346,6 @@ str		Your models, your workspace.	Your models, your workspace.
 str		Help & shortcuts	Help & shortcuts
 str		Switch to the dark appearance	Switch to the dark appearance
 str		Switch to the light appearance	Switch to the light appearance
-str		Last view: {view}	Last view: {view}
 str		This model	This model
 str		This schema	This schema
 str		This table	This table

@@ -55,12 +55,7 @@ fn home_lists_its_pinned_folders_and_recent_projects_in_both_appearances() {
         let mut shell = Shell::new(Services::default());
         shell.state.theme = theme;
         shell.home.pinned.push(crate::home::Pinned { name: "Models".into(), path: "~/Documents/Models".into() });
-        shell.home.recent.push(crate::home::Recent {
-            name: "Library system".into(),
-            last_view: "Overview".into(),
-            elements: 3,
-            opened: "Today, 10:24".into(),
-        });
+        shell.state.remember("Library system", std::path::Path::new("/Users/robin/Documents/Archforge/Library system.archforge"), 1_761_670_800);
         let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1400.0)).build_ui_state(
             |ui, shell: &mut Shell| {
                 shell.logic(ui.ctx());
@@ -252,7 +247,7 @@ fn create_project_asks_the_host_and_opens_the_project_it_made() {
     assert!(h.state().new_project.is_none(), "success closes the dialog");
     assert_eq!(h.state().project.as_ref().map(|p| p.path.clone()), Some(path));
     assert_eq!(h.state().title(), "Commerce platform — Archforge");
-    assert_eq!(h.state().home.recent.first().map(|r| r.name.as_str()), Some("Commerce platform"));
+    assert_eq!(h.state().state.recent.first().map(|r| r.name.as_str()), Some("Commerce platform"));
 }
 
 #[test]
@@ -429,7 +424,7 @@ fn open_project_asks_the_picker_and_the_host_and_shows_the_model_it_read() {
     h.run_steps(4);
     let shell = h.state();
     assert_eq!(shell.title(), "Shop — Archforge");
-    assert_eq!(shell.home.recent.first().map(|r| r.name.as_str()), Some("Shop"));
+    assert_eq!(shell.state.recent.first().map(|r| r.name.as_str()), Some("Shop"));
     let session = shell.session.as_ref().expect("the model read opens");
     assert!(session.doc().alive().any(|o| archforge_er::rules::name_of(session.doc(), o) == "shop"));
     // Changes the project held but never committed show as unsaved; what was read is not handed
@@ -591,6 +586,69 @@ fn eight_tabs_stay_left_of_help_at_every_width_down_to_the_smallest_window() {
         let shown = rect_of(&h, &format!("workspace.header.project.{}.close", crate::MAX_TABS - 1));
         assert!(shown.right() <= help.left(), "{w}: the shown tab's close button at {shown:?}");
     }
+}
+
+#[test]
+fn the_recent_list_keeps_each_project_once_newest_first_and_drops_what_it_cannot_take() {
+    let mut state = UiState::default();
+    for i in 0..20u64 {
+        state.remember(&format!("P{i}"), &std::env::temp_dir().join(format!("P{i}.archforge")), i);
+    }
+    assert_eq!(state.recent.len(), crate::state::MAX_RECENT);
+    assert_eq!(state.recent[0].name, "P19");
+    state.remember("P15", &std::env::temp_dir().join("P15.archforge"), 100);
+    assert_eq!((state.recent[0].name.as_str(), state.recent[0].opened), ("P15", 100));
+    assert_eq!(state.recent.iter().filter(|r| r.name == "P15").count(), 1, "once");
+    // A preferences file may hold anything: what the window does not take is dropped.
+    let at = |file: &str| std::env::temp_dir().join(file);
+    let entry = |name: &str, path: std::path::PathBuf| crate::state::RecentProject { name: name.into(), path, opened: 1 };
+    let long = "x".repeat(230);
+    state.recent = vec![
+        entry("Good", at("Good.archforge")),
+        entry(&long, at("Long.archforge")),
+        entry("", at("Nameless.archforge")),
+        entry("Relative", "relative/path.archforge".into()),
+        entry("Two\nlines", at("Lines.archforge")),
+        entry("Tab\there", at("Tab.archforge")),
+        entry(&"x".repeat(500), at("TooLong.archforge")),
+        entry("Again", at("Good.archforge")),
+    ];
+    state.sanitize();
+    assert_eq!(state.recent.iter().map(|r| r.name.as_str()).collect::<Vec<_>>(), ["Good", long.as_str()], "a long valid name stays");
+    // One entry of the wrong shape is left out, not the whole state.
+    let read: UiState =
+        serde_json::from_str(r#"{"theme":"dark","recent":[{"name":"Kept","path":"/k.archforge","opened":5},{"name":null,"opened":-1},7]}"#).unwrap();
+    assert_eq!(read.theme, ThemeKind::Dark);
+    assert_eq!(read.recent.iter().filter(|r| r.name == "Kept").count(), 1);
+    assert_eq!(crate::home::ago(0, 30), "Just now");
+    assert_eq!(crate::home::ago(0, 120), "2 minutes ago");
+    assert_eq!(crate::home::ago(0, 3_600), "1 hour ago");
+    assert_eq!(crate::home::ago(0, 90_000), "Yesterday");
+    assert_eq!(crate::home::ago(0, 3 * 86_400), "3 days ago");
+}
+
+#[test]
+fn a_recent_project_opens_from_its_row_or_shows_its_tab() {
+    let (mut h, host) = saving_harness(None, None);
+    h.state_mut().state.remember("Shop", std::path::Path::new("/tmp/Shop.archforge"), 1);
+    h.run_steps(2);
+    let at = rect_of(&h, "home.recent.0").center();
+    click(&mut h, at);
+    h.run_steps(2);
+    let (path, tx) = host.opens.lock().unwrap().pop().expect("the row asks the host to open its project");
+    assert_eq!(path, std::path::PathBuf::from("/tmp/Shop.archforge"));
+    tx.send(Ok(crate::Opened { name: "Shop".into(), path, ..Default::default() })).unwrap();
+    h.run_steps(4);
+    assert_eq!(h.state().title(), "Shop — Archforge");
+    // On Home again, the row of the open project shows its tab without asking the host.
+    let at = rect_of(&h, "workspace.header.home").center();
+    click(&mut h, at);
+    h.run_steps(2);
+    let at = rect_of(&h, "home.recent.0").center();
+    click(&mut h, at);
+    h.run_steps(2);
+    assert!(host.opens.lock().unwrap().is_empty());
+    assert_eq!(h.state().active, Some(0));
 }
 
 #[test]

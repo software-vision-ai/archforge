@@ -7,7 +7,6 @@ str		Open…	打开…
 str		Save	存储
 str		{name} — Archforge	{name} — Archforge
 # 主页
-plural		{n} element	{n} 个元素
 str		Recent projects	最近的项目
 str		Open project	打开项目
 str		Close project	关闭项目
@@ -195,6 +194,7 @@ str		Not saved	未保存
 str		Changes could not be written to the project	无法将更改写入项目
 str		The save stopped without an answer	保存未返回结果即已停止
 str		The opening stopped without an answer	打开未返回结果即已停止
+str		Close a project to open another	请先关闭一个项目再打开另一个
 str		The closing stopped without an answer	关闭未返回结果即已停止
 str		The project could not be opened: {why}	无法打开项目：{why}
 str		The project could not be closed: {why}	无法关闭项目：{why}
@@ -335,8 +335,11 @@ str		Pinned folders	已固定的文件夹
 str		Keep your project locations close.	让项目位置触手可及。
 str		Pin a folder	固定文件夹
 str		Pick up in the exact view you left.	从你离开时的视图继续。
-str		Nothing yet	暂无
 str		Just now	刚刚
+plural		{n} minute ago	{n} 分钟前
+plural		{n} hour ago	{n} 小时前
+str		Yesterday	昨天
+plural		{n} day ago	{n} 天前
 str		Last opened	上次打开
 str		No recent projects yet	暂无最近的项目
 str		Projects you create or open will appear here.	你创建或打开的项目将显示在这里。
@@ -344,7 +347,6 @@ str		Your models, your workspace.	你的模型，你的工作区。
 str		Help & shortcuts	帮助与快捷键
 str		Switch to the dark appearance	切换到深色外观
 str		Switch to the light appearance	切换到浅色外观
-str		Last view: {view}	上次视图：{view}
 str		This model	此模型
 str		This schema	此架构
 str		This table	此表

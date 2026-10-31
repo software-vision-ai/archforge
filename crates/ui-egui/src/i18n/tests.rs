@@ -172,22 +172,34 @@ fn every_languages_plural_rule_picks_the_cldr_form_at_the_edge_numbers() {
         assert_eq!(plural_forms(lang), if forms.contains(&1) { 2 } else { 1 }, "{code}");
     }
     // Spelled out for one row in every language.
-    let element = |code: &str, n: u64| {
+    let days = |code: &str, n: u64| {
         set_language(code);
-        trn("{n} element", "{n} elements", n)
+        trn("{n} day ago", "{n} days ago", n)
     };
-    let words: Vec<String> = EDGES.iter().map(|n| element("de", *n)).collect();
-    assert_eq!(words, ["0 Elemente", "1 Element", "2 Elemente", "5 Elemente", "11 Elemente", "21 Elemente", "100 Elemente", "1000 Elemente"]);
-    let words: Vec<String> = EDGES.iter().map(|n| element("fr", *n)).collect();
-    assert_eq!(words, ["0 élément", "1 élément", "2 éléments", "5 éléments", "11 éléments", "21 éléments", "100 éléments", "1000 éléments"]);
-    let words: Vec<String> = EDGES.iter().map(|n| element("es", *n)).collect();
-    assert_eq!(words, ["0 elementos", "1 elemento", "2 elementos", "5 elementos", "11 elementos", "21 elementos", "100 elementos", "1000 elementos"]);
-    let words: Vec<String> = EDGES.iter().map(|n| element("pt-PT", *n)).collect();
-    assert_eq!(words, ["0 elementos", "1 elemento", "2 elementos", "5 elementos", "11 elementos", "21 elementos", "100 elementos", "1000 elementos"]);
-    assert_eq!(element("ja", 0), "0 個の要素");
-    assert_eq!(element("ja", 21), "21 個の要素");
-    assert_eq!(element("zh-Hans", 1), "1 个元素");
-    assert_eq!(element("zh-Hans", 1000), "1000 个元素");
+    let words: Vec<String> = EDGES.iter().map(|n| days("de", *n)).collect();
+    assert_eq!(words, ["vor 0 Tagen", "vor 1 Tag", "vor 2 Tagen", "vor 5 Tagen", "vor 11 Tagen", "vor 21 Tagen", "vor 100 Tagen", "vor 1000 Tagen"]);
+    let words: Vec<String> = EDGES.iter().map(|n| days("fr", *n)).collect();
+    assert_eq!(
+        words,
+        [
+            "il y a 0 jour",
+            "il y a 1 jour",
+            "il y a 2 jours",
+            "il y a 5 jours",
+            "il y a 11 jours",
+            "il y a 21 jours",
+            "il y a 100 jours",
+            "il y a 1000 jours"
+        ]
+    );
+    let words: Vec<String> = EDGES.iter().map(|n| days("es", *n)).collect();
+    assert_eq!(words, ["hace 0 días", "hace 1 día", "hace 2 días", "hace 5 días", "hace 11 días", "hace 21 días", "hace 100 días", "hace 1000 días"]);
+    let words: Vec<String> = EDGES.iter().map(|n| days("pt-PT", *n)).collect();
+    assert_eq!(words, ["há 0 dias", "há 1 dia", "há 2 dias", "há 5 dias", "há 11 dias", "há 21 dias", "há 100 dias", "há 1000 dias"]);
+    assert_eq!(days("ja", 0), "0 日前");
+    assert_eq!(days("ja", 21), "21 日前");
+    assert_eq!(days("zh-Hans", 1), "1 天前");
+    assert_eq!(days("zh-Hans", 1000), "1000 天前");
     // Every plural row of every language gives its own form at every edge, with the count in it
     // wherever the English form has it.
     for lang in LANGUAGES {

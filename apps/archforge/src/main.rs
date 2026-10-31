@@ -54,9 +54,17 @@ struct DesktopApp {
     settings: PathBuf,
     /// The projects the shell creates: their servers stop on exit.
     projects: std::sync::Arc<projects::Projects>,
+    /// The preferences as last saved, and when the next save may run, so a change is saved a
+    /// moment after it is made (Home's recent list survives a crash), not on every frame of a drag.
+    saved: prefs::Prefs,
+    next_save: std::time::Instant,
     #[cfg(target_os = "macos")]
     menu: Option<macos_menu::NativeMenu>,
 }
+
+/// The least time between two saves of changed preferences, and after a save that failed.
+const PREFS_SETTLE: std::time::Duration = std::time::Duration::from_secs(1);
+const PREFS_RETRY: std::time::Duration = std::time::Duration::from_secs(30);
 
 impl eframe::App for DesktopApp {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
@@ -67,6 +75,27 @@ impl eframe::App for DesktopApp {
         self.shell.logic(ctx);
         if self.shell.frames == graphics::HEALTHY_AFTER_FRAMES {
             graphics::healthy(&self.marker);
+        }
+        // Changed preferences are saved once the change settles and no pointer is held (a drag
+        // saves when it ends); the state is compared in place, copied only to save.
+        if self.shell.state != self.saved.ui {
+            let held = ctx.input(|i| i.pointer.any_down());
+            let wait = self.next_save.saturating_duration_since(std::time::Instant::now());
+            if held || !wait.is_zero() {
+                ctx.request_repaint_after(wait.max(PREFS_SETTLE));
+            } else {
+                let now = prefs::capture(&self.shell);
+                match prefs::save(&self.settings, &now) {
+                    Ok(()) => {
+                        self.saved = now;
+                        self.next_save = std::time::Instant::now() + PREFS_SETTLE;
+                    }
+                    Err(e) => {
+                        log::error!("the preferences could not be saved: {e}; trying again in {} seconds", PREFS_RETRY.as_secs());
+                        self.next_save = std::time::Instant::now() + PREFS_RETRY;
+                    }
+                }
+            }
         }
     }
 
@@ -145,11 +174,14 @@ fn run() -> i32 {
                 prefs::apply(&stored, &mut shell);
                 #[cfg(target_os = "macos")]
                 let menu = native_menu(&mut shell);
+                let saved = prefs::capture(&shell);
                 Ok(Box::new(DesktopApp {
                     shell,
                     marker,
                     settings,
                     projects,
+                    saved,
+                    next_save: std::time::Instant::now() + PREFS_SETTLE,
                     #[cfg(target_os = "macos")]
                     menu,
                 }))
@@ -235,11 +267,21 @@ mod tests {
                 theme: archforge_ui_egui::theme::ThemeKind::Dark,
                 language: "de".to_string(),
                 home_banner_closed: true,
+                recent: vec![archforge_ui_egui::state::RecentProject {
+                    name: "Commerce platform".into(),
+                    path: std::env::temp_dir().join("Commerce platform.archforge"),
+                    opened: 1_761_670_800,
+                }],
                 ..archforge_ui_egui::UiState::default()
             },
         };
         let mut shell = Shell::new(archforge_ui_egui::Services::default());
         prefs::apply(&stored, &mut shell);
+        assert_eq!(prefs::capture(&shell), stored);
+        // A recent entry the window does not take (here a relative folder) is dropped on applying.
+        let mut planted = stored.clone();
+        planted.ui.recent.push(archforge_ui_egui::state::RecentProject { name: "Elsewhere".into(), path: "../elsewhere".into(), opened: 1 });
+        prefs::apply(&planted, &mut shell);
         assert_eq!(prefs::capture(&shell), stored);
         assert_eq!(archforge_ui_egui::i18n::language(), "de");
         // A language no catalogue is registered under is said and replaced with English.

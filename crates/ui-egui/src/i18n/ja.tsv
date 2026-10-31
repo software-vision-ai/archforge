@@ -7,7 +7,6 @@ str		Open…	開く…
 str		Save	保存
 str		{name} — Archforge	{name} — Archforge
 # ホーム
-plural		{n} element	{n} 個の要素
 str		Recent projects	最近使ったプロジェクト
 str		Open project	プロジェクトを開く
 str		Close project	プロジェクトを閉じる
@@ -195,6 +194,7 @@ str		Not saved	保存されていません
 str		Changes could not be written to the project	変更をプロジェクトに書き込めませんでした
 str		The save stopped without an answer	保存が応答なしで終了しました
 str		The opening stopped without an answer	開く処理が応答なしで終了しました
+str		Close a project to open another	別のプロジェクトを開くには、プロジェクトを閉じてください
 str		The closing stopped without an answer	閉じる処理が応答なしで終了しました
 str		The project could not be opened: {why}	プロジェクトを開けませんでした: {why}
 str		The project could not be closed: {why}	プロジェクトを閉じられませんでした: {why}
@@ -335,8 +335,11 @@ str		Pinned folders	ピン留めしたフォルダー
 str		Keep your project locations close.	プロジェクトの保存場所を、すぐ手の届くところに。
 str		Pin a folder	フォルダーをピン留め
 str		Pick up in the exact view you left.	中断したビューからそのまま再開できます。
-str		Nothing yet	まだありません
 str		Just now	たった今
+plural		{n} minute ago	{n} 分前
+plural		{n} hour ago	{n} 時間前
+str		Yesterday	昨日
+plural		{n} day ago	{n} 日前
 str		Last opened	最後に開いた日時
 str		No recent projects yet	最近使ったプロジェクトはまだありません
 str		Projects you create or open will appear here.	作成したり開いたりしたプロジェクトがここに表示されます。
@@ -344,7 +347,6 @@ str		Your models, your workspace.	あなたのモデル、あなたのワーク�
 str		Help & shortcuts	ヘルプとショートカット
 str		Switch to the dark appearance	ダーク表示に切り替え
 str		Switch to the light appearance	ライト表示に切り替え
-str		Last view: {view}	前回のビュー: {view}
 str		This model	このモデル
 str		This schema	このスキーマ
 str		This table	このテーブル
