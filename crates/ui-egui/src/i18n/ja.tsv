@@ -126,7 +126,7 @@ str		Problems · {n}	問題 · {n}
 str		lacks its table or its key	テーブルまたはキーがありません
 str		{column} is a key column and may be null	{column} はキー列ですが NULL を許可しています
 str		{from} to {to} is many to many	{from} から {to} は多対多です
-str		{from} to {to}: one or more is not enforced by a key	{from} から {to}: 1 以上はキーでは保証されません
+str		Every {one} has at least one {many} only on the diagram: no database key can require it. Choose zero or more if a {one} may have none.	すべての {one} に少なくとも 1 つの {many} があることは図の上だけの決まりです。データベースのキーではこれを強制できません。{one} が 1 つも持たない場合があるなら「0 以上」を選んでください。
 str		{key}: {problem}	{key}: {problem}
 str		{name} has no primary key	{name} に主キーがありません
 str		{name} has subtypes but no primary key to share	{name} にはサブタイプがありますが、共有する主キーがありません

@@ -126,7 +126,7 @@ str		Problems · {n}	Problèmes · {n}
 str		lacks its table or its key	n’a pas sa table ou sa clé
 str		{column} is a key column and may be null	{column} est une colonne clé et peut être nulle
 str		{from} to {to} is many to many	{from} vers {to} est plusieurs à plusieurs
-str		{from} to {to}: one or more is not enforced by a key	{from} vers {to} : un ou plusieurs n’est garanti par aucune clé
+str		Every {one} has at least one {many} only on the diagram: no database key can require it. Choose zero or more if a {one} may have none.	Au moins une ligne de {many} pour chaque ligne de {one} n’existe que sur le diagramme : aucune clé de base de données ne peut l’exiger. Choisissez zéro ou plusieurs si une ligne de {one} peut n’en avoir aucune.
 str		{key}: {problem}	{key}: {problem}
 str		{name} has no primary key	{name} n’a pas de clé primaire
 str		{name} has subtypes but no primary key to share	{name} a des sous-types mais aucune clé primaire à partager

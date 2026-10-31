@@ -126,7 +126,7 @@ str		Problems · {n}	问题 · {n}
 str		lacks its table or its key	缺少其表或其键
 str		{column} is a key column and may be null	{column} 是键列但允许为空
 str		{from} to {to} is many to many	{from} 到 {to} 是多对多
-str		{from} to {to}: one or more is not enforced by a key	{from} 到 {to}：一个或多个无法由键保证
+str		Every {one} has at least one {many} only on the diagram: no database key can require it. Choose zero or more if a {one} may have none.	每个 {one} 至少有一个 {many}，这只在图中成立：数据库键无法强制这一点。如果 {one} 可以没有，请选择“零或多个”。
 str		{key}: {problem}	{key}: {problem}
 str		{name} has no primary key	{name} 没有主键
 str		{name} has subtypes but no primary key to share	{name} 有子类型，但没有可共享的主键

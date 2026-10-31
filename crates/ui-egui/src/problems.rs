@@ -100,7 +100,21 @@ pub fn all(store: &Store) -> Vec<Problem> {
             if r::is_many_to_many(store, o) {
                 out.push(Problem { element: o, text: fmt(&tr("{from} to {to} is many to many"), &ends) });
             } else if r::child_end_one_or_more(store, o) {
-                out.push(Problem { element: o, text: fmt(&tr("{from} to {to}: one or more is not enforced by a key"), &ends) });
+                // Said in the model's words: which table must have at least one of which, why the
+                // database cannot hold it, and what to choose instead.
+                let one_or_more = |p| archforge_er::rules::cardinality_of(store, o, p) == Some(archforge_er::Cardinality::OneOrMore);
+                let (one, many) = if one_or_more(archforge_er::relationship::TO_END) {
+                    (end(archforge_er::relationship::FROM), end(archforge_er::relationship::TO))
+                } else {
+                    (end(archforge_er::relationship::TO), end(archforge_er::relationship::FROM))
+                };
+                let text = fmt(
+                    &tr(
+                        "Every {one} has at least one {many} only on the diagram: no database key can require it. Choose zero or more if a {one} may have none.",
+                    ),
+                    &[("one", one.as_str()), ("many", many.as_str())],
+                );
+                out.push(Problem { element: o, text });
             }
         }
     }
