@@ -148,7 +148,7 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
 
 /// The bar: the brand and the tabs (Home and the open projects) at the left; the search field,
 /// help and the avatar at the right. False when a tab was clicked (the frame ends).
-fn bar_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) -> bool {
+fn bar_row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -> bool {
     let paint = ui.painter();
     paint.rect_filled(r, 0.0, p.surface);
     paint.rect_filled(Rect::from_min_max(pos2(r.left(), r.bottom() - 1.0), r.max), 0.0, p.border);

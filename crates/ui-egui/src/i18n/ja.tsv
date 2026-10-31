@@ -13,6 +13,13 @@ str		Close project	プロジェクトを閉じる
 str		Close	閉じる
 str		Home	ホーム
 str		Search projects and actions	プロジェクトと操作を検索
+str		Projects	プロジェクト
+str		Actions	アクション
+str		No matches	一致なし
+str		Show recent projects as a gallery	最近のプロジェクトをギャラリーで表示
+str		Show recent projects as a list	最近のプロジェクトをリストで表示
+str		Sort recent projects by name	最近のプロジェクトを名前で並べ替え
+str		Sort recent projects by last opened	最近のプロジェクトを最後に開いた順で並べ替え
 # ワークスペース
 str		Find an element, view, or action	要素、ビュー、操作を検索
 str		No schemas yet	スキーマはまだありません

@@ -13,6 +13,13 @@ str		Close project	关闭项目
 str		Close	关闭
 str		Home	主页
 str		Search projects and actions	搜索项目和操作
+str		Projects	项目
+str		Actions	操作
+str		No matches	无匹配项
+str		Show recent projects as a gallery	以图库显示最近的项目
+str		Show recent projects as a list	以列表显示最近的项目
+str		Sort recent projects by name	按名称排序最近的项目
+str		Sort recent projects by last opened	按上次打开时间排序最近的项目
 # 工作区
 str		Find an element, view, or action	查找元素、视图或操作
 str		No schemas yet	还没有架构

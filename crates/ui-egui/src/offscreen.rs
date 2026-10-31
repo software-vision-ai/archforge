@@ -10,6 +10,8 @@ pub enum Screen {
     Home,
     /// Home with a pinned folder and four recent projects, shown as a gallery.
     HomeGallery,
+    /// The same with its search open, nothing typed yet.
+    HomeSearch,
     /// The New project dialog over Home, a name typed and the usual folder.
     NewProject,
     /// The same after a creation failed for want of Dolt.
@@ -76,7 +78,7 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
     });
     let mut shell = Shell::new(Services { user_name: Some("Jordan Dale".into()), ids: Some(ids), ..Services::default() });
     shell.state.theme = theme;
-    if screen == Screen::HomeGallery {
+    if matches!(screen, Screen::HomeGallery | Screen::HomeSearch) {
         shell.services.projects_folder = Some(Folder { path: "/Users/robin/Documents/Archforge".into(), label: "Documents / Archforge".into() });
         let now = crate::home::now();
         for (name, ago) in [("Billing", 9 * 86_400), ("Warehouse", 2 * 86_400), ("Customer care", 3 * 3_600), ("Commerce platform", 600)] {
@@ -84,8 +86,9 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
         }
         shell.state.recent_view = crate::state::RecentView::Gallery;
         shell.state.pin(std::path::Path::new("/Users/robin/Projects/Architecture"));
+        shell.home_search.open = screen == Screen::HomeSearch;
     }
-    if !matches!(screen, Screen::Home | Screen::HomeGallery | Screen::NewProject | Screen::NewProjectFailed) {
+    if !matches!(screen, Screen::Home | Screen::HomeGallery | Screen::HomeSearch | Screen::NewProject | Screen::NewProjectFailed) {
         shell.services.projects_folder = Some(Folder { path: "/Users/robin/Documents/Archforge".into(), label: "Documents / Archforge".into() });
         shell.open_project(crate::Opened {
             name: "Commerce platform".into(),

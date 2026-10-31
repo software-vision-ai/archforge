@@ -14,6 +14,7 @@ pub mod editing;
 pub mod explorer;
 pub mod fonts;
 pub mod home;
+pub mod home_search;
 pub mod i18n;
 pub mod indexes;
 pub mod keys;
@@ -210,6 +211,8 @@ pub struct Shell {
     last_title: String,
     /// Logical pixels at the top the host draws over (a full-size-content title bar).
     pub top_inset: f32,
+    /// Home's search field and its list.
+    pub home_search: home_search::Search,
     /// The New project dialog, while it is open over Home.
     pub new_project: Option<new_project::Dialog>,
     /// The open projects, one tab each, in the bar's order; the one shown has its state in the
@@ -265,6 +268,7 @@ impl Shell {
             applied_theme: None,
             last_title: String::new(),
             top_inset: 0.0,
+            home_search: home_search::Search::default(),
             new_project: None,
             tabs: Vec::new(),
             active: None,

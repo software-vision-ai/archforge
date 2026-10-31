@@ -13,6 +13,13 @@ str		Close project	Fechar projeto
 str		Close	Fechar
 str		Home	Início
 str		Search projects and actions	Pesquisar projetos e ações
+str		Projects	Projetos
+str		Actions	Ações
+str		No matches	Sem resultados
+str		Show recent projects as a gallery	Mostrar os projetos recentes em galeria
+str		Show recent projects as a list	Mostrar os projetos recentes em lista
+str		Sort recent projects by name	Ordenar os projetos recentes por nome
+str		Sort recent projects by last opened	Ordenar os projetos recentes pela última abertura
 # Área de trabalho
 str		Find an element, view, or action	Encontrar um elemento, vista ou ação
 str		No schemas yet	Ainda sem esquemas

@@ -761,6 +761,58 @@ fn a_folder_whose_path_is_not_text_is_neither_pinned_nor_listed_and_the_preferen
 }
 
 #[test]
+fn homes_search_finds_projects_and_actions_and_runs_them_from_the_keyboard() {
+    let (mut h, host) = saving_harness(None, None);
+    for (name, opened) in [("Shop", 2), ("Library", 1)] {
+        h.state_mut().state.remember(name, &std::path::PathBuf::from(format!("/tmp/{name}.archforge")), opened);
+    }
+    h.run_steps(2);
+    let results = |h: &Harness<'static, Shell>| ids(h).iter().filter(|i| i.starts_with("home.header.search.result.")).count();
+    assert_eq!(results(&h), 0, "closed until asked");
+    // A click opens it: the recent projects and every action, no query needed.
+    let at = rect_of(&h, "home.header.search").center();
+    click(&mut h, at);
+    h.run_steps(2);
+    assert!(h.state().home_search.open);
+    assert!(results(&h) >= 2 + 4, "{:?}", ids(&h));
+    // Typing narrows the list; Enter runs the first match.
+    h.event(egui::Event::Text("shop".into()));
+    h.run_steps(2);
+    assert_eq!(results(&h), 1, "only Shop: {:?}", ids(&h));
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    h.run_steps(2);
+    let (path, _tx) = host.opens.lock().unwrap().pop().expect("Enter opened the project");
+    assert_eq!(path, std::path::PathBuf::from("/tmp/Shop.archforge"));
+    assert!(!h.state().home_search.open, "running a result closes the search");
+    // The shortcut opens it again; an action runs from the keyboard.
+    key(&mut h, egui::Key::K, egui::Modifiers::COMMAND);
+    h.run_steps(2);
+    assert!(h.state().home_search.open);
+    h.event(egui::Event::Text("dark".into()));
+    h.run_steps(2);
+    assert_eq!(results(&h), 1);
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    h.run_steps(2);
+    assert!(h.state().state.theme.is_dark());
+    // The arrows move the highlight round the list; Esc closes and forgets the query.
+    key(&mut h, egui::Key::K, egui::Modifiers::COMMAND);
+    h.run_steps(2);
+    key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+    key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+    h.run_steps(1);
+    assert_eq!(h.state().home_search.highlight, 2);
+    key(&mut h, egui::Key::ArrowUp, egui::Modifiers::NONE);
+    h.run_steps(1);
+    assert_eq!(h.state().home_search.highlight, 1);
+    h.event(egui::Event::Text("zzz".into()));
+    h.run_steps(2);
+    assert_eq!(results(&h), 0, "no matches");
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    h.run_steps(2);
+    assert!(!h.state().home_search.open && h.state().home_search.query.is_empty());
+}
+
+#[test]
 fn at_most_eight_projects_open_at_once() {
     let (mut h, host) = saving_harness(None, Some("/tmp/Ninth.archforge"));
     for i in 0..crate::MAX_TABS {
