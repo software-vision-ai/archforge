@@ -812,7 +812,10 @@ fn entity_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
         ux::text_mid(&paint, after, mid + 0.5, &col.ty, types::CAPTION, p.text_secondary, Some((row.right() - after - 32.0).max(0.0)));
         let id = format!("workspace.properties.column.{}", col.id);
         if edit_button(shell, ui, p, row, &id, resp.contains_pointer()) || resp.double_clicked() {
+            select_element(shell, col.id);
             open_column(shell, entity_id, Some(col.id));
+        } else if resp.clicked() {
+            select_element(shell, col.id);
         }
         y += ROW;
     }
@@ -843,6 +846,22 @@ fn entity_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y
 pub(crate) fn selected_id(shell: &Shell) -> Option<Uuid> {
     let s = shell.session.as_ref()?;
     s.view().selection.first().and_then(|o| s.doc().uuid(*o).ok())
+}
+
+/// Selects an element a Properties row lists, so the Models tree and the canvas mark it as they
+/// would for a click there; its table and schema open in the tree so its row shows.
+pub(crate) fn select_element(shell: &mut Shell, id: Uuid) {
+    if let Some(store) = shell.session.as_ref().map(|s| s.doc())
+        && let Some(o) = store.by_uuid(id)
+    {
+        let parents = [archforge_er::rules::entity_of(store, o), archforge_er::rules::schema_of(store, o)];
+        for parent in parents.into_iter().flatten().filter_map(|p| store.uuid(p).ok()) {
+            shell.explorer.collapsed.remove(&parent);
+        }
+    }
+    if let Err(e) = run(shell, "view.select", json!({ "ids": [id.to_string()] })) {
+        shell.panels.notice = Some(e);
+    }
 }
 
 /// A list row's edit button at its right end. Only it, or a double click on the row, opens the
@@ -1959,8 +1978,16 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, 
     // or selection starts at the top, an editor that opens is brought into view, the wheel over
     // the body moves it within its content.
     let body = Rect::from_min_max(pos2(r.left(), body_y), r.max);
-    if shell.panels.scrolled_for != Some((panel, s.id)) {
-        shell.panels.scrolled_for = Some((panel, s.id));
+    // A column shows its table's page, so moving between a table and its columns keeps the scroll.
+    let page = match (s.class, shell.session.as_ref(), s.obj) {
+        (Some(c), Some(session), Some(o)) if c == archforge_er::ATTRIBUTE => {
+            let store = session.doc();
+            archforge_er::rules::entity_of(store, o).and_then(|e| store.uuid(e).ok())
+        }
+        _ => s.id,
+    };
+    if shell.panels.scrolled_for != Some((panel, page)) {
+        shell.panels.scrolled_for = Some((panel, page));
         shell.panels.scroll = 0.0;
     }
     let open = open_editors(&shell.panels);

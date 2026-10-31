@@ -1397,7 +1397,7 @@ fn apply_closes_a_new_columns_editor_after_a_type_is_picked_from_the_list() {
 }
 
 #[test]
-fn selecting_a_column_never_opens_its_editor_only_its_edit_button_does_and_selecting_elsewhere_closes_it() {
+fn a_column_row_selects_its_column_only_its_edit_button_opens_the_editor_and_selecting_elsewhere_closes_it() {
     let (mut h, customer) = table_harness();
     let select = |h: &mut Harness<'static, Shell>, id: &str| {
         let s = h.state_mut().session.as_mut().unwrap();
@@ -1411,14 +1411,33 @@ fn selecting_a_column_never_opens_its_editor_only_its_edit_button_does_and_selec
     select(&mut h, &email);
     h.run();
     assert!(h.state().panels.column.is_none(), "selecting a column only marks its row: {:?}", h.state().panels.column);
+    // A click on a row selects its column, as the tree and the canvas do, and opens its table in
+    // the tree so the row there shows too; it does not open the editor.
+    let customer_id = archforge_mof::Uuid::parse(&customer).unwrap();
+    select(&mut h, &customer);
+    h.state_mut().explorer.collapsed.insert(customer_id);
+    h.run();
     let at = rect_of(&h, &format!("workspace.properties.column.{email}")).center();
     click(&mut h, at);
     h.run();
-    assert!(h.state().panels.column.is_none(), "a click on the row does not open it either");
+    assert_eq!(selected_name(&h), "email", "the row's click selects its column");
+    assert!(!h.state().explorer.collapsed.contains(&customer_id), "its table opens in the tree");
+    assert!(ids(&h).iter().any(|i| *i == format!("workspace.explorer.row.{email}")), "{:?}", ids(&h));
+    assert!(h.state().panels.column.is_none(), "a click on the row does not open it");
     let at = rect_of(&h, &format!("workspace.properties.column.{email}.edit")).center();
     click(&mut h, at);
     h.run();
     assert!(h.state().panels.column.as_ref().is_some_and(|c| c.target.map(|t| t.to_string()) == Some(email.clone())), "the edit button opens it");
+    // The edit button of a row while the table is selected selects the column too.
+    let at = rect_of(&h, "workspace.properties.column.cancel").center();
+    click(&mut h, at);
+    select(&mut h, &customer);
+    h.run();
+    let at = rect_of(&h, &format!("workspace.properties.column.{email}.edit")).center();
+    click(&mut h, at);
+    h.run();
+    assert_eq!(selected_name(&h), "email");
+    assert!(h.state().panels.column.as_ref().is_some_and(|c| c.target.map(|t| t.to_string()) == Some(email.clone())), "and opens it");
     // Selecting the table, then the column again: the editor closed and stays closed.
     select(&mut h, &customer);
     h.run();
@@ -2421,6 +2440,11 @@ fn the_column_editor_sets_the_size_default_and_generation_and_the_heading_takes_
     assert_eq!(archforge_er::rules::generation_of(st, email), archforge_er::Generation::ComputedStored);
     assert_eq!(archforge_er::rules::text_of(st, email, archforge_er::attribute::EXPRESSION), "lower(name)");
     // The heading's description field describes the table.
+    {
+        let s = h.state_mut().session.as_mut().unwrap();
+        s.execute("view.select", &serde_json::json!({ "ids": [customer] })).unwrap();
+    }
+    h.run();
     assert!(ids(&h).iter().any(|i| i == "workspace.properties.description"));
     let at = rect_of(&h, "workspace.properties.description").center();
     click(&mut h, at);
