@@ -125,6 +125,7 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
         }
         let strip = Rect::from_min_size(full.min, vec2(full.width(), STRIP));
         let bar = Rect::from_min_size(pos2(full.left(), strip.bottom()), vec2(full.width(), BAR));
+        crate::home_search::shortcut(shell, ui.ctx());
         // The bar first, so the strip's drag area does not cover it; a tab clicked ends the frame.
         if !bar_row(shell, ui, &p, bar) {
             return;
@@ -211,7 +212,7 @@ pub(crate) fn title_strip(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect
 
 /// The bar: the brand at the left, then the tabs while projects are open; the search field, help
 /// and the avatar at the right. False when a tab was clicked (the frame ends).
-fn bar_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) -> bool {
+fn bar_row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -> bool {
     let paint = ui.painter();
     paint.rect_filled(r, 0.0, p.surface);
     paint.rect_filled(Rect::from_min_max(pos2(r.left(), r.bottom() - 1.0), r.max), 0.0, p.border);
@@ -248,7 +249,7 @@ pub(crate) fn brand(paint: &egui::Painter, p: &Palette, r: Rect) -> Rect {
 #[allow(clippy::too_many_arguments, reason = "the bar's two screens differ in their ids, placeholder and search kind")]
 pub(crate) fn bar_tail(
     shell: &mut Shell,
-    ui: &egui::Ui,
+    ui: &mut egui::Ui,
     p: &Palette,
     r: Rect,
     start: f32,
@@ -256,7 +257,8 @@ pub(crate) fn bar_tail(
     placeholder: &str,
     search_kind: &'static str,
 ) {
-    let paint = ui.painter();
+    let paint = ui.painter().clone();
+    let paint = &paint;
     let mid = bar_mid(r);
     let right = r.right();
     if let Some(initials) = shell.services.user_name.as_deref().and_then(initials) {
@@ -274,6 +276,11 @@ pub(crate) fn bar_tail(
     let start = (end - 300.0).max(start);
     if end - start >= 160.0 {
         let field = Rect::from_min_max(pos2(start, mid - 15.0), pos2(end, mid + 15.0));
+        // Home's field searches; the workspace's waits for its own search.
+        if prefix == "home.header" {
+            crate::home_search::field(shell, ui, p, field, placeholder);
+            return;
+        }
         paint.rect_filled(field, 15.0, p.page);
         paint.rect_stroke(field, 15.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
         ux::icon_mid(paint, pos2(field.left() + 18.0, mid), &icons::SEARCH, p.text_secondary);

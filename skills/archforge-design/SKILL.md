@@ -61,6 +61,9 @@ the change, and update this file in the same change.
 - Pin a folder picks a folder with the system's picker and pins it on Home, up to eight, kept in
   the preferences. A click on a pinned folder opens the project picker in it; its menu offers
   Open a project here and Unpin.
+- Home's search field (or the command key with K) opens a list under it: the recent projects,
+  the pinned folders and Home's actions, each worded for the state it is in. Every word typed must
+  be found; the arrows move, Enter runs, Esc or a click elsewhere closes.
 - The recent projects show as rows or as a gallery of cards standing in the start cards' columns,
   sorted by last opened (newest first) or by name; both choices are kept in the preferences.
 - One project holds one model, named as the project. The New project dialog asks for a name and a

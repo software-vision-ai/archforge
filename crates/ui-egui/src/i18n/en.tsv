@@ -12,6 +12,13 @@ str		Close project	Close project
 str		Close	Close
 str		Home	Home
 str		Search projects and actions	Search projects and actions
+str		Projects	Projects
+str		Actions	Actions
+str		No matches	No matches
+str		Show recent projects as a gallery	Show recent projects as a gallery
+str		Show recent projects as a list	Show recent projects as a list
+str		Sort recent projects by name	Sort recent projects by name
+str		Sort recent projects by last opened	Sort recent projects by last opened
 # Workspace
 str		Find an element, view, or action	Find an element, view, or action
 str		No schemas yet	No schemas yet

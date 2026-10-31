@@ -1,5 +1,5 @@
 //! Renders the window offscreen to a PNG, without opening one. Usage:
-//! `cargo run -p archforge-ui-egui --features snapshot --example snapshot -- <out.png> [light|dark] [width height [scale]] [--screen home|home-gallery|new-project|new-project-failed|workspace|workspace-schema|workspace-table|workspace-skills|workspace-diagram-empty|workspace-diagram|workspace-entity-new|workspace-cardinality|workspace-relationship|workspace-key-editor|workspace-column-editor|workspace-index-editor|workspace-mapping-table|workspace-schema-types|workspace-subtypes|workspace-schema-objects|workspace-cross-schema|workspace-column-selected]`
+//! `cargo run -p archforge-ui-egui --features snapshot --example snapshot -- <out.png> [light|dark] [width height [scale]] [--screen home|home-gallery|home-search|new-project|new-project-failed|workspace|workspace-schema|workspace-table|workspace-skills|workspace-diagram-empty|workspace-diagram|workspace-entity-new|workspace-cardinality|workspace-relationship|workspace-key-editor|workspace-column-editor|workspace-index-editor|workspace-mapping-table|workspace-schema-types|workspace-subtypes|workspace-schema-objects|workspace-cross-schema|workspace-column-selected]`
 
 use archforge_ui_egui::offscreen::Screen;
 use archforge_ui_egui::theme::ThemeKind;
@@ -20,6 +20,7 @@ fn run() -> Result<(), String> {
         screen = match args.get(at + 1).map(String::as_str) {
             Some("home") => Screen::Home,
             Some("home-gallery") => Screen::HomeGallery,
+            Some("home-search") => Screen::HomeSearch,
             Some("new-project") => Screen::NewProject,
             Some("new-project-failed") => Screen::NewProjectFailed,
             Some("workspace") => Screen::Workspace,
@@ -42,7 +43,7 @@ fn run() -> Result<(), String> {
             Some("workspace-relationship") => Screen::WorkspaceRelationship,
             other => {
                 return Err(format!(
-                    "--screen {other:?} is not home, home-gallery, new-project, new-project-failed, workspace, workspace-schema, workspace-table, workspace-skills, workspace-diagram-empty, workspace-diagram, workspace-entity-new, workspace-cardinality, workspace-relationship, workspace-key-editor, workspace-column-editor, workspace-index-editor, workspace-mapping-table, workspace-schema-types, workspace-subtypes, workspace-schema-objects, workspace-cross-schema or workspace-column-selected; {USAGE}"
+                    "--screen {other:?} is not home, home-gallery, home-search, new-project, new-project-failed, workspace, workspace-schema, workspace-table, workspace-skills, workspace-diagram-empty, workspace-diagram, workspace-entity-new, workspace-cardinality, workspace-relationship, workspace-key-editor, workspace-column-editor, workspace-index-editor, workspace-mapping-table, workspace-schema-types, workspace-subtypes, workspace-schema-objects, workspace-cross-schema or workspace-column-selected; {USAGE}"
                 ));
             }
         };
