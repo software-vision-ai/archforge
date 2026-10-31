@@ -40,10 +40,11 @@ fn home_draws_in_both_appearances_with_every_control_registered() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let h = harness(theme);
         let ids = ids(&h);
-        for id in ["strip.home", "strip.theme", "home.header.search", "home.open-project", "home.pin-folder", "home.banner.close"] {
+        for id in ["strip.home", "strip.theme", "home.header.search", "home.start.open-project", "home.pin-folder", "home.banner.close"] {
             assert!(ids.iter().any(|i| i == id), "{theme:?}: {id} in {ids:?}");
         }
         assert_eq!(ids.iter().filter(|i| i.starts_with("home.start.")).count(), 4, "the four start cards");
+        assert!(!ids.iter().any(|i| i == "home.open-project"), "{theme:?}: no Open project button in the welcome");
         assert_eq!(h.ctx.theme(), if theme.is_dark() { egui::Theme::Dark } else { egui::Theme::Light });
     }
 }
@@ -414,7 +415,7 @@ fn open_project_asks_the_picker_and_the_host_and_shows_the_model_it_read() {
         host.written.lock().unwrap().pop().unwrap().1
     };
     let (mut h, host) = saving_harness(None, Some("/Users/robin/Documents/Archforge/Shop.archforge"));
-    let at = rect_of(&h, "home.open-project").center();
+    let at = rect_of(&h, "home.start.open-project").center();
     click(&mut h, at);
     h.run_steps(2);
     let (path, tx) = host.opens.lock().unwrap().pop().expect("the host was asked to open");
@@ -449,7 +450,7 @@ fn a_project_that_never_held_a_model_opens_with_a_fresh_one() {
 #[test]
 fn a_failed_opening_says_why_on_home_and_a_cancelled_picker_opens_nothing() {
     let (mut h, host) = saving_harness(None, None);
-    let at = rect_of(&h, "home.open-project").center();
+    let at = rect_of(&h, "home.start.open-project").center();
     click(&mut h, at);
     assert!(host.opens.lock().unwrap().is_empty(), "no folder chosen, nothing asked");
     let (mut h, host) = saving_harness(None, Some("/tmp/Broken.archforge"));
@@ -510,7 +511,7 @@ fn projects_open_in_tabs_that_keep_their_models_and_home_keeps_them_open() {
     click(&mut h, at);
     h.run_steps(2);
     assert!(h.state().project.is_none() && h.state().tabs.len() == 2);
-    assert!(ids(&h).iter().any(|i| i == "home.open-project"));
+    assert!(ids(&h).iter().any(|i| i == "home.start.open-project"));
     let at = rect_of(&h, "workspace.header.project.1").center();
     click(&mut h, egui::pos2(at.x - 20.0, at.y));
     h.run_steps(2);
@@ -555,7 +556,7 @@ fn projects_open_in_tabs_that_keep_their_models_and_home_keeps_them_open() {
     host.closings.lock().unwrap().pop().unwrap().send(Ok(())).unwrap();
     h.run_steps(2);
     assert!(h.state().tabs.is_empty() && h.state().project.is_none());
-    assert!(ids(&h).iter().any(|i| i == "home.open-project"), "Home after the last tab");
+    assert!(ids(&h).iter().any(|i| i == "home.start.open-project"), "Home after the last tab");
 }
 
 #[test]
@@ -1121,7 +1122,7 @@ fn the_rails_switch_the_explorer_and_the_panel_and_home_closes_the_project() {
     let at = rect_of(&h, "workspace.header.home").center();
     click(&mut h, at);
     assert!(h.state().project.is_none() && h.state().session.is_none(), "Home shows instead of the project");
-    assert!(ids(&h).iter().any(|i| i == "home.open-project"), "Home is back");
+    assert!(ids(&h).iter().any(|i| i == "home.start.open-project"), "Home is back");
     assert_eq!(h.state().tabs.len(), 1, "the project stays open in its tab");
 }
 
