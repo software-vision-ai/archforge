@@ -39,7 +39,12 @@ redefines `isAbstract`), the redefining property is the class's: `class::IS_ABST
 **Public API.** `metamodel()`, `universe()`, the constants, the structs and enums, `UmlSlabs`,
 `TABLES`, `JUNCTIONS`, `INDEX`, `URI`, `VERSION`, `CONTENT_HASH`; `UmlNotation`, `ALONE`,
 `CLASS_DIAGRAM`, `CLASS_SIZE`, `registry`, `commands::{specs, packages, classes, package_of,
-remove_elements, MAX_NAME}`, `figures::{card, line, ends, text_slots, slot_text, attribute_text,
+remove_elements, MAX_NAME}`, `members::{specs, attributes, operations, parameters,
+parse_multiplicity, BUILT_IN, TYPES, MAX_PARAMETERS, MAX_BOUND}` (`uml.class.{set, get}`,
+`uml.attribute.{add, set, move}`, `uml.operation.{add, set, move}`, `uml.type.list`; a type is an
+element's id or a built-in type's name, Integer, String, Boolean, Real or UnlimitedNatural, made in
+the package Types the first time it is used; a multiplicity is typed, `1`, `0..1`, `*`, `1..*`,
+`2..5`; members are removed through `element.remove`), `figures::{card, line, ends, text_slots, slot_text, attribute_text,
 operation_text, multiplicity, visibility, member_ends, navigable}` (a class's card with its
 members' visibility, type and multiplicity, abstract names slanted; an association's line with its
 name, roles, multiplicities, an arrow at an end only it navigates to and a diamond at the whole of
