@@ -4617,12 +4617,13 @@ fn a_new_project_makes_a_class_diagram_in_three_steps_and_its_class_tool_places_
     assert_eq!(class_diagram_shown(&h), (archforge_uml::CLASS_DIAGRAM.to_string(), Vec::new()), "an empty class diagram is open");
     let st = h.state().session.as_ref().unwrap().doc();
     assert_eq!(archforge_uml::commands::packages(st).iter().map(|p| archforge_core::name_of(st, *p)).collect::<Vec<_>>(), ["Domain"]);
-    // Its toolbar: Class, Note and Link note; ER's tools and its key status are not there.
+    // Its toolbar: Class, Relationship with its kinds, Note and Link note; ER's tools and its key
+    // status are not there.
     let found = ids(&h);
-    for tool in ["select", "pan", "class", "note", "link", "grid", "arrange"] {
+    for tool in ["select", "pan", "class", "relationship", "relationship-kinds", "note", "link", "grid", "arrange"] {
         assert!(found.iter().any(|i| *i == format!("workspace.tools.{tool}")), "{tool}");
     }
-    for er in ["entity", "relationship", "relationship-types", "key-status"] {
+    for er in ["entity", "relationship-types", "key-status"] {
         assert!(!found.iter().any(|i| *i == format!("workspace.tools.{er}")), "{er}");
     }
     // A click in Select adds nothing; with the Class tool it places a class, named in place.
@@ -5057,4 +5058,150 @@ fn a_class_dragged_from_models_onto_a_second_diagram_stays_one_element_and_leave
     h.state_mut().session.as_mut().unwrap().undo().unwrap();
     let st = h.state().session.as_ref().unwrap().doc();
     assert!(st.by_uuid(customer).is_some_and(|c| st.is_alive(c)), "undo brings it back");
+}
+
+/// The sample class model open, with the node of each class on its diagram by name.
+fn related_sample() -> (Harness<'static, Shell>, std::collections::BTreeMap<String, String>) {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    crate::uml_ui::open_sample(h.state_mut()).unwrap();
+    h.run();
+    let st = h.state().session.as_ref().unwrap().doc();
+    let d = st.by_uuid(h.state().canvas.active.unwrap()).unwrap();
+    let nodes = st
+        .list(d, archforge_diagram::diagram::NODE)
+        .unwrap()
+        .iter()
+        .filter_map(archforge_mof::Value::as_ref)
+        .filter_map(|n| {
+            let c = st.get(n, archforge_diagram::node::ELEMENT).ok()?.as_ref()?;
+            Some((archforge_core::name_of(st, c), st.uuid(n).ok()?.to_string()))
+        })
+        .collect();
+    (h, nodes)
+}
+
+/// The relationships of the class named `name`, as the agent's tool lists them.
+fn related(h: &mut Harness<'static, Shell>, name: &str) -> Vec<serde_json::Value> {
+    let s = h.state_mut().session.as_mut().unwrap();
+    let st = s.doc();
+    let c = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(st, *o) == name).unwrap();
+    let id = st.uuid(c).unwrap().to_string();
+    s.execute("uml.relationship.list", &serde_json::json!({ "class": id })).unwrap().value["relationships"].as_array().unwrap().clone()
+}
+
+fn edge_count(h: &Harness<'static, Shell>) -> usize {
+    let st = h.state().session.as_ref().unwrap().doc();
+    st.list(st.by_uuid(h.state().canvas.active.unwrap()).unwrap(), archforge_diagram::diagram::EDGE).unwrap().len()
+}
+
+#[test]
+fn the_relationship_tool_draws_the_kind_its_menu_chose_refuses_a_cycle_and_a_drop_on_empty_canvas_makes_a_class() {
+    let (mut h, nodes) = related_sample();
+    let node = |h: &Harness<'static, Shell>, name: &str| rect_of(h, &format!("workspace.canvas.node.{}", nodes[name])).center();
+    let before = edge_count(&h);
+    // The chevron's menu: Composition.
+    let at = rect_of(&h, "workspace.tools.relationship-kinds").center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.relate.composition").center();
+    click(&mut h, at);
+    assert_eq!(h.state().canvas.uml_relation, crate::uml_relate::Relate::Composition);
+    assert!(!h.state().canvas.popover, "a pick closes the menu");
+    // Drawn from the whole, Catalog, to the part, Customer: one step, the line on the diagram.
+    let at = rect_of(&h, "workspace.tools.relationship").center();
+    click(&mut h, at);
+    let (from, to) = (node(&h, "Catalog"), node(&h, "Customer"));
+    drag(&mut h, from, to);
+    assert_eq!(edge_count(&h), before + 1, "notice {:?}", h.state().canvas.notice);
+    let composed =
+        related(&mut h, "Catalog").into_iter().find(|r| r["to"].is_string() && r["ends"][1]["aggregation"] == "composite").expect("the composition");
+    assert_eq!(composed["kind"], "association");
+    assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Select, "the tool hands back to Select");
+    h.state_mut().session.as_mut().unwrap().undo().unwrap();
+    assert_eq!(edge_count(&h), before);
+    h.state_mut().session.as_mut().unwrap().redo().unwrap();
+    h.run();
+    assert_eq!(edge_count(&h), before + 1);
+    // A generalization that would make a cycle is refused and said; nothing is drawn.
+    h.state_mut().canvas.uml_relation = crate::uml_relate::Relate::Generalization;
+    let at = rect_of(&h, "workspace.tools.relationship").center();
+    click(&mut h, at);
+    let (from, to) = (node(&h, "Payment"), node(&h, "CardPayment"));
+    drag(&mut h, from, to);
+    assert_eq!(edge_count(&h), before + 1);
+    let notice = h.state().canvas.notice.clone().expect("the refusal is said");
+    assert!(notice.contains("cycle"), "{notice}");
+    // A dependency dropped on empty canvas: a new class there, its name open for typing.
+    h.state_mut().canvas.uml_relation = crate::uml_relate::Relate::Dependency;
+    let at = rect_of(&h, "workspace.tools.relationship").center();
+    click(&mut h, at);
+    let from = node(&h, "Catalog");
+    let canvas = rect_of(&h, "workspace.canvas");
+    drag(&mut h, from, egui::pos2(from.x, canvas.bottom() - 60.0));
+    let rename = h.state().canvas.rename.clone().expect("the new class's name is open");
+    assert_eq!(rename.text, "Class 1");
+    assert!(related(&mut h, "Class 1").iter().any(|r| r["kind"] == "dependency"));
+    assert_eq!(edge_count(&h), before + 2);
+}
+
+#[test]
+fn a_selected_associations_ends_are_set_in_properties_its_end_drags_to_another_class_and_delete_removes_it() {
+    let (mut h, nodes) = related_sample();
+    let paid = {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let a =
+            st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::ASSOCIATION) && archforge_core::name_of(st, *o) == "paid by").unwrap();
+        st.uuid(a).unwrap()
+    };
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [paid.to_string()] })).unwrap();
+    h.state_mut().state.show_panel(crate::state::Panel::Properties);
+    h.run();
+    let texts = painted(&h);
+    assert!(texts.iter().any(|t| t == "End at Order") && texts.iter().any(|t| t == "End at Payment"), "{texts:?}");
+    // A role typed and Enter: written to the model, one step.
+    let at = rect_of(&h, "workspace.properties.end.1.role").center();
+    click(&mut h, at);
+    h.event(egui::Event::Key { key: egui::Key::A, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::COMMAND });
+    h.event(egui::Event::Text("settlement".into()));
+    h.run();
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    let ends = |h: &mut Harness<'static, Shell>| related(h, "Payment").into_iter().find(|r| r["name"] == "paid by").unwrap()["ends"].clone();
+    assert_eq!(ends(&mut h)[1]["role"], "settlement");
+    // Composite on the Payment end: the Order end allows one, so it is fine; then not navigable.
+    let at = rect_of(&h, "workspace.properties.end.1.aggregation").center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.properties.end.1.aggregation.2").center();
+    click(&mut h, at);
+    assert_eq!(ends(&mut h)[1]["aggregation"], "composite");
+    let at = rect_of(&h, "workspace.properties.end.0.navigable").center();
+    click(&mut h, at);
+    assert_eq!(ends(&mut h)[0]["navigable"], false);
+    // Shared on the Order end too is refused, and said.
+    let at = rect_of(&h, "workspace.properties.end.0.aggregation").center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.properties.end.0.aggregation.1").center();
+    click(&mut h, at);
+    assert!(h.state().panels.notice.as_ref().is_some_and(|n| n.contains("aggregates already")), "{:?}", h.state().panels.notice);
+    assert_eq!(ends(&mut h)[0]["aggregation"], "none");
+    // The line's target end, at Payment, dragged onto Product: the association and its line move.
+    let handle = rect_of(&h, "workspace.canvas.line-end.target").center();
+    let to = rect_of(&h, &format!("workspace.canvas.node.{}", nodes["Product"])).center();
+    drag(&mut h, handle, to);
+    assert!(related(&mut h, "Product").iter().any(|r| r["name"] == "paid by"), "notice {:?}", h.state().canvas.notice);
+    assert!(!related(&mut h, "Payment").iter().any(|r| r["name"] == "paid by"));
+    let st = h.state().session.as_ref().unwrap().doc();
+    let edge = archforge_diagram::views_of(st, st.by_uuid(paid).unwrap()).1[0];
+    let target = st.get(edge, archforge_diagram::edge::TARGET).unwrap().as_ref().unwrap();
+    assert_eq!(st.uuid(target).unwrap().to_string(), nodes["Product"], "the line follows");
+    // Delete on the selected line removes it, said with Undo.
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [paid.to_string()] })).unwrap();
+    h.run();
+    let before = edge_count(&h);
+    let at = rect_of(&h, "workspace.canvas").center();
+    h.event(egui::Event::PointerMoved(at));
+    h.state_mut().canvas.focused = true;
+    key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
+    assert_eq!(edge_count(&h), before - 1);
+    assert_eq!(h.state().canvas.toast.as_ref().map(|t| t.text.as_str()), Some("Association removed"));
+    h.state_mut().session.as_mut().unwrap().undo().unwrap();
+    assert_eq!(edge_count(&h), before);
 }

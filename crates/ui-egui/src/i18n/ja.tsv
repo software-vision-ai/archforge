@@ -500,3 +500,37 @@ str		This attribute	この属性
 str		This operation	この操作
 str		Visibility	可視性
 str		Place class	クラスを配置
+# クラスの関係 (archforge-3c5.1.4)
+str		A relationship joins two classes	関係は 2 つのクラスを結びます
+str		Add association	関連を追加
+str		Add dependency	依存を追加
+str		Add generalization	汎化を追加
+str		Aggregation	集約
+str		Association	関連
+str		Association · model	関連 · モデル
+str		Client	クライアント
+str		Composite	コンポジット
+str		Composition	コンポジション
+str		Dependency	依存
+str		Dependency · model	依存 · モデル
+str		Directed association	有向関連
+str		Drag a line end onto another class.	線の端を別のクラスへドラッグします。
+str		Drag onto another class to move this end	別のクラスへドラッグしてこの端を移動
+str		End at {class}	{class} 側の端
+str		From	始点
+str		General	一般
+str		Generalization	汎化
+str		Generalization · model	汎化 · モデル
+str		Navigable	ナビゲーション可能
+str		On this association · {n}	この関連に · {n}
+str		On this dependency · {n}	この依存に · {n}
+str		On this generalization · {n}	この汎化に · {n}
+str		Relationship kinds	関係の種類
+str		Shared	共有
+str		Specific	特化
+str		Supplier	サプライヤー
+str		This association	この関連
+str		This dependency	この依存
+str		This generalization	この汎化
+str		To	終点
+str		{what} removed	{what}を削除しました

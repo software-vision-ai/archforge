@@ -499,3 +499,37 @@ str		This attribute	This attribute
 str		This operation	This operation
 str		Visibility	Visibility
 str		Place class	Place class
+# Relating classes (archforge-3c5.1.4)
+str		A relationship joins two classes	A relationship joins two classes
+str		Add association	Add association
+str		Add dependency	Add dependency
+str		Add generalization	Add generalization
+str		Aggregation	Aggregation
+str		Association	Association
+str		Association · model	Association · model
+str		Client	Client
+str		Composite	Composite
+str		Composition	Composition
+str		Dependency	Dependency
+str		Dependency · model	Dependency · model
+str		Directed association	Directed association
+str		Drag a line end onto another class.	Drag a line end onto another class.
+str		Drag onto another class to move this end	Drag onto another class to move this end
+str		End at {class}	End at {class}
+str		From	From
+str		General	General
+str		Generalization	Generalization
+str		Generalization · model	Generalization · model
+str		Navigable	Navigable
+str		On this association · {n}	On this association · {n}
+str		On this dependency · {n}	On this dependency · {n}
+str		On this generalization · {n}	On this generalization · {n}
+str		Relationship kinds	Relationship kinds
+str		Shared	Shared
+str		Specific	Specific
+str		Supplier	Supplier
+str		This association	This association
+str		This dependency	This dependency
+str		This generalization	This generalization
+str		To	To
+str		{what} removed	{what} removed

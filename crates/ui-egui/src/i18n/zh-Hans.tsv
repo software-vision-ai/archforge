@@ -500,3 +500,37 @@ str		This attribute	此属性
 str		This operation	此操作
 str		Visibility	可见性
 str		Place class	放置类
+# 关联类 (archforge-3c5.1.4)
+str		A relationship joins two classes	关系连接两个类
+str		Add association	添加关联
+str		Add dependency	添加依赖
+str		Add generalization	添加泛化
+str		Aggregation	聚合
+str		Association	关联
+str		Association · model	关联 · 模型
+str		Client	客户
+str		Composite	组合
+str		Composition	组合
+str		Dependency	依赖
+str		Dependency · model	依赖 · 模型
+str		Directed association	有向关联
+str		Drag a line end onto another class.	将线的一端拖到另一个类上。
+str		Drag onto another class to move this end	拖到另一个类上以移动此端
+str		End at {class}	{class} 端
+str		From	从
+str		General	一般
+str		Generalization	泛化
+str		Generalization · model	泛化 · 模型
+str		Navigable	可导航
+str		On this association · {n}	在此关联上 · {n}
+str		On this dependency · {n}	在此依赖上 · {n}
+str		On this generalization · {n}	在此泛化上 · {n}
+str		Relationship kinds	关系类型
+str		Shared	共享
+str		Specific	特殊
+str		Supplier	供应者
+str		This association	此关联
+str		This dependency	此依赖
+str		This generalization	此泛化
+str		To	到
+str		{what} removed	已移除{what}

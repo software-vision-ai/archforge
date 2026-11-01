@@ -84,6 +84,14 @@ pub(crate) trait DiagramKind: Sync {
     /// Opens the element's editor, at the row of its card under a double click (None: the editor's
     /// new row, as the second adorner asks).
     fn open(&self, shell: &mut Shell, element: Uuid, row: Option<usize>);
+    /// Whether a selected line's ends drag onto another element to reconnect it.
+    fn reconnects(&self) -> bool {
+        false
+    }
+    /// Moves the source or target end of the line element `element` to the element of `to_node`.
+    fn reconnect(&self, shell: &mut Shell, element: Uuid, source: bool, to_node: Uuid) {
+        let _ = (shell, element, source, to_node);
+    }
     /// Places an element dragged from the Models explorer on diagram `d`, centred on `at`.
     fn drop(&self, shell: &mut Shell, d: Obj, element: Uuid, at: (f64, f64)) {
         let _ = (shell, d, element, at);
