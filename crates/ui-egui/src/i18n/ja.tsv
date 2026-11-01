@@ -534,3 +534,5 @@ str		This dependency	この依存
 str		This generalization	この汎化
 str		To	終点
 str		{what} removed	{what}を削除しました
+# パッケージ (AR-17)
+str		Class · {package}	クラス · {package}

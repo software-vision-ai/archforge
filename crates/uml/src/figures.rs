@@ -131,11 +131,19 @@ pub fn operation_text(store: &Store, op: Obj) -> String {
     cut(text)
 }
 
-/// A class's card: its name, slanted when it is abstract, its attributes and its operations.
-pub fn card(store: &Store, c: Obj) -> Option<Card> {
+/// A class's card on `diagram`: its name, slanted when it is abstract, its attributes and its
+/// operations; a class of another package than the diagram's is drawn as an outsider, its package
+/// named in the eyebrow (AR-17).
+pub fn card(store: &Store, c: Obj, diagram: Obj) -> Option<Card> {
     if store.class_of(c).ok()? != CLASS {
         return None;
     }
+    let here = store.get(diagram, archforge_diagram::diagram::ELEMENT).ok().and_then(|v| v.as_ref()).filter(|o| store.is_alive(*o));
+    let elsewhere = crate::commands::package_of(store, c).filter(|p| here.is_some_and(|h| h != *p));
+    let eyebrow = match elsewhere {
+        Some(p) => Text::Said("Class · {package}", vec![("package", name(store, p))]),
+        None => Text::said("Class"),
+    };
     let row = |text, slanted| Row { mark: None, text, linked: false, slanted };
     let attributes = list(store, c, class::OWNED_ATTRIBUTE)
         .into_iter()
@@ -148,11 +156,11 @@ pub fn card(store: &Store, c: Obj) -> Option<Card> {
         .map(|op| row(operation_text(store, op), flag(store, op, behavioral_feature::IS_ABSTRACT)))
         .collect();
     Some(Card {
-        eyebrow: Text::said("Class"),
+        eyebrow,
         name: name(store, c),
         compartments: vec![attributes, operations],
         more: ("+ {n} more member", "+ {n} more members"),
-        elsewhere: false,
+        elsewhere: elsewhere.is_some(),
         tone: Tone::Plain,
         slanted: flag(store, c, class::IS_ABSTRACT),
     })

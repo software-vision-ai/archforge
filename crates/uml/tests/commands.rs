@@ -124,7 +124,10 @@ fn a_class_diagram_shows_its_packages_classes_and_removing_the_package_takes_the
     run(&mut s, "diagram.place", json!({ "diagram": d, "element": order, "x": 0, "y": 0 }));
     let size = s.execute("diagram.get", &json!({ "diagram": d })).unwrap().value;
     assert_eq!((size["nodes"][0]["width"].as_f64(), size["nodes"][0]["height"].as_f64()), (Some(240.0), Some(120.0)));
-    assert!(s.execute("diagram.place", &json!({ "diagram": d, "element": invoice, "x": 300, "y": 0 })).is_err(), "another package's class");
+    // Another package's class is welcome, drawn as an outsider (AR-17).
+    run(&mut s, "diagram.place", json!({ "diagram": d, "element": invoice, "x": 300, "y": 0 }));
+    let st = s.doc();
+    assert!(archforge_diagram::Notation::card(&archforge_uml::UmlNotation, st, obj(st, &invoice), obj(st, &d)).unwrap().elsewhere);
     // A card: the class's name, its attributes and its operations.
     let st = s.doc();
     let card = archforge_diagram::Notation::card(&archforge_uml::UmlNotation, st, obj(st, &order), obj(st, &d)).unwrap();

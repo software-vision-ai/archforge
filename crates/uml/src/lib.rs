@@ -65,10 +65,10 @@ impl Notation for UmlNotation {
         class == CLASS
     }
 
-    /// A package's diagram shows the package's own classes.
+    /// A package's diagram shows its own classes and, as outsiders, classes of other packages.
     fn may_show(&self, store: &Store, diagram: Obj, element: Obj) -> bool {
         let of = store.get(diagram, archforge_diagram::diagram::ELEMENT).ok().and_then(|v| v.as_ref());
-        of.is_some() && commands::package_of(store, element) == of
+        of.is_some() && commands::package_of(store, element).is_some()
     }
 
     fn default_size(&self, _class: ClassId) -> (f64, f64) {
@@ -89,8 +89,8 @@ impl Notation for UmlNotation {
     }
 
     /// A class: its name, slanted when abstract, its attributes, then its operations.
-    fn card(&self, store: &Store, element: Obj, _diagram: Obj) -> Option<Card> {
-        figures::card(store, element)
+    fn card(&self, store: &Store, element: Obj, diagram: Obj) -> Option<Card> {
+        figures::card(store, element, diagram)
     }
 
     fn line(&self, store: &Store, element: Obj) -> Option<Line> {
@@ -110,7 +110,7 @@ impl Notation for UmlNotation {
 pub static ALONE: &[&dyn Notation] = &[&UmlNotation];
 
 /// The words UML's figures say, for the shell's catalogue: the texts, and the plural.
-pub const WORDS: &[&str] = &["Class"];
+pub const WORDS: &[&str] = &["Class", "Class · {package}"];
 pub const PLURALS: &[&str] = &["+ {n} more member"];
 
 /// The command registry of UML alone: the edit area, the shared element commands, UML's, the

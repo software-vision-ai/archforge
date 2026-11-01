@@ -534,3 +534,5 @@ str		This dependency	Esta dependência
 str		This generalization	Esta generalização
 str		To	Para
 str		{what} removed	Removido: {what}
+# Pacotes (AR-17)
+str		Class · {package}	Classe · {package}
