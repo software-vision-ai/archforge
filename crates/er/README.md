@@ -191,6 +191,6 @@ view; the grid; the sweep; random sequences over model and diagram commands toge
 
 **Known lacks.** Nothing persists an ER model or its diagrams until gm2.31. No indexes, checks or
 views. A mapping table cannot yet be collapsed back into a many-to-many relationship.
-Attribute types are free text; the PostgreSQL names decide what size a type takes (`rules::type_shape`: a length for `VARCHAR`, `CHAR`, `BIT`; a precision for `TIME`, `TIMESTAMP`, `INTERVAL`; precision and scale for `NUMERIC`, `DECIMAL`), other dialects follow behind a dialect setting (owner, 2026-10-30). Every element takes a `description`, the text DDL writes as its comment.
+Attribute types are free text; the PostgreSQL names decide what size a type takes (`rules::type_shape`: a length for `VARCHAR`, `CHAR`, `BIT`, and MySQL's `BINARY` (to 255) and `VARBINARY`, which a project's own ids are; a precision for `TIME`, `TIMESTAMP`, `INTERVAL`; precision and scale for `NUMERIC`, `DECIMAL`), other dialects follow behind a dialect setting (owner, 2026-10-30). Every element takes a `description`, the text DDL writes as its comment.
 
 **Non-goals.** Drawing, storage, the canvas, MCP tools, the class model.

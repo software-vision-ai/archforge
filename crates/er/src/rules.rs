@@ -504,12 +504,13 @@ pub fn enum_default_check(store: &Store, e: Obj, default: &str) -> Option<String
 }
 
 /// What a type takes after its name, in the PostgreSQL list (owner decision 2026-10-30: this
-/// list first, other dialects behind a dialect setting later).
+/// list first, other dialects behind a dialect setting later), and MySQL's BINARY and VARBINARY,
+/// which a project's own ids are (BINARY(16), archforge-gm2.38).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TypeShape {
     /// Nothing: `INTEGER`, `TEXT`, `BOOLEAN`, `DATE`, `UUID`, …
     Plain,
-    /// A length: `VARCHAR(n)`, `CHAR(n)`, `BIT(n)`, `VARBIT(n)`.
+    /// A length: `VARCHAR(n)`, `CHAR(n)`, `BIT(n)`, `VARBIT(n)`, `BINARY(n)`, `VARBINARY(n)`.
     Length,
     /// A precision: `TIME(p)`, `TIMESTAMP(p)`, `INTERVAL(p)`.
     Precision,
@@ -523,7 +524,9 @@ pub fn type_shape(kind: &str) -> TypeShape {
     let k = kind.trim().to_ascii_lowercase();
     let k = k.split('(').next().unwrap_or("").trim();
     match k {
-        "varchar" | "character varying" | "char" | "character" | "bpchar" | "bit" | "bit varying" | "varbit" => TypeShape::Length,
+        "varchar" | "character varying" | "char" | "character" | "bpchar" | "bit" | "bit varying" | "varbit" | "binary" | "varbinary" => {
+            TypeShape::Length
+        }
         "time"
         | "timetz"
         | "timestamp"
@@ -599,7 +602,8 @@ pub fn text_of(store: &Store, o: Obj, prop: archforge_mof::PropId) -> String {
 }
 
 /// Why a column's size does not fit its type, or none: a length only where the type takes one,
-/// precision and scale likewise, each 1 to 65535 and the scale no more than the precision.
+/// precision and scale likewise, each 1 to 65535 (a BINARY's length to 255) and the scale no
+/// more than the precision.
 pub fn size_problem(kind: &str, length: Option<i64>, precision: Option<i64>, scale: Option<i64>) -> Option<(&'static str, String)> {
     let shape = type_shape(kind);
     for (key, value) in [("length", length), ("precision", precision), ("scale", scale)] {
@@ -612,6 +616,12 @@ pub fn size_problem(kind: &str, length: Option<i64>, precision: Option<i64>, sca
     let kind = if kind.is_empty() { "a type without a name" } else { kind };
     if length.is_some() && shape != TypeShape::Length {
         return Some(("length", format!("{kind} takes no length")));
+    }
+    if let Some(n) = length
+        && n > 255
+        && kind.trim().eq_ignore_ascii_case("binary")
+    {
+        return Some(("length", format!("{n} is more than the 255 bytes a BINARY holds")));
     }
     if precision.is_some() && !matches!(shape, TypeShape::Precision | TypeShape::PrecisionScale) {
         return Some(("precision", format!("{kind} takes no precision")));

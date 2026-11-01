@@ -1929,3 +1929,19 @@ fn a_schema_never_holds_two_relationships_of_one_name() {
     // What the commands leave, a project can read back.
     assert_eq!(s.doc().validate_all(), vec![]);
 }
+
+#[test]
+fn binary_and_varbinary_take_a_length() {
+    let mut s = session();
+    let sm = sample(&mut s);
+    // A project's own ids: BINARY(16).
+    let id = run(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": "uuid", "type": "BINARY", "length": 16 }));
+    let a = s.doc().by_uuid(archforge_mof::Uuid::parse(&id).unwrap()).unwrap();
+    assert_eq!(archforge_er::rules::type_display(s.doc(), a), "BINARY(16)");
+    run(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": "blob", "type": "varbinary", "length": 65535 }));
+    // BINARY holds at most 255 bytes; the size never goes into the name.
+    assert_eq!(refused_on(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": "big", "type": "BINARY", "length": 256 })), "length");
+    assert_eq!(refused_on(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": "named", "type": "BINARY(16)" })), "type");
+    // A domain on BINARY(16), as the project model uses.
+    run(&mut s, "er.domain.add", json!({ "schema": sm.schema, "name": "uuid16", "base_type": "BINARY", "length": 16 }));
+}
