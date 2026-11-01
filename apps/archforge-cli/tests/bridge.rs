@@ -62,7 +62,8 @@ fn an_agent_drives_the_application_through_the_real_binary() {
     assert!(child.wait().unwrap().success());
     assert_eq!(replies.len(), 3, "the notification is not answered: {replies:?}");
     assert_eq!(replies[0]["result"]["protocolVersion"], "2025-06-18");
-    assert_eq!(replies[1]["result"]["tools"].as_array().unwrap().len(), 8);
+    let tools = replies[1]["result"]["tools"].as_array().unwrap();
+    assert!(tools.len() > 8 && tools.iter().any(|t| t["name"] == "er_entity_add"), "the general tools and one per command");
     assert_eq!(replies[2]["result"]["isError"], false);
     assert_eq!(seen.lock().unwrap()[0], ("engine.execute".to_string(), json!({ "command": "er.entity.add", "params": { "name": "Invoice" } })));
 
