@@ -230,9 +230,9 @@ version = "0.1.0"
 dependencies = [
  "archforge-control",
  "archforge-dolt",
- "archforge-er",
  "archforge-mcp",
  "archforge-mof",
+ "archforge-notations",
  "archforge-project",
  "archforge-ui-egui",
  "craft-atomic",
@@ -254,9 +254,9 @@ version = "0.1.0"
 dependencies = [
  "archforge-control",
  "archforge-engine",
- "archforge-er",
  "archforge-mcp",
  "archforge-mof",
+ "archforge-notations",
  "serde_json",
 ]
 
@@ -345,6 +345,19 @@ name = "archforge-names"
 version = "0.1.0"
 
 [[package]]
+name = "archforge-notations"
+version = "0.1.0"
+dependencies = [
+ "archforge-core",
+ "archforge-diagram",
+ "archforge-engine",
+ "archforge-er",
+ "archforge-mof",
+ "archforge-uml",
+ "serde_json",
+]
+
+[[package]]
 name = "archforge-project"
 version = "0.1.0"
 dependencies = [
@@ -354,6 +367,8 @@ dependencies = [
  "archforge-er",
  "archforge-mof",
  "archforge-names",
+ "archforge-notations",
+ "archforge-uml",
  "log",
  "mysql",
  "serde_json",
@@ -369,6 +384,7 @@ dependencies = [
  "archforge-er",
  "archforge-mof",
  "archforge-names",
+ "archforge-notations",
  "egui",
  "egui_commonmark",
  "egui_kittest",

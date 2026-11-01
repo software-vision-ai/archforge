@@ -221,7 +221,7 @@ fn job(inner: &Inner, folder: &Path, name: &str, reply: &Sender<Result<Opened, C
         let hooks = Hooks { cancel: Some(inner.cancel.clone()), ..Hooks::default() };
         let project =
             Project::create_with(&dolt, &opts, folder, name, &inner.created_by, &archforge_project::timestamp(now), &hooks).map_err(kind)?;
-        // The model's tables come with the project; its rows follow with the first change.
+        // The project records which model it holds; each table comes with the first rows that go there.
         match schema(inner).and_then(|s| project.prepare_model(&s).map_err(kind)) {
             Ok(()) => Ok(project),
             Err(e) => {
@@ -357,15 +357,15 @@ fn close_job(inner: &Inner, path: &Path, reply: &Sender<Result<(), String>>) {
     let _ = reply.send(Ok(()));
 }
 
-/// The model's tables, described once from the ER crate's storage.
+/// The model's tables, described once from every notation's storage.
 fn schema(inner: &Inner) -> Result<Arc<ModelSchema>, CreateError> {
     let mut held = lock(&inner.schema);
     if let Some(s) = held.as_ref() {
         return Ok(s.clone());
     }
     let failed = |detail: String| CreateError::Failed { detail };
-    let universe = archforge_er::store(Box::new(|| archforge_mof::Uuid([0; 16]))).map_err(failed)?.universe().clone();
-    let (tables, junctions) = archforge_er::storage();
+    let universe = archforge_notations::store(Box::new(|| archforge_mof::Uuid([0; 16]))).map_err(failed)?.universe().clone();
+    let (tables, junctions) = archforge_notations::storage();
     let s = Arc::new(ModelSchema::new(&universe, tables, junctions).map_err(failed)?);
     *held = Some(s.clone());
     Ok(s)
@@ -657,9 +657,9 @@ mod tests {
             r[2..].copy_from_slice(&n.to_be_bytes());
             archforge_mof::Uuid::v7(1_761_670_800_000, r)
         });
-        let mut s = archforge_er::new_project_session("Commerce platform", ids).unwrap();
+        let mut s = archforge_notations::new_project_session("Commerce platform", ids).unwrap();
         s.execute("er.schema.add", &serde_json::json!({ "name": schema })).unwrap();
-        let (tables, junctions) = archforge_er::storage();
+        let (tables, junctions) = archforge_notations::storage();
         archforge_mof::rows::snapshot(s.doc(), &tables, &junctions).unwrap()
     }
 

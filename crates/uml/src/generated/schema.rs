@@ -7672,7 +7672,7 @@ pub const JUNCTIONS: &[Junction] = &[
         reference: true,
     },
     Junction {
-        name: "uml_read_link_object_end_qualifier_action_in_interruptible_region",
+        name: "uml_read_link_object_end_qualifier_action_in_interrupti_994063e2",
         class: READ_LINK_OBJECT_END_QUALIFIER_ACTION,
         prop: activity_node::IN_INTERRUPTIBLE_REGION,
         ordered: false,
@@ -8004,7 +8004,7 @@ pub const JUNCTIONS: &[Junction] = &[
         reference: true,
     },
     Junction {
-        name: "uml_remove_structural_feature_value_action_in_interruptible_region",
+        name: "uml_remove_structural_feature_value_action_in_interrupt_0c0b71c9",
         class: REMOVE_STRUCTURAL_FEATURE_VALUE_ACTION,
         prop: activity_node::IN_INTERRUPTIBLE_REGION,
         ordered: false,

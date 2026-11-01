@@ -1333,6 +1333,29 @@ fn emit_slabs(b: &Built) -> String {
     s
 }
 
+/// The longest name SQL takes for a table or a column.
+const MAX_SQL_NAME: usize = 64;
+
+/// A table's or column's name as SQL takes it: kept when it fits in 64 characters, else its first
+/// part and a stable hash of the whole (UML's list tables named after a class and a property can
+/// run longer). Two long names that still meet are refused where the names are checked.
+fn sql_name(name: String) -> String {
+    if name.len() <= MAX_SQL_NAME {
+        return name;
+    }
+    let mut h: u32 = 0x811c_9dc5;
+    for b in name.bytes() {
+        h ^= u32::from(b);
+        h = h.wrapping_mul(0x0100_0193);
+    }
+    let mut cut = MAX_SQL_NAME - 9;
+    while !name.is_char_boundary(cut) {
+        cut -= 1;
+    }
+    let head = name[..cut].trim_end_matches('_');
+    format!("{head}_{h:08x}")
+}
+
 fn emit_schema(t: &Target, b: &Built) -> String {
     let m = &b.metamodel;
     let mut s = String::from(HEADER);
@@ -1348,7 +1371,7 @@ fn emit_schema(t: &Target, b: &Built) -> String {
             continue;
         }
         let class = ClassId::new(m.index, ci as u16);
-        let table = format!("{}_{}", t.name, snake(&c.name).trim_end_matches('_'));
+        let table = sql_name(format!("{}_{}", t.name, snake(&c.name).trim_end_matches('_')));
         let _ = writeln!(
             tables,
             "    Table {{\n        name: {table:?},\n        class: {},\n        columns: &[\n            Column {{ name: \"id\", prop: None, sql: \"BINARY(16) NOT NULL PRIMARY KEY\" }},",
@@ -1363,6 +1386,7 @@ fn emit_schema(t: &Target, b: &Built) -> String {
                 if table_names.contains(&name) {
                     name.push_str("_list");
                 }
+                let name = sql_name(name);
                 let _ = writeln!(
                     junctions,
                     "    Junction {{ name: {name:?}, class: {}, prop: {}, ordered: {}, reference: {reference} }},",

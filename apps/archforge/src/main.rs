@@ -341,7 +341,7 @@ mod tests {
             n += 1;
             archforge_mof::Uuid(n.to_le_bytes())
         });
-        let session = archforge_er::new_project_session("Shop", ids).unwrap();
+        let session = archforge_notations::new_project_session("Shop", ids).unwrap();
         let infos: Vec<Value> = session.registry().infos(&session.facts()).into_iter().map(|i| serde_json::to_value(i).unwrap()).collect();
         let catalog = archforge_mcp::Catalog::new(&infos, false);
         let mut shell = Shell::new(archforge_ui_egui::Services::default());

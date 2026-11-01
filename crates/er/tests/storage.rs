@@ -78,7 +78,7 @@ fn picture(st: &Store) -> Picture {
 /// A project with a schema of every element kind, a second schema reached across, a diagram of
 /// the first, a skill and a description.
 fn rich_session() -> Session {
-    let mut s = new_project_session("Commerce platform", ids()).unwrap();
+    let mut s = session_alone("Commerce platform", ids()).unwrap();
     let shop = run(&mut s, "er.schema.add", json!({ "name": "shop" }));
     let customer = run(&mut s, "er.entity.add", json!({ "schema": shop, "name": "Customer" }));
     let key = run(&mut s, "er.attribute.add", json!({ "entity": customer, "name": "id", "type": "BIGINT", "primary_key": true }));

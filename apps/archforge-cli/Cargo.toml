@@ -14,7 +14,7 @@ path = "src/main.rs"
 
 [dependencies]
 archforge-control.workspace = true
-archforge-er.workspace = true
+archforge-notations.workspace = true
 archforge-mcp.workspace = true
 archforge-mof.workspace = true
 serde_json.workspace = true

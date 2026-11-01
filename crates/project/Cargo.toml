@@ -20,6 +20,8 @@ mysql.workspace = true
 archforge-core.workspace = true
 archforge-diagram.workspace = true
 archforge-er.workspace = true
+archforge-notations.workspace = true
+archforge-uml.workspace = true
 serde_json.workspace = true
 
 [lints]

@@ -8,9 +8,9 @@ use std::process::{Command, Stdio};
 use std::time::Duration;
 
 use archforge_dolt::{Dolt, Home, ServerOptions};
-use archforge_er::Session;
 use archforge_mof::rows;
-use archforge_mof::{Store, Uuid};
+use archforge_mof::{Store, Uuid, Value};
+use archforge_notations::Session;
 use archforge_project::{EARLIER_MODELS, Error, ModelSchema, Project, timestamp};
 use mysql::prelude::Queryable;
 use serde_json::{Value as Json, json};
@@ -63,9 +63,8 @@ fn ids(start: u64) -> Box<dyn FnMut() -> Uuid + Send> {
 }
 
 fn schema() -> ModelSchema {
-    let universe = archforge_er::store(ids(0)).unwrap().universe().clone();
-    let tables = archforge_core::TABLES.iter().chain(archforge_diagram::TABLES).chain(archforge_er::TABLES).copied().collect();
-    let junctions = archforge_core::JUNCTIONS.iter().chain(archforge_diagram::JUNCTIONS).chain(archforge_er::JUNCTIONS).copied().collect();
+    let universe = archforge_notations::store(ids(0)).unwrap().universe().clone();
+    let (tables, junctions) = archforge_notations::storage();
     ModelSchema::new(&universe, tables, junctions).unwrap()
 }
 
@@ -75,7 +74,7 @@ fn run(s: &mut Session, cmd: &str, p: Json) -> String {
 }
 
 fn model() -> Session {
-    let mut s = archforge_er::new_project_session("Commerce platform", ids(0)).unwrap();
+    let mut s = archforge_notations::new_project_session("Commerce platform", ids(0)).unwrap();
     let shop = run(&mut s, "er.schema.add", json!({ "name": "shop" }));
     let customer = run(&mut s, "er.entity.add", json!({ "schema": shop, "name": "Kunde · 顧客" }));
     run(&mut s, "er.attribute.add", json!({ "entity": customer, "name": "id", "type": "BIGINT", "primary_key": true }));
@@ -122,7 +121,7 @@ fn a_saved_model_opens_again_identical_and_the_unsaved_state_follows() {
     let again = Project::open(&env.dolt, &env.opts(), &path).unwrap();
     again.prepare_model(&schema).unwrap();
     let read = again.read_model(&schema).unwrap();
-    let mut back = archforge_er::store(ids(1 << 40)).unwrap();
+    let mut back = archforge_notations::store(ids(1 << 40)).unwrap();
     rows::restore(&mut back, &read, schema.tables(), &schema.junctions()).unwrap();
     assert_eq!(rows_of(&back, &schema), written, "the model comes back identical");
     // The last save is in the history with its message.
@@ -130,6 +129,11 @@ fn a_saved_model_opens_again_identical_and_the_unsaved_state_follows() {
     c.query_drop("USE project").unwrap();
     let newest: String = c.query_first("SELECT message FROM dolt_log ORDER BY date DESC LIMIT 1").unwrap().unwrap();
     assert_eq!(newest, "Saved by the test");
+    // The project holds the tables its rows went to, not every table of the model: a table it
+    // lacks reads as empty.
+    let held: i64 = c.query_first("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'project'").unwrap().unwrap();
+    let used = written.tables.iter().filter(|t| !t.is_empty()).count() + written.junctions.iter().filter(|j| !j.is_empty()).count();
+    assert_eq!(held as usize, used + 2, "the tables used, the settings and the list of the tables used");
     // The packet limit is the one the server is started with.
     let packet: u64 = c.query_first("SELECT @@max_allowed_packet").unwrap().unwrap();
     assert_eq!(packet, archforge_dolt::MAX_PACKET as u64);
@@ -193,11 +197,12 @@ fn a_project_of_an_earlier_archforge_gets_the_columns_and_tables_added_since() {
     c.query_drop("ALTER TABLE diagram_style DROP COLUMN `routing`").unwrap();
     c.query_drop("INSERT INTO diagram_style (id, name, fill, stroke, `text`, line) VALUES (UNHEX('00000000000000000000000000000abc'), NULL, '#FFFFFF', NULL, NULL, 2)").unwrap();
     c.query_drop("DROP TABLE core_model_skill").unwrap();
+    c.query_drop("DROP TABLE model_tables").unwrap();
     c.exec_drop("UPDATE settings SET `value` = ? WHERE `key` = 'model_schema'", (EARLIER_MODELS[EARLIER_MODELS.len() - 1],)).unwrap();
     drop(c);
     project.prepare_model(&schema).unwrap();
     let read = project.read_model(&schema).unwrap();
-    let mut back = archforge_er::store(ids(1 << 40)).unwrap();
+    let mut back = archforge_notations::store(ids(1 << 40)).unwrap();
     rows::restore(&mut back, &read, schema.tables(), &schema.junctions()).unwrap();
     let mut c = project.server().connect().unwrap();
     c.query_drop("USE project").unwrap();
@@ -207,9 +212,67 @@ fn a_project_of_an_earlier_archforge_gets_the_columns_and_tables_added_since() {
     assert_eq!(filled, (0, 0));
     let held: String = c.query_first("SELECT `value` FROM settings WHERE `key` = 'model_schema'").unwrap().unwrap();
     assert_eq!(held, schema.fingerprint(), "the fingerprint is the current one");
+    // The tables it held are the ones in use; the one it lacked is not.
+    let in_use: i64 = c.query_first("SELECT COUNT(*) FROM model_tables WHERE name IN ('diagram_style', 'core_model_skill')").unwrap().unwrap();
+    assert_eq!(in_use, 1);
     // Opened again, nothing more to add.
     project.prepare_model(&schema).unwrap();
     drop(c);
+    project.close().unwrap();
+}
+
+/// The fingerprint of the tables of the Archforge that held ER alone (before UML joined).
+const ER_ALONE: &str = "8c7ee9a29f10f219";
+
+#[test]
+fn er_and_uml_live_in_one_project_and_a_project_of_er_alone_takes_uml() {
+    assert!(EARLIER_MODELS.contains(&ER_ALONE));
+    let env = Env::new("notations");
+    let schema = schema();
+    let project = Project::create(&env.dolt, &env.opts(), &env.base.join("Projects"), "Shop", "test", &timestamp(1_761_670_800)).unwrap();
+    project.prepare_model(&schema).unwrap();
+    // As the Archforge of ER alone left it: an ER model, and that Archforge's fingerprint.
+    let s = model();
+    project.write_model(&schema, &rows_of(s.doc(), &schema)).unwrap();
+    project.commit("Saved").unwrap();
+    let mut c = project.server().connect().unwrap();
+    c.query_drop("USE project").unwrap();
+    c.exec_drop("UPDATE settings SET `value` = ? WHERE `key` = 'model_schema'", (ER_ALONE,)).unwrap();
+    c.query_drop("DROP TABLE model_tables").unwrap();
+    let path = project.path().to_path_buf();
+    drop(c);
+    project.close().unwrap();
+    // Opened by this Archforge: brought up to date, and its ER model reads back as it was.
+    let project = Project::open(&env.dolt, &env.opts(), &path).unwrap();
+    project.prepare_model(&schema).unwrap();
+    let mut st = archforge_notations::store(ids(1 << 40)).unwrap();
+    rows::restore(&mut st, &project.read_model(&schema).unwrap(), schema.tables(), &schema.junctions()).unwrap();
+    assert_eq!(rows_of(&st, &schema), rows_of(s.doc(), &schema));
+    // A UML package with a class beside the ER schema, in a folder of the same Model, with a
+    // trace link from the class to an ER table.
+    let model = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_core::MODEL)).unwrap();
+    let table = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::ENTITY)).unwrap();
+    let folder = st.create(archforge_core::FOLDER).unwrap();
+    archforge_core::FolderObj::set_name(&mut st, folder, Some("Domain")).unwrap();
+    archforge_core::ModelObj::push_member(&mut st, model, Value::Ref(folder)).unwrap();
+    let pkg = st.create(archforge_uml::PACKAGE).unwrap();
+    archforge_uml::PackageObj::set_name(&mut st, pkg, Some("sales")).unwrap();
+    archforge_core::FolderObj::push_member(&mut st, folder, Value::Ref(pkg)).unwrap();
+    let class = st.create(archforge_uml::CLASS).unwrap();
+    archforge_uml::ClassObj::set_name(&mut st, class, Some("Customer")).unwrap();
+    st.push(pkg, archforge_uml::package::PACKAGED_ELEMENT, Value::Ref(class)).unwrap();
+    archforge_core::link(&mut st, model, archforge_core::LinkKind::Realization, table, class, None).unwrap();
+    assert!(st.validate_all().is_empty(), "{:?}", st.validate_all());
+    let both = rows_of(&st, &schema);
+    project.write_model(&schema, &both).unwrap();
+    project.commit("UML joins").unwrap();
+    project.close().unwrap();
+    let project = Project::open(&env.dolt, &env.opts(), &path).unwrap();
+    project.prepare_model(&schema).unwrap();
+    let read = project.read_model(&schema).unwrap();
+    assert_eq!(read, both, "ER and UML come back side by side");
+    let session = archforge_notations::session_from_rows(&read, ids(1 << 41)).unwrap();
+    assert!(session.doc().alive().any(|o| session.doc().class_of(o).ok() == Some(archforge_uml::CLASS)));
     project.close().unwrap();
 }
 
@@ -256,8 +319,8 @@ fn a_damaged_database_is_refused_with_a_reason_and_without_reading_it() {
     // A view in place of a table.
     let e = refused(
         &mut c,
-        &["RENAME TABLE er_view TO er_view_kept", "CREATE VIEW er_view AS SELECT * FROM er_view_kept"],
-        &["DROP VIEW er_view", "RENAME TABLE er_view_kept TO er_view"],
+        &["RENAME TABLE er_entity TO er_entity_kept", "CREATE VIEW er_entity AS SELECT * FROM er_entity_kept"],
+        &["DROP VIEW er_entity", "RENAME TABLE er_entity_kept TO er_entity"],
     );
     assert!(e.contains("not a table"), "{e}");
     // A column more, or one missing.
@@ -271,6 +334,29 @@ fn a_damaged_database_is_refused_with_a_reason_and_without_reading_it() {
             "ALTER TABLE er_entity ADD COLUMN `description` MEDIUMTEXT AS (REPEAT(`name`, 1000)) VIRTUAL AFTER `id`",
         ],
         &["ALTER TABLE er_entity DROP COLUMN `description`", "ALTER TABLE er_entity ADD COLUMN `description` MEDIUMTEXT NULL AFTER `id`"],
+    );
+    assert!(e.contains("shape"), "{e}");
+    // A model table named in another case: the database finds it under either name, so it is
+    // neither read as missing nor cleared as the model's.
+    let e = refused(
+        &mut c,
+        &["RENAME TABLE er_entity TO entity_kept", "RENAME TABLE entity_kept TO ER_ENTITY"],
+        &["RENAME TABLE ER_ENTITY TO entity_kept", "RENAME TABLE entity_kept TO er_entity"],
+    );
+    assert!(e.contains("another case"), "{e}");
+    // A table far wider than any model table, beside the ones read: refused, not read short.
+    let wide: Vec<String> = (0..700).map(|i| format!("ADD COLUMN `w{i}` INT NULL")).collect();
+    let drop_wide: Vec<String> = (0..700).map(|i| format!("DROP COLUMN `w{i}`")).collect();
+    let e = refused(&mut c, &[&format!("ALTER TABLE er_entity {}", wide.join(", "))], &[&format!("ALTER TABLE er_entity {}", drop_wide.join(", "))]);
+    assert!(e.contains("more columns"), "{e}");
+    // A table the model uses, gone: refused as lost, not read as never used.
+    let e = refused(&mut c, &["RENAME TABLE er_attribute TO attribute_kept"], &["RENAME TABLE attribute_kept TO er_attribute"]);
+    assert!(e.contains("missing"), "{e}");
+    // The list of the tables in use, of another shape: a name written to it could be cut short.
+    let e = refused(
+        &mut c,
+        &["ALTER TABLE model_tables MODIFY `name` VARCHAR(63) NOT NULL"],
+        &["ALTER TABLE model_tables MODIFY `name` VARCHAR(64) NOT NULL"],
     );
     assert!(e.contains("shape"), "{e}");
     // After every repair the model reads again.
@@ -287,4 +373,4 @@ fn a_change_of_the_model_tables_keeps_the_fingerprint_it_had() {
     assert!(!EARLIER_MODELS.contains(&CURRENT));
 }
 
-const CURRENT: &str = "8c7ee9a29f10f219";
+const CURRENT: &str = "bb92f9913c8937ef";
