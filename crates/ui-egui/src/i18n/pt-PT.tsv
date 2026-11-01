@@ -177,6 +177,10 @@ str		Inherited · {n}	Herdadas · {n}
 str		every table	todas as tabelas
 str		every relationship	todas as relações
 str		every column	todas as colunas
+str		every class	todas as classes
+str		every attribute	todos os atributos
+str		every operation	todas as operações
+str		every association	todas as associações
 str		project	projeto
 str		overridden below	substituída abaixo
 str		Open the skill	Abrir a competência

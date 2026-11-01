@@ -41,7 +41,7 @@ them. A skill's `appliesTo` holds a class key such as `er.Entity` (`skills::clas
 | `link` | `pub fn link(store, owner, kind, source, target, note) -> Result<Obj, Invalid>` |
 | `destroy_with_links`, `links_of` | destroy with the links on the subtree first; those links |
 | `tag_name_free`, `problems`, `CoreProblem` | the rules |
-| `skills::SkillHost` | what the view answers: `selection_mut`, `skill_subjects`, `skill_kinds`, `typed_classes` |
+| `skills::SkillHost` | what the view answers: `selection_mut`, `skill_subjects`, `skill_kinds`, `typed_classes`, `skill_problem` (an element of a subject class that still carries none) |
 | `skills::specs::<V>()` | the commands `skill.add`, `skill.set`, `skill.set-body`, `skill.rename`, `skill.remove`, `skill.move` and the queries `skill.list`, `skill.effective`, for a notation's registry |
 | `skills::{effective_skills, EffectiveSkill, levels, aims_at, skills, skills_on, subject_of, triggers_of, name_of, model_of, skill_name_free, name_problem, text_problem, hidden, trigger_named, trigger_words, class_key, kind_by_key, class_by_key, category_of, type_matches, skill_json, problems, SkillProblem}` | the skill rules and lookups |
 | `skills::{MAX_NAME, MAX_DESCRIPTION, MAX_BODY, MAX_DIALECT, MAX_TYPE_PATTERN, MAX_TRIGGERS, CATEGORIES, NO_MODEL, NO_SKILLS}` | the limits, the type categories, the reasons a command is unavailable |
@@ -49,7 +49,7 @@ them. A skill's `appliesTo` holds a class key such as `er.Entity` (`skills::clas
 
 **Tests.** `crates/er/tests/skills.rs` (skills over ER: every command's round trip, refusals, the
 effective skills over four levels with kinds, types, triggers and an override, the cascade with a
-subject). `crates/uml/tests/core_over_uml.rs` (with the notation, since a dependency only points
+subject), `crates/uml/tests/skills.rs` (skills over UML's packages, classes and members). `crates/uml/tests/core_over_uml.rs` (with the notation, since a dependency only points
 down a layer), over the core and UML in one store: a Model with a Folder holding a UML
 Package (containment across metamodels), a comment and a tag on elements of two notations, a
 realization link between two classes; the rules refuse and change nothing; destroy with links and

@@ -177,6 +177,10 @@ str		Inherited · {n}	继承 · {n}
 str		every table	所有表
 str		every relationship	所有关系
 str		every column	所有列
+str		every class	所有类
+str		every attribute	所有属性
+str		every operation	所有操作
+str		every association	所有关联
 str		project	项目
 str		overridden below	被下方覆盖
 str		Open the skill	打开技能

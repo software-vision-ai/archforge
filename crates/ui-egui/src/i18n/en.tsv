@@ -176,6 +176,10 @@ str		Inherited · {n}	Inherited · {n}
 str		every table	every table
 str		every relationship	every relationship
 str		every column	every column
+str		every class	every class
+str		every attribute	every attribute
+str		every operation	every operation
+str		every association	every association
 str		project	project
 str		overridden below	overridden below
 str		Open the skill	Open the skill

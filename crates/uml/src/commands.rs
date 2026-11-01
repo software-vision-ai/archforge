@@ -347,7 +347,7 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
         gone += store
             .transaction(|st| {
                 let views = archforge_diagram::remove_views_of(st, o)?;
-                Ok(views + st.destroy(o)?)
+                Ok(views + archforge_core::destroy_with_links(st, o)?)
             })
             .map_err(fail)?;
     }

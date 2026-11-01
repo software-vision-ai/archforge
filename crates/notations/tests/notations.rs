@@ -251,3 +251,22 @@ fn a_model_past_one_transactions_steps_opens_again_from_its_rows() {
     busy.create(archforge_core::MODEL).unwrap();
     assert!(rows::restore_into_empty(busy, &saved, &tables, &junctions).is_err());
 }
+
+#[test]
+fn a_skill_aims_only_at_kinds_of_its_subjects_notation_and_moves_only_within_it() {
+    let mut s = new_project_session("Shop", ids(0)).unwrap();
+    let schema = id(&mut s, "er.schema.add", json!({ "name": "shop" }));
+    let package = id(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+    let class = id(&mut s, "uml.class.add", json!({ "package": package, "name": "Order" }));
+    let refused = |s: &mut Session, cmd: &str, p: Json| s.execute(cmd, &p).map(|o| o.value.to_string()).unwrap_err().to_string();
+    let e = refused(&mut s, "skill.add", json!({ "subject": package, "name": "Tables", "applies_to": "table" }));
+    assert!(e.contains("class, attribute, operation, association") && !e.contains("column"), "{e}");
+    let e = refused(&mut s, "skill.add", json!({ "subject": schema, "name": "Classes", "applies_to": "class" }));
+    assert!(e.contains("table, relationship, column") && !e.contains("operation"), "{e}");
+    // The model's skill may aim at any notation's kind.
+    id(&mut s, "skill.add", json!({ "subject": "", "name": "Classes", "applies_to": "class" }));
+    let columns = id(&mut s, "skill.add", json!({ "subject": schema, "name": "Columns", "applies_to": "column" }));
+    let e = refused(&mut s, "skill.move", json!({ "skill": columns, "subject": class }));
+    assert!(e.contains("every column cannot sit on Class"), "{e}");
+    id(&mut s, "skill.move", json!({ "skill": columns, "subject": "" }));
+}
