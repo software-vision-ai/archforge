@@ -264,6 +264,11 @@ impl Grid {
         self.nodes.is_empty() && self.edges.is_empty()
     }
 
+    /// The points of `e`'s line as indexed: as the canvas draws it from the store.
+    pub fn line(&self, e: Obj) -> Option<&[(f64, f64)]> {
+        self.edges.iter().find(|item| item.obj == e).map(|item| item.points.as_slice())
+    }
+
     /// The nearest edge within [`EDGE_TOLERANCE`] of a point that `keep` takes, nodes aside: a note
     /// link dropped on a relationship's line looks past the links that end there.
     pub fn hit_edge(&self, x: f64, y: f64, keep: impl Fn(Obj) -> bool) -> Option<Obj> {

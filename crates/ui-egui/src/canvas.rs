@@ -40,7 +40,7 @@ const FIT_MARGIN: f32 = 48.0;
 /// The minimap's box and the toolbar's pill.
 const MINIMAP: Vec2 = vec2(200.0, 156.0);
 const MINIMAP_GAP: Vec2 = vec2(16.0, 14.0);
-const TOOLBAR: Vec2 = vec2(358.0, 50.0);
+const TOOLBAR: Vec2 = vec2(404.0, 50.0);
 const TOOLBAR_GAP: f32 = 14.0;
 /// An entity node: its header's height, its first row's baseline, the pitch between rows, the
 /// text inset and the badge column.
@@ -120,6 +120,18 @@ pub struct State {
     pub note_edit: Option<crate::editing::NoteEdit>,
     /// The texts of the skills with a tab, as typed.
     pub skills: Vec<crate::skill_tab::Doc>,
+    /// The cardinality texts the last frame drew, where a press grabs one.
+    pub ends: Vec<EndText>,
+}
+
+/// A cardinality text as drawn: its line, which end (0 the line's start, 1 its end), where it
+/// was and the end of the line it belongs to, on screen.
+#[derive(Debug, Clone, PartialEq)]
+pub struct EndText {
+    pub edge: Uuid,
+    pub end: u8,
+    pub rect: Rect,
+    pub anchor: Pos2,
 }
 
 impl Default for State {
@@ -147,6 +159,7 @@ impl Default for State {
             toast: None,
             note_edit: None,
             skills: Vec::new(),
+            ends: Vec::new(),
         }
     }
 }
@@ -519,12 +532,27 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
             schema: crate::diagrams::schema_of(store, d),
             boxes: refs(store, d, diagram::NODE).into_iter().map(|n| (n, model_rect(store, &view, &overrides, n))).collect(),
             spreads: archforge_diagram::route::spreads(store, d, |n| model_rect(store, &view, &overrides, n)),
+            // A line under the pointer, while no gesture runs and the pointer is on the canvas.
+            hovered: ui
+                .input(|i| i.pointer.hover_pos())
+                .filter(|at| r.contains(*at) && shell.canvas.gesture.is_none() && ui.rect_contains_pointer(r))
+                .and_then(|at| {
+                    let (x, y) = view.to_canvas(at);
+                    match grid.hit(x, y) {
+                        Some(archforge_diagram::Hit::Edge(e)) => Some(e),
+                        _ => None,
+                    }
+                }),
+            end_drag: crate::editing::end_preview(shell, pointer),
+            segment_drag: crate::editing::segment_preview(shell, view, pointer),
+            ends: std::cell::RefCell::new(Vec::new()),
         };
         for e in &visible.edges {
             if let Some(badge) = draw_edge(&clip, &draw, *e, &mut shell.registry, ui) {
                 badges.push(badge);
             }
         }
+        shell.canvas.ends = draw.ends.take();
         for n in &visible.nodes {
             if let Some(badge) = draw_node(&clip, &draw, *n, &mut shell.registry, ui) {
                 badges.push(badge);
@@ -617,6 +645,14 @@ struct Drawing<'a> {
     /// and where each line's ends sit along their sides: worked out once a frame.
     boxes: Vec<(Obj, archforge_diagram::Rect)>,
     spreads: std::collections::HashMap<Obj, (f64, f64)>,
+    /// The line under the pointer, drawn with a halo so its route reads.
+    hovered: Option<Obj>,
+    /// A drag under way: a cardinality text's line, end and centre, or a line's route with a
+    /// segment moved.
+    end_drag: Option<(Uuid, u8, Pos2)>,
+    segment_drag: Option<(Uuid, Vec<(f64, f64)>)>,
+    /// The cardinality texts drawn this frame, for the next frame's press.
+    ends: std::cell::RefCell<Vec<EndText>>,
 }
 
 impl Drawing<'_> {
@@ -876,8 +912,11 @@ fn draw_edge(
     let selected = selection.contains(&e) || element.is_some_and(|el| selection.contains(&el));
     // A generalization (slice S6): slate, solid, no ends but a hollow triangle at the supertype.
     if let Some(g) = element.filter(|el| store.class_of(*el).ok() == Some(archforge_er::GENERALIZATION)) {
-        let ink = if selected { p.accent } else { p.text_secondary };
+        let ink = if selected || d.hovered == Some(e) { p.accent } else { p.text_secondary };
         let stroke = Stroke::new((1.3 * z).clamp(1.0, 3.0), ink);
+        if d.hovered == Some(e) {
+            halo(paint, &points, stroke, p);
+        }
         let tip = points[n - 1];
         let back = points[n - 2];
         let dir = if (tip - back).length() > f32::EPSILON { (tip - back).normalized() } else { vec2(0.0, -1.0) };
@@ -924,7 +963,12 @@ fn draw_edge(
         p.key_foreign
     };
     let width = look.width.map_or((1.5 * z).clamp(1.0, 3.0), |w| (w * z).clamp(1.0, 6.0));
-    let stroke = Stroke::new(width, ink);
+    // The line under the pointer: a soft halo under it, and its colour turns to the accent.
+    let hovered = d.hovered == Some(e);
+    let stroke = Stroke::new(width, if hovered && !selected { p.accent } else { ink });
+    if hovered {
+        halo(paint, &points, stroke, p);
+    }
     crate::connect::line(paint, &points, stroke, identifying, z);
     let mut badge = None;
     if let Some(rel) = relationship
@@ -941,8 +985,23 @@ fn draw_edge(
     if let Some(rel) = element.filter(|el| store.class_of(*el).ok() == Some(archforge_er::RELATIONSHIP)) {
         let from = archforge_er::rules::cardinality_of(store, rel, archforge_er::relationship::FROM_END);
         let to = archforge_er::rules::cardinality_of(store, rel, archforge_er::relationship::TO_END);
-        end_glyph(paint, p, points[0], points[1], from, stroke, z, true);
-        end_glyph(paint, p, points[n - 1], points[n - 2], to, stroke, z, true);
+        end_glyph(paint, p, points[0], points[1], from, stroke, z, false);
+        end_glyph(paint, p, points[n - 1], points[n - 2], to, stroke, z, false);
+        // The cardinalities as text: beside the line near its end, or where the user put them.
+        for (end, c, at, towards, kind) in [(0u8, from, points[0], points[1], "from_end"), (1, to, points[n - 1], points[n - 2], "to_end")] {
+            let Some(c) = c else { continue };
+            let Ok(edge_id) = store.uuid(e) else { continue };
+            let own = refs(store, e, edge::LABEL).into_iter().find(|l| string(store, *l, label::KIND) == kind);
+            let g = ux::galley(paint, &cardinality_text(c), types::SMALL.scaled(z), p.text_secondary, None);
+            let centre = match (d.end_drag.filter(|(id, k, _)| *id == edge_id && *k == end), own) {
+                (Some((_, _, centre)), _) => centre,
+                (None, Some(l)) => at + vec2(real(store, l, label::DX) as f32, real(store, l, label::DY) as f32) * z,
+                (None, None) => beside(at, towards, g.size(), z),
+            };
+            let rect = Rect::from_center_size(centre, g.size());
+            paint.galley(rect.min, g, p.text_secondary);
+            d.ends.borrow_mut().push(EndText { edge: edge_id, end, rect: rect.expand(3.0), anchor: at });
+        }
         // The roles, above the line near their ends.
         for (role, end, towards) in
             [(archforge_er::relationship::FROM_ROLE, points[0], points[1]), (archforge_er::relationship::TO_ROLE, points[n - 1], points[n - 2])]
@@ -958,6 +1017,10 @@ fn draw_edge(
         }
         for l in refs(store, e, edge::LABEL) {
             let kind = string(store, l, label::KIND);
+            // The cardinalities draw above, with the ends.
+            if kind == "from_end" || kind == "to_end" {
+                continue;
+            }
             let text = slot_text(store, rel, &kind);
             if text.is_empty() {
                 continue;
@@ -986,6 +1049,27 @@ fn draw_edge(
     badge
 }
 
+/// Where a cardinality text sits by default: a little along the line from its end, beside the
+/// line rather than on it: under a level line (a line's name sits above it), right of an upright
+/// one.
+fn beside(end: Pos2, towards: Pos2, size: Vec2, z: f32) -> Pos2 {
+    let d = towards - end;
+    if d.length() <= f32::EPSILON || !d.is_finite() {
+        return end;
+    }
+    let d = d.normalized();
+    let n = if d.x.abs() >= d.y.abs() { vec2(0.0, 1.0) } else { vec2(1.0, 0.0) };
+    // Far enough off the line that the text's box clears it, whichever way the line runs.
+    let reach = n.x.abs() * size.x / 2.0 + n.y.abs() * size.y / 2.0 + 6.0 * z;
+    end + d * 30.0 * z + n * reach
+}
+
+/// A soft band under a line's whole route, so the line under the pointer stands out.
+fn halo(paint: &egui::Painter, points: &[Pos2], stroke: Stroke, p: &Palette) {
+    let band = Stroke::new(stroke.width + 6.0, p.accent.gamma_multiply(0.18));
+    paint.add(egui::Shape::line(points.to_vec(), band));
+}
+
 /// A line's points on screen, from its source's edge to its target's, run as its style or its
 /// diagram's says (straight, at right angles, around the other tables, or curved) through its
 /// waypoints; a relationship of a table with itself loops out of its right side. Routed in diagram
@@ -994,8 +1078,11 @@ fn draw_edge(
 fn edge_points(d: &Drawing<'_>, e: Obj) -> Option<Vec<Pos2>> {
     let (store, view) = (d.store, d.view);
     let (Some(source), Some(target)) = (element_of(store, e, edge::SOURCE), element_of(store, e, edge::TARGET)) else { return None };
+    let dragged = store.uuid(e).ok().and_then(|id| d.segment_drag.as_ref().filter(|(s, _)| *s == id)).map(|(_, route)| route);
     let points: Vec<Pos2> = if source == target {
         crate::connect::self_loop(d.node_rect(source), view.zoom)
+    } else if let Some(route) = dragged {
+        route.iter().map(|(x, y)| view.to_screen(*x, *y)).collect()
     } else {
         let rect_of = |n: Obj| model_rect(store, view, d.overrides, n);
         let via: Vec<(f64, f64)> = refs(store, e, edge::WAYPOINT).into_iter().map(|w| (real(store, w, point::X), real(store, w, point::Y))).collect();
@@ -1232,8 +1319,8 @@ fn minimap_shown(shell: &Shell, r: Rect) -> bool {
     shell.canvas.minimap_open && r.width() >= 16.0 + TOOLBAR.x + 16.0 + MINIMAP.x + MINIMAP_GAP.x
 }
 
-/// The floating toolbar at the canvas's bottom centre: Select and Pan, the drawing tools, and
-/// the key status and grid toggles.
+/// The floating toolbar at the canvas's bottom centre: Select and Pan, the drawing tools, the key
+/// status and grid toggles, and Arrange diagram.
 fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     // Kept to the canvas: in the narrowest window the toolbar's end is cut, never drawn over a panel.
     let paint = ui.painter().with_clip_rect(r);
@@ -1322,6 +1409,30 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
             }
         }
     }
+    // Arrange diagram: the boxes laid out along their lines, one undo step, then the whole diagram
+    // shown.
+    paint.rect_filled(divider(357.0), 0.0, p.border);
+    let arrange = button(365.0);
+    let live = shell.canvas.active.is_some();
+    let resp = control(shell, ui, "workspace.tools.arrange", "button", arrange, live).on_hover_text(tr("Arrange diagram"));
+    if resp.hovered() && live {
+        paint.rect_filled(arrange, 8.0, p.page);
+    }
+    ux::icon_in(
+        &paint,
+        Rect::from_center_size(arrange.center(), Vec2::splat(16.0)),
+        &icons::ARRANGE_DIAGRAM,
+        if live { p.text_secondary } else { p.text_muted },
+    );
+    if resp.clicked()
+        && let Some(d) = shell.canvas.active
+        && let Some(session) = shell.session.as_mut()
+    {
+        match session.execute("diagram.arrange", &json!({ "diagram": d.to_string() })) {
+            Ok(_) => shell.canvas.fit_pending = true,
+            Err(e) => shell.canvas.notice = Some(e.to_string()),
+        }
+    }
     if shell.canvas.popover {
         crate::connect::popover(shell, ui, p, r, chevron);
     }
@@ -1330,5 +1441,13 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
 /// Every hover text of the tables, for the catalogue tests.
 #[cfg(test)]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
-    TOOLS.iter().map(|(_, _, hint)| *hint).chain(["Relationship types", "Key status", "Grid", "complete", "disjoint", "overlapping"])
+    TOOLS.iter().map(|(_, _, hint)| *hint).chain([
+        "Relationship types",
+        "Key status",
+        "Grid",
+        "complete",
+        "disjoint",
+        "overlapping",
+        "Arrange diagram",
+    ])
 }

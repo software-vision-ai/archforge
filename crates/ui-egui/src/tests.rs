@@ -3963,3 +3963,93 @@ fn a_recent_project_comes_off_the_list_through_its_menu() {
     h.run_steps(2);
     assert_eq!(host.opens.lock().unwrap().len(), 1);
 }
+
+/// Two tables with the relationship Customer places Order drawn between them, Order moved to
+/// `order_at`; the diagram, its edge and the two nodes.
+fn related_tables(order_at: (f64, f64)) -> (Harness<'static, Shell>, archforge_mof::Obj, archforge_mof::Obj, archforge_mof::Obj, archforge_mof::Obj) {
+    let (mut h, customer, order) = two_tables_harness();
+    {
+        let s = h.state_mut().session.as_mut().unwrap();
+        s.execute(
+            "er.relationship.add",
+            &serde_json::json!({ "from": customer, "to": order, "name": "places", "from_end": "exactly-one", "to_end": "zero-or-more" }),
+        )
+        .unwrap();
+        let st = s.doc();
+        let d = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_diagram::DIAGRAM)).unwrap();
+        let did = st.uuid(d).unwrap().to_string();
+        s.execute("diagram.connect-all", &serde_json::json!({ "diagram": did })).unwrap();
+        let st = s.doc();
+        let order_obj = st.by_uuid(archforge_mof::Uuid::parse(&order).unwrap()).unwrap();
+        let order_node = archforge_diagram::views_of(st, order_obj).2[0];
+        let (x, y) = (archforge_diagram::grid::bounds_of(st, order_node).x, archforge_diagram::grid::bounds_of(st, order_node).y);
+        let node_id = st.uuid(order_node).unwrap().to_string();
+        s.execute("diagram.move", &serde_json::json!({ "nodes": [node_id], "dx": order_at.0 - x, "dy": order_at.1 - y })).unwrap();
+        s.execute("view.select", &serde_json::json!({ "ids": [] })).unwrap();
+    }
+    h.run();
+    let st = h.state().session.as_ref().unwrap().doc();
+    let d = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_diagram::DIAGRAM)).unwrap();
+    let e = st.list(d, archforge_diagram::diagram::EDGE).unwrap()[0].as_ref().unwrap();
+    let nodes: Vec<archforge_mof::Obj> = st.list(d, archforge_diagram::diagram::NODE).unwrap().iter().filter_map(|v| v.as_ref()).collect();
+    (h, d, e, nodes[0], nodes[1])
+}
+
+#[test]
+fn arrange_diagram_lays_the_tables_out_along_their_line_as_one_step() {
+    // Order on top of Customer.
+    let (mut h, _d, _e, customer, order) = related_tables((120.0, 120.0));
+    let at = rect_of(&h, "workspace.tools.arrange").center();
+    click(&mut h, at);
+    h.run();
+    let st = h.state().session.as_ref().unwrap().doc();
+    let (c, o) = (archforge_diagram::grid::bounds_of(st, customer), archforge_diagram::grid::bounds_of(st, order));
+    assert!(c.y + c.height <= o.y, "Customer, where the line starts, above Order: {c:?} {o:?}");
+    // One undo puts both back.
+    h.state_mut().session.as_mut().unwrap().undo().unwrap();
+    let st = h.state().session.as_ref().unwrap().doc();
+    assert_eq!(archforge_diagram::grid::bounds_of(st, order).x, 120.0);
+}
+
+#[test]
+fn a_cardinality_text_is_dragged_aside_and_a_double_click_puts_it_back() {
+    let (mut h, _d, e, ..) = related_tables((500.0, 100.0));
+    let labels = |h: &Harness<'static, Shell>| h.state().session.as_ref().unwrap().doc().list(e, archforge_diagram::edge::LABEL).unwrap().len();
+    let first = h.state().canvas.ends.iter().find(|t| t.end == 1).cloned().expect("the line's texts are drawn");
+    // Between the tables, clear of both.
+    let to = first.rect.center() + egui::vec2(-40.0, 60.0);
+    drag(&mut h, first.rect.center(), to);
+    assert_eq!(labels(&h), 1, "the place is kept");
+    h.run();
+    let moved = h.state().canvas.ends.iter().find(|t| t.end == 1).cloned().unwrap();
+    assert!((moved.rect.center() - to).length() < 2.0, "drawn where it was let go: {:?} {to:?}", moved.rect.center());
+    click(&mut h, moved.rect.center());
+    click(&mut h, moved.rect.center());
+    h.run();
+    assert_eq!(labels(&h), 0, "back beside the line");
+}
+
+#[test]
+fn a_right_angled_lines_segment_slides_and_a_double_click_routes_it_anew() {
+    // Order below and right of Customer: around nothing, at right angles.
+    let (mut h, d, e, ..) = related_tables((600.0, 500.0));
+    let route = |h: &Harness<'static, Shell>| archforge_diagram::Grid::build(h.state().session.as_ref().unwrap().doc(), d).line(e).unwrap().to_vec();
+    let before = route(&h);
+    assert!(before.len() >= 3, "{before:?}");
+    // The segment from the first corner on: an upright one slides left, a level one up.
+    let level = (before[1].1 - before[2].1).abs() < 1e-6;
+    let shift = if level { egui::vec2(0.0, -40.0) } else { egui::vec2(-40.0, 0.0) };
+    let view = crate::canvas::View { origin: rect_of(&h, "workspace.canvas").min, pan: h.state().canvas.pan, zoom: h.state().canvas.zoom };
+    let middle = view.to_screen((before[1].0 + before[2].0) / 2.0, (before[1].1 + before[2].1) / 2.0);
+    drag(&mut h, middle, middle + shift * view.zoom);
+    let after = route(&h);
+    let moved = if level { (after[1].1 - (before[1].1 - 40.0)).abs() < 1.0 } else { (after[1].0 - (before[1].0 - 40.0)).abs() < 1.0 };
+    assert!(moved && after.windows(2).all(|w| (w[0].0 - w[1].0).abs() < 1e-6 || (w[0].1 - w[1].1).abs() < 1e-6), "{before:?} → {after:?}");
+    let waypoints = |h: &Harness<'static, Shell>| h.state().session.as_ref().unwrap().doc().list(e, archforge_diagram::edge::WAYPOINT).unwrap().len();
+    assert_eq!(waypoints(&h), before.len() - 2);
+    let at = view.to_screen((after[1].0 + after[2].0) / 2.0, (after[1].1 + after[2].1) / 2.0);
+    click(&mut h, at);
+    click(&mut h, at);
+    h.run();
+    assert_eq!(waypoints(&h), 0, "the route is worked out anew");
+}

@@ -716,6 +716,70 @@ fn diagram_style<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     Ok(json!({ "styled": if clear { 0 } else { ids.len() }, "cleared": cleared }))
 }
 
+/// Arranges the diagram's boxes in layers along their lines (crate::arrange), keeping its top-left
+/// where it was; a box moves with what it contains, and the lines' waypoints go, since their
+/// routes are worked out anew. One step.
+fn diagram_arrange<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
+    let d = one_of(ctx.doc, p, "diagram", DIAGRAM, "a diagram")?;
+    let st = &*ctx.doc;
+    let tops: Vec<Obj> = st.list(d, diagram::NODE).map_err(fail)?.iter().filter_map(Value::as_ref).collect();
+    if tops.is_empty() {
+        return Err(refuse("diagram", "the diagram shows nothing to arrange"));
+    }
+    let index: BTreeMap<Obj, usize> = tops.iter().enumerate().map(|(i, n)| (*n, i)).collect();
+    // A line between nested boxes counts between the boxes on the diagram they are in.
+    let top_of = |mut n: Obj| -> Option<usize> {
+        for _ in 0..=MAX_DEPTH {
+            if let Some(i) = index.get(&n) {
+                return Some(*i);
+            }
+            n = st.container(n).ok().flatten()?.0;
+        }
+        None
+    };
+    let rects: Vec<crate::Rect> = tops.iter().map(|n| crate::grid::bounds_of(st, *n)).collect();
+    let edges: Vec<Obj> = st.list(d, diagram::EDGE).map_err(fail)?.iter().filter_map(Value::as_ref).collect();
+    let lines: Vec<(usize, usize)> = edges
+        .iter()
+        .filter_map(|e| {
+            let (s, t) = (element_of(st, *e, edge::SOURCE)?, element_of(st, *e, edge::TARGET)?);
+            if st.class_of(t).ok() != Some(NODE) {
+                return None;
+            }
+            Some((top_of(s)?, top_of(t)?))
+        })
+        .collect();
+    let places = crate::arrange::arrange(&rects.iter().map(|r| (r.width, r.height)).collect::<Vec<_>>(), &lines);
+    // Where the diagram started stays where it is.
+    let left = rects.iter().map(|r| r.x).fold(f64::INFINITY, f64::min);
+    let top = rects.iter().map(|r| r.y).fold(f64::INFINITY, f64::min);
+    let moves: Vec<(Obj, f64, f64)> = tops.iter().zip(&places).zip(&rects).map(|((n, (x, y)), r)| (*n, left + x - r.x, top + y - r.y)).collect();
+    let mut moving: Vec<(Obj, f64, f64)> = Vec::new();
+    for (n, dx, dy) in &moves {
+        for m in node_tree(st, *n) {
+            let (x, y) = (real(st, m, node::X) + dx, real(st, m, node::Y) + dy);
+            if let Some(problem) = rules::coord_problem(x).or_else(|| rules::coord_problem(y)) {
+                return Err(refuse("diagram", format!("arranged, a box would land at a place that {problem}")));
+            }
+            moving.push((m, x, y));
+        }
+    }
+    let points: Vec<Obj> = edges.iter().flat_map(|e| st.list(*e, edge::WAYPOINT).unwrap_or_default()).filter_map(|v| v.as_ref()).collect();
+    ctx.doc
+        .transaction(|st| {
+            for (m, x, y) in &moving {
+                st.set(*m, node::X, Value::Real(*x))?;
+                st.set(*m, node::Y, Value::Real(*y))?;
+            }
+            for w in &points {
+                st.destroy(*w)?;
+            }
+            Ok(())
+        })
+        .map_err(fail)?;
+    Ok(json!({ "arranged": tops.len() }))
+}
+
 // Queries.
 
 fn style_json(store: &Store, owner: Obj, prop: PropId) -> Json {
@@ -920,6 +984,15 @@ pub fn specs<V: DiagramView>() -> Vec<CommandSpec<Store, V>> {
         cmd!("diagram.label", "Add label", &["Diagram"], None, LABEL_PARAMS, has_diagrams::<V>, diagram_label::<V>),
         cmd!("diagram.unlabel", "Remove label", &["Diagram"], None, "label: string; the label's id", has_diagrams::<V>, diagram_unlabel::<V>),
         cmd!("diagram.style", "Style", &["Diagram"], None, STYLE_PARAMS, has_diagrams::<V>, diagram_style::<V>),
+        cmd!(
+            "diagram.arrange",
+            "Arrange diagram",
+            &["Diagram"],
+            None,
+            "diagram: string; the diagram's id: its boxes are laid out in layers along their lines, the box a line starts at above the box it ends at",
+            has_diagrams::<V>,
+            diagram_arrange::<V>
+        ),
         cmd!(noundo "view.open-diagram", "Open diagram", &["View"], None, "diagram: string; the diagram's id", has_diagrams::<V>, view_open_diagram::<V>),
         cmd!(query "diagram.list", "List diagrams", &["Diagram"], None, "element: string = \"\"; only the diagrams of this element, or all", always, diagram_list::<V>),
         cmd!(query "diagram.get", "Get diagram", &["Diagram"], None, "diagram: string; the diagram's id", has_diagrams::<V>, diagram_get::<V>),

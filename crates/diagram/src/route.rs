@@ -249,19 +249,42 @@ fn right_angled(from: &Rect, to: &Rect, at: (f64, f64)) -> Vec<P> {
     simplify(points)
 }
 
-/// At right angles through the waypoints: each leg turns once, horizontally first.
+/// At right angles through the waypoints: each leg turns once, horizontally first. The line
+/// leaves a box straight towards its first waypoint when the box spans it across or down, and
+/// enters the other box the same way, so a route whose corners were dragged keeps its right
+/// angles at the boxes.
 fn through(from: &Rect, to: &Rect, via: &[P]) -> Vec<P> {
-    let mut points = vec![exit(from, via[0])];
+    let mut points = vec![facing_point(from, via[0])];
     for &q in via {
         let last = points[points.len() - 1];
         points.push((q.0, last.1));
         points.push(q);
     }
-    let end = exit(to, via[via.len() - 1]);
     let last = points[points.len() - 1];
-    points.push((end.0, last.1));
+    let end = facing_point(to, last);
+    if (end.0 - last.0).abs() > 1e-9 && (end.1 - last.1).abs() > 1e-9 {
+        // Into the box along its side's normal: the last leg turns before it.
+        if (end.0 - to.x).abs() < 1e-9 || (end.0 - (to.x + to.width)).abs() < 1e-9 {
+            points.push((last.0, end.1));
+        } else {
+            points.push((end.0, last.1));
+        }
+    }
     points.push(end);
     simplify(points)
+}
+
+/// Where a line from `r` towards `q` meets `r`'s border at right angles: straight up or down when
+/// `r` spans `q` across, left or right when it spans it down, else where the line to its middle
+/// leaves it.
+fn facing_point(r: &Rect, q: P) -> P {
+    let inside_x = q.0 > r.x && q.0 < r.x + r.width;
+    let inside_y = q.1 > r.y && q.1 < r.y + r.height;
+    match (inside_x, inside_y) {
+        (true, false) => (q.0, if q.1 < r.y { r.y } else { r.y + r.height }),
+        (false, true) => (if q.0 < r.x { r.x } else { r.x + r.width }, q.1),
+        _ => exit(r, q),
+    }
 }
 
 /// A cubic curve out of one side and into the facing one, its handles along the sides' normals.

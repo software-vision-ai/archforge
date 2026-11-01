@@ -45,12 +45,13 @@ tables (archforge-4ym).
 | `metamodel`, `universe_with`, `with_slabs` | the metamodel; a universe of it and others; the slabs joined to a `CompositeSlabs` |
 | `remove_views_of`, `destroy_node_with_edges`, `views_of`, `edges_on`, `node_tree`, `diagram_of` | the cascades and the walks they rest on |
 | `Grid`, `Hit`, `Rect`, `grid::Visible` | `Grid::build(store, diagram)`, `hit(x, y)`, `visible(rect)`: the spatial index of one diagram, its lines routed as drawn |
+| `arrange::arrange` | `arrange(sizes, lines) -> Vec<(f64, f64)>`: boxes in layers along their lines, crossings few, groups side by side, lone boxes in rows |
 | `route`, `Way`, `route::{way_of, spreads}` | `route(way, from, to, at, via, boxes) -> Vec<(f64, f64)>`: a line straight, at right angles, around the other boxes, or curved; `way_of` reads an edge's routing (its own, else its diagram's); `spreads(store, diagram, rect)` places every line's ends along its boxes' sides, once per diagram |
 | `rules::{problems, kind_problem, text_problem, colour_problem, coord_problem, size_problem, depth_of}` | the rules, for commands and for a whole store |
 | the generated constants, structs, `LabelPlace`, `TABLES`, `JUNCTIONS` | as every generated metamodel |
 
 Commands: `diagram.{add, rename, remove, place, note, set-text, move, resize, unplace, connect,
-connect-all, disconnect, route, label, unlabel, style}`, `view.open-diagram`, and the queries
+connect-all, disconnect, route, label, unlabel, style, arrange}`, `view.open-diagram`, and the queries
 `diagram.{list, get}`. `diagram.move` takes the nodes with what they contain and the waypoints of
 the edges between them, so a multi-node drag is one step (the engine's `coalesce` key joins the
 steps of one drag); `diagram.style` sets a style as a whole and a call naming nothing removes it;
@@ -65,7 +66,7 @@ sequences with the rules and the store's validation checked after each step and 
 start. `archforge-er/tests/diagram.rs` runs the commands with the ER policy.
 
 **Known lacks.** Nothing persists a diagram until gm2.31, where diagrams load lazily. The style
-sheet's contents and the drawing come with the canvas (gm2.10). No auto-layout; routes are worked out when drawn, never
+sheet's contents and the drawing come with the canvas (gm2.10). Arrange is a layered layout without dummy boxes for long lines; routes are worked out when drawn, never
 stored, and an avoiding route that finds no way round takes the plain right-angled one; `visible`
 culls edges by their bounds, so a long diagonal edge is drawn in more viewports than it
 crosses, and a viewport wider than 4,096 cells is answered by a scan of the items. The grid is

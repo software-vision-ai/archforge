@@ -249,6 +249,8 @@ str		Note	Nota
 str		Link note	Ligar nota
 str		Key status	Estado das chaves
 str		Grid	Grelha
+str		Arrange diagram	Organizar o diagrama
+str		Move cardinality	Mover a cardinalidade
 str		Add table	Adicionar tabela
 str		Place table	Colocar tabela
 str		Already on this diagram	Já está neste diagrama

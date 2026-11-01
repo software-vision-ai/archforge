@@ -249,6 +249,8 @@ str		Note	ノート
 str		Link note	ノートをリンク
 str		Key status	キーの状態
 str		Grid	グリッド
+str		Arrange diagram	ダイアグラムを整列
+str		Move cardinality	多重度を移動
 str		Add table	テーブルを追加
 str		Place table	テーブルを配置
 str		Already on this diagram	この図にはすでにあります

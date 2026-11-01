@@ -100,8 +100,15 @@ the change, and update this file in the same change.
 
 ## Canvas and tools
 - The tools float at the bottom centre of the canvas: Select, Pan | Entity, Relationship with its
-  chevron, Note, Link note | Key status and Grid. The toolbar is never hidden; the minimap folds
-  to its button when both do not fit.
+  chevron, Note, Link note | Key status and Grid | Arrange diagram. The toolbar is never hidden;
+  the minimap folds to its button when both do not fit.
+- Arrange diagram (owner, 2026-11-01) lays the whole diagram out in layers along its lines: the
+  table a relationship starts at above the one it ends at, each layer ordered so lines cross
+  little, groups with no line between them side by side, tables with no line in rows below. It
+  keeps the diagram's top left, drops dragged line routes, is one undo step, and shows the whole
+  diagram after.
+- The line under the pointer turns to the accent with a soft halo along its whole route, so it
+  reads among the others.
 - The Relationship tool's button is double width, and its icon shows the two ends its next line
   will get.
 - A placing or drawing tool hands back to Select after it has made one thing.
@@ -132,6 +139,12 @@ the change, and update this file in the same change.
   with its foreign key off.
 - A relationship dragged from a table and dropped on empty canvas makes a new table there, joined
   by the line with its foreign key off, as one undo step, the new table's name open for typing.
+- A line's cardinalities show as text beside the line near each end: under a level line (its name
+  sits above), right of an upright one. A text is dragged anywhere and stays there relative to its
+  end, as the line's label; a double click puts it back.
+- A right-angled line's segment is dragged across (the pointer shows which way): a middle one
+  slides, the first or last slides where the line meets its table. The line keeps its route from
+  then on; a double click on it routes it anew.
 - Cardinality is chosen in one place, the popover from the Relationship tool's chevron, with
   glyphs, not words; the choice stays for the next line. An existing line's ends change there or
   in Properties.

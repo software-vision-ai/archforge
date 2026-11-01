@@ -249,6 +249,8 @@ str		Note	备注
 str		Link note	链接备注
 str		Key status	键状态
 str		Grid	网格
+str		Arrange diagram	整理图
+str		Move cardinality	移动基数
 str		Add table	添加表
 str		Place table	放置表
 str		Already on this diagram	已在此图中

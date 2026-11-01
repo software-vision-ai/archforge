@@ -248,6 +248,8 @@ str		Note	Note
 str		Link note	Link note
 str		Key status	Key status
 str		Grid	Grid
+str		Arrange diagram	Arrange diagram
+str		Move cardinality	Move cardinality
 str		Add table	Add table
 str		Place table	Place table
 str		Already on this diagram	Already on this diagram
