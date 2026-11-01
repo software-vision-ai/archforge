@@ -1908,3 +1908,24 @@ fn view_queries_sequence_owners_and_types_of_another_schema_keep_their_limits() 
     assert_eq!((rules::type_of(s.doc(), a), rules::size_of(s.doc(), a)), ("NUMERIC".to_string(), (None, Some(18), None)));
     all_rules_hold(s.doc());
 }
+
+#[test]
+fn a_schema_never_holds_two_relationships_of_one_name() {
+    let mut s = session();
+    let sm = sample(&mut s);
+    let line = run(&mut s, "er.entity.add", json!({ "schema": sm.schema, "name": "Line" }));
+    // A second "places" is refused, on add and on rename; unnamed ones may be many.
+    let again = json!({ "from": sm.order, "to": line, "from_end": "exactly-one", "to_end": "zero-or-more", "name": "places" });
+    assert_eq!(refused_on(&mut s, "er.relationship.add", again), "name");
+    let holds = run(
+        &mut s,
+        "er.relationship.add",
+        json!({ "from": sm.order, "to": line, "from_end": "exactly-one", "to_end": "zero-or-more", "name": "holds" }),
+    );
+    assert_eq!(refused_on(&mut s, "er.relationship.rename", json!({ "relationship": holds, "name": "places" })), "name");
+    run(&mut s, "er.relationship.rename", json!({ "relationship": holds, "name": "holds" }));
+    run(&mut s, "er.relationship.rename", json!({ "relationship": holds, "name": "" }));
+    run(&mut s, "er.relationship.add", json!({ "from": sm.customer, "to": line, "from_end": "exactly-one", "to_end": "zero-or-more" }));
+    // What the commands leave, a project can read back.
+    assert_eq!(s.doc().validate_all(), vec![]);
+}

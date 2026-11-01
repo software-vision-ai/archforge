@@ -1813,6 +1813,9 @@ fn relationship_add(ctx: &mut C<'_>, p: &Params) -> R {
     // The relationship may join two schemas (slice S7); it belongs to its child's, as its foreign
     // key does.
     let s = if child == from { from_schema } else { to_schema };
+    if !rules::relationship_name_free(ctx.doc, s, &name, None) {
+        return Err(refuse("name", format!("the schema has a relationship named {name:?} already")));
+    }
     let points_to = if text(p, "points_to").is_empty() { None } else { Some(key_id(ctx, p, "points_to")?) };
     if points_to.is_some() && !with_key {
         return Err(refuse("points_to", "only a relationship that brings its foreign key points at a key; set create_foreign_key"));
@@ -2994,6 +2997,11 @@ fn relationship_set_roles(ctx: &mut C<'_>, p: &Params) -> R {
 fn relationship_rename(ctx: &mut C<'_>, p: &Params) -> R {
     let r = id_of(ctx, p, "relationship", RELATIONSHIP)?;
     let name = relationship_name(p)?.to_string();
+    if let Some((s, _)) = ctx.doc.container(r).ok().flatten()
+        && !rules::relationship_name_free(ctx.doc, s, &name, Some(r))
+    {
+        return Err(refuse("name", format!("the schema has a relationship named {name:?} already")));
+    }
     set_name(ctx, r, relationship::NAME, &name)?;
     Ok(json!({ "id": uuid_of(ctx.doc, r)? }))
 }
