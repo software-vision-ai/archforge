@@ -6,7 +6,10 @@
 //! Methods: `engine.commands`, `engine.describe`, `engine.execute`, `engine.batch` (steps refer to
 //! earlier results as `$N` or `$N.path`, `$$` writing a literal `$`, and a failing step rolls the
 //! batch back: CS-12),
-//! `engine.undo`, `engine.redo`, `document.inspect` and `ui.inspect`. Unknown methods and
+//! `engine.undo`, `engine.redo`, `document.inspect`, `ui.inspect`, `app.save` (a version of the
+//! open project, as the Save button makes it; the answer, a ticket, comes before the host has
+//! finished) and `app.saved` (how the save with that ticket went, whichever tab is shown by then).
+//! Unknown methods and
 //! parameter keys are refused, naming the accepted ones (CS-3).
 
 use std::sync::Arc;
@@ -14,7 +17,7 @@ use std::sync::atomic::{AtomicU8, Ordering};
 
 use serde_json::{Value, json};
 
-use crate::Shell;
+use crate::{SaveState, Shell};
 
 /// One request from the control channel, where its answer goes, and whether it may still run: the
 /// one waiting for the answer gives up after a while, and a request given up is never run, so an
@@ -47,7 +50,7 @@ const PER_FRAME: usize = 32;
 pub const MAX_STEPS: usize = 256;
 
 /// Every method, with the parameter keys it takes.
-pub const METHODS: [(&str, &[&str]); 8] = [
+pub const METHODS: [(&str, &[&str]); 10] = [
     ("engine.commands", &["filter"]),
     ("engine.describe", &["command"]),
     ("engine.execute", &["command", "params"]),
@@ -56,6 +59,8 @@ pub const METHODS: [(&str, &[&str]); 8] = [
     ("engine.redo", &[]),
     ("document.inspect", &[]),
     ("ui.inspect", &[]),
+    ("app.save", &[]),
+    ("app.saved", &["ticket"]),
 ];
 
 /// Answers the requests waiting on the channel, at most [`PER_FRAME`] of them.
@@ -88,6 +93,8 @@ pub fn answer(shell: &mut Shell, method: &str, params: &Value) -> Result<Value, 
     }
     match method {
         "document.inspect" => Ok(inspect(shell)),
+        "app.save" => save(shell),
+        "app.saved" => saved(shell, params),
         "ui.inspect" => {
             Ok(json!({ "controls": shell.widgets().iter().map(|w| json!({ "id": w.id, "kind": w.kind, "rect": w.rect })).collect::<Vec<_>>() }))
         }
@@ -107,12 +114,53 @@ fn inspect(shell: &Shell) -> Value {
         "project": shell.project.as_ref().map(|p| json!({ "name": p.name, "path": p.path.display().to_string() })),
         "revision": session.revision(),
         "unsaved": session.is_dirty(),
+        "saving": shell.is_saving(),
+        "save_error": shell.save_error,
         "undo": session.undo_label(),
         "redo": session.redo_label(),
         "selection": ids(&session.view().selection),
         "diagram": shell.canvas.active.map(|d| d.to_string()),
         "tabs": shell.canvas.tabs.iter().map(|t| t.to_string()).collect::<Vec<_>>(),
     })
+}
+
+/// Saves the open project as the Save button does: its changes are written, then the host makes a
+/// version. Answers the save's ticket for `app.saved`, or why none could start.
+fn save(shell: &mut Shell) -> Result<Value, String> {
+    if shell.session.is_none() {
+        return Err("no project is open in Archforge; open one first".into());
+    }
+    if shell.services.projects.is_none() || shell.project.is_none() {
+        return Err("this window saves no projects".into());
+    }
+    // One save at a time: a second request follows the one under way.
+    if !shell.is_saving() {
+        let revision = shell.session.as_ref().map(|s| s.revision());
+        shell.save();
+        if !shell.is_saving() {
+            if revision.is_some() && shell.refused == revision {
+                return Err(shell.save_error.clone().unwrap_or_else(|| "the model could not be written, so it cannot be saved".into()));
+            }
+            if shell.session.as_ref().is_some_and(|s| !s.is_dirty()) {
+                return Ok(json!({ "saving": false, "saved": true, "unsaved": false }));
+            }
+            return Err("the save could not start: the project's changes have not reached it yet; try again in a moment".into());
+        }
+    }
+    let project = shell.project.as_ref().map(|p| p.name.clone());
+    Ok(json!({ "saving": true, "ticket": shell.save_ticket, "project": project }))
+}
+
+/// How the save with the given ticket went: still running, saved (the revision written), or why not.
+fn saved(shell: &Shell, params: &Value) -> Result<Value, String> {
+    let Some(ticket) = params.get("ticket").and_then(Value::as_u64) else { return Err("app.saved needs \"ticket\", a number app.save gave".into()) };
+    match shell.save_state(ticket) {
+        SaveState::Running => Ok(json!({ "saving": true })),
+        SaveState::Saved(revision) => Ok(json!({ "saving": false, "saved": true, "revision": revision })),
+        SaveState::Failed(e) => Err(format!("the save failed: {e}")),
+        SaveState::Unknown => Err(format!("the project was closed before save {ticket} answered, so whether it was saved is not known")),
+        SaveState::Forgotten => Err(format!("no save {ticket} is known: it may be too old to remember")),
+    }
 }
 
 fn engine(shell: &mut Shell, method: &str, params: &Value) -> Result<Value, String> {

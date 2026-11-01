@@ -154,6 +154,55 @@ impl Tab {
     }
 }
 
+/// A save the host works on: its answer, the model's revision it writes, and its ticket.
+type Saving = (std::sync::mpsc::Receiver<Result<bool, String>>, u64, u64);
+
+/// How many finished saves the shell remembers for the agent asking how its save went.
+const SAVES_KEPT: usize = 16;
+
+/// How a save asked for by its ticket stands.
+#[derive(Clone, Debug, PartialEq)]
+pub enum SaveState {
+    Running,
+    /// Done: the model's revision it wrote.
+    Saved(u64),
+    Failed(String),
+    /// Its project was closed before the host answered, so whether it was saved is not known.
+    Unknown,
+    /// No such save is remembered.
+    Forgotten,
+}
+
+/// Looks whether the host has answered `saving`; when it has, marks what it wrote saved (or keeps
+/// why not) and gives the save's ticket and outcome.
+fn poll_save(saving: &mut Option<Saving>, session: Option<&mut archforge_er::Session>, save_error: &mut Option<String>) -> Option<(u64, SaveState)> {
+    let (rx, revision, ticket) = saving.as_ref()?;
+    let (revision, ticket) = (*revision, *ticket);
+    let outcome = match rx.try_recv() {
+        Ok(Ok(_)) => {
+            // What the save wrote is saved; an edit made while it ran is not.
+            if let Some(s) = session
+                && let Err(e) = s.mark_saved_at(revision)
+            {
+                log::warn!("the session could not be marked saved: {e}");
+            }
+            SaveState::Saved(revision)
+        }
+        Ok(Err(e)) => {
+            *save_error = Some(e.clone());
+            SaveState::Failed(e)
+        }
+        Err(std::sync::mpsc::TryRecvError::Empty) => return None,
+        Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+            let e = crate::i18n::tr("The save stopped without an answer");
+            *save_error = Some(e.clone());
+            SaveState::Failed(e)
+        }
+    };
+    *saving = None;
+    Some((ticket, outcome))
+}
+
 /// Everything the window keeps for a project whose tab is not the one shown.
 struct Parked {
     project: Opened,
@@ -162,7 +211,7 @@ struct Parked {
     adopted: Option<std::path::PathBuf>,
     written: Option<u64>,
     refused: Option<u64>,
-    saving: Option<(std::sync::mpsc::Receiver<Result<bool, String>>, u64)>,
+    saving: Option<Saving>,
     save_error: Option<String>,
     explorer: explorer::State,
     diagrams: diagrams::State,
@@ -256,7 +305,11 @@ pub struct Shell {
     /// The model's revision that could not be turned into rows, so it is not tried every frame.
     refused: Option<u64>,
     /// A save the host works on, and the state it writes.
-    saving: Option<(std::sync::mpsc::Receiver<Result<bool, String>>, u64)>,
+    saving: Option<Saving>,
+    /// The last save's ticket, and how the latest finished ones went (the revision written, or
+    /// why not), whichever project they saved.
+    save_ticket: u64,
+    saves: std::collections::VecDeque<(u64, SaveState)>,
     /// An opening the host works on.
     opening: Option<std::sync::mpsc::Receiver<Result<Opened, CreateError>>>,
     /// Why the last save or the last opening failed, for the status bar and Home.
@@ -304,6 +357,8 @@ impl Shell {
             written: None,
             refused: None,
             saving: None,
+            save_ticket: 0,
+            saves: std::collections::VecDeque::new(),
             opening: None,
             save_error: None,
             open_error: None,
@@ -448,7 +503,10 @@ impl Shell {
                 self.activate(if next > i { next - 1 } else { next });
             }
         } else {
-            self.tabs.remove(i);
+            let tab = self.tabs.remove(i);
+            if let Some((_, _, ticket)) = tab.parked.and_then(|p| p.saving) {
+                self.finished_save(ticket, SaveState::Unknown);
+            }
             if let Some(a) = self.active
                 && a > i
             {
@@ -499,7 +557,9 @@ impl Shell {
         self.written = None;
         self.refused = None;
         // A save of another project answers for that one, never for this.
-        self.saving = None;
+        if let Some((_, _, ticket)) = self.saving.take() {
+            self.finished_save(ticket, SaveState::Unknown);
+        }
         self.save_error = None;
         self.explorer = explorer::State::default();
         self.diagrams = diagrams::State::default();
@@ -606,11 +666,12 @@ impl Shell {
         }
     }
 
-    /// Save: the host writes what waits and commits it.
+    /// Save: the host writes what waits and commits it, a skill's text being typed included.
     pub fn save(&mut self) {
         if self.saving.is_some() || self.session.is_none() {
             return;
         }
+        skill_tab::sync(self, 0.0, true, None);
         self.write_changes();
         // A state that could not be written cannot be saved: its error stays on the status bar.
         let current = self.session.as_ref().map(|s| s.revision());
@@ -619,7 +680,8 @@ impl Shell {
         }
         let Some(revision) = self.written else { return };
         if let (Some(host), Some(project)) = (&self.services.projects, &self.project) {
-            self.saving = Some((host.save(&project.path), revision));
+            self.save_ticket += 1;
+            self.saving = Some((host.save(&project.path), revision, self.save_ticket));
             self.save_error = None;
             self.open_error = None;
         }
@@ -690,28 +752,13 @@ impl Shell {
                 }
             }
         }
-        if let Some((rx, revision)) = &self.saving {
-            let revision = *revision;
-            match rx.try_recv() {
-                Ok(Ok(_)) => {
-                    self.saving = None;
-                    // What the save wrote is saved; an edit made while it ran is not.
-                    if let Some(s) = self.session.as_mut()
-                        && let Err(e) = s.mark_saved_at(revision)
-                    {
-                        log::warn!("the session could not be marked saved: {e}");
-                    }
-                }
-                Ok(Err(e)) => {
-                    self.saving = None;
-                    self.save_error = Some(e);
-                }
-                Err(std::sync::mpsc::TryRecvError::Empty) => {}
-                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                    self.saving = None;
-                    self.save_error = Some(crate::i18n::tr("The save stopped without an answer"));
-                }
-            }
+        // Saves, the shown project's and those of projects parked in their tabs.
+        let mut done: Vec<(u64, SaveState)> = poll_save(&mut self.saving, self.session.as_mut(), &mut self.save_error).into_iter().collect();
+        for p in self.tabs.iter_mut().filter_map(|t| t.parked.as_deref_mut()) {
+            done.extend(poll_save(&mut p.saving, p.session.as_mut(), &mut p.save_error));
+        }
+        for (ticket, outcome) in done {
+            self.finished_save(ticket, outcome);
         }
         if let Some(rx) = &self.opening {
             match rx.try_recv() {
@@ -766,6 +813,26 @@ impl Shell {
     /// Whether a save is under way.
     pub fn is_saving(&self) -> bool {
         self.saving.is_some()
+    }
+
+    /// Keeps how a save went, the latest few, for the agent that asked for it.
+    fn finished_save(&mut self, ticket: u64, outcome: SaveState) {
+        if self.saves.len() == SAVES_KEPT {
+            self.saves.pop_front();
+        }
+        self.saves.push_back((ticket, outcome));
+    }
+
+    /// How the save with `ticket` stands, whichever tab its project is in.
+    pub fn save_state(&self, ticket: u64) -> SaveState {
+        if let Some((_, outcome)) = self.saves.iter().find(|(t, _)| *t == ticket) {
+            return outcome.clone();
+        }
+        let running = |s: &Option<Saving>| s.as_ref().is_some_and(|(_, _, t)| *t == ticket);
+        if running(&self.saving) || self.tabs.iter().any(|tab| tab.parked.as_ref().is_some_and(|p| running(&p.saving))) {
+            return SaveState::Running;
+        }
+        SaveState::Forgotten
     }
 
     /// At exit, before the host writes what waits: the skill text still being typed is kept and
@@ -836,7 +903,6 @@ impl Shell {
         // bar takes both first.
         let now = ctx.input(|i| i.time);
         if self.session.is_some() && ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::S)) {
-            skill_tab::sync(self, now, true, None);
             self.save();
         }
         if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::O)) {

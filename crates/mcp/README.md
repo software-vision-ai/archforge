@@ -3,13 +3,15 @@
 **Purpose.** The MCP server agents use (agent-control-surfaces §10.5, BP-CS-4): JSON-RPC 2.0 over the
 standard streams, one message per line, protocol versions 2024-11-05, 2025-03-26 and 2025-06-18,
 bridged to the running Archforge's control channel. Tools: `list_commands`, `describe_command`,
-`execute_command`, `batch`, `inspect_document`, `undo`, `redo`, `call_app`, and one tool per command
+`execute_command`, `batch`, `inspect_document`, `undo`, `redo`, `save_project`, `call_app`, and one tool per command
 of the table (`er_entity_add` for `er.entity.add`), its schema generated from the command's
 parameter documentation (types, required keys, choices, ranges, defaults, and `coalesce` on undoable
 commands); `edit.undo` and `edit.redo` are left to `undo` and `redo`, and a name another tool has is
 never shadowed. `compact` lists only the general tools and `search_tools`, whose finds run through
 `execute_command` (CS-14). Only the reads carry `readOnlyHint`; a change of the view alone is not
-destructive.
+destructive, nor is a save. `save_project` follows its save by the ticket `app.save` gives, through `app.saved`,
+for up to 30 seconds in all, so a tab switched meanwhile never answers for it. It is not the
+catalogue's `save_file`: it takes no path and saves the open project where the user opened it.
 
 **Layer.** 9, above `control`, which it reaches the application through.
 

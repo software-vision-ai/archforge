@@ -393,6 +393,14 @@ mod tests {
     }
 
     #[test]
+    fn save_needs_an_open_project() {
+        let mut shell = Shell::new(archforge_ui_egui::Services::default());
+        let refused = archforge_ui_egui::control::answer(&mut shell, "app.save", &serde_json::json!({})).unwrap_err();
+        assert!(refused.contains("no project is open"), "{refused}");
+        assert!(archforge_ui_egui::control::answer(&mut shell, "app.save", &serde_json::json!({ "path": "x" })).is_err(), "it takes no keys");
+    }
+
+    #[test]
     fn the_mcp_tools_and_the_shells_methods_never_drift_apart() {
         let shell: Vec<&str> = archforge_ui_egui::control::METHODS.iter().map(|(m, _)| *m).collect();
         let (tools, call_app) = archforge_mcp::tool_methods();

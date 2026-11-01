@@ -259,8 +259,8 @@ mod tests {
         let mut names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
         assert_eq!(
             tools.len(),
-            all.len() + 8 - 2,
-            "one tool per command beside the eight general ones, edit.undo and edit.redo left to undo and redo"
+            all.len() + 9 - 2,
+            "one tool per command beside the nine general ones, edit.undo and edit.redo left to undo and redo"
         );
         for n in &names {
             assert!(!n.is_empty() && n.len() <= 64 && n.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-'), "{n}");
