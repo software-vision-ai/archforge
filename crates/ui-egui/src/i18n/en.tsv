@@ -354,6 +354,7 @@ str		Change…	Change…
 str		Creates {file} here: one versioned project file that keeps every change.	Creates {file} here: one versioned project file that keeps every change.
 str		The project file is made here: one versioned file that keeps every change.	The project file is made here: one versioned file that keeps every change.
 str		Diagrams	Diagrams
+str		Elements	Elements
 str		Add diagrams of any kind as you go: UML 2, C4 and many more. Every diagram shows the same model.	Add diagrams of any kind as you go: UML 2, C4 and many more. Every diagram shows the same model.
 str		In every project	In every project
 str		Issues	Issues

@@ -94,6 +94,8 @@ pub struct State {
     pub zoom: f32,
     /// True until the diagram just opened has been fitted into the canvas once.
     pub fit_pending: bool,
+    /// A node the next frame brings to the canvas's centre (what the search found).
+    pub centre_on: Option<Uuid>,
     /// True when the active tab changed without the view: the next frame opens it through the
     /// engine, so the view's open diagram and the canvas agree.
     pub reopen_pending: bool,
@@ -143,6 +145,7 @@ impl Default for State {
             pan: Vec2::ZERO,
             zoom: 1.0,
             fit_pending: false,
+            centre_on: None,
             reopen_pending: false,
             minimap_open: true,
             minimap_drag: None,
@@ -462,6 +465,17 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     if shell.canvas.fit_pending {
         fit(&mut shell.canvas, r.size(), bounds);
         shell.canvas.fit_pending = false;
+    }
+    // A node the search found comes to the centre, readable.
+    if let Some(n) = shell.canvas.centre_on.take()
+        && let Some(n) = shell.session.as_ref().and_then(|s| s.doc().by_uuid(n).map(|o| bounds_of(s.doc(), o)))
+    {
+        shell.canvas.zoom = shell.canvas.zoom.max(0.75);
+        let centre = vec2((n.x + n.width / 2.0) as f32, (n.y + n.height / 2.0) as f32);
+        let pan = r.size() / 2.0 - centre * shell.canvas.zoom;
+        if pan.is_finite() {
+            shell.canvas.pan = pan;
+        }
     }
     // The pointer: the pan tool or the middle button drag the view, the wheel scrolls it, a pinch
     // or the wheel with the command key zoom it about the pointer, a click selects what it hits.

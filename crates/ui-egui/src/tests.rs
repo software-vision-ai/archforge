@@ -4053,3 +4053,40 @@ fn a_right_angled_lines_segment_slides_and_a_double_click_routes_it_anew() {
     h.run();
     assert_eq!(waypoints(&h), 0, "the route is worked out anew");
 }
+
+#[test]
+fn the_top_bars_search_finds_a_projects_tables_and_diagrams() {
+    let (mut h, _d, _e, _customer, order_node) = related_tables((900.0, 700.0));
+    let results = |h: &Harness<'static, Shell>| ids(h).into_iter().filter(|i| i.starts_with("workspace.header.search.result.")).collect::<Vec<_>>();
+    // The command key with K opens it; typing narrows it to the table Order.
+    h.event(egui::Event::Key { key: egui::Key::K, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::COMMAND });
+    h.run();
+    assert!(h.state().home_search.open, "the search opens");
+    h.event(egui::Event::Text("order".into()));
+    h.run();
+    assert!(!results(&h).is_empty());
+    // Enter goes to the first: Order is selected and its table comes to the canvas's centre.
+    h.event(egui::Event::Key { key: egui::Key::Enter, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::NONE });
+    h.run();
+    h.run();
+    assert_eq!(selected_name(&h), "Order");
+    assert!(!h.state().home_search.open, "the list closes");
+    let node = rect_of(&h, &format!("workspace.canvas.node.{}", h.state().session.as_ref().unwrap().doc().uuid(order_node).unwrap()));
+    let canvas = rect_of(&h, "workspace.canvas");
+    assert!((node.center() - canvas.center()).length() < 4.0, "brought into view: {node:?} in {canvas:?}");
+    // A click opens it too; the diagram is found by its name and opens in its tab.
+    let at = rect_of(&h, "workspace.header.search").center();
+    click(&mut h, at);
+    h.event(egui::Event::Text("shop schema".into()));
+    h.run();
+    let first = rect_of(&h, "workspace.header.search.result.0").center();
+    click(&mut h, first);
+    h.run();
+    assert_eq!(selected_name(&h), "Shop schema", "the diagram is open and selected");
+    // Esc closes it with nothing chosen.
+    let at = rect_of(&h, "workspace.header.search").center();
+    click(&mut h, at);
+    h.event(egui::Event::Key { key: egui::Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::NONE });
+    h.run();
+    assert!(!h.state().home_search.open);
+}

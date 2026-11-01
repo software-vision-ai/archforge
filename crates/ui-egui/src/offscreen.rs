@@ -53,6 +53,8 @@ pub enum Screen {
     /// The diagram of two tables with Invoice and Product placed so that their lines from Customer
     /// would cross Order: right-angled lines go around it (archforge-guc.1.1).
     WorkspaceRouting,
+    /// The routing sample with the top bar's search open on "order" (archforge-9ln.1.3).
+    WorkspaceSearch,
     /// The Diagrams explorer with the diagram "dbo" open, its one table Company placed and its key
     /// column selected: the owner's screen of 2026-10-31.
     WorkspaceColumnSelected,
@@ -228,6 +230,7 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
             | Screen::WorkspaceSubtypes
             | Screen::WorkspaceCrossSchema
             | Screen::WorkspaceRouting
+            | Screen::WorkspaceSearch
     ) {
         shell.adopt_project();
         sample_diagram(
@@ -243,10 +246,14 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
                     | Screen::WorkspaceMappingTable
                     | Screen::WorkspaceCrossSchema
                     | Screen::WorkspaceRouting
+                    | Screen::WorkspaceSearch
             ),
         )?;
-        if screen == Screen::WorkspaceRouting {
+        if matches!(screen, Screen::WorkspaceRouting | Screen::WorkspaceSearch) {
             sample_routing(&mut shell)?;
+        }
+        if screen == Screen::WorkspaceSearch {
+            crate::home_search::open_with(&mut shell, "order");
         }
         if screen == Screen::WorkspaceCrossSchema {
             sample_cross_schema(&mut shell)?;

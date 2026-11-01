@@ -27,6 +27,7 @@ pub mod objects;
 pub mod offscreen;
 pub mod panels;
 pub mod problems;
+mod project_search;
 pub mod relation;
 pub mod skill_tab;
 pub mod state;

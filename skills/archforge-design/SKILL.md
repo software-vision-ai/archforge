@@ -83,6 +83,14 @@ the change, and update this file in the same change.
 - New things get default names (Schema 1, Diagram 1, Entity, Entity 2) with the name open for
   typing in place.
 
+- In a project the top bar's search (or the command key with K, unless a text is being typed)
+  finds the project's diagrams and elements (schemas, tables, columns, relationships, domains,
+  enum types, sequences, views, skills, notes) by name or by where they live; every word must
+  match, the name itself first, then names that start so. Diagrams are listed first, then
+  elements, each saying what it is and where. A diagram opens in its tab; an element is selected,
+  its row shows in the Models tree, and the canvas brings it to the centre on the open diagram,
+  or on the first diagram that shows it, which opens.
+
 ## Explorer
 - Models starts at the schemas: schema, then its domains, enum types, sequences and views, then
   its tables and their columns. Diagrams appear only in the Diagrams explorer.

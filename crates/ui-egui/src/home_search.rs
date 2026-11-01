@@ -1,9 +1,10 @@
-//! Home's search field: a quick switcher over the recent projects, the projects in the pinned
-//! folders (the host looks for them when the search opens, one search at a time), the pinned
-//! folders and what Home can do. A click on the field or the command key with K opens it; typing narrows the list
-//! under it, every word of the query found in a result's name (or, for a project or a folder, in
-//! where it lives); the arrow keys move the highlight, Enter runs it, Esc or a click elsewhere
-//! closes the list.
+//! The top bar's search field. On Home, a quick switcher over the recent projects, the projects in
+//! the pinned folders (the host looks for them when the search opens, one search at a time), the
+//! pinned folders and what Home can do; in a project, its diagrams and elements
+//! (crate::project_search). A click on the field or the command key with K opens it; typing
+//! narrows the list under it, every word of the query found in a result's name (or in where it
+//! lives); the arrow keys move the highlight, Enter runs it, Esc or a click elsewhere closes the
+//! list.
 
 use egui::{Rect, Stroke, StrokeKind, pos2, vec2};
 
@@ -26,6 +27,11 @@ pub struct Search {
     focus: bool,
     found: Vec<Found>,
     finding: Option<std::sync::mpsc::Receiver<Vec<crate::FoundProject>>>,
+    /// Where the list was opened (a project's folder, none for Home): moving elsewhere closes it.
+    scope: Option<std::path::PathBuf>,
+    /// The open project's index, and the project and model revision it was made from.
+    index: Vec<crate::project_search::Entry>,
+    indexed: Option<(std::path::PathBuf, u64)>,
 }
 
 /// A project found in a pinned folder, as its row shows it: where it is, its name, where it lives
@@ -52,6 +58,8 @@ enum Target {
     Project(std::path::PathBuf),
     Folder(std::path::PathBuf),
     Action(Action),
+    /// In a project: a diagram or an element.
+    Model(crate::project_search::Found),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -72,14 +80,19 @@ struct Hit {
     detail: String,
 }
 
-/// Opens the search with the keyboard: the command key with K, while Home shows.
+/// Opens the search with the keyboard: the command key with K, on Home or in a project, unless a
+/// text is being typed (in a skill's text the same keys make a link).
 pub(crate) fn shortcut(shell: &mut Shell, ctx: &egui::Context) {
+    if ctx.egui_wants_keyboard_input() {
+        return;
+    }
     if ctx.input_mut(|i| i.consume_shortcut(&egui::KeyboardShortcut::new(egui::Modifiers::COMMAND, egui::Key::K))) {
         open(shell, ctx);
     }
 }
 
 fn open(shell: &mut Shell, ctx: &egui::Context) {
+    let scope = scope(shell);
     let search = &mut shell.home_search;
     search.focus = true;
     if search.open {
@@ -87,6 +100,10 @@ fn open(shell: &mut Shell, ctx: &egui::Context) {
     }
     search.open = true;
     search.highlight = 0;
+    search.scope = scope;
+    if search.scope.is_some() {
+        return;
+    }
     // The pinned folders' projects, looked for again each time the list opens (folders change),
     // but never while a search of them is still running; its answer wakes the window.
     if search.finding.is_none()
@@ -119,6 +136,30 @@ fn take_found(shell: &mut Shell) {
         .collect();
 }
 
+/// Opens the search in the open project with `query` typed, for the pictures of the design.
+#[cfg(feature = "snapshot")]
+pub(crate) fn open_with(shell: &mut Shell, query: &str) {
+    shell.home_search.open = true;
+    shell.home_search.scope = scope(shell);
+    shell.home_search.query = query.to_string();
+    shell.home_search.highlight = 0;
+}
+
+/// Where the search works now: the open project's folder, or none on Home.
+fn scope(shell: &Shell) -> Option<std::path::PathBuf> {
+    shell.active.and(shell.project.as_ref()).map(|p| p.path.clone()).filter(|_| shell.session.is_some())
+}
+
+/// The open project's index, made again when the project or its model changed since.
+fn fresh_index(shell: &mut Shell) {
+    let (Some(session), Some(path)) = (shell.session.as_ref(), scope(shell)) else { return };
+    let key = (path, session.revision());
+    if shell.home_search.indexed.as_ref() != Some(&key) {
+        shell.home_search.index = crate::project_search::index(session.doc());
+        shell.home_search.indexed = Some(key);
+    }
+}
+
 /// Closes the list and forgets the query; the projects found stay for the next time.
 fn close(shell: &mut Shell) {
     let search = &mut shell.home_search;
@@ -138,6 +179,19 @@ fn matches(query: &str, texts: &[&str]) -> bool {
 /// not among them, the pinned folders and the actions, in that order; with no query, all of them.
 fn hits(shell: &Shell, query: &str) -> Vec<(String, Vec<Hit>)> {
     let mut groups = Vec::new();
+    if shell.home_search.scope.is_some() {
+        let (diagrams, elements) = crate::project_search::hits(&shell.home_search.index, query);
+        for (heading, entries) in [(tr("Diagrams"), diagrams), (tr("Elements"), elements)] {
+            let rows: Vec<Hit> = entries
+                .into_iter()
+                .map(|e| Hit { target: Target::Model(e.found), icon: e.icon, label: e.label.clone(), detail: e.detail.clone() })
+                .collect();
+            if !rows.is_empty() {
+                groups.push((heading, rows));
+            }
+        }
+        return groups;
+    }
     let recent = shell.state.recent.iter().map(|r| Hit {
         target: Target::Project(r.path.clone()),
         icon: &icons::ER_DIAGRAM,
@@ -218,6 +272,7 @@ fn run(shell: &mut Shell, target: Target) {
     close(shell);
     match target {
         Target::Project(path) => shell.open_path(&path),
+        Target::Model(found) => crate::project_search::go(shell, found),
         Target::Folder(path) => shell.open_from_picker_in(Some(&path)),
         Target::Action(Action::NewProject) => crate::new_project::open(shell),
         Target::Action(Action::OpenProject) => shell.open_from_picker(),
@@ -242,9 +297,15 @@ fn run(shell: &mut Shell, target: Target) {
 
 /// The field in the bar at `field`, with its placeholder and shortcut while closed, the query
 /// and its list while open.
-pub(crate) fn field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Rect, placeholder: &str) {
+pub(crate) fn field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Rect, placeholder: &str, prefix: &str) {
     let paint = ui.painter().clone();
     let mid = field.center().y;
+    // A list opened on Home or for another project closes when the window shows something else.
+    if shell.home_search.open && shell.home_search.scope != scope(shell) {
+        close(shell);
+    }
+    fresh_index(shell);
+    let id = format!("{prefix}.search");
     let open_now = shell.home_search.open;
     paint.rect_filled(field, 15.0, if open_now { p.surface } else { p.page });
     paint.rect_stroke(field, 15.0, Stroke::new(1.0, if open_now { p.accent } else { p.border }), StrokeKind::Inside);
@@ -256,12 +317,12 @@ pub(crate) fn field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Re
     if !open_now {
         paint.galley(key_at, key, p.text_muted);
         ux::text_mid(&paint, text.left(), mid, placeholder, types::UI, p.text_secondary, Some(text.width()));
-        if control(shell, ui, "home.header.search", "field", field, true).clicked() {
+        if control(shell, ui, &id, "field", field, true).clicked() {
             open(shell, ui.ctx());
         }
         return;
     }
-    widgets::record_visible(ui, &mut shell.registry, "home.header.search", "field", field);
+    widgets::record_visible(ui, &mut shell.registry, &id, "field", field);
     // The list's keys before the field sees them: the arrows move, Enter runs, Esc closes.
     let groups = hits(shell, &shell.home_search.query.clone());
     let count = groups.iter().map(|(_, h)| h.len()).sum::<usize>();
@@ -296,10 +357,10 @@ pub(crate) fn field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Re
     }
     let row = ui.fonts_mut(|f| f.row_height(&types::UI.font()));
     let inner = Rect::from_min_max(pos2(text.left(), mid - row / 2.0), pos2(text.right(), mid + row / 2.0));
-    let id = widgets::egui_id("home.header.search.input");
+    let input = widgets::egui_id(&format!("{id}.input"));
     let before = shell.home_search.query.clone();
     let edit = egui::TextEdit::singleline(&mut shell.home_search.query)
-        .id(id)
+        .id(input)
         .frame(egui::Frame::NONE)
         .margin(egui::Margin::ZERO)
         .font(types::UI.font())
@@ -315,7 +376,7 @@ pub(crate) fn field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Re
     if shell.home_search.query != before {
         shell.home_search.highlight = 0;
     }
-    list(shell, ui, p, field, &groups);
+    list(shell, ui, p, field, &groups, &id);
     // The host's answer only now, so the rows a key or a click ran on are the rows drawn; a list
     // that grows keeps its highlight on the first row.
     let had = shell.home_search.found.len();
@@ -326,12 +387,12 @@ pub(crate) fn field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Re
 }
 
 /// The list under the field, its rows grouped under their headings; a click elsewhere closes it.
-fn list(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Rect, groups: &[(String, Vec<Hit>)]) {
+fn list(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Rect, groups: &[(String, Vec<Hit>)], id: &str) {
     let rows = groups.iter().map(|(_, h)| h.len()).sum::<usize>() as f32;
     let height = if groups.is_empty() { 52.0 } else { 8.0 + groups.len() as f32 * 28.0 + rows * ROW };
     let width = field.width().max(LIST_WIDTH);
     let r = Rect::from_min_size(pos2(field.right() - width, field.bottom() + 6.0), vec2(width, height));
-    let picked = ux::overlay(ui, widgets::egui_id("home.header.search.list"), r, |ui| {
+    let picked = ux::overlay(ui, widgets::egui_id(&format!("{id}.list")), r, |ui| {
         let paint = ui.painter().clone();
         ux::shadow(&paint, r, 10.0, p.shadow);
         paint.rect_filled(r, 10.0, p.surface);
@@ -348,7 +409,7 @@ fn list(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Rect, groups: &[(S
             y += 28.0;
             for hit in hits {
                 let row = Rect::from_min_size(pos2(r.left() + 4.0, y), vec2(r.width() - 8.0, ROW));
-                let resp = control(shell, ui, &format!("home.header.search.result.{n}"), "menu-item", row, true);
+                let resp = control(shell, ui, &format!("{id}.result.{n}"), "menu-item", row, true);
                 if resp.hovered() {
                     shell.home_search.highlight = n;
                 }
