@@ -27,7 +27,16 @@ fn name(store: &Store, o: Obj) -> String {
 /// The class diagram in the shell.
 pub(crate) struct UmlKind;
 
-const TOOLS: &[KindTool] = &[KindTool { key: "class", icon: &icons::TOOL_CLASS, hint: "Class", use_: ToolUse::Place, chevron: None }];
+const TOOLS: &[KindTool] = &[
+    KindTool { key: "class", icon: &icons::TOOL_CLASS, hint: "Class", use_: ToolUse::Place, chevron: None },
+    KindTool {
+        key: "relationship",
+        icon: &icons::TOOL_RELATIONSHIP,
+        hint: "Relationship",
+        use_: ToolUse::Connect,
+        chevron: Some(("relationship-kinds", "Relationship kinds")),
+    },
+];
 
 impl DiagramKind for UmlKind {
     fn kind(&self) -> &'static str {
@@ -112,10 +121,34 @@ impl DiagramKind for UmlKind {
         }
     }
 
-    /// No connect tool yet: relating classes comes with its own journey.
-    fn connect(&self, _: &mut Shell, _: &'static str, _: Obj, _: Uuid, _: Uuid) {}
+    /// The Relationship tool shows the kind it draws.
+    fn tool_face(&self, shell: &Shell, paint: &egui::Painter, p: &Palette, key: &str, b: Rect, ink: egui::Color32, active: bool) -> bool {
+        if key != "relationship" {
+            return false;
+        }
+        crate::uml_relate::tool_face(shell, paint, p, b, ink, active);
+        true
+    }
 
-    fn connect_to_new(&self, _: &mut Shell, _: &'static str, _: Obj, _: Uuid, _: f64, _: f64) {}
+    fn popover(&self, shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, chevron: Rect) {
+        crate::uml_relate::popover(shell, ui, p, r, chevron);
+    }
+
+    fn connect(&self, shell: &mut Shell, _tool: &'static str, d: Obj, from_node: Uuid, to_node: Uuid) {
+        crate::uml_relate::connect(shell, d, from_node, to_node);
+    }
+
+    fn connect_to_new(&self, shell: &mut Shell, _tool: &'static str, d: Obj, from_node: Uuid, x: f64, y: f64) {
+        crate::uml_relate::connect_to_new(shell, d, from_node, x, y);
+    }
+
+    fn reconnects(&self) -> bool {
+        true
+    }
+
+    fn reconnect(&self, shell: &mut Shell, element: Uuid, source: bool, to_node: Uuid) {
+        crate::uml_relate::reconnect(shell, element, source, to_node);
+    }
 
     fn rename(&self, shell: &mut Shell, element: Uuid, name: &str) -> Result<(), String> {
         crate::editing::run(shell, "uml.class.rename", json!({ "class": element.to_string(), "name": name })).map(|_| ())
@@ -308,6 +341,15 @@ impl NotationUi for UmlUi {
         Some(match class(store, o)? {
             c if c == archforge_uml::PACKAGE => words(tr("Package · model"), tr("Package"), tr("This package"), tr("On this package · {n}")),
             c if c == archforge_uml::CLASS => words(tr("Class · model, in every diagram"), tr("Class"), tr("This class"), tr("On this class · {n}")),
+            c if c == archforge_uml::ASSOCIATION => {
+                words(tr("Association · model"), tr("Association"), tr("This association"), tr("On this association · {n}"))
+            }
+            c if c == archforge_uml::GENERALIZATION => {
+                words(tr("Generalization · model"), tr("Generalization"), tr("This generalization"), tr("On this generalization · {n}"))
+            }
+            c if c == archforge_uml::DEPENDENCY => {
+                words(tr("Dependency · model"), tr("Dependency"), tr("This dependency"), tr("On this dependency · {n}"))
+            }
             _ => match member_of(store, o)?.1 {
                 MemberKind::Attribute => words(tr("Attribute · model"), tr("Attribute"), tr("This attribute"), tr("On this attribute · {n}")),
                 MemberKind::Operation => words(tr("Operation · model"), tr("Operation"), tr("This operation"), tr("On this operation · {n}")),
@@ -324,8 +366,12 @@ impl NotationUi for UmlUi {
     fn body(&self, shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, subject: &Subject) {
         let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
         let Some(o) = subject.obj else { return };
-        if class(store, o) == Some(archforge_uml::CLASS) {
-            return crate::uml_panel::class_body(shell, ui, p, r, y, subject);
+        match class(store, o) {
+            Some(c) if c == archforge_uml::CLASS => return crate::uml_panel::class_body(shell, ui, p, r, y, subject),
+            Some(c) if [archforge_uml::ASSOCIATION, archforge_uml::GENERALIZATION, archforge_uml::DEPENDENCY].contains(&c) => {
+                return crate::uml_relate::body(shell, ui, p, r, y, subject);
+            }
+            _ => {}
         }
         if let Some((c, _)) = member_of(store, o) {
             let Some(words) = self.words(store, c) else { return };

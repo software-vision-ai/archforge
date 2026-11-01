@@ -65,6 +65,11 @@ pub enum Screen {
     WorkspaceClassMembers,
     /// The same with Customer's operation rename open in its editor, its parameter on a row.
     WorkspaceMemberEditor,
+    /// The sample class model with the association "paid by" selected: its line's end handles and
+    /// its Properties with both ends (archforge-3c5.1.4).
+    WorkspaceAssociation,
+    /// The sample class model with the Relationship tool active and its kinds' menu open.
+    WorkspaceRelateKinds,
     /// The routing sample with the top bar's search open on "order" (archforge-9ln.1.3).
     WorkspaceSearch,
     /// The Diagrams explorer with the diagram "dbo" open, its one table Company placed and its key
@@ -242,6 +247,26 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
     if screen == Screen::WorkspaceClassDiagramRead {
         shell.adopt_project();
         crate::uml_ui::open_sample(&mut shell)?;
+    }
+    if matches!(screen, Screen::WorkspaceAssociation | Screen::WorkspaceRelateKinds) {
+        shell.adopt_project();
+        crate::uml_ui::open_sample(&mut shell)?;
+        if screen == Screen::WorkspaceAssociation {
+            let id = {
+                let store = shell.session.as_ref().ok_or("no project is open")?.doc();
+                let a = store
+                    .alive()
+                    .find(|o| store.class_of(*o).ok() == Some(archforge_uml::ASSOCIATION) && archforge_core::name_of(store, *o) == "paid by")
+                    .ok_or("the sample has no such association")?;
+                store.uuid(a).map_err(|e| e.to_string())?
+            };
+            crate::panels::run(&mut shell, "view.select", serde_json::json!({ "ids": [id.to_string()] }))?;
+            shell.state.show_panel(crate::state::Panel::Properties);
+        } else {
+            shell.canvas.tool = crate::canvas::Tool::Connect("relationship");
+            shell.canvas.uml_relation = crate::uml_relate::Relate::Composition;
+            shell.canvas.popover = true;
+        }
     }
     if matches!(screen, Screen::WorkspaceClassMembers | Screen::WorkspaceMemberEditor) {
         shell.adopt_project();

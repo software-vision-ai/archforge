@@ -119,6 +119,8 @@ pub struct State {
     /// open, the mapping table offer and the toast with Undo.
     pub relationship: crate::connect::RelKind,
     pub popover: bool,
+    /// What a class diagram's Relationship tool draws (archforge-3c5.1.4).
+    pub uml_relation: crate::uml_relate::Relate,
     pub mapping: Option<crate::connect::MappingOffer>,
     pub toast: Option<crate::connect::Toast>,
     /// A note's text being typed in place (slice E4).
@@ -161,6 +163,7 @@ impl Default for State {
             focused: false,
             relationship: crate::connect::RelKind::default(),
             popover: false,
+            uml_relation: crate::uml_relate::Relate::default(),
             mapping: None,
             toast: None,
             note_edit: None,
@@ -932,6 +935,43 @@ fn along(points: &[Pos2], t: f32) -> Pos2 {
     points[points.len() - 1]
 }
 
+/// Where a mark the line stops short of sits at `tip`, coming from `back`: the line's direction,
+/// the mark's base, half its width across, and its length; a triangle stops the line at its base,
+/// a diamond at its far corner.
+fn mark_shape(mark: EndMark, tip: Pos2, back: Pos2, z: f32) -> (Vec2, Pos2, Vec2, f32) {
+    let dir = if (tip - back).length() > f32::EPSILON { (tip - back).normalized() } else { vec2(0.0, -1.0) };
+    let s = z.max(0.6);
+    let (len, half) = match mark {
+        EndMark::Triangle => (12.0 * s, 7.5 * s),
+        EndMark::HollowDiamond | EndMark::FilledDiamond => (20.0 * s, 6.0 * s),
+        _ => (0.0, 6.0 * s),
+    };
+    (dir, tip - dir * len, vec2(-dir.y, dir.x) * half, len)
+}
+
+/// Draws a line's triangle, diamond or open arrow at `tip`, coming from `back`, a hollow one filled
+/// with `bg`.
+#[allow(clippy::too_many_arguments, reason = "a mark is drawn at its end, in its stroke and over what it is drawn on")]
+pub(crate) fn line_mark(paint: &egui::Painter, mark: EndMark, tip: Pos2, back: Pos2, stroke: Stroke, z: f32, bg: egui::Color32) {
+    let (dir, base, side, len) = mark_shape(mark, tip, back, z);
+    match mark {
+        EndMark::Triangle => {
+            paint.add(egui::Shape::convex_polygon(vec![tip, base + side, base - side], bg, stroke));
+        }
+        EndMark::HollowDiamond | EndMark::FilledDiamond => {
+            let middle = tip - dir * (len / 2.0);
+            let fill = if mark == EndMark::FilledDiamond { stroke.color } else { bg };
+            paint.add(egui::Shape::convex_polygon(vec![tip, middle + side, base, middle - side], fill, stroke));
+        }
+        EndMark::OpenArrow => {
+            let back = tip - dir * 12.0 * z.max(0.6);
+            paint.line_segment([tip, back + side], stroke);
+            paint.line_segment([tip, back - side], stroke);
+        }
+        _ => {}
+    }
+}
+
 /// One edge: the line between its nodes' borders through its waypoints, as its element's notation
 /// describes it (its ends' marks and texts, its roles, its dashes, its status), and its labels.
 /// Gives the point and element of a problem badge to draw, when the line shows one.
@@ -975,17 +1015,7 @@ fn draw_edge(
     if hovered {
         halo(paint, &points, stroke, p);
     }
-    // A mark the line stops short of: a triangle at its base, a diamond at its far corner.
-    let shape = |mark: EndMark, tip: Pos2, back: Pos2| {
-        let dir = if (tip - back).length() > f32::EPSILON { (tip - back).normalized() } else { vec2(0.0, -1.0) };
-        let s = z.max(0.6);
-        let (len, half) = match mark {
-            EndMark::Triangle => (12.0 * s, 7.5 * s),
-            EndMark::HollowDiamond | EndMark::FilledDiamond => (20.0 * s, 6.0 * s),
-            _ => (0.0, 6.0 * s),
-        };
-        (dir, tip - dir * len, vec2(-dir.y, dir.x) * half, len)
-    };
+    let shape = |mark: EndMark, tip: Pos2, back: Pos2| mark_shape(mark, tip, back, z);
     let mut drawn = points.clone();
     if line.ends[0].mark.set_back() > 0.0 {
         drawn[0] = shape(line.ends[0].mark, points[0], points[1]).1;
@@ -995,28 +1025,15 @@ fn draw_edge(
     }
     crate::connect::line(paint, &drawn, stroke, !line.dashed, z);
     for (end, tip, back) in [(&line.ends[0], points[0], points[1]), (&line.ends[1], points[n - 1], points[n - 2])] {
-        let (dir, base, side, len) = shape(end.mark, tip, back);
-        match end.mark {
-            EndMark::Triangle => {
-                paint.add(egui::Shape::convex_polygon(vec![tip, base + side, base - side], p.canvas, stroke));
-                // A note beside the target's triangle, such as a generalization set's facts.
-                if let Some(note) = line.note.as_ref().filter(|_| std::ptr::eq(end, &line.ends[1])) {
-                    let text = note.iter().map(say).collect::<Vec<_>>().join(" · ");
-                    let gal = ux::galley(paint, &text, types::SMALL.scaled(z), p.text_secondary, None);
-                    paint.galley(base + vec2(10.0 * z, -gal.size().y / 2.0) - dir * 14.0 * z, gal, p.text_secondary);
-                }
-            }
-            EndMark::HollowDiamond | EndMark::FilledDiamond => {
-                let middle = tip - dir * (len / 2.0);
-                let fill = if end.mark == EndMark::FilledDiamond { stroke.color } else { p.canvas };
-                paint.add(egui::Shape::convex_polygon(vec![tip, middle + side, base, middle - side], fill, stroke));
-            }
-            EndMark::OpenArrow => {
-                let back = tip - dir * 12.0 * z.max(0.6);
-                paint.line_segment([tip, back + side], stroke);
-                paint.line_segment([tip, back - side], stroke);
-            }
-            _ => {}
+        let (dir, base, _, _) = shape(end.mark, tip, back);
+        line_mark(paint, end.mark, tip, back, stroke, z, p.canvas);
+        // A note beside the target's triangle, such as a generalization set's facts.
+        if end.mark == EndMark::Triangle
+            && let Some(note) = line.note.as_ref().filter(|_| std::ptr::eq(end, &line.ends[1]))
+        {
+            let text = note.iter().map(say).collect::<Vec<_>>().join(" · ");
+            let gal = ux::galley(paint, &text, types::SMALL.scaled(z), p.text_secondary, None);
+            paint.galley(base + vec2(10.0 * z, -gal.size().y / 2.0) - dir * 14.0 * z, gal, p.text_secondary);
         }
     }
     let mut badge = None;

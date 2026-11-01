@@ -472,6 +472,37 @@ pub fn remove_selected_relationship(shell: &mut Shell) -> bool {
     true
 }
 
+/// Removes the selected line's element of any notation (a class diagram's association,
+/// generalization or dependency) with the lines that show it, as one undo step, and says so in the
+/// toast with Undo; false when no such line is selected.
+pub fn remove_selected_line(shell: &mut Shell) -> bool {
+    let Some(session) = shell.session.as_ref() else { return false };
+    let store = session.doc();
+    let element = session.view().selection.iter().copied().find_map(|o| match store.class_of(o).ok() {
+        Some(c) if c == archforge_diagram::EDGE => store.get(o, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref()),
+        _ => Some(o),
+    });
+    let Some(element) = element.filter(|e| {
+        let (_, edges, nodes) = archforge_diagram::views_of(store, *e);
+        !edges.is_empty() && nodes.is_empty()
+    }) else {
+        return false;
+    };
+    let Some(id) = store.uuid(element).ok() else { return false };
+    let word = crate::notation_ui::of(shell.notation_uis, store, element).and_then(|ui| ui.words(store, element)).map(|w| w.word).unwrap_or_default();
+    let Some(session) = shell.session.as_mut() else { return false };
+    let removed = session.execute("element.remove", &json!({ "ids": [id.to_string()] })).map_err(|e| e.to_string());
+    match removed {
+        Ok(_) => {
+            let text = fmt(&tr("{what} removed"), &[("what", &word)]);
+            let undo_label = shell.session.as_ref().and_then(|s| s.undo_label().map(str::to_string));
+            shell.canvas.toast = Some(Toast { text, until: shell.frames.saturating_add(TOAST_FRAMES), undo_label });
+        }
+        Err(e) => shell.canvas.notice = Some(e),
+    }
+    true
+}
+
 /// The toast at the canvas's foot: the text and Undo, gone after its frames or on Undo.
 pub(crate) fn toast(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     let Some(t) = shell.canvas.toast.clone() else { return };

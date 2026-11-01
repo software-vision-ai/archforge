@@ -101,6 +101,9 @@ pub enum Gesture {
     /// A segment of a right-angled line slid across: the line, the segment's index in the route,
     /// the route as it was in diagram units, and the screen point the drag started at.
     Segment { edge: Uuid, index: usize, route: Vec<(f64, f64)>, from: Pos2 },
+    /// A selected line's end dragged towards another element (archforge-3c5.1.4): the line's
+    /// element, whether it is the source end, and the screen point of the end that stays.
+    Reconnect { element: Uuid, source: bool, fixed: Pos2 },
 }
 
 /// The entity menu, open at a screen point.
@@ -258,7 +261,12 @@ pub(crate) fn preview_rects(shell: &Shell, view: View, pointer: Option<Pos2>) ->
             let r = resized(*base, *corner, (pointer - *from) / view.zoom);
             out.insert(*node, Rect::from_min_size(view.to_screen(r.left() as f64, r.top() as f64), r.size() * view.zoom));
         }
-        Gesture::Marquee { .. } | Gesture::Connect { .. } | Gesture::LinkNote { .. } | Gesture::EndText { .. } | Gesture::Segment { .. } => {}
+        Gesture::Marquee { .. }
+        | Gesture::Connect { .. }
+        | Gesture::LinkNote { .. }
+        | Gesture::EndText { .. }
+        | Gesture::Segment { .. }
+        | Gesture::Reconnect { .. } => {}
     }
     out
 }
@@ -710,6 +718,12 @@ fn commit(shell: &mut Shell, view: View, d: Obj, pointer: Option<Pos2>, shift: b
                 let (x, y) = view.to_canvas(pointer);
                 kind.connect_to_new(shell, tool, d, from_node, x, y);
                 shell.canvas.tool = Tool::Select;
+            }
+        }
+        Gesture::Reconnect { element, source, .. } => {
+            let Some(kind) = shell.session.as_ref().and_then(|s| crate::kinds::kind_of(shell, s.doc(), d)) else { return };
+            if let Some(to_node) = node_at(shell, view, d, pointer) {
+                kind.reconnect(shell, element, source, to_node);
             }
         }
         Gesture::LinkNote { note } => {
@@ -1325,6 +1339,19 @@ pub(crate) fn overlays(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rec
         let stroke = Stroke::new((1.2 * z).clamp(1.0, 2.5), p.accent);
         paint.extend(egui::Shape::dashed_line(&[start, pointer], stroke, 5.0 * z.max(0.5), 4.0 * z.max(0.5)));
     }
+    // A line's end being moved: dashed from the end that stays to the pointer, the element under
+    // the pointer ringed.
+    if let Some(Gesture::Reconnect { fixed, .. }) = shell.canvas.gesture
+        && let Some(pointer) = ui.input(|i| i.pointer.hover_pos())
+    {
+        let z = view.zoom;
+        let stroke = Stroke::new((1.2 * z).clamp(1.0, 2.5), p.accent);
+        paint.extend(egui::Shape::dashed_line(&[fixed, pointer], stroke, 5.0 * z.max(0.5), 4.0 * z.max(0.5)));
+        let target = node_at(shell, view, d, pointer).and_then(|id| shell.session.as_ref()?.doc().by_uuid(id));
+        if let Some(rect) = target.and_then(|n| shell.session.as_ref().map(|s| view.rect(&bounds_of(s.doc(), n)))) {
+            paint.rect_stroke(rect.expand(3.0), 6.0, Stroke::new(2.0, p.accent), StrokeKind::Outside);
+        }
+    }
     if let Some(Gesture::Marquee { from }) = shell.canvas.gesture
         && let Some(to) = ui.input(|i| i.pointer.hover_pos())
     {
@@ -1375,6 +1402,9 @@ pub(crate) fn overlays(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rec
     if !many.is_empty() && shell.canvas.gesture.is_none() {
         arrange_bar(shell, ui, p, r, view, &many);
     }
+    if kind.is_some_and(|k| k.reconnects()) && shell.canvas.gesture.is_none() {
+        line_ends(shell, ui, p, r, view, d);
+    }
     if let Some(rect) = rename_rect {
         rename_field(shell, ui, p, rect, view.zoom);
     }
@@ -1389,6 +1419,44 @@ pub(crate) fn overlays(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rec
         entity_menu(shell, ui, p, r, &menu);
     }
     keyboard(shell, ui, d);
+}
+
+/// The selected line element of `d` and the route of its line there, when one line is selected.
+fn selected_line(store: &Store, d: Obj, selection: &[Obj]) -> Option<(Uuid, Vec<(f64, f64)>)> {
+    let [element] = selection else { return None };
+    let (_, edges, nodes) = archforge_diagram::views_of(store, *element);
+    if !nodes.is_empty() {
+        return None;
+    }
+    let edge = edges.into_iter().find(|e| store.container(*e).ok().flatten().is_some_and(|(c, _)| c == d))?;
+    let route = Grid::build(store, d).line(edge)?.to_vec();
+    Some((uuid(store, *element)?, route))
+}
+
+/// A selected line's two end handles (archforge-3c5.1.4): each drags onto another element to move
+/// that end there.
+fn line_ends(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, view: View, d: Obj) {
+    let Some((element, route)) = shell.session.as_ref().and_then(|s| selected_line(s.doc(), d, &s.view().selection)) else { return };
+    let (Some(first), Some(last)) = (route.first().copied(), route.last().copied()) else { return };
+    let paint = ui.painter().with_clip_rect(r);
+    let (a, b) = (view.to_screen(first.0, first.1), view.to_screen(last.0, last.1));
+    for (source, at, fixed) in [(true, a, b), (false, b, a)] {
+        let handle = Rect::from_center_size(at, Vec2::splat(12.0));
+        if !r.contains(at) {
+            continue;
+        }
+        paint.circle_filled(at, 5.0, p.surface);
+        paint.circle_stroke(at, 5.0, Stroke::new(1.5, p.accent));
+        let id = format!("workspace.canvas.line-end.{}", if source { "source" } else { "target" });
+        widgets::record_visible(ui, &mut shell.registry, &id, "button", handle);
+        let resp = ui
+            .interact(handle.expand(2.0), widgets::egui_id(&id), egui::Sense::click_and_drag())
+            .on_hover_cursor(egui::CursorIcon::Crosshair)
+            .on_hover_text(tr("Drag onto another class to move this end"));
+        if resp.drag_started_by(egui::PointerButton::Primary) {
+            shell.canvas.gesture = Some(Gesture::Reconnect { element, source, fixed });
+        }
+    }
 }
 
 /// The adorners of a selected element: connect (E2), with the kind's first connect tool, and the
@@ -1708,7 +1776,10 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
         shell.canvas.mapping = None;
         return;
     }
-    if delete && !shift && (remove_selected_link(shell) || crate::connect::remove_selected_relationship(shell)) {
+    if delete
+        && !shift
+        && (remove_selected_link(shell) || crate::connect::remove_selected_relationship(shell) || crate::connect::remove_selected_line(shell))
+    {
         return;
     }
     let kind = shell.session.as_ref().and_then(|s| crate::kinds::kind_of(shell, s.doc(), d));
@@ -1777,6 +1848,7 @@ pub fn retain_valid(state: &mut crate::canvas::State, store: &Store) {
         Some(Gesture::Resize { node, .. }) => !alive(node),
         Some(Gesture::Connect { from_node, .. }) => !alive(from_node),
         Some(Gesture::LinkNote { note }) => !alive(note),
+        Some(Gesture::Reconnect { element, .. }) => !alive(element),
         _ => false,
     };
     if gone {

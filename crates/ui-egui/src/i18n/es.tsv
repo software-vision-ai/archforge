@@ -500,3 +500,37 @@ str		This attribute	Este atributo
 str		This operation	Esta operación
 str		Visibility	Visibilidad
 str		Place class	Colocar clase
+# Relacionar clases (archforge-3c5.1.4)
+str		A relationship joins two classes	Una relación une dos clases
+str		Add association	Añadir asociación
+str		Add dependency	Añadir dependencia
+str		Add generalization	Añadir generalización
+str		Aggregation	Agregación
+str		Association	Asociación
+str		Association · model	Asociación · modelo
+str		Client	Cliente
+str		Composite	Compuesta
+str		Composition	Composición
+str		Dependency	Dependencia
+str		Dependency · model	Dependencia · modelo
+str		Directed association	Asociación dirigida
+str		Drag a line end onto another class.	Arrastre un extremo de la línea a otra clase.
+str		Drag onto another class to move this end	Arrastre a otra clase para mover este extremo
+str		End at {class}	Extremo en {class}
+str		From	Desde
+str		General	General
+str		Generalization	Generalización
+str		Generalization · model	Generalización · modelo
+str		Navigable	Navegable
+str		On this association · {n}	En esta asociación · {n}
+str		On this dependency · {n}	En esta dependencia · {n}
+str		On this generalization · {n}	En esta generalización · {n}
+str		Relationship kinds	Tipos de relación
+str		Shared	Compartida
+str		Specific	Específica
+str		Supplier	Proveedor
+str		This association	Esta asociación
+str		This dependency	Esta dependencia
+str		This generalization	Esta generalización
+str		To	Hacia
+str		{what} removed	Eliminado: {what}

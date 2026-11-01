@@ -311,8 +311,24 @@ What is UML's own, beside the shared rules above.
   Its name sits at the middle, its roles and multiplicities at their ends.
 - A generalization draws to a hollow triangle at the general class, in the muted ink, as ER's.
 - A dependency is dashed, with an open arrow at its supplier.
-- The class diagram's toolbar is Class, Note and Link note; the relationship tool comes with
-  relating classes. A class is added only with the Class tool, never by a click in Select.
+- The class diagram's toolbar is Class, Relationship with its chevron, Note and Link note. A
+  class is added only with the Class tool, never by a click in Select.
+- The Relationship tool's face is a sample of the kind it draws; its chevron opens a menu of
+  Association, Directed association, Aggregation, Composition, Generalization and Dependency, each
+  a row with its sample line, and a pick closes it. A line is drawn from the whole to the part, from
+  the specific class to the general one, from the client to the supplier; dropped on empty canvas
+  it makes a new class there, named in place. A refusal (a cycle, a class on itself) is said at the
+  canvas's top and draws nothing.
+- A new association is a plain line: no roles, no multiplicities, navigable both ways (owner
+  decision); an association owns both its ends, so drawing lines never changes a class's
+  attributes (owner decision).
+- A selected class-diagram line shows a round handle at each end; one dragged onto another class
+  moves that end there, its lines on every diagram following. Delete removes the line's
+  relationship with a toast and Undo.
+- An association's Properties: Name, its From and To classes read only with "Drag a line end onto
+  another class.", then a section per end, "End at {class}": Role and Multiplicity (written on
+  Enter or leaving the field), Navigable and Aggregation (None, Shared, Composite; written when
+  changed). A dependency shows Name, Client and Supplier; a generalization Specific and General.
 - Its own icons: the Class tool and a class in the tree are a box in three compartments (a
   table's box has a column line instead); a package is UML's tabbed box; a class diagram's tab
   shows two class boxes joined by a generalization arrow.

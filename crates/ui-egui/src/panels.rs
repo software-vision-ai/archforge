@@ -59,6 +59,8 @@ pub struct State {
     pub object_edit: Option<crate::objects::ObjectEdit>,
     /// A class's attribute or operation editor (archforge-3c5.1.3).
     pub member: Option<crate::uml_panel::MemberEdit>,
+    /// An association's ends' roles and multiplicities as typed (archforge-3c5.1.4).
+    pub ends: Option<crate::uml_relate::EndsEdit>,
     /// The body's scroll (archforge-gm2.36): how far it is scrolled, how tall its content was last
     /// frame, what it was scrolled for (a new panel or selection starts at the top), the editors
     /// open last frame, whether an editor that just opened is still to be brought into view, and
@@ -182,6 +184,8 @@ pub enum Menu {
     MemberVisibility,
     MemberType,
     ParamType(usize),
+    /// An association end's aggregation (archforge-3c5.1.4).
+    EndAggregation(usize),
 }
 
 /// The selection the panels describe.
@@ -302,6 +306,9 @@ pub fn retain_valid(state: &mut State, store: &Store) {
         state.object_edit = None;
     }
     crate::uml_panel::retain_valid(&mut state.member, store);
+    if state.ends.as_ref().is_some_and(|e| store.by_uuid(e.association).is_none()) {
+        state.ends = None;
+    }
 }
 
 // Shared drawing.
