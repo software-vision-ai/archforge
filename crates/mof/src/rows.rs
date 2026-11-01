@@ -200,12 +200,35 @@ pub fn snapshot(store: &Store, tables: &[Table], junctions: &[Junction]) -> Resu
 
 /// Builds the objects of `rows` into `store`, all of them or none: the objects first under their
 /// ids, then their single values, then each list in its order. The caller validates the result.
+/// It is one transaction, so a model past [`crate::store::MAX_OPS`] steps is refused; a project
+/// being opened uses [`restore_into_empty`], which has no such bound.
 pub fn restore(store: &mut Store, rows: &Rows, tables: &[Table], junctions: &[Junction]) -> Result<(), Invalid> {
     if rows.tables.len() != tables.len() || rows.junctions.len() != junctions.len() {
         return Err(refused("the rows do not match the project's tables"));
     }
     check_nesting(store, rows, tables, junctions)?;
-    store.transaction(|st| {
+    store.transaction(|st| build(st, rows, tables, junctions))
+}
+
+/// Builds the objects of `rows` into `store`, which must hold nothing yet, and gives it back built
+/// (AR-30). No undo log is kept, so a model of any size the read budgets let through opens: all of
+/// it or none comes from the store being given back only when everything was built, and dropped
+/// otherwise. The caller validates the result.
+pub fn restore_into_empty(mut store: Store, rows: &Rows, tables: &[Table], junctions: &[Junction]) -> Result<Store, Invalid> {
+    if store.live() != 0 {
+        return Err(Invalid::Internal("a model is built into an empty store only".into()));
+    }
+    if rows.tables.len() != tables.len() || rows.junctions.len() != junctions.len() {
+        return Err(refused("the rows do not match the project's tables"));
+    }
+    check_nesting(&store, rows, tables, junctions)?;
+    build(&mut store, rows, tables, junctions)?;
+    Ok(store)
+}
+
+/// The objects of `rows`, their single values, then their lists, built into `st`.
+fn build(st: &mut Store, rows: &Rows, tables: &[Table], junctions: &[Junction]) -> Result<(), Invalid> {
+    {
         let mut ids: HashMap<Uuid, Obj> = HashMap::new();
         for (table, table_rows) in tables.iter().zip(&rows.tables) {
             let id_column =
@@ -285,7 +308,7 @@ pub fn restore(store: &mut Store, rows: &Rows, tables: &[Table], junctions: &[Ju
             }
         }
         Ok(())
-    })
+    }
 }
 
 /// Refuses rows whose containment nests deeper than [`MAX_NESTING`], or in a loop, or lists an

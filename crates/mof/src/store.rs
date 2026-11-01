@@ -1130,6 +1130,35 @@ impl Store {
         self.alive().flat_map(|o| self.validate(o).unwrap_or_default()).collect()
     }
 
+    /// The first problem `validate_all` would find, if any, found in time linear in the model and
+    /// without gathering the rest (AR-30): a missing value, or two siblings of one container whose
+    /// names differ only in case. For checking a model as it opens, whatever its size.
+    pub fn first_problem(&self) -> Option<Problem> {
+        let mut names: std::collections::HashMap<(Obj, PropId, String), Obj> = std::collections::HashMap::new();
+        for obj in self.alive() {
+            let Ok(class) = self.class_of(obj) else { continue };
+            let Some(info) = self.universe.info(class) else { continue };
+            let Ok(r) = self.reflect(obj) else { continue };
+            for p in &info.stored {
+                let Some(prop) = self.universe.prop(*p) else { continue };
+                if prop.lower == 0 {
+                    continue;
+                }
+                let found = if prop.is_many() { r.list(*p).map_or(0, <[Value]>::len) } else { usize::from(r.get(*p).is_some_and(|v| !v.is_null())) };
+                if found < prop.lower as usize {
+                    return Some(Problem::Missing { obj, prop: *p, lower: prop.lower, found });
+                }
+            }
+            if let (Some(np), Ok(Some((c, _)))) = (info.name_prop, self.container(obj))
+                && let Some(Value::Str(name)) = r.get(np)
+                && let Some(other) = names.insert((c, np, name.to_lowercase()), obj)
+            {
+                return Some(Problem::DuplicateName { obj, other, name: name.to_string() });
+            }
+        }
+        None
+    }
+
     // The raw level.
 
     /// Applies one op, recording it.

@@ -221,3 +221,33 @@ fn every_session_a_project_makes_holds_its_notations() {
     let e = bare.execute("diagram.add", &json!({ "kind": "er" })).unwrap_err();
     assert!(e.to_string().contains("holds no notation"), "{e}");
 }
+
+#[test]
+fn a_model_past_one_transactions_steps_opens_again_from_its_rows() {
+    // 400 packages of 1,000 classes each: over a million steps to rebuild, more than one store
+    // transaction takes, built straight in the store as a big project's rows would hold them.
+    let mut st = store(ids(0)).unwrap();
+    let model = st.create(archforge_core::MODEL).unwrap();
+    for p in 0..400 {
+        let pkg = st.create(archforge_uml::PACKAGE).unwrap();
+        st.set(pkg, archforge_uml::named_element::NAME, Value::str(&format!("p{p}"))).unwrap();
+        st.push(model, archforge_core::model::MEMBER, Value::Ref(pkg)).unwrap();
+        for c in 0..1_000 {
+            let class = st.create(archforge_uml::CLASS).unwrap();
+            st.set(class, archforge_uml::named_element::NAME, Value::str(&format!("C{c}"))).unwrap();
+            st.push(pkg, archforge_uml::package::PACKAGED_ELEMENT, Value::Ref(class)).unwrap();
+        }
+    }
+    let (tables, junctions) = storage();
+    let saved = rows::snapshot(&st, &tables, &junctions).unwrap();
+    // One transaction refuses it; opening builds it without one.
+    let mut again = store(ids(1)).unwrap();
+    assert!(matches!(rows::restore(&mut again, &saved, &tables, &junctions), Err(archforge_mof::Invalid::TooManyOps)));
+    let session = session_from_rows(&saved, ids(2)).unwrap();
+    assert_eq!(session.doc().live(), 1 + 400 + 400_000);
+    assert!(!session.is_dirty());
+    // A store that already holds something is refused rather than mixed.
+    let mut busy = store(ids(3)).unwrap();
+    busy.create(archforge_core::MODEL).unwrap();
+    assert!(rows::restore_into_empty(busy, &saved, &tables, &junctions).is_err());
+}
