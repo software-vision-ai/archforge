@@ -396,6 +396,14 @@ fn validate_reports_missing_values_and_duplicate_names() {
     st.set(b, NAMED_ELEMENT_NAME, s("Invoice")).unwrap();
     assert_eq!(st.validate_all(), vec![]);
     assert_eq!(st.first_problem(), None);
+    // Siblings named with nothing never clash, for either check.
+    for _ in 0..2 {
+        let c = st.create(CLASS).unwrap();
+        st.set(c, NAMED_ELEMENT_NAME, s("")).unwrap();
+        st.push(pkg, PACKAGE_PACKAGED_ELEMENT, Value::Ref(c)).unwrap();
+    }
+    assert_eq!(st.validate_all(), vec![]);
+    assert_eq!(st.first_problem(), None);
 }
 
 #[test]

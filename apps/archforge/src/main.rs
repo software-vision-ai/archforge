@@ -6,6 +6,8 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
+#[cfg(test)]
+mod acceptance;
 mod app_dirs;
 mod app_icon;
 mod build_info;

@@ -226,7 +226,7 @@ fn pick_folder() -> Option<PathBuf> {
 /// counter in the tail makes every id of this process distinct whatever the clock and the
 /// randomness do (RFC 9562's monotonic counter), the two random bytes before it keep ids of two
 /// processes apart, and the time keeps them sorted. A failing randomness source is said once.
-fn fresh_id() -> archforge_mof::Uuid {
+pub(crate) fn fresh_id() -> archforge_mof::Uuid {
     static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
     static WARNED: std::sync::Once = std::sync::Once::new();
     let millis = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0);

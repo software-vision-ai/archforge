@@ -1113,8 +1113,10 @@ impl Store {
                 out.push(Problem::Missing { obj, prop: *p, lower: prop.lower, found });
             }
         }
+        // An empty name names nothing: unnamed siblings never clash.
         if let (Some(np), Some((c, _))) = (info.name_prop, self.container(obj)?)
             && let Some(Value::Str(name)) = r.get(np)
+            && !name.is_empty()
         {
             for other in self.by_name(np, &name) {
                 if other != obj && self.container(other)?.map(|(o, _)| o) == Some(c) {
@@ -1149,8 +1151,10 @@ impl Store {
                     return Some(Problem::Missing { obj, prop: *p, lower: prop.lower, found });
                 }
             }
+            // An empty name names nothing, as `validate` sees it: unnamed siblings never clash.
             if let (Some(np), Ok(Some((c, _)))) = (info.name_prop, self.container(obj))
                 && let Some(Value::Str(name)) = r.get(np)
+                && !name.is_empty()
                 && let Some(other) = names.insert((c, np, name.to_lowercase()), obj)
             {
                 return Some(Problem::DuplicateName { obj, other, name: name.to_string() });
