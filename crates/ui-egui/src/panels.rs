@@ -1453,9 +1453,13 @@ pub(crate) fn target_word(store: &Store, s: Obj) -> String {
     match archforge_core::skills::kind_by_key(&archforge_notations::view(), store, &applies).map(|(_, w)| w) {
         Some("table") => tr("every table"),
         Some("relationship") => tr("every relationship"),
+        Some("class") => tr("every class"),
+        Some("attribute") => tr("every attribute"),
+        Some("operation") => tr("every operation"),
+        Some("association") => tr("every association"),
         Some(_) if !pattern.is_empty() => pattern,
-        Some(_) => tr("every column"),
-        None => String::new(),
+        Some("column") => tr("every column"),
+        Some(_) | None => String::new(),
     }
 }
 

@@ -97,6 +97,12 @@ pub trait Notation: Send + Sync + 'static {
     fn typed_class(&self) -> Option<(ClassId, PropId)> {
         None
     }
+    /// Why `element`, of a skill subject or kind class, still carries no skill and is aimed at by
+    /// none, when it does not.
+    fn skill_problem(&self, store: &Store, element: Obj) -> Option<&'static str> {
+        let _ = (store, element);
+        None
+    }
     /// Removes `objs`, live elements of its metamodel, with everything that goes with them; how
     /// many went. Refused, changing nothing the command keeps, when one of them cannot go.
     fn remove(&self, store: &mut Store, objs: &[Obj]) -> Result<usize, CommandError> {
@@ -247,6 +253,10 @@ impl SkillHost for ProjectView {
 
     fn typed_classes(&self) -> Vec<(ClassId, PropId)> {
         self.notations.iter().filter_map(|n| n.typed_class()).collect()
+    }
+
+    fn skill_problem(&self, store: &Store, element: Obj) -> Option<&'static str> {
+        self.of_element(store, element)?.skill_problem(store, element)
     }
 }
 

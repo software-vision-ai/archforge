@@ -438,10 +438,10 @@ fn has_members(store: &Store, c: Obj) -> bool {
     !archforge_uml::members::attributes(store, c).is_empty() || !archforge_uml::members::operations(store, c).is_empty()
 }
 
-/// A package's rows at `depth`: the package, then, when open, the packages it holds, its classes
-/// and their members. A row whose name holds the filter shows with the rows above it.
+/// A package's rows at `depth`: the package, then, when open, its skills, the packages it holds,
+/// its classes and their members. A row whose name holds the filter shows with the rows above it.
 fn package_rows(store: &Store, package: Obj, depth: u8, t: &Tree<'_>) -> Vec<Row> {
-    let mut under: Vec<Row> = Vec::new();
+    let mut under = t.skill_rows(package, depth.saturating_add(1));
     for sub in archforge_uml::commands::subpackages(store, package) {
         under.extend(package_rows(store, sub, depth.saturating_add(1), t));
     }
@@ -449,7 +449,7 @@ fn package_rows(store: &Store, package: Obj, depth: u8, t: &Tree<'_>) -> Vec<Row
         under.extend(class_rows(store, c, depth.saturating_add(1), t));
     }
     let label = name(store, package);
-    let empty = archforge_uml::commands::subpackages(store, package).is_empty() && classes(store, package).is_empty();
+    let empty = t.skills(package).is_empty() && archforge_uml::commands::subpackages(store, package).is_empty() && classes(store, package).is_empty();
     if !t.matches(&label) && under.is_empty() {
         return Vec::new();
     }
@@ -466,10 +466,10 @@ fn package_rows(store: &Store, package: Obj, depth: u8, t: &Tree<'_>) -> Vec<Row
     out
 }
 
-/// A class's rows: the class, draggable onto a diagram or a package, then, when open, its
-/// attributes and operations, each with its type.
+/// A class's rows: the class, draggable onto a diagram or a package, then, when open, its skills,
+/// its attributes and operations, each with its type.
 fn class_rows(store: &Store, c: Obj, depth: u8, t: &Tree<'_>) -> Vec<Row> {
-    let mut members: Vec<Row> = Vec::new();
+    let mut members = t.skill_rows(c, depth.saturating_add(1));
     for a in archforge_uml::members::attributes(store, c) {
         let label = name(store, a);
         if t.matches(&label) {
@@ -490,7 +490,7 @@ fn class_rows(store: &Store, c: Obj, depth: u8, t: &Tree<'_>) -> Vec<Row> {
     if !t.matches(&label) && members.is_empty() {
         return Vec::new();
     }
-    let expandable = if t.filtering() { !members.is_empty() } else { has_members(store, c) };
+    let expandable = if t.filtering() { !members.is_empty() } else { !t.skills(c).is_empty() || has_members(store, c) };
     let expanded = expandable && t.open(c);
     let mut out: Vec<Row> =
         t.row(c, depth, "class", &icons::CLASS, label).map(|row| Row { expandable, expanded, draggable: true, ..row }).into_iter().collect();

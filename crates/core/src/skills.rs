@@ -46,6 +46,12 @@ pub trait SkillHost: View<Store> {
     fn skill_kinds(&self) -> Vec<(ClassId, &'static str)>;
     /// The classes whose elements have a type a pattern can match, each with the property holding it.
     fn typed_classes(&self) -> Vec<(ClassId, PropId)>;
+    /// Why `element`, of a subject or kind class, still carries no skill and is aimed at by none,
+    /// when it does not: in UML an association's end is a property but no attribute.
+    fn skill_problem(&self, store: &Store, element: Obj) -> Option<&'static str> {
+        let _ = (store, element);
+        None
+    }
 }
 
 // Rules.
@@ -228,7 +234,7 @@ pub fn aims_at<V: SkillHost>(view: &V, store: &Store, s: Obj, element: Obj) -> b
     }
     let Some((kind, _)) = kind_by_key(view, store, &applies) else { return false };
     let Ok(class) = store.class_of(element) else { return false };
-    if !store.universe().conforms(class, TypeRef::Class(kind)) {
+    if !store.universe().conforms(class, TypeRef::Class(kind)) || view.skill_problem(store, element).is_some() {
         return false;
     }
     let pattern = string_of(store, s, skill::TYPE_PATTERN);
@@ -415,12 +421,16 @@ fn subject_param<V: SkillHost>(view: &V, store: &Store, p: &Params, key: &str) -
             format!("a skill cannot sit on {}; it sits on the model, {}", store.universe().class_name(class), allowed.join(", ")),
         ));
     }
+    if let Some(why) = view.skill_problem(store, o) {
+        return Err(refuse(key, why));
+    }
     Ok(Some(o))
 }
 
-/// The kind under `applies_to` (a word the notation declares, or empty) and the type pattern
-/// under `type_pattern`, checked together: a pattern needs the typed kind.
-fn target_params<V: SkillHost>(view: &V, store: &Store, p: &Params) -> Result<(Option<String>, Option<String>), CommandError> {
+/// The kind under `applies_to` (a word the subject's notation declares, any notation's for the
+/// model, or empty) and the type pattern under `type_pattern`, checked together: a pattern needs
+/// the typed kind.
+fn target_params<V: SkillHost>(view: &V, store: &Store, p: &Params, subject: Option<Obj>) -> Result<(Option<String>, Option<String>), CommandError> {
     let word = text(p, "applies_to").trim().to_lowercase();
     let pattern = text(p, "type_pattern").trim().to_string();
     if word.is_empty() {
@@ -429,7 +439,8 @@ fn target_params<V: SkillHost>(view: &V, store: &Store, p: &Params) -> Result<(O
         }
         return Ok((None, None));
     }
-    let kinds = view.skill_kinds();
+    let home = subject.and_then(|o| store.class_of(o).ok()).map(|c| c.metamodel());
+    let kinds: Vec<(ClassId, &str)> = view.skill_kinds().into_iter().filter(|(c, _)| home.is_none_or(|m| c.metamodel() == m)).collect();
     let Some((class, _)) = kinds.iter().find(|(_, w)| *w == word) else {
         let words: Vec<&str> = kinds.iter().map(|(_, w)| *w).collect();
         return Err(refuse("applies_to", format!("{word:?} is not one of {}", words.join(", "))));
@@ -446,10 +457,10 @@ fn target_params<V: SkillHost>(view: &V, store: &Store, p: &Params) -> Result<(O
         return Ok((Some(key), Some(pattern)));
     }
     let words: Vec<&str> = typed.iter().filter_map(|(c, _)| kinds.iter().find(|(k, _)| k == c)).map(|(_, w)| *w).collect();
-    Err(refuse(
-        "type_pattern",
-        format!("only a skill for every {} can name a type", if words.is_empty() { "column".to_string() } else { words.join(" or every ") }),
-    ))
+    if words.is_empty() {
+        return Err(refuse("type_pattern", "no kind a skill here aims at can name a type"));
+    }
+    Err(refuse("type_pattern", format!("only a skill for every {} can name a type", words.join(" or every "))))
 }
 
 /// The triggers under `triggers`: literals, none twice.
@@ -507,7 +518,7 @@ fn fields<V: SkillHost>(view: &V, store: &Store, p: &Params, subject: Option<Obj
             return Err(refuse("dialect", "a dialect belongs to a skill with the export trigger"));
         }
     }
-    let (applies_to, type_pattern) = target_params(view, store, p)?;
+    let (applies_to, type_pattern) = target_params(view, store, p, subject)?;
     Ok(Fields { name, description, body, triggers, dialect, applies_to, type_pattern })
 }
 
@@ -610,6 +621,14 @@ fn skill_remove<V: SkillHost>(ctx: &mut C<'_, V>, p: &Params) -> R {
 fn skill_move<V: SkillHost>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let s = skill_of(ctx.doc, p, "skill")?;
     let subject = subject_param(&*ctx.view, ctx.doc, p, "subject")?;
+    // A skill that aims at a kind stays within that kind's notation.
+    let applies = string_of(ctx.doc, s, skill::APPLIES_TO);
+    if let (Some(o), Some((kind, word))) = (subject, kind_by_key(&*ctx.view, ctx.doc, &applies))
+        && ctx.doc.class_of(o).ok().map(|c| c.metamodel()) != Some(kind.metamodel())
+    {
+        let class = ctx.doc.class_of(o).map(|c| ctx.doc.universe().class_name(c)).unwrap_or_default();
+        return Err(refuse("subject", format!("a skill for every {word} cannot sit on {class}")));
+    }
     let name = name_of(ctx.doc, s);
     if !skill_name_free(ctx.doc, subject, &name, Some(s)) {
         return Err(refuse("subject", format!("a skill named {name:?} already sits there")));
@@ -666,7 +685,7 @@ pub fn specs<V: SkillHost>() -> Vec<CommandSpec<Store, V>> {
                 "body: string = \"\"; the instructions, Markdown\n",
                 "triggers: array = []; when it applies: modelling, drawing, naming, export; none for always\n",
                 "dialect: string = \"\"; the SQL dialect of an export skill, or empty for every dialect\n",
-                "applies_to: string = \"\"; what it aims at below the subject: table, relationship or column, or empty for the subject itself\n",
+                "applies_to: string = \"\"; what it aims at below the subject, a kind of the subject's notation (ER: table, relationship, column; UML: class, attribute, operation, association), or empty for the subject itself\n",
                 "type_pattern: string = \"\"; with applies_to column: an exact type or a category (text, number, date, boolean, binary)"
             ),
             has_model::<V>,
@@ -684,7 +703,7 @@ pub fn specs<V: SkillHost>() -> Vec<CommandSpec<Store, V>> {
                 "body: string; the instructions, Markdown, or empty\n",
                 "triggers: array; when it applies: modelling, drawing, naming, export; none for always\n",
                 "dialect: string; the SQL dialect of an export skill, or empty for every dialect\n",
-                "applies_to: string; what it aims at below the subject: table, relationship or column, or empty for the subject itself\n",
+                "applies_to: string; what it aims at below the subject, a kind of the subject's notation (ER: table, relationship, column; UML: class, attribute, operation, association), or empty for the subject itself\n",
                 "type_pattern: string; with applies_to column: an exact type or a category, or empty"
             ),
             has_skills::<V>,

@@ -101,6 +101,22 @@ impl Notation for UmlNotation {
         figures::slot_text(store, element, slot)
     }
 
+    /// A skill sits on a package, a class, an attribute or an operation; it aims at every class,
+    /// attribute, operation or association below its subject (owner decision).
+    fn skill_subjects(&self) -> &'static [ClassId] {
+        &[PACKAGE, CLASS, PROPERTY, OPERATION]
+    }
+
+    fn skill_kinds(&self) -> &'static [(ClassId, &'static str)] {
+        &[(CLASS, "class"), (PROPERTY, "attribute"), (OPERATION, "operation"), (ASSOCIATION, "association")]
+    }
+
+    /// An association's end is a property but no attribute: its association carries the skill.
+    fn skill_problem(&self, store: &Store, element: Obj) -> Option<&'static str> {
+        let end = store.class_of(element).ok() == Some(PROPERTY) && store.get(element, property::ASSOCIATION).ok().and_then(|v| v.as_ref()).is_some();
+        end.then_some("an association's end carries no skill; its association's classes do")
+    }
+
     fn remove(&self, store: &mut Store, objs: &[Obj]) -> Result<usize, archforge_engine::CommandError> {
         commands::remove_elements(store, objs)
     }

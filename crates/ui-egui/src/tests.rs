@@ -5461,3 +5461,45 @@ fn a_picker_that_cannot_appear_is_said_on_home_and_a_cancel_says_nothing() {
     h.state_mut().pin_from_picker();
     assert_eq!(h.state().picker_error.as_deref(), Some("this system has no desktop portal"));
 }
+
+#[test]
+fn a_class_and_an_attribute_take_a_skill_from_the_skills_panel_and_the_tree_lists_the_class_skill() {
+    let (mut h, customer) = class_properties("Customer");
+    h.state_mut().state.show_panel(crate::state::Panel::Skills);
+    h.run();
+    let at = rect_of(&h, "workspace.skills.add").center();
+    click(&mut h, at);
+    h.run();
+    let on = |h: &Harness<'static, Shell>, subject: archforge_mof::Uuid| {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let o = st.by_uuid(subject).unwrap();
+        archforge_core::skills::skills(st).into_iter().filter(|s| archforge_core::skills::subject_of(st, *s) == Some(o)).collect::<Vec<_>>()
+    };
+    let skills = on(&h, customer);
+    assert_eq!(skills.len(), 1, "the class carries the new skill");
+    let skill = h.state().session.as_ref().unwrap().doc().uuid(skills[0]).unwrap();
+    assert_eq!(h.state().canvas.active, Some(skill), "it opens in its tab");
+    // The class's row in the Models tree opens onto its skill, above its members.
+    let package = {
+        let st = h.state().session.as_ref().unwrap().doc();
+        st.uuid(st.container(st.by_uuid(customer).unwrap()).unwrap().unwrap().0).unwrap()
+    };
+    h.state_mut().explorer.expanded.extend([package, customer]);
+    h.run();
+    let found = ids(&h);
+    let row = |id: archforge_mof::Uuid| found.iter().position(|i| *i == format!("workspace.explorer.row.{id}"));
+    assert!(row(skill).is_some_and(|s| row(customer).is_some_and(|c| s > c)), "{found:?}");
+    // An attribute takes one too, and the class's skill shows on it as inherited.
+    let attribute = {
+        let st = h.state().session.as_ref().unwrap().doc();
+        st.uuid(archforge_uml::members::attributes(st, st.by_uuid(customer).unwrap())[0]).unwrap()
+    };
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [attribute.to_string()] })).unwrap();
+    h.state_mut().state.show_panel(crate::state::Panel::Skills);
+    h.run();
+    assert!(ids(&h).contains(&format!("workspace.skills.row.{skill}")), "inherited from the class");
+    let at = rect_of(&h, "workspace.skills.add").center();
+    click(&mut h, at);
+    h.run();
+    assert_eq!(on(&h, attribute).len(), 1, "the attribute carries its own");
+}

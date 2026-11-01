@@ -7,7 +7,8 @@ written by hand.
 
 **Layer.** 7, the notations' layer above the MOF core (4), the shared core (5) and the diagrams (6),
 whose project view it joins as `UmlNotation` (class diagrams of a package, classes as plain cards
-with their attributes and operations) and whose commands it adds to (`commands`: `uml.package.{add,
+with their attributes and operations; skills on packages, classes, attributes and operations,
+aiming at every class, attribute, operation or association below) and whose commands it adds to (`commands`: `uml.package.{add,
 rename, list}`, `uml.class.{add, rename, list}`; a name told apart from its siblings', whatever the
 case; removing a package or a class goes through `element.remove`, with its views); pure, builds for
 the portable target.
@@ -62,7 +63,10 @@ sweep). `tests/uml.rs`: the universe builds with the file's counts and the key i
 derived-union facts; a package with a class and a typed attribute behaves as UML says through the
 store (both ends of `ownedAttribute` and `class`, containment, `ownedElement`, `ownedMember`,
 `attribute`, defaults, destroy and undo); the adversarial sweep over a session of generic commands;
-the million-object test (release only).
+the million-object test (release only). `tests/skills.rs`: skills on a package, a class, an
+attribute and an operation, each one undo step; a relationship and an association's end refused;
+the kinds a skill aims at; inheritance down the package tree with an override by name; a skill
+going with its element, a nested package's too, and back with undo.
 
 **Known lacks.** No derived getters yet (`Classifier::general`, `MultiplicityElement::lower`, …
 read as Derived until a notation writes them). No hand-written rules beyond the core's. No
