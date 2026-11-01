@@ -56,11 +56,11 @@ referrers, indexes exact against a rebuild after random sequences with undo back
 store as the engine's document (rollback on panic and on failure, batch, gesture, sweep).
 
 **Known lacks.** A destroyed object keeps its slot until the store is dropped: the engine does not
-yet tell the document when a history step is gone (recorded on gm2.31). `validate_all` over many
-same-named siblings in one container is quadratic (recorded on gm2.31 with the name index's shape).
+yet tell the document when a history step is gone (recorded on il6.1.2). `validate_all` over many
+same-named siblings in one container is quadratic (recorded on il6.1.2 with the name index's shape).
 Redefinitions resolve the property table; a redefining property with a different type is not
 checked further.
 
-**Non-goals.** The generator (gm2.26), XMI, storage in Dolt (gm2.31), any real metamodel, OCL,
+**Non-goals.** The generator (gm2.26), XMI, storage in Dolt (il6.1.2), any real metamodel, OCL,
 operations, profiles, package merge, user-defined metamodels (the `Reflect` trait leaves the door
 open).

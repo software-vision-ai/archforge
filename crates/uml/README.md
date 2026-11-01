@@ -10,10 +10,10 @@ the portable target.
 
 **Binding rules.** Decision gm2.18: the metamodel is data read at build time and compiled in; nothing
 at runtime redefines it. The XMI is read from the folder `ARCHFORGE_SPECS_DIR` names, outside the
-repository, until gm2.23 decides where the files may live; the generated code is committed, so the
+repository, until p9h.3.1 decides where the files may live; the generated code is committed, so the
 repository builds without them, and the gate's `generated` step fails when the committed code is not
 what the XMI gives (it says when it skipped because the folder is not there). The spec's comments
-are not emitted (`--docs`, off until gm2.23). The content hash of the XMI is `CONTENT_HASH`.
+are not emitted (`--docs`, off until p9h.3.1). The content hash of the XMI is `CONTENT_HASH`.
 
 **What the generated code is.** `meta.rs`: `metamodel()` built with the core's `Builder`, the
 class and data type constants (`CLASS`, `AGGREGATION_KIND`) and one module per declaring class with

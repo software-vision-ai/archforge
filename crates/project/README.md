@@ -14,7 +14,7 @@ others may not write to it, its own `.dolt` may hold nothing but a server lock, 
 read with a cap on rows, keys and values; anything unexpected is refused, never changed.
 
 
-The model's tables come with the generated storage (gm2.31); a format-2 project may carry the `er_`
+The model's tables come with the generated storage (il6.1.2); a format-2 project may carry the `er_`
 tables an earlier Archforge made, unused. A project whose model fingerprint is an earlier
 Archforge's is brought up to date when it opens, but only by adding: the tables it lacks, and the
 columns that come after the ones a table has, empty or holding what a new object holds. A table
@@ -38,4 +38,4 @@ stored procedures or events, since Archforge's writes would set them off.
 **Tests.** `tests/project.rs` against a real dolt 2.6 or later, measured on macOS; the Linux and
 Windows runs are still to be done.
 
-**Non-goals.** The model's own tables and Save (gm2.31), the Open screen and the recent list.
+**Non-goals.** The model's own tables and Save (il6.1.2), the Open screen and the recent list.

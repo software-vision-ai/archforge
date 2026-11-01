@@ -5,6 +5,6 @@ data types: 14 (9 enumerations)
 associations: 0 (0 with an association-owned or missing end: no stored opposite)
 subsets or redefinitions of association-owned ends dropped: 0
 defaults on derived properties dropped: 0
-documentation: not emitted (gm2.23)
+documentation: not emitted (p9h.3.1)
 skipped, not read:
 derived properties that need a hand-written getter (0):

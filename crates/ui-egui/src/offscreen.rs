@@ -51,7 +51,7 @@ pub enum Screen {
     /// dashed, its relationship to Order drawn (slice S7).
     WorkspaceCrossSchema,
     /// The diagram of two tables with Invoice and Product placed so that their lines from Customer
-    /// would cross Order: right-angled lines go around it (archforge-4ym).
+    /// would cross Order: right-angled lines go around it (archforge-guc.1.1).
     WorkspaceRouting,
     /// The Diagrams explorer with the diagram "dbo" open, its one table Company placed and its key
     /// column selected: the owner's screen of 2026-10-31.
