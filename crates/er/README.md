@@ -10,7 +10,7 @@ and relationships as edges, whose labels show the name, the two cardinalities an
 
 **Layer.** 6, the notations' layer, above the MOF core (4), the shared core and the diagram
 metamodel (5); pure, builds for the portable target. Storage comes with the generated tables
-(gm2.31); the canvas later (gm2.10).
+(il6.1.2); the canvas later (gm2.10).
 
 **Binding rules.** Every edit is a registered command with documented parameters, refused centrally
 when unknown or out of range and refused by the handler, naming the key, when an id is not an element
@@ -189,7 +189,7 @@ changes) with the rules checked after each step and undo back to the start.
 makes; model removals that take their views and undo that brings them back; the open diagram in the
 view; the grid; the sweep; random sequences over model and diagram commands together.
 
-**Known lacks.** Nothing persists an ER model or its diagrams until gm2.31. No indexes, checks or
+**Known lacks.** Nothing persists an ER model or its diagrams until il6.1.2. No indexes, checks or
 views. A mapping table cannot yet be collapsed back into a many-to-many relationship.
 Attribute types are free text; the PostgreSQL names decide what size a type takes (`rules::type_shape`: a length for `VARCHAR`, `CHAR`, `BIT`, and MySQL's `BINARY` (to 255) and `VARBINARY`, which a project's own ids are; a precision for `TIME`, `TIMESTAMP`, `INTERVAL`; precision and scale for `NUMERIC`, `DECIMAL`), other dialects follow behind a dialect setting (owner, 2026-10-30). Every element takes a `description`, the text DDL writes as its comment.
 

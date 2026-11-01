@@ -1,4 +1,4 @@
-//! How a line runs between two boxes (owner decisions on archforge-4ym): straight, at right angles,
+//! How a line runs between two boxes (owner decisions on archforge-guc.1.1): straight, at right angles,
 //! at right angles around the boxes in its way, or curved. Pure geometry in diagram coordinates;
 //! routes are worked out each time they are drawn and never stored.
 //!

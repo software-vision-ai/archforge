@@ -56,10 +56,10 @@ realization link between two classes; the rules refuse and change nothing; destr
 an exact undo; the sweep over a session of generic commands on the combined store.
 
 **Known lacks.** The rules run on demand (`problems`) and in the helpers; nothing calls them before
-a Save yet (gm2.31). The generator marks `Tag::name` as the class's name property, so the MOF
+a Save yet (il6.1.2). The generator marks `Tag::name` as the class's name property, so the MOF
 core's sibling-name rule (`validate`) would report two tags of one name under one Model even when
-they tag different elements, which the core allows; recorded on gm2.31 for an owner decision. No
+they tag different elements, which the core allows; recorded on il6.1.2 for an owner decision. No
 commands or UI.
 
 **Non-goals.** Issues and chats (own tables, gm2.22), diagrams (gm2.29), ER and C4, the Model's
-creation in a project (gm2.31).
+creation in a project (il6.1.2).

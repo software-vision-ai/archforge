@@ -181,7 +181,7 @@ fn diagram_add<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
             st.set(d, diagram::ELEMENT, Value::Ref(e))?;
         }
         // A new diagram's lines run at right angles around the tables (owner decision on
-        // archforge-4ym); one made earlier keeps straight lines.
+        // archforge-guc.1.1); one made earlier keeps straight lines.
         let look = st.create(STYLE)?;
         st.set(look, style::ROUTING, Value::Enum(Routing::RightAngled.index()))?;
         st.set(look, style::AVOID, Value::Bool(true))?;

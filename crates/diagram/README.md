@@ -34,7 +34,7 @@ text, x, y, width, height, child, style), `Edge` (element, source, target, waypo
 avoid) and the enumerations `LabelPlace` (source, middle, target) and `Routing` (asDiagram,
 straight, rightAngled, curved); `Element` abstract above them. A diagram's style is the look its
 lines take unless their own says otherwise; a new diagram's lines run at right angles around the
-tables (archforge-4ym).
+tables (archforge-guc.1.1).
 
 **Public API.**
 
@@ -65,7 +65,7 @@ topmost node, nearest edge and viewport; the rules over hand-made data; the swee
 sequences with the rules and the store's validation checked after each step and undo back to the
 start. `archforge-er/tests/diagram.rs` runs the commands with the ER policy.
 
-**Known lacks.** Nothing persists a diagram until gm2.31, where diagrams load lazily. The style
+**Known lacks.** Nothing persists a diagram until il6.1.2, where diagrams load lazily. The style
 sheet's contents and the drawing come with the canvas (gm2.10). Arrange is a layered layout without dummy boxes for long lines; routes are worked out when drawn, never
 stored, and an avoiding route that finds no way round takes the plain right-angled one; `visible`
 culls edges by their bounds, so a long diagonal edge is drawn in more viewports than it

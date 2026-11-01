@@ -38,7 +38,7 @@ const SCHEMA_KEY: &str = "model_schema";
 /// change, the fingerprint they had goes here. A fingerprint not listed is another model's, or a
 /// later Archforge's, and is refused.
 pub const EARLIER_MODELS: &[&str] = &[
-    // Before line routing (archforge-4ym): no Diagram.style, no Style.routing or Style.avoid.
+    // Before line routing (archforge-guc.1.1): no Diagram.style, no Style.routing or Style.avoid.
     "7666551b88d9af5b",
 ];
 /// The most tables a project's database may hold for an upgrade to look at.

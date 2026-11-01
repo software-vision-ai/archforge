@@ -780,7 +780,7 @@ pub fn build(t: &Target, bytes: &[u8], docs: bool) -> Result<Built, String> {
     let _ = writeln!(report, "associations: {} ({ends_dropped} with an association-owned or missing end: no stored opposite)", x.assocs.len());
     let _ = writeln!(report, "subsets or redefinitions of association-owned ends dropped: {subsets_dropped}");
     let _ = writeln!(report, "defaults on derived properties dropped: {derived_defaults_dropped}");
-    let _ = writeln!(report, "documentation: {}", if docs { "emitted" } else { "not emitted (gm2.23)" });
+    let _ = writeln!(report, "documentation: {}", if docs { "emitted" } else { "not emitted (p9h.3.1)" });
     if !x.primitives.is_empty() {
         let _ = writeln!(
             report,
