@@ -139,11 +139,11 @@ pub fn session_from_rows_repaired(
     repair: impl FnOnce(&mut Store),
 ) -> Result<Session, String> {
     let registry = registry()?;
-    let mut st = store(ids)?;
     let (tables, junctions) = storage();
-    archforge_mof::rows::restore(&mut st, rows, &tables, &junctions).map_err(|e| e.to_string())?;
+    // Built without an undo log, so a model of any size the read budgets let through opens.
+    let mut st = archforge_mof::rows::restore_into_empty(store(ids)?, rows, &tables, &junctions).map_err(|e| e.to_string())?;
     repair(&mut st);
-    if let Some(problem) = st.validate_all().first() {
+    if let Some(problem) = st.first_problem() {
         return Err(format!("the model does not hold together: {problem:?}"));
     }
     if !st.alive().any(|o| st.class_of(o).ok() == Some(archforge_core::MODEL)) {

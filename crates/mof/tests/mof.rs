@@ -391,9 +391,35 @@ fn validate_reports_missing_values_and_duplicate_names() {
     assert!(
         problems.iter().any(|p| matches!(p, Problem::DuplicateName { obj, other, .. } if (*obj == a && *other == b) || (*obj == b && *other == a)))
     );
+    assert!(problems.contains(&st.first_problem().expect("the first problem is one validate_all finds")));
     st.set(g, GENERALIZATION_GENERAL, Value::Ref(b)).unwrap();
     st.set(b, NAMED_ELEMENT_NAME, s("Invoice")).unwrap();
     assert_eq!(st.validate_all(), vec![]);
+    assert_eq!(st.first_problem(), None);
+}
+
+#[test]
+fn the_first_problem_is_found_in_time_linear_in_the_model() {
+    // Many objects of one name in different containers are fine; many of one name among siblings
+    // are reported at the second. Either way each object is looked at once.
+    let mut st = store();
+    let mut pkgs = Vec::new();
+    for _ in 0..20_000 {
+        let pkg = st.create(PACKAGE).unwrap();
+        let c = st.create(CLASS).unwrap();
+        st.set(c, NAMED_ELEMENT_NAME, s("Id")).unwrap();
+        st.push(pkg, PACKAGE_PACKAGED_ELEMENT, Value::Ref(c)).unwrap();
+        pkgs.push(pkg);
+    }
+    let started = std::time::Instant::now();
+    assert_eq!(st.first_problem(), None);
+    for _ in 0..20_000 {
+        let c = st.create(CLASS).unwrap();
+        st.set(c, NAMED_ELEMENT_NAME, s("id")).unwrap();
+        st.push(pkgs[0], PACKAGE_PACKAGED_ELEMENT, Value::Ref(c)).unwrap();
+    }
+    assert!(matches!(st.first_problem(), Some(Problem::DuplicateName { .. })));
+    assert!(started.elapsed() < std::time::Duration::from_secs(5), "{:?}", started.elapsed());
 }
 
 struct Rng(u64);
