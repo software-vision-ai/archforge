@@ -6,9 +6,11 @@ slot of their element and `Style`s over the shipped style sheet; our own, in the
 with UMLDI export a later task. Generated from `diagram.xmi` by `cargo xtask generate diagram`;
 the rules, the generic commands, the cascades and the spatial index are written here.
 
-**Layer.** 5, beside the shared core, above `archforge-mof` (4) and `archforge-engine` (3); pure,
+**Layer.** 6, above the shared core (5), whose Model holds the diagrams, `archforge-mof` (4) and `archforge-engine` (3); pure,
 builds for the portable target. Knows no notation: everything a view shows is typed Any, and a
-notation's view type brings the policy through `DiagramView`. The notations (6) depend on it.
+view brings the policy through `DiagramView`. The project's view, `ProjectView`, answers it by
+asking the notation that owns a diagram's kind or an element's class (`Notation`). The notations
+(7) depend on it.
 
 **Binding rules.** A node or a label carries no model text; it draws its element's, so a rename
 shows everywhere at once. Coordinates are doubles in one logical unit, absolute in the diagram's
@@ -40,7 +42,9 @@ tables (archforge-guc.1.1).
 
 | Item | Signature |
 |---|---|
-| `DiagramView` | the notation's policy: the open diagram and selection, `kinds`, `home`, `is_of`, `needs_element`, `shows`, `may_show`, `connects`, `ends`, `text_slots`, `default_size` |
+| `DiagramView` | the view's policy, asked of the view: the open diagram and selection, `kinds`, `home`, `is_of`, `needs_element`, `shows`, `may_show`, `connects`, `ends`, `text_slots`, `default_size` |
+| `Notation`, `ProjectView` | what a notation answers for its own kinds and classes (the diagram policy, where skills sit, `remove`, `describe`); the view of a project holding several notations, which asks the right one (`of_kind`, `of_class`, `of_element`) and implements `DiagramView` and `SkillHost` |
+| `project::specs` | the shared commands: `view.select`, `element.remove` (each notation removes its own) and `element.describe` |
 | `commands::specs` | `pub fn specs<V: DiagramView>() -> Vec<CommandSpec<Store, V>>`: the diagram commands for a notation's registry |
 | `metamodel`, `universe_with`, `with_slabs` | the metamodel; a universe of it and others; the slabs joined to a `CompositeSlabs` |
 | `remove_views_of`, `destroy_node_with_edges`, `views_of`, `edges_on`, `node_tree`, `diagram_of` | the cascades and the walks they rest on |

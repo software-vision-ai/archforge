@@ -17,6 +17,7 @@ archforge-mof.workspace = true
 archforge-uml.workspace = true
 
 [dev-dependencies]
+archforge-engine = { workspace = true, features = ["testing"] }
 serde_json.workspace = true
 
 [lints]

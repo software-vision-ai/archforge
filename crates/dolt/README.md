@@ -4,7 +4,7 @@
 application, reachable only by this user with a password made for each start, connects to it, stops
 it, and recovers a server a crashed Archforge left behind.
 
-**Layer.** Host services, layer 8: the application uses it, the interface never depends on it, and
+**Layer.** Host services, layer 9: the application uses it, the interface never depends on it, and
 the portable-target check leaves it out. No toolkit.
 
 **Binding rules.** Every helper program runs by absolute path in a cleared environment with a

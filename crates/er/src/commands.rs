@@ -4,19 +4,20 @@
 
 use std::collections::BTreeSet;
 
+use archforge_diagram::ProjectView;
 use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, always, cmd};
 use archforge_mof::{ClassId, Invalid, Obj, Store, TypeRef, Uuid, Value};
 use serde_json::{Value as Json, json};
 
 use crate::rules::{self, IndexColumnSpec, MAX_NAME, MAX_TEXT, MAX_TYPE, name_of};
 use crate::{
-    ATTRIBUTE, CHECK_CONSTRAINT, Cardinality, DOMAIN, DOMAIN_CHECK, Deferrability, ELEMENT, ENTITY, ENTITY_SIZE, ENUM_TYPE, EntityKind, ErView,
-    FOREIGN_KEY, GENERALIZATION, Generation, INDEX_COLUMN, MatchType, NullsOrder, PRIMARY_KEY, RELATIONSHIP, ReferentialAction, SCHEMA, SEQUENCE,
-    SortDirection, SubtypeMapping, TABLE_INDEX, UNIQUE_CONSTRAINT, VIEW, attribute, check_constraint, domain, domain_check, element, entity,
-    enum_type, foreign_key, generalization, index_column, key, named_element, relationship, schema, sequence, table_index, unique_constraint, view,
+    ATTRIBUTE, CHECK_CONSTRAINT, Cardinality, DOMAIN, DOMAIN_CHECK, Deferrability, ELEMENT, ENTITY, ENTITY_SIZE, ENUM_TYPE, EntityKind, FOREIGN_KEY,
+    GENERALIZATION, Generation, INDEX_COLUMN, MatchType, NullsOrder, PRIMARY_KEY, RELATIONSHIP, ReferentialAction, SCHEMA, SEQUENCE, SortDirection,
+    SubtypeMapping, TABLE_INDEX, UNIQUE_CONSTRAINT, VIEW, attribute, check_constraint, domain, domain_check, element, entity, enum_type, foreign_key,
+    generalization, index_column, key, named_element, relationship, schema, sequence, table_index, unique_constraint, view,
 };
 
-type C<'a> = Ctx<'a, Store, ErView>;
+type C<'a> = Ctx<'a, Store, ProjectView>;
 type R = Result<Json, CommandError>;
 
 /// Why a command is not available.
@@ -27,11 +28,11 @@ fn any_of(store: &Store, class: ClassId) -> bool {
     store.alive().any(|o| store.class_of(o).ok() == Some(class))
 }
 
-fn has_schemas(f: &Facts<'_, Store, ErView>) -> Result<(), &'static str> {
+fn has_schemas(f: &Facts<'_, Store, ProjectView>) -> Result<(), &'static str> {
     if any_of(f.doc, SCHEMA) { Ok(()) } else { Err(NO_SCHEMAS) }
 }
 
-fn has_entities(f: &Facts<'_, Store, ErView>) -> Result<(), &'static str> {
+fn has_entities(f: &Facts<'_, Store, ProjectView>) -> Result<(), &'static str> {
     if any_of(f.doc, ENTITY) { Ok(()) } else { Err(NO_ENTITIES) }
 }
 
@@ -88,18 +89,6 @@ fn subtype_key_piece(store: &Store, obj: Obj) -> Option<Obj> {
 
 fn uuid_of(store: &Store, obj: Obj) -> Result<String, CommandError> {
     store.uuid(obj).map(|u| u.to_string()).map_err(fail)
-}
-
-/// The element the id under `key` names, of any class of the ER model.
-fn element_of_any(ctx: &C<'_>, p: &Params, key: &str) -> Result<Obj, CommandError> {
-    let id = text(p, key);
-    let Some(uuid) = Uuid::parse(id) else { return Err(refuse(key, format!("{:?} is not an id", short(id)))) };
-    let o = ctx.doc.by_uuid(uuid).filter(|o| ctx.doc.is_alive(*o)).ok_or_else(|| refuse(key, format!("there is no element {}", short(id))))?;
-    let class = ctx.doc.class_of(o).map_err(fail)?;
-    if !ctx.doc.universe().conforms(class, TypeRef::Class(ELEMENT)) {
-        return Err(refuse(key, format!("{id} is not an element of the ER model")));
-    }
-    Ok(o)
 }
 
 /// The element the id under `key` names, of `class`.
@@ -1501,13 +1490,15 @@ fn attribute_set_collation(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, a)? }))
 }
 
-/// Describes any element of the model: the text DDL writes as its comment, or nothing.
-fn describe(ctx: &mut C<'_>, p: &Params) -> R {
-    let o = element_of_any(ctx, p, "element")?;
-    let description = text(p, "text");
+/// Sets the description of an ER element, the text DDL writes as its comment, or nothing
+/// (`element.describe`, through [`crate::ErNotation`]).
+pub fn describe_element(store: &mut Store, o: Obj, description: &str) -> Result<(), CommandError> {
+    let class = store.class_of(o).map_err(fail)?;
+    if !store.universe().conforms(class, TypeRef::Class(ELEMENT)) {
+        return Err(refuse("element", format!("{} is not an element of the ER model", uuid_of(store, o)?)));
+    }
     check_text("text", rules::text_problem(description, MAX_TEXT))?;
-    set_name(ctx, o, element::DESCRIPTION, description)?;
-    Ok(json!({ "id": uuid_of(ctx.doc, o)? }))
+    store.set(o, element::DESCRIPTION, if description.is_empty() { Value::Null } else { Value::str(description) }).map_err(fail)
 }
 
 fn attribute_set_flags(ctx: &mut C<'_>, p: &Params) -> R {
@@ -3058,27 +3049,24 @@ fn id_list(ctx: &C<'_>, p: &Params, key: &str) -> Result<Vec<Obj>, CommandError>
 }
 
 /// Removes schemas, entities, attributes, relationships, keys and foreign keys at once: the
-/// selection's delete. Foreign keys, keys, relationships and attributes first, then entities, then
-/// schemas, so a cascade finds nothing missing; what an earlier removal already took is skipped.
-fn remove_many(ctx: &mut C<'_>, p: &Params) -> R {
-    let ids = id_list(ctx, p, "ids")?;
-    if ids.is_empty() {
-        return Err(refuse("ids", "nothing to remove"));
-    }
+/// selection's delete (`element.remove`, through [`crate::ErNotation`]). Foreign keys, keys,
+/// relationships and attributes first, then entities, then schemas, so a cascade finds nothing
+/// missing; what an earlier removal already took is skipped. How many went.
+pub fn remove_elements(store: &mut Store, ids: &[Obj]) -> Result<usize, CommandError> {
     let mut by_class: Vec<(ClassId, Obj)> = Vec::new();
-    for o in &ids {
-        let class = ctx.doc.class_of(*o).map_err(fail)?;
+    for o in ids {
+        let class = store.class_of(*o).map_err(fail)?;
         if ![GENERALIZATION, FOREIGN_KEY, PRIMARY_KEY, UNIQUE_CONSTRAINT, RELATIONSHIP, ATTRIBUTE, ENTITY, SEQUENCE, VIEW, SCHEMA].contains(&class) {
-            return Err(refuse("ids", format!("{} is not an ER element", uuid_of(ctx.doc, *o)?)));
+            return Err(refuse("ids", format!("{} is not an ER element", uuid_of(store, *o)?)));
         }
         by_class.push((class, *o));
     }
     // A piece of a subtype key goes only with its own generalization, one of its two tables, or
     // their schema in the same call.
     for (_, o) in &by_class {
-        if let Some(g) = breaks_subtype_key(ctx.doc, *o) {
-            let (sup, sub, _) = rules::generalization_parts(ctx.doc, g);
-            let schema = rules::schema_of(ctx.doc, g);
+        if let Some(g) = breaks_subtype_key(store, *o) {
+            let (sup, sub, _) = rules::generalization_parts(store, g);
+            let schema = rules::schema_of(store, g);
             let covered = ids.iter().any(|x| Some(*x) == Some(g) || Some(*x) == sup || Some(*x) == sub || Some(*x) == schema);
             if !covered {
                 return Err(refuse("ids", "a part of a subtype's key goes only with its generalization"));
@@ -3089,24 +3077,18 @@ fn remove_many(ctx: &mut C<'_>, p: &Params) -> R {
     let mut gone = 0;
     for class in order {
         for (c, o) in &by_class {
-            if *c == class && ctx.doc.is_alive(*o) {
+            if *c == class && store.is_alive(*o) {
                 gone += match class {
-                    ENTITY => remove_entity(ctx.doc, *o),
-                    GENERALIZATION => ctx.doc.transaction(|st| remove_generalization(st, *o)),
-                    SCHEMA => remove_schema(ctx.doc, *o),
-                    _ => remove_element(ctx.doc, *o),
+                    ENTITY => remove_entity(store, *o),
+                    GENERALIZATION => store.transaction(|st| remove_generalization(st, *o)),
+                    SCHEMA => remove_schema(store, *o),
+                    _ => remove_element(store, *o),
                 }
                 .map_err(refused_as("ids"))?;
             }
         }
     }
-    Ok(json!({ "removed": gone }))
-}
-
-fn view_select(ctx: &mut C<'_>, p: &Params) -> R {
-    let ids = id_list(ctx, p, "ids")?;
-    ctx.view.selection = ids;
-    Ok(Json::Null)
+    Ok(gone)
 }
 
 // Queries.
@@ -3375,8 +3357,10 @@ fn optional_name_of(store: &Store, o: Obj, prop: archforge_mof::PropId) -> Json 
 }
 
 /// The ER notation's command table, with the edit area.
-pub fn specs() -> Vec<CommandSpec<Store, ErView>> {
-    let mut s = archforge_engine::cmd::edit::specs();
+/// ER's own commands; the edit area, the shared element commands, the diagrams' and the skills'
+/// join them in a registry.
+pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
+    let mut s = Vec::new();
     s.extend([
         cmd!("er.schema.add", "Add schema", &["Schema"], None, "name: string; the schema's name", always, schema_add),
         cmd!("er.schema.rename", "Rename schema", &["Schema"], None, "schema: string; the schema's id\nname: string; the new name", has_schemas, schema_rename),
@@ -3430,7 +3414,6 @@ pub fn specs() -> Vec<CommandSpec<Store, ErView>> {
             has_entities,
             attribute_set_collation
         ),
-        cmd!("er.describe", "Describe", &["Edit"], None, "element: string; the element's id\ntext: string = \"\"; its description, or nothing", has_schemas, describe),
         cmd!(
             "er.attribute.set-flags",
             "Set attribute flags",
@@ -3676,8 +3659,6 @@ pub fn specs() -> Vec<CommandSpec<Store, ErView>> {
             has_entities,
             entity_set_subtyping
         ),
-        cmd!("er.remove", "Remove", &["Edit"], Some("Delete"), "ids: array; the ids of what goes", has_schemas, remove_many),
-        cmd!(noundo "view.select", "Select", &["View"], None, "ids: array = []; the ids selected", always, view_select),
         cmd!(query "er.schema.list", "List schemas", &["Schema"], None, "", always, schema_list),
         cmd!(query "er.schema.get", "Get schema", &["Schema"], None, "schema: string; the schema's id", has_schemas, schema_get),
         cmd!(query "er.entity.list", "List entities", &["Entity"], None, "schema: string; the schema's id", has_schemas, entity_list),

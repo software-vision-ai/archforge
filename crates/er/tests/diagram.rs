@@ -23,7 +23,7 @@ fn ids() -> Box<dyn FnMut() -> Uuid + Send> {
 fn session() -> Session {
     let mut st = store(ids()).unwrap();
     st.create(MODEL).unwrap();
-    Session::new(registry().unwrap(), st, 1, Options::default())
+    Session::with_view(registry().unwrap(), st, 1, Options::default(), archforge_diagram::ProjectView::new(ALONE))
 }
 
 fn run(s: &mut Session, cmd: &str, p: Json) -> String {
@@ -113,13 +113,14 @@ fn round_trip(s: &mut Session, cmd: &str, p: &Json) {
 
 #[test]
 fn the_er_policy_is_what_the_spec_says() {
-    assert_eq!(ErView::kinds(), ["er"]);
-    assert!(ErView::is_of("er", SCHEMA) && !ErView::is_of("er", ENTITY));
-    assert!(ErView::shows("er", ENTITY) && !ErView::shows("er", ATTRIBUTE) && !ErView::shows("er", SCHEMA));
-    assert!(ErView::connects("er", RELATIONSHIP) && !ErView::connects("er", ENTITY));
-    assert_eq!(ErView::text_slots(RELATIONSHIP), ["name", "from_end", "to_end", "from_role", "to_role"]);
-    assert!(ErView::text_slots(ENTITY).is_empty());
-    assert_eq!(ErView::default_size(ENTITY), ENTITY_SIZE);
+    let v = archforge_diagram::ProjectView::new(ALONE);
+    assert_eq!(v.kinds(), ["er"]);
+    assert!(v.is_of("er", SCHEMA) && !v.is_of("er", ENTITY));
+    assert!(v.shows("er", ENTITY) && !v.shows("er", ATTRIBUTE) && !v.shows("er", SCHEMA));
+    assert!(v.connects("er", RELATIONSHIP) && !v.connects("er", ENTITY));
+    assert_eq!(v.text_slots(RELATIONSHIP), ["name", "from_end", "to_end", "from_role", "to_role"]);
+    assert!(v.text_slots(ENTITY).is_empty());
+    assert_eq!(v.default_size(ENTITY), ENTITY_SIZE);
     let reg = registry().unwrap();
     assert!(reg.ids().any(|i| i == "diagram.place") && reg.ids().any(|i| i == "er.entity.add"));
     let m = metamodel().unwrap();
@@ -195,7 +196,7 @@ fn refusals_follow_the_er_policy_and_change_nothing() {
         ("diagram.label", json!({ "edge": sm.edge, "kind": "name" })),
         ("diagram.style", json!({ "ids": [sm.customer_node], "fill": "blue" })),
         ("er.entity.rename", json!({ "entity": sm.customer_node, "name": "X" })),
-        ("er.remove", json!({ "ids": [sm.customer_node] })),
+        ("element.remove", json!({ "ids": [sm.customer_node] })),
     ];
     for (cmd, p) in &refused {
         let e = s.execute(cmd, p).expect_err(&format!("{cmd} {p} was accepted"));
@@ -239,7 +240,7 @@ fn removing_model_elements_removes_their_views_and_undo_brings_them_back() {
     s.undo().unwrap();
     assert_eq!(picture(s.doc()), before);
     // The mixed delete: a node is not an ER element, an entity and the relationship together are one step.
-    let out = s.execute("er.remove", &json!({ "ids": [sm.order, sm.places] })).unwrap();
+    let out = s.execute("element.remove", &json!({ "ids": [sm.order, sm.places] })).unwrap();
     assert_eq!(out.value["removed"], 5);
     no_problems(s.doc());
     s.undo().unwrap();
@@ -252,7 +253,7 @@ fn without_a_model_root_no_diagram_can_be_added() {
     let schema = st.create(SCHEMA).unwrap();
     SchemaObj::set_name(&mut st, schema, Some("loose")).unwrap();
     let id = st.uuid(schema).unwrap().to_string();
-    let mut s = Session::new(registry().unwrap(), st, 1, Options::default());
+    let mut s = Session::with_view(registry().unwrap(), st, 1, Options::default(), archforge_diagram::ProjectView::new(ALONE));
     let e = s.execute("diagram.add", &json!({ "kind": "er", "element": id })).unwrap_err();
     assert!(e.to_string().contains("no model root"), "{e}");
     assert_eq!(s.doc().live(), 1, "nothing was created");
@@ -339,7 +340,7 @@ fn random_call(rng: &mut Rng, s: &Session) -> (&'static str, Json) {
         14 if rng.below(8) == 0 => ("er.schema.remove", json!({ "schema": rng.pick(&schemas) })),
         14 => ("diagram.note", json!({ "diagram": rng.pick(&diagrams), "text": "n", "x": rng.coord(), "y": rng.coord() })),
         15 => ("diagram.link-note", json!({ "diagram": rng.pick(&diagrams), "note": rng.pick(&nodes), "target": rng.pick(&views) })),
-        _ => ("er.remove", json!({ "ids": [rng.pick(&entities).cloned().unwrap_or_default()] })),
+        _ => ("element.remove", json!({ "ids": [rng.pick(&entities).cloned().unwrap_or_default()] })),
     }
 }
 

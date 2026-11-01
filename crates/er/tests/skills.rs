@@ -23,7 +23,7 @@ fn ids() -> Box<dyn FnMut() -> Uuid + Send> {
 fn session() -> Session {
     let mut st = store(ids()).unwrap();
     st.create(MODEL).unwrap();
-    Session::new(registry().unwrap(), st, 1, Options::default())
+    Session::with_view(registry().unwrap(), st, 1, Options::default(), archforge_diagram::ProjectView::new(ALONE))
 }
 
 fn run(s: &mut Session, cmd: &str, p: Json) -> Json {
@@ -206,28 +206,28 @@ fn effective_skills_read_outermost_first_and_the_most_specific_last() {
         (obj(st, &sm.schema), obj(st, &sm.customer), obj(st, &sm.order), obj(st, &sm.key), obj(st, &sm.placed_at), obj(st, &sm.places));
 
     // A table: the project's, then the schema's general one, then the schema's table skill, then its own.
-    let eff = effective_skills::<ErView>(st, customer, None);
+    let eff = effective_skills(s.view(), st, customer, None);
     assert_eq!(names(st, &eff), ["Draw left to right", "Project naming", "Shop wide", "Every table", "Customer naming"]);
     assert_eq!(eff[0].origin, None);
     assert_eq!(eff[2].origin, Some(schema));
     assert_eq!(eff[4].origin, Some(customer));
 
     // The naming trigger alone.
-    let eff = effective_skills::<ErView>(st, customer, Some(SkillTrigger::Naming));
+    let eff = effective_skills(s.view(), st, customer, Some(SkillTrigger::Naming));
     assert_eq!(names(st, &eff), ["Project naming", "Shop wide", "Every table", "Customer naming"]);
 
     // A relationship gets the relationship skill, never the table one.
-    let eff = effective_skills::<ErView>(st, places, None);
+    let eff = effective_skills(s.view(), st, places, None);
     assert_eq!(names(st, &eff), ["Draw left to right", "Project naming", "Shop wide", "Every relationship"]);
 
     // A TIMESTAMP column matches the exact type and the date category; a BIGINT column neither.
-    let eff = effective_skills::<ErView>(st, placed_at, None);
+    let eff = effective_skills(s.view(), st, placed_at, None);
     assert_eq!(names(st, &eff), ["Draw left to right", "Project naming", "Shop wide", "Timestamps", "Dates", "Project naming"]);
-    let eff = effective_skills::<ErView>(st, key, None);
+    let eff = effective_skills(s.view(), st, key, None);
     assert_eq!(names(st, &eff), ["Draw left to right", "Project naming", "Shop wide", "Customer naming"]);
 
     // Order's own "Project naming" replaces the project's.
-    let eff = effective_skills::<ErView>(st, order, Some(SkillTrigger::Naming));
+    let eff = effective_skills(s.view(), st, order, Some(SkillTrigger::Naming));
     assert_eq!(names(st, &eff), ["Project naming", "Shop wide", "Every table", "Project naming"]);
     assert_eq!(eff[0].overridden_by, Some(eff[3].skill));
     assert_eq!(active(st, &eff), ["Shop wide", "Every table", "Project naming"]);
@@ -255,7 +255,7 @@ fn a_skill_goes_with_its_subject_and_comes_back_with_undo() {
     let mut expected = vec![obj(st, &on_customer), obj(st, &on_key)];
     expected.sort();
     assert_eq!(on, expected);
-    round_trip(&mut s, "er.remove", &json!({ "ids": [sm.customer] }));
+    round_trip(&mut s, "element.remove", &json!({ "ids": [sm.customer] }));
     let left: Vec<String> = skills(s.doc()).iter().map(|k| archforge_core::skills::name_of(s.doc(), *k)).collect();
     assert_eq!(left, ["Shop wide"]);
     assert!(s.doc().is_alive(obj(s.doc(), &on_schema)));

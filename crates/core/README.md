@@ -41,7 +41,7 @@ them. A skill's `appliesTo` holds a class key such as `er.Entity` (`skills::clas
 | `link` | `pub fn link(store, owner, kind, source, target, note) -> Result<Obj, Invalid>` |
 | `destroy_with_links`, `links_of` | destroy with the links on the subtree first; those links |
 | `tag_name_free`, `problems`, `CoreProblem` | the rules |
-| `skills::SkillHost` | what a notation's view declares: `selection_mut`, `skill_subjects`, `skill_kinds`, `typed_class` |
+| `skills::SkillHost` | what the view answers: `selection_mut`, `skill_subjects`, `skill_kinds`, `typed_classes` |
 | `skills::specs::<V>()` | the commands `skill.add`, `skill.set`, `skill.set-body`, `skill.rename`, `skill.remove`, `skill.move` and the queries `skill.list`, `skill.effective`, for a notation's registry |
 | `skills::{effective_skills, EffectiveSkill, levels, aims_at, skills, skills_on, subject_of, triggers_of, name_of, model_of, skill_name_free, name_problem, text_problem, hidden, trigger_named, trigger_words, class_key, kind_by_key, class_by_key, category_of, type_matches, skill_json, problems, SkillProblem}` | the skill rules and lookups |
 | `skills::{MAX_NAME, MAX_DESCRIPTION, MAX_BODY, MAX_DIALECT, MAX_TYPE_PATTERN, MAX_TRIGGERS, CATEGORIES, NO_MODEL, NO_SKILLS}` | the limits, the type categories, the reasons a command is unavailable |

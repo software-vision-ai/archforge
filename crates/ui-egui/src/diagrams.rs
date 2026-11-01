@@ -198,7 +198,7 @@ fn create(shell: &mut Shell) {
         let made = run(shell, "diagram.add", json!({ "kind": archforge_er::DIAGRAM_KIND, "element": &schema, "name": name }));
         // A schema made for a diagram that was then refused goes again, so nothing is left behind.
         if made.is_err() && fresh_schema {
-            let _ = run(shell, "er.remove", json!({ "ids": [schema] }));
+            let _ = run(shell, "element.remove", json!({ "ids": [schema] }));
         }
         made
     });

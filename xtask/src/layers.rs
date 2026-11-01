@@ -31,29 +31,31 @@ pub const TABLE: &[(&str, Class)] = &[
     // The command engine: knows no notation, builds for the portable target.
     ("engine", Class::Layer(3)),
     // The MOF core: the meta-metamodel, the object store and change sets; pure, portable. The
-    // shared core metamodel comes at 5, the notations' metamodels at 6.
+    // shared core metamodel comes at 5, the diagrams at 6, the notations at 7.
     ("mof", Class::Layer(4)),
     // The shared core metamodel (comments, tags, folders, trace links), generated from our XMI.
     ("core", Class::Layer(5)),
     // The diagram metamodel for every notation (diagrams, nodes, edges, labels, styles), generated
-    // from our XMI, with the generic diagram commands and the spatial index; knows no notation.
-    ("diagram", Class::Layer(5)),
+    // from our XMI, with the generic diagram commands, the spatial index and the project's view,
+    // which asks each notation about its own diagrams and elements; knows no notation. Diagrams are
+    // members of the core's Model, so it sits above the core.
+    ("diagram", Class::Layer(6)),
     // The notations' metamodels, generated over the MOF core and the shared core: UML from OMG's XMI.
-    ("uml", Class::Layer(6)),
+    ("uml", Class::Layer(7)),
     // The ER notation: its metamodel generated from our XMI, its commands on the MOF core.
-    ("er", Class::Layer(6)),
+    ("er", Class::Layer(7)),
     // The notations a project holds, composed into one store, one command table and one set of
     // tables: the one crate above the notations that names them all.
-    ("notations", Class::Layer(7)),
-    ("ui-egui", Class::Layer(8)),
+    ("notations", Class::Layer(8)),
+    ("ui-egui", Class::Layer(9)),
     // Host services, for the desktop only: the application uses them and the shell never depends on
     // them, so the portable-target check, which builds the layers below the shell, leaves them out.
-    ("dolt", Class::Layer(8)),
-    ("project", Class::Layer(9)),
+    ("dolt", Class::Layer(9)),
+    ("project", Class::Layer(10)),
     // Agent access: the control channel's token, loopback server and client, and the MCP server
     // bridged to it. Host services like the two above, never built for the portable target.
-    ("control", Class::Layer(8)),
-    ("mcp", Class::Layer(9)),
+    ("control", Class::Layer(9)),
+    ("mcp", Class::Layer(10)),
 ];
 
 /// The shell crate: the highest crate the portable-target check builds.
@@ -61,7 +63,7 @@ pub const SHELL: &str = "ui-egui";
 
 /// Toolkit crates (exact names or prefixes ending in `*`) and the minimum layer that may use them.
 pub const TOOLKIT: &[&str] = &["egui", "egui-*", "egui_*", "eframe", "winit", "wgpu", "wgpu-*"];
-pub const TOOLKIT_MIN_LAYER: u8 = 6;
+pub const TOOLKIT_MIN_LAYER: u8 = 9;
 
 pub fn class_of(short: &str) -> Option<Class> {
     TABLE.iter().find(|(n, _)| *n == short).map(|(_, c)| *c)
@@ -211,13 +213,13 @@ mod tests {
             pkg("geom", Some(Class::Layer(0)), &[]),
             pkg("model", Some(Class::Layer(1)), &[("geom", "normal"), ("color", "dev"), ("model", "dev")]),
             pkg("color", Some(Class::Layer(0)), &[]),
-            pkg("ui-egui", Some(Class::Layer(7)), &[("model", "normal"), ("egui", "normal")]),
+            pkg("ui-egui", Some(Class::Layer(9)), &[("model", "normal"), ("egui", "normal")]),
         ];
         assert_eq!(violations(&packages), Vec::<String>::new());
     }
 
     #[test]
     fn every_library_crate_of_the_repository_is_in_the_table() {
-        assert_eq!(class_of(SHELL), Some(Class::Layer(8)));
+        assert_eq!(class_of(SHELL), Some(Class::Layer(9)));
     }
 }

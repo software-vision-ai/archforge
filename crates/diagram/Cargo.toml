@@ -9,6 +9,7 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+archforge-core.workspace = true
 archforge-engine.workspace = true
 archforge-mof.workspace = true
 log.workspace = true

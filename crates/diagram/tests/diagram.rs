@@ -40,22 +40,22 @@ impl DiagramView for TestView {
     fn selection_mut(&mut self) -> &mut Vec<Obj> {
         &mut self.selection
     }
-    fn kinds() -> &'static [&'static str] {
-        &["toy.class"]
+    fn kinds(&self) -> Vec<&'static str> {
+        vec!["toy.class"]
     }
-    fn home(_: &Store) -> Result<Option<(Obj, PropId)>, String> {
+    fn home(&self, _: &Store) -> Result<Option<(Obj, PropId)>, String> {
         Ok(None)
     }
-    fn is_of(_: &str, class: ClassId) -> bool {
+    fn is_of(&self, _: &str, class: ClassId) -> bool {
         class == PACKAGE
     }
-    fn shows(_: &str, class: ClassId) -> bool {
+    fn shows(&self, _: &str, class: ClassId) -> bool {
         class == CLASS
     }
-    fn connects(_: &str, class: ClassId) -> bool {
+    fn connects(&self, _: &str, class: ClassId) -> bool {
         class == GENERALIZATION
     }
-    fn ends(store: &Store, element: Obj) -> Option<(Obj, Obj)> {
+    fn ends(&self, store: &Store, element: Obj) -> Option<(Obj, Obj)> {
         if store.class_of(element).ok()? != GENERALIZATION {
             return None;
         }
@@ -63,10 +63,10 @@ impl DiagramView for TestView {
         let general = store.get(element, toy::GENERALIZATION_GENERAL).ok()?.as_ref()?;
         Some((specific, general))
     }
-    fn text_slots(class: ClassId) -> &'static [&'static str] {
+    fn text_slots(&self, class: ClassId) -> &'static [&'static str] {
         if class == GENERALIZATION { &["general"] } else { &[] }
     }
-    fn default_size(_: ClassId) -> (f64, f64) {
+    fn default_size(&self, _: ClassId) -> (f64, f64) {
         (120.0, 80.0)
     }
 }

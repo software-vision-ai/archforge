@@ -283,6 +283,7 @@ dependencies = [
 name = "archforge-diagram"
 version = "0.1.0"
 dependencies = [
+ "archforge-core",
  "archforge-engine",
  "archforge-mof",
  "log",

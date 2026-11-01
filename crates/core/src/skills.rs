@@ -40,12 +40,12 @@ pub trait SkillHost: View<Store> {
     /// The selection, which a new skill joins.
     fn selection_mut(&mut self) -> &mut Vec<Obj>;
     /// The classes whose elements may be a skill's subject, besides the model root.
-    fn skill_subjects() -> &'static [ClassId];
+    fn skill_subjects(&self) -> Vec<ClassId>;
     /// The classes a skill may aim at, each with the word the user sees (`table`, `relationship`,
     /// `column`).
-    fn skill_kinds() -> &'static [(ClassId, &'static str)];
-    /// The class whose elements have a type a pattern can match, and the property holding it.
-    fn typed_class() -> Option<(ClassId, PropId)>;
+    fn skill_kinds(&self) -> Vec<(ClassId, &'static str)>;
+    /// The classes whose elements have a type a pattern can match, each with the property holding it.
+    fn typed_classes(&self) -> Vec<(ClassId, PropId)>;
 }
 
 // Rules.
@@ -165,8 +165,8 @@ pub fn class_key(store: &Store, class: ClassId) -> Option<String> {
 
 /// The kind a key names among those the notation declares, and its word: three comparisons, not a
 /// walk over the universe.
-pub fn kind_by_key<V: SkillHost>(store: &Store, key: &str) -> Option<(ClassId, &'static str)> {
-    V::skill_kinds().iter().copied().find(|(c, _)| class_key(store, *c).as_deref() == Some(key))
+pub fn kind_by_key<V: SkillHost>(view: &V, store: &Store, key: &str) -> Option<(ClassId, &'static str)> {
+    view.skill_kinds().into_iter().find(|(c, _)| class_key(store, *c).as_deref() == Some(key))
 }
 
 /// The class a key names, when the universe has it (a walk over every class: for `problems`).
@@ -221,12 +221,12 @@ pub fn type_matches(pattern: &str, type_name: &str) -> bool {
 
 /// Whether a skill aims at `element`: it names no kind (it applies to everything below its
 /// subject), or a kind the element's class conforms to, with a type pattern its type matches.
-pub fn aims_at<V: SkillHost>(store: &Store, s: Obj, element: Obj) -> bool {
+pub fn aims_at<V: SkillHost>(view: &V, store: &Store, s: Obj, element: Obj) -> bool {
     let applies = string_of(store, s, skill::APPLIES_TO);
     if applies.is_empty() {
         return true;
     }
-    let Some((kind, _)) = kind_by_key::<V>(store, &applies) else { return false };
+    let Some((kind, _)) = kind_by_key(view, store, &applies) else { return false };
     let Ok(class) = store.class_of(element) else { return false };
     if !store.universe().conforms(class, TypeRef::Class(kind)) {
         return false;
@@ -235,9 +235,9 @@ pub fn aims_at<V: SkillHost>(store: &Store, s: Obj, element: Obj) -> bool {
     if pattern.is_empty() {
         return true;
     }
-    match V::typed_class() {
-        Some((typed, prop)) if store.universe().conforms(class, TypeRef::Class(typed)) => type_matches(&pattern, &string_of(store, element, prop)),
-        _ => false,
+    match view.typed_classes().into_iter().find(|(typed, _)| store.universe().conforms(class, TypeRef::Class(*typed))) {
+        Some((_, prop)) => type_matches(&pattern, &string_of(store, element, prop)),
+        None => false,
     }
 }
 
@@ -282,7 +282,7 @@ pub struct EffectiveSkill {
 /// and, within a level, the least specific first, so the AI reads the most specific last. A
 /// skill named like an earlier one is kept, marked as overriding it. An element whose containment
 /// does not reach the model root (a second root, which `problems` reports) gets no model-level skill.
-pub fn effective_skills<V: SkillHost>(store: &Store, element: Obj, trigger: Option<SkillTrigger>) -> Vec<EffectiveSkill> {
+pub fn effective_skills<V: SkillHost>(view: &V, store: &Store, element: Obj, trigger: Option<SkillTrigger>) -> Vec<EffectiveSkill> {
     let all = skills(store);
     let model = model_of(store);
     let mut out: Vec<EffectiveSkill> = Vec::new();
@@ -294,7 +294,7 @@ pub fn effective_skills<V: SkillHost>(store: &Store, element: Obj, trigger: Opti
         let mut here: Vec<Obj> = all.iter().copied().filter(at_level).collect();
         here.sort_by_key(|s| specificity(store, *s));
         for s in here {
-            if !aims_at::<V>(store, s, element) {
+            if !aims_at(view, store, s, element) {
                 continue;
             }
             let triggers = triggers_of(store, s);
@@ -398,7 +398,7 @@ fn skill_of(store: &Store, p: &Params, key: &str) -> Result<Obj, CommandError> {
 
 /// The subject under `key`: empty or the model's id for the whole model, else an element of a
 /// class the notation allows.
-fn subject_param<V: SkillHost>(store: &Store, p: &Params, key: &str) -> Result<Option<Obj>, CommandError> {
+fn subject_param<V: SkillHost>(view: &V, store: &Store, p: &Params, key: &str) -> Result<Option<Obj>, CommandError> {
     if text(p, key).is_empty() {
         return Ok(None);
     }
@@ -407,8 +407,9 @@ fn subject_param<V: SkillHost>(store: &Store, p: &Params, key: &str) -> Result<O
     if class == MODEL {
         return Ok(None);
     }
-    if !V::skill_subjects().contains(&class) {
-        let allowed: Vec<String> = V::skill_subjects().iter().filter_map(|c| store.universe().class(*c).map(|c| c.name.to_string())).collect();
+    let subjects = view.skill_subjects();
+    if !subjects.contains(&class) {
+        let allowed: Vec<String> = subjects.iter().filter_map(|c| store.universe().class(*c).map(|c| c.name.to_string())).collect();
         return Err(refuse(
             key,
             format!("a skill cannot sit on {}; it sits on the model, {}", store.universe().class_name(class), allowed.join(", ")),
@@ -419,7 +420,7 @@ fn subject_param<V: SkillHost>(store: &Store, p: &Params, key: &str) -> Result<O
 
 /// The kind under `applies_to` (a word the notation declares, or empty) and the type pattern
 /// under `type_pattern`, checked together: a pattern needs the typed kind.
-fn target_params<V: SkillHost>(store: &Store, p: &Params) -> Result<(Option<String>, Option<String>), CommandError> {
+fn target_params<V: SkillHost>(view: &V, store: &Store, p: &Params) -> Result<(Option<String>, Option<String>), CommandError> {
     let word = text(p, "applies_to").trim().to_lowercase();
     let pattern = text(p, "type_pattern").trim().to_string();
     if word.is_empty() {
@@ -428,8 +429,9 @@ fn target_params<V: SkillHost>(store: &Store, p: &Params) -> Result<(Option<Stri
         }
         return Ok((None, None));
     }
-    let Some((class, _)) = V::skill_kinds().iter().find(|(_, w)| *w == word) else {
-        let words: Vec<&str> = V::skill_kinds().iter().map(|(_, w)| *w).collect();
+    let kinds = view.skill_kinds();
+    let Some((class, _)) = kinds.iter().find(|(_, w)| *w == word) else {
+        let words: Vec<&str> = kinds.iter().map(|(_, w)| *w).collect();
         return Err(refuse("applies_to", format!("{word:?} is not one of {}", words.join(", "))));
     };
     let key = class_key(store, *class).ok_or_else(|| refuse("applies_to", "the kind is not in this project's metamodels"))?;
@@ -439,16 +441,15 @@ fn target_params<V: SkillHost>(store: &Store, p: &Params) -> Result<(Option<Stri
     if let Some(problem) = name_problem(&pattern, MAX_TYPE_PATTERN) {
         return Err(refuse("type_pattern", format!("the type pattern {problem}")));
     }
-    match V::typed_class() {
-        Some((typed, _)) if typed == *class => Ok((Some(key), Some(pattern))),
-        _ => Err(refuse(
-            "type_pattern",
-            format!(
-                "only a skill for every {} can name a type",
-                V::typed_class().and_then(|(c, _)| V::skill_kinds().iter().find(|(k, _)| *k == c)).map(|(_, w)| *w).unwrap_or("column")
-            ),
-        )),
+    let typed = view.typed_classes();
+    if typed.iter().any(|(c, _)| c == class) {
+        return Ok((Some(key), Some(pattern)));
     }
+    let words: Vec<&str> = typed.iter().filter_map(|(c, _)| kinds.iter().find(|(k, _)| k == c)).map(|(_, w)| *w).collect();
+    Err(refuse(
+        "type_pattern",
+        format!("only a skill for every {} can name a type", if words.is_empty() { "column".to_string() } else { words.join(" or every ") }),
+    ))
 }
 
 /// The triggers under `triggers`: literals, none twice.
@@ -480,7 +481,7 @@ struct Fields {
     type_pattern: Option<String>,
 }
 
-fn fields<V: SkillHost>(store: &Store, p: &Params, subject: Option<Obj>, except: Option<Obj>) -> Result<Fields, CommandError> {
+fn fields<V: SkillHost>(view: &V, store: &Store, p: &Params, subject: Option<Obj>, except: Option<Obj>) -> Result<Fields, CommandError> {
     let name = text(p, "name").to_string();
     if let Some(problem) = name_problem(&name, MAX_NAME) {
         return Err(refuse("name", format!("the name {problem}")));
@@ -506,7 +507,7 @@ fn fields<V: SkillHost>(store: &Store, p: &Params, subject: Option<Obj>, except:
             return Err(refuse("dialect", "a dialect belongs to a skill with the export trigger"));
         }
     }
-    let (applies_to, type_pattern) = target_params::<V>(store, p)?;
+    let (applies_to, type_pattern) = target_params(view, store, p)?;
     Ok(Fields { name, description, body, triggers, dialect, applies_to, type_pattern })
 }
 
@@ -532,11 +533,11 @@ fn write(st: &mut Store, s: Obj, f: &Fields) -> Result<(), Invalid> {
 }
 
 /// A skill as the queries report it.
-pub fn skill_json<V: SkillHost>(store: &Store, s: Obj) -> Json {
+pub fn skill_json<V: SkillHost>(view: &V, store: &Store, s: Obj) -> Json {
     let applies = string_of(store, s, skill::APPLIES_TO);
     // The word the notation uses for the kind; a key no declared kind has is reported as it is
     // stored, never as "" (which means the subject itself).
-    let word = kind_by_key::<V>(store, &applies).map(|(_, w)| w).unwrap_or(applies.as_str());
+    let word = kind_by_key(view, store, &applies).map(|(_, w)| w).unwrap_or(applies.as_str());
     json!({
         "id": uuid_json(store, s),
         "name": name_of(store, s),
@@ -552,8 +553,8 @@ pub fn skill_json<V: SkillHost>(store: &Store, s: Obj) -> Json {
 
 fn skill_add<V: SkillHost>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let model = model_of(ctx.doc).ok_or_else(|| CommandError::new(NO_MODEL))?;
-    let subject = subject_param::<V>(ctx.doc, p, "subject")?;
-    let f = fields::<V>(ctx.doc, p, subject, None)?;
+    let subject = subject_param(&*ctx.view, ctx.doc, p, "subject")?;
+    let f = fields(&*ctx.view, ctx.doc, p, subject, None)?;
     let s = ctx
         .doc
         .transaction(|st| {
@@ -571,7 +572,7 @@ fn skill_add<V: SkillHost>(ctx: &mut C<'_, V>, p: &Params) -> R {
 fn skill_set<V: SkillHost>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let s = skill_of(ctx.doc, p, "skill")?;
     let subject = subject_of(ctx.doc, s);
-    let f = fields::<V>(ctx.doc, p, subject, Some(s))?;
+    let f = fields(&*ctx.view, ctx.doc, p, subject, Some(s))?;
     ctx.doc.transaction(|st| write(st, s, &f)).map_err(fail)?;
     Ok(json!({ "id": uuid_of(ctx.doc, s)? }))
 }
@@ -608,7 +609,7 @@ fn skill_remove<V: SkillHost>(ctx: &mut C<'_, V>, p: &Params) -> R {
 
 fn skill_move<V: SkillHost>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let s = skill_of(ctx.doc, p, "skill")?;
-    let subject = subject_param::<V>(ctx.doc, p, "subject")?;
+    let subject = subject_param(&*ctx.view, ctx.doc, p, "subject")?;
     let name = name_of(ctx.doc, s);
     if !skill_name_free(ctx.doc, subject, &name, Some(s)) {
         return Err(refuse("subject", format!("a skill named {name:?} already sits there")));
@@ -619,9 +620,12 @@ fn skill_move<V: SkillHost>(ctx: &mut C<'_, V>, p: &Params) -> R {
 
 fn skill_list<V: SkillHost>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let subject = text(p, "subject");
-    let wanted = if subject.is_empty() { None } else { Some(subject_param::<V>(ctx.doc, p, "subject")?) };
-    let items: Vec<Json> =
-        skills(ctx.doc).into_iter().filter(|s| wanted.is_none_or(|w| subject_of(ctx.doc, *s) == w)).map(|s| skill_json::<V>(ctx.doc, s)).collect();
+    let wanted = if subject.is_empty() { None } else { Some(subject_param(&*ctx.view, ctx.doc, p, "subject")?) };
+    let items: Vec<Json> = skills(ctx.doc)
+        .into_iter()
+        .filter(|s| wanted.is_none_or(|w| subject_of(ctx.doc, *s) == w))
+        .map(|s| skill_json(&*ctx.view, ctx.doc, s))
+        .collect();
     Ok(json!({ "skills": items }))
 }
 
@@ -633,10 +637,10 @@ fn skill_effective<V: SkillHost>(ctx: &mut C<'_, V>, p: &Params) -> R {
     } else {
         Some(trigger_named(&word).ok_or_else(|| refuse("trigger", format!("{word:?} is not {}", trigger_words())))?)
     };
-    let items: Vec<Json> = effective_skills::<V>(ctx.doc, element, trigger)
+    let items: Vec<Json> = effective_skills(&*ctx.view, ctx.doc, element, trigger)
         .into_iter()
         .map(|e| {
-            let mut j = skill_json::<V>(ctx.doc, e.skill);
+            let mut j = skill_json(&*ctx.view, ctx.doc, e.skill);
             if let Json::Object(m) = &mut j {
                 m.insert("origin".into(), e.origin.map(|o| uuid_json(ctx.doc, o)).unwrap_or(Json::Null));
                 m.insert("overridden_by".into(), e.overridden_by.map(|o| uuid_json(ctx.doc, o)).unwrap_or(Json::Null));

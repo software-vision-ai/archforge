@@ -3,7 +3,7 @@
 //! model over the session's store, starting at the schemas, with a schema's skills and tables
 //! under it and a table's skills and columns under that. A click selects through `view.select`,
 //! the `+` adds a schema, table or column through the ER commands and opens the name for typing
-//! in place, Enter or F2 renames, Delete removes through `er.remove` after a dialog when other
+//! in place, Enter or F2 renames, Delete removes through `element.remove` after a dialog when other
 //! things go with it. The filter narrows the rows to the names that contain it. Every change goes
 //! through the engine, so undo and redo cover it.
 //!
@@ -519,7 +519,7 @@ pub fn remove_selection(shell: &mut Shell) {
     .into_iter()
     .any(|prop| !children_of(store, obj, prop).is_empty());
     if relationships + keys + foreign_keys == 0 && !has_children {
-        if let Err(e) = run(shell, "er.remove", json!({ "ids": [id.to_string()] })) {
+        if let Err(e) = run(shell, "element.remove", json!({ "ids": [id.to_string()] })) {
             shell.explorer.notice = Some(e);
         }
         return;
@@ -1004,7 +1004,7 @@ fn delete_dialog_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: 
             shell.explorer.delete = None;
             if primary {
                 let ids: Vec<String> = d.ids.iter().map(|i| i.to_string()).collect();
-                if let Err(e) = run(shell, "er.remove", json!({ "ids": ids })) {
+                if let Err(e) = run(shell, "element.remove", json!({ "ids": ids })) {
                     shell.explorer.notice = Some(e);
                 }
             } else if id == "workspace.explorer.delete.unplace"

@@ -1003,7 +1003,7 @@ pub(crate) fn place_dropped(shell: &mut Shell, d: Obj, entity: Uuid, at: (f64, f
         .chain(archforge_er::rules::supertype_links(store, e))
         .chain(archforge_er::rules::subtype_links(store, e));
     for l in links {
-        let Some((from, to)) = <archforge_er::ErView as archforge_diagram::DiagramView>::ends(store, l) else { continue };
+        let Some((from, to)) = archforge_diagram::Notation::ends(&archforge_er::ErNotation, store, l) else { continue };
         let end = |t: Obj| if t == e { Some(None) } else { shown(t).map(Some) };
         if let (Some(a), Some(b), Some(id)) = (end(from), end(to), uuid(store, l))
             && !lines.iter().any(|(x, _, _)| *x == id)
@@ -1137,7 +1137,7 @@ pub(crate) fn fit_tables(store: &mut Store) {
 /// columns the table has now: a command that adds key columns (a foreign key, a shared subtype
 /// key) keeps them in sight in the same undo step.
 pub(crate) fn grow_to_fit(
-    b: &mut archforge_engine::Batch<'_, Store, archforge_er::ErView>,
+    b: &mut archforge_engine::Batch<'_, Store, archforge_diagram::ProjectView>,
     entities: &[Uuid],
 ) -> Result<(), archforge_engine::EngineError> {
     let mut grow: Vec<(String, f64, f64)> = Vec::new();

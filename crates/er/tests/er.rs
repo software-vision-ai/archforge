@@ -29,7 +29,7 @@ fn rooted_store() -> (Store, Obj) {
 
 fn session() -> Session {
     let (st, _) = rooted_store();
-    Session::new(registry().unwrap(), st, 1, Options::default())
+    Session::with_view(registry().unwrap(), st, 1, Options::default(), archforge_diagram::ProjectView::new(ALONE))
 }
 
 fn run(s: &mut Session, cmd: &str, p: Json) -> String {
@@ -170,9 +170,9 @@ fn refusals_name_their_key_and_change_nothing() {
             json!({ "from": sm.customer, "to": "00000000-0000-7000-8000-000000000000", "from_end": "exactly-one", "to_end": "exactly-one" }),
         ),
         ("er.relationship.add", json!({ "from": sm.customer, "to": sm.order, "from_end": "many", "to_end": "exactly-one" })),
-        ("er.remove", json!({ "ids": [] })),
-        ("er.remove", json!({ "ids": [sm.customer, sm.customer] })),
-        ("er.remove", json!({ "ids": ["not-an-id"] })),
+        ("element.remove", json!({ "ids": [] })),
+        ("element.remove", json!({ "ids": [sm.customer, sm.customer] })),
+        ("element.remove", json!({ "ids": ["not-an-id"] })),
         ("view.select", json!({ "ids": [sm.customer, sm.customer] })),
     ];
     for (cmd, p) in &refused {
@@ -235,7 +235,7 @@ fn removing_an_entity_takes_its_attributes_relationships_and_links_in_one_step()
     let mut s = session();
     let sm = sample(&mut s);
     let before = picture(s.doc());
-    let out = s.execute("er.remove", &json!({ "ids": [sm.key, sm.customer, sm.places] })).unwrap();
+    let out = s.execute("element.remove", &json!({ "ids": [sm.key, sm.customer, sm.places] })).unwrap();
     assert_eq!(out.value["removed"], 4, "the relationship, the key column with the primary key it was in, the entity");
     assert_eq!(s.doc().list(obj(s.doc(), &sm.schema), schema::ENTITY).unwrap(), vec![Value::Ref(obj(s.doc(), &sm.order))]);
     assert!(!s.view().selection.iter().any(|o| !s.doc().is_alive(*o)));
@@ -502,13 +502,13 @@ fn removals_leave_no_identifying_relationship_without_its_key() {
     s.undo().unwrap();
     assert_eq!(relationship(&mut s, &sm.schema, &r)["identifying"], true);
     // Removing the relationship keeps the key and clears its link to the relationship.
-    run(&mut s, "er.remove", json!({ "ids": [r] }));
+    run(&mut s, "element.remove", json!({ "ids": [r] }));
     let l = get(&mut s, "er.entity.get", json!({ "entity": line }));
     assert_eq!(l["foreign_keys"][0]["relationship"], Json::Null);
     all_rules_hold(s.doc());
     s.undo().unwrap();
     // A removal that names a key and what the key depends on takes both in one call.
-    let out = get(&mut s, "er.remove", json!({ "ids": [sm.order, fk] }));
+    let out = get(&mut s, "element.remove", json!({ "ids": [sm.order, fk] }));
     assert!(out["removed"].as_u64().unwrap() >= 4);
     assert!(get(&mut s, "er.entity.get", json!({ "entity": line }))["foreign_keys"].as_array().unwrap().is_empty());
     all_rules_hold(s.doc());
@@ -1070,7 +1070,7 @@ fn random_call(rng: &mut Rng, s: &Session) -> (&'static str, Json) {
         8 => ("er.relationship.add", json!({ "from": rng.pick(&entities), "to": rng.pick(&entities), "from_end": end(rng), "to_end": end(rng) })),
         9 => ("er.relationship.remove", json!({ "relationship": rng.pick(&relationships) })),
         10 => ("er.attribute.set-flags", json!({ "attribute": rng.pick(&attributes), "primary_key": n.is_multiple_of(2), "nullable": "auto" })),
-        _ => ("er.remove", json!({ "ids": [rng.pick(&attributes).cloned().unwrap_or_default()] })),
+        _ => ("element.remove", json!({ "ids": [rng.pick(&attributes).cloned().unwrap_or_default()] })),
     }
 }
 
@@ -1138,7 +1138,7 @@ fn a_column_takes_its_size_default_generation_collation_and_description_with_the
         ("er.attribute.set-generation", json!({ "attribute": code, "generation": "identity-always" })),
         ("er.attribute.set-generation", json!({ "attribute": code, "generation": "computed-stored" })),
         ("er.attribute.set-generation", json!({ "attribute": code, "generation": "sometimes" })),
-        ("er.describe", json!({ "element": sm.order, "text": " padded " })),
+        ("element.describe", json!({ "element": sm.order, "text": " padded " })),
         // A size belongs in its own parameter, never in the type's name.
         ("er.attribute.add", json!({ "entity": sm.order, "name": "x", "type": "VARCHAR(255)", "length": 255 })),
         ("er.attribute.set-type", json!({ "attribute": code, "type": "VARCHAR(255)" })),
@@ -1149,7 +1149,7 @@ fn a_column_takes_its_size_default_generation_collation_and_description_with_the
             json!({ "entity": sm.order, "name": "x", "type": "INTEGER", "generation": "computed-stored", "expression": "1", "default": "0" }),
         ),
         // Only elements of the ER model take a description.
-        ("er.describe", json!({ "element": skill, "text": "A skill is no element" })),
+        ("element.describe", json!({ "element": skill, "text": "A skill is no element" })),
     ] {
         let e = s.execute(cmd, &p).expect_err(&format!("{cmd} {p} was accepted"));
         assert!(!e.to_string().is_empty());
@@ -1183,11 +1183,11 @@ fn a_column_takes_its_size_default_generation_collation_and_description_with_the
     );
     round_trip(&mut s, "er.attribute.set-generation", &json!({ "attribute": sm.key, "generation": "identity-always" }));
     round_trip(&mut s, "er.attribute.set-collation", &json!({ "attribute": code, "collation": "en_US" }));
-    round_trip(&mut s, "er.describe", &json!({ "element": sm.order, "text": "One purchase by a customer." }));
+    round_trip(&mut s, "element.describe", &json!({ "element": sm.order, "text": "One purchase by a customer." }));
     run(&mut s, "er.attribute.set-generation", json!({ "attribute": price, "generation": "computed-stored", "expression": "quantity * unit_price" }));
     let e = s.execute("er.attribute.set-default", &json!({ "attribute": price, "default": "0" })).expect_err("a computed column takes no default");
     assert!(e.to_string().contains("default"));
-    run(&mut s, "er.describe", json!({ "element": sm.order, "text": "One purchase by a customer." }));
+    run(&mut s, "element.describe", json!({ "element": sm.order, "text": "One purchase by a customer." }));
     assert_eq!(rules::text_of(s.doc(), obj(s.doc(), &sm.order), element::DESCRIPTION), "One purchase by a customer.");
     all_rules_hold(s.doc());
 }
@@ -1433,7 +1433,7 @@ fn a_cycle_of_identifying_keys_in_a_loaded_document_cannot_grow_and_a_self_key_o
     identify(&mut st, a, a_pk, b, b_pk);
     identify(&mut st, b, b_pk, a, a_pk);
     let a_id = st.uuid(a).unwrap().to_string();
-    let mut s = Session::new(registry().unwrap(), st, 1, Options::default());
+    let mut s = Session::with_view(registry().unwrap(), st, 1, Options::default(), archforge_diagram::ProjectView::new(ALONE));
     let before = picture(s.doc());
     let e = s
         .execute("er.attribute.add", &json!({ "entity": a_id, "name": "more", "type": "INT", "primary_key": true }))
@@ -1600,7 +1600,7 @@ fn subtypes_share_their_supertypes_key_and_keep_it_in_step() {
         ("er.generalization.add", json!({ "supertype": party, "subtype": elsewhere }), "subtype"),
         ("er.entity.set-subtyping", json!({ "entity": party, "discriminator": sm.key, "mapping": "table-per-type" }), "discriminator"),
         ("er.relationship.remove", json!({ "relationship": key_rel }), "relationship"),
-        ("er.remove", json!({ "ids": [key_rel] }), "ids"),
+        ("element.remove", json!({ "ids": [key_rel] }), "ids"),
     ] {
         assert_eq!(refused_on(&mut s, cmd, p.clone()), key, "{cmd} {p}");
     }
@@ -1638,7 +1638,7 @@ fn subtype_keys_hold_through_chains_later_keys_removals_and_circles() {
     for (cmd, p, key) in [
         ("er.attribute.remove", json!({ "attribute": follower }), "attribute"),
         ("er.primary-key.remove", json!({ "entity": person }), "entity"),
-        ("er.remove", json!({ "ids": [follower, sm.order] }), "ids"),
+        ("element.remove", json!({ "ids": [follower, sm.order] }), "ids"),
     ] {
         assert_eq!(refused_on(&mut s, cmd, p.clone()), key, "{cmd} {p}");
     }
@@ -1741,7 +1741,7 @@ fn removing_the_top_of_a_very_deep_loaded_chain_is_refused_not_a_crash() {
         }
         prev = Some((e, a, pk));
     }
-    let mut session = Session::new(registry().unwrap(), st, 1, Options::default());
+    let mut session = Session::with_view(registry().unwrap(), st, 1, Options::default(), archforge_diagram::ProjectView::new(ALONE));
     let before = picture(session.doc());
     let e = session.execute("er.primary-key.remove", &json!({ "entity": top.unwrap() })).expect_err("too deep to cascade");
     assert!(e.to_string().contains("deeper than") && e.to_string().contains("entity"), "{e}");
@@ -1814,7 +1814,7 @@ fn sequences_and_views_belong_to_a_schema_under_its_rules() {
     assert_eq!(get(&mut s, "er.schema.get", json!({ "schema": sm.schema }))["sequences"][0]["owned_by"], Json::Null);
     all_rules_hold(s.doc());
     // They go one at a time or together with the Delete key's command.
-    round_trip(&mut s, "er.remove", &json!({ "ids": [q, v] }));
+    round_trip(&mut s, "element.remove", &json!({ "ids": [q, v] }));
     s.undo().unwrap();
     round_trip(&mut s, "er.sequence.remove", &json!({ "sequence": q }));
     round_trip(&mut s, "er.view.remove", &json!({ "view": v }));

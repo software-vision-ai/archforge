@@ -652,7 +652,7 @@ fn remove_foreign_key(shell: &mut Shell, rel: &Rel) {
     let out = session.batch(&tr("Remove foreign key"), |b| {
         b.execute("er.foreign-key.remove", &json!({ "foreign_key": fk_id }))?;
         if !columns.is_empty() {
-            b.execute("er.remove", &json!({ "ids": columns }))?;
+            b.execute("element.remove", &json!({ "ids": columns }))?;
         }
         Ok(())
     });
