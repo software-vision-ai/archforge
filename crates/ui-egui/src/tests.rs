@@ -2458,7 +2458,7 @@ fn the_entity_tool_places_a_table_named_in_place_as_one_undo_step() {
     let (mut h, _customer, _diagram) = diagram_harness();
     let at = rect_of(&h, "workspace.tools.entity").center();
     click(&mut h, at);
-    assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Entity);
+    assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Place("entity"));
     let canvas = rect_of(&h, "workspace.canvas");
     let before = node_ids(&h).len();
     click(&mut h, canvas.left_top() + egui::vec2(120.0, 320.0));
@@ -2764,7 +2764,7 @@ fn the_relationship_tool_draws_a_line_with_its_foreign_key_as_one_step_and_delet
     let order_node = nodes.iter().find(|n| **n != customer_node).unwrap().clone();
     let at = rect_of(&h, "workspace.tools.relationship").center();
     click(&mut h, at);
-    assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Relationship);
+    assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Connect("relationship"));
     // Drag from Customer to Order: one to many, Customer has a primary key, so the key comes along.
     let (from, to) = (rect_of(&h, &customer_node).center(), rect_of(&h, &order_node).center());
     drag(&mut h, from, to);
@@ -2828,7 +2828,7 @@ fn the_cardinality_popover_sets_the_ends_and_a_many_to_many_line_offers_its_mapp
     let order_node = nodes.iter().find(|n| **n != customer_node).unwrap().clone();
     let at = rect_of(&h, "workspace.tools.relationship-types").center();
     click(&mut h, at);
-    assert!(h.state().canvas.popover && h.state().canvas.tool == crate::canvas::Tool::Relationship);
+    assert!(h.state().canvas.popover && h.state().canvas.tool == crate::canvas::Tool::Connect("relationship"));
     assert!(ids(&h).iter().any(|i| i == "workspace.cardinality.preset.3"), "{:?}", ids(&h));
     let at = rect_of(&h, "workspace.cardinality.preset.3").center();
     click(&mut h, at);
@@ -4211,8 +4211,10 @@ fn painted(h: &Harness<'static, Shell>) -> Vec<String> {
     out
 }
 
-#[test]
-fn a_second_notations_cards_and_lines_draw_route_arrange_and_take_their_look_on_the_same_canvas() {
+/// A workspace whose session holds the sketch notation beside ER, with a sketch diagram of a
+/// package: Party at the left, Customer at the right, Customer a kind of Party. Gives the diagram,
+/// Party's node, Customer's node and the line's edge.
+fn sketch_harness() -> (Harness<'static, Shell>, String, String, String, String) {
     use archforge_mof::Value;
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
     // A package with Party and Customer, Customer a kind of Party, in a session that holds the
@@ -4269,9 +4271,15 @@ fn a_second_notations_cards_and_lines_draw_route_arrange_and_take_their_look_on_
         .value);
     let e = id(s.execute("diagram.connect", &serde_json::json!({ "diagram": d, "element": g_id, "source": b, "target": a })).unwrap().value);
     h.state_mut().session = Some(s);
+    h.state_mut().kinds = SKETCH_KINDS;
     crate::canvas::open(h.state_mut(), archforge_mof::Uuid::parse(&d).unwrap());
     h.run();
+    (h, d, a, b, e)
+}
 
+#[test]
+fn a_second_notations_cards_and_lines_draw_route_arrange_and_take_their_look_on_the_same_canvas() {
+    let (mut h, d, a, b, e) = sketch_harness();
     // The cards and the line, drawn through the one canvas from the sketch's descriptions.
     let texts = painted(&h);
     for t in ["CLASS", "Party", "partyId", "rename", "Customer", "since", "specific"] {
@@ -4302,4 +4310,113 @@ fn a_second_notations_cards_and_lines_draw_route_arrange_and_take_their_look_on_
     assert_eq!(look(&h, aobj).fill, crate::canvas::colour("#A0C4FF"));
     let filled = h.output().shapes.iter().any(|c| matches!(&c.shape, egui::Shape::Rect(r) if Some(r.fill) == crate::canvas::colour("#A0C4FF")));
     assert!(filled, "the card is filled in its own colour");
+}
+
+/// What the sketch kind's hooks were asked, in order.
+static SKETCH_CALLS: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+/// The sketch diagram kind in the shell, for the tests alone: a Class tool that places and an
+/// Inherit tool that connects, each hook writing down what it was asked.
+struct SketchKind;
+
+static SKETCH_TOOLS: &[crate::kinds::KindTool] = &[
+    crate::kinds::KindTool { key: "class", icon: &crate::ux::icons::TOOL_ENTITY, hint: "Entity", use_: crate::kinds::ToolUse::Place, chevron: None },
+    crate::kinds::KindTool {
+        key: "inherit",
+        icon: &crate::ux::icons::TOOL_RELATIONSHIP,
+        hint: "Relationship",
+        use_: crate::kinds::ToolUse::Connect,
+        chevron: None,
+    },
+];
+
+impl crate::kinds::DiagramKind for SketchKind {
+    fn kind(&self) -> &'static str {
+        SKETCH
+    }
+    fn tools(&self) -> &'static [crate::kinds::KindTool] {
+        SKETCH_TOOLS
+    }
+    fn takes_part(&self, store: &archforge_mof::Store, element: archforge_mof::Obj) -> bool {
+        store.class_of(element).ok() == Some(archforge_uml::CLASS)
+    }
+    fn place(&self, _: &mut Shell, tool: &'static str, _: archforge_mof::Obj, _: f64, _: f64) {
+        SKETCH_CALLS.lock().unwrap().push(format!("place {tool}"));
+    }
+    fn connect(&self, shell: &mut Shell, tool: &'static str, _: archforge_mof::Obj, from: archforge_mof::Uuid, to: archforge_mof::Uuid) {
+        let name = |id| {
+            shell.session.as_ref().and_then(|s| {
+                let st = s.doc();
+                let e = st.get(st.by_uuid(id)?, archforge_diagram::node::ELEMENT).ok()?.as_ref()?;
+                Some(archforge_core::name_of(st, e))
+            })
+        };
+        SKETCH_CALLS.lock().unwrap().push(format!("connect {tool} {} {}", name(from).unwrap_or_default(), name(to).unwrap_or_default()));
+    }
+    fn connect_to_new(&self, _: &mut Shell, tool: &'static str, _: archforge_mof::Obj, _: archforge_mof::Uuid, _: f64, _: f64) {
+        SKETCH_CALLS.lock().unwrap().push(format!("connect to new {tool}"));
+    }
+    fn rename(&self, _: &mut Shell, _: archforge_mof::Uuid, name: &str) -> Result<(), String> {
+        SKETCH_CALLS.lock().unwrap().push(format!("rename {name}"));
+        Ok(())
+    }
+    fn open(&self, _: &mut Shell, _: archforge_mof::Uuid, row: Option<usize>) {
+        SKETCH_CALLS.lock().unwrap().push(format!("open {row:?}"));
+    }
+}
+
+static SKETCH_KINDS: &[&dyn crate::kinds::DiagramKind] = &[&crate::er_kind::ErKind, &SketchKind];
+
+#[test]
+fn a_second_kinds_toolbar_shows_its_own_tools_and_its_place_connect_and_rename_hooks_run() {
+    let (mut h, _d, a, b, _e) = sketch_harness();
+    SKETCH_CALLS.lock().unwrap().clear();
+    // ER's tool, left on from an ER diagram, is not the sketch's: the toolbar hands back to Select.
+    h.state_mut().canvas.tool = crate::canvas::Tool::Place("entity");
+    h.run();
+    assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Select);
+    let found = ids(&h);
+    for shared in ["select", "pan", "class", "inherit", "note", "link", "grid", "arrange"] {
+        assert!(found.iter().any(|i| *i == format!("workspace.tools.{shared}")), "{shared} is on the toolbar: {found:?}");
+    }
+    for er in ["entity", "relationship", "relationship-types", "key-status"] {
+        assert!(!found.iter().any(|i| *i == format!("workspace.tools.{er}")), "ER's {er} is not");
+    }
+    // The toolbar keeps its order: Select, Pan, the kind's tools, Note, Link note, Grid, Arrange.
+    let left = |key: &str| rect_of(&h, &format!("workspace.tools.{key}")).left();
+    let xs: Vec<f32> = ["select", "pan", "class", "inherit", "note", "link", "grid", "arrange"].iter().map(|k| left(k)).collect();
+    assert!(xs.windows(2).all(|w| w[0] < w[1]), "{xs:?}");
+    // Class places where the canvas is clicked.
+    let at = rect_of(&h, "workspace.tools.class").center();
+    click(&mut h, at);
+    assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Place("class"));
+    let canvas = rect_of(&h, "workspace.canvas");
+    click(&mut h, canvas.left_top() + egui::vec2(40.0, 40.0));
+    // Inherit connects Customer to Party, and dropped on empty canvas asks for a new class.
+    let at = rect_of(&h, "workspace.tools.inherit").center();
+    click(&mut h, at);
+    assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Connect("inherit"));
+    let (party, customer) = (rect_of(&h, &format!("workspace.canvas.node.{a}")), rect_of(&h, &format!("workspace.canvas.node.{b}")));
+    drag(&mut h, customer.center(), party.center());
+    let at = rect_of(&h, "workspace.tools.inherit").center();
+    click(&mut h, at);
+    drag(&mut h, customer.center(), egui::pos2(customer.center().x, canvas.bottom() - 120.0));
+    // A double click on Party's header names it in place, and Enter hands the name to the kind.
+    for _ in 0..45 {
+        h.step();
+    }
+    double_click(&mut h, party.left_top() + egui::vec2(60.0, 30.0));
+    assert!(h.state().canvas.rename.as_ref().is_some_and(|r| r.text == "Party"), "{:?}", h.state().canvas.rename);
+    h.state_mut().canvas.rename.as_mut().unwrap().text = "Person".into();
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    assert!(h.state().canvas.rename.is_none());
+    // A double click on a row opens the kind's editor there.
+    for _ in 0..45 {
+        h.step();
+    }
+    double_click(&mut h, party.left_top() + egui::vec2(100.0, 77.0 + 6.0));
+    assert_eq!(
+        *SKETCH_CALLS.lock().unwrap(),
+        ["place class", "connect inherit Customer Party", "connect to new inherit", "rename Person", "open Some(0)"]
+    );
 }

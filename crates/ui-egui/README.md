@@ -9,7 +9,10 @@ diagram, the New diagram dialog from its `+` and the tab strip's), the centre (`
 diagram tabs, the open diagram drawn read-only from the diagram metamodel in the design's style
 with each notation's cards and lines as it describes them (`archforge_diagram::figure`: ER's
 table cards and crow's foot lines), notes, links and labels, pan and zoom, the minimap with the zoom control, the canvas
-toolbar; a click selects what it hits; `editing`: the Entity tool places a table named in place,
+toolbar, whose tools after Select and Pan are the open diagram kind's (`kinds::DiagramKind`: its
+tools, each placing or connecting, and the hooks the gestures run: place, connect, a line dropped
+on empty canvas, rename in place, open at a card's row, its adorner, its menu, the live line;
+`er_kind`: ER's); a click selects what it hits; `editing`: the Entity tool places a table named in place,
 Select drags, resizes, marquees, nudges and arranges nodes, the entity menu removes from the
 diagram or deletes from the model after the dialog, a node grows with its columns; `connect`: the
 Relationship tool and the connect adorner drag a line from table to table with the cardinality

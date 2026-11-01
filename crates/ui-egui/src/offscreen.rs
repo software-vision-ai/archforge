@@ -289,7 +289,7 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
             sample_new_entity(&mut shell)?;
         }
         if screen == Screen::WorkspaceCardinality {
-            shell.canvas.tool = crate::canvas::Tool::Relationship;
+            shell.canvas.tool = crate::canvas::Tool::Connect("relationship");
             shell.canvas.popover = true;
         }
     }
@@ -724,7 +724,7 @@ fn sample_new_entity(shell: &mut Shell) -> Result<(), String> {
     let (Some(entity), Some(node)) = (id_at(0), id_at(1)) else { return Err("the sample's table has no id".to_string()) };
     session.execute("view.select", &json!({ "ids": [entity.to_string()] })).map_err(|e| format!("view.select: {e:?}"))?;
     session.mark_saved().map_err(|e| format!("mark_saved: {e:?}"))?;
-    shell.canvas.tool = crate::canvas::Tool::Entity;
+    shell.canvas.tool = crate::canvas::Tool::Place("entity");
     shell.canvas.rename = Some(crate::editing::NodeRename { node, entity, text: "Entity".to_string(), opened: true, refused: None });
     Ok(())
 }

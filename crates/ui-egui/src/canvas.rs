@@ -40,7 +40,8 @@ const FIT_MARGIN: f32 = 48.0;
 /// The minimap's box and the toolbar's pill.
 const MINIMAP: Vec2 = vec2(200.0, 156.0);
 const MINIMAP_GAP: Vec2 = vec2(16.0, 14.0);
-const TOOLBAR: Vec2 = vec2(404.0, 50.0);
+/// The toolbar's height (its width comes from the open diagram kind's tools).
+const TOOLBAR_HEIGHT: f32 = 50.0;
 const TOOLBAR_GAP: f32 = 14.0;
 /// An entity node: its header's height, its first row's baseline, the pitch between rows, the
 /// text inset and the badge column.
@@ -60,10 +61,12 @@ pub enum Tool {
     #[default]
     Select,
     Pan,
-    /// Places a table where the canvas is clicked (slice E1).
-    Entity,
-    /// Drags a relationship from one table to another (slice E2).
-    Relationship,
+    /// A diagram kind's tool that places an element where the canvas is clicked (ER's Entity,
+    /// slice E1), by its key.
+    Place(&'static str),
+    /// A diagram kind's tool that drags a line from one element to another (ER's Relationship,
+    /// slice E2), by its key.
+    Connect(&'static str),
     /// Places a note where the canvas is clicked (slice E4).
     Note,
     /// Drags a link from a note to a table or a relationship's line.
@@ -484,7 +487,7 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
         Tool::Pan => {
             resp.clone().on_hover_cursor(if resp.dragged() { egui::CursorIcon::Grabbing } else { egui::CursorIcon::Grab });
         }
-        Tool::Entity | Tool::Relationship | Tool::Note | Tool::Link => {
+        Tool::Place(_) | Tool::Connect(_) | Tool::Note | Tool::Link => {
             resp.clone().on_hover_cursor(egui::CursorIcon::Crosshair);
         }
         Tool::Select => {}
@@ -587,7 +590,7 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     crate::connect::toast(shell, ui, p, r);
     if minimap_shown(shell, r) {
         minimap(shell, ui, p, r, bounds, &view);
-    } else if r.width() >= 16.0 + TOOLBAR.x + 16.0 + 28.0 + MINIMAP_GAP.x {
+    } else if r.width() >= 16.0 + layout(crate::kinds::active_kind(shell)).width + 16.0 + 28.0 + MINIMAP_GAP.x {
         // Its button, where the toolbar leaves room for it: live when the user folded the minimap,
         // not available when the canvas is too narrow for it.
         let b = Rect::from_min_size(pos2(r.right() - MINIMAP_GAP.x - 28.0, r.bottom() - MINIMAP_GAP.y - 26.0), vec2(28.0, 26.0));
@@ -1297,31 +1300,73 @@ fn pos2_of((x, y): (f64, f64)) -> Pos2 {
     pos2(x as f32, y as f32)
 }
 
-/// The tools of the toolbar: automation id, icon, hover text.
-const TOOLS: [(&str, &ux::Icon, &str); 6] = [
+/// The shared tools of the toolbar: automation id, icon, hover text. Select and Pan come first, a
+/// diagram kind's own tools after them, then Note and Link note.
+const TOOLS: [(&str, &ux::Icon, &str); 4] = [
     ("select", &icons::TOOL_SELECT, "Select"),
     ("pan", &icons::TOOL_PAN, "Pan"),
-    ("entity", &icons::TOOL_ENTITY, "Entity"),
-    ("relationship", &icons::TOOL_RELATIONSHIP, "Relationship"),
     ("note", &icons::TOOL_NOTE, "Note"),
     ("link", &icons::TOOL_LINK_NOTE, "Link note"),
 ];
 
+/// Where the toolbar's parts sit, from its left, for the tools of the open diagram's kind: Select
+/// and Pan, a divider, the kind's tools (one with a chevron twice as wide, its chevron after it),
+/// Note and Link note, a divider, the view group (the status marks where the kind has them, and
+/// the grid), a divider and Arrange.
+struct Layout {
+    /// Each kind tool's x, and the x after them, where Note goes.
+    kind_tools: Vec<f32>,
+    note: f32,
+    /// The view group's x and its toggles.
+    group: f32,
+    toggles: Vec<(&'static str, &'static str)>,
+    arrange: f32,
+    width: f32,
+}
+
+fn layout(kind: Option<&'static dyn crate::kinds::DiagramKind>) -> Layout {
+    let mut x = 86.0;
+    let mut kind_tools = Vec::new();
+    for t in kind.map(|k| k.tools()).unwrap_or(&[]) {
+        kind_tools.push(x);
+        x += if t.chevron.is_some() { 82.0 } else { 34.0 };
+    }
+    let mut toggles = Vec::new();
+    if kind.is_some_and(|k| k.status_marks()) {
+        toggles.push(("key-status", "Key status"));
+    }
+    toggles.push(("grid", "Grid"));
+    let group = x + 79.0;
+    let arrange = group + 2.0 + 34.0 * toggles.len() as f32 + 6.0 + 8.0;
+    Layout { kind_tools, note: x, group, toggles, arrange, width: arrange + 32.0 + 7.0 }
+}
+
 /// Whether the minimap is drawn open: when the user has it open and the canvas has room for it
 /// beside the toolbar; otherwise its button stands in, so the tools are never hidden.
 fn minimap_shown(shell: &Shell, r: Rect) -> bool {
-    shell.canvas.minimap_open && r.width() >= 16.0 + TOOLBAR.x + 16.0 + MINIMAP.x + MINIMAP_GAP.x
+    let width = layout(crate::kinds::active_kind(shell)).width;
+    shell.canvas.minimap_open && r.width() >= 16.0 + width + 16.0 + MINIMAP.x + MINIMAP_GAP.x
 }
 
-/// The floating toolbar at the canvas's bottom centre: Select and Pan, the drawing tools, the key
-/// status and grid toggles, and Arrange diagram.
+/// The floating toolbar at the canvas's bottom centre: Select and Pan, the open diagram kind's
+/// tools, Note and Link note, the status marks and grid toggles, and Arrange diagram.
 fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
+    let kind = crate::kinds::active_kind(shell);
+    // A tool of another kind, from the diagram shown before, hands back to Select.
+    if let Tool::Place(key) | Tool::Connect(key) = shell.canvas.tool
+        && !kind.is_some_and(|k| k.tools().iter().any(|t| t.key == key))
+    {
+        shell.canvas.tool = Tool::Select;
+        shell.canvas.popover = false;
+    }
+    let at = layout(kind);
+    let size = vec2(at.width, TOOLBAR_HEIGHT);
     // Kept to the canvas: in the narrowest window the toolbar's end is cut, never drawn over a panel.
     let paint = ui.painter().with_clip_rect(r);
     // Centred under the canvas; moved left of the minimap, or of its button; never hidden.
     let minimap_left = if minimap_shown(shell, r) { r.right() - MINIMAP_GAP.x - MINIMAP.x } else { r.right() - MINIMAP_GAP.x - 28.0 };
-    let x = (r.center().x - TOOLBAR.x / 2.0).min(minimap_left - 16.0 - TOOLBAR.x).max(r.left() + 16.0);
-    let t = Rect::from_min_size(pos2(x, r.bottom() - TOOLBAR_GAP - TOOLBAR.y), TOOLBAR);
+    let x = (r.center().x - size.x / 2.0).min(minimap_left - 16.0 - size.x).max(r.left() + 16.0);
+    let t = Rect::from_min_size(pos2(x, r.bottom() - TOOLBAR_GAP - size.y), size);
     if t.top() < r.top() {
         return;
     }
@@ -1330,65 +1375,73 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     paint.rect_stroke(t, 12.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
     let button = |x: f32| Rect::from_min_size(pos2(t.left() + x, t.top() + 9.0), Vec2::splat(32.0));
     let divider = |x: f32| Rect::from_min_size(pos2(t.left() + x, t.top() + 15.0), vec2(1.0, 20.0));
-    let xs = [7.0, 41.0, 86.0, 120.0, 202.0, 236.0];
-    for ((key, icon, hint), x) in TOOLS.iter().zip(xs) {
-        // The relationship tool is twice as wide, so both ends of its line read.
-        let b = if *key == "relationship" { Rect::from_min_size(pos2(t.left() + x, t.top() + 9.0), vec2(64.0, 32.0)) } else { button(x) };
-        let active = matches!(
-            (*key, shell.canvas.tool),
-            ("select", Tool::Select)
-                | ("pan", Tool::Pan)
-                | ("entity", Tool::Entity)
-                | ("relationship", Tool::Relationship)
-                | ("note", Tool::Note)
-                | ("link", Tool::Link)
-        );
+    // The shared tools.
+    for ((key, icon, hint), x) in TOOLS.iter().zip([7.0, 41.0, at.note, at.note + 34.0]) {
+        let b = button(x);
+        let tool = match *key {
+            "select" => Tool::Select,
+            "pan" => Tool::Pan,
+            "note" => Tool::Note,
+            _ => Tool::Link,
+        };
+        let active = shell.canvas.tool == tool;
+        if active {
+            paint.rect_filled(b, 8.0, p.accent_tint);
+        }
+        ux::icon_in(&paint, b, icon, if active { p.accent } else { p.text_secondary });
+        if control(shell, ui, &format!("workspace.tools.{key}"), "button", b, true).on_hover_text(tr(hint)).clicked() {
+            shell.canvas.tool = tool;
+        }
+    }
+    // The kind's own tools; one with a chevron is twice as wide, so what it draws reads.
+    let mut chevrons = Vec::new();
+    for (tool, x) in kind.map(|k| k.tools()).unwrap_or(&[]).iter().zip(at.kind_tools.iter().copied()) {
+        let b = if tool.chevron.is_some() { Rect::from_min_size(pos2(t.left() + x, t.top() + 9.0), vec2(64.0, 32.0)) } else { button(x) };
+        let picked = match tool.use_ {
+            crate::kinds::ToolUse::Place => Tool::Place(tool.key),
+            crate::kinds::ToolUse::Connect => Tool::Connect(tool.key),
+        };
+        let active = shell.canvas.tool == picked;
         if active {
             paint.rect_filled(b, 8.0, p.accent_tint);
         }
         let ink = if active { p.accent } else { p.text_secondary };
-        if *key == "relationship" {
-            // The relationship tool shows the ends it draws, as the cardinality popover sets them.
-            let kind = shell.canvas.relationship;
-            let fill = if active { p.accent_tint } else { p.surface };
-            crate::connect::tool_line(&paint, p, b.center(), kind.from, kind.to, ink, fill);
-        } else {
-            ux::icon_in(&paint, b, icon, ink);
+        if !kind.is_some_and(|k| k.tool_face(shell, &paint, p, tool.key, b, ink, active)) {
+            ux::icon_in(&paint, b, tool.icon, ink);
         }
-        if control(shell, ui, &format!("workspace.tools.{key}"), "button", b, true).on_hover_text(tr(hint)).clicked() {
-            match *key {
-                "select" => shell.canvas.tool = Tool::Select,
-                "pan" => shell.canvas.tool = Tool::Pan,
-                "entity" => shell.canvas.tool = Tool::Entity,
-                "relationship" => shell.canvas.tool = Tool::Relationship,
-                "note" => shell.canvas.tool = Tool::Note,
-                "link" => shell.canvas.tool = Tool::Link,
-                _ => {}
-            }
+        if control(shell, ui, &format!("workspace.tools.{}", tool.key), "button", b, true).on_hover_text(tr(tool.hint)).clicked() {
+            shell.canvas.tool = picked;
+        }
+        if let Some(chevron) = tool.chevron {
+            chevrons.push((chevron, picked, Rect::from_min_size(pos2(t.left() + x + 66.0, t.top() + 9.0), vec2(14.0, 32.0))));
         }
     }
-    for x in [75.0, 270.0] {
+    for x in [75.0, at.note + 68.0] {
         paint.rect_filled(divider(x), 0.0, p.border);
     }
-    // The relationship tool's chevron opens the kinds popover.
-    let chevron = Rect::from_min_size(pos2(t.left() + 186.0, t.top() + 9.0), vec2(14.0, 32.0));
-    ux::icon_in(&paint, chevron, &icons::CHEVRON_SMALL, if shell.canvas.popover { p.accent } else { p.text_secondary });
-    if control(shell, ui, "workspace.tools.relationship-types", "button", chevron, true).on_hover_text(tr("Relationship types")).clicked() {
-        shell.canvas.popover = !shell.canvas.popover;
-        if shell.canvas.popover {
-            shell.canvas.tool = Tool::Relationship;
+    // A tool's chevron opens the kind's popover.
+    let mut open_at = None;
+    for ((key, hint), picked, chevron) in chevrons {
+        ux::icon_in(&paint, chevron, &icons::CHEVRON_SMALL, if shell.canvas.popover { p.accent } else { p.text_secondary });
+        if control(shell, ui, &format!("workspace.tools.{key}"), "button", chevron, true).on_hover_text(tr(hint)).clicked() {
+            shell.canvas.popover = !shell.canvas.popover;
+            if shell.canvas.popover {
+                shell.canvas.tool = picked;
+            }
         }
+        open_at = Some(chevron);
     }
-    // The view group: key status and grid.
-    let group = Rect::from_min_size(pos2(t.left() + 281.0, t.top() + 7.0), vec2(70.0, 36.0));
+    // The view group: the status marks and the grid.
+    let group = Rect::from_min_size(pos2(t.left() + at.group, t.top() + 7.0), vec2(2.0 + 34.0 * at.toggles.len() as f32, 36.0));
     paint.rect_filled(group, 8.0, p.page);
-    for (key, x, hint, on) in [("key-status", 283.0, "Key status", shell.canvas.key_status), ("grid", 317.0, "Grid", shell.canvas.grid)] {
-        let b = button(x);
+    for (i, (key, hint)) in at.toggles.iter().enumerate() {
+        let b = button(at.group + 2.0 + 34.0 * i as f32);
+        let on = if *key == "grid" { shell.canvas.grid } else { shell.canvas.key_status };
         if on {
             paint.rect_filled(b, 8.0, p.accent_tint);
         }
         let ink = if on { p.accent } else { p.text_secondary };
-        if key == "grid" {
+        if *key == "grid" {
             ux::icon_in(&paint, Rect::from_center_size(b.center(), Vec2::splat(14.0)), &icons::GRID, ink);
         } else {
             let box_ = Rect::from_center_size(b.center(), vec2(14.0, 12.0));
@@ -1397,7 +1450,7 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
             paint.circle_filled(box_.min + vec2(11.5, 9.5), 2.5, p.key_foreign);
         }
         if control(shell, ui, &format!("workspace.tools.{key}"), "toggle", b, true).on_hover_text(tr(hint)).clicked() {
-            match key {
+            match *key {
                 "grid" => shell.canvas.grid = !shell.canvas.grid,
                 _ => shell.canvas.key_status = !shell.canvas.key_status,
             }
@@ -1405,8 +1458,8 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     }
     // Arrange diagram: the boxes laid out along their lines, one undo step, then the whole diagram
     // shown.
-    paint.rect_filled(divider(357.0), 0.0, p.border);
-    let arrange = button(365.0);
+    paint.rect_filled(divider(at.arrange - 8.0), 0.0, p.border);
+    let arrange = button(at.arrange);
     let live = shell.canvas.active.is_some();
     let resp = control(shell, ui, "workspace.tools.arrange", "button", arrange, live).on_hover_text(tr("Arrange diagram"));
     if resp.hovered() && live {
@@ -1427,8 +1480,10 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
             Err(e) => shell.canvas.notice = Some(e.to_string()),
         }
     }
-    if shell.canvas.popover {
-        crate::connect::popover(shell, ui, p, r, chevron);
+    if shell.canvas.popover
+        && let (Some(kind), Some(chevron)) = (kind, open_at)
+    {
+        kind.popover(shell, ui, p, r, chevron);
     }
 }
 
@@ -1438,6 +1493,8 @@ pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
     TOOLS
         .iter()
         .map(|(_, _, hint)| *hint)
-        .chain(["Relationship types", "Key status", "Grid", "complete", "disjoint", "overlapping", "Arrange diagram"])
+        .chain(["Key status", "Grid", "complete", "disjoint", "overlapping", "Arrange diagram"])
+        .chain(crate::kinds::KINDS.iter().flat_map(|k| k.tools().iter().flat_map(|t| std::iter::once(t.hint).chain(t.chevron.map(|(_, hint)| hint)))))
+        .chain(crate::kinds::KINDS.iter().filter_map(|k| k.adorner().map(|(_, hint)| hint)))
         .chain(archforge_er::figures::WORDS.iter().copied())
 }
