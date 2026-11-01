@@ -473,3 +473,30 @@ str		The diagram is of no package	该图不属于任何包
 str		This class	此类
 str		This package	此包
 plural		+ {n} more member	+ 另 {n} 个成员
+# 属性面板中的类成员 (archforge-3c5.1.3)
+str		Abstract	抽象
+str		Add attribute	添加属性
+str		Add operation	添加操作
+str		Add parameter	添加参数
+str		Attribute	属性
+str		Attribute · model	属性 · 模型
+str		Attributes · {n}	属性 · {n}
+str		Move down	下移
+str		Move up	上移
+str		Multiplicity	多重性
+str		On this attribute · {n}	在此属性上 · {n}
+str		On this operation · {n}	在此操作上 · {n}
+str		Operation	操作
+str		Operation · model	操作 · 模型
+str		Operations · {n}	操作 · {n}
+str		Parameters	参数
+str		Private	私有
+str		Protected	受保护
+str		Public	公共
+str		Remove parameter	移除参数
+str		Return type	返回类型
+str		Static	静态
+str		This attribute	此属性
+str		This operation	此操作
+str		Visibility	可见性
+str		Place class	放置类

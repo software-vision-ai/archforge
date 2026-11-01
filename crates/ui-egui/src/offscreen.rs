@@ -60,6 +60,11 @@ pub enum Screen {
     WorkspaceClassDiagram,
     /// The sample class model to read: members, every line kind and end (archforge-3c5.1.2).
     WorkspaceClassDiagramRead,
+    /// The sample class model with Order selected: its Properties, Abstract and its members
+    /// (archforge-3c5.1.3).
+    WorkspaceClassMembers,
+    /// The same with Customer's operation rename open in its editor, its parameter on a row.
+    WorkspaceMemberEditor,
     /// The routing sample with the top bar's search open on "order" (archforge-9ln.1.3).
     WorkspaceSearch,
     /// The Diagrams explorer with the diagram "dbo" open, its one table Company placed and its key
@@ -237,6 +242,11 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
     if screen == Screen::WorkspaceClassDiagramRead {
         shell.adopt_project();
         crate::uml_ui::open_sample(&mut shell)?;
+    }
+    if matches!(screen, Screen::WorkspaceClassMembers | Screen::WorkspaceMemberEditor) {
+        shell.adopt_project();
+        crate::uml_ui::open_sample(&mut shell)?;
+        sample_class_members(&mut shell, screen == Screen::WorkspaceMemberEditor)?;
     }
     if matches!(
         screen,
@@ -584,6 +594,27 @@ fn sample_cross_schema(shell: &mut Shell) -> Result<(), String> {
     session.mark_saved().map_err(|e| format!("mark_saved: {e:?}"))?;
     // The three tables framed on the canvas.
     shell.canvas.pan = egui::vec2(-150.0, -280.0);
+    Ok(())
+}
+
+/// Selects a class of the sample class model and shows its Properties: Order, or Customer with its
+/// operation open in the editor.
+fn sample_class_members(shell: &mut Shell, editor: bool) -> Result<(), String> {
+    let name = if editor { "Customer" } else { "Order" };
+    let (class, op) = {
+        let store = shell.session.as_ref().ok_or("no project is open")?.doc();
+        let c = store
+            .alive()
+            .find(|o| store.class_of(*o).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(store, *o) == name)
+            .ok_or("the sample has no such class")?;
+        let op = archforge_uml::members::operations(store, c).first().and_then(|o| store.uuid(*o).ok());
+        (store.uuid(c).map_err(|e| e.to_string())?, op)
+    };
+    crate::panels::run(shell, "view.select", serde_json::json!({ "ids": [class.to_string()] }))?;
+    shell.state.show_panel(crate::state::Panel::Properties);
+    if editor && let Some(op) = op {
+        crate::uml_panel::open(shell, class, crate::uml_panel::MemberKind::Operation, Some(op));
+    }
     Ok(())
 }
 

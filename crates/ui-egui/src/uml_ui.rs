@@ -13,6 +13,7 @@ use crate::i18n::tr;
 use crate::kinds::{DiagramKind, KindTool, ToolUse};
 use crate::notation_ui::{Added, Entry, NotationUi, Offer, Words};
 use crate::panels::Subject;
+use crate::uml_panel::{MemberKind, member_of};
 use crate::ux::{Palette, icons};
 
 fn class(store: &Store, o: Obj) -> Option<archforge_mof::ClassId> {
@@ -120,11 +121,60 @@ impl DiagramKind for UmlKind {
         crate::editing::run(shell, "uml.class.rename", json!({ "class": element.to_string(), "name": name })).map(|_| ())
     }
 
-    /// The class in Properties; its members' editor comes with modelling classes.
-    fn open(&self, shell: &mut Shell, element: Uuid, _row: Option<usize>) {
+    /// The class in Properties with the editor of the member at `row` of its card (its
+    /// attributes, then its operations), or of a new attribute.
+    fn open(&self, shell: &mut Shell, element: Uuid, row: Option<usize>) {
+        let member = row.and_then(|row| {
+            let store = shell.session.as_ref()?.doc();
+            let c = store.by_uuid(element)?;
+            let attributes = archforge_uml::members::attributes(store, c);
+            let (kind, o) = match attributes.get(row) {
+                Some(a) => (MemberKind::Attribute, *a),
+                None => (MemberKind::Operation, *archforge_uml::members::operations(store, c).get(row - attributes.len())?),
+            };
+            Some((kind, store.uuid(o).ok()?))
+        });
         let _ = crate::editing::run(shell, "view.select", json!({ "ids": [element.to_string()] }));
         shell.state.show_panel(crate::state::Panel::Properties);
+        match member {
+            Some((kind, id)) => crate::uml_panel::open(shell, element, kind, Some(id)),
+            None => crate::uml_panel::open(shell, element, MemberKind::Attribute, None),
+        }
     }
+
+    fn adorner(&self) -> Option<(&'static str, &'static str)> {
+        Some(("add-attribute", "Add attribute"))
+    }
+
+    /// A class from the tree, with its lines to the classes the diagram shows; one already there is
+    /// said so and left.
+    fn drop(&self, shell: &mut Shell, d: Obj, element: Uuid, at: (f64, f64)) {
+        shell.canvas.notice = None;
+        let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+        let Some(c) = store.by_uuid(element).filter(|c| class(store, *c) == Some(archforge_uml::CLASS)) else { return };
+        if crate::editing::on_diagram(store, d, c) {
+            shell.canvas.notice = Some(tr("Already on this diagram"));
+            return;
+        }
+        let notation = archforge_uml::UmlNotation;
+        let lines = [archforge_uml::ASSOCIATION, archforge_uml::GENERALIZATION, archforge_uml::DEPENDENCY];
+        let links: Vec<Obj> = store
+            .alive()
+            .filter(|l| class(store, *l).is_some_and(|k| lines.contains(&k)))
+            .filter(|l| archforge_diagram::Notation::ends(&notation, store, *l).is_some_and(|(a, b)| a == c || b == c))
+            .collect();
+        let (width, _) = archforge_uml::CLASS_SIZE;
+        crate::editing::place_with_lines(shell, d, c, at, (width, content_height(store, c)), &links, &notation, &tr("Place class"));
+    }
+}
+
+/// How tall a class's card is to show its members: its attributes, the dividing line and its
+/// operations, an empty compartment a row; never less than a new class nor more than a node may be.
+fn content_height(store: &Store, c: Obj) -> f64 {
+    use crate::canvas::{ENTITY_FIRST_ROW, ENTITY_ROW};
+    let rows = |n: usize| n.max(1) as f64;
+    let slots = rows(archforge_uml::members::attributes(store, c).len()) + 0.5 + rows(archforge_uml::members::operations(store, c).len());
+    (f64::from(ENTITY_FIRST_ROW) + 9.0 + slots * f64::from(ENTITY_ROW)).clamp(archforge_uml::CLASS_SIZE.1, archforge_diagram::rules::MAX_SIZE)
 }
 
 /// UML in the shell's explorers, search and panels.
@@ -146,7 +196,9 @@ impl NotationUi for UmlUi {
             .iter()
             .filter_map(|c| {
                 let label = name(store, *c);
-                if t.matches(&label) { t.row(*c, 1, "class", &icons::CLASS, label) } else { None }
+                let row = if t.matches(&label) { t.row(*c, 1, "class", &icons::CLASS, label) } else { None };
+                // A class drags onto a class diagram.
+                row.map(|row| Row { draggable: true, ..row })
             })
             .collect();
         let expandable = if t.filtering() { !under.is_empty() } else { !all.is_empty() };
@@ -229,19 +281,46 @@ impl NotationUi for UmlUi {
         }
     }
 
+    /// A member's class, which the canvas brings into view for it.
+    fn shown(&self, store: &Store, o: Obj) -> Option<Obj> {
+        Some(member_of(store, o).map_or(o, |(c, _)| c))
+    }
+
+    fn problem_holder(&self, store: &Store, o: Obj) -> Obj {
+        member_of(store, o).map_or(o, |(c, _)| c)
+    }
+
     fn words(&self, store: &Store, o: Obj) -> Option<Words> {
         let words = |kind: String, word: String, this: String, on_this: String| Words { kind, word, this, on_this, name: name(store, o) };
         Some(match class(store, o)? {
             c if c == archforge_uml::PACKAGE => words(tr("Package · model"), tr("Package"), tr("This package"), tr("On this package · {n}")),
             c if c == archforge_uml::CLASS => words(tr("Class · model, in every diagram"), tr("Class"), tr("This class"), tr("On this class · {n}")),
-            _ => return None,
+            _ => match member_of(store, o)?.1 {
+                MemberKind::Attribute => words(tr("Attribute · model"), tr("Attribute"), tr("This attribute"), tr("On this attribute · {n}")),
+                MemberKind::Operation => words(tr("Operation · model"), tr("Operation"), tr("This operation"), tr("On this operation · {n}")),
+            },
         })
     }
 
-    /// A package's or a class's name; its members come with modelling classes.
+    /// A member's panel is its class's.
+    fn heading(&self, store: &Store, o: Obj) -> Option<String> {
+        member_of(store, o).map(|_| tr("Class"))
+    }
+
+    /// A package's name; a class's panel, which a member's selection shows too.
     fn body(&self, shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, subject: &Subject) {
         let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
-        let Some((cmd, key)) = subject.obj.and_then(|o| self.rename(store, o)) else { return };
+        let Some(o) = subject.obj else { return };
+        if class(store, o) == Some(archforge_uml::CLASS) {
+            return crate::uml_panel::class_body(shell, ui, p, r, y, subject);
+        }
+        if let Some((c, _)) = member_of(store, o) {
+            let Some(words) = self.words(store, c) else { return };
+            let Ok(id) = store.uuid(c) else { return };
+            let of = Subject::of(c, id, archforge_uml::CLASS, words);
+            return crate::uml_panel::class_body(shell, ui, p, r, y, &of);
+        }
+        let Some((cmd, key)) = self.rename(store, o) else { return };
         let width = r.width() - 2.0 * crate::panels::PAD;
         crate::panels::name_field(shell, ui, p, egui::pos2(r.left() + crate::panels::PAD, y), width, subject, cmd, key);
     }

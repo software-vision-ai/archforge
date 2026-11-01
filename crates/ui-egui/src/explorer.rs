@@ -527,7 +527,7 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     }
 }
 
-/// The table being dragged, as a chip at the pointer above everything.
+/// The element being dragged, as a chip with its icon at the pointer above everything.
 fn drag_ghost(shell: &Shell, ui: &egui::Ui, p: &Palette, rows: &[Row]) {
     let (Some(id), Some(at)) = (shell.explorer.dragging, ui.input(|i| i.pointer.latest_pos())) else { return };
     let Some(row) = rows.iter().find(|r| r.id == id) else { return };
@@ -537,7 +537,7 @@ fn drag_ghost(shell: &Shell, ui: &egui::Ui, p: &Palette, rows: &[Row]) {
     ux::shadow(&paint, chip, 6.0, p.shadow);
     paint.rect_filled(chip, 6.0, p.surface);
     paint.rect_stroke(chip, 6.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
-    ux::icon_in(&paint, Rect::from_min_size(chip.min + vec2(10.0, 7.0), Vec2::splat(14.0)), &icons::TABLE, p.accent);
+    ux::icon_in(&paint, Rect::from_min_size(chip.min + vec2(10.0, 7.0), Vec2::splat(14.0)), row.icon, p.accent);
     paint.galley(chip.min + vec2(30.0, (28.0 - g.size().y) / 2.0), g, p.text);
 }
 

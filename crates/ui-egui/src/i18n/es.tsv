@@ -473,3 +473,30 @@ str		The diagram is of no package	El diagrama no es de ningún paquete
 str		This class	Esta clase
 str		This package	Este paquete
 plural		+ {n} more member	+ {n} miembro más|+ {n} miembros más
+# Miembros de clase en Propiedades (archforge-3c5.1.3)
+str		Abstract	Abstracta
+str		Add attribute	Añadir atributo
+str		Add operation	Añadir operación
+str		Add parameter	Añadir parámetro
+str		Attribute	Atributo
+str		Attribute · model	Atributo · modelo
+str		Attributes · {n}	Atributos · {n}
+str		Move down	Bajar
+str		Move up	Subir
+str		Multiplicity	Multiplicidad
+str		On this attribute · {n}	En este atributo · {n}
+str		On this operation · {n}	En esta operación · {n}
+str		Operation	Operación
+str		Operation · model	Operación · modelo
+str		Operations · {n}	Operaciones · {n}
+str		Parameters	Parámetros
+str		Private	Privada
+str		Protected	Protegida
+str		Public	Pública
+str		Remove parameter	Quitar parámetro
+str		Return type	Tipo de retorno
+str		Static	Estático
+str		This attribute	Este atributo
+str		This operation	Esta operación
+str		Visibility	Visibilidad
+str		Place class	Colocar clase

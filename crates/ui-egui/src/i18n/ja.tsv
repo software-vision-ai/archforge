@@ -473,3 +473,30 @@ str		The diagram is of no package	この図はどのパッケージにも属し�
 str		This class	このクラス
 str		This package	このパッケージ
 plural		+ {n} more member	+ 他 {n} メンバー
+# プロパティのクラスメンバー (archforge-3c5.1.3)
+str		Abstract	抽象
+str		Add attribute	属性を追加
+str		Add operation	操作を追加
+str		Add parameter	パラメーターを追加
+str		Attribute	属性
+str		Attribute · model	属性 · モデル
+str		Attributes · {n}	属性 · {n}
+str		Move down	下へ移動
+str		Move up	上へ移動
+str		Multiplicity	多重度
+str		On this attribute · {n}	この属性に · {n}
+str		On this operation · {n}	この操作に · {n}
+str		Operation	操作
+str		Operation · model	操作 · モデル
+str		Operations · {n}	操作 · {n}
+str		Parameters	パラメーター
+str		Private	プライベート
+str		Protected	プロテクテッド
+str		Public	パブリック
+str		Remove parameter	パラメーターを削除
+str		Return type	戻り値の型
+str		Static	静的
+str		This attribute	この属性
+str		This operation	この操作
+str		Visibility	可視性
+str		Place class	クラスを配置

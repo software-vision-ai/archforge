@@ -4767,3 +4767,294 @@ fn a_class_diagram_draws_every_line_kind_and_its_lines_highlight_and_their_texts
     let slid = if level { (after[1].1 - (before[1].1 - 40.0)).abs() < 1.0 } else { (after[1].0 - (before[1].0 - 40.0)).abs() < 1.0 };
     assert!(slid, "{before:?} → {after:?}");
 }
+
+/// The sample class model open with `class` selected and Properties showing it; gives its id.
+fn class_properties(class: &str) -> (Harness<'static, Shell>, archforge_mof::Uuid) {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    crate::uml_ui::open_sample(h.state_mut()).unwrap();
+    let st = h.state().session.as_ref().unwrap().doc();
+    let c = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(st, *o) == class).unwrap();
+    let id = st.uuid(c).unwrap();
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [id.to_string()] })).unwrap();
+    h.state_mut().state.show_panel(crate::state::Panel::Properties);
+    h.run();
+    (h, id)
+}
+
+/// A class's attributes or operations as its card lists them.
+fn member_rows(h: &Harness<'static, Shell>, class: archforge_mof::Uuid, operations: bool) -> Vec<String> {
+    let st = h.state().session.as_ref().unwrap().doc();
+    let c = st.by_uuid(class).unwrap();
+    if operations {
+        archforge_uml::members::operations(st, c).into_iter().map(|o| archforge_uml::figures::operation_text(st, o)).collect()
+    } else {
+        archforge_uml::members::attributes(st, c).into_iter().map(|a| archforge_uml::figures::attribute_text(st, a)).collect()
+    }
+}
+
+/// Picks the type labelled `label` from the open editor's type select `id`.
+fn pick_type(h: &mut Harness<'static, Shell>, id: &str, label: &str) {
+    let at = rect_of(h, id).center();
+    click(h, at);
+    let i = crate::uml_panel::type_choices(h.state().session.as_ref().unwrap().doc()).iter().position(|(l, _)| l == label).expect(label);
+    let at = rect_of(h, &format!("{id}.{i}")).center();
+    click(h, at);
+}
+
+/// Clicks the field `id` and types `text` into it.
+fn type_into(h: &mut Harness<'static, Shell>, id: &str, text: &str) {
+    let at = rect_of(h, id).center();
+    click(h, at);
+    h.event(egui::Event::Text(text.into()));
+    h.run();
+}
+
+#[test]
+fn a_class_takes_attributes_in_properties_typed_checked_moved_and_removed_each_one_undo_step() {
+    let (mut h, customer) = class_properties("Customer");
+    let texts = painted(&h);
+    assert!(texts.iter().any(|t| t == "Attributes · 2") && texts.iter().any(|t| t == "Operations · 1"), "{texts:?}");
+    assert_eq!(member_rows(&h, customer, false), ["+ id : Integer", "- email : String"]);
+    // + opens the editor with the name taking the keyboard; a built-in type makes the Types package.
+    let at = rect_of(&h, "workspace.properties.attributes.add").center();
+    click(&mut h, at);
+    assert!(h.state().panels.member.as_ref().is_some_and(|e| e.target.is_none()), "the editor is open for a new attribute");
+    h.event(egui::Event::Text("rating".into()));
+    h.run();
+    pick_type(&mut h, "workspace.properties.member.type", "Real");
+    type_into(&mut h, "workspace.properties.member.multiplicity", "0..1");
+    let at = rect_of(&h, "workspace.properties.member.apply").center();
+    click(&mut h, at);
+    assert!(h.state().panels.member.is_none(), "{:?}", h.state().panels.member);
+    assert_eq!(member_rows(&h, customer, false), ["+ id : Integer", "- email : String", "+ rating : Real [0..1]"]);
+    let st = h.state().session.as_ref().unwrap().doc();
+    assert!(
+        archforge_uml::commands::packages(st).iter().any(|p| archforge_core::name_of(st, *p) == archforge_uml::members::TYPES),
+        "Real is kept in Types"
+    );
+    h.run();
+    assert!(painted(&h).iter().any(|t| t == "+ rating : Real [0..1]"), "the card and the row show it");
+    // One undo step takes it back, redo brings it again.
+    h.state_mut().session.as_mut().unwrap().undo().unwrap();
+    assert_eq!(member_rows(&h, customer, false).len(), 2);
+    h.state_mut().session.as_mut().unwrap().redo().unwrap();
+    h.run();
+    assert_eq!(member_rows(&h, customer, false).len(), 3);
+    // A click on a row selects the attribute; Properties stays the class's, the row marked.
+    let st = h.state().session.as_ref().unwrap().doc();
+    let rating = st.uuid(archforge_uml::members::attributes(st, st.by_uuid(customer).unwrap())[2]).unwrap();
+    let row = format!("workspace.properties.attribute.{rating}");
+    let at = rect_of(&h, &row).left_center() + egui::vec2(20.0, 0.0);
+    click(&mut h, at);
+    assert_eq!(crate::panels::selected_id(h.state()), Some(rating));
+    assert!(painted(&h).iter().any(|t| t == "Attributes · 3"), "the class's panel shows for its attribute");
+    // Its edit button opens the editor in its place; a multiplicity that does not read is refused.
+    let at = rect_of(&h, &format!("{row}.edit")).center();
+    click(&mut h, at);
+    assert_eq!(h.state().panels.member.as_ref().and_then(|e| e.target), Some(rating));
+    assert_eq!(h.state().panels.member.as_ref().unwrap().multiplicity, "0..1");
+    h.state_mut().panels.member.as_mut().unwrap().multiplicity = "3..1".into();
+    let at = rect_of(&h, "workspace.properties.member.apply").center();
+    click(&mut h, at);
+    let refused = h.state().panels.member.as_ref().and_then(|e| e.refused.clone()).expect("refused");
+    assert!(refused.contains("multiplicity"), "{refused}");
+    assert_eq!(member_rows(&h, customer, false)[2], "+ rating : Real [0..1]", "nothing changed");
+    // Private and static, applied.
+    h.state_mut().panels.member.as_mut().unwrap().multiplicity = "1..*".into();
+    let at = rect_of(&h, "workspace.properties.member.visibility").center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.properties.member.visibility.1").center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.properties.member.static").center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.properties.member.apply").center();
+    click(&mut h, at);
+    assert_eq!(member_rows(&h, customer, false)[2], "- rating : Real [1..*]");
+    let st = h.state().session.as_ref().unwrap().doc();
+    assert_eq!(st.get(st.by_uuid(rating).unwrap(), archforge_uml::feature::IS_STATIC).unwrap().as_bool(), Some(true));
+    // Moved up past email, then removed; undo brings it back where it was.
+    let at = rect_of(&h, &format!("{row}.edit")).center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.properties.member.up").center();
+    click(&mut h, at);
+    assert_eq!(member_rows(&h, customer, false), ["+ id : Integer", "- rating : Real [1..*]", "- email : String"]);
+    let at = rect_of(&h, "workspace.properties.member.remove").center();
+    click(&mut h, at);
+    assert_eq!(member_rows(&h, customer, false), ["+ id : Integer", "- email : String"]);
+    assert!(h.state().panels.member.is_none());
+    h.state_mut().session.as_mut().unwrap().undo().unwrap();
+    assert_eq!(member_rows(&h, customer, false), ["+ id : Integer", "- rating : Real [1..*]", "- email : String"]);
+}
+
+#[test]
+fn a_class_takes_operations_with_parameters_and_turns_abstract_in_properties() {
+    let (mut h, payment) = class_properties("CardPayment");
+    // The class turns abstract: its name slants on its card.
+    let at = rect_of(&h, "workspace.properties.class.abstract").center();
+    click(&mut h, at);
+    let st = h.state().session.as_ref().unwrap().doc();
+    assert_eq!(st.get(st.by_uuid(payment).unwrap(), archforge_uml::class::IS_ABSTRACT).unwrap().as_bool(), Some(true));
+    // An operation with a parameter typed by a class of the model and a return type.
+    let at = rect_of(&h, "workspace.properties.operations.add").center();
+    click(&mut h, at);
+    h.event(egui::Event::Text("refund".into()));
+    h.run();
+    pick_type(&mut h, "workspace.properties.member.type", "Boolean");
+    let at = rect_of(&h, "workspace.properties.member.parameter.add").center();
+    click(&mut h, at);
+    type_into(&mut h, "workspace.properties.member.parameter.0.name", "to");
+    pick_type(&mut h, "workspace.properties.member.parameter.0.type", "Customer");
+    let at = rect_of(&h, "workspace.properties.member.parameter.add").center();
+    click(&mut h, at);
+    type_into(&mut h, "workspace.properties.member.parameter.1.name", "times");
+    type_into(&mut h, "workspace.properties.member.parameter.1.multiplicity", "0..*");
+    let at = rect_of(&h, "workspace.properties.member.abstract").center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.properties.member.apply").center();
+    click(&mut h, at);
+    assert!(h.state().panels.member.is_none(), "{:?}", h.state().panels.member);
+    assert_eq!(member_rows(&h, payment, true), ["+ refund(to : Customer, times) : Boolean"]);
+    let st = h.state().session.as_ref().unwrap().doc();
+    let op = archforge_uml::members::operations(st, st.by_uuid(payment).unwrap())[0];
+    assert_eq!(st.get(op, archforge_uml::behavioral_feature::IS_ABSTRACT).unwrap().as_bool(), Some(true));
+    assert_eq!(archforge_uml::figures::multiplicity(st, archforge_uml::members::parameters(st, op).0[1]), "*");
+    // Opened again it holds what it was given; a parameter's ✕ drops it.
+    let op_id = st.uuid(op).unwrap();
+    let at = rect_of(&h, &format!("workspace.properties.operation.{op_id}.edit")).center();
+    click(&mut h, at);
+    let edit = h.state().panels.member.clone().unwrap();
+    assert_eq!((edit.name.as_str(), edit.params.len(), edit.is_abstract), ("refund", 2, true));
+    // The model's own Boolean, by its id, rather than a built-in one.
+    let st = h.state().session.as_ref().unwrap().doc();
+    let ty = st.by_uuid(archforge_mof::Uuid::parse(&edit.ty).expect("an id")).unwrap();
+    assert_eq!(archforge_core::name_of(st, ty), "Boolean");
+    let at = rect_of(&h, "workspace.properties.member.parameter.1.remove").center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.properties.member.apply").center();
+    click(&mut h, at);
+    assert_eq!(member_rows(&h, payment, true), ["+ refund(to : Customer) : Boolean"]);
+}
+
+#[test]
+fn a_class_dragged_from_models_onto_a_second_diagram_stays_one_element_and_leaves_by_delete_or_shift_delete() {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    crate::uml_ui::open_sample(h.state_mut()).unwrap();
+    let find = |h: &Harness<'static, Shell>, name: &str| {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let c = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(st, *o) == name).unwrap();
+        st.uuid(c).unwrap()
+    };
+    let (customer, order) = (find(&h, "Customer"), find(&h, "Order"));
+    let (pkg, d2) = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let st = s.doc();
+        let pkg = st.uuid(archforge_uml::commands::packages(st)[0]).unwrap();
+        let out = s
+            .execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": pkg.to_string(), "name": "Ordering" }))
+            .unwrap();
+        (pkg, archforge_mof::Uuid::parse(out.value["id"].as_str().unwrap()).unwrap())
+    };
+    crate::canvas::open(h.state_mut(), d2);
+    h.state_mut().explorer.expanded.insert(pkg);
+    h.run();
+    let shown = |h: &Harness<'static, Shell>| {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let d = st.by_uuid(d2).unwrap();
+        (st.list(d, archforge_diagram::diagram::NODE).unwrap().len(), st.list(d, archforge_diagram::diagram::EDGE).unwrap().len())
+    };
+    assert_eq!(shown(&h), (0, 0));
+    // Customer, then Order: the association between them draws with the second, one undo step.
+    let canvas = rect_of(&h, "workspace.canvas");
+    let row = rect_of(&h, &format!("workspace.explorer.row.{customer}")).center();
+    drag(&mut h, row, canvas.center() - egui::vec2(200.0, 0.0));
+    let row = rect_of(&h, &format!("workspace.explorer.row.{order}")).center();
+    drag(&mut h, row, canvas.center() + egui::vec2(200.0, 0.0));
+    assert_eq!(shown(&h), (2, 1), "notice {:?}", h.state().canvas.notice);
+    h.state_mut().session.as_mut().unwrap().undo().unwrap();
+    assert_eq!(shown(&h), (1, 0));
+    h.state_mut().session.as_mut().unwrap().redo().unwrap();
+    h.run();
+    assert_eq!(shown(&h), (2, 1));
+    // One element, two views; the card is as tall as its members.
+    let st = h.state().session.as_ref().unwrap().doc();
+    let (_, _, nodes) = archforge_diagram::views_of(st, st.by_uuid(order).unwrap());
+    assert_eq!(nodes.len(), 2, "Order on both diagrams");
+    let row = rect_of(&h, &format!("workspace.explorer.row.{order}")).center();
+    drag(&mut h, row, canvas.center());
+    assert_eq!(shown(&h), (2, 1));
+    assert_eq!(h.state().canvas.notice.as_deref(), Some("Already on this diagram"));
+    // The selected class's adorner opens a new attribute's editor; Enter applies it.
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [order.to_string()] })).unwrap();
+    h.run();
+    let at = rect_of(&h, "workspace.canvas.adorn.add-attribute").center();
+    click(&mut h, at);
+    assert!(h.state().panels.member.as_ref().is_some_and(|e| e.target.is_none() && e.class == order));
+    h.event(egui::Event::Text("status".into()));
+    h.run();
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    assert_eq!(member_rows(&h, order, false), ["+ id : Integer", "+ placedAt : Date", "+ status"]);
+    // A double click on the operation's row of the card opens its editor.
+    let st = h.state().session.as_ref().unwrap().doc();
+    let node = archforge_diagram::views_of(st, st.by_uuid(order).unwrap())
+        .2
+        .into_iter()
+        .find(|n| st.container(*n).ok().flatten().is_some_and(|(d, _)| st.uuid(d).ok() == Some(d2)))
+        .unwrap();
+    let node_id = st.uuid(node).unwrap().to_string();
+    let r = rect_of(&h, &format!("workspace.canvas.node.{node_id}"));
+    let z = h.state().canvas.zoom;
+    // Two attributes shown when it was placed, the dividing line, then the operation.
+    let y = r.top() + (crate::canvas::ENTITY_FIRST_ROW + 3.5 * crate::canvas::ENTITY_ROW + 6.0) * z;
+    let at = egui::pos2(r.center().x, y);
+    h.event(egui::Event::PointerMoved(at));
+    for _ in 0..2 {
+        h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed: true, modifiers: egui::Modifiers::NONE });
+        h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed: false, modifiers: egui::Modifiers::NONE });
+    }
+    h.run();
+    h.run();
+    let st = h.state().session.as_ref().unwrap().doc();
+    let total = st.uuid(archforge_uml::members::operations(st, st.by_uuid(order).unwrap())[0]).unwrap();
+    assert_eq!(h.state().panels.member.as_ref().and_then(|e| e.target), Some(total), "{:?}", h.state().panels.member);
+    let at = rect_of(&h, "workspace.properties.member.cancel").center();
+    click(&mut h, at);
+    // Delete takes it off this diagram only; Shift+Delete asks, then takes it from the model.
+    let at = rect_of(&h, &format!("workspace.canvas.node.{node_id}")).center();
+    click(&mut h, at);
+    key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
+    assert_eq!(shown(&h).0, 1);
+    let st = h.state().session.as_ref().unwrap().doc();
+    assert!(st.by_uuid(order).is_some_and(|o| st.is_alive(o)), "the class stays in the model");
+    let node = node_ids(&h)
+        .into_iter()
+        .find(|i| {
+            i.ends_with(&{
+                let st = h.state().session.as_ref().unwrap().doc();
+                let c = st.by_uuid(customer).unwrap();
+                let (_, _, nodes) = archforge_diagram::views_of(st, c);
+                nodes
+                    .into_iter()
+                    .filter_map(|n| st.uuid(n).ok())
+                    .find(|n| {
+                        let o = st.by_uuid(*n).unwrap();
+                        st.container(o).ok().flatten().is_some_and(|(d, _)| st.uuid(d).ok() == Some(d2))
+                    })
+                    .unwrap()
+                    .to_string()
+            })
+        })
+        .unwrap();
+    let at = rect_of(&h, &node).center();
+    click(&mut h, at);
+    key(&mut h, egui::Key::Delete, egui::Modifiers::SHIFT);
+    let ask = h.state().explorer.delete.clone().expect("the dialog asks");
+    assert_eq!((ask.name.as_str(), ask.diagrams), ("Customer", 2));
+    let at = rect_of(&h, "workspace.explorer.delete.confirm").center();
+    click(&mut h, at);
+    let st = h.state().session.as_ref().unwrap().doc();
+    assert!(st.by_uuid(customer).is_none_or(|c| !st.is_alive(c)), "Customer left the model");
+    assert_eq!(shown(&h).0, 0);
+    h.state_mut().session.as_mut().unwrap().undo().unwrap();
+    let st = h.state().session.as_ref().unwrap().doc();
+    assert!(st.by_uuid(customer).is_some_and(|c| st.is_alive(c)), "undo brings it back");
+}
