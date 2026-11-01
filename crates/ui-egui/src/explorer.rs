@@ -35,8 +35,12 @@ const MAX_NAME: usize = archforge_er::rules::MAX_NAME;
 /// What the explorer keeps between frames: nothing the model holds.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct State {
-    /// The rows folded shut; everything else is open.
-    pub collapsed: BTreeSet<Uuid>,
+    /// The rows opened; everything else is folded, so a large model shows its schemas first and
+    /// the user drills in.
+    pub expanded: BTreeSet<Uuid>,
+    /// The selection whose schema and table were last opened for it, so one made on the canvas or
+    /// in the panels shows in the tree once, and folding them again stays folded.
+    pub revealed: Option<Uuid>,
     /// The filter field's text.
     pub filter: String,
     /// A name being typed in place.
@@ -207,7 +211,7 @@ fn skills_by_subject(store: &Store) -> std::collections::BTreeMap<Obj, Vec<Obj>>
     out
 }
 
-/// The tree's rows for the store, the collapsed set and the filter: a filter shows the rows whose
+/// The tree's rows for the store, the opened rows and the filter: a filter shows the rows whose
 /// name holds it and their ancestors, all open.
 pub fn rows(store: &Store, state: &State) -> Vec<Row> {
     let filter = state.filter.trim().to_lowercase();
@@ -217,7 +221,7 @@ pub fn rows(store: &Store, state: &State) -> Vec<Row> {
             out.push(Row { id, obj, depth, kind, label, detail, expandable, expanded });
         }
     };
-    let open = |obj: Obj| -> bool { !filter.is_empty() || uuid_of(store, obj).is_none_or(|id| !state.collapsed.contains(&id)) };
+    let open = |obj: Obj| -> bool { !filter.is_empty() || uuid_of(store, obj).is_some_and(|id| state.expanded.contains(&id)) };
     let matches = |label: &str| filter.is_empty() || label.to_lowercase().contains(&filter);
     let skills = skills_by_subject(store);
     let none = Vec::new();
@@ -418,9 +422,7 @@ pub fn add(shell: &mut Shell, kind: Kind) {
     match out {
         Ok(out) => {
             if let Some(id) = out.get("id").and_then(|v| v.as_str()).and_then(Uuid::parse) {
-                for parent in parents {
-                    shell.explorer.collapsed.remove(&parent);
-                }
+                shell.explorer.expanded.extend(parents);
                 shell.explorer.filter.clear();
                 let name = shell.session.as_ref().and_then(|s| s.doc().by_uuid(id).map(|o| name_of(s.doc(), o))).unwrap_or_default();
                 shell.explorer.rename = Some(Rename::new(id, name, true));
@@ -538,7 +540,39 @@ pub fn retain_valid(state: &mut State, store: &Store) {
     if state.delete.as_ref().is_some_and(|d| d.ids.iter().any(|i| store.by_uuid(*i).is_none())) {
         state.delete = None;
     }
-    state.collapsed.retain(|id| store.by_uuid(*id).is_some());
+    state.expanded.retain(|id| store.by_uuid(*id).is_some());
+}
+
+/// Opens a folded row, folds an open one.
+fn toggle(state: &mut State, row: &Row) {
+    if row.expanded {
+        state.expanded.remove(&row.id);
+    } else {
+        state.expanded.insert(row.id);
+    }
+}
+
+/// Every row that can open: the schemas and their tables.
+fn foldable(store: &Store) -> Vec<Uuid> {
+    let mut out = Vec::new();
+    for schema in schemas(store) {
+        out.extend(uuid_of(store, schema));
+        out.extend(children_of(store, schema, archforge_er::schema::ENTITY).into_iter().filter_map(|e| uuid_of(store, e)));
+    }
+    out
+}
+
+/// Opens the schema and the table of the element selected, once per selection, so its row shows.
+fn reveal(state: &mut State, store: &Store, selected: Option<Obj>) {
+    let id = selected.and_then(|o| uuid_of(store, o));
+    if id == state.revealed {
+        return;
+    }
+    state.revealed = id;
+    if let Some(o) = selected {
+        let parents = [archforge_er::rules::entity_of(store, o).filter(|e| *e != o), archforge_er::rules::schema_of(store, o).filter(|s| *s != o)];
+        state.expanded.extend(parents.into_iter().flatten().filter_map(|p| uuid_of(store, p)));
+    }
 }
 
 /// Draws the Models explorer into `r`: the title with `+`, the filter field, the tree.
@@ -557,6 +591,22 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     let live = shell.session.is_some();
     if control(shell, ui, "workspace.explorer.add", "button", add, live).on_hover_text(tr("Add")).clicked() {
         shell.explorer.menu_open = !menu_open;
+    }
+    // Expand all, or Collapse all once every row is open; a filter opens everything it shows.
+    let folds = shell.session.as_ref().map(|s| foldable(s.doc())).unwrap_or_default();
+    let all_open = !folds.is_empty() && folds.iter().all(|id| shell.explorer.expanded.contains(id));
+    let unfiltered = shell.explorer.filter.trim().is_empty();
+    let fold_all = Rect::from_min_size(pos2(r.right() - 68.0, r.top() + 20.0), Vec2::splat(24.0));
+    let can_fold = live && unfiltered && !folds.is_empty();
+    let icon = if all_open { &icons::COLLAPSE_ALL } else { &icons::EXPAND_ALL };
+    ux::icon_mid(&paint, fold_all.center(), icon, if can_fold { p.text_secondary } else { p.text_muted });
+    let hint = if all_open { tr("Collapse all") } else { tr("Expand all") };
+    if control(shell, ui, "workspace.explorer.fold-all", "button", fold_all, can_fold).on_hover_text(hint).clicked() {
+        if all_open {
+            shell.explorer.expanded.clear();
+        } else {
+            shell.explorer.expanded.extend(folds);
+        }
     }
     filter_field(shell, ui, p, Rect::from_min_max(at(16.0, 65.0), pos2(r.right() - 16.0, r.top() + 97.0)));
     // The keys act only when no name was open at the frame's start: the Enter that commits a name
@@ -593,6 +643,9 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
         select(shell, None);
     }
     let selected_obj = selected(shell);
+    if let Some(store) = shell.session.as_ref().map(|s| s.doc()) {
+        reveal(&mut shell.explorer, store, selected_obj);
+    }
     // The rows scroll under the filter; a row newly selected is brought into view.
     let follow = selected_obj.and_then(|o| rows.iter().position(|row| row.obj == o).map(|i| (i, rows[i].id)));
     let tail = if rows.len() >= MAX_ROWS { 40.0 } else { 12.0 };
@@ -701,11 +754,7 @@ fn tree_row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, column: Rect, y: 
         let chevron = Rect::from_center_size(pos2(column.left() + 21.0 + indent, hit.center().y), Vec2::splat(16.0));
         ux::icon_in(&paint, chevron, if row.expanded { &icons::CHEVRON_DOWN } else { &icons::CHEVRON_RIGHT }, p.text_secondary);
         if ui.interact(chevron.expand(4.0), widgets::egui_id(&format!("{id}.fold")), Sense::click()).clicked() {
-            if row.expanded {
-                shell.explorer.collapsed.insert(row.id);
-            } else {
-                shell.explorer.collapsed.remove(&row.id);
-            }
+            toggle(&mut shell.explorer, row);
             return;
         }
     }
@@ -749,11 +798,7 @@ fn tree_row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, column: Rect, y: 
         }
     }
     if resp.double_clicked() && row.expandable {
-        if row.expanded {
-            shell.explorer.collapsed.insert(row.id);
-        } else {
-            shell.explorer.collapsed.remove(&row.id);
-        }
+        toggle(&mut shell.explorer, row);
     }
 }
 
@@ -833,12 +878,12 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, rows: &[Row], selected_obj: Option
     {
         if left {
             if row.expanded {
-                shell.explorer.collapsed.insert(row.id);
+                shell.explorer.expanded.remove(&row.id);
             } else if let Some(parent) = rows.get(..i).unwrap_or(&[]).iter().rev().find(|r| r.depth < row.depth) {
                 select(shell, Some(parent.id));
             }
         } else if right && row.expandable {
-            shell.explorer.collapsed.remove(&row.id);
+            shell.explorer.expanded.insert(row.id);
         } else if rename && row.kind != Kind::Skill {
             shell.explorer.rename = Some(Rename::new(row.id, row.label.clone(), false));
         } else if delete {

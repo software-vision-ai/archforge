@@ -30,6 +30,8 @@ str		Table	テーブル
 str		Column	列
 str		Skill	スキル
 str		Nothing matches the filter	フィルターに一致するものはありません
+str		Expand all	すべて展開
+str		Collapse all	すべて折りたたむ
 str		Delete {name} from the model?	{name} をモデルから削除しますか？
 str		Narrow the filter to see more	もっと見るにはフィルターを絞り込んでください
 str		No free name is left	空いている名前がありません
@@ -377,6 +379,8 @@ str		Keep your project locations close.	プロジェクトの保存場所を、�
 str		Pin a folder	フォルダーをピン留め
 str		Open a project here	ここでプロジェクトを開く
 str		Unpin	固定を解除
+str		Open	開く
+str		Remove from recent projects	最近のプロジェクトから削除
 str		Pick up in the exact view you left.	中断したビューからそのまま再開できます。
 str		Just now	たった今
 plural		{n} minute ago	{n} 分前

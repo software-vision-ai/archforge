@@ -30,6 +30,8 @@ str		Table	Tabla
 str		Column	Columna
 str		Skill	Habilidad
 str		Nothing matches the filter	Nada coincide con el filtro
+str		Expand all	Expandir todo
+str		Collapse all	Contraer todo
 str		Delete {name} from the model?	¿Eliminar {name} del modelo?
 str		Narrow the filter to see more	Acote el filtro para ver más
 str		No free name is left	No queda ningún nombre libre
@@ -377,6 +379,8 @@ str		Keep your project locations close.	Tenga a mano las ubicaciones de sus proy
 str		Pin a folder	Fijar una carpeta
 str		Open a project here	Abrir un proyecto aquí
 str		Unpin	Desanclar
+str		Open	Abrir
+str		Remove from recent projects	Quitar de los proyectos recientes
 str		Pick up in the exact view you left.	Continúe exactamente en la vista en la que lo dejó.
 str		Just now	Ahora mismo
 plural		{n} minute ago	hace {n} minuto|hace {n} minutos

@@ -30,6 +30,8 @@ str		Table	Tabelle
 str		Column	Spalte
 str		Skill	Skill
 str		Nothing matches the filter	Nichts passt zum Filter
+str		Expand all	Alle aufklappen
+str		Collapse all	Alle zuklappen
 str		Delete {name} from the model?	{name} aus dem Modell löschen?
 str		Narrow the filter to see more	Filter eingrenzen, um mehr zu sehen
 str		No free name is left	Kein freier Name mehr
@@ -377,6 +379,8 @@ str		Keep your project locations close.	Halten Sie Ihre Projektorte griffbereit.
 str		Pin a folder	Ordner anheften
 str		Open a project here	Hier ein Projekt öffnen
 str		Unpin	Lösen
+str		Open	Öffnen
+str		Remove from recent projects	Aus den letzten Projekten entfernen
 str		Pick up in the exact view you left.	Machen Sie genau in der Ansicht weiter, die Sie verlassen haben.
 str		Just now	Gerade eben
 plural		{n} minute ago	vor {n} Minute|vor {n} Minuten

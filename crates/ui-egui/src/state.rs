@@ -131,6 +131,11 @@ impl UiState {
         self.recent.truncate(MAX_RECENT);
     }
 
+    /// Takes the project at `path` off the recent list; the project itself stays where it is.
+    pub fn forget(&mut self, path: &std::path::Path) {
+        self.recent.retain(|r| r.path != path);
+    }
+
     /// Pins the folder at `path` on Home, after the folders pinned already; a folder pinned
     /// already, one that does not fit the list or one past the most it keeps is not added.
     pub fn pin(&mut self, path: &std::path::Path) {

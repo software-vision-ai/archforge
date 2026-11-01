@@ -30,6 +30,8 @@ str		Table	表
 str		Column	列
 str		Skill	技能
 str		Nothing matches the filter	没有与筛选匹配的内容
+str		Expand all	全部展开
+str		Collapse all	全部折叠
 str		Delete {name} from the model?	从模型中删除 {name}？
 str		Narrow the filter to see more	缩小筛选范围以查看更多
 str		No free name is left	没有可用的名称了
@@ -377,6 +379,8 @@ str		Keep your project locations close.	让项目位置触手可及。
 str		Pin a folder	固定文件夹
 str		Open a project here	在此打开项目
 str		Unpin	取消固定
+str		Open	打开
+str		Remove from recent projects	从最近的项目中移除
 str		Pick up in the exact view you left.	从你离开时的视图继续。
 str		Just now	刚刚
 plural		{n} minute ago	{n} 分钟前
