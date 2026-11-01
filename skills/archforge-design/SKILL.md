@@ -179,9 +179,18 @@ the change, and update this file in the same change.
 ## Appearance
 - Appearance styles the selection on the diagram open in the centre, and on that diagram only.
   For now it holds Style (owner, 2026-10-31): a table, a note or another card takes Fill, Border
-  and Text colour and a Border width; a line takes Line colour and Line width. Text size and
-  routing come later with their own model fields; a line style is never offered, since dashed
-  already means not identifying.
+  and Text colour and a Border width; a line takes Line colour, Line width and Line routing. Text
+  size comes later with its own model field; a line style is never offered, since dashed already
+  means not identifying.
+- Line routing (owner, 2026-11-01): Straight, Right-angled or Curved, the design's routing icons in
+  a row of three under Line width. Route around tables, a switch under the row, shows only for
+  Right-angled. The diagram sets how its lines run and a line may run its own way; with nothing
+  selected the panel shows the diagram's routing. A new diagram's lines run right-angled around
+  the tables; a diagram made before keeps straight lines until changed.
+- A right-angled line leaves and enters a table at right angles to its side; around tables it
+  keeps a margin from every table near it and takes the way with the fewest bends. A table's lines
+  spread over the middle of each side, ordered by where their other table lies, so they leave
+  side by side. Moving a table re-routes its lines as it moves.
 - Each colour row starts with the diagram's own colour, drawn in the theme shown, which takes the
   row's own colour away; then the design's colours; then Your own colour, which opens a picker
   (a saturation and brightness field, a hue bar, the colour's code, Cancel and Apply). Nothing

@@ -168,6 +168,8 @@ impl Grid {
         let mut nodes = Vec::new();
         let mut node_cells: BTreeMap<(i64, i64), Vec<usize>> = BTreeMap::new();
         let mut index_of: BTreeMap<Obj, usize> = BTreeMap::new();
+        let tops: Vec<(Obj, Rect)> =
+            store.list(diagram, diagram::NODE).unwrap_or_default().iter().filter_map(Value::as_ref).map(|n| (n, bounds_of(store, n))).collect();
         for top in store.list(diagram, diagram::NODE).unwrap_or_default().iter().filter_map(Value::as_ref) {
             for n in node_tree(store, top) {
                 let rect = bounds_of(store, n);
@@ -185,6 +187,8 @@ impl Grid {
         let on_edge =
             |e: &Obj| store.get(*e, edge::TARGET).ok().and_then(|v| v.as_ref()).is_some_and(|t| store.class_of(t).ok() == Some(crate::EDGE));
         let mut middles: BTreeMap<Obj, (f64, f64)> = BTreeMap::new();
+        // Where each line's ends sit along their boxes' sides, worked out once for the diagram.
+        let spreads = crate::route::spreads(store, diagram, |n| bounds_of(store, n));
         for e in all.iter().filter(|e| !on_edge(e)).chain(all.iter().filter(|e| on_edge(e))).copied() {
             let end_obj = |prop| store.get(e, prop).ok().and_then(|v| v.as_ref());
             let rect_of = |o: Option<Obj>| o.and_then(|n| index_of.get(&n)).and_then(|i| nodes.get(*i)).map(|n| n.rect);
@@ -206,14 +210,25 @@ impl Grid {
                 self_loop(&src)
             } else {
                 let Some(dst) = rect_of(target) else { continue };
-                let mut points = vec![src.center()];
-                for w in store.list(e, edge::WAYPOINT).unwrap_or_default().iter().filter_map(Value::as_ref) {
-                    points.push((real(store, w, point::X), real(store, w, point::Y)));
+                let via: Vec<(f64, f64)> = store
+                    .list(e, edge::WAYPOINT)
+                    .unwrap_or_default()
+                    .iter()
+                    .filter_map(Value::as_ref)
+                    .map(|w| (real(store, w, point::X), real(store, w, point::Y)))
+                    .collect();
+                // The other boxes on the diagram, which an avoiding line goes around.
+                let way = crate::route::way_of(store, e);
+                let boxes: Vec<Rect> = if way == crate::Way::Avoiding {
+                    tops.iter().filter(|(n, _)| Some(*n) != source && Some(*n) != target).map(|(_, r)| *r).collect()
+                } else {
+                    Vec::new()
+                };
+                let at = spreads.get(&e).copied().unwrap_or((0.5, 0.5));
+                let points = crate::route(way, &src, &dst, at, &via, &boxes);
+                if points.len() < 2 {
+                    continue;
                 }
-                points.push(dst.center());
-                let n = points.len();
-                points[0] = exit_point(&src, points[1]);
-                points[n - 1] = exit_point(&dst, points[n - 2]);
                 points
             };
             if points.iter().any(|(x, y)| !x.is_finite() || !y.is_finite()) {

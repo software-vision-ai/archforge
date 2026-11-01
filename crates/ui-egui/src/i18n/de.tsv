@@ -302,6 +302,12 @@ str		Text colour	Textfarbe
 str		Border width	Rahmenstärke
 str		Line colour	Linienfarbe
 str		Line width	Linienstärke
+str		Line routing	Linienführung
+str		Straight	Gerade
+str		Right-angled	Rechtwinklig
+str		Curved	Geschwungen
+str		Route around tables	Um Tabellen herumführen
+str		Diagram · its lines	Diagramm · seine Linien
 str		Diagram default	Diagramm-Standard
 str		Your own colour	Eigene Farbe
 str		Colour code	Farbcode

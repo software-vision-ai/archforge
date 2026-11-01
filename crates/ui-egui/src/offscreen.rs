@@ -50,6 +50,9 @@ pub enum Screen {
     /// The diagram of two tables with a table of the CRM schema placed beside them, dimmed and
     /// dashed, its relationship to Order drawn (slice S7).
     WorkspaceCrossSchema,
+    /// The diagram of two tables with Invoice and Product placed so that their lines from Customer
+    /// would cross Order: right-angled lines go around it (archforge-4ym).
+    WorkspaceRouting,
     /// The Diagrams explorer with the diagram "dbo" open, its one table Company placed and its key
     /// column selected: the owner's screen of 2026-10-31.
     WorkspaceColumnSelected,
@@ -224,6 +227,7 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
             | Screen::WorkspaceMappingTable
             | Screen::WorkspaceSubtypes
             | Screen::WorkspaceCrossSchema
+            | Screen::WorkspaceRouting
     ) {
         shell.adopt_project();
         sample_diagram(
@@ -238,8 +242,12 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
                     | Screen::WorkspaceRelationship
                     | Screen::WorkspaceMappingTable
                     | Screen::WorkspaceCrossSchema
+                    | Screen::WorkspaceRouting
             ),
         )?;
+        if screen == Screen::WorkspaceRouting {
+            sample_routing(&mut shell)?;
+        }
         if screen == Screen::WorkspaceCrossSchema {
             sample_cross_schema(&mut shell)?;
         }
@@ -547,6 +555,49 @@ fn sample_cross_schema(shell: &mut Shell) -> Result<(), String> {
     session.mark_saved().map_err(|e| format!("mark_saved: {e:?}"))?;
     // The three tables framed on the canvas.
     shell.canvas.pan = egui::vec2(-150.0, -280.0);
+    Ok(())
+}
+
+/// Invoice above right and Product right of Order, each related to Customer, so the straight or
+/// plain right-angled way runs through Order; the diagram's lines go around the tables.
+fn sample_routing(shell: &mut Shell) -> Result<(), String> {
+    use serde_json::json;
+    let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
+    let run = |session: &mut archforge_er::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
+        let out = session.execute(command, &params).map_err(|e| format!("{command}: {e:?}"))?;
+        Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
+    };
+    let store = session.doc();
+    let by_name =
+        |name: &str| store.alive().find(|o| archforge_er::rules::name_of(store, *o) == name).and_then(|o| store.uuid(o).ok()).map(|u| u.to_string());
+    let (Some(customer), Some(schema), Some(diagram)) = (by_name("Customer"), by_name("Shop schema"), shell.canvas.active.map(|d| d.to_string()))
+    else {
+        return Err("the sample diagram".into());
+    };
+    let customer_node = {
+        let store = session.doc();
+        let c = store.by_uuid(archforge_mof::Uuid::parse(&customer).ok_or("the customer's id")?).ok_or("the customer")?;
+        archforge_diagram::views_of(store, c).2.first().and_then(|n| store.uuid(*n).ok()).map(|u| u.to_string()).ok_or("the customer's node")?
+    };
+    for (name, rel, x, y) in [("Invoice", "bills", 920, 120), ("Product", "favours", 920, 380)] {
+        let table = run(session, "er.entity.add", json!({ "schema": schema, "name": name }))?;
+        run(
+            session,
+            "er.attribute.add",
+            json!({ "entity": table, "name": format!("{}_id", name.to_lowercase()), "type": "BIGINT", "primary_key": true }),
+        )?;
+        let r = run(session, "er.relationship.add", json!({ "from": customer, "to": table, "name": rel, "create_foreign_key": true }))?;
+        let n = run(
+            session,
+            "diagram.place",
+            json!({ "diagram": diagram, "element": table, "x": x, "y": y, "width": 240, "height": crate::editing::content_height(2) }),
+        )?;
+        run(session, "diagram.connect", json!({ "diagram": diagram, "element": r, "source": customer_node, "target": n }))?;
+    }
+    run(session, "view.select", json!({ "ids": [] }))?;
+    session.mark_saved().map_err(|e| format!("mark_saved: {e:?}"))?;
+    shell.canvas.zoom = 0.75;
+    shell.canvas.pan = egui::vec2(-40.0, 40.0);
     Ok(())
 }
 

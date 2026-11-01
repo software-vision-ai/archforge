@@ -285,6 +285,7 @@ version = "0.1.0"
 dependencies = [
  "archforge-engine",
  "archforge-mof",
+ "log",
  "serde_json",
 ]
 

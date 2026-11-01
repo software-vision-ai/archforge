@@ -11,7 +11,7 @@ use archforge_dolt::{Dolt, Home, ServerOptions};
 use archforge_er::Session;
 use archforge_mof::rows;
 use archforge_mof::{Store, Uuid};
-use archforge_project::{Error, ModelSchema, Project, timestamp};
+use archforge_project::{EARLIER_MODELS, Error, ModelSchema, Project, timestamp};
 use mysql::prelude::Queryable;
 use serde_json::{Value as Json, json};
 
@@ -145,8 +145,71 @@ fn a_project_made_for_other_tables_is_refused() {
     let mut c = project.server().connect().unwrap();
     c.query_drop("USE project").unwrap();
     c.query_drop("INSERT INTO settings (`key`, `value`) VALUES ('model_schema', '0123456789abcdef')").unwrap();
-    drop(c);
+    // A fingerprint no earlier Archforge made: refused as it is, nothing added.
     assert!(matches!(project.prepare_model(&schema), Err(Error::OtherModel { .. })));
+    let tables: i64 = c.query_first("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'project'").unwrap().unwrap();
+    assert_eq!(tables, 1, "only the settings");
+    // An earlier Archforge's fingerprint over tables that are not an earlier shape: refused.
+    c.exec_drop("UPDATE settings SET `value` = ? WHERE `key` = 'model_schema'", (EARLIER_MODELS[0],)).unwrap();
+    // A table Archforge does not know: another model, or a later Archforge's.
+    c.query_drop("CREATE TABLE library_book (id BINARY(16) NOT NULL PRIMARY KEY, title MEDIUMTEXT NULL)").unwrap();
+    assert!(matches!(project.prepare_model(&schema), Err(Error::OtherModel { .. })));
+    // A table Archforge knows, with columns it does not write.
+    c.query_drop("DROP TABLE library_book").unwrap();
+    c.query_drop("CREATE TABLE diagram_point (id BINARY(16) NOT NULL PRIMARY KEY, x MEDIUMTEXT NULL)").unwrap();
+    assert!(matches!(project.prepare_model(&schema), Err(Error::OtherModel { .. })));
+    // Columns past the ones Archforge writes: a later Archforge's.
+    c.query_drop("DROP TABLE diagram_point").unwrap();
+    c.query_drop("CREATE TABLE diagram_point (id BINARY(16) NOT NULL PRIMARY KEY, x DOUBLE NOT NULL, y DOUBLE NOT NULL, z DOUBLE NULL)").unwrap();
+    assert!(matches!(project.prepare_model(&schema), Err(Error::OtherModel { .. })));
+    // A column that may be empty where Archforge's may not.
+    c.query_drop("DROP TABLE diagram_point").unwrap();
+    c.query_drop("CREATE TABLE diagram_point (id BINARY(16) NOT NULL PRIMARY KEY, x DOUBLE NULL)").unwrap();
+    assert!(matches!(project.prepare_model(&schema), Err(Error::OtherModel { .. })));
+    // A list table of another shape.
+    c.query_drop("DROP TABLE diagram_point").unwrap();
+    c.query_drop("CREATE TABLE diagram_diagram_node (owner BINARY(16) NOT NULL, position INT NOT NULL, value MEDIUMTEXT NOT NULL, PRIMARY KEY (owner, position))").unwrap();
+    assert!(matches!(project.prepare_model(&schema), Err(Error::OtherModel { .. })));
+    drop(c);
+    project.close().unwrap();
+}
+
+#[test]
+fn a_project_of_an_earlier_archforge_gets_the_columns_and_tables_added_since() {
+    let env = Env::new("upgrade");
+    let schema = schema();
+    let project = Project::create(&env.dolt, &env.opts(), &env.base.join("Projects"), "Earlier", "test", &timestamp(1_761_670_800)).unwrap();
+    project.prepare_model(&schema).unwrap();
+    let s = model();
+    let written = rows_of(s.doc(), &schema);
+    project.write_model(&schema, &written).unwrap();
+    project.commit("Saved").unwrap();
+    // As an earlier Archforge left it: the diagram's style and a style's routing and avoid (the
+    // last columns: one optional, two that a new object fills), and a list table, missing.
+    let mut c = project.server().connect().unwrap();
+    c.query_drop("USE project").unwrap();
+    c.query_drop("ALTER TABLE diagram_diagram DROP COLUMN `style`").unwrap();
+    c.query_drop("ALTER TABLE diagram_style DROP COLUMN `avoid`").unwrap();
+    c.query_drop("ALTER TABLE diagram_style DROP COLUMN `routing`").unwrap();
+    c.query_drop("INSERT INTO diagram_style (id, name, fill, stroke, `text`, line) VALUES (UNHEX('00000000000000000000000000000abc'), NULL, '#FFFFFF', NULL, NULL, 2)").unwrap();
+    c.query_drop("DROP TABLE core_model_skill").unwrap();
+    c.exec_drop("UPDATE settings SET `value` = ? WHERE `key` = 'model_schema'", (EARLIER_MODELS[EARLIER_MODELS.len() - 1],)).unwrap();
+    drop(c);
+    project.prepare_model(&schema).unwrap();
+    let read = project.read_model(&schema).unwrap();
+    let mut back = archforge_er::store(ids(1 << 40)).unwrap();
+    rows::restore(&mut back, &read, schema.tables(), &schema.junctions()).unwrap();
+    let mut c = project.server().connect().unwrap();
+    c.query_drop("USE project").unwrap();
+    // The style an earlier Archforge wrote takes what a new style holds: routing as the diagram, no avoiding.
+    let filled: (i64, i64) =
+        c.query_first("SELECT routing, avoid FROM diagram_style WHERE id = UNHEX('00000000000000000000000000000abc')").unwrap().unwrap();
+    assert_eq!(filled, (0, 0));
+    let held: String = c.query_first("SELECT `value` FROM settings WHERE `key` = 'model_schema'").unwrap().unwrap();
+    assert_eq!(held, schema.fingerprint(), "the fingerprint is the current one");
+    // Opened again, nothing more to add.
+    project.prepare_model(&schema).unwrap();
+    drop(c);
     project.close().unwrap();
 }
 
@@ -215,3 +278,13 @@ fn a_damaged_database_is_refused_with_a_reason_and_without_reading_it() {
     drop(c);
     project.close().unwrap();
 }
+
+#[test]
+fn a_change_of_the_model_tables_keeps_the_fingerprint_it_had() {
+    // When the tables change, this fingerprint goes to EARLIER_MODELS and this line takes the new
+    // one: projects of this build must stay upgradable by the next.
+    assert_eq!(schema().fingerprint(), CURRENT, "the model's tables changed: add {CURRENT} to EARLIER_MODELS, then update CURRENT");
+    assert!(!EARLIER_MODELS.contains(&CURRENT));
+}
+
+const CURRENT: &str = "8c7ee9a29f10f219";

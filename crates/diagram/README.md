@@ -28,10 +28,13 @@ such as a schema's own entities). Removing a model element removes, for it and e
 contains, the diagrams of them, the edges that show them and the nodes that show them with the
 edges on those nodes (`remove_views_of`); a notation calls it before it destroys an element.
 
-**The metaclasses.** `Diagram` (kind, name, element, node, edge), `Node` (element, kind, text, x, y,
-width, height, child, style), `Edge` (element, source, target, waypoint, label, style), `Point` (x,
-y), `Label` (kind, at, dx, dy), `Style` (name, fill, stroke, text, line) and the enumeration
-`LabelPlace` (source, middle, target); `Element` abstract above them.
+**The metaclasses.** `Diagram` (kind, name, element, node, edge, style), `Node` (element, kind,
+text, x, y, width, height, child, style), `Edge` (element, source, target, waypoint, label, style),
+`Point` (x, y), `Label` (kind, at, dx, dy), `Style` (name, fill, stroke, text, line, routing,
+avoid) and the enumerations `LabelPlace` (source, middle, target) and `Routing` (asDiagram,
+straight, rightAngled, curved); `Element` abstract above them. A diagram's style is the look its
+lines take unless their own says otherwise; a new diagram's lines run at right angles around the
+tables (archforge-4ym).
 
 **Public API.**
 
@@ -41,7 +44,8 @@ y), `Label` (kind, at, dx, dy), `Style` (name, fill, stroke, text, line) and the
 | `commands::specs` | `pub fn specs<V: DiagramView>() -> Vec<CommandSpec<Store, V>>`: the diagram commands for a notation's registry |
 | `metamodel`, `universe_with`, `with_slabs` | the metamodel; a universe of it and others; the slabs joined to a `CompositeSlabs` |
 | `remove_views_of`, `destroy_node_with_edges`, `views_of`, `edges_on`, `node_tree`, `diagram_of` | the cascades and the walks they rest on |
-| `Grid`, `Hit`, `Rect`, `grid::Visible` | `Grid::build(store, diagram)`, `hit(x, y)`, `visible(rect)`: the spatial index of one diagram |
+| `Grid`, `Hit`, `Rect`, `grid::Visible` | `Grid::build(store, diagram)`, `hit(x, y)`, `visible(rect)`: the spatial index of one diagram, its lines routed as drawn |
+| `route`, `Way`, `route::{way_of, spreads}` | `route(way, from, to, at, via, boxes) -> Vec<(f64, f64)>`: a line straight, at right angles, around the other boxes, or curved; `way_of` reads an edge's routing (its own, else its diagram's); `spreads(store, diagram, rect)` places every line's ends along its boxes' sides, once per diagram |
 | `rules::{problems, kind_problem, text_problem, colour_problem, coord_problem, size_problem, depth_of}` | the rules, for commands and for a whole store |
 | the generated constants, structs, `LabelPlace`, `TABLES`, `JUNCTIONS` | as every generated metamodel |
 
@@ -61,8 +65,9 @@ sequences with the rules and the store's validation checked after each step and 
 start. `archforge-er/tests/diagram.rs` runs the commands with the ER policy.
 
 **Known lacks.** Nothing persists a diagram until gm2.31, where diagrams load lazily. The style
-sheet's contents and the drawing come with the canvas (gm2.10). No auto-layout or edge routing;
-`visible` culls edges by their bounds, so a long diagonal edge is drawn in more viewports than it
+sheet's contents and the drawing come with the canvas (gm2.10). No auto-layout; routes are worked out when drawn, never
+stored, and an avoiding route that finds no way round takes the plain right-angled one; `visible`
+culls edges by their bounds, so a long diagonal edge is drawn in more viewports than it
 crosses, and a viewport wider than 4,096 cells is answered by a scan of the items. The grid is
 rebuilt from the store, not maintained incrementally.
 

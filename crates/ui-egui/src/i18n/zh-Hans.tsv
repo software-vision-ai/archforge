@@ -302,6 +302,12 @@ str		Text colour	文字颜色
 str		Border width	边框粗细
 str		Line colour	线条颜色
 str		Line width	线条粗细
+str		Line routing	连线路径
+str		Straight	直线
+str		Right-angled	直角
+str		Curved	曲线
+str		Route around tables	绕开表
+str		Diagram · its lines	图 · 其连线
 str		Diagram default	图表默认
 str		Your own colour	自定义颜色
 str		Colour code	颜色代码

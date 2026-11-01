@@ -199,7 +199,7 @@ fn the_registry_and_the_metamodel_are_what_the_spec_says() {
     assert!(reg.ids().filter(|i| i.starts_with("diagram.")).count() == 19 && reg.ids().any(|i| i == "view.open-diagram"));
     let m = metamodel().unwrap();
     assert_eq!(m.classes.len(), 8, "with View, the abstract end of an edge");
-    assert_eq!(m.data_types.len(), 6, "the five primitives and LabelPlace");
+    assert_eq!(m.data_types.len(), 7, "the five primitives, LabelPlace and Routing");
     assert_eq!(LabelPlace::from_index(1), Some(LabelPlace::Middle));
     assert_eq!(commands::place_name(LabelPlace::Target), "target");
     assert!(TABLES.iter().any(|t| t.name == "diagram_node") && JUNCTIONS.iter().any(|j| j.name == "diagram_diagram_node" && j.ordered));
@@ -226,6 +226,8 @@ fn every_command_applies_undoes_and_redoes_to_the_identical_store() {
         ("diagram.connect-all", json!({ "diagram": sm.diagram })),
         ("diagram.style", json!({ "ids": [sm.a, sm.edge], "name": "accent", "stroke": "#112233", "text": "#000000" })),
         ("diagram.style", json!({ "ids": [sm.a, sm.edge] })),
+        ("diagram.style", json!({ "ids": [sm.diagram, sm.edge], "routing": "curved", "line": 2 })),
+        ("diagram.style", json!({ "ids": [sm.edge], "routing": "right-angled", "avoid": true })),
         ("diagram.unlabel", json!({ "label": sm.label })),
         ("diagram.disconnect", json!({ "edge": sm.anchor })),
         ("diagram.unplace", json!({ "nodes": [sm.b] })),
@@ -322,7 +324,7 @@ fn refusals_name_their_key_and_change_nothing() {
         ("diagram.style", json!({ "ids": [sm.a], "fill": "#12345" })),
         ("diagram.style", json!({ "ids": [sm.a], "name": "Accent Style" })),
         ("diagram.style", json!({ "ids": [sm.a], "line": 500 })),
-        ("diagram.style", json!({ "ids": [sm.diagram] })),
+        ("diagram.style", json!({ "ids": [sm.a], "routing": "zigzag" })),
         ("diagram.style", json!({ "ids": [] })),
         ("view.open-diagram", json!({ "diagram": sm.a })),
         ("diagram.get", json!({ "diagram": "00000000-0000-7000-8000-000000000000" })),
@@ -408,6 +410,8 @@ fn the_grid_finds_the_topmost_node_the_nearest_edge_and_what_a_viewport_shows() 
         run(&mut s, "diagram.note", json!({ "diagram": sm.diagram, "text": "in", "x": 240, "y": 200, "width": 20, "height": 20, "parent": c }));
     let _ = package;
     run(&mut s, "diagram.route", json!({ "edge": sm.edge, "points": [{ "x": 300, "y": 600 }] }));
+    // Straight lines, as the geometry below reads them (a new diagram's run at right angles).
+    run(&mut s, "diagram.style", json!({ "ids": [sm.diagram], "routing": "straight" }));
     let st = s.doc();
     let d = obj(st, &sm.diagram);
     let grid = Grid::build(st, d);
@@ -697,4 +701,21 @@ fn a_note_links_to_a_table_once_either_way_round_and_a_link_is_never_routed() {
     let other = run(&mut s, "diagram.note", json!({ "diagram": sm.diagram, "text": "two", "x": 600, "y": 300 }));
     assert!(refused(&mut s, "diagram.link-note", json!({ "diagram": sm.diagram, "note": sm.note, "target": other })).contains("another note"));
     assert!(refused(&mut s, "diagram.route", json!({ "edge": sm.anchor, "points": [{ "x": 1, "y": 2 }] })).contains("straight"));
+}
+
+#[test]
+fn a_new_diagram_routes_its_lines_at_right_angles_around_what_is_in_their_way() {
+    let (mut s, m) = session();
+    let sm = sample(&mut s, &m);
+    let got = s.execute("diagram.get", &json!({ "diagram": sm.diagram })).unwrap().value;
+    assert_eq!((got["style"]["routing"].clone(), got["style"]["avoid"].clone()), (json!("right-angled"), json!(true)), "{got}");
+    // A line of its own: curved; then back to the diagram's.
+    run(&mut s, "diagram.style", json!({ "ids": [sm.edge], "routing": "curved" }));
+    let got = s.execute("diagram.get", &json!({ "diagram": sm.diagram })).unwrap().value;
+    let edge = got["edges"].as_array().unwrap().iter().find(|e| e["id"] == json!(sm.edge)).unwrap().clone();
+    assert_eq!(edge["style"]["routing"], "curved");
+    run(&mut s, "diagram.style", json!({ "ids": [sm.edge] }));
+    let got = s.execute("diagram.get", &json!({ "diagram": sm.diagram })).unwrap().value;
+    let edge = got["edges"].as_array().unwrap().iter().find(|e| e["id"] == json!(sm.edge)).unwrap().clone();
+    assert_eq!(edge["style"], Json::Null, "the line takes its diagram's routing again");
 }

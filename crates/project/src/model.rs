@@ -5,12 +5,13 @@
 //! sizing an allocation from what is read; and Save, a Dolt commit of everything written.
 //!
 //! The tables are described by the metamodels' generated code (`Table`, `Junction`); a project
-//! records a fingerprint of that description, and a project made for another one is refused rather
-//! than read wrongly.
+//! records a fingerprint of that description. A project made by an earlier Archforge, whose tables
+//! lack only tables and optional columns that come last, is brought up to date by adding them; any
+//! other project made for other tables is refused rather than read wrongly.
 
 use archforge_mof::rows::{Cell, Rows};
 use archforge_mof::schema::{Junction, Table};
-use archforge_mof::{DataKind, MAX_STRING, TypeRef, Universe, Uuid};
+use archforge_mof::{DataKind, MAX_STRING, TypeRef, Universe, Uuid, Value};
 use mysql::prelude::Queryable;
 
 use crate::{AUTHOR, DATABASE, Error, Project};
@@ -32,6 +33,16 @@ const BATCH: usize = 500;
 const BATCH_BYTES: usize = archforge_dolt::MAX_PACKET / 4;
 /// The setting that holds the model tables' fingerprint.
 const SCHEMA_KEY: &str = "model_schema";
+/// The fingerprints of the model tables earlier Archforges made, oldest first: a project holding
+/// one of them is brought up to date by adding what came since. Append-only: when the tables
+/// change, the fingerprint they had goes here. A fingerprint not listed is another model's, or a
+/// later Archforge's, and is refused.
+pub const EARLIER_MODELS: &[&str] = &[
+    // Before line routing (archforge-4ym): no Diagram.style, no Style.routing or Style.avoid.
+    "7666551b88d9af5b",
+];
+/// The most tables a project's database may hold for an upgrade to look at.
+const MAX_TABLES: usize = 4096;
 
 /// The model's tables as the project stores them: the generated tables and junctions with the SQL
 /// type of each junction's value, and their fingerprint.
@@ -39,6 +50,9 @@ pub struct ModelSchema {
     tables: Vec<Table>,
     junctions: Vec<(Junction, &'static str)>,
     fingerprint: String,
+    /// For each column that may not be empty, the value a new object holds there, as SQL: what a
+    /// column added to an earlier project's table gives the rows already in it.
+    fills: Vec<(&'static str, &'static str, String)>,
 }
 
 impl ModelSchema {
@@ -52,7 +66,27 @@ impl ModelSchema {
             }
         }
         let mut text = String::new();
+        let mut fills = Vec::new();
         for t in &tables {
+            for c in t.columns.iter().filter(|c| c.sql.contains("NOT NULL")) {
+                let Some(prop) = c.prop.and_then(|p| universe.prop(p)) else { continue };
+                let fill = match (&prop.default, &prop.ty) {
+                    (Some(Value::Bool(b)), _) => Some(i64::from(*b).to_string()),
+                    (Some(Value::Int(i)), _) => Some(i.to_string()),
+                    (Some(Value::Real(r)), _) if r.is_finite() => Some(r.to_string()),
+                    (Some(Value::Enum(i)), _) => Some(i.to_string()),
+                    (Some(_), _) => None,
+                    // A new object holds zero, false or the first literal.
+                    (None, TypeRef::Data(d)) => match universe.data_type(*d).map(|t| &t.kind) {
+                        Some(DataKind::Boolean | DataKind::Integer | DataKind::Real | DataKind::Enumeration(_)) => Some("0".into()),
+                        _ => None,
+                    },
+                    (None, _) => None,
+                };
+                if let Some(fill) = fill {
+                    fills.push((t.name, c.name, fill));
+                }
+            }
             if !plain(t.name) || t.columns.iter().any(|c| !plain(c.name)) {
                 return Err(format!("the table {:?} has a name that is not a plain identifier", t.name));
             }
@@ -90,11 +124,16 @@ impl ModelSchema {
             text.push_str(&format!("{} {}\n", j.name, sql));
             with_types.push((j, sql));
         }
-        Ok(ModelSchema { tables, junctions: with_types, fingerprint: fingerprint(&text) })
+        Ok(ModelSchema { tables, junctions: with_types, fingerprint: fingerprint(&text), fills })
     }
 
     pub fn tables(&self) -> &[Table] {
         &self.tables
+    }
+
+    /// The fingerprint a project made for these tables records.
+    pub fn fingerprint(&self) -> &str {
+        &self.fingerprint
     }
 
     /// The junctions without their value types, as `rows` takes them.
@@ -143,7 +182,27 @@ impl Project {
         };
         match held {
             Some(f) if f != schema.fingerprint => {
-                return Err(Error::OtherModel { path: self.path().to_path_buf(), found: f, expected: schema.fingerprint.clone() });
+                // Made by an earlier Archforge, as its fingerprint says: the columns added since come
+                // last and are empty or hold what a new object holds, so adding them keeps every row
+                // as it was. Anything else is another model, or a later Archforge's.
+                let other = || Error::OtherModel { path: self.path().to_path_buf(), found: f.clone(), expected: schema.fingerprint.clone() };
+                if !EARLIER_MODELS.contains(&f.as_str()) {
+                    return Err(other());
+                }
+                let added = match upgrade(&mut c, schema) {
+                    Ok(added) => added,
+                    Err(Refusal::Shape(why)) => {
+                        log::warn!("{} is not upgraded: {why}", self.path().display());
+                        return Err(other());
+                    }
+                    Err(Refusal::Read(why)) => return Err(Error::Damaged { path: self.path().to_path_buf(), why }),
+                };
+                for statement in &added {
+                    c.query_drop(statement).map_err(sql("cannot add a column to a model table"))?;
+                }
+                c.exec_drop("UPDATE settings SET `value` = ? WHERE `key` = ?", (&schema.fingerprint, SCHEMA_KEY))
+                    .map_err(sql("cannot record the model's fingerprint"))?;
+                log::info!("{} upgraded: {} columns added", self.path().display(), added.len());
             }
             Some(_) => {}
             None => {
@@ -233,7 +292,7 @@ impl Project {
             rows.tables.push(out);
         }
         for (j, value_sql) in &schema.junctions {
-            check_shape(&mut c, j.name, &[("owner", "BINARY(16)"), ("position", "INT"), ("value", value_sql)]).map_err(&damaged)?;
+            check_shape(&mut c, j.name, &[("owner", "BINARY(16) NOT NULL"), ("position", "INT NOT NULL"), ("value", value_sql)]).map_err(&damaged)?;
             let mut out = Vec::new();
             let read = c
                 .query_iter(format!("SELECT `owner`, `position`, `value` FROM `{}` LIMIT {}", j.name, MAX_TABLE_ROWS + 1))
@@ -345,6 +404,118 @@ impl Budget {
     }
 }
 
+/// The statements that bring a project made by an earlier Archforge up to `schema`: a column the
+/// generated tables have that a table lacks is added when it comes after the columns the table
+/// has, empty or holding what a new object holds; tables missing are made by the caller. Refused when the project holds a
+/// table Archforge does not know, a table whose columns are not the first ones of its generated
+/// shape, or a list table of another shape: a project of another model, or of a later Archforge.
+fn upgrade(c: &mut mysql::Conn, schema: &ModelSchema) -> Result<Vec<String>, Refusal> {
+    let names: Vec<mysql::Row> = c
+        .exec(
+            format!("SELECT LEFT(CAST(table_name AS CHAR), 64) FROM information_schema.tables WHERE table_schema = ? LIMIT {}", MAX_TABLES + 1),
+            (DATABASE,),
+        )
+        .map_err(|e| Refusal::Read(format!("the tables cannot be listed: {e}")))?;
+    if names.len() > MAX_TABLES {
+        return Err(Refusal::Shape(format!("it holds more than {MAX_TABLES} tables")));
+    }
+    let known =
+        |name: &str| name == "settings" || schema.tables.iter().any(|t| t.name == name) || schema.junctions.iter().any(|(j, _)| j.name == name);
+    for row in &names {
+        match row.get_opt::<String, usize>(0).and_then(Result::ok) {
+            Some(name) if known(&name) => {}
+            Some(name) => return Err(Refusal::Shape(format!("it holds the table {name}, which this Archforge does not know"))),
+            None => return Err(Refusal::Read("a table's name cannot be read".into())),
+        }
+    }
+    let mut added = Vec::new();
+    for t in &schema.tables {
+        let Some(found) = columns_of(c, t.name).map_err(Refusal::Read)? else { continue };
+        let expected: Vec<(&str, &str)> = t.columns.iter().map(|col| (col.name, col.sql)).collect();
+        if found.len() > expected.len() || !found.iter().zip(&expected).all(|(f, e)| same_column(f, e)) {
+            return Err(Refusal::Shape(format!("the table {} has columns this Archforge does not write", t.name)));
+        }
+        for (name, sql) in &expected[found.len()..] {
+            if !sql.contains("NOT NULL") {
+                added.push(format!("ALTER TABLE `{}` ADD COLUMN `{name}` {sql}", t.name));
+                continue;
+            }
+            // The rows already there take what a new object holds.
+            let Some((_, _, fill)) = schema.fills.iter().find(|(table, column, _)| *table == t.name && column == name) else {
+                return Err(Refusal::Shape(format!("the table {} lacks the column {name}, which has no value to give the rows it holds", t.name)));
+            };
+            added.push(format!("ALTER TABLE `{}` ADD COLUMN `{name}` {sql} DEFAULT {fill}", t.name));
+        }
+    }
+    for (j, value) in &schema.junctions {
+        if columns_of(c, j.name).map_err(Refusal::Read)?.is_some() {
+            check_shape(c, j.name, &[("owner", "BINARY(16) NOT NULL"), ("position", "INT NOT NULL"), ("value", value)]).map_err(Refusal::Shape)?;
+        }
+    }
+    Ok(added)
+}
+
+/// Why a project is not upgraded: its tables are not an earlier shape of the model's, or they
+/// could not be read.
+enum Refusal {
+    Shape(String),
+    Read(String),
+}
+
+/// A column as `information_schema` gives it: its name, data type and octet length, whether it is
+/// plain (not generated), and whether it may be empty.
+type Found = (Option<String>, Option<String>, Option<i64>, bool, Option<bool>);
+
+/// Whether a column found is the one declared `(name, sql)`; a binary id column must hold exactly
+/// 16 bytes.
+fn same_column((name, ty, octets, plain, nullable): &Found, (want_name, want_sql): &(&str, &str)) -> bool {
+    let want = data_type(want_sql);
+    *plain
+        && name.as_deref() == Some(*want_name)
+        && ty.as_deref() == Some(want.as_str())
+        && (want != "binary" || *octets == Some(16))
+        && *nullable == Some(!want_sql.contains("NOT NULL"))
+}
+
+/// The columns of the base table `table`, in order; None when the project has no such table.
+fn columns_of(c: &mut mysql::Conn, table: &str) -> Result<Option<Vec<Found>>, String> {
+    let kind: Option<mysql::Row> = c
+        .exec_first("SELECT table_type FROM information_schema.tables WHERE table_schema = ? AND table_name = ?", (DATABASE, table))
+        .map_err(|e| format!("the table {table} cannot be looked at: {e}"))?;
+    let Some(kind) = kind else { return Ok(None) };
+    if kind.get_opt::<String, usize>(0).and_then(Result::ok).as_deref() != Some("BASE TABLE") {
+        return Err(format!("{table} is not a table"));
+    }
+    let columns: Vec<mysql::Row> = c
+        .exec(
+            format!(
+                "SELECT LEFT(CAST(column_name AS CHAR), 64), LEFT(CAST(data_type AS CHAR), 32), character_octet_length, \
+                 LEFT(CAST(COALESCE(extra, '') AS CHAR), 64), LEFT(CAST(COALESCE(generation_expression, '') AS CHAR), 64), \
+                 LEFT(CAST(is_nullable AS CHAR), 8) \
+                 FROM information_schema.columns WHERE table_schema = ? AND table_name = ? ORDER BY ordinal_position LIMIT {}",
+                MAX_COLUMNS + 1
+            ),
+            (DATABASE, table),
+        )
+        .map_err(|e| format!("the columns of {table} cannot be looked at: {e}"))?;
+    Ok(Some(
+        columns
+            .iter()
+            .map(|r| {
+                let text = |i: usize| r.get_opt::<String, usize>(i).and_then(Result::ok);
+                // A generated column computes its value on every read: none is written.
+                let plain = text(3).is_some_and(|e| e.trim().is_empty()) && text(4).is_some_and(|g| g.trim().is_empty());
+                let nullable = match text(5).as_deref() {
+                    Some("YES") => Some(true),
+                    Some("NO") => Some(false),
+                    _ => None,
+                };
+                (text(0), text(1).map(|t| t.to_ascii_lowercase()), r.get_opt::<i64, usize>(2).and_then(Result::ok), plain, nullable)
+            })
+            .collect(),
+    ))
+}
+
 /// The type name `information_schema` gives a column declared `sql`: its first word, lower case.
 fn data_type(sql: &str) -> String {
     sql.split([' ', '(']).next().unwrap_or_default().to_ascii_lowercase()
@@ -353,37 +524,8 @@ fn data_type(sql: &str) -> String {
 /// Refuses a table that is not a base table with exactly the `expected` columns, in order, of the
 /// declared types; a binary id column must hold exactly 16 bytes.
 fn check_shape(c: &mut mysql::Conn, table: &str, expected: &[(&str, &str)]) -> Result<(), String> {
-    let kind: Option<mysql::Row> = c
-        .exec_first("SELECT table_type FROM information_schema.tables WHERE table_schema = ? AND table_name = ?", (DATABASE, table))
-        .map_err(|e| format!("the table {table} cannot be looked at: {e}"))?;
-    if kind.and_then(|r| r.get_opt::<String, usize>(0)).and_then(Result::ok).as_deref() != Some("BASE TABLE") {
-        return Err(format!("{table} is not a table"));
-    }
-    let columns: Vec<mysql::Row> = c
-        .exec(
-            format!(
-                "SELECT LEFT(CAST(column_name AS CHAR), 64), LEFT(CAST(data_type AS CHAR), 32), character_octet_length, \
-                 LEFT(CAST(COALESCE(extra, '') AS CHAR), 64), LEFT(CAST(COALESCE(generation_expression, '') AS CHAR), 64) \
-                 FROM information_schema.columns WHERE table_schema = ? AND table_name = ? ORDER BY ordinal_position LIMIT {}",
-                MAX_COLUMNS + 1
-            ),
-            (DATABASE, table),
-        )
-        .map_err(|e| format!("the columns of {table} cannot be looked at: {e}"))?;
-    let found: Vec<(Option<String>, Option<String>, Option<i64>, bool)> = columns
-        .iter()
-        .map(|r| {
-            let text = |i: usize| r.get_opt::<String, usize>(i).and_then(Result::ok);
-            // A generated column computes its value on every read: none is written.
-            let plain = text(3).is_some_and(|e| e.trim().is_empty()) && text(4).is_some_and(|g| g.trim().is_empty());
-            (text(0), text(1).map(|t| t.to_ascii_lowercase()), r.get_opt::<i64, usize>(2).and_then(Result::ok), plain)
-        })
-        .collect();
-    let same = found.len() == expected.len()
-        && found.iter().zip(expected).all(|((name, ty, octets, plain), (want_name, want_sql))| {
-            let want = data_type(want_sql);
-            *plain && name.as_deref() == Some(*want_name) && ty.as_deref() == Some(want.as_str()) && (want != "binary" || *octets == Some(16))
-        });
+    let found = columns_of(c, table)?.ok_or_else(|| format!("{table} is not a table"))?;
+    let same = found.len() == expected.len() && found.iter().zip(expected).all(|(f, e)| same_column(f, e));
     if same { Ok(()) } else { Err(format!("the table {table} does not have the shape Archforge writes")) }
 }
 

@@ -38,6 +38,39 @@ impl LabelPlace {
     }
 }
 
+/// The enumeration Routing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Routing {
+    AsDiagram,
+    Straight,
+    RightAngled,
+    Curved,
+}
+
+impl Routing {
+    pub const DATA_TYPE: DataId = ROUTING;
+    pub fn from_index(i: u32) -> Option<Self> {
+        match i {
+            0 => Some(Self::AsDiagram),
+            1 => Some(Self::Straight),
+            2 => Some(Self::RightAngled),
+            3 => Some(Self::Curved),
+            _ => None,
+        }
+    }
+    pub fn index(self) -> u32 {
+        self as u32
+    }
+    pub fn literal(self) -> &'static str {
+        match self {
+            Self::AsDiagram => "asDiagram",
+            Self::Straight => "straight",
+            Self::RightAngled => "rightAngled",
+            Self::Curved => "curved",
+        }
+    }
+}
+
 use archforge_mof::DataId;
 
 /// An object of Diagram, with every inherited stored property as a field.
@@ -48,6 +81,7 @@ pub struct DiagramObj {
     pub element: Option<Obj>,
     pub node: Vec<Value>,
     pub edge: Vec<Value>,
+    pub style: Option<Obj>,
 }
 
 impl Reflect for DiagramObj {
@@ -59,6 +93,7 @@ impl Reflect for DiagramObj {
             diagram::KIND => Some(self.kind.clone().map_or(Value::Null, Value::Str)),
             diagram::NAME => Some(self.name.clone().map_or(Value::Null, Value::Str)),
             diagram::ELEMENT => Some(self.element.map_or(Value::Null, Value::Ref)),
+            diagram::STYLE => Some(self.style.map_or(Value::Null, Value::Ref)),
             _ => None,
         }
     }
@@ -84,6 +119,14 @@ impl Reflect for DiagramObj {
                 match value {
                     Value::Null => self.element = None,
                     Value::Ref(v) => self.element = Some(v),
+                    other => return Err(format!("not a reference: {other}")),
+                }
+                Ok(())
+            }
+            diagram::STYLE => {
+                match value {
+                    Value::Null => self.style = None,
+                    Value::Ref(v) => self.style = Some(v),
                     other => return Err(format!("not a reference: {other}")),
                 }
                 Ok(())
@@ -123,6 +166,9 @@ impl DiagramObj {
     pub fn edge(&self) -> &[Value] {
         &self.edge
     }
+    pub fn style(&self) -> Option<Obj> {
+        self.style
+    }
     pub fn set_kind(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
         store.set(obj, diagram::KIND, v.map_or(Value::Null, Value::str))
     }
@@ -137,6 +183,9 @@ impl DiagramObj {
     }
     pub fn push_edge(store: &mut Store, obj: Obj, value: Value) -> Result<u32, Invalid> {
         store.push(obj, diagram::EDGE, value)
+    }
+    pub fn set_style(store: &mut Store, obj: Obj, v: Option<Obj>) -> Result<(), Invalid> {
+        store.set(obj, diagram::STYLE, v.map_or(Value::Null, Value::Ref))
     }
 }
 
@@ -588,6 +637,8 @@ pub struct StyleObj {
     pub stroke: Option<Arc<str>>,
     pub text: Option<Arc<str>>,
     pub line: f64,
+    pub routing: u32,
+    pub avoid: bool,
 }
 
 impl Reflect for StyleObj {
@@ -601,6 +652,8 @@ impl Reflect for StyleObj {
             style::STROKE => Some(self.stroke.clone().map_or(Value::Null, Value::Str)),
             style::TEXT => Some(self.text.clone().map_or(Value::Null, Value::Str)),
             style::LINE => Some(Value::Real(self.line)),
+            style::ROUTING => Some(Value::Enum(self.routing)),
+            style::AVOID => Some(Value::Bool(self.avoid)),
             _ => None,
         }
     }
@@ -645,6 +698,20 @@ impl Reflect for StyleObj {
                 }
                 Ok(())
             }
+            style::ROUTING => {
+                match value {
+                    Value::Enum(v) => self.routing = v,
+                    other => return Err(format!("not a literal: {other}")),
+                }
+                Ok(())
+            }
+            style::AVOID => {
+                match value {
+                    Value::Bool(v) => self.avoid = v,
+                    other => return Err(format!("not a boolean: {other}")),
+                }
+                Ok(())
+            }
             _ => Err(format!("no single-valued property {} on Style", prop.0)),
         }
     }
@@ -672,6 +739,12 @@ impl StyleObj {
     pub fn line(&self) -> f64 {
         self.line
     }
+    pub fn routing(&self) -> u32 {
+        self.routing
+    }
+    pub fn avoid(&self) -> bool {
+        self.avoid
+    }
     pub fn set_name(store: &mut Store, obj: Obj, v: Option<&str>) -> Result<(), Invalid> {
         store.set(obj, style::NAME, v.map_or(Value::Null, Value::str))
     }
@@ -686,5 +759,11 @@ impl StyleObj {
     }
     pub fn set_line(store: &mut Store, obj: Obj, v: f64) -> Result<(), Invalid> {
         store.set(obj, style::LINE, Value::Real(v))
+    }
+    pub fn set_routing(store: &mut Store, obj: Obj, v: u32) -> Result<(), Invalid> {
+        store.set(obj, style::ROUTING, Value::Enum(v))
+    }
+    pub fn set_avoid(store: &mut Store, obj: Obj, v: bool) -> Result<(), Invalid> {
+        store.set(obj, style::AVOID, Value::Bool(v))
     }
 }

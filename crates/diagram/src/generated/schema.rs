@@ -14,6 +14,7 @@ pub const TABLES: &[Table] = &[
             Column { name: "kind", prop: Some(diagram::KIND), sql: "MEDIUMTEXT NULL" },
             Column { name: "name", prop: Some(diagram::NAME), sql: "MEDIUMTEXT NULL" },
             Column { name: "element", prop: Some(diagram::ELEMENT), sql: "BINARY(16) NULL" },
+            Column { name: "style", prop: Some(diagram::STYLE), sql: "BINARY(16) NULL" },
         ],
     },
     Table {
@@ -72,6 +73,8 @@ pub const TABLES: &[Table] = &[
             Column { name: "stroke", prop: Some(style::STROKE), sql: "MEDIUMTEXT NULL" },
             Column { name: "text", prop: Some(style::TEXT), sql: "MEDIUMTEXT NULL" },
             Column { name: "line", prop: Some(style::LINE), sql: "DOUBLE NOT NULL" },
+            Column { name: "routing", prop: Some(style::ROUTING), sql: "INT NOT NULL" },
+            Column { name: "avoid", prop: Some(style::AVOID), sql: "TINYINT NOT NULL" },
         ],
     },
 ];

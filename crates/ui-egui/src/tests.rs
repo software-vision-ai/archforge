@@ -2128,10 +2128,33 @@ fn appearance_styles_the_selection_on_this_diagram() {
     };
     let at = rect_of(&h, "workspace.panels.appearance").center();
     click(&mut h, at);
-    // Nothing selected: the panel says what to select.
+    // Nothing selected: the panel sets how the diagram's lines run, nothing else.
     h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [] })).unwrap();
     h.run();
-    assert!(!ids(&h).iter().any(|i| i.starts_with("workspace.appearance.")), "nothing to style");
+    let shown: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.appearance.")).collect();
+    assert!(!shown.is_empty() && shown.iter().all(|i| i.starts_with("workspace.appearance.routing.")), "{shown:?}");
+    let diagram_way = |h: &Harness<'static, Shell>| {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let e = st
+            .list(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_diagram::DIAGRAM)).unwrap(), archforge_diagram::diagram::EDGE)
+            .unwrap()[0]
+            .as_ref()
+            .unwrap();
+        archforge_diagram::route::way_of(st, e)
+    };
+    let at = rect_of(&h, "workspace.appearance.routing.right-angled").center();
+    click(&mut h, at);
+    h.run();
+    assert_eq!(diagram_way(&h), archforge_diagram::Way::Avoiding, "right angles go around the tables at first");
+    let at = rect_of(&h, "workspace.appearance.routing.avoid").center();
+    click(&mut h, at);
+    h.run();
+    assert_eq!(diagram_way(&h), archforge_diagram::Way::RightAngled);
+    let at = rect_of(&h, "workspace.appearance.routing.straight").center();
+    click(&mut h, at);
+    h.run();
+    assert_eq!(diagram_way(&h), archforge_diagram::Way::Straight);
+    assert!(!ids(&h).iter().any(|i| i == "workspace.appearance.routing.avoid"), "the switch is for right angles only");
     h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [customer] })).unwrap();
     h.run();
     // A swatch sets the fill; a width keeps it.
@@ -2173,6 +2196,11 @@ fn appearance_styles_the_selection_on_this_diagram() {
     let at = rect_of(&h, "workspace.appearance.line-width.2").center();
     click(&mut h, at);
     assert_eq!(look(&h, edge).width, Some(2.0));
+    // Its own routing: curved, keeping its colour and width.
+    let at = rect_of(&h, "workspace.appearance.routing.curved").center();
+    click(&mut h, at);
+    assert_eq!(archforge_diagram::route::way_of(h.state().session.as_ref().unwrap().doc(), edge), archforge_diagram::Way::Curved);
+    assert_eq!((look(&h, edge).stroke, look(&h, edge).width), (crate::canvas::colour("#C25E0A"), Some(2.0)));
     assert!(h.state().canvas.key_status);
     let at = rect_of(&h, "workspace.appearance.key-status").center();
     click(&mut h, at);

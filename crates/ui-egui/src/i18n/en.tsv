@@ -301,6 +301,12 @@ str		Text colour	Text colour
 str		Border width	Border width
 str		Line colour	Line colour
 str		Line width	Line width
+str		Line routing	Line routing
+str		Straight	Straight
+str		Right-angled	Right-angled
+str		Curved	Curved
+str		Route around tables	Route around tables
+str		Diagram · its lines	Diagram · its lines
 str		Diagram default	Diagram default
 str		Your own colour	Your own colour
 str		Colour code	Colour code

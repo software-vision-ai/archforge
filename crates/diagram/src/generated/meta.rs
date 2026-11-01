@@ -9,7 +9,7 @@ use archforge_mof::{Builder, ClassId, DataId, DataKind, MetaError, Metamodel, Pr
 pub const INDEX: u16 = 5;
 pub const URI: &str = "archforge:diagram";
 pub const VERSION: &str = "1";
-pub const CONTENT_HASH: &str = "e1f53cf86fd4effd";
+pub const CONTENT_HASH: &str = "b6bb0d6d0aa90693";
 
 pub const BOOLEAN: DataId = DataId::new(INDEX, 0);
 pub const INTEGER: DataId = DataId::new(INDEX, 1);
@@ -17,6 +17,7 @@ pub const REAL: DataId = DataId::new(INDEX, 2);
 pub const STRING: DataId = DataId::new(INDEX, 3);
 pub const UNLIMITED_NATURAL: DataId = DataId::new(INDEX, 4);
 pub const LABEL_PLACE: DataId = DataId::new(INDEX, 5);
+pub const ROUTING: DataId = DataId::new(INDEX, 6);
 
 pub const ELEMENT: ClassId = ClassId::new(INDEX, 0);
 pub const DIAGRAM: ClassId = ClassId::new(INDEX, 1);
@@ -42,57 +43,60 @@ pub mod diagram {
     pub const ELEMENT: PropId = PropId::new(INDEX, 3);
     pub const NODE: PropId = PropId::new(INDEX, 4);
     pub const EDGE: PropId = PropId::new(INDEX, 5);
+    pub const STYLE: PropId = PropId::new(INDEX, 6);
 }
 /// The properties Node declares.
 pub mod node {
     use super::INDEX;
     use super::PropId;
-    pub const ELEMENT: PropId = PropId::new(INDEX, 6);
-    pub const KIND: PropId = PropId::new(INDEX, 7);
-    pub const TEXT: PropId = PropId::new(INDEX, 8);
-    pub const X: PropId = PropId::new(INDEX, 9);
-    pub const Y: PropId = PropId::new(INDEX, 10);
-    pub const WIDTH: PropId = PropId::new(INDEX, 11);
-    pub const HEIGHT: PropId = PropId::new(INDEX, 12);
-    pub const CHILD: PropId = PropId::new(INDEX, 13);
-    pub const STYLE: PropId = PropId::new(INDEX, 14);
+    pub const ELEMENT: PropId = PropId::new(INDEX, 7);
+    pub const KIND: PropId = PropId::new(INDEX, 8);
+    pub const TEXT: PropId = PropId::new(INDEX, 9);
+    pub const X: PropId = PropId::new(INDEX, 10);
+    pub const Y: PropId = PropId::new(INDEX, 11);
+    pub const WIDTH: PropId = PropId::new(INDEX, 12);
+    pub const HEIGHT: PropId = PropId::new(INDEX, 13);
+    pub const CHILD: PropId = PropId::new(INDEX, 14);
+    pub const STYLE: PropId = PropId::new(INDEX, 15);
 }
 /// The properties Edge declares.
 pub mod edge {
     use super::INDEX;
     use super::PropId;
-    pub const ELEMENT: PropId = PropId::new(INDEX, 15);
-    pub const SOURCE: PropId = PropId::new(INDEX, 16);
-    pub const TARGET: PropId = PropId::new(INDEX, 17);
-    pub const WAYPOINT: PropId = PropId::new(INDEX, 18);
-    pub const LABEL: PropId = PropId::new(INDEX, 19);
-    pub const STYLE: PropId = PropId::new(INDEX, 20);
+    pub const ELEMENT: PropId = PropId::new(INDEX, 16);
+    pub const SOURCE: PropId = PropId::new(INDEX, 17);
+    pub const TARGET: PropId = PropId::new(INDEX, 18);
+    pub const WAYPOINT: PropId = PropId::new(INDEX, 19);
+    pub const LABEL: PropId = PropId::new(INDEX, 20);
+    pub const STYLE: PropId = PropId::new(INDEX, 21);
 }
 /// The properties Point declares.
 pub mod point {
     use super::INDEX;
     use super::PropId;
-    pub const X: PropId = PropId::new(INDEX, 21);
-    pub const Y: PropId = PropId::new(INDEX, 22);
+    pub const X: PropId = PropId::new(INDEX, 22);
+    pub const Y: PropId = PropId::new(INDEX, 23);
 }
 /// The properties Label declares.
 pub mod label {
     use super::INDEX;
     use super::PropId;
-    pub const KIND: PropId = PropId::new(INDEX, 23);
-    pub const AT: PropId = PropId::new(INDEX, 24);
-    pub const DX: PropId = PropId::new(INDEX, 25);
-    pub const DY: PropId = PropId::new(INDEX, 26);
+    pub const KIND: PropId = PropId::new(INDEX, 24);
+    pub const AT: PropId = PropId::new(INDEX, 25);
+    pub const DX: PropId = PropId::new(INDEX, 26);
+    pub const DY: PropId = PropId::new(INDEX, 27);
 }
 /// The properties Style declares.
 pub mod style {
     use super::INDEX;
     use super::PropId;
-    pub const NAME: PropId = PropId::new(INDEX, 27);
-    pub const FILL: PropId = PropId::new(INDEX, 28);
-    pub const STROKE: PropId = PropId::new(INDEX, 29);
-    pub const TEXT: PropId = PropId::new(INDEX, 30);
-    pub const LINE: PropId = PropId::new(INDEX, 31);
+    pub const NAME: PropId = PropId::new(INDEX, 28);
+    pub const FILL: PropId = PropId::new(INDEX, 29);
+    pub const STROKE: PropId = PropId::new(INDEX, 30);
+    pub const TEXT: PropId = PropId::new(INDEX, 31);
+    pub const LINE: PropId = PropId::new(INDEX, 32);
+    pub const ROUTING: PropId = PropId::new(INDEX, 33);
+    pub const AVOID: PropId = PropId::new(INDEX, 34);
 }
 
 fn build() -> Result<Arc<Metamodel>, MetaError> {
@@ -103,6 +107,7 @@ fn build() -> Result<Arc<Metamodel>, MetaError> {
     b.data_type("String", DataKind::String, "")?;
     b.data_type("UnlimitedNatural", DataKind::UnlimitedNatural, "")?;
     b.data_type("LabelPlace", DataKind::Enumeration(vec!["source".into(), "middle".into(), "target".into()]), "")?;
+    b.data_type("Routing", DataKind::Enumeration(vec!["asDiagram".into(), "straight".into(), "rightAngled".into(), "curved".into()]), "")?;
     b.class("Element", true, &[], "")?;
     b.class("Diagram", false, &[ELEMENT], "")?;
     b.class("View", true, &[ELEMENT], "")?;
@@ -231,6 +236,26 @@ fn build() -> Result<Arc<Metamodel>, MetaError> {
         default: None,
         doc: "",
     })?; // diagram::EDGE
+    b.property(PropertySpec {
+        name: "style",
+        owner: DIAGRAM,
+        ty: TypeRef::Class(STYLE),
+        lower: 0,
+        upper: Some(1),
+        is_ordered: false,
+        is_unique: true,
+        is_composite: true,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[element::OWNED_ELEMENT],
+        redefines: &[],
+        default: None,
+        doc: "",
+    })?; // diagram::STYLE
     b.property(PropertySpec {
         name: "element",
         owner: NODE,
@@ -751,6 +776,46 @@ fn build() -> Result<Arc<Metamodel>, MetaError> {
         default: None,
         doc: "",
     })?; // style::LINE
+    b.property(PropertySpec {
+        name: "routing",
+        owner: STYLE,
+        ty: TypeRef::Data(ROUTING),
+        lower: 0,
+        upper: Some(1),
+        is_ordered: false,
+        is_unique: true,
+        is_composite: false,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[],
+        redefines: &[],
+        default: None,
+        doc: "",
+    })?; // style::ROUTING
+    b.property(PropertySpec {
+        name: "avoid",
+        owner: STYLE,
+        ty: TypeRef::Data(BOOLEAN),
+        lower: 0,
+        upper: Some(1),
+        is_ordered: false,
+        is_unique: true,
+        is_composite: false,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[],
+        redefines: &[],
+        default: None,
+        doc: "",
+    })?; // style::AVOID
     Ok(b.finish())
 }
 

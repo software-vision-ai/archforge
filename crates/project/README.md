@@ -15,7 +15,11 @@ read with a cap on rows, keys and values; anything unexpected is refused, never 
 
 
 The model's tables come with the generated storage (gm2.31); a format-2 project may carry the `er_`
-tables an earlier Archforge made, unused. Opening refuses a project whose database holds triggers,
+tables an earlier Archforge made, unused. A project whose model fingerprint is an earlier
+Archforge's is brought up to date when it opens, but only by adding: the tables it lacks, and the
+columns that come after the ones a table has, empty or holding what a new object holds. A table
+Archforge does not know, columns it does not write, or a list table of another shape keep the
+project refused, unchanged. Opening refuses a project whose database holds triggers,
 stored procedures or events, since Archforge's writes would set them off.
 
 **Public API.**

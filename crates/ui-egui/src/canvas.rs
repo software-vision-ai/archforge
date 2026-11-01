@@ -517,6 +517,8 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
             renaming,
             problems: &shell.problems,
             schema: crate::diagrams::schema_of(store, d),
+            boxes: refs(store, d, diagram::NODE).into_iter().map(|n| (n, model_rect(store, &view, &overrides, n))).collect(),
+            spreads: archforge_diagram::route::spreads(store, d, |n| model_rect(store, &view, &overrides, n)),
         };
         for e in &visible.edges {
             if let Some(badge) = draw_edge(&clip, &draw, *e, &mut shell.registry, ui) {
@@ -611,12 +613,28 @@ struct Drawing<'a> {
     problems: &'a std::collections::BTreeMap<Obj, Vec<String>>,
     /// The schema the diagram is of: a table of another schema draws dimmed (slice S7).
     schema: Option<Obj>,
+    /// The diagram's tables and notes in diagram coordinates (a drag's preview where it has one),
+    /// and where each line's ends sit along their sides: worked out once a frame.
+    boxes: Vec<(Obj, archforge_diagram::Rect)>,
+    spreads: std::collections::HashMap<Obj, (f64, f64)>,
 }
 
 impl Drawing<'_> {
     /// A node's rectangle on screen: the gesture's preview when it has one, else as stored.
     fn node_rect(&self, n: Obj) -> Rect {
         self.store.uuid(n).ok().and_then(|id| self.overrides.get(&id).copied()).unwrap_or_else(|| self.view.rect(&bounds_of(self.store, n)))
+    }
+}
+
+/// A node's rectangle in diagram coordinates: as stored, or a gesture's preview turned back from
+/// the screen. Lines are routed from these, so panning and zooming route nothing anew.
+fn model_rect(store: &Store, view: &View, overrides: &std::collections::BTreeMap<Uuid, Rect>, n: Obj) -> archforge_diagram::Rect {
+    match store.uuid(n).ok().and_then(|id| overrides.get(&id)) {
+        Some(r) => {
+            let (x, y) = view.to_canvas(r.min);
+            archforge_diagram::Rect::new(x, y, f64::from(r.width() / view.zoom), f64::from(r.height() / view.zoom))
+        }
+        None => bounds_of(store, n),
     }
 }
 
@@ -968,29 +986,31 @@ fn draw_edge(
     badge
 }
 
-/// A line's points on screen, from its source's edge through its waypoints to its target's edge; a
-/// relationship of a table with itself loops out of its right side. None when an end is missing.
+/// A line's points on screen, from its source's edge to its target's, run as its style or its
+/// diagram's says (straight, at right angles, around the other tables, or curved) through its
+/// waypoints; a relationship of a table with itself loops out of its right side. Routed in diagram
+/// coordinates from the rectangles drawn, so a table being dragged takes its lines along. None
+/// when an end is missing.
 fn edge_points(d: &Drawing<'_>, e: Obj) -> Option<Vec<Pos2>> {
     let (store, view) = (d.store, d.view);
     let (Some(source), Some(target)) = (element_of(store, e, edge::SOURCE), element_of(store, e, edge::TARGET)) else { return None };
-    let (s_rect, t_rect) = (d.node_rect(source), d.node_rect(target));
-    let mut points: Vec<Pos2> = if source == target {
-        crate::connect::self_loop(s_rect, view.zoom)
+    let points: Vec<Pos2> = if source == target {
+        crate::connect::self_loop(d.node_rect(source), view.zoom)
     } else {
-        let mut points = vec![s_rect.center()];
-        for w in refs(store, e, edge::WAYPOINT) {
-            points.push(view.to_screen(real(store, w, point::X), real(store, w, point::Y)));
-        }
-        points.push(t_rect.center());
-        points
+        let rect_of = |n: Obj| model_rect(store, view, d.overrides, n);
+        let via: Vec<(f64, f64)> = refs(store, e, edge::WAYPOINT).into_iter().map(|w| (real(store, w, point::X), real(store, w, point::Y))).collect();
+        let way = archforge_diagram::route::way_of(store, e);
+        // The other tables and notes on the diagram, which an avoiding line goes around.
+        let boxes: Vec<archforge_diagram::Rect> = if way == archforge_diagram::Way::Avoiding {
+            d.boxes.iter().filter(|(n, _)| *n != source && *n != target).map(|(_, r)| *r).collect()
+        } else {
+            Vec::new()
+        };
+        let at = d.spreads.get(&e).copied().unwrap_or((0.5, 0.5));
+        archforge_diagram::route(way, &rect_of(source), &rect_of(target), at, &via, &boxes).into_iter().map(|(x, y)| view.to_screen(x, y)).collect()
     };
-    if points.iter().any(|q| !q.is_finite()) {
+    if points.len() < 2 || points.iter().any(|q| !q.is_finite()) {
         return None;
-    }
-    let n = points.len();
-    if source != target {
-        points[0] = exit_point(s_rect, points[1]);
-        points[n - 1] = exit_point(t_rect, points[n - 2]);
     }
     Some(points)
 }
