@@ -47,6 +47,8 @@ pub struct State {
     pub new: Option<NewDiagram>,
     /// The last refusal, shown under the tree until the next action.
     pub notice: Option<String>,
+    /// How far the tree is scrolled, and the row it last brought into view.
+    pub scroll: crate::explorer::TreeScroll,
 }
 
 /// The New diagram dialog's fields: the name, the schema the diagram is of (none for a new
@@ -249,19 +251,24 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
         let empty = if shell.diagrams.filter.trim().is_empty() { tr("No diagrams yet") } else { tr("Nothing matches the filter") };
         ux::text(&paint, at(36.0, FIRST_ROW), &empty, types::SMALL, p.text_muted, Some((r.width() - 52.0).max(0.0)));
     }
+    // The rows scroll under the filter; the diagram newly opened is brought into view.
+    let follow = active.and_then(|a| rows.iter().position(|row| row.id == a).zip(Some(a)));
+    let tail = if rows.len() >= MAX_ROWS { 40.0 } else { 12.0 };
+    let wheel = shell.diagrams.new.is_none();
+    let offset = crate::explorer::scroll_tree(ui, p, tree, r.top() + FIRST_ROW, rows.len(), ROW, tail, wheel, follow, &mut shell.diagrams.scroll);
     let mut clip = ui.new_child(egui::UiBuilder::new().max_rect(tree));
     clip.set_clip_rect(tree);
     for (i, row) in rows.iter().enumerate() {
-        let y = r.top() + FIRST_ROW + i as f32 * ROW;
+        let y = r.top() + FIRST_ROW + i as f32 * ROW - offset;
         if y + ROW_HEIGHT < tree.top() || y - 7.0 > tree.bottom() {
             continue;
         }
         tree_row(shell, &mut clip, p, r, y, row, active == Some(row.id));
     }
     if rows.len() >= MAX_ROWS {
-        let y = r.top() + FIRST_ROW + rows.len() as f32 * ROW;
+        let y = r.top() + FIRST_ROW + rows.len() as f32 * ROW - offset;
         ux::text(
-            &paint,
+            &clip.painter().clone(),
             pos2(r.left() + 36.0, y),
             &tr("Narrow the filter to see more"),
             types::SMALL,

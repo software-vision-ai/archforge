@@ -53,6 +53,63 @@ pub struct State {
     /// canvas to place (slice S7).
     pub dragging: Option<Uuid>,
     pub dropped: Option<(Uuid, egui::Pos2)>,
+    /// How far the tree is scrolled, and the row it last brought into view.
+    pub scroll: TreeScroll,
+}
+
+/// A tree's scroll: how far its rows are moved up, and the row last brought into view, so a row
+/// newly selected (by the keys, on the canvas or in Properties) is shown once, and the wheel is
+/// free again after.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct TreeScroll {
+    pub offset: f32,
+    pub followed: Option<Uuid>,
+}
+
+/// Scrolls a tree of `rows` rows `pitch` apart whose first row sits at `first` inside `tree`,
+/// with `tail` points after the last: the wheel over it, the row `follow` (its index and id) into
+/// view when it is newly selected, the offset kept within the content, and a thin thumb at the
+/// edge while the rows overflow. Gives the offset to draw the rows at.
+pub(crate) fn scroll_tree(
+    ui: &egui::Ui,
+    p: &Palette,
+    tree: Rect,
+    first: f32,
+    rows: usize,
+    pitch: f32,
+    tail: f32,
+    wheel: bool,
+    follow: Option<(usize, Uuid)>,
+    state: &mut TreeScroll,
+) -> f32 {
+    let view = (tree.bottom() - first - 8.0).max(pitch);
+    let content = rows as f32 * pitch + tail;
+    let room = (content - view).max(0.0);
+    if wheel && ui.rect_contains_pointer(tree) {
+        let dy = ui.input(|i| i.smooth_scroll_delta.y);
+        state.offset -= dy;
+    }
+    match follow {
+        Some((i, id)) if state.followed != Some(id) => {
+            state.followed = Some(id);
+            let top = i as f32 * pitch;
+            if top < state.offset {
+                state.offset = top;
+            } else if top + pitch > state.offset + view {
+                state.offset = top + pitch - view;
+            }
+        }
+        Some(_) => {}
+        None => state.followed = None,
+    }
+    state.offset = state.offset.clamp(0.0, room);
+    if room > 0.0 {
+        let track = Rect::from_min_max(pos2(tree.right() - 6.0, first - 6.0), pos2(tree.right() - 2.0, tree.bottom() - 6.0));
+        let h = (track.height() * view / content).max(24.0).min(track.height());
+        let thumb = Rect::from_min_size(pos2(track.left(), track.top() + state.offset / room * (track.height() - h)), vec2(4.0, h));
+        ui.painter().rect_filled(thumb, 2.0, p.scroll_thumb);
+    }
+    state.offset
 }
 
 /// A name being typed in place: the element, the text so far, whether the element was just made
@@ -536,19 +593,24 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
         select(shell, None);
     }
     let selected_obj = selected(shell);
+    // The rows scroll under the filter; a row newly selected is brought into view.
+    let follow = selected_obj.and_then(|o| rows.iter().position(|row| row.obj == o).map(|i| (i, rows[i].id)));
+    let tail = if rows.len() >= MAX_ROWS { 40.0 } else { 12.0 };
+    let wheel = !shell.explorer.menu_open && shell.explorer.dragging.is_none();
+    let offset = scroll_tree(ui, p, tree, r.top() + FIRST_ROW, rows.len(), ROW, tail, wheel, follow, &mut shell.explorer.scroll);
     let mut clip = ui.new_child(egui::UiBuilder::new().max_rect(tree));
     clip.set_clip_rect(tree);
     for (i, row) in rows.iter().enumerate() {
-        let y = r.top() + FIRST_ROW + i as f32 * ROW;
+        let y = r.top() + FIRST_ROW + i as f32 * ROW - offset;
         if y + ROW_HEIGHT < tree.top() || y - 7.0 > tree.bottom() {
             continue;
         }
         tree_row(shell, &mut clip, p, r, y, row, selected_obj == Some(row.obj));
     }
     if rows.len() >= MAX_ROWS {
-        let y = r.top() + FIRST_ROW + rows.len() as f32 * ROW;
+        let y = r.top() + FIRST_ROW + rows.len() as f32 * ROW - offset;
         ux::text(
-            &paint,
+            &clip.painter().clone(),
             pos2(r.left() + 36.0, y),
             &tr("Narrow the filter to see more"),
             types::SMALL,
