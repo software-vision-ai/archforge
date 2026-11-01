@@ -489,6 +489,20 @@ pub const COLLAPSE: Icon = Icon {
     segments: &[L([3.0, 4.0], [7.0, 8.0]), L([7.0, 8.0], [3.0, 12.0]), L([9.0, 4.0], [13.0, 8.0]), L([13.0, 8.0], [9.0, 12.0])],
 };
 
+/// Two chevrons pointing apart: open every row of a tree (the design's `Icon / Expand all`).
+pub const EXPAND_ALL: Icon = Icon {
+    size: [6.0, 9.0],
+    stroke: 1.2,
+    segments: &[L([0.0, 3.0], [3.0, 0.0]), L([3.0, 0.0], [6.0, 3.0]), L([0.0, 6.0], [3.0, 9.0]), L([3.0, 9.0], [6.0, 6.0])],
+};
+
+/// Two chevrons pointing together: fold every row of a tree (the design's `Icon / Collapse all`).
+pub const COLLAPSE_ALL: Icon = Icon {
+    size: [6.0, 9.0],
+    stroke: 1.2,
+    segments: &[L([0.0, 0.0], [3.0, 3.0]), L([3.0, 3.0], [6.0, 0.0]), L([0.0, 9.0], [3.0, 6.0]), L([3.0, 6.0], [6.0, 9.0])],
+};
+
 /// Two boxes joined by a line: a diagram.
 pub const DIAGRAM: Icon = Icon {
     size: [16.0, 16.0],

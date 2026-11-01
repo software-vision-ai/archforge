@@ -688,7 +688,58 @@ fn recent_card(
     let place = shell.location_of(&project.path).unwrap_or_default();
     ux::text(paint, r.min + vec2(16.0, 156.0), &place, types::CAPTION, p.text_secondary, Some(w));
     ux::text(paint, r.min + vec2(16.0, 176.0), &ago(project.opened, now), types::SMALL, p.text_secondary, Some(w));
-    live && resp.clicked()
+    let more = Rect::from_center_size(pos2(r.right() - 26.0, r.bottom() - 26.0), Vec2::splat(28.0));
+    let picked = recent_more(shell, ui, p, paint, r, more, i, project);
+    picked || (live && resp.clicked() && !more_hit(ui, more))
+}
+
+/// Whether the pointer is on a recent project's More button, whose click is not the project's.
+fn more_hit(ui: &egui::Ui, more: Rect) -> bool {
+    ui.input(|i| i.pointer.interact_pos().is_some_and(|at| more.contains(at)))
+}
+
+/// A recent project's More button, shown while the pointer is on its row or card or its menu is
+/// open, and the menu: Open, and Remove from recent projects, which leaves the project where it
+/// is. True when Open was picked.
+#[allow(clippy::too_many_arguments, reason = "the button sits on the row or card that owns it")]
+fn recent_more(
+    shell: &mut Shell,
+    ui: &egui::Ui,
+    p: &Palette,
+    paint: &egui::Painter,
+    owner: Rect,
+    more: Rect,
+    i: usize,
+    project: &crate::state::RecentProject,
+) -> bool {
+    let menu = crate::panels::Menu::Recent(i);
+    let open = shell.panels.menu == Some(menu);
+    let over = ui.input(|inp| inp.pointer.hover_pos().is_some_and(|at| owner.contains(at)));
+    let resp = control(shell, ui, &format!("home.recent.{i}.more"), "button", more, over || open).on_hover_text(tr("More"));
+    if over || open {
+        if resp.hovered() || open {
+            paint.rect_filled(more, 6.0, p.page);
+        }
+        ux::icon_mid(paint, more.center(), &icons::MORE, if resp.hovered() || open { p.text_secondary } else { p.text_muted });
+    }
+    if resp.clicked() {
+        shell.panels.menu = if open { None } else { Some(menu) };
+    }
+    if shell.panels.menu != Some(menu) {
+        return false;
+    }
+    let anchor = Rect::from_min_max(pos2(more.right() - 220.0, more.top()), more.max);
+    // Opening is offered only while a project can open; removing from the list always.
+    let live = shell.services.projects.is_some();
+    let items: Vec<String> = if live { vec![tr("Open"), tr("Remove from recent projects")] } else { vec![tr("Remove from recent projects")] };
+    match crate::panels::menu(shell, ui, p, anchor, &format!("home.recent.{i}.menu"), &items) {
+        Some(0) if live => true,
+        Some(_) => {
+            shell.state.forget(&project.path);
+            false
+        }
+        None => false,
+    }
 }
 
 /// A recent project's row: its name and where it lives, when it was last opened; true when clicked.
@@ -720,7 +771,9 @@ fn recent_row(
     ux::text(paint, r.min + vec2(112.0, 30.0), &place, types::CAPTION, p.text_secondary, Some(w * 0.674 - 136.0));
     ux::text(paint, r.min + vec2(w * 0.801, 17.5), &ago(project.opened, now), types::SMALL, p.text_secondary, Some(w * 0.12));
     ux::icon(paint, pos2(r.right() - 32.0, r.top() + 18.0), &icons::ARROW, 16.0, p.accent);
-    live && resp.clicked()
+    let more = Rect::from_center_size(pos2(r.right() - 64.0, r.center().y), Vec2::splat(28.0));
+    let picked = recent_more(shell, ui, p, paint, r, more, i, project);
+    picked || (live && resp.clicked() && !more_hit(ui, more))
 }
 
 #[cfg(test)]

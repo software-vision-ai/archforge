@@ -144,8 +144,9 @@ fn linked_label(store: &Store, a: Obj) -> Option<String> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Menu {
-    /// Home's order of the recent projects, and a pinned folder's menu.
+    /// Home's order of the recent projects, a recent project's menu and a pinned folder's.
     RecentSort,
+    Recent(usize),
     Pinned(usize),
     Kind,
     /// A relationship's foreign key (slice E3): what it points to, one key pair's child column,
@@ -822,9 +823,7 @@ pub(crate) fn select_element(shell: &mut Shell, id: Uuid) {
         && let Some(o) = store.by_uuid(id)
     {
         let parents = [archforge_er::rules::entity_of(store, o), archforge_er::rules::schema_of(store, o)];
-        for parent in parents.into_iter().flatten().filter_map(|p| store.uuid(p).ok()) {
-            shell.explorer.collapsed.remove(&parent);
-        }
+        shell.explorer.expanded.extend(parents.into_iter().flatten().filter_map(|p| store.uuid(p).ok()));
     }
     if let Err(e) = run(shell, "view.select", json!({ "ids": [id.to_string()] })) {
         shell.panels.notice = Some(e);

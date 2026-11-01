@@ -62,7 +62,9 @@ the change, and update this file in the same change.
 - A start card for what cannot be done at all yet (Import a model) is left off Home, and the
   cards left share the row.
 - Recent projects keep the last twelve (name, folder, last opened) across restarts; a row opens
-  its project, or shows its tab when it is open already.
+  its project, or shows its tab when it is open already. A row or card under the pointer shows a
+  More button whose menu offers Open and Remove from recent projects; removing leaves the project
+  where it is, asks nothing, and opening it again lists it again.
 - Pin a folder picks a folder with the system's picker and pins it on Home, up to eight, kept in
   the preferences. A click on a pinned folder opens the project picker in it; its menu offers
   Open a project here and Unpin.
@@ -84,6 +86,10 @@ the change, and update this file in the same change.
 ## Explorer
 - Models starts at the schemas: schema, then its domains, enum types, sequences and views, then
   its tables and their columns. Diagrams appear only in the Diagrams explorer.
+- Models starts folded: only the schemas show, and the user drills in. The button beside + opens
+  every row (Expand all), or folds them all (Collapse all) once everything is open; a filter opens
+  what it shows, and the button rests while one is typed. An element selected on the canvas or in
+  Properties opens its schema and table once, so its row shows; folding them again sticks.
 - The + adds what fits the selection, named in place: Enter confirms, Esc cancels.
 - Dragging a table from Models onto the canvas places it; a table already there is refused with a
   toast.

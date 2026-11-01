@@ -1873,13 +1873,13 @@ fn a_column_row_selects_its_column_only_its_edit_button_opens_the_editor_and_sel
     // the tree so the row there shows too; it does not open the editor.
     let customer_id = archforge_mof::Uuid::parse(&customer).unwrap();
     select(&mut h, &customer);
-    h.state_mut().explorer.collapsed.insert(customer_id);
+    h.state_mut().explorer.expanded.remove(&customer_id);
     h.run();
     let at = rect_of(&h, &format!("workspace.properties.column.{email}")).center();
     click(&mut h, at);
     h.run();
     assert_eq!(selected_name(&h), "email", "the row's click selects its column");
-    assert!(!h.state().explorer.collapsed.contains(&customer_id), "its table opens in the tree");
+    assert!(h.state().explorer.expanded.contains(&customer_id), "its table opens in the tree");
     assert!(ids(&h).iter().any(|i| *i == format!("workspace.explorer.row.{email}")), "{:?}", ids(&h));
     assert!(h.state().panels.column.is_none(), "a click on the row does not open it");
     let at = rect_of(&h, &format!("workspace.properties.column.{email}.edit")).center();
@@ -3634,6 +3634,10 @@ fn a_table_of_another_schema_dragged_from_the_explorer_lands_with_its_line_once(
         (st.list(diagram, archforge_diagram::diagram::NODE).unwrap().len(), st.list(diagram, archforge_diagram::diagram::EDGE).unwrap().len())
     };
     assert_eq!(shown(&h), (2, 0));
+    // The new schema starts folded; Expand all opens it.
+    let fold_all = rect_of(&h, "workspace.explorer.fold-all").center();
+    click(&mut h, fold_all);
+    h.run();
     let row = rect_of(&h, &format!("workspace.explorer.row.{account}")).center();
     let canvas = rect_of(&h, "workspace.canvas");
     let to = egui::pos2(canvas.center().x, canvas.bottom() - 200.0);
@@ -3865,4 +3869,69 @@ fn key_columns_a_line_adds_grow_the_table_to_show_them_in_the_same_step() {
     h.state_mut().session.as_mut().unwrap().undo().unwrap();
     h.run_steps(2);
     assert_eq!(node_bounds(&h, &order_node).height, snug, "one undo takes the line and the growth back");
+}
+
+#[test]
+fn the_models_tree_starts_folded_and_opens_all_at_once() {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    let (schema, entity, column) = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
+        let schema = id(s.execute("er.schema.add", &serde_json::json!({ "name": "shop" })).unwrap().value);
+        let entity = id(s.execute("er.entity.add", &serde_json::json!({ "schema": schema, "name": "Customer" })).unwrap().value);
+        let column = id(s.execute("er.attribute.add", &serde_json::json!({ "entity": entity, "name": "email" })).unwrap().value);
+        s.execute("view.select", &serde_json::json!({ "ids": [] })).unwrap();
+        (schema, entity, column)
+    };
+    h.run();
+    let row = |id: &str| format!("workspace.explorer.row.{id}");
+    let shows = |h: &Harness<'static, Shell>, id: &str| ids(h).iter().any(|i| *i == row(id));
+    assert!(shows(&h, &schema) && !shows(&h, &entity), "only the schema shows: {:?}", ids(&h));
+    // Expand all opens every row; then the same button folds them all again.
+    let at = rect_of(&h, "workspace.explorer.fold-all").center();
+    click(&mut h, at);
+    h.run();
+    assert!(shows(&h, &entity) && shows(&h, &column));
+    click(&mut h, at);
+    h.run();
+    assert!(shows(&h, &schema) && !shows(&h, &entity));
+    // An element selected elsewhere opens its schema and table once, so its row shows.
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [column] })).unwrap();
+    h.run();
+    assert!(shows(&h, &column), "the selected column's row shows");
+    h.state_mut().explorer.expanded.remove(&archforge_mof::Uuid::parse(&entity).unwrap());
+    h.run();
+    assert!(!shows(&h, &column), "folded again, its table stays folded");
+}
+
+#[test]
+fn a_recent_project_comes_off_the_list_through_its_menu() {
+    let (mut h, host) = saving_harness(None, None);
+    h.state_mut().state.remember("Shop", std::path::Path::new("/tmp/Shop.archforge"), 2);
+    h.state_mut().state.remember("Billing", std::path::Path::new("/tmp/Billing.archforge"), 3);
+    h.run_steps(2);
+    // The menu button shows on the row under the pointer; its click opens no project.
+    let row = rect_of(&h, "home.recent.0").center();
+    h.event(egui::Event::PointerMoved(row));
+    h.run_steps(2);
+    let at = rect_of(&h, "home.recent.0.more").center();
+    click(&mut h, at);
+    h.run_steps(2);
+    assert!(host.opens.lock().unwrap().is_empty(), "the menu button opens nothing");
+    let at = rect_of(&h, "home.recent.0.menu.1").center();
+    click(&mut h, at);
+    h.run_steps(2);
+    let left: Vec<String> = h.state().state.recent.iter().map(|r| r.name.clone()).collect();
+    assert_eq!(left, ["Shop"], "Billing, opened last and listed first, is gone");
+    assert!(host.opens.lock().unwrap().is_empty());
+    // Open, the menu's first row, opens it.
+    h.event(egui::Event::PointerMoved(rect_of(&h, "home.recent.0").center()));
+    h.run_steps(2);
+    let at = rect_of(&h, "home.recent.0.more").center();
+    click(&mut h, at);
+    h.run_steps(2);
+    let at = rect_of(&h, "home.recent.0.menu.0").center();
+    click(&mut h, at);
+    h.run_steps(2);
+    assert_eq!(host.opens.lock().unwrap().len(), 1);
 }
