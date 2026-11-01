@@ -454,7 +454,7 @@ pub fn remove_selected_relationship(shell: &mut Shell) -> bool {
     ids.push(id.to_string());
     let Some(session) = shell.session.as_mut() else { return false };
     let removed =
-        session.batch(&tr("Remove relationship"), |b| b.execute("er.remove", &json!({ "ids": ids })).map(|_| ())).map_err(|e| e.to_string());
+        session.batch(&tr("Remove relationship"), |b| b.execute("element.remove", &json!({ "ids": ids })).map(|_| ())).map_err(|e| e.to_string());
     match removed {
         Ok(_) => {
             let text = if name.is_empty() { tr("Relationship removed") } else { fmt(&tr("{name} removed"), &[("name", &name)]) };

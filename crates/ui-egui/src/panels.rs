@@ -638,7 +638,7 @@ pub(crate) fn name_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: 
     }
 }
 
-/// The description under the heading: typed in place, committed through `er.describe` on Enter
+/// The description under the heading: typed in place, committed through `element.describe` on Enter
 /// or when the keyboard leaves it.
 fn description_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: egui::Pos2, width: f32, subject: &Subject) {
     let (Some(id), Some(obj)) = (subject.id, subject.obj) else { return };
@@ -663,7 +663,7 @@ fn description_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: egui
     if committed {
         shell.panels.description = None;
         if text.trim() != current {
-            match run(shell, "er.describe", json!({ "element": id.to_string(), "text": text.trim() })) {
+            match run(shell, "element.describe", json!({ "element": id.to_string(), "text": text.trim() })) {
                 Ok(_) => shell.panels.notice = None,
                 Err(e) => shell.panels.notice = Some(e),
             }
@@ -1501,7 +1501,7 @@ struct SkillRow {
 pub(crate) fn target_word(store: &Store, s: Obj) -> String {
     let applies = string_of(store, s, archforge_core::skill::APPLIES_TO);
     let pattern = string_of(store, s, archforge_core::skill::TYPE_PATTERN);
-    match archforge_core::skills::kind_by_key::<archforge_er::ErView>(store, &applies).map(|(_, w)| w) {
+    match archforge_core::skills::kind_by_key(&archforge_notations::view(), store, &applies).map(|(_, w)| w) {
         Some("table") => tr("every table"),
         Some("relationship") => tr("every relationship"),
         Some(_) if !pattern.is_empty() => pattern,
@@ -1527,7 +1527,7 @@ fn skill_rows(store: &Store, subject: &Subject) -> (Vec<SkillRow>, Vec<SkillRow>
         })
         .collect();
     let inherited = match subject {
-        Some(element) => archforge_core::skills::effective_skills::<archforge_er::ErView>(store, element, None)
+        Some(element) => archforge_core::skills::effective_skills(&archforge_notations::view(), store, element, None)
             .into_iter()
             .filter(|e| e.origin != Some(element))
             .filter_map(|e| {

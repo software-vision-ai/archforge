@@ -152,25 +152,29 @@ fn select<V: DiagramView>(ctx: &mut C<'_, V>, objs: Vec<Obj>) {
 fn diagram_add<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let kind = str_of(p, "kind");
     check("kind", rules::kind_problem(kind), "kind")?;
-    if !V::kinds().contains(&kind) {
-        return Err(refuse("kind", format!("{kind:?} is not one of {}", V::kinds().join(", "))));
+    let kinds = ctx.view.kinds();
+    if kinds.is_empty() {
+        return Err(refuse("kind", "the project's view holds no notation, so it knows no diagram kind"));
+    }
+    if !kinds.contains(&kind) {
+        return Err(refuse("kind", format!("{kind:?} is not one of {}", kinds.join(", "))));
     }
     let name = str_of(p, "name");
     check("name", rules::text_problem(name, MAX_NAME), "name")?;
     let element = if str_of(p, "element").is_empty() {
-        if V::needs_element(kind) {
+        if ctx.view.needs_element(kind) {
             return Err(refuse("element", format!("a {kind} diagram is of an element; name it")));
         }
         None
     } else {
         let e = any_of(ctx.doc, p, "element")?;
         let class = ctx.doc.class_of(e).map_err(fail)?;
-        if !V::is_of(kind, class) {
+        if !ctx.view.is_of(kind, class) {
             return Err(refuse("element", format!("a {kind} diagram is not of a {}", class_name(ctx.doc, class).to_lowercase())));
         }
         Some(e)
     };
-    let home = V::home(ctx.doc).map_err(CommandError::new)?;
+    let home = ctx.view.home(ctx.doc).map_err(CommandError::new)?;
     let d = ctx.doc.transaction(|st| {
         let d = st.create(DIAGRAM)?;
         st.set(d, diagram::KIND, Value::str(kind))?;
@@ -268,10 +272,10 @@ fn diagram_place<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let kind = kind_of(ctx.doc, d);
     let e = any_of(ctx.doc, p, "element")?;
     let class = ctx.doc.class_of(e).map_err(fail)?;
-    if !V::shows(&kind, class) {
+    if !ctx.view.shows(&kind, class) {
         return Err(refuse("element", format!("a {kind} diagram does not show a {}", class_name(ctx.doc, class).to_lowercase())));
     }
-    if !V::may_show(ctx.doc, d, e) {
+    if !ctx.view.may_show(ctx.doc, d, e) {
         return Err(refuse("element", "the element is outside what this diagram shows"));
     }
     if !nodes_showing(ctx.doc, d, e).is_empty() {
@@ -282,7 +286,7 @@ fn diagram_place<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
         check("kind", rules::kind_problem(role), "kind")?;
     }
     let parent = parent_in(ctx.doc, p, d)?;
-    let n = new_node(ctx.doc, p, parent, Some(e), role, V::default_size(class))?;
+    let n = new_node(ctx.doc, p, parent, Some(e), role, ctx.view.default_size(class))?;
     select(ctx, vec![n]);
     Ok(json!({ "id": uuid_of(ctx.doc, n)? }))
 }
@@ -402,7 +406,15 @@ fn diagram_unplace<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
 // Edges.
 
 /// Checks that an edge for `element` may go from `source` to `target` in the diagram of `kind`.
-fn check_edge<V: DiagramView>(store: &Store, d: Obj, kind: &str, element: Option<Obj>, source: Obj, target: Obj) -> Result<(), CommandError> {
+fn check_edge<V: DiagramView>(
+    view: &V,
+    store: &Store,
+    d: Obj,
+    kind: &str,
+    element: Option<Obj>,
+    source: Obj,
+    target: Obj,
+) -> Result<(), CommandError> {
     let Some(e) = element else {
         if element_of(store, source, node::ELEMENT).is_some() && element_of(store, target, node::ELEMENT).is_some() {
             return Err(refuse("element", "an edge between two elements shows a relationship; name it"));
@@ -410,10 +422,10 @@ fn check_edge<V: DiagramView>(store: &Store, d: Obj, kind: &str, element: Option
         return Ok(());
     };
     let class = store.class_of(e).map_err(fail)?;
-    if !V::connects(kind, class) {
+    if !view.connects(kind, class) {
         return Err(refuse("element", format!("a {kind} diagram does not connect a {}", class_name(store, class).to_lowercase())));
     }
-    let (from, to) = V::ends(store, e).ok_or_else(|| refuse("element", "the relationship lacks an end"))?;
+    let (from, to) = view.ends(store, e).ok_or_else(|| refuse("element", "the relationship lacks an end"))?;
     if element_of(store, source, node::ELEMENT) != Some(from) {
         return Err(refuse("source", "the node does not show the relationship's first end"));
     }
@@ -445,7 +457,7 @@ fn diagram_connect<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let source = node_in(ctx.doc, p, "source", d)?;
     let target = node_in(ctx.doc, p, "target", d)?;
     let element = if str_of(p, "element").is_empty() { None } else { Some(any_of(ctx.doc, p, "element")?) };
-    check_edge::<V>(ctx.doc, d, &kind, element, source, target)?;
+    check_edge(&*ctx.view, ctx.doc, d, &kind, element, source, target)?;
     let e = new_edge(ctx.doc, d, element, source, target).map_err(fail)?;
     select(ctx, vec![e]);
     Ok(json!({ "id": uuid_of(ctx.doc, e)? }))
@@ -467,10 +479,10 @@ fn diagram_connect_all<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let mut missing: Vec<(Obj, Obj, Obj)> = Vec::new();
     for o in ctx.doc.alive() {
         let Ok(class) = ctx.doc.class_of(o) else { continue };
-        if !V::connects(&kind, class) {
+        if !ctx.view.connects(&kind, class) {
             continue;
         }
-        let Some((from, to)) = V::ends(ctx.doc, o) else { continue };
+        let Some((from, to)) = ctx.view.ends(ctx.doc, o) else { continue };
         if let (Some(s), Some(t)) = (shown.get(&from), shown.get(&to))
             && edges_showing(ctx.doc, d, o).is_empty()
         {
@@ -605,7 +617,7 @@ fn diagram_label<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let class = ctx.doc.class_of(element).map_err(fail)?;
     let kind = str_of(p, "kind");
     check("kind", rules::kind_problem(kind), "kind")?;
-    let slots = V::text_slots(class);
+    let slots = ctx.view.text_slots(class);
     if !slots.contains(&kind) {
         return Err(refuse(
             "kind",

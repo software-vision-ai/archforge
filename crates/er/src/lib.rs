@@ -2,7 +2,7 @@
 //! cardinality at each end, primary keys, unique constraints, foreign keys and mapping tables, as a metamodel over the MOF core (`er.xmi`, generated into
 //! `generated/` by `cargo xtask generate er`) with the rules and commands written here. The schema
 //! is a member of the project's Model (the shared core); comments on ER elements are the core's;
-//! its diagrams are the diagram metamodel's, with the ER policy in [`ErView`]. Pure: builds for
+//! its diagrams are the diagram metamodel's, with the ER policy in [`ErNotation`]. Pure: builds for
 //! the portable target.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
@@ -12,7 +12,7 @@ pub mod rules;
 
 use std::sync::Arc;
 
-use archforge_diagram::DiagramView;
+use archforge_diagram::{Notation, ProjectView};
 use archforge_mof::{ClassId, CompositeSlabs, MetaError, Metamodel, Obj, PropId, Store, Universe, Uuid};
 
 pub use commands::{NO_ENTITIES, NO_SCHEMAS};
@@ -21,22 +21,6 @@ pub use generated::meta::*;
 pub use generated::schema::{JUNCTIONS, TABLES};
 pub use generated::slabs::ErSlabs;
 
-/// The view: the selection and the open diagram, which undo never touches.
-#[derive(Debug, Clone, PartialEq, Default)]
-pub struct ErView {
-    pub selection: Vec<Obj>,
-    pub open_diagram: Option<Obj>,
-}
-
-impl archforge_engine::View<Store> for ErView {
-    fn retain_valid(&mut self, doc: &Store) {
-        self.selection.retain(|o| doc.is_alive(*o));
-        if self.open_diagram.is_some_and(|d| !doc.is_alive(d)) {
-            self.open_diagram = None;
-        }
-    }
-}
-
 /// The ER diagram kind: a diagram of a schema that shows entities as nodes and relationships as
 /// edges.
 pub const DIAGRAM_KIND: &str = "er";
@@ -44,59 +28,52 @@ pub const DIAGRAM_KIND: &str = "er";
 /// An entity node's width and height when the user names none.
 pub const ENTITY_SIZE: (f64, f64) = (160.0, 100.0);
 
-/// The ER policy for the diagram commands (gm2.29).
-impl DiagramView for ErView {
-    fn open_diagram(&self) -> Option<Obj> {
-        self.open_diagram
+/// The ER notation in a project's view: its diagrams (gm2.29), where skills sit (spec
+/// archforge-zer.2), and how its elements are removed and described.
+pub struct ErNotation;
+
+/// A project's notations when it holds ER alone.
+pub static ALONE: &[&dyn Notation] = &[&ErNotation];
+
+impl Notation for ErNotation {
+    fn name(&self) -> &'static str {
+        "ER"
     }
 
-    fn set_open_diagram(&mut self, diagram: Option<Obj>) {
-        self.open_diagram = diagram;
+    fn metamodel(&self) -> u16 {
+        INDEX
     }
 
-    fn selection_mut(&mut self) -> &mut Vec<Obj> {
-        &mut self.selection
-    }
-
-    fn kinds() -> &'static [&'static str] {
+    fn kinds(&self) -> &'static [&'static str] {
         &[DIAGRAM_KIND]
     }
 
-    /// Diagrams are members of the project's Model, beside the schemas.
-    fn home(store: &Store) -> Result<Option<(Obj, PropId)>, String> {
-        store
-            .alive()
-            .find(|o| store.class_of(*o).ok() == Some(archforge_core::MODEL))
-            .map(|m| Some((m, archforge_core::model::MEMBER)))
-            .ok_or_else(|| "the project has no model root".to_string())
-    }
-
-    fn is_of(_kind: &str, class: ClassId) -> bool {
+    fn is_of(&self, _kind: &str, class: ClassId) -> bool {
         class == SCHEMA
     }
 
     /// An ER diagram is always of a schema.
-    fn needs_element(_kind: &str) -> bool {
+    fn needs_element(&self, _kind: &str) -> bool {
         true
     }
 
-    fn shows(_kind: &str, class: ClassId) -> bool {
+    fn shows(&self, _kind: &str, class: ClassId) -> bool {
         class == ENTITY
     }
 
     /// A schema's diagram shows any table of the model (slice S7: one of another schema draws
     /// dimmed, with its schema named).
-    fn may_show(store: &Store, diagram: Obj, element: Obj) -> bool {
+    fn may_show(&self, store: &Store, diagram: Obj, element: Obj) -> bool {
         let of = store.get(diagram, archforge_diagram::diagram::ELEMENT).ok().and_then(|v| v.as_ref());
         of.is_some_and(|s| store.class_of(s).ok() == Some(SCHEMA)) && rules::schema_of(store, element).is_some()
     }
 
     /// Relationships, and generalizations (slice S6) drawn from the subtype to the supertype.
-    fn connects(_kind: &str, class: ClassId) -> bool {
+    fn connects(&self, _kind: &str, class: ClassId) -> bool {
         class == RELATIONSHIP || class == GENERALIZATION
     }
 
-    fn ends(store: &Store, element: Obj) -> Option<(Obj, Obj)> {
+    fn ends(&self, store: &Store, element: Obj) -> Option<(Obj, Obj)> {
         let end = |p| store.get(element, p).ok().and_then(|v| v.as_ref());
         match store.class_of(element).ok() {
             Some(c) if c == RELATIONSHIP => Some((end(relationship::FROM)?, end(relationship::TO)?)),
@@ -105,45 +82,48 @@ impl DiagramView for ErView {
         }
     }
 
-    fn text_slots(class: ClassId) -> &'static [&'static str] {
+    fn text_slots(&self, class: ClassId) -> &'static [&'static str] {
         if class == RELATIONSHIP { &["name", "from_end", "to_end", "from_role", "to_role"] } else { &[] }
     }
 
-    fn default_size(_class: ClassId) -> (f64, f64) {
+    fn default_size(&self, _class: ClassId) -> (f64, f64) {
         ENTITY_SIZE
     }
-}
 
-/// What may carry a skill in ER and what a skill may aim at (spec archforge-zer.2): a skill sits
-/// on a schema, an entity or an attribute; it aims at every table, every relationship or every
-/// column below its subject, and a column skill may name a type.
-impl archforge_core::skills::SkillHost for ErView {
-    fn selection_mut(&mut self) -> &mut Vec<Obj> {
-        &mut self.selection
-    }
-
-    fn skill_subjects() -> &'static [ClassId] {
+    /// A skill sits on a schema, an entity or an attribute; it aims at every table, every
+    /// relationship or every column below its subject, and a column skill may name a type.
+    fn skill_subjects(&self) -> &'static [ClassId] {
         &[SCHEMA, ENTITY, ATTRIBUTE]
     }
 
-    fn skill_kinds() -> &'static [(ClassId, &'static str)] {
+    fn skill_kinds(&self) -> &'static [(ClassId, &'static str)] {
         &[(ENTITY, "table"), (RELATIONSHIP, "relationship"), (ATTRIBUTE, "column")]
     }
 
-    fn typed_class() -> Option<(ClassId, PropId)> {
+    fn typed_class(&self) -> Option<(ClassId, PropId)> {
         Some((ATTRIBUTE, attribute::TYPE))
+    }
+
+    fn remove(&self, store: &mut Store, objs: &[Obj]) -> Result<usize, archforge_engine::CommandError> {
+        commands::remove_elements(store, objs)
+    }
+
+    fn describe(&self, store: &mut Store, obj: Obj, text: &str) -> Result<(), archforge_engine::CommandError> {
+        commands::describe_element(store, obj, text)
     }
 }
 
-/// The ER notation's session: the store of the project, the selection, the ER commands.
-pub type Session = archforge_engine::Session<Store, ErView>;
+/// A session over a store of ER, the selection, the commands.
+pub type Session = archforge_engine::Session<Store, ProjectView>;
 
-/// The ER notation's command registry: the edit area, the ER commands, the diagram commands and
-/// the skill commands.
-pub fn registry() -> Result<Arc<archforge_engine::Registry<Store, ErView>>, String> {
-    let mut specs = commands::specs();
-    specs.extend(archforge_diagram::commands::specs::<ErView>());
-    specs.extend(archforge_core::skills::specs::<ErView>());
+/// The command registry of ER alone: the edit area, the shared element commands, the ER commands,
+/// the diagram commands and the skill commands.
+pub fn registry() -> Result<Arc<archforge_engine::Registry<Store, ProjectView>>, String> {
+    let mut specs = archforge_engine::cmd::edit::specs();
+    specs.extend(archforge_diagram::project::specs());
+    specs.extend(commands::specs());
+    specs.extend(archforge_diagram::commands::specs::<ProjectView>());
+    specs.extend(archforge_core::skills::specs::<ProjectView>());
     archforge_engine::Registry::new(specs)
 }
 
@@ -158,7 +138,7 @@ pub fn session_alone(name: &str, ids: Box<dyn FnMut() -> Uuid + Send>) -> Result
     let mut st = store(ids)?;
     let model = st.create(archforge_core::MODEL).map_err(|e| e.to_string())?;
     st.set(model, archforge_core::named_element::NAME, archforge_mof::Value::str(name)).map_err(|e| e.to_string())?;
-    Ok(Session::new(registry, st, FIRST_COUNTER, archforge_engine::Options::default()))
+    Ok(Session::with_view(registry, st, FIRST_COUNTER, archforge_engine::Options::default(), ProjectView::new(ALONE)))
 }
 
 /// The tables of the shared core, the diagram metamodel and ER, in that order: what a store of

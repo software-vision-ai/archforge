@@ -104,7 +104,7 @@ fn rich_session() -> Session {
     run(&mut s, "er.generalization.add", json!({ "supertype": customer, "subtype": vip }));
     run(&mut s, "er.sequence.add", json!({ "schema": shop, "name": "order_no", "start": 1000, "minimum": "1000", "owned_by": key }));
     run(&mut s, "er.view.add", json!({ "schema": shop, "name": "open_orders", "query": "select * from orders", "materialized": true }));
-    run(&mut s, "er.describe", json!({ "element": customer, "text": "Someone who buys." }));
+    run(&mut s, "element.describe", json!({ "element": customer, "text": "Someone who buys." }));
     let crm = run(&mut s, "er.schema.add", json!({ "name": "crm" }));
     let contact = run(&mut s, "er.entity.add", json!({ "schema": crm, "name": "Contact" }));
     run(
@@ -134,7 +134,7 @@ fn a_model_with_every_element_kind_comes_back_from_its_rows_identical() {
     // The rows read back are the rows written.
     assert_eq!(rows::snapshot(&back, &tables, &junctions).unwrap(), saved);
     // A session over the store read back works as one made in place.
-    let mut reopened = Session::new(registry().unwrap(), back, 1, Options::default());
+    let mut reopened = Session::with_view(registry().unwrap(), back, 1, Options::default(), archforge_diagram::ProjectView::new(ALONE));
     let shop = reopened.doc().alive().find(|o| rules::name_of(reopened.doc(), *o) == "shop").unwrap();
     let shop = reopened.doc().uuid(shop).unwrap().to_string();
     run(&mut reopened, "er.entity.add", json!({ "schema": shop, "name": "Product" }));

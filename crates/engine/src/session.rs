@@ -147,7 +147,12 @@ impl<D: Document, V: View<D>> Session<D, V> {
     /// A session on `doc` with the id counter at `counter`, and the view the notation's default
     /// gives, made valid for `doc`.
     pub fn new(registry: Arc<Registry<D, V>>, doc: D, counter: u64, options: Options) -> Self {
-        let mut view = V::default();
+        Session::with_view(registry, doc, counter, options, V::default())
+    }
+
+    /// [`Session::new`] with `view` in place of the default, such as a view that knows which
+    /// notations the document holds; made valid for `doc`.
+    pub fn with_view(registry: Arc<Registry<D, V>>, doc: D, counter: u64, options: Options, mut view: V) -> Self {
         view.retain_valid(&doc);
         Session {
             registry,

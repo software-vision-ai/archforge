@@ -4,7 +4,7 @@
 database, `project`, whose `settings` table says what the project is. Creates it, opens it, reads
 its settings back, and closes it.
 
-**Layer.** Host services, layer 9, above `archforge-dolt`: the application uses it, the interface
+**Layer.** Host services, layer 10, above `archforge-dolt`: the application uses it, the interface
 never depends on it.
 
 **Binding rules.** A name follows `archforge-names`. A creation validates first, keeps a marker

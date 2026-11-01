@@ -5,7 +5,7 @@ concrete), 622 class-owned properties (73 derived, without a field), 13 enumerat
 primitive types, generated from OMG's `UML.xmi` by `cargo xtask generate uml`. Only `lib.rs` is
 written by hand.
 
-**Layer.** 6, the notations' layer above the MOF core (4) and the shared core (5); pure, builds for
+**Layer.** 7, the notations' layer above the MOF core (4), the shared core (5) and the diagrams (6); pure, builds for
 the portable target.
 
 **Binding rules.** Decision gm2.18: the metamodel is data read at build time and compiled in; nothing

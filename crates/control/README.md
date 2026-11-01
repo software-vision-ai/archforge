@@ -7,7 +7,7 @@ One JSON object per line: `{id, method, params}`, the first on a connection also
 replies `{id, ok, result | error}`. A first line that is not a well-formed request with the right
 token closes the connection without a word.
 
-**Layer.** 8, a host service beside `dolt`: network and files, never built for the portable target.
+**Layer.** 9, a host service beside `dolt`: network and files, never built for the portable target.
 
 **Public API.**
 

@@ -2,15 +2,16 @@
 //! model elements as nodes and relationships as edges, with labels that name a text slot of their
 //! element and styles over the shipped style sheet; our own, in the spirit of OMG DI. The metamodel
 //! is `diagram.xmi`, generated into `generated/` by `cargo xtask generate diagram`; the rules, the
-//! generic commands, the cascades and the spatial index are written here. Knows no notation: a
-//! notation's view type says what its diagrams show through [`DiagramView`]. Pure: builds for the
-//! portable target.
+//! generic commands, the cascades, the spatial index and the project's view are written here.
+//! Knows no notation: the view says what each diagram shows through [`DiagramView`], asking the
+//! [`Notation`] that owns the diagram's kind. Pure: builds for the portable target.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
 pub mod arrange;
 pub mod commands;
 mod generated;
 pub mod grid;
+pub mod project;
 pub mod route;
 pub mod rules;
 
@@ -24,9 +25,10 @@ pub use generated::meta::*;
 pub use generated::schema::{JUNCTIONS, TABLES};
 pub use generated::slabs::DiagramSlabs;
 pub use grid::{Grid, Hit, Rect};
+pub use project::{Notation, ProjectView};
 pub use route::{Way, route};
 
-/// What a notation's view brings to the diagram commands: the open diagram and the selection, which
+/// What the view brings to the diagram commands: the open diagram and the selection, which
 /// undo never touches, and the notation's policy, which the commands enforce so a diagram never
 /// shows what its kind cannot draw.
 pub trait DiagramView: archforge_engine::View<Store> {
@@ -35,35 +37,35 @@ pub trait DiagramView: archforge_engine::View<Store> {
     fn set_open_diagram(&mut self, diagram: Option<Obj>);
     /// The selection, which the commands set to what they made.
     fn selection_mut(&mut self) -> &mut Vec<Obj>;
-    /// The diagram kinds the notation knows, such as `er` or `uml.class`.
-    fn kinds() -> &'static [&'static str];
+    /// The diagram kinds the notations know, such as `er` or `uml.class`.
+    fn kinds(&self) -> Vec<&'static str>;
     /// Where a new diagram goes: a container and its list property, None for a diagram without a
     /// container, or why no diagram can be added now.
-    fn home(store: &Store) -> Result<Option<(Obj, PropId)>, String>;
+    fn home(&self, store: &Store) -> Result<Option<(Obj, PropId)>, String>;
     /// Whether a diagram of `kind` may be of an element of `class`.
-    fn is_of(kind: &str, class: ClassId) -> bool;
+    fn is_of(&self, kind: &str, class: ClassId) -> bool;
     /// Whether a diagram of `kind` must be of an element.
-    fn needs_element(kind: &str) -> bool {
+    fn needs_element(&self, kind: &str) -> bool {
         let _ = kind;
         false
     }
     /// Whether a diagram of `kind` shows elements of `class` as nodes.
-    fn shows(kind: &str, class: ClassId) -> bool;
+    fn shows(&self, kind: &str, class: ClassId) -> bool;
     /// Whether `diagram` may show `element`, beyond its class: a notation keeps a diagram to its own
     /// scope here, such as a schema's entities. Everything may by default.
-    fn may_show(store: &Store, diagram: Obj, element: Obj) -> bool {
+    fn may_show(&self, store: &Store, diagram: Obj, element: Obj) -> bool {
         let _ = (store, diagram, element);
         true
     }
     /// Whether a diagram of `kind` shows elements of `class` as edges.
-    fn connects(kind: &str, class: ClassId) -> bool;
+    fn connects(&self, kind: &str, class: ClassId) -> bool;
     /// The two ends of a relationship element, source first, or None when it is no relationship or
     /// lacks an end.
-    fn ends(store: &Store, element: Obj) -> Option<(Obj, Obj)>;
+    fn ends(&self, store: &Store, element: Obj) -> Option<(Obj, Obj)>;
     /// The text slots of an element of `class` a label may show, such as `name`.
-    fn text_slots(class: ClassId) -> &'static [&'static str];
+    fn text_slots(&self, class: ClassId) -> &'static [&'static str];
     /// A node's width and height for an element of `class` when the user names none.
-    fn default_size(class: ClassId) -> (f64, f64);
+    fn default_size(&self, class: ClassId) -> (f64, f64);
 }
 
 /// A universe of the diagram metamodel and the metamodels given.
