@@ -323,6 +323,75 @@ mod tests {
         assert!(!native_options().system_font_fallback, "installed fonts come from fonts.rs, never mapped");
     }
 
+    /// The agent's way into a shell with an open project: each tool call answered at once by the
+    /// shell's control methods, as the running window answers them.
+    struct Direct(std::cell::RefCell<Shell>);
+
+    impl archforge_mcp::Backend for Direct {
+        fn call(&self, method: &str, params: serde_json::Value) -> Result<serde_json::Value, archforge_control::CallError> {
+            archforge_ui_egui::control::answer(&mut self.0.borrow_mut(), method, &params).map_err(archforge_control::CallError::Refused)
+        }
+    }
+
+    #[test]
+    fn an_agent_builds_a_small_er_diagram_through_the_tools_and_undo_takes_it_apart() {
+        use serde_json::{Value, json};
+        let mut n: u128 = 0;
+        let ids = Box::new(move || {
+            n += 1;
+            archforge_mof::Uuid(n.to_le_bytes())
+        });
+        let session = archforge_er::new_project_session("Shop", ids).unwrap();
+        let infos: Vec<Value> = session.registry().infos(&session.facts()).into_iter().map(|i| serde_json::to_value(i).unwrap()).collect();
+        let catalog = archforge_mcp::Catalog::new(&infos, false);
+        let mut shell = Shell::new(archforge_ui_egui::Services::default());
+        shell.session = Some(session);
+        let agent = Direct(std::cell::RefCell::new(shell));
+        let revision = || agent.0.borrow().session.as_ref().unwrap().revision();
+        // One tool call; gives the command's result, or the refusal as an error.
+        let tool = |name: &str, args: Value| -> Result<Value, String> {
+            let reply = archforge_mcp::handle(
+                json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": name, "arguments": args } }).to_string().as_bytes(),
+                &agent,
+                &catalog,
+            )
+            .unwrap();
+            let text = reply["result"]["content"][0]["text"].as_str().unwrap_or_default().to_string();
+            if reply["result"]["isError"] == true { Err(text) } else { Ok(serde_json::from_str::<Value>(&text).unwrap()["result"].clone()) }
+        };
+        let id = |v: Result<Value, String>| v.unwrap()["id"].as_str().unwrap().to_string();
+        let schema = id(tool("er_schema_add", json!({ "name": "shop" })));
+        let customer = id(tool("er_entity_add", json!({ "schema": schema, "name": "Customer" })));
+        tool("er_attribute_add", json!({ "entity": customer, "name": "customer_id", "type": "BIGINT", "primary_key": true })).unwrap();
+        let order = id(tool("er_entity_add", json!({ "schema": schema, "name": "Order" })));
+        tool("er_attribute_add", json!({ "entity": order, "name": "order_id", "type": "BIGINT", "primary_key": true })).unwrap();
+        let places = id(tool("er_relationship_add", json!({ "from": customer, "to": order, "name": "places", "create_foreign_key": true })));
+        let diagram = id(tool("diagram_add", json!({ "kind": "er", "element": schema, "name": "Shop" })));
+        let c = id(tool("diagram_place", json!({ "diagram": diagram, "element": customer, "x": 100, "y": 100, "width": 240, "height": 166 })));
+        let o = id(tool("diagram_place", json!({ "diagram": diagram, "element": order, "x": 500, "y": 100, "width": 240, "height": 166 })));
+        tool("diagram_connect", json!({ "diagram": diagram, "element": places, "source": c, "target": o })).unwrap();
+        let changes = 10;
+        // What the window draws: two tables on the diagram, the foreign key column in Order.
+        let listed = tool("er_entity_list", json!({ "schema": schema })).unwrap();
+        assert_eq!(listed.as_array().unwrap().len(), 2, "{listed}");
+        let shown = tool("diagram_get", json!({ "diagram": diagram })).unwrap().to_string();
+        assert!(shown.contains(&customer) && shown.contains(&order) && shown.contains(&places), "{shown}");
+        // Refused calls change nothing.
+        let before = revision();
+        assert!(tool("er_entity_add", json!({ "schema": "not-an-id", "name": "X" })).is_err());
+        assert!(tool("er_entity_add", json!({ "schema": schema, "name": "X", "colour": "red" })).unwrap_err().contains("colour"));
+        let taken = tool("er_attribute_add", json!({ "entity": customer, "name": "customer_id" })).unwrap_err();
+        assert!(taken.contains("customer_id") && taken.to_lowercase().contains("already"), "a name already taken: {taken}");
+        assert_eq!(revision(), before, "refused calls leave the model as it was");
+        // Undo takes it apart, one step per change, down to the empty project.
+        for step in 0..changes {
+            tool("undo", json!({})).unwrap_or_else(|e| panic!("undo {step}: {e}"));
+        }
+        assert!(tool("undo", json!({})).is_err(), "nothing more to undo");
+        let left = tool("er_schema_list", json!({})).unwrap();
+        assert_eq!(left, json!([]), "the project is empty again");
+    }
+
     #[test]
     fn the_mcp_tools_and_the_shells_methods_never_drift_apart() {
         let shell: Vec<&str> = archforge_ui_egui::control::METHODS.iter().map(|(m, _)| *m).collect();

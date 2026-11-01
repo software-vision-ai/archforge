@@ -14,7 +14,8 @@ use archforge_control::{CallError, Client};
 use serde_json::{Value, json};
 
 const USAGE: &str = "usage: archforge-cli <verb>
-  mcp --bridge <port>                 serve MCP on the standard streams, bridged to Archforge started with --control <port>
+  mcp --bridge <port> [--compact]     serve MCP on the standard streams, bridged to Archforge started with --control <port>;
+                                      --compact lists only the general tools and search_tools, not one tool per command
   app <method> [<json>] --port <port> send one request to the running Archforge and print its result
   commands [<filter>]                 list Archforge's commands
   describe <command>                  print one command's documentation
@@ -24,7 +25,7 @@ const USAGE: &str = "usage: archforge-cli <verb>
 enum Verb {
     Help,
     Version,
-    Mcp { port: u16 },
+    Mcp { port: u16, compact: bool },
     App { method: String, params: Value, port: u16 },
     Commands { filter: String },
     Describe { id: String },
@@ -42,9 +43,10 @@ fn parse(args: &[String]) -> Result<Verb, String> {
         "--help" | "-h" if rest.is_empty() => Ok(Verb::Help),
         "--version" | "-V" if rest.is_empty() => Ok(Verb::Version),
         "mcp" => match rest {
-            [flag, p] if flag == "--bridge" => Ok(Verb::Mcp { port: port(Some(p))? }),
+            [flag, p] if flag == "--bridge" => Ok(Verb::Mcp { port: port(Some(p))?, compact: false }),
+            [flag, p, c] | [c, flag, p] if flag == "--bridge" && c == "--compact" => Ok(Verb::Mcp { port: port(Some(p))?, compact: true }),
             [flag] if flag == "--demo" => Err("the headless MCP server is not built yet; use --bridge <port>".into()),
-            _ => Err("mcp takes --bridge <port>".into()),
+            _ => Err("mcp takes --bridge <port> and optionally --compact".into()),
         },
         "app" => {
             let mut positional = Vec::new();
@@ -130,11 +132,17 @@ fn run(args: &[String]) -> i32 {
     match verb {
         Verb::Help => done(out(USAGE)),
         Verb::Version => done(out(&format!("archforge-cli {}", env!("CARGO_PKG_VERSION")))),
-        Verb::Mcp { port } => {
+        Verb::Mcp { port, compact } => {
+            // The tools come from the command table this build carries, so they are listed even
+            // before Archforge runs.
+            let catalog = match infos() {
+                Ok(all) => archforge_mcp::Catalog::new(&all, compact),
+                Err(e) => return fail(&e, 1),
+            };
             let bridge = Bridge { settings: archforge_control::settings_folder(), port };
             let mut input = std::io::stdin().lock();
             let mut output = std::io::stdout().lock();
-            match archforge_mcp::serve(&mut input, &mut output, &bridge) {
+            match archforge_mcp::serve(&mut input, &mut output, &bridge, &catalog) {
                 Ok(()) => 0,
                 Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => 0,
                 Err(e) => fail(&format!("the MCP server stopped: {e}"), 1),
@@ -188,7 +196,8 @@ mod tests {
     #[test]
     fn arguments_are_parsed_by_hand_and_anything_unknown_is_a_usage_error() {
         assert_eq!(parse(&args(&["--help"])), Ok(Verb::Help));
-        assert_eq!(parse(&args(&["mcp", "--bridge", "47000"])), Ok(Verb::Mcp { port: 47000 }));
+        assert_eq!(parse(&args(&["mcp", "--bridge", "47000"])), Ok(Verb::Mcp { port: 47000, compact: false }));
+        assert_eq!(parse(&args(&["mcp", "--bridge", "47000", "--compact"])), Ok(Verb::Mcp { port: 47000, compact: true }));
         assert_eq!(
             parse(&args(&["app", "engine.execute", "{\"command\":\"x\"}", "--port", "47000"])),
             Ok(Verb::App { method: "engine.execute".into(), params: json!({ "command": "x" }), port: 47000 })
@@ -214,6 +223,91 @@ mod tests {
     fn without_a_running_archforge_a_request_exits_3() {
         // A port no Archforge listens on: its token file is missing.
         assert_eq!(run(&args(&["app", "document.inspect", "--port", "1"])), 3);
+    }
+
+    /// A stand-in for the application that records the commands the tools ask for.
+    struct Recorder(std::cell::RefCell<Vec<Value>>);
+
+    impl archforge_mcp::Backend for Recorder {
+        fn call(&self, method: &str, params: Value) -> Result<Value, CallError> {
+            assert_eq!(method, "engine.execute");
+            self.0.borrow_mut().push(params);
+            Ok(json!({ "result": null }))
+        }
+    }
+
+    /// The smallest value of a schema property's type.
+    fn sample(p: &Value) -> Value {
+        if let Some(first) = p["enum"].as_array().and_then(|e| e.first()) {
+            return first.clone();
+        }
+        match p["type"].as_str() {
+            Some("integer" | "number") => p.get("minimum").cloned().unwrap_or(json!(0)),
+            Some("boolean") => json!(false),
+            Some("array") => json!([]),
+            Some("object") => json!({}),
+            _ => json!("x"),
+        }
+    }
+
+    #[test]
+    fn every_command_of_the_table_is_a_tool_that_runs_it() {
+        let all = infos().unwrap();
+        let catalog = archforge_mcp::Catalog::new(&all, false);
+        let list = catalog.list();
+        let tools = list["tools"].as_array().unwrap();
+        let mut names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
+        assert_eq!(
+            tools.len(),
+            all.len() + 8 - 2,
+            "one tool per command beside the eight general ones, edit.undo and edit.redo left to undo and redo"
+        );
+        for n in &names {
+            assert!(!n.is_empty() && n.len() <= 64 && n.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-'), "{n}");
+        }
+        names.sort();
+        names.dedup();
+        assert_eq!(names.len(), tools.len(), "tool names are unique");
+        // Drive every command's tool with its required arguments: each reaches its own command, and
+        // the real engine takes the arguments the schema calls for (it may refuse their values).
+        let rec = Recorder(std::cell::RefCell::new(Vec::new()));
+        let mut n: u128 = 0;
+        let ids = Box::new(move || {
+            n = n.wrapping_add(1);
+            archforge_mof::Uuid(n.to_le_bytes())
+        });
+        let mut engine = archforge_er::new_project_session("Model", ids).unwrap();
+        let mut driven = 0;
+        for c in &all {
+            let id = c["id"].as_str().unwrap();
+            if id == "edit.undo" || id == "edit.redo" {
+                continue;
+            }
+            driven += 1;
+            let tool = tools.iter().find(|t| t["name"] == archforge_mcp::tool_name(id)).unwrap();
+            let schema = &tool["inputSchema"];
+            let args: serde_json::Map<String, Value> = schema["required"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|k| (k.as_str().unwrap().to_string(), sample(&schema["properties"][k.as_str().unwrap()])))
+                .collect();
+            let r = archforge_mcp::handle(
+                json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": tool["name"], "arguments": args } })
+                    .to_string()
+                    .as_bytes(),
+                &rec,
+                &catalog,
+            )
+            .unwrap();
+            assert_eq!(r["result"]["isError"], false, "{id}: {r}");
+            assert_eq!(rec.0.borrow().last().unwrap()["command"], id);
+            use archforge_engine::EngineError as E;
+            if let Err(e @ (E::UnknownKey { .. } | E::MissingKey { .. } | E::WrongType { .. })) = engine.execute(id, &Value::Object(args)) {
+                panic!("{id}: the schema's arguments do not fit the command: {e}");
+            }
+        }
+        assert_eq!(rec.0.borrow().len(), driven);
     }
 
     #[test]

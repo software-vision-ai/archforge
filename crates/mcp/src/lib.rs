@@ -5,8 +5,11 @@
 //! The headless mode is not built and not advertised (CS-3).
 //!
 //! Tools: `list_commands`, `describe_command`, `execute_command`, `batch`, `inspect_document`,
-//! `undo`, `redo` and `call_app`. Only the reads say they are read-only (CS-13); unknown tools,
-//! methods and argument keys are refused, naming the accepted ones (CS-3).
+//! `undo`, `redo` and `call_app`, and one tool per command of the table (`er_entity_add` for
+//! `er.entity.add`), its schema generated from the command's parameter documentation (BP-CS-4).
+//! With `compact` the command tools are not listed and `search_tools` finds them, each to run
+//! through `execute_command` (CS-14). Only the reads say they are read-only (CS-13); unknown tools, methods and
+//! argument keys are refused, naming the accepted ones (CS-3).
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
 use std::io::{BufRead, Write};
@@ -146,28 +149,165 @@ pub fn tool_methods() -> (Vec<(&'static str, Vec<String>)>, &'static str) {
     (methods, call_app)
 }
 
-/// The tools as `tools/list` gives them.
+/// One command of the table as a tool: its tool name, the command it runs, what it does, its
+/// arguments' schema, whether it only reads and whether it can remove anything (a change of the
+/// view alone cannot).
+#[derive(Debug, Clone, PartialEq)]
+struct CommandTool {
+    name: String,
+    id: String,
+    description: String,
+    schema: Value,
+    read_only: bool,
+    destructive: bool,
+}
+
+/// Commands the general tools already offer, left out as tools of their own.
+const COVERED: [&str; 2] = ["edit.undo", "edit.redo"];
+/// The longest search, in bytes and in words.
+const MAX_QUERY: usize = 256;
+const MAX_WORDS: usize = 16;
+/// The most tools one search gives.
+const MAX_FOUND: usize = 20;
+
+/// The tools a server offers: the fixed ones and one per command of the table.
+#[derive(Debug, Clone, Default)]
+pub struct Catalog {
+    commands: Vec<CommandTool>,
+    compact: bool,
+}
+
+/// A command id as a tool name: `er.foreign-key.add` becomes `er_foreign_key_add`.
+pub fn tool_name(command: &str) -> String {
+    command.chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '_' }).collect()
+}
+
+impl Catalog {
+    /// The catalogue for the commands `infos` describes (the engine's `CommandInfo`s as JSON).
+    /// With `compact`, the command tools are left out of `tools/list` and found through
+    /// `search_tools`.
+    /// A command whose tool name another tool already has is left out, never shadowing it.
+    pub fn new(infos: &[Value], compact: bool) -> Catalog {
+        let mut commands: Vec<CommandTool> = Vec::new();
+        for tool in infos.iter().filter_map(command_tool) {
+            let taken = TOOLS.iter().any(|t| t.name == tool.name) || tool.name == SEARCH || commands.iter().any(|c| c.name == tool.name);
+            if !taken {
+                commands.push(tool);
+            }
+        }
+        Catalog { commands, compact }
+    }
+
+    /// Whether the command tools are left out of the listing.
+    pub fn compact(&self) -> bool {
+        self.compact
+    }
+
+    fn find(&self, name: &str) -> Option<&CommandTool> {
+        self.commands.iter().find(|c| c.name == name)
+    }
+
+    /// The tools as `tools/list` gives them.
+    pub fn list(&self) -> Value {
+        let mut tools: Vec<Value> = TOOLS.iter().map(|t| listed(t.name, t.description, (t.schema)(), t.read_only, t.destructive)).collect();
+        if self.compact {
+            tools.push(listed(
+                SEARCH,
+                SEARCH_DOC,
+                object(
+                    json!({ "query": { "type": "string", "description": "Words of the command's name or label, such as \"add relationship\"" } }),
+                    &["query"],
+                ),
+                true,
+                false,
+            ));
+        } else {
+            tools.extend(self.commands.iter().map(|c| listed(&c.name, &c.description, c.schema.clone(), c.read_only, c.destructive)));
+        }
+        json!({ "tools": tools })
+    }
+}
+
+const SEARCH: &str = "search_tools";
+const SEARCH_DOC: &str = "Find Archforge's commands by words of their name or label: each comes with its command id, its parameters' schema and hints; run one with execute_command {command, params}.";
+
+fn listed(name: &str, description: &str, schema: Value, read_only: bool, destructive: bool) -> Value {
+    json!({
+        "name": name,
+        "description": description,
+        "inputSchema": schema,
+        "annotations": { "readOnlyHint": read_only, "destructiveHint": destructive, "openWorldHint": false },
+    })
+}
+
+/// A command's tool, its schema from the documented parameters: a parameter without a default
+/// is required; choices, ranges and defaults carry over.
+/// A command of a kind of parameter this does not know is left out, never described wrongly.
+fn command_tool(info: &Value) -> Option<CommandTool> {
+    let id = info.get("id")?.as_str()?;
+    if COVERED.contains(&id) {
+        return None;
+    }
+    let label = info.get("label").and_then(Value::as_str).unwrap_or(id);
+    let read_only = !info.get("journal").and_then(Value::as_bool).unwrap_or(true);
+    let undoable = info.get("undoable").and_then(Value::as_bool).unwrap_or(true);
+    let mut properties = serde_json::Map::new();
+    let mut required = Vec::new();
+    for p in info.get("params").and_then(Value::as_array).into_iter().flatten() {
+        let Some(key) = p.get("key").and_then(Value::as_str) else { continue };
+        let kind = match p.get("kind").and_then(Value::as_str)? {
+            "bool" => "boolean",
+            k @ ("number" | "integer" | "string" | "array" | "object") => k,
+            _ => return None,
+        };
+        let mut prop = json!({ "type": kind, "description": p.get("meaning").and_then(Value::as_str).unwrap_or_default() });
+        match p.get("default") {
+            Some(Value::Null) | None => required.push(key.to_string()),
+            Some(d) => prop["default"] = d.clone(),
+        }
+        if let Some(choices) = p.get("choices").and_then(Value::as_array).filter(|c| !c.is_empty()) {
+            prop["enum"] = Value::Array(choices.clone());
+        }
+        if let Some([lo, hi]) = p.get("range").and_then(Value::as_array).map(Vec::as_slice) {
+            prop["minimum"] = lo.clone();
+            prop["maximum"] = hi.clone();
+        }
+        properties.insert(key.to_string(), prop);
+    }
+    if undoable && !read_only {
+        // The engine's own key on every undoable command: calls with the same value merge into
+        // one undo step.
+        properties.insert(
+            "coalesce".into(),
+            json!({ "type": "string", "maxLength": 256, "description": "calls with the same value in a row become one undo step" }),
+        );
+    }
+    let effect = match (read_only, undoable) {
+        (true, _) => "Reads the model; changes nothing.",
+        (false, true) => "Changes the model in the open project; the window shows it and undo takes it back.",
+        (false, false) => "Changes the view (what is selected or open), not the model; not recorded for undo.",
+    };
+    Some(CommandTool {
+        name: tool_name(id),
+        id: id.to_string(),
+        description: format!("{label} ({id}). {effect}"),
+        schema: json!({ "type": "object", "properties": properties, "required": required, "additionalProperties": false }),
+        read_only,
+        destructive: !read_only && undoable,
+    })
+}
+
+/// The fixed tools as `tools/list` gives them, without the command tools.
 pub fn tool_list() -> Value {
-    let tools: Vec<Value> = TOOLS
-        .iter()
-        .map(|t| {
-            json!({
-                "name": t.name,
-                "description": t.description,
-                "inputSchema": (t.schema)(),
-                "annotations": { "readOnlyHint": t.read_only, "destructiveHint": t.destructive, "openWorldHint": false },
-            })
-        })
-        .collect();
-    json!({ "tools": tools })
+    Catalog::default().list()
 }
 
 /// Serves `input` until it ends, writing a reply line to `output` for every request.
-pub fn serve(input: &mut impl BufRead, output: &mut impl Write, backend: &dyn Backend) -> std::io::Result<()> {
+pub fn serve(input: &mut impl BufRead, output: &mut impl Write, backend: &dyn Backend, catalog: &Catalog) -> std::io::Result<()> {
     loop {
         let reply = match read_line(input, MAX_LINE) {
             Ok(None) => return Ok(()),
-            Ok(Some(line)) => handle(&line, backend),
+            Ok(Some(line)) => handle(&line, backend, catalog),
             Err(e) if e.kind() == std::io::ErrorKind::InvalidData => {
                 skip_line(input)?;
                 Some(error(Value::Null, -32700, "the message is longer than 4 MiB"))
@@ -204,7 +344,7 @@ fn skip_line(input: &mut impl BufRead) -> std::io::Result<()> {
 }
 
 /// The reply to one message, none for a notification.
-pub fn handle(line: &[u8], backend: &dyn Backend) -> Option<Value> {
+pub fn handle(line: &[u8], backend: &dyn Backend, catalog: &Catalog) -> Option<Value> {
     let Ok(message) = serde_json::from_slice::<Value>(line) else { return Some(error(Value::Null, -32700, "the message is not JSON")) };
     let Some(object) = message.as_object() else { return Some(error(Value::Null, -32600, "a message is a JSON object")) };
     let id = object.get("id").cloned();
@@ -225,49 +365,108 @@ pub fn handle(line: &[u8], backend: &dyn Backend) -> Option<Value> {
                     "protocolVersion": version,
                     "capabilities": { "tools": { "listChanged": false } },
                     "serverInfo": { "name": "archforge", "version": env!("CARGO_PKG_VERSION") },
-                    "instructions": "Archforge models databases as ER diagrams. Every tool works on the project open in the running Archforge window: list_commands and describe_command show what can be done, execute_command and batch change the model (the user sees it and can undo it), inspect_document tells what is open and selected.",
+                    "instructions": if catalog.compact() { COMPACT_INSTRUCTIONS } else { INSTRUCTIONS },
                 }),
             )
         }
         "ping" => result(id, json!({})),
-        "tools/list" => result(id, tool_list()),
-        "tools/call" => call(id, &params, backend),
+        "tools/list" => result(id, catalog.list()),
+        "tools/call" => call(id, &params, backend, catalog),
         other => error(id, -32601, &format!("unknown method {other:?}; the server answers initialize, ping, tools/list and tools/call")),
     })
 }
 
-/// Runs a tool: its arguments checked against its schema's keys, then its control method.
-fn call(id: Value, params: &Value, backend: &dyn Backend) -> Value {
+/// Runs a tool: its arguments checked against its schema's keys, then its control method, or for
+/// a command's tool `engine.execute` with that command.
+fn call(id: Value, params: &Value, backend: &dyn Backend, catalog: &Catalog) -> Value {
     let Some(name) = params.get("name").and_then(Value::as_str) else { return error(id, -32602, "tools/call needs name") };
-    let Some(tool) = TOOLS.iter().find(|t| t.name == name) else {
-        let names: Vec<&str> = TOOLS.iter().map(|t| t.name).collect();
-        return error(id, -32602, &format!("unknown tool {name:?}; the tools are {}", names.join(", ")));
-    };
     let args = params.get("arguments").cloned().unwrap_or_else(|| json!({}));
     let Some(given) = args.as_object() else { return tool_error(id, "arguments must be an object") };
-    let schema = (tool.schema)();
-    let keys: Vec<&str> = schema["properties"].as_object().map(|p| p.keys().map(String::as_str).collect()).unwrap_or_default();
-    if let Some(key) = given.keys().find(|k| !keys.contains(&k.as_str())) {
-        return tool_error(
-            id,
-            &format!("{name} has no argument {key:?}; it takes {}", if keys.is_empty() { "none".to_string() } else { keys.join(", ") }),
-        );
-    }
-    let required = schema["required"].as_array().cloned().unwrap_or_default();
-    if let Some(missing) = required.iter().filter_map(Value::as_str).find(|k| !given.contains_key(*k)) {
-        return tool_error(id, &format!("{name} needs {missing:?}"));
-    }
-    let (method, request) = match tool.method {
-        Some(m) => (m.to_string(), args.clone()),
-        None => {
-            (given.get("method").and_then(Value::as_str).unwrap_or_default().to_string(), given.get("params").cloned().unwrap_or_else(|| json!({})))
-        }
+    let (schema, method, request) = if let Some(tool) = TOOLS.iter().find(|t| t.name == name) {
+        let (method, request) = match tool.method {
+            Some(m) => (m.to_string(), args.clone()),
+            None => (
+                given.get("method").and_then(Value::as_str).unwrap_or_default().to_string(),
+                given.get("params").cloned().unwrap_or_else(|| json!({})),
+            ),
+        };
+        ((tool.schema)(), method, request)
+    } else if let Some(c) = catalog.find(name) {
+        (c.schema.clone(), "engine.execute".to_string(), json!({ "command": c.id, "params": args }))
+    } else if name == SEARCH && catalog.compact {
+        return match given.get("query").and_then(Value::as_str) {
+            Some(q) => search(id, catalog, q),
+            None => tool_error(id, "search_tools needs \"query\""),
+        };
+    } else {
+        return error(id, -32602, &format!("unknown tool {name:?}; {}", close_tools(name, catalog)));
     };
+    if let Err(why) = check(name, &schema, given) {
+        return tool_error(id, &why);
+    }
     match backend.call(&method, request) {
         Ok(value) => result(id, json!({ "content": [{ "type": "text", "text": value.to_string() }], "isError": false })),
         Err(CallError::Unreachable(e)) => tool_error(id, &format!("Archforge is not reachable: {e}")),
         Err(CallError::Refused(e)) => tool_error(id, &e),
     }
+}
+
+const INSTRUCTIONS: &str = "Archforge models databases as ER diagrams. Every tool works on the project open in the running Archforge window. Each command has its own tool (er_schema_list, er_entity_add, er_attribute_add, er_relationship_add, diagram_add, diagram_place, diagram_connect, er_remove, ...; ids come back in the results); batch runs several as one undo step; inspect_document tells what is open and selected; undo and redo step through the history. Every change shows in the window at once and the user can undo it.";
+const COMPACT_INSTRUCTIONS: &str = "Archforge models databases as ER diagrams. Every tool works on the project open in the running Archforge window. search_tools finds a command (er.entity.add, er.relationship.add, diagram.place, ...) with its parameters; execute_command {command, params} runs it and batch runs several as one undo step; inspect_document tells what is open and selected; undo and redo step through the history. Every change shows in the window at once and the user can undo it.";
+
+/// Up to five tool names close to an unknown one: those sharing its first word, else the general
+/// tools.
+fn close_tools(name: &str, catalog: &Catalog) -> String {
+    let head = name.split('_').next().unwrap_or_default();
+    let mut close: Vec<&str> = catalog.commands.iter().map(|c| c.name.as_str()).filter(|n| !head.is_empty() && n.starts_with(head)).take(5).collect();
+    if close.is_empty() || catalog.compact() {
+        close = TOOLS.iter().map(|t| t.name).take(5).collect();
+    }
+    format!("close ones are {}; tools/list names them all", close.join(", "))
+}
+
+/// Refuses an argument the schema does not name and a required one missing.
+fn check(name: &str, schema: &Value, given: &serde_json::Map<String, Value>) -> Result<(), String> {
+    let keys: Vec<&str> = schema["properties"].as_object().map(|p| p.keys().map(String::as_str).collect()).unwrap_or_default();
+    if let Some(key) = given.keys().find(|k| !keys.contains(&k.as_str())) {
+        return Err(format!("{name} has no argument {key:?}; it takes {}", if keys.is_empty() { "none".to_string() } else { keys.join(", ") }));
+    }
+    let required = schema["required"].as_array().cloned().unwrap_or_default();
+    match required.iter().filter_map(Value::as_str).find(|k| !given.contains_key(*k)) {
+        Some(missing) => Err(format!("{name} needs {missing:?}")),
+        None => Ok(()),
+    }
+}
+
+/// The command tools whose name, command or description holds every word of `query`, at most 20.
+fn search(id: Value, catalog: &Catalog, query: &str) -> Value {
+    let words: Vec<String> = query.to_lowercase().split_whitespace().map(str::to_string).collect();
+    if query.len() > MAX_QUERY || words.len() > MAX_WORDS {
+        return tool_error(id, &format!("a search is at most {MAX_QUERY} bytes and {MAX_WORDS} words"));
+    }
+    let matching: Vec<&CommandTool> = catalog
+        .commands
+        .iter()
+        .filter(|c| {
+            let text = format!("{} {} {}", c.name, c.id, c.description).to_lowercase();
+            words.iter().all(|w| text.contains(w.as_str()))
+        })
+        .collect();
+    let found: Vec<Value> = matching
+        .iter()
+        .take(MAX_FOUND)
+        .map(|c| {
+            json!({
+                "command": c.id,
+                "description": c.description,
+                "inputSchema": c.schema,
+                "annotations": { "readOnlyHint": c.read_only, "destructiveHint": c.destructive },
+            })
+        })
+        .collect();
+    let more = matching.len().saturating_sub(MAX_FOUND);
+    let answer = json!({ "commands": found, "more": more, "run": "execute_command {command, params}" });
+    result(id, json!({ "content": [{ "type": "text", "text": answer.to_string() }], "isError": false }))
 }
 
 fn result(id: Value, result: Value) -> Value {

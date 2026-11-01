@@ -19,5 +19,8 @@ archforge-mcp.workspace = true
 archforge-mof.workspace = true
 serde_json.workspace = true
 
+[dev-dependencies]
+archforge-engine.workspace = true
+
 [lints]
 workspace = true

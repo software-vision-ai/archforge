@@ -22,7 +22,7 @@ impl Backend for Fake {
 }
 
 fn ask(backend: &dyn Backend, message: Value) -> Value {
-    handle(message.to_string().as_bytes(), backend).unwrap()
+    handle(message.to_string().as_bytes(), backend, &Catalog::default()).unwrap()
 }
 
 #[test]
@@ -35,7 +35,7 @@ fn initialize_answers_the_clients_version_when_spoken_and_the_newest_otherwise()
     assert_eq!(r["result"]["protocolVersion"], "2025-06-18");
     assert_eq!(ask(&fake, json!({ "jsonrpc": "2.0", "id": "p", "method": "ping" }))["result"], json!({}));
     // A notification is never answered.
-    assert!(handle(br#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#, &fake).is_none());
+    assert!(handle(br#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#, &fake, &Catalog::default()).is_none());
     assert_eq!(ask(&fake, json!({ "jsonrpc": "2.0", "id": 3, "method": "resources/list" }))["error"]["code"], -32601);
 }
 
@@ -87,7 +87,7 @@ fn a_line_too_long_is_answered_and_the_next_one_still_served() {
     let mut input = vec![b'x'; MAX_LINE + 5];
     input.extend_from_slice(b"\n{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}\n");
     let mut out = Vec::new();
-    serve(&mut std::io::BufReader::new(&input[..]), &mut out, &fake).unwrap();
+    serve(&mut std::io::BufReader::new(&input[..]), &mut out, &fake, &Catalog::default()).unwrap();
     let replies: Vec<Value> = out.split(|b| *b == b'\n').filter(|l| !l.is_empty()).map(|l| serde_json::from_slice(l).unwrap()).collect();
     assert_eq!(replies.len(), 2);
     assert_eq!(replies[0]["error"]["code"], -32700);
@@ -126,6 +126,124 @@ fn hostile_messages_never_crash_the_server() {
         input.push(b'\n');
     }
     let mut out = Vec::new();
-    serve(&mut std::io::BufReader::new(&input[..]), &mut out, &fake).unwrap();
+    serve(&mut std::io::BufReader::new(&input[..]), &mut out, &fake, &Catalog::default()).unwrap();
     assert!(!out.is_empty());
+}
+
+/// Two commands as the engine describes them: one that changes the model, one that reads it.
+fn infos() -> Vec<Value> {
+    vec![
+        json!({ "id": "er.entity.add", "label": "Add entity", "journal": true, "params": [
+            { "key": "schema", "kind": "string", "default": null, "range": null, "choices": [], "meaning": "the schema's id" },
+            { "key": "name", "kind": "string", "default": "", "range": null, "choices": [], "meaning": "its name" },
+            { "key": "width", "kind": "integer", "default": 240, "range": [40.0, 4000.0], "choices": [], "meaning": "its width" },
+            { "key": "kind", "kind": "string", "default": "table", "range": null, "choices": ["table", "view"], "meaning": "what it is" },
+            { "key": "unique", "kind": "bool", "default": false, "range": null, "choices": [], "meaning": "a flag" },
+        ] }),
+        json!({ "id": "er.foreign-key.list", "label": "List foreign keys", "journal": false, "params": [] }),
+        json!({ "id": "view.select", "label": "Select", "journal": true, "undoable": false, "params": [] }),
+        json!({ "id": "edit.undo", "label": "Undo", "journal": true, "params": [] }),
+        // Would shadow a general tool, and has a kind this does not know: both left out.
+        json!({ "id": "inspect.document", "label": "Shadow", "journal": false, "params": [] }),
+        json!({ "id": "er.odd", "label": "Odd", "journal": true, "params": [{ "key": "x", "kind": "colour", "default": null, "range": null, "choices": [], "meaning": "?" }] }),
+    ]
+}
+
+#[test]
+fn every_command_becomes_a_tool_with_a_schema_from_its_documentation() {
+    let catalog = Catalog::new(&infos(), false);
+    let list = catalog.list();
+    let tools = list["tools"].as_array().unwrap();
+    assert_eq!(tools.len(), 11, "the general eight, two commands and view.select");
+    assert_eq!(tools.iter().filter(|t| t["name"] == "inspect_document").count(), 1, "never shadowed");
+    let add = tools.iter().find(|t| t["name"] == "er_entity_add").unwrap();
+    assert_eq!(add["inputSchema"]["required"], json!(["schema"]));
+    assert_eq!(
+        add["inputSchema"]["properties"]["width"],
+        json!({ "type": "integer", "description": "its width", "default": 240, "minimum": 40.0, "maximum": 4000.0 })
+    );
+    assert_eq!(add["inputSchema"]["properties"]["kind"]["enum"], json!(["table", "view"]));
+    assert_eq!(add["inputSchema"]["properties"]["unique"]["type"], "boolean");
+    assert_eq!((add["annotations"]["readOnlyHint"].clone(), add["annotations"]["destructiveHint"].clone()), (json!(false), json!(true)));
+    assert_eq!(add["inputSchema"]["properties"]["coalesce"]["type"], "string", "the engine's own key on undoable commands");
+    let list_fk = tools.iter().find(|t| t["name"] == "er_foreign_key_list").unwrap();
+    assert_eq!(list_fk["annotations"]["readOnlyHint"], true);
+    assert!(list_fk["inputSchema"]["properties"].get("coalesce").is_none());
+    // A change of the view alone: neither read-only nor destructive, and said so.
+    let select = tools.iter().find(|t| t["name"] == "view_select").unwrap();
+    assert_eq!((select["annotations"]["readOnlyHint"].clone(), select["annotations"]["destructiveHint"].clone()), (json!(false), json!(false)));
+    assert!(select["description"].as_str().unwrap().contains("not recorded for undo"));
+}
+
+#[test]
+fn a_command_tool_runs_its_command_and_refuses_what_it_does_not_take() {
+    let fake = Fake::ok();
+    let catalog = Catalog::new(&infos(), false);
+    let call = |name: &str, args: Value| {
+        handle(
+            json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": name, "arguments": args } }).to_string().as_bytes(),
+            &fake,
+            &catalog,
+        )
+        .unwrap()
+    };
+    let r = call("er_entity_add", json!({ "schema": "s1", "name": "Invoice" }));
+    assert_eq!(r["result"]["isError"], false);
+    assert_eq!(
+        fake.calls.borrow()[0],
+        ("engine.execute".into(), json!({ "command": "er.entity.add", "params": { "schema": "s1", "name": "Invoice" } }))
+    );
+    assert!(call("er_entity_add", json!({ "name": "x" }))["result"]["content"][0]["text"].as_str().unwrap().contains("needs \"schema\""));
+    assert!(
+        call("er_entity_add", json!({ "schema": "s", "colour": "red" }))["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap()
+            .contains("no argument \"colour\"")
+    );
+    assert_eq!(fake.calls.borrow().len(), 1, "refused calls reach nothing");
+    assert_eq!(call("er_entity_fly", json!({}))["error"]["code"], -32602);
+}
+
+#[test]
+fn the_compact_listing_offers_a_search_and_the_tools_still_answer() {
+    let fake = Fake::ok();
+    let catalog = Catalog::new(&infos(), true);
+    let list = catalog.list();
+    let names: Vec<&str> = list["tools"].as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap()).collect();
+    assert!(names.contains(&"search_tools") && !names.contains(&"er_entity_add"));
+    let found = handle(
+        json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": "search_tools", "arguments": { "query": "add entity" } } })
+            .to_string()
+            .as_bytes(),
+        &fake,
+        &catalog,
+    )
+    .unwrap();
+    let text: Value = serde_json::from_str(found["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(text["commands"][0]["command"], "er.entity.add");
+    assert_eq!(text["commands"][0]["annotations"]["destructiveHint"], true);
+    assert_eq!(text["more"], 0);
+    // What search finds runs through a listed tool.
+    let r = handle(json!({ "jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": { "name": "execute_command", "arguments": { "command": "er.entity.add", "params": { "schema": "s" } } } }).to_string().as_bytes(), &fake, &catalog).unwrap();
+    assert_eq!(r["result"]["isError"], false);
+    let huge = handle(
+        json!({ "jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": { "name": "search_tools", "arguments": { "query": "a ".repeat(40) } } })
+            .to_string()
+            .as_bytes(),
+        &fake,
+        &catalog,
+    )
+    .unwrap();
+    assert!(huge["result"]["content"][0]["text"].as_str().unwrap().contains("at most"));
+    let init = handle(br#"{"jsonrpc":"2.0","id":5,"method":"initialize","params":{}}"#, &fake, &catalog).unwrap();
+    assert!(init["result"]["instructions"].as_str().unwrap().contains("search_tools"));
+    let r = handle(
+        json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": { "name": "er_entity_add", "arguments": { "schema": "s" } } })
+            .to_string()
+            .as_bytes(),
+        &fake,
+        &catalog,
+    )
+    .unwrap();
+    assert_eq!(r["result"]["isError"], false);
 }
