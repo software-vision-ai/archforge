@@ -186,8 +186,13 @@ pub(crate) fn project_tabs(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rec
     let mid = crate::home::bar_mid(r);
     paint.rect_filled(Rect::from_center_size(pos2(after + 16.5, mid), vec2(1.0, 20.0)), 0.0, p.border);
     let mut click = None;
-    let tabs: Vec<(String, bool, bool)> =
-        shell.tabs.iter().enumerate().map(|(i, t)| (t.name.clone(), shell.active == Some(i), t.closing())).collect();
+    let tabs: Vec<(String, bool, bool)> = shell
+        .tabs
+        .iter()
+        .enumerate()
+        // A project with unsaved changes shows a dot before its name, as the title does (AR-22).
+        .map(|(i, t)| (if shell.tab_unsaved(i) { format!("• {}", t.name) } else { t.name.clone() }, shell.active == Some(i), t.closing()))
+        .collect();
     let widths: Vec<f32> = tabs.iter().map(|(name, ..)| ux::galley(&paint, name, types::UI_STRONG, p.text, None).size().x).collect();
     let home_on = shell.active.is_none();
     let home_label = ux::galley(&paint, &tr("Home"), types::UI, if home_on { p.accent } else { p.text }, None);

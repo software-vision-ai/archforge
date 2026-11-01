@@ -295,6 +295,10 @@ struct SavingHost {
     closed: std::sync::Mutex<Vec<std::path::PathBuf>>,
     /// Each closing's answer, sent by the test.
     closings: std::sync::Mutex<Vec<std::sync::mpsc::Sender<Result<(), String>>>>,
+    /// The projects put back to their last save and closed (Don't save), and those closed without
+    /// writing what waited (Close without writing).
+    discarded: std::sync::Mutex<Vec<std::path::PathBuf>>,
+    unwritten: std::sync::Mutex<Vec<std::path::PathBuf>>,
 }
 
 impl crate::ProjectHost for SavingHost {
@@ -314,6 +318,20 @@ impl crate::ProjectHost for SavingHost {
 
     fn close(&self, project: &std::path::Path) -> std::sync::mpsc::Receiver<Result<(), String>> {
         self.closed.lock().unwrap().push(project.to_path_buf());
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.closings.lock().unwrap().push(tx);
+        rx
+    }
+
+    fn discard_and_close(&self, project: &std::path::Path) -> std::sync::mpsc::Receiver<Result<(), String>> {
+        self.discarded.lock().unwrap().push(project.to_path_buf());
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.closings.lock().unwrap().push(tx);
+        rx
+    }
+
+    fn close_without_writing(&self, project: &std::path::Path) -> std::sync::mpsc::Receiver<Result<(), String>> {
+        self.unwritten.lock().unwrap().push(project.to_path_buf());
         let (tx, rx) = std::sync::mpsc::channel();
         self.closings.lock().unwrap().push(tx);
         rx
@@ -449,7 +467,11 @@ fn a_save_whose_tab_closes_before_the_host_answers_is_not_known() {
     let (mut h, host) = saving_harness(Some(commerce()), None);
     add_schema(&mut h, "shop");
     let ticket = answer(h.state_mut(), "app.save", &serde_json::json!({})).unwrap()["ticket"].clone();
+    // Unsaved, so closing asks; Don't save closes it while the save still runs.
     h.state_mut().close_tab(0);
+    assert!(matches!(h.state().ask, Some(crate::close_ask::Ask::Unsaved { .. })));
+    h.state_mut().ask = None;
+    h.state_mut().discard_tab(0, true);
     h.run_steps(2);
     host.closings.lock().unwrap().pop().unwrap().send(Ok(())).unwrap();
     h.run_steps(2);
@@ -476,7 +498,7 @@ fn open_project_asks_the_picker_and_the_host_and_shows_the_model_it_read() {
     tx.send(Ok(opened)).unwrap();
     h.run_steps(4);
     let shell = h.state();
-    assert_eq!(shell.title(), "Shop — Archforge");
+    assert_eq!(shell.title(), "• Shop — Archforge", "opened with unsaved changes: the title marks them");
     assert_eq!(shell.state.recent.first().map(|r| r.name.as_str()), Some("Shop"));
     let session = shell.session.as_ref().expect("the model read opens");
     assert!(session.doc().alive().any(|o| archforge_core::name_of(session.doc(), o) == "shop"));
@@ -606,6 +628,12 @@ fn projects_open_in_tabs_that_keep_their_models_and_home_keeps_them_open() {
     let at = rect_of(&h, "workspace.header.project.0.close").center();
     click(&mut h, at);
     h.run_steps(2);
+    // It holds unsaved changes, so it asks: Save, and once saved it closes.
+    let at = rect_of(&h, "close-ask.save").center();
+    click(&mut h, at);
+    h.run_steps(2);
+    host.saves.lock().unwrap().pop().expect("the save asked for").send(Ok(true)).unwrap();
+    h.run_steps(2);
     assert_eq!(host.closed.lock().unwrap().as_slice(), [std::path::PathBuf::from("/tmp/Commerce platform.archforge")]);
     assert!(h.state().tabs.len() == 2 && h.state().tabs[0].closing());
     // While it closes it steps aside: the tab beside it shows, and it cannot be shown.
@@ -624,14 +652,22 @@ fn projects_open_in_tabs_that_keep_their_models_and_home_keeps_them_open() {
     // Its next change clears the word; once closed, the tab beside it shows, and Home after the last.
     add_schema(&mut h, "billing");
     assert_eq!(h.state().close_error(), None);
+    // Unsaved again: Don't save closes it without writing, put back to its last save.
     let at = rect_of(&h, "workspace.header.project.0.close").center();
     click(&mut h, at);
+    h.run_steps(2);
+    let at = rect_of(&h, "close-ask.discard").center();
+    click(&mut h, at);
+    assert_eq!(host.discarded.lock().unwrap().as_slice(), [std::path::PathBuf::from("/tmp/Commerce platform.archforge")]);
     host.closings.lock().unwrap().pop().unwrap().send(Ok(())).unwrap();
     h.run_steps(2);
     assert_eq!(h.state().tabs.len(), 1);
-    assert_eq!(h.state().title(), "Library — Archforge");
+    assert_eq!(h.state().title(), "• Library — Archforge");
     assert_eq!(schema_names(&h), ["books"]);
     let at = rect_of(&h, "workspace.header.project.0.close").center();
+    click(&mut h, at);
+    h.run_steps(2);
+    let at = rect_of(&h, "close-ask.discard").center();
     click(&mut h, at);
     host.closings.lock().unwrap().pop().unwrap().send(Ok(())).unwrap();
     h.run_steps(2);
@@ -2051,6 +2087,10 @@ fn a_skill_opens_in_its_own_tab_and_keeps_its_markdown() {
     // So does closing the project: it stays open on the skill and says why.
     let project = h.state().active.unwrap();
     h.state_mut().close_tab(project);
+    // Unsaved, so it asks first; Save (with no host to save to) goes on to close.
+    assert!(matches!(h.state().ask, Some(crate::close_ask::Ask::Unsaved { .. })));
+    h.state_mut().ask = None;
+    h.state_mut().save_and_close(project);
     h.run();
     assert_eq!(h.state().active, Some(project));
     assert!(h.state().tabs[project].close_error.is_some() && !h.state().tabs[project].closing());
@@ -5286,4 +5326,95 @@ fn the_models_tree_nests_packages_lists_members_and_moves_a_class_by_drag_or_pro
     assert_eq!(h.state().canvas.toast.as_ref().map(|t| t.text.as_str()), Some("Billing removed; what it held moved to Commerce"));
     h.state_mut().session.as_mut().unwrap().undo().unwrap();
     assert_eq!(package_of(&h, order).as_deref(), Some("Billing"));
+}
+
+#[test]
+fn quitting_asks_about_each_unsaved_project_in_turn_and_cancel_stops_it() {
+    let (mut h, host) = saving_harness(Some(commerce()), None);
+    add_schema(&mut h, "shop");
+    h.state_mut().open_project(crate::Opened { name: "Library".into(), path: "/tmp/Library.archforge".into(), ..Default::default() });
+    h.run_steps(2);
+    add_schema(&mut h, "books");
+    // Both tabs and the title mark their unsaved changes.
+    assert_eq!(h.state().title(), "• Library — Archforge");
+    assert!(h.state().tab_unsaved(0) && h.state().tab_unsaved(1));
+    assert!(painted(&h).iter().any(|t| t == "• Commerce platform"), "{:?}", painted(&h));
+    // Quit: the first unsaved project is asked about; Cancel stops quitting, nothing closes.
+    h.state_mut().request_quit();
+    h.run_steps(2);
+    assert!(h.state().quitting());
+    assert!(matches!(&h.state().ask, Some(crate::close_ask::Ask::Unsaved { path }) if path.ends_with("Commerce platform.archforge")));
+    assert!(!h.state().quit_confirmed());
+    let at = rect_of(&h, "close-ask.cancel").center();
+    click(&mut h, at);
+    h.run_steps(2);
+    assert!(!h.state().quitting() && h.state().ask.is_none() && h.state().tabs.len() == 2);
+    // Quit again: Save for Commerce (it closes once saved), then Don't save for Library.
+    h.state_mut().request_quit();
+    h.run_steps(2);
+    let at = rect_of(&h, "close-ask.save").center();
+    click(&mut h, at);
+    h.run_steps(2);
+    host.saves.lock().unwrap().pop().expect("Commerce is saved").send(Ok(true)).unwrap();
+    h.run_steps(2);
+    host.closings.lock().unwrap().pop().expect("then it closes").send(Ok(())).unwrap();
+    h.run_steps(3);
+    assert!(matches!(&h.state().ask, Some(crate::close_ask::Ask::Unsaved { path }) if path.ends_with("Library.archforge")));
+    let at = rect_of(&h, "close-ask.discard").center();
+    click(&mut h, at);
+    assert_eq!(host.discarded.lock().unwrap().as_slice(), [std::path::PathBuf::from("/tmp/Library.archforge")]);
+    host.closings.lock().unwrap().pop().expect("Library closes without writing").send(Ok(())).unwrap();
+    // Every project answered: quitting is confirmed and the window closes.
+    h.run_steps(3);
+    assert!(h.state().quit_confirmed() && !h.state().quitting(), "the window is asked to close once every project is answered");
+}
+
+#[test]
+fn a_project_whose_changes_cannot_be_written_closes_only_after_saying_its_changes_are_lost() {
+    let (mut h, host) = saving_harness(Some(commerce()), None);
+    // Saved, so closing asks nothing; the host cannot write and refuses.
+    let at = rect_of(&h, "workspace.header.project.0.close").center();
+    click(&mut h, at);
+    h.run_steps(2);
+    host.closings.lock().unwrap().pop().expect("the host is asked").send(Err("the project server stopped".into())).unwrap();
+    h.run_steps(2);
+    assert_eq!(h.state().close_error(), Some("the project server stopped"));
+    // Closing again offers Close without writing, which asks once more.
+    let at = rect_of(&h, "workspace.header.project.0.close").center();
+    click(&mut h, at);
+    h.run_steps(2);
+    assert!(matches!(h.state().ask, Some(crate::close_ask::Ask::CannotWrite { .. })));
+    assert!(painted(&h).iter().any(|t| t == "the project server stopped"));
+    let at = rect_of(&h, "close-ask.close-anyway").center();
+    click(&mut h, at);
+    h.run_steps(2);
+    assert!(matches!(h.state().ask, Some(crate::close_ask::Ask::ConfirmLoss { .. })));
+    assert!(host.unwritten.lock().unwrap().is_empty(), "nothing is lost before the second answer");
+    let at = rect_of(&h, "close-ask.confirm").center();
+    click(&mut h, at);
+    assert_eq!(host.unwritten.lock().unwrap().len(), 1, "closed without writing, not put back to its last save");
+    assert!(host.discarded.lock().unwrap().is_empty());
+    host.closings.lock().unwrap().pop().unwrap().send(Ok(())).unwrap();
+    h.run_steps(2);
+    assert!(h.state().tabs.is_empty());
+}
+
+#[test]
+fn save_on_close_waits_for_a_running_save_and_asks_again_when_edits_came_in_meanwhile() {
+    let (mut h, host) = saving_harness(Some(commerce()), None);
+    add_schema(&mut h, "shop");
+    h.state_mut().save();
+    h.state_mut().close_tab(0);
+    h.run_steps(2);
+    let at = rect_of(&h, "close-ask.save").center();
+    click(&mut h, at);
+    h.run_steps(2);
+    assert_eq!(host.saves.lock().unwrap().len(), 1, "the running save is waited for, not a second one");
+    assert!(host.closed.lock().unwrap().is_empty(), "nothing closes before the save answers");
+    // An edit arrives while the save runs: once it answers, the question comes again.
+    add_schema(&mut h, "crm");
+    host.saves.lock().unwrap().pop().unwrap().send(Ok(true)).unwrap();
+    h.run_steps(2);
+    assert!(matches!(h.state().ask, Some(crate::close_ask::Ask::Unsaved { .. })), "{:?}", h.state().ask);
+    assert!(host.closed.lock().unwrap().is_empty());
 }

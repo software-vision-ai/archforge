@@ -537,3 +537,14 @@ str		{what} removed	Supprimé : {what}
 # Paquetages (AR-17)
 str		Class · {package}	Classe · {package}
 str		{name} removed; what it held moved to {parent}	{name} supprimé ; son contenu a été déplacé vers {parent}
+# Modifications non enregistrées à la fermeture (AR-22)
+str		Close and lose changes	Fermer et perdre les modifications
+str		Close without writing	Fermer sans écrire
+str		Close {name} without writing?	Fermer {name} sans écrire ?
+str		Don't save	Ne pas enregistrer
+str		If you don't save, the changes since the last save are lost.	Si vous n'enregistrez pas, les modifications depuis le dernier enregistrement sont perdues.
+str		It stays open until its changes are written, or you close it without them.	Il reste ouvert jusqu'à ce que ses modifications soient écrites ou que vous le fermiez sans elles.
+str		Keep open	Garder ouvert
+str		Save the changes to {name}?	Enregistrer les modifications de {name} ?
+str		The changes since the last write are lost.	Les modifications depuis la dernière écriture sont perdues.
+str		The changes to {name} cannot be written	Les modifications de {name} ne peuvent pas être écrites

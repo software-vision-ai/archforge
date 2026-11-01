@@ -411,6 +411,16 @@ impl Project {
         c.exec_drop("CALL DOLT_COMMIT('-Am', ?, '--author', ?)", (message, AUTHOR)).map_err(sql("cannot save the project"))?;
         Ok(true)
     }
+
+    /// Don't save: puts the project back to its last save, throwing away every change written
+    /// since (AR-22, owner decision): the tables it had are reset, and those made since (a
+    /// notation's table first used after the save) are removed. A project never saved goes back
+    /// to how it was created; its model's tables are made again when rows next go there.
+    pub fn discard(&self) -> Result<(), Error> {
+        let mut c = self.model_connection()?;
+        c.query_drop("CALL DOLT_RESET('--hard')").map_err(sql("cannot put the project back to its last save"))?;
+        c.query_drop("CALL DOLT_CLEAN()").map_err(sql("cannot remove the tables made since the last save"))
+    }
 }
 
 /// Splits `rows` into runs of at most [`BATCH`] rows and [`BATCH_BYTES`] bytes (a run holds at
