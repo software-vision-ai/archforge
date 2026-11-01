@@ -229,6 +229,8 @@ name = "archforge"
 version = "0.1.0"
 dependencies = [
  "archforge-control",
+ "archforge-core",
+ "archforge-diagram",
  "archforge-dolt",
  "archforge-mcp",
  "archforge-mof",
@@ -238,6 +240,7 @@ dependencies = [
  "craft-atomic",
  "eframe",
  "egui",
+ "egui_kittest",
  "fontdb",
  "getrandom 0.3.4",
  "log",
