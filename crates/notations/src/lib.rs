@@ -61,8 +61,8 @@ pub const PARTS: &[Part] = &[
     },
 ];
 
-/// The notations a project's view asks about their diagrams and elements; UML has none yet.
-pub static NOTATIONS: &[&dyn Notation] = &[&archforge_er::ErNotation];
+/// The notations a project's view asks about their diagrams and elements.
+pub static NOTATIONS: &[&dyn Notation] = &[&archforge_er::ErNotation, &archforge_uml::UmlNotation];
 
 /// A project's session: its store, the view and the commands.
 pub type Session = archforge_engine::Session<Store, ProjectView>;
@@ -103,6 +103,7 @@ pub fn registry() -> Result<Arc<archforge_engine::Registry<Store, ProjectView>>,
     let mut specs = archforge_engine::cmd::edit::specs();
     specs.extend(archforge_diagram::project::specs());
     specs.extend(archforge_er::commands::specs());
+    specs.extend(archforge_uml::commands::specs());
     specs.extend(archforge_diagram::commands::specs::<ProjectView>());
     specs.extend(archforge_core::skills::specs::<ProjectView>());
     archforge_engine::Registry::new(specs)

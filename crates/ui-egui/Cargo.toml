@@ -18,6 +18,7 @@ archforge-diagram.workspace = true
 archforge-engine.workspace = true
 archforge-er.workspace = true
 archforge-notations.workspace = true
+archforge-uml.workspace = true
 archforge-mof.workspace = true
 archforge-names.workspace = true
 egui.workspace = true
@@ -32,7 +33,6 @@ egui_commonmark.workspace = true
 png.workspace = true
 
 [dev-dependencies]
-archforge-uml.workspace = true
 egui_kittest = { workspace = true, features = ["wgpu"] }
 serde_json.workspace = true
 

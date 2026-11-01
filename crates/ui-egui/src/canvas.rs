@@ -402,7 +402,7 @@ fn tab_strip(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
                 return Some((*id, archforge_core::skills::name_of(store, d), &icons::SKILL));
             }
             let name = crate::diagrams::diagram_name(store, d);
-            Some((*id, if name.is_empty() { tr("Unnamed diagram") } else { name }, &icons::ER_DIAGRAM))
+            Some((*id, if name.is_empty() { tr("Unnamed diagram") } else { name }, crate::kinds::diagram_icon(shell.kinds, store, d)))
         })
         .collect();
     let active = shell.canvas.active;
@@ -719,11 +719,15 @@ fn draw_node(
                 Some(f) => ink_for(f),
                 None => p,
             };
+            // A plain card (a class) takes the surface, the border and the muted eyebrow.
+            let plain = card.tone == archforge_diagram::figure::Tone::Plain;
+            let (fill, edge, eyebrow, line) =
+                if plain { (p.surface, p.border, ink.text_secondary, p.border) } else { (p.entity, p.entity_edge, ink.entity_ink, p.entity_line) };
             let p = &Palette {
-                entity: dim(look.fill.unwrap_or(p.entity)),
-                entity_edge: dim(look.stroke.unwrap_or(p.entity_edge)),
-                entity_ink: dim(ink.entity_ink),
-                entity_line: dim(look.stroke.map_or(p.entity_line, |c| c.gamma_multiply(0.5))),
+                entity: dim(look.fill.unwrap_or(fill)),
+                entity_edge: dim(look.stroke.unwrap_or(edge)),
+                entity_ink: dim(eyebrow),
+                entity_line: dim(look.stroke.map_or(line, |c| c.gamma_multiply(0.5))),
                 text: dim(look.text.unwrap_or(ink.text)),
                 text_muted: dim(ink.text_muted),
                 text_secondary: dim(ink.text_secondary),
@@ -804,6 +808,10 @@ fn draw_rows(inner: &egui::Painter, p: &Palette, card: &archforge_diagram::figur
             }
             inner.rect_filled(Rect::from_min_size(pos2(rect.left(), line_y), vec2(rect.width(), 1.0)), 0.0, p.entity_line);
             slot += 0.5;
+        }
+        // An empty compartment of several still takes a row, so the line between them shows.
+        if rows.is_empty() && card.compartments.len() > 1 {
+            slot += 1.0;
         }
         for row in rows {
             let y = rect.top() + (ENTITY_FIRST_ROW + slot * ENTITY_ROW) * z;
@@ -1497,4 +1505,5 @@ pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
         .chain(crate::kinds::KINDS.iter().flat_map(|k| k.tools().iter().flat_map(|t| std::iter::once(t.hint).chain(t.chevron.map(|(_, hint)| hint)))))
         .chain(crate::kinds::KINDS.iter().filter_map(|k| k.adorner().map(|(_, hint)| hint)))
         .chain(archforge_er::figures::WORDS.iter().copied())
+        .chain(archforge_uml::WORDS.iter().copied())
 }

@@ -5,7 +5,8 @@ workspace once a project is open (`workspace`: the project bar, the activity rai
 explorer over the session (`explorer`: each notation's rows, ER's schemas, tables, columns and
 skills; `+` adds what the selection's notation offers, a name is typed in place, Delete asks when
 other things go with it; `notation_ui::NotationUi` is what a notation brings to the tree, the
-search, the problems and Properties, `er_ui` ER's),
+search, the problems and Properties, `er_ui` ER's, `uml_ui` UML's packages and classes and the class
+diagram's Class tool),
 the Diagrams explorer (`diagrams`: the model's folders and diagrams, the model behind the open
 diagram, the New diagram dialog from its `+` and the tab strip's), the centre (`canvas`: the
 diagram tabs, the open diagram drawn read-only from the diagram metamodel in the design's style

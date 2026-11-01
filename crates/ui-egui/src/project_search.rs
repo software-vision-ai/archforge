@@ -44,7 +44,11 @@ fn cut(s: &str) -> String {
 }
 
 /// The open project's diagrams and elements, in a stable order.
-pub(crate) fn index(uis: &[&'static dyn crate::notation_ui::NotationUi], store: &Store) -> Vec<Entry> {
+pub(crate) fn index(
+    kinds: &[&'static dyn crate::kinds::DiagramKind],
+    uis: &[&'static dyn crate::notation_ui::NotationUi],
+    store: &Store,
+) -> Vec<Entry> {
     let mut out = Vec::new();
     let mut push = |found: Found, icon: &'static ux::Icon, kind: u8, label: String, detail: String| {
         if label.trim().is_empty() {
@@ -61,7 +65,7 @@ pub(crate) fn index(uis: &[&'static dyn crate::notation_ui::NotationUi], store: 
         match class {
             c if c == DIAGRAM => {
                 let label = store.get(o, diagram::NAME).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default();
-                push(Found::Diagram(id), &icons::ER_DIAGRAM, 0, label, tr("Diagram"));
+                push(Found::Diagram(id), crate::kinds::diagram_icon(kinds, store, o), 0, label, tr("Diagram"));
             }
             c if c == archforge_core::SKILL => push(Found::Element(id), &icons::SKILL, 6, archforge_core::skills::name_of(store, o), tr("Skill")),
             // A note: a node that shows no element, found by its text's first line.
@@ -173,7 +177,7 @@ mod tests {
         id(s.execute("er.entity.add", &json!({ "schema": schema, "name": "Customer_order" })).unwrap().value);
         s.execute("er.attribute.add", &json!({ "entity": order, "name": "order_id", "type": "BIGINT" })).unwrap();
         s.execute("diagram.add", &json!({ "kind": "er", "element": schema, "name": "Orders" })).unwrap();
-        let index = index(crate::notation_ui::UIS, s.doc());
+        let index = index(crate::kinds::KINDS, crate::notation_ui::UIS, s.doc());
         let (diagrams, elements) = hits(&index, "order");
         assert_eq!(diagrams.iter().map(|e| e.label.as_str()).collect::<Vec<_>>(), ["Orders"]);
         // The table named so first, then what starts so, then a word inside a name.

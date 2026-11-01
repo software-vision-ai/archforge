@@ -8,6 +8,7 @@ use egui::{Pos2, Rect};
 
 use crate::Shell;
 use crate::canvas::View;
+use crate::i18n::tr;
 use crate::kinds::{DiagramKind, KindTool, ToolUse};
 use crate::ux::{Palette, icons};
 
@@ -32,6 +33,38 @@ impl DiagramKind for ErKind {
 
     fn tools(&self) -> &'static [KindTool] {
         TOOLS
+    }
+
+    fn word(&self) -> String {
+        tr("ER diagram")
+    }
+
+    fn owner_word(&self) -> String {
+        tr("Schema")
+    }
+
+    fn new_owner(&self) -> String {
+        tr("New schema")
+    }
+
+    fn owners(&self, store: &Store) -> Vec<Obj> {
+        let Some(model) = archforge_core::skills::model_of(store) else { return Vec::new() };
+        store
+            .list(model, archforge_core::model::MEMBER)
+            .unwrap_or_default()
+            .iter()
+            .filter_map(archforge_mof::Value::as_ref)
+            .filter(|o| store.is_alive(*o) && store.class_of(*o).ok() == Some(archforge_er::SCHEMA))
+            .collect()
+    }
+
+    fn owner_of(&self, store: &Store, selected: Obj) -> Option<Obj> {
+        if store.class_of(selected).ok() == Some(archforge_er::SCHEMA) { Some(selected) } else { archforge_er::rules::schema_of(store, selected) }
+    }
+
+    fn add_owner(&self, shell: &mut Shell, name: &str) -> Result<String, String> {
+        crate::editing::run(shell, "er.schema.add", serde_json::json!({ "name": name }))
+            .map(|v| v.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
     }
 
     fn status_marks(&self) -> bool {

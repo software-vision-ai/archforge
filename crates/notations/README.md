@@ -3,7 +3,8 @@
 **Purpose.** The notations a project holds, composed. Each metamodel brings what it adds to the
 store as a `Part`: its metamodel, its index and slabs, and the tables and list tables its objects
 are stored in (`PARTS`: the shared core and the diagrams first, then ER and UML). Each notation
-brings what it answers in the project's view as a `Notation` (`NOTATIONS`: ER; UML has none yet).
+brings what it answers in the project's view as a `Notation` (`NOTATIONS`: ER, and UML's class
+diagrams).
 So one universe, one store, one database, one view and one command table hold the notations side
 by side. The shell, the host and the agent's tools make projects here and name no
 notation for it.

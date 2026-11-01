@@ -459,3 +459,17 @@ str		Simple	単純
 str		Full	完全
 str		Partial	部分
 str		{parent} has no primary key yet, so there is nothing in {child} to point at.	{parent} にはまだ主キーがないため、{child} から参照できるものがありません。
+# クラス図 (archforge-3c5.1.1)
+str		Add class	クラスを追加
+str		Class	クラス
+str		Class diagram	クラス図
+str		Class · model, in every diagram	クラス · モデル、すべての図に
+str		New package	新しいパッケージ
+str		On this class · {n}	このクラスに · {n}
+str		On this package · {n}	このパッケージに · {n}
+str		Package	パッケージ
+str		Package · model	パッケージ · モデル
+str		The diagram is of no package	この図はどのパッケージにも属していません
+str		This class	このクラス
+str		This package	このパッケージ
+plural		+ {n} more member	+ 他 {n} メンバー

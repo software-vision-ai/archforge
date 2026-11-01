@@ -78,6 +78,7 @@ pub fn card(store: &Store, table: Obj, diagram: Obj) -> Option<Card> {
         compartments: vec![rows],
         more: ("+ {n} more column", "+ {n} more columns"),
         elsewhere: elsewhere.is_some(),
+        tone: archforge_diagram::figure::Tone::Tinted,
     })
 }
 
