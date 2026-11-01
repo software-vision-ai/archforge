@@ -189,7 +189,23 @@ pub(crate) fn member_of(store: &Store, o: Obj) -> Option<(Obj, MemberKind)> {
 pub(crate) fn class_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, subject: &Subject) {
     let (Some(class), Some(class_id)) = (subject.obj, subject.id) else { return };
     let width = r.width() - 2.0 * PAD;
-    crate::panels::name_field(shell, ui, p, pos2(r.left() + PAD, y), width, subject, "uml.class.rename", "class");
+    let half = ((width - 8.0) / 2.0).max(0.0);
+    crate::panels::name_field(shell, ui, p, pos2(r.left() + PAD, y), half, subject, "uml.class.rename", "class");
+    // Its package: a pick moves it there (AR-17).
+    let (here, choices) = match shell.session.as_ref() {
+        Some(s) => {
+            let store = s.doc();
+            let here = archforge_uml::commands::package_of(store, class).map(|p| package_path(store, p)).unwrap_or_default();
+            let choices: Vec<(Uuid, String)> = archforge_uml::commands::all_packages(store)
+                .into_iter()
+                .filter_map(|p| Some((store.uuid(p).ok()?, package_path(store, p))))
+                .collect();
+            (here, choices)
+        }
+        None => (String::new(), Vec::new()),
+    };
+    let package_id = "workspace.properties.class.package";
+    let field = select_field(shell, ui, p, pos2(r.left() + PAD + half + 8.0, y), half, package_id, &tr("Package"), &here, Menu::ClassPackage);
     let mut y = y + 17.0 + FIELD + 12.0;
     let was = shell.session.as_ref().is_some_and(|s| flag(s.doc(), class, archforge_uml::class::IS_ABSTRACT));
     let mut is_abstract = was;
@@ -203,6 +219,30 @@ pub(crate) fn class_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
     }
     let y = members_section(shell, ui, p, r, y, class, class_id, MemberKind::Attribute);
     members_section(shell, ui, p, r, y + 4.0, class, class_id, MemberKind::Operation);
+    // The package menu last, over the sections.
+    if shell.panels.menu == Some(Menu::ClassPackage) {
+        let items: Vec<String> = choices.iter().map(|(_, n)| n.clone()).collect();
+        if let Some(i) = menu(shell, ui, p, field, package_id, &items)
+            && let Some((to, _)) = choices.get(i)
+        {
+            match run(shell, "uml.class.move", json!({ "class": class_id.to_string(), "package": to.to_string() })) {
+                Ok(_) => shell.panels.notice = None,
+                Err(e) => shell.panels.notice = Some(e),
+            }
+        }
+    }
+}
+
+/// A package as the menus name it: its path from the top, `sales › orders`.
+fn package_path(store: &Store, package: Obj) -> String {
+    let mut names = Vec::new();
+    let mut at = Some(package);
+    while let Some(p) = at.filter(|_| names.len() < 32) {
+        names.push(name(store, p));
+        at = archforge_uml::commands::package_of(store, p);
+    }
+    names.reverse();
+    names.join(" › ")
 }
 
 /// The Attributes or Operations section with its rows and the editor; gives the y under it.

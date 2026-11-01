@@ -68,6 +68,18 @@ pub(crate) trait NotationUi: Sync {
         let _ = (store, obj);
         (0, 0, 0)
     }
+    /// The element that takes what `obj` holds when `obj` is removed (a nested package's
+    /// parent), when it hands its contents up rather than taking them along.
+    fn hands_up(&self, store: &Store, obj: Obj) -> Option<Obj> {
+        let _ = (store, obj);
+        None
+    }
+    /// The command, with its parameters, that a tree row `dragged` dropped on the row `target`
+    /// runs (a class moved into a package); none when the drop means nothing there.
+    fn drop_on(&self, store: &Store, dragged: Obj, target: Obj) -> Option<(&'static str, serde_json::Value)> {
+        let _ = (store, dragged, target);
+        None
+    }
     /// Whether `obj` holds elements that go with it.
     fn has_children(&self, store: &Store, obj: Obj) -> bool {
         let _ = (store, obj);

@@ -5205,3 +5205,85 @@ fn a_selected_associations_ends_are_set_in_properties_its_end_drags_to_another_c
     h.state_mut().session.as_mut().unwrap().undo().unwrap();
     assert_eq!(edge_count(&h), before);
 }
+
+/// The labels of the Models tree's rows, each indented by its depth.
+fn tree_labels(h: &Harness<'static, Shell>) -> Vec<String> {
+    crate::explorer::rows(h.state().notation_uis, h.state().session.as_ref().unwrap().doc(), &h.state().explorer)
+        .into_iter()
+        .map(|r| format!("{}{}{}", "  ".repeat(r.depth as usize), r.label, r.detail.map(|d| format!(" : {d}")).unwrap_or_default()))
+        .collect()
+}
+
+fn select_named(h: &mut Harness<'static, Shell>, class: archforge_mof::ClassId, name: &str) -> archforge_mof::Uuid {
+    let st = h.state().session.as_ref().unwrap().doc();
+    let o = st.alive().find(|o| st.class_of(*o).ok() == Some(class) && archforge_core::name_of(st, *o) == name).unwrap();
+    let id = st.uuid(o).unwrap();
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [id.to_string()] })).unwrap();
+    h.run();
+    id
+}
+
+#[test]
+fn the_models_tree_nests_packages_lists_members_and_moves_a_class_by_drag_or_properties() {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    crate::uml_ui::open_sample(h.state_mut()).unwrap();
+    h.run();
+    // A package added with Commerce selected goes inside it, its name open for typing.
+    let commerce = select_named(&mut h, archforge_uml::PACKAGE, "Commerce");
+    crate::explorer::add(h.state_mut(), "package");
+    let rename = h.state().explorer.rename.clone().expect("named in place");
+    assert_eq!(rename.text, "Package 1");
+    h.state_mut().explorer.rename.as_mut().unwrap().text = "Billing".into();
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    h.run();
+    let st = h.state().session.as_ref().unwrap().doc();
+    let billing = st.alive().find(|o| archforge_core::name_of(st, *o) == "Billing").unwrap();
+    assert_eq!(archforge_uml::commands::package_of(st, billing), st.by_uuid(commerce), "nested in Commerce");
+    // Expand all opens the packages and the classes: members show with their types.
+    let at = rect_of(&h, "workspace.explorer.fold-all").center();
+    click(&mut h, at);
+    let rows = tree_labels(&h);
+    for want in ["Commerce", "  Billing", "  Customer", "    id : Integer", "    email : String", "    rename()"] {
+        assert!(rows.iter().any(|r| r == want), "{want} in {rows:?}");
+    }
+    // Customer dragged onto Billing's row moves there; one undo puts it back.
+    let customer = select_named(&mut h, archforge_uml::CLASS, "Customer");
+    let billing_id = h.state().session.as_ref().unwrap().doc().uuid(billing).unwrap();
+    let from = rect_of(&h, &format!("workspace.explorer.row.{customer}")).center();
+    let to = rect_of(&h, &format!("workspace.explorer.row.{billing_id}")).center();
+    drag(&mut h, from, to);
+    let package_of = |h: &Harness<'static, Shell>, id: archforge_mof::Uuid| {
+        let st = h.state().session.as_ref().unwrap().doc();
+        archforge_uml::commands::package_of(st, st.by_uuid(id).unwrap()).map(|p| archforge_core::name_of(st, p))
+    };
+    assert_eq!(package_of(&h, customer).as_deref(), Some("Billing"), "notice {:?}", h.state().explorer.notice);
+    h.state_mut().session.as_mut().unwrap().undo().unwrap();
+    assert_eq!(package_of(&h, customer).as_deref(), Some("Commerce"));
+    // Properties' Package select moves Order into Billing.
+    let order = select_named(&mut h, archforge_uml::CLASS, "Order");
+    h.state_mut().state.show_panel(crate::state::Panel::Properties);
+    h.run();
+    let at = rect_of(&h, "workspace.properties.class.package").center();
+    click(&mut h, at);
+    let i = {
+        let st = h.state().session.as_ref().unwrap().doc();
+        archforge_uml::commands::all_packages(st).iter().position(|p| *p == billing).unwrap()
+    };
+    let at = rect_of(&h, &format!("workspace.properties.class.package.{i}")).center();
+    click(&mut h, at);
+    assert_eq!(package_of(&h, order).as_deref(), Some("Billing"));
+    // On the Commerce diagram Order is now an outsider, its package named.
+    let st = h.state().session.as_ref().unwrap().doc();
+    let d = st.by_uuid(h.state().canvas.active.unwrap()).unwrap();
+    let card = archforge_uml::figures::card(st, st.by_uuid(order).unwrap(), d).unwrap();
+    assert!(card.elsewhere, "an outsider on Commerce's diagram");
+    assert_eq!(card.eyebrow, archforge_diagram::figure::Text::Said("Class · {package}", vec![("package", "Billing".into())]));
+    // Billing removed: Order moves up to Commerce, said in the toast; undo brings Billing back.
+    select_named(&mut h, archforge_uml::PACKAGE, "Billing");
+    crate::explorer::remove_selection(h.state_mut());
+    assert!(h.state().explorer.delete.is_none(), "no dialog: nothing goes");
+    assert_eq!(package_of(&h, order).as_deref(), Some("Commerce"));
+    assert_eq!(h.state().canvas.toast.as_ref().map(|t| t.text.as_str()), Some("Billing removed; what it held moved to Commerce"));
+    h.state_mut().session.as_mut().unwrap().undo().unwrap();
+    assert_eq!(package_of(&h, order).as_deref(), Some("Billing"));
+}

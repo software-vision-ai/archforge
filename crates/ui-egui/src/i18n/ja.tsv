@@ -536,3 +536,4 @@ str		To	終点
 str		{what} removed	{what}を削除しました
 # パッケージ (AR-17)
 str		Class · {package}	クラス · {package}
+str		{name} removed; what it held moved to {parent}	{name} を削除しました。中身は {parent} に移動しました

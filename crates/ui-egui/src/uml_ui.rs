@@ -64,7 +64,7 @@ impl DiagramKind for UmlKind {
     }
 
     fn owners(&self, store: &Store) -> Vec<Obj> {
-        packages(store)
+        archforge_uml::commands::all_packages(store)
     }
 
     fn owner_of(&self, store: &Store, selected: Obj) -> Option<Obj> {
@@ -222,53 +222,36 @@ impl NotationUi for UmlUi {
         class(store, member) == Some(archforge_uml::PACKAGE)
     }
 
-    /// A package with its classes.
+    /// A package with the packages it holds, its classes, and each class's attributes and
+    /// operations, every level folded until opened (AR-17).
     fn tree(&self, store: &Store, package: Obj, t: &Tree<'_>) -> Vec<Row> {
-        let all = classes(store, package);
-        let under: Vec<Row> = all
-            .iter()
-            .filter_map(|c| {
-                let label = name(store, *c);
-                let row = if t.matches(&label) { t.row(*c, 1, "class", &icons::CLASS, label) } else { None };
-                // A class drags onto a class diagram.
-                row.map(|row| Row { draggable: true, ..row })
-            })
-            .collect();
-        let expandable = if t.filtering() { !under.is_empty() } else { !all.is_empty() };
-        let label = name(store, package);
-        let mut out = Vec::new();
-        if t.matches(&label) || !under.is_empty() {
-            let expanded = expandable && t.open(package);
-            out.extend(t.row(package, 0, "package", &icons::PACKAGE, label).map(|row| Row { expandable, expanded, ..row }));
-            if expanded {
-                out.extend(under);
-            }
-        }
-        out
+        package_rows(store, package, 0, t)
     }
 
     fn offers(&self, store: &Store, selection: Option<Obj>) -> Vec<Offer> {
         let offer = |key, word: String| Offer { key, word };
-        match selection.and_then(|o| class(store, o)) {
-            // A class goes into the selected package, or the selected class's.
-            Some(c) if c == archforge_uml::PACKAGE || (c == archforge_uml::CLASS && selection.and_then(|o| package_of(store, o)).is_some()) => {
-                vec![offer("class", tr("Class")), offer("package", tr("Package"))]
-            }
-            _ => vec![offer("package", tr("Package"))],
+        // A class or a package goes into the selected package, or the package of what is selected.
+        match selection.and_then(|o| home_of(store, o)) {
+            Some(_) => vec![offer("class", tr("Class")), offer("package", tr("Package"))],
+            None => vec![offer("package", tr("Package"))],
         }
     }
 
     fn add(&self, shell: &mut Shell, key: &str, sel: Option<Obj>) -> Option<Result<Added, String>> {
         let store = shell.session.as_ref()?.doc();
         let no_name = || Some(Err(tr("No free name is left")));
-        let mut parents = Vec::new();
+        let home = sel.and_then(|o| home_of(store, o));
+        // The packages it sits under open, so its row shows.
+        let mut parents: Vec<Uuid> = home.map(|h| chain(store, h)).unwrap_or_default().into_iter().filter_map(|p| store.uuid(p).ok()).collect();
         let out = match key {
             "package" => {
-                let Some(name) = fresh_name("Package", packages(store).into_iter().map(|p| name(store, p)), false) else { return no_name() };
-                crate::explorer::run(shell, "uml.package.add", json!({ "name": name }))
+                let siblings = home.map_or_else(|| packages(store), |h| archforge_uml::commands::subpackages(store, h));
+                let Some(name) = fresh_name("Package", siblings.into_iter().map(|p| name(store, p)), false) else { return no_name() };
+                let parent = home.and_then(|h| store.uuid(h).ok()).map(|u| u.to_string()).unwrap_or_default();
+                crate::explorer::run(shell, "uml.package.add", json!({ "name": name, "parent": parent }))
             }
             "class" => {
-                let package = sel.and_then(|o| if class(store, o) == Some(archforge_uml::PACKAGE) { Some(o) } else { package_of(store, o) })?;
+                let package = home?;
                 let Some(name) = fresh_name("Class", classes(store, package).into_iter().map(|c| name(store, c)), false) else { return no_name() };
                 let package_id = store.uuid(package).ok()?;
                 parents.push(package_id);
@@ -304,20 +287,66 @@ impl NotationUi for UmlUi {
     }
 
     fn has_children(&self, store: &Store, obj: Obj) -> bool {
-        class(store, obj) == Some(archforge_uml::PACKAGE) && !classes(store, obj).is_empty()
+        match class(store, obj) {
+            Some(c) if c == archforge_uml::PACKAGE => !classes(store, obj).is_empty() || !archforge_uml::commands::subpackages(store, obj).is_empty(),
+            Some(c) if c == archforge_uml::CLASS => has_members(store, obj),
+            _ => false,
+        }
     }
 
-    fn foldable(&self, _store: &Store, package: Obj) -> Vec<Obj> {
-        vec![package]
+    /// The package and every package and class with members under it.
+    fn foldable(&self, store: &Store, package: Obj) -> Vec<Obj> {
+        let mut out = vec![package];
+        out.extend(classes(store, package).into_iter().filter(|c| has_members(store, *c)));
+        for sub in archforge_uml::commands::subpackages(store, package) {
+            out.extend(self.foldable(store, sub));
+        }
+        out
     }
 
+    /// The packages above, and a member's class.
     fn parents(&self, store: &Store, obj: Obj) -> Vec<Obj> {
-        package_of(store, obj).into_iter().collect()
+        let (start, mut out) = match member_of(store, obj) {
+            Some((c, _)) => (Some(c), vec![c]),
+            None => (package_of(store, obj), Vec::new()),
+        };
+        let home = if out.is_empty() { start } else { start.and_then(|c| package_of(store, c)) };
+        out.extend(home.map(|h| chain(store, h)).unwrap_or_default());
+        out
+    }
+
+    /// A nested package hands what it holds to its parent when it is removed.
+    fn hands_up(&self, store: &Store, obj: Obj) -> Option<Obj> {
+        if class(store, obj) == Some(archforge_uml::PACKAGE) { package_of(store, obj) } else { None }
+    }
+
+    /// A class dragged onto a package, or onto a class of another package, moves there; a
+    /// package dragged onto another package moves into it.
+    fn drop_on(&self, store: &Store, dragged: Obj, target: Obj) -> Option<(&'static str, serde_json::Value)> {
+        let to = match class(store, target)? {
+            c if c == archforge_uml::PACKAGE => target,
+            c if c == archforge_uml::CLASS => package_of(store, target)?,
+            _ => return None,
+        };
+        let id = |o: Obj| store.uuid(o).ok().map(|u| u.to_string());
+        match class(store, dragged)? {
+            c if c == archforge_uml::CLASS && package_of(store, dragged) != Some(to) => {
+                Some(("uml.class.move", json!({ "class": id(dragged)?, "package": id(to)? })))
+            }
+            c if c == archforge_uml::PACKAGE && !archforge_uml::commands::is_within(store, to, dragged) && package_of(store, dragged) != Some(to) => {
+                Some(("uml.package.move", json!({ "package": id(dragged)?, "to": id(to)? })))
+            }
+            _ => None,
+        }
     }
 
     fn entry(&self, store: &Store, o: Obj) -> Option<Entry> {
         match class(store, o)? {
-            c if c == archforge_uml::PACKAGE => Some(Entry { icon: &icons::PACKAGE, order: 1, label: name(store, o), detail: tr("Package") }),
+            c if c == archforge_uml::PACKAGE => {
+                let at = package_of(store, o).map(|p| name(store, p)).unwrap_or_default();
+                let detail = if at.is_empty() { tr("Package") } else { format!("{} · {at}", tr("Package")) };
+                Some(Entry { icon: &icons::PACKAGE, order: 1, label: name(store, o), detail })
+            }
             c if c == archforge_uml::CLASS => {
                 let at = package_of(store, o).map(|p| name(store, p)).unwrap_or_default();
                 let detail = if at.is_empty() { tr("Class") } else { format!("{} · {at}", tr("Class")) };
@@ -383,6 +412,92 @@ impl NotationUi for UmlUi {
         let width = r.width() - 2.0 * crate::panels::PAD;
         crate::panels::name_field(shell, ui, p, egui::pos2(r.left() + crate::panels::PAD, y), width, subject, cmd, key);
     }
+}
+
+/// The package an element belongs in: a package itself, a class's, or a member's class's.
+fn home_of(store: &Store, o: Obj) -> Option<Obj> {
+    match class(store, o)? {
+        c if c == archforge_uml::PACKAGE => Some(o),
+        c if c == archforge_uml::CLASS => package_of(store, o),
+        _ => member_of(store, o).and_then(|(c, _)| package_of(store, c)),
+    }
+}
+
+/// A package and every package above it, innermost first.
+fn chain(store: &Store, package: Obj) -> Vec<Obj> {
+    let mut out = Vec::new();
+    let mut at = Some(package);
+    while let Some(p) = at.filter(|_| out.len() < 256) {
+        out.push(p);
+        at = package_of(store, p);
+    }
+    out
+}
+
+fn has_members(store: &Store, c: Obj) -> bool {
+    !archforge_uml::members::attributes(store, c).is_empty() || !archforge_uml::members::operations(store, c).is_empty()
+}
+
+/// A package's rows at `depth`: the package, then, when open, the packages it holds, its classes
+/// and their members. A row whose name holds the filter shows with the rows above it.
+fn package_rows(store: &Store, package: Obj, depth: u8, t: &Tree<'_>) -> Vec<Row> {
+    let mut under: Vec<Row> = Vec::new();
+    for sub in archforge_uml::commands::subpackages(store, package) {
+        under.extend(package_rows(store, sub, depth.saturating_add(1), t));
+    }
+    for c in classes(store, package) {
+        under.extend(class_rows(store, c, depth.saturating_add(1), t));
+    }
+    let label = name(store, package);
+    let empty = archforge_uml::commands::subpackages(store, package).is_empty() && classes(store, package).is_empty();
+    if !t.matches(&label) && under.is_empty() {
+        return Vec::new();
+    }
+    let expandable = if t.filtering() { !under.is_empty() } else { !empty };
+    let expanded = expandable && t.open(package);
+    let mut out: Vec<Row> = t
+        .row(package, depth, "package", &icons::PACKAGE, label)
+        .map(|row| Row { expandable, expanded, draggable: true, ..row })
+        .into_iter()
+        .collect();
+    if expanded {
+        out.extend(under);
+    }
+    out
+}
+
+/// A class's rows: the class, draggable onto a diagram or a package, then, when open, its
+/// attributes and operations, each with its type.
+fn class_rows(store: &Store, c: Obj, depth: u8, t: &Tree<'_>) -> Vec<Row> {
+    let mut members: Vec<Row> = Vec::new();
+    for a in archforge_uml::members::attributes(store, c) {
+        let label = name(store, a);
+        if t.matches(&label) {
+            let ty = archforge_uml::figures::attribute_text(store, a);
+            let detail = ty.split_once(" : ").map(|(_, rest)| rest.to_string());
+            members.extend(t.row(a, depth.saturating_add(1), "attribute", &icons::ATTRIBUTE, label).map(|row| Row { detail, ..row }));
+        }
+    }
+    for op in archforge_uml::members::operations(store, c) {
+        let label = format!("{}()", name(store, op));
+        if t.matches(&label) {
+            let text = archforge_uml::figures::operation_text(store, op);
+            let detail = text.rsplit_once(") : ").map(|(_, ty)| ty.to_string());
+            members.extend(t.row(op, depth.saturating_add(1), "operation", &icons::OPERATION, label).map(|row| Row { detail, ..row }));
+        }
+    }
+    let label = name(store, c);
+    if !t.matches(&label) && members.is_empty() {
+        return Vec::new();
+    }
+    let expandable = if t.filtering() { !members.is_empty() } else { has_members(store, c) };
+    let expanded = expandable && t.open(c);
+    let mut out: Vec<Row> =
+        t.row(c, depth, "class", &icons::CLASS, label).map(|row| Row { expandable, expanded, draggable: true, ..row }).into_iter().collect();
+    if expanded {
+        out.extend(members);
+    }
+    out
 }
 
 /// A class model to read (archforge-3c5.1.2), for the snapshot screens and the tests: in a package,

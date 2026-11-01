@@ -536,3 +536,4 @@ str		To	到
 str		{what} removed	已移除{what}
 # 包 (AR-17)
 str		Class · {package}	类 · {package}
+str		{name} removed; what it held moved to {parent}	已移除 {name}；其内容已移至 {parent}
