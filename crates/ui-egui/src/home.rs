@@ -281,12 +281,16 @@ pub(crate) fn bar_tail(
     let paint = &paint;
     let mid = bar_mid(r);
     let right = r.right();
-    if let Some(initials) = shell.services.user_name.as_deref().and_then(initials) {
+    // The avatar: the initials of the name entered in Settings, which it opens.
+    {
         let avatar = Rect::from_center_size(pos2(right - 30.0, mid), Vec2::splat(28.0));
-        paint.rect_filled(avatar, 14.0, p.accent_tint);
-        let g = ux::galley(paint, &initials, types::CAPTION_STRONG, p.accent, None);
+        let resp = control(shell, ui, &format!("{prefix}.account"), "button", avatar, true).on_hover_text(tr("Settings"));
+        paint.rect_filled(avatar, 14.0, if resp.hovered() { p.accent_tint.gamma_multiply(0.85) } else { p.accent_tint });
+        let g = ux::galley(paint, &crate::settings::avatar_initials(shell), types::CAPTION_STRONG, p.accent, None);
         paint.galley(avatar.center() - g.size() / 2.0, g, p.accent);
-        control(shell, ui, &format!("{prefix}.account"), "button", avatar, false);
+        if resp.clicked() {
+            crate::settings::open(shell);
+        }
     }
     let help = Rect::from_center_size(pos2(right - 68.0, mid), Vec2::splat(28.0));
     ux::icon_mid(paint, help.center(), &icons::HELP, p.text_secondary);

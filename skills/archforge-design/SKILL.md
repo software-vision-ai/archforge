@@ -91,6 +91,12 @@ the change, and update this file in the same change.
   its row shows in the Models tree, and the canvas brings it to the centre on the open diagram,
   or on the first diagram that shows it, which opens.
 
+- The bar's avatar shows the initials of the name entered in Settings (owner, 2026-11-01): the
+  first and last words' first letters, or the first two letters of a single word; with no name,
+  JD for John Doe. Archforge never reads the name from the operating system's account. The avatar
+  and the command key with comma open Settings, which for now holds Your name, with the initials
+  beside it changing as it is typed; Done, the close button, Enter or Esc close it.
+
 ## Explorer
 - Models starts at the schemas: schema, then its domains, enum types, sequences and views, then
   its tables and their columns. Diagrams appear only in the Diagrams explorer.

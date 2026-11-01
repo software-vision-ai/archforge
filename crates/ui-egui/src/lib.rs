@@ -29,6 +29,7 @@ pub mod panels;
 pub mod problems;
 mod project_search;
 pub mod relation;
+pub mod settings;
 pub mod skill_tab;
 pub mod state;
 pub mod subtypes;
@@ -48,8 +49,6 @@ pub struct Services {
     /// The installed fonts: a language whose script the bundled faces do not draw is drawn in an
     /// installed family that does; without them its text shows as boxes.
     pub fonts: Option<std::sync::Arc<dyn FontSource>>,
-    /// The full name of the account the app runs under, for Home's avatar; none hides it.
-    pub user_name: Option<String>,
     /// Where new projects go unless the user picks another folder; none leaves the choice open.
     pub projects_folder: Option<Folder>,
     /// Creates projects; none keeps Create project unavailable.
@@ -286,6 +285,8 @@ pub struct Shell {
     pub home_search: home_search::Search,
     /// The New project dialog, while it is open over Home.
     pub new_project: Option<new_project::Dialog>,
+    /// The Settings dialog while it is open.
+    pub settings: Option<settings::Dialog>,
     /// The open projects, one tab each, in the bar's order; the one shown has its state in the
     /// fields below, the others keep theirs parked in their tab.
     pub tabs: Vec<Tab>,
@@ -349,6 +350,7 @@ impl Shell {
             top_inset: 0.0,
             home_search: home_search::Search::default(),
             new_project: None,
+            settings: None,
             tabs: Vec::new(),
             active: None,
             project: None,
@@ -941,6 +943,7 @@ impl Shell {
     /// dialog over Home while it is open.
     pub fn ui(&mut self, ui: &mut egui::Ui) {
         self.registry.begin_frame();
+        settings::shortcut(self, ui.ctx());
         // The OS window title follows the in-app title; on a host with a native title bar it is
         // the only title the user sees.
         let title = self.title();
@@ -954,6 +957,7 @@ impl Shell {
             home::show(self, ui);
         }
         new_project::show(self, ui);
+        settings::show(self, ui);
     }
 }
 

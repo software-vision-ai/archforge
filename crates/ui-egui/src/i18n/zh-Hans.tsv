@@ -251,6 +251,11 @@ str		Key status	键状态
 str		Grid	网格
 str		Arrange diagram	整理图
 str		Move cardinality	移动基数
+str		Settings	设置
+str		How Archforge knows you.	Archforge 如何认识你。
+str		Your name	你的名字
+str		The bar shows your initials. Without a name they are JD, for John Doe.	栏中显示你的姓名首字母。没有名字时为 JD，即 John Doe。
+str		Done	完成
 str		Add table	添加表
 str		Place table	放置表
 str		Already on this diagram	已在此图中
