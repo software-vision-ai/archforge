@@ -5048,7 +5048,7 @@ fn a_class_dragged_from_models_onto_a_second_diagram_stays_one_element_and_leave
     click(&mut h, at);
     key(&mut h, egui::Key::Delete, egui::Modifiers::SHIFT);
     let ask = h.state().explorer.delete.clone().expect("the dialog asks");
-    assert_eq!((ask.name.as_str(), ask.diagrams), ("Customer", 2));
+    assert_eq!((ask.name.as_str(), ask.diagrams, ask.relationships), ("Customer", 2, 1), "its association goes with it");
     let at = rect_of(&h, "workspace.explorer.delete.confirm").center();
     click(&mut h, at);
     let st = h.state().session.as_ref().unwrap().doc();

@@ -97,7 +97,7 @@ pub fn parse_multiplicity(s: &str) -> Result<Option<(u64, Option<u64>)>, String>
 }
 
 /// Gives `o` the multiplicity typed as `typed` (refused as `key`), replacing the bounds it had.
-fn set_multiplicity(store: &mut Store, o: Obj, typed: &str, key: &str) -> Result<(), CommandError> {
+pub(crate) fn set_multiplicity(store: &mut Store, o: Obj, typed: &str, key: &str) -> Result<(), CommandError> {
     let bounds = parse_multiplicity(typed).map_err(|why| refuse(key, format!("the multiplicity {why}")))?;
     for prop in [multiplicity_element::LOWER_VALUE, multiplicity_element::UPPER_VALUE] {
         if let Some(old) = one(store, o, prop) {
