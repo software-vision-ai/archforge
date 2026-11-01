@@ -1945,3 +1945,21 @@ fn binary_and_varbinary_take_a_length() {
     // A domain on BINARY(16), as the project model uses.
     run(&mut s, "er.domain.add", json!({ "schema": sm.schema, "name": "uuid16", "base_type": "BINARY", "length": 16 }));
 }
+
+#[test]
+fn an_er_element_and_a_core_folder_are_named_by_the_shared_lookup() {
+    let mut s = session();
+    let sm = sample(&mut s);
+    let st = s.doc();
+    let obj = |id: &str| st.by_uuid(archforge_mof::Uuid::parse(id).unwrap()).unwrap();
+    // The schema, a table, a column and a relationship, each by its own name property.
+    for (id, name) in [(&sm.schema, "shop"), (&sm.customer, "Customer"), (&sm.key, "id"), (&sm.places, "places")] {
+        assert_eq!(archforge_core::name_of(st, obj(id)), name);
+        assert_eq!(archforge_er::rules::name_of(st, obj(id)), name, "ER's lookup is the shared one");
+    }
+    // The model root is the core's: named through the core's own name property.
+    let (mut st, root) = rooted_store();
+    assert_eq!(archforge_core::name_of(&st, root), "", "an unnamed root has no name");
+    st.set(root, archforge_core::named_element::NAME, archforge_mof::Value::str("Shop")).unwrap();
+    assert_eq!(archforge_core::name_of(&st, root), "Shop");
+}

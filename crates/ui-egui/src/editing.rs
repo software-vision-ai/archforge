@@ -859,7 +859,7 @@ fn entity_name(store: &Store, schema: Obj) -> Option<String> {
         .unwrap_or_default()
         .iter()
         .filter_map(archforge_mof::Value::as_ref)
-        .map(|e| archforge_er::rules::name_of(store, e).to_lowercase())
+        .map(|e| archforge_core::name_of(store, e).to_lowercase())
         .collect();
     let stem = tr("Entity");
     if !taken.contains(&stem.to_lowercase()) {
@@ -1193,14 +1193,14 @@ pub(crate) fn run_fitting(
 fn open_rename(shell: &mut Shell, node: Uuid, entity: Uuid) {
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
     let Some(e) = store.by_uuid(entity) else { return };
-    let text = archforge_er::rules::name_of(store, e);
+    let text = archforge_core::name_of(store, e);
     shell.canvas.rename = Some(NodeRename { node, entity, text, opened: true, refused: None });
 }
 
 /// Commits the name typed in place; a refusal keeps it open.
 fn commit_rename(shell: &mut Shell) {
     let Some(r) = shell.canvas.rename.clone() else { return };
-    let current = shell.session.as_ref().and_then(|s| s.doc().by_uuid(r.entity).map(|e| archforge_er::rules::name_of(s.doc(), e)));
+    let current = shell.session.as_ref().and_then(|s| s.doc().by_uuid(r.entity).map(|e| archforge_core::name_of(s.doc(), e)));
     if current.as_deref() == Some(r.text.trim()) {
         shell.canvas.rename = None;
         return;
@@ -1243,7 +1243,7 @@ fn ask_delete(shell: &mut Shell, node: Uuid, entity: Uuid) {
     let diagrams = diagrams_showing(store, e);
     shell.explorer.delete = Some(crate::explorer::Delete {
         ids: vec![entity],
-        name: archforge_er::rules::name_of(store, e),
+        name: archforge_core::name_of(store, e),
         relationships,
         keys,
         foreign_keys,

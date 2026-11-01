@@ -59,7 +59,7 @@ pub struct IndexRow {
 }
 
 fn name(store: &Store, o: Obj) -> String {
-    archforge_er::rules::name_of(store, o)
+    archforge_core::name_of(store, o)
 }
 
 /// The indexes of a table, in order.

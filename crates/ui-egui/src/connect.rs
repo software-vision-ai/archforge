@@ -329,7 +329,7 @@ pub fn connect(shell: &mut Shell, d: Obj, from_node: Uuid, to_node: Uuid) {
 pub fn offer_mapping(shell: &mut Shell, relationship: Uuid) {
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
     let Some(rel) = store.by_uuid(relationship) else { return };
-    let end = |p| store.get(rel, p).ok().and_then(|v| v.as_ref()).map(|e| archforge_er::rules::name_of(store, e)).unwrap_or_default();
+    let end = |p| store.get(rel, p).ok().and_then(|v| v.as_ref()).map(|e| archforge_core::name_of(store, e)).unwrap_or_default();
     let name = format!("{}{}", end(archforge_er::relationship::FROM), end(archforge_er::relationship::TO));
     shell.canvas.mapping = Some(MappingOffer { relationship, name, refused: None });
 }
@@ -340,13 +340,13 @@ pub(crate) fn mapping_offer(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r
     let (from, to, chips) = match shell.session.as_ref().and_then(|s| s.doc().by_uuid(offer.relationship).map(|rel| (s.doc(), rel))) {
         Some((store, rel)) => {
             let end = |p| store.get(rel, p).ok().and_then(|v| v.as_ref());
-            let name = |e: Option<Obj>| e.map(|e| archforge_er::rules::name_of(store, e)).unwrap_or_default();
+            let name = |e: Option<Obj>| e.map(|e| archforge_core::name_of(store, e)).unwrap_or_default();
             let (f, t) = (end(archforge_er::relationship::FROM), end(archforge_er::relationship::TO));
             let mut chips = Vec::new();
             for (i, e) in [f, t].into_iter().enumerate() {
                 let Some(e) = e else { continue };
                 for c in archforge_er::rules::key_columns(store, e) {
-                    chips.push(format!("{} · PK FK{}", archforge_er::rules::name_of(store, c), i + 1));
+                    chips.push(format!("{} · PK FK{}", archforge_core::name_of(store, c), i + 1));
                 }
             }
             (name(f), name(t), chips)
@@ -441,7 +441,7 @@ pub fn remove_selected_relationship(shell: &mut Shell) -> bool {
     });
     let Some(rel) = rel.filter(|r| store.class_of(*r).ok() == Some(archforge_er::RELATIONSHIP)) else { return false };
     let Some(id) = store.uuid(rel).ok() else { return false };
-    let name = archforge_er::rules::name_of(store, rel);
+    let name = archforge_core::name_of(store, rel);
     let mut ids: Vec<String> = Vec::new();
     for (fk, _) in store.referrers(rel).into_iter().filter(|(_, p)| *p == archforge_er::foreign_key::RELATIONSHIP) {
         ids.extend(store.uuid(fk).ok().map(|u| u.to_string()));

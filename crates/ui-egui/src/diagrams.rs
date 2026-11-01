@@ -125,7 +125,7 @@ fn walk(store: &Store, state: &State, filter: &str, owner: Obj, prop: archforge_
         let Ok(id) = store.uuid(m) else { continue };
         match store.class_of(m).ok() {
             Some(c) if c == archforge_core::FOLDER => {
-                let label = archforge_er::rules::name_of(store, m);
+                let label = archforge_core::name_of(store, m);
                 let expanded = !filter.is_empty() || !state.collapsed.contains(&id);
                 let matches = filter.is_empty() || label.to_lowercase().contains(filter);
                 let at = out.len();
@@ -171,7 +171,7 @@ pub fn open_new(shell: &mut Shell) {
         .or_else(|| schemas(store).first().copied());
     let taken = store.alive().filter(|o| store.class_of(*o).ok() == Some(DIAGRAM)).map(|d| diagram_name(store, d));
     let name = match schema {
-        Some(s) => archforge_er::rules::name_of(store, s),
+        Some(s) => archforge_core::name_of(store, s),
         None => crate::explorer::fresh_name(&tr("Diagram"), taken, false).unwrap_or_default(),
     };
     shell.diagrams.new = Some(NewDiagram { name, schema: schema.and_then(|s| store.uuid(s).ok()), menu: None, refused: None, opened: true });
@@ -290,7 +290,7 @@ fn footer_lines(shell: &Shell, paint: &egui::Painter, p: &Palette, r: Rect) {
     let store = session.doc();
     let Some(d) = shell.canvas.active.and_then(|id| store.by_uuid(id)) else { return };
     let project = shell.project.as_ref().map(|o| o.name.clone()).unwrap_or_default();
-    let schema = schema_of(store, d).map(|s| archforge_er::rules::name_of(store, s)).unwrap_or_default();
+    let schema = schema_of(store, d).map(|s| archforge_core::name_of(store, s)).unwrap_or_default();
     paint.rect_filled(Rect::from_min_size(pos2(r.left() + 16.0, r.bottom() - FOOTER_LINE), vec2((r.width() - 32.0).max(0.0), 1.0)), 0.0, p.border);
     let room = Some((r.width() - 40.0).max(0.0));
     ux::text(
@@ -397,10 +397,7 @@ fn new_dialog_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: &eg
     let (schemas, taken_focus) = match (shell.session.as_ref(), shell.diagrams.new.as_ref()) {
         (Some(s), Some(n)) => {
             let store = s.doc();
-            (
-                schemas(store).into_iter().filter_map(|o| Some((store.uuid(o).ok()?, archforge_er::rules::name_of(store, o)))).collect::<Vec<_>>(),
-                n.opened,
-            )
+            (schemas(store).into_iter().filter_map(|o| Some((store.uuid(o).ok()?, archforge_core::name_of(store, o)))).collect::<Vec<_>>(), n.opened)
         }
         _ => return,
     };

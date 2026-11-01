@@ -740,11 +740,11 @@ fn draw_node(
             } else {
                 paint.rect_stroke(rect, 6.0 * z, Stroke::new(border, p.entity_edge), StrokeKind::Inside);
             }
-            let name = archforge_er::rules::name_of(store, e);
+            let name = archforge_core::name_of(store, e);
             let room = Some((rect.width() - 2.0 * ENTITY_INSET * z).max(0.0));
             if z >= DETAIL_ZOOM {
                 let eyebrow = match elsewhere {
-                    Some(s) => fmt(&tr("Entity · {schema}"), &[("schema", &archforge_er::rules::name_of(store, s))]).to_uppercase(),
+                    Some(s) => fmt(&tr("Entity · {schema}"), &[("schema", &archforge_core::name_of(store, s))]).to_uppercase(),
                     None => tr("Entity").to_uppercase(),
                 };
                 ux::text(&inner, rect.min + vec2(ENTITY_INSET, 12.0) * z, &eyebrow, types::EYEBROW.scaled(z), p.entity_ink, room);
@@ -774,9 +774,9 @@ fn draw_node(
                     }
                     let ty = archforge_er::rules::type_display(store, *column);
                     let text = if ty.is_empty() {
-                        archforge_er::rules::name_of(store, *column)
+                        archforge_core::name_of(store, *column)
                     } else {
-                        format!("{} : {ty}", archforge_er::rules::name_of(store, *column))
+                        format!("{} : {ty}", archforge_core::name_of(store, *column))
                     };
                     let text_x = rect.left() + ENTITY_TEXT * z;
                     let linked = archforge_er::rules::linked_to(store, *column).is_some();
@@ -796,7 +796,7 @@ fn draw_node(
             let border = look.width.map_or(1.0, |w| (w * z).max(1.0));
             paint.rect_filled(rect, 6.0 * z, look.fill.unwrap_or(p.surface));
             paint.rect_stroke(rect, 6.0 * z, Stroke::new(border, look.stroke.unwrap_or(p.border)), StrokeKind::Inside);
-            let name = archforge_er::rules::name_of(store, e);
+            let name = archforge_core::name_of(store, e);
             ux::text(
                 &inner,
                 rect.min + vec2(ENTITY_INSET, 12.0) * z,
@@ -863,7 +863,7 @@ pub(crate) fn exit_point(rect: Rect, toward: Pos2) -> Pos2 {
 fn slot_text(store: &Store, rel: Obj, kind: &str) -> String {
     use archforge_er::relationship as r;
     match kind {
-        "name" => archforge_er::rules::name_of(store, rel),
+        "name" => archforge_core::name_of(store, rel),
         "from_end" => archforge_er::rules::cardinality_of(store, rel, r::FROM_END).map(cardinality_text).unwrap_or_default(),
         "to_end" => archforge_er::rules::cardinality_of(store, rel, r::TO_END).map(cardinality_text).unwrap_or_default(),
         "from_role" => string(store, rel, r::FROM_ROLE),

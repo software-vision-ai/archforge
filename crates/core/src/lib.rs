@@ -21,6 +21,15 @@ pub use generated::meta::*;
 pub use generated::schema::{JUNCTIONS, TABLES};
 pub use generated::slabs::CoreSlabs;
 
+/// An element's name in any notation, or empty: the property its class names itself by (the
+/// string property named `name` the metamodel marks; a Folder's, a table's, a relationship's, a
+/// UML class's), so no caller lists classes. An element with none (a note, a link) has no name.
+pub fn name_of(store: &Store, obj: Obj) -> String {
+    let Ok(class) = store.class_of(obj) else { return String::new() };
+    let Some(prop) = store.universe().info(class).and_then(|i| i.name_prop) else { return String::new() };
+    store.get(obj, prop).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default()
+}
+
 /// A universe of the core and the metamodels given.
 pub fn universe_with(others: Vec<Arc<Metamodel>>) -> Result<Arc<Universe>, MetaError> {
     let mut all = vec![metamodel()?];

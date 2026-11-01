@@ -182,7 +182,7 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
             let store = session.doc();
             let email = store
                 .alive()
-                .find(|o| archforge_er::rules::name_of(store, *o) == "email")
+                .find(|o| archforge_core::name_of(store, *o) == "email")
                 .and_then(|a| Some((store.uuid(a).ok()?, archforge_er::rules::entity_of(store, a)?)));
             if let Some((column, entity)) = email
                 && let Ok(entity) = store.uuid(entity)
@@ -197,7 +197,7 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
             && let Some(session) = shell.session.as_ref()
         {
             let store = session.doc();
-            let customer = store.alive().find(|o| archforge_er::rules::name_of(store, *o) == "Customer");
+            let customer = store.alive().find(|o| archforge_core::name_of(store, *o) == "Customer");
             if let Some(e) = customer
                 && let Ok(entity) = store.uuid(e)
                 && let Some(index) = crate::indexes::rows(store, e).into_iter().next()
@@ -212,7 +212,7 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
             && let Some(session) = shell.session.as_ref()
         {
             let store = session.doc();
-            let customer = store.alive().find(|o| archforge_er::rules::name_of(store, *o) == "Customer");
+            let customer = store.alive().find(|o| archforge_core::name_of(store, *o) == "Customer");
             if let Some(e) = customer
                 && let Ok(entity) = store.uuid(e)
                 && let Some(unique) = crate::keys::rows(store, e).into_iter().find(|k| !k.primary)
@@ -391,7 +391,7 @@ fn sample_types(shell: &mut Shell) -> Result<(), String> {
     };
     let store = session.doc();
     let by_name =
-        |name: &str| store.alive().find(|o| archforge_er::rules::name_of(store, *o) == name).and_then(|o| store.uuid(o).ok()).map(|u| u.to_string());
+        |name: &str| store.alive().find(|o| archforge_core::name_of(store, *o) == name).and_then(|o| store.uuid(o).ok()).map(|u| u.to_string());
     let (Some(schema), Some(customer), Some(email)) = (by_name("Shop"), by_name("Customer"), by_name("email")) else {
         return Err("the sample table".into());
     };
@@ -419,7 +419,7 @@ fn sample_mapping_table(shell: &mut Shell) -> Result<(), String> {
     };
     let store = session.doc();
     let by_name =
-        |name: &str| store.alive().find(|o| archforge_er::rules::name_of(store, *o) == name).and_then(|o| store.uuid(o).ok()).map(|u| u.to_string());
+        |name: &str| store.alive().find(|o| archforge_core::name_of(store, *o) == name).and_then(|o| store.uuid(o).ok()).map(|u| u.to_string());
     let (Some(schema), Some(order), Some(diagram)) = (
         by_name("Shop schema"),
         by_name("Order"),
@@ -518,7 +518,7 @@ fn sample_objects(shell: &mut Shell) -> Result<(), String> {
     };
     let store = session.doc();
     let by_name =
-        |name: &str| store.alive().find(|o| archforge_er::rules::name_of(store, *o) == name).and_then(|o| store.uuid(o).ok()).map(|u| u.to_string());
+        |name: &str| store.alive().find(|o| archforge_core::name_of(store, *o) == name).and_then(|o| store.uuid(o).ok()).map(|u| u.to_string());
     let (Some(schema), Some(key)) = (by_name("Shop"), by_name("customer_id")) else {
         return Err("the sample table".into());
     };
@@ -543,7 +543,7 @@ fn sample_cross_schema(shell: &mut Shell) -> Result<(), String> {
     };
     let store = session.doc();
     let by_name =
-        |name: &str| store.alive().find(|o| archforge_er::rules::name_of(store, *o) == name).and_then(|o| store.uuid(o).ok()).map(|u| u.to_string());
+        |name: &str| store.alive().find(|o| archforge_core::name_of(store, *o) == name).and_then(|o| store.uuid(o).ok()).map(|u| u.to_string());
     let (Some(order), Some(diagram)) = (by_name("Order"), shell.canvas.active.map(|d| d.to_string())) else {
         return Err("the sample diagram".into());
     };
@@ -585,7 +585,7 @@ fn sample_routing(shell: &mut Shell) -> Result<(), String> {
     };
     let store = session.doc();
     let by_name =
-        |name: &str| store.alive().find(|o| archforge_er::rules::name_of(store, *o) == name).and_then(|o| store.uuid(o).ok()).map(|u| u.to_string());
+        |name: &str| store.alive().find(|o| archforge_core::name_of(store, *o) == name).and_then(|o| store.uuid(o).ok()).map(|u| u.to_string());
     let (Some(customer), Some(schema), Some(diagram)) = (by_name("Customer"), by_name("Shop schema"), shell.canvas.active.map(|d| d.to_string()))
     else {
         return Err("the sample diagram".into());

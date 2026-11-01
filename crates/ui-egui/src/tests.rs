@@ -479,7 +479,7 @@ fn open_project_asks_the_picker_and_the_host_and_shows_the_model_it_read() {
     assert_eq!(shell.title(), "Shop — Archforge");
     assert_eq!(shell.state.recent.first().map(|r| r.name.as_str()), Some("Shop"));
     let session = shell.session.as_ref().expect("the model read opens");
-    assert!(session.doc().alive().any(|o| archforge_er::rules::name_of(session.doc(), o) == "shop"));
+    assert!(session.doc().alive().any(|o| archforge_core::name_of(session.doc(), o) == "shop"));
     // Changes the project held but never committed show as unsaved; what was read is not handed
     // back to be written.
     assert!(session.is_dirty());
@@ -1587,7 +1587,7 @@ fn key(h: &mut Harness<'static, Shell>, key: egui::Key, modifiers: egui::Modifie
 fn schema_names(h: &Harness<'static, Shell>) -> Vec<String> {
     let s = h.state().session.as_ref().unwrap();
     let st = s.doc();
-    st.alive().filter(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).map(|o| archforge_er::rules::name_of(st, o)).collect()
+    st.alive().filter(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).map(|o| archforge_core::name_of(st, o)).collect()
 }
 
 #[test]
@@ -1682,7 +1682,7 @@ fn the_filter_narrows_the_tree_and_the_keys_walk_it() {
     h.state_mut().explorer.focused = true;
     key(&mut h, egui::Key::ArrowUp, egui::Modifiers::NONE);
     let selected = h.state().session.as_ref().unwrap().view().selection[0];
-    assert_eq!(archforge_er::rules::name_of(h.state().session.as_ref().unwrap().doc(), selected), "Schema 2");
+    assert_eq!(archforge_core::name_of(h.state().session.as_ref().unwrap().doc(), selected), "Schema 2");
     key(&mut h, egui::Key::F2, egui::Modifiers::NONE);
     assert!(h.state().explorer.rename.as_ref().is_some_and(|r| r.text == "Schema 2"));
 }
@@ -1778,7 +1778,7 @@ fn properties_lists_a_tables_columns_and_the_editor_changes_them_through_the_eng
     assert!(h.state().panels.column.is_none(), "{:?}", h.state().panels.column);
     let s = h.state().session.as_ref().unwrap();
     let st = s.doc();
-    let email_obj = st.alive().find(|o| archforge_er::rules::name_of(st, *o) == "email").unwrap();
+    let email_obj = st.alive().find(|o| archforge_core::name_of(st, *o) == "email").unwrap();
     assert!(archforge_er::rules::is_unique(st, email_obj));
     assert!(!archforge_er::rules::is_nullable(st, email_obj));
     assert!(s.can_undo());
@@ -1863,7 +1863,7 @@ fn a_column_row_selects_its_column_only_its_edit_button_opens_the_editor_and_sel
     };
     let email = {
         let st = h.state().session.as_ref().unwrap().doc();
-        let email = st.alive().find(|o| archforge_er::rules::name_of(st, *o) == "email").unwrap();
+        let email = st.alive().find(|o| archforge_core::name_of(st, *o) == "email").unwrap();
         st.uuid(email).unwrap().to_string()
     };
     select(&mut h, &email);
@@ -2311,7 +2311,7 @@ fn selected_name(h: &Harness<'static, Shell>) -> String {
     let s = h.state().session.as_ref().unwrap();
     let st = s.doc();
     let o = s.view().selection.first().copied().unwrap();
-    if st.class_of(o).ok() == Some(archforge_diagram::DIAGRAM) { crate::diagrams::diagram_name(st, o) } else { archforge_er::rules::name_of(st, o) }
+    if st.class_of(o).ok() == Some(archforge_diagram::DIAGRAM) { crate::diagrams::diagram_name(st, o) } else { archforge_core::name_of(st, o) }
 }
 
 #[test]
@@ -2377,7 +2377,7 @@ fn the_diagrams_explorer_creates_a_diagram_through_the_dialog_and_opens_it_in_a_
     click(&mut h, at);
     assert!(h.state().diagrams.new.is_none(), "{:?}", h.state().diagrams.new);
     let st = h.state().session.as_ref().unwrap().doc();
-    assert!(st.alive().any(|o| st.class_of(o).ok() == Some(archforge_er::SCHEMA) && archforge_er::rules::name_of(st, o) == "Billing"));
+    assert!(st.alive().any(|o| st.class_of(o).ok() == Some(archforge_er::SCHEMA) && archforge_core::name_of(st, o) == "Billing"));
     assert_eq!(h.state().canvas.tabs.len(), 2);
     assert_eq!(selected_name(&h), "Billing");
 }
@@ -2482,7 +2482,7 @@ fn the_entity_tool_places_a_table_named_in_place_as_one_undo_step() {
     h.run();
     assert_eq!(node_ids(&h).len(), before);
     let st = h.state().session.as_ref().unwrap().doc();
-    assert!(!st.alive().any(|o| archforge_er::rules::name_of(st, o) == "Entity"), "the table went with the node");
+    assert!(!st.alive().any(|o| archforge_core::name_of(st, o) == "Entity"), "the table went with the node");
     // Escape returns to Select.
     key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
     assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Select);
@@ -2564,7 +2564,7 @@ fn the_entity_menu_removes_from_the_diagram_and_the_dialog_deletes_from_the_mode
     click(&mut h, at);
     assert_eq!(node_ids(&h).len(), 1, "the node went; notice {:?}, active {:?}, ids {:?}", h.state().canvas.notice, h.state().canvas.active, ids(&h));
     let st = h.state().session.as_ref().unwrap().doc();
-    assert!(st.alive().any(|o| archforge_er::rules::name_of(st, o) == "Order"), "the table stays");
+    assert!(st.alive().any(|o| archforge_core::name_of(st, o) == "Order"), "the table stays");
     // Shift+Delete on the selected Customer asks; Delete confirms and the table goes with its node.
     let at = rect_of(&h, &customer_node).center();
     click(&mut h, at);
@@ -2579,7 +2579,7 @@ fn the_entity_menu_removes_from_the_diagram_and_the_dialog_deletes_from_the_mode
     assert!(h.state().explorer.delete.is_none());
     assert!(node_ids(&h).is_empty());
     let st = h.state().session.as_ref().unwrap().doc();
-    assert!(!st.alive().any(|o| archforge_er::rules::name_of(st, o) == "Customer"));
+    assert!(!st.alive().any(|o| archforge_core::name_of(st, o) == "Customer"));
 }
 
 #[test]
@@ -2705,7 +2705,7 @@ fn double_clicks_rename_and_open_columns_and_a_refused_name_stays_open() {
     assert!(h.state().explorer.delete.is_none());
     assert_eq!(node_ids(&h).len(), n - 1);
     let st = h.state().session.as_ref().unwrap().doc();
-    assert!(st.alive().any(|o| archforge_er::rules::name_of(st, o) == "Order"), "the table stays in the model");
+    assert!(st.alive().any(|o| archforge_core::name_of(st, o) == "Order"), "the table stays in the model");
 }
 
 /// A secondary click, for context menus.
@@ -2862,7 +2862,7 @@ fn the_cardinality_popover_sets_the_ends_and_a_many_to_many_line_offers_its_mapp
     click(&mut h, at);
     assert!(h.state().canvas.mapping.is_none(), "{:?}", h.state().canvas.mapping);
     let st = h.state().session.as_ref().unwrap().doc();
-    assert!(st.alive().any(|o| archforge_er::rules::name_of(st, o) == "CustomerOrder"), "the mapping table exists");
+    assert!(st.alive().any(|o| archforge_core::name_of(st, o) == "CustomerOrder"), "the mapping table exists");
 }
 
 /// The diagram harness with the relationship `places` selected, its Properties shown.
@@ -2950,7 +2950,7 @@ fn the_foreign_key_switch_removes_and_adds_the_key_with_its_columns_as_one_step(
     let (mut h, rel) = relationship_harness();
     let columns_of_order = |h: &Harness<'static, Shell>| {
         let st = h.state().session.as_ref().unwrap().doc();
-        let order = st.alive().find(|o| archforge_er::rules::name_of(st, *o) == "Order").unwrap();
+        let order = st.alive().find(|o| archforge_core::name_of(st, *o) == "Order").unwrap();
         st.list(order, archforge_er::entity::ATTRIBUTE).unwrap().len()
     };
     let before = columns_of_order(&h);
@@ -2973,7 +2973,7 @@ fn the_foreign_key_switch_removes_and_adds_the_key_with_its_columns_as_one_step(
     {
         let s = h.state_mut().session.as_mut().unwrap();
         let st = s.doc();
-        let order = st.uuid(st.alive().find(|o| archforge_er::rules::name_of(st, *o) == "Order").unwrap()).unwrap().to_string();
+        let order = st.uuid(st.alive().find(|o| archforge_core::name_of(st, *o) == "Order").unwrap()).unwrap().to_string();
         s.execute("er.attribute.add", &serde_json::json!({ "entity": order, "name": "buyer_ref", "type": "BIGINT" })).unwrap();
         // Adding selected the column; the panel shows the relationship again.
         let rel_id = s.doc().uuid(rel).unwrap().to_string();
@@ -2995,7 +2995,7 @@ fn the_foreign_key_switch_removes_and_adds_the_key_with_its_columns_as_one_step(
         .unwrap()
         .iter()
         .filter_map(archforge_mof::Value::as_ref)
-        .map(|c| archforge_er::rules::name_of(st, c))
+        .map(|c| archforge_core::name_of(st, c))
         .collect();
     assert!(cols.contains(&"buyer_ref".to_string()), "{cols:?} notice {:?}", h.state().panels.notice);
 }
@@ -3008,7 +3008,7 @@ fn a_parent_without_a_key_gets_the_card_and_add_id_column_makes_the_key() {
         let s = h.state_mut().session.as_mut().unwrap();
         let st = s.doc();
         let schema = st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap()).unwrap().to_string();
-        let order = st.uuid(st.alive().find(|o| archforge_er::rules::name_of(st, *o) == "Order").unwrap()).unwrap().to_string();
+        let order = st.uuid(st.alive().find(|o| archforge_core::name_of(st, *o) == "Order").unwrap()).unwrap().to_string();
         let payment = s.execute("er.entity.add", &serde_json::json!({ "schema": schema, "name": "Payment" })).unwrap().value["id"]
             .as_str()
             .unwrap()
@@ -3084,7 +3084,7 @@ fn problems_badge_the_canvas_and_a_note_is_placed_and_typed_in_place() {
         let s = h.state_mut().session.as_mut().unwrap();
         let (order, schema) = {
             let st = s.doc();
-            let order = st.uuid(st.alive().find(|o| archforge_er::rules::name_of(st, *o) == "Order").unwrap()).unwrap().to_string();
+            let order = st.uuid(st.alive().find(|o| archforge_core::name_of(st, *o) == "Order").unwrap()).unwrap().to_string();
             let schema = st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap()).unwrap().to_string();
             (order, schema)
         };
@@ -3127,8 +3127,8 @@ fn problems_badge_the_canvas_and_a_note_is_placed_and_typed_in_place() {
         .uuid(
             st.alive()
                 .find(|o| {
-                    archforge_er::rules::name_of(st, *o) == "customer_id"
-                        && archforge_er::rules::entity_of(st, *o).is_some_and(|e| archforge_er::rules::name_of(st, e) == "Customer")
+                    archforge_core::name_of(st, *o) == "customer_id"
+                        && archforge_er::rules::entity_of(st, *o).is_some_and(|e| archforge_core::name_of(st, e) == "Customer")
                 })
                 .unwrap(),
         )
@@ -3165,7 +3165,7 @@ fn the_column_editor_sets_the_size_default_and_generation_and_the_heading_takes_
     click(&mut h, at);
     assert!(h.state().panels.column.is_none(), "{:?}", h.state().panels.column);
     let st = h.state().session.as_ref().unwrap().doc();
-    let email = st.alive().find(|o| archforge_er::rules::name_of(st, *o) == "email").unwrap();
+    let email = st.alive().find(|o| archforge_core::name_of(st, *o) == "email").unwrap();
     assert_eq!(archforge_er::rules::type_display(st, email), "VARCHAR(255)");
     assert_eq!(archforge_er::rules::text_of(st, email, archforge_er::attribute::DEFAULT), "''");
     // A numeric takes precision and scale; the scale above the precision is refused and the editor stays open.
@@ -3371,7 +3371,7 @@ fn key_columns_follow_their_target_until_unlinked_and_a_pure_mapping_table_colla
             .unwrap()
             .iter()
             .filter_map(archforge_mof::Value::as_ref)
-            .find(|a| archforge_er::rules::name_of(st, *a) == "customer_customer_id")
+            .find(|a| archforge_core::name_of(st, *a) == "customer_customer_id")
             .unwrap();
         assert!(archforge_er::rules::is_nullable(st, column), "zero-or-one made the key column nullable");
     }
@@ -3558,7 +3558,7 @@ fn the_schema_adds_and_edits_sequences_and_views_and_a_selected_ones_edit_button
         let s = h.state_mut().session.as_mut().unwrap();
         let st = s.doc();
         let schema = st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap()).unwrap().to_string();
-        let key = st.uuid(st.alive().find(|o| archforge_er::rules::name_of(st, *o) == "customer_id").unwrap()).unwrap();
+        let key = st.uuid(st.alive().find(|o| archforge_core::name_of(st, *o) == "customer_id").unwrap()).unwrap();
         s.execute("view.select", &serde_json::json!({ "ids": [schema] })).unwrap();
         (schema, key)
     };

@@ -41,7 +41,7 @@ pub struct KeyRow {
 }
 
 fn name(store: &Store, o: Obj) -> String {
-    archforge_er::rules::name_of(store, o)
+    archforge_core::name_of(store, o)
 }
 
 /// The keys of a table: the primary key first, then the unique constraints.

@@ -46,7 +46,7 @@ fn cut(s: &str) -> String {
 
 /// The open project's diagrams and elements, in a stable order.
 pub(crate) fn index(store: &Store) -> Vec<Entry> {
-    let name = |o: Obj| archforge_er::rules::name_of(store, o);
+    let name = |o: Obj| archforge_core::name_of(store, o);
     let schema_name = |o: Obj| archforge_er::rules::schema_of(store, o).map(name).unwrap_or_default();
     let mut out = Vec::new();
     let mut push = |found: Found, icon: &'static ux::Icon, kind: u8, label: String, detail: String| {

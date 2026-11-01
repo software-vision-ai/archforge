@@ -41,7 +41,7 @@ pub fn rows(store: &Store, e: Obj) -> Vec<CheckRow> {
         .filter_map(|c| {
             Some(CheckRow {
                 id: store.uuid(c).ok()?,
-                name: archforge_er::rules::name_of(store, c),
+                name: archforge_core::name_of(store, c),
                 label: archforge_er::rules::display_name(store, c),
                 expression: archforge_er::rules::text_of(store, c, archforge_er::check_constraint::EXPRESSION),
             })

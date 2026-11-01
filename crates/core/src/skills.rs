@@ -122,7 +122,7 @@ pub fn subject_of(store: &Store, s: Obj) -> Option<Obj> {
 
 /// A skill's name, or empty.
 pub fn name_of(store: &Store, s: Obj) -> String {
-    string_of(store, s, named_element::NAME)
+    crate::name_of(store, s)
 }
 
 fn string_of(store: &Store, o: Obj, prop: PropId) -> String {

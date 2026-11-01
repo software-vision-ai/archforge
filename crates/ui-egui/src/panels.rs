@@ -138,8 +138,8 @@ pub struct ColumnEdit {
 /// The column `a` follows, as "Table.column".
 fn linked_label(store: &Store, a: Obj) -> Option<String> {
     let t = archforge_er::rules::linked_to(store, a)?;
-    let table = archforge_er::rules::entity_of(store, t).map(|e| archforge_er::rules::name_of(store, e)).unwrap_or_default();
-    Some(format!("{table}.{}", archforge_er::rules::name_of(store, t)))
+    let table = archforge_er::rules::entity_of(store, t).map(|e| archforge_core::name_of(store, e)).unwrap_or_default();
+    Some(format!("{table}.{}", archforge_core::name_of(store, t)))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -214,12 +214,12 @@ fn subject(shell: &Shell, project: &str) -> Subject {
                 Some(c) if c == archforge_core::SKILL => (tr("Skill · model"), tr("Skill"), tr("This skill"), tr("On this skill · {n}")),
                 Some(c) if c == archforge_er::GENERALIZATION => {
                     let (sup, sub, _) = archforge_er::rules::generalization_parts(store, o);
-                    let n = |e: Option<archforge_mof::Obj>| e.map(|e| archforge_er::rules::name_of(store, e)).unwrap_or_default();
+                    let n = |e: Option<archforge_mof::Obj>| e.map(|e| archforge_core::name_of(store, e)).unwrap_or_default();
                     let kind = fmt(&tr("Subtype · {sub} is a {super}"), &[("sub", &n(sub)), ("super", &n(sup))]);
                     (kind, tr("Subtype"), tr("This subtype"), tr("On this subtype · {n}"))
                 }
                 Some(c) if c == archforge_er::RELATIONSHIP => {
-                    let end = |p| store.get(o, p).ok().and_then(|v| v.as_ref()).map(|e| archforge_er::rules::name_of(store, e)).unwrap_or_default();
+                    let end = |p| store.get(o, p).ok().and_then(|v| v.as_ref()).map(|e| archforge_core::name_of(store, e)).unwrap_or_default();
                     let kind = fmt(
                         &tr("Relationship · {from} to {to}"),
                         &[("from", &end(archforge_er::relationship::FROM)), ("to", &end(archforge_er::relationship::TO))],
@@ -227,7 +227,7 @@ fn subject(shell: &Shell, project: &str) -> Subject {
                     (kind, tr("Relationship"), tr("This relationship"), tr("On this relationship · {n}"))
                 }
                 Some(c) if c == archforge_diagram::DIAGRAM => {
-                    let schema = crate::diagrams::schema_of(store, o).map(|s| archforge_er::rules::name_of(store, s)).unwrap_or_default();
+                    let schema = crate::diagrams::schema_of(store, o).map(|s| archforge_core::name_of(store, s)).unwrap_or_default();
                     (fmt(&tr("Diagram · of {schema}"), &[("schema", &schema)]), tr("Diagram"), tr("This diagram"), tr("On this diagram · {n}"))
                 }
                 _ => (tr("Element · model"), tr("Element"), tr("This element"), tr("On this element · {n}")),
@@ -236,9 +236,9 @@ fn subject(shell: &Shell, project: &str) -> Subject {
                 Some(c) if c == archforge_core::SKILL => archforge_core::skills::name_of(store, o),
                 Some(c) if c == archforge_diagram::DIAGRAM => crate::diagrams::diagram_name(store, o),
                 Some(c) if c == archforge_er::GENERALIZATION => {
-                    archforge_er::rules::generalization_parts(store, o).1.map(|s| archforge_er::rules::name_of(store, s)).unwrap_or_default()
+                    archforge_er::rules::generalization_parts(store, o).1.map(|s| archforge_core::name_of(store, s)).unwrap_or_default()
                 }
-                _ => archforge_er::rules::name_of(store, o),
+                _ => archforge_core::name_of(store, o),
             };
             Subject { obj: Some(o), id: store.uuid(o).ok(), class, name, kind, word, this, on_this }
         }
@@ -570,7 +570,7 @@ fn properties(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y:
                 .as_ref()
                 .and_then(|s| {
                     let store = s.doc();
-                    Some(archforge_er::rules::name_of(store, crate::diagrams::schema_of(store, subject.obj?)?))
+                    Some(archforge_core::name_of(store, crate::diagrams::schema_of(store, subject.obj?)?))
                 })
                 .unwrap_or_default();
             let at = pos2(r.left() + PAD + half + 16.0, y);
@@ -597,7 +597,7 @@ fn properties(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y:
                 .unzip();
             if let (Some(entity), Some(entity_id)) = (entity, entity_id) {
                 let store = shell.session.as_ref().map(|s| s.doc());
-                let name = store.map(|st| archforge_er::rules::name_of(st, entity)).unwrap_or_default();
+                let name = store.map(|st| archforge_core::name_of(st, entity)).unwrap_or_default();
                 let table = Subject {
                     obj: Some(entity),
                     id: Some(entity_id),
@@ -693,7 +693,7 @@ fn entity_rows(store: &Store, e: Obj) -> (Vec<ColumnRow>, bool) {
         .filter_map(|a| {
             Some(ColumnRow {
                 id: store.uuid(a).ok()?,
-                name: archforge_er::rules::name_of(store, a),
+                name: archforge_core::name_of(store, a),
                 ty: archforge_er::rules::type_display(store, a),
                 primary: archforge_er::rules::in_primary_key(store, a),
                 unique: archforge_er::rules::is_unique(store, a),
@@ -877,7 +877,7 @@ pub(crate) fn open_column(shell: &mut Shell, entity: Uuid, target: Option<Uuid>)
             ColumnEdit {
                 target,
                 entity,
-                name: archforge_er::rules::name_of(store, a),
+                name: archforge_core::name_of(store, a),
                 ty: if archforge_er::rules::domain_of(store, a).is_some() || archforge_er::rules::enum_of(store, a).is_some() {
                     archforge_er::rules::type_display(store, a)
                 } else {
@@ -906,10 +906,7 @@ pub(crate) fn open_column(shell: &mut Shell, entity: Uuid, target: Option<Uuid>)
             let taken = store
                 .by_uuid(entity)
                 .map(|e| {
-                    children(store, e, archforge_er::entity::ATTRIBUTE)
-                        .into_iter()
-                        .map(|a| archforge_er::rules::name_of(store, a))
-                        .collect::<Vec<_>>()
+                    children(store, e, archforge_er::entity::ATTRIBUTE).into_iter().map(|a| archforge_core::name_of(store, a)).collect::<Vec<_>>()
                 })
                 .unwrap_or_default();
             let name = crate::explorer::fresh_name("column", taken.into_iter(), true).unwrap_or_default();
@@ -967,7 +964,7 @@ fn collapse_offer(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y:
             let store = s.doc();
             let mut parents = archforge_er::rules::foreign_keys(store, entity).into_iter().filter_map(|fk| {
                 let k = archforge_er::rules::key_parts(store, fk).key?;
-                Some(archforge_er::rules::name_of(store, archforge_er::rules::entity_of(store, k)?))
+                Some(archforge_core::name_of(store, archforge_er::rules::entity_of(store, k)?))
             });
             (parents.next().unwrap_or_default(), parents.next().unwrap_or_default())
         }
@@ -1277,12 +1274,12 @@ fn column_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: 
                 let mut out: Vec<(Option<(bool, Uuid)>, String)> = Vec::new();
                 for d in archforge_er::rules::domains_of(store, schema) {
                     if let Ok(id) = store.uuid(d) {
-                        out.push((Some((true, id)), format!("{} · {}", archforge_er::rules::name_of(store, d), tr("domain"))));
+                        out.push((Some((true, id)), format!("{} · {}", archforge_core::name_of(store, d), tr("domain"))));
                     }
                 }
                 for en in archforge_er::rules::enums_of(store, schema) {
                     if let Ok(id) = store.uuid(en) {
-                        out.push((Some((false, id)), format!("{} · {}", archforge_er::rules::name_of(store, en), tr("enum"))));
+                        out.push((Some((false, id)), format!("{} · {}", archforge_core::name_of(store, en), tr("enum"))));
                     }
                 }
                 Some(out)
@@ -1421,7 +1418,7 @@ fn commit_column(shell: &mut Shell, edit: &ColumnEdit) {
             let Some(session) = shell.session.as_mut() else { return };
             let store = session.doc();
             let Some(a) = store.by_uuid(t) else { return };
-            let old_name = archforge_er::rules::name_of(store, a);
+            let old_name = archforge_core::name_of(store, a);
             let old_type = string_of(store, a, archforge_er::attribute::TYPE);
             let old_domain = archforge_er::rules::domain_of(store, a).and_then(|d| store.uuid(d).ok());
             let old_enum = archforge_er::rules::enum_of(store, a).and_then(|e| store.uuid(e).ok());
@@ -1535,7 +1532,7 @@ fn skill_rows(store: &Store, subject: &Subject) -> (Vec<SkillRow>, Vec<SkillRow>
             .filter(|e| e.origin != Some(element))
             .filter_map(|e| {
                 let origin = match e.origin {
-                    Some(o) => archforge_er::rules::name_of(store, o),
+                    Some(o) => archforge_core::name_of(store, o),
                     None => tr("project"),
                 };
                 Some(SkillRow {
