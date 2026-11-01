@@ -1,0 +1,23 @@
+[package]
+name = "archforge-notations"
+description = "The notations a project holds, composed into one store, one command table and one set of tables"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+archforge-core.workspace = true
+archforge-diagram.workspace = true
+archforge-engine.workspace = true
+archforge-er.workspace = true
+archforge-mof.workspace = true
+archforge-uml.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true

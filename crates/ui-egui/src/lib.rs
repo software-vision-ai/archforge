@@ -483,7 +483,7 @@ impl Shell {
         if parked.written == Some(revision) {
             return Ok(());
         }
-        let (tables, junctions) = archforge_er::storage();
+        let (tables, junctions) = archforge_notations::storage();
         let rows = archforge_mof::rows::snapshot(session.doc(), &tables, &junctions).map_err(|e| e.to_string())?;
         host.write(&path, rows);
         parked.written = Some(revision);
@@ -587,7 +587,7 @@ impl Shell {
         path.parent().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().into_owned())
     }
 
-    /// The session of the open project, made once per project through the ER crate, with the
+    /// The session of the open project, made once per project from its notations, with the
     /// host's ids. Without an id source, or when the engine refuses, the reason is kept for the
     /// status bar and said once in the log.
     pub(crate) fn adopt_project(&mut self) {
@@ -605,13 +605,13 @@ impl Shell {
                 let source = source.clone();
                 let ids = Box::new(move || source());
                 match rows {
-                    Some(rows) => archforge_er::session_from_rows_repaired(rows, ids, editing::fit_tables).map(|mut s| {
+                    Some(rows) => archforge_notations::session_from_rows_repaired(rows, ids, editing::fit_tables).map(|mut s| {
                         if project.unsaved {
                             s.mark_unsaved();
                         }
                         s
                     }),
-                    None => archforge_er::new_project_session(&project.name, ids),
+                    None => archforge_notations::new_project_session(&project.name, ids),
                 }
                 .map_err(SessionError::Engine)
             }
@@ -645,7 +645,7 @@ impl Shell {
         if self.written == Some(revision) || self.refused == Some(revision) || session.interacting() {
             return;
         }
-        let (tables, junctions) = archforge_er::storage();
+        let (tables, junctions) = archforge_notations::storage();
         match archforge_mof::rows::snapshot(session.doc(), &tables, &junctions) {
             Ok(rows) => {
                 host.write(&project.path, rows);

@@ -42,7 +42,10 @@ pub const TABLE: &[(&str, Class)] = &[
     ("uml", Class::Layer(6)),
     // The ER notation: its metamodel generated from our XMI, its commands on the MOF core.
     ("er", Class::Layer(6)),
-    ("ui-egui", Class::Layer(7)),
+    // The notations a project holds, composed into one store, one command table and one set of
+    // tables: the one crate above the notations that names them all.
+    ("notations", Class::Layer(7)),
+    ("ui-egui", Class::Layer(8)),
     // Host services, for the desktop only: the application uses them and the shell never depends on
     // them, so the portable-target check, which builds the layers below the shell, leaves them out.
     ("dolt", Class::Layer(8)),
@@ -215,6 +218,6 @@ mod tests {
 
     #[test]
     fn every_library_crate_of_the_repository_is_in_the_table() {
-        assert_eq!(class_of(SHELL), Some(Class::Layer(7)));
+        assert_eq!(class_of(SHELL), Some(Class::Layer(8)));
     }
 }

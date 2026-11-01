@@ -182,7 +182,7 @@ mod tests {
             r[2..].copy_from_slice(&n.to_be_bytes());
             archforge_mof::Uuid::v7(1_761_670_800_000, r)
         });
-        let mut s = archforge_er::new_project_session("Shop", ids).unwrap();
+        let mut s = archforge_notations::new_project_session("Shop", ids).unwrap();
         let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
         let schema = id(s.execute("er.schema.add", &json!({ "name": "shop" })).unwrap().value);
         let order = id(s.execute("er.entity.add", &json!({ "schema": schema, "name": "Order" })).unwrap().value);

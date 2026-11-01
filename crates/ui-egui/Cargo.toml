@@ -17,6 +17,7 @@ archforge-core.workspace = true
 archforge-diagram.workspace = true
 archforge-engine.workspace = true
 archforge-er.workspace = true
+archforge-notations.workspace = true
 archforge-mof.workspace = true
 archforge-names.workspace = true
 egui.workspace = true

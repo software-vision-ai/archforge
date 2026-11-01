@@ -36,7 +36,7 @@ chevrons 8); rows, fields and bars centre their content on their middle line (`u
 78 pt in, clear of the traffic lights. An open project has an in-memory ER session (`Shell::session`); nothing reaches the
 project's database yet, and the status bar says so once there is something unsaved.
 
-**Layer.** 7, over `archforge-er` (6), `archforge-core` and `archforge-diagram` (5), `archforge-mof` (4), `archforge-engine` (3) and
+**Layer.** 8, over `archforge-notations` (7), `archforge-er` (6), `archforge-core` and `archforge-diagram` (5), `archforge-mof` (4), `archforge-engine` (3) and
 `archforge-names`; the only library crate that may use the toolkit (egui). The shell never reads
 the clock or the file system: the ids of a model's elements come from the host (`Services::ids`).
 
@@ -54,7 +54,7 @@ or explorer with nothing to show says so in one line, never with a help text.
 | `Shell::ui` | `pub fn ui(&mut self, ui: &mut egui::Ui)` (draws the whole window) |
 | `Shell::request_quit` | `pub fn request_quit(&mut self)` (closes the window at the next frame) |
 | `Shell::open_project`, `Shell::close_project` | `pub fn open_project(&mut self, opened: Opened)`, `pub fn close_project(&mut self)`: the workspace replaces Home and back |
-| `Shell::project`, `Shell::session`, `Shell::session_error` | the open project, its ER session (made once per project through `archforge_er::new_project_session`), why none could be made |
+| `Shell::project`, `Shell::session`, `Shell::session_error` | the open project, its session (made once per project through `archforge_notations::new_project_session`), why none could be made |
 | `Shell::location` | `pub fn location(&self) -> Option<String>`: where the project lives, as the status bar says it |
 | `state::{Explorer, Panel}` | the workspace's explorer and right panel, part of `UiState` |
 | `Shell::attach_control` | `pub fn attach_control(&mut self, requests: Receiver<control::ControlRequest>)`: agent access on; the shell answers once per frame |

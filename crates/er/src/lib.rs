@@ -147,13 +147,13 @@ pub fn registry() -> Result<Arc<archforge_engine::Registry<Store, ErView>>, Stri
     archforge_engine::Registry::new(specs)
 }
 
-/// The id counter a new project's session starts at: ids below it are the store's own.
+/// The id counter a new session starts at: ids below it are the store's own.
 const FIRST_COUNTER: u64 = 1;
 
-/// The session of a project that has nothing yet: a store over the shared core, the diagram
-/// metamodel and ER, the project's Model root named `name`, and the ER registry. `ids` mints the
-/// elements' ids; the host supplies it, since only the host may read the clock.
-pub fn new_project_session(name: &str, ids: Box<dyn FnMut() -> Uuid + Send>) -> Result<Session, String> {
+/// A session over the shared core, the diagram metamodel and ER alone, with a Model root named
+/// `name`: for ER's own tests and tools. A project's session holds every notation and is made by
+/// `archforge-notations`. `ids` mints the elements' ids.
+pub fn session_alone(name: &str, ids: Box<dyn FnMut() -> Uuid + Send>) -> Result<Session, String> {
     let registry = registry()?;
     let mut st = store(ids)?;
     let model = st.create(archforge_core::MODEL).map_err(|e| e.to_string())?;
@@ -161,42 +161,12 @@ pub fn new_project_session(name: &str, ids: Box<dyn FnMut() -> Uuid + Send>) -> 
     Ok(Session::new(registry, st, FIRST_COUNTER, archforge_engine::Options::default()))
 }
 
-/// The tables a project stores its model in: the shared core's, the diagram metamodel's and ER's,
-/// in that order. The shell writes rows for them and the host stores them, so both name them here.
+/// The tables of the shared core, the diagram metamodel and ER, in that order: what a store of
+/// [`store`] is written to.
 pub fn storage() -> (Vec<archforge_mof::schema::Table>, Vec<archforge_mof::schema::Junction>) {
     let tables = archforge_core::TABLES.iter().chain(archforge_diagram::TABLES).chain(TABLES).copied().collect();
     let junctions = archforge_core::JUNCTIONS.iter().chain(archforge_diagram::JUNCTIONS).chain(JUNCTIONS).copied().collect();
     (tables, junctions)
-}
-
-/// The session of a project read back from its rows: the store rebuilt from them and checked,
-/// the ER registry, saved as it is. `ids` mints the ids of the elements made from now on.
-pub fn session_from_rows(rows: &archforge_mof::rows::Rows, ids: Box<dyn FnMut() -> Uuid + Send>) -> Result<Session, String> {
-    session_from_rows_repaired(rows, ids, |_| {})
-}
-
-/// [`session_from_rows`] with `repair` run on the model read before the session starts: for a
-/// layout the reader puts right (a box too small for what it shows) without an undo step; it is
-/// written with the next change.
-pub fn session_from_rows_repaired(
-    rows: &archforge_mof::rows::Rows,
-    ids: Box<dyn FnMut() -> Uuid + Send>,
-    repair: impl FnOnce(&mut Store),
-) -> Result<Session, String> {
-    let registry = registry()?;
-    let mut st = store(ids)?;
-    let (tables, junctions) = storage();
-    archforge_mof::rows::restore(&mut st, rows, &tables, &junctions).map_err(|e| e.to_string())?;
-    repair(&mut st);
-    if let Some(problem) = st.validate_all().first() {
-        return Err(format!("the model does not hold together: {problem:?}"));
-    }
-    if !st.alive().any(|o| st.class_of(o).ok() == Some(archforge_core::MODEL)) {
-        return Err("the project has no model root".into());
-    }
-    let mut session = Session::new(registry, st, FIRST_COUNTER, archforge_engine::Options::default());
-    session.mark_saved().map_err(|e| e.to_string())?;
-    Ok(session)
 }
 
 /// A universe of the shared core, the diagram metamodel, ER and the metamodels given.

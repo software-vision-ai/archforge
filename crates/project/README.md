@@ -14,10 +14,15 @@ others may not write to it, its own `.dolt` may hold nothing but a server lock, 
 read with a cap on rows, keys and values; anything unexpected is refused, never changed.
 
 
-The model's tables come with the generated storage (il6.1.2); a format-2 project may carry the `er_`
-tables an earlier Archforge made, unused. A project whose model fingerprint is an earlier
-Archforge's is brought up to date when it opens, but only by adding: the tables it lacks, and the
-columns that come after the ones a table has, empty or holding what a new object holds. A table
+The model's tables are the notations' generated storage (il6.1.2), composed by `archforge-notations`;
+a project's database holds only the tables rows have gone to, made with the first rows, and a table
+it lacks reads as empty, so a notation the project does not use costs it nothing. The table
+`model_tables` names every model table rows have gone to, written with those rows: one of them
+missing is a loss, and the project is refused rather than read short. A project of an earlier
+Archforge records the model tables it holds when it is brought up to date. Every table's shape
+is looked at in two queries, whatever the number of tables. A project whose model fingerprint is an
+earlier Archforge's is brought up to date when it opens, but only by adding the columns that come
+after the ones a table has, empty or holding what a new object holds. A table
 Archforge does not know, columns it does not write, or a list table of another shape keep the
 project refused, unchanged. Opening refuses a project whose database holds triggers,
 stored procedures or events, since Archforge's writes would set them off.
