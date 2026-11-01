@@ -358,6 +358,24 @@ pub fn remove_selection(shell: &mut Shell) {
     }
     let Some(id) = uuid_of(store, obj) else { return };
     let ui = crate::notation_ui::of(shell.notation_uis, store, obj);
+    // What it holds moves up to its parent (a nested package): no dialog, the toast says where.
+    if let Some(parent) = ui.and_then(|u| u.hands_up(store, obj)) {
+        let (name, to) = (name_of(store, obj), name_of(store, parent));
+        let held = ui.is_some_and(|u| u.has_children(store, obj));
+        match run(shell, "element.remove", json!({ "ids": [id.to_string()] })) {
+            Ok(_) => {
+                let text = if held {
+                    fmt(&tr("{name} removed; what it held moved to {parent}"), &[("name", &name), ("parent", &to)])
+                } else {
+                    fmt(&tr("{name} removed"), &[("name", &name)])
+                };
+                let undo_label = shell.session.as_ref().and_then(|s| s.undo_label().map(str::to_string));
+                shell.canvas.toast = Some(crate::connect::Toast { text, until: shell.frames.saturating_add(300), undo_label });
+            }
+            Err(e) => shell.explorer.notice = Some(e),
+        }
+        return;
+    }
     let (relationships, keys, foreign_keys) = ui.map(|u| u.consequences(store, obj)).unwrap_or_default();
     let has_children = ui.is_some_and(|u| u.has_children(store, obj));
     if relationships + keys + foreign_keys == 0 && !has_children {
@@ -498,6 +516,39 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
             continue;
         }
         tree_row(shell, &mut clip, p, r, y, row, selected_obj == Some(row.obj));
+    }
+    // A row dragged onto another row: what the drop means there (a class into a package), its
+    // target ringed while it is held over it.
+    let row_at = |at: egui::Pos2| -> Option<&Row> {
+        if !tree.contains(at) {
+            return None;
+        }
+        let i = ((at.y + 7.0 - (r.top() + FIRST_ROW - offset)) / ROW).floor();
+        (i >= 0.0).then(|| rows.get(i as usize)).flatten()
+    };
+    let drop_of = |shell: &Shell, dragged: Uuid, target: &Row| {
+        let store = shell.session.as_ref()?.doc();
+        let d = store.by_uuid(dragged)?;
+        crate::notation_ui::of(shell.notation_uis, store, target.obj)?.drop_on(store, d, target.obj)
+    };
+    if let (Some(dragged), Some(at)) = (shell.explorer.dragging, ui.input(|i| i.pointer.latest_pos()))
+        && let Some(target) = row_at(at).filter(|t| t.id != dragged && drop_of(shell, dragged, t).is_some())
+    {
+        let i = rows.iter().position(|x| x.id == target.id).unwrap_or(0);
+        let y = r.top() + FIRST_ROW + i as f32 * ROW - offset;
+        let hit = Rect::from_min_max(pos2(r.left() + 8.0, y - 7.0), pos2(r.right() - 8.0, y - 7.0 + ROW_HEIGHT));
+        clip.painter().rect_stroke(hit, 6.0, Stroke::new(1.5, p.accent), StrokeKind::Inside);
+    }
+    if let Some((dragged, at)) = shell.explorer.dropped
+        && tree.contains(at)
+    {
+        shell.explorer.dropped = None;
+        let todo = row_at(at).filter(|t| t.id != dragged).and_then(|t| drop_of(shell, dragged, t));
+        if let Some((cmd, params)) = todo
+            && let Err(e) = run(shell, cmd, params)
+        {
+            shell.explorer.notice = Some(e);
+        }
     }
     if rows.len() >= MAX_ROWS {
         let y = r.top() + FIRST_ROW + rows.len() as f32 * ROW - offset;

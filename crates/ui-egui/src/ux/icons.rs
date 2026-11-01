@@ -809,6 +809,25 @@ pub const TOOL_CLASS: Icon = Icon {
         L([0.0, 7.25], [14.0, 7.25]),
     ],
 };
+/// A class's attribute in the Models tree: a small field.
+pub const ATTRIBUTE: Icon = Icon {
+    size: [16.0, 16.0],
+    stroke: 1.3,
+    segments: &[L([4.0, 5.0], [12.0, 5.0]), L([12.0, 5.0], [12.0, 11.0]), L([12.0, 11.0], [4.0, 11.0]), L([4.0, 11.0], [4.0, 5.0])],
+};
+/// A class's operation in the Models tree: a pair of brackets.
+pub const OPERATION: Icon = Icon {
+    size: [16.0, 16.0],
+    stroke: 1.3,
+    segments: &[
+        L([6.0, 3.0], [4.0, 6.0]),
+        L([4.0, 6.0], [4.0, 10.0]),
+        L([4.0, 10.0], [6.0, 13.0]),
+        L([10.0, 3.0], [12.0, 6.0]),
+        L([12.0, 6.0], [12.0, 10.0]),
+        L([12.0, 10.0], [10.0, 13.0]),
+    ],
+};
 /// A class in the Models tree and the search: its box in three compartments.
 pub const CLASS: Icon = Icon {
     size: [16.0, 16.0],

@@ -535,3 +535,4 @@ str		To	To
 str		{what} removed	{what} removed
 # Packages (AR-17)
 str		Class · {package}	Class · {package}
+str		{name} removed; what it held moved to {parent}	{name} removed; what it held moved to {parent}

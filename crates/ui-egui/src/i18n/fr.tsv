@@ -536,3 +536,4 @@ str		To	Vers
 str		{what} removed	Supprimé : {what}
 # Paquetages (AR-17)
 str		Class · {package}	Classe · {package}
+str		{name} removed; what it held moved to {parent}	{name} supprimé ; son contenu a été déplacé vers {parent}

@@ -186,6 +186,8 @@ pub enum Menu {
     ParamType(usize),
     /// An association end's aggregation (archforge-3c5.1.4).
     EndAggregation(usize),
+    /// A class's package (AR-17).
+    ClassPackage,
 }
 
 /// The selection the panels describe.

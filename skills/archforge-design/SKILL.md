@@ -325,6 +325,20 @@ What is UML's own, beside the shared rules above.
 - A selected class-diagram line shows a round handle at each end; one dragged onto another class
   moves that end there, its lines on every diagram following. Delete removes the line's
   relationship with a toast and Undo.
+- Packages nest as deep as needed. The Models tree shows a package, then the packages it holds,
+  then its classes, and under an open class its attributes (with their type) and operations
+  (`name()`, with their return type), every level folded until opened; Expand all opens packages
+  and classes. `+` adds a class or a package inside the selected package (or the package of what is
+  selected); with nothing selected, a top-level package.
+- A class moves to another package by dragging its row onto a package's row (or onto a class of
+  that package), the target ringed while held over it, or with the Package select beside Name in
+  its Properties (packages named by their path, `sales › orders`). A package row drags onto
+  another package the same way.
+- A class of another package on a class diagram is an outsider: dimmed, its package named in the
+  eyebrow, as ER draws a table of another schema.
+- Removing a nested package needs no dialog: what it held moves up to its parent and the toast
+  says so with Undo (owner decision, every notation). A top-level package asks, as anything that
+  takes its contents along does.
 - An association's Properties: Name, its From and To classes read only with "Drag a line end onto
   another class.", then a section per end, "End at {class}": Role and Multiplicity (written on
   Enter or leaving the field), Navigable and Aggregation (None, Shared, Composite; written when

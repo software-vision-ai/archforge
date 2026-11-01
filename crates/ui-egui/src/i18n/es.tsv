@@ -536,3 +536,4 @@ str		To	Hacia
 str		{what} removed	Eliminado: {what}
 # Paquetes (AR-17)
 str		Class · {package}	Clase · {package}
+str		{name} removed; what it held moved to {parent}	{name} eliminado; su contenido se movió a {parent}
