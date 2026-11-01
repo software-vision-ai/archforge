@@ -1637,6 +1637,58 @@ fn the_filter_narrows_the_tree_and_the_keys_walk_it() {
 }
 
 /// A harness with a schema, a table of two columns, the table selected.
+#[test]
+fn the_models_tree_scrolls_and_follows_the_selection() {
+    let (mut h, _) = table_harness();
+    let (first, last) = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let st = s.doc();
+        let schema = st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap()).unwrap().to_string();
+        let mut ids = Vec::new();
+        for n in 0..60 {
+            let out = s.execute("er.entity.add", &serde_json::json!({ "schema": schema, "name": format!("table_{n:02}") })).unwrap();
+            ids.push(out.value["id"].as_str().unwrap().to_string());
+        }
+        s.execute("view.select", &serde_json::json!({ "ids": [] })).unwrap();
+        (ids[0].clone(), ids[59].clone())
+    };
+    h.run();
+    let row = |id: &str| format!("workspace.explorer.row.{id}");
+    assert!(!ids(&h).contains(&row(&last)), "the last table is below the tree's foot");
+    // The wheel over the tree brings the rows below into view.
+    let tree = rect_of(&h, "workspace.explorer.filter").center() + egui::vec2(0.0, 300.0);
+    h.event(egui::Event::PointerMoved(tree));
+    for _ in 0..8 {
+        h.event(egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Point,
+            delta: egui::vec2(0.0, -1200.0),
+            modifiers: egui::Modifiers::NONE,
+            phase: egui::TouchPhase::Move,
+            source: egui::MouseWheelSource::Wheel,
+        });
+        h.run_steps(30);
+    }
+    assert!(ids(&h).contains(&row(&last)), "scrolled to the end");
+    assert!(h.state().explorer.scroll.offset > 0.0);
+    for _ in 0..8 {
+        h.event(egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Point,
+            delta: egui::vec2(0.0, 1200.0),
+            modifiers: egui::Modifiers::NONE,
+            phase: egui::TouchPhase::Move,
+            source: egui::MouseWheelSource::Wheel,
+        });
+        h.run_steps(30);
+    }
+    assert_eq!(h.state().explorer.scroll.offset, 0.0, "and back to the top, never past it");
+    // A table selected elsewhere (the canvas, Properties) is brought into view.
+    h.event(egui::Event::PointerMoved(egui::pos2(900.0, 500.0)));
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [last] })).unwrap();
+    h.run_steps(5);
+    assert!(ids(&h).contains(&row(&last)), "the selected table's row is shown");
+    let _ = first;
+}
+
 fn table_harness() -> (Harness<'static, Shell>, String) {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1120.0));
     let (schema, customer) = {

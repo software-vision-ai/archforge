@@ -88,6 +88,9 @@ the change, and update this file in the same change.
 - Dragging a table from Models onto the canvas places it; a table already there is refused with a
   toast.
 - Deleting from the explorer asks first when the element is on diagrams or has keys.
+- The Models and Diagrams trees scroll under their filter (wheel or trackpad, a thin thumb at the
+  edge while they overflow); a row newly selected, on the canvas, in Properties or with the keys,
+  is scrolled into view once, so the tree never fights the wheel.
 
 ## Canvas and tools
 - The tools float at the bottom centre of the canvas: Select, Pan | Entity, Relationship with its
