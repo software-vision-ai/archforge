@@ -9,6 +9,13 @@ The decisions taken so far about the interface, as rules. `skills/archforge-ui/S
 to draw them. A change that departs from one of these is a new decision for the owner: say so in
 the change, and update this file in the same change.
 
+Every rule here holds for every notation (ER now, UML and C4 next) unless it sits under "ER
+notation" at the end. Many were first decided while building ER and are worded with ER's boxes and
+lines as the example: read "table" as any notation's box (a class, a container) and "relationship"
+as any of its lines. A notation adds its own section for what is its own, and builds on the shared
+parts (the shell, the canvas and its gestures, routing, arrange, appearance, notes, the explorers,
+search, Properties' panel and editors, skills, messages and saving) instead of making its own.
+
 ## Our own style
 - Archforge has its own look. Never copy how classic modelling tools look or behave; reimagine a
   control in Archforge's visual language and show it to the owner before it is final.
@@ -34,7 +41,8 @@ the change, and update this file in the same change.
   small semibold capitals.
 - Colours are role tokens with a Light and a Dark value; every screen exists in both, and the
   title strip's moon or sun switches between them, kept in the preferences.
-- Tables are orange by default, the selection is accent blue, and a style set on one table wins.
+- The selection is accent blue in every notation; each notation gives its boxes a default colour,
+  and a style set on one box wins.
 
 ## Shell
 - The title strip is 32 pt tall, clear of the macOS window buttons, and holds Home, + Open project
@@ -98,83 +106,70 @@ the change, and update this file in the same change.
   beside it changing as it is typed; Done, the close button, Enter or Esc close it.
 
 ## Explorer
-- Models starts at the schemas: schema, then its domains, enum types, sequences and views, then
-  its tables and their columns. Diagrams appear only in the Diagrams explorer.
-- Models starts folded: only the schemas show, and the user drills in. The button beside + opens
+- Models shows the model's elements, a notation's own containers first; diagrams appear only in the
+  Diagrams explorer.
+- Models starts folded: only the top-level containers (an ER model's schemas) show, and the user drills in. The button beside + opens
   every row (Expand all), or folds them all (Collapse all) once everything is open; a filter opens
   what it shows, and the button rests while one is typed. An element selected on the canvas or in
   Properties opens its schema and table once, so its row shows; folding them again sticks.
 - The + adds what fits the selection, named in place: Enter confirms, Esc cancels.
-- Dragging a table from Models onto the canvas places it; a table already there is refused with a
+- Dragging an element from Models onto the canvas places it; one already there is refused with a
   toast.
-- Deleting from the explorer asks first when the element is on diagrams or has keys.
+- Deleting from the explorer asks first when the element is on diagrams or takes other elements
+  with it (for ER, keys).
 - The Models and Diagrams trees scroll under their filter (wheel or trackpad, a thin thumb at the
   edge while they overflow); a row newly selected, on the canvas, in Properties or with the keys,
   is scrolled into view once, so the tree never fights the wheel.
 
 ## Canvas and tools
-- The tools float at the bottom centre of the canvas: Select, Pan | Entity, Relationship with its
-  chevron, Note, Link note | Key status and Grid | Arrange diagram. The toolbar is never hidden;
+- The tools float at the bottom centre of the canvas: Select, Pan | the diagram kind's own tools
+  (for ER: Entity, Relationship with its chevron) | Note, Link note | the kind's view toggles (for
+  ER: Key status) and Grid | Arrange diagram. The toolbar is never hidden;
   the minimap folds to its button when both do not fit.
 - Arrange diagram (owner, 2026-11-01) lays the whole diagram out in layers along its lines: the
-  table a relationship starts at above the one it ends at, each layer ordered so lines cross
-  little, groups with no line between them side by side, tables with no line in rows below. It
+  box a line starts at above the one it ends at, each layer ordered so lines cross
+  little, groups with no line between them side by side, boxes with no line in rows below. It
   keeps the diagram's top left, drops dragged line routes, is one undo step, and shows the whole
   diagram after.
 - The line under the pointer turns to the accent with a soft halo along its whole route, so it
   reads among the others.
-- The Relationship tool's button is double width, and its icon shows the two ends its next line
-  will get.
+- A line tool's button is double width, and its icon shows the two ends its next line will get;
+  its chevron opens the kinds and ends it draws, and the choice stays for the next line.
 - A placing or drawing tool hands back to Select after it has made one thing.
-- Selecting is by click, Shift-click and marquee. A selected table shows handles and two buttons
-  beside it: connect and add column. Dragging moves the whole selection as one undo step; arrow
-  keys nudge. Two or more selected tables show an arrange bar under them.
-- Delete removes a table from the diagram only; Shift+Delete deletes it from the model after a
-  dialog that names what goes with it.
-- Double-clicking a column on the canvas opens its editor in Properties.
-- Key marks (PK, FK, FKn) sit in a column at the left of each table row; a column that follows
-  another column shows a link mark whose tooltip names the column it follows.
-- Related tables are shown by a focus chip above the canvas, the other tables faded, never as a
-  drawn region.
-- A table of another schema is drawn faded with a dashed border and its schema in its header, and
-  stays editable.
+- Selecting is by click, Shift-click and marquee. A selected box shows handles and buttons beside
+  it: connect, and the notation's add (for ER, add column). Dragging moves the whole selection as
+  one undo step; arrow keys nudge. Two or more selected boxes show an arrange bar under them.
+- Delete removes a box from the diagram only; Shift+Delete deletes its element from the model after
+  a dialog that names what goes with it.
+- Double-clicking a box's name renames it in place; double-clicking a member (a column, an
+  attribute) opens its editor in Properties.
+- Related boxes are shown by a focus chip above the canvas, the others faded, never as a drawn
+  region.
+- A box of another container (an ER table of another schema, a UML class of another package) is
+  drawn faded with a dashed border and its container in its header, and stays editable.
 - The minimap sits at the canvas's right edge; the zoom control is in its footer. Its viewport
   rectangle is dragged to move the view (a hand over it, a closed hand while dragging); a press
   elsewhere in the map centres the view there and the drag goes on from there. The map keeps its
   scale while a drag lasts, so it never shifts under the pointer.
 
-## Relationships and notation
-- Crow's foot. Each end draws two marks: the outer one the most (a bar for one, a foot for many),
-  the inner one the fewest (a circle for zero, a bar for one). Exactly one is two bars.
-- An identifying relationship's line is solid; a non-identifying one is dashed. With Key status
-  on, a line is green when its foreign key is on and orange when it is off.
-- Relationships are drawn by dragging from table to table, never click by click, and drawing never
-  blocks: without a parent key, or when either table has no columns at all, the line is drawn
-  with its foreign key off.
-- A relationship dragged from a table and dropped on empty canvas makes a new table there, joined
-  by the line with its foreign key off, as one undo step, the new table's name open for typing.
-- A line's cardinalities show as text beside the line near each end: under a level line (its name
-  sits above), right of an upright one. A text is dragged anywhere and stays there relative to its
-  end, as the line's label; a double click puts it back.
+## Lines
+- Lines are drawn by dragging from box to box, never click by click. A line dragged from a box and
+  dropped on empty canvas makes a new box there, joined by the line, as one undo step, the new
+  box's name open for typing.
+- A line's end texts (multiplicities, cardinalities) show beside the line near each end: under a
+  level line (its name sits above), right of an upright one. A text is dragged anywhere and stays
+  there relative to its end, as the line's label; a double click puts it back.
 - A right-angled line's segment is dragged across (the pointer shows which way): a middle one
-  slides, the first or last slides where the line meets its table. The line keeps its route from
+  slides, the first or last slides where the line meets its box. The line keeps its route from
   then on; a double click on it routes it anew.
-- Cardinality is chosen in one place, the popover from the Relationship tool's chevron, with
-  glyphs, not words; the choice stays for the next line. An existing line's ends change there or
-  in Properties.
-- Key columns a foreign key adds grow every box of their table to show them, in the same undo
-  step; deleting a relationship takes its foreign key and those key columns with it. A project
-  opens with every table box at least tall enough for its columns.
-- Many-to-many offers a mapping table; a mapping table that holds only its two keys offers to
-  collapse back into a line.
-- ER has no generalization tool. Subtypes are added from the supertype's Properties and drawn as a
-  solid line with a hollow triangle at the supertype.
+- A generalization is a solid line with a hollow triangle at the general end, in every notation.
+- An existing line's ends change in its tool's popover or in Properties.
 
 ## Notes
 - The Note tool places a note on an amber tint, typed in place.
-- A note links to a table or to a relationship with a thin dashed straight line; a link to a
+- A note links to a box or to a line with a thin dashed straight line; a link to a
   relationship ends on its line with a dot. A link is drawn from the selected note's handle or
-  with the Link note tool, whose icon is that dashed line: press on a note, drag onto a table or a
+  with the Link note tool, whose icon is that dashed line: press on a note, drag onto a box or a
   line. A link belongs to the diagram, can be selected and deleted on its own, and goes with what
   it joins.
 
@@ -182,11 +177,12 @@ the change, and update this file in the same change.
 - Properties shows model data, the same on every diagram; Appearance styles this diagram only;
   Skills is a tab of its own.
 - The panel opens with the selection's name, its kind and a Description field, pinned while the
-  body scrolls. A table and its columns share one page, so moving between them keeps the scroll.
+  body scrolls. A box's element and its members (a table and its columns, a class and its
+  attributes) share one page, so moving between them keeps the scroll.
 - Sections are divided by full-width lines, each headed by a regular title with its count
   ("Columns · 3") and an icon action such as +. Fields are filled and borderless with small muted
   labels above them. The panel carries no help or footer texts.
-- Every list row (columns, keys, checks, indexes, types, sequences, views) has an edit button that
+- Every list row (columns, keys, checks, indexes, types, sequences, views; attributes, operations) has an edit button that
   is always visible at its right end. Only that button, or a double click on the row, opens the
   row's editor. Selecting an element never opens an editor.
 - A click on a row selects its element, so the Models tree and the canvas follow; selecting in the
@@ -195,17 +191,12 @@ the change, and update this file in the same change.
 - An editor commits nothing until Apply. Enter applies, Esc cancels, Apply is one undo step and
   closes the editor; a refusal shows under its field and keeps the editor open. Editor actions are
   icons: a red bin for Remove, a cross for Cancel, a check for Apply.
-- Foreign keys come only from drawing relationships; a table's Properties has no foreign key
-  section.
-- Ticking Primary key ticks Not null, and unticking Not null unticks Primary key. A parent end's
-  cardinality and its key columns' nullability move together.
-- A linked column follows the name and type of the column it points at; any direct edit unlinks
-  it, and the editor offers Unlink.
-- The column type menu lists the schema's domains and enum types, then the built-in types.
+- A type menu lists the model's own types nearest the element first (for ER the schema's domains
+  and enum types), then the built-in types.
 
 ## Appearance
 - Appearance styles the selection on the diagram open in the centre, and on that diagram only.
-  For now it holds Style (owner, 2026-10-31): a table, a note or another card takes Fill, Border
+  For now it holds Style (owner, 2026-10-31): a box (a table, a class), a note or another card takes Fill, Border
   and Text colour and a Border width; a line takes Line colour, Line width and Line routing. Text
   size comes later with its own model field; a line style is never offered, since dashed already
   means not identifying.
@@ -213,19 +204,17 @@ the change, and update this file in the same change.
   a row of three under Line width. Route around tables, a switch under the row, shows only for
   Right-angled. The diagram sets how its lines run and a line may run its own way; with nothing
   selected the panel shows the diagram's routing. A new diagram's lines run right-angled around
-  the tables; a diagram made before keeps straight lines until changed.
-- A right-angled line leaves and enters a table at right angles to its side; around tables it
-  keeps a margin from every table near it and takes the way with the fewest bends. A table's lines
-  spread over the middle of each side, ordered by where their other table lies, so they leave
-  side by side. Moving a table re-routes its lines as it moves.
+  the boxes; a diagram made before keeps straight lines until changed.
+- A right-angled line leaves and enters a box at right angles to its side; around boxes it keeps a
+  margin from every box near it and takes the way with the fewest bends. A box's lines spread over
+  the middle of each side, ordered by where their other box lies, so they leave side by side.
+  Moving a box re-routes its lines as it moves.
 - Each colour row starts with the diagram's own colour, drawn in the theme shown, which takes the
   row's own colour away; then the design's colours; then Your own colour, which opens a picker
   (a saturation and brightness field, a hue bar, the colour's code, Cancel and Apply). Nothing
   changes until Apply; Esc or a click outside cancels.
-- A table or note with its own fill and no text colour of its own draws its text to read on that
+- A box or note with its own fill and no text colour of its own draws its text to read on that
   fill: dark on a light fill, light on a dark one, in either theme.
-- A line's own colour shows while Key status is off; while it is on, the panel offers Show line
-  colours, which turns it off. A line's own width shows always.
 - Use diagram defaults takes the selection's own look away. Every change is one undo step for
   the whole selection.
 
@@ -262,17 +251,49 @@ the change, and update this file in the same change.
   fields; they come back when the contexts are known.
 
 ## Messages
-- Problems show as an orange badge on the table or line and in a Problems section of Properties,
+- Problems show as an orange badge on the box or line and in a Problems section of Properties,
   whose rows select the element.
-- A fact the database cannot enforce, such as a one-or-more end, is a notice, never a refusal. It
-  says in the model's words what is wrong, why, and which choice avoids it.
-- A refusal shows where the action happened: under the field, under the table's name or under the
+- A fact the model's target cannot enforce (for ER, the database; say a one-or-more end) is a
+  notice, never a refusal. It says in the model's words what is wrong, why, and which choice
+  avoids it.
+- A refusal shows where the action happened: under the field, under the box's name or under the
   tree. Removals that take other things with them show a toast with Undo.
 
 ## Saving
 - Every edit is written to the project on its own a moment after it settles, so a crash loses
   nothing. Save makes a version; "Unsaved changes" means edits not yet in a version.
 - Every edit is a command that can be undone; a drag, an Apply or an arrange is one step.
+
+## ER notation
+What is ER's own, beside the shared rules above.
+- Tables are orange by default, and a style set on one table wins.
+- Models starts at the schemas: schema, then its domains, enum types, sequences and views, then
+  its tables and their columns.
+- Key marks (PK, FK, FKn) sit in a column at the left of each table row; a column that follows
+  another column shows a link mark whose tooltip names the column it follows.
+- Crow's foot. Each end draws two marks: the outer one the most (a bar for one, a foot for many),
+  the inner one the fewest (a circle for zero, a bar for one). Exactly one is two bars.
+- An identifying relationship's line is solid; a non-identifying one is dashed. With Key status
+  on, a line is green when its foreign key is on and orange when it is off.
+- Drawing a relationship never blocks: without a parent key, or when either table has no columns
+  at all, the line is drawn with its foreign key off; one dropped on empty canvas makes its new
+  table with the foreign key off.
+- Cardinality is chosen in one place, the popover from the Relationship tool's chevron, with
+  glyphs, not words.
+- Key columns a foreign key adds grow every box of their table to show them, in the same undo
+  step; deleting a relationship takes its foreign key and those key columns with it. A project
+  opens with every table box at least tall enough for its columns.
+- Many-to-many offers a mapping table; a mapping table that holds only its two keys offers to
+  collapse back into a line.
+- ER has no generalization tool. Subtypes are added from the supertype's Properties.
+- Foreign keys come only from drawing relationships; a table's Properties has no foreign key
+  section.
+- Ticking Primary key ticks Not null, and unticking Not null unticks Primary key. A parent end's
+  cardinality and its key columns' nullability move together.
+- A linked column follows the name and type of the column it points at; any direct edit unlinks
+  it, and the editor offers Unlink.
+- A line's own colour shows while Key status is off; while it is on, the panel offers Show line
+  colours, which turns it off. A line's own width shows always.
 
 ## Not decided yet
 The menu bar's structure; how a colour chosen in Appearance and the key-status colour combine;
