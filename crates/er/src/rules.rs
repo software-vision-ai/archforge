@@ -90,6 +90,16 @@ pub fn entity_name_free(store: &Store, schema: Obj, name: &str, except: Option<O
     name_free_under(store, schema, name, except)
 }
 
+/// Whether `name` is free among the relationships of `schema`, except for `except`; an unnamed
+/// relationship takes no name.
+pub fn relationship_name_free(store: &Store, schema: Obj, name: &str, except: Option<Obj>) -> bool {
+    name.is_empty()
+        || !store
+            .by_name(relationship::NAME, name)
+            .into_iter()
+            .any(|o| Some(o) != except && store.container(o).ok().flatten().map(|(c, _)| c) == Some(schema))
+}
+
 /// Whether `name` is free among the attributes of `entity`, except for `except`.
 pub fn attribute_name_free(store: &Store, entity: Obj, name: &str, except: Option<Obj>) -> bool {
     name_free_under(store, entity, name, except)
