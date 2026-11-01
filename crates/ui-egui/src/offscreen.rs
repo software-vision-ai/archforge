@@ -58,6 +58,8 @@ pub enum Screen {
     /// A class diagram of a package with three classes, the package open in the tree
     /// (archforge-3c5.1.1).
     WorkspaceClassDiagram,
+    /// The sample class model to read: members, every line kind and end (archforge-3c5.1.2).
+    WorkspaceClassDiagramRead,
     /// The routing sample with the top bar's search open on "order" (archforge-9ln.1.3).
     WorkspaceSearch,
     /// The Diagrams explorer with the diagram "dbo" open, its one table Company placed and its key
@@ -231,6 +233,10 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
     if screen == Screen::WorkspaceClassDiagram {
         shell.adopt_project();
         sample_class_diagram(&mut shell)?;
+    }
+    if screen == Screen::WorkspaceClassDiagramRead {
+        shell.adopt_project();
+        crate::uml_ui::open_sample(&mut shell)?;
     }
     if matches!(
         screen,

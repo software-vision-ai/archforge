@@ -1,8 +1,8 @@
 uml 2.5.1 from XMI (FNV-1a 64 28130e4e7cea905d)
 classes: 242 (193 concrete, 49 abstract)
-properties: 622 (73 derived or derived unions without a field, 213 composite, 180 with an opposite)
+properties: 622 (73 derived or derived unions without a field, 213 composite, 154 with an opposite)
 data types: 18 (13 enumerations)
-associations: 418 (328 with an association-owned or missing end: no stored opposite)
+associations: 418 (292 with an association-owned or missing end, 49 with a derived end: no stored opposite)
 subsets or redefinitions of association-owned ends dropped: 34
 defaults on derived properties dropped: 1
 documentation: not emitted (p9h.3.1)

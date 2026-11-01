@@ -359,6 +359,26 @@ pub fn galley(painter: &egui::Painter, text: &str, ty: Type, color: Color32, wid
 /// Lays `text` out in `ty`, wrapped at `width` into at most `rows` lines, the last cut with an
 /// ellipsis.
 pub fn galley_rows(painter: &egui::Painter, text: &str, ty: Type, color: Color32, width: Option<f32>, rows: usize) -> std::sync::Arc<egui::Galley> {
+    laid_out(painter, text, ty, color, width, rows, false)
+}
+
+/// [`text`], slanted (an abstract class's name).
+pub fn text_slanted(painter: &egui::Painter, at: Pos2, text: &str, ty: Type, color: Color32, width: Option<f32>) -> Rect {
+    let g = laid_out(painter, text, ty, color, width, 1, true);
+    let rect = Rect::from_min_size(at, g.size());
+    painter.galley(at, g, color);
+    rect
+}
+
+fn laid_out(
+    painter: &egui::Painter,
+    text: &str,
+    ty: Type,
+    color: Color32,
+    width: Option<f32>,
+    rows: usize,
+    italics: bool,
+) -> std::sync::Arc<egui::Galley> {
     let mut job = egui::text::LayoutJob::single_section(
         text.to_owned(),
         egui::TextFormat {
@@ -367,6 +387,7 @@ pub fn galley_rows(painter: &egui::Painter, text: &str, ty: Type, color: Color32
             extra_letter_spacing: ty.spacing,
             line_height: Some(ty.line),
             valign: egui::Align::Center,
+            italics,
             ..Default::default()
         },
     );

@@ -140,6 +140,13 @@ pub enum Op {
         from: u32,
         to: u32,
     },
+    /// A list put in another order of the same values, in one step.
+    Reorder {
+        obj: Obj,
+        prop: PropId,
+        old: Vec<Value>,
+        new: Vec<Value>,
+    },
 }
 
 impl Op {
@@ -151,6 +158,7 @@ impl Op {
             Op::Insert { obj, prop, index, value } => Op::Remove { obj, prop, index, value },
             Op::Remove { obj, prop, index, value } => Op::Insert { obj, prop, index, value },
             Op::Move { obj, prop, from, to } => Op::Move { obj, prop, from: to, to: from },
+            Op::Reorder { obj, prop, old, new } => Op::Reorder { obj, prop, old: new, new: old },
         }
     }
 
@@ -884,6 +892,31 @@ impl Store {
         self.atomic(|st| st.perform(Op::Move { obj, prop, from, to }))
     }
 
+    /// Puts the list in the order of `order`, which holds the same values, each as often, in one
+    /// step: a reading puts a list built through its opposite in its saved order this way, in
+    /// linear time.
+    pub(crate) fn reorder(&mut self, obj: Obj, prop: PropId, order: Vec<Value>) -> R<()> {
+        let p = self.writable(obj, prop)?;
+        if !p.is_many() {
+            return Err(Invalid::SingleValued(self.pname(prop)));
+        }
+        let old = self.list(obj, prop)?;
+        if old == order {
+            return Ok(());
+        }
+        let mut count: HashMap<crate::rows::Key, i64> = HashMap::with_capacity(old.len());
+        for v in &old {
+            *count.entry(crate::rows::key(v)).or_default() += 1;
+        }
+        for v in &order {
+            *count.entry(crate::rows::key(v)).or_default() -= 1;
+        }
+        if old.len() != order.len() || count.values().any(|n| *n != 0) {
+            return Err(Invalid::NoFit(format!("{} is not reordered to the same values", self.pname(prop))));
+        }
+        self.atomic(|st| st.perform(Op::Reorder { obj, prop, old, new: order }))
+    }
+
     /// Destroys `obj` with everything it contains: references to any of them from outside are
     /// dropped where their property allows it and refused where it is required; opposites of the
     /// dying objects' own references are repaired; the subtree is unlinked and destroyed, leaves
@@ -1206,6 +1239,16 @@ impl Store {
                 }
                 let v = l.remove(*from as usize);
                 l.insert(*to as usize, v);
+                Ok(())
+            }
+            Op::Reorder { obj, prop, old, new } => {
+                self.check_alive(*obj)?;
+                let name = self.pname(*prop);
+                let l = self.reflect_mut(*obj)?.list_mut(*prop).ok_or_else(|| Invalid::NoFit(format!("{name} is not a list")))?;
+                if l.as_slice() != old.as_slice() || l.len() != new.len() {
+                    return Err(Invalid::NoFit(format!("{name} does not hold the values it is reordered from")));
+                }
+                l.clone_from(new);
                 Ok(())
             }
         }

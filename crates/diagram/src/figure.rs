@@ -32,6 +32,8 @@ pub struct Card {
     /// its outline dashed.
     pub elsewhere: bool,
     pub tone: Tone,
+    /// Its name slanted: an abstract class.
+    pub slanted: bool,
 }
 
 /// The colours a card is drawn in.
@@ -51,6 +53,8 @@ pub struct Row {
     pub mark: Option<&'static str>,
     pub text: String,
     pub linked: bool,
+    /// Slanted: an abstract operation.
+    pub slanted: bool,
 }
 
 /// A mark at a line's end.
@@ -67,6 +71,23 @@ pub enum EndMark {
     OneOrMore,
     /// A hollow triangle, the line stopping at its base: a generalization's general end.
     Triangle,
+    /// An open arrowhead at the end: a navigable association end, a dependency's supplier.
+    OpenArrow,
+    /// A diamond, the line stopping at its far corner: the whole of a shared aggregation
+    /// (hollow) or of a composition (filled).
+    HollowDiamond,
+    FilledDiamond,
+}
+
+impl EndMark {
+    /// How far from its end the line stops, in diagram units, so the mark draws on its own.
+    pub fn set_back(self) -> f32 {
+        match self {
+            EndMark::Triangle => 12.0,
+            EndMark::HollowDiamond | EndMark::FilledDiamond => 20.0,
+            _ => 0.0,
+        }
+    }
 }
 
 /// One end of a line: its mark, the text beside it, which the user may move (kept in a label of

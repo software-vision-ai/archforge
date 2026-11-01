@@ -69,6 +69,7 @@ pub fn card(store: &Store, table: Obj, diagram: Obj) -> Option<Card> {
                 mark: mark(store, table, column),
                 text: if ty.is_empty() { name } else { format!("{name} : {ty}") },
                 linked: rules::linked_to(store, column).is_some(),
+                slanted: false,
             }
         })
         .collect();
@@ -79,6 +80,7 @@ pub fn card(store: &Store, table: Obj, diagram: Obj) -> Option<Card> {
         more: ("+ {n} more column", "+ {n} more columns"),
         elsewhere: elsewhere.is_some(),
         tone: archforge_diagram::figure::Tone::Tinted,
+        slanted: false,
     })
 }
 

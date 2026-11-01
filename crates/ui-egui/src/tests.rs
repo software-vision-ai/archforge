@@ -4170,7 +4170,7 @@ impl archforge_diagram::Notation for Sketch {
                 .unwrap_or_default()
                 .iter()
                 .filter_map(archforge_mof::Value::as_ref)
-                .map(|o| Row { mark: None, text: archforge_core::name_of(store, o), linked: false })
+                .map(|o| Row { mark: None, text: archforge_core::name_of(store, o), linked: false, slanted: false })
                 .collect::<Vec<_>>()
         };
         Some(Card {
@@ -4180,6 +4180,7 @@ impl archforge_diagram::Notation for Sketch {
             more: ("+ {n} more column", "+ {n} more columns"),
             elsewhere: false,
             tone: archforge_diagram::figure::Tone::Tinted,
+            slanted: false,
         })
     }
     fn line(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<archforge_diagram::figure::Line> {
@@ -4688,4 +4689,81 @@ fn an_er_project_makes_a_class_diagram_beside_its_er_diagrams_and_an_agent_makes
     let st = h.state().session.as_ref().unwrap().doc();
     let d = st.by_uuid(archforge_mof::Uuid::parse(&d).unwrap()).expect("the agent's class diagram");
     assert_eq!(st.list(d, archforge_diagram::diagram::NODE).unwrap().len(), 1);
+}
+
+/// The sample class model open on its class diagram, and the edge of its association `name`.
+fn read_class_diagram(name: &str) -> (Harness<'static, Shell>, archforge_mof::Obj, archforge_mof::Obj) {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    crate::uml_ui::open_sample(h.state_mut()).unwrap();
+    h.run();
+    let st = h.state().session.as_ref().unwrap().doc();
+    let d = st.by_uuid(h.state().canvas.active.unwrap()).unwrap();
+    let a = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::ASSOCIATION) && archforge_core::name_of(st, *o) == name).unwrap();
+    let e = archforge_diagram::views_of(st, a).1[0];
+    (h, d, e)
+}
+
+/// Whether the last frame painted a path in the accent colour.
+fn painted_accent(h: &Harness<'static, Shell>) -> bool {
+    let accent = crate::ux::palette(false).accent;
+    fn walk(s: &egui::Shape, accent: egui::Color32) -> bool {
+        match s {
+            egui::Shape::Path(p) => p.stroke.color == egui::epaint::ColorMode::Solid(accent),
+            egui::Shape::Vec(v) => v.iter().any(|s| walk(s, accent)),
+            _ => false,
+        }
+    }
+    h.output().shapes.iter().any(|c| walk(&c.shape, accent))
+}
+
+#[test]
+fn a_class_diagram_draws_every_line_kind_and_its_lines_highlight_and_their_texts_and_segments_drag() {
+    let (mut h, d, e) = read_class_diagram("paid by");
+    let st = h.state().session.as_ref().unwrap().doc();
+    // Every line kind is on the diagram, each drawn as its notation describes it.
+    let lines: Vec<archforge_diagram::figure::Line> = st
+        .list(d, archforge_diagram::diagram::EDGE)
+        .unwrap()
+        .iter()
+        .filter_map(archforge_mof::Value::as_ref)
+        .filter_map(|edge| st.get(edge, archforge_diagram::edge::ELEMENT).ok()?.as_ref())
+        .filter_map(|el| archforge_uml::figures::line(st, el))
+        .collect();
+    use archforge_diagram::figure::EndMark as M;
+    let marks: Vec<[M; 2]> = lines.iter().map(|l| [l.ends[0].mark, l.ends[1].mark]).collect();
+    for kind in [M::OpenArrow, M::FilledDiamond, M::HollowDiamond, M::Triangle] {
+        assert!(marks.iter().any(|m| m.contains(&kind)), "{kind:?} in {marks:?}");
+    }
+    assert!(marks.contains(&[M::None, M::None]), "navigable both ways: no arrows");
+    assert!(lines.iter().any(|l| l.dashed), "the dependency is dashed");
+    let texts = painted(&h);
+    for t in ["CLASS", "Payment", "+ amount : Money", "+ authorise() : Boolean", "+ price : Money [0..1]", "paid by", "1..*", "0..1", "lines"] {
+        assert!(texts.iter().any(|x| x == t), "{t} is drawn: {texts:?}");
+    }
+    // The hovered line turns to the accent.
+    assert!(!painted_accent(&h), "nothing is selected or hovered yet");
+    let route = |h: &Harness<'static, Shell>| archforge_diagram::Grid::build(h.state().session.as_ref().unwrap().doc(), d).line(e).unwrap().to_vec();
+    let before = route(&h);
+    assert!(before.len() >= 3, "a right-angled route: {before:?}");
+    let view = crate::canvas::View { origin: rect_of(&h, "workspace.canvas").min, pan: h.state().canvas.pan, zoom: h.state().canvas.zoom };
+    let middle = view.to_screen((before[1].0 + before[2].0) / 2.0, (before[1].1 + before[2].1) / 2.0);
+    h.event(egui::Event::PointerMoved(middle));
+    h.run();
+    assert!(painted_accent(&h), "the hovered line is highlighted");
+    // A multiplicity text drags aside and stays where it was let go.
+    let edge = h.state().session.as_ref().unwrap().doc().uuid(e).unwrap();
+    let text = h.state().canvas.ends.iter().find(|t| t.edge == edge && t.end == 1).cloned().expect("the line's end text is drawn");
+    let to = text.rect.center() + egui::vec2(30.0, 30.0);
+    drag(&mut h, text.rect.center(), to);
+    h.run();
+    let moved = h.state().canvas.ends.iter().find(|t| t.edge == edge && t.end == 1).cloned().unwrap();
+    assert!((moved.rect.center() - to).length() < 2.0, "drawn where it was let go: {:?} {to:?}", moved.rect.center());
+    // A segment slides across.
+    let level = (before[1].1 - before[2].1).abs() < 1e-6;
+    let shift = if level { egui::vec2(0.0, -40.0) } else { egui::vec2(-40.0, 0.0) };
+    let middle = view.to_screen((before[1].0 + before[2].0) / 2.0, (before[1].1 + before[2].1) / 2.0);
+    drag(&mut h, middle, middle + shift * view.zoom);
+    let after = route(&h);
+    let slid = if level { (after[1].1 - (before[1].1 - 40.0)).abs() < 1.0 } else { (after[1].0 - (before[1].0 - 40.0)).abs() < 1.0 };
+    assert!(slid, "{before:?} → {after:?}");
 }

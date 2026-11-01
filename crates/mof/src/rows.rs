@@ -64,7 +64,7 @@ fn refused(why: impl Into<String>) -> Invalid {
 /// calls equal (it is made from the value read, not the cell, so two cells read as one value are
 /// one key).
 #[derive(PartialEq, Eq, Hash)]
-enum Key {
+pub(crate) enum Key {
     Null,
     Bool(bool),
     Int(i64),
@@ -76,7 +76,7 @@ enum Key {
     Ref(Obj),
 }
 
-fn key(value: &Value) -> Key {
+pub(crate) fn key(value: &Value) -> Key {
     match value {
         Value::Null => Key::Null,
         Value::Bool(b) => Key::Bool(*b),
@@ -250,8 +250,14 @@ pub fn restore(store: &mut Store, rows: &Rows, tables: &[Table], junctions: &[Ju
                 let mut items = lists.get(owner).cloned().unwrap_or_default();
                 items.sort_by_key(|(at, _)| *at);
                 // A unique list is checked for repeats once, so each value is added without a
-                // search of the list built so far.
+                // search of the list built so far. A unique list with an opposite may hold values
+                // already, put there as their opposites were set from a column or another list:
+                // read once, they are not added again, and the list then takes its saved order in
+                // one step.
                 let mut seen = HashSet::new();
+                let paired = prop.opposite.is_some() && prop.is_unique;
+                let present: HashSet<Key> = if paired { st.list(o, j.prop)?.iter().map(key).collect() } else { HashSet::new() };
+                let mut order: Vec<Value> = if paired { Vec::with_capacity(items.len()) } else { Vec::new() };
                 for (k, (at, cell)) in items.iter().enumerate() {
                     if *at as usize != k {
                         return Err(refused(format!("{} misses position {k} of a list", j.name)));
@@ -261,10 +267,20 @@ pub fn restore(store: &mut Store, rows: &Rows, tables: &[Table], junctions: &[Ju
                         if !seen.insert(key(&value)) {
                             return Err(refused(format!("{} holds a value twice in a list", j.name)));
                         }
+                        if paired {
+                            order.push(value.clone());
+                            if present.contains(&key(&value)) {
+                                continue;
+                            }
+                        }
                         st.push_new(o, j.prop, value)?;
                     } else {
                         st.push(o, j.prop, value)?;
                     }
+                }
+                // A value the list holds that its rows do not list makes the reorder refuse.
+                if paired {
+                    st.reorder(o, j.prop, order).map_err(|_| refused(format!("{} does not list every value its opposites give it", j.name)))?;
                 }
             }
         }
