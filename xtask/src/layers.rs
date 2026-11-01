@@ -40,7 +40,8 @@ pub const TABLE: &[(&str, Class)] = &[
     // which asks each notation about its own diagrams and elements; knows no notation. Diagrams are
     // members of the core's Model, so it sits above the core.
     ("diagram", Class::Layer(6)),
-    // The notations' metamodels, generated over the MOF core and the shared core: UML from OMG's XMI.
+    // UML: its metamodel generated from OMG's XMI, its commands on the MOF core, its class diagrams
+    // in the project's view.
     ("uml", Class::Layer(7)),
     // The ER notation: its metamodel generated from our XMI, its commands on the MOF core.
     ("er", Class::Layer(7)),

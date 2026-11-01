@@ -39,6 +39,7 @@ pub mod state;
 pub mod subtypes;
 pub mod theme;
 pub mod types;
+mod uml_ui;
 pub mod ux;
 pub mod widgets;
 pub mod workspace;

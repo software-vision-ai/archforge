@@ -40,6 +40,21 @@ pub(crate) trait DiagramKind: Sync {
     fn kind(&self) -> &'static str;
     /// Its tools, in toolbar order.
     fn tools(&self) -> &'static [KindTool];
+    /// Its name in the New diagram dialog.
+    fn word(&self) -> String;
+    /// The icon its diagrams show in their tabs, the Diagrams explorer and the search.
+    fn icon(&self) -> &'static Icon {
+        &crate::ux::icons::ER_DIAGRAM
+    }
+    /// What its diagrams are of: the word for it, and the choice that makes a new one.
+    fn owner_word(&self) -> String;
+    fn new_owner(&self) -> String;
+    /// The elements its diagrams may be of, in the model's order.
+    fn owners(&self, store: &Store) -> Vec<Obj>;
+    /// The element a diagram of it would be of, from the selection.
+    fn owner_of(&self, store: &Store, selected: Obj) -> Option<Obj>;
+    /// Makes a new element for a diagram to be of, named `name`; its id.
+    fn add_owner(&self, shell: &mut Shell, name: &str) -> Result<String, String>;
     /// Whether the toolbar shows the status marks toggle.
     fn status_marks(&self) -> bool {
         false
@@ -96,12 +111,18 @@ pub(crate) trait DiagramKind: Sync {
 }
 
 /// The kinds the shell knows.
-pub(crate) static KINDS: &[&dyn DiagramKind] = &[&crate::er_kind::ErKind];
+pub(crate) static KINDS: &[&dyn DiagramKind] = &[&crate::er_kind::ErKind, &crate::uml_ui::UmlKind];
 
 /// The kind of the diagram `d`, when the shell knows it.
 pub(crate) fn kind_of(shell: &Shell, store: &Store, d: Obj) -> Option<&'static dyn DiagramKind> {
     let kind = store.get(d, archforge_diagram::diagram::KIND).ok().and_then(|v| v.as_str().map(str::to_string))?;
     shell.kinds.iter().copied().find(|k| k.kind() == kind)
+}
+
+/// The icon of the diagram `d`: its kind's.
+pub(crate) fn diagram_icon(kinds: &[&'static dyn DiagramKind], store: &Store, d: Obj) -> &'static Icon {
+    let kind = store.get(d, archforge_diagram::diagram::KIND).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default();
+    kinds.iter().find(|k| k.kind() == kind).map_or(&crate::ux::icons::ER_DIAGRAM, |k| k.icon())
 }
 
 /// The kind of the diagram the canvas shows.

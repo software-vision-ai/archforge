@@ -403,6 +403,7 @@ name = "archforge-uml"
 version = "0.1.0"
 dependencies = [
  "archforge-core",
+ "archforge-diagram",
  "archforge-engine",
  "archforge-mof",
  "serde_json",

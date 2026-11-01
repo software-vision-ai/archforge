@@ -4179,6 +4179,7 @@ impl archforge_diagram::Notation for Sketch {
             compartments: vec![rows(archforge_uml::class::OWNED_ATTRIBUTE), rows(archforge_uml::class::OWNED_OPERATION)],
             more: ("+ {n} more column", "+ {n} more columns"),
             elsewhere: false,
+            tone: archforge_diagram::figure::Tone::Tinted,
         })
     }
     fn line(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<archforge_diagram::figure::Line> {
@@ -4338,6 +4339,24 @@ impl crate::kinds::DiagramKind for SketchKind {
     }
     fn tools(&self) -> &'static [crate::kinds::KindTool] {
         SKETCH_TOOLS
+    }
+    fn word(&self) -> String {
+        "Sketch".into()
+    }
+    fn owner_word(&self) -> String {
+        "Package".into()
+    }
+    fn new_owner(&self) -> String {
+        "New package".into()
+    }
+    fn owners(&self, store: &archforge_mof::Store) -> Vec<archforge_mof::Obj> {
+        archforge_uml::commands::packages(store)
+    }
+    fn owner_of(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<archforge_mof::Obj> {
+        None
+    }
+    fn add_owner(&self, _: &mut Shell, _: &str) -> Result<String, String> {
+        Err("the sketch makes no package".into())
     }
     fn takes_part(&self, store: &archforge_mof::Store, element: archforge_mof::Obj) -> bool {
         store.class_of(element).ok() == Some(archforge_uml::CLASS)
@@ -4549,7 +4568,7 @@ fn a_second_notations_elements_show_in_the_tree_are_found_and_get_their_own_prop
     assert_eq!(rows(&h), [(0, "sales".to_string()), (1, "Party".to_string()), (1, "Customer".to_string())]);
     assert!(ids(&h).iter().any(|i| *i == format!("workspace.explorer.row.{party_id}")), "the class has a row");
     // The search finds a class as its notation lists it.
-    let index = crate::project_search::index(h.state().notation_uis, h.state().session.as_ref().unwrap().doc());
+    let index = crate::project_search::index(h.state().kinds, h.state().notation_uis, h.state().session.as_ref().unwrap().doc());
     let (_, found) = crate::project_search::hits(&index, "part");
     assert!(found.iter().any(|e| e.label == "Party" && e.detail == "Class · sales"), "{:?}", found.iter().map(|e| &e.label).collect::<Vec<_>>());
     // Properties: the class's own words and its notation's section.
@@ -4559,4 +4578,114 @@ fn a_second_notations_elements_show_in_the_tree_are_found_and_get_their_own_prop
     let texts = painted(&h);
     assert!(texts.iter().any(|t| t == "Class · sketch"), "{texts:?}");
     assert!(ids(&h).iter().any(|i| i == "workspace.properties.sketch.attribute.0"), "the class's attributes section");
+}
+
+/// The class diagram the canvas shows, and its classes' names on it.
+fn class_diagram_shown(h: &Harness<'static, Shell>) -> (String, Vec<String>) {
+    let st = h.state().session.as_ref().unwrap().doc();
+    let d = st.by_uuid(h.state().canvas.active.expect("a diagram is open")).unwrap();
+    let kind = st.get(d, archforge_diagram::diagram::KIND).unwrap().as_str().unwrap().to_string();
+    let classes = st
+        .list(d, archforge_diagram::diagram::NODE)
+        .unwrap()
+        .iter()
+        .filter_map(archforge_mof::Value::as_ref)
+        .filter_map(|n| st.get(n, archforge_diagram::node::ELEMENT).ok()?.as_ref())
+        .map(|e| archforge_core::name_of(st, e))
+        .collect();
+    (kind, classes)
+}
+
+#[test]
+fn a_new_project_makes_a_class_diagram_in_three_steps_and_its_class_tool_places_a_class_named_in_place() {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    // 1. The tab strip's + opens New diagram; 2. the kind is Class diagram; 3. Create.
+    let at = rect_of(&h, "workspace.tabs.add").center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.new-diagram.kind").center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.new-diagram.kind.1").center();
+    click(&mut h, at);
+    let edit = h.state().diagrams.new.clone().expect("the dialog is open");
+    assert_eq!(edit.kind, archforge_uml::CLASS_DIAGRAM);
+    assert_eq!(edit.schema, None, "a project without a package gets one");
+    h.state_mut().diagrams.new.as_mut().unwrap().name = "Domain".into();
+    let at = rect_of(&h, "workspace.new-diagram.create").center();
+    click(&mut h, at);
+    assert!(h.state().diagrams.new.is_none(), "{:?}", h.state().diagrams.new);
+    assert_eq!(class_diagram_shown(&h), (archforge_uml::CLASS_DIAGRAM.to_string(), Vec::new()), "an empty class diagram is open");
+    let st = h.state().session.as_ref().unwrap().doc();
+    assert_eq!(archforge_uml::commands::packages(st).iter().map(|p| archforge_core::name_of(st, *p)).collect::<Vec<_>>(), ["Domain"]);
+    // Its toolbar: Class, Note and Link note; ER's tools and its key status are not there.
+    let found = ids(&h);
+    for tool in ["select", "pan", "class", "note", "link", "grid", "arrange"] {
+        assert!(found.iter().any(|i| *i == format!("workspace.tools.{tool}")), "{tool}");
+    }
+    for er in ["entity", "relationship", "relationship-types", "key-status"] {
+        assert!(!found.iter().any(|i| *i == format!("workspace.tools.{er}")), "{er}");
+    }
+    // A click in Select adds nothing; with the Class tool it places a class, named in place.
+    let canvas = rect_of(&h, "workspace.canvas");
+    click(&mut h, canvas.center());
+    assert!(class_diagram_shown(&h).1.is_empty(), "Select adds nothing");
+    let at = rect_of(&h, "workspace.tools.class").center();
+    click(&mut h, at);
+    click(&mut h, canvas.center());
+    assert_eq!(class_diagram_shown(&h).1, ["Class 1"]);
+    assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Select, "the tool hands back to Select");
+    let rename = h.state().canvas.rename.clone().expect("the class's name is open for typing");
+    assert_eq!(rename.text, "Class 1");
+    h.state_mut().canvas.rename.as_mut().unwrap().text = "Order".into();
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    assert_eq!(class_diagram_shown(&h).1, ["Order"]);
+    // The tree shows the package with its class; the search finds it.
+    let st = h.state().session.as_ref().unwrap().doc();
+    let pkg = st.uuid(archforge_uml::commands::packages(st)[0]).unwrap();
+    h.state_mut().explorer.expanded.insert(pkg);
+    let rows: Vec<String> = crate::explorer::rows(h.state().notation_uis, h.state().session.as_ref().unwrap().doc(), &h.state().explorer)
+        .into_iter()
+        .map(|r| r.label)
+        .collect();
+    assert_eq!(rows, ["Domain", "Order"]);
+    let index = crate::project_search::index(h.state().kinds, h.state().notation_uis, h.state().session.as_ref().unwrap().doc());
+    assert!(crate::project_search::hits(&index, "ord").1.iter().any(|e| e.label == "Order"));
+    // Saved and opened again, as the project's rows: the class diagram comes back.
+    let (tables, junctions) = archforge_notations::storage();
+    let rows = archforge_mof::rows::snapshot(h.state().session.as_ref().unwrap().doc(), &tables, &junctions).unwrap();
+    let back = archforge_notations::session_from_rows(&rows, Box::new(|| archforge_mof::Uuid::v7(1_761_670_900_000, [9; 10]))).unwrap();
+    let st = back.doc();
+    let d = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_diagram::DIAGRAM)).unwrap();
+    assert_eq!(st.get(d, archforge_diagram::diagram::KIND).unwrap().as_str(), Some(archforge_uml::CLASS_DIAGRAM));
+    assert_eq!(st.list(d, archforge_diagram::diagram::NODE).unwrap().len(), 1);
+}
+
+#[test]
+fn an_er_project_makes_a_class_diagram_beside_its_er_diagrams_and_an_agent_makes_one_too() {
+    let (mut h, _customer, er_diagram) = diagram_harness();
+    let at = rect_of(&h, "workspace.tabs.add").center();
+    click(&mut h, at);
+    assert_eq!(h.state().diagrams.new.as_ref().unwrap().kind, archforge_er::DIAGRAM_KIND, "an ER project starts at ER");
+    let at = rect_of(&h, "workspace.new-diagram.kind").center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.new-diagram.kind.1").center();
+    click(&mut h, at);
+    h.state_mut().diagrams.new.as_mut().unwrap().name = "Domain".into();
+    let at = rect_of(&h, "workspace.new-diagram.create").center();
+    click(&mut h, at);
+    assert_eq!(class_diagram_shown(&h).0, archforge_uml::CLASS_DIAGRAM);
+    assert_eq!(h.state().canvas.tabs.len(), 2, "beside the ER diagram's tab");
+    assert!(h.state().canvas.tabs.contains(&archforge_mof::Uuid::parse(&er_diagram).unwrap()));
+    // An agent, through the control channel's commands, as its MCP tools call them.
+    let mut call = |command: &str, params: serde_json::Value| {
+        let out = crate::control::answer(h.state_mut(), "engine.execute", &serde_json::json!({ "command": command, "params": params }))
+            .unwrap_or_else(|e| panic!("{command}: {e}"));
+        out["result"]["id"].as_str().unwrap_or_default().to_string()
+    };
+    let pkg = call("uml.package.add", serde_json::json!({ "name": "Billing" }));
+    let d = call("diagram.add", serde_json::json!({ "kind": "uml.class", "element": pkg, "name": "Billing" }));
+    let invoice = call("uml.class.add", serde_json::json!({ "package": pkg, "name": "Invoice" }));
+    call("diagram.place", serde_json::json!({ "diagram": d, "element": invoice, "x": 100, "y": 100 }));
+    let st = h.state().session.as_ref().unwrap().doc();
+    let d = st.by_uuid(archforge_mof::Uuid::parse(&d).unwrap()).expect("the agent's class diagram");
+    assert_eq!(st.list(d, archforge_diagram::diagram::NODE).unwrap().len(), 1);
 }

@@ -116,7 +116,7 @@ pub(crate) trait NotationUi: Sync {
 }
 
 /// The notations the shell knows.
-pub(crate) static UIS: &[&dyn NotationUi] = &[&crate::er_ui::ErUi];
+pub(crate) static UIS: &[&dyn NotationUi] = &[&crate::er_ui::ErUi, &crate::uml_ui::UmlUi];
 
 /// The notation of `obj`, when the shell knows it.
 pub(crate) fn of(uis: &[&'static dyn NotationUi], store: &Store, obj: Obj) -> Option<&'static dyn NotationUi> {

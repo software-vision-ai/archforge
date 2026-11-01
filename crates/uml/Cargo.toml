@@ -9,12 +9,14 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+archforge-core.workspace = true
+archforge-diagram.workspace = true
+archforge-engine.workspace = true
 archforge-mof.workspace = true
+serde_json.workspace = true
 
 [dev-dependencies]
-archforge-core.workspace = true
 archforge-engine = { workspace = true, features = ["testing"] }
-serde_json.workspace = true
 
 [lints]
 workspace = true

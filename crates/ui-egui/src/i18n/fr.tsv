@@ -459,3 +459,17 @@ str		Simple	Simple
 str		Full	Complète
 str		Partial	Partielle
 str		{parent} has no primary key yet, so there is nothing in {child} to point at.	{parent} n’a pas encore de clé primaire ; il n’y a donc rien dans {child} vers quoi pointer.
+# Diagrammes de classes (archforge-3c5.1.1)
+str		Add class	Ajouter une classe
+str		Class	Classe
+str		Class diagram	Diagramme de classes
+str		Class · model, in every diagram	Classe · modèle, dans chaque diagramme
+str		New package	Nouveau paquetage
+str		On this class · {n}	Sur cette classe · {n}
+str		On this package · {n}	Sur ce paquetage · {n}
+str		Package	Paquetage
+str		Package · model	Paquetage · modèle
+str		The diagram is of no package	Le diagramme n’est d’aucun paquetage
+str		This class	Cette classe
+str		This package	Ce paquetage
+plural		+ {n} more member	+ {n} membre de plus|+ {n} membres de plus

@@ -111,10 +111,12 @@ fn targets(shell: &Shell) -> (Vec<Obj>, Vec<Obj>) {
 /// The colour a node shows for `group` without a look of its own.
 fn default_colour(view: &ProjectView, store: &Store, n: Obj, group: Group, p: &Palette) -> Color32 {
     let el = store.get(n, node::ELEMENT).ok().and_then(|v| v.as_ref());
-    // A card its notation draws (ER's table) takes the card's colours.
+    // A tinted card its notation draws (ER's table) takes the card's colours; a plain one (a
+    // class) the surface's.
     let entity = el.is_some_and(|e| {
         let d = archforge_diagram::diagram_of(store, n);
-        d.zip(view.of_element(store, e)).and_then(|(d, notation)| notation.card(store, e, d)).is_some()
+        let card = d.zip(view.of_element(store, e)).and_then(|(d, notation)| notation.card(store, e, d));
+        card.is_some_and(|c| c.tone == archforge_diagram::figure::Tone::Tinted)
     });
     match (group, el, entity) {
         (Group::Fill, _, true) => p.entity,

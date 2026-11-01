@@ -5,7 +5,11 @@ concrete), 622 class-owned properties (73 derived, without a field), 13 enumerat
 primitive types, generated from OMG's `UML.xmi` by `cargo xtask generate uml`. Only `lib.rs` is
 written by hand.
 
-**Layer.** 7, the notations' layer above the MOF core (4), the shared core (5) and the diagrams (6); pure, builds for
+**Layer.** 7, the notations' layer above the MOF core (4), the shared core (5) and the diagrams (6),
+whose project view it joins as `UmlNotation` (class diagrams of a package, classes as plain cards
+with their attributes and operations) and whose commands it adds to (`commands`: `uml.package.{add,
+rename, list}`, `uml.class.{add, rename, list}`; a name told apart from its siblings', whatever the
+case; removing a package or a class goes through `element.remove`, with its views); pure, builds for
 the portable target.
 
 **Binding rules.** Decision gm2.18: the metamodel is data read at build time and compiled in; nothing
@@ -33,7 +37,9 @@ redefines `isAbstract`), the redefining property is the class's: `class::IS_ABST
 `classifier::IS_ABSTRACT`.
 
 **Public API.** `metamodel()`, `universe()`, the constants, the structs and enums, `UmlSlabs`,
-`TABLES`, `JUNCTIONS`, `INDEX`, `URI`, `VERSION`, `CONTENT_HASH`.
+`TABLES`, `JUNCTIONS`, `INDEX`, `URI`, `VERSION`, `CONTENT_HASH`; `UmlNotation`, `ALONE`,
+`CLASS_DIAGRAM`, `CLASS_SIZE`, `registry`, `commands::{specs, packages, classes, package_of,
+remove_elements, MAX_NAME}`, and the card's `WORDS` and `PLURALS` for the shell's catalogue.
 
 **Measured** (release, M4 Max): a million UML objects (classes with three typed attributes and
 their multiplicity literals), rename p99 well inside a frame; see the test's output.

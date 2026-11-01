@@ -55,6 +55,9 @@ pub enum Screen {
     /// The diagram of two tables with Invoice and Product placed so that their lines from Customer
     /// would cross Order: right-angled lines go around it (archforge-guc.1.1).
     WorkspaceRouting,
+    /// A class diagram of a package with three classes, the package open in the tree
+    /// (archforge-3c5.1.1).
+    WorkspaceClassDiagram,
     /// The routing sample with the top bar's search open on "order" (archforge-9ln.1.3).
     WorkspaceSearch,
     /// The Diagrams explorer with the diagram "dbo" open, its one table Company placed and its key
@@ -224,6 +227,10 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
     if screen == Screen::WorkspaceColumnSelected {
         shell.adopt_project();
         sample_column_selected(&mut shell)?;
+    }
+    if screen == Screen::WorkspaceClassDiagram {
+        shell.adopt_project();
+        sample_class_diagram(&mut shell)?;
     }
     if matches!(
         screen,
@@ -571,6 +578,34 @@ fn sample_cross_schema(shell: &mut Shell) -> Result<(), String> {
     session.mark_saved().map_err(|e| format!("mark_saved: {e:?}"))?;
     // The three tables framed on the canvas.
     shell.canvas.pan = egui::vec2(-150.0, -280.0);
+    Ok(())
+}
+
+/// A package, Commerce, with Order, Customer and Payment on its class diagram; Order selected.
+fn sample_class_diagram(shell: &mut Shell) -> Result<(), String> {
+    use serde_json::json;
+    let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
+    let run = |session: &mut archforge_notations::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
+        let out = session.execute(command, &params).map_err(|e| format!("{command}: {e:?}"))?;
+        Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
+    };
+    let package = run(session, "uml.package.add", json!({ "name": "Commerce" }))?;
+    let diagram = run(session, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": package, "name": "Commerce" }))?;
+    let mut order = String::new();
+    for (name, x, y) in [("Order", 120, 120), ("Customer", 480, 120), ("Payment", 120, 360)] {
+        let class = run(session, "uml.class.add", json!({ "package": package, "name": name }))?;
+        run(session, "diagram.place", json!({ "diagram": diagram, "element": class, "x": x, "y": y }))?;
+        if name == "Order" {
+            order = class;
+        }
+    }
+    run(session, "view.select", json!({ "ids": [order] }))?;
+    session.mark_saved().map_err(|e| format!("mark_saved: {e:?}"))?;
+    let (Some(package), Some(diagram)) = (archforge_mof::Uuid::parse(&package), archforge_mof::Uuid::parse(&diagram)) else {
+        return Err("the sample's ids".into());
+    };
+    shell.explorer.expanded.insert(package);
+    crate::canvas::open(shell, diagram);
     Ok(())
 }
 

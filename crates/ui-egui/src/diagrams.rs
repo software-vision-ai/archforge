@@ -51,11 +51,13 @@ pub struct State {
     pub scroll: crate::explorer::TreeScroll,
 }
 
-/// The New diagram dialog's fields: the name, the schema the diagram is of (none for a new
-/// schema named like the diagram), the select that is open, the engine's refusal.
+/// The New diagram dialog's fields: the name, the kind, the element the diagram is of (a schema, a
+/// package; none for a new one named like the diagram), the select that is open, the engine's
+/// refusal.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NewDiagram {
     pub name: String,
+    pub kind: &'static str,
     pub schema: Option<Uuid>,
     pub menu: Option<Field>,
     pub refused: Option<String>,
@@ -154,27 +156,27 @@ fn run(shell: &mut Shell, id: &str, params: serde_json::Value) -> Result<serde_j
     session.execute(id, &params).map(|o| o.value).map_err(|e| e.to_string())
 }
 
-/// The schemas of the model, in its order.
-fn schemas(store: &Store) -> Vec<Obj> {
-    let Some(model) = archforge_core::skills::model_of(store) else { return Vec::new() };
-    members(store, model, archforge_core::model::MEMBER).into_iter().filter(|o| store.class_of(*o).ok() == Some(archforge_er::SCHEMA)).collect()
+/// The kind the dialog makes a diagram of.
+fn kind_named(shell: &Shell, kind: &str) -> Option<&'static dyn crate::kinds::DiagramKind> {
+    shell.kinds.iter().copied().find(|k| k.kind() == kind)
 }
 
-/// Opens the New diagram dialog: the name and the schema start from the selection's schema, else
-/// the first schema, else a new schema named like the diagram.
+/// Opens the New diagram dialog: the kind and what it is of start from the selection (its schema
+/// or package), else the first kind and its first element, else a new one named like the diagram.
 pub fn open_new(shell: &mut Shell) {
     let Some(session) = shell.session.as_ref() else { return };
     let store = session.doc();
     let selected = session.view().selection.first().copied().filter(|o| store.is_alive(*o));
-    let schema = selected
-        .and_then(|o| if store.class_of(o).ok() == Some(archforge_er::SCHEMA) { Some(o) } else { archforge_er::rules::schema_of(store, o) })
-        .or_else(|| schemas(store).first().copied());
+    let from_selection = selected.and_then(|o| shell.kinds.iter().find_map(|k| k.owner_of(store, o).map(|of| (*k, of))));
+    let Some(kind) = from_selection.map(|(k, _)| k).or_else(|| shell.kinds.first().copied()) else { return };
+    let schema = from_selection.map(|(_, of)| of).or_else(|| kind.owners(store).first().copied());
     let taken = store.alive().filter(|o| store.class_of(*o).ok() == Some(DIAGRAM)).map(|d| diagram_name(store, d));
     let name = match schema {
         Some(s) => archforge_core::name_of(store, s),
         None => crate::explorer::fresh_name(&tr("Diagram"), taken, false).unwrap_or_default(),
     };
-    shell.diagrams.new = Some(NewDiagram { name, schema: schema.and_then(|s| store.uuid(s).ok()), menu: None, refused: None, opened: true });
+    shell.diagrams.new =
+        Some(NewDiagram { name, kind: kind.kind(), schema: schema.and_then(|s| store.uuid(s).ok()), menu: None, refused: None, opened: true });
     shell.diagrams.notice = None;
 }
 
@@ -189,13 +191,14 @@ fn create(shell: &mut Shell) {
         }
         return;
     }
+    let Some(kind) = kind_named(shell, edit.kind) else { return };
     let fresh_schema = edit.schema.is_none();
     let schema = match edit.schema {
         Some(s) => Ok(s.to_string()),
-        None => run(shell, "er.schema.add", json!({ "name": name })).map(|v| v.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string()),
+        None => kind.add_owner(shell, &name),
     };
     let made = schema.and_then(|schema| {
-        let made = run(shell, "diagram.add", json!({ "kind": archforge_er::DIAGRAM_KIND, "element": &schema, "name": name }));
+        let made = run(shell, "diagram.add", json!({ "kind": kind.kind(), "element": &schema, "name": name }));
         // A schema made for a diagram that was then refused goes again, so nothing is left behind.
         if made.is_err() && fresh_schema {
             let _ = run(shell, "element.remove", json!({ "ids": [schema] }));
@@ -341,9 +344,10 @@ fn tree_row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, column: Rect, y: 
     let ink = if is_active { p.accent } else { p.text };
     let mid = hit.center().y;
     let icon_ink = if is_active { p.accent } else { p.text_secondary };
-    let icon = match row.kind {
-        Kind::Folder => &icons::FOLDER,
-        Kind::Diagram => &icons::ER_DIAGRAM,
+    let icon = match (row.kind, shell.session.as_ref()) {
+        (Kind::Diagram, Some(s)) => crate::kinds::diagram_icon(shell.kinds, s.doc(), row.obj),
+        (Kind::Diagram, None) => &icons::ER_DIAGRAM,
+        (Kind::Folder, _) => &icons::FOLDER,
     };
     ux::icon_mid(&paint, pos2(column.left() + 38.5 + indent, mid), icon, icon_ink);
     let name_x = column.left() + 53.0 + indent;
@@ -393,11 +397,15 @@ fn new_dialog_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: &eg
     let at = |x: f32, y: f32| dialog.min + vec2(x, y);
     let width = size.x - 40.0;
     ux::text(paint, at(20.0, 20.0), &tr("New diagram"), types::CARD_TITLE, p.text, Some(width));
-    // The schemas the diagram may be of, read once.
+    // The kind, and the elements the diagram may be of, read once.
+    let Some(kind) = shell.diagrams.new.as_ref().and_then(|n| kind_named(shell, n.kind)) else { return };
     let (schemas, taken_focus) = match (shell.session.as_ref(), shell.diagrams.new.as_ref()) {
         (Some(s), Some(n)) => {
             let store = s.doc();
-            (schemas(store).into_iter().filter_map(|o| Some((store.uuid(o).ok()?, archforge_core::name_of(store, o)))).collect::<Vec<_>>(), n.opened)
+            (
+                kind.owners(store).into_iter().filter_map(|o| Some((store.uuid(o).ok()?, archforge_core::name_of(store, o)))).collect::<Vec<_>>(),
+                n.opened,
+            )
         }
         _ => return,
     };
@@ -426,15 +434,15 @@ fn new_dialog_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: &eg
         paint.rect_stroke(field, 6.0, Stroke::new(1.0, p.focus), StrokeKind::Inside);
     }
     let enter = out.response.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-    // The kind and the schema, side by side.
+    // The kind and what it is of, side by side.
     let half = (width - 16.0) / 2.0;
     let schema_word = match edit.schema {
-        Some(id) => schemas.iter().find(|(s, _)| *s == id).map(|(_, n)| n.clone()).unwrap_or_else(|| tr("New schema")),
-        None => tr("New schema"),
+        Some(id) => schemas.iter().find(|(s, _)| *s == id).map(|(_, n)| n.clone()).unwrap_or_else(|| kind.new_owner()),
+        None => kind.new_owner(),
     };
-    let kind_field = select(shell, ui, p, at(20.0, 121.0), half, "workspace.new-diagram.kind", &tr("Kind"), &tr("ER diagram"), Field::Kind);
+    let kind_field = select(shell, ui, p, at(20.0, 121.0), half, "workspace.new-diagram.kind", &tr("Kind"), &kind.word(), Field::Kind);
     let schema_field =
-        select(shell, ui, p, at(20.0 + half + 16.0, 121.0), half, "workspace.new-diagram.schema", &tr("Schema"), &schema_word, Field::Schema);
+        select(shell, ui, p, at(20.0 + half + 16.0, 121.0), half, "workspace.new-diagram.schema", &kind.owner_word(), &schema_word, Field::Schema);
     if let Some(refused) = shell.diagrams.new.as_ref().and_then(|e| e.refused.clone()) {
         ux::text(paint, at(20.0, dialog.height() - 44.0), &refused, types::CAPTION, p.amber, Some((width - 200.0).max(0.0)));
     }
@@ -455,11 +463,24 @@ fn new_dialog_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: &eg
     let open = shell.diagrams.new.as_ref().and_then(|e| e.menu);
     match open {
         Some(Field::Kind) => {
-            menu(shell, ui, p, kind_field, "workspace.new-diagram.kind", &[tr("ER diagram")]);
+            let kinds = shell.kinds;
+            let words: Vec<String> = kinds.iter().map(|k| k.word()).collect();
+            if let Some(i) = menu(shell, ui, p, kind_field, "workspace.new-diagram.kind", &words)
+                && let Some(picked) = kinds.get(i)
+                && picked.kind() != kind.kind()
+            {
+                // Another kind: its first element, or a new one.
+                let first = shell.session.as_ref().and_then(|s| picked.owners(s.doc()).first().and_then(|o| s.doc().uuid(*o).ok()));
+                if let Some(edit) = shell.diagrams.new.as_mut() {
+                    edit.kind = picked.kind();
+                    edit.schema = first;
+                    edit.refused = None;
+                }
+            }
         }
         Some(Field::Schema) => {
             let mut items: Vec<String> = schemas.iter().map(|(_, n)| n.clone()).collect();
-            items.push(tr("New schema"));
+            items.push(kind.new_owner());
             if let Some(i) = menu(shell, ui, p, schema_field, "workspace.new-diagram.schema", &items)
                 && let Some(edit) = shell.diagrams.new.as_mut()
             {

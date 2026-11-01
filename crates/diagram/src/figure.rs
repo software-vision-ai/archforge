@@ -31,6 +31,17 @@ pub struct Card {
     /// An element of another scope than the diagram's (a table of another schema): drawn dimmed,
     /// its outline dashed.
     pub elsewhere: bool,
+    pub tone: Tone,
+}
+
+/// The colours a card is drawn in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Tone {
+    /// The warm tint of a table.
+    #[default]
+    Tinted,
+    /// The plain surface with the plain border, its eyebrow muted: a class.
+    Plain,
 }
 
 /// A row of a compartment: a mark before it (such as `PK`, shown while the status marks are on),

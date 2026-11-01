@@ -459,3 +459,17 @@ str		Simple	简单
 str		Full	完全
 str		Partial	部分
 str		{parent} has no primary key yet, so there is nothing in {child} to point at.	{parent} 还没有主键，因此 {child} 中没有可指向的内容。
+# 类图 (archforge-3c5.1.1)
+str		Add class	添加类
+str		Class	类
+str		Class diagram	类图
+str		Class · model, in every diagram	类 · 模型，在每个图中
+str		New package	新包
+str		On this class · {n}	此类上 · {n}
+str		On this package · {n}	此包上 · {n}
+str		Package	包
+str		Package · model	包 · 模型
+str		The diagram is of no package	该图不属于任何包
+str		This class	此类
+str		This package	此包
+plural		+ {n} more member	+ 另 {n} 个成员
