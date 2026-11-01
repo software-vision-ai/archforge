@@ -408,6 +408,57 @@ fn every_edit_is_handed_to_the_host_and_save_marks_only_what_it_wrote_saved() {
 }
 
 #[test]
+fn an_agents_save_is_followed_by_its_ticket_whichever_tab_is_shown() {
+    use crate::control::answer;
+    let none = serde_json::json!({});
+    let (mut h, host) = saving_harness(Some(commerce()), None);
+    add_schema(&mut h, "shop");
+    let begun = answer(h.state_mut(), "app.save", &none).unwrap();
+    assert_eq!((begun["saving"].clone(), begun["project"].clone()), (serde_json::json!(true), serde_json::json!("Commerce platform")));
+    let ticket = begun["ticket"].clone();
+    let saved = |h: &mut Harness<'static, Shell>| answer(h.state_mut(), "app.saved", &serde_json::json!({ "ticket": ticket }));
+    // A second request while it runs follows the same save.
+    assert_eq!(answer(h.state_mut(), "app.save", &none).unwrap()["ticket"], ticket);
+    assert_eq!(host.saves.lock().unwrap().len(), 1);
+    assert_eq!(saved(&mut h).unwrap()["saving"], true);
+    // The user opens another project, which has nothing to save: the first save still runs.
+    h.state_mut().open_project(crate::Opened { name: "Other".into(), path: "/tmp/Other.archforge".into(), ..Default::default() });
+    h.run_steps(2);
+    assert_eq!(saved(&mut h).unwrap()["saving"], true, "a parked tab's save is not the shown tab's");
+    host.saves.lock().unwrap().pop().unwrap().send(Ok(true)).unwrap();
+    h.run_steps(2);
+    let done = saved(&mut h).unwrap();
+    assert_eq!((done["saved"].clone(), done["saving"].clone()), (serde_json::json!(true), serde_json::json!(false)), "{done}");
+    h.state_mut().activate(0);
+    h.run_steps(2);
+    assert!(!dirty(&h), "the parked project's save marked what it wrote saved");
+    // A failed save says why; an unknown ticket is refused.
+    add_schema(&mut h, "crm");
+    let ticket = answer(h.state_mut(), "app.save", &none).unwrap()["ticket"].clone();
+    host.saves.lock().unwrap().pop().unwrap().send(Err("the disk is full".into())).unwrap();
+    h.run_steps(2);
+    let failed = answer(h.state_mut(), "app.saved", &serde_json::json!({ "ticket": ticket })).unwrap_err();
+    assert!(failed.contains("the disk is full"), "{failed}");
+    assert!(answer(h.state_mut(), "app.saved", &serde_json::json!({ "ticket": 999 })).unwrap_err().contains("no save 999"));
+    assert!(answer(h.state_mut(), "app.saved", &none).unwrap_err().contains("ticket"));
+}
+
+#[test]
+fn a_save_whose_tab_closes_before_the_host_answers_is_not_known() {
+    use crate::control::answer;
+    let (mut h, host) = saving_harness(Some(commerce()), None);
+    add_schema(&mut h, "shop");
+    let ticket = answer(h.state_mut(), "app.save", &serde_json::json!({})).unwrap()["ticket"].clone();
+    h.state_mut().close_tab(0);
+    h.run_steps(2);
+    host.closings.lock().unwrap().pop().unwrap().send(Ok(())).unwrap();
+    h.run_steps(2);
+    assert!(h.state().tabs.is_empty());
+    let unknown = answer(h.state_mut(), "app.saved", &serde_json::json!({ "ticket": ticket })).unwrap_err();
+    assert!(unknown.contains("not known") && !unknown.contains("failed"), "{unknown}");
+}
+
+#[test]
 fn open_project_asks_the_picker_and_the_host_and_shows_the_model_it_read() {
     // A model made elsewhere, as the host reads it from a project.
     let rows = {

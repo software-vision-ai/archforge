@@ -38,7 +38,8 @@ cargo build -p archforge-cli
 
 `.mcp.json` registers `target/debug/archforge-cli mcp --bridge 47000` for agents that read it. The
 agent gets one tool per command (`er_entity_add`, `er_relationship_add`, `diagram_place`, ...) with
-its parameters, plus `batch`, `undo`, `redo` and `inspect_document`; `--compact` lists the general
+its parameters, plus `batch`, `undo`, `redo`, `inspect_document` and `save_project`, which saves the project as
+the Save button does; `--compact` lists the general
 tools and `search_tools` instead, for agents short of context. Every
 change the agent makes runs through Archforge's commands, so it shows in the window at once and
 undo takes it back. The port listens on the loopback interface only, and a token minted for each

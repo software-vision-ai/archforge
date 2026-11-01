@@ -43,15 +43,15 @@ fn initialize_answers_the_clients_version_when_spoken_and_the_newest_otherwise()
 fn only_the_reads_say_they_are_read_only() {
     let list = tool_list();
     let tools = list["tools"].as_array().unwrap();
-    assert_eq!(tools.len(), 8);
+    assert_eq!(tools.len(), 9);
     for t in tools {
         let read_only = t["annotations"]["readOnlyHint"].as_bool().unwrap();
         let name = t["name"].as_str().unwrap();
         assert_eq!(read_only, ["list_commands", "describe_command", "inspect_document"].contains(&name), "{name}");
         assert_eq!(
             t["annotations"]["destructiveHint"].as_bool().unwrap(),
-            !read_only,
-            "{name}: every change can remove something, undo and redo included"
+            !read_only && name != "save_project",
+            "{name}: every change can remove something, undo and redo included; a save only adds a version"
         );
         assert_eq!(t["inputSchema"]["additionalProperties"], false, "{name}");
     }
@@ -154,7 +154,7 @@ fn every_command_becomes_a_tool_with_a_schema_from_its_documentation() {
     let catalog = Catalog::new(&infos(), false);
     let list = catalog.list();
     let tools = list["tools"].as_array().unwrap();
-    assert_eq!(tools.len(), 11, "the general eight, two commands and view.select");
+    assert_eq!(tools.len(), 12, "the general nine, two commands and view.select");
     assert_eq!(tools.iter().filter(|t| t["name"] == "inspect_document").count(), 1, "never shadowed");
     let add = tools.iter().find(|t| t["name"] == "er_entity_add").unwrap();
     assert_eq!(add["inputSchema"]["required"], json!(["schema"]));
@@ -246,4 +246,53 @@ fn the_compact_listing_offers_a_search_and_the_tools_still_answer() {
     )
     .unwrap();
     assert_eq!(r["result"]["isError"], false);
+}
+
+/// A stand-in that answers each method from a script, in turn.
+struct Script(RefCell<Vec<(&'static str, Value, Result<Value, CallError>)>>);
+
+impl Backend for Script {
+    fn call(&self, method: &str, params: Value) -> Result<Value, CallError> {
+        let mut next = self.0.borrow_mut();
+        assert!(!next.is_empty(), "unexpected {method}");
+        let (want, want_params, answer) = next.remove(0);
+        assert_eq!((method, params), (want, want_params));
+        answer
+    }
+}
+
+fn save(script: &Script) -> Value {
+    let r =
+        ask(script, json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": "save_project", "arguments": {} } }))["result"]
+            .clone();
+    assert!(script.0.borrow().is_empty(), "every scripted call made");
+    r
+}
+
+#[test]
+fn save_project_follows_its_save_by_the_ticket_until_it_is_done() {
+    let begun = || ("app.save", json!({}), Ok(json!({ "saving": true, "ticket": 7, "project": "Shop" })));
+    let saved = |answer| ("app.saved", json!({ "ticket": 7 }), answer);
+    let script = Script(RefCell::new(vec![
+        begun(),
+        saved(Ok(json!({ "saving": true }))),
+        saved(Ok(json!({ "saving": false, "saved": true, "revision": 42 }))),
+    ]));
+    let r = save(&script);
+    assert_eq!(r["isError"], false, "{r}");
+    assert_eq!(
+        serde_json::from_str::<Value>(r["content"][0]["text"].as_str().unwrap()).unwrap(),
+        json!({ "saved": true, "project": "Shop", "revision": 42 })
+    );
+    // A save that fails says why.
+    let script = Script(RefCell::new(vec![begun(), saved(Err(CallError::Refused("the save failed: the disk is full".into())))]));
+    let r = save(&script);
+    assert!(r["isError"].as_bool().unwrap() && r["content"][0]["text"].as_str().unwrap().contains("the disk is full"), "{r}");
+    // Archforge gone while the save runs: started, outcome unknown.
+    let script = Script(RefCell::new(vec![begun(), saved(Err(CallError::Unreachable("connection refused".into())))]));
+    let text = save(&script)["content"][0]["text"].as_str().unwrap().to_string();
+    assert!(text.contains("was started") && text.contains("unknown"), "{text}");
+    // Nothing to save: answered at once.
+    let script = Script(RefCell::new(vec![("app.save", json!({}), Ok(json!({ "saving": false, "saved": true, "unsaved": false })))]));
+    assert_eq!(serde_json::from_str::<Value>(save(&script)["content"][0]["text"].as_str().unwrap()).unwrap()["saved"], true);
 }

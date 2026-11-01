@@ -5,7 +5,7 @@
 //! The headless mode is not built and not advertised (CS-3).
 //!
 //! Tools: `list_commands`, `describe_command`, `execute_command`, `batch`, `inspect_document`,
-//! `undo`, `redo` and `call_app`, and one tool per command of the table (`er_entity_add` for
+//! `undo`, `redo`, `save_project` and `call_app`, and one tool per command of the table (`er_entity_add` for
 //! `er.entity.add`), its schema generated from the command's parameter documentation (BP-CS-4).
 //! With `compact` the command tools are not listed and `search_tools` finds them, each to run
 //! through `execute_command` (CS-14). Only the reads say they are read-only (CS-13); unknown tools, methods and
@@ -42,7 +42,7 @@ struct Tool {
     destructive: bool,
 }
 
-const TOOLS: [Tool; 8] = [
+const TOOLS: [Tool; 9] = [
     Tool {
         name: "list_commands",
         description: "List Archforge's commands for the open project, compactly: id, label, whether it is enabled now and whether it changes the model. Use describe_command for one command's parameters.",
@@ -121,8 +121,16 @@ const TOOLS: [Tool; 8] = [
         destructive: true,
     },
     Tool {
+        name: "save_project",
+        description: "Save the open project, as the Save button does: its changes become a version in the project's history. Waits until the save is done (up to 30 seconds) and gives the project and the revision saved.",
+        schema: || object(json!({}), &[]),
+        method: Some("app.save"),
+        read_only: false,
+        destructive: false,
+    },
+    Tool {
         name: "call_app",
-        description: "Send any control-channel request to the running Archforge: engine.commands, engine.describe, engine.execute, engine.batch, engine.undo, engine.redo, document.inspect or ui.inspect (the controls drawn in the window).",
+        description: "Send any control-channel request to the running Archforge: engine.commands, engine.describe, engine.execute, engine.batch, engine.undo, engine.redo, document.inspect, ui.inspect (the controls drawn in the window), app.save (gives a ticket) or app.saved {ticket}.",
         schema: || object(json!({ "method": { "type": "string" }, "params": { "type": "object" } }), &["method"]),
         method: None,
         read_only: false,
@@ -404,15 +412,22 @@ fn call(id: Value, params: &Value, backend: &dyn Backend, catalog: &Catalog) -> 
     if let Err(why) = check(name, &schema, given) {
         return tool_error(id, &why);
     }
-    match backend.call(&method, request) {
+    let started = std::time::Instant::now();
+    let answer = backend.call(&method, request);
+    // A save goes on in the background: the tool waits until it is done.
+    let answer = match answer {
+        Ok(v) if name == "save_project" && v.get("saving") == Some(&Value::Bool(true)) => wait_for_save(backend, v, started),
+        other => other,
+    };
+    match answer {
         Ok(value) => result(id, json!({ "content": [{ "type": "text", "text": value.to_string() }], "isError": false })),
         Err(CallError::Unreachable(e)) => tool_error(id, &format!("Archforge is not reachable: {e}")),
         Err(CallError::Refused(e)) => tool_error(id, &e),
     }
 }
 
-const INSTRUCTIONS: &str = "Archforge models databases as ER diagrams. Every tool works on the project open in the running Archforge window. Each command has its own tool (er_schema_list, er_entity_add, er_attribute_add, er_relationship_add, diagram_add, diagram_place, diagram_connect, er_remove, ...; ids come back in the results); batch runs several as one undo step; inspect_document tells what is open and selected; undo and redo step through the history. Every change shows in the window at once and the user can undo it.";
-const COMPACT_INSTRUCTIONS: &str = "Archforge models databases as ER diagrams. Every tool works on the project open in the running Archforge window. search_tools finds a command (er.entity.add, er.relationship.add, diagram.place, ...) with its parameters; execute_command {command, params} runs it and batch runs several as one undo step; inspect_document tells what is open and selected; undo and redo step through the history. Every change shows in the window at once and the user can undo it.";
+const INSTRUCTIONS: &str = "Archforge models databases as ER diagrams. Every tool works on the project open in the running Archforge window. Each command has its own tool (er_schema_list, er_entity_add, er_attribute_add, er_relationship_add, diagram_add, diagram_place, diagram_connect, er_remove, ...; ids come back in the results); batch runs several as one undo step; inspect_document tells what is open and selected; undo and redo step through the history; save_project saves the project, as the Save button does, once the model is done. Every change shows in the window at once and the user can undo it.";
+const COMPACT_INSTRUCTIONS: &str = "Archforge models databases as ER diagrams. Every tool works on the project open in the running Archforge window. search_tools finds a command (er.entity.add, er.relationship.add, diagram.place, ...) with its parameters; execute_command {command, params} runs it and batch runs several as one undo step; inspect_document tells what is open and selected; undo and redo step through the history; save_project saves the project, as the Save button does, once the model is done. Every change shows in the window at once and the user can undo it.";
 
 /// Up to five tool names close to an unknown one: those sharing its first word, else the general
 /// tools.
@@ -423,6 +438,36 @@ fn close_tools(name: &str, catalog: &Catalog) -> String {
         close = TOOLS.iter().map(|t| t.name).take(5).collect();
     }
     format!("close ones are {}; tools/list names them all", close.join(", "))
+}
+
+/// How often `save_project` looks whether its save is done, and how long it waits in all, the
+/// calls included, so it answers before an MCP client gives up on it.
+const SAVE_POLL: std::time::Duration = std::time::Duration::from_millis(200);
+const SAVE_WAIT: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// Waits until the save `begun` (app.save's answer, with its ticket) is done, and says how it went.
+fn wait_for_save(backend: &dyn Backend, begun: Value, started: std::time::Instant) -> Result<Value, CallError> {
+    let Some(ticket) = begun.get("ticket").and_then(Value::as_u64) else {
+        return Err(CallError::Refused("the save started without a ticket to follow it by".into()));
+    };
+    let project = begun.get("project").cloned().unwrap_or(Value::Null);
+    loop {
+        if started.elapsed() > SAVE_WAIT {
+            return Err(CallError::Refused(format!("save {ticket} is still running after {} seconds; it goes on in Archforge", SAVE_WAIT.as_secs())));
+        }
+        std::thread::sleep(SAVE_POLL);
+        let state = match backend.call("app.saved", json!({ "ticket": ticket })) {
+            Err(CallError::Unreachable(e)) => {
+                return Err(CallError::Refused(format!(
+                    "save {ticket} was started, but whether it finished is unknown: Archforge is not reachable: {e}"
+                )));
+            }
+            other => other?,
+        };
+        if state.get("saving") != Some(&Value::Bool(true)) {
+            return Ok(json!({ "saved": true, "project": project, "revision": state.get("revision").cloned().unwrap_or(Value::Null) }));
+        }
+    }
 }
 
 /// Refuses an argument the schema does not name and a required one missing.
