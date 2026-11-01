@@ -13,6 +13,7 @@ pub mod connect;
 pub mod control;
 pub mod diagrams;
 pub mod editing;
+mod er_kind;
 pub mod explorer;
 pub mod fonts;
 pub mod home;
@@ -20,6 +21,7 @@ pub mod home_search;
 pub mod i18n;
 pub mod indexes;
 pub mod keys;
+mod kinds;
 pub mod markdown;
 pub mod new_project;
 pub mod objects;
@@ -275,6 +277,8 @@ pub struct Shell {
     /// Frames run so far.
     pub frames: u64,
     pub(crate) registry: widgets::Registry,
+    /// The diagram kinds whose tools and gestures the canvas offers.
+    pub(crate) kinds: &'static [&'static dyn kinds::DiagramKind],
     /// The installed fonts as this window knows them.
     pub(crate) fonts: fonts::FontState,
     /// The font notices logged so far, oldest first (tests only).
@@ -346,6 +350,7 @@ impl Shell {
             state: UiState::default(),
             frames: 0,
             registry: widgets::Registry::default(),
+            kinds: kinds::KINDS,
             fonts: fonts::FontState::default(),
             #[cfg(test)]
             font_notices: Vec::new(),

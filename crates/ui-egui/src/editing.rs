@@ -90,8 +90,9 @@ pub enum Gesture {
     Resize { node: Uuid, corner: Corner, base: Rect, from: Pos2 },
     /// A selection rectangle from a screen point.
     Marquee { from: Pos2 },
-    /// A relationship drawn from a node, from the screen point the drag started at (slice E2).
-    Connect { from_node: Uuid, from: Pos2 },
+    /// A line of a kind's connect tool drawn from a node, from the screen point the drag started
+    /// at (ER's relationship, slice E2).
+    Connect { tool: &'static str, from_node: Uuid, from: Pos2 },
     /// A note link drawn from a note's handle to a table or a relationship's line (kjz.13).
     LinkNote { note: Uuid },
     /// A cardinality text dragged off its place: its line, its end, the screen point the drag
@@ -117,10 +118,10 @@ enum Action {
     Toggle(Uuid),
     Start(Gesture, Option<Uuid>),
     Commit,
-    Place(f64, f64),
+    Place(&'static str, f64, f64),
     Menu(EntityMenu),
     Rename(Uuid, Uuid),
-    OpenColumn(Uuid, Option<Uuid>),
+    Open(Uuid, Option<usize>),
     PlaceNote(f64, f64),
     EditNote(Uuid),
     /// A cardinality text put back in its place, and a line's route worked out anew.
@@ -128,7 +129,7 @@ enum Action {
     ResetRoute(Uuid),
 }
 
-fn run(shell: &mut Shell, id: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
+pub(crate) fn run(shell: &mut Shell, id: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
     let Some(session) = shell.session.as_mut() else { return Err(tr("The model could not be opened")) };
     session.execute(id, &params).map(|o| o.value).map_err(|e| e.to_string())
 }
@@ -146,6 +147,11 @@ fn uuid(store: &Store, o: Obj) -> Option<Uuid> {
 
 fn element_of(store: &Store, n: Obj) -> Option<Obj> {
     store.get(n, node::ELEMENT).ok().and_then(|v| v.as_ref()).filter(|e| store.is_alive(*e))
+}
+
+/// The element of node `n` when it takes part in the gestures of `kind`.
+fn part_of_node(kind: Option<&'static dyn crate::kinds::DiagramKind>, store: &Store, n: Obj) -> Option<Obj> {
+    element_of(store, n).filter(|e| kind.is_some_and(|k| k.takes_part(store, *e)))
 }
 
 fn entity_of_node(store: &Store, n: Obj) -> Option<Obj> {
@@ -329,6 +335,7 @@ fn decide(
     released: bool,
 ) -> Action {
     let pos = resp.interact_pointer_pos().filter(|p| p.is_finite());
+    let kind = crate::kinds::kind_of(shell, store, d);
     let hit_node = |pos: Pos2| {
         let (x, y) = view.to_canvas(pos);
         match grid.hit(x, y) {
@@ -338,15 +345,15 @@ fn decide(
     };
     match shell.canvas.tool {
         Tool::Pan => Action::Nothing,
-        Tool::Relationship => {
+        Tool::Connect(tool) => {
             if (resp.drag_stopped_by(egui::PointerButton::Primary) || released) && shell.canvas.gesture.is_some() {
                 return Action::Commit;
             }
             let Some(pos) = pos else { return Action::Nothing };
             if resp.drag_started_by(egui::PointerButton::Primary) && shell.canvas.gesture.is_none() {
                 let from = origin.filter(|o| o.is_finite()).unwrap_or(pos);
-                return match hit_node(from).filter(|n| entity_of_node(store, *n).is_some()).and_then(|n| uuid(store, n)) {
-                    Some(from_node) => Action::Start(Gesture::Connect { from_node, from }, None),
+                return match hit_node(from).filter(|n| part_of_node(kind, store, *n).is_some()).and_then(|n| uuid(store, n)) {
+                    Some(from_node) => Action::Start(Gesture::Connect { tool, from_node, from }, None),
                     None => Action::Nothing,
                 };
             }
@@ -390,12 +397,12 @@ fn decide(
             },
             _ => Action::Nothing,
         },
-        Tool::Entity => match (resp.clicked(), pos) {
+        Tool::Place(tool) => match (resp.clicked(), pos) {
             (true, Some(pos)) => match hit_node(pos) {
                 Some(n) => Action::Select(uuid(store, element_of(store, n).unwrap_or(n)).into_iter().collect()),
                 None => {
                     let (x, y) = view.to_canvas(pos);
-                    Action::Place(x, y)
+                    Action::Place(tool, x, y)
                 }
             },
             _ => Action::Nothing,
@@ -448,8 +455,9 @@ fn decide(
                 };
             }
             if resp.secondary_clicked()
+                && kind.is_some_and(|k| k.menu())
                 && let Some(n) = hit_node(pos)
-                && let Some(entity) = entity_of_node(store, n)
+                && let Some(entity) = part_of_node(kind, store, n)
                 && let (Some(node), Some(entity)) = (uuid(store, n), uuid(store, entity))
             {
                 return Action::Menu(EntityMenu { node, entity, at: pos });
@@ -478,9 +486,10 @@ fn decide(
             {
                 return Action::EditNote(node);
             }
+            // A double click on a card: its header renames it in place, a row opens its editor there.
             if (resp.double_clicked() || resp.triple_clicked())
                 && let Some(n) = hit_node(pos)
-                && let Some(entity) = entity_of_node(store, n)
+                && let Some(entity) = part_of_node(kind, store, n)
                 && let (Some(node), Some(entity_id)) = (uuid(store, n), uuid(store, entity))
             {
                 let rect = view.rect(&bounds_of(store, n));
@@ -489,15 +498,7 @@ fn decide(
                     return Action::Rename(node, entity_id);
                 }
                 let row = ((y_units - (ENTITY_FIRST_ROW - 4.0)) / ENTITY_ROW).floor();
-                let columns: Vec<Obj> = store
-                    .list(entity, archforge_er::entity::ATTRIBUTE)
-                    .unwrap_or_default()
-                    .iter()
-                    .filter_map(archforge_mof::Value::as_ref)
-                    .filter(|c| store.is_alive(*c))
-                    .collect();
-                let column = if row >= 0.0 { columns.get(row as usize).and_then(|c| uuid(store, *c)) } else { None };
-                return Action::OpenColumn(entity_id, column);
+                return Action::Open(entity_id, (row >= 0.0).then_some(row as usize));
             }
             if resp.clicked() {
                 let (x, y) = view.to_canvas(pos);
@@ -518,6 +519,7 @@ fn decide(
 pub(crate) fn pointer(shell: &mut Shell, ui: &egui::Ui, resp: &egui::Response, view: View, grid: &Grid, d: Obj) {
     let (shift, origin, released) = ui.input(|i| (i.modifiers.shift, i.pointer.press_origin(), i.pointer.primary_released()));
     let pointer = resp.interact_pointer_pos().or_else(|| ui.input(|i| i.pointer.hover_pos()));
+    let kind = shell.session.as_ref().and_then(|s| crate::kinds::kind_of(shell, s.doc(), d));
     let action = match shell.session.as_ref() {
         Some(s) => {
             let selection = s.view().selection.clone();
@@ -549,7 +551,11 @@ pub(crate) fn pointer(shell: &mut Shell, ui: &egui::Ui, resp: &egui::Response, v
             shell.canvas.gesture = Some(gesture);
         }
         Action::Commit => commit(shell, view, d, pointer, shift, resp.rect),
-        Action::Place(x, y) => place_entity(shell, d, x, y),
+        Action::Place(tool, x, y) => {
+            if let Some(kind) = kind {
+                kind.place(shell, tool, d, x, y);
+            }
+        }
         Action::Menu(m) => shell.canvas.menu = Some(m),
         Action::Rename(node, entity) => open_rename(shell, node, entity),
         Action::PlaceNote(x, y) => place_note(shell, d, x, y),
@@ -561,9 +567,10 @@ pub(crate) fn pointer(shell: &mut Shell, ui: &egui::Ui, resp: &egui::Response, v
                 shell.canvas.note_edit = Some(NoteEdit { node, text, opened: true, refused: None });
             }
         }
-        Action::OpenColumn(entity, column) => {
-            crate::panels::open_column(shell, entity, column);
-            shell.state.show_panel(crate::state::Panel::Properties);
+        Action::Open(element, row) => {
+            if let Some(kind) = kind {
+                kind.open(shell, element, row);
+            }
         }
         Action::ResetEnd(edge, end) => {
             let label = shell.session.as_ref().and_then(|s| s.doc().by_uuid(edge).and_then(|e| end_label(s.doc(), e, end)));
@@ -684,15 +691,16 @@ fn commit(shell: &mut Shell, view: View, d: Obj, pointer: Option<Pos2>, shift: b
                 shell.canvas.notice = Some(e);
             }
         }
-        Gesture::Connect { from_node, from } => {
+        Gesture::Connect { tool, from_node, from } => {
+            let Some(kind) = shell.session.as_ref().and_then(|s| crate::kinds::kind_of(shell, s.doc(), d)) else { return };
             if let Some(to_node) = node_at(shell, view, d, pointer) {
-                crate::connect::connect(shell, d, from_node, to_node);
+                kind.connect(shell, tool, d, from_node, to_node);
                 // The line drawn, the tool hands back to Select, as the placing tools do.
                 shell.canvas.tool = Tool::Select;
             } else if canvas.contains(pointer) && (pointer - from).length() / view.zoom >= DRAG_MIN {
-                // Dropped on empty canvas: a new table there, joined to the one the drag began on.
+                // Dropped on empty canvas: a new element there, joined to the one the drag began on.
                 let (x, y) = view.to_canvas(pointer);
-                connect_to_new(shell, d, from_node, x, y);
+                kind.connect_to_new(shell, tool, d, from_node, x, y);
                 shell.canvas.tool = Tool::Select;
             }
         }
@@ -767,13 +775,15 @@ fn remove_selected_link(shell: &mut Shell) -> bool {
     true
 }
 
-/// The topmost entity node of `d` under a screen point.
+/// The topmost node of `d` under a screen point whose element takes part in the diagram kind's
+/// gestures.
 fn node_at(shell: &Shell, view: View, d: Obj, at: Pos2) -> Option<Uuid> {
     let store = shell.session.as_ref()?.doc();
+    let kind = crate::kinds::kind_of(shell, store, d);
     nodes_of(store, d)
         .into_iter()
         .rev()
-        .find(|n| entity_of_node(store, *n).is_some() && view.rect(&bounds_of(store, *n)).contains(at))
+        .find(|n| part_of_node(kind, store, *n).is_some() && view.rect(&bounds_of(store, *n)).contains(at))
         .and_then(|n| uuid(store, n))
 }
 
@@ -870,7 +880,7 @@ fn entity_name(store: &Store, schema: Obj) -> Option<String> {
 
 /// Adds a table to the diagram's schema and places it at `(x, y)`, its centre under the click,
 /// as one undo step; then its name is open for typing.
-fn place_entity(shell: &mut Shell, d: Obj, x: f64, y: f64) {
+pub(crate) fn place_entity(shell: &mut Shell, d: Obj, x: f64, y: f64) {
     shell.canvas.notice = None;
     let Some(session) = shell.session.as_mut() else { return };
     let store = session.doc();
@@ -912,7 +922,7 @@ fn place_entity(shell: &mut Shell, d: Obj, x: f64, y: f64) {
 /// `from_node` by the relationship the tool is set to, all one undo step; then the new table's name
 /// is open for typing. The relationship's foreign key starts off (and so it is not identifying):
 /// the new table is still to be shaped, and its keys come when the user turns the key on.
-fn connect_to_new(shell: &mut Shell, d: Obj, from_node: Uuid, x: f64, y: f64) {
+pub(crate) fn connect_to_new(shell: &mut Shell, d: Obj, from_node: Uuid, x: f64, y: f64) {
     use crate::connect::cardinality_word;
     shell.canvas.notice = None;
     let kind = shell.canvas.relationship;
@@ -1205,8 +1215,13 @@ fn commit_rename(shell: &mut Shell) {
         shell.canvas.rename = None;
         return;
     }
-    match run(shell, "er.entity.rename", json!({ "entity": r.entity.to_string(), "name": r.text.trim() })) {
-        Ok(_) => shell.canvas.rename = None,
+    let kind = shell.session.as_ref().and_then(|s| {
+        let d = s.doc().by_uuid(r.node).and_then(|n| archforge_diagram::diagram_of(s.doc(), n))?;
+        crate::kinds::kind_of(shell, s.doc(), d)
+    });
+    let Some(kind) = kind else { return };
+    match kind.rename(shell, r.entity, r.text.trim()) {
+        Ok(()) => shell.canvas.rename = None,
         Err(e) => {
             // The field takes the keyboard again, the text selected, so the name can be retyped.
             if let Some(rename) = shell.canvas.rename.as_mut() {
@@ -1257,14 +1272,16 @@ fn ask_delete(shell: &mut Shell, node: Uuid, entity: Uuid) {
 /// the name typed in place and the entity menu; then reads the keys.
 pub(crate) fn overlays(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, view: View, d: Obj, overrides: &BTreeMap<Uuid, Rect>) {
     let paint = ui.painter().with_clip_rect(r);
+    let kind = shell.session.as_ref().and_then(|s| crate::kinds::kind_of(shell, s.doc(), d));
     if let Some(Gesture::Connect { from_node, .. }) = shell.canvas.gesture
+        && let Some(kind) = kind
         && let Some(pointer) = ui.input(|i| i.pointer.hover_pos())
     {
         let target = node_at(shell, view, d, pointer).and_then(|id| shell.session.as_ref()?.doc().by_uuid(id)).map(|n| {
             let store = shell.session.as_ref().map(|s| s.doc());
             store.map(|s| view.rect(&bounds_of(s, n))).unwrap_or(Rect::NOTHING)
         });
-        crate::connect::live_line(shell, &paint, p, view, from_node, pointer, target);
+        kind.live_line(shell, &paint, p, view, from_node, pointer, target);
     }
     // A note link being drawn: dashed from the note to the pointer.
     if let Some(Gesture::LinkNote { note }) = shell.canvas.gesture
@@ -1297,7 +1314,7 @@ pub(crate) fn overlays(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rec
                 })
                 .collect();
             let single = match selected.as_slice() {
-                [(n, id, rect)] => entity_of_node(store, *n).and_then(|e| uuid(store, e)).map(|e| (*id, e, *rect)),
+                [(n, id, rect)] => part_of_node(kind, store, *n).and_then(|e| uuid(store, e)).map(|e| (*id, e, *rect)),
                 _ => None,
             };
             // A selected note alone: its link handle.
@@ -1312,9 +1329,10 @@ pub(crate) fn overlays(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rec
         None => (None, Vec::new(), None, None),
     };
     if let Some((node, entity, rect)) = single
+        && let Some(kind) = kind
         && shell.canvas.gesture.is_none()
     {
-        adorners(shell, ui, p, r, rect, node, entity);
+        adorners(shell, ui, p, r, kind, rect, node, entity);
     }
     if let Some((note, rect)) = note
         && shell.canvas.gesture.is_none()
@@ -1341,13 +1359,28 @@ pub(crate) fn overlays(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rec
     keyboard(shell, ui, d);
 }
 
-/// The two adorners of a selected entity: connect (E2) and add column.
-fn adorners(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, rect: Rect, node: Uuid, entity: Uuid) {
+/// The adorners of a selected element: connect (E2), with the kind's first connect tool, and the
+/// kind's own (ER's add column).
+#[allow(clippy::too_many_arguments, reason = "the adorners sit beside a node over the canvas, for its kind")]
+fn adorners(
+    shell: &mut Shell,
+    ui: &egui::Ui,
+    p: &Palette,
+    r: Rect,
+    kind: &'static dyn crate::kinds::DiagramKind,
+    rect: Rect,
+    node: Uuid,
+    entity: Uuid,
+) {
     let paint = ui.painter().with_clip_rect(r);
-    let boxes = [
-        ("connect", &icons::ADORN_CONNECT, "Connect", pos2(rect.right() + ADORNER_GAP, rect.top() - ADORNER - 6.0), true),
-        ("add-column", &icons::ADORN_ADD, "Add column", pos2(rect.right() + ADORNER_GAP, rect.bottom() - ADORNER + 6.0), true),
-    ];
+    let connect = kind.tools().iter().find(|t| t.use_ == crate::kinds::ToolUse::Connect).map(|t| t.key);
+    let mut boxes = Vec::new();
+    if connect.is_some() {
+        boxes.push(("connect", &icons::ADORN_CONNECT, "Connect", pos2(rect.right() + ADORNER_GAP, rect.top() - ADORNER - 6.0), true));
+    }
+    if let Some((key, hint)) = kind.adorner() {
+        boxes.push((key, &icons::ADORN_ADD, hint, pos2(rect.right() + ADORNER_GAP, rect.bottom() - ADORNER + 6.0), true));
+    }
     for (key, icon, hint, at, live) in boxes {
         let b = Rect::from_min_size(at, Vec2::splat(ADORNER));
         if !r.intersects(b) {
@@ -1364,14 +1397,17 @@ fn adorners(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, rect: Rect, 
         } else {
             control(shell, ui, &id, "button", b, live).on_hover_text(tr(hint))
         };
-        if resp.clicked() && key == "add-column" {
-            crate::panels::open_column(shell, entity, None);
-            shell.state.show_panel(crate::state::Panel::Properties);
+        if resp.clicked() && key != "connect" {
+            kind.open(shell, entity, None);
         }
-        // Dragging the connect adorner draws a relationship from this entity.
-        if key == "connect" && resp.drag_started_by(egui::PointerButton::Primary) && shell.canvas.gesture.is_none() {
+        // Dragging the connect adorner draws a line from this element.
+        if let Some(tool) = connect
+            && key == "connect"
+            && resp.drag_started_by(egui::PointerButton::Primary)
+            && shell.canvas.gesture.is_none()
+        {
             let from = ui.input(|i| i.pointer.press_origin()).filter(|o| o.is_finite()).unwrap_or(b.center());
-            shell.canvas.gesture = Some(Gesture::Connect { from_node: node, from });
+            shell.canvas.gesture = Some(Gesture::Connect { tool, from_node: node, from });
         }
     }
 }
@@ -1643,6 +1679,7 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
     if delete && !shift && (remove_selected_link(shell) || crate::connect::remove_selected_relationship(shell)) {
         return;
     }
+    let kind = shell.session.as_ref().and_then(|s| crate::kinds::kind_of(shell, s.doc(), d));
     let selected: Vec<(Uuid, Option<Uuid>)> = match shell.session.as_ref() {
         Some(s) => {
             let store = s.doc();
@@ -1650,7 +1687,7 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
             nodes_of(store, d)
                 .into_iter()
                 .filter(|n| is_selected(store, selection, *n))
-                .filter_map(|n| Some((uuid(store, n)?, entity_of_node(store, n).and_then(|e| uuid(store, e)))))
+                .filter_map(|n| Some((uuid(store, n)?, part_of_node(kind, store, n).and_then(|e| uuid(store, e)))))
                 .collect()
         }
         None => Vec::new(),
@@ -1658,10 +1695,12 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
     if selected.is_empty() {
         return;
     }
+    // The kind's new row, as its adorner opens it (ER's add column).
     if add_column {
-        if let [(_, Some(entity))] = selected.as_slice() {
-            crate::panels::open_column(shell, *entity, None);
-            shell.state.show_panel(crate::state::Panel::Properties);
+        if let [(_, Some(entity))] = selected.as_slice()
+            && let Some(kind) = kind.filter(|k| k.adorner().is_some())
+        {
+            kind.open(shell, *entity, None);
         }
         return;
     }
