@@ -7,6 +7,7 @@
 pub mod commands;
 pub mod figures;
 mod generated;
+pub mod members;
 
 use std::sync::Arc;
 
@@ -117,6 +118,7 @@ pub fn registry() -> Result<Arc<archforge_engine::Registry<Store, ProjectView>>,
     let mut specs = archforge_engine::cmd::edit::specs();
     specs.extend(archforge_diagram::project::specs());
     specs.extend(commands::specs());
+    specs.extend(members::specs());
     specs.extend(archforge_diagram::commands::specs::<ProjectView>());
     specs.extend(archforge_core::skills::specs::<ProjectView>());
     archforge_engine::Registry::new(specs)

@@ -19,36 +19,36 @@ pub const MAX_NAME: usize = 128;
 /// Why a command is not available.
 pub const NO_PACKAGES: &str = "There is no package yet.";
 
-fn refuse(key: &str, why: impl Into<String>) -> CommandError {
+pub(crate) fn refuse(key: &str, why: impl Into<String>) -> CommandError {
     CommandError::about(key, why)
 }
 
-fn fail(e: Invalid) -> CommandError {
+pub(crate) fn fail(e: Invalid) -> CommandError {
     CommandError::new(e.to_string())
 }
 
-fn text<'a>(p: &'a Params, key: &str) -> &'a str {
+pub(crate) fn text<'a>(p: &'a Params, key: &str) -> &'a str {
     p.str(key).unwrap_or_default()
 }
 
-fn short(s: &str) -> String {
+pub(crate) fn short(s: &str) -> String {
     s.chars().take(40).collect()
 }
 
-fn uuid_of(store: &Store, obj: Obj) -> Result<String, CommandError> {
+pub(crate) fn uuid_of(store: &Store, obj: Obj) -> Result<String, CommandError> {
     store.uuid(obj).map(|u| u.to_string()).map_err(fail)
 }
 
-fn name_of(store: &Store, obj: Obj) -> String {
+pub(crate) fn name_of(store: &Store, obj: Obj) -> String {
     archforge_core::name_of(store, obj)
 }
 
-fn has_packages(f: &Facts<'_, Store, ProjectView>) -> Result<(), &'static str> {
+pub(crate) fn has_packages(f: &Facts<'_, Store, ProjectView>) -> Result<(), &'static str> {
     if f.doc.alive().any(|o| f.doc.class_of(o).ok() == Some(PACKAGE)) { Ok(()) } else { Err(NO_PACKAGES) }
 }
 
 /// The element the id under `key` names, of `class` (`what` names it in a refusal).
-fn id_of(store: &Store, p: &Params, key: &str, class: ClassId, what: &str) -> Result<Obj, CommandError> {
+pub(crate) fn id_of(store: &Store, p: &Params, key: &str, class: ClassId, what: &str) -> Result<Obj, CommandError> {
     let id = text(p, key);
     let Some(uuid) = Uuid::parse(id) else { return Err(refuse(key, format!("{:?} is not an id", short(id)))) };
     let obj = store.by_uuid(uuid).filter(|o| store.is_alive(*o)).ok_or_else(|| refuse(key, format!("there is no element {}", short(id))))?;
@@ -59,12 +59,12 @@ fn id_of(store: &Store, p: &Params, key: &str, class: ClassId, what: &str) -> Re
 }
 
 /// The project's Model, the root that holds the packages.
-fn model(store: &Store) -> Result<Obj, CommandError> {
+pub(crate) fn model(store: &Store) -> Result<Obj, CommandError> {
     store.alive().find(|o| store.class_of(*o).ok() == Some(archforge_core::MODEL)).ok_or_else(|| CommandError::new("the project has no model root"))
 }
 
 /// The members of `owner`'s list `prop` of `class`.
-fn members(store: &Store, owner: Obj, prop: archforge_mof::PropId, class: ClassId) -> Vec<Obj> {
+pub(crate) fn members(store: &Store, owner: Obj, prop: archforge_mof::PropId, class: ClassId) -> Vec<Obj> {
     store
         .list(owner, prop)
         .unwrap_or_default()
@@ -101,7 +101,7 @@ fn check_name(store: &Store, name: &str, siblings: &[Obj], except: Option<Obj>, 
     Ok(())
 }
 
-fn set_name(store: &mut Store, obj: Obj, name: &str) -> Result<(), CommandError> {
+pub(crate) fn set_name(store: &mut Store, obj: Obj, name: &str) -> Result<(), CommandError> {
     store.set(obj, named_element::NAME, Value::str(name)).map_err(fail)
 }
 
@@ -161,12 +161,16 @@ fn class_list(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "classes": items }))
 }
 
-/// Removes UML elements, each with what it holds and the diagrams, nodes and lines that show
-/// them (`element.remove`, through [`crate::UmlNotation`]).
+/// Removes UML elements (packages, classes, attributes, operations and primitive types), each with
+/// what it holds and the diagrams, nodes and lines that show them (`element.remove`, through
+/// [`crate::UmlNotation`]); a member's type that goes is dropped from what had it.
 pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, CommandError> {
     // Every id is checked before anything goes, so a refusal leaves the store as it was.
     for o in objs.iter().filter(|o| store.is_alive(**o)) {
-        if ![PACKAGE, CLASS].contains(&store.class_of(*o).map_err(fail)?) {
+        let class = store.class_of(*o).map_err(fail)?;
+        // An association's end goes with its association, which comes with relating classes.
+        let end = class == crate::PROPERTY && store.get(*o, crate::property::ASSOCIATION).ok().and_then(|v| v.as_ref()).is_some();
+        if ![PACKAGE, CLASS, crate::PROPERTY, crate::OPERATION, crate::PRIMITIVE_TYPE].contains(&class) || end {
             return Err(refuse("ids", format!("{} cannot be removed yet", uuid_of(store, *o)?)));
         }
     }
