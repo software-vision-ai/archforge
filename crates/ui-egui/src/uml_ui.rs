@@ -566,8 +566,8 @@ pub(crate) fn open_sample(shell: &mut Shell) -> Result<Uuid, String> {
         .iter()
         .filter_map(|(n, x, y)| {
             let c = by_name(n)?;
-            let card = archforge_uml::figures::card(store, c)?;
-            let rows = card.compartments.iter().map(|r| r.len().max(1)).sum::<usize>() as f64;
+            let count = |n: usize| n.max(1) as f64;
+            let rows = count(archforge_uml::members::attributes(store, c).len()) + count(archforge_uml::members::operations(store, c).len());
             Some((uuid(c), *x, *y, 77.0 + (rows + 0.5) * 20.0 + 6.0))
         })
         .collect();

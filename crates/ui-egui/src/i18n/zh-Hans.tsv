@@ -534,3 +534,5 @@ str		This dependency	此依赖
 str		This generalization	此泛化
 str		To	到
 str		{what} removed	已移除{what}
+# 包 (AR-17)
+str		Class · {package}	类 · {package}

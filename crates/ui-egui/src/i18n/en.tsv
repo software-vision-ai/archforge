@@ -533,3 +533,5 @@ str		This dependency	This dependency
 str		This generalization	This generalization
 str		To	To
 str		{what} removed	{what} removed
+# Packages (AR-17)
+str		Class · {package}	Class · {package}

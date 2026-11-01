@@ -1,7 +1,9 @@
-//! UML's commands over the store (archforge-3c5.1.1): packages in the project's Model and classes
-//! in a package, added, renamed and listed. Each validates what it is given before it changes
-//! anything and refuses with a message naming the key. Ids in parameters are the elements' UUIDs.
-//! Removing and describing go through the shared `element.remove` and `element.describe`.
+//! UML's commands over the store (archforge-3c5.1.1, AR-17): packages in the project's Model,
+//! nested as deep as needed, and classes in a package, added, renamed, moved and listed. Each
+//! validates what it is given before it changes anything and refuses with a message naming the
+//! key. Ids in parameters are the elements' UUIDs. Removing and describing go through the shared
+//! `element.remove` and `element.describe`; a nested package removed hands what it holds up to its
+//! parent (owner decision, for every notation).
 
 use archforge_diagram::ProjectView;
 use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, always, cmd};
@@ -74,9 +76,43 @@ pub(crate) fn members(store: &Store, owner: Obj, prop: archforge_mof::PropId, cl
         .collect()
 }
 
-/// The packages of the model, in its order.
+/// The top-level packages of the model, in its order.
 pub fn packages(store: &Store) -> Vec<Obj> {
     model(store).map(|m| members(store, m, archforge_core::model::MEMBER, PACKAGE)).unwrap_or_default()
+}
+
+/// The packages a package holds, in its order.
+pub fn subpackages(store: &Store, package: Obj) -> Vec<Obj> {
+    members(store, package, package::PACKAGED_ELEMENT, PACKAGE)
+}
+
+/// Every package of the model, each before the packages it holds.
+pub fn all_packages(store: &Store) -> Vec<Obj> {
+    let mut out = Vec::new();
+    let mut stack: Vec<Obj> = packages(store).into_iter().rev().collect();
+    while let Some(p) = stack.pop() {
+        out.push(p);
+        stack.extend(subpackages(store, p).into_iter().rev());
+    }
+    out
+}
+
+/// The packages beside `package`: its parent's, or the model's top level.
+fn siblings_of(store: &Store, parent: Option<Obj>) -> Vec<Obj> {
+    parent.map_or_else(|| packages(store), |p| subpackages(store, p))
+}
+
+/// Whether `package` is `ancestor` or sits inside it, at any depth.
+pub fn is_within(store: &Store, package: Obj, ancestor: Obj) -> bool {
+    let mut at = Some(package);
+    for _ in 0..256 {
+        match at {
+            Some(p) if p == ancestor => return true,
+            Some(p) => at = package_of(store, p),
+            None => return false,
+        }
+    }
+    false
 }
 
 /// The classes of a package, in its order.
@@ -84,7 +120,7 @@ pub fn classes(store: &Store, package: Obj) -> Vec<Obj> {
     members(store, package, package::PACKAGED_ELEMENT, CLASS)
 }
 
-/// The package a class sits in.
+/// The package an element (a class, or a nested package) sits in.
 pub fn package_of(store: &Store, class: Obj) -> Option<Obj> {
     store.container(class).ok().flatten().map(|(c, _)| c).filter(|c| store.class_of(*c).ok() == Some(PACKAGE))
 }
@@ -105,13 +141,27 @@ pub(crate) fn set_name(store: &mut Store, obj: Obj, name: &str) -> Result<(), Co
     store.set(obj, named_element::NAME, Value::str(name)).map_err(fail)
 }
 
+/// The package under `key`, or none when it is empty: the model's top level.
+fn parent_param(store: &Store, p: &Params, key: &str) -> Result<Option<Obj>, CommandError> {
+    if text(p, key).is_empty() { Ok(None) } else { id_of(store, p, key, PACKAGE, "a package").map(Some) }
+}
+
+/// Puts `pkg` into `parent`, or at the model's top level.
+fn place_package(store: &mut Store, pkg: Obj, parent: Option<Obj>) -> Result<(), CommandError> {
+    match parent {
+        Some(parent) => store.push(parent, package::PACKAGED_ELEMENT, Value::Ref(pkg)).map_err(fail)?,
+        None => store.push(model(store)?, archforge_core::model::MEMBER, Value::Ref(pkg)).map_err(fail)?,
+    };
+    Ok(())
+}
+
 fn package_add(ctx: &mut C<'_>, p: &Params) -> R {
+    let parent = parent_param(ctx.doc, p, "parent")?;
     let name = text(p, "name");
-    check_name(ctx.doc, name, &packages(ctx.doc), None, "package")?;
-    let m = model(ctx.doc)?;
+    check_name(ctx.doc, name, &siblings_of(ctx.doc, parent), None, "package")?;
     let pkg = ctx.doc.create(PACKAGE).map_err(fail)?;
     set_name(ctx.doc, pkg, name)?;
-    ctx.doc.push(m, archforge_core::model::MEMBER, Value::Ref(pkg)).map_err(fail)?;
+    place_package(ctx.doc, pkg, parent)?;
     ctx.view.selection = vec![pkg];
     Ok(json!({ "id": uuid_of(ctx.doc, pkg)? }))
 }
@@ -119,9 +169,46 @@ fn package_add(ctx: &mut C<'_>, p: &Params) -> R {
 fn package_rename(ctx: &mut C<'_>, p: &Params) -> R {
     let pkg = id_of(ctx.doc, p, "package", PACKAGE, "a package")?;
     let name = text(p, "name");
-    check_name(ctx.doc, name, &packages(ctx.doc), Some(pkg), "package")?;
+    check_name(ctx.doc, name, &siblings_of(ctx.doc, package_of(ctx.doc, pkg)), Some(pkg), "package")?;
     set_name(ctx.doc, pkg, name)?;
     Ok(json!({ "id": uuid_of(ctx.doc, pkg)? }))
+}
+
+/// Takes `obj` out of whatever holds it, so it can be put elsewhere.
+fn detach(store: &mut Store, obj: Obj) -> Result<(), CommandError> {
+    if let Some((owner, prop)) = store.container(obj).map_err(fail)? {
+        store.remove_value(owner, prop, &Value::Ref(obj)).map_err(fail)?;
+    }
+    Ok(())
+}
+
+fn package_move(ctx: &mut C<'_>, p: &Params) -> R {
+    let pkg = id_of(ctx.doc, p, "package", PACKAGE, "a package")?;
+    let to = parent_param(ctx.doc, p, "to")?;
+    if to.is_some_and(|t| is_within(ctx.doc, t, pkg)) {
+        return Err(refuse("to", "a package cannot go into itself or a package it holds"));
+    }
+    if to == package_of(ctx.doc, pkg) {
+        return Ok(json!({ "id": uuid_of(ctx.doc, pkg)? }));
+    }
+    check_name(ctx.doc, &name_of(ctx.doc, pkg), &siblings_of(ctx.doc, to), Some(pkg), "package")?;
+    detach(ctx.doc, pkg)?;
+    place_package(ctx.doc, pkg, to)?;
+    ctx.view.selection = vec![pkg];
+    Ok(json!({ "id": uuid_of(ctx.doc, pkg)? }))
+}
+
+fn class_move(ctx: &mut C<'_>, p: &Params) -> R {
+    let c = id_of(ctx.doc, p, "class", CLASS, "a class")?;
+    let to = id_of(ctx.doc, p, "package", PACKAGE, "a package")?;
+    if package_of(ctx.doc, c) == Some(to) {
+        return Ok(json!({ "id": uuid_of(ctx.doc, c)? }));
+    }
+    check_name(ctx.doc, &name_of(ctx.doc, c), &classes(ctx.doc, to), Some(c), "class")?;
+    detach(ctx.doc, c)?;
+    ctx.doc.push(to, package::PACKAGED_ELEMENT, Value::Ref(c)).map_err(fail)?;
+    ctx.view.selection = vec![c];
+    Ok(json!({ "id": uuid_of(ctx.doc, c)? }))
 }
 
 fn class_add(ctx: &mut C<'_>, p: &Params) -> R {
@@ -146,9 +233,12 @@ fn class_rename(ctx: &mut C<'_>, p: &Params) -> R {
 
 fn package_list(ctx: &mut C<'_>, _: &Params) -> R {
     let store = &*ctx.doc;
-    let items: Vec<Json> = packages(store)
+    let items: Vec<Json> = all_packages(store)
         .into_iter()
-        .map(|pkg| json!({ "id": uuid_of(store, pkg).unwrap_or_default(), "name": name_of(store, pkg), "classes": classes(store, pkg).len() }))
+        .map(|pkg| {
+            let parent = package_of(store, pkg).and_then(|p| uuid_of(store, p).ok());
+            json!({ "id": uuid_of(store, pkg).unwrap_or_default(), "name": name_of(store, pkg), "parent": parent, "classes": classes(store, pkg).len() })
+        })
         .collect();
     Ok(json!({ "packages": items }))
 }
@@ -161,10 +251,44 @@ fn class_list(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "classes": items }))
 }
 
+/// What a nested package hands up to its parent when it is removed: everything it holds.
+fn held(store: &Store, pkg: Obj) -> Vec<Obj> {
+    store.list(pkg, package::PACKAGED_ELEMENT).unwrap_or_default().iter().filter_map(Value::as_ref).filter(|o| store.is_alive(*o)).collect()
+}
+
+/// Every class inside a package, at any depth.
+fn classes_within(store: &Store, pkg: Obj) -> Vec<Obj> {
+    let mut out = classes(store, pkg);
+    for sub in subpackages(store, pkg) {
+        out.extend(classes_within(store, sub));
+    }
+    out
+}
+
+/// Why `parent` cannot take what `pkg` holds, when a name would clash there.
+fn hand_up_problem(store: &Store, pkg: Obj, parent: Obj) -> Option<String> {
+    for o in held(store, pkg) {
+        let (class, what) = match store.class_of(o).ok() {
+            Some(c) if c == CLASS => (CLASS, "class"),
+            Some(c) if c == PACKAGE => (PACKAGE, "package"),
+            _ => continue,
+        };
+        let n = name_of(store, o);
+        if !n.is_empty()
+            && members(store, parent, package::PACKAGED_ELEMENT, class).iter().any(|s| name_of(store, *s).to_lowercase() == n.to_lowercase())
+        {
+            return Some(format!("{} has a {what} named {n} already", name_of(store, parent)));
+        }
+    }
+    None
+}
+
 /// Removes UML elements (packages, classes, attributes, operations, primitive types,
 /// associations, generalizations and dependencies), each with what it holds and the diagrams,
-/// nodes and lines that show them (`element.remove`, through [`crate::UmlNotation`]); a class takes
-/// the relationships that touch it along, and a member's type that goes is dropped from what had it.
+/// nodes and lines that show them (`element.remove`, through [`crate::UmlNotation`]). A nested
+/// package hands what it holds, and its diagrams, up to its parent first (owner decision, AR-25);
+/// a top-level package takes them along. A class takes the relationships that touch it along, and
+/// a member's type that goes is dropped from what had it.
 pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, CommandError> {
     // Every id is checked before anything goes, so a refusal leaves the store as it was.
     let removable =
@@ -176,14 +300,39 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
         if !removable.contains(&class) || end {
             return Err(refuse("ids", format!("{} cannot be removed yet", uuid_of(store, *o)?)));
         }
+        if class == PACKAGE
+            && let Some(parent) = package_of(store, *o)
+            && let Some(why) = hand_up_problem(store, *o, parent)
+        {
+            return Err(refuse("ids", format!("its contents cannot move up: {why}")));
+        }
     }
-    // The relationships of every class that goes, a package's classes among them, go first: a
-    // generalization requires its general class.
+    let mut gone = 0;
+    // A nested package's contents and diagrams move up to its parent before it goes.
+    let nested: Vec<Obj> = objs.iter().copied().filter(|o| store.is_alive(*o) && store.class_of(*o).ok() == Some(PACKAGE)).collect();
+    for o in nested {
+        let Some(parent) = package_of(store, o) else { continue };
+        let (diagrams, _, _) = archforge_diagram::views_of(store, o);
+        store
+            .transaction(|st| {
+                for child in held(st, o) {
+                    st.remove_value(o, package::PACKAGED_ELEMENT, &Value::Ref(child))?;
+                    st.push(parent, package::PACKAGED_ELEMENT, Value::Ref(child))?;
+                }
+                for d in diagrams {
+                    st.set(d, archforge_diagram::diagram::ELEMENT, Value::Ref(parent))?;
+                }
+                Ok(())
+            })
+            .map_err(fail)?;
+    }
+    // The relationships of every class that goes, a top-level package's classes among them, go
+    // first: a generalization requires its general class.
     let mut all: Vec<Obj> = Vec::new();
     for o in objs.iter().filter(|o| store.is_alive(**o)) {
         let classes = match store.class_of(*o).ok() {
             Some(c) if c == CLASS => vec![*o],
-            Some(c) if c == PACKAGE => classes(store, *o),
+            Some(c) if c == PACKAGE => classes_within(store, *o),
             _ => Vec::new(),
         };
         for c in classes {
@@ -191,7 +340,6 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
         }
     }
     all.extend(objs);
-    let mut gone = 0;
     for o in all {
         if !store.is_alive(o) {
             continue;
@@ -210,7 +358,33 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
 /// join them in a registry.
 pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
     vec![
-        cmd!("uml.package.add", "Add package", &["Package"], None, "name: string; the package's name", always, package_add),
+        cmd!(
+            "uml.package.add",
+            "Add package",
+            &["Package"],
+            None,
+            "name: string; the package's name\nparent: string = \"\"; the id of the package it goes into, or nothing for the model's top level",
+            always,
+            package_add
+        ),
+        cmd!(
+            "uml.package.move",
+            "Move package",
+            &["Package"],
+            None,
+            "package: string; the package's id\nto: string = \"\"; the id of the package it goes into, or nothing for the model's top level",
+            has_packages,
+            package_move
+        ),
+        cmd!(
+            "uml.class.move",
+            "Move class",
+            &["Class"],
+            None,
+            "class: string; the class's id\npackage: string; the id of the package it goes into",
+            has_packages,
+            class_move
+        ),
         cmd!(
             "uml.package.rename",
             "Rename package",
