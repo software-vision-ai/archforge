@@ -12,7 +12,7 @@ use egui::{Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
 use crate::Shell;
-use crate::canvas::cardinality_text;
+use crate::connect::cardinality_text;
 use crate::home::control;
 use crate::i18n::{fmt, tr};
 use crate::panels::{FIELD, Menu, PAD, ROW, Subject, check, name_field, run, section, select_field, text_field};

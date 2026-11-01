@@ -44,6 +44,7 @@ tables (archforge-guc.1.1).
 |---|---|
 | `DiagramView` | the view's policy, asked of the view: the open diagram and selection, `kinds`, `home`, `is_of`, `needs_element`, `shows`, `may_show`, `connects`, `ends`, `text_slots`, `default_size` |
 | `Notation`, `ProjectView` | what a notation answers for its own kinds and classes (the diagram policy, where skills sit, `remove`, `describe`); the view of a project holding several notations, which asks the right one (`of_kind`, `of_class`, `of_element`) and implements `DiagramView` and `SkillHost` |
+| `figure::{Card, Row, Line, End, EndMark, Text}` | what a notation draws, without a toolkit: a node's card (eyebrow, name, compartments of rows), an edge's line (end marks and texts, roles, dashes, status, a note); `Notation::card`, `line` and `slot_text` give them and the canvas draws them alike |
 | `project::specs` | the shared commands: `view.select`, `element.remove` (each notation removes its own) and `element.describe` |
 | `commands::specs` | `pub fn specs<V: DiagramView>() -> Vec<CommandSpec<Store, V>>`: the diagram commands for a notation's registry |
 | `metamodel`, `universe_with`, `with_slabs` | the metamodel; a universe of it and others; the slabs joined to a `CompositeSlabs` |

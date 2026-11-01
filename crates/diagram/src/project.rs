@@ -12,6 +12,7 @@ use archforge_mof::{ClassId, Invalid, Obj, PropId, Store, Uuid};
 use serde_json::{Value as Json, json};
 
 use crate::DiagramView;
+use crate::figure::{Card, Line};
 
 /// A node's width and height when its notation names none.
 pub const DEFAULT_SIZE: (f64, f64) = (160.0, 100.0);
@@ -67,6 +68,22 @@ pub trait Notation: Send + Sync + 'static {
     fn default_size(&self, class: ClassId) -> (f64, f64) {
         let _ = class;
         DEFAULT_SIZE
+    }
+    /// The card a node of `element` shows on `diagram`, when the notation draws one; None draws a
+    /// plain box with the element's name.
+    fn card(&self, store: &Store, element: Obj, diagram: Obj) -> Option<Card> {
+        let _ = (store, element, diagram);
+        None
+    }
+    /// The line an edge of `element` draws; None draws a plain solid line.
+    fn line(&self, store: &Store, element: Obj) -> Option<Line> {
+        let _ = (store, element);
+        None
+    }
+    /// The text of `element`'s slot a label shows, such as its name.
+    fn slot_text(&self, store: &Store, element: Obj, slot: &str) -> String {
+        let _ = (store, element, slot);
+        String::new()
     }
     /// The classes whose elements may be a skill's subject.
     fn skill_subjects(&self) -> &'static [ClassId] {

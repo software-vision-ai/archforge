@@ -317,7 +317,7 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
 fn sample_table(shell: &mut Shell, skills: bool) -> Result<(), String> {
     use serde_json::json;
     let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
-    let run = |session: &mut archforge_er::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
+    let run = |session: &mut archforge_notations::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
         let out = session.execute(command, &params).map_err(|e| format!("{command}: {e:?}"))?;
         Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
     };
@@ -385,7 +385,7 @@ fn sample_skill_tab(shell: &mut Shell, preview: bool) -> Result<(), String> {
 fn sample_types(shell: &mut Shell) -> Result<(), String> {
     use serde_json::json;
     let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
-    let run = |session: &mut archforge_er::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
+    let run = |session: &mut archforge_notations::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
         let out = session.execute(command, &params).map_err(|e| format!("{command}: {e:?}"))?;
         Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
     };
@@ -413,7 +413,7 @@ fn sample_types(shell: &mut Shell) -> Result<(), String> {
 fn sample_mapping_table(shell: &mut Shell) -> Result<(), String> {
     use serde_json::json;
     let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
-    let run = |session: &mut archforge_er::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
+    let run = |session: &mut archforge_notations::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
         let out = session.execute(command, &params).map_err(|e| format!("{command}: {e:?}"))?;
         Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
     };
@@ -449,7 +449,7 @@ fn sample_mapping_table(shell: &mut Shell) -> Result<(), String> {
 fn sample_column_selected(shell: &mut Shell) -> Result<(), String> {
     use serde_json::json;
     let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
-    let run = |session: &mut archforge_er::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
+    let run = |session: &mut archforge_notations::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
         let out = session.execute(command, &params).map_err(|e| format!("{command}: {e:?}"))?;
         Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
     };
@@ -491,7 +491,7 @@ fn sample_appearance(shell: &mut Shell, screen: Screen) -> Result<(), String> {
         .ok_or_else(|| "the selected table has no node".to_string())?;
     let rel = class(archforge_er::RELATIONSHIP).and_then(|o| store.uuid(o).ok()).ok_or_else(|| "the sample has no relationship".to_string())?;
     let edge = class(archforge_diagram::EDGE).and_then(|o| store.uuid(o).ok()).ok_or_else(|| "the sample has no line".to_string())?;
-    let run = |session: &mut archforge_er::Session, params: serde_json::Value| {
+    let run = |session: &mut archforge_notations::Session, params: serde_json::Value| {
         session.execute("diagram.style", &params).map(|_| ()).map_err(|e| format!("diagram.style: {e:?}"))
     };
     run(session, json!({ "ids": [node.to_string()], "fill": "#EBF0FE", "stroke": "#9EAFE7", "line": 1.5 }))?;
@@ -512,7 +512,7 @@ fn sample_appearance(shell: &mut Shell, screen: Screen) -> Result<(), String> {
 fn sample_objects(shell: &mut Shell) -> Result<(), String> {
     use serde_json::json;
     let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
-    let run = |session: &mut archforge_er::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
+    let run = |session: &mut archforge_notations::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
         let out = session.execute(command, &params).map_err(|e| format!("{command}: {e:?}"))?;
         Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
     };
@@ -537,7 +537,7 @@ fn sample_objects(shell: &mut Shell) -> Result<(), String> {
 fn sample_cross_schema(shell: &mut Shell) -> Result<(), String> {
     use serde_json::json;
     let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
-    let run = |session: &mut archforge_er::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
+    let run = |session: &mut archforge_notations::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
         let out = session.execute(command, &params).map_err(|e| format!("{command}: {e:?}"))?;
         Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
     };
@@ -579,7 +579,7 @@ fn sample_cross_schema(shell: &mut Shell) -> Result<(), String> {
 fn sample_routing(shell: &mut Shell) -> Result<(), String> {
     use serde_json::json;
     let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
-    let run = |session: &mut archforge_er::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
+    let run = |session: &mut archforge_notations::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
         let out = session.execute(command, &params).map_err(|e| format!("{command}: {e:?}"))?;
         Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
     };
@@ -623,7 +623,7 @@ fn sample_routing(shell: &mut Shell) -> Result<(), String> {
 fn sample_diagram(shell: &mut Shell, filled: bool) -> Result<(), String> {
     use serde_json::json;
     let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
-    let run = |session: &mut archforge_er::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
+    let run = |session: &mut archforge_notations::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
         let out = session.execute(command, &params).map_err(|e| format!("{command}: {e:?}"))?;
         Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
     };
@@ -671,7 +671,7 @@ fn sample_subtypes(shell: &mut Shell) -> Result<(), String> {
     let diagram = shell.canvas.active.and_then(|id| store.by_uuid(id)).ok_or_else(|| "the sample has no open diagram".to_string())?;
     let schema = crate::diagrams::schema_of(store, diagram).ok_or_else(|| "the sample diagram has no schema".to_string())?;
     let (schema, diagram) = (store.uuid(schema).map_err(|e| e.to_string())?.to_string(), store.uuid(diagram).map_err(|e| e.to_string())?.to_string());
-    let run = |session: &mut archforge_er::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
+    let run = |session: &mut archforge_notations::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
         let out = session.execute(command, &params).map_err(|e| format!("{command}: {e:?}"))?;
         Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
     };
