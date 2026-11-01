@@ -4,7 +4,10 @@
 //! colour and a border width; a line takes a colour and a width. Each colour is one of the design's
 //! swatches or one of the user's own; Use diagram defaults takes the selection's own look away.
 //! Every change goes through `diagram.style`, one undo step for the whole selection. A line's own
-//! colour shows while the key status is off, which the panel offers to turn off.
+//! colour shows while the key status is off, which the panel offers to turn off. Lines run
+//! straight, at right angles or curved, as the diagram says or as a line's own look says; right
+//! angles can go around the tables in the way. With nothing selected the panel sets the diagram's
+//! routing (owner decisions on archforge-4ym).
 
 use archforge_diagram::{DIAGRAM, NODE, diagram, edge, node, style};
 use archforge_mof::{Obj, Store, Value};
@@ -26,6 +29,8 @@ const TEXTS: [&str; 4] = ["#657386", "#C25E0A", "#345EDB", "#27816D"];
 const LINES: [&str; 5] = ["#1B2B3C", "#C25E0A", "#345EDB", "#27816D", "#7A56B5"];
 /// The widths offered for a border or a line.
 const WIDTHS: [f32; 4] = [1.0, 1.5, 2.0, 3.0];
+/// The routings by `Routing` literal, as `diagram.style` names them.
+const ROUTINGS: [&str; 4] = ["as-diagram", "straight", "right-angled", "curved"];
 
 /// What a colour row sets.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -154,19 +159,7 @@ fn same<T: PartialEq>(mut each: impl Iterator<Item = T>) -> Option<T> {
 
 /// Changes one part of every target's look and keeps the rest, one undo step for them all.
 fn change(shell: &mut Shell, targets: &[Obj], group: Option<Group>, colour: Option<&str>, width: Option<f32>) {
-    let Some(session) = shell.session.as_mut() else { return };
-    let store = session.doc();
-    let mut calls = Vec::new();
-    for o in targets {
-        let Ok(id) = store.uuid(*o) else { continue };
-        let prop = if store.class_of(*o).ok() == Some(NODE) { node::STYLE } else { edge::STYLE };
-        let s = store.get(*o, prop).ok().and_then(|v| v.as_ref());
-        let text = |p| s.and_then(|s| store.get(s, p).ok()).and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default();
-        let line = s.and_then(|s| store.get(s, style::LINE).ok()).and_then(|v| if let Value::Real(r) = v { Some(r) } else { None }).unwrap_or(0.0);
-        let mut params = json!({
-            "ids": [id.to_string()], "name": text(style::NAME), "fill": text(style::FILL),
-            "stroke": text(style::STROKE), "text": text(style::TEXT), "line": line,
-        });
+    restyle(shell, targets, |params| {
         if let (Some(g), Some(c)) = (group, colour) {
             let key = match g {
                 Group::Fill => "fill",
@@ -178,6 +171,39 @@ fn change(shell: &mut Shell, targets: &[Obj], group: Option<Group>, colour: Opti
         if let Some(w) = width {
             params["line"] = json!(w);
         }
+    });
+}
+
+/// The style property of `o`: a node's, an edge's or a diagram's.
+fn style_prop(store: &Store, o: Obj) -> archforge_mof::PropId {
+    match store.class_of(o).ok() {
+        Some(c) if c == NODE => node::STYLE,
+        Some(c) if c == DIAGRAM => diagram::STYLE,
+        _ => edge::STYLE,
+    }
+}
+
+/// Sets every target's look as `edit` changes it from what it is, one undo step for them all.
+fn restyle(shell: &mut Shell, targets: &[Obj], edit: impl Fn(&mut serde_json::Value)) {
+    let Some(session) = shell.session.as_mut() else { return };
+    let store = session.doc();
+    let mut calls = Vec::new();
+    for o in targets {
+        let Ok(id) = store.uuid(*o) else { continue };
+        let s = store.get(*o, style_prop(store, *o)).ok().and_then(|v| v.as_ref());
+        let text = |p| s.and_then(|s| store.get(s, p).ok()).and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default();
+        let line = s.and_then(|s| store.get(s, style::LINE).ok()).and_then(|v| if let Value::Real(r) = v { Some(r) } else { None }).unwrap_or(0.0);
+        let routing = match s.and_then(|s| store.get(s, style::ROUTING).ok()) {
+            Some(Value::Enum(i)) => ROUTINGS.get(i as usize).copied().unwrap_or(ROUTINGS[0]),
+            _ => ROUTINGS[0],
+        };
+        let avoid = s.is_some_and(|s| matches!(store.get(s, style::AVOID), Ok(Value::Bool(true))));
+        let mut params = json!({
+            "ids": [id.to_string()], "name": text(style::NAME), "fill": text(style::FILL),
+            "stroke": text(style::STROKE), "text": text(style::TEXT), "line": line,
+            "routing": routing, "avoid": avoid,
+        });
+        edit(&mut params);
         calls.push(params);
     }
     let outcome = session.batch(&tr("Change appearance"), |b| {
@@ -187,6 +213,89 @@ fn change(shell: &mut Shell, targets: &[Obj], group: Option<Group>, colour: Opti
         Ok(())
     });
     shell.panels.notice = outcome.err().map(|e| e.to_string());
+}
+
+/// The routing `o`'s own style gives (a `Routing` literal past as-diagram) and whether it avoids
+/// tables; none when it leaves that to its diagram.
+fn own_routing(store: &Store, o: Obj) -> Option<(usize, bool)> {
+    let s = store.get(o, style_prop(store, o)).ok()?.as_ref()?;
+    match store.get(s, style::ROUTING).ok()? {
+        Value::Enum(i) if i > 0 && (i as usize) < ROUTINGS.len() => Some((i as usize, matches!(store.get(s, style::AVOID), Ok(Value::Bool(true))))),
+        _ => None,
+    }
+}
+
+/// How the lines of diagram `d` run when they have no routing of their own: straight unless it
+/// says.
+fn diagram_routing(store: &Store, d: Obj) -> (usize, bool) {
+    own_routing(store, d).unwrap_or((1, false))
+}
+
+/// The open diagram.
+fn open_diagram(shell: &Shell) -> Option<Obj> {
+    let store = shell.session.as_ref()?.doc();
+    shell.canvas.active.and_then(|a| store.by_uuid(a)).filter(|d| store.is_alive(*d) && store.class_of(*d).ok() == Some(DIAGRAM))
+}
+
+/// The routing row (Straight, Right-angled, Curved) under its label, and for right angles the
+/// switch that takes the lines around the tables in their way. `current` is the routing every
+/// target shows and whether it avoids, or none when they differ. Gives the y under them.
+#[allow(clippy::too_many_arguments)]
+fn routing_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: Pos2, width: f32, current: Option<(usize, bool)>, targets: &[Obj]) -> f32 {
+    let paint = ui.painter().clone();
+    ux::text(&paint, at, &tr("Line routing"), types::CAPTION, p.text_secondary, Some(width));
+    let w = ((width - 2.0 * 6.0) / 3.0).max(0.0);
+    let options = [
+        (1, "straight", &icons::ROUTE_STRAIGHT, tr("Straight")),
+        (2, "right-angled", &icons::ROUTE_RIGHT_ANGLED, tr("Right-angled")),
+        (3, "curved", &icons::ROUTE_CURVED, tr("Curved")),
+    ];
+    let mut picked = None;
+    for (i, (literal, key, icon, hint)) in options.into_iter().enumerate() {
+        let b = Rect::from_min_size(at + vec2(i as f32 * (w + 6.0), 19.0), vec2(w, FIELD));
+        let resp = control(shell, ui, &format!("workspace.appearance.routing.{key}"), "toggle", b, true).on_hover_text(hint);
+        let on = current.is_some_and(|(r, _)| r == literal);
+        paint.rect_filled(b, 6.0, if on { p.accent_tint } else { p.field });
+        if on {
+            paint.rect_stroke(b, 6.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
+        }
+        let ink = if on {
+            p.accent
+        } else if resp.hovered() {
+            p.text
+        } else {
+            p.text_secondary
+        };
+        ux::icon_mid(&paint, b.center(), icon, ink);
+        if resp.clicked() {
+            picked = Some(literal);
+        }
+    }
+    let mut y = at.y + 19.0 + FIELD + 14.0;
+    // Around the tables: only for right angles.
+    if let Some((2, avoid)) = current {
+        let label = ux::text(&paint, pos2(at.x, y + 2.0), &tr("Route around tables"), types::UI, p.text, Some((width - 48.0).max(0.0)));
+        let sw = Rect::from_min_size(pos2(at.x + width - 36.0, label.center().y - 10.0), vec2(36.0, 20.0));
+        paint.rect_filled(sw, 10.0, if avoid { p.accent_fill } else { p.border });
+        let knob = if avoid { sw.right_center() - vec2(10.0, 0.0) } else { sw.left_center() + vec2(10.0, 0.0) };
+        paint.circle_filled(knob, 8.0, p.surface);
+        if control(shell, ui, "workspace.appearance.routing.avoid", "toggle", sw, true).on_hover_text(tr("Route around tables")).clicked() {
+            restyle(shell, targets, |params| {
+                params["routing"] = json!(ROUTINGS[2]);
+                params["avoid"] = json!(!avoid);
+            });
+        }
+        y += 36.0;
+    }
+    if let Some(literal) = picked {
+        // Right angles go around the tables unless the targets said otherwise already.
+        let avoid = current.is_none_or(|(r, a)| r != 2 || a);
+        restyle(shell, targets, |params| {
+            params["routing"] = json!(ROUTINGS[literal]);
+            params["avoid"] = json!(literal == 2 && avoid);
+        });
+    }
+    y
 }
 
 /// Takes every target's own look away.
@@ -231,7 +340,18 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) 
     let (nodes, edges) = targets(shell);
     if nodes.is_empty() && edges.is_empty() {
         shell.panels.picker = None;
-        ux::text(&paint, r.min + vec2(PAD, y), &tr("Select a table or a line on the diagram"), types::UI, p.text_muted, Some(width));
+        // The diagram's own look: how its lines run.
+        let Some((store, d)) = shell.session.as_ref().map(|s| s.doc()).zip(open_diagram(shell)) else {
+            ux::text(&paint, r.min + vec2(PAD, y), &tr("Select a table or a line on the diagram"), types::UI, p.text_muted, Some(width));
+            return;
+        };
+        let name = store.get(d, diagram::NAME).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default();
+        let current = diagram_routing(store, d);
+        ux::text(&paint, r.min + vec2(PAD, y), &name, types::CARD_TITLE, p.text, Some(width));
+        ux::text(&paint, r.min + vec2(PAD, y + 26.0), &tr("Diagram · its lines"), types::CAPTION, p.text_secondary, Some(width));
+        let at = section(shell, ui, p, r, r.top() + y + 51.0, &tr("Style"), None).unwrap_or(r.top() + y + 101.0) - 8.0;
+        let at = routing_row(shell, ui, p, pos2(r.left() + PAD, at), width, Some(current), &[d]);
+        ux::text(&paint, pos2(r.left() + PAD, at + 4.0), &tr("Select a table or a line on the diagram"), types::UI, p.text_muted, Some(width));
         return;
     }
     // What the targets show now, read before anything changes.
@@ -241,6 +361,10 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) 
     let node_width = shown_width(store, &nodes);
     let line_colour = (own(store, &edges, Group::Line), diagram_colour(store, &edges, Group::Line, p));
     let line_width = shown_width(store, &edges);
+    // What each line shows: its own routing, else its diagram's.
+    let line_routing = same(edges.iter().map(|e| {
+        own_routing(store, *e).unwrap_or_else(|| store.container(*e).ok().flatten().map_or((1, false), |(d, _)| diagram_routing(store, d)))
+    }));
     ux::text(&paint, r.min + vec2(PAD, y), &name, types::CARD_TITLE, p.text, Some(width));
     ux::text(&paint, r.min + vec2(PAD, y + 26.0), &kind, types::CAPTION, p.text_secondary, Some(width));
     let mut at = section(shell, ui, p, r, r.top() + y + 51.0, &tr("Style"), None).unwrap_or(r.top() + y + 101.0) - 8.0;
@@ -258,6 +382,7 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) 
         let (next, custom) = swatches(shell, ui, p, pos2(r.left() + PAD, at), width, Group::Line, &tr("Line colour"), &LINES, line_colour, &edges);
         anchors.push((Group::Line, custom));
         at = widths(shell, ui, p, pos2(r.left() + PAD, next), width, "line", &tr("Line width"), line_width, &edges);
+        at = routing_row(shell, ui, p, pos2(r.left() + PAD, at), width, line_routing, &edges);
         // Lines show their key status while it is on; their own colour shows with it off.
         if shell.canvas.key_status {
             if crate::panels::ghost_button(

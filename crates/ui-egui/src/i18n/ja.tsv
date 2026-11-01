@@ -302,6 +302,12 @@ str		Text colour	文字色
 str		Border width	枠線の太さ
 str		Line colour	線の色
 str		Line width	線の太さ
+str		Line routing	線の経路
+str		Straight	直線
+str		Right-angled	直角
+str		Curved	曲線
+str		Route around tables	テーブルを避けて配線
+str		Diagram · its lines	ダイアグラム · その線
 str		Diagram default	図の既定
 str		Your own colour	任意の色
 str		Colour code	カラーコード

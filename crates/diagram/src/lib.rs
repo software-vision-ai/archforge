@@ -10,6 +10,7 @@
 pub mod commands;
 mod generated;
 pub mod grid;
+pub mod route;
 pub mod rules;
 
 use std::collections::BTreeSet;
@@ -22,6 +23,7 @@ pub use generated::meta::*;
 pub use generated::schema::{JUNCTIONS, TABLES};
 pub use generated::slabs::DiagramSlabs;
 pub use grid::{Grid, Hit, Rect};
+pub use route::{Way, route};
 
 /// What a notation's view brings to the diagram commands: the open diagram and the selection, which
 /// undo never touches, and the notation's policy, which the commands enforce so a diagram never

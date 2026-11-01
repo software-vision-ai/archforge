@@ -489,6 +489,16 @@ pub const COLLAPSE: Icon = Icon {
     segments: &[L([3.0, 4.0], [7.0, 8.0]), L([7.0, 8.0], [3.0, 12.0]), L([9.0, 4.0], [13.0, 8.0]), L([13.0, 8.0], [9.0, 12.0])],
 };
 
+/// The design's `Icon / Routing · Straight`: a line straight across.
+pub const ROUTE_STRAIGHT: Icon = Icon { size: [18.0, 10.0], stroke: 1.2, segments: &[L([0.0, 10.0], [18.0, 0.0])] };
+
+/// The design's `Icon / Routing · Orthogonal`: across, up, across.
+pub const ROUTE_RIGHT_ANGLED: Icon =
+    Icon { size: [18.0, 10.0], stroke: 1.2, segments: &[L([0.0, 10.0], [9.0, 10.0]), L([9.0, 10.0], [9.0, 0.0]), L([9.0, 0.0], [18.0, 0.0])] };
+
+/// The design's `Icon / Routing · Curved`: one curve, flat at both ends.
+pub const ROUTE_CURVED: Icon = Icon { size: [18.0, 10.0], stroke: 1.2, segments: &[C([0.0, 10.0], [9.0, 10.0], [9.0, 0.0], [18.0, 0.0])] };
+
 /// Two chevrons pointing apart: open every row of a tree (the design's `Icon / Expand all`).
 pub const EXPAND_ALL: Icon = Icon {
     size: [6.0, 9.0],

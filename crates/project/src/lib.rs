@@ -24,7 +24,7 @@ use archforge_dolt::{Dolt, Server, ServerOptions};
 use mysql::prelude::Queryable;
 
 pub use error::Error;
-pub use model::ModelSchema;
+pub use model::{EARLIER_MODELS, ModelSchema};
 pub use time::timestamp;
 
 /// The project format this Archforge writes and the newest it reads.

@@ -302,6 +302,12 @@ str		Text colour	Couleur du texte
 str		Border width	Épaisseur de la bordure
 str		Line colour	Couleur du trait
 str		Line width	Épaisseur du trait
+str		Line routing	Tracé des lignes
+str		Straight	Droit
+str		Right-angled	À angles droits
+str		Curved	Courbe
+str		Route around tables	Contourner les tables
+str		Diagram · its lines	Diagramme · ses lignes
 str		Diagram default	Couleur du diagramme
 str		Your own colour	Votre couleur
 str		Colour code	Code couleur

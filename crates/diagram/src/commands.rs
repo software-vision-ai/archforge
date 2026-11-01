@@ -11,7 +11,9 @@ use archforge_mof::{ClassId, Invalid, Obj, PropId, Store, Uuid, Value};
 use serde_json::{Value as Json, json};
 
 use crate::rules::{self, MAX_DEPTH, MAX_LABELS, MAX_LINE, MAX_NAME, MAX_TEXT, MAX_WAYPOINTS, real, text};
-use crate::{DIAGRAM, DiagramView, EDGE, LABEL, LabelPlace, NODE, POINT, STYLE, diagram, diagram_of, edge, label, node, node_tree, point, style};
+use crate::{
+    DIAGRAM, DiagramView, EDGE, LABEL, LabelPlace, NODE, POINT, Routing, STYLE, diagram, diagram_of, edge, label, node, node_tree, point, style,
+};
 
 type C<'a, V> = Ctx<'a, Store, V>;
 type R = Result<Json, CommandError>;
@@ -178,6 +180,12 @@ fn diagram_add<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
         if let Some(e) = element {
             st.set(d, diagram::ELEMENT, Value::Ref(e))?;
         }
+        // A new diagram's lines run at right angles around the tables (owner decision on
+        // archforge-4ym); one made earlier keeps straight lines.
+        let look = st.create(STYLE)?;
+        st.set(look, style::ROUTING, Value::Enum(Routing::RightAngled.index()))?;
+        st.set(look, style::AVOID, Value::Bool(true))?;
+        st.set(d, diagram::STYLE, Value::Ref(look))?;
         if let Some((owner, prop)) = home {
             st.push(owner, prop, Value::Ref(d))?;
         }
@@ -639,7 +647,7 @@ fn diagram_unlabel<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
 // Styles.
 
 fn diagram_style<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
-    let ids = list_of(ctx.doc, p, "ids", &[NODE, EDGE], "a node or an edge")?;
+    let ids = list_of(ctx.doc, p, "ids", &[DIAGRAM, NODE, EDGE], "a diagram, a node or an edge")?;
     if ids.is_empty() {
         return Err(refuse("ids", "nothing to style"));
     }
@@ -660,13 +668,23 @@ fn diagram_style<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     if !line.is_finite() || !(0.0..=MAX_LINE).contains(&line) {
         return Err(refuse("line", format!("the line width is not between 0 and {MAX_LINE}")));
     }
-    let clear = name.is_empty() && colours.iter().all(|(k, _)| str_of(p, k).is_empty()) && line == 0.0;
+    let routing_name = if str_of(p, "routing").is_empty() { ROUTINGS[0] } else { str_of(p, "routing") };
+    let routing = ROUTINGS
+        .iter()
+        .position(|r| *r == routing_name)
+        .ok_or_else(|| refuse("routing", format!("{routing_name:?} is not one of {}", ROUTINGS.join(", "))))?;
+    let avoid = p.bool("avoid").unwrap_or(false);
+    let clear = name.is_empty() && colours.iter().all(|(k, _)| str_of(p, k).is_empty()) && line == 0.0 && routing == 0 && !avoid;
     let cleared = ctx
         .doc
         .transaction(|st| {
             let mut cleared = 0usize;
             for o in &ids {
-                let prop = if st.class_of(*o)? == NODE { node::STYLE } else { edge::STYLE };
+                let prop = match st.class_of(*o)? {
+                    c if c == NODE => node::STYLE,
+                    c if c == DIAGRAM => diagram::STYLE,
+                    _ => edge::STYLE,
+                };
                 let existing = st.get(*o, prop)?.as_ref();
                 if clear {
                     if let Some(s) = existing {
@@ -689,6 +707,8 @@ fn diagram_style<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
                     st.set(s, sp, if c.is_empty() { Value::Null } else { Value::str(c) })?;
                 }
                 st.set(s, style::LINE, Value::Real(line))?;
+                st.set(s, style::ROUTING, Value::Enum(routing as u32))?;
+                st.set(s, style::AVOID, Value::Bool(avoid))?;
             }
             Ok(cleared)
         })
@@ -703,7 +723,12 @@ fn style_json(store: &Store, owner: Obj, prop: PropId) -> Json {
         None => Json::Null,
         Some(s) => {
             let opt = |p| store.get(s, p).ok().and_then(|v| v.as_str().map(str::to_string));
-            json!({ "name": opt(style::NAME), "fill": opt(style::FILL), "stroke": opt(style::STROKE), "text": opt(style::TEXT), "line": real(store, s, style::LINE) })
+            let routing = match store.get(s, style::ROUTING) {
+                Ok(Value::Enum(i)) => ROUTINGS.get(i as usize).copied().unwrap_or(ROUTINGS[0]),
+                _ => ROUTINGS[0],
+            };
+            let avoid = matches!(store.get(s, style::AVOID), Ok(Value::Bool(true)));
+            json!({ "name": opt(style::NAME), "fill": opt(style::FILL), "stroke": opt(style::STROKE), "text": opt(style::TEXT), "line": real(store, s, style::LINE), "routing": routing, "avoid": avoid })
         }
     }
 }
@@ -794,6 +819,7 @@ fn diagram_get<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let nodes: Vec<Json> = ctx.doc.list(d, diagram::NODE).map_err(fail)?.iter().filter_map(Value::as_ref).map(|n| node_json(ctx.doc, n, 0)).collect();
     let edges: Vec<Json> = ctx.doc.list(d, diagram::EDGE).map_err(fail)?.iter().filter_map(Value::as_ref).map(|e| edge_json(ctx.doc, e)).collect();
     if let Some(o) = out.as_object_mut() {
+        o.insert("style".into(), style_json(ctx.doc, d, diagram::STYLE));
         o.insert("nodes".into(), Json::Array(nodes));
         o.insert("edges".into(), Json::Array(edges));
     }
@@ -805,7 +831,10 @@ const NOTE_PARAMS: &str = "diagram: string; the diagram's id\ntext: string; the 
 const MOVE_PARAMS: &str = "nodes: array; the ids of the nodes moved, with what they contain\ndx: number, -2000000..2000000; how far right\ndy: number, -2000000..2000000; how far down";
 const RESIZE_PARAMS: &str = "node: string; the node's id\nwidth: number, 20..10000; the new width\nheight: number, 20..10000; the new height";
 const LABEL_PARAMS: &str = "edge: string; the edge's id\nkind: string; the text slot of the edge's element the label shows\nat: string = \"middle\", source|middle|target; where along the edge\ndx: number = 0, -1000000..1000000; the offset right of that place\ndy: number = 0, -1000000..1000000; the offset down";
-const STYLE_PARAMS: &str = "ids: array; the ids of the nodes and edges styled, whose style is set as a whole: a call naming nothing removes it\nname: string = \"\"; a style of the shipped sheet, or nothing\nfill: string = \"\"; a fill colour #rrggbb, or nothing\nstroke: string = \"\"; a stroke colour #rrggbb, or nothing\ntext: string = \"\"; a text colour #rrggbb, or nothing\nline: number = 0, 0..100; the stroke width, 0 for the sheet's";
+const STYLE_PARAMS: &str = "ids: array; the ids of the diagrams, nodes and edges styled, whose style is set as a whole: a call naming nothing removes it; a diagram's style is the look its lines take unless they have their own\nname: string = \"\"; a style of the shipped sheet, or nothing\nfill: string = \"\"; a fill colour #rrggbb, or nothing\nstroke: string = \"\"; a stroke colour #rrggbb, or nothing\ntext: string = \"\"; a text colour #rrggbb, or nothing\nline: number = 0, 0..100; the stroke width, 0 for the sheet's\nrouting: string = \"as-diagram\", as-diagram|straight|right-angled|curved; how a line runs: as its diagram's lines, or its own way (a diagram as-diagram: straight)\navoid: bool = false; a right-angled line goes around the tables in its way";
+
+/// The names of the routings, by literal.
+const ROUTINGS: [&str; 4] = ["as-diagram", "straight", "right-angled", "curved"];
 
 /// The diagram commands for a notation whose view is `V`, to add to the notation's command table.
 pub fn specs<V: DiagramView>() -> Vec<CommandSpec<Store, V>> {

@@ -1529,8 +1529,8 @@ mod tests {
         assert_eq!(names, ["Element", "Diagram", "View", "Node", "Edge", "Point", "Label", "Style"]);
         assert_eq!(
             diagram.metamodel.props.iter().filter(|p| p.is_composite).count(),
-            8,
-            "node, edge, child, two styles, waypoint, label and the union"
+            9,
+            "node, edge, child, three styles (a diagram's, a node's, an edge's), waypoint, label and the union"
         );
         let any = |class: &str, prop: &str| {
             diagram.metamodel.props.iter().any(|p| &*p.name == prop && diagram.universe.class_name(p.owner) == class && p.ty == TypeRef::Any)
