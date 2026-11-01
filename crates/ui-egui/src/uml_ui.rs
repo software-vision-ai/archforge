@@ -26,7 +26,7 @@ fn name(store: &Store, o: Obj) -> String {
 /// The class diagram in the shell.
 pub(crate) struct UmlKind;
 
-const TOOLS: &[KindTool] = &[KindTool { key: "class", icon: &icons::TOOL_ENTITY, hint: "Class", use_: ToolUse::Place, chevron: None }];
+const TOOLS: &[KindTool] = &[KindTool { key: "class", icon: &icons::TOOL_CLASS, hint: "Class", use_: ToolUse::Place, chevron: None }];
 
 impl DiagramKind for UmlKind {
     fn kind(&self) -> &'static str {
@@ -42,7 +42,7 @@ impl DiagramKind for UmlKind {
     }
 
     fn icon(&self) -> &'static crate::ux::Icon {
-        &icons::DIAGRAM
+        &icons::CLASS_DIAGRAM
     }
 
     fn owner_word(&self) -> String {
@@ -146,7 +146,7 @@ impl NotationUi for UmlUi {
             .iter()
             .filter_map(|c| {
                 let label = name(store, *c);
-                if t.matches(&label) { t.row(*c, 1, "class", &icons::TABLE, label) } else { None }
+                if t.matches(&label) { t.row(*c, 1, "class", &icons::CLASS, label) } else { None }
             })
             .collect();
         let expandable = if t.filtering() { !under.is_empty() } else { !all.is_empty() };
@@ -154,7 +154,7 @@ impl NotationUi for UmlUi {
         let mut out = Vec::new();
         if t.matches(&label) || !under.is_empty() {
             let expanded = expandable && t.open(package);
-            out.extend(t.row(package, 0, "package", &icons::FOLDER, label).map(|row| Row { expandable, expanded, ..row }));
+            out.extend(t.row(package, 0, "package", &icons::PACKAGE, label).map(|row| Row { expandable, expanded, ..row }));
             if expanded {
                 out.extend(under);
             }
@@ -219,11 +219,11 @@ impl NotationUi for UmlUi {
 
     fn entry(&self, store: &Store, o: Obj) -> Option<Entry> {
         match class(store, o)? {
-            c if c == archforge_uml::PACKAGE => Some(Entry { icon: &icons::FOLDER, order: 1, label: name(store, o), detail: tr("Package") }),
+            c if c == archforge_uml::PACKAGE => Some(Entry { icon: &icons::PACKAGE, order: 1, label: name(store, o), detail: tr("Package") }),
             c if c == archforge_uml::CLASS => {
                 let at = package_of(store, o).map(|p| name(store, p)).unwrap_or_default();
                 let detail = if at.is_empty() { tr("Class") } else { format!("{} · {at}", tr("Class")) };
-                Some(Entry { icon: &icons::TABLE, order: 2, label: name(store, o), detail })
+                Some(Entry { icon: &icons::CLASS, order: 2, label: name(store, o), detail })
             }
             _ => None,
         }
@@ -245,4 +245,217 @@ impl NotationUi for UmlUi {
         let width = r.width() - 2.0 * crate::panels::PAD;
         crate::panels::name_field(shell, ui, p, egui::pos2(r.left() + crate::panels::PAD, y), width, subject, cmd, key);
     }
+}
+
+/// A class model to read (archforge-3c5.1.2), for the snapshot screens and the tests: in a package,
+/// Commerce, classes with typed attributes and operations, an abstract Payment, associations that
+/// navigate one way and both, a composition and a shared aggregation, a generalization and a
+/// dependency. Built on the store, since commands for members and relationships come with their
+/// own journeys. Gives the package.
+#[cfg(any(test, feature = "snapshot"))]
+pub(crate) fn sample_model(st: &mut Store, model: Obj) -> Result<Obj, archforge_mof::Invalid> {
+    use archforge_mof::Value;
+    use archforge_uml as u;
+    // An element without a name keeps none, as the commands store it.
+    let named = |st: &mut Store, class, name: &str| -> Result<Obj, archforge_mof::Invalid> {
+        let o = st.create(class)?;
+        if !name.is_empty() {
+            st.set(o, u::named_element::NAME, Value::str(name))?;
+        }
+        Ok(o)
+    };
+    let pkg = named(st, u::PACKAGE, "Commerce")?;
+    st.push(model, archforge_core::model::MEMBER, Value::Ref(pkg))?;
+    let mut types = std::collections::BTreeMap::new();
+    for t in ["Integer", "String", "Date", "Money", "Boolean"] {
+        let o = named(st, u::PRIMITIVE_TYPE, t)?;
+        st.push(pkg, u::package::PACKAGED_ELEMENT, Value::Ref(o))?;
+        types.insert(t, o);
+    }
+    let public = Value::Enum(0);
+    let private = Value::Enum(1);
+    // Multiplicity bounds: a lower bound and an upper one, None for many.
+    let bounds = |st: &mut Store, o: Obj, lower: i64, upper: Option<u64>| -> Result<(), archforge_mof::Invalid> {
+        let l = st.create(u::LITERAL_INTEGER)?;
+        st.set(l, u::literal_integer::VALUE, Value::Int(lower))?;
+        st.set(o, u::multiplicity_element::LOWER_VALUE, Value::Ref(l))?;
+        let h = st.create(u::LITERAL_UNLIMITED_NATURAL)?;
+        st.set(h, u::literal_unlimited_natural::VALUE, Value::Unlimited(upper))?;
+        st.set(o, u::multiplicity_element::UPPER_VALUE, Value::Ref(h))
+    };
+    let class = |st: &mut Store, name: &str, abstract_: bool| -> Result<Obj, archforge_mof::Invalid> {
+        let c = named(st, u::CLASS, name)?;
+        if abstract_ {
+            st.set(c, u::class::IS_ABSTRACT, Value::Bool(true))?;
+        }
+        st.push(pkg, u::package::PACKAGED_ELEMENT, Value::Ref(c))?;
+        Ok(c)
+    };
+    let attribute = |st: &mut Store, c: Obj, name: &str, ty: Obj, vis: &Value| -> Result<Obj, archforge_mof::Invalid> {
+        let a = named(st, u::PROPERTY, name)?;
+        st.set(a, u::typed_element::TYPE, Value::Ref(ty))?;
+        st.set(a, u::named_element::VISIBILITY, vis.clone())?;
+        st.push(c, u::class::OWNED_ATTRIBUTE, Value::Ref(a))?;
+        Ok(a)
+    };
+    let operation = |st: &mut Store, c: Obj, name: &str, params: &[(&str, Obj)], returns: Option<Obj>, abstract_: bool| {
+        let op = named(st, u::OPERATION, name)?;
+        st.set(op, u::named_element::VISIBILITY, Value::Enum(0))?;
+        if abstract_ {
+            st.set(op, u::behavioral_feature::IS_ABSTRACT, Value::Bool(true))?;
+        }
+        for (p, ty) in params {
+            let param = named(st, u::PARAMETER, p)?;
+            st.set(param, u::typed_element::TYPE, Value::Ref(*ty))?;
+            st.push(op, u::operation::OWNED_PARAMETER, Value::Ref(param))?;
+        }
+        if let Some(ty) = returns {
+            let r = st.create(u::PARAMETER)?;
+            st.set(r, u::parameter::DIRECTION, Value::Enum(3))?;
+            st.set(r, u::typed_element::TYPE, Value::Ref(ty))?;
+            st.push(op, u::operation::OWNED_PARAMETER, Value::Ref(r))?;
+        }
+        st.push(c, u::class::OWNED_OPERATION, Value::Ref(op))
+    };
+    let t = |n: &str| types.get(n).copied().unwrap_or(pkg);
+    let customer = class(st, "Customer", false)?;
+    attribute(st, customer, "id", t("Integer"), &public)?;
+    attribute(st, customer, "email", t("String"), &private)?;
+    operation(st, customer, "rename", &[("name", t("String"))], None, false)?;
+    let order = class(st, "Order", false)?;
+    attribute(st, order, "id", t("Integer"), &public)?;
+    attribute(st, order, "placedAt", t("Date"), &public)?;
+    operation(st, order, "total", &[], Some(t("Money")), false)?;
+    let line = class(st, "OrderLine", false)?;
+    attribute(st, line, "quantity", t("Integer"), &public)?;
+    let product = class(st, "Product", false)?;
+    attribute(st, product, "sku", t("String"), &public)?;
+    let price = attribute(st, product, "price", t("Money"), &public)?;
+    bounds(st, price, 0, Some(1))?;
+    let catalog = class(st, "Catalog", false)?;
+    attribute(st, catalog, "name", t("String"), &public)?;
+    let payment = class(st, "Payment", true)?;
+    attribute(st, payment, "amount", t("Money"), &public)?;
+    operation(st, payment, "authorise", &[], Some(t("Boolean")), true)?;
+    let card = class(st, "CardPayment", false)?;
+    attribute(st, card, "cardNumber", t("String"), &private)?;
+    let pricing = class(st, "PricingService", false)?;
+    operation(st, pricing, "price", &[("product", product)], Some(t("Money")), false)?;
+    // An association from `a` to `b`: each end typed by its class with its bounds, its role and its
+    // aggregation; an end a class owns is navigable, the others the association owns.
+    type EndSpec<'a> = (Obj, &'a str, i64, Option<u64>, u32, Option<Obj>);
+    let associate = |st: &mut Store, name: &str, ends: [EndSpec<'_>; 2]| -> Result<Obj, archforge_mof::Invalid> {
+        let a = named(st, u::ASSOCIATION, name)?;
+        st.push(pkg, u::package::PACKAGED_ELEMENT, Value::Ref(a))?;
+        for (ty, role, lower, upper, aggregation, owner) in ends {
+            let end = named(st, u::PROPERTY, role)?;
+            st.set(end, u::typed_element::TYPE, Value::Ref(ty))?;
+            st.set(end, u::property::AGGREGATION, Value::Enum(aggregation))?;
+            bounds(st, end, lower, upper)?;
+            match owner {
+                Some(c) => st.push(c, u::class::OWNED_ATTRIBUTE, Value::Ref(end))?,
+                None => st.push(a, u::association::OWNED_END, Value::Ref(end))?,
+            };
+            // An end the association owns is one of its members already (ownedEnd subsets it).
+            if !st.list(a, u::association::MEMBER_END)?.contains(&Value::Ref(end)) {
+                st.push(a, u::association::MEMBER_END, Value::Ref(end))?;
+            }
+        }
+        Ok(a)
+    };
+    associate(st, "places", [(customer, "customer", 1, Some(1), 0, None), (order, "orders", 0, None, 0, Some(customer))])?;
+    associate(st, "", [(order, "order", 1, Some(1), 0, None), (line, "lines", 1, None, 2, Some(order))])?;
+    associate(st, "", [(line, "", 0, None, 0, None), (product, "product", 1, Some(1), 0, Some(line))])?;
+    associate(st, "lists", [(catalog, "", 0, None, 0, None), (product, "products", 0, None, 1, Some(catalog))])?;
+    associate(st, "paid by", [(order, "order", 1, Some(1), 0, Some(payment)), (payment, "payment", 0, Some(1), 0, Some(order))])?;
+    let g = st.create(u::GENERALIZATION)?;
+    st.set(g, u::generalization::GENERAL, Value::Ref(payment))?;
+    st.push(card, u::classifier::GENERALIZATION, Value::Ref(g))?;
+    let dep = st.create(u::DEPENDENCY)?;
+    st.push(pkg, u::package::PACKAGED_ELEMENT, Value::Ref(dep))?;
+    st.push(dep, u::dependency::CLIENT, Value::Ref(order))?;
+    st.push(dep, u::dependency::SUPPLIER, Value::Ref(pricing))?;
+    Ok(pkg)
+}
+
+/// Opens the sample class model (`sample_model`) on a class diagram in the shell's project: its
+/// classes laid out in three rows, every association, generalization and dependency drawn, the
+/// named ones labelled. Gives the diagram's id.
+#[cfg(any(test, feature = "snapshot"))]
+pub(crate) fn open_sample(shell: &mut Shell) -> Result<Uuid, String> {
+    use archforge_mof::rows;
+    let fail = |e: &dyn std::fmt::Display| e.to_string();
+    let session = shell.session.as_ref().ok_or("the sample needs a session")?;
+    let (tables, junctions) = archforge_notations::storage();
+    let counter = |start: u64| {
+        let n = std::sync::atomic::AtomicU64::new(start);
+        Box::new(move || {
+            let i = n.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let mut r = [0u8; 10];
+            r[2..].copy_from_slice(&i.to_be_bytes());
+            archforge_mof::Uuid::v7(1_761_670_800_000, r)
+        })
+    };
+    let mut st = archforge_notations::store(counter(1 << 31)).map_err(|e| fail(&e))?;
+    rows::restore(&mut st, &rows::snapshot(session.doc(), &tables, &junctions).map_err(|e| fail(&e))?, &tables, &junctions).map_err(|e| fail(&e))?;
+    let model = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_core::MODEL)).ok_or("the project has no model root")?;
+    let pkg = sample_model(&mut st, model).map_err(|e| fail(&e))?;
+    let pkg_uuid = st.uuid(pkg).map_err(|e| fail(&e))?;
+    let back = rows::snapshot(&st, &tables, &junctions).map_err(|e| fail(&e))?;
+    let mut session = archforge_notations::session_from_rows(&back, counter(1 << 32))?;
+    let id = |v: serde_json::Value| v.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string();
+    let run = |session: &mut archforge_notations::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
+        session.execute(command, &params).map(|o| id(o.value)).map_err(|e| format!("{command}: {e}"))
+    };
+    let store = session.doc();
+    let pkg = store.by_uuid(pkg_uuid).ok_or("the sample's package")?;
+    let uuid = |o: Obj| store.uuid(o).map(|u| u.to_string()).unwrap_or_default();
+    let by_name = |n: &str| classes(store, pkg).into_iter().find(|c| name(store, *c) == n);
+    let layout = [
+        ("Customer", 80, 80),
+        ("Order", 560, 80),
+        ("PricingService", 1040, 80),
+        ("Product", 80, 400),
+        ("OrderLine", 560, 400),
+        ("Payment", 1040, 400),
+        ("Catalog", 80, 700),
+        ("CardPayment", 1040, 700),
+    ];
+    let placed: Vec<(String, i32, i32, f64)> = layout
+        .iter()
+        .filter_map(|(n, x, y)| {
+            let c = by_name(n)?;
+            let card = archforge_uml::figures::card(store, c)?;
+            let rows = card.compartments.iter().map(|r| r.len().max(1)).sum::<usize>() as f64;
+            Some((uuid(c), *x, *y, 77.0 + (rows + 0.5) * 20.0 + 6.0))
+        })
+        .collect();
+    let lines: Vec<(String, bool)> = store
+        .alive()
+        .filter(|o| matches!(store.class_of(*o).ok(), Some(c) if c == archforge_uml::ASSOCIATION || c == archforge_uml::GENERALIZATION || c == archforge_uml::DEPENDENCY))
+        .map(|o| (uuid(o), !name(store, o).is_empty()))
+        .collect();
+    let pkg_id = uuid(pkg);
+    let d = run(&mut session, "diagram.add", serde_json::json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": pkg_id, "name": "Commerce" }))?;
+    for (c, x, y, h) in &placed {
+        run(&mut session, "diagram.place", serde_json::json!({ "diagram": d, "element": c, "x": x, "y": y, "width": 290, "height": h }))?;
+    }
+    run(&mut session, "diagram.connect-all", serde_json::json!({ "diagram": d }))?;
+    for (line, named) in lines.iter().filter(|(_, named)| *named) {
+        let store = session.doc();
+        let edge = store
+            .by_uuid(archforge_mof::Uuid::parse(line).ok_or("a line's id")?)
+            .and_then(|l| archforge_diagram::views_of(store, l).1.first().copied())
+            .and_then(|e| store.uuid(e).ok());
+        if let (Some(edge), true) = (edge, named) {
+            run(&mut session, "diagram.label", serde_json::json!({ "edge": edge.to_string(), "kind": "name", "at": "middle" }))?;
+        }
+    }
+    run(&mut session, "view.select", serde_json::json!({ "ids": [] }))?;
+    session.mark_saved().map_err(|e| e.to_string())?;
+    shell.session = Some(session);
+    let d = Uuid::parse(&d).ok_or("the diagram's id")?;
+    shell.explorer.expanded.extend(Uuid::parse(&pkg_id));
+    crate::canvas::open(shell, d);
+    Ok(d)
 }

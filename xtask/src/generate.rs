@@ -662,10 +662,16 @@ pub fn build(t: &Target, bytes: &[u8], docs: bool) -> Result<Built, String> {
         }
     }
     let owned_ends: BTreeSet<&str> = x.assocs.iter().flat_map(|a| a.owned_ends.iter().map(String::as_str)).collect();
+    // An end derived (or a derived union) keeps no field, so it cannot be the stored opposite of
+    // the other: a write to the other would have nowhere to go (Dependency::client and the
+    // derived NamedElement::clientDependency).
+    let derived_ids: BTreeSet<&str> =
+        x.classes.iter().flat_map(|c| c.props.iter()).filter(|p| p.derived || p.derived_union).map(|p| p.id.as_str()).collect();
     let mut opposites: BTreeMap<PropId, PropId> = BTreeMap::new();
-    let mut ends_dropped = 0;
+    let (mut ends_dropped, mut derived_pairs) = (0, 0);
     for a in &x.assocs {
         match a.member_ends.as_slice() {
+            [e1, e2] if derived_ids.contains(e1.as_str()) || derived_ids.contains(e2.as_str()) => derived_pairs += 1,
             [e1, e2] => match (prop_of.get(e1), prop_of.get(e2)) {
                 (Some(p1), Some(p2)) => {
                     opposites.insert(*p1, *p2);
@@ -777,7 +783,11 @@ pub fn build(t: &Target, bytes: &[u8], docs: bool) -> Result<Built, String> {
         metamodel.props.iter().filter(|p| p.opposite.is_some()).count()
     );
     let _ = writeln!(report, "data types: {} ({} enumerations)", metamodel.data_types.len(), x.enums.len());
-    let _ = writeln!(report, "associations: {} ({ends_dropped} with an association-owned or missing end: no stored opposite)", x.assocs.len());
+    let _ = writeln!(
+        report,
+        "associations: {} ({ends_dropped} with an association-owned or missing end, {derived_pairs} with a derived end: no stored opposite)",
+        x.assocs.len()
+    );
     let _ = writeln!(report, "subsets or redefinitions of association-owned ends dropped: {subsets_dropped}");
     let _ = writeln!(report, "defaults on derived properties dropped: {derived_defaults_dropped}");
     let _ = writeln!(report, "documentation: {}", if docs { "emitted" } else { "not emitted (p9h.3.1)" });

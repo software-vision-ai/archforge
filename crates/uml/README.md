@@ -39,7 +39,14 @@ redefines `isAbstract`), the redefining property is the class's: `class::IS_ABST
 **Public API.** `metamodel()`, `universe()`, the constants, the structs and enums, `UmlSlabs`,
 `TABLES`, `JUNCTIONS`, `INDEX`, `URI`, `VERSION`, `CONTENT_HASH`; `UmlNotation`, `ALONE`,
 `CLASS_DIAGRAM`, `CLASS_SIZE`, `registry`, `commands::{specs, packages, classes, package_of,
-remove_elements, MAX_NAME}`, and the card's `WORDS` and `PLURALS` for the shell's catalogue.
+remove_elements, MAX_NAME}`, `figures::{card, line, ends, text_slots, slot_text, attribute_text,
+operation_text, multiplicity, visibility, member_ends, navigable}` (a class's card with its
+members' visibility, type and multiplicity, abstract names slanted; an association's line with its
+name, roles, multiplicities, an arrow at an end only it navigates to and a diamond at the whole of
+an aggregation or a composition; a generalization's triangle; a dependency dashed with an open
+arrow), and the card's `WORDS` and `PLURALS` for the shell's catalogue. Where an association's two
+ends pair a derived end with a stored one, the generator gives neither an opposite: a derived end
+keeps no field to keep in step.
 
 **Measured** (release, M4 Max): a million UML objects (classes with three typed attributes and
 their multiplicity literals), rename p99 well inside a frame; see the test's output.

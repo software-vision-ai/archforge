@@ -5,11 +5,12 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
 pub mod commands;
+pub mod figures;
 mod generated;
 
 use std::sync::Arc;
 
-use archforge_diagram::figure::{Card, Row, Text, Tone};
+use archforge_diagram::figure::{Card, Line};
 use archforge_diagram::{Notation, ProjectView};
 use archforge_mof::{ClassId, MetaError, Obj, Store, Universe};
 
@@ -30,9 +31,10 @@ pub const CLASS_DIAGRAM: &str = "uml.class";
 /// operation row and the line between them.
 pub const CLASS_SIZE: (f64, f64) = (240.0, 120.0);
 
-/// UML in a project's view (archforge-3c5.1.1): class diagrams of a package showing its classes,
-/// drawn as plain cards with their attributes and operations; packages and classes removed with
-/// what they hold.
+/// UML in a project's view (archforge-3c5.1.1, 3c5.1.2): class diagrams of a package showing its
+/// classes as plain cards with their attributes and operations, and the associations,
+/// generalizations and dependencies between them as lines (`figures`); packages and classes removed
+/// with what they hold.
 pub struct UmlNotation;
 
 impl Notation for UmlNotation {
@@ -71,29 +73,30 @@ impl Notation for UmlNotation {
         CLASS_SIZE
     }
 
-    /// A class: its name, its attributes, then its operations.
+    /// Associations, generalizations and dependencies.
+    fn connects(&self, _kind: &str, class: ClassId) -> bool {
+        class == ASSOCIATION || class == GENERALIZATION || class == DEPENDENCY
+    }
+
+    fn ends(&self, store: &Store, element: Obj) -> Option<(Obj, Obj)> {
+        figures::ends(store, element)
+    }
+
+    fn text_slots(&self, class: ClassId) -> &'static [&'static str] {
+        figures::text_slots(class)
+    }
+
+    /// A class: its name, slanted when abstract, its attributes, then its operations.
     fn card(&self, store: &Store, element: Obj, _diagram: Obj) -> Option<Card> {
-        if store.class_of(element).ok()? != CLASS {
-            return None;
-        }
-        let rows = |prop, suffix: &str| {
-            store
-                .list(element, prop)
-                .unwrap_or_default()
-                .iter()
-                .filter_map(archforge_mof::Value::as_ref)
-                .filter(|o| store.is_alive(*o))
-                .map(|o| Row { mark: None, text: format!("{}{suffix}", archforge_core::name_of(store, o)), linked: false })
-                .collect::<Vec<_>>()
-        };
-        Some(Card {
-            eyebrow: Text::said("Class"),
-            name: archforge_core::name_of(store, element),
-            compartments: vec![rows(class::OWNED_ATTRIBUTE, ""), rows(class::OWNED_OPERATION, "()")],
-            more: ("+ {n} more member", "+ {n} more members"),
-            elsewhere: false,
-            tone: Tone::Plain,
-        })
+        figures::card(store, element)
+    }
+
+    fn line(&self, store: &Store, element: Obj) -> Option<Line> {
+        figures::line(store, element)
+    }
+
+    fn slot_text(&self, store: &Store, element: Obj, slot: &str) -> String {
+        figures::slot_text(store, element, slot)
     }
 
     fn remove(&self, store: &mut Store, objs: &[Obj]) -> Result<usize, archforge_engine::CommandError> {

@@ -791,3 +791,66 @@ pub const ADORN_ADD: Icon = Icon {
         L([7.0, 9.0], [13.0, 9.0]),
     ],
 };
+/// The class diagram's Class tool: a class box in its three compartments (name, attributes,
+/// operations), drawn at the Entity tool's size.
+pub const TOOL_CLASS: Icon = Icon {
+    size: [14.0, 11.0],
+    stroke: 1.1,
+    segments: &[
+        L([0.0, 0.0], [14.0, 0.0]),
+        L([14.0, 0.0], [14.0, 11.0]),
+        L([14.0, 11.0], [0.0, 11.0]),
+        L([0.0, 11.0], [0.0, 0.0]),
+        L([0.0, 3.5], [14.0, 3.5]),
+        L([0.0, 7.25], [14.0, 7.25]),
+    ],
+};
+/// A class in the Models tree and the search: its box in three compartments.
+pub const CLASS: Icon = Icon {
+    size: [16.0, 16.0],
+    stroke: 1.3,
+    segments: &[
+        L([1.0, 2.0], [15.0, 2.0]),
+        L([15.0, 2.0], [15.0, 14.0]),
+        L([15.0, 14.0], [1.0, 14.0]),
+        L([1.0, 14.0], [1.0, 2.0]),
+        L([1.0, 6.0], [15.0, 6.0]),
+        L([1.0, 10.0], [15.0, 10.0]),
+    ],
+};
+/// A UML package: a box with its tab at the top left.
+pub const PACKAGE: Icon = Icon {
+    size: [16.0, 16.0],
+    stroke: 1.3,
+    segments: &[
+        L([1.0, 2.0], [7.0, 2.0]),
+        L([7.0, 2.0], [7.0, 5.0]),
+        L([1.0, 2.0], [1.0, 14.0]),
+        L([1.0, 14.0], [15.0, 14.0]),
+        L([15.0, 14.0], [15.0, 5.0]),
+        L([15.0, 5.0], [1.0, 5.0]),
+    ],
+};
+/// A class diagram: two class boxes, the lower one generalizing the upper, as the ER diagram's
+/// icon joins two tables.
+pub const CLASS_DIAGRAM: Icon = Icon {
+    size: [13.0, 12.0],
+    stroke: 1.5,
+    segments: &[
+        L([0.0, 0.0], [6.0, 0.0]),
+        L([6.0, 0.0], [6.0, 5.0]),
+        L([6.0, 5.0], [0.0, 5.0]),
+        L([0.0, 5.0], [0.0, 0.0]),
+        L([0.0, 2.5], [6.0, 2.5]),
+        L([7.0, 7.0], [13.0, 7.0]),
+        L([13.0, 7.0], [13.0, 12.0]),
+        L([13.0, 12.0], [7.0, 12.0]),
+        L([7.0, 12.0], [7.0, 7.0]),
+        L([7.0, 9.5], [13.0, 9.5]),
+        L([10.0, 7.0], [10.0, 3.0]),
+        L([10.0, 3.0], [8.0, 3.0]),
+        L([8.0, 3.0], [6.0, 2.0]),
+        L([8.0, 3.0], [6.0, 4.0]),
+        L([6.0, 2.0], [6.0, 4.0]),
+    ],
+};

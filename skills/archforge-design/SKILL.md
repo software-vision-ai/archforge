@@ -295,6 +295,31 @@ What is ER's own, beside the shared rules above.
 - A line's own colour shows while Key status is off; while it is on, the panel offers Show line
   colours, which turns it off. A line's own width shows always.
 
+## UML notation
+What is UML's own, beside the shared rules above.
+- A class diagram is of a package. New diagram offers Class diagram beside ER diagram; its second
+  field is Package, with New package as ER has New schema.
+- A class is a plain card: the surface's white with the plain border, its eyebrow CLASS, its name,
+  then two compartments under dividing lines, attributes and operations, each shown even when
+  empty. An abstract class's name, and an abstract operation, are slanted.
+- An attribute reads `+ name : Type [0..1]`, an operation `+ name(param : Type) : Return`; the
+  visibility sign only when one is set, the multiplicity only when it is not 1. A bound pair of
+  none to many is written `*`.
+- An association end a class owns is the line's role, not a row of the card.
+- An association's arrow shows only where it navigates one way; navigable both ways, it shows no
+  arrows. A diamond sits at the whole: hollow for a shared aggregation, filled for a composition.
+  Its name sits at the middle, its roles and multiplicities at their ends.
+- A generalization draws to a hollow triangle at the general class, in the muted ink, as ER's.
+- A dependency is dashed, with an open arrow at its supplier.
+- The class diagram's toolbar is Class, Note and Link note; the relationship tool comes with
+  relating classes. A class is added only with the Class tool, never by a click in Select.
+- Its own icons: the Class tool and a class in the tree are a box in three compartments (a
+  table's box has a column line instead); a package is UML's tabbed box; a class diagram's tab
+  shows two class boxes joined by a generalization arrow.
+
+On every line: a role, and a label at the line's middle, sit above a level stretch of the line and
+beside an upright one, never on the line or its mark.
+
 ## Not decided yet
 The menu bar's structure; how a colour chosen in Appearance and the key-status colour combine;
 packages; closing a project whose changes cannot be written; whether resolving a relationship

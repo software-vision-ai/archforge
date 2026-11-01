@@ -745,7 +745,8 @@ fn draw_node(
                 let eyebrow = say(&card.eyebrow).to_uppercase();
                 ux::text(&inner, rect.min + vec2(ENTITY_INSET, 12.0) * z, &eyebrow, types::EYEBROW.scaled(z), p.entity_ink, room);
                 if !renaming {
-                    ux::text(&inner, rect.min + vec2(ENTITY_INSET, 30.0) * z, &card.name, types::SECTION.scaled(z), p.text, room);
+                    let name = if card.slanted { ux::text_slanted } else { ux::text };
+                    name(&inner, rect.min + vec2(ENTITY_INSET, 30.0) * z, &card.name, types::SECTION.scaled(z), p.text, room);
                 }
                 let line_y = rect.top() + ENTITY_HEADER * z;
                 if line_y < rect.bottom() {
@@ -831,7 +832,8 @@ fn draw_rows(inner: &egui::Painter, p: &Palette, card: &archforge_diagram::figur
             }
             let text_x = rect.left() + ENTITY_TEXT * z;
             let room_x = (rect.right() - ENTITY_INSET * z - text_x - if row.linked { 18.0 * z } else { 0.0 }).max(0.0);
-            let drawn = ux::text(inner, pos2(text_x, y), &row.text, types::UI.scaled(z), p.text, Some(room_x));
+            let text = if row.slanted { ux::text_slanted } else { ux::text };
+            let drawn = text(inner, pos2(text_x, y), &row.text, types::UI.scaled(z), p.text, Some(room_x));
             if row.linked {
                 ux::icon(inner, pos2(drawn.right() + 6.0 * z, y + 6.0 * z), &icons::LINK, 12.0 * z, p.text_secondary);
             }
@@ -947,32 +949,48 @@ fn draw_edge(
     if hovered {
         halo(paint, &points, stroke, p);
     }
-    // A triangle at an end: the line stops at its base.
-    let triangle = |tip: Pos2, back: Pos2| {
+    // A mark the line stops short of: a triangle at its base, a diamond at its far corner.
+    let shape = |mark: EndMark, tip: Pos2, back: Pos2| {
         let dir = if (tip - back).length() > f32::EPSILON { (tip - back).normalized() } else { vec2(0.0, -1.0) };
-        let (len, half) = (12.0 * z.max(0.6), 7.5 * z.max(0.6));
-        let base = tip - dir * len;
-        (dir, base, vec2(-dir.y, dir.x) * half)
+        let s = z.max(0.6);
+        let (len, half) = match mark {
+            EndMark::Triangle => (12.0 * s, 7.5 * s),
+            EndMark::HollowDiamond | EndMark::FilledDiamond => (20.0 * s, 6.0 * s),
+            _ => (0.0, 6.0 * s),
+        };
+        (dir, tip - dir * len, vec2(-dir.y, dir.x) * half, len)
     };
     let mut drawn = points.clone();
-    if line.ends[0].mark == EndMark::Triangle {
-        drawn[0] = triangle(points[0], points[1]).1;
+    if line.ends[0].mark.set_back() > 0.0 {
+        drawn[0] = shape(line.ends[0].mark, points[0], points[1]).1;
     }
-    if line.ends[1].mark == EndMark::Triangle {
-        drawn[n - 1] = triangle(points[n - 1], points[n - 2]).1;
+    if line.ends[1].mark.set_back() > 0.0 {
+        drawn[n - 1] = shape(line.ends[1].mark, points[n - 1], points[n - 2]).1;
     }
     crate::connect::line(paint, &drawn, stroke, !line.dashed, z);
     for (end, tip, back) in [(&line.ends[0], points[0], points[1]), (&line.ends[1], points[n - 1], points[n - 2])] {
-        if end.mark != EndMark::Triangle {
-            continue;
-        }
-        let (dir, base, side) = triangle(tip, back);
-        paint.add(egui::Shape::convex_polygon(vec![tip, base + side, base - side], p.canvas, stroke));
-        // A note beside the target's triangle, such as a generalization set's facts.
-        if let Some(note) = line.note.as_ref().filter(|_| std::ptr::eq(end, &line.ends[1])) {
-            let text = note.iter().map(say).collect::<Vec<_>>().join(" · ");
-            let gal = ux::galley(paint, &text, types::SMALL.scaled(z), p.text_secondary, None);
-            paint.galley(base + vec2(10.0 * z, -gal.size().y / 2.0) - dir * 14.0 * z, gal, p.text_secondary);
+        let (dir, base, side, len) = shape(end.mark, tip, back);
+        match end.mark {
+            EndMark::Triangle => {
+                paint.add(egui::Shape::convex_polygon(vec![tip, base + side, base - side], p.canvas, stroke));
+                // A note beside the target's triangle, such as a generalization set's facts.
+                if let Some(note) = line.note.as_ref().filter(|_| std::ptr::eq(end, &line.ends[1])) {
+                    let text = note.iter().map(say).collect::<Vec<_>>().join(" · ");
+                    let gal = ux::galley(paint, &text, types::SMALL.scaled(z), p.text_secondary, None);
+                    paint.galley(base + vec2(10.0 * z, -gal.size().y / 2.0) - dir * 14.0 * z, gal, p.text_secondary);
+                }
+            }
+            EndMark::HollowDiamond | EndMark::FilledDiamond => {
+                let middle = tip - dir * (len / 2.0);
+                let fill = if end.mark == EndMark::FilledDiamond { stroke.color } else { p.canvas };
+                paint.add(egui::Shape::convex_polygon(vec![tip, middle + side, base, middle - side], fill, stroke));
+            }
+            EndMark::OpenArrow => {
+                let back = tip - dir * 12.0 * z.max(0.6);
+                paint.line_segment([tip, back + side], stroke);
+                paint.line_segment([tip, back - side], stroke);
+            }
+            _ => {}
         }
     }
     let mut badge = None;
@@ -1005,7 +1023,8 @@ fn draw_edge(
         paint.galley(rect.min, g, p.text_secondary);
         d.ends.borrow_mut().push(EndText { edge: edge_id, end: i, rect: rect.expand(3.0), anchor: at });
     }
-    // The roles, above the line near their ends.
+    // The roles near their ends: above a level line, left of an upright one, so neither sits on
+    // the line or its mark.
     for (end, at, towards) in [(&line.ends[0], points[0], points[1]), (&line.ends[1], points[n - 1], points[n - 2])] {
         let Some(text) = end.role.as_deref() else { continue };
         if text.is_empty() || (towards - at).length() <= f32::EPSILON {
@@ -1013,7 +1032,12 @@ fn draw_edge(
         }
         let dir = (towards - at).normalized();
         let g = ux::galley(paint, text, types::SMALL.scaled(z), p.text_secondary, None);
-        let at = at + dir * 44.0 * z - vec2(g.size().x / 2.0, g.size().y + 8.0 * z);
+        let near = at + dir * 44.0 * z;
+        let at = if dir.y.abs() > dir.x.abs() {
+            near - vec2(g.size().x + 8.0 * z, g.size().y / 2.0)
+        } else {
+            near - vec2(g.size().x / 2.0, g.size().y + 8.0 * z)
+        };
         paint.galley(at, g, p.text_secondary);
     }
     if line.styled {
@@ -1037,7 +1061,16 @@ fn draw_edge(
             };
             let at = along(&points, t) + vec2(real(store, l, label::DX) as f32, real(store, l, label::DY) as f32) * z;
             let g = ux::galley(paint, &text, types::SMALL.scaled(z), p.text_secondary, None);
-            let offset = if t == 0.5 { vec2(-g.size().x / 2.0, -g.size().y - 6.0 * z) } else { vec2(-g.size().x / 2.0, 6.0 * z) };
+            // A middle label sits above a level stretch of the line, right of an upright one.
+            let upright = {
+                let d = along(&points, 0.51) - along(&points, 0.49);
+                d.y.abs() > d.x.abs()
+            };
+            let offset = match (t == 0.5, upright) {
+                (true, true) => vec2(8.0 * z, -g.size().y / 2.0),
+                (true, false) => vec2(-g.size().x / 2.0, -g.size().y - 6.0 * z),
+                (false, _) => vec2(-g.size().x / 2.0, 6.0 * z),
+            };
             paint.galley(at + offset, g, p.text_secondary);
         }
         if selected {
@@ -1168,7 +1201,7 @@ pub(crate) fn end_glyph_on(
         EndMark::ZeroOrOne => (false, true, "0..1"),
         EndMark::ZeroOrMore => (true, true, "0..*"),
         EndMark::OneOrMore => (true, false, "1..*"),
-        EndMark::None | EndMark::Triangle => return,
+        _ => return,
     };
     let d = from - end;
     if d.length() <= f32::EPSILON || !d.is_finite() {
