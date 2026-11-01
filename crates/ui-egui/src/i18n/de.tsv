@@ -249,6 +249,8 @@ str		Note	Notiz
 str		Link note	Notiz verbinden
 str		Key status	Schlüsselstatus
 str		Grid	Raster
+str		Arrange diagram	Diagramm anordnen
+str		Move cardinality	Kardinalität verschieben
 str		Add table	Tabelle hinzufügen
 str		Place table	Tabelle platzieren
 str		Already on this diagram	Schon in diesem Diagramm

@@ -196,7 +196,7 @@ fn round_trip(s: &mut S, cmd: &str, p: &Json) {
 #[test]
 fn the_registry_and_the_metamodel_are_what_the_spec_says() {
     let reg = registry();
-    assert!(reg.ids().filter(|i| i.starts_with("diagram.")).count() == 19 && reg.ids().any(|i| i == "view.open-diagram"));
+    assert!(reg.ids().filter(|i| i.starts_with("diagram.")).count() == 20 && reg.ids().any(|i| i == "view.open-diagram"));
     let m = metamodel().unwrap();
     assert_eq!(m.classes.len(), 8, "with View, the abstract end of an edge");
     assert_eq!(m.data_types.len(), 7, "the five primitives, LabelPlace and Routing");
@@ -228,6 +228,7 @@ fn every_command_applies_undoes_and_redoes_to_the_identical_store() {
         ("diagram.style", json!({ "ids": [sm.a, sm.edge] })),
         ("diagram.style", json!({ "ids": [sm.diagram, sm.edge], "routing": "curved", "line": 2 })),
         ("diagram.style", json!({ "ids": [sm.edge], "routing": "right-angled", "avoid": true })),
+        ("diagram.arrange", json!({ "diagram": sm.diagram })),
         ("diagram.unlabel", json!({ "label": sm.label })),
         ("diagram.disconnect", json!({ "edge": sm.anchor })),
         ("diagram.unplace", json!({ "nodes": [sm.b] })),

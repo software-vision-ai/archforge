@@ -7,6 +7,7 @@
 //! portable target.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
+pub mod arrange;
 pub mod commands;
 mod generated;
 pub mod grid;

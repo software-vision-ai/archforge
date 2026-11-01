@@ -28,6 +28,8 @@ pub const ENTITY_EMPTY_HEIGHT: f64 = 72.0;
 const MIN_SIZE: f64 = 20.0;
 /// How far a drag must go before it counts as a move.
 const DRAG_MIN: f32 = 0.5;
+/// How near a line's segment the pointer grabs it, in logical pixels.
+const SEGMENT_REACH: f32 = 6.0;
 /// A nudge by the arrows, and with Shift.
 const NUDGE: f64 = 1.0;
 const NUDGE_FAR: f64 = 10.0;
@@ -92,6 +94,12 @@ pub enum Gesture {
     Connect { from_node: Uuid, from: Pos2 },
     /// A note link drawn from a note's handle to a table or a relationship's line (kjz.13).
     LinkNote { note: Uuid },
+    /// A cardinality text dragged off its place: its line, its end, the screen point the drag
+    /// started at, its centre then and the end of the line it belongs to.
+    EndText { edge: Uuid, end: u8, from: Pos2, centre: Pos2, anchor: Pos2 },
+    /// A segment of a right-angled line slid across: the line, the segment's index in the route,
+    /// the route as it was in diagram units, and the screen point the drag started at.
+    Segment { edge: Uuid, index: usize, route: Vec<(f64, f64)>, from: Pos2 },
 }
 
 /// The entity menu, open at a screen point.
@@ -115,6 +123,9 @@ enum Action {
     OpenColumn(Uuid, Option<Uuid>),
     PlaceNote(f64, f64),
     EditNote(Uuid),
+    /// A cardinality text put back in its place, and a line's route worked out anew.
+    ResetEnd(Uuid, u8),
+    ResetRoute(Uuid),
 }
 
 fn run(shell: &mut Shell, id: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
@@ -241,9 +252,66 @@ pub(crate) fn preview_rects(shell: &Shell, view: View, pointer: Option<Pos2>) ->
             let r = resized(*base, *corner, (pointer - *from) / view.zoom);
             out.insert(*node, Rect::from_min_size(view.to_screen(r.left() as f64, r.top() as f64), r.size() * view.zoom));
         }
-        Gesture::Marquee { .. } | Gesture::Connect { .. } | Gesture::LinkNote { .. } => {}
+        Gesture::Marquee { .. } | Gesture::Connect { .. } | Gesture::LinkNote { .. } | Gesture::EndText { .. } | Gesture::Segment { .. } => {}
     }
     out
+}
+
+/// A cardinality text being dragged: its line, end and where its centre is now.
+pub(crate) fn end_preview(shell: &Shell, pointer: Option<Pos2>) -> Option<(Uuid, u8, Pos2)> {
+    match (shell.canvas.gesture.as_ref(), pointer.filter(|p| p.is_finite())) {
+        (Some(Gesture::EndText { edge, end, from, centre, .. }), Some(at)) => Some((*edge, *end, *centre + (at - *from))),
+        _ => None,
+    }
+}
+
+/// A line whose segment is being slid: its route as it is now, in diagram units.
+pub(crate) fn segment_preview(shell: &Shell, view: View, pointer: Option<Pos2>) -> Option<(Uuid, Vec<(f64, f64)>)> {
+    match (shell.canvas.gesture.as_ref(), pointer.filter(|p| p.is_finite())) {
+        (Some(Gesture::Segment { edge, index, route, from }), Some(at)) => Some((*edge, slid(route, *index, (at - *from) / view.zoom))),
+        _ => None,
+    }
+}
+
+/// The route with segment `k` slid across by `by`: a level segment up or down, an upright one left
+/// or right, its two corners with it.
+fn slid(route: &[(f64, f64)], k: usize, by: Vec2) -> Vec<(f64, f64)> {
+    let mut out = route.to_vec();
+    if k + 1 >= out.len() {
+        return out;
+    }
+    let level = (out[k].1 - out[k + 1].1).abs() < 1e-6;
+    for p in &mut out[k..=k + 1] {
+        if level {
+            p.1 += f64::from(by.y);
+        } else {
+            p.0 += f64::from(by.x);
+        }
+    }
+    out
+}
+
+/// The segment of a right-angled line `e` at diagram point (x, y), within `reach` units: its index
+/// and the route. A middle segment slides across; the first or last slides where the line meets
+/// its table, along the table's side.
+fn segment_at(store: &Store, grid: &Grid, e: Obj, x: f64, y: f64, reach: f64) -> Option<(usize, Vec<(f64, f64)>)> {
+    use archforge_diagram::Way;
+    if !matches!(archforge_diagram::route::way_of(store, e), Way::RightAngled | Way::Avoiding) {
+        return None;
+    }
+    let route = grid.line(e)?.to_vec();
+    let n = route.len();
+    (0..n.saturating_sub(1)).find_map(|k| {
+        let ((ax, ay), (bx, by)) = (route[k], route[k + 1]);
+        let near = if (ay - by).abs() < 1e-6 {
+            (y - ay).abs() <= reach && x >= ax.min(bx) - reach && x <= ax.max(bx) + reach
+        } else if (ax - bx).abs() < 1e-6 {
+            (x - ax).abs() <= reach && y >= ay.min(by) - reach && y <= ay.max(by) + reach
+        } else {
+            false
+        };
+        near.then(|| (k, route.clone()))
+    })
 }
 
 /// Reads what the pointer asked for this frame.
@@ -340,6 +408,14 @@ fn decide(
             if resp.drag_started_by(egui::PointerButton::Primary) && shell.canvas.gesture.is_none() {
                 // The gesture starts where the button went down, not where the pointer is now.
                 let from = origin.filter(|o| o.is_finite()).unwrap_or(pos);
+                // A cardinality text, grabbed where the last frame drew it, unless a table or its
+                // handle is over it there.
+                if handle_at(store, d, selection, view, from).is_none()
+                    && hit_node(from).is_none()
+                    && let Some(t) = shell.canvas.ends.iter().find(|t| t.rect.contains(from))
+                {
+                    return Action::Start(Gesture::EndText { edge: t.edge, end: t.end, from, centre: t.rect.center(), anchor: t.anchor }, None);
+                }
                 if let Some((n, corner)) = handle_at(store, d, selection, view, from)
                     && let Some(id) = uuid(store, n)
                 {
@@ -355,10 +431,20 @@ fn decide(
                         let select_first = if is_selected(store, selection, n) { None } else { uuid(store, element_of(store, n).unwrap_or(n)) };
                         Action::Start(Gesture::Move { nodes, from }, select_first)
                     }
-                    None => match grid.hit(view.to_canvas(from).0, view.to_canvas(from).1) {
-                        Some(Hit::Edge(_)) => Action::Nothing,
-                        _ => Action::Start(Gesture::Marquee { from }, None),
-                    },
+                    None => {
+                        let (x, y) = view.to_canvas(from);
+                        match grid.hit(x, y) {
+                            // A right-angled line's middle segment slides; the rest of a line holds.
+                            Some(Hit::Edge(e)) => match (segment_at(store, grid, e, x, y, f64::from(SEGMENT_REACH / view.zoom)), uuid(store, e)) {
+                                (Some((index, route)), Some(edge)) => {
+                                    let element = store.get(e, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref()).unwrap_or(e);
+                                    Action::Start(Gesture::Segment { edge, index, route, from }, uuid(store, element))
+                                }
+                                _ => Action::Nothing,
+                            },
+                            _ => Action::Start(Gesture::Marquee { from }, None),
+                        }
+                    }
                 };
             }
             if resp.secondary_clicked()
@@ -367,6 +453,22 @@ fn decide(
                 && let (Some(node), Some(entity)) = (uuid(store, n), uuid(store, entity))
             {
                 return Action::Menu(EntityMenu { node, entity, at: pos });
+            }
+            // A double click puts a moved cardinality text back, or a line's dragged route.
+            if resp.double_clicked() && hit_node(pos).is_none() {
+                if let Some(t) = shell.canvas.ends.iter().find(|t| t.rect.contains(pos))
+                    && let Some(e) = store.by_uuid(t.edge)
+                    && end_label(store, e, t.end).is_some()
+                {
+                    return Action::ResetEnd(t.edge, t.end);
+                }
+                let (x, y) = view.to_canvas(pos);
+                if let Some(Hit::Edge(e)) = grid.hit(x, y)
+                    && !store.list(e, archforge_diagram::edge::WAYPOINT).unwrap_or_default().is_empty()
+                    && let Some(id) = uuid(store, e)
+                {
+                    return Action::ResetRoute(id);
+                }
             }
             // A third click in a row still opens; egui counts it as a triple click.
             if (resp.double_clicked() || resp.triple_clicked())
@@ -463,7 +565,54 @@ pub(crate) fn pointer(shell: &mut Shell, ui: &egui::Ui, resp: &egui::Response, v
             crate::panels::open_column(shell, entity, column);
             shell.state.show_panel(crate::state::Panel::Properties);
         }
+        Action::ResetEnd(edge, end) => {
+            let label = shell.session.as_ref().and_then(|s| s.doc().by_uuid(edge).and_then(|e| end_label(s.doc(), e, end)));
+            if let Some(label) = label
+                && let Err(e) = run(shell, "diagram.unlabel", json!({ "label": label.to_string() }))
+            {
+                shell.canvas.notice = Some(e);
+            }
+        }
+        Action::ResetRoute(edge) => {
+            if let Err(e) = run(shell, "diagram.route", json!({ "edge": edge.to_string(), "points": [] })) {
+                shell.canvas.notice = Some(e);
+            }
+        }
     }
+    // What the pointer may grab: a cardinality text moves, a right-angled line's segment slides
+    // across.
+    if shell.canvas.gesture.is_none()
+        && shell.canvas.tool == Tool::Select
+        && let Some(at) = ui.input(|i| i.pointer.hover_pos()).filter(|at| resp.rect.contains(*at))
+    {
+        let over_node = {
+            let (x, y) = view.to_canvas(at);
+            matches!(grid.hit(x, y), Some(Hit::Node(_)))
+        };
+        if !over_node && shell.canvas.ends.iter().any(|t| t.rect.contains(at)) {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
+        } else if let Some(store) = shell.session.as_ref().map(|s| s.doc()) {
+            let (x, y) = view.to_canvas(at);
+            if let Some(Hit::Edge(e)) = grid.hit(x, y)
+                && let Some((k, route)) = segment_at(store, grid, e, x, y, f64::from(SEGMENT_REACH / view.zoom))
+            {
+                let level = (route[k].1 - route[k + 1].1).abs() < 1e-6;
+                ui.ctx().set_cursor_icon(if level { egui::CursorIcon::ResizeVertical } else { egui::CursorIcon::ResizeHorizontal });
+            }
+        }
+    }
+}
+
+/// The label that holds where the user put the cardinality text at `end` of line `e`.
+fn end_label(store: &Store, e: Obj, end: u8) -> Option<Uuid> {
+    let kind = if end == 0 { "from_end" } else { "to_end" };
+    store
+        .list(e, archforge_diagram::edge::LABEL)
+        .unwrap_or_default()
+        .iter()
+        .filter_map(archforge_mof::Value::as_ref)
+        .find(|l| store.get(*l, archforge_diagram::label::KIND).ok().and_then(|v| v.as_str().map(|k| k == kind)).unwrap_or(false))
+        .and_then(|l| uuid(store, l))
 }
 
 /// Ends the gesture: a move or a resize as one engine step, a marquee as a selection.
@@ -499,6 +648,40 @@ fn commit(shell: &mut Shell, view: View, d: Obj, pointer: Option<Pos2>, shift: b
             });
             if let Err(e) = out {
                 shell.canvas.notice = Some(e.to_string());
+            }
+        }
+        Gesture::EndText { edge, end, from, centre, anchor } => {
+            if (pointer - from).length() / view.zoom < DRAG_MIN {
+                return;
+            }
+            // Kept as the text's centre from its line's end, in diagram units, so it moves with it.
+            let at = (centre + (pointer - from) - anchor) / view.zoom;
+            let old = shell.session.as_ref().and_then(|s| s.doc().by_uuid(edge).and_then(|e| end_label(s.doc(), e, end)));
+            let Some(session) = shell.session.as_mut() else { return };
+            let (kind, place) = if end == 0 { ("from_end", "source") } else { ("to_end", "target") };
+            let out = session.batch(&tr("Move cardinality"), |b| {
+                if let Some(old) = old {
+                    b.execute("diagram.unlabel", &json!({ "label": old.to_string() }))?;
+                }
+                b.execute("diagram.label", &json!({ "edge": edge.to_string(), "kind": kind, "at": place, "dx": at.x as f64, "dy": at.y as f64 }))?;
+                Ok(())
+            });
+            if let Err(e) = out {
+                shell.canvas.notice = Some(e.to_string());
+            }
+        }
+        Gesture::Segment { edge, index, route, from } => {
+            let by = (pointer - from) / view.zoom;
+            if by.length() < DRAG_MIN || route.len() < 2 {
+                return;
+            }
+            // The corners between the ends become the line's waypoints; a line straight across keeps
+            // both its ends, which the route then meets its tables at.
+            let moved = slid(&route, index, by);
+            let kept = if moved.len() == 2 { &moved[..] } else { &moved[1..moved.len() - 1] };
+            let points: Vec<serde_json::Value> = kept.iter().map(|(x, y)| json!({ "x": x, "y": y })).collect();
+            if let Err(e) = run(shell, "diagram.route", json!({ "edge": edge.to_string(), "points": points })) {
+                shell.canvas.notice = Some(e);
             }
         }
         Gesture::Connect { from_node, from } => {
