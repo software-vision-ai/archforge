@@ -15,6 +15,7 @@ use serde_json::json;
 
 use crate::home::control;
 use crate::i18n::{fmt, tr};
+use crate::notation_ui::Words;
 use crate::state::Panel;
 use crate::ux::{self, Palette, icons, types};
 use crate::{Shell, widgets};
@@ -183,12 +184,12 @@ pub(crate) struct Subject {
     pub class: Option<archforge_mof::ClassId>,
     pub name: String,
     /// The kind line under the heading and the word for the selection.
-    kind: String,
-    word: String,
+    pub(crate) kind: String,
+    pub(crate) word: String,
     /// "This table": the selection itself, as the applies-to choice and the own skill rows say it.
-    this: String,
+    pub(crate) this: String,
     /// "On this table · {n}": the title of the own skills section.
-    on_this: String,
+    pub(crate) on_this: String,
 }
 
 fn subject(shell: &Shell, project: &str) -> Subject {
@@ -199,54 +200,44 @@ fn subject(shell: &Shell, project: &str) -> Subject {
     match s.view().selection.first().copied().filter(|o| store.is_alive(*o)) {
         Some(o) => {
             let class = store.class_of(o).ok();
-            let (kind, word, this, on_this) = match class {
-                Some(c) if c == archforge_er::SCHEMA => (tr("Schema · model"), tr("Schema"), tr("This schema"), tr("On this schema · {n}")),
-                Some(c) if c == archforge_er::ENTITY => {
-                    (tr("Table · model, in every diagram"), tr("Table"), tr("This table"), tr("On this table · {n}"))
-                }
-                Some(c) if c == archforge_er::ATTRIBUTE => (tr("Column · model"), tr("Column"), tr("This column"), tr("On this column · {n}")),
-                Some(c) if c == archforge_er::DOMAIN => (tr("Domain · model"), tr("Domain"), tr("This domain"), tr("On this domain · {n}")),
-                Some(c) if c == archforge_er::ENUM_TYPE => {
-                    (tr("Enum type · model"), tr("Enum type"), tr("This enum type"), tr("On this enum type · {n}"))
-                }
-                Some(c) if c == archforge_er::SEQUENCE => (tr("Sequence · model"), tr("Sequence"), tr("This sequence"), tr("On this sequence · {n}")),
-                Some(c) if c == archforge_er::VIEW => (tr("View · model"), tr("View"), tr("This view"), tr("On this view · {n}")),
-                Some(c) if c == archforge_core::SKILL => (tr("Skill · model"), tr("Skill"), tr("This skill"), tr("On this skill · {n}")),
-                Some(c) if c == archforge_er::GENERALIZATION => {
-                    let (sup, sub, _) = archforge_er::rules::generalization_parts(store, o);
-                    let n = |e: Option<archforge_mof::Obj>| e.map(|e| archforge_core::name_of(store, e)).unwrap_or_default();
-                    let kind = fmt(&tr("Subtype · {sub} is a {super}"), &[("sub", &n(sub)), ("super", &n(sup))]);
-                    (kind, tr("Subtype"), tr("This subtype"), tr("On this subtype · {n}"))
-                }
-                Some(c) if c == archforge_er::RELATIONSHIP => {
-                    let end = |p| store.get(o, p).ok().and_then(|v| v.as_ref()).map(|e| archforge_core::name_of(store, e)).unwrap_or_default();
-                    let kind = fmt(
-                        &tr("Relationship · {from} to {to}"),
-                        &[("from", &end(archforge_er::relationship::FROM)), ("to", &end(archforge_er::relationship::TO))],
-                    );
-                    (kind, tr("Relationship"), tr("This relationship"), tr("On this relationship · {n}"))
-                }
+            let words = match class {
+                Some(c) if c == archforge_core::SKILL => Words {
+                    kind: tr("Skill · model"),
+                    word: tr("Skill"),
+                    this: tr("This skill"),
+                    on_this: tr("On this skill · {n}"),
+                    name: archforge_core::skills::name_of(store, o),
+                },
                 Some(c) if c == archforge_diagram::DIAGRAM => {
                     let schema = crate::diagrams::schema_of(store, o).map(|s| archforge_core::name_of(store, s)).unwrap_or_default();
-                    (fmt(&tr("Diagram · of {schema}"), &[("schema", &schema)]), tr("Diagram"), tr("This diagram"), tr("On this diagram · {n}"))
+                    Words {
+                        kind: fmt(&tr("Diagram · of {schema}"), &[("schema", &schema)]),
+                        word: tr("Diagram"),
+                        this: tr("This diagram"),
+                        on_this: tr("On this diagram · {n}"),
+                        name: crate::diagrams::diagram_name(store, o),
+                    }
                 }
-                _ => (tr("Element · model"), tr("Element"), tr("This element"), tr("On this element · {n}")),
+                _ => crate::notation_ui::of(shell.notation_uis, store, o).and_then(|ui| ui.words(store, o)).unwrap_or_else(|| Words {
+                    kind: tr("Element · model"),
+                    word: tr("Element"),
+                    this: tr("This element"),
+                    on_this: tr("On this element · {n}"),
+                    name: archforge_core::name_of(store, o),
+                }),
             };
-            let name = match class {
-                Some(c) if c == archforge_core::SKILL => archforge_core::skills::name_of(store, o),
-                Some(c) if c == archforge_diagram::DIAGRAM => crate::diagrams::diagram_name(store, o),
-                Some(c) if c == archforge_er::GENERALIZATION => {
-                    archforge_er::rules::generalization_parts(store, o).1.map(|s| archforge_core::name_of(store, s)).unwrap_or_default()
-                }
-                _ => archforge_core::name_of(store, o),
-            };
-            Subject { obj: Some(o), id: store.uuid(o).ok(), class, name, kind, word, this, on_this }
+            Subject::of(o, store.uuid(o).ok(), class, words)
         }
         None => Subject::root(project),
     }
 }
 
 impl Subject {
+    /// The subject `o` of `class`, as its words name it.
+    pub(crate) fn of(o: Obj, id: impl Into<Option<Uuid>>, class: impl Into<Option<archforge_mof::ClassId>>, words: Words) -> Subject {
+        let Words { kind, word, this, on_this, name } = words;
+        Subject { obj: Some(o), id: id.into(), class: class.into(), name, kind, word, this, on_this }
+    }
     /// The model root, which the project's name names.
     fn root(project: &str) -> Subject {
         Subject {
@@ -498,8 +489,10 @@ pub(crate) const BASE_TYPES: [&str; 12] =
 fn properties(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, subject: &Subject) {
     let paint = ui.painter().clone();
     let width = r.width() - 2.0 * PAD;
-    // A column's panel shows its table's fields, so their section says Table.
-    let word = if subject.class == Some(archforge_er::ATTRIBUTE) { tr("Table") } else { subject.word.clone() };
+    // A notation may title the first section otherwise (a column's panel is its table's).
+    let notation = shell.session.as_ref().zip(subject.obj).and_then(|(s, o)| crate::notation_ui::of(shell.notation_uis, s.doc(), o));
+    let heading = shell.session.as_ref().zip(subject.obj).zip(notation).and_then(|((s, o), n)| n.heading(s.doc(), o));
+    let word = heading.unwrap_or_else(|| subject.word.clone());
     y = section(shell, ui, p, r, y, &word, None).unwrap_or(y + 50.0);
     if shell.panels.editors_for != subject.id {
         shell.panels.editors_for = subject.id;
@@ -514,67 +507,23 @@ fn properties(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y:
             ux::text_mid(&paint, field.left() + 8.0, field.center().y, &subject.name, types::SMALL, p.text, Some((width - 16.0).max(0.0)));
             control(shell, ui, "workspace.properties.name", "button", field, false);
         }
-        Some(c) if c == archforge_er::SCHEMA => {
-            name_field(shell, ui, p, pos2(r.left() + PAD, y), width, subject, "er.schema.rename", "schema");
-            if let (Some(o), Some(id)) = (subject.obj, subject.id) {
-                let y = crate::types::types_section(shell, ui, p, r, y + 17.0 + FIELD + 16.0, o, id);
-                let y = crate::objects::section_of(shell, ui, p, r, y, o, id, crate::objects::ObjectKind::Sequence);
-                let y = crate::objects::section_of(shell, ui, p, r, y, o, id, crate::objects::ObjectKind::View);
-                crate::keys::problems_section(shell, ui, p, r, y + 4.0, o);
-            }
-        }
-        Some(c) if c == archforge_er::GENERALIZATION => {
-            // A generalization: its supertype's Subtypes section.
-            let sup = shell.session.as_ref().and_then(|s| {
-                let store = s.doc();
-                let sup = crate::subtypes::supertype_of_link(store, subject.obj?)?;
-                Some((sup, store.uuid(sup).ok()?))
-            });
-            if let (Some((sup, sup_id)), Some(id)) = (sup, subject.id) {
-                let y = crate::subtypes::subtypes_section(shell, ui, p, r, y, sup, sup_id, id);
-                crate::keys::problems_section(shell, ui, p, r, y + 4.0, sup);
-            }
-        }
-        Some(c) if c == archforge_er::DOMAIN || c == archforge_er::ENUM_TYPE => {
-            // A type: its schema's Types section, this type's row marked.
-            let schema = shell.session.as_ref().and_then(|s| {
-                let store = s.doc();
-                let schema = archforge_er::rules::schema_of(store, subject.obj?)?;
-                Some((schema, store.uuid(schema).ok()?, crate::types::kind_of(store, subject.obj?)?))
-            });
-            if let Some((schema, schema_id, _)) = schema {
-                let y = crate::types::types_section(shell, ui, p, r, y, schema, schema_id);
-                crate::keys::problems_section(shell, ui, p, r, y + 4.0, schema);
-            }
-        }
-        Some(c) if c == archforge_er::SEQUENCE || c == archforge_er::VIEW => {
-            // A sequence or view: its schema's section, its row marked.
-            let schema = shell.session.as_ref().and_then(|s| {
-                let store = s.doc();
-                let schema = archforge_er::rules::schema_of(store, subject.obj?)?;
-                Some((schema, store.uuid(schema).ok()?, crate::objects::kind_of(store, subject.obj?)?))
-            });
-            if let Some((schema, schema_id, kind)) = schema {
-                let y = crate::objects::section_of(shell, ui, p, r, y, schema, schema_id, kind);
-                crate::keys::problems_section(shell, ui, p, r, y + 4.0, schema);
-            }
-        }
-        Some(c) if c == archforge_er::ENTITY => entity_body(shell, ui, p, r, y, subject),
-        Some(c) if c == archforge_er::RELATIONSHIP => crate::relation::body(shell, ui, p, r, y, subject),
         Some(c) if c == archforge_diagram::DIAGRAM => {
             // A diagram: its name, and the schema it is of, which does not change.
             let half = (width - 16.0) / 2.0;
             name_field(shell, ui, p, pos2(r.left() + PAD, y), half, subject, "diagram.rename", "diagram");
-            let schema = shell
+            // The element it is of, named by its notation's word (ER's Schema).
+            let (schema, word) = shell
                 .session
                 .as_ref()
                 .and_then(|s| {
                     let store = s.doc();
-                    Some(archforge_core::name_of(store, crate::diagrams::schema_of(store, subject.obj?)?))
+                    let of = crate::diagrams::schema_of(store, subject.obj?)?;
+                    let word = crate::notation_ui::of(shell.notation_uis, store, of).and_then(|ui| ui.words(store, of)).map(|w| w.word);
+                    Some((archforge_core::name_of(store, of), word))
                 })
                 .unwrap_or_default();
             let at = pos2(r.left() + PAD + half + 16.0, y);
-            ux::text(&paint, at, &tr("Schema"), types::CAPTION, p.text_secondary, Some(half.max(0.0)));
+            ux::text(&paint, at, &word.unwrap_or_else(|| tr("Schema")), types::CAPTION, p.text_secondary, Some(half.max(0.0)));
             let field = Rect::from_min_size(at + vec2(0.0, 17.0), vec2(half.max(0.0), FIELD));
             paint.rect_filled(field, 6.0, p.field);
             ux::text_mid(&paint, field.left() + 8.0, field.center().y, &schema, types::SMALL, p.text, Some((half - 36.0).max(0.0)));
@@ -584,34 +533,12 @@ fn properties(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y:
                 crate::keys::problems_section(shell, ui, p, r, y + 17.0 + FIELD + 16.0, o);
             }
         }
-        Some(c) if c == archforge_er::ATTRIBUTE => {
-            // A column: its table's panel, the column's row marked.
-            let (entity, entity_id) = shell
-                .session
-                .as_ref()
-                .and_then(|s| {
-                    let store = s.doc();
-                    let e = archforge_er::rules::entity_of(store, subject.obj?)?;
-                    Some((e, store.uuid(e).ok()?))
-                })
-                .unzip();
-            if let (Some(entity), Some(entity_id)) = (entity, entity_id) {
-                let store = shell.session.as_ref().map(|s| s.doc());
-                let name = store.map(|st| archforge_core::name_of(st, entity)).unwrap_or_default();
-                let table = Subject {
-                    obj: Some(entity),
-                    id: Some(entity_id),
-                    class: Some(archforge_er::ENTITY),
-                    name,
-                    kind: tr("Table · model, in every diagram"),
-                    this: tr("This table"),
-                    on_this: tr("On this table · {n}"),
-                    word: tr("Table"),
-                };
-                entity_body(shell, ui, p, r, y, &table);
+        // An element of a notation: its notation's sections.
+        Some(_) => {
+            if let Some(notation) = notation {
+                notation.body(shell, ui, p, r, y, subject);
             }
         }
-        _ => {}
     }
 }
 
@@ -710,7 +637,7 @@ fn entity_rows(store: &Store, e: Obj) -> (Vec<ColumnRow>, bool) {
 }
 
 /// A table: name and kind, its columns with the editor, its keys.
-fn entity_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, subject: &Subject) {
+pub(crate) fn entity_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, subject: &Subject) {
     let paint = ui.painter().clone();
     let width = r.width() - 2.0 * PAD;
     let (Some(entity), Some(entity_id)) = (subject.obj, subject.id) else { return };

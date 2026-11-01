@@ -9,7 +9,7 @@
 //! angles can go around the tables in the way. With nothing selected the panel sets the diagram's
 //! routing (owner decisions on archforge-guc.1.1).
 
-use archforge_diagram::{DIAGRAM, NODE, diagram, edge, node, style};
+use archforge_diagram::{DIAGRAM, NODE, ProjectView, diagram, edge, node, style};
 use archforge_mof::{Obj, Store, Value};
 use egui::{Color32, Pos2, Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
@@ -97,7 +97,9 @@ fn targets(shell: &Shell) -> (Vec<Obj>, Vec<Obj>) {
             }
         }
         for e in all_edges.iter().filter(|e| **e == *o || element(**e, edge::ELEMENT) == Some(*o)) {
-            let styled = element(*e, edge::ELEMENT).is_some_and(|el| store.class_of(el).ok() != Some(archforge_er::GENERALIZATION));
+            // A line its notation draws in its own fixed look (ER's generalization) keeps it.
+            let styled = element(*e, edge::ELEMENT)
+                .is_some_and(|el| session.view().of_element(store, el).and_then(|n| n.line(store, el)).is_none_or(|l| l.styled));
             if styled && !edges.contains(e) {
                 edges.push(*e);
             }
@@ -107,9 +109,13 @@ fn targets(shell: &Shell) -> (Vec<Obj>, Vec<Obj>) {
 }
 
 /// The colour a node shows for `group` without a look of its own.
-fn default_colour(store: &Store, n: Obj, group: Group, p: &Palette) -> Color32 {
+fn default_colour(view: &ProjectView, store: &Store, n: Obj, group: Group, p: &Palette) -> Color32 {
     let el = store.get(n, node::ELEMENT).ok().and_then(|v| v.as_ref());
-    let entity = el.is_some_and(|e| store.class_of(e).ok() == Some(archforge_er::ENTITY));
+    // A card its notation draws (ER's table) takes the card's colours.
+    let entity = el.is_some_and(|e| {
+        let d = archforge_diagram::diagram_of(store, n);
+        d.zip(view.of_element(store, e)).and_then(|(d, notation)| notation.card(store, e, d)).is_some()
+    });
     match (group, el, entity) {
         (Group::Fill, _, true) => p.entity,
         (Group::Border, _, true) => p.entity_edge,
@@ -136,9 +142,9 @@ fn own(store: &Store, targets: &[Obj], group: Group) -> Option<Option<Color32>> 
 }
 
 /// The diagram's own colour for `group` on the first target, as the row's first swatch shows it.
-fn diagram_colour(store: &Store, targets: &[Obj], group: Group, p: &Palette) -> Color32 {
+fn diagram_colour(view: &ProjectView, store: &Store, targets: &[Obj], group: Group, p: &Palette) -> Color32 {
     match targets.first() {
-        Some(n) if group != Group::Line => default_colour(store, *n, group, p),
+        Some(n) if group != Group::Line => default_colour(view, store, *n, group, p),
         _ => p.text_secondary,
     }
 }
@@ -307,7 +313,7 @@ fn defaults(shell: &mut Shell, targets: &[Obj]) {
 }
 
 /// The heading's two lines for the targets: a name and what it is, on this diagram.
-fn heading(store: &Store, nodes: &[Obj], edges: &[Obj]) -> (String, String) {
+fn heading(uis: &[&'static dyn crate::notation_ui::NotationUi], store: &Store, nodes: &[Obj], edges: &[Obj]) -> (String, String) {
     let all: Vec<Obj> = nodes.iter().chain(edges).copied().collect();
     if all.len() != 1 {
         let n = all.len() as u64;
@@ -317,11 +323,7 @@ fn heading(store: &Store, nodes: &[Obj], edges: &[Obj]) -> (String, String) {
     let prop = if nodes.is_empty() { edge::ELEMENT } else { node::ELEMENT };
     match store.get(o, prop).ok().and_then(|v| v.as_ref()) {
         Some(e) => {
-            let word = match store.class_of(e).ok() {
-                Some(c) if c == archforge_er::ENTITY => tr("Table"),
-                Some(c) if c == archforge_er::RELATIONSHIP => tr("Relationship"),
-                _ => tr("Element"),
-            };
+            let word = crate::notation_ui::of(uis, store, e).and_then(|ui| ui.words(store, e)).map_or_else(|| tr("Element"), |w| w.word);
             (archforge_core::name_of(store, e), fmt(&tr("{kind} · this diagram"), &[("kind", &word)]))
         }
         None => {
@@ -355,11 +357,12 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) 
         return;
     }
     // What the targets show now, read before anything changes.
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
-    let (name, kind) = heading(store, &nodes, &edges);
-    let node_colours = [Group::Fill, Group::Border, Group::Text].map(|g| (own(store, &nodes, g), diagram_colour(store, &nodes, g, p)));
+    let Some(session) = shell.session.as_ref() else { return };
+    let (store, view) = (session.doc(), session.view());
+    let (name, kind) = heading(shell.notation_uis, store, &nodes, &edges);
+    let node_colours = [Group::Fill, Group::Border, Group::Text].map(|g| (own(store, &nodes, g), diagram_colour(view, store, &nodes, g, p)));
     let node_width = shown_width(store, &nodes);
-    let line_colour = (own(store, &edges, Group::Line), diagram_colour(store, &edges, Group::Line, p));
+    let line_colour = (own(store, &edges, Group::Line), diagram_colour(view, store, &edges, Group::Line, p));
     let line_width = shown_width(store, &edges);
     // What each line shows: its own routing, else its diagram's.
     let line_routing = same(edges.iter().map(|e| {

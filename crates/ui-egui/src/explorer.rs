@@ -1,9 +1,9 @@
 //! The Models explorer (slice W2 of the workspace chrome, from the design's page 03 frames and
 //! the cards "Models + menu" and "First schema named in place"): the tree of the open project's
-//! model over the session's store, starting at the schemas, with a schema's skills and tables
-//! under it and a table's skills and columns under that. A click selects through `view.select`,
-//! the `+` adds a schema, table or column through the ER commands and opens the name for typing
-//! in place, Enter or F2 renames, Delete removes through `element.remove` after a dialog when other
+//! model over the session's store, each notation's top elements in the model's order with the
+//! rows its notation puts under them (ER's schemas, their skills and tables, a table's skills and
+//! columns; `notation_ui`). A click selects through `view.select`, the `+` adds what the
+//! selection's notation offers and opens the name for typing in place, Enter or F2 renames, Delete removes through `element.remove` after a dialog when other
 //! things go with it. The filter narrows the rows to the names that contain it. Every change goes
 //! through the engine, so undo and redo cover it.
 //!
@@ -19,6 +19,7 @@ use serde_json::json;
 
 use crate::home::control;
 use crate::i18n::{fmt, tr, trn};
+use crate::notation_ui::{Added, NotationUi, Offer};
 use crate::ux::{self, Palette, icons, types};
 use crate::{Shell, widgets};
 
@@ -147,33 +148,72 @@ pub struct Delete {
     pub node: Option<Uuid>,
 }
 
-/// What a row shows.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Kind {
-    Schema,
-    Entity,
-    Attribute,
-    Skill,
-    /// A schema's domain or enum type (slice S5).
-    Domain,
-    Enum,
-    /// A schema's sequence or view (slice S7).
-    Sequence,
-    View,
-}
-
 /// One row of the tree as drawn.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Row {
     pub id: Uuid,
     pub obj: Obj,
     pub depth: u8,
-    pub kind: Kind,
+    /// What the row is, as its notation names it (`schema`, `table`, `column`, `skill`), and its
+    /// icon, drawn muted for a row under another's (a column).
+    pub kind: &'static str,
+    pub icon: &'static ux::Icon,
+    pub muted: bool,
     pub label: String,
     /// A column's type, after its name.
     pub detail: Option<String>,
     pub expandable: bool,
     pub expanded: bool,
+    /// Whether the row drags onto the canvas (a table).
+    pub draggable: bool,
+}
+
+/// What a notation's rows are made with: the filter, the rows opened and the skills by subject.
+pub(crate) struct Tree<'a> {
+    store: &'a Store,
+    filter: String,
+    expanded: &'a BTreeSet<Uuid>,
+    skills: std::collections::BTreeMap<Obj, Vec<Obj>>,
+    none: Vec<Obj>,
+}
+
+impl Tree<'_> {
+    /// Whether a filter narrows the rows: then every row with a match under it is open.
+    pub(crate) fn filtering(&self) -> bool {
+        !self.filter.is_empty()
+    }
+
+    /// Whether a name holds the filter.
+    pub(crate) fn matches(&self, label: &str) -> bool {
+        self.filter.is_empty() || label.to_lowercase().contains(&self.filter)
+    }
+
+    /// Whether the row of `obj` is open.
+    pub(crate) fn open(&self, obj: Obj) -> bool {
+        self.filtering() || uuid_of(self.store, obj).is_some_and(|id| self.expanded.contains(&id))
+    }
+
+    /// The skills that sit on `obj`.
+    pub(crate) fn skills(&self, obj: Obj) -> &[Obj] {
+        self.skills.get(&obj).unwrap_or(&self.none)
+    }
+
+    /// A row of `obj`, closed, without a detail.
+    pub(crate) fn row(&self, obj: Obj, depth: u8, kind: &'static str, icon: &'static ux::Icon, label: String) -> Option<Row> {
+        let id = uuid_of(self.store, obj)?;
+        Some(Row { id, obj, depth, kind, icon, muted: false, label, detail: None, expandable: false, expanded: false, draggable: false })
+    }
+
+    /// The rows of the skills on `obj` whose names hold the filter.
+    pub(crate) fn skill_rows(&self, obj: Obj, depth: u8) -> Vec<Row> {
+        self.skills(obj)
+            .iter()
+            .filter_map(|s| {
+                let label = archforge_core::skills::name_of(self.store, *s);
+                if self.matches(&label) { self.row(*s, depth, "skill", &icons::SKILL, label) } else { None }
+            })
+            .collect()
+    }
 }
 
 fn uuid_of(store: &Store, obj: Obj) -> Option<Uuid> {
@@ -184,15 +224,12 @@ fn name_of(store: &Store, obj: Obj) -> String {
     archforge_core::name_of(store, obj)
 }
 
-/// The schemas of the model, in the order the model lists them.
-fn schemas(store: &Store) -> Vec<Obj> {
+/// The model's members each notation lists at the top, with their notation, in the model's order.
+fn tops(uis: &[&'static dyn NotationUi], store: &Store) -> Vec<(Obj, &'static dyn NotationUi)> {
     let Some(model) = archforge_core::skills::model_of(store) else { return Vec::new() };
-    store
-        .list(model, archforge_core::model::MEMBER)
-        .unwrap_or_default()
-        .iter()
-        .filter_map(Value::as_ref)
-        .filter(|o| store.is_alive(*o) && store.class_of(*o).ok() == Some(archforge_er::SCHEMA))
+    children_of(store, model, archforge_core::model::MEMBER)
+        .into_iter()
+        .filter_map(|m| uis.iter().copied().find(|u| u.is_top(store, m)).map(|u| (m, u)))
         .collect()
 }
 
@@ -213,94 +250,11 @@ fn skills_by_subject(store: &Store) -> std::collections::BTreeMap<Obj, Vec<Obj>>
 
 /// The tree's rows for the store, the opened rows and the filter: a filter shows the rows whose
 /// name holds it and their ancestors, all open.
-pub fn rows(store: &Store, state: &State) -> Vec<Row> {
-    let filter = state.filter.trim().to_lowercase();
+pub(crate) fn rows(uis: &[&'static dyn NotationUi], store: &Store, state: &State) -> Vec<Row> {
+    let t = Tree { store, filter: state.filter.trim().to_lowercase(), expanded: &state.expanded, skills: skills_by_subject(store), none: Vec::new() };
     let mut out = Vec::new();
-    let push = |out: &mut Vec<Row>, obj: Obj, depth: u8, kind: Kind, label: String, detail: Option<String>, expandable: bool, expanded: bool| {
-        if let Some(id) = uuid_of(store, obj) {
-            out.push(Row { id, obj, depth, kind, label, detail, expandable, expanded });
-        }
-    };
-    let open = |obj: Obj| -> bool { !filter.is_empty() || uuid_of(store, obj).is_some_and(|id| state.expanded.contains(&id)) };
-    let matches = |label: &str| filter.is_empty() || label.to_lowercase().contains(&filter);
-    let skills = skills_by_subject(store);
-    let none = Vec::new();
-    for schema in schemas(store) {
-        let schema_skills = skills.get(&schema).unwrap_or(&none);
-        let entities = children_of(store, schema, archforge_er::schema::ENTITY);
-        let mut rows_under = Vec::new();
-        for s in schema_skills {
-            let label = archforge_core::skills::name_of(store, *s);
-            if matches(&label) {
-                push(&mut rows_under, *s, 1, Kind::Skill, label, None, false, false);
-            }
-        }
-        for d in archforge_er::rules::domains_of(store, schema) {
-            let label = name_of(store, d);
-            if matches(&label) {
-                let base = Some(archforge_er::rules::text_of(store, d, archforge_er::domain::BASE_TYPE)).filter(|t| !t.is_empty());
-                push(&mut rows_under, d, 1, Kind::Domain, label, base, false, false);
-            }
-        }
-        for en in archforge_er::rules::enums_of(store, schema) {
-            let label = name_of(store, en);
-            if matches(&label) {
-                let n = archforge_er::rules::literals_of(store, en).len();
-                push(&mut rows_under, en, 1, Kind::Enum, label, Some(trn("{n} literal", "{n} literals", n as u64)), false, false);
-            }
-        }
-        for q in archforge_er::rules::sequences_of(store, schema) {
-            let label = name_of(store, q);
-            if matches(&label) {
-                push(&mut rows_under, q, 1, Kind::Sequence, label, None, false, false);
-            }
-        }
-        for v in archforge_er::rules::views_of(store, schema) {
-            let label = name_of(store, v);
-            if matches(&label) {
-                push(&mut rows_under, v, 1, Kind::View, label, None, false, false);
-            }
-        }
-        for e in &entities {
-            let e_label = name_of(store, *e);
-            let entity_skills = skills.get(e).unwrap_or(&none);
-            let attributes = children_of(store, *e, archforge_er::entity::ATTRIBUTE);
-            let mut under_entity = Vec::new();
-            for s in entity_skills {
-                let label = archforge_core::skills::name_of(store, *s);
-                if matches(&label) {
-                    push(&mut under_entity, *s, 2, Kind::Skill, label, None, false, false);
-                }
-            }
-            for a in &attributes {
-                let label = name_of(store, *a);
-                let ty = Some(archforge_er::rules::type_display(store, *a)).filter(|t| !t.is_empty());
-                if matches(&label) {
-                    push(&mut under_entity, *a, 2, Kind::Attribute, label, ty, false, false);
-                }
-            }
-            let expandable = if filter.is_empty() { !entity_skills.is_empty() || !attributes.is_empty() } else { !under_entity.is_empty() };
-            if matches(&e_label) || !under_entity.is_empty() {
-                let expanded = expandable && open(*e);
-                push(&mut rows_under, *e, 1, Kind::Entity, e_label, None, expandable, expanded);
-                if expanded {
-                    rows_under.extend(under_entity);
-                }
-            }
-        }
-        let s_label = name_of(store, schema);
-        let has_types = !archforge_er::rules::domains_of(store, schema).is_empty()
-            || !archforge_er::rules::enums_of(store, schema).is_empty()
-            || !archforge_er::rules::sequences_of(store, schema).is_empty()
-            || !archforge_er::rules::views_of(store, schema).is_empty();
-        let expandable = if filter.is_empty() { !schema_skills.is_empty() || !entities.is_empty() || has_types } else { !rows_under.is_empty() };
-        if matches(&s_label) || !rows_under.is_empty() {
-            let expanded = expandable && open(schema);
-            push(&mut out, schema, 0, Kind::Schema, s_label, None, expandable, expanded);
-            if expanded {
-                out.extend(rows_under);
-            }
-        }
+    for (top, ui) in tops(uis, store) {
+        out.extend(ui.tree(store, top, &t));
         if out.len() >= MAX_ROWS {
             out.truncate(MAX_ROWS);
             break;
@@ -315,30 +269,17 @@ pub fn fresh_name(stem: &str, taken: impl Iterator<Item = String>, snake: bool) 
     (1..=10_000u32).map(|n| if snake { format!("{stem}_{n}") } else { format!("{stem} {n}") }).find(|name| !taken.contains(&name.to_lowercase()))
 }
 
-/// What `+` offers: the kinds that can be added at the selection, the first being the default.
-fn offers(store: &Store, selection: Option<Obj>) -> Vec<Kind> {
-    match selection.and_then(|o| store.class_of(o).ok()) {
-        Some(c) if c == archforge_er::SCHEMA => vec![Kind::Entity, Kind::Schema],
-        Some(c) if c == archforge_er::ENTITY || c == archforge_er::ATTRIBUTE => vec![Kind::Attribute, Kind::Entity],
-        _ => vec![Kind::Schema],
-    }
-}
-
-fn kind_word(kind: Kind) -> String {
-    match kind {
-        Kind::Schema => tr("Schema"),
-        Kind::Entity => tr("Table"),
-        Kind::Attribute => tr("Column"),
-        Kind::Skill => tr("Skill"),
-        Kind::Domain => tr("Domain"),
-        Kind::Enum => tr("Enum type"),
-        Kind::Sequence => tr("Sequence"),
-        Kind::View => tr("View"),
+/// What `+` offers at the selection, the first being the default: what the selection's notation
+/// adds there, or what every notation adds at the model's root.
+fn offers(uis: &[&'static dyn NotationUi], store: &Store, selection: Option<Obj>) -> Vec<(&'static dyn NotationUi, Offer)> {
+    match selection.and_then(|o| crate::notation_ui::of(uis, store, o)) {
+        Some(ui) => ui.offers(store, selection).into_iter().map(|o| (ui, o)).collect(),
+        None => uis.iter().flat_map(|ui| ui.offers(store, None).into_iter().map(move |o| (*ui, o))).collect(),
     }
 }
 
 /// Runs a command on the open project's session, keeping the engine's refusal as text.
-fn run(shell: &mut Shell, id: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
+pub(crate) fn run(shell: &mut Shell, id: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
     let Some(session) = shell.session.as_mut() else { return Err(crate::i18n::tr("The model could not be opened")) };
     session.execute(id, &params).map(|o| o.value).map_err(|e| e.to_string())
 }
@@ -352,84 +293,26 @@ fn select(shell: &mut Shell, id: Option<Uuid>) {
     let _ = run(shell, "view.select", json!({ "ids": ids }));
 }
 
-/// Adds an element of `kind` at the selection with a fresh default name, selects it and opens its
-/// name for typing. A schema or table needs a parent of the right class.
-pub fn add(shell: &mut Shell, kind: Kind) {
+/// Adds what the offer `key` names at the selection with a fresh default name, selects it and
+/// opens its name for typing; the rows it sits under open, and the filter goes, so it is listed.
+pub fn add(shell: &mut Shell, key: &str) {
     if shell.explorer.rename.is_some() {
         commit_rename(shell);
     }
     shell.explorer.notice = None;
     let Some(session) = shell.session.as_ref() else { return };
-    let store = session.doc();
     let sel = selected(shell);
-    // The parents the new row sits under, opened so it is seen; the filter goes, so it is listed.
-    let mut parents: Vec<Uuid> = Vec::new();
-    // The table a column is added to: its nodes grow with the column, in the same step.
-    let mut grow: Option<Uuid> = None;
-    let no_name = || tr("No free name is left");
-    let (cmd, params) = match kind {
-        Kind::Schema => {
-            let Some(name) = fresh_name("Schema", schemas(store).into_iter().map(|s| name_of(store, s)), false) else {
-                shell.explorer.notice = Some(no_name());
-                return;
-            };
-            ("er.schema.add", json!({ "name": name }))
+    let Some(ui) = offers(shell.notation_uis, session.doc(), sel).into_iter().find(|(_, o)| o.key == key).map(|(ui, _)| ui) else { return };
+    match ui.add(shell, key, sel) {
+        None => {}
+        Some(Ok(Added { id, parents })) => {
+            shell.explorer.expanded.extend(parents);
+            shell.explorer.filter.clear();
+            let name = shell.session.as_ref().and_then(|s| s.doc().by_uuid(id).map(|o| name_of(s.doc(), o))).unwrap_or_default();
+            shell.explorer.rename = Some(Rename::new(id, name, true));
+            shell.explorer.focused = true;
         }
-        Kind::Entity => {
-            let Some(schema) = sel.and_then(|o| archforge_er::rules::schema_of(store, o)) else { return };
-            let taken = children_of(store, schema, archforge_er::schema::ENTITY).into_iter().map(|e| name_of(store, e));
-            let Some(name) = fresh_name("Table", taken, false) else {
-                shell.explorer.notice = Some(no_name());
-                return;
-            };
-            let Some(schema_id) = uuid_of(store, schema) else { return };
-            parents.push(schema_id);
-            ("er.entity.add", json!({ "schema": schema_id.to_string(), "name": name }))
-        }
-        Kind::Attribute => {
-            let entity = sel.and_then(|o| match store.class_of(o).ok() {
-                Some(c) if c == archforge_er::ENTITY => Some(o),
-                Some(c) if c == archforge_er::ATTRIBUTE => archforge_er::rules::entity_of(store, o),
-                _ => None,
-            });
-            let Some(entity) = entity else { return };
-            let taken = children_of(store, entity, archforge_er::entity::ATTRIBUTE).into_iter().map(|a| name_of(store, a));
-            let Some(name) = fresh_name("column", taken, true) else {
-                shell.explorer.notice = Some(no_name());
-                return;
-            };
-            let Some(entity_id) = uuid_of(store, entity) else { return };
-            parents.extend(archforge_er::rules::schema_of(store, entity).and_then(|s| uuid_of(store, s)));
-            parents.push(entity_id);
-            grow = Some(entity_id);
-            ("er.attribute.add", json!({ "entity": entity_id.to_string(), "name": name, "type": "TEXT" }))
-        }
-        Kind::Skill | Kind::Domain | Kind::Enum | Kind::Sequence | Kind::View => return,
-    };
-    let out = match (kind, grow) {
-        // A table lands on an open diagram of its schema too, in the same step.
-        (Kind::Entity, _) => {
-            let schema = params.get("schema").and_then(|v| v.as_str()).and_then(Uuid::parse);
-            let name = params.get("name").and_then(|v| v.as_str()).unwrap_or_default().to_string();
-            match schema {
-                Some(schema) => crate::editing::add_entity(shell, schema, &name).map(|id| json!({ "id": id.to_string() })),
-                None => run(shell, cmd, params),
-            }
-        }
-        (_, Some(entity)) => crate::editing::run_growing(shell, &tr("Add column"), cmd, params, entity),
-        _ => run(shell, cmd, params),
-    };
-    match out {
-        Ok(out) => {
-            if let Some(id) = out.get("id").and_then(|v| v.as_str()).and_then(Uuid::parse) {
-                shell.explorer.expanded.extend(parents);
-                shell.explorer.filter.clear();
-                let name = shell.session.as_ref().and_then(|s| s.doc().by_uuid(id).map(|o| name_of(s.doc(), o))).unwrap_or_default();
-                shell.explorer.rename = Some(Rename::new(id, name, true));
-                shell.explorer.focused = true;
-            }
-        }
-        Err(e) => shell.explorer.notice = Some(e),
+        Some(Err(e)) => shell.explorer.notice = Some(e),
     }
 }
 
@@ -448,12 +331,7 @@ fn commit_rename(shell: &mut Shell) {
         shell.explorer.rename = None;
         return;
     }
-    let cmd = match store.class_of(obj).ok() {
-        Some(c) if c == archforge_er::SCHEMA => Some(("er.schema.rename", "schema")),
-        Some(c) if c == archforge_er::ENTITY => Some(("er.entity.rename", "entity")),
-        Some(c) if c == archforge_er::ATTRIBUTE => Some(("er.attribute.rename", "attribute")),
-        _ => None,
-    };
+    let cmd = crate::notation_ui::of(shell.notation_uis, store, obj).and_then(|ui| ui.rename(store, obj));
     let Some((cmd, key)) = cmd else {
         shell.explorer.rename = None;
         return;
@@ -468,33 +346,6 @@ fn commit_rename(shell: &mut Shell) {
     }
 }
 
-/// What goes with `obj` when it is removed: the relationships that reach it, and the keys and
-/// foreign keys the ER cascade takes.
-pub(crate) fn consequences(store: &Store, obj: Obj) -> (usize, usize, usize) {
-    let relationships = match store.class_of(obj).ok() {
-        Some(c) if c == archforge_er::ENTITY => store
-            .referrers(obj)
-            .into_iter()
-            .filter(|(_, p)| *p == archforge_er::relationship::FROM || *p == archforge_er::relationship::TO)
-            .map(|(r, _)| r)
-            .collect::<BTreeSet<_>>()
-            .len(),
-        Some(c) if c == archforge_er::SCHEMA => {
-            let own: BTreeSet<Obj> = children_of(store, obj, archforge_er::schema::RELATIONSHIP).into_iter().collect();
-            let reaching: BTreeSet<Obj> = children_of(store, obj, archforge_er::schema::ENTITY)
-                .into_iter()
-                .flat_map(|e| store.referrers(e))
-                .filter(|(_, p)| *p == archforge_er::relationship::FROM || *p == archforge_er::relationship::TO)
-                .map(|(r, _)| r)
-                .collect();
-            own.union(&reaching).count()
-        }
-        _ => 0,
-    };
-    let (keys, fks) = archforge_er::commands::dependents(store, obj).unwrap_or_default();
-    (relationships, keys.len(), fks.len())
-}
-
 /// Removes the selection: at once when nothing else goes with it, else after the dialog.
 pub fn remove_selection(shell: &mut Shell) {
     shell.explorer.notice = None;
@@ -506,18 +357,9 @@ pub fn remove_selection(shell: &mut Shell) {
         return;
     }
     let Some(id) = uuid_of(store, obj) else { return };
-    let (relationships, keys, foreign_keys) = consequences(store, obj);
-    // A schema's types, sequences and views count as what goes with it too (slices S5 and S7).
-    let has_children = [
-        archforge_er::schema::ENTITY,
-        archforge_er::schema::DOMAIN,
-        archforge_er::schema::ENUM_TYPE,
-        archforge_er::schema::SEQUENCE,
-        archforge_er::schema::VIEW,
-        archforge_er::entity::ATTRIBUTE,
-    ]
-    .into_iter()
-    .any(|prop| !children_of(store, obj, prop).is_empty());
+    let ui = crate::notation_ui::of(shell.notation_uis, store, obj);
+    let (relationships, keys, foreign_keys) = ui.map(|u| u.consequences(store, obj)).unwrap_or_default();
+    let has_children = ui.is_some_and(|u| u.has_children(store, obj));
     if relationships + keys + foreign_keys == 0 && !has_children {
         if let Err(e) = run(shell, "element.remove", json!({ "ids": [id.to_string()] })) {
             shell.explorer.notice = Some(e);
@@ -552,26 +394,23 @@ fn toggle(state: &mut State, row: &Row) {
     }
 }
 
-/// Every row that can open: the schemas and their tables.
-fn foldable(store: &Store) -> Vec<Uuid> {
-    let mut out = Vec::new();
-    for schema in schemas(store) {
-        out.extend(uuid_of(store, schema));
-        out.extend(children_of(store, schema, archforge_er::schema::ENTITY).into_iter().filter_map(|e| uuid_of(store, e)));
-    }
-    out
+/// Every row that can open (ER's schemas and their tables).
+fn foldable(uis: &[&'static dyn NotationUi], store: &Store) -> Vec<Uuid> {
+    tops(uis, store).into_iter().flat_map(|(top, ui)| ui.foldable(store, top)).filter_map(|o| uuid_of(store, o)).collect()
 }
 
-/// Opens the schema and the table of the element selected, once per selection, so its row shows.
-fn reveal(state: &mut State, store: &Store, selected: Option<Obj>) {
+/// Opens the rows the selected element sits under (ER's schema and table), once per selection, so
+/// its row shows.
+fn reveal(uis: &[&'static dyn NotationUi], state: &mut State, store: &Store, selected: Option<Obj>) {
     let id = selected.and_then(|o| uuid_of(store, o));
     if id == state.revealed {
         return;
     }
     state.revealed = id;
-    if let Some(o) = selected {
-        let parents = [archforge_er::rules::entity_of(store, o).filter(|e| *e != o), archforge_er::rules::schema_of(store, o).filter(|s| *s != o)];
-        state.expanded.extend(parents.into_iter().flatten().filter_map(|p| uuid_of(store, p)));
+    if let Some(o) = selected
+        && let Some(ui) = crate::notation_ui::of(uis, store, o)
+    {
+        state.expanded.extend(ui.parents(store, o).into_iter().filter_map(|p| uuid_of(store, p)));
     }
 }
 
@@ -593,7 +432,7 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
         shell.explorer.menu_open = !menu_open;
     }
     // Expand all, or Collapse all once every row is open; a filter opens everything it shows.
-    let folds = shell.session.as_ref().map(|s| foldable(s.doc())).unwrap_or_default();
+    let folds = shell.session.as_ref().map(|s| foldable(shell.notation_uis, s.doc())).unwrap_or_default();
     let all_open = !folds.is_empty() && folds.iter().all(|id| shell.explorer.expanded.contains(id));
     let unfiltered = shell.explorer.filter.trim().is_empty();
     let fold_all = Rect::from_min_size(pos2(r.right() - 68.0, r.top() + 20.0), Vec2::splat(24.0));
@@ -614,7 +453,7 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     let typing_at_start = shell.explorer.rename.is_some();
     let tree = Rect::from_min_max(at(0.0, FIRST_ROW - 12.0), r.max);
     let rows = match &shell.session {
-        Some(s) => rows(s.doc(), &shell.explorer),
+        Some(s) => rows(shell.notation_uis, s.doc(), &shell.explorer),
         None => Vec::new(),
     };
     if rows.is_empty() {
@@ -644,7 +483,7 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     }
     let selected_obj = selected(shell);
     if let Some(store) = shell.session.as_ref().map(|s| s.doc()) {
-        reveal(&mut shell.explorer, store, selected_obj);
+        reveal(shell.notation_uis, &mut shell.explorer, store, selected_obj);
     }
     // The rows scroll under the filter; a row newly selected is brought into view.
     let follow = selected_obj.and_then(|o| rows.iter().position(|row| row.obj == o).map(|i| (i, rows[i].id)));
@@ -737,7 +576,7 @@ fn tree_row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, column: Rect, y: 
     }
     let id = format!("workspace.explorer.row.{}", row.id);
     // A table row drags onto the canvas; its click still selects.
-    if row.kind == Kind::Entity {
+    if row.draggable {
         let drag = ui.interact(hit, widgets::egui_id(&format!("{id}.drag")), Sense::drag());
         if drag.drag_started() {
             shell.explorer.dragging = Some(row.id);
@@ -762,17 +601,7 @@ fn tree_row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, column: Rect, y: 
     // The icon and the name share the row's middle line.
     let mid = hit.center().y;
     let icon_ink = if is_selected { p.accent } else { p.text_secondary };
-    let icon = match row.kind {
-        Kind::Schema => &icons::SCHEMA,
-        Kind::Entity => &icons::TABLE,
-        Kind::Skill => &icons::SKILL,
-        Kind::Domain => &icons::DOMAIN,
-        Kind::Enum => &icons::ENUM,
-        Kind::Sequence => &icons::SEQUENCE,
-        Kind::View => &icons::VIEW,
-        Kind::Attribute => &icons::COLUMN,
-    };
-    ux::icon_mid(&paint, pos2(column.left() + 38.5 + indent, mid), icon, if row.kind == Kind::Attribute { p.text_muted } else { icon_ink });
+    ux::icon_mid(&paint, pos2(column.left() + 38.5 + indent, mid), row.icon, if row.muted { p.text_muted } else { icon_ink });
     let name_x = column.left() + 53.0 + indent;
     let renaming = shell.explorer.rename.as_ref().is_some_and(|r| r.target == row.id);
     if renaming {
@@ -884,7 +713,7 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, rows: &[Row], selected_obj: Option
             }
         } else if right && row.expandable {
             shell.explorer.expanded.insert(row.id);
-        } else if rename && row.kind != Kind::Skill {
+        } else if rename && row.kind != "skill" {
             shell.explorer.rename = Some(Rename::new(row.id, row.label.clone(), false));
         } else if delete {
             remove_selection(shell);
@@ -895,8 +724,8 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, rows: &[Row], selected_obj: Option
 /// The `+` menu under its button: what can be added at the selection, Folder shown but not yet
 /// live.
 fn add_menu(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, anchor: Rect) {
-    let store_offers = shell.session.as_ref().map(|s| offers(s.doc(), selected(shell))).unwrap_or_default();
-    let mut items: Vec<(Option<Kind>, String)> = store_offers.iter().map(|k| (Some(*k), kind_word(*k))).collect();
+    let store_offers = shell.session.as_ref().map(|s| offers(shell.notation_uis, s.doc(), selected(shell))).unwrap_or_default();
+    let mut items: Vec<(Option<&'static str>, String)> = store_offers.into_iter().map(|(_, o)| (Some(o.key), o.word)).collect();
     items.push((None, tr("Folder")));
     let width = 200.0;
     let height = 8.0 + items.len() as f32 * 30.0;
@@ -918,7 +747,13 @@ fn add_menu(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, anchor: Rect) {
 }
 
 /// The add menu's rows; gives the row picked, a kind or the folder.
-fn add_menu_rows(shell: &mut Shell, ui: &egui::Ui, p: &Palette, menu: Rect, items: &[(Option<Kind>, String)]) -> Option<Option<Kind>> {
+fn add_menu_rows(
+    shell: &mut Shell,
+    ui: &egui::Ui,
+    p: &Palette,
+    menu: Rect,
+    items: &[(Option<&'static str>, String)],
+) -> Option<Option<&'static str>> {
     let width = menu.width();
     let paint = ui.painter().clone();
     ux::shadow(&paint, menu, 8.0, p.shadow);
@@ -927,18 +762,8 @@ fn add_menu_rows(shell: &mut Shell, ui: &egui::Ui, p: &Palette, menu: Rect, item
     let mut picked = None;
     for (i, (kind, label)) in items.iter().enumerate() {
         let row = Rect::from_min_size(pos2(menu.left() + 4.0, menu.top() + 4.0 + i as f32 * 30.0), vec2(width - 8.0, 30.0));
-        let id = match kind {
-            Some(Kind::Schema) => "workspace.explorer.add.schema",
-            Some(Kind::Entity) => "workspace.explorer.add.table",
-            Some(Kind::Attribute) => "workspace.explorer.add.column",
-            Some(Kind::Skill) => "workspace.explorer.add.skill",
-            Some(Kind::Domain) => "workspace.explorer.add.domain",
-            Some(Kind::Enum) => "workspace.explorer.add.enum",
-            Some(Kind::Sequence) => "workspace.explorer.add.sequence",
-            Some(Kind::View) => "workspace.explorer.add.view",
-            None => "workspace.explorer.add.folder",
-        };
-        let resp = control(shell, ui, id, "menu-item", row, kind.is_some());
+        let id = format!("workspace.explorer.add.{}", kind.unwrap_or("folder"));
+        let resp = control(shell, ui, &id, "menu-item", row, kind.is_some());
         if resp.hovered() && kind.is_some() {
             paint.rect_filled(row, 5.0, p.page);
         }
