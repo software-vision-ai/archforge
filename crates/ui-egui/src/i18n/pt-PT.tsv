@@ -251,6 +251,11 @@ str		Key status	Estado das chaves
 str		Grid	Grelha
 str		Arrange diagram	Organizar o diagrama
 str		Move cardinality	Mover a cardinalidade
+str		Settings	Definições
+str		How Archforge knows you.	Como o Archforge o conhece.
+str		Your name	O seu nome
+str		The bar shows your initials. Without a name they are JD, for John Doe.	A barra mostra as suas iniciais. Sem nome são JD, de John Doe.
+str		Done	Concluído
 str		Add table	Adicionar tabela
 str		Place table	Colocar tabela
 str		Already on this diagram	Já está neste diagrama

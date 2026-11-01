@@ -1,5 +1,5 @@
 //! Renders the window offscreen to a PNG, without opening one. Usage:
-//! `cargo run -p archforge-ui-egui --features snapshot --example snapshot -- <out.png> [light|dark] [width height [scale]] [--screen home|home-gallery|home-search|new-project|new-project-failed|workspace|workspace-schema|workspace-table|workspace-skills|workspace-skill-tab|workspace-skill-preview|workspace-skill-link|workspace-skill-new|workspace-diagram-empty|workspace-diagram|workspace-appearance|workspace-appearance-line|workspace-appearance-picker|workspace-entity-new|workspace-cardinality|workspace-relationship|workspace-key-editor|workspace-column-editor|workspace-index-editor|workspace-mapping-table|workspace-schema-types|workspace-subtypes|workspace-schema-objects|workspace-cross-schema|workspace-routing|workspace-search|workspace-column-selected]`
+//! `cargo run -p archforge-ui-egui --features snapshot --example snapshot -- <out.png> [light|dark] [width height [scale]] [--screen home|home-gallery|home-search|home-settings|new-project|new-project-failed|workspace|workspace-schema|workspace-table|workspace-skills|workspace-skill-tab|workspace-skill-preview|workspace-skill-link|workspace-skill-new|workspace-diagram-empty|workspace-diagram|workspace-appearance|workspace-appearance-line|workspace-appearance-picker|workspace-entity-new|workspace-cardinality|workspace-relationship|workspace-key-editor|workspace-column-editor|workspace-index-editor|workspace-mapping-table|workspace-schema-types|workspace-subtypes|workspace-schema-objects|workspace-cross-schema|workspace-routing|workspace-search|workspace-column-selected]`
 
 use archforge_ui_egui::offscreen::Screen;
 use archforge_ui_egui::theme::ThemeKind;
@@ -21,6 +21,7 @@ fn run() -> Result<(), String> {
             Some("home") => Screen::Home,
             Some("home-gallery") => Screen::HomeGallery,
             Some("home-search") => Screen::HomeSearch,
+            Some("home-settings") => Screen::HomeSettings,
             Some("new-project") => Screen::NewProject,
             Some("new-project-failed") => Screen::NewProjectFailed,
             Some("workspace") => Screen::Workspace,
@@ -52,7 +53,7 @@ fn run() -> Result<(), String> {
             Some("workspace-relationship") => Screen::WorkspaceRelationship,
             other => {
                 return Err(format!(
-                    "--screen {other:?} is not home, home-gallery, home-search, new-project, new-project-failed, workspace, workspace-schema, workspace-table, workspace-skills, workspace-skill-tab, workspace-skill-preview, workspace-skill-link, workspace-skill-new, workspace-diagram-empty, workspace-diagram, workspace-appearance, workspace-appearance-line, workspace-appearance-picker, workspace-entity-new, workspace-cardinality, workspace-relationship, workspace-key-editor, workspace-column-editor, workspace-index-editor, workspace-mapping-table, workspace-schema-types, workspace-subtypes, workspace-schema-objects, workspace-cross-schema, workspace-routing, workspace-search or workspace-column-selected; {USAGE}"
+                    "--screen {other:?} is not home, home-gallery, home-search, home-settings, new-project, new-project-failed, workspace, workspace-schema, workspace-table, workspace-skills, workspace-skill-tab, workspace-skill-preview, workspace-skill-link, workspace-skill-new, workspace-diagram-empty, workspace-diagram, workspace-appearance, workspace-appearance-line, workspace-appearance-picker, workspace-entity-new, workspace-cardinality, workspace-relationship, workspace-key-editor, workspace-column-editor, workspace-index-editor, workspace-mapping-table, workspace-schema-types, workspace-subtypes, workspace-schema-objects, workspace-cross-schema, workspace-routing, workspace-search or workspace-column-selected; {USAGE}"
                 ));
             }
         };

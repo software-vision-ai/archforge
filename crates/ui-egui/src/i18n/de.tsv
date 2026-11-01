@@ -251,6 +251,11 @@ str		Key status	Schlüsselstatus
 str		Grid	Raster
 str		Arrange diagram	Diagramm anordnen
 str		Move cardinality	Kardinalität verschieben
+str		Settings	Einstellungen
+str		How Archforge knows you.	Wie Archforge Sie kennt.
+str		Your name	Ihr Name
+str		The bar shows your initials. Without a name they are JD, for John Doe.	Die Leiste zeigt Ihre Initialen. Ohne Namen sind es JD, für John Doe.
+str		Done	Fertig
 str		Add table	Tabelle hinzufügen
 str		Place table	Tabelle platzieren
 str		Already on this diagram	Schon in diesem Diagramm

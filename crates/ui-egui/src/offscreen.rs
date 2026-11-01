@@ -12,6 +12,8 @@ pub enum Screen {
     HomeGallery,
     /// The same with its search open, nothing typed yet.
     HomeSearch,
+    /// Home with the Settings dialog open, a name entered (archforge-9ln.4.1).
+    HomeSettings,
     /// The New project dialog over Home, a name typed and the usual folder.
     NewProject,
     /// The same after a creation failed for want of Dolt.
@@ -95,7 +97,7 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
         r[2..].copy_from_slice(&i.to_be_bytes());
         archforge_mof::Uuid::v7(1_761_670_800_000, r)
     });
-    let mut shell = Shell::new(Services { user_name: Some("Jordan Dale".into()), ids: Some(ids), ..Services::default() });
+    let mut shell = Shell::new(Services { ids: Some(ids), ..Services::default() });
     shell.state.theme = theme;
     if matches!(screen, Screen::HomeGallery | Screen::HomeSearch) {
         shell.services.projects_folder = Some(Folder { path: "/Users/robin/Documents/Archforge".into(), label: "Documents / Archforge".into() });
@@ -107,7 +109,14 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
         shell.state.pin(std::path::Path::new("/Users/robin/Projects/Architecture"));
         shell.home_search.open = screen == Screen::HomeSearch;
     }
-    if !matches!(screen, Screen::Home | Screen::HomeGallery | Screen::HomeSearch | Screen::NewProject | Screen::NewProjectFailed) {
+    if screen == Screen::HomeSettings {
+        shell.state.user_name = "Ada Lovelace".into();
+        crate::settings::open(&mut shell);
+    }
+    if !matches!(
+        screen,
+        Screen::Home | Screen::HomeGallery | Screen::HomeSearch | Screen::HomeSettings | Screen::NewProject | Screen::NewProjectFailed
+    ) {
         shell.services.projects_folder = Some(Folder { path: "/Users/robin/Documents/Archforge".into(), label: "Documents / Archforge".into() });
         shell.open_project(crate::Opened {
             name: "Commerce platform".into(),

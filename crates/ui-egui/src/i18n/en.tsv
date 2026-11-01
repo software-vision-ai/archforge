@@ -250,6 +250,11 @@ str		Key status	Key status
 str		Grid	Grid
 str		Arrange diagram	Arrange diagram
 str		Move cardinality	Move cardinality
+str		Settings	Settings
+str		How Archforge knows you.	How Archforge knows you.
+str		Your name	Your name
+str		The bar shows your initials. Without a name they are JD, for John Doe.	The bar shows your initials. Without a name they are JD, for John Doe.
+str		Done	Done
 str		Add table	Add table
 str		Place table	Place table
 str		Already on this diagram	Already on this diagram

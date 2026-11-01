@@ -251,6 +251,11 @@ str		Key status	キーの状態
 str		Grid	グリッド
 str		Arrange diagram	ダイアグラムを整列
 str		Move cardinality	多重度を移動
+str		Settings	設定
+str		How Archforge knows you.	Archforge があなたを識別する方法です。
+str		Your name	あなたの名前
+str		The bar shows your initials. Without a name they are JD, for John Doe.	バーにはあなたのイニシャルが表示されます。名前がない場合は John Doe の JD です。
+str		Done	完了
 str		Add table	テーブルを追加
 str		Place table	テーブルを配置
 str		Already on this diagram	この図にはすでにあります

@@ -30,6 +30,8 @@ pub struct UiState {
     /// How Home shows the recent projects, and in which order; kept as the user left them.
     pub recent_view: RecentView,
     pub recent_sort: RecentSort,
+    /// The user's name as entered in Settings; the bar shows its initials. Empty: JD, for John Doe.
+    pub user_name: String,
 }
 
 /// The recent list as a file holds it: the entries that read, the others left out (the next
@@ -115,6 +117,7 @@ impl Default for UiState {
             pinned: Vec::new(),
             recent_view: RecentView::List,
             recent_sort: RecentSort::LastOpened,
+            user_name: String::new(),
         }
     }
 }
@@ -163,6 +166,7 @@ impl UiState {
     /// listed twice; pinned folders that are not absolute, too long or pinned twice; more than
     /// either list keeps. Says in the log how many went.
     pub fn sanitize(&mut self) {
+        self.user_name = crate::settings::clean(&self.user_name);
         let pins = self.pinned.len();
         let mut pinned = std::collections::HashSet::new();
         self.pinned.retain(|p| pin_ok(p) && pinned.insert(p.clone()));

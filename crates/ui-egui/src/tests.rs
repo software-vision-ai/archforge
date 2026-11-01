@@ -18,7 +18,7 @@ fn click(h: &mut Harness<'static, Shell>, at: egui::Pos2) {
 /// The real shell in the harness at the design's frame size.
 fn harness(theme: ThemeKind) -> Harness<'static, Shell> {
     crate::i18n::set_language("en");
-    let mut shell = Shell::new(Services { user_name: Some("Robin Meyer".into()), ..Services::default() });
+    let mut shell = Shell::new(Services { ..Services::default() });
     shell.state.theme = theme;
     let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1000.0)).build_ui_state(
         |ui, shell: &mut Shell| {
@@ -643,7 +643,7 @@ fn projects_open_in_tabs_that_keep_their_models_and_home_keeps_them_open() {
 fn eight_tabs_stay_left_of_help_at_every_width_down_to_the_smallest_window() {
     for w in [640.0, 900.0, 1600.0] {
         crate::i18n::set_language("en");
-        let mut shell = Shell::new(Services { user_name: Some("Robin Meyer".into()), ids: Some(test_ids()), ..Services::default() });
+        let mut shell = Shell::new(Services { ids: Some(test_ids()), ..Services::default() });
         for i in 0..crate::MAX_TABS {
             shell.open_project(crate::Opened {
                 name: format!("A project with a rather long name {i}"),
@@ -1367,7 +1367,7 @@ fn the_bundled_faces_draw_every_character_of_the_latin_script_catalogues() {
 /// The shell with a project open, in the harness at the design's frame size or another.
 fn workspace_harness(theme: ThemeKind, size: egui::Vec2) -> Harness<'static, Shell> {
     crate::i18n::set_language("en");
-    let mut shell = Shell::new(Services { user_name: Some("Robin Meyer".into()), ids: Some(test_ids()), ..Services::default() });
+    let mut shell = Shell::new(Services { ids: Some(test_ids()), ..Services::default() });
     shell.state.theme = theme;
     shell.open_project(crate::Opened { name: "Commerce platform".into(), path: "/tmp/Commerce platform.archforge".into(), ..Default::default() });
     // Frames a sixtieth of a second apart, as on screen, so two clicks in a row read as a double click.
@@ -1551,7 +1551,7 @@ fn a_long_project_name_keeps_the_chip_left_of_the_bar_controls_at_every_size_and
     for lang in crate::i18n::LANGUAGES {
         for (w, h_) in [(1600.0, 1120.0), (900.0, 700.0), (480.0, 600.0), (80.0, 80.0)] {
             crate::i18n::set_language(lang.code);
-            let mut shell = Shell::new(Services { user_name: Some("Robin Meyer".into()), ids: Some(test_ids()), ..Services::default() });
+            let mut shell = Shell::new(Services { ids: Some(test_ids()), ..Services::default() });
             shell.open_project(crate::Opened {
                 name: "A project with a very long name that goes on and on".into(),
                 path: "/tmp/long.archforge".into(),
@@ -4089,4 +4089,35 @@ fn the_top_bars_search_finds_a_projects_tables_and_diagrams() {
     h.event(egui::Event::Key { key: egui::Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::NONE });
     h.run();
     assert!(!h.state().home_search.open);
+}
+
+#[test]
+fn the_avatar_shows_the_initials_of_the_name_entered_in_settings() {
+    let mut h = harness(ThemeKind::Light);
+    let initials = |h: &Harness<'static, Shell>| crate::settings::avatar_initials(h.state());
+    assert_eq!(initials(&h), "JD", "without a name: John Doe");
+    // The avatar opens Settings; a name typed there shows at once.
+    let at = rect_of(&h, "home.header.account").center();
+    click(&mut h, at);
+    assert!(h.state().settings.is_some());
+    h.event(egui::Event::Text("Ada Lovelace".into()));
+    h.run();
+    assert_eq!(initials(&h), "AL");
+    let at = rect_of(&h, "settings.done").center();
+    click(&mut h, at);
+    assert!(h.state().settings.is_none());
+    assert_eq!(h.state().state.user_name, "Ada Lovelace", "kept in the preferences");
+    // The command key with comma opens it again; an emptied name goes back to JD; Escape closes.
+    h.event(egui::Event::Key { key: egui::Key::Comma, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::COMMAND });
+    h.run();
+    assert!(h.state().settings.is_some());
+    h.state_mut().state.user_name.clear();
+    h.event(egui::Event::Key { key: egui::Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::NONE });
+    h.run();
+    assert!(h.state().settings.is_none());
+    assert_eq!(initials(&h), "JD");
+    // A preferences file's name is cleaned when read.
+    let mut state: crate::state::UiState = serde_json::from_str(r#"{"user_name":"  Grace Hopper\n"}"#).unwrap();
+    state.sanitize();
+    assert_eq!(state.user_name, "Grace Hopper");
 }
