@@ -84,6 +84,10 @@ pub(crate) trait DiagramKind: Sync {
     /// Opens the element's editor, at the row of its card under a double click (None: the editor's
     /// new row, as the second adorner asks).
     fn open(&self, shell: &mut Shell, element: Uuid, row: Option<usize>);
+    /// Places an element dragged from the Models explorer on diagram `d`, centred on `at`.
+    fn drop(&self, shell: &mut Shell, d: Obj, element: Uuid, at: (f64, f64)) {
+        let _ = (shell, d, element, at);
+    }
     /// The second adorner of a selected element, beside Connect: its key and hover text; it opens
     /// the editor's new row.
     fn adorner(&self) -> Option<(&'static str, &'static str)> {

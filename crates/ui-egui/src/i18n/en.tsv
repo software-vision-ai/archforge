@@ -472,3 +472,30 @@ str		The diagram is of no package	The diagram is of no package
 str		This class	This class
 str		This package	This package
 plural		+ {n} more member	+ {n} more member|+ {n} more members
+# Class members in Properties (archforge-3c5.1.3)
+str		Abstract	Abstract
+str		Add attribute	Add attribute
+str		Add operation	Add operation
+str		Add parameter	Add parameter
+str		Attribute	Attribute
+str		Attribute · model	Attribute · model
+str		Attributes · {n}	Attributes · {n}
+str		Move down	Move down
+str		Move up	Move up
+str		Multiplicity	Multiplicity
+str		On this attribute · {n}	On this attribute · {n}
+str		On this operation · {n}	On this operation · {n}
+str		Operation	Operation
+str		Operation · model	Operation · model
+str		Operations · {n}	Operations · {n}
+str		Parameters	Parameters
+str		Private	Private
+str		Protected	Protected
+str		Public	Public
+str		Remove parameter	Remove parameter
+str		Return type	Return type
+str		Static	Static
+str		This attribute	This attribute
+str		This operation	This operation
+str		Visibility	Visibility
+str		Place class	Place class

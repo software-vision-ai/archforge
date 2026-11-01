@@ -497,8 +497,16 @@ fn decide(
                 if y_units < ENTITY_HEADER {
                     return Action::Rename(node, entity_id);
                 }
-                let row = ((y_units - (ENTITY_FIRST_ROW - 4.0)) / ENTITY_ROW).floor();
-                return Action::Open(entity_id, (row >= 0.0).then_some(row as usize));
+                // The row under the pointer, counted across the card's compartments.
+                let card = shell.session.as_ref().and_then(|s| s.view().of_element(store, entity)?.card(store, entity, d));
+                let row = match card {
+                    Some(card) => crate::canvas::row_at(&card, y_units),
+                    None => {
+                        let row = ((y_units - (ENTITY_FIRST_ROW - 4.0)) / ENTITY_ROW).floor();
+                        (row >= 0.0).then_some(row as usize)
+                    }
+                };
+                return Action::Open(entity_id, row);
             }
             if resp.clicked() {
                 let (x, y) = view.to_canvas(pos);
@@ -991,29 +999,53 @@ pub(crate) fn place_dropped(shell: &mut Shell, d: Obj, entity: Uuid, at: (f64, f
     let Some(session) = shell.session.as_ref() else { return };
     let store = session.doc();
     let Some(e) = store.by_uuid(entity).filter(|e| store.class_of(*e).ok() == Some(archforge_er::ENTITY)) else { return };
-    if nodes_of(store, d).into_iter().any(|n| element_of(store, n) == Some(e)) {
+    if on_diagram(store, d, e) {
         shell.canvas.notice = Some(tr("Already on this diagram"));
         return;
     }
-    let Some(diagram_id) = uuid(store, d) else { return };
     let columns = store.list(e, archforge_er::entity::ATTRIBUTE).map(|l| l.len()).unwrap_or(0);
     // A very wide table lands as tall as a node may be; its rows past that say how many more.
     let height = content_height(columns).min(archforge_diagram::rules::MAX_SIZE);
-    let (x, y) = ((at.0 - ENTITY_WIDTH / 2.0).round(), (at.1 - height / 2.0).round());
-    let place = json!({ "diagram": diagram_id.to_string(), "element": entity.to_string(), "x": x, "y": y, "width": ENTITY_WIDTH, "height": height });
-    // Its relationships and subtype lines to the tables the diagram shows draw with it: (line's
-    // element, source, target), None for the table being placed.
-    let shown = |t: Obj| nodes_of(store, d).into_iter().find(|n| element_of(store, *n) == Some(t)).and_then(|n| uuid(store, n));
-    let mut lines: Vec<(Uuid, Option<Uuid>, Option<Uuid>)> = Vec::new();
-    let links = store
+    // Its relationships and subtype lines to the tables the diagram shows draw with it.
+    let links: Vec<Obj> = store
         .referrers(e)
         .into_iter()
         .filter(|(_, prop)| *prop == archforge_er::relationship::FROM || *prop == archforge_er::relationship::TO)
         .map(|(r, _)| r)
         .chain(archforge_er::rules::supertype_links(store, e))
-        .chain(archforge_er::rules::subtype_links(store, e));
-    for l in links {
-        let Some((from, to)) = archforge_diagram::Notation::ends(&archforge_er::ErNotation, store, l) else { continue };
+        .chain(archforge_er::rules::subtype_links(store, e))
+        .collect();
+    place_with_lines(shell, d, e, at, (ENTITY_WIDTH, height), &links, &archforge_er::ErNotation, &tr("Place table"));
+}
+
+/// Whether diagram `d` shows element `e`.
+pub(crate) fn on_diagram(store: &Store, d: Obj, e: Obj) -> bool {
+    nodes_of(store, d).into_iter().any(|n| element_of(store, n) == Some(e))
+}
+
+/// Places element `e` dropped on diagram `d`, centred on `at` at `size`, with those of `links`
+/// that join it to an element the diagram shows, as one undo step named `label`; then selects it.
+#[allow(clippy::too_many_arguments, reason = "a drop is placed with its size, its lines and its step's name")]
+pub(crate) fn place_with_lines(
+    shell: &mut Shell,
+    d: Obj,
+    e: Obj,
+    at: (f64, f64),
+    size: (f64, f64),
+    links: &[Obj],
+    notation: &dyn archforge_diagram::Notation,
+    label: &str,
+) {
+    let Some(session) = shell.session.as_ref() else { return };
+    let store = session.doc();
+    let (Some(diagram_id), Some(entity)) = (uuid(store, d), uuid(store, e)) else { return };
+    let (x, y) = ((at.0 - size.0 / 2.0).round(), (at.1 - size.1 / 2.0).round());
+    let place = json!({ "diagram": diagram_id.to_string(), "element": entity.to_string(), "x": x, "y": y, "width": size.0, "height": size.1 });
+    // (line's element, source, target), None for the element being placed.
+    let shown = |t: Obj| nodes_of(store, d).into_iter().find(|n| element_of(store, *n) == Some(t)).and_then(|n| uuid(store, n));
+    let mut lines: Vec<(Uuid, Option<Uuid>, Option<Uuid>)> = Vec::new();
+    for &l in links {
+        let Some((from, to)) = notation.ends(store, l) else { continue };
         let end = |t: Obj| if t == e { Some(None) } else { shown(t).map(Some) };
         if let (Some(a), Some(b), Some(id)) = (end(from), end(to), uuid(store, l))
             && !lines.iter().any(|(x, _, _)| *x == id)
@@ -1022,7 +1054,7 @@ pub(crate) fn place_dropped(shell: &mut Shell, d: Obj, entity: Uuid, at: (f64, f
         }
     }
     let out = shell.session.as_mut().map(|session| {
-        session.batch(&tr("Place table"), |b| {
+        session.batch(label, |b| {
             let placed = b.execute("diagram.place", &place)?;
             let node = placed.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string();
             for (element, source, target) in &lines {
@@ -1254,7 +1286,7 @@ pub fn diagrams_showing(store: &Store, element: Obj) -> usize {
 fn ask_delete(shell: &mut Shell, node: Uuid, entity: Uuid) {
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
     let Some(e) = store.by_uuid(entity) else { return };
-    let (relationships, keys, foreign_keys) = crate::er_ui::consequences(store, e);
+    let (relationships, keys, foreign_keys) = crate::notation_ui::of(shell.notation_uis, store, e).map_or((0, 0, 0), |ui| ui.consequences(store, e));
     let diagrams = diagrams_showing(store, e);
     shell.explorer.delete = Some(crate::explorer::Delete {
         ids: vec![entity],

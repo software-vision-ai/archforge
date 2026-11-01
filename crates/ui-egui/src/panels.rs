@@ -57,6 +57,8 @@ pub struct State {
     pub type_edit: Option<crate::types::TypeEdit>,
     /// The sequence or view editor (slice S7).
     pub object_edit: Option<crate::objects::ObjectEdit>,
+    /// A class's attribute or operation editor (archforge-3c5.1.3).
+    pub member: Option<crate::uml_panel::MemberEdit>,
     /// The body's scroll (archforge-gm2.36): how far it is scrolled, how tall its content was last
     /// frame, what it was scrolled for (a new panel or selection starts at the top), the editors
     /// open last frame, whether an editor that just opened is still to be brought into view, and
@@ -81,6 +83,7 @@ fn open_editors(s: &State) -> Vec<Option<Option<Uuid>>> {
         s.index.as_ref().map(|e| e.target),
         s.type_edit.as_ref().map(|e| e.target),
         s.object_edit.as_ref().map(|e| e.target),
+        s.member.as_ref().map(|e| e.target),
     ]
 }
 
@@ -174,6 +177,11 @@ pub enum Menu {
     Mapping,
     /// The sequence editor's Owned by select (slice S7).
     OwnedBy,
+    /// A class member editor's visibility, its type or return type, and a parameter's type
+    /// (archforge-3c5.1.3).
+    MemberVisibility,
+    MemberType,
+    ParamType(usize),
 }
 
 /// The selection the panels describe.
@@ -293,6 +301,7 @@ pub fn retain_valid(state: &mut State, store: &Store) {
     if state.object_edit.as_ref().is_some_and(|o| store.by_uuid(o.schema).is_none() || o.target.is_some_and(|t| store.by_uuid(t).is_none())) {
         state.object_edit = None;
     }
+    crate::uml_panel::retain_valid(&mut state.member, store);
 }
 
 // Shared drawing.
@@ -351,7 +360,8 @@ pub(crate) fn text_field(
     if out.response.has_focus() {
         paint.rect_stroke(field, 6.0, Stroke::new(1.0, p.focus), StrokeKind::Inside);
     }
-    let enter = out.response.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+    // A one-line field gives up the keyboard on Enter in the same frame.
+    let enter = (out.response.has_focus() || out.response.lost_focus()) && ui.input(|i| i.key_pressed(egui::Key::Enter));
     enter || (commit_on_blur && out.response.lost_focus())
 }
 
@@ -792,6 +802,9 @@ fn close_editors(shell: &mut Shell) {
     }
     if panels.object_edit.as_ref().is_some_and(|e| !e.opened) {
         panels.object_edit = None;
+    }
+    if panels.member.as_ref().is_some_and(|e| !e.opened) {
+        panels.member = None;
     }
 }
 

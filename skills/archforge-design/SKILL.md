@@ -316,6 +316,20 @@ What is UML's own, beside the shared rules above.
 - Its own icons: the Class tool and a class in the tree are a box in three compartments (a
   table's box has a column line instead); a package is UML's tabbed box; a class diagram's tab
   shows two class boxes joined by a generalization arrow.
+- A class's Properties: its name, Abstract, then Attributes · n and Operations · n, each row read as
+  the card shows it, with the columns' row-and-editor pattern (+ adds, the pencil or a double
+  click edits, Apply or Enter writes, Cancel or Escape leaves). A selected member shows its class's
+  panel, its row marked. The attribute editor holds Visibility (narrow) and Name, Type and
+  Multiplicity, and Static; the operation editor Visibility and Name, Return type, Static and
+  Abstract, then its parameters, each on two lines: its name with its ✕, then its type and its
+  multiplicity (narrow, `1` as its hint). Remove and Move up and down sit at the editor's foot on
+  the left, Cancel and Apply on the right.
+- A type menu offers None, the built-in types (Integer, String, Boolean, Real, UnlimitedNatural)
+  the model has no type of the same name for, then the model's own types by name. A built-in type
+  is made in the package Types the first time it is used (owner decision).
+- A selected class's second adorner is Add attribute; a double click on a member's row of its card
+  opens that member's editor. A class dragged from Models lands sized to show its members, with its
+  lines to the classes the diagram shows, as one undo step.
 
 On every line: a role, and a label at the line's middle, sit above a level stretch of the line and
 beside an upright one, never on the line or its mark.

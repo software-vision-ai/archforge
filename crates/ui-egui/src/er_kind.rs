@@ -128,6 +128,10 @@ impl DiagramKind for ErKind {
         Some(("add-column", "Add column"))
     }
 
+    fn drop(&self, shell: &mut Shell, d: Obj, element: Uuid, at: (f64, f64)) {
+        crate::editing::place_dropped(shell, d, element, at);
+    }
+
     fn menu(&self) -> bool {
         true
     }

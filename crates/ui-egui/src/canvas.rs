@@ -508,11 +508,13 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
         shell.canvas.pan = Vec2::ZERO;
     }
     let view = View { origin: r.min, pan: shell.canvas.pan, zoom: shell.canvas.zoom };
-    // A table dragged from the Models explorer lands where it was let go (slice S7).
-    if let Some((entity, at)) = shell.explorer.dropped.take()
+    // An element dragged from the Models explorer lands where it was let go (slice S7), as the
+    // diagram's kind places it.
+    if let Some((element, at)) = shell.explorer.dropped.take()
         && r.contains(at)
+        && let Some(kind) = shell.session.as_ref().and_then(|s| crate::kinds::kind_of(shell, s.doc(), d))
     {
-        crate::editing::place_dropped(shell, d, entity, view.to_canvas(at));
+        kind.drop(shell, d, element, view.to_canvas(at));
     }
     let clip = paint.with_clip_rect(r);
     if shell.canvas.grid {
@@ -792,6 +794,30 @@ fn draw_node(
     }
     let e = element.filter(|e| d.problems.contains_key(e))?;
     Some((rect.right_top() + vec2(-2.0, 2.0), id?, store.uuid(e).ok()?, e, false))
+}
+
+/// The row of `card` at `y` units below its top, counted across its compartments as
+/// [`draw_rows`] lays them out; none on a dividing line or past the last row.
+pub(crate) fn row_at(card: &archforge_diagram::figure::Card, y: f32) -> Option<usize> {
+    let mut slot = 0.0_f32;
+    let mut index = 0;
+    for (c, rows) in card.compartments.iter().enumerate() {
+        if c > 0 {
+            slot += 0.5;
+        }
+        if rows.is_empty() && card.compartments.len() > 1 {
+            slot += 1.0;
+        }
+        for _ in rows {
+            let top = ENTITY_FIRST_ROW - 4.0 + slot * ENTITY_ROW;
+            if (top..top + ENTITY_ROW).contains(&y) {
+                return Some(index);
+            }
+            index += 1;
+            slot += 1.0;
+        }
+    }
+    None
 }
 
 /// A card's compartments under its header: a row a pitch apart, half a pitch and a dividing line
