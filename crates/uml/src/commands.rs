@@ -161,28 +161,45 @@ fn class_list(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "classes": items }))
 }
 
-/// Removes UML elements (packages, classes, attributes, operations and primitive types), each with
-/// what it holds and the diagrams, nodes and lines that show them (`element.remove`, through
-/// [`crate::UmlNotation`]); a member's type that goes is dropped from what had it.
+/// Removes UML elements (packages, classes, attributes, operations, primitive types,
+/// associations, generalizations and dependencies), each with what it holds and the diagrams,
+/// nodes and lines that show them (`element.remove`, through [`crate::UmlNotation`]); a class takes
+/// the relationships that touch it along, and a member's type that goes is dropped from what had it.
 pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, CommandError> {
     // Every id is checked before anything goes, so a refusal leaves the store as it was.
+    let removable =
+        [PACKAGE, CLASS, crate::PROPERTY, crate::OPERATION, crate::PRIMITIVE_TYPE, crate::ASSOCIATION, crate::GENERALIZATION, crate::DEPENDENCY];
     for o in objs.iter().filter(|o| store.is_alive(**o)) {
         let class = store.class_of(*o).map_err(fail)?;
-        // An association's end goes with its association, which comes with relating classes.
+        // An association's end goes with its association.
         let end = class == crate::PROPERTY && store.get(*o, crate::property::ASSOCIATION).ok().and_then(|v| v.as_ref()).is_some();
-        if ![PACKAGE, CLASS, crate::PROPERTY, crate::OPERATION, crate::PRIMITIVE_TYPE].contains(&class) || end {
+        if !removable.contains(&class) || end {
             return Err(refuse("ids", format!("{} cannot be removed yet", uuid_of(store, *o)?)));
         }
     }
+    // The relationships of every class that goes, a package's classes among them, go first: a
+    // generalization requires its general class.
+    let mut all: Vec<Obj> = Vec::new();
+    for o in objs.iter().filter(|o| store.is_alive(**o)) {
+        let classes = match store.class_of(*o).ok() {
+            Some(c) if c == CLASS => vec![*o],
+            Some(c) if c == PACKAGE => classes(store, *o),
+            _ => Vec::new(),
+        };
+        for c in classes {
+            all.extend(crate::relations::relationships_of(store, c));
+        }
+    }
+    all.extend(objs);
     let mut gone = 0;
-    for o in objs {
-        if !store.is_alive(*o) {
+    for o in all {
+        if !store.is_alive(o) {
             continue;
         }
         gone += store
             .transaction(|st| {
-                let views = archforge_diagram::remove_views_of(st, *o)?;
-                Ok(views + st.destroy(*o)?)
+                let views = archforge_diagram::remove_views_of(st, o)?;
+                Ok(views + st.destroy(o)?)
             })
             .map_err(fail)?;
     }

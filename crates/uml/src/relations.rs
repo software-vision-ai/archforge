@@ -1,0 +1,484 @@
+//! Relating classes (archforge-3c5.1.4): associations, generalizations and dependencies drawn
+//! between classes, an association's ends set (role, multiplicity, navigability, aggregation),
+//! any of them reconnected to another class, and the relationships that touch a class listed so
+//! removing the class can say them and take them along.
+//!
+//! An association owns both its ends; navigability is marked by the association listing the end
+//! as navigable, so relating classes never changes a class's attributes (owner decision). A new
+//! association is a plain line: no roles, no multiplicities, navigable both ways (owner decision);
+//! a directed one is navigable to its second class only. Aggregation and composition sit on the
+//! part's end, the line drawn from the whole to the part, and the diamond shows at the whole.
+//!
+//! What would make the model wrong is refused with a reason before anything changes: a class that
+//! specializes itself, directly or round a cycle, the same generalization twice, a class depending
+//! on itself, both ends of an association aggregating, a composition whose whole's end allows more
+//! than one, and two ends of one association with the same role.
+
+use archforge_diagram::ProjectView;
+use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, cmd};
+use archforge_mof::{Obj, Store, Value};
+use serde_json::{Value as Json, json};
+
+use crate::commands::{fail, id_of, name_of, package_of, refuse, set_name, text, uuid_of};
+use crate::{
+    ASSOCIATION, CLASS, DEPENDENCY, GENERALIZATION, PROPERTY, association, classifier, dependency, generalization, package, property, typed_element,
+};
+
+type C<'a> = Ctx<'a, Store, ProjectView>;
+type R = Result<Json, CommandError>;
+
+/// The kinds of association a line draws, as the commands name them.
+pub const ASSOCIATION_KINDS: [&str; 4] = ["association", "directed", "aggregation", "composition"];
+/// An end's aggregation, in the metamodel's order, as the commands name it.
+const AGGREGATIONS: [&str; 3] = ["none", "shared", "composite"];
+/// Why a command is not available.
+pub const NO_CLASSES: &str = "There is no class yet.";
+
+fn has_classes(f: &Facts<'_, Store, ProjectView>) -> Result<(), &'static str> {
+    if f.doc.alive().any(|o| f.doc.class_of(o).ok() == Some(CLASS)) { Ok(()) } else { Err(NO_CLASSES) }
+}
+
+fn list(store: &Store, o: Obj, prop: archforge_mof::PropId) -> Vec<Obj> {
+    store.list(o, prop).unwrap_or_default().iter().filter_map(Value::as_ref).filter(|x| store.is_alive(*x)).collect()
+}
+
+fn one(store: &Store, o: Obj, prop: archforge_mof::PropId) -> Option<Obj> {
+    store.get(o, prop).ok().and_then(|v| v.as_ref()).filter(|x| store.is_alive(*x))
+}
+
+/// The classes `c` specializes, directly.
+fn generals(store: &Store, c: Obj) -> Vec<Obj> {
+    list(store, c, classifier::GENERALIZATION).into_iter().filter_map(|g| one(store, g, generalization::GENERAL)).collect()
+}
+
+/// Whether `from` is `to` or specializes it, directly or through other classes.
+fn specializes(store: &Store, from: Obj, to: Obj) -> bool {
+    let mut seen = std::collections::BTreeSet::new();
+    let mut stack = vec![from];
+    while let Some(c) = stack.pop() {
+        if c == to {
+            return true;
+        }
+        if seen.insert(c) {
+            stack.extend(generals(store, c));
+        }
+    }
+    false
+}
+
+/// The aggregation of an association's end, as an index into [`AGGREGATIONS`].
+fn aggregation(store: &Store, end: Obj) -> usize {
+    match store.get(end, property::AGGREGATION) {
+        Ok(Value::Enum(i)) => (i as usize).min(AGGREGATIONS.len() - 1),
+        _ => 0,
+    }
+}
+
+/// The upper bound of an end's multiplicity: none for many, one when it names none.
+fn upper(store: &Store, end: Obj) -> Option<u64> {
+    match one(store, end, crate::multiplicity_element::UPPER_VALUE).map(|u| store.get(u, crate::literal_unlimited_natural::VALUE)) {
+        Some(Ok(Value::Unlimited(n))) => n,
+        _ => Some(1),
+    }
+}
+
+/// The relationships that touch class `c`: the associations with an end typed by it, the
+/// generalizations to and from it, and the dependencies it is a client or supplier of; each once.
+pub fn relationships_of(store: &Store, c: Obj) -> Vec<Obj> {
+    let mut out = Vec::new();
+    for (src, prop) in store.referrers(c) {
+        let r = if prop == typed_element::TYPE && store.class_of(src).ok() == Some(PROPERTY) {
+            // Its association, or the association that owns it.
+            let owner = store.container(src).ok().flatten().map(|(o, _)| o).filter(|o| store.class_of(*o).ok() == Some(ASSOCIATION));
+            one(store, src, property::ASSOCIATION).or(owner)
+        } else if prop == generalization::GENERAL || prop == dependency::CLIENT || prop == dependency::SUPPLIER {
+            Some(src)
+        } else {
+            None
+        };
+        out.extend(r.filter(|r| store.is_alive(*r)));
+    }
+    out.extend(list(store, c, classifier::GENERALIZATION));
+    out.sort();
+    out.dedup();
+    out
+}
+
+/// The class under `key`, which must sit in a package.
+fn class_in_package(store: &Store, p: &Params, key: &str) -> Result<(Obj, Obj), CommandError> {
+    let c = id_of(store, p, key, CLASS, "a class")?;
+    let pkg = package_of(store, c).ok_or_else(|| refuse(key, "the class is in no package"))?;
+    Ok((c, pkg))
+}
+
+/// A relationship's name: empty, or a name.
+fn check_name(name: &str) -> Result<(), CommandError> {
+    if name.is_empty() {
+        return Ok(());
+    }
+    match archforge_core::skills::name_problem(name, crate::commands::MAX_NAME) {
+        Some(p) => Err(refuse("name", format!("the name {p}"))),
+        None => Ok(()),
+    }
+}
+
+/// Lists `end` among the association's navigable ends, or takes it off.
+fn set_navigable(store: &mut Store, a: Obj, end: Obj, navigable: bool) -> Result<(), CommandError> {
+    let listed = list(store, a, association::NAVIGABLE_OWNED_END).contains(&end);
+    if navigable && !listed {
+        store.push(a, association::NAVIGABLE_OWNED_END, Value::Ref(end)).map_err(fail)?;
+    } else if !navigable && listed {
+        // Taking an end off the navigable ends takes it off the lists those subset too, the owned
+        // and the member ends; it goes back to its place there.
+        let at = store.list(a, association::MEMBER_END).map_err(fail)?.iter().position(|v| *v == Value::Ref(end)).unwrap_or(0);
+        store.remove_value(a, association::NAVIGABLE_OWNED_END, &Value::Ref(end)).map_err(fail)?;
+        if !store.list(a, association::MEMBER_END).map_err(fail)?.contains(&Value::Ref(end)) {
+            store.insert(a, association::MEMBER_END, at as u32, Value::Ref(end)).map_err(fail)?;
+        }
+        if !store.list(a, association::OWNED_END).map_err(fail)?.contains(&Value::Ref(end)) {
+            store.push(a, association::OWNED_END, Value::Ref(end)).map_err(fail)?;
+        }
+    }
+    Ok(())
+}
+
+fn association_add(ctx: &mut C<'_>, p: &Params) -> R {
+    let (from, pkg) = class_in_package(ctx.doc, p, "from")?;
+    let to = id_of(ctx.doc, p, "to", CLASS, "a class")?;
+    let kind = match text(p, "kind") {
+        "" => "association",
+        k if ASSOCIATION_KINDS.contains(&k) => k,
+        k => return Err(refuse("kind", format!("{k:?} is not one of {}", ASSOCIATION_KINDS.join(", ")))),
+    };
+    let name = text(p, "name");
+    check_name(name)?;
+    let a = ctx.doc.create(ASSOCIATION).map_err(fail)?;
+    set_name(ctx.doc, a, name)?;
+    ctx.doc.push(pkg, package::PACKAGED_ELEMENT, Value::Ref(a)).map_err(fail)?;
+    let mut ends = Vec::new();
+    for ty in [from, to] {
+        let end = ctx.doc.create(PROPERTY).map_err(fail)?;
+        ctx.doc.set(end, typed_element::TYPE, Value::Ref(ty)).map_err(fail)?;
+        // A member end first, which tells the end its association, then owned by it (owned
+        // ends subset the member ends; pushing only the owned end leaves the end not knowing).
+        ctx.doc.push(a, association::MEMBER_END, Value::Ref(end)).map_err(fail)?;
+        if !ctx.doc.list(a, association::OWNED_END).map_err(fail)?.contains(&Value::Ref(end)) {
+            ctx.doc.push(a, association::OWNED_END, Value::Ref(end)).map_err(fail)?;
+        }
+        ends.push(end);
+    }
+    // Navigable both ways, or only to the second class; the part's end aggregates.
+    set_navigable(ctx.doc, a, ends[0], kind != "directed")?;
+    set_navigable(ctx.doc, a, ends[1], true)?;
+    let aggregation = match kind {
+        "aggregation" => 1,
+        "composition" => 2,
+        _ => 0,
+    };
+    ctx.doc.set(ends[1], property::AGGREGATION, Value::Enum(aggregation)).map_err(fail)?;
+    ctx.view.selection = vec![a];
+    Ok(json!({ "id": uuid_of(ctx.doc, a)?, "ends": [uuid_of(ctx.doc, ends[0])?, uuid_of(ctx.doc, ends[1])?] }))
+}
+
+/// Why `specific` may not specialize `general`, when it may not.
+fn generalization_problem(store: &Store, specific: Obj, general: Obj, except: Option<Obj>) -> Option<&'static str> {
+    if specific == general {
+        return Some("a class cannot specialize itself");
+    }
+    if list(store, specific, classifier::GENERALIZATION)
+        .into_iter()
+        .any(|g| Some(g) != except && one(store, g, generalization::GENERAL) == Some(general))
+    {
+        return Some("the class specializes that class already");
+    }
+    if specializes(store, general, specific) {
+        return Some("that class specializes this one already, which would make a cycle");
+    }
+    None
+}
+
+fn generalization_add(ctx: &mut C<'_>, p: &Params) -> R {
+    let specific = id_of(ctx.doc, p, "specific", CLASS, "a class")?;
+    let general = id_of(ctx.doc, p, "general", CLASS, "a class")?;
+    if let Some(why) = generalization_problem(ctx.doc, specific, general, None) {
+        return Err(refuse("general", why));
+    }
+    let g = ctx.doc.create(GENERALIZATION).map_err(fail)?;
+    ctx.doc.set(g, generalization::GENERAL, Value::Ref(general)).map_err(fail)?;
+    ctx.doc.push(specific, classifier::GENERALIZATION, Value::Ref(g)).map_err(fail)?;
+    ctx.view.selection = vec![g];
+    Ok(json!({ "id": uuid_of(ctx.doc, g)? }))
+}
+
+fn dependency_add(ctx: &mut C<'_>, p: &Params) -> R {
+    let (client, pkg) = class_in_package(ctx.doc, p, "client")?;
+    let supplier = id_of(ctx.doc, p, "supplier", CLASS, "a class")?;
+    if client == supplier {
+        return Err(refuse("supplier", "a class cannot depend on itself"));
+    }
+    let name = text(p, "name");
+    check_name(name)?;
+    let d = ctx.doc.create(DEPENDENCY).map_err(fail)?;
+    set_name(ctx.doc, d, name)?;
+    ctx.doc.push(pkg, package::PACKAGED_ELEMENT, Value::Ref(d)).map_err(fail)?;
+    ctx.doc.push(d, dependency::CLIENT, Value::Ref(client)).map_err(fail)?;
+    ctx.doc.push(d, dependency::SUPPLIER, Value::Ref(supplier)).map_err(fail)?;
+    ctx.view.selection = vec![d];
+    Ok(json!({ "id": uuid_of(ctx.doc, d)? }))
+}
+
+/// The association or dependency under `key`.
+fn named_relationship(store: &Store, p: &Params, key: &str) -> Result<Obj, CommandError> {
+    let r = id_of(store, p, key, ASSOCIATION, "an association").or_else(|_| id_of(store, p, key, DEPENDENCY, "a dependency"));
+    r.map_err(|_| refuse(key, "it is no association or dependency"))
+}
+
+fn relationship_rename(ctx: &mut C<'_>, p: &Params) -> R {
+    let r = named_relationship(ctx.doc, p, "relationship")?;
+    let name = text(p, "name");
+    check_name(name)?;
+    set_name(ctx.doc, r, name)?;
+    Ok(json!({ "id": uuid_of(ctx.doc, r)? }))
+}
+
+/// An association's two ends, in its member order.
+fn ends_of(store: &Store, a: Obj, key: &str) -> Result<[Obj; 2], CommandError> {
+    crate::figures::member_ends(store, a).ok_or_else(|| refuse(key, "the association has not two ends"))
+}
+
+/// The end an end owned by a class becomes: the association's own, as every end drawn here is.
+fn own_end(store: &mut Store, a: Obj, end: Obj) -> Result<(), CommandError> {
+    if let Some((owner, prop)) = store.container(end).map_err(fail)?
+        && owner != a
+    {
+        // An end its class owned was navigable; it stays so, now marked on the association.
+        store.remove_value(owner, prop, &Value::Ref(end)).map_err(fail)?;
+        store.push(a, association::OWNED_END, Value::Ref(end)).map_err(fail)?;
+        set_navigable(store, a, end, true)?;
+    }
+    Ok(())
+}
+
+fn association_set_end(ctx: &mut C<'_>, p: &Params) -> R {
+    let a = id_of(ctx.doc, p, "association", ASSOCIATION, "an association")?;
+    let ends = ends_of(ctx.doc, a, "association")?;
+    let i = match p.integer("end") {
+        Some(i @ 0..=1) => i as usize,
+        _ => return Err(refuse("end", "the end is 0 or 1")),
+    };
+    let (end, other) = (ends[i], ends[1 - i]);
+    let role = text(p, "role");
+    if let Some(problem) = (!role.is_empty()).then(|| archforge_core::skills::name_problem(role, crate::commands::MAX_NAME)).flatten() {
+        return Err(refuse("role", format!("the role {problem}")));
+    }
+    if !role.is_empty() && name_of(ctx.doc, other).to_lowercase() == role.to_lowercase() {
+        return Err(refuse("role", format!("the other end's role is {role} already")));
+    }
+    let kind = match text(p, "aggregation") {
+        "" => 0,
+        k => AGGREGATIONS
+            .iter()
+            .position(|w| *w == k)
+            .ok_or_else(|| refuse("aggregation", format!("{k:?} is not one of {}", AGGREGATIONS.join(", "))))?,
+    };
+    if kind != 0 && aggregation(ctx.doc, other) != 0 {
+        return Err(refuse("aggregation", "the other end aggregates already: only the part's end can"));
+    }
+    let typed = text(p, "multiplicity");
+    let bounds = crate::members::parse_multiplicity(typed).map_err(|why| refuse("multiplicity", format!("the multiplicity {why}")))?;
+    // A part belongs to at most one whole: the whole's end allows one at most.
+    if kind == 2 && upper(ctx.doc, other).is_none_or(|u| u > 1) {
+        return Err(refuse("aggregation", "a composition's whole end allows one at most; set the other end's multiplicity to 1 or 0..1 first"));
+    }
+    if aggregation(ctx.doc, other) == 2 && bounds.is_some_and(|(_, u)| u.is_none_or(|u| u > 1)) {
+        return Err(refuse("multiplicity", "this end is a composition's whole, which allows one at most"));
+    }
+    own_end(ctx.doc, a, end)?;
+    set_name(ctx.doc, end, role)?;
+    crate::members::set_multiplicity(ctx.doc, end, typed, "multiplicity")?;
+    set_navigable(ctx.doc, a, end, p.bool("navigable").unwrap_or(true))?;
+    ctx.doc.set(end, property::AGGREGATION, Value::Enum(kind as u32)).map_err(fail)?;
+    Ok(json!({ "id": uuid_of(ctx.doc, end)? }))
+}
+
+/// Moves the drawn lines of `element` to the nodes of its classes on each diagram; a diagram that
+/// does not show a class the element now joins loses the line.
+fn follow_ends(store: &mut Store, element: Obj) -> Result<(), CommandError> {
+    let Some((from, to)) = crate::figures::ends(store, element) else { return Ok(()) };
+    let (_, edges, _) = archforge_diagram::views_of(store, element);
+    for e in edges {
+        let Some((d, _)) = store.container(e).map_err(fail)? else { continue };
+        let node_of = |c: Obj| {
+            list(store, d, archforge_diagram::diagram::NODE).into_iter().find(|n| one(store, *n, archforge_diagram::node::ELEMENT) == Some(c))
+        };
+        let (Some(source), Some(target)) = (node_of(from), node_of(to)) else {
+            archforge_diagram::destroy_edge_with_links(store, e).map_err(fail)?;
+            continue;
+        };
+        if one(store, e, archforge_diagram::edge::SOURCE) == Some(source) && one(store, e, archforge_diagram::edge::TARGET) == Some(target) {
+            continue;
+        }
+        store.set(e, archforge_diagram::edge::SOURCE, Value::Ref(source)).map_err(fail)?;
+        store.set(e, archforge_diagram::edge::TARGET, Value::Ref(target)).map_err(fail)?;
+        // Its bends were for the old ends.
+        for w in list(store, e, archforge_diagram::edge::WAYPOINT) {
+            store.destroy(w).map_err(fail)?;
+        }
+    }
+    Ok(())
+}
+
+fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
+    let key = "relationship";
+    let id = text(p, key);
+    let r = [ASSOCIATION, GENERALIZATION, DEPENDENCY]
+        .into_iter()
+        .find_map(|k| id_of(ctx.doc, p, key, k, "").ok())
+        .ok_or_else(|| refuse(key, format!("{} is no association, generalization or dependency", crate::commands::short(id))))?;
+    let source = match text(p, "end") {
+        "source" => true,
+        "target" => false,
+        e => return Err(refuse("end", format!("{e:?} is not source or target"))),
+    };
+    let c = id_of(ctx.doc, p, "class", CLASS, "a class")?;
+    let class = ctx.doc.class_of(r).map_err(fail)?;
+    if class == ASSOCIATION {
+        let ends = ends_of(ctx.doc, r, key)?;
+        let end = ends[if source { 0 } else { 1 }];
+        own_end(ctx.doc, r, end)?;
+        ctx.doc.set(end, typed_element::TYPE, Value::Ref(c)).map_err(fail)?;
+    } else if class == GENERALIZATION {
+        let (specific, general) = crate::figures::ends(ctx.doc, r).ok_or_else(|| refuse(key, "the generalization joins no two classes"))?;
+        let (s, g) = if source { (c, general) } else { (specific, c) };
+        if let Some(why) = generalization_problem(ctx.doc, s, g, Some(r)) {
+            return Err(refuse("class", why));
+        }
+        if source && s != specific {
+            ctx.doc.remove_value(specific, classifier::GENERALIZATION, &Value::Ref(r)).map_err(fail)?;
+            ctx.doc.push(s, classifier::GENERALIZATION, Value::Ref(r)).map_err(fail)?;
+        }
+        ctx.doc.set(r, generalization::GENERAL, Value::Ref(g)).map_err(fail)?;
+    } else {
+        let (client, supplier) = crate::figures::ends(ctx.doc, r).ok_or_else(|| refuse(key, "the dependency joins no two classes"))?;
+        let (cl, su) = if source { (c, supplier) } else { (client, c) };
+        if cl == su {
+            return Err(refuse("class", "a class cannot depend on itself"));
+        }
+        let (prop, old) = if source { (dependency::CLIENT, client) } else { (dependency::SUPPLIER, supplier) };
+        ctx.doc.remove_value(r, prop, &Value::Ref(old)).map_err(fail)?;
+        ctx.doc.push(r, prop, Value::Ref(c)).map_err(fail)?;
+    }
+    follow_ends(ctx.doc, r)?;
+    ctx.view.selection = vec![r];
+    Ok(json!({ "id": uuid_of(ctx.doc, r)? }))
+}
+
+/// A relationship as the query commands give it.
+fn describe(store: &Store, r: Obj) -> Json {
+    let id = |o: Obj| uuid_of(store, o).unwrap_or_default();
+    let (from, to) = crate::figures::ends(store, r).map_or((Json::Null, Json::Null), |(a, b)| (json!(id(a)), json!(id(b))));
+    match store.class_of(r).ok() {
+        Some(c) if c == ASSOCIATION => {
+            let ends: Vec<Json> = crate::figures::member_ends(store, r)
+                .map(|ends| {
+                    ends.iter()
+                        .map(|e| {
+                            json!({
+                                "id": id(*e),
+                                "class": one(store, *e, typed_element::TYPE).map_or(Json::Null, |t| json!(id(t))),
+                                "role": name_of(store, *e),
+                                "multiplicity": crate::figures::multiplicity(store, *e),
+                                "navigable": crate::figures::navigable(store, r, *e),
+                                "aggregation": AGGREGATIONS[aggregation(store, *e)],
+                            })
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            json!({ "id": id(r), "kind": "association", "name": name_of(store, r), "from": from, "to": to, "ends": ends })
+        }
+        Some(c) if c == GENERALIZATION => json!({ "id": id(r), "kind": "generalization", "specific": from, "general": to }),
+        _ => json!({ "id": id(r), "kind": "dependency", "name": name_of(store, r), "client": from, "supplier": to }),
+    }
+}
+
+fn relationship_list(ctx: &mut C<'_>, p: &Params) -> R {
+    let store = &*ctx.doc;
+    let c = id_of(store, p, "class", CLASS, "a class")?;
+    Ok(json!({ "relationships": relationships_of(store, c).into_iter().map(|r| describe(store, r)).collect::<Vec<_>>() }))
+}
+
+macro_rules! end_lines {
+    () => {
+        concat!(
+            "association: string; the association's id\n",
+            "end: integer, 0..1; which end, 0 at the class it was drawn from, 1 at the other\n",
+            "role: string = \"\"; the end's role name, or nothing\n",
+            "multiplicity: string = \"\"; 1, 0..1, *, 1..*, 2..5, or nothing\n",
+            "navigable: bool = true; the association navigates to this end\n",
+            "aggregation: string = \"none\", none|shared|composite; this end is a part of the other end's class, shared or composed"
+        )
+    };
+}
+
+/// Relating classes' commands.
+pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
+    vec![
+        cmd!(
+            "uml.association.add",
+            "Add association",
+            &["Association"],
+            None,
+            concat!(
+                "from: string; the id of the class it is drawn from, the whole of an aggregation or composition\n",
+                "to: string; the id of the class it is drawn to, the part of an aggregation or composition\n",
+                "kind: string = \"association\", association|directed|aggregation|composition; directed navigates only to the second class\n",
+                "name: string = \"\"; the association's name, or nothing"
+            ),
+            has_classes,
+            association_add
+        ),
+        cmd!("uml.association.set-end", "Set association end", &["Association"], None, end_lines!(), has_classes, association_set_end),
+        cmd!(
+            "uml.generalization.add",
+            "Add generalization",
+            &["Generalization"],
+            None,
+            "specific: string; the id of the class that specializes\ngeneral: string; the id of the class it specializes",
+            has_classes,
+            generalization_add
+        ),
+        cmd!(
+            "uml.dependency.add",
+            "Add dependency",
+            &["Dependency"],
+            None,
+            "client: string; the id of the class that depends\nsupplier: string; the id of the class it depends on\nname: string = \"\"; the dependency's name, or nothing",
+            has_classes,
+            dependency_add
+        ),
+        cmd!(
+            "uml.relationship.rename",
+            "Rename relationship",
+            &["Association", "Dependency"],
+            None,
+            "relationship: string; the association's or dependency's id\nname: string; the new name, or nothing",
+            has_classes,
+            relationship_rename
+        ),
+        cmd!(
+            "uml.relationship.reconnect",
+            "Reconnect relationship",
+            &["Association", "Generalization", "Dependency"],
+            None,
+            concat!(
+                "relationship: string; the association's, generalization's or dependency's id\n",
+                "end: string, source|target; the end to move: the class it was drawn from (the specific class, the client) or to\n",
+                "class: string; the id of the class the end moves to"
+            ),
+            has_classes,
+            relationship_reconnect
+        ),
+        cmd!(query "uml.relationship.list", "List relationships", &["Association", "Generalization", "Dependency"], None, "class: string; the class's id", has_classes, relationship_list),
+    ]
+}

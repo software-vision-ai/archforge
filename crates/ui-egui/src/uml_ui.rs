@@ -257,6 +257,19 @@ impl NotationUi for UmlUi {
         }
     }
 
+    /// The relationships that go with a class, or with a package's classes.
+    fn consequences(&self, store: &Store, obj: Obj) -> (usize, usize, usize) {
+        let held = match class(store, obj) {
+            Some(c) if c == archforge_uml::CLASS => vec![obj],
+            Some(c) if c == archforge_uml::PACKAGE => classes(store, obj),
+            _ => Vec::new(),
+        };
+        let mut going: Vec<Obj> = held.into_iter().flat_map(|c| archforge_uml::relations::relationships_of(store, c)).collect();
+        going.sort();
+        going.dedup();
+        (going.len(), 0, 0)
+    }
+
     fn has_children(&self, store: &Store, obj: Obj) -> bool {
         class(store, obj) == Some(archforge_uml::PACKAGE) && !classes(store, obj).is_empty()
     }
@@ -431,13 +444,16 @@ pub(crate) fn sample_model(st: &mut Store, model: Obj) -> Result<Obj, archforge_
             st.set(end, u::typed_element::TYPE, Value::Ref(ty))?;
             st.set(end, u::property::AGGREGATION, Value::Enum(aggregation))?;
             bounds(st, end, lower, upper)?;
+            // A member end first, which tells the end its association, then its owner.
+            st.push(a, u::association::MEMBER_END, Value::Ref(end))?;
             match owner {
-                Some(c) => st.push(c, u::class::OWNED_ATTRIBUTE, Value::Ref(end))?,
-                None => st.push(a, u::association::OWNED_END, Value::Ref(end))?,
-            };
-            // An end the association owns is one of its members already (ownedEnd subsets it).
-            if !st.list(a, u::association::MEMBER_END)?.contains(&Value::Ref(end)) {
-                st.push(a, u::association::MEMBER_END, Value::Ref(end))?;
+                Some(c) => {
+                    st.push(c, u::class::OWNED_ATTRIBUTE, Value::Ref(end))?;
+                }
+                None if !st.list(a, u::association::OWNED_END)?.contains(&Value::Ref(end)) => {
+                    st.push(a, u::association::OWNED_END, Value::Ref(end))?;
+                }
+                None => {}
             }
         }
         Ok(a)
