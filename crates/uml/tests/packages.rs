@@ -1,4 +1,4 @@
-//! Packages through the engine (AR-17): nested as deep as needed, names told apart among
+//! Packages through the engine: nested as deep as needed, names told apart among
 //! siblings, classes and packages moved, a nested package removed handing its contents and
 //! diagrams up to its parent (owner decision, for every notation), a top-level one taking them
 //! along, and a class of another package drawn as an outsider; each one undo step; the sweep.

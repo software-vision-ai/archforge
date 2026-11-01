@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- The diagram metamodel for every notation (decision gm2.21): a diagram of some element shows
+<!-- The diagram metamodel for every notation: a diagram of some element shows
      model elements as nodes and relationships as edges, in the spirit of OMG DI but our own. A node
      or a label carries no model text; it draws its element's. Coordinates are doubles in one logical
      unit, absolute in the diagram's space (a child's too). Generated into crates/diagram/src/generated

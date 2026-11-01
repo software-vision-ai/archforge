@@ -1,4 +1,4 @@
-//! UML's commands over the store (archforge-3c5.1.1, AR-17): packages in the project's Model,
+//! UML's commands over the store: packages in the project's Model,
 //! nested as deep as needed, and classes in a package, added, renamed, moved and listed. Each
 //! validates what it is given before it changes anything and refuses with a message naming the
 //! key. Ids in parameters are the elements' UUIDs. Removing and describing go through the shared
@@ -286,7 +286,7 @@ fn hand_up_problem(store: &Store, pkg: Obj, parent: Obj) -> Option<String> {
 /// Removes UML elements (packages, classes, attributes, operations, primitive types,
 /// associations, generalizations and dependencies), each with what it holds and the diagrams,
 /// nodes and lines that show them (`element.remove`, through [`crate::UmlNotation`]). A nested
-/// package hands what it holds, and its diagrams, up to its parent first (owner decision, AR-25);
+/// package hands what it holds, and its diagrams, up to its parent first (owner decision);
 /// a top-level package takes them along. A class takes the relationships that touch it along, and
 /// a member's type that goes is dropped from what had it.
 pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, CommandError> {

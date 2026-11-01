@@ -459,7 +459,7 @@ str		Simple	Simples
 str		Full	Completa
 str		Partial	Parcial
 str		{parent} has no primary key yet, so there is nothing in {child} to point at.	{parent} ainda não tem chave primária, por isso não há nada em {child} para apontar.
-# Diagramas de classes (archforge-3c5.1.1)
+# Diagramas de classes
 str		Add class	Adicionar classe
 str		Class	Classe
 str		Class diagram	Diagrama de classes
@@ -473,7 +473,7 @@ str		The diagram is of no package	O diagrama não é de nenhum pacote
 str		This class	Esta classe
 str		This package	Este pacote
 plural		+ {n} more member	+ {n} membro mais|+ {n} membros mais
-# Membros de classe nas Propriedades (archforge-3c5.1.3)
+# Membros de classe nas Propriedades
 str		Abstract	Abstrata
 str		Add attribute	Adicionar atributo
 str		Add operation	Adicionar operação
@@ -500,7 +500,7 @@ str		This attribute	Este atributo
 str		This operation	Esta operação
 str		Visibility	Visibilidade
 str		Place class	Colocar classe
-# Relacionar classes (archforge-3c5.1.4)
+# Relacionar classes
 str		A relationship joins two classes	Uma relação liga duas classes
 str		Add association	Adicionar associação
 str		Add dependency	Adicionar dependência
@@ -534,10 +534,10 @@ str		This dependency	Esta dependência
 str		This generalization	Esta generalização
 str		To	Para
 str		{what} removed	Removido: {what}
-# Pacotes (AR-17)
+# Pacotes
 str		Class · {package}	Classe · {package}
 str		{name} removed; what it held moved to {parent}	{name} removido; o conteúdo foi movido para {parent}
-# Alterações por guardar ao fechar (AR-22)
+# Alterações por guardar ao fechar
 str		Close and lose changes	Fechar e perder as alterações
 str		Close without writing	Fechar sem escrever
 str		Close {name} without writing?	Fechar {name} sem escrever?
@@ -548,5 +548,5 @@ str		Keep open	Manter aberto
 str		Save the changes to {name}?	Guardar as alterações a {name}?
 str		The changes since the last write are lost.	As alterações desde a última escrita perdem-se.
 str		The changes to {name} cannot be written	Não é possível escrever as alterações a {name}
-# Seletor de pastas no Linux (AR-23)
+# Seletor de pastas no Linux
 str		No folder picker could open: install xdg-desktop-portal and a backend for your desktop.	Não foi possível abrir nenhum seletor de pastas: instale o xdg-desktop-portal e um backend para o seu ambiente.

@@ -459,7 +459,7 @@ str		Simple	単純
 str		Full	完全
 str		Partial	部分
 str		{parent} has no primary key yet, so there is nothing in {child} to point at.	{parent} にはまだ主キーがないため、{child} から参照できるものがありません。
-# クラス図 (archforge-3c5.1.1)
+# クラス図
 str		Add class	クラスを追加
 str		Class	クラス
 str		Class diagram	クラス図
@@ -473,7 +473,7 @@ str		The diagram is of no package	この図はどのパッケージにも属し�
 str		This class	このクラス
 str		This package	このパッケージ
 plural		+ {n} more member	+ 他 {n} メンバー
-# プロパティのクラスメンバー (archforge-3c5.1.3)
+# プロパティのクラスメンバー
 str		Abstract	抽象
 str		Add attribute	属性を追加
 str		Add operation	操作を追加
@@ -500,7 +500,7 @@ str		This attribute	この属性
 str		This operation	この操作
 str		Visibility	可視性
 str		Place class	クラスを配置
-# クラスの関係 (archforge-3c5.1.4)
+# クラスの関係
 str		A relationship joins two classes	関係は 2 つのクラスを結びます
 str		Add association	関連を追加
 str		Add dependency	依存を追加
@@ -534,10 +534,10 @@ str		This dependency	この依存
 str		This generalization	この汎化
 str		To	終点
 str		{what} removed	{what}を削除しました
-# パッケージ (AR-17)
+# パッケージ
 str		Class · {package}	クラス · {package}
 str		{name} removed; what it held moved to {parent}	{name} を削除しました。中身は {parent} に移動しました
-# 閉じるときの未保存の変更 (AR-22)
+# 閉じるときの未保存の変更
 str		Close and lose changes	閉じて変更を破棄
 str		Close without writing	書き込まずに閉じる
 str		Close {name} without writing?	{name} を書き込まずに閉じますか？
@@ -548,5 +548,5 @@ str		Keep open	開いたままにする
 str		Save the changes to {name}?	{name} への変更を保存しますか？
 str		The changes since the last write are lost.	前回の書き込み以降の変更は失われます。
 str		The changes to {name} cannot be written	{name} への変更を書き込めません
-# Linux のフォルダーピッカー (AR-23)
+# Linux のフォルダーピッカー
 str		No folder picker could open: install xdg-desktop-portal and a backend for your desktop.	フォルダーピッカーを開けませんでした: お使いのデスクトップ用に xdg-desktop-portal とバックエンドをインストールしてください。

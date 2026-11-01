@@ -170,7 +170,7 @@ pub fn problems(store: &Store) -> Vec<String> {
                 }
             }
             // An edge's ends are nodes, but for a note link, which may end on a relationship's
-            // line (archforge-kjz.13): from a note, onto a line that shows an element, never onto
+            // line: from a note, onto a line that shows an element, never onto
             // itself or another link.
             let end = |prop| store.get(o, prop).ok().and_then(|v| v.as_ref());
             let is_line = |x: Obj| store.class_of(x).ok() == Some(EDGE);

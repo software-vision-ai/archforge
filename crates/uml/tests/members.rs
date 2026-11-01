@@ -1,4 +1,4 @@
-//! A class's members through the engine (archforge-3c5.1.3): attributes and operations added,
+//! A class's members through the engine: attributes and operations added,
 //! changed, moved, listed and removed, each one undo step; built-in types made in the Types package
 //! the first time one is used and reused after; multiplicities read or refused; the sweep.
 

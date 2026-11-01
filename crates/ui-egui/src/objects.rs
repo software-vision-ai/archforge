@@ -1,4 +1,4 @@
-//! A schema's sequences and views in Properties (slice S7 of archforge-gm2.34, from the design's
+//! A schema's sequences and views in Properties (from the design's
 //! panel states "Schema with sequences and views", "Sequence editor" and "View editor"): the
 //! Sequences section lists them with an `SQ` badge, the name, where they start, their step and
 //! the column that owns them; the Views section with a `VW` badge, the name, whether the view is

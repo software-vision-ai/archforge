@@ -2,8 +2,8 @@
 
 **Purpose.** The shared core metamodel: a project's one root (`Model`), folders that organise
 elements of any notation, comments and tags on any element, trace links between elements of
-any notations, which make the notations viewpoints of one model (decision gm2.20), and skills:
-text the user writes on an element to guide the AI (spec archforge-zer.2). Generated from
+any notations, which make the notations viewpoints of one model (decision), and skills:
+text the user writes on an element to guide the AI. Generated from
 `core.xmi` by `cargo xtask generate core`; `lib.rs` holds the rules the MOF core cannot know and
 `skills.rs` the skill rules and commands.
 
@@ -11,7 +11,7 @@ text the user writes on an element to guide the AI (spec archforge-zer.2). Gener
 Depends on no notation: everything that refers to another notation's element is typed Any, and what
 a skill may sit on or aim at comes from the notation's view through `skills::SkillHost`.
 
-**Binding rules.** The metamodel is data compiled in (gm2.18); the XMI is ours and lives in the
+**Binding rules.** The metamodel is data compiled in; the XMI is ours and lives in the
 repository, so the gate's `generated` step checks it everywhere. The MOF core enforces types,
 bounds, containment and the derived union `ownedElement`; this crate adds: a tag's name is unique
 among the tags on one element (`tag_name_free`), a link's ends differ (`link`), links die with
@@ -56,10 +56,10 @@ realization link between two classes; the rules refuse and change nothing; destr
 an exact undo; the sweep over a session of generic commands on the combined store.
 
 **Known lacks.** The rules run on demand (`problems`) and in the helpers; nothing calls them before
-a Save yet (il6.1.2). The generator marks `Tag::name` as the class's name property, so the MOF
+a Save yet. The generator marks `Tag::name` as the class's name property, so the MOF
 core's sibling-name rule (`validate`) would report two tags of one name under one Model even when
-they tag different elements, which the core allows; recorded on il6.1.2 for an owner decision. No
+they tag different elements, which the core allows; left for an owner decision. No
 commands or UI.
 
-**Non-goals.** Issues and chats (own tables, gm2.22), diagrams (gm2.29), ER and C4, the Model's
-creation in a project (il6.1.2).
+**Non-goals.** Issues and chats (own tables), diagrams, ER and C4, the Model's
+creation in a project.

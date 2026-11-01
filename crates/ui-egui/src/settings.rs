@@ -1,4 +1,4 @@
-//! The Settings dialog (archforge-9ln.4.1): for now, who the user is. The name entered here is kept
+//! The Settings dialog: for now, who the user is. The name entered here is kept
 //! in the preferences, and the bar's avatar shows its initials; with no name it shows JD, for John
 //! Doe. Archforge does not read the name from the operating system's account.
 //!

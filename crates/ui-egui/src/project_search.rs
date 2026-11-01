@@ -1,4 +1,4 @@
-//! What the top bar's search finds in an open project (archforge-9ln.1.3): its diagrams and its
+//! What the top bar's search finds in an open project: its diagrams and its
 //! elements (schemas, tables, columns, relationships, domains, enum types, sequences, views,
 //! skills and notes) by name, each with what it is and where it lives. The index is made once the
 //! list opens and again only when the model changes, so typing stays quick in a large model. A

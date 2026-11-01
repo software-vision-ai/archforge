@@ -1,4 +1,4 @@
-//! Relating classes on a class diagram (archforge-3c5.1.4): the Relationship tool draws the kind
+//! Relating classes on a class diagram: the Relationship tool draws the kind
 //! its chevron's menu chose (Association, Directed association, Aggregation, Composition,
 //! Generalization or Dependency) from class to class, from the whole to the part, from the specific
 //! class to the general one, from the client to the supplier; dropped on empty canvas it makes a new

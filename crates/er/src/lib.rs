@@ -29,8 +29,8 @@ pub const DIAGRAM_KIND: &str = "er";
 /// An entity node's width and height when the user names none.
 pub const ENTITY_SIZE: (f64, f64) = (160.0, 100.0);
 
-/// The ER notation in a project's view: its diagrams (gm2.29), where skills sit (spec
-/// archforge-zer.2), and how its elements are removed and described.
+/// The ER notation in a project's view: its diagrams, where skills sit, and
+/// how its elements are removed and described.
 pub struct ErNotation;
 
 /// A project's notations when it holds ER alone.

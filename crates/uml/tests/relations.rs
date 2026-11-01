@@ -1,4 +1,4 @@
-//! Relating classes through the engine (archforge-3c5.1.4): associations of each kind, ends set,
+//! Relating classes through the engine: associations of each kind, ends set,
 //! generalizations and dependencies drawn, wrong ends refused with nothing changed, relationships
 //! reconnected with their drawn lines following, and removed with the classes they touch; each one
 //! undo step; the sweep.

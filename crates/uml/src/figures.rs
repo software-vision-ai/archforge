@@ -1,4 +1,4 @@
-//! What a class diagram draws (archforge-3c5.1.2): a class as a plain card with its attributes
+//! What a class diagram draws: a class as a plain card with its attributes
 //! (visibility, name, type, multiplicity) and its operations (visibility, name, parameters, return
 //! type), its name slanted when it is abstract; an association as a line with its name, its ends'
 //! roles and multiplicities, an open arrow at an end only it navigates to (navigable both ways, it
@@ -133,7 +133,7 @@ pub fn operation_text(store: &Store, op: Obj) -> String {
 
 /// A class's card on `diagram`: its name, slanted when it is abstract, its attributes and its
 /// operations; a class of another package than the diagram's is drawn as an outsider, its package
-/// named in the eyebrow (AR-17).
+/// named in the eyebrow.
 pub fn card(store: &Store, c: Obj, diagram: Obj) -> Option<Card> {
     if store.class_of(c).ok()? != CLASS {
         return None;

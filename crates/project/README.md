@@ -14,7 +14,7 @@ others may not write to it, its own `.dolt` may hold nothing but a server lock, 
 read with a cap on rows, keys and values; anything unexpected is refused, never changed.
 
 
-The model's tables are the notations' generated storage (il6.1.2), composed by `archforge-notations`;
+The model's tables are the notations' generated storage, composed by `archforge-notations`;
 a project's database holds only the tables rows have gone to, made with the first rows, and a table
 it lacks reads as empty, so a notation the project does not use costs it nothing. The table
 `model_tables` names every model table rows have gone to, written with those rows: one of them
@@ -43,4 +43,4 @@ stored procedures or events, since Archforge's writes would set them off.
 **Tests.** `tests/project.rs` against a real dolt 2.6 or later, measured on macOS; the Linux and
 Windows runs are still to be done.
 
-**Non-goals.** The model's own tables and Save (il6.1.2), the Open screen and the recent list.
+**Non-goals.** The model's own tables and Save, the Open screen and the recent list.

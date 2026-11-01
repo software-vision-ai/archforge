@@ -1,5 +1,5 @@
-//! What a notation brings to the shell's explorers, search, problems and panels
-//! (archforge-il6.3.6): its rows in the Models tree and what `+` adds there, its renames and what a
+//! What a notation brings to the shell's explorers, search, problems and panels:
+//! its rows in the Models tree and what `+` adds there, its renames and what a
 //! removal takes with it, its entries in the project search, its problems, and the heading and the
 //! body of Properties for its elements. The shells (the tree, the filter, the scroll, the search
 //! list, the sections, the fields, the editors) stay shared; each answer is about the notation's

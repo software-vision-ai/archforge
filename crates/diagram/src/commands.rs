@@ -184,8 +184,8 @@ fn diagram_add<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
         if let Some(e) = element {
             st.set(d, diagram::ELEMENT, Value::Ref(e))?;
         }
-        // A new diagram's lines run at right angles around the tables (owner decision on
-        // archforge-guc.1.1); one made earlier keeps straight lines.
+        // A new diagram's lines run at right angles around the tables (owner decision);
+        // one made earlier keeps straight lines.
         let look = st.create(STYLE)?;
         st.set(look, style::ROUTING, Value::Enum(Routing::RightAngled.index()))?;
         st.set(look, style::AVOID, Value::Bool(true))?;
@@ -464,7 +464,7 @@ fn diagram_connect<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
 }
 
 /// Adds an edge for every relationship whose both ends the diagram shows and which it does not show
-/// yet (decision gm2.21: relationships appear where the user places edges; this adds the missing).
+/// yet (decision: relationships appear where the user places edges; this adds the missing).
 fn diagram_connect_all<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let d = one_of(ctx.doc, p, "diagram", DIAGRAM, "a diagram")?;
     let kind = kind_of(ctx.doc, d);
@@ -511,7 +511,7 @@ fn diagram_disconnect<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
 }
 
 /// Links a note to a node, or to an edge that shows a relationship, in its diagram: an edge with no
-/// element from the note (owner decision archforge-kjz.13). It changes no model element.
+/// element from the note (owner decision). It changes no model element.
 fn diagram_link_note<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let d = one_of(ctx.doc, p, "diagram", DIAGRAM, "a diagram")?;
     let note = node_in(ctx.doc, p, "note", d)?;

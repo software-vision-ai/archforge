@@ -116,7 +116,7 @@ pub trait ProjectHost: Send + Sync {
     }
 
     /// Writes the model of the project at `project` as these rows a moment from now; newer rows
-    /// replace ones not yet written (owner decision archforge-gm2.17: every edit reaches the
+    /// replace ones not yet written (owner decision: every edit reaches the
     /// project). Rows for a project that is no longer open are dropped.
     fn write(&self, _project: &std::path::Path, _rows: archforge_mof::rows::Rows) {}
 
@@ -351,7 +351,7 @@ pub struct Shell {
     saves: std::collections::VecDeque<(u64, SaveState)>,
     /// An opening the host works on.
     opening: Option<std::sync::mpsc::Receiver<Result<Opened, CreateError>>>,
-    /// Closing and quitting with unsaved changes (AR-22): the question open, the projects quitting
+    /// Closing and quitting with unsaved changes: the question open, the projects quitting
     /// still asks about, the save a closing waits for (its project and ticket), and whether
     /// quitting was answered for every project, so the window may close.
     pub ask: Option<close_ask::Ask>,
@@ -361,7 +361,7 @@ pub struct Shell {
     /// Why the last save or the last opening failed, for the status bar and Home.
     pub save_error: Option<String>,
     pub open_error: Option<String>,
-    /// Why the last folder pick showed no picker (AR-23), for Home and the status bar; gone with
+    /// Why the last folder pick showed no picker, for Home and the status bar; gone with
     /// the next pick that shows one.
     pub picker_error: Option<String>,
     /// The Models explorer's own state: folds, filter, a name being typed, the dialogs.
@@ -917,7 +917,7 @@ impl Shell {
     }
 
     /// A pick that came back empty: a cancel, or a picker that could not appear, which Home and
-    /// the status bar then say (AR-23).
+    /// the status bar then say.
     fn say_why_no_picker(&mut self) {
         self.picker_error = self.services.picker_unavailable.as_ref().and_then(|probe| probe());
     }
@@ -1158,7 +1158,7 @@ impl Shell {
     /// The window title: the open project's name and the application's, or the application's alone.
     pub fn title(&self) -> String {
         match &self.project {
-            // Unsaved changes mark the title with a dot before the name (AR-22).
+            // Unsaved changes mark the title with a dot before the name.
             Some(p) => {
                 let name = if self.session.as_ref().is_some_and(|s| s.is_dirty()) { format!("• {}", p.name) } else { p.name.clone() };
                 crate::i18n::fmt(&crate::i18n::tr("{name} — Archforge"), &[("name", &name)])

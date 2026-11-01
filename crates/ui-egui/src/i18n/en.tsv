@@ -458,7 +458,7 @@ str		Simple	Simple
 str		Full	Full
 str		Partial	Partial
 str		{parent} has no primary key yet, so there is nothing in {child} to point at.	{parent} has no primary key yet, so there is nothing in {child} to point at.
-# Class diagrams (archforge-3c5.1.1)
+# Class diagrams
 str		Add class	Add class
 str		Class	Class
 str		Class diagram	Class diagram
@@ -472,7 +472,7 @@ str		The diagram is of no package	The diagram is of no package
 str		This class	This class
 str		This package	This package
 plural		+ {n} more member	+ {n} more member|+ {n} more members
-# Class members in Properties (archforge-3c5.1.3)
+# Class members in Properties
 str		Abstract	Abstract
 str		Add attribute	Add attribute
 str		Add operation	Add operation
@@ -499,7 +499,7 @@ str		This attribute	This attribute
 str		This operation	This operation
 str		Visibility	Visibility
 str		Place class	Place class
-# Relating classes (archforge-3c5.1.4)
+# Relating classes
 str		A relationship joins two classes	A relationship joins two classes
 str		Add association	Add association
 str		Add dependency	Add dependency
@@ -533,10 +533,10 @@ str		This dependency	This dependency
 str		This generalization	This generalization
 str		To	To
 str		{what} removed	{what} removed
-# Packages (AR-17)
+# Packages
 str		Class · {package}	Class · {package}
 str		{name} removed; what it held moved to {parent}	{name} removed; what it held moved to {parent}
-# Unsaved changes on close (AR-22)
+# Unsaved changes on close
 str		Close and lose changes	Close and lose changes
 str		Close without writing	Close without writing
 str		Close {name} without writing?	Close {name} without writing?
@@ -547,5 +547,5 @@ str		Keep open	Keep open
 str		Save the changes to {name}?	Save the changes to {name}?
 str		The changes since the last write are lost.	The changes since the last write are lost.
 str		The changes to {name} cannot be written	The changes to {name} cannot be written
-# Linux folder picker (AR-23)
+# Linux folder picker
 str		No folder picker could open: install xdg-desktop-portal and a backend for your desktop.	No folder picker could open: install xdg-desktop-portal and a backend for your desktop.

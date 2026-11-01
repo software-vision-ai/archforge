@@ -7,7 +7,7 @@
 //! colour shows while the key status is off, which the panel offers to turn off. Lines run
 //! straight, at right angles or curved, as the diagram says or as a line's own look says; right
 //! angles can go around the tables in the way. With nothing selected the panel sets the diagram's
-//! routing (owner decisions on archforge-guc.1.1).
+//! routing (owner decisions).
 
 use archforge_diagram::{DIAGRAM, NODE, ProjectView, diagram, edge, node, style};
 use archforge_mof::{Obj, Store, Value};

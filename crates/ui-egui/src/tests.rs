@@ -285,7 +285,7 @@ fn a_failed_creation_keeps_the_dialog_and_the_name_and_says_why() {
     assert!(h.state().new_project.as_ref().is_some_and(|d| !d.creating()));
 }
 
-/// A host that writes and saves (archforge-kjz.3): it keeps every hand-over of rows, and each
+/// A host that writes and saves: it keeps every hand-over of rows, and each
 /// save's and opening's sender, so a test answers when it chooses.
 #[derive(Default)]
 struct SavingHost {

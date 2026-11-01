@@ -1,6 +1,6 @@
 # archforge-diagram
 
-**Purpose.** The diagram metamodel for every notation (decision gm2.21): a `Diagram` of some
+**Purpose.** The diagram metamodel for every notation (decision): a `Diagram` of some
 element shows model elements as `Node`s and relationships as `Edge`s, with `Label`s that name a text
 slot of their element and `Style`s over the shipped style sheet; our own, in the spirit of OMG DI,
 with UMLDI export a later task. Generated from `diagram.xmi` by `cargo xtask generate diagram`;
@@ -36,7 +36,7 @@ text, x, y, width, height, child, style), `Edge` (element, source, target, waypo
 avoid) and the enumerations `LabelPlace` (source, middle, target) and `Routing` (asDiagram,
 straight, rightAngled, curved); `Element` abstract above them. A diagram's style is the look its
 lines take unless their own says otherwise; a new diagram's lines run at right angles around the
-tables (archforge-guc.1.1).
+tables.
 
 **Public API.**
 
@@ -70,8 +70,8 @@ topmost node, nearest edge and viewport; the rules over hand-made data; the swee
 sequences with the rules and the store's validation checked after each step and undo back to the
 start. `archforge-er/tests/diagram.rs` runs the commands with the ER policy.
 
-**Known lacks.** Nothing persists a diagram until il6.1.2, where diagrams load lazily. The style
-sheet's contents and the drawing come with the canvas (gm2.10). Arrange is a layered layout without dummy boxes for long lines; routes are worked out when drawn, never
+**Known lacks.** The project crate persists diagrams; they do not load lazily. The style
+sheet's contents and the drawing come with the canvas. Arrange is a layered layout without dummy boxes for long lines; routes are worked out when drawn, never
 stored, and an avoiding route that finds no way round takes the plain right-angled one; `visible`
 culls edges by their bounds, so a long diagonal edge is drawn in more viewports than it
 crosses, and a viewport wider than 4,096 cells is answered by a scan of the items. The grid is

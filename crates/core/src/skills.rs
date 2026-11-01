@@ -1,4 +1,4 @@
-//! Skills (spec archforge-zer.2): text the user writes on a model element to guide the AI when it
+//! Skills: text the user writes on a model element to guide the AI when it
 //! draws, names, changes the model or exports it. A skill sits on a subject (a schema, a package,
 //! a table, a column, or the whole model when it has none), may aim at a kind below the subject
 //! (every table, every relationship, columns of a type) and is inherited down the hierarchy: the

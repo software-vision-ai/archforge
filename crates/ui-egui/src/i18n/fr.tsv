@@ -459,7 +459,7 @@ str		Simple	Simple
 str		Full	Complète
 str		Partial	Partielle
 str		{parent} has no primary key yet, so there is nothing in {child} to point at.	{parent} n’a pas encore de clé primaire ; il n’y a donc rien dans {child} vers quoi pointer.
-# Diagrammes de classes (archforge-3c5.1.1)
+# Diagrammes de classes
 str		Add class	Ajouter une classe
 str		Class	Classe
 str		Class diagram	Diagramme de classes
@@ -473,7 +473,7 @@ str		The diagram is of no package	Le diagramme n’est d’aucun paquetage
 str		This class	Cette classe
 str		This package	Ce paquetage
 plural		+ {n} more member	+ {n} membre de plus|+ {n} membres de plus
-# Membres de classe dans Propriétés (archforge-3c5.1.3)
+# Membres de classe dans Propriétés
 str		Abstract	Abstraite
 str		Add attribute	Ajouter un attribut
 str		Add operation	Ajouter une opération
@@ -500,7 +500,7 @@ str		This attribute	Cet attribut
 str		This operation	Cette opération
 str		Visibility	Visibilité
 str		Place class	Placer la classe
-# Relier des classes (archforge-3c5.1.4)
+# Relier des classes
 str		A relationship joins two classes	Une relation joint deux classes
 str		Add association	Ajouter une association
 str		Add dependency	Ajouter une dépendance
@@ -534,10 +534,10 @@ str		This dependency	Cette dépendance
 str		This generalization	Cette généralisation
 str		To	Vers
 str		{what} removed	Supprimé : {what}
-# Paquetages (AR-17)
+# Paquetages
 str		Class · {package}	Classe · {package}
 str		{name} removed; what it held moved to {parent}	{name} supprimé ; son contenu a été déplacé vers {parent}
-# Modifications non enregistrées à la fermeture (AR-22)
+# Modifications non enregistrées à la fermeture
 str		Close and lose changes	Fermer et perdre les modifications
 str		Close without writing	Fermer sans écrire
 str		Close {name} without writing?	Fermer {name} sans écrire ?
@@ -548,5 +548,5 @@ str		Keep open	Garder ouvert
 str		Save the changes to {name}?	Enregistrer les modifications de {name} ?
 str		The changes since the last write are lost.	Les modifications depuis la dernière écriture sont perdues.
 str		The changes to {name} cannot be written	Les modifications de {name} ne peuvent pas être écrites
-# Sélecteur de dossier sous Linux (AR-23)
+# Sélecteur de dossier sous Linux
 str		No folder picker could open: install xdg-desktop-portal and a backend for your desktop.	Aucun sélecteur de dossier n'a pu s'ouvrir : installez xdg-desktop-portal et un backend pour votre bureau.

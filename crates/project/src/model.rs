@@ -1,7 +1,7 @@
-//! The model in the project database (archforge-kjz.3): the generated tables of the metamodels a
+//! The model in the project database: the generated tables of the metamodels a
 //! project holds, each made when rows first go there, so a project holds the tables of the
 //! notations it uses and a table it lacks holds nothing; the model's rows written as one transaction that replaces
-//! what the tables held, as the user works (owner decision archforge-gm2.17); read back only from
+//! what the tables held, as the user works (owner decision); read back only from
 //! tables of exactly the generated shape, row by row within budgets of rows, cells and bytes, never
 //! sizing an allocation from what is read; and Save, a Dolt commit of everything written.
 //!
@@ -41,14 +41,13 @@ const SCHEMA_KEY: &str = "model_schema";
 /// change, the fingerprint they had goes here. A fingerprint not listed is another model's, or a
 /// later Archforge's, and is refused.
 pub const EARLIER_MODELS: &[&str] = &[
-    // Before line routing (archforge-guc.1.1): no Diagram.style, no Style.routing or Style.avoid.
+    // Before line routing: no Diagram.style, no Style.routing or Style.avoid.
     "7666551b88d9af5b",
-    // Before UML (archforge-il6.3.2): the core's, the diagrams' and ER's tables alone.
+    // Before UML: the core's, the diagrams' and ER's tables alone.
     "8c7ee9a29f10f219",
 ];
 /// The table that names every model table rows have gone to: one the project lacks is then lost,
-/// not unused, and the project is refused rather than read short (owner decision on
-/// archforge-il6.3.2).
+/// not unused, and the project is refused rather than read short (owner decision).
 const IN_USE: &str = "model_tables";
 /// The most tables a project's database may hold for an upgrade to look at.
 const MAX_TABLES: usize = 4096;
@@ -413,7 +412,7 @@ impl Project {
     }
 
     /// Don't save: puts the project back to its last save, throwing away every change written
-    /// since (AR-22, owner decision): the tables it had are reset, and those made since (a
+    /// since (owner decision): the tables it had are reset, and those made since (a
     /// notation's table first used after the save) are removed. A project never saved goes back
     /// to how it was created; its model's tables are made again when rows next go there.
     pub fn discard(&self) -> Result<(), Error> {

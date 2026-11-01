@@ -24,4 +24,4 @@ token closes the connection without a word.
 | `MAX_LINE`, `MAX_REQUEST`, `MAX_REPLY`, `MAX_CONNECTIONS`, `TIMEOUT`, `TOKEN_LEN` | 4 MiB, 1 MiB, 16 MiB, 16, 30 s, 64 |
 
 **Non-goals.** Answering requests: the shell does (`archforge_ui_egui::control`). Windows: its
-protected token file is archforge-vge.1.2.
+protected token file comes later.

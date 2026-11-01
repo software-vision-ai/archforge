@@ -9,7 +9,7 @@ use archforge_mof::{Builder, ClassId, DataId, DataKind, MetaError, Metamodel, Pr
 pub const INDEX: u16 = 1;
 pub const URI: &str = "archforge:core";
 pub const VERSION: &str = "1";
-pub const CONTENT_HASH: &str = "c3b38075539852e0";
+pub const CONTENT_HASH: &str = "ccd42499b304a81d";
 
 pub const BOOLEAN: DataId = DataId::new(INDEX, 0);
 pub const INTEGER: DataId = DataId::new(INDEX, 1);

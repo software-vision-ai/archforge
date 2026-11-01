@@ -1,8 +1,8 @@
 //! A project on disk: `<name>.archforge`, the data folder of a Dolt server, with one database,
 //! `project`, whose `settings` table says what the project is. Creating it makes the folder, starts
 //! the server, writes the settings and commits them; opening it checks the folder, starts the
-//! server and reads the settings back. The model's own tables come with the generated storage
-//! (il6.1.2); a format-2 project may still carry the `er_` tables an earlier Archforge made, unused. The project stays open, its server running, until it is
+//! server and reads the settings back. The model's own tables come with the generated storage;
+//! a format-2 project may still carry the `er_` tables an earlier Archforge made, unused. The project stays open, its server running, until it is
 //! closed or dropped.
 //!
 //! A folder from elsewhere is never trusted: its server settings cannot sync with a remote or run

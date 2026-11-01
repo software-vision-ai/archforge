@@ -1,4 +1,4 @@
-//! The MVP's end-to-end test (AR-38): the real shell over the real project host, driven through
+//! The MVP's end-to-end test: the real shell over the real project host, driven through
 //! its controls as a user would. A new project from Home; a class diagram; classes placed with the
 //! Class tool and named in place; an attribute and an operation added in Properties; one line of
 //! each relationship kind drawn with the Relationship tool; undo and redo from the keyboard; Save;

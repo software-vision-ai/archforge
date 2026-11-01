@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- The ER notation's metamodel (decision gm2.20): a schema of entities with ordered attributes and
+<!-- The ER notation's metamodel: a schema of entities with ordered attributes and
      relationships with a cardinality at each end; primary keys and unique constraints as named
      key elements with their own column order; foreign keys onto any key, with their own columns
      matched to the key's by position, referential actions, match type and deferrability; check

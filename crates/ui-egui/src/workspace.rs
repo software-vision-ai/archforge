@@ -190,7 +190,7 @@ pub(crate) fn project_tabs(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rec
         .tabs
         .iter()
         .enumerate()
-        // A project with unsaved changes shows a dot before its name, as the title does (AR-22).
+        // A project with unsaved changes shows a dot before its name, as the title does.
         .map(|(i, t)| (if shell.tab_unsaved(i) { format!("• {}", t.name) } else { t.name.clone() }, shell.active == Some(i), t.closing()))
         .collect();
     let widths: Vec<f32> = tabs.iter().map(|(name, ..)| ux::galley(&paint, name, types::UI_STRONG, p.text, None).size().x).collect();
@@ -437,7 +437,7 @@ fn status_bar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     let paint = ui.painter();
     paint.rect_filled(r, 0.0, p.surface);
     paint.rect_filled(Rect::from_min_size(r.min, vec2(r.width(), 1.0)), 0.0, p.border);
-    // Saving (archforge-kjz.3): every change is written to the project a moment after it is made;
+    // Saving: every change is written to the project a moment after it is made;
     // Save commits it. The status says which, and why a write or a save failed.
     let writing = match (&shell.services.projects, &shell.project) {
         (Some(h), Some(project)) => h.writing(&project.path),

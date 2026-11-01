@@ -1,4 +1,4 @@
-//! The problems the shell shows (slice E4 of archforge-gm2.10, from the design's cards "ER ·
+//! The problems the shell shows (from the design's cards "ER ·
 //! Canvas · Problems and a note" and "ER · Properties · Problems"): a table without a primary key,
 //! a many-to-many relationship still waiting for its mapping table, a foreign key the rules
 //! refuse, a key column that may be null, a key whose columns the rules refuse. Each is named by

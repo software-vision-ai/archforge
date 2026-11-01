@@ -210,8 +210,8 @@ pub fn restore(store: &mut Store, rows: &Rows, tables: &[Table], junctions: &[Ju
     store.transaction(|st| build(st, rows, tables, junctions))
 }
 
-/// Builds the objects of `rows` into `store`, which must hold nothing yet, and gives it back built
-/// (AR-30). No undo log is kept, so a model of any size the read budgets let through opens: all of
+/// Builds the objects of `rows` into `store`, which must hold nothing yet, and gives it back built.
+/// No undo log is kept, so a model of any size the read budgets let through opens: all of
 /// it or none comes from the store being given back only when everything was built, and dropped
 /// otherwise. The caller validates the result.
 pub fn restore_into_empty(mut store: Store, rows: &Rows, tables: &[Table], junctions: &[Junction]) -> Result<Store, Invalid> {

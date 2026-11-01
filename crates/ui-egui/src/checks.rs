@@ -1,4 +1,4 @@
-//! A table's check constraints in Properties (slice S3 of archforge-gm2.34, from the design's
+//! A table's check constraints in Properties (from the design's
 //! panel state "Editing a check constraint"): the Checks section lists them with a `CK` badge, the
 //! name (or the generated one) and the expression; `+` starts one, a click on a row opens the
 //! editor in its place (name, the expression in a multiline field; remove, cancel and apply as

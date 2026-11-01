@@ -1,4 +1,4 @@
-//! The tools and gestures of each diagram kind (archforge-il6.3.5): a kind brings its toolbar
+//! The tools and gestures of each diagram kind: a kind brings its toolbar
 //! tools, each placing an element or connecting two, and the hooks the canvas's gestures run on
 //! its elements: place, connect, a line dropped on empty canvas, renaming in place, opening an
 //! element's editor at a row of its card, a second adorner, and the live line while connecting.

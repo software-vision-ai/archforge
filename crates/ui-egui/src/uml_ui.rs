@@ -1,4 +1,4 @@
-//! What UML brings to the shell (archforge-3c5.1.1): the class diagram's tools and gestures (the
+//! What UML brings to the shell: the class diagram's tools and gestures (the
 //! Class tool places a class named in place, its card renames in place), and its packages and
 //! classes in the Models tree, the search and Properties.
 
@@ -223,7 +223,7 @@ impl NotationUi for UmlUi {
     }
 
     /// A package with the packages it holds, its classes, and each class's attributes and
-    /// operations, every level folded until opened (AR-17).
+    /// operations, every level folded until opened.
     fn tree(&self, store: &Store, package: Obj, t: &Tree<'_>) -> Vec<Row> {
         package_rows(store, package, 0, t)
     }
@@ -500,7 +500,7 @@ fn class_rows(store: &Store, c: Obj, depth: u8, t: &Tree<'_>) -> Vec<Row> {
     out
 }
 
-/// A class model to read (archforge-3c5.1.2), for the snapshot screens and the tests: in a package,
+/// A class model to read, for the snapshot screens and the tests: in a package,
 /// Commerce, classes with typed attributes and operations, an abstract Payment, associations that
 /// navigate one way and both, a composition and a shared aggregation, a generalization and a
 /// dependency. Built on the store, since commands for members and relationships come with their

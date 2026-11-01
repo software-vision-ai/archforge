@@ -1,6 +1,6 @@
 //! The host's projects: creates and opens them on a worker thread, keeps those that are open (one
 //! per tab of the window, at most [`MAX_OPEN`], each with its own server), and writes their models
-//! as the user works (owner decision archforge-gm2.17) on a writer thread: each project's newest
+//! as the user works (owner decision) on a writer thread: each project's newest
 //! rows a moment after its last change, all of them in one transaction; Save writes what waits and
 //! commits it. A failed write keeps the rows and tries again with the next change or Save; the
 //! status bar says why meanwhile.
@@ -660,7 +660,7 @@ mod tests {
     }
 
     /// Removes a test's folder once the servers that wrote in it have stopped. A file can still
-    /// appear in it just after (archforge-543): the removal is tried again for a few seconds, and
+    /// appear in it just after: the removal is tried again for a few seconds, and
     /// what stayed is named when it never empties.
     fn remove_settled(base: &Path) {
         let started = Instant::now();

@@ -1,4 +1,4 @@
-//! Closing and quitting with unsaved changes (AR-22): the question a project's closing asks.
+//! Closing and quitting with unsaved changes: the question a project's closing asks.
 //! Unsaved changes ask Save, Don't save or Cancel (owner decision); Don't save puts the project
 //! back to its last save. A project whose changes could not be written offers Close without
 //! writing, which asks once more before the changes not yet written are lost (owner decision);

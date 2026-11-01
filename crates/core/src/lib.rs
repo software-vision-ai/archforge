@@ -1,4 +1,4 @@
-//! The shared core metamodel (decision gm2.20): what every notation has in common. A project's one
+//! The shared core metamodel (decision): what every notation has in common. A project's one
 //! root (`Model`), folders that organise elements of any notation, comments and tags on any
 //! element, and trace links between elements of any notations, which make the notations
 //! viewpoints of one model. Everything that refers to another notation is typed Any, so this crate

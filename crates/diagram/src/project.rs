@@ -1,4 +1,4 @@
-//! One view for a project of several notations (archforge-il6.3.3): the selection and the open
+//! One view for a project of several notations: the selection and the open
 //! diagram, and the notations the project holds, each a [`Notation`] that answers for its own
 //! diagram kinds and for the elements of its metamodel. The diagram commands and the skill
 //! commands ask the view; the view asks the notation that owns a diagram's kind or an element's
