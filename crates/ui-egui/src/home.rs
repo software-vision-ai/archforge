@@ -358,8 +358,12 @@ fn content(shell: &mut Shell, ui: &egui::Ui, p: &Palette, origin: Pos2, width: f
         Some(inner),
     );
     // Why the last opening failed: the host's words, at the right, level with the title.
-    if let Some(why) = shell.open_error.clone() {
-        let line = crate::i18n::fmt(&tr("The project could not be opened: {why}"), &[("why", &why)]);
+    let line = match (&shell.open_error, &shell.picker_error) {
+        (Some(why), _) => Some(crate::i18n::fmt(&tr("The project could not be opened: {why}"), &[("why", why)])),
+        (None, Some(why)) => Some(why.clone()),
+        _ => None,
+    };
+    if let Some(line) = line {
         let g = ux::galley_rows(&paint, &line, types::CAPTION, p.danger, Some(inner.clamp(0.0, 480.0)), 2);
         paint.galley(pos2(right - g.size().x, origin.y + 81.0), g, p.danger);
     }

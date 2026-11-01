@@ -547,3 +547,5 @@ str		Keep open	Keep open
 str		Save the changes to {name}?	Save the changes to {name}?
 str		The changes since the last write are lost.	The changes since the last write are lost.
 str		The changes to {name} cannot be written	The changes to {name} cannot be written
+# Linux folder picker (AR-23)
+str		No folder picker could open: install xdg-desktop-portal and a backend for your desktop.	No folder picker could open: install xdg-desktop-portal and a backend for your desktop.

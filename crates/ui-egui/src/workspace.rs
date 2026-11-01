@@ -456,6 +456,7 @@ fn status_bar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
             let why = shell.open_error.clone().unwrap_or_default();
             (p.danger, crate::i18n::fmt(&tr("The project could not be opened: {why}"), &[("why", &why)]))
         }
+        Some(_) if shell.picker_error.is_some() => (p.danger, shell.picker_error.clone().unwrap_or_default()),
         Some(_) if shell.save_error.is_some() => {
             detail = shell.save_error.clone();
             (p.danger, tr("Not saved"))

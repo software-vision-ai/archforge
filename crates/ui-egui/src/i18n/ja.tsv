@@ -548,3 +548,5 @@ str		Keep open	開いたままにする
 str		Save the changes to {name}?	{name} への変更を保存しますか？
 str		The changes since the last write are lost.	前回の書き込み以降の変更は失われます。
 str		The changes to {name} cannot be written	{name} への変更を書き込めません
+# Linux のフォルダーピッカー (AR-23)
+str		No folder picker could open: install xdg-desktop-portal and a backend for your desktop.	フォルダーピッカーを開けませんでした: お使いのデスクトップ用に xdg-desktop-portal とバックエンドをインストールしてください。
