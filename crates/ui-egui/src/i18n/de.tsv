@@ -355,6 +355,7 @@ str		Change…	Ändern…
 str		Creates {file} here: one versioned project file that keeps every change.	Erstellt hier {file}: eine versionierte Projektdatei, die jede Änderung bewahrt.
 str		The project file is made here: one versioned file that keeps every change.	Die Projektdatei entsteht hier: eine versionierte Datei, die jede Änderung bewahrt.
 str		Diagrams	Diagramme
+str		Elements	Elemente
 str		Add diagrams of any kind as you go: UML 2, C4 and many more. Every diagram shows the same model.	Fügen Sie beim Arbeiten Diagramme jeder Art hinzu: UML 2, C4 und viele mehr. Jedes Diagramm zeigt dasselbe Modell.
 str		In every project	In jedem Projekt
 str		Issues	Aufgaben

@@ -122,6 +122,8 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
         let explorer_w = (!shell.state.explorer_collapsed).then_some(shell.state.explorer_width);
         let panel_w = (!shell.state.panel_collapsed).then_some(shell.state.panel_width);
         let cols = columns(body, explorer_w, panel_w);
+        // The command key with K opens the search, over the project's diagrams and elements.
+        crate::home_search::shortcut(shell, ui.ctx());
         // The bar and the strip first: a click on a tab or Home there changes what shows, and the
         // frame ends.
         if !bar_row(shell, ui, &p, bar) || !title_strip(shell, ui, &p, strip, false) {

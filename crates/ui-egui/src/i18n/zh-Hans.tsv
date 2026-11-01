@@ -355,6 +355,7 @@ str		Change…	更改…
 str		Creates {file} here: one versioned project file that keeps every change.	在此创建 {file}：一个保留每次更改的版本化项目文件。
 str		The project file is made here: one versioned file that keeps every change.	项目文件在此创建：一个保留每次更改的版本化文件。
 str		Diagrams	图表
+str		Elements	元素
 str		Add diagrams of any kind as you go: UML 2, C4 and many more. Every diagram shows the same model.	随时添加任意类型的图表：UML 2、C4 等等。每个图表都显示同一个模型。
 str		In every project	每个项目都包含
 str		Issues	问题

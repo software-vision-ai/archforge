@@ -296,9 +296,9 @@ pub(crate) fn bar_tail(
     let start = (end - 300.0).max(start);
     if end - start >= 160.0 {
         let field = Rect::from_min_max(pos2(start, mid - 15.0), pos2(end, mid + 15.0));
-        // Home's field searches; the workspace's waits for its own search.
-        if prefix == "home.header" {
-            crate::home_search::field(shell, ui, p, field, placeholder);
+        // Home's field searches projects; a project's, its diagrams and elements.
+        if prefix == "home.header" || prefix == "workspace.header" {
+            crate::home_search::field(shell, ui, p, field, placeholder, prefix);
             return;
         }
         paint.rect_filled(field, 15.0, p.page);
