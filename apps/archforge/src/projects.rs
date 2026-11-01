@@ -576,6 +576,41 @@ mod tests {
             .is_ok_and(|s| s.success())
     }
 
+    /// Removes a test's folder once the servers that wrote in it have stopped. A file can still
+    /// appear in it just after (archforge-543): the removal is tried again for a few seconds, and
+    /// what stayed is named when it never empties.
+    fn remove_settled(base: &Path) {
+        let started = Instant::now();
+        loop {
+            match std::fs::remove_dir_all(base) {
+                Ok(()) => return,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => return,
+                Err(e) if started.elapsed() < Duration::from_secs(5) => {
+                    eprintln!("removing {} again after: {e}; left: {:?}", base.display(), left_in(base));
+                    std::thread::sleep(Duration::from_millis(100));
+                }
+                Err(e) => panic!("{} would not empty: {e}; left: {:?}", base.display(), left_in(base)),
+            }
+        }
+    }
+
+    /// The files under `dir`, at most twenty.
+    fn left_in(dir: &Path) -> Vec<PathBuf> {
+        let mut out = Vec::new();
+        let mut todo = vec![dir.to_path_buf()];
+        while let Some(d) = todo.pop() {
+            for entry in std::fs::read_dir(&d).into_iter().flatten().flatten() {
+                let p = entry.path();
+                if p.is_dir() {
+                    todo.push(p);
+                } else if out.len() < 20 {
+                    out.push(p);
+                }
+            }
+        }
+        out
+    }
+
     /// Closes `path` and waits for the answer.
     fn close(host: &Projects, path: &Path) -> Result<(), String> {
         host.close(path).recv_timeout(Duration::from_secs(60)).expect("the closing answers")
@@ -610,7 +645,7 @@ mod tests {
         host.shutdown();
         assert!(gone(pid), "exit stopped every open project's server");
         assert!(open_paths(&host).is_empty());
-        std::fs::remove_dir_all(&base).unwrap();
+        remove_settled(&base);
     }
 
     /// A model's rows: a project with one schema of the given name.
@@ -686,6 +721,6 @@ mod tests {
         close(&host, &first).unwrap();
         assert!(open_paths(&host).is_empty());
         host.shutdown();
-        std::fs::remove_dir_all(&base).unwrap();
+        remove_settled(&base);
     }
 }
