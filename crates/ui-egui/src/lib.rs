@@ -175,7 +175,11 @@ pub enum SaveState {
 
 /// Looks whether the host has answered `saving`; when it has, marks what it wrote saved (or keeps
 /// why not) and gives the save's ticket and outcome.
-fn poll_save(saving: &mut Option<Saving>, session: Option<&mut archforge_er::Session>, save_error: &mut Option<String>) -> Option<(u64, SaveState)> {
+fn poll_save(
+    saving: &mut Option<Saving>,
+    session: Option<&mut archforge_notations::Session>,
+    save_error: &mut Option<String>,
+) -> Option<(u64, SaveState)> {
     let (rx, revision, ticket) = saving.as_ref()?;
     let (revision, ticket) = (*revision, *ticket);
     let outcome = match rx.try_recv() {
@@ -206,7 +210,7 @@ fn poll_save(saving: &mut Option<Saving>, session: Option<&mut archforge_er::Ses
 /// Everything the window keeps for a project whose tab is not the one shown.
 struct Parked {
     project: Opened,
-    session: Option<archforge_er::Session>,
+    session: Option<archforge_notations::Session>,
     session_error: Option<SessionError>,
     adopted: Option<std::path::PathBuf>,
     written: Option<u64>,
@@ -297,7 +301,7 @@ pub struct Shell {
     /// The open project's model: the ER session over a store with the project's Model root, made
     /// once when the project opens and dropped when it closes. Nothing reaches the project's
     /// database yet; the status bar says so.
-    pub session: Option<archforge_er::Session>,
+    pub session: Option<archforge_notations::Session>,
     /// Why the session could not be made, when it could not.
     pub session_error: Option<SessionError>,
     /// The project the session was made for, so it is made once.

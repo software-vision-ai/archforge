@@ -7,7 +7,8 @@ typed in place, Delete asks when other things go with it),
 the Diagrams explorer (`diagrams`: the model's folders and diagrams, the model behind the open
 diagram, the New diagram dialog from its `+` and the tab strip's), the centre (`canvas`: the
 diagram tabs, the open diagram drawn read-only from the diagram metamodel in the design's style
-with entity cards, ER edges and labels, pan and zoom, the minimap with the zoom control, the canvas
+with each notation's cards and lines as it describes them (`archforge_diagram::figure`: ER's
+table cards and crow's foot lines), notes, links and labels, pan and zoom, the minimap with the zoom control, the canvas
 toolbar; a click selects what it hits; `editing`: the Entity tool places a table named in place,
 Select drags, resizes, marquees, nudges and arranges nodes, the entity menu removes from the
 diagram or deletes from the model after the dialog, a node grows with its columns; `connect`: the

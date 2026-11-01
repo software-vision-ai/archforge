@@ -9,6 +9,7 @@
 
 pub mod arrange;
 pub mod commands;
+pub mod figure;
 mod generated;
 pub mod grid;
 pub mod project;

@@ -386,6 +386,7 @@ dependencies = [
  "archforge-mof",
  "archforge-names",
  "archforge-notations",
+ "archforge-uml",
  "egui",
  "egui_commonmark",
  "egui_kittest",

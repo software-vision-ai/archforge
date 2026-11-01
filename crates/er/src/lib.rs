@@ -7,6 +7,7 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
 pub mod commands;
+pub mod figures;
 mod generated;
 pub mod rules;
 
@@ -88,6 +89,18 @@ impl Notation for ErNotation {
 
     fn default_size(&self, _class: ClassId) -> (f64, f64) {
         ENTITY_SIZE
+    }
+
+    fn card(&self, store: &Store, element: Obj, diagram: Obj) -> Option<archforge_diagram::figure::Card> {
+        figures::card(store, element, diagram)
+    }
+
+    fn line(&self, store: &Store, element: Obj) -> Option<archforge_diagram::figure::Line> {
+        figures::line(store, element)
+    }
+
+    fn slot_text(&self, store: &Store, element: Obj, slot: &str) -> String {
+        figures::slot_text(store, element, slot)
     }
 
     /// A skill sits on a schema, an entity or an attribute; it aims at every table, every

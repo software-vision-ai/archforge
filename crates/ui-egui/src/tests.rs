@@ -3755,7 +3755,16 @@ fn every_relationship_end_draws_its_two_crows_foot_marks() {
         let mut out = ctx.run_ui(Default::default(), |ui| {
             let p = crate::ux::palette(false);
             let stroke = egui::Stroke::new(1.2, p.text);
-            crate::canvas::end_glyph(ui.painter(), p, egui::pos2(100.0, 100.0), egui::pos2(200.0, 100.0), Some(c), stroke, 1.0, false);
+            crate::canvas::end_glyph(
+                ui.painter(),
+                p,
+                egui::pos2(100.0, 100.0),
+                egui::pos2(200.0, 100.0),
+                archforge_er::figures::end_mark(Some(c)),
+                stroke,
+                1.0,
+                false,
+            );
         });
         out.textures_delta.clear();
         let shapes: Vec<egui::Shape> = out.shapes.into_iter().map(|s| s.shape).collect();
@@ -4120,4 +4129,177 @@ fn the_avatar_shows_the_initials_of_the_name_entered_in_settings() {
     let mut state: crate::state::UiState = serde_json::from_str(r#"{"user_name":"  Grace Hopper\n"}"#).unwrap();
     state.sanitize();
     assert_eq!(state.user_name, "Grace Hopper");
+}
+
+/// A second notation, for the canvas test alone: diagrams of a UML package showing its classes as
+/// cards (their attributes, then their operations) and their generalizations as lines with a
+/// triangle and a text at the specific end.
+struct Sketch;
+
+const SKETCH: &str = "test.sketch";
+
+impl archforge_diagram::Notation for Sketch {
+    fn name(&self) -> &'static str {
+        "Sketch"
+    }
+    fn metamodel(&self) -> u16 {
+        archforge_uml::INDEX
+    }
+    fn kinds(&self) -> &'static [&'static str] {
+        &[SKETCH]
+    }
+    fn is_of(&self, _: &str, class: archforge_mof::ClassId) -> bool {
+        class == archforge_uml::PACKAGE
+    }
+    fn shows(&self, _: &str, class: archforge_mof::ClassId) -> bool {
+        class == archforge_uml::CLASS
+    }
+    fn connects(&self, _: &str, class: archforge_mof::ClassId) -> bool {
+        class == archforge_uml::GENERALIZATION
+    }
+    fn ends(&self, store: &archforge_mof::Store, element: archforge_mof::Obj) -> Option<(archforge_mof::Obj, archforge_mof::Obj)> {
+        let specific = store.container(element).ok()??.0;
+        let general = store.get(element, archforge_uml::generalization::GENERAL).ok()?.as_ref()?;
+        Some((specific, general))
+    }
+    fn card(&self, store: &archforge_mof::Store, element: archforge_mof::Obj, _: archforge_mof::Obj) -> Option<archforge_diagram::figure::Card> {
+        use archforge_diagram::figure::{Card, Row, Text};
+        let rows = |prop| {
+            store
+                .list(element, prop)
+                .unwrap_or_default()
+                .iter()
+                .filter_map(archforge_mof::Value::as_ref)
+                .map(|o| Row { mark: None, text: archforge_core::name_of(store, o), linked: false })
+                .collect::<Vec<_>>()
+        };
+        Some(Card {
+            eyebrow: Text::Plain("Class".into()),
+            name: archforge_core::name_of(store, element),
+            compartments: vec![rows(archforge_uml::class::OWNED_ATTRIBUTE), rows(archforge_uml::class::OWNED_OPERATION)],
+            more: ("+ {n} more column", "+ {n} more columns"),
+            elsewhere: false,
+        })
+    }
+    fn line(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<archforge_diagram::figure::Line> {
+        use archforge_diagram::figure::{End, EndMark, Line};
+        Some(Line {
+            ends: [End { mark: EndMark::None, text: Some("specific".into()), slot: "sketch.specific", role: None }, End::marked(EndMark::Triangle)],
+            styled: true,
+            dashed: false,
+            status: None,
+            note: None,
+            badge: false,
+            resolvable: false,
+        })
+    }
+}
+
+static SKETCHED: &[&dyn archforge_diagram::Notation] = &[&archforge_er::ErNotation, &Sketch];
+
+/// Every text the last frame painted.
+fn painted(h: &Harness<'static, Shell>) -> Vec<String> {
+    fn walk(s: &egui::Shape, out: &mut Vec<String>) {
+        match s {
+            egui::Shape::Text(t) => out.push(t.galley.text().to_string()),
+            egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, out)),
+            _ => {}
+        }
+    }
+    let mut out = Vec::new();
+    h.output().shapes.iter().for_each(|c| walk(&c.shape, &mut out));
+    out
+}
+
+#[test]
+fn a_second_notations_cards_and_lines_draw_route_arrange_and_take_their_look_on_the_same_canvas() {
+    use archforge_mof::Value;
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    // A package with Party and Customer, Customer a kind of Party, in a session that holds the
+    // sketch notation beside ER.
+    let mut st = archforge_notations::store(Box::new({
+        let ids = test_ids();
+        move || ids()
+    }))
+    .unwrap();
+    let model = st.create(archforge_core::MODEL).unwrap();
+    let pkg = st.create(archforge_uml::PACKAGE).unwrap();
+    archforge_core::ModelObj::push_member(&mut st, model, Value::Ref(pkg)).unwrap();
+    let class = |st: &mut archforge_mof::Store, name: &str, parts: &[(&str, archforge_mof::ClassId, archforge_mof::PropId)]| {
+        let c = st.create(archforge_uml::CLASS).unwrap();
+        archforge_uml::ClassObj::set_name(st, c, Some(name)).unwrap();
+        st.push(pkg, archforge_uml::package::PACKAGED_ELEMENT, Value::Ref(c)).unwrap();
+        for (part, kind, prop) in parts {
+            let o = st.create(*kind).unwrap();
+            st.set(o, archforge_uml::named_element::NAME, Value::str(part)).unwrap();
+            st.push(c, *prop, Value::Ref(o)).unwrap();
+        }
+        c
+    };
+    let party = class(
+        &mut st,
+        "Party",
+        &[
+            ("partyId", archforge_uml::PROPERTY, archforge_uml::class::OWNED_ATTRIBUTE),
+            ("rename", archforge_uml::OPERATION, archforge_uml::class::OWNED_OPERATION),
+        ],
+    );
+    let customer = class(&mut st, "Customer", &[("since", archforge_uml::PROPERTY, archforge_uml::class::OWNED_ATTRIBUTE)]);
+    let g = st.create(archforge_uml::GENERALIZATION).unwrap();
+    st.set(g, archforge_uml::generalization::GENERAL, Value::Ref(party)).unwrap();
+    st.push(customer, archforge_uml::classifier::GENERALIZATION, Value::Ref(g)).unwrap();
+    let uuid = |st: &archforge_mof::Store, o| st.uuid(o).unwrap().to_string();
+    let (pkg_id, party_id, customer_id, g_id) = (uuid(&st, pkg), uuid(&st, party), uuid(&st, customer), uuid(&st, g));
+    let mut s = archforge_engine::Session::with_view(
+        archforge_notations::registry().unwrap(),
+        st,
+        1,
+        archforge_engine::Options::default(),
+        archforge_diagram::ProjectView::new(SKETCHED),
+    );
+    let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
+    let d = id(s.execute("diagram.add", &serde_json::json!({ "kind": SKETCH, "element": pkg_id })).unwrap().value);
+    let a = id(s
+        .execute("diagram.place", &serde_json::json!({ "diagram": d, "element": party_id, "x": 100, "y": 100, "width": 240, "height": 166 }))
+        .unwrap()
+        .value);
+    let b = id(s
+        .execute("diagram.place", &serde_json::json!({ "diagram": d, "element": customer_id, "x": 600, "y": 100, "width": 240, "height": 166 }))
+        .unwrap()
+        .value);
+    let e = id(s.execute("diagram.connect", &serde_json::json!({ "diagram": d, "element": g_id, "source": b, "target": a })).unwrap().value);
+    h.state_mut().session = Some(s);
+    crate::canvas::open(h.state_mut(), archforge_mof::Uuid::parse(&d).unwrap());
+    h.run();
+
+    // The cards and the line, drawn through the one canvas from the sketch's descriptions.
+    let texts = painted(&h);
+    for t in ["CLASS", "Party", "partyId", "rename", "Customer", "since", "specific"] {
+        assert!(texts.iter().any(|x| x == t), "{t} is drawn: {texts:?}");
+    }
+    let found = ids(&h);
+    assert_eq!(found.iter().filter(|i| i.starts_with("workspace.canvas.node.")).count(), 2);
+    assert!(found.iter().any(|i| *i == format!("workspace.canvas.edge.{e}")));
+    assert_eq!(h.state().canvas.ends.len(), 1, "the specific end's text, which the user may move");
+    // Routed: at right angles around nothing, as a new diagram's lines run.
+    let (dobj, eobj, aobj, bobj) = {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let o = |x: &str| st.by_uuid(archforge_mof::Uuid::parse(x).unwrap()).unwrap();
+        (o(&d), o(&e), o(&a), o(&b))
+    };
+    let route = archforge_diagram::Grid::build(h.state().session.as_ref().unwrap().doc(), dobj).line(eobj).unwrap().to_vec();
+    assert!(route.len() >= 2, "{route:?}");
+    // Arranged: Customer, where the line starts, above Party.
+    let at = rect_of(&h, "workspace.tools.arrange").center();
+    click(&mut h, at);
+    h.run();
+    let st = h.state().session.as_ref().unwrap().doc();
+    let (top, bottom) = (archforge_diagram::grid::bounds_of(st, bobj), archforge_diagram::grid::bounds_of(st, aobj));
+    assert!(top.y + top.height <= bottom.y, "Customer above Party: {top:?} {bottom:?}");
+    // Its look: a fill of its own on Party's card.
+    h.state_mut().session.as_mut().unwrap().execute("diagram.style", &serde_json::json!({ "ids": [a], "fill": "#A0C4FF" })).unwrap();
+    h.run();
+    assert_eq!(look(&h, aobj).fill, crate::canvas::colour("#A0C4FF"));
+    let filled = h.output().shapes.iter().any(|c| matches!(&c.shape, egui::Shape::Rect(r) if Some(r.fill) == crate::canvas::colour("#A0C4FF")));
+    assert!(filled, "the card is filled in its own colour");
 }

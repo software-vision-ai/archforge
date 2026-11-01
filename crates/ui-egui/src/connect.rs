@@ -10,11 +10,12 @@
 
 use archforge_diagram::grid::bounds_of;
 use archforge_er::Cardinality;
+use archforge_er::figures::end_mark;
 use archforge_mof::{Obj, Store, Uuid};
 use egui::{Pos2, Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
-use crate::canvas::{View, cardinality_text, end_glyph};
+use crate::canvas::{View, end_glyph};
 use crate::home::control;
 use crate::i18n::{fmt, tr};
 use crate::ux::{self, Palette, icons, types};
@@ -97,7 +98,12 @@ pub(crate) fn cardinality_word(c: Cardinality) -> &'static str {
 
 /// Whether a foreign key realises the relationship.
 pub fn has_foreign_key(store: &Store, rel: Obj) -> bool {
-    store.referrers(rel).into_iter().any(|(_, p)| p == archforge_er::foreign_key::RELATIONSHIP)
+    archforge_er::figures::has_foreign_key(store, rel)
+}
+
+/// A cardinality as the design writes it beside an end.
+pub(crate) fn cardinality_text(c: Cardinality) -> String {
+    archforge_er::figures::cardinality_text(c).to_string()
 }
 
 /// The points of a self relationship's loop on the entity's right side.
@@ -126,8 +132,8 @@ pub(crate) fn sample_line(
     let (a, b) = (centre - vec2(18.0, 0.0), centre + vec2(18.0, 0.0));
     let stroke = Stroke::new(1.2, ink);
     paint.line_segment([a, b], stroke);
-    crate::canvas::end_glyph_on(paint, p, a, b, from, stroke, z, false, fill);
-    crate::canvas::end_glyph_on(paint, p, b, a, to, stroke, z, false, fill);
+    crate::canvas::end_glyph_on(paint, p, a, b, end_mark(from), stroke, z, false, fill);
+    crate::canvas::end_glyph_on(paint, p, b, a, end_mark(to), stroke, z, false, fill);
 }
 
 /// The relationship tool's icon: a line with the ends the tool draws, at the size the popover's
@@ -145,8 +151,8 @@ pub(crate) fn tool_line(
     let (a, b) = (centre - vec2(24.0, 0.0), centre + vec2(24.0, 0.0));
     let stroke = Stroke::new(1.2, ink);
     paint.line_segment([a, b], stroke);
-    crate::canvas::end_glyph_on(paint, p, a, b, Some(from), stroke, z, false, fill);
-    crate::canvas::end_glyph_on(paint, p, b, a, Some(to), stroke, z, false, fill);
+    crate::canvas::end_glyph_on(paint, p, a, b, end_mark(Some(from)), stroke, z, false, fill);
+    crate::canvas::end_glyph_on(paint, p, b, a, end_mark(Some(to)), stroke, z, false, fill);
 }
 
 /// The cardinality popover above the toolbar's Relationship chevron.
@@ -248,8 +254,8 @@ pub(crate) fn live_line(shell: &Shell, paint: &egui::Painter, p: &Palette, view:
             (start, pointer)
         }
     };
-    end_glyph(paint, p, start, end, Some(kind.from), stroke, z, true);
-    end_glyph(paint, p, end, start, Some(kind.to), stroke, z, true);
+    end_glyph(paint, p, start, end, end_mark(Some(kind.from)), stroke, z, true);
+    end_glyph(paint, p, end, start, end_mark(Some(kind.to)), stroke, z, true);
     if let Some(t) = target {
         paint.rect_stroke(t.expand(4.0), 4.0, Stroke::new(1.5, p.accent), StrokeKind::Inside);
     }

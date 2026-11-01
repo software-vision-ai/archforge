@@ -93,6 +93,8 @@ fn required() -> (Vec<(String, String)>, Vec<String>) {
     strings.extend(crate::types::texts().map(|s| (String::new(), s.to_string())));
     strings.extend(crate::subtypes::texts().map(|s| (String::new(), s.to_string())));
     strings.extend(crate::objects::texts().map(|s| (String::new(), s.to_string())));
+    // The plurals the notations' cards say, which `trn` takes through their descriptions.
+    plurals.extend(archforge_er::figures::PLURALS.iter().map(|s| s.to_string()));
     strings.sort();
     strings.dedup();
     plurals.sort();

@@ -256,23 +256,6 @@ pub(crate) fn supertype_of_link(store: &Store, g: Obj) -> Option<Obj> {
     archforge_er::rules::generalization_parts(store, g).0
 }
 
-/// The label a supertype's set shows on the canvas: complete, disjoint or overlapping, and the
-/// discriminator, when any of them says more than the defaults.
-pub(crate) fn set_label(store: &Store, e: Obj) -> Option<String> {
-    let (complete, disjoint) = archforge_er::rules::subtyping_flags(store, e);
-    let discriminator = archforge_er::rules::discriminator_of(store, e).map(|a| name(store, a));
-    if !complete && disjoint && discriminator.is_none() {
-        return None;
-    }
-    let mut parts = Vec::new();
-    if complete {
-        parts.push(tr("complete"));
-    }
-    parts.push(if disjoint { tr("disjoint") } else { tr("overlapping") });
-    parts.extend(discriminator);
-    Some(parts.join(" · "))
-}
-
 /// Every text of the tables, for the catalogue tests.
 #[cfg(test)]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {

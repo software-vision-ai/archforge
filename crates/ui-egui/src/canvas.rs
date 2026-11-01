@@ -11,9 +11,9 @@
 //! 200 by 156 at 16 px from the right and 14 px above the status bar, the toolbar 342 by 50 at
 //! the bottom centre. The grid dots sit 32 units apart and thin out as the zoom falls.
 
+use archforge_diagram::figure::EndMark;
 use archforge_diagram::grid::bounds_of;
 use archforge_diagram::{DIAGRAM, Grid, LabelPlace, diagram, edge, label, node, point, style};
-use archforge_er::Cardinality;
 use archforge_mof::{Obj, Store, Uuid, Value};
 use egui::{Pos2, Rect, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
@@ -543,7 +543,8 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
             key_status: shell.canvas.key_status,
             renaming,
             problems: &shell.problems,
-            schema: crate::diagrams::schema_of(store, d),
+            diagram: d,
+            notations: session.view(),
             boxes: refs(store, d, diagram::NODE).into_iter().map(|n| (n, model_rect(store, &view, &overrides, n))).collect(),
             spreads: archforge_diagram::route::spreads(store, d, |n| model_rect(store, &view, &overrides, n)),
             // A line under the pointer, while no gesture runs and the pointer is on the canvas.
@@ -631,16 +632,6 @@ fn grid_dots(paint: &egui::Painter, p: &Palette, r: Rect, view: &View) {
     }
 }
 
-/// The badge of a column: PK when it is in the primary key, FK when a foreign key holds it.
-fn badge(store: &Store, entity: Obj, column: Obj) -> Option<&'static str> {
-    if archforge_er::rules::in_primary_key(store, column) {
-        return Some("PK");
-    }
-    let foreign =
-        refs(store, entity, archforge_er::entity::FOREIGN_KEY).iter().any(|fk| refs(store, *fk, archforge_er::foreign_key::COLUMN).contains(&column));
-    foreign.then_some("FK")
-}
-
 /// What one frame's drawing reads: the palette, the store, the view, the selection, the rectangles
 /// a gesture previews, the key status toggle and the node whose name is being typed.
 struct Drawing<'a> {
@@ -653,8 +644,9 @@ struct Drawing<'a> {
     renaming: Option<Uuid>,
     /// The problems the rules find, by the element they sit on.
     problems: &'a std::collections::BTreeMap<Obj, Vec<String>>,
-    /// The schema the diagram is of: a table of another schema draws dimmed (slice S7).
-    schema: Option<Obj>,
+    /// The diagram drawn, and the notations that describe its nodes and lines.
+    diagram: Obj,
+    notations: &'a archforge_diagram::ProjectView,
     /// The diagram's tables and notes in diagram coordinates (a drag's preview where it has one),
     /// and where each line's ends sit along their sides: worked out once a frame.
     boxes: Vec<(Obj, archforge_diagram::Rect)>,
@@ -711,11 +703,12 @@ fn draw_node(
     let element = element_of(store, n, node::ELEMENT);
     let selected = selection.contains(&n) || element.is_some_and(|e| selection.contains(&e));
     let inner = paint.with_clip_rect(rect.intersect(paint.clip_rect()));
+    // The card the element's notation describes, when it describes one.
+    let card = element.and_then(|e| d.notations.of_element(store, e)?.card(store, e, d.diagram));
     match element {
-        Some(e) if store.class_of(e).ok() == Some(archforge_er::ENTITY) => {
-            // A table of another schema: dimmed, dashed, its schema named after the eyebrow.
-            let elsewhere = archforge_er::rules::schema_of(store, e).filter(|s| d.schema.is_some_and(|here| here != *s));
-            let dim = |c: egui::Color32| if elsewhere.is_some() { c.gamma_multiply(FOREIGN_ALPHA) } else { c };
+        Some(_) if let Some(card) = card => {
+            // An element of another scope: dimmed, dashed, its scope named in the eyebrow.
+            let dim = |c: egui::Color32| if card.elsewhere { c.gamma_multiply(FOREIGN_ALPHA) } else { c };
             // The node's own look on this diagram, where it has one.
             let look = look_of(store, n, node::STYLE);
             // Its own fill brings the text that reads on it, unless it has its own text colour too.
@@ -735,59 +728,25 @@ fn draw_node(
             };
             let border = look.width.map_or(1.0, |w| (w * z).max(1.0));
             paint.rect_filled(rect, 6.0 * z, p.entity);
-            if elsewhere.is_some() {
+            if card.elsewhere {
                 dashed_rect(paint, rect, Stroke::new(border, p.entity_edge), 4.0 * z, 3.0 * z);
             } else {
                 paint.rect_stroke(rect, 6.0 * z, Stroke::new(border, p.entity_edge), StrokeKind::Inside);
             }
-            let name = archforge_core::name_of(store, e);
             let room = Some((rect.width() - 2.0 * ENTITY_INSET * z).max(0.0));
             if z >= DETAIL_ZOOM {
-                let eyebrow = match elsewhere {
-                    Some(s) => fmt(&tr("Entity · {schema}"), &[("schema", &archforge_core::name_of(store, s))]).to_uppercase(),
-                    None => tr("Entity").to_uppercase(),
-                };
+                let eyebrow = say(&card.eyebrow).to_uppercase();
                 ux::text(&inner, rect.min + vec2(ENTITY_INSET, 12.0) * z, &eyebrow, types::EYEBROW.scaled(z), p.entity_ink, room);
                 if !renaming {
-                    ux::text(&inner, rect.min + vec2(ENTITY_INSET, 30.0) * z, &name, types::SECTION.scaled(z), p.text, room);
+                    ux::text(&inner, rect.min + vec2(ENTITY_INSET, 30.0) * z, &card.name, types::SECTION.scaled(z), p.text, room);
                 }
                 let line_y = rect.top() + ENTITY_HEADER * z;
                 if line_y < rect.bottom() {
                     inner.rect_filled(Rect::from_min_size(pos2(rect.left(), line_y), vec2(rect.width(), 1.0)), 0.0, p.entity_line);
                 }
-                let columns = refs(store, e, archforge_er::entity::ATTRIBUTE);
-                for (i, column) in columns.iter().enumerate() {
-                    let y = rect.top() + (ENTITY_FIRST_ROW + i as f32 * ENTITY_ROW) * z;
-                    let last_shown = i + 1 < columns.len() && y + 2.0 * ENTITY_ROW * z > rect.bottom();
-                    if y + ENTITY_ROW * z > rect.bottom() + z {
-                        break;
-                    }
-                    if last_shown {
-                        // The columns past the node's height, said in one row.
-                        let more = columns.len() - i;
-                        let text = trn("+ {n} more column", "+ {n} more columns", more as u64);
-                        ux::text(&inner, pos2(rect.left() + ENTITY_TEXT * z, y), &text, types::UI.scaled(z), p.text_muted, room);
-                        break;
-                    }
-                    if key_status && let Some(b) = badge(store, e, *column) {
-                        ux::text(&inner, pos2(rect.left() + ENTITY_INSET * z, y + z), b, types::CAPTION.scaled(z), p.entity_ink, None);
-                    }
-                    let ty = archforge_er::rules::type_display(store, *column);
-                    let text = if ty.is_empty() {
-                        archforge_core::name_of(store, *column)
-                    } else {
-                        format!("{} : {ty}", archforge_core::name_of(store, *column))
-                    };
-                    let text_x = rect.left() + ENTITY_TEXT * z;
-                    let linked = archforge_er::rules::linked_to(store, *column).is_some();
-                    let room_x = (rect.right() - ENTITY_INSET * z - text_x - if linked { 18.0 * z } else { 0.0 }).max(0.0);
-                    let drawn = ux::text(&inner, pos2(text_x, y), &text, types::UI.scaled(z), p.text, Some(room_x));
-                    if linked {
-                        ux::icon(&inner, pos2(drawn.right() + 6.0 * z, y + 6.0 * z), &icons::LINK, 12.0 * z, p.text_secondary);
-                    }
-                }
+                draw_rows(&inner, p, &card, rect, z, key_status, room);
             } else {
-                let g = ux::galley(&inner, &name, types::SECTION.scaled(z.max(DETAIL_ZOOM)), p.text, room);
+                let g = ux::galley(&inner, &card.name, types::SECTION.scaled(z.max(DETAIL_ZOOM)), p.text, room);
                 inner.galley(rect.center() - g.size() / 2.0, g, p.text);
             }
         }
@@ -827,6 +786,61 @@ fn draw_node(
     Some((rect.right_top() + vec2(-2.0, 2.0), id?, store.uuid(e).ok()?, e, false))
 }
 
+/// A card's compartments under its header: a row a pitch apart, half a pitch and a dividing line
+/// between compartments, and the rows past the card's height said in one row.
+fn draw_rows(inner: &egui::Painter, p: &Palette, card: &archforge_diagram::figure::Card, rect: Rect, z: f32, key_status: bool, room: Option<f32>) {
+    let total: usize = card.compartments.iter().map(Vec::len).sum();
+    let mut shown = 0;
+    // Where the next row sits, in pitches below the first.
+    let mut slot = 0.0_f32;
+    for (c, rows) in card.compartments.iter().enumerate() {
+        if c > 0 {
+            let line_y = rect.top() + (ENTITY_FIRST_ROW + slot * ENTITY_ROW - 4.0) * z;
+            if line_y >= rect.bottom() {
+                return;
+            }
+            inner.rect_filled(Rect::from_min_size(pos2(rect.left(), line_y), vec2(rect.width(), 1.0)), 0.0, p.entity_line);
+            slot += 0.5;
+        }
+        for row in rows {
+            let y = rect.top() + (ENTITY_FIRST_ROW + slot * ENTITY_ROW) * z;
+            let last_shown = shown + 1 < total && y + 2.0 * ENTITY_ROW * z > rect.bottom();
+            if y + ENTITY_ROW * z > rect.bottom() + z {
+                return;
+            }
+            if last_shown {
+                // The rows past the node's height, said in one row.
+                let more = total - shown;
+                let text = trn(card.more.0, card.more.1, more as u64);
+                ux::text(inner, pos2(rect.left() + ENTITY_TEXT * z, y), &text, types::UI.scaled(z), p.text_muted, room);
+                return;
+            }
+            if key_status && let Some(b) = row.mark {
+                ux::text(inner, pos2(rect.left() + ENTITY_INSET * z, y + z), b, types::CAPTION.scaled(z), p.entity_ink, None);
+            }
+            let text_x = rect.left() + ENTITY_TEXT * z;
+            let room_x = (rect.right() - ENTITY_INSET * z - text_x - if row.linked { 18.0 * z } else { 0.0 }).max(0.0);
+            let drawn = ux::text(inner, pos2(text_x, y), &row.text, types::UI.scaled(z), p.text, Some(room_x));
+            if row.linked {
+                ux::icon(inner, pos2(drawn.right() + 6.0 * z, y + 6.0 * z), &icons::LINK, 12.0 * z, p.text_secondary);
+            }
+            shown += 1;
+            slot += 1.0;
+        }
+    }
+}
+
+/// A text a notation describes, in the user's language.
+fn say(t: &archforge_diagram::figure::Text) -> String {
+    match t {
+        archforge_diagram::figure::Text::Said(template, args) => {
+            let args: Vec<(&str, &str)> = args.iter().map(|(k, v)| (*k, v.as_str())).collect();
+            fmt(&tr(template), &args)
+        }
+        archforge_diagram::figure::Text::Plain(s) => s.clone(),
+    }
+}
+
 /// A rectangle's outline in dashes of `dash` with gaps of `gap`, as the design draws a table of
 /// another schema.
 fn dashed_rect(paint: &egui::Painter, rect: Rect, stroke: Stroke, dash: f32, gap: f32) {
@@ -859,30 +873,6 @@ pub(crate) fn exit_point(rect: Rect, toward: Pos2) -> Pos2 {
     if t.is_finite() { c + d * t } else { c }
 }
 
-/// The text of a relationship's slot a label shows.
-fn slot_text(store: &Store, rel: Obj, kind: &str) -> String {
-    use archforge_er::relationship as r;
-    match kind {
-        "name" => archforge_core::name_of(store, rel),
-        "from_end" => archforge_er::rules::cardinality_of(store, rel, r::FROM_END).map(cardinality_text).unwrap_or_default(),
-        "to_end" => archforge_er::rules::cardinality_of(store, rel, r::TO_END).map(cardinality_text).unwrap_or_default(),
-        "from_role" => string(store, rel, r::FROM_ROLE),
-        "to_role" => string(store, rel, r::TO_ROLE),
-        _ => String::new(),
-    }
-}
-
-/// A cardinality as the design writes it beside an end.
-pub(crate) fn cardinality_text(c: Cardinality) -> String {
-    match c {
-        Cardinality::ZeroOrOne => "0..1",
-        Cardinality::ExactlyOne => "1",
-        Cardinality::ZeroOrMore => "0..*",
-        Cardinality::OneOrMore => "1..*",
-    }
-    .to_string()
-}
-
 /// A point along a polyline at `t` of its length, 0 at its start and 1 at its end.
 fn along(points: &[Pos2], t: f32) -> Pos2 {
     let total: f32 = points.windows(2).map(|w| (w[1] - w[0]).length()).sum();
@@ -903,9 +893,9 @@ fn along(points: &[Pos2], t: f32) -> Pos2 {
     points[points.len() - 1]
 }
 
-/// One edge: the line between its nodes' borders through its waypoints, the ER end glyphs with
-/// their cardinalities, and its labels.
-/// Gives the point and relationship of a many-to-many badge to draw, when the line needs one.
+/// One edge: the line between its nodes' borders through its waypoints, as its element's notation
+/// describes it (its ends' marks and texts, its roles, its dashes, its status), and its labels.
+/// Gives the point and element of a problem badge to draw, when the line shows one.
 fn draw_edge(
     paint: &egui::Painter,
     d: &Drawing<'_>,
@@ -915,127 +905,114 @@ fn draw_edge(
 ) -> Option<(Pos2, Uuid, Uuid, Obj, bool)> {
     let (p, store, view, selection) = (d.p, d.store, d.view, d.selection);
     let z = view.zoom;
-    let element = element_of(store, e, edge::ELEMENT);
-    if element.is_none() {
+    let Some(element) = element_of(store, e, edge::ELEMENT) else {
         draw_link(paint, d, e, registry, ui);
         return None;
-    }
-    let relationship = element.filter(|el| store.class_of(*el).ok() == Some(archforge_er::RELATIONSHIP));
+    };
+    let notation = d.notations.of_element(store, element);
+    let line = notation.and_then(|nt| nt.line(store, element)).unwrap_or_default();
     let points = edge_points(d, e)?;
     let n = points.len();
-    let selected = selection.contains(&e) || element.is_some_and(|el| selection.contains(&el));
-    // A generalization (slice S6): slate, solid, no ends but a hollow triangle at the supertype.
-    if let Some(g) = element.filter(|el| store.class_of(*el).ok() == Some(archforge_er::GENERALIZATION)) {
-        let ink = if selected || d.hovered == Some(e) { p.accent } else { p.text_secondary };
-        let stroke = Stroke::new((1.3 * z).clamp(1.0, 3.0), ink);
-        if d.hovered == Some(e) {
-            halo(paint, &points, stroke, p);
-        }
-        let tip = points[n - 1];
-        let back = points[n - 2];
-        let dir = if (tip - back).length() > f32::EPSILON { (tip - back).normalized() } else { vec2(0.0, -1.0) };
-        let (len, half) = (12.0 * z.max(0.6), 7.5 * z.max(0.6));
-        let base = tip - dir * len;
-        let side = vec2(-dir.y, dir.x) * half;
-        let mut line = points.clone();
-        line[n - 1] = base;
-        paint.add(egui::Shape::line(line, stroke));
-        paint.add(egui::Shape::convex_polygon(vec![tip, base + side, base - side], p.canvas, stroke));
-        // The set's facts, once per supertype, beside its first subtype's triangle.
-        if let Some(sup) = crate::subtypes::supertype_of_link(store, g)
-            && archforge_er::rules::subtype_links(store, sup).first() == Some(&g)
-            && let Some(text) = crate::subtypes::set_label(store, sup)
-        {
-            let gal = ux::galley(paint, &text, types::SMALL.scaled(z), p.text_secondary, None);
-            paint.galley(base + vec2(10.0 * z, -gal.size().y / 2.0) - dir * 14.0 * z, gal, p.text_secondary);
-        }
-        if let Ok(id) = store.uuid(e) {
-            let bounds = Rect::from_points(&points).expand(6.0);
-            widgets::record_visible(ui, registry, &format!("workspace.canvas.edge.{id}"), "edge", bounds);
-        }
-        return None;
-    }
-    // The line's colour says its key status while the toggle is on: green with its foreign key,
-    // orange without one or while many-to-many waits for its mapping table.
-    let (identifying, many_to_many, with_key) = match relationship {
-        Some(rel) => (
-            matches!(store.get(rel, archforge_er::relationship::IDENTIFYING), Ok(Value::Bool(true))),
-            archforge_er::rules::is_many_to_many(store, rel),
-            crate::connect::has_foreign_key(store, rel),
-        ),
-        None => (true, false, true),
-    };
-    // A line's own colour shows while the key status is off; its own width shows always.
-    let look = look_of(store, e, edge::STYLE);
-    let ink = if selected {
-        p.accent
-    } else if !d.key_status {
-        look.stroke.unwrap_or(p.text_secondary)
-    } else if with_key && !many_to_many {
-        p.green
-    } else {
-        p.key_foreign
-    };
-    let width = look.width.map_or((1.5 * z).clamp(1.0, 3.0), |w| (w * z).clamp(1.0, 6.0));
-    // The line under the pointer: a soft halo under it, and its colour turns to the accent.
+    let selected = selection.contains(&e) || selection.contains(&element);
     let hovered = d.hovered == Some(e);
-    let stroke = Stroke::new(width, if hovered && !selected { p.accent } else { ink });
+    let stroke = if line.styled {
+        // The line's colour says its status while the marks are on: green when complete, orange
+        // when not. A line's own colour shows while they are off; its own width shows always.
+        let look = look_of(store, e, edge::STYLE);
+        let own = look.stroke.unwrap_or(p.text_secondary);
+        let ink = match (selected, d.key_status, line.status) {
+            (true, _, _) => p.accent,
+            (false, false, _) | (false, true, None) => own,
+            (false, true, Some(true)) => p.green,
+            (false, true, Some(false)) => p.key_foreign,
+        };
+        let width = look.width.map_or((1.5 * z).clamp(1.0, 3.0), |w| (w * z).clamp(1.0, 6.0));
+        // The line under the pointer turns to the accent.
+        Stroke::new(width, if hovered && !selected { p.accent } else { ink })
+    } else {
+        Stroke::new((1.3 * z).clamp(1.0, 3.0), if selected || hovered { p.accent } else { p.text_secondary })
+    };
+    // The line under the pointer: a soft halo under it.
     if hovered {
         halo(paint, &points, stroke, p);
     }
-    crate::connect::line(paint, &points, stroke, identifying, z);
+    // A triangle at an end: the line stops at its base.
+    let triangle = |tip: Pos2, back: Pos2| {
+        let dir = if (tip - back).length() > f32::EPSILON { (tip - back).normalized() } else { vec2(0.0, -1.0) };
+        let (len, half) = (12.0 * z.max(0.6), 7.5 * z.max(0.6));
+        let base = tip - dir * len;
+        (dir, base, vec2(-dir.y, dir.x) * half)
+    };
+    let mut drawn = points.clone();
+    if line.ends[0].mark == EndMark::Triangle {
+        drawn[0] = triangle(points[0], points[1]).1;
+    }
+    if line.ends[1].mark == EndMark::Triangle {
+        drawn[n - 1] = triangle(points[n - 1], points[n - 2]).1;
+    }
+    crate::connect::line(paint, &drawn, stroke, !line.dashed, z);
+    for (end, tip, back) in [(&line.ends[0], points[0], points[1]), (&line.ends[1], points[n - 1], points[n - 2])] {
+        if end.mark != EndMark::Triangle {
+            continue;
+        }
+        let (dir, base, side) = triangle(tip, back);
+        paint.add(egui::Shape::convex_polygon(vec![tip, base + side, base - side], p.canvas, stroke));
+        // A note beside the target's triangle, such as a generalization set's facts.
+        if let Some(note) = line.note.as_ref().filter(|_| std::ptr::eq(end, &line.ends[1])) {
+            let text = note.iter().map(say).collect::<Vec<_>>().join(" · ");
+            let gal = ux::galley(paint, &text, types::SMALL.scaled(z), p.text_secondary, None);
+            paint.galley(base + vec2(10.0 * z, -gal.size().y / 2.0) - dir * 14.0 * z, gal, p.text_secondary);
+        }
+    }
     let mut badge = None;
-    if let Some(rel) = relationship
-        && d.problems.contains_key(&rel)
-        && let (Ok(id), Ok(edge_id)) = (store.uuid(rel), store.uuid(e))
+    if line.badge
+        && d.problems.contains_key(&element)
+        && let (Ok(id), Ok(edge_id)) = (store.uuid(element), store.uuid(e))
     {
-        badge = Some((along(&points, 0.5) + vec2(0.0, -14.0 * z.max(0.5)), edge_id, id, rel, many_to_many));
+        badge = Some((along(&points, 0.5) + vec2(0.0, -14.0 * z.max(0.5)), edge_id, id, element, line.resolvable));
     }
     if let Ok(id) = store.uuid(e) {
         let bounds = Rect::from_points(&points).expand(6.0);
         widgets::record_visible(ui, registry, &format!("workspace.canvas.edge.{id}"), "edge", bounds);
     }
-    // The ends: the relationship's cardinalities as glyphs and as text.
-    if let Some(rel) = element.filter(|el| store.class_of(*el).ok() == Some(archforge_er::RELATIONSHIP)) {
-        let from = archforge_er::rules::cardinality_of(store, rel, archforge_er::relationship::FROM_END);
-        let to = archforge_er::rules::cardinality_of(store, rel, archforge_er::relationship::TO_END);
-        end_glyph(paint, p, points[0], points[1], from, stroke, z, false);
-        end_glyph(paint, p, points[n - 1], points[n - 2], to, stroke, z, false);
-        // The cardinalities as text: beside the line near its end, or where the user put them.
-        for (end, c, at, towards, kind) in [(0u8, from, points[0], points[1], "from_end"), (1, to, points[n - 1], points[n - 2], "to_end")] {
-            let Some(c) = c else { continue };
-            let Ok(edge_id) = store.uuid(e) else { continue };
-            let own = refs(store, e, edge::LABEL).into_iter().find(|l| string(store, *l, label::KIND) == kind);
-            let g = ux::galley(paint, &cardinality_text(c), types::SMALL.scaled(z), p.text_secondary, None);
-            let centre = match (d.end_drag.filter(|(id, k, _)| *id == edge_id && *k == end), own) {
-                (Some((_, _, centre)), _) => centre,
-                (None, Some(l)) => at + vec2(real(store, l, label::DX) as f32, real(store, l, label::DY) as f32) * z,
-                (None, None) => beside(at, towards, g.size(), z),
-            };
-            let rect = Rect::from_center_size(centre, g.size());
-            paint.galley(rect.min, g, p.text_secondary);
-            d.ends.borrow_mut().push(EndText { edge: edge_id, end, rect: rect.expand(3.0), anchor: at });
+    // The ends' marks.
+    end_glyph(paint, p, points[0], points[1], line.ends[0].mark, stroke, z, false);
+    end_glyph(paint, p, points[n - 1], points[n - 2], line.ends[1].mark, stroke, z, false);
+    // The ends' texts: beside the line near its end, or where the user put them.
+    for (i, (end, at, towards)) in [(&line.ends[0], points[0], points[1]), (&line.ends[1], points[n - 1], points[n - 2])].into_iter().enumerate() {
+        let Some(text) = end.text.as_deref() else { continue };
+        let Ok(edge_id) = store.uuid(e) else { continue };
+        let i = i as u8;
+        let own = refs(store, e, edge::LABEL).into_iter().find(|l| string(store, *l, label::KIND) == end.slot);
+        let g = ux::galley(paint, text, types::SMALL.scaled(z), p.text_secondary, None);
+        let centre = match (d.end_drag.filter(|(id, k, _)| *id == edge_id && *k == i), own) {
+            (Some((_, _, centre)), _) => centre,
+            (None, Some(l)) => at + vec2(real(store, l, label::DX) as f32, real(store, l, label::DY) as f32) * z,
+            (None, None) => beside(at, towards, g.size(), z),
+        };
+        let rect = Rect::from_center_size(centre, g.size());
+        paint.galley(rect.min, g, p.text_secondary);
+        d.ends.borrow_mut().push(EndText { edge: edge_id, end: i, rect: rect.expand(3.0), anchor: at });
+    }
+    // The roles, above the line near their ends.
+    for (end, at, towards) in [(&line.ends[0], points[0], points[1]), (&line.ends[1], points[n - 1], points[n - 2])] {
+        let Some(text) = end.role.as_deref() else { continue };
+        if text.is_empty() || (towards - at).length() <= f32::EPSILON {
+            continue;
         }
-        // The roles, above the line near their ends.
-        for (role, end, towards) in
-            [(archforge_er::relationship::FROM_ROLE, points[0], points[1]), (archforge_er::relationship::TO_ROLE, points[n - 1], points[n - 2])]
-        {
-            let text = string(store, rel, role);
-            if text.is_empty() || (towards - end).length() <= f32::EPSILON {
-                continue;
-            }
-            let dir = (towards - end).normalized();
-            let g = ux::galley(paint, &text, types::SMALL.scaled(z), p.text_secondary, None);
-            let at = end + dir * 44.0 * z - vec2(g.size().x / 2.0, g.size().y + 8.0 * z);
-            paint.galley(at, g, p.text_secondary);
-        }
+        let dir = (towards - at).normalized();
+        let g = ux::galley(paint, text, types::SMALL.scaled(z), p.text_secondary, None);
+        let at = at + dir * 44.0 * z - vec2(g.size().x / 2.0, g.size().y + 8.0 * z);
+        paint.galley(at, g, p.text_secondary);
+    }
+    if line.styled {
         for l in refs(store, e, edge::LABEL) {
             let kind = string(store, l, label::KIND);
-            // The cardinalities draw above, with the ends.
-            if kind == "from_end" || kind == "to_end" {
+            // The ends' texts draw above, with the ends.
+            if line.ends.iter().any(|end| !end.slot.is_empty() && end.slot == kind) {
                 continue;
             }
-            let text = slot_text(store, rel, &kind);
+            let text = notation.map(|nt| nt.slot_text(store, element, &kind)).unwrap_or_default();
             if text.is_empty() {
                 continue;
             }
@@ -1052,12 +1029,12 @@ fn draw_edge(
             let offset = if t == 0.5 { vec2(-g.size().x / 2.0, -g.size().y - 6.0 * z) } else { vec2(-g.size().x / 2.0, 6.0 * z) };
             paint.galley(at + offset, g, p.text_secondary);
         }
-    }
-    if selected {
-        for q in [points[0], points[n - 1]] {
-            let h = Rect::from_center_size(q, Vec2::splat(6.0));
-            paint.rect_filled(h, 1.0, p.surface);
-            paint.rect_stroke(h, 1.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
+        if selected {
+            for q in [points[0], points[n - 1]] {
+                let h = Rect::from_center_size(q, Vec2::splat(6.0));
+                paint.rect_filled(h, 1.0, p.surface);
+                paint.rect_stroke(h, 1.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
+            }
         }
     }
     badge
@@ -1153,37 +1130,41 @@ fn draw_link(paint: &egui::Painter, d: &Drawing<'_>, e: Obj, registry: &mut widg
     }
 }
 
-/// An ER end at `end`, the line coming from `from`, in crow's foot: the outer mark is the most
-/// (a bar for one, a crow's foot for many), the inner mark the fewest (a circle for zero, a bar
-/// for one), so exactly one is two bars and one or more a bar and a crow's foot; the cardinality
-/// is written under the line.
-#[allow(clippy::too_many_arguments, reason = "an end is drawn from its line, its cardinality and the view")]
-pub(crate) fn end_glyph(paint: &egui::Painter, p: &Palette, end: Pos2, from: Pos2, c: Option<Cardinality>, stroke: Stroke, z: f32, with_text: bool) {
-    end_glyph_on(paint, p, end, from, c, stroke, z, with_text, p.canvas);
+/// A line's end mark at `end`, the line coming from `from`. Crow's foot: the outer mark is the
+/// most (a bar for one, a crow's foot for many), the inner mark the fewest (a circle for zero, a
+/// bar for one), so exactly one is two bars and one or more a bar and a crow's foot; the
+/// cardinality is written under the line. A triangle is drawn with its line.
+#[allow(clippy::too_many_arguments, reason = "an end is drawn from its line, its mark and the view")]
+pub(crate) fn end_glyph(paint: &egui::Painter, p: &Palette, end: Pos2, from: Pos2, mark: EndMark, stroke: Stroke, z: f32, with_text: bool) {
+    end_glyph_on(paint, p, end, from, mark, stroke, z, with_text, p.canvas);
 }
 
 /// [`end_glyph`] over a background `fill`, which the circle for zero is filled with.
-#[allow(clippy::too_many_arguments, reason = "an end is drawn from its line, its cardinality, the view and what it is drawn on")]
+#[allow(clippy::too_many_arguments, reason = "an end is drawn from its line, its mark, the view and what it is drawn on")]
 pub(crate) fn end_glyph_on(
     paint: &egui::Painter,
     p: &Palette,
     end: Pos2,
     from: Pos2,
-    c: Option<Cardinality>,
+    mark: EndMark,
     stroke: Stroke,
     z: f32,
     with_text: bool,
     fill: egui::Color32,
 ) {
-    let Some(c) = c else { return };
+    let (many, zero, text) = match mark {
+        EndMark::ExactlyOne => (false, false, "1"),
+        EndMark::ZeroOrOne => (false, true, "0..1"),
+        EndMark::ZeroOrMore => (true, true, "0..*"),
+        EndMark::OneOrMore => (true, false, "1..*"),
+        EndMark::None | EndMark::Triangle => return,
+    };
     let d = from - end;
     if d.length() <= f32::EPSILON || !d.is_finite() {
         return;
     }
     let d = d.normalized();
     let n = vec2(-d.y, d.x);
-    let many = matches!(c, Cardinality::ZeroOrMore | Cardinality::OneOrMore);
-    let zero = matches!(c, Cardinality::ZeroOrOne | Cardinality::ZeroOrMore);
     if many {
         let base = end + d * 14.0 * z;
         paint.line_segment([base, end + n * 7.0 * z], stroke);
@@ -1203,8 +1184,7 @@ pub(crate) fn end_glyph_on(
     if !with_text {
         return;
     }
-    let text = cardinality_text(c);
-    let g = ux::galley(paint, &text, types::SMALL.scaled(z), p.text_secondary, None);
+    let g = ux::galley(paint, text, types::SMALL.scaled(z), p.text_secondary, None);
     let at = end + d * 26.0 * z + vec2(0.0, 6.0 * z);
     paint.galley(at - vec2(g.size().x / 2.0, 0.0), g, p.text_secondary);
 }
@@ -1455,13 +1435,9 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
 /// Every hover text of the tables, for the catalogue tests.
 #[cfg(test)]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
-    TOOLS.iter().map(|(_, _, hint)| *hint).chain([
-        "Relationship types",
-        "Key status",
-        "Grid",
-        "complete",
-        "disjoint",
-        "overlapping",
-        "Arrange diagram",
-    ])
+    TOOLS
+        .iter()
+        .map(|(_, _, hint)| *hint)
+        .chain(["Relationship types", "Key status", "Grid", "complete", "disjoint", "overlapping", "Arrange diagram"])
+        .chain(archforge_er::figures::WORDS.iter().copied())
 }
