@@ -181,7 +181,7 @@ fn uuid_of(store: &Store, obj: Obj) -> Option<Uuid> {
 }
 
 fn name_of(store: &Store, obj: Obj) -> String {
-    archforge_er::rules::name_of(store, obj)
+    archforge_core::name_of(store, obj)
 }
 
 /// The schemas of the model, in the order the model lists them.

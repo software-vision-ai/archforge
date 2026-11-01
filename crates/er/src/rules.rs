@@ -62,17 +62,9 @@ pub fn same_name(a: &str, b: &str) -> bool {
     a.to_lowercase() == b.to_lowercase()
 }
 
-/// The name of an ER element, or empty.
+/// The name of an element, or empty: the core's lookup, which every notation shares.
 pub fn name_of(store: &Store, obj: Obj) -> String {
-    let prop = match store.class_of(obj).ok() {
-        Some(c) if c == RELATIONSHIP => relationship::NAME,
-        Some(c) if c == FOREIGN_KEY => foreign_key::NAME,
-        Some(c) if c == PRIMARY_KEY || c == UNIQUE_CONSTRAINT => key::NAME,
-        Some(c) if c == CHECK_CONSTRAINT => check_constraint::NAME,
-        Some(c) if c == TABLE_INDEX => table_index::NAME,
-        _ => named_element::NAME,
-    };
-    store.get(obj, prop).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default()
+    archforge_core::name_of(store, obj)
 }
 
 /// Whether `name` is free among the children of `parent` named through the shared name property,

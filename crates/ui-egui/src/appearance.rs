@@ -322,7 +322,7 @@ fn heading(store: &Store, nodes: &[Obj], edges: &[Obj]) -> (String, String) {
                 Some(c) if c == archforge_er::RELATIONSHIP => tr("Relationship"),
                 _ => tr("Element"),
             };
-            (archforge_er::rules::name_of(store, e), fmt(&tr("{kind} · this diagram"), &[("kind", &word)]))
+            (archforge_core::name_of(store, e), fmt(&tr("{kind} · this diagram"), &[("kind", &word)]))
         }
         None => {
             let text = store.get(o, node::TEXT).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default();

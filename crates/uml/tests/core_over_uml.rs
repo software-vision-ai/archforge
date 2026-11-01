@@ -249,3 +249,24 @@ fn the_sweep_finds_nothing_on_the_combined_store() {
     }
     assert_eq!(session.doc().live(), 1, "only the model is left");
 }
+
+#[test]
+fn every_element_is_named_by_its_own_name_whatever_its_notation() {
+    let mut st = store();
+    let sm = sample(&mut st);
+    // The core's model and folder, UML's package and classes: each by its own name property.
+    assert_eq!(name_of(&st, sm.model), "Shop");
+    assert_eq!(name_of(&st, sm.folder), "Domain");
+    assert_eq!(name_of(&st, sm.pkg), "sales");
+    assert_eq!(name_of(&st, sm.customer), "Customer");
+    // A UML property, an operation and an association end are named the same way.
+    let attr = st.create(archforge_uml::PROPERTY).unwrap();
+    archforge_uml::PropertyObj::set_name(&mut st, attr, Some("email")).unwrap();
+    st.push(sm.customer, archforge_uml::class::OWNED_ATTRIBUTE, Value::Ref(attr)).unwrap();
+    assert_eq!(name_of(&st, attr), "email");
+    // What has no name says so: a comment, a tag's link, and an element never named.
+    assert_eq!(name_of(&st, sm.comment), "");
+    assert_eq!(name_of(&st, sm.link), "");
+    let unnamed = st.create(archforge_uml::CLASS).unwrap();
+    assert_eq!(name_of(&st, unnamed), "");
+}

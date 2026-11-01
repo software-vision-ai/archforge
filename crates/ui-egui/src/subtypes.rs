@@ -33,7 +33,7 @@ pub struct SubtypeRow {
 }
 
 fn name(store: &Store, o: Obj) -> String {
-    archforge_er::rules::name_of(store, o)
+    archforge_core::name_of(store, o)
 }
 
 fn mapping_label(m: archforge_er::SubtypeMapping) -> String {

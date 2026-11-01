@@ -75,7 +75,7 @@ struct Fk {
 }
 
 fn name(store: &Store, o: Obj) -> String {
-    archforge_er::rules::name_of(store, o)
+    archforge_core::name_of(store, o)
 }
 
 fn string(store: &Store, o: Obj, prop: archforge_mof::PropId) -> String {
