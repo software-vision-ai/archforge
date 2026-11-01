@@ -1,4 +1,4 @@
-//! A schema's domains and enum types in Properties (slice S5 of archforge-gm2.34, from the design's
+//! A schema's domains and enum types in Properties (from the design's
 //! panel states "Schema with types", "Domain editor" and "Enum editor"): the Types section lists
 //! them with a `DM` or `EN` badge, the name and the base type with its size, not null and checks,
 //! or the literals; `+` asks which kind to add and opens the editor, a click on a row opens the

@@ -1,10 +1,10 @@
-//! A table's indexes in Properties (slice S3 of archforge-gm2.34, from the design's panel state
+//! A table's indexes in Properties (from the design's panel state
 //! "Editing an index"): the Indexes section lists them with an `IX` badge, the name (or the
 //! generated one) and the columns; `+` starts one, a click on a row opens the editor in its place
 //! (name, Unique, the columns in index order each with a grip, a direction button and a remove, an
 //! expression typed in place, Add a column with "An expression" last, More for Where and Method;
 //! remove, cancel and apply as icons). A right click on a column row offers its nulls order (owner
-//! decision archforge-gm2.34.9). Apply is one command, `er.index.add` or `er.index.set`; the bin
+//! decision). Apply is one command, `er.index.add` or `er.index.set`; the bin
 //! runs `er.index.remove`.
 
 use archforge_er::{NullsOrder, SortDirection};

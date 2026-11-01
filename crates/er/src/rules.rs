@@ -497,7 +497,7 @@ pub fn enum_default_check(store: &Store, e: Obj, default: &str) -> Option<String
 
 /// What a type takes after its name, in the PostgreSQL list (owner decision 2026-10-30: this
 /// list first, other dialects behind a dialect setting later), and MySQL's BINARY and VARBINARY,
-/// which a project's own ids are (BINARY(16), archforge-gm2.38).
+/// which a project's own ids are (BINARY(16)).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TypeShape {
     /// Nothing: `INTEGER`, `TEXT`, `BOOLEAN`, `DATE`, `UUID`, …

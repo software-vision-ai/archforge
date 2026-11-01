@@ -57,11 +57,11 @@ pub struct State {
     pub type_edit: Option<crate::types::TypeEdit>,
     /// The sequence or view editor (slice S7).
     pub object_edit: Option<crate::objects::ObjectEdit>,
-    /// A class's attribute or operation editor (archforge-3c5.1.3).
+    /// A class's attribute or operation editor.
     pub member: Option<crate::uml_panel::MemberEdit>,
-    /// An association's ends' roles and multiplicities as typed (archforge-3c5.1.4).
+    /// An association's ends' roles and multiplicities as typed.
     pub ends: Option<crate::uml_relate::EndsEdit>,
-    /// The body's scroll (archforge-gm2.36): how far it is scrolled, how tall its content was last
+    /// The body's scroll: how far it is scrolled, how tall its content was last
     /// frame, what it was scrolled for (a new panel or selection starts at the top), the editors
     /// open last frame, whether an editor that just opened is still to be brought into view, and
     /// the body's visible rectangle.
@@ -180,13 +180,13 @@ pub enum Menu {
     /// The sequence editor's Owned by select (slice S7).
     OwnedBy,
     /// A class member editor's visibility, its type or return type, and a parameter's type
-    /// (archforge-3c5.1.3).
+    ///.
     MemberVisibility,
     MemberType,
     ParamType(usize),
-    /// An association end's aggregation (archforge-3c5.1.4).
+    /// An association end's aggregation.
     EndAggregation(usize),
-    /// A class's package (AR-17).
+    /// A class's package.
     ClassPackage,
 }
 
@@ -1588,7 +1588,7 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, 
         description_field(shell, ui, p, pos2(r.left() + PAD, r.top() + y + 49.0), (r.width() - 2.0 * PAD).max(0.0), &s);
         body_y += 17.0 + FIELD + 14.0;
     }
-    // The body scrolls under the pinned heading and description (archforge-gm2.36): a new panel
+    // The body scrolls under the pinned heading and description: a new panel
     // or selection starts at the top, an editor that opens is brought into view, the wheel over
     // the body moves it within its content.
     let body = Rect::from_min_max(pos2(r.left(), body_y), r.max);

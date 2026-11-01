@@ -1,4 +1,4 @@
-//! What ER draws (archforge-il6.3.4): a table as a card with its columns, a relationship as a line
+//! What ER draws: a table as a card with its columns, a relationship as a line
 //! with crow's foot ends, its cardinalities and roles, dashed when it does not identify its child,
 //! and a generalization as a slate line to a hollow triangle at the supertype, with the set's facts
 //! beside the first subtype's triangle. The canvas draws these descriptions.

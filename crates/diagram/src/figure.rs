@@ -1,4 +1,4 @@
-//! What a notation draws, described without a toolkit (archforge-il6.3.4): a node of an element is
+//! What a notation draws, described without a toolkit: a node of an element is
 //! a [`Card`] (an eyebrow, a name and compartments of rows), and an edge of an element a [`Line`]
 //! (marks and texts at its ends, its dashes, its status, a note). The notation describes; the
 //! canvas draws every description alike, with the routing, the hover, the labels, the drags, the

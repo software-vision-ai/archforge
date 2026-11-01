@@ -33,7 +33,7 @@ pub const CLASS_DIAGRAM: &str = "uml.class";
 /// operation row and the line between them.
 pub const CLASS_SIZE: (f64, f64) = (240.0, 120.0);
 
-/// UML in a project's view (archforge-3c5.1.1, 3c5.1.2): class diagrams of a package showing its
+/// UML in a project's view: class diagrams of a package showing its
 /// classes as plain cards with their attributes and operations, and the associations,
 /// generalizations and dependencies between them as lines (`figures`); packages and classes removed
 /// with what they hold.

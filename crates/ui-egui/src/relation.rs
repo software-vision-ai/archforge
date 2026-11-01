@@ -1,4 +1,4 @@
-//! A relationship's Properties (slice E3 of archforge-gm2.10, from the design's frame "ER ·
+//! A relationship's Properties (from the design's frame "ER ·
 //! Properties · Relationship drawn" and its panel-state cards): the name and Identifying, the two
 //! ends with their cardinality buttons and roles, and the Foreign key section with its switch,
 //! Points to, the key pairs (parent key column · child column), On delete / On update and, under

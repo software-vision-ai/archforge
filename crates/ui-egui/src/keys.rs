@@ -1,4 +1,4 @@
-//! A table's keys in Properties (slice E4 of archforge-gm2.10, from the design's panel state
+//! A table's keys in Properties (from the design's panel state
 //! "Editing a unique constraint"): the Keys section lists the primary key and the unique
 //! constraints; `+` starts a unique constraint, a click on a row opens the key editor in its place
 //! (name, the columns in key order with a grip and a remove, Add a column, Nulls distinct for a

@@ -1,4 +1,4 @@
-//! The diagram metamodel for every notation (decision gm2.21): a diagram of some element shows
+//! The diagram metamodel for every notation (decision): a diagram of some element shows
 //! model elements as nodes and relationships as edges, with labels that name a text slot of their
 //! element and styles over the shipped style sheet; our own, in the spirit of OMG DI. The metamodel
 //! is `diagram.xmi`, generated into `generated/` by `cargo xtask generate diagram`; the rules, the

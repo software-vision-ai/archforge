@@ -119,7 +119,7 @@ pub struct State {
     /// open, the mapping table offer and the toast with Undo.
     pub relationship: crate::connect::RelKind,
     pub popover: bool,
-    /// What a class diagram's Relationship tool draws (archforge-3c5.1.4).
+    /// What a class diagram's Relationship tool draws.
     pub uml_relation: crate::uml_relate::Relate,
     pub mapping: Option<crate::connect::MappingOffer>,
     pub toast: Option<crate::connect::Toast>,
@@ -1180,7 +1180,7 @@ fn edge_points(d: &Drawing<'_>, e: Obj) -> Option<Vec<Pos2>> {
     Some(points)
 }
 
-/// A note link (owner decision archforge-kjz.13): dashed and straight, from the note's edge to the
+/// A note link (owner decision): dashed and straight, from the note's edge to the
 /// edge of the table it points at, or to the middle of the relationship's line.
 fn draw_link(paint: &egui::Painter, d: &Drawing<'_>, e: Obj, registry: &mut widgets::Registry, ui: &egui::Ui) {
     let (p, store, z) = (d.p, d.store, d.view.zoom);

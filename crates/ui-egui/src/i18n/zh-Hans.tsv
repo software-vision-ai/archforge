@@ -459,7 +459,7 @@ str		Simple	简单
 str		Full	完全
 str		Partial	部分
 str		{parent} has no primary key yet, so there is nothing in {child} to point at.	{parent} 还没有主键，因此 {child} 中没有可指向的内容。
-# 类图 (archforge-3c5.1.1)
+# 类图
 str		Add class	添加类
 str		Class	类
 str		Class diagram	类图
@@ -473,7 +473,7 @@ str		The diagram is of no package	该图不属于任何包
 str		This class	此类
 str		This package	此包
 plural		+ {n} more member	+ 另 {n} 个成员
-# 属性面板中的类成员 (archforge-3c5.1.3)
+# 属性面板中的类成员
 str		Abstract	抽象
 str		Add attribute	添加属性
 str		Add operation	添加操作
@@ -500,7 +500,7 @@ str		This attribute	此属性
 str		This operation	此操作
 str		Visibility	可见性
 str		Place class	放置类
-# 关联类 (archforge-3c5.1.4)
+# 关联类
 str		A relationship joins two classes	关系连接两个类
 str		Add association	添加关联
 str		Add dependency	添加依赖
@@ -534,10 +534,10 @@ str		This dependency	此依赖
 str		This generalization	此泛化
 str		To	到
 str		{what} removed	已移除{what}
-# 包 (AR-17)
+# 包
 str		Class · {package}	类 · {package}
 str		{name} removed; what it held moved to {parent}	已移除 {name}；其内容已移至 {parent}
-# 关闭时未保存的更改 (AR-22)
+# 关闭时未保存的更改
 str		Close and lose changes	关闭并丢弃更改
 str		Close without writing	不写入就关闭
 str		Close {name} without writing?	不写入就关闭 {name}？
@@ -548,5 +548,5 @@ str		Keep open	保持打开
 str		Save the changes to {name}?	保存对 {name} 的更改？
 str		The changes since the last write are lost.	上次写入以来的更改将丢失。
 str		The changes to {name} cannot be written	无法写入对 {name} 的更改
-# Linux 文件夹选择器 (AR-23)
+# Linux 文件夹选择器
 str		No folder picker could open: install xdg-desktop-portal and a backend for your desktop.	无法打开文件夹选择器：请为你的桌面安装 xdg-desktop-portal 和一个后端。

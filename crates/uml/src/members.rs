@@ -1,4 +1,4 @@
-//! A class's members (archforge-3c5.1.3): attributes (visibility, name, type, multiplicity,
+//! A class's members: attributes (visibility, name, type, multiplicity,
 //! static) and operations (visibility, name, parameters, return type, static, abstract), added,
 //! changed, moved and listed; a class made abstract or not. A type is named by an element's id
 //! (a class of the model, or any type it holds) or by a built-in type's name: Integer, String,

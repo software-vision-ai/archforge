@@ -34,7 +34,7 @@ fn pick_project(start: Option<&std::path::Path>) -> Option<PathBuf> {
     dialog.pick_folder()
 }
 
-/// Why the folder picker cannot appear (AR-23). Where the picker is the desktop portal's (Linux
+/// Why the folder picker cannot appear. Where the picker is the desktop portal's (Linux
 /// and the BSDs), asked over D-Bus, a missing portal answers nothing, as a cancel does; the picker
 /// library then falls back to zenity, so only with no zenity either is the picker surely missing.
 /// Elsewhere the picker is the system's own and always appears.

@@ -47,7 +47,7 @@ pub struct Target {
     pub crate_dir: &'static str,
 }
 
-/// The metamodels and their fixed indices (decision gm2.18): core 1, uml 2, er 3, c4 4 (reserved, not
+/// The metamodels and their fixed indices (decision): core 1, uml 2, er 3, c4 4 (reserved, not
 /// yet a target), diagram 5;
 /// the toy of the MOF core's tests is 15.
 pub const TARGETS: &[Target] = &[
@@ -790,7 +790,7 @@ pub fn build(t: &Target, bytes: &[u8], docs: bool) -> Result<Built, String> {
     );
     let _ = writeln!(report, "subsets or redefinitions of association-owned ends dropped: {subsets_dropped}");
     let _ = writeln!(report, "defaults on derived properties dropped: {derived_defaults_dropped}");
-    let _ = writeln!(report, "documentation: {}", if docs { "emitted" } else { "not emitted (p9h.3.1)" });
+    let _ = writeln!(report, "documentation: {}", if docs { "emitted" } else { "not emitted" });
     if !x.primitives.is_empty() {
         let _ = writeln!(
             report,

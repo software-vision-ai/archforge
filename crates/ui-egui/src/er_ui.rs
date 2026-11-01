@@ -1,4 +1,4 @@
-//! What ER brings to the shell's explorers, search, problems and panels (archforge-il6.3.6): the
+//! What ER brings to the shell's explorers, search, problems and panels: the
 //! Models tree's schemas with their skills, types, sequences, views and tables, and a table's
 //! skills and columns; `+` adds a schema, a table or a column; the search's schemas, tables,
 //! columns, relationships and types; the problems the rules find, in the user's words; and

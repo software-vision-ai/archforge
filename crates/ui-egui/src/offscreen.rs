@@ -12,7 +12,7 @@ pub enum Screen {
     HomeGallery,
     /// The same with its search open, nothing typed yet.
     HomeSearch,
-    /// Home with the Settings dialog open, a name entered (archforge-9ln.4.1).
+    /// Home with the Settings dialog open, a name entered.
     HomeSettings,
     /// The New project dialog over Home, a name typed and the usual folder.
     NewProject,
@@ -53,24 +53,27 @@ pub enum Screen {
     /// dashed, its relationship to Order drawn (slice S7).
     WorkspaceCrossSchema,
     /// The diagram of two tables with Invoice and Product placed so that their lines from Customer
-    /// would cross Order: right-angled lines go around it (archforge-guc.1.1).
+    /// would cross Order: right-angled lines go around it.
     WorkspaceRouting,
     /// A class diagram of a package with three classes, the package open in the tree
-    /// (archforge-3c5.1.1).
+    ///.
     WorkspaceClassDiagram,
-    /// The sample class model to read: members, every line kind and end (archforge-3c5.1.2).
+    /// The sample class model to read: members, every line kind and end.
     WorkspaceClassDiagramRead,
     /// The sample class model with Order selected: its Properties, Abstract and its members
-    /// (archforge-3c5.1.3).
+    ///.
     WorkspaceClassMembers,
     /// The same with Customer's operation rename open in its editor, its parameter on a row.
     WorkspaceMemberEditor,
     /// The sample class model with the association "paid by" selected: its line's end handles and
-    /// its Properties with both ends (archforge-3c5.1.4).
+    /// its Properties with both ends.
     WorkspaceAssociation,
     /// The sample class model with the Relationship tool active and its kinds' menu open.
     WorkspaceRelateKinds,
-    /// The routing sample with the top bar's search open on "order" (archforge-9ln.1.3).
+    /// The sample class model edited, unsaved, and its close asking Save, Don't save or Cancel
+    ///.
+    WorkspaceCloseAsk,
+    /// The routing sample with the top bar's search open on "order".
     WorkspaceSearch,
     /// The Diagrams explorer with the diagram "dbo" open, its one table Company placed and its key
     /// column selected: the owner's screen of 2026-10-31.
@@ -247,6 +250,14 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
     if screen == Screen::WorkspaceClassDiagramRead {
         shell.adopt_project();
         crate::uml_ui::open_sample(&mut shell)?;
+    }
+    if screen == Screen::WorkspaceCloseAsk {
+        shell.adopt_project();
+        crate::uml_ui::open_sample(&mut shell)?;
+        if let Some(s) = shell.session.as_mut() {
+            s.mark_unsaved();
+        }
+        shell.close_project();
     }
     if matches!(screen, Screen::WorkspaceAssociation | Screen::WorkspaceRelateKinds) {
         shell.adopt_project();

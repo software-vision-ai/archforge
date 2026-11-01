@@ -1,4 +1,4 @@
-//! Editing on the ER canvas (slice E1 of archforge-gm2.10, from the design's frame "ER · Empty
+//! Editing on the ER canvas (from the design's frame "ER · Empty
 //! diagram · First entity named in place" and the cards "Two entities selected", "Entity menu"
 //! and "Delete from the model"): the Entity tool places a table and opens its name for typing in
 //! the node's header; Select drags nodes, resizes them by their handles, draws a marquee, nudges
@@ -93,7 +93,7 @@ pub enum Gesture {
     /// A line of a kind's connect tool drawn from a node, from the screen point the drag started
     /// at (ER's relationship, slice E2).
     Connect { tool: &'static str, from_node: Uuid, from: Pos2 },
-    /// A note link drawn from a note's handle to a table or a relationship's line (kjz.13).
+    /// A note link drawn from a note's handle to a table or a relationship's line.
     LinkNote { note: Uuid },
     /// A cardinality text dragged off its place: its line, its end, the screen point the drag
     /// started at, its centre then and the end of the line it belongs to.
@@ -101,7 +101,7 @@ pub enum Gesture {
     /// A segment of a right-angled line slid across: the line, the segment's index in the route,
     /// the route as it was in diagram units, and the screen point the drag started at.
     Segment { edge: Uuid, index: usize, route: Vec<(f64, f64)>, from: Pos2 },
-    /// A selected line's end dragged towards another element (archforge-3c5.1.4): the line's
+    /// A selected line's end dragged towards another element: the line's
     /// element, whether it is the source end, and the screen point of the end that stays.
     Reconnect { element: Uuid, source: bool, fixed: Pos2 },
 }
@@ -1433,7 +1433,7 @@ fn selected_line(store: &Store, d: Obj, selection: &[Obj]) -> Option<(Uuid, Vec<
     Some((uuid(store, *element)?, route))
 }
 
-/// A selected line's two end handles (archforge-3c5.1.4): each drags onto another element to move
+/// A selected line's two end handles: each drags onto another element to move
 /// that end there.
 fn line_ends(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, view: View, d: Obj) {
     let Some((element, route)) = shell.session.as_ref().and_then(|s| selected_line(s.doc(), d, &s.view().selection)) else { return };
@@ -1513,7 +1513,7 @@ fn adorners(
 }
 
 /// A selected note's link handle at its top right: dragged onto a table or a relationship's line,
-/// it links the note to it (owner decision archforge-kjz.13).
+/// it links the note to it (owner decision).
 fn link_handle(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, rect: Rect, note: Uuid) {
     let paint = ui.painter().with_clip_rect(r);
     let b = Rect::from_min_size(pos2(rect.right() + ADORNER_GAP, rect.top() - ADORNER - 6.0), Vec2::splat(ADORNER));

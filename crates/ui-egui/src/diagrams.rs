@@ -3,7 +3,7 @@
 //! folders the model keeps them in, with the model behind the open diagram named under the tree.
 //! A click opens the diagram in the centre and selects it, so Properties shows it. The `+`, like
 //! the one in the tab strip, opens the New diagram dialog: a name, the kind and the schema the
-//! diagram is of, or a new schema when the model has none yet (owner decision archforge-tec).
+//! diagram is of, or a new schema when the model has none yet (owner decision).
 //! Every change goes through the engine, so undo and redo cover it.
 //!
 //! The geometry is the Models tree's: rows 34 px apart from y 119, a level 13 px deeper than its

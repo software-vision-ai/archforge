@@ -1,4 +1,4 @@
-//! Relating classes (archforge-3c5.1.4): associations, generalizations and dependencies drawn
+//! Relating classes: associations, generalizations and dependencies drawn
 //! between classes, an association's ends set (role, multiplicity, navigability, aggregation),
 //! any of them reconnected to another class, and the relationships that touch a class listed so
 //! removing the class can say them and take them along.

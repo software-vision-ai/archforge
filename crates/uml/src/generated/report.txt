@@ -5,7 +5,7 @@ data types: 18 (13 enumerations)
 associations: 418 (292 with an association-owned or missing end, 49 with a derived end: no stored opposite)
 subsets or redefinitions of association-owned ends dropped: 34
 defaults on derived properties dropped: 1
-documentation: not emitted (p9h.3.1)
+documentation: not emitted
 skipped, not read:
   redefinedProperty: 18
   subsettedProperty: 212

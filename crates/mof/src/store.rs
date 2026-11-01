@@ -1133,7 +1133,7 @@ impl Store {
     }
 
     /// The first problem `validate_all` would find, if any, found in time linear in the model and
-    /// without gathering the rest (AR-30): a missing value, or two siblings of one container whose
+    /// without gathering the rest: a missing value, or two siblings of one container whose
     /// names differ only in case. For checking a model as it opens, whatever its size.
     pub fn first_problem(&self) -> Option<Problem> {
         let mut names: std::collections::HashMap<(Obj, PropId, String), Obj> = std::collections::HashMap::new();

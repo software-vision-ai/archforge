@@ -1,4 +1,4 @@
-//! UML's commands through the engine over the shared core, the diagrams and UML (archforge-3c5.1.1):
+//! UML's commands through the engine over the shared core, the diagrams and UML:
 //! packages and classes added, renamed, listed and refused by key; a class diagram of a package
 //! showing its own classes; removing a package takes its classes and their views; every command
 //! undoes and redoes; the sweep.
@@ -124,7 +124,7 @@ fn a_class_diagram_shows_its_packages_classes_and_removing_the_package_takes_the
     run(&mut s, "diagram.place", json!({ "diagram": d, "element": order, "x": 0, "y": 0 }));
     let size = s.execute("diagram.get", &json!({ "diagram": d })).unwrap().value;
     assert_eq!((size["nodes"][0]["width"].as_f64(), size["nodes"][0]["height"].as_f64()), (Some(240.0), Some(120.0)));
-    // Another package's class is welcome, drawn as an outsider (AR-17).
+    // Another package's class is welcome, drawn as an outsider.
     run(&mut s, "diagram.place", json!({ "diagram": d, "element": invoice, "x": 300, "y": 0 }));
     let st = s.doc();
     assert!(archforge_diagram::Notation::card(&archforge_uml::UmlNotation, st, obj(st, &invoice), obj(st, &d)).unwrap().elsewhere);

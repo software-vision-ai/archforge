@@ -1,4 +1,4 @@
-//! Drawing relationships on the ER canvas (slice E2 of archforge-gm2.10, from the design's
+//! Drawing relationships on the ER canvas (from the design's
 //! `Popover / Cardinality`, the frame "ER · Properties · Relationship drawn" and the cards "Many
 //! to many picked", "Roles on lines" and "Column removed with its keys"): the Relationship tool
 //! drags a line from one entity to another, the cardinality popover beside the tool sets the ends

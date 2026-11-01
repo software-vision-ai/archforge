@@ -1,4 +1,4 @@
-//! A class in Properties (archforge-3c5.1.3): its name and whether it is abstract, then the
+//! A class in Properties: its name and whether it is abstract, then the
 //! Attributes and Operations sections, each row read as the class's card shows it. `+` opens the
 //! editor for a new member, the row's edit button or a double click opens the editor in its place,
 //! as a table's columns do. The attribute editor takes the visibility, the name, the type (none, a
@@ -191,7 +191,7 @@ pub(crate) fn class_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
     let width = r.width() - 2.0 * PAD;
     let half = ((width - 8.0) / 2.0).max(0.0);
     crate::panels::name_field(shell, ui, p, pos2(r.left() + PAD, y), half, subject, "uml.class.rename", "class");
-    // Its package: a pick moves it there (AR-17).
+    // Its package: a pick moves it there.
     let (here, choices) = match shell.session.as_ref() {
         Some(s) => {
             let store = s.doc();

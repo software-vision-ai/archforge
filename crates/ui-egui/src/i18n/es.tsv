@@ -459,7 +459,7 @@ str		Simple	Simple
 str		Full	Completa
 str		Partial	Parcial
 str		{parent} has no primary key yet, so there is nothing in {child} to point at.	{parent} aún no tiene clave primaria, así que en {child} no hay nada a lo que apuntar.
-# Diagramas de clases (archforge-3c5.1.1)
+# Diagramas de clases
 str		Add class	Añadir clase
 str		Class	Clase
 str		Class diagram	Diagrama de clases
@@ -473,7 +473,7 @@ str		The diagram is of no package	El diagrama no es de ningún paquete
 str		This class	Esta clase
 str		This package	Este paquete
 plural		+ {n} more member	+ {n} miembro más|+ {n} miembros más
-# Miembros de clase en Propiedades (archforge-3c5.1.3)
+# Miembros de clase en Propiedades
 str		Abstract	Abstracta
 str		Add attribute	Añadir atributo
 str		Add operation	Añadir operación
@@ -500,7 +500,7 @@ str		This attribute	Este atributo
 str		This operation	Esta operación
 str		Visibility	Visibilidad
 str		Place class	Colocar clase
-# Relacionar clases (archforge-3c5.1.4)
+# Relacionar clases
 str		A relationship joins two classes	Una relación une dos clases
 str		Add association	Añadir asociación
 str		Add dependency	Añadir dependencia
@@ -534,10 +534,10 @@ str		This dependency	Esta dependencia
 str		This generalization	Esta generalización
 str		To	Hacia
 str		{what} removed	Eliminado: {what}
-# Paquetes (AR-17)
+# Paquetes
 str		Class · {package}	Clase · {package}
 str		{name} removed; what it held moved to {parent}	{name} eliminado; su contenido se movió a {parent}
-# Cambios sin guardar al cerrar (AR-22)
+# Cambios sin guardar al cerrar
 str		Close and lose changes	Cerrar y perder los cambios
 str		Close without writing	Cerrar sin escribir
 str		Close {name} without writing?	¿Cerrar {name} sin escribir?
@@ -548,5 +548,5 @@ str		Keep open	Mantener abierto
 str		Save the changes to {name}?	¿Guardar los cambios en {name}?
 str		The changes since the last write are lost.	Se pierden los cambios desde la última escritura.
 str		The changes to {name} cannot be written	No se pueden escribir los cambios en {name}
-# Selector de carpetas en Linux (AR-23)
+# Selector de carpetas en Linux
 str		No folder picker could open: install xdg-desktop-portal and a backend for your desktop.	No se pudo abrir ningún selector de carpetas: instale xdg-desktop-portal y un backend para su escritorio.

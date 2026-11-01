@@ -1,4 +1,4 @@
-//! A supertype's subtypes in Properties (slice S6 of archforge-gm2.34, from the design's panel
+//! A supertype's subtypes in Properties (from the design's panel
 //! state "Subtypes"): the Subtypes section lists the tables that are kinds of the selected one with
 //! an `ST` badge, the mapping and the key they share; `+` offers the schema's tables that can become
 //! a subtype; a row selects its table, its cross removes the generalization with the key it made.

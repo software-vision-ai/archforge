@@ -1,4 +1,4 @@
-//! A project's model as rows of the generated tables and back (archforge-kjz.3): a model with every
+//! A project's model as rows of the generated tables and back: a model with every
 //! element kind, its diagram and a skill comes back from its rows identical, object for object and
 //! value for value; damaged rows are refused and leave the store as it was.
 

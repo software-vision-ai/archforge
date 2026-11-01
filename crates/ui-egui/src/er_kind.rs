@@ -1,4 +1,4 @@
-//! The ER diagram's tools and gestures (archforge-il6.3.5): the Entity tool places a table named in
+//! The ER diagram's tools and gestures: the Entity tool places a table named in
 //! place, the Relationship tool draws a relationship with the ends its popover sets, a line dropped
 //! on empty canvas makes a new table there, a table renames in place, a double click on a column
 //! opens its editor, the second adorner adds a column, and a right click opens the entity menu.

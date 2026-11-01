@@ -1,4 +1,4 @@
-//! A project's model in its Dolt database (archforge-kjz.3): written, saved, closed and opened
+//! A project's model in its Dolt database: written, saved, closed and opened
 //! again, it comes back identical; the unsaved state follows the writes and the saves; a project
 //! made for other tables is refused. Needs dolt 2.6 or later, as the project tests do.
 #![cfg(unix)]

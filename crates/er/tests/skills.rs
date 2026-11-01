@@ -1,4 +1,4 @@
-//! Skills over the ER notation (spec archforge-zer.2): every skill command's round trip with
+//! Skills over the ER notation: every skill command's round trip with
 //! undo, refusals that change nothing, what applies to an element over four levels of the
 //! hierarchy, kinds and type patterns, overrides by name, trigger filtering, and the cascade when
 //! a subject goes.
