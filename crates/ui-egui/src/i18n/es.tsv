@@ -548,3 +548,5 @@ str		Keep open	Mantener abierto
 str		Save the changes to {name}?	¿Guardar los cambios en {name}?
 str		The changes since the last write are lost.	Se pierden los cambios desde la última escritura.
 str		The changes to {name} cannot be written	No se pueden escribir los cambios en {name}
+# Selector de carpetas en Linux (AR-23)
+str		No folder picker could open: install xdg-desktop-portal and a backend for your desktop.	No se pudo abrir ningún selector de carpetas: instale xdg-desktop-portal y un backend para su escritorio.

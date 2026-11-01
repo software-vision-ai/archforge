@@ -5418,3 +5418,46 @@ fn save_on_close_waits_for_a_running_save_and_asks_again_when_edits_came_in_mean
     assert!(matches!(h.state().ask, Some(crate::close_ask::Ask::Unsaved { .. })), "{:?}", h.state().ask);
     assert!(host.closed.lock().unwrap().is_empty());
 }
+
+#[test]
+fn a_picker_that_cannot_appear_is_said_on_home_and_a_cancel_says_nothing() {
+    crate::i18n::set_language("en");
+    let host = std::sync::Arc::new(SavingHost::default());
+    let unavailable = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let probe = unavailable.clone();
+    let services = Services {
+        projects: Some(host),
+        ids: Some(test_ids()),
+        pick_project: Some(std::sync::Arc::new(|_| None)),
+        pick_folder: Some(std::sync::Arc::new(|| None)),
+        picker_unavailable: Some(std::sync::Arc::new(move || {
+            probe.load(std::sync::atomic::Ordering::SeqCst).then(|| "this system has no desktop portal".to_string())
+        })),
+        ..Services::default()
+    };
+    let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1120.0)).build_ui_state(
+        |ui, shell: &mut Shell| {
+            shell.logic(ui.ctx());
+            shell.ui(ui);
+        },
+        Shell::new(services),
+    );
+    h.run();
+    // A cancel: nothing to say.
+    h.state_mut().open_from_picker();
+    assert_eq!(h.state().picker_error, None);
+    // A picker that could not appear: Home says why, in its own words, for Open and for Pin a
+    // folder alike; a later pick that shows a picker clears it.
+    unavailable.store(true, std::sync::atomic::Ordering::SeqCst);
+    h.state_mut().open_from_picker();
+    h.run();
+    assert_eq!(h.state().picker_error.as_deref(), Some("this system has no desktop portal"));
+    assert!(painted(&h).iter().any(|t| t == "this system has no desktop portal"), "{:?}", painted(&h));
+    assert_eq!(h.state().open_error, None, "not said as a failed opening");
+    unavailable.store(false, std::sync::atomic::Ordering::SeqCst);
+    h.state_mut().pin_from_picker();
+    assert_eq!(h.state().picker_error, None, "a cancel with a picker there clears it");
+    unavailable.store(true, std::sync::atomic::Ordering::SeqCst);
+    h.state_mut().pin_from_picker();
+    assert_eq!(h.state().picker_error.as_deref(), Some("this system has no desktop portal"));
+}

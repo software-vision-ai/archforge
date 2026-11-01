@@ -74,6 +74,9 @@ pub struct Services {
     /// Asks the user for a folder to pin on Home (the native folder picker); none keeps Pin a
     /// folder unavailable.
     pub pick_folder: Option<std::sync::Arc<dyn Fn() -> Option<std::path::PathBuf> + Send + Sync>>,
+    /// Why the native folder picker cannot appear, when the platform can tell (Linux without a
+    /// desktop portal answers nothing, as a cancel does); asked when a pick comes back empty.
+    pub picker_unavailable: Option<std::sync::Arc<dyn Fn() -> Option<String> + Send + Sync>>,
 }
 
 /// The host's search for projects in folders: the folders and a wake in, the projects found sent
@@ -358,6 +361,9 @@ pub struct Shell {
     /// Why the last save or the last opening failed, for the status bar and Home.
     pub save_error: Option<String>,
     pub open_error: Option<String>,
+    /// Why the last folder pick showed no picker (AR-23), for Home and the status bar; gone with
+    /// the next pick that shows one.
+    pub picker_error: Option<String>,
     /// The Models explorer's own state: folds, filter, a name being typed, the dialogs.
     pub explorer: explorer::State,
     /// The Diagrams explorer's own state: folds, filter, the New diagram dialog.
@@ -412,6 +418,7 @@ impl Shell {
             quit_confirmed: false,
             save_error: None,
             open_error: None,
+            picker_error: None,
             explorer: explorer::State::default(),
             diagrams: diagrams::State::default(),
             canvas: canvas::State::default(),
@@ -888,17 +895,31 @@ impl Shell {
             return;
         }
         let Some(pick) = self.services.pick_project.clone() else { return };
-        if let Some(path) = pick(folder) {
-            self.open_path(&path);
+        match pick(folder) {
+            Some(path) => {
+                self.picker_error = None;
+                self.open_path(&path);
+            }
+            None => self.say_why_no_picker(),
         }
     }
 
     /// Pin a folder: asks the user for a folder and pins it on Home.
     pub fn pin_from_picker(&mut self) {
         let Some(pick) = self.services.pick_folder.clone() else { return };
-        if let Some(path) = pick() {
-            self.state.pin(&path);
+        match pick() {
+            Some(path) => {
+                self.picker_error = None;
+                self.state.pin(&path);
+            }
+            None => self.say_why_no_picker(),
         }
+    }
+
+    /// A pick that came back empty: a cancel, or a picker that could not appear, which Home and
+    /// the status bar then say (AR-23).
+    fn say_why_no_picker(&mut self) {
+        self.picker_error = self.services.picker_unavailable.as_ref().and_then(|probe| probe());
     }
 
     /// Opens the project at `path` (from the picker or Home's recent list): a project open in a

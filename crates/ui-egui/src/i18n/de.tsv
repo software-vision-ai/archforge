@@ -548,3 +548,5 @@ str		Keep open	Geöffnet lassen
 str		Save the changes to {name}?	Änderungen an {name} sichern?
 str		The changes since the last write are lost.	Die Änderungen seit dem letzten Schreiben gehen verloren.
 str		The changes to {name} cannot be written	Die Änderungen an {name} können nicht geschrieben werden
+# Ordnerauswahl unter Linux (AR-23)
+str		No folder picker could open: install xdg-desktop-portal and a backend for your desktop.	Es konnte keine Ordnerauswahl geöffnet werden: Installieren Sie xdg-desktop-portal und ein Backend für Ihren Desktop.

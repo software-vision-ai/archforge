@@ -548,3 +548,5 @@ str		Keep open	保持打开
 str		Save the changes to {name}?	保存对 {name} 的更改？
 str		The changes since the last write are lost.	上次写入以来的更改将丢失。
 str		The changes to {name} cannot be written	无法写入对 {name} 的更改
+# Linux 文件夹选择器 (AR-23)
+str		No folder picker could open: install xdg-desktop-portal and a backend for your desktop.	无法打开文件夹选择器：请为你的桌面安装 xdg-desktop-portal 和一个后端。

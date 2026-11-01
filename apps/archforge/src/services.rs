@@ -13,6 +13,7 @@ pub fn native(projects: std::sync::Arc<crate::projects::Projects>) -> Services {
         projects: Some(projects),
         pick_project: Some(std::sync::Arc::new(pick_project)),
         pick_folder: Some(std::sync::Arc::new(pick_folder)),
+        picker_unavailable: Some(std::sync::Arc::new(picker_unavailable)),
         find_projects: Some(std::sync::Arc::new(find_projects)),
         ids: Some(std::sync::Arc::new(fresh_id)),
     }
@@ -31,6 +32,131 @@ fn pick_project(start: Option<&std::path::Path>) -> Option<PathBuf> {
         }
     }
     dialog.pick_folder()
+}
+
+/// Why the folder picker cannot appear (AR-23). Where the picker is the desktop portal's (Linux
+/// and the BSDs), asked over D-Bus, a missing portal answers nothing, as a cancel does; the picker
+/// library then falls back to zenity, so only with no zenity either is the picker surely missing.
+/// Elsewhere the picker is the system's own and always appears.
+fn picker_unavailable() -> Option<String> {
+    #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "dragonfly", target_os = "netbsd", target_os = "openbsd"))]
+    {
+        use archforge_ui_egui::i18n::tr;
+        // A portal once seen is there for the rest of the run: a cancel then asks nothing.
+        static SEEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        if SEEN.load(std::sync::atomic::Ordering::Relaxed) || on_path("zenity") {
+            return None;
+        }
+        let why = || tr("No folder picker could open: install xdg-desktop-portal and a backend for your desktop.");
+        let session_bus = std::env::var_os("DBUS_SESSION_BUS_ADDRESS").is_some()
+            || std::env::var_os("XDG_RUNTIME_DIR").is_some_and(|dir| !dir.is_empty() && std::path::Path::new(&dir).join("bus").exists());
+        if !session_bus {
+            return Some(why());
+        }
+        match file_chooser_probe() {
+            Probe::Present => {
+                SEEN.store(true, std::sync::atomic::Ordering::Relaxed);
+                None
+            }
+            Probe::Missing => Some(why()),
+            Probe::Unknown => None,
+        }
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "freebsd", target_os = "dragonfly", target_os = "netbsd", target_os = "openbsd")))]
+    {
+        None
+    }
+}
+
+/// What the portal's file chooser answered.
+#[derive(Debug, PartialEq, Eq)]
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+enum Probe {
+    Present,
+    Missing,
+    /// It could not be asked, or did not answer in time: nothing is claimed.
+    Unknown,
+}
+
+/// The longest the probe may take: it runs on the window's thread after an empty pick.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+const PROBE_DEADLINE: std::time::Duration = std::time::Duration::from_millis(1500);
+
+/// Whether `program` is an executable file on the PATH.
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "dragonfly", target_os = "netbsd", target_os = "openbsd"))]
+fn on_path(program: &str) -> bool {
+    std::env::var_os("PATH").is_some_and(|paths| std::env::split_paths(&paths).any(|dir| !dir.as_os_str().is_empty() && dir.join(program).is_file()))
+}
+
+/// Asks the desktop portal for its file chooser's version with `dbus-send`, killed past
+/// [`PROBE_DEADLINE`]: an answer means a portal with a file chooser, a bus error naming the
+/// service, interface or property unknown means none.
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "dragonfly", target_os = "netbsd", target_os = "openbsd"))]
+fn file_chooser_probe() -> Probe {
+    use std::io::Read;
+    let child = std::process::Command::new("dbus-send")
+        .args([
+            "--session",
+            "--print-reply",
+            "--reply-timeout=1000",
+            "--dest=org.freedesktop.portal.Desktop",
+            "/org/freedesktop/portal/desktop",
+            "org.freedesktop.DBus.Properties.Get",
+            "string:org.freedesktop.portal.FileChooser",
+            "string:version",
+        ])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .spawn();
+    let mut child = match child {
+        Ok(child) => child,
+        Err(e) => {
+            log::warn!("dbus-send could not be run to look for the desktop portal: {e}");
+            return Probe::Unknown;
+        }
+    };
+    let started = std::time::Instant::now();
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if started.elapsed() < PROBE_DEADLINE => std::thread::sleep(std::time::Duration::from_millis(20)),
+            Ok(None) => {
+                log::warn!("dbus-send did not answer within {} ms; the desktop portal is not judged", PROBE_DEADLINE.as_millis());
+                let _ = child.kill();
+                let _ = child.wait();
+                return Probe::Unknown;
+            }
+            Err(e) => {
+                log::warn!("dbus-send could not be waited for: {e}");
+                let _ = child.kill();
+                let _ = child.wait();
+                return Probe::Unknown;
+            }
+        }
+    };
+    let mut stderr = String::new();
+    if let Some(pipe) = child.stderr.take() {
+        let _ = pipe.take(64 * 1024).read_to_string(&mut stderr);
+    }
+    if !status.success() {
+        log::info!("dbus-send asking for the desktop portal ended with {status}: {}", stderr.trim());
+    }
+    classify(status.success(), &stderr)
+}
+
+/// What a `dbus-send` run says of the portal's file chooser: success, a bus error meaning there is
+/// none, or anything else, which claims nothing.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn classify(success: bool, stderr: &str) -> Probe {
+    const MISSING: [&str; 5] = ["ServiceUnknown", "UnknownInterface", "UnknownMethod", "UnknownProperty", "InvalidArgs"];
+    if success {
+        Probe::Present
+    } else if MISSING.iter().any(|e| stderr.contains(&format!("org.freedesktop.DBus.Error.{e}"))) {
+        Probe::Missing
+    } else {
+        Probe::Unknown
+    }
 }
 
 /// How deep below a pinned folder Home's search looks for projects, the most it lists, and the
@@ -118,4 +244,21 @@ pub fn projects_folder() -> Option<Folder> {
     let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).map(PathBuf::from).filter(|h| h.is_absolute())?;
     let documents = home.join("Documents");
     documents.is_dir().then(|| Folder { path: documents.join("Archforge"), label: "Documents / Archforge".to_string() })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_file_chooser_is_missing_only_when_the_bus_says_so() {
+        assert_eq!(classify(true, ""), Probe::Present);
+        let unknown =
+            "Error org.freedesktop.DBus.Error.ServiceUnknown: The name org.freedesktop.portal.Desktop was not provided by any .service files";
+        assert_eq!(classify(false, unknown), Probe::Missing, "no portal");
+        let no_backend = "Error org.freedesktop.DBus.Error.UnknownInterface: No such interface org.freedesktop.portal.FileChooser";
+        assert_eq!(classify(false, no_backend), Probe::Missing, "a portal without a file chooser backend");
+        assert_eq!(classify(false, "Error org.freedesktop.DBus.Error.NoReply: Did not receive a reply"), Probe::Unknown, "no answer claims nothing");
+        assert_eq!(classify(false, "Failed to open connection to session bus"), Probe::Unknown);
+    }
 }
