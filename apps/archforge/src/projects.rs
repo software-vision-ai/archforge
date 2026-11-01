@@ -39,6 +39,8 @@ enum Job {
     Write(PathBuf, Rows),
     Save(Option<PathBuf>, Sender<Result<bool, String>>),
     Flush(PathBuf, Sender<Result<(), String>>),
+    /// Forget what waits for a project without writing it (Don't save), then answer.
+    Drop(PathBuf, Sender<()>),
 }
 
 pub struct Projects {
@@ -185,6 +187,14 @@ impl ProjectHost for Projects {
             }
         }
         rx
+    }
+
+    fn discard_and_close(&self, project: &Path) -> Receiver<Result<(), String>> {
+        self.close_unwritten(project, true)
+    }
+
+    fn close_without_writing(&self, project: &Path) -> Receiver<Result<(), String>> {
+        self.close_unwritten(project, false)
     }
 
     fn create(&self, folder: &Path, name: &str) -> Receiver<Result<Opened, CreateError>> {
@@ -357,6 +367,74 @@ fn close_job(inner: &Inner, path: &Path, reply: &Sender<Result<(), String>>) {
     let _ = reply.send(Ok(()));
 }
 
+/// Closes a project without writing what waits for it: the writer forgets its waiting rows, then
+/// the project closes. With `reset` (Don't save) it is first put back to its last save, and a
+/// reset that fails keeps it open, saying why; without (Close without writing) what was written
+/// stays, unsaved, for the next opening. A writer too busy to let go keeps it open too, so no
+/// forgotten rows can reach it later.
+fn discard_job(inner: &Inner, path: &Path, reset: bool, reply: &Sender<Result<(), String>>) {
+    let _job = lock(&inner.job);
+    let writer = lock(&inner.writer).clone();
+    if let Some(tx) = writer {
+        let (done, answer) = channel();
+        if tx.send(Job::Drop(path.to_path_buf(), done)).is_err() || answer.recv_timeout(FLUSH_BUDGET).is_err() {
+            log::warn!("the writer did not let go of {} in time; it stays open", path.display());
+            let _ = reply.send(Err("the changes are still being written; try again in a moment".into()));
+            return;
+        }
+    }
+    if reset {
+        let undone = lock(&inner.open).iter().find(|p| p.path() == path).map(|p| p.discard());
+        if let Some(Err(e)) = undone {
+            log::warn!("the project {} could not be put back to its last save: {e}", path.display());
+            let _ = reply.send(Err(format!("it could not be put back to its last save ({e})")));
+            return;
+        }
+        log::info!("put the project {} back to its last save", path.display());
+    }
+    let project = {
+        let mut open = lock(&inner.open);
+        open.iter().position(|p| p.path() == path).map(|i| open.remove(i))
+    };
+    lock(&inner.writing).remove(path);
+    if let Some(project) = project
+        && let Err(e) = project.close()
+    {
+        log::warn!("the project {} did not close cleanly: {e}", path.display());
+    }
+    let _ = reply.send(Ok(()));
+}
+
+impl Projects {
+    /// Closes `project` without writing what waits for it, off the interface thread; with `reset`
+    /// put back to its last save first.
+    fn close_unwritten(&self, project: &Path, reset: bool) -> Receiver<Result<(), String>> {
+        let (tx, rx) = channel();
+        let inner = self.inner.clone();
+        let path = project.to_path_buf();
+        let reply = tx.clone();
+        match std::thread::Builder::new().name("archforge-discard".into()).spawn(move || discard_job(&inner, &path, reset, &reply)) {
+            Ok(handle) => {
+                let mut closers = lock(&self.inner.closers);
+                closers.retain(|c| !c.is_finished());
+                closers.push(handle);
+            }
+            Err(e) => {
+                let _ = tx.send(Err(format!("the work could not start: {e}")));
+            }
+        }
+        rx
+    }
+}
+
+#[cfg(test)]
+impl Projects {
+    /// Waits until what waits for `project` is written, as a closing does first.
+    fn flush_for_test(&self, project: &Path) -> Result<(), String> {
+        flush_one(&self.inner, project)
+    }
+}
+
 /// The model's tables, described once from every notation's storage.
 fn schema(inner: &Inner) -> Result<Arc<ModelSchema>, CreateError> {
     let mut held = lock(&inner.schema);
@@ -430,6 +508,11 @@ fn write_loop(inner: &Inner, rx: &Receiver<Job>) {
                     },
                 };
                 let _ = reply.send(answer);
+            }
+            Some(Job::Drop(project, reply)) => {
+                waiting.remove(&project);
+                failed = false;
+                let _ = reply.send(());
             }
             Some(Job::Flush(project, reply)) => {
                 write_waiting(inner, &mut waiting);
@@ -646,6 +729,73 @@ mod tests {
         assert!(gone(pid), "exit stopped every open project's server");
         assert!(open_paths(&host).is_empty());
         remove_settled(&base);
+    }
+
+    #[test]
+    fn dont_save_puts_a_project_back_to_its_last_save_and_closes_it() {
+        let base = std::env::temp_dir().join(format!("af-discard-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        let host = Projects::new(&base.join("settings"), "Archforge test".into());
+        let folder = base.join("Documents/Archforge");
+        let path = wait(&host.create(&folder, "Commerce platform")).unwrap().path;
+        let shop = model("shop");
+        host.write(&path, shop.clone());
+        assert_eq!(saved(&host, &path), Ok(true));
+        // Changes written since the save, rows in a table first used since (UML's), and rows
+        // still waiting, are all thrown away.
+        host.write(&path, with_uml_package("shop"));
+        assert_eq!(host.flush_for_test(&path), Ok(()));
+        host.write(&path, model("draft"));
+        let answer = host.discard_and_close(&path).recv_timeout(Duration::from_secs(60)).expect("the closing answers");
+        assert_eq!(answer, Ok(()));
+        assert!(open_paths(&host).is_empty());
+        let back = wait(&host.open(&path)).unwrap();
+        assert_eq!(back.model.as_deref(), Some(&shop), "back to its last save, the newer table gone");
+        assert!(!back.unsaved, "nothing unsaved is left");
+        // Close without writing keeps what was written, unsaved, and forgets only what waits.
+        let crm = model("crm");
+        host.write(&path, crm.clone());
+        assert_eq!(host.flush_for_test(&path), Ok(()));
+        host.write(&path, model("draft"));
+        let answer = host.close_without_writing(&path).recv_timeout(Duration::from_secs(60)).expect("the closing answers");
+        assert_eq!(answer, Ok(()));
+        let back = wait(&host.open(&path)).unwrap();
+        assert_eq!(back.model.as_deref(), Some(&crm), "what was written stays");
+        assert!(back.unsaved);
+        close(&host, &path).unwrap();
+        // A project never saved goes back to how it was created: it opens as one never touched.
+        let untouched = wait(&host.create(&folder, "Untouched")).unwrap().path;
+        close(&host, &untouched).unwrap();
+        let as_created = wait(&host.open(&untouched)).unwrap();
+        close(&host, &untouched).unwrap();
+        let fresh = wait(&host.create(&folder, "Fresh")).unwrap().path;
+        host.write(&fresh, with_uml_package("x"));
+        assert_eq!(host.flush_for_test(&fresh), Ok(()));
+        let answer = host.discard_and_close(&fresh).recv_timeout(Duration::from_secs(60)).expect("the closing answers");
+        assert_eq!(answer, Ok(()));
+        let back = wait(&host.open(&fresh)).unwrap();
+        assert!(back.model.as_deref().is_none_or(|rows| rows.is_empty()), "no model rows are left");
+        assert_eq!(back.unsaved, as_created.unsaved, "as a project never touched opens");
+        close(&host, &fresh).unwrap();
+        host.shutdown();
+        remove_settled(&base);
+    }
+
+    /// A model's rows with a schema and a UML package: rows in UML's tables too.
+    fn with_uml_package(schema: &str) -> Rows {
+        let mut n = 0u64;
+        let ids = Box::new(move || {
+            n += 1;
+            let mut r = [0u8; 10];
+            r[2..].copy_from_slice(&n.to_be_bytes());
+            archforge_mof::Uuid::v7(1_761_670_800_000, r)
+        });
+        let mut s = archforge_notations::new_project_session("Commerce platform", ids).unwrap();
+        s.execute("er.schema.add", &serde_json::json!({ "name": schema })).unwrap();
+        s.execute("uml.package.add", &serde_json::json!({ "name": "Domain" })).unwrap();
+        let (tables, junctions) = archforge_notations::storage();
+        archforge_mof::rows::snapshot(s.doc(), &tables, &junctions).unwrap()
     }
 
     /// A model's rows: a project with one schema of the given name.

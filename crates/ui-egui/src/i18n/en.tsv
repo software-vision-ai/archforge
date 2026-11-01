@@ -536,3 +536,14 @@ str		{what} removed	{what} removed
 # Packages (AR-17)
 str		Class · {package}	Class · {package}
 str		{name} removed; what it held moved to {parent}	{name} removed; what it held moved to {parent}
+# Unsaved changes on close (AR-22)
+str		Close and lose changes	Close and lose changes
+str		Close without writing	Close without writing
+str		Close {name} without writing?	Close {name} without writing?
+str		Don't save	Don't save
+str		If you don't save, the changes since the last save are lost.	If you don't save, the changes since the last save are lost.
+str		It stays open until its changes are written, or you close it without them.	It stays open until its changes are written, or you close it without them.
+str		Keep open	Keep open
+str		Save the changes to {name}?	Save the changes to {name}?
+str		The changes since the last write are lost.	The changes since the last write are lost.
+str		The changes to {name} cannot be written	The changes to {name} cannot be written

@@ -263,6 +263,16 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
 - Every edit is written to the project on its own a moment after it settles, so a crash loses
   nothing. Save makes a version; "Unsaved changes" means edits not yet in a version.
 - Every edit is a command that can be undone; a drag, an Apply or an arrange is one step.
+- Unsaved changes show as a dot before the project's name, in the window title and on its tab.
+- Closing a project with unsaved changes, or quitting, asks "Save the changes to {name}?":
+  Save (primary, right), Cancel, and Don't save apart on the left (owner decision). Save closes
+  once the save is done; Don't save puts the project back to its last save. Quitting asks about
+  each unsaved project in turn, showing it; Cancel stops quitting.
+- A project whose changes cannot be written stays open and says why; closing it again offers
+  Keep open or Close without writing, and Close without writing asks once more ("Close and lose
+  changes", in the danger colour) before the changes not yet written are lost; what was written
+  stays, unsaved, for the next opening (owner decision). Save waits for a save already running and
+  asks again when edits came in meanwhile.
 
 ## ER notation
 What is ER's own, beside the shared rules above.

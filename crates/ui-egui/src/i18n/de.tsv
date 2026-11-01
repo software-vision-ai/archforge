@@ -537,3 +537,14 @@ str		{what} removed	{what} entfernt
 # Pakete (AR-17)
 str		Class · {package}	Klasse · {package}
 str		{name} removed; what it held moved to {parent}	{name} entfernt; der Inhalt wurde nach {parent} verschoben
+# Ungesicherte Änderungen beim Schließen (AR-22)
+str		Close and lose changes	Schließen und Änderungen verwerfen
+str		Close without writing	Ohne Schreiben schließen
+str		Close {name} without writing?	{name} ohne Schreiben schließen?
+str		Don't save	Nicht sichern
+str		If you don't save, the changes since the last save are lost.	Wenn Sie nicht sichern, gehen die Änderungen seit dem letzten Sichern verloren.
+str		It stays open until its changes are written, or you close it without them.	Es bleibt geöffnet, bis seine Änderungen geschrieben sind oder Sie es ohne sie schließen.
+str		Keep open	Geöffnet lassen
+str		Save the changes to {name}?	Änderungen an {name} sichern?
+str		The changes since the last write are lost.	Die Änderungen seit dem letzten Schreiben gehen verloren.
+str		The changes to {name} cannot be written	Die Änderungen an {name} können nicht geschrieben werden

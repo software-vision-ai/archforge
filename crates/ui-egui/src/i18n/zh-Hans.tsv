@@ -537,3 +537,14 @@ str		{what} removed	已移除{what}
 # 包 (AR-17)
 str		Class · {package}	类 · {package}
 str		{name} removed; what it held moved to {parent}	已移除 {name}；其内容已移至 {parent}
+# 关闭时未保存的更改 (AR-22)
+str		Close and lose changes	关闭并丢弃更改
+str		Close without writing	不写入就关闭
+str		Close {name} without writing?	不写入就关闭 {name}？
+str		Don't save	不保存
+str		If you don't save, the changes since the last save are lost.	如果不保存，上次保存以来的更改将丢失。
+str		It stays open until its changes are written, or you close it without them.	在其更改写入或你不带更改关闭之前，它会保持打开。
+str		Keep open	保持打开
+str		Save the changes to {name}?	保存对 {name} 的更改？
+str		The changes since the last write are lost.	上次写入以来的更改将丢失。
+str		The changes to {name} cannot be written	无法写入对 {name} 的更改

@@ -537,3 +537,14 @@ str		{what} removed	Removido: {what}
 # Pacotes (AR-17)
 str		Class · {package}	Classe · {package}
 str		{name} removed; what it held moved to {parent}	{name} removido; o conteúdo foi movido para {parent}
+# Alterações por guardar ao fechar (AR-22)
+str		Close and lose changes	Fechar e perder as alterações
+str		Close without writing	Fechar sem escrever
+str		Close {name} without writing?	Fechar {name} sem escrever?
+str		Don't save	Não guardar
+str		If you don't save, the changes since the last save are lost.	Se não guardar, as alterações desde a última gravação perdem-se.
+str		It stays open until its changes are written, or you close it without them.	Fica aberto até as alterações serem escritas ou até o fechar sem elas.
+str		Keep open	Manter aberto
+str		Save the changes to {name}?	Guardar as alterações a {name}?
+str		The changes since the last write are lost.	As alterações desde a última escrita perdem-se.
+str		The changes to {name} cannot be written	Não é possível escrever as alterações a {name}

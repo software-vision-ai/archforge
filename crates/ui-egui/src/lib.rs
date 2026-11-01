@@ -9,6 +9,7 @@
 pub mod appearance;
 pub mod canvas;
 pub mod checks;
+pub mod close_ask;
 pub mod connect;
 pub mod control;
 pub mod diagrams;
@@ -127,6 +128,24 @@ pub trait ProjectHost: Send + Sync {
     /// How writing the project at `project` stands now.
     fn writing(&self, _project: &std::path::Path) -> Writing {
         Writing::default()
+    }
+
+    /// Starts closing the project at `project` without writing what waits for it, and returns at
+    /// once: its changes since the last save are thrown away, the project put back to that save
+    /// (Don't save); a project that cannot be reached any more closes all the same. The answer
+    /// says why when it stays open.
+    fn discard_and_close(&self, _project: &std::path::Path) -> std::sync::mpsc::Receiver<Result<(), String>> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let _ = tx.send(Ok(()));
+        rx
+    }
+
+    /// Starts closing the project at `project` without writing what waits for it, and returns at
+    /// once: what was written stays, unsaved, for the next opening (Close without writing).
+    fn close_without_writing(&self, _project: &std::path::Path) -> std::sync::mpsc::Receiver<Result<(), String>> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let _ = tx.send(Ok(()));
+        rx
     }
 
     /// Starts closing the project at `project` and returns at once: what waits for it is written,
@@ -329,6 +348,13 @@ pub struct Shell {
     saves: std::collections::VecDeque<(u64, SaveState)>,
     /// An opening the host works on.
     opening: Option<std::sync::mpsc::Receiver<Result<Opened, CreateError>>>,
+    /// Closing and quitting with unsaved changes (AR-22): the question open, the projects quitting
+    /// still asks about, the save a closing waits for (its project and ticket), and whether
+    /// quitting was answered for every project, so the window may close.
+    pub ask: Option<close_ask::Ask>,
+    quitting: Option<Vec<std::path::PathBuf>>,
+    close_after_save: Vec<(std::path::PathBuf, u64)>,
+    quit_confirmed: bool,
     /// Why the last save or the last opening failed, for the status bar and Home.
     pub save_error: Option<String>,
     pub open_error: Option<String>,
@@ -380,6 +406,10 @@ impl Shell {
             save_ticket: 0,
             saves: std::collections::VecDeque::new(),
             opening: None,
+            ask: None,
+            quitting: None,
+            close_after_save: Vec::new(),
+            quit_confirmed: false,
             save_error: None,
             open_error: None,
             explorer: explorer::State::default(),
@@ -441,10 +471,141 @@ impl Shell {
         }
     }
 
-    /// Closes the project of tab `i`: its last changes go to the host, which closes it; the tab
-    /// stays until the host answers, then the tab beside it is shown, or Home when it was the last.
-    /// When its changes cannot be handed over or written, it stays open and the reason shows.
+    /// Closes tab `i`'s project, asking first when it holds unsaved changes (Save, Don't save,
+    /// Cancel) or when its changes could not be written (Close without writing, confirmed).
     pub fn close_tab(&mut self, i: usize) {
+        if i >= self.tabs.len() || self.tabs[i].closing.is_some() {
+            return;
+        }
+        let path = self.tabs[i].path.clone();
+        if let Some(why) = self.tabs[i].close_error.clone() {
+            self.ask = Some(close_ask::Ask::CannotWrite { path, why });
+        } else if self.tab_unsaved(i) {
+            self.ask = Some(close_ask::Ask::Unsaved { path });
+        } else {
+            self.close_tab_now(i);
+        }
+    }
+
+    /// Whether tab `i`'s project holds changes not yet saved.
+    pub fn tab_unsaved(&self, i: usize) -> bool {
+        if self.active == Some(i) {
+            return self.session.as_ref().is_some_and(|s| s.is_dirty());
+        }
+        self.tabs.get(i).and_then(|t| t.parked.as_ref()).and_then(|p| p.session.as_ref()).is_some_and(|s| s.is_dirty())
+    }
+
+    /// The tab of the project at `path`.
+    pub(crate) fn tab_of(&self, path: &std::path::Path) -> Option<usize> {
+        self.tabs.iter().position(|t| t.path == path)
+    }
+
+    /// Save, then close: the tab's project shows, its save starts, and the tab closes when the
+    /// save is done; a project with nothing to write closes at once.
+    pub(crate) fn save_and_close(&mut self, i: usize) {
+        if i >= self.tabs.len() {
+            return;
+        }
+        if self.active != Some(i) {
+            self.activate(i);
+        }
+        let path = self.tabs[i].path.clone();
+        // A save already under way is waited for; what it did not take is asked about again.
+        if let Some((_, _, running)) = &self.saving {
+            self.close_after_save.push((path, *running));
+            return;
+        }
+        let before = self.save_ticket;
+        self.save();
+        if self.saving.is_some() && self.save_ticket != before {
+            self.close_after_save.push((path, self.save_ticket));
+        } else if let Some(why) = self.save_error.clone() {
+            // The save could not start: quitting stops, and the question says why.
+            self.quitting = None;
+            self.ask = Some(close_ask::Ask::CannotWrite { path, why });
+        } else {
+            self.close_tab_now(i);
+        }
+    }
+
+    /// Don't save (`reset`: put back to its last save) or Close without writing (what was written
+    /// stays, unsaved): tab `i`'s project closes without its last changes being written.
+    pub(crate) fn discard_tab(&mut self, i: usize, reset: bool) {
+        if i >= self.tabs.len() || self.tabs[i].closing.is_some() {
+            return;
+        }
+        self.tabs[i].close_error = None;
+        let path = &self.tabs[i].path;
+        let Some(rx) =
+            self.services.projects.as_ref().map(|host| if reset { host.discard_and_close(path) } else { host.close_without_writing(path) })
+        else {
+            self.closed(i);
+            return;
+        };
+        self.tabs[i].closing = Some(rx);
+        if self.active == Some(i) {
+            // Nothing is handed over: what the project held since its last save goes.
+            self.stash();
+            if let Some(next) = self.neighbour(i) {
+                self.activate(next);
+            }
+        }
+    }
+
+    /// Quitting: asks about each project with unsaved changes in turn, then lets the window close.
+    fn start_quit(&mut self, ctx: &egui::Context) {
+        let unsaved: Vec<std::path::PathBuf> = (0..self.tabs.len()).filter(|i| self.tab_unsaved(*i)).map(|i| self.tabs[i].path.clone()).collect();
+        if unsaved.is_empty() {
+            self.quit_confirmed = true;
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        } else {
+            self.quitting = Some(unsaved);
+        }
+    }
+
+    /// The next step of quitting, once the last question is answered and its closing or save is
+    /// done: the next project to ask about, or the window closing.
+    fn continue_quit(&mut self, ctx: &egui::Context) {
+        if self.ask.is_some() || !self.close_after_save.is_empty() || self.tabs.iter().any(|t| t.closing.is_some()) {
+            return;
+        }
+        let Some(mut queue) = self.quitting.take() else { return };
+        queue.retain(|p| self.tab_of(p).is_some_and(|i| self.tab_unsaved(i)));
+        match queue.first().cloned() {
+            Some(path) => {
+                if let Some(i) = self.tab_of(&path)
+                    && self.active != Some(i)
+                {
+                    self.activate(i);
+                }
+                self.ask = Some(close_ask::Ask::Unsaved { path });
+                self.quitting = Some(queue);
+            }
+            None => {
+                self.quit_confirmed = true;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            }
+        }
+    }
+
+    /// Whether quitting was answered for every unsaved project, so the window closes.
+    pub fn quit_confirmed(&self) -> bool {
+        self.quit_confirmed
+    }
+
+    /// Whether quitting is under way, asking about unsaved projects.
+    pub fn quitting(&self) -> bool {
+        self.quitting.is_some()
+    }
+
+    /// Stops quitting: Cancel on its question, or a save that failed.
+    pub(crate) fn cancel_quit(&mut self) {
+        self.quitting = None;
+    }
+
+    /// Closes tab `i`'s project without asking: its last changes are handed over and written, then
+    /// it closes.
+    fn close_tab_now(&mut self, i: usize) {
         if i >= self.tabs.len() || self.tabs[i].closing.is_some() {
             return;
         }
@@ -544,9 +705,17 @@ impl Shell {
 
     /// Parks the project shown in its tab, its last changes handed to the host first; Home shows.
     fn park(&mut self) {
-        let Some(i) = self.active else { return };
+        if self.active.is_none() {
+            return;
+        }
         skill_tab::sync(self, 0.0, true, None);
         self.write_changes();
+        self.stash();
+    }
+
+    /// Parks the project shown in its tab as it is, handing nothing over; Home shows.
+    fn stash(&mut self) {
+        let Some(i) = self.active else { return };
         let Some(project) = self.project.take() else { return };
         let parked = Parked {
             project,
@@ -837,6 +1006,17 @@ impl Shell {
 
     /// Keeps how a save went, the latest few, for the agent that asked for it.
     fn finished_save(&mut self, ticket: u64, outcome: SaveState) {
+        // A closing that waited for this save goes on, asks again when edits came in meanwhile,
+        // or stops with the save's error.
+        let waiting: Vec<std::path::PathBuf> = self.close_after_save.iter().filter(|(_, t)| *t == ticket).map(|(p, _)| p.clone()).collect();
+        self.close_after_save.retain(|(_, t)| *t != ticket);
+        for path in waiting {
+            match (&outcome, self.tab_of(&path)) {
+                (SaveState::Saved(_), Some(i)) if self.tab_unsaved(i) => self.ask = Some(close_ask::Ask::Unsaved { path }),
+                (SaveState::Saved(_), Some(i)) => self.close_tab_now(i),
+                _ => self.quitting = None,
+            }
+        }
         if self.saves.len() == SAVES_KEPT {
             self.saves.pop_front();
         }
@@ -942,16 +1122,26 @@ impl Shell {
             panels::retain_valid(&mut self.panels, session.doc());
             self.problems = problems::by_element(self.notation_uis, session.doc());
         }
-        if std::mem::take(&mut self.quit_requested) {
-            // Quitting goes through the normal close path, so the exit hook runs.
-            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        // Quitting, by the menu or the window's close button, asks about unsaved projects first;
+        // once each is answered the window closes through the normal path, so the exit hook runs.
+        let closing_window = ctx.input(|i| i.viewport().close_requested());
+        if closing_window && !self.quit_confirmed {
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
         }
+        if (std::mem::take(&mut self.quit_requested) || closing_window) && !self.quit_confirmed && self.quitting.is_none() && self.ask.is_none() {
+            self.start_quit(ctx);
+        }
+        self.continue_quit(ctx);
     }
 
     /// The window title: the open project's name and the application's, or the application's alone.
     pub fn title(&self) -> String {
         match &self.project {
-            Some(p) => crate::i18n::fmt(&crate::i18n::tr("{name} — Archforge"), &[("name", &p.name)]),
+            // Unsaved changes mark the title with a dot before the name (AR-22).
+            Some(p) => {
+                let name = if self.session.as_ref().is_some_and(|s| s.is_dirty()) { format!("• {}", p.name) } else { p.name.clone() };
+                crate::i18n::fmt(&crate::i18n::tr("{name} — Archforge"), &[("name", &name)])
+            }
             None => "Archforge".to_string(),
         }
     }
@@ -975,6 +1165,7 @@ impl Shell {
         }
         new_project::show(self, ui);
         settings::show(self, ui);
+        close_ask::show(self, ui);
     }
 }
 

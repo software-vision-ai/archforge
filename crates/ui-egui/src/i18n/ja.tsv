@@ -537,3 +537,14 @@ str		{what} removed	{what}を削除しました
 # パッケージ (AR-17)
 str		Class · {package}	クラス · {package}
 str		{name} removed; what it held moved to {parent}	{name} を削除しました。中身は {parent} に移動しました
+# 閉じるときの未保存の変更 (AR-22)
+str		Close and lose changes	閉じて変更を破棄
+str		Close without writing	書き込まずに閉じる
+str		Close {name} without writing?	{name} を書き込まずに閉じますか？
+str		Don't save	保存しない
+str		If you don't save, the changes since the last save are lost.	保存しないと、前回の保存以降の変更は失われます。
+str		It stays open until its changes are written, or you close it without them.	変更が書き込まれるか、変更なしで閉じるまで開いたままです。
+str		Keep open	開いたままにする
+str		Save the changes to {name}?	{name} への変更を保存しますか？
+str		The changes since the last write are lost.	前回の書き込み以降の変更は失われます。
+str		The changes to {name} cannot be written	{name} への変更を書き込めません
