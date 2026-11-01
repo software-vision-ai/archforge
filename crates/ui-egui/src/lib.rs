@@ -14,6 +14,7 @@ pub mod control;
 pub mod diagrams;
 pub mod editing;
 mod er_kind;
+mod er_ui;
 pub mod explorer;
 pub mod fonts;
 pub mod home;
@@ -24,6 +25,7 @@ pub mod keys;
 mod kinds;
 pub mod markdown;
 pub mod new_project;
+mod notation_ui;
 pub mod objects;
 #[cfg(feature = "snapshot")]
 pub mod offscreen;
@@ -279,6 +281,8 @@ pub struct Shell {
     pub(crate) registry: widgets::Registry,
     /// The diagram kinds whose tools and gestures the canvas offers.
     pub(crate) kinds: &'static [&'static dyn kinds::DiagramKind],
+    /// The notations whose elements the explorers, the search, the problems and Properties show.
+    pub(crate) notation_uis: &'static [&'static dyn notation_ui::NotationUi],
     /// The installed fonts as this window knows them.
     pub(crate) fonts: fonts::FontState,
     /// The font notices logged so far, oldest first (tests only).
@@ -351,6 +355,7 @@ impl Shell {
             frames: 0,
             registry: widgets::Registry::default(),
             kinds: kinds::KINDS,
+            notation_uis: notation_ui::UIS,
             fonts: fonts::FontState::default(),
             #[cfg(test)]
             font_notices: Vec::new(),
@@ -932,7 +937,7 @@ impl Shell {
             canvas::retain_valid(&mut self.canvas, session.doc());
             skill_tab::retain_valid(&mut self.canvas);
             panels::retain_valid(&mut self.panels, session.doc());
-            self.problems = problems::by_element(session.doc());
+            self.problems = problems::by_element(self.notation_uis, session.doc());
         }
         if std::mem::take(&mut self.quit_requested) {
             // Quitting goes through the normal close path, so the exit hook runs.

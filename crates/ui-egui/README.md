@@ -2,8 +2,10 @@
 
 **Purpose.** The user interface: Home, the start screen, the New project dialog over it, and the
 workspace once a project is open (`workspace`: the project bar, the activity rail and the Models
-explorer over the session (`explorer`: schemas, tables, columns and skills; `+` adds, a name is
-typed in place, Delete asks when other things go with it),
+explorer over the session (`explorer`: each notation's rows, ER's schemas, tables, columns and
+skills; `+` adds what the selection's notation offers, a name is typed in place, Delete asks when
+other things go with it; `notation_ui::NotationUi` is what a notation brings to the tree, the
+search, the problems and Properties, `er_ui` ER's),
 the Diagrams explorer (`diagrams`: the model's folders and diagrams, the model behind the open
 diagram, the New diagram dialog from its `+` and the tab strip's), the centre (`canvas`: the
 diagram tabs, the open diagram drawn read-only from the diagram metamodel in the design's style
@@ -73,7 +75,7 @@ or explorer with nothing to show says so in one line, never with a help text.
 | `i18n::{tr, tr_ctx, trn, set_language}` | catalogue lookups at draw time |
 | `offscreen::render` | `pub fn render(width: f32, height: f32, scale: f32, theme: ThemeKind) -> Result<(u32, u32, Vec<u8>), String>` (feature `snapshot`) |
 | `offscreen::render_screen` | the same for a `Screen`: Home, the New project dialog over it, the workspace, its first schema being named, a table's Properties, the Skills tab, a first diagram just created, or a diagram of two tables |
-| `explorer::{State, add, remove_selection, rows, fresh_name, Kind}` | the Models explorer's state and the actions the tests and the host drive |
+| `explorer::{State, add, remove_selection, rows, fresh_name, Row, Tree}` | the Models explorer's state and the actions the tests and the host drive |
 | `panels::{State, draw, retain_valid, ColumnEdit, SkillEdit, Applies, Menu}` | the right panels' state and body; every change goes through `er.*` and `skill.*` commands; the Properties and Skills bodies scroll under the pinned heading and description, an editor that opens is brought into view, and a thin thumb shows while the content overflows (`widgets::Registry::reach` measures how far the controls go) |
 | `diagrams::{State, rows, open_new, retain_valid, diagram_name, schema_of}` | the Diagrams explorer's state, its rows and the New diagram dialog |
 | `canvas::{State, Tool, open, close_tab, retain_valid}` | the centre's state: the tabs, the view (pan, zoom), the tool, the toggles and the editing state; `open` shows a diagram through `view.open-diagram` |

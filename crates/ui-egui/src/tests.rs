@@ -1621,22 +1621,22 @@ fn the_plus_adds_a_schema_named_in_place_and_enter_renames_it() {
 #[test]
 fn with_a_schema_selected_the_plus_adds_a_table_and_delete_asks_before_the_schema_goes() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1120.0));
-    crate::explorer::add(h.state_mut(), crate::explorer::Kind::Schema);
+    crate::explorer::add(h.state_mut(), "schema");
     h.run();
     key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
     assert!(h.state().explorer.rename.is_none());
     // The new schema is selected: + offers a table first.
-    crate::explorer::add(h.state_mut(), crate::explorer::Kind::Entity);
+    crate::explorer::add(h.state_mut(), "table");
     h.run();
     key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
-    let rows = crate::explorer::rows(h.state().session.as_ref().unwrap().doc(), &h.state().explorer);
+    let rows = crate::explorer::rows(h.state().notation_uis, h.state().session.as_ref().unwrap().doc(), &h.state().explorer);
     assert_eq!(rows.iter().map(|r| r.label.as_str()).collect::<Vec<_>>(), ["Schema 1", "Table 1"]);
     assert_eq!(rows[1].depth, 1);
     // A column under the table.
-    crate::explorer::add(h.state_mut(), crate::explorer::Kind::Attribute);
+    crate::explorer::add(h.state_mut(), "column");
     h.run();
     key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
-    let rows = crate::explorer::rows(h.state().session.as_ref().unwrap().doc(), &h.state().explorer);
+    let rows = crate::explorer::rows(h.state().notation_uis, h.state().session.as_ref().unwrap().doc(), &h.state().explorer);
     assert_eq!(rows.iter().map(|r| r.label.as_str()).collect::<Vec<_>>(), ["Schema 1", "Table 1", "column_1"]);
     assert_eq!(rows[2].detail.as_deref(), Some("TEXT"));
     // Select the schema by its row and press Delete: it holds a table, so the dialog asks.
@@ -1663,18 +1663,18 @@ fn with_a_schema_selected_the_plus_adds_a_table_and_delete_asks_before_the_schem
 fn the_filter_narrows_the_tree_and_the_keys_walk_it() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1120.0));
     for _ in 0..2 {
-        crate::explorer::add(h.state_mut(), crate::explorer::Kind::Schema);
+        crate::explorer::add(h.state_mut(), "schema");
         h.run();
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
         h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [] })).unwrap();
     }
-    crate::explorer::add(h.state_mut(), crate::explorer::Kind::Schema);
+    crate::explorer::add(h.state_mut(), "schema");
     h.run();
     key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
     assert_eq!(schema_names(&h).len(), 3);
     h.state_mut().explorer.filter = "schema 2".into();
     h.run();
-    let rows = crate::explorer::rows(h.state().session.as_ref().unwrap().doc(), &h.state().explorer);
+    let rows = crate::explorer::rows(h.state().notation_uis, h.state().session.as_ref().unwrap().doc(), &h.state().explorer);
     assert_eq!(rows.iter().map(|r| r.label.as_str()).collect::<Vec<_>>(), ["Schema 2"]);
     h.state_mut().explorer.filter.clear();
     h.run();
@@ -2590,7 +2590,7 @@ fn a_table_added_in_models_is_placed_on_the_open_diagram_and_grows_with_its_colu
     let schema_row = ids(&h).into_iter().find(|i| i.starts_with("workspace.explorer.row.")).unwrap();
     let at = rect_of(&h, &schema_row).center();
     click(&mut h, at);
-    crate::explorer::add(h.state_mut(), crate::explorer::Kind::Entity);
+    crate::explorer::add(h.state_mut(), "table");
     h.run();
     assert_eq!(node_ids(&h).len(), before + 1, "placed on the open diagram");
     key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
@@ -2598,7 +2598,7 @@ fn a_table_added_in_models_is_placed_on_the_open_diagram_and_grows_with_its_colu
     let new_node = node_ids(&h).into_iter().max_by(|a, b| rect_of(&h, a).left().total_cmp(&rect_of(&h, b).left())).unwrap();
     let id = new_node.trim_start_matches("workspace.canvas.node.").to_string();
     assert!((node_bounds(&h, &id).height - crate::editing::ENTITY_EMPTY_HEIGHT).abs() < 0.01);
-    crate::explorer::add(h.state_mut(), crate::explorer::Kind::Attribute);
+    crate::explorer::add(h.state_mut(), "column");
     h.run();
     assert!(
         (node_bounds(&h, &id).height - crate::editing::content_height(1)).abs() < 0.01,
@@ -3071,7 +3071,7 @@ fn the_key_editor_adds_a_unique_constraint_and_removes_the_primary_key() {
     let st = h.state().session.as_ref().unwrap().doc();
     assert!(archforge_er::rules::primary_key_of(st, customer_obj).is_none(), "{:?}", h.state().panels.notice);
     assert!(ids(&h).iter().any(|i| i == "workspace.properties.problem.0"), "Problems lists the missing key: {:?}", ids(&h));
-    let problems = crate::problems::of(st, &crate::problems::by_element(st), customer_obj);
+    let problems = crate::problems::of(crate::notation_ui::UIS, st, &crate::problems::by_element(crate::notation_ui::UIS, st), customer_obj);
     assert_eq!(problems.len(), 1);
     assert_eq!(problems[0].text, "Customer has no primary key");
 }
@@ -4226,6 +4226,7 @@ fn sketch_harness() -> (Harness<'static, Shell>, String, String, String, String)
     .unwrap();
     let model = st.create(archforge_core::MODEL).unwrap();
     let pkg = st.create(archforge_uml::PACKAGE).unwrap();
+    archforge_uml::PackageObj::set_name(&mut st, pkg, Some("sales")).unwrap();
     archforge_core::ModelObj::push_member(&mut st, model, Value::Ref(pkg)).unwrap();
     let class = |st: &mut archforge_mof::Store, name: &str, parts: &[(&str, archforge_mof::ClassId, archforge_mof::PropId)]| {
         let c = st.create(archforge_uml::CLASS).unwrap();
@@ -4272,6 +4273,7 @@ fn sketch_harness() -> (Harness<'static, Shell>, String, String, String, String)
     let e = id(s.execute("diagram.connect", &serde_json::json!({ "diagram": d, "element": g_id, "source": b, "target": a })).unwrap().value);
     h.state_mut().session = Some(s);
     h.state_mut().kinds = SKETCH_KINDS;
+    h.state_mut().notation_uis = SKETCH_UIS;
     crate::canvas::open(h.state_mut(), archforge_mof::Uuid::parse(&d).unwrap());
     h.run();
     (h, d, a, b, e)
@@ -4419,4 +4421,142 @@ fn a_second_kinds_toolbar_shows_its_own_tools_and_its_place_connect_and_rename_h
         *SKETCH_CALLS.lock().unwrap(),
         ["place class", "connect inherit Customer Party", "connect to new inherit", "rename Person", "open Some(0)"]
     );
+}
+
+/// The sketch notation in the shell's explorers, search and panels, for the tests alone: a package
+/// at the top of the Models tree with its classes under it, each class found by the search as a
+/// Class of its package, and a class's Properties a section of its attributes.
+struct SketchUi;
+
+fn sketch_classes(store: &archforge_mof::Store, pkg: archforge_mof::Obj) -> Vec<archforge_mof::Obj> {
+    store
+        .list(pkg, archforge_uml::package::PACKAGED_ELEMENT)
+        .unwrap_or_default()
+        .iter()
+        .filter_map(archforge_mof::Value::as_ref)
+        .filter(|o| store.class_of(*o).ok() == Some(archforge_uml::CLASS))
+        .collect()
+}
+
+impl crate::notation_ui::NotationUi for SketchUi {
+    fn metamodel(&self) -> u16 {
+        archforge_uml::INDEX
+    }
+    fn is_top(&self, store: &archforge_mof::Store, member: archforge_mof::Obj) -> bool {
+        store.class_of(member).ok() == Some(archforge_uml::PACKAGE)
+    }
+    fn tree(&self, store: &archforge_mof::Store, pkg: archforge_mof::Obj, t: &crate::explorer::Tree<'_>) -> Vec<crate::explorer::Row> {
+        let classes = sketch_classes(store, pkg);
+        let under: Vec<crate::explorer::Row> = classes
+            .iter()
+            .filter_map(|c| {
+                let label = archforge_core::name_of(store, *c);
+                if t.matches(&label) { t.row(*c, 1, "class", &crate::ux::icons::TABLE, label) } else { None }
+            })
+            .collect();
+        let expandable = !under.is_empty();
+        let expanded = expandable && t.open(pkg);
+        let mut out: Vec<crate::explorer::Row> = t
+            .row(pkg, 0, "package", &crate::ux::icons::SCHEMA, archforge_core::name_of(store, pkg))
+            .map(|r| crate::explorer::Row { expandable, expanded, ..r })
+            .into_iter()
+            .collect();
+        if expanded {
+            out.extend(under);
+        }
+        out
+    }
+    fn offers(&self, _: &archforge_mof::Store, _: Option<archforge_mof::Obj>) -> Vec<crate::notation_ui::Offer> {
+        Vec::new()
+    }
+    fn add(&self, _: &mut Shell, _: &str, _: Option<archforge_mof::Obj>) -> Option<Result<crate::notation_ui::Added, String>> {
+        None
+    }
+    fn rename(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<(&'static str, &'static str)> {
+        None
+    }
+    fn foldable(&self, _: &archforge_mof::Store, pkg: archforge_mof::Obj) -> Vec<archforge_mof::Obj> {
+        vec![pkg]
+    }
+    fn parents(&self, store: &archforge_mof::Store, o: archforge_mof::Obj) -> Vec<archforge_mof::Obj> {
+        store.container(o).ok().flatten().map(|(c, _)| c).into_iter().collect()
+    }
+    fn entry(&self, store: &archforge_mof::Store, o: archforge_mof::Obj) -> Option<crate::notation_ui::Entry> {
+        (store.class_of(o).ok()? == archforge_uml::CLASS).then(|| {
+            let pkg = store.container(o).ok().flatten().map(|(c, _)| archforge_core::name_of(store, c)).unwrap_or_default();
+            crate::notation_ui::Entry {
+                icon: &crate::ux::icons::TABLE,
+                order: 2,
+                label: archforge_core::name_of(store, o),
+                detail: format!("Class · {pkg}"),
+            }
+        })
+    }
+    fn words(&self, store: &archforge_mof::Store, o: archforge_mof::Obj) -> Option<crate::notation_ui::Words> {
+        Some(crate::notation_ui::Words {
+            kind: "Class · sketch".into(),
+            word: "Class".into(),
+            this: "This class".into(),
+            on_this: "On this class · {n}".into(),
+            name: archforge_core::name_of(store, o),
+        })
+    }
+    fn body(&self, shell: &mut Shell, ui: &mut egui::Ui, p: &crate::ux::Palette, r: egui::Rect, y: f32, subject: &crate::panels::Subject) {
+        let attributes = shell
+            .session
+            .as_ref()
+            .and_then(|s| {
+                let store = s.doc();
+                Some(
+                    store
+                        .list(subject.obj?, archforge_uml::class::OWNED_ATTRIBUTE)
+                        .ok()?
+                        .iter()
+                        .filter_map(archforge_mof::Value::as_ref)
+                        .map(|a| archforge_core::name_of(store, a))
+                        .collect::<Vec<_>>(),
+                )
+            })
+            .unwrap_or_default();
+        let y = crate::panels::section(shell, ui, p, r, y, "Attributes", None).unwrap_or(y + 50.0);
+        for (i, a) in attributes.iter().enumerate() {
+            let row = egui::Rect::from_min_size(egui::pos2(r.left() + 16.0, y + i as f32 * 28.0), egui::vec2(r.width() - 32.0, 24.0));
+            crate::home::control(shell, ui, &format!("workspace.properties.sketch.attribute.{i}"), "row", row, true);
+            crate::ux::text(&ui.painter().clone(), row.min, a, crate::ux::types::UI, p.text, None);
+        }
+    }
+}
+
+static SKETCH_UIS: &[&dyn crate::notation_ui::NotationUi] = &[&crate::er_ui::ErUi, &SketchUi];
+
+#[test]
+fn a_second_notations_elements_show_in_the_tree_are_found_and_get_their_own_properties() {
+    let (mut h, ..) = sketch_harness();
+    let st = h.state().session.as_ref().unwrap().doc();
+    let o = |name: &str| st.alive().find(|o| archforge_core::name_of(st, *o) == name).unwrap();
+    let (pkg, party) = (o("sales"), o("Party"));
+    let (pkg_id, party_id) = (st.uuid(pkg).unwrap(), st.uuid(party).unwrap());
+    // The tree: the package at the top, its classes under it once it is open.
+    let rows = |h: &Harness<'static, Shell>| {
+        crate::explorer::rows(h.state().notation_uis, h.state().session.as_ref().unwrap().doc(), &h.state().explorer)
+            .into_iter()
+            .map(|r| (r.depth, r.label))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(rows(&h), [(0, "sales".to_string())]);
+    h.state_mut().explorer.expanded.insert(pkg_id);
+    h.run();
+    assert_eq!(rows(&h), [(0, "sales".to_string()), (1, "Party".to_string()), (1, "Customer".to_string())]);
+    assert!(ids(&h).iter().any(|i| *i == format!("workspace.explorer.row.{party_id}")), "the class has a row");
+    // The search finds a class as its notation lists it.
+    let index = crate::project_search::index(h.state().notation_uis, h.state().session.as_ref().unwrap().doc());
+    let (_, found) = crate::project_search::hits(&index, "part");
+    assert!(found.iter().any(|e| e.label == "Party" && e.detail == "Class · sales"), "{:?}", found.iter().map(|e| &e.label).collect::<Vec<_>>());
+    // Properties: the class's own words and its notation's section.
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [party_id.to_string()] })).unwrap();
+    h.state_mut().state.show_panel(crate::state::Panel::Properties);
+    h.run();
+    let texts = painted(&h);
+    assert!(texts.iter().any(|t| t == "Class · sketch"), "{texts:?}");
+    assert!(ids(&h).iter().any(|i| i == "workspace.properties.sketch.attribute.0"), "the class's attributes section");
 }

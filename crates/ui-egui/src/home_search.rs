@@ -155,7 +155,7 @@ fn fresh_index(shell: &mut Shell) {
     let (Some(session), Some(path)) = (shell.session.as_ref(), scope(shell)) else { return };
     let key = (path, session.revision());
     if shell.home_search.indexed.as_ref() != Some(&key) {
-        shell.home_search.index = crate::project_search::index(session.doc());
+        shell.home_search.index = crate::project_search::index(shell.notation_uis, session.doc());
         shell.home_search.indexed = Some(key);
     }
 }

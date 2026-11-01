@@ -322,7 +322,10 @@ pub(crate) fn problems_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette
     let paint = ui.painter().clone();
     let width = (r.width() - 2.0 * PAD).max(0.0);
     let problems: Vec<(Option<Uuid>, String)> = match shell.session.as_ref() {
-        Some(s) => crate::problems::of(s.doc(), &shell.problems, subject).into_iter().map(|pr| (s.doc().uuid(pr.element).ok(), pr.text)).collect(),
+        Some(s) => crate::problems::of(shell.notation_uis, s.doc(), &shell.problems, subject)
+            .into_iter()
+            .map(|pr| (s.doc().uuid(pr.element).ok(), pr.text))
+            .collect(),
         None => return y,
     };
     if problems.is_empty() {

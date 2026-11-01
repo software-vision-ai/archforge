@@ -1254,7 +1254,7 @@ pub fn diagrams_showing(store: &Store, element: Obj) -> usize {
 fn ask_delete(shell: &mut Shell, node: Uuid, entity: Uuid) {
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
     let Some(e) = store.by_uuid(entity) else { return };
-    let (relationships, keys, foreign_keys) = crate::explorer::consequences(store, e);
+    let (relationships, keys, foreign_keys) = crate::er_ui::consequences(store, e);
     let diagrams = diagrams_showing(store, e);
     shell.explorer.delete = Some(crate::explorer::Delete {
         ids: vec![entity],

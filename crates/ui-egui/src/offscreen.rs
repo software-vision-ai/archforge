@@ -139,7 +139,7 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
     if screen == Screen::WorkspaceSchema {
         // The session first, as the first frame would make it, then the schema the + adds.
         shell.adopt_project();
-        crate::explorer::add(&mut shell, crate::explorer::Kind::Schema);
+        crate::explorer::add(&mut shell, "schema");
     }
     if matches!(
         screen,

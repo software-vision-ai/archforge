@@ -6,7 +6,6 @@
 //! canvas brings it into view on the open diagram, or on the first diagram that shows it.
 
 use archforge_diagram::{DIAGRAM, NODE, diagram, node};
-use archforge_er::{ATTRIBUTE, DOMAIN, ENTITY, ENUM_TYPE, RELATIONSHIP, SCHEMA, SEQUENCE, VIEW, relationship};
 use archforge_mof::{Obj, Store, Uuid};
 use serde_json::json;
 
@@ -45,9 +44,7 @@ fn cut(s: &str) -> String {
 }
 
 /// The open project's diagrams and elements, in a stable order.
-pub(crate) fn index(store: &Store) -> Vec<Entry> {
-    let name = |o: Obj| archforge_core::name_of(store, o);
-    let schema_name = |o: Obj| archforge_er::rules::schema_of(store, o).map(name).unwrap_or_default();
+pub(crate) fn index(uis: &[&'static dyn crate::notation_ui::NotationUi], store: &Store) -> Vec<Entry> {
     let mut out = Vec::new();
     let mut push = |found: Found, icon: &'static ux::Icon, kind: u8, label: String, detail: String| {
         if label.trim().is_empty() {
@@ -66,23 +63,6 @@ pub(crate) fn index(store: &Store) -> Vec<Entry> {
                 let label = store.get(o, diagram::NAME).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default();
                 push(Found::Diagram(id), &icons::ER_DIAGRAM, 0, label, tr("Diagram"));
             }
-            c if c == SCHEMA => push(Found::Element(id), &icons::SCHEMA, 1, name(o), tr("Schema")),
-            c if c == ENTITY => push(Found::Element(id), &icons::TABLE, 2, name(o), place(tr("Table"), schema_name(o))),
-            c if c == ATTRIBUTE => {
-                let table = archforge_er::rules::entity_of(store, o).map(name).unwrap_or_default();
-                push(Found::Element(id), &icons::COLUMN, 3, name(o), place(tr("Column"), table));
-            }
-            c if c == RELATIONSHIP => {
-                let end = |p| store.get(o, p).ok().and_then(|v| v.as_ref()).map(name).unwrap_or_default();
-                let ends = format!("{} → {}", end(relationship::FROM), end(relationship::TO));
-                let own = name(o);
-                let label = if own.is_empty() { ends.clone() } else { own };
-                push(Found::Element(id), &icons::LINK, 4, label, place(tr("Relationship"), ends));
-            }
-            c if c == DOMAIN => push(Found::Element(id), &icons::DOMAIN, 5, name(o), place(tr("Domain"), schema_name(o))),
-            c if c == ENUM_TYPE => push(Found::Element(id), &icons::ENUM, 5, name(o), place(tr("Enum type"), schema_name(o))),
-            c if c == SEQUENCE => push(Found::Element(id), &icons::SEQUENCE, 5, name(o), place(tr("Sequence"), schema_name(o))),
-            c if c == VIEW => push(Found::Element(id), &icons::VIEW, 5, name(o), place(tr("View"), schema_name(o))),
             c if c == archforge_core::SKILL => push(Found::Element(id), &icons::SKILL, 6, archforge_core::skills::name_of(store, o), tr("Skill")),
             // A note: a node that shows no element, found by its text's first line.
             c if c == NODE && store.get(o, node::ELEMENT).ok().and_then(|v| v.as_ref()).is_none() => {
@@ -93,7 +73,12 @@ pub(crate) fn index(store: &Store) -> Vec<Entry> {
                     .unwrap_or_default();
                 push(Found::Element(id), &icons::TOOL_NOTE, 7, first, place(tr("Note"), on));
             }
-            _ => {}
+            // An element of a notation, as its notation lists it.
+            _ => {
+                if let Some(e) = crate::notation_ui::of(uis, store, o).and_then(|ui| ui.entry(store, o)) {
+                    push(Found::Element(id), e.icon, e.order, e.label, e.detail);
+                }
+            }
         }
     }
     out.sort_by(|a, b| a.kind.cmp(&b.kind).then_with(|| a.name.cmp(&b.name)).then_with(|| a.detail.cmp(&b.detail)));
@@ -138,10 +123,9 @@ pub(crate) fn go(shell: &mut Shell, found: Found) {
             let Some(o) = store.by_uuid(id) else { return };
             // What the canvas draws for it: a column's table, a relationship's line's first table,
             // a note's own node.
-            let shown = match store.class_of(o).ok() {
-                Some(c) if c == ATTRIBUTE => archforge_er::rules::entity_of(store, o),
-                Some(c) if c == RELATIONSHIP => store.get(o, relationship::FROM).ok().and_then(|v| v.as_ref()),
-                _ => Some(o),
+            let shown = match crate::notation_ui::of(shell.notation_uis, store, o) {
+                Some(ui) => ui.shown(store, o),
+                None => Some(o),
             };
             let nodes: Vec<Obj> = match shown {
                 Some(n) if store.class_of(n).ok() == Some(NODE) => vec![n],
@@ -189,7 +173,7 @@ mod tests {
         id(s.execute("er.entity.add", &json!({ "schema": schema, "name": "Customer_order" })).unwrap().value);
         s.execute("er.attribute.add", &json!({ "entity": order, "name": "order_id", "type": "BIGINT" })).unwrap();
         s.execute("diagram.add", &json!({ "kind": "er", "element": schema, "name": "Orders" })).unwrap();
-        let index = index(s.doc());
+        let index = index(crate::notation_ui::UIS, s.doc());
         let (diagrams, elements) = hits(&index, "order");
         assert_eq!(diagrams.iter().map(|e| e.label.as_str()).collect::<Vec<_>>(), ["Orders"]);
         // The table named so first, then what starts so, then a word inside a name.
