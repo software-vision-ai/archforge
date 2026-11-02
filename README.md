@@ -71,9 +71,14 @@ None yet.
 ## Supporting Archforge
 
 Archforge is free and stays free: a contribution unlocks nothing. If it helps your work, you can
-support its development through GitHub Sponsors or Ko-fi. The links will appear here, in the
-repository's Sponsor button and in the app's About Archforge (the bar's Help button) once both
-accounts are set up.
+support its development:
+
+- [Ko-fi](https://ko-fi.com/dejanwho): a one-time tip to Dejan, who develops Archforge.
+- GitHub Sponsors, one-time or monthly, for the software-vision-ai organization: the link appears
+  here once its Sponsors profile is published.
+
+The repository's Sponsor button and the app's About Archforge (the bar's Help button) offer the
+same.
 
 ## Contributing
 
