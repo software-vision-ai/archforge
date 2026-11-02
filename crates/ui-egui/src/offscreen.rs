@@ -18,6 +18,8 @@ pub enum Screen {
     NewProject,
     /// The same after a creation failed for want of Dolt.
     NewProjectFailed,
+    /// The same with a folder chosen with Change… in place of the usual one.
+    NewProjectFolder,
     /// The workspace of a project just created.
     Workspace,
     /// The same after `+` added the first schema, its name open for typing.
@@ -142,7 +144,13 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
     }
     if !matches!(
         screen,
-        Screen::Home | Screen::HomeGallery | Screen::HomeSearch | Screen::HomeSettings | Screen::NewProject | Screen::NewProjectFailed
+        Screen::Home
+            | Screen::HomeGallery
+            | Screen::HomeSearch
+            | Screen::HomeSettings
+            | Screen::NewProject
+            | Screen::NewProjectFailed
+            | Screen::NewProjectFolder
     ) {
         shell.services.projects_folder = Some(Folder { path: "/Users/robin/Documents/Archforge".into(), label: "Documents / Archforge".into() });
         shell.open_project(crate::Opened {
@@ -151,7 +159,7 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
             ..Default::default()
         });
     }
-    if matches!(screen, Screen::NewProject | Screen::NewProjectFailed) {
+    if matches!(screen, Screen::NewProject | Screen::NewProjectFailed | Screen::NewProjectFolder) {
         shell.services.projects_folder = Some(Folder { path: "/Users/robin/Documents/Archforge".into(), label: "Documents / Archforge".into() });
         crate::new_project::open(&mut shell);
         if let Some(d) = shell.new_project.as_mut() {
@@ -161,6 +169,13 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
                     detail: "no dolt found (ARCHFORGE_DOLT is not set and no dolt is on the PATH)".into(),
                 });
             }
+            if screen == Screen::NewProjectFolder {
+                d.folder = Some("/Volumes/Work/Clients/Acme".into());
+            }
+        }
+        // Change… as a host with a folder picker shows it.
+        if screen == Screen::NewProjectFolder {
+            shell.services.pick_folder = Some(std::sync::Arc::new(|| None));
         }
     }
     if screen == Screen::WorkspaceSchema {

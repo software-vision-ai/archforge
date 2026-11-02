@@ -378,6 +378,7 @@ str		A project called {name} is already in this folder.	此文件夹中已有名
 str		An unfinished project called {name} is in this folder; delete it or choose another name.	此文件夹中有一个未完成的项目 {name}；请删除它或另选一个名称。
 str		This name cannot be used.	此名称不能使用。
 str		The folder cannot hold projects.	此文件夹不能存放项目。
+str		The folder picker could not open.	无法打开文件夹选择器。
 str		Archforge cannot find Dolt, which keeps its projects.	Archforge 找不到用于保存项目的 Dolt。
 str		The project could not be created.	无法创建项目。
 str		The work stopped without an answer.	处理在没有应答的情况下停止了。

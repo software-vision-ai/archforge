@@ -9,8 +9,10 @@
 //! Create project, or Enter in the name field, asks the host to create the project; the dialog
 //! then waits, taking no other click, and closes on success with the project open, or keeps the
 //! name and says what went wrong. The name follows the rules both sides share (`archforge-names`).
-//! Change… waits for the folder picker. Cancel, the close button and Escape close the dialog; the
-//! window behind it takes no clicks while it is open.
+//! Change… asks the host's folder picker for the folder the project goes in (AR-66); a pick shows
+//! there and is where the project is made, a cancel keeps the name and the folder as they were,
+//! and a picker that cannot appear says why. Cancel, the close button and Escape close the dialog;
+//! the window behind it takes no clicks while it is open.
 
 use std::sync::mpsc::{Receiver, TryRecvError};
 use std::time::Duration;
@@ -60,6 +62,10 @@ pub struct Dialog {
     creating: Option<Receiver<Result<Opened, CreateError>>>,
     /// The last creation's failure, and the name it was for; shown while the name is unchanged.
     failed: Option<(String, CreateError)>,
+    /// The folder chosen with Change…, in place of the projects folder.
+    pub folder: Option<std::path::PathBuf>,
+    /// Why the folder picker could not appear, after a pick that came back empty.
+    picker: Option<String>,
 }
 
 impl Dialog {
@@ -110,17 +116,48 @@ fn creatable(name: &str) -> bool {
     archforge_names::problem(name).is_none()
 }
 
+/// The folder the project goes in: the one chosen with Change…, else the projects folder.
+fn folder_of(shell: &Shell, dialog: &Dialog) -> Option<std::path::PathBuf> {
+    dialog.folder.clone().or_else(|| shell.services.projects_folder.as_ref().map(|f| f.path.clone()))
+}
+
+/// The folder as the field shows it: the projects folder by its label, a chosen one by its last
+/// two names.
+fn folder_label(shell: &Shell, dialog: &Dialog) -> Option<String> {
+    match &dialog.folder {
+        Some(path) => {
+            let names: Vec<String> = path.components().rev().take(2).map(|c| c.as_os_str().to_string_lossy().into_owned()).collect();
+            Some(names.into_iter().rev().collect::<Vec<_>>().join(" / "))
+        }
+        None => shell.services.projects_folder.as_ref().map(|f| f.label.clone()),
+    }
+}
+
 /// Whether Create project can start now: a name that can be created, a folder, a host, and no
 /// creation running.
 fn can_create(shell: &Shell, dialog: &Dialog) -> bool {
-    creatable(&dialog.name) && shell.services.projects_folder.is_some() && shell.services.projects.is_some() && !dialog.creating()
+    creatable(&dialog.name) && folder_of(shell, dialog).is_some() && shell.services.projects.is_some() && !dialog.creating()
 }
 
-/// Asks the host to create the project.
+/// Asks the host to create the project in its folder.
 fn start(shell: &Shell, dialog: &mut Dialog) {
-    if let (Some(host), Some(folder)) = (&shell.services.projects, &shell.services.projects_folder) {
-        dialog.creating = Some(host.create(&folder.path, &dialog.name));
+    if let (Some(host), Some(folder)) = (&shell.services.projects, folder_of(shell, dialog)) {
+        dialog.creating = Some(host.create(&folder, &dialog.name));
         dialog.failed = None;
+    }
+}
+
+/// Change…: the host's folder picker, its pick the project's folder; a cancel changes nothing, and
+/// a picker that could not appear says why under the field.
+fn change_folder(shell: &Shell, dialog: &mut Dialog) {
+    let Some(pick) = shell.services.pick_folder.clone() else { return };
+    match pick() {
+        Some(path) => {
+            dialog.folder = Some(path);
+            dialog.picker = None;
+            dialog.failed = None;
+        }
+        None => dialog.picker = shell.services.picker_unavailable.as_ref().and_then(|probe| probe()),
     }
 }
 
@@ -294,22 +331,31 @@ fn content(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, origin: Pos2, inne
     ux::icon(&paint, field.min + vec2(14.0, 13.0), &icons::FOLDER, 18.0, p.text_secondary);
     let change = Rect::from_min_size(pos2(field.right() - 98.0, field.top() + 6.0), vec2(92.0, 32.0));
     let room = Some((change.left() - field.left() - 44.0 - 12.0).max(0.0));
-    let folder = shell.services.projects_folder.as_ref().map(|f| f.label.clone());
+    let folder = folder_label(shell, dialog);
     match &folder {
         Some(label) => ux::text(&paint, field.min + vec2(44.0, 12.0), label, types::BODY, p.text, room),
         None => ux::text(&paint, field.min + vec2(44.0, 12.0), &tr("No folder chosen yet"), types::BODY, p.text_muted, room),
     };
-    paint.rect_filled(change, 6.0, p.page);
-    let g = ux::galley(&paint, &tr("Change…"), types::UI_STRONG, p.text, Some(change.width() - 8.0));
-    paint.galley(change.center() - g.size() / 2.0, g, p.text);
-    control(shell, ui, "new-project.location.change", "button", change, false);
+    // Change… acts where the host has a folder picker, and not while a creation runs.
+    let live = shell.services.pick_folder.is_some() && !dialog.creating();
+    let resp = control(shell, ui, "new-project.location.change", "button", change, live);
+    let paint = ui.painter().clone();
+    paint.rect_filled(change, 6.0, if live && resp.hovered() { p.border } else { p.page });
+    let ink = if live { p.text } else { p.text_muted };
+    let g = ux::galley(&paint, &tr("Change…"), types::UI_STRONG, ink, Some(change.width() - 8.0));
+    paint.galley(change.center() - g.size() / 2.0, g, ink);
+    if live && resp.clicked() {
+        change_folder(shell, dialog);
+    }
     let file_line = if creatable(&dialog.name) && folder.is_some() {
         fmt(&tr("Creates {file} here: one versioned project file that keeps every change."), &[("file", &file_name(&dialog.name))])
     } else {
         tr("The project file is made here: one versioned file that keeps every change.")
     };
-    // Under the location: a creation's failure about the folder or the work, or the file line.
+    // Under the location: why the picker could not appear, a creation's failure about the folder
+    // or the work, or the file line.
     let (headline, detail) = match dialog.failure() {
+        _ if dialog.picker.is_some() => (Some(tr("The folder picker could not open.")), dialog.picker.as_deref().unwrap_or_default()),
         Some(CreateError::FolderUnusable { detail }) => (Some(tr("The folder cannot hold projects.")), detail.as_str()),
         Some(CreateError::DoltMissing { detail }) => (Some(tr("Archforge cannot find Dolt, which keeps its projects.")), detail.as_str()),
         Some(CreateError::Failed { detail }) => (Some(tr("The project could not be created.")), detail.as_str()),

@@ -1,5 +1,5 @@
 //! Renders the window offscreen to a PNG, without opening one. Usage:
-//! `cargo run -p archforge-ui-egui --features snapshot --example snapshot -- <out.png> [light|dark] [width height [scale]] [--screen home|home-gallery|home-search|home-settings|new-project|new-project-failed|workspace|workspace-schema|workspace-table|workspace-skills|workspace-skill-tab|workspace-skill-preview|workspace-skill-link|workspace-skill-new|workspace-diagram-empty|workspace-diagram|workspace-appearance|workspace-appearance-line|workspace-appearance-picker|workspace-entity-new|workspace-cardinality|workspace-relationship|workspace-key-editor|workspace-column-editor|workspace-index-editor|workspace-mapping-table|workspace-schema-types|workspace-subtypes|workspace-schema-objects|workspace-cross-schema|workspace-routing|workspace-search|workspace-column-selected|workspace-class-diagram|workspace-class-diagram-read|workspace-class-sizing|workspace-class-members|workspace-member-editor|workspace-inline-member|workspace-association|workspace-multiplicity-presets|workspace-multiplicity-refused|workspace-relate-kinds|workspace-close-ask]`
+//! `cargo run -p archforge-ui-egui --features snapshot --example snapshot -- <out.png> [light|dark] [width height [scale]] [--screen home|home-gallery|home-search|home-settings|new-project|new-project-failed|new-project-folder|workspace|workspace-schema|workspace-table|workspace-skills|workspace-skill-tab|workspace-skill-preview|workspace-skill-link|workspace-skill-new|workspace-diagram-empty|workspace-diagram|workspace-appearance|workspace-appearance-line|workspace-appearance-picker|workspace-entity-new|workspace-cardinality|workspace-relationship|workspace-key-editor|workspace-column-editor|workspace-index-editor|workspace-mapping-table|workspace-schema-types|workspace-subtypes|workspace-schema-objects|workspace-cross-schema|workspace-routing|workspace-search|workspace-column-selected|workspace-class-diagram|workspace-class-diagram-read|workspace-class-sizing|workspace-class-members|workspace-member-editor|workspace-inline-member|workspace-association|workspace-multiplicity-presets|workspace-multiplicity-refused|workspace-relate-kinds|workspace-close-ask]`
 
 use archforge_ui_egui::offscreen::Screen;
 use archforge_ui_egui::theme::ThemeKind;
@@ -12,8 +12,7 @@ fn main() {
 }
 
 fn run() -> Result<(), String> {
-    const USAGE: &str =
-        "usage: snapshot <out.png> [light|dark] [width height [scale]] [--screen home|new-project|new-project-failed|workspace|workspace-schema]";
+    const USAGE: &str = "usage: snapshot <out.png> [light|dark] [width height [scale]] [--screen home|new-project|new-project-failed|new-project-folder|workspace|workspace-schema]";
     let mut args: Vec<String> = std::env::args().skip(1).collect();
     let mut screen = Screen::Home;
     if let Some(at) = args.iter().position(|a| a == "--screen") {
@@ -24,6 +23,7 @@ fn run() -> Result<(), String> {
             Some("home-settings") => Screen::HomeSettings,
             Some("new-project") => Screen::NewProject,
             Some("new-project-failed") => Screen::NewProjectFailed,
+            Some("new-project-folder") => Screen::NewProjectFolder,
             Some("workspace") => Screen::Workspace,
             Some("workspace-schema") => Screen::WorkspaceSchema,
             Some("workspace-table") => Screen::WorkspaceTable,
@@ -64,7 +64,7 @@ fn run() -> Result<(), String> {
             Some("workspace-relationship") => Screen::WorkspaceRelationship,
             other => {
                 return Err(format!(
-                    "--screen {other:?} is not home, home-gallery, home-search, home-settings, new-project, new-project-failed, workspace, workspace-schema, workspace-table, workspace-skills, workspace-skill-tab, workspace-skill-preview, workspace-skill-link, workspace-skill-new, workspace-diagram-empty, workspace-diagram, workspace-appearance, workspace-appearance-line, workspace-appearance-picker, workspace-entity-new, workspace-cardinality, workspace-relationship, workspace-key-editor, workspace-column-editor, workspace-index-editor, workspace-mapping-table, workspace-schema-types, workspace-subtypes, workspace-schema-objects, workspace-cross-schema, workspace-routing, workspace-search, workspace-column-selected, workspace-class-diagram, workspace-class-diagram-read, workspace-class-sizing, workspace-class-members, workspace-member-editor, workspace-inline-member, workspace-association, workspace-multiplicity-presets, workspace-multiplicity-refused, workspace-relate-kinds or workspace-close-ask; {USAGE}"
+                    "--screen {other:?} is not home, home-gallery, home-search, home-settings, new-project, new-project-failed, new-project-folder, workspace, workspace-schema, workspace-table, workspace-skills, workspace-skill-tab, workspace-skill-preview, workspace-skill-link, workspace-skill-new, workspace-diagram-empty, workspace-diagram, workspace-appearance, workspace-appearance-line, workspace-appearance-picker, workspace-entity-new, workspace-cardinality, workspace-relationship, workspace-key-editor, workspace-column-editor, workspace-index-editor, workspace-mapping-table, workspace-schema-types, workspace-subtypes, workspace-schema-objects, workspace-cross-schema, workspace-routing, workspace-search, workspace-column-selected, workspace-class-diagram, workspace-class-diagram-read, workspace-class-sizing, workspace-class-members, workspace-member-editor, workspace-inline-member, workspace-association, workspace-multiplicity-presets, workspace-multiplicity-refused, workspace-relate-kinds or workspace-close-ask; {USAGE}"
                 ));
             }
         };

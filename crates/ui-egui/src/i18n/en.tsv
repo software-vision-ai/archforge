@@ -377,6 +377,7 @@ str		A project called {name} is already in this folder.	A project called {name} 
 str		An unfinished project called {name} is in this folder; delete it or choose another name.	An unfinished project called {name} is in this folder; delete it or choose another name.
 str		This name cannot be used.	This name cannot be used.
 str		The folder cannot hold projects.	The folder cannot hold projects.
+str		The folder picker could not open.	The folder picker could not open.
 str		Archforge cannot find Dolt, which keeps its projects.	Archforge cannot find Dolt, which keeps its projects.
 str		The project could not be created.	The project could not be created.
 str		The work stopped without an answer.	The work stopped without an answer.
