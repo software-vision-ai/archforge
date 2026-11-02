@@ -81,9 +81,10 @@ pub const OPERATION_OWNED_PARAMETER: PropId = p(20);
 pub const PARAMETER_DIRECTION: PropId = p(21);
 pub const GENERALIZATION_GENERAL: PropId = p(22);
 pub const ASSOCIATION_MEMBER_END: PropId = p(23);
-pub const LITERAL_INTEGER_VALUE: PropId = p(24);
-pub const LITERAL_UNLIMITED_VALUE: PropId = p(25);
-pub const ENUMERATION_OWNED_LITERAL: PropId = p(26);
+pub const ASSOCIATION_OWNED_END: PropId = p(24);
+pub const LITERAL_INTEGER_VALUE: PropId = p(25);
+pub const LITERAL_UNLIMITED_VALUE: PropId = p(26);
+pub const ENUMERATION_OWNED_LITERAL: PropId = p(27);
 
 fn build() -> Result<Arc<Metamodel>, MetaError> {
     let mut b = Builder::new(INDEX, URI, "toy", "1", "toy-content-hash");
@@ -213,6 +214,17 @@ fn build() -> Result<Arc<Metamodel>, MetaError> {
         &mut b,
         ASSOCIATION_MEMBER_END,
         PropertySpec::new("memberEnd", ASSOCIATION, TypeRef::Class(PROPERTY)).many().ordered().opposite(PROPERTY_ASSOCIATION),
+    )?;
+    // The ends the association owns: a composite subset of the member ends, whose opposite
+    // (Property::association) a pushed end gets through the superset.
+    prop(
+        &mut b,
+        ASSOCIATION_OWNED_END,
+        PropertySpec::new("ownedEnd", ASSOCIATION, TypeRef::Class(PROPERTY))
+            .many()
+            .ordered()
+            .composite()
+            .subsets(&[ASSOCIATION_MEMBER_END, ELEMENT_OWNED_ELEMENT]),
     )?;
     class(&mut b, LITERAL_INTEGER, "LiteralInteger", false, &[ELEMENT])?;
     prop(&mut b, LITERAL_INTEGER_VALUE, PropertySpec::new("value", LITERAL_INTEGER, TypeRef::Data(INTEGER)).required().default(Value::Int(0)))?;
@@ -404,7 +416,11 @@ metaclass!(ParameterObj, PARAMETER, {
     enm direction = PARAMETER_DIRECTION,
 }, { owned_comment = ELEMENT_OWNED_COMMENT });
 metaclass!(GeneralizationObj, GENERALIZATION, { obj general = GENERALIZATION_GENERAL }, { owned_comment = ELEMENT_OWNED_COMMENT });
-metaclass!(AssociationObj, ASSOCIATION, { str name = NAMED_ELEMENT_NAME }, { owned_comment = ELEMENT_OWNED_COMMENT, member_end = ASSOCIATION_MEMBER_END });
+metaclass!(AssociationObj, ASSOCIATION, { str name = NAMED_ELEMENT_NAME }, {
+    owned_comment = ELEMENT_OWNED_COMMENT,
+    member_end = ASSOCIATION_MEMBER_END,
+    owned_end = ASSOCIATION_OWNED_END,
+});
 metaclass!(LiteralIntegerObj, LITERAL_INTEGER, { int value = LITERAL_INTEGER_VALUE }, { owned_comment = ELEMENT_OWNED_COMMENT });
 metaclass!(LiteralUnlimitedNaturalObj, LITERAL_UNLIMITED_NATURAL, { unl value = LITERAL_UNLIMITED_VALUE }, { owned_comment = ELEMENT_OWNED_COMMENT });
 metaclass!(PrimitiveTypeObj, PRIMITIVE_TYPE, { str name = NAMED_ELEMENT_NAME }, { owned_comment = ELEMENT_OWNED_COMMENT });

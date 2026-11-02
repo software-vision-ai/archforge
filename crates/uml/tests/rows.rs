@@ -1,7 +1,9 @@
 //! UML's model as rows and back, where its properties come in opposite pairs: a generalization
 //! (its general class's list and the specific back-reference), an association's member ends
 //! (the ends' association), a dependency, and a list whose opposite is a list (a use case's
-//! subjects and a classifier's use cases) come back identical, in their order.
+//! subjects and a classifier's use cases) come back identical, in their order; so does a list whose
+//! superset's opposite is kept in step (an activity's partitions, in its groups, each in the
+//! activity).
 
 use archforge_mof::rows;
 use archforge_mof::{CompositeSlabs, Store, Uuid, Value};
@@ -50,12 +52,17 @@ fn a_model_of_opposite_pairs_comes_back_from_its_rows_identical() {
         let end = st.create(u::PROPERTY).unwrap();
         st.set(end, u::typed_element::TYPE, Value::Ref(ty)).unwrap();
         match owner {
-            Some(c) => st.push(c, u::class::OWNED_ATTRIBUTE, Value::Ref(end)).unwrap(),
-            None => st.push(a, u::association::OWNED_END, Value::Ref(end)).unwrap(),
+            Some(c) => {
+                st.push(c, u::class::OWNED_ATTRIBUTE, Value::Ref(end)).unwrap();
+                st.push(a, u::association::MEMBER_END, Value::Ref(end)).unwrap();
+            }
+            // An owned end is a member end, with the association as its own.
+            None => {
+                st.push(a, u::association::OWNED_END, Value::Ref(end)).unwrap();
+                assert!(st.list(a, u::association::MEMBER_END).unwrap().contains(&Value::Ref(end)));
+                assert_eq!(st.get(end, u::property::ASSOCIATION).unwrap(), Value::Ref(a));
+            }
         };
-        if !st.list(a, u::association::MEMBER_END).unwrap().contains(&Value::Ref(end)) {
-            st.push(a, u::association::MEMBER_END, Value::Ref(end)).unwrap();
-        }
     }
     let dep = st.create(u::DEPENDENCY).unwrap();
     st.push(pkg, u::package::PACKAGED_ELEMENT, Value::Ref(dep)).unwrap();
@@ -124,4 +131,80 @@ fn values_a_list_has_through_its_opposite_and_values_it_adds_take_the_saved_orde
     let again = rows::snapshot(&back, &tables, &junctions).unwrap();
     let list = junctions.iter().position(|j| j.prop == u::class::OWNED_ATTRIBUTE && j.class == u::CLASS).unwrap();
     assert_eq!(again.junctions[list], saved.junctions[list], "the list in its saved order");
+}
+
+#[test]
+fn an_activitys_partitions_are_in_its_groups_point_back_and_come_back_from_their_rows_identical() {
+    let tables: Vec<_> = archforge_core::TABLES.iter().chain(u::TABLES).copied().collect();
+    let junctions: Vec<_> = archforge_core::JUNCTIONS.iter().chain(u::JUNCTIONS).copied().collect();
+    let mut st = store(0);
+    let pkg = st.create(u::PACKAGE).unwrap();
+    let activity = st.create(u::ACTIVITY).unwrap();
+    st.push(pkg, u::package::PACKAGED_ELEMENT, Value::Ref(activity)).unwrap();
+    let mut partitions = Vec::new();
+    for name in ["Customer", "Warehouse"] {
+        let p = st.create(u::ACTIVITY_PARTITION).unwrap();
+        st.set(p, u::named_element::NAME, Value::str(name)).unwrap();
+        st.push(activity, u::activity::PARTITION, Value::Ref(p)).unwrap();
+        // Pushed into the subset, it is in the superset and the superset's opposite points back.
+        assert!(st.list(activity, u::activity::GROUP).unwrap().contains(&Value::Ref(p)));
+        assert_eq!(st.get(p, u::activity_group::IN_ACTIVITY).unwrap(), Value::Ref(activity));
+        partitions.push(p);
+    }
+    // Out of the partitions, it leaves the groups and the activity.
+    st.remove_value(activity, u::activity::PARTITION, &Value::Ref(partitions[1])).unwrap();
+    assert!(!st.list(activity, u::activity::GROUP).unwrap().contains(&Value::Ref(partitions[1])));
+    assert_eq!(st.get(partitions[1], u::activity_group::IN_ACTIVITY).unwrap(), Value::Null);
+    st.push(activity, u::activity::PARTITION, Value::Ref(partitions[1])).unwrap();
+    let saved = rows::snapshot(&st, &tables, &junctions).unwrap();
+    let mut back = store(1 << 40);
+    rows::restore(&mut back, &saved, &tables, &junctions).unwrap();
+    let again = rows::snapshot(&back, &tables, &junctions).unwrap();
+    assert_eq!(again, saved, "the activity comes back identical");
+}
+
+#[test]
+fn a_long_list_with_an_opposite_whose_back_references_are_gone_is_read_back_in_linear_time() {
+    // As a hand-edited database might hold it: no attribute's back-reference to its class is
+    // left, so the whole list comes from its own rows, each value adding the opposite.
+    // Long enough that searching the list for each value would take far longer than the limit.
+    let (mut saved, tables, junctions) = class_rows(100_000, false);
+    let table = tables.iter().position(|t| t.name == "uml_property").unwrap();
+    let column = tables[table].columns.iter().position(|c| c.prop == Some(u::property::CLASS)).unwrap();
+    for row in &mut saved.tables[table] {
+        row[column] = rows::Cell::Null;
+    }
+    let started = std::time::Instant::now();
+    let mut back = store(1 << 40);
+    rows::restore(&mut back, &saved, &tables, &junctions).unwrap();
+    assert!(started.elapsed() < std::time::Duration::from_secs(5), "reading took {:?}", started.elapsed());
+    let list = junctions.iter().position(|j| j.prop == u::class::OWNED_ATTRIBUTE && j.class == u::CLASS).unwrap();
+    assert_eq!(rows::snapshot(&back, &tables, &junctions).unwrap().junctions[list], saved.junctions[list]);
+}
+
+#[test]
+fn a_node_that_leaves_an_activitys_nodes_leaves_its_structured_nodes_and_groups_and_its_container() {
+    let mut st = store(0);
+    let (a, b) = (st.create(u::ACTIVITY).unwrap(), st.create(u::ACTIVITY).unwrap());
+    let node = st.create(u::STRUCTURED_ACTIVITY_NODE).unwrap();
+    // A structured node is a node and a group of the activity, contained by it.
+    st.push(a, u::activity::STRUCTURED_NODE, Value::Ref(node)).unwrap();
+    for list in [u::activity::NODE, u::activity::GROUP] {
+        assert!(st.list(a, list).unwrap().contains(&Value::Ref(node)));
+    }
+    assert_eq!(st.container(node).unwrap().map(|(c, _)| c), Some(a));
+    // Out of the nodes: it leaves the structured nodes and, with them, the groups, so no list
+    // that contains it is left behind.
+    st.remove_value(a, u::activity::NODE, &Value::Ref(node)).unwrap();
+    for list in [u::activity::NODE, u::activity::STRUCTURED_NODE, u::activity::GROUP] {
+        assert!(!st.list(a, list).unwrap().contains(&Value::Ref(node)), "{list:?}");
+    }
+    assert_eq!(st.container(node).unwrap(), None);
+    // Another activity takes it whole; the first holds it nowhere.
+    st.push(b, u::activity::STRUCTURED_NODE, Value::Ref(node)).unwrap();
+    assert_eq!(st.container(node).unwrap().map(|(c, _)| c), Some(b));
+    for list in [u::activity::NODE, u::activity::STRUCTURED_NODE, u::activity::GROUP] {
+        assert!(!st.list(a, list).unwrap().contains(&Value::Ref(node)), "{list:?}");
+        assert!(st.list(b, list).unwrap().contains(&Value::Ref(node)), "{list:?}");
+    }
 }
