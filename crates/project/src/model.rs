@@ -317,8 +317,8 @@ impl Project {
     pub fn read_model(&self, schema: &ModelSchema) -> Result<Rows, Error> {
         let damaged = |why: String| Error::Damaged { path: self.path().to_path_buf(), why };
         let mut c = self.model_connection()?;
-        let shapes = shapes(&mut c, schema).map_err(&damaged)?;
-        for name in in_use(&mut c, &shapes).map_err(&damaged)? {
+        let shapes = shapes(&mut c, schema).map_err(damaged)?;
+        for name in in_use(&mut c, &shapes).map_err(damaged)? {
             if !schema.is_model_table(&name) {
                 return Err(damaged(format!("the model uses the table {name:?}, which this Archforge does not know")));
             }
@@ -330,7 +330,7 @@ impl Project {
         let mut rows = Rows::default();
         for t in &schema.tables {
             let expected: Vec<(&str, &str)> = t.columns.iter().map(|col| (col.name, col.sql)).collect();
-            if !check_shape(&shapes, t.name, &expected).map_err(&damaged)? {
+            if !check_shape(&shapes, t.name, &expected).map_err(damaged)? {
                 rows.tables.push(Vec::new());
                 continue;
             }
@@ -344,11 +344,11 @@ impl Project {
                 if out.len() == MAX_TABLE_ROWS {
                     return Err(damaged(format!("the table {} has more than {MAX_TABLE_ROWS} rows", t.name)));
                 }
-                budget.row().map_err(&damaged)?;
+                budget.row().map_err(damaged)?;
                 let mut cells = Vec::with_capacity(t.columns.len());
                 for (i, col) in t.columns.iter().enumerate() {
                     let v = row.as_ref(i).cloned().unwrap_or(mysql::Value::NULL);
-                    budget.take(&v).map_err(&damaged)?;
+                    budget.take(&v).map_err(damaged)?;
                     cells.push(from_sql(&v, col.sql).map_err(|why| damaged(format!("{}.{}: {why}", t.name, col.name)))?);
                 }
                 out.push(cells);
@@ -357,7 +357,7 @@ impl Project {
         }
         for (j, value_sql) in &schema.junctions {
             if !check_shape(&shapes, j.name, &[("owner", "BINARY(16) NOT NULL"), ("position", "INT NOT NULL"), ("value", value_sql)])
-                .map_err(&damaged)?
+                .map_err(damaged)?
             {
                 rows.junctions.push(Vec::new());
                 continue;
@@ -374,7 +374,7 @@ impl Project {
                 let get = |i: usize| row.as_ref(i).cloned().unwrap_or(mysql::Value::NULL);
                 let (owner, at, value) = (get(0), get(1), get(2));
                 for v in [&owner, &at, &value] {
-                    budget.take(v).map_err(&damaged)?;
+                    budget.take(v).map_err(damaged)?;
                 }
                 let Cell::Id(owner) = from_sql(&owner, "BINARY(16)").map_err(|why| damaged(format!("{}: {why}", j.name)))? else {
                     return Err(damaged(format!("{} has a row without its owner", j.name)));

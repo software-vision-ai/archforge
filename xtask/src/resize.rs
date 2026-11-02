@@ -56,8 +56,8 @@ fn read(path: &str) -> Result<(usize, Vec<u8>), String> {
     let pixels = side * side;
     let rgba = match frame.color_type {
         png::ColorType::Rgba => short(&buf, pixels * 4, path)?.to_vec(),
-        png::ColorType::Rgb => short(&buf, pixels * 3, path)?.chunks_exact(3).flat_map(|p| [p[0], p[1], p[2], 255]).collect(),
-        png::ColorType::GrayscaleAlpha => short(&buf, pixels * 2, path)?.chunks_exact(2).flat_map(|p| [p[0], p[0], p[0], p[1]]).collect(),
+        png::ColorType::Rgb => short(&buf, pixels * 3, path)?.as_chunks::<3>().0.iter().flat_map(|[r, g, b]| [*r, *g, *b, 255]).collect(),
+        png::ColorType::GrayscaleAlpha => short(&buf, pixels * 2, path)?.as_chunks::<2>().0.iter().flat_map(|[g, a]| [*g, *g, *g, *a]).collect(),
         png::ColorType::Grayscale => short(&buf, pixels, path)?.iter().flat_map(|g| [*g, *g, *g, 255]).collect(),
         png::ColorType::Indexed => return Err(format!("{path}: the palette was not expanded")),
     };

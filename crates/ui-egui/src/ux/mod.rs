@@ -105,7 +105,9 @@ fn decode_png(bytes: &[u8]) -> Result<egui::ColorImage, String> {
     let frame = reader.next_frame(&mut buf).map_err(|e| e.to_string())?;
     let rgba: Vec<u8> = match frame.color_type {
         png::ColorType::Rgba => buf.get(..w * h * 4).ok_or("short picture")?.to_vec(),
-        png::ColorType::Rgb => buf.get(..w * h * 3).ok_or("short picture")?.chunks_exact(3).flat_map(|p| [p[0], p[1], p[2], 255]).collect(),
+        png::ColorType::Rgb => {
+            buf.get(..w * h * 3).ok_or("short picture")?.as_chunks::<3>().0.iter().flat_map(|[r, g, b]| [*r, *g, *b, 255]).collect()
+        }
         other => return Err(format!("{other:?} pictures are not read")),
     };
     Ok(egui::ColorImage::from_rgba_unmultiplied([w, h], &rgba))
