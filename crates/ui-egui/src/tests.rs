@@ -5139,6 +5139,131 @@ fn a_table_box_shorter_than_its_columns_shows_those_that_fit_and_counts_the_rest
 }
 
 #[test]
+fn generate_scrolls_its_body_in_a_short_window_and_keeps_its_footer_clear() {
+    let (mut h, _customer, _diagram) = diagram_harness();
+    let schema = {
+        let st = h.state().session.as_ref().unwrap().doc();
+        st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap()).unwrap()
+    };
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [schema.to_string()] })).unwrap();
+    // The smallest window the app allows.
+    h.set_size(egui::vec2(800.0, 400.0));
+    h.state_mut().open_generate();
+    h.run();
+    let foot = rect_of(&h, "generate.close").top() - 20.0;
+    let request = |h: &Harness<'static, Shell>| ids(h).iter().any(|i| i == "generate.request").then(|| rect_of(h, "generate.request"));
+    assert!(request(&h).is_none_or(|r| r.bottom() > foot), "the request does not fit above the footer before scrolling");
+    // The wheel over the body brings the request into view above the footer.
+    let over = rect_of(&h, "generate.output.ddl").center();
+    h.event(egui::Event::PointerMoved(over));
+    for _ in 0..6 {
+        h.event(egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Point,
+            delta: egui::vec2(0.0, -1200.0),
+            modifiers: egui::Modifiers::NONE,
+            phase: egui::TouchPhase::Move,
+            source: egui::MouseWheelSource::Wheel,
+        });
+        h.run_steps(30);
+    }
+    let r = request(&h).expect("the request in view");
+    assert!(r.bottom() <= foot, "{r:?} ends above the footer at {foot}");
+    assert_eq!(rect_of(&h, "generate.close").top() - 20.0, foot, "the footer stays put");
+}
+
+#[test]
+fn generate_hands_a_schema_and_its_export_skills_to_an_agent_as_a_request_it_can_copy() {
+    let (mut h, _customer, _diagram) = diagram_harness();
+    let schema = {
+        let st = h.state().session.as_ref().unwrap().doc();
+        st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap()).unwrap()
+    };
+    let run = |h: &mut Harness<'static, Shell>, command: &str, params: serde_json::Value| {
+        h.state_mut().session.as_mut().unwrap().execute(command, &params).unwrap_or_else(|e| panic!("{command}: {e}"));
+    };
+    // With nothing selected it is from the open diagram.
+    h.state_mut().open_generate();
+    h.run();
+    assert!(painted(&h).iter().any(|t| t == "Diagram · Shop schema"), "{:?}", painted(&h));
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    assert!(h.state().generate.is_none());
+    // A project's export skill and a schema's of the same name with its dialect: the schema's wins.
+    run(&mut h, "skill.add", serde_json::json!({ "name": "DDL conventions", "body": "Plain CREATE TABLE.", "triggers": ["export"] }));
+    run(
+        &mut h,
+        "skill.add",
+        serde_json::json!({ "subject": schema.to_string(), "name": "DDL conventions", "body": "Named constraints.", "triggers": ["export"], "dialect": "MySQL" }),
+    );
+    run(&mut h, "view.select", serde_json::json!({ "ids": [schema.to_string()] }));
+    h.state_mut().open_generate();
+    h.run();
+    assert_eq!(h.state().generate.as_ref().unwrap().dialect, "MySQL", "the dialect the skills in effect name");
+    let texts = painted(&h);
+    assert!(texts.iter().any(|t| t == "Schema · Shop"), "{texts:?}");
+    assert!(texts.iter().any(|t| t == "DDL conventions · on this element · MySQL"), "{texts:?}");
+    assert!(texts.iter().any(|t| t == "DDL conventions · from the project · overridden"), "{texts:?}");
+    assert!(texts.iter().any(|t| t.starts_with("Agent access is off")), "no control channel in the harness: {texts:?}");
+    // The request names the resources to read and the revision it is of.
+    let revision = h.state().session.as_ref().unwrap().revision();
+    let request = texts.iter().find(|t| t.starts_with("Generate SQL DDL (MySQL)")).expect("the request").clone();
+    assert!(request.contains(&format!("archforge://element/{schema}")), "{request}");
+    assert!(request.contains(&format!("archforge://skills/effective/{schema}/export")), "{request}");
+    assert!(request.contains(&format!("model revision {revision}")), "{request}");
+    // Copied, it says so; a change after copying says to copy again.
+    let at = rect_of(&h, "generate.copy").center();
+    click(&mut h, at);
+    assert_eq!(h.state().generate.as_ref().unwrap().copied, Some(revision));
+    assert!(painted(&h).iter().any(|t| t.starts_with("Copied.")));
+    run(&mut h, "er.entity.add", serde_json::json!({ "schema": schema.to_string(), "name": "Invoice" }));
+    h.run();
+    assert!(painted(&h).iter().any(|t| t.starts_with("The model changed after the request was copied")));
+    assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add entity"), "the dialog itself changes nothing");
+    // Behind the dialog the workspace's keys rest: Delete removes nothing and undo undoes nothing.
+    h.state_mut().canvas.focused = true;
+    let revision = h.state().session.as_ref().unwrap().revision();
+    key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
+    key(&mut h, egui::Key::Z, egui::Modifiers::COMMAND);
+    assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "nothing behind the dialog changed");
+    // Documentation takes no dialect.
+    let at = rect_of(&h, "generate.output.documentation").center();
+    click(&mut h, at);
+    assert!(!ids(&h).iter().any(|i| i == "generate.dialect"));
+    assert!(painted(&h).iter().any(|t| t.starts_with("Write Markdown documentation")));
+    let at = rect_of(&h, "generate.close").center();
+    click(&mut h, at);
+    assert!(h.state().generate.is_none());
+    // On every platform: its keys open it, and so does a table's menu.
+    key(&mut h, egui::Key::G, egui::Modifiers::COMMAND | egui::Modifiers::SHIFT);
+    assert!(h.state().generate.is_some(), "Ctrl or Cmd with Shift and G");
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    let node = {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let c = st.by_uuid(archforge_mof::Uuid::parse(&_customer).unwrap()).unwrap();
+        st.uuid(archforge_diagram::views_of(st, c).2[0]).unwrap()
+    };
+    let at = rect_of(&h, &format!("workspace.canvas.node.{node}")).center();
+    h.event(egui::Event::PointerMoved(at));
+    h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Secondary, pressed: true, modifiers: egui::Modifiers::NONE });
+    h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Secondary, pressed: false, modifiers: egui::Modifiers::NONE });
+    h.run();
+    let at = rect_of(&h, "workspace.canvas.menu.generate").center();
+    click(&mut h, at);
+    assert!(h.state().generate.is_some(), "from the table's menu");
+    assert!(painted(&h).iter().any(|t| t == "Table · Customer"), "{:?}", painted(&h));
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    // With nothing to be from, there is no request to copy.
+    run(&mut h, "view.select", serde_json::json!({ "ids": [] }));
+    h.state_mut().canvas.active = None;
+    h.state_mut().open_generate();
+    h.run();
+    let texts = painted(&h);
+    assert!(texts.iter().any(|t| t == "Nothing selected") && texts.iter().any(|t| t.starts_with("Select a schema")), "{texts:?}");
+    let at = rect_of(&h, "generate.copy").center();
+    click(&mut h, at);
+    assert_eq!(h.state().generate.as_ref().unwrap().copied, None);
+}
+
+#[test]
 fn a_selected_class_takes_attributes_and_operations_typed_on_its_card_each_one_undo_step() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
     crate::uml_ui::open_sample(h.state_mut()).unwrap();

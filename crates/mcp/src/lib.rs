@@ -8,9 +8,12 @@
 //! `undo`, `redo`, `save_project` and `call_app`, and one tool per command of the table (`er_entity_add` for
 //! `er.entity.add`), its schema generated from the command's parameter documentation (BP-CS-4).
 //! With `compact` the command tools are not listed and `search_tools` finds them, each to run
-//! through `execute_command` (CS-14). Only the reads say they are read-only (CS-13); unknown tools, methods and
+//! through `execute_command` (CS-14). The model and its skills are read-only resources too
+//! (`resources`), in both modes. Only the reads say they are read-only (CS-13); unknown tools, methods and
 //! argument keys are refused, naming the accepted ones (CS-3).
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
+
+mod resources;
 
 use std::io::{BufRead, Write};
 
@@ -371,7 +374,7 @@ pub fn handle(line: &[u8], backend: &dyn Backend, catalog: &Catalog) -> Option<V
                 id,
                 json!({
                     "protocolVersion": version,
-                    "capabilities": { "tools": { "listChanged": false } },
+                    "capabilities": { "tools": { "listChanged": false }, "resources": { "subscribe": false, "listChanged": false } },
                     "serverInfo": { "name": "archforge", "version": env!("CARGO_PKG_VERSION") },
                     "instructions": if catalog.compact() { COMPACT_INSTRUCTIONS } else { INSTRUCTIONS },
                 }),
@@ -380,7 +383,22 @@ pub fn handle(line: &[u8], backend: &dyn Backend, catalog: &Catalog) -> Option<V
         "ping" => result(id, json!({})),
         "tools/list" => result(id, catalog.list()),
         "tools/call" => call(id, &params, backend, catalog),
-        other => error(id, -32601, &format!("unknown method {other:?}; the server answers initialize, ping, tools/list and tools/call")),
+        "resources/list" => result(id, resources::list()),
+        "resources/templates/list" => result(id, resources::templates()),
+        "resources/read" => match params.get("uri").and_then(Value::as_str) {
+            Some(uri) => match resources::read(backend, uri) {
+                Ok(read) => result(id, read),
+                Err((code, why)) => error(id, code, &why),
+            },
+            None => error(id, -32602, "resources/read needs uri"),
+        },
+        other => error(
+            id,
+            -32601,
+            &format!(
+                "unknown method {other:?}; the server answers initialize, ping, tools/list, tools/call, resources/list, resources/templates/list and resources/read"
+            ),
+        ),
     })
 }
 
@@ -426,8 +444,8 @@ fn call(id: Value, params: &Value, backend: &dyn Backend, catalog: &Catalog) -> 
     }
 }
 
-const INSTRUCTIONS: &str = "Archforge models UML class diagrams (packages; classes with their attributes and operations; associations, generalizations and dependencies) and ER diagrams (schemas, entities, attributes, keys, relationships). Every tool works on the project open in the running Archforge window, which must have agent access on (started with --control <port>). Each command has its own tool (uml_package_add, uml_class_add, uml_attribute_add, uml_operation_add, uml_association_add, er_schema_add, er_entity_add, er_attribute_add, er_relationship_add, diagram_add with kind uml.class or er, diagram_place, diagram_connect, element_remove, ...; ids come back in the results); batch runs several as one undo step; inspect_document tells what is open and selected; undo and redo step through the history; save_project saves the project, as the Save button does, once the model is done. Every change shows in the window at once and the user can undo it.";
-const COMPACT_INSTRUCTIONS: &str = "Archforge models UML class diagrams (packages; classes with their attributes and operations; associations, generalizations and dependencies) and ER diagrams (schemas, entities, attributes, keys, relationships). Every tool works on the project open in the running Archforge window, which must have agent access on (started with --control <port>). search_tools finds a command (uml.class.add, uml.association.add, er.entity.add, er.relationship.add, diagram.add with kind uml.class or er, diagram.place, ...) with its parameters; execute_command {command, params} runs it and batch runs several as one undo step; inspect_document tells what is open and selected; undo and redo step through the history; save_project saves the project, as the Save button does, once the model is done. Every change shows in the window at once and the user can undo it.";
+const INSTRUCTIONS: &str = "Archforge models UML class diagrams (packages; classes with their attributes and operations; associations, generalizations and dependencies) and ER diagrams (schemas, entities, attributes, keys, relationships). Every tool works on the project open in the running Archforge window, which must have agent access on (started with --control <port>). Each command has its own tool (uml_package_add, uml_class_add, uml_attribute_add, uml_operation_add, uml_association_add, er_schema_add, er_entity_add, er_attribute_add, er_relationship_add, diagram_add with kind uml.class or er, diagram_place, diagram_connect, element_remove, ...; ids come back in the results); batch runs several as one undo step; inspect_document tells what is open and selected; undo and redo step through the history; save_project saves the project, as the Save button does, once the model is done. Resources give read-only context: archforge://project, archforge://skills, archforge://element/{id} and archforge://skills/effective/{id}/export, the skills in effect for generating code such as SQL DDL. Every change shows in the window at once and the user can undo it.";
+const COMPACT_INSTRUCTIONS: &str = "Archforge models UML class diagrams (packages; classes with their attributes and operations; associations, generalizations and dependencies) and ER diagrams (schemas, entities, attributes, keys, relationships). Every tool works on the project open in the running Archforge window, which must have agent access on (started with --control <port>). search_tools finds a command (uml.class.add, uml.association.add, er.entity.add, er.relationship.add, diagram.add with kind uml.class or er, diagram.place, ...) with its parameters; execute_command {command, params} runs it and batch runs several as one undo step; inspect_document tells what is open and selected; undo and redo step through the history; save_project saves the project, as the Save button does, once the model is done. Resources give read-only context: archforge://project, archforge://skills, archforge://element/{id} and archforge://skills/effective/{id}/export, the skills in effect for generating code such as SQL DDL. Every change shows in the window at once and the user can undo it.";
 
 /// Up to five tool names close to an unknown one: those sharing its first word, else the general
 /// tools.

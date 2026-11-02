@@ -403,6 +403,83 @@ mod tests {
     }
 
     #[test]
+    fn an_agent_reads_a_schema_and_its_export_skills_as_resources_to_generate_ddl() {
+        use serde_json::{Value, json};
+        let mut n: u128 = 0;
+        let ids = Box::new(move || {
+            n += 1;
+            archforge_mof::Uuid(n.to_le_bytes())
+        });
+        let session = archforge_notations::new_project_session("Shop", ids).unwrap();
+        let infos: Vec<Value> = session.registry().infos(&session.facts()).into_iter().map(|i| serde_json::to_value(i).unwrap()).collect();
+        let catalog = archforge_mcp::Catalog::new(&infos, false);
+        let mut shell = Shell::new(archforge_ui_egui::Services::default());
+        shell.session = Some(session);
+        let agent = Direct(std::cell::RefCell::new(shell));
+        let rpc = |method: &str, params: Value| {
+            archforge_mcp::handle(json!({ "jsonrpc": "2.0", "id": 1, "method": method, "params": params }).to_string().as_bytes(), &agent, &catalog)
+                .unwrap()
+        };
+        let tool = |name: &str, args: Value| -> Value {
+            let reply = rpc("tools/call", json!({ "name": name, "arguments": args }));
+            assert_eq!(reply["result"]["isError"], false, "{name}: {reply}");
+            serde_json::from_str::<Value>(reply["result"]["content"][0]["text"].as_str().unwrap()).unwrap()["result"].clone()
+        };
+        let read = |uri: &str| -> Value {
+            let reply = rpc("resources/read", json!({ "uri": uri }));
+            serde_json::from_str(reply["result"]["contents"][0]["text"].as_str().unwrap_or_else(|| panic!("{uri}: {reply}"))).unwrap()
+        };
+        let id = |v: Value| v["id"].as_str().unwrap().to_string();
+        // A small shop: customers place orders, keys and the foreign key the relationship makes.
+        let schema = id(tool("er_schema_add", json!({ "name": "shop" })));
+        let customer = id(tool("er_entity_add", json!({ "schema": schema, "name": "customer" })));
+        tool("er_attribute_add", json!({ "entity": customer, "name": "customer_id", "type": "BIGINT", "primary_key": true }));
+        tool("er_attribute_add", json!({ "entity": customer, "name": "email", "type": "TEXT" }));
+        let order = id(tool("er_entity_add", json!({ "schema": schema, "name": "purchase_order" })));
+        tool("er_attribute_add", json!({ "entity": order, "name": "order_id", "type": "BIGINT", "primary_key": true }));
+        tool("er_relationship_add", json!({ "from": customer, "to": order, "name": "places", "create_foreign_key": true }));
+        // An export skill for the whole project, one of its name on the schema that overrides it with
+        // a dialect, and one on the order table alone.
+        let everywhere =
+            id(tool("skill_add", json!({ "name": "DDL conventions", "body": "Plain CREATE TABLE statements.", "triggers": ["export"] })));
+        let on_schema = id(tool(
+            "skill_add",
+            json!({ "subject": schema, "name": "DDL conventions", "body": "PostgreSQL; a named constraint per key.", "triggers": ["export"], "dialect": "PostgreSQL" }),
+        ));
+        let on_order =
+            id(tool("skill_add", json!({ "subject": order, "name": "Order history", "body": "Add a created_at column.", "triggers": ["export"] })));
+        let revision = agent.0.borrow().session.as_ref().unwrap().revision();
+        // Found by listing, then read: the schema with both its tables, its foreign key column too.
+        let listed = rpc("resources/list", json!({}));
+        assert!(listed["result"]["resources"].as_array().unwrap().iter().any(|r| r["uri"] == "archforge://skills"));
+        let model = read(&format!("archforge://element/{schema}"));
+        assert_eq!((model["kind"].as_str(), model["revision"].as_u64()), (Some("schema"), Some(revision)));
+        let tables = model["schema"]["entities"].to_string();
+        for column in ["customer_id", "email", "order_id", "customer_customer_id"] {
+            assert!(tables.contains(column), "{column} in {tables}");
+        }
+        assert_eq!(model["schema"]["entities"].as_array().unwrap().len(), 2);
+        assert_eq!(model["schema"]["relationships"][0]["name"], "places");
+        // The export skills in effect on the schema agree with the tool's: the project's overridden
+        // by the schema's, which carries the dialect.
+        let effective = read(&format!("archforge://skills/effective/{schema}/export"));
+        assert_eq!(effective["skills"], tool("skill_effective", json!({ "element": schema, "trigger": "export" }))["skills"]);
+        let skills = effective["skills"].as_array().unwrap();
+        let by_id = |id: &str| skills.iter().find(|s| s["id"] == id).unwrap_or_else(|| panic!("{id} in {skills:?}")).clone();
+        assert_eq!(by_id(&everywhere)["overridden_by"], on_schema.as_str());
+        assert_eq!(by_id(&on_schema)["dialect"], "PostgreSQL");
+        assert!(!skills.iter().any(|s| s["id"] == on_order.as_str()), "the order table's skill is its own");
+        // The order table, a second scope, adds its own.
+        let on_table = read(&format!("archforge://skills/effective/{order}/export"));
+        assert!(on_table["skills"].as_array().unwrap().iter().any(|s| s["id"] == on_order.as_str()), "{on_table}");
+        // Reading changed nothing: neither the model nor its history.
+        let s = &agent.0.borrow();
+        let session = s.session.as_ref().unwrap();
+        assert_eq!(session.revision(), revision);
+        assert_eq!(session.undo_label(), Some("Add skill"));
+    }
+
+    #[test]
     fn the_mcp_tools_and_the_shells_methods_never_drift_apart() {
         let shell: Vec<&str> = archforge_ui_egui::control::METHODS.iter().map(|(m, _)| *m).collect();
         let (tools, call_app) = archforge_mcp::tool_methods();

@@ -18,6 +18,7 @@ mod er_kind;
 mod er_ui;
 pub mod explorer;
 pub mod fonts;
+pub mod generate;
 pub mod home;
 pub mod home_search;
 pub mod i18n;
@@ -356,6 +357,8 @@ pub struct Shell {
     /// still asks about, the save a closing waits for (its project and ticket), and whether
     /// quitting was answered for every project, so the window may close.
     pub ask: Option<close_ask::Ask>,
+    /// File → Generate…'s handoff to an agent, while it is open.
+    pub generate: Option<generate::Generate>,
     quitting: Option<Vec<std::path::PathBuf>>,
     close_after_save: Vec<(std::path::PathBuf, u64)>,
     quit_confirmed: bool,
@@ -414,6 +417,7 @@ impl Shell {
             saves: std::collections::VecDeque::new(),
             opening: None,
             ask: None,
+            generate: None,
             quitting: None,
             close_after_save: Vec::new(),
             quit_confirmed: false,
@@ -998,6 +1002,16 @@ impl Shell {
         self.session.is_some() && self.saving.is_none()
     }
 
+    /// Whether File → Generate… can open: a project is open and the dialog is not.
+    pub fn can_generate(&self) -> bool {
+        self.session.is_some() && self.generate.is_none()
+    }
+
+    /// Opens File → Generate…'s handoff to an agent.
+    pub fn open_generate(&mut self) {
+        generate::open(self);
+    }
+
     /// Whether Open can act now: the host opens projects, no opening is under way, the New
     /// project dialog is closed and a tab is free.
     pub fn can_open_project(&self) -> bool {
@@ -1124,6 +1138,13 @@ impl Shell {
         // Cmd+S (Ctrl+S) saves the open project and Cmd+O (Ctrl+O) opens one; on macOS the menu
         // bar takes both first.
         let now = ctx.input(|i| i.time);
+        // File → Generate…'s keys, on every platform.
+        if self.can_generate()
+            && self.ask.is_none()
+            && ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND | egui::Modifiers::SHIFT, egui::Key::G))
+        {
+            self.open_generate();
+        }
         if self.session.is_some() && ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::S)) {
             self.save();
         }
@@ -1188,6 +1209,7 @@ impl Shell {
         }
         new_project::show(self, ui);
         settings::show(self, ui);
+        generate::show(self, ui);
         close_ask::show(self, ui);
     }
 }
