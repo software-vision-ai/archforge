@@ -144,6 +144,8 @@ fn start(shell: &Shell, dialog: &mut Dialog) {
     if let (Some(host), Some(folder)) = (&shell.services.projects, folder_of(shell, dialog)) {
         dialog.creating = Some(host.create(&folder, &dialog.name));
         dialog.failed = None;
+        // What the picker said is past: the creation's own outcome shows from here.
+        dialog.picker = None;
     }
 }
 

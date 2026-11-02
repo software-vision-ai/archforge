@@ -256,6 +256,10 @@ fn change_picks_the_folder_the_project_is_made_in_and_a_cancel_keeps_the_last_on
     let at = centre_of(&h, "new-project.create");
     press(&mut h, at);
     assert_eq!(host.asked.lock().unwrap().as_slice(), [("/Volumes/Work/Clients/Acme".into(), "Commerce platform".to_string())]);
+    // The creation's own failure shows in place of what the picker said before it.
+    answer(&mut h, &host, Err(crate::CreateError::FolderUnusable { detail: "read-only volume".into() }));
+    assert!(painted(&h).iter().any(|t| t == "The folder cannot hold projects."), "{:?}", painted(&h));
+    assert!(!painted(&h).iter().any(|t| t == "The folder picker could not open."), "{:?}", painted(&h));
 }
 
 #[test]
