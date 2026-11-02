@@ -5102,7 +5102,12 @@ fn a_class_dragged_from_models_onto_a_second_diagram_stays_one_element_and_leave
 
 /// The sample class model open, with the node of each class on its diagram by name.
 fn related_sample() -> (Harness<'static, Shell>, std::collections::BTreeMap<String, String>) {
-    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    related_sample_in(ThemeKind::Light, egui::vec2(1600.0, 1000.0))
+}
+
+/// [`related_sample`] in `theme` in a window of `size`.
+fn related_sample_in(theme: ThemeKind, size: egui::Vec2) -> (Harness<'static, Shell>, std::collections::BTreeMap<String, String>) {
+    let mut h = workspace_harness(theme, size);
     crate::uml_ui::open_sample(h.state_mut()).unwrap();
     h.run();
     let st = h.state().session.as_ref().unwrap().doc();
@@ -5181,6 +5186,360 @@ fn the_relationship_tool_draws_the_kind_its_menu_chose_refuses_a_cycle_and_a_dro
     assert_eq!(rename.text, "Class 1");
     assert!(related(&mut h, "Class 1").iter().any(|r| r["kind"] == "dependency"));
     assert_eq!(edge_count(&h), before + 2);
+}
+
+/// The sample class model in `theme` and a window of `size`, its association "paid by" (Order to
+/// Payment) selected and its Properties shown; its id.
+fn paid_by(theme: ThemeKind, size: egui::Vec2) -> (Harness<'static, Shell>, archforge_mof::Uuid) {
+    let (mut h, _) = related_sample_in(theme, size);
+    let paid = {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let a =
+            st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::ASSOCIATION) && archforge_core::name_of(st, *o) == "paid by").unwrap();
+        st.uuid(a).unwrap()
+    };
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [paid.to_string()] })).unwrap();
+    h.state_mut().state.show_panel(crate::state::Panel::Properties);
+    h.run();
+    (h, paid)
+}
+
+/// The multiplicity of each end of `a` in the model, and as its line writes it at each end.
+fn end_multiplicities(h: &Harness<'static, Shell>, a: archforge_mof::Uuid) -> ([String; 2], [String; 2]) {
+    let st = h.state().session.as_ref().unwrap().doc();
+    let a = st.by_uuid(a).unwrap();
+    let model = archforge_uml::figures::member_ends(st, a).unwrap().map(|e| archforge_uml::figures::multiplicity(st, e));
+    let line = archforge_uml::figures::line(st, a).unwrap();
+    (model, line.ends.map(|e| e.text.unwrap_or_default()))
+}
+
+/// The multiplicity field of end `i` as typed.
+fn typed_multiplicity(h: &Harness<'static, Shell>, i: usize) -> String {
+    h.state().panels.ends.as_ref().unwrap().multiplicity[i].clone()
+}
+
+/// Clicks the field `id`, selects what it holds and types `text` over it.
+fn retype(h: &mut Harness<'static, Shell>, id: &str, text: &str) {
+    let at = rect_of(h, id).center();
+    click(h, at);
+    h.event(egui::Event::Key { key: egui::Key::A, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::COMMAND });
+    h.run();
+    if text.is_empty() {
+        key(h, egui::Key::Backspace, egui::Modifiers::NONE);
+    } else {
+        h.event(egui::Event::Text(text.into()));
+        h.run();
+    }
+}
+
+fn revision(h: &Harness<'static, Shell>) -> u64 {
+    h.state().session.as_ref().unwrap().revision()
+}
+
+#[test]
+fn an_association_end_multiplicity_is_picked_or_typed_one_undo_step_each_its_line_following_and_kept_on_reopen() {
+    let size = egui::vec2(1600.0, 1000.0);
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (h, _) = paid_by(theme, size);
+        let found = ids(&h);
+        for i in 0..2 {
+            for id in [format!("workspace.properties.end.{i}.multiplicity"), format!("workspace.properties.end.{i}.multiplicity.menu")] {
+                assert!(found.contains(&id), "{theme:?}: {id}");
+            }
+        }
+    }
+    let (mut h, paid) = paid_by(ThemeKind::Light, size);
+    let s = |a: [&str; 2]| a.map(String::from);
+    assert_eq!(end_multiplicities(&h, paid), (s(["1", "0..1"]), s(["1", "0..1"])));
+    // The chevron opens the presets, the hint and Clear; a pick writes at once, one undo step.
+    let at = rect_of(&h, "workspace.properties.end.0.multiplicity.menu").center();
+    click(&mut h, at);
+    assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::EndMultiplicity(0)));
+    let found = ids(&h);
+    for item in ["0", "1", "2", "3", "4", "clear"] {
+        assert!(found.contains(&format!("workspace.properties.end.0.multiplicity.menu.{item}")), "{item} in {found:?}");
+    }
+    assert!(painted(&h).iter().any(|t| t == "Or type a number or range"));
+    let at = rect_of(&h, "workspace.properties.end.0.multiplicity.menu.3").center();
+    click(&mut h, at);
+    assert_eq!(h.state().panels.menu, None, "a pick closes the menu");
+    assert_eq!(end_multiplicities(&h, paid), (s(["1..*", "0..1"]), s(["1..*", "0..1"])));
+    h.state_mut().session.as_mut().unwrap().undo().unwrap();
+    h.run();
+    assert_eq!(end_multiplicities(&h, paid).0, s(["1", "0..1"]));
+    assert_eq!(typed_multiplicity(&h, 0), "1", "the field follows the undo");
+    h.state_mut().session.as_mut().unwrap().redo().unwrap();
+    h.run();
+    assert_eq!((end_multiplicities(&h, paid).0, typed_multiplicity(&h, 0)), (s(["1..*", "0..1"]), "1..*".to_string()));
+    // Typed on the other end and Enter: written there, the first end keeping its own.
+    retype(&mut h, "workspace.properties.end.1.multiplicity", "2..5");
+    assert_eq!(end_multiplicities(&h, paid).0[1], "0..1", "typing writes nothing until it is committed");
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    assert_eq!(end_multiplicities(&h, paid), (s(["1..*", "2..5"]), s(["1..*", "2..5"])));
+    // A reversed range is refused under the field and stays there to correct; nothing is written.
+    let before = revision(&h);
+    retype(&mut h, "workspace.properties.end.1.multiplicity", "5..2");
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    assert!(painted(&h).iter().any(|t| t == "The upper bound must be at least 5."), "{:?}", painted(&h));
+    assert_eq!(typed_multiplicity(&h, 1), "5..2");
+    assert_eq!(end_multiplicities(&h, paid), (s(["1..*", "2..5"]), s(["1..*", "2..5"])));
+    assert_eq!(revision(&h), before);
+    // Escape brings the written value back and the reason goes.
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    assert_eq!(typed_multiplicity(&h, 1), "2..5");
+    assert!(!painted(&h).iter().any(|t| t == "The upper bound must be at least 5."));
+    assert_eq!(revision(&h), before);
+    // Each malformed text is refused with its reason, never coerced.
+    for (bad, why) in [
+        ("-1", "Type a whole number, a range such as 2..5, or *."),
+        ("1...*", "Type a whole number, a range such as 2..5, or *."),
+        ("99999999999", "A bound can be at most 1000000."),
+        ("*..1", "The lower bound cannot be *."),
+    ] {
+        retype(&mut h, "workspace.properties.end.1.multiplicity", bad);
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert_eq!(h.state().panels.ends.as_ref().unwrap().refused[1].as_deref(), Some(why), "{bad}");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    }
+    assert_eq!(revision(&h), before);
+    // Saved and opened again, as the project's rows: the ends keep their multiplicities.
+    let (tables, junctions) = archforge_notations::storage();
+    let rows = archforge_mof::rows::snapshot(h.state().session.as_ref().unwrap().doc(), &tables, &junctions).unwrap();
+    let back = archforge_notations::session_from_rows(&rows, Box::new(|| archforge_mof::Uuid::v7(1_761_670_900_000, [9; 10]))).unwrap();
+    let st = back.doc();
+    let ends = archforge_uml::figures::member_ends(st, st.by_uuid(paid).unwrap()).unwrap();
+    assert_eq!(ends.map(|e| archforge_uml::figures::multiplicity(st, e)), s(["1..*", "2..5"]));
+    // Clear takes it away, as empty text does; each one undo step.
+    let at = rect_of(&h, "workspace.properties.end.1.multiplicity.menu").center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.properties.end.1.multiplicity.menu.clear").center();
+    click(&mut h, at);
+    assert_eq!(end_multiplicities(&h, paid), (s(["1..*", ""]), s(["1..*", ""])));
+    h.state_mut().session.as_mut().unwrap().undo().unwrap();
+    h.run();
+    assert_eq!(end_multiplicities(&h, paid).0, s(["1..*", "2..5"]));
+    retype(&mut h, "workspace.properties.end.0.multiplicity", "");
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    assert_eq!(end_multiplicities(&h, paid), (s(["", "2..5"]), s(["", "2..5"])));
+    assert!(painted(&h).iter().any(|t| t == "—"), "an empty field shows the placeholder");
+}
+
+#[test]
+fn an_end_multiplicity_menu_follows_the_keys_and_escape_closes_it_before_it_cancels_the_edit() {
+    let (mut h, paid) = paid_by(ThemeKind::Dark, egui::vec2(1600.0, 1000.0));
+    let open = |h: &Harness<'static, Shell>| h.state().panels.menu == Some(crate::panels::Menu::EndMultiplicity(1));
+    // Alt+Down in the field opens the presets at the current one; the arrows move; Enter picks.
+    let at = rect_of(&h, "workspace.properties.end.1.multiplicity").center();
+    click(&mut h, at);
+    key(&mut h, egui::Key::ArrowDown, egui::Modifiers::ALT);
+    assert!(open(&h));
+    assert_eq!(h.state().panels.highlight, Some(0), "0..1 is the current one");
+    key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+    key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+    key(&mut h, egui::Key::ArrowUp, egui::Modifiers::NONE);
+    assert_eq!(h.state().panels.highlight, Some(1));
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    assert!(!open(&h));
+    assert_eq!(end_multiplicities(&h, paid).0[1], "1");
+    // Typed but not committed: Escape closes the menu first, then brings the written value back.
+    let before = revision(&h);
+    retype(&mut h, "workspace.properties.end.1.multiplicity", "3");
+    key(&mut h, egui::Key::ArrowDown, egui::Modifiers::ALT);
+    assert!(open(&h));
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    assert!(!open(&h));
+    assert_eq!(typed_multiplicity(&h, 1), "3", "closing the menu keeps the typing");
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    assert_eq!(typed_multiplicity(&h, 1), "1");
+    assert_eq!(revision(&h), before, "nothing was written");
+    // Leaving the field writes what was typed: `0..*` reads as `*`.
+    retype(&mut h, "workspace.properties.end.1.multiplicity", "0..*");
+    let at = rect_of(&h, "workspace.properties.end.1.role").center();
+    click(&mut h, at);
+    assert_eq!(end_multiplicities(&h, paid).0[1], "*");
+    assert_eq!(typed_multiplicity(&h, 1), "*");
+    // The keys reach the end chosen: the Order end kept its own.
+    assert_eq!(end_multiplicities(&h, paid).0[0], "1");
+}
+
+#[test]
+fn a_multiplicity_refusal_stays_until_its_own_field_is_written_and_reads_in_full() {
+    let (mut h, paid) = paid_by(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    let refused = |h: &Harness<'static, Shell>, i: usize| h.state().panels.ends.as_ref().unwrap().refused[i].clone();
+    // Writing another field of the end keeps the reason while the refused text stays.
+    retype(&mut h, "workspace.properties.end.1.multiplicity", "abc");
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    assert!(refused(&h, 1).is_some());
+    // Out of the field first, so the Navigable click writes on its own.
+    let at = rect_of(&h, "workspace.properties.relationship.from").center();
+    click(&mut h, at);
+    assert!(refused(&h, 1).is_some());
+    let at = rect_of(&h, "workspace.properties.end.1.navigable").center();
+    click(&mut h, at);
+    let navigable = |h: &Harness<'static, Shell>| {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let a = st.by_uuid(paid).unwrap();
+        archforge_uml::figures::navigable(st, a, archforge_uml::figures::member_ends(st, a).unwrap()[1])
+    };
+    assert!(!navigable(&h), "Navigable was written");
+    assert_eq!(end_multiplicities(&h, paid).0[1], "0..1");
+    assert_eq!(typed_multiplicity(&h, 1), "abc");
+    assert!(refused(&h, 1).is_some(), "the field still holds text that was never written");
+    // Picking the value the model has already takes the reason away, though nothing is written.
+    let at = rect_of(&h, "workspace.properties.end.1.multiplicity.menu").center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.properties.end.1.multiplicity.menu.0").center();
+    click(&mut h, at);
+    assert_eq!((typed_multiplicity(&h, 1), refused(&h, 1)), ("0..1".to_string(), None));
+    // A composition's whole allows one at most: the model's refusal on Enter keeps the keyboard
+    // in the field and shows its whole reason under it.
+    let at = rect_of(&h, "workspace.properties.end.1.aggregation").center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.properties.end.1.aggregation.2").center();
+    click(&mut h, at);
+    retype(&mut h, "workspace.properties.end.0.multiplicity", "2");
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    let why = refused(&h, 0).expect("the model refuses");
+    assert!(why.contains("composition's whole"), "{why}");
+    assert_eq!(end_multiplicities(&h, paid).0[0], "1");
+    let id = crate::widgets::egui_id("workspace.properties.end.0.multiplicity");
+    assert!(h.ctx.memory(|m| m.has_focus(id)), "the field keeps the keyboard");
+    fn galleys(s: &egui::Shape, out: &mut Vec<std::sync::Arc<egui::Galley>>) {
+        match s {
+            egui::Shape::Text(t) => out.push(t.galley.clone()),
+            egui::Shape::Vec(v) => v.iter().for_each(|s| galleys(s, out)),
+            _ => {}
+        }
+    }
+    let mut all = Vec::new();
+    for clipped in h.output().shapes.iter() {
+        galleys(&clipped.shape, &mut all);
+    }
+    let said = all.iter().find(|g| g.text() == why).expect("the reason is drawn");
+    assert!(!said.elided && said.rows.len() > 1, "the reason wraps instead of being cut: {:?} rows", said.rows.len());
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    assert_eq!((typed_multiplicity(&h, 0), refused(&h, 0)), ("1".to_string(), None));
+}
+
+#[test]
+fn the_chevron_keeps_a_typed_multiplicity_a_draft_so_a_pick_is_one_step_and_escape_still_cancels() {
+    let (mut h, paid) = paid_by(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    let id = crate::widgets::egui_id("workspace.properties.end.0.multiplicity");
+    // Typed over the written 1, then the chevron: nothing is written and the field keeps the keyboard.
+    let before = revision(&h);
+    retype(&mut h, "workspace.properties.end.0.multiplicity", "3");
+    let at = rect_of(&h, "workspace.properties.end.0.multiplicity.menu").center();
+    click(&mut h, at);
+    assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::EndMultiplicity(0)));
+    assert_eq!((end_multiplicities(&h, paid).0[0].as_str(), typed_multiplicity(&h, 0)), ("1", "3".to_string()));
+    assert_eq!(revision(&h), before);
+    assert!(h.ctx.memory(|m| m.has_focus(id)));
+    // Escape closes the menu, then brings the 1 back; still nothing written.
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    assert_eq!((typed_multiplicity(&h, 0), revision(&h)), ("1".to_string(), before));
+    // Typed, then a preset picked: the preset is written as one step, which one undo takes back.
+    retype(&mut h, "workspace.properties.end.0.multiplicity", "3");
+    let at = rect_of(&h, "workspace.properties.end.0.multiplicity.menu").center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.properties.end.0.multiplicity.menu.3").center();
+    click(&mut h, at);
+    assert_eq!(end_multiplicities(&h, paid).0[0], "1..*");
+    h.state_mut().session.as_mut().unwrap().undo().unwrap();
+    h.run();
+    assert_eq!(end_multiplicities(&h, paid).0[0], "1", "one undo goes back past the pick to the 1, not to a 3");
+}
+
+#[test]
+fn leaving_a_multiplicity_closes_its_menu_and_its_rows_and_refusal_reach_assistive_technology() {
+    use egui_kittest::kittest::{NodeT, Queryable};
+    let (mut h, paid) = paid_by(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    let open = |h: &Harness<'static, Shell>| h.state().panels.menu == Some(crate::panels::Menu::EndMultiplicity(1));
+    // The menu's rows and the chevron carry their words.
+    let at = rect_of(&h, "workspace.properties.end.1.multiplicity.menu").center();
+    click(&mut h, at);
+    assert!(open(&h));
+    assert!(h.query_by_label("End at Payment · Pick a multiplicity").is_some());
+    assert!(h.query_by_label("End at Order · Pick a multiplicity").is_some(), "each chevron names its end");
+    for word in ["0..1", "1", "0..*", "1..*", "*", "Clear"] {
+        assert!(!h.query_all_by_label(word).collect::<Vec<_>>().is_empty(), "{word} has an accessible name");
+    }
+    // Tab out of the field with the menu open and a row reached: the menu closes, and Enter
+    // afterwards picks nothing.
+    key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+    key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+    assert_eq!(h.state().panels.highlight, Some(2), "from the current 0..1 down to 0..*");
+    key(&mut h, egui::Key::Tab, egui::Modifiers::NONE);
+    assert!(!open(&h), "leaving the field closes its menu");
+    assert_eq!(end_multiplicities(&h, paid).0[1], "0..1", "nothing was picked");
+    // Tab reached the chevron, whose Enter opens the menu again; Escape closes it.
+    let chevron = crate::widgets::egui_id("workspace.properties.end.1.multiplicity.menu");
+    assert!(h.ctx.memory(|m| m.has_focus(chevron)));
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    assert!(open(&h));
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    assert!(!open(&h));
+    // Typing with the menu open takes over from the row reached: Enter writes the typing.
+    let at = rect_of(&h, "workspace.properties.end.1.multiplicity").center();
+    click(&mut h, at);
+    key(&mut h, egui::Key::ArrowDown, egui::Modifiers::ALT);
+    assert_eq!((open(&h), h.state().panels.highlight), (true, Some(0)));
+    h.event(egui::Event::Key { key: egui::Key::A, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::COMMAND });
+    h.event(egui::Event::Text("2..*".into()));
+    h.run();
+    assert_eq!(h.state().panels.highlight, None);
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    assert_eq!(end_multiplicities(&h, paid).0[1], "2..*");
+    // A refusal is the field's description, and the field says it is invalid.
+    retype(&mut h, "workspace.properties.end.1.multiplicity", "5..2");
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    let field = h.get_by_label("End at Payment · Multiplicity");
+    assert_eq!(field.accesskit_node().description().as_deref(), Some("The upper bound must be at least 5."));
+    assert_eq!(field.accesskit_node().data().invalid(), Some(egui::accesskit::Invalid::True));
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    let field = h.get_by_label("End at Payment · Multiplicity");
+    assert_eq!((field.accesskit_node().description(), field.accesskit_node().data().invalid()), (None, None));
+}
+
+#[test]
+fn an_end_multiplicity_menu_opens_above_its_field_when_the_window_has_no_room_below() {
+    let (mut h, _) = paid_by(ThemeKind::Light, egui::vec2(1600.0, 820.0));
+    for (i, above) in [(0, false), (1, true)] {
+        let at = rect_of(&h, &format!("workspace.properties.end.{i}.multiplicity.menu")).center();
+        click(&mut h, at);
+        let field = rect_of(&h, &format!("workspace.properties.end.{i}.multiplicity"));
+        let (first, clear) = (
+            rect_of(&h, &format!("workspace.properties.end.{i}.multiplicity.menu.0")),
+            rect_of(&h, &format!("workspace.properties.end.{i}.multiplicity.menu.clear")),
+        );
+        if above {
+            assert!(clear.bottom() < field.top(), "end {i}: {clear:?} over {field:?}");
+        } else {
+            assert!(first.top() > field.bottom(), "end {i}: {first:?} under {field:?}");
+        }
+        assert!(clear.bottom() <= 820.0 && first.top() >= 0.0, "end {i}: the whole menu shows");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    }
+}
+
+#[test]
+fn a_new_association_shows_both_ends_without_a_multiplicity() {
+    let (mut h, _) = related_sample();
+    let class = |h: &Harness<'static, Shell>, name: &str| {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let c = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(st, *o) == name).unwrap();
+        st.uuid(c).unwrap().to_string()
+    };
+    let (from, to) = (class(&h, "Catalog"), class(&h, "Product"));
+    let s = h.state_mut().session.as_mut().unwrap();
+    let a = s.execute("uml.association.add", &serde_json::json!({ "from": from, "to": to })).unwrap().value["id"].as_str().unwrap().to_string();
+    s.execute("view.select", &serde_json::json!({ "ids": [a.clone()] })).unwrap();
+    h.state_mut().state.show_panel(crate::state::Panel::Properties);
+    h.run();
+    let a = archforge_mof::Uuid::parse(&a).unwrap();
+    let none = [String::new(), String::new()];
+    assert_eq!(end_multiplicities(&h, a), (none.clone(), none));
+    assert_eq!(painted(&h).iter().filter(|t| *t == "—").count(), 2, "each end shows the placeholder, never a value");
 }
 
 #[test]

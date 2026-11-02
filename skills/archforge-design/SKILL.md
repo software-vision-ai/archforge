@@ -357,9 +357,20 @@ What is UML's own, beside the shared rules above.
   says so with Undo (owner decision, every notation). A top-level package asks, as anything that
   takes its contents along does.
 - An association's Properties: Name, its From and To classes read only with "Drag a line end onto
-  another class.", then a section per end, "End at {class}": Role and Multiplicity (written on
-  Enter or leaving the field), Navigable and Aggregation (None, Shared, Composite; written when
+  another class.", then a section per end, "End at {class}": Role (written on Enter or leaving the
+  field) and Multiplicity, Navigable and Aggregation (None, Shared, Composite; written when
   changed). A dependency shows Name, Client and Supplier; a generalization Specific and General.
+- An end's Multiplicity is an editable select (owner, 2026-11-02): its text takes typing, its
+  chevron (or Alt+Down) opens `0..1`, `1`, `0..*`, `1..*` and `*` with the current one ticked, the
+  hint "Or type a number or range" and Clear. A preset writes on its pick; typing writes on Enter
+  or leaving the field; empty text or Clear takes the multiplicity away, and an empty field shows a
+  muted dash that is never a value. While the menu is open the arrows move, Enter picks and Escape
+  closes it; with it closed, Escape brings back the value written. Text that does not read stays in
+  the field, ringed in the danger colour with the reason under it, and the model keeps its value.
+- A multiplicity reads as a whole number (`0`, `2`), a range `lower..upper` with lower up to upper,
+  `lower..*`, or `*` for `0..*`, each bound at most 1,000,000; whitespace around it is dropped and
+  anything else inside it is refused with its reason, never coerced (owner, 2026-11-02). Attributes
+  and parameters read theirs the same way.
 - Its own icons: the Class tool and a class in the tree are a box in three compartments (a
   table's box has a column line instead); a package is UML's tabbed box; a class diagram's tab
   shows two class boxes joined by a generalization arrow.

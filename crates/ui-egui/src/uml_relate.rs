@@ -14,7 +14,7 @@ use serde_json::json;
 use crate::Shell;
 use crate::home::control;
 use crate::i18n::{fmt, tr};
-use crate::panels::{FIELD, Menu, PAD, Subject, check, menu, run, section, select_field, text_field};
+use crate::panels::{Combo, ComboOut, FIELD, Menu, PAD, Subject, check, editable_select, menu, run, section, select_field, text_field};
 use crate::ux::{self, Palette, types};
 
 /// What the Relationship tool draws.
@@ -282,15 +282,47 @@ pub struct EndsEdit {
     pub association: Uuid,
     pub role: [String; 2],
     pub multiplicity: [String; 2],
+    /// Each end's role and multiplicity as the model last had them: what Escape brings back, and
+    /// how a change made elsewhere (an undo, another view) reaches the fields.
+    pub written_role: [String; 2],
+    pub written: [String; 2],
+    /// Why an end's typed multiplicity was refused, shown under its field until it changes.
+    pub refused: [Option<String>; 2],
 }
 
 fn ends_edit(store: &Store, a: Obj, id: Uuid) -> Option<EndsEdit> {
     let ends = archforge_uml::figures::member_ends(store, a)?;
-    Some(EndsEdit {
-        association: id,
-        role: ends.map(|e| archforge_core::name_of(store, e)),
-        multiplicity: ends.map(|e| archforge_uml::figures::multiplicity(store, e)),
-    })
+    let role = ends.map(|e| archforge_core::name_of(store, e));
+    let multiplicity = ends.map(|e| archforge_uml::figures::multiplicity(store, e));
+    Some(EndsEdit { association: id, written_role: role.clone(), written: multiplicity.clone(), role, multiplicity, refused: [None, None] })
+}
+
+/// `typed` in end `end`'s multiplicity of association `id`, committed and refused, as a sample
+/// to look at.
+#[cfg(feature = "snapshot")]
+pub(crate) fn refuse_typed(shell: &mut Shell, id: Uuid, end: usize, typed: &str) -> Result<(), String> {
+    let store = shell.session.as_ref().ok_or("no project is open")?.doc();
+    let a = store.by_uuid(id).ok_or("no such association")?;
+    let mut edit = ends_edit(store, a, id).ok_or("not an association")?;
+    let why = archforge_uml::members::parse_multiplicity(typed).err().ok_or("the sample reads")?;
+    *edit.multiplicity.get_mut(end).ok_or("no such end")? = typed.to_string();
+    *edit.refused.get_mut(end).ok_or("no such end")? = Some(multiplicity_problem(&why));
+    shell.panels.ends = Some(edit);
+    Ok(())
+}
+
+/// The common multiplicities an end's menu offers, in the design's order.
+pub(crate) const MULTIPLICITIES: [&str; 5] = ["0..1", "1", "0..*", "1..*", "*"];
+
+/// Why a typed multiplicity does not read, in the user's language.
+fn multiplicity_problem(e: &archforge_uml::members::MultiplicityError) -> String {
+    use archforge_uml::members::MultiplicityError as E;
+    match e {
+        E::Malformed(_) => tr("Type a whole number, a range such as 2..5, or *."),
+        E::TooLarge => fmt(&tr("A bound can be at most {max}."), &[("max", &archforge_uml::members::MAX_BOUND.to_string())]),
+        E::LowerMany => tr("The lower bound cannot be *."),
+        E::Reversed(lower) => fmt(&tr("The upper bound must be at least {lower}."), &[("lower", &lower.to_string())]),
+    }
 }
 
 /// The aggregation of an end, as an index of None, Shared, Composite.
@@ -345,8 +377,10 @@ pub(crate) fn body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, m
     }
 }
 
-/// An association's two ends, each its own section: role and multiplicity, written when typed;
-/// Navigable and the aggregation, written when changed.
+/// An association's two ends, each its own section: role, written when typed; the multiplicity,
+/// an editable select of the common ones, written when picked or typed; Navigable and the
+/// aggregation, written when changed. A multiplicity that does not read stays in its field, with
+/// why under it, and the model keeps the one it had.
 #[allow(clippy::too_many_arguments, reason = "the ends are drawn into the panel for their association")]
 fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, a: Obj, id: Uuid) {
     let width = (r.width() - 2.0 * PAD).max(0.0);
@@ -360,7 +394,21 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
     });
     let navigable = ends.map(|e| archforge_uml::figures::navigable(store, a, e));
     let aggregations = ends.map(|e| aggregation(store, e));
+    let roles = ends.map(|e| archforge_core::name_of(store, e));
+    let written = ends.map(|e| archforge_uml::figures::multiplicity(store, e));
     let Some(mut edit) = shell.panels.ends.clone() else { return };
+    // A change the model took elsewhere (an undo, a redo, another view) reaches the fields.
+    for i in 0..2 {
+        if edit.written_role[i] != roles[i] {
+            edit.role[i] = roles[i].clone();
+            edit.written_role[i] = roles[i].clone();
+        }
+        if edit.written[i] != written[i] {
+            edit.multiplicity[i] = written[i].clone();
+            edit.written[i] = written[i].clone();
+            edit.refused[i] = None;
+        }
+    }
     let words = aggregation_words();
     for i in 0..2 {
         let title = fmt(&tr("End at {class}"), &[("class", &classes[i])]);
@@ -381,20 +429,71 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
             false,
             true,
         );
-        let m = text_field(
-            shell,
-            ui,
-            p,
-            at + vec2(half + 8.0, 0.0),
-            half,
-            &format!("{key}.multiplicity"),
-            &tr("Multiplicity"),
-            &mut edit.multiplicity[i],
-            24,
-            false,
-            true,
-        );
+        let typed = edit.multiplicity[i].clone();
+        let refusal = edit.refused[i].clone();
+        let combo = Combo {
+            id: &format!("{key}.multiplicity"),
+            label: &tr("Multiplicity"),
+            name: &format!("{title} · {}", tr("Multiplicity")),
+            placeholder: "—",
+            options: &MULTIPLICITIES,
+            current: MULTIPLICITIES.iter().position(|m| *m == edit.written[i]),
+            pick: &tr("Pick a multiplicity"),
+            pick_name: &format!("{title} · {}", tr("Pick a multiplicity")),
+            hint: &tr("Or type a number or range"),
+            clear: &tr("Clear"),
+            refused: refusal.as_deref(),
+            menu: Menu::EndMultiplicity(i),
+            limit: 24,
+        };
+        let asked = editable_select(shell, ui, p, at + vec2(half + 8.0, 0.0), half, &mut edit.multiplicity[i], &combo);
+        if edit.multiplicity[i] != typed {
+            // Typing again takes the reason away until the next commit.
+            edit.refused[i] = None;
+        }
+        let mut write_multiplicity = false;
+        match asked {
+            ComboOut::Idle => {}
+            ComboOut::Commit => write_multiplicity = true,
+            ComboOut::Pick(k) => {
+                // A preset, or Clear past the presets, which takes the multiplicity away.
+                edit.multiplicity[i] = MULTIPLICITIES.get(k).map(|m| (*m).to_string()).unwrap_or_default();
+                write_multiplicity = true;
+            }
+            ComboOut::Cancel => {
+                edit.multiplicity[i] = edit.written[i].clone();
+                edit.refused[i] = None;
+            }
+        }
+        // Presets and typing share one check; what reads as the model has it already writes nothing.
+        if write_multiplicity {
+            match archforge_uml::members::parse_multiplicity(&edit.multiplicity[i]) {
+                Err(e) => {
+                    edit.refused[i] = Some(multiplicity_problem(&e));
+                    write_multiplicity = false;
+                    // Refused on Enter, the field keeps the keyboard for the correction or Escape.
+                    if ui.input(|inp| inp.key_pressed(egui::Key::Enter)) {
+                        ui.memory_mut(|m| m.request_focus(crate::widgets::egui_id(combo.id)));
+                    }
+                }
+                Ok(bounds) if Ok(bounds) == archforge_uml::members::parse_multiplicity(&edit.written[i]) => {
+                    // Corrected back to what the model has: nothing to write, and nothing wrong.
+                    edit.multiplicity[i] = edit.written[i].clone();
+                    edit.refused[i] = None;
+                    write_multiplicity = false;
+                }
+                Ok(_) => {}
+            }
+        }
         y += 17.0 + FIELD + 12.0;
+        if let Some(why) = &edit.refused[i] {
+            // Wrapped, so a long refusal from the model shows its reason, not only its start.
+            let paint = ui.painter().clone();
+            let said = ux::galley_rows(&paint, why, types::CAPTION, p.danger, Some(width), 4);
+            let height = said.size().y;
+            paint.galley(pos2(r.left() + PAD, y - 2.0), said, p.danger);
+            y += (height + 26.0).max(42.0);
+        }
         // The whole's end, where the diamond sits, is never navigable: it shows no Navigable.
         let whole = aggregations[1 - i] != 0;
         let mut nav = navigable[i] && !whole;
@@ -421,20 +520,38 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
             agg = k;
         }
         shell.panels.ends = Some(edit.clone());
-        if role || m || (!whole && nav != navigable[i]) || agg != aggregations[i] {
+        if role || write_multiplicity || (!whole && nav != navigable[i]) || agg != aggregations[i] {
+            // Only the field written changes: the others go as the model has them, so a
+            // multiplicity still being corrected is never sent with a role or an aggregation.
             let params = json!({
                 "association": id.to_string(),
                 "end": i,
-                "role": edit.role[i].trim(),
-                "multiplicity": edit.multiplicity[i].trim(),
+                "role": if role { edit.role[i].trim() } else { roles[i].as_str() },
+                "multiplicity": if write_multiplicity { edit.multiplicity[i].trim() } else { written[i].as_str() },
                 "navigable": nav,
                 "aggregation": AGGREGATIONS[agg],
             });
             match run(shell, "uml.association.set-end", params) {
                 Ok(_) => {
                     shell.panels.notice = None;
-                    // Read again from the model, as written.
-                    shell.panels.ends = None;
+                    if let Some(e) = shell.panels.ends.as_mut() {
+                        // A refused multiplicity still in its field keeps its reason while
+                        // another field of the end is written.
+                        if write_multiplicity {
+                            e.refused[i] = None;
+                        }
+                        e.role[i] = e.role[i].trim().to_string();
+                    }
+                }
+                // A multiplicity the model refuses (a composition's whole allows one at most) is
+                // said under its field; anything else at the panel's foot.
+                Err(e) if write_multiplicity => {
+                    if let Some(ends) = shell.panels.ends.as_mut() {
+                        ends.refused[i] = Some(e);
+                    }
+                    if ui.input(|inp| inp.key_pressed(egui::Key::Enter)) {
+                        ui.memory_mut(|m| m.request_focus(crate::widgets::egui_id(&format!("{key}.multiplicity"))));
+                    }
                 }
                 Err(e) => shell.panels.notice = Some(e),
             }

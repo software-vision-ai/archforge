@@ -35,6 +35,8 @@ pub struct State {
     pub column: Option<ColumnEdit>,
     /// The select menu that is open.
     pub menu: Option<Menu>,
+    /// The item of an editable select's open menu the arrow keys have reached.
+    pub highlight: Option<usize>,
     /// The Appearance panel's colour picker, while it is open.
     pub picker: Option<crate::appearance::Picker>,
     /// The last refusal of a change, shown at the panel's foot until the next change.
@@ -184,8 +186,9 @@ pub enum Menu {
     MemberVisibility,
     MemberType,
     ParamType(usize),
-    /// An association end's aggregation.
+    /// An association end's aggregation and its multiplicity's presets.
     EndAggregation(usize),
+    EndMultiplicity(usize),
     /// A class's package.
     ClassPackage,
 }
@@ -406,6 +409,209 @@ pub(crate) fn select_field(
         shell.panels.menu = if shell.panels.menu == Some(menu) { None } else { Some(menu) };
     }
     field
+}
+
+/// An editable select: what it shows and offers.
+pub(crate) struct Combo<'a> {
+    pub id: &'a str,
+    pub label: &'a str,
+    /// Its accessible name, which tells it from its namesakes.
+    pub name: &'a str,
+    /// Shown, muted, while the text is empty; never a value.
+    pub placeholder: &'a str,
+    pub options: &'a [&'a str],
+    /// The option the model's value is, ticked in the menu.
+    pub current: Option<usize>,
+    /// The chevron's tooltip and its accessible name, which names the field too; the line under
+    /// the options, and the last row, which empties it.
+    pub pick: &'a str,
+    pub pick_name: &'a str,
+    pub hint: &'a str,
+    pub clear: &'a str,
+    /// Why the text was refused: ringed in the danger colour, and told to assistive technology;
+    /// the caller draws it under the field.
+    pub refused: Option<&'a str>,
+    pub menu: Menu,
+    pub limit: usize,
+}
+
+/// What an editable select asked for this frame.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ComboOut {
+    Idle,
+    /// The text as typed is to be written: Enter, or the field left.
+    Commit,
+    /// A row of the menu was picked: an option's index, or the options' count for Clear.
+    Pick(usize),
+    /// Escape with the menu closed: the value as last written comes back.
+    Cancel,
+}
+
+/// The editable select's menu width, its widest, and its height for `n` options: the options, the
+/// hint under them and Clear.
+const COMBO_W: f32 = 160.0;
+const COMBO_MAX_W: f32 = 264.0;
+fn combo_height(n: usize) -> f32 {
+    n as f32 * 30.0 + 78.0
+}
+
+/// A label over a filled field that takes typing, with a chevron that opens its options above or
+/// under it. The keys go to the menu while it is open (the arrows move, Enter picks, Escape
+/// closes it) and to the field otherwise (Alt+Down opens the menu, Enter commits, Escape cancels).
+/// A refused field is ringed in the danger colour and its reason is the field's description;
+/// the caller draws the reason under it. Leaving the field closes its menu.
+pub(crate) fn editable_select(
+    shell: &mut Shell,
+    ui: &mut egui::Ui,
+    p: &Palette,
+    at: egui::Pos2,
+    width: f32,
+    text: &mut String,
+    c: &Combo,
+) -> ComboOut {
+    let paint = ui.painter().clone();
+    ux::text(&paint, at, c.label, types::CAPTION, p.text_secondary, Some(width.max(0.0)));
+    let field = Rect::from_min_size(at + vec2(0.0, 17.0), vec2(width.max(0.0), FIELD));
+    paint.rect_filled(field, 6.0, p.field);
+    widgets::record_visible(ui, &mut shell.registry, c.id, "field", field);
+    let eid = widgets::egui_id(c.id);
+    let rows = c.options.len() + 1;
+    // The menu is as wide as the design's, or wider when its hint needs it (a longer language).
+    let hint_w = ux::galley(&paint, c.hint, types::CAPTION, p.text_secondary, None).size().x;
+    let list_w = (hint_w + 24.0).clamp(COMBO_W, COMBO_MAX_W);
+    let list = ux::drop_rect(ui, field, field.right() - list_w, vec2(list_w, combo_height(c.options.len())));
+    let was_open = shell.panels.menu == Some(c.menu);
+    let focused = ui.memory(|m| m.has_focus(eid));
+    let mut out = ComboOut::Idle;
+    // The keys first, before the text field takes them.
+    if was_open {
+        if ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown)) {
+            shell.panels.highlight = Some(shell.panels.highlight.map_or(0, |h| (h + 1).min(rows - 1)));
+        }
+        if ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowUp)) {
+            shell.panels.highlight = Some(shell.panels.highlight.map_or(0, |h| h.saturating_sub(1)));
+        }
+        if ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter)) {
+            out = shell.panels.highlight.map_or(ComboOut::Commit, ComboOut::Pick);
+            shell.panels.menu = None;
+        }
+        if ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+            shell.panels.menu = None;
+        }
+    } else if focused {
+        if ui.input_mut(|i| i.consume_key(egui::Modifiers::ALT, egui::Key::ArrowDown)) {
+            shell.panels.menu = Some(c.menu);
+            shell.panels.highlight = c.current;
+        } else if ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+            out = ComboOut::Cancel;
+            ui.memory_mut(|m| m.surrender_focus(eid));
+        }
+    }
+    let chevron = Rect::from_min_size(pos2(field.right() - 28.0, field.top()), vec2(28.0, FIELD));
+    let inner = field_inner(ui, field);
+    let inner = Rect::from_min_max(inner.min, pos2((chevron.left() - 2.0).max(inner.left()), inner.bottom()));
+    // Escape stays with the field, so the menu or the edit can take it.
+    let filter = egui::EventFilter { escape: true, horizontal_arrows: true, vertical_arrows: true, tab: false };
+    let edit = egui::TextEdit::singleline(text)
+        .id(eid)
+        .frame(egui::Frame::NONE)
+        .margin(egui::Margin::ZERO)
+        .font(types::SMALL.font())
+        .text_color(p.text)
+        .char_limit(c.limit)
+        .hint_text(egui::RichText::new(c.placeholder).color(p.text_muted).font(types::SMALL.font()))
+        .event_filter(filter)
+        .desired_width(inner.width());
+    let resp = edit.show(&mut ui.new_child(egui::UiBuilder::new().max_rect(inner))).response;
+    // Typing takes over from the row the keys reached: Enter then writes the typing.
+    if resp.changed() && shell.panels.menu == Some(c.menu) {
+        shell.panels.highlight = None;
+    }
+    ui.ctx().accesskit_node_builder(resp.id, |node| {
+        node.set_label(c.name);
+        if let Some(why) = c.refused {
+            node.set_description(why);
+            node.set_invalid(egui::accesskit::Invalid::True);
+        }
+    });
+    // Leaving the field writes what was typed, unless the press that left it is on the field's own
+    // chevron or its open menu: then the typing stays a draft and the field takes the keyboard back,
+    // so a pick replaces the draft and Escape still brings the written value back.
+    // The field gives the keyboard up on the press or on the click, so either edge counts.
+    let pressed_in =
+        |r: Rect| ui.input(|i| (i.pointer.any_pressed() || i.pointer.any_released()) && i.pointer.interact_pos().is_some_and(|o| r.contains(o)));
+    let own = pressed_in(chevron) || (was_open && pressed_in(list));
+    if out == ComboOut::Idle && resp.lost_focus() {
+        if own {
+            ui.memory_mut(|m| m.request_focus(eid));
+        } else {
+            // Left another way (a click elsewhere, Tab): its menu goes too, so its keys stop.
+            out = ComboOut::Commit;
+            if shell.panels.menu == Some(c.menu) {
+                shell.panels.menu = None;
+            }
+        }
+    }
+    let ring = if c.refused.is_some() { Some(p.danger) } else { (resp.has_focus() || shell.panels.menu == Some(c.menu)).then_some(p.focus) };
+    if let Some(ink) = ring {
+        paint.rect_stroke(field, 6.0, Stroke::new(1.0, ink), StrokeKind::Inside);
+    }
+    ux::icon_mid(&paint, pos2(field.right() - 16.0, field.center().y), &icons::CHEVRON_DOWN, p.text_secondary);
+    if control(shell, ui, &format!("{}.menu", c.id), "button", chevron, true).on_hover_text(c.pick).accessible_name(c.pick_name).clicked() {
+        if shell.panels.menu == Some(c.menu) {
+            shell.panels.menu = None;
+        } else {
+            shell.panels.menu = Some(c.menu);
+            shell.panels.highlight = c.current;
+            // The field keeps the keyboard, so the keys reach the menu and not the canvas.
+            ui.memory_mut(|m| m.request_focus(eid));
+        }
+    }
+    if shell.panels.menu == Some(c.menu)
+        && let Some(k) = ux::overlay(ui, widgets::egui_id(&format!("{}.menu.layer", c.id)), list, |ui| combo_menu(shell, ui, p, field, list, c))
+    {
+        out = ComboOut::Pick(k);
+    }
+    out
+}
+
+/// The editable select's open menu over `r`: its options, the current one ticked, the hint, then
+/// Clear; gives the row picked and closes on a pick or a press elsewhere.
+fn combo_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, r: Rect, c: &Combo) -> Option<usize> {
+    let paint = ui.painter();
+    ux::shadow(paint, r, 8.0, p.shadow);
+    paint.rect_filled(r, 8.0, p.surface);
+    paint.rect_stroke(r, 8.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
+    let n = c.options.len();
+    let rows = c.options.iter().copied().enumerate().map(|(i, o)| (i, o.to_string(), 4.0 + i as f32 * 30.0, format!("{}.menu.{i}", c.id)));
+    let clear = (n, c.clear.to_string(), 4.0 + n as f32 * 30.0 + 40.0, format!("{}.menu.clear", c.id));
+    let mut picked = None;
+    for (i, word, top, id) in rows.chain([clear]) {
+        let row = Rect::from_min_size(pos2(r.left() + 4.0, r.top() + top), vec2(r.width() - 8.0, 30.0));
+        let resp = control(shell, ui, &id, "menu-item", row, true).accessible_name(word.as_str());
+        let on = c.current == Some(i);
+        if on {
+            paint.rect_filled(row, 5.0, p.accent_tint);
+        } else if resp.hovered() || shell.panels.highlight == Some(i) {
+            paint.rect_filled(row, 5.0, p.page);
+        }
+        if on && shell.panels.highlight == Some(i) {
+            paint.rect_stroke(row, 5.0, Stroke::new(1.0, p.focus), StrokeKind::Inside);
+        }
+        ux::text(paint, row.min + vec2(10.0, 7.5), &word, types::SMALL, p.text, Some((row.width() - 40.0).max(0.0)));
+        if on {
+            ux::icon_in(paint, Rect::from_center_size(pos2(row.right() - 16.0, row.center().y), Vec2::splat(14.0)), &icons::TICK, p.accent);
+        }
+        if resp.clicked() {
+            picked = Some(i);
+        }
+    }
+    ux::text(paint, pos2(r.left() + 12.0, r.top() + 4.0 + n as f32 * 30.0 + 10.0), c.hint, types::CAPTION, p.text_secondary, Some(r.width() - 24.0));
+    let outside = ui.input(|i| i.pointer.any_pressed() && !i.pointer.interact_pos().is_some_and(|pos| r.contains(pos) || anchor.contains(pos)));
+    if picked.is_some() || outside {
+        shell.panels.menu = None;
+    }
+    picked
 }
 
 /// A menu under `anchor` with `items`; gives the index picked, closing the menu on a pick or a

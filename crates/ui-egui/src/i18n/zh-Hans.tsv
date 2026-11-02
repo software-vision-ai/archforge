@@ -505,6 +505,7 @@ str		This operation	此操作
 str		Visibility	可见性
 str		Place class	放置类
 # 关联类
+str		A bound can be at most {max}.	界限最多为 {max}。
 str		A relationship joins two classes	关系连接两个类
 str		Add association	添加关联
 str		Add dependency	添加依赖
@@ -512,6 +513,7 @@ str		Add generalization	添加泛化
 str		Aggregation	聚合
 str		Association	关联
 str		Association · model	关联 · 模型
+str		Clear	清除
 str		Client	客户
 str		Composite	组合
 str		Composition	组合
@@ -529,14 +531,19 @@ str		Navigable	可导航
 str		On this association · {n}	在此关联上 · {n}
 str		On this dependency · {n}	在此依赖上 · {n}
 str		On this generalization · {n}	在此泛化上 · {n}
+str		Or type a number or range	或输入数字或范围
+str		Pick a multiplicity	选择多重性
 str		Relationship kinds	关系类型
 str		Shared	共享
 str		Specific	特殊
 str		Supplier	供应者
+str		The lower bound cannot be *.	下限不能为 *。
+str		The upper bound must be at least {lower}.	上限必须至少为 {lower}。
 str		This association	此关联
 str		This dependency	此依赖
 str		This generalization	此泛化
 str		To	到
+str		Type a whole number, a range such as 2..5, or *.	请输入整数、范围（如 2..5）或 *。
 str		{what} removed	已移除{what}
 # 包
 str		Class · {package}	类 · {package}

@@ -505,6 +505,7 @@ str		This operation	Diese Operation
 str		Visibility	Sichtbarkeit
 str		Place class	Klasse platzieren
 # Klassen in Beziehung setzen
+str		A bound can be at most {max}.	Eine Grenze darf höchstens {max} sein.
 str		A relationship joins two classes	Eine Beziehung verbindet zwei Klassen
 str		Add association	Assoziation hinzufügen
 str		Add dependency	Abhängigkeit hinzufügen
@@ -512,6 +513,7 @@ str		Add generalization	Generalisierung hinzufügen
 str		Aggregation	Aggregation
 str		Association	Assoziation
 str		Association · model	Assoziation · Modell
+str		Clear	Leeren
 str		Client	Client
 str		Composite	Komposition
 str		Composition	Komposition
@@ -529,14 +531,19 @@ str		Navigable	Navigierbar
 str		On this association · {n}	An dieser Assoziation · {n}
 str		On this dependency · {n}	An dieser Abhängigkeit · {n}
 str		On this generalization · {n}	An dieser Generalisierung · {n}
+str		Or type a number or range	Oder eine Zahl oder einen Bereich eingeben
+str		Pick a multiplicity	Multiplizität wählen
 str		Relationship kinds	Beziehungsarten
 str		Shared	Geteilt
 str		Specific	Speziell
 str		Supplier	Lieferant
+str		The lower bound cannot be *.	Die Untergrenze darf nicht * sein.
+str		The upper bound must be at least {lower}.	Die Obergrenze muss mindestens {lower} sein.
 str		This association	Diese Assoziation
 str		This dependency	Diese Abhängigkeit
 str		This generalization	Diese Generalisierung
 str		To	Nach
+str		Type a whole number, a range such as 2..5, or *.	Geben Sie eine ganze Zahl, einen Bereich wie 2..5 oder * ein.
 str		{what} removed	{what} entfernt
 # Pakete
 str		Class · {package}	Klasse · {package}

@@ -505,6 +505,7 @@ str		This operation	この操作
 str		Visibility	可視性
 str		Place class	クラスを配置
 # クラスの関係
+str		A bound can be at most {max}.	境界は最大 {max} までです。
 str		A relationship joins two classes	関係は 2 つのクラスを結びます
 str		Add association	関連を追加
 str		Add dependency	依存を追加
@@ -512,6 +513,7 @@ str		Add generalization	汎化を追加
 str		Aggregation	集約
 str		Association	関連
 str		Association · model	関連 · モデル
+str		Clear	クリア
 str		Client	クライアント
 str		Composite	コンポジット
 str		Composition	コンポジション
@@ -529,14 +531,19 @@ str		Navigable	ナビゲーション可能
 str		On this association · {n}	この関連に · {n}
 str		On this dependency · {n}	この依存に · {n}
 str		On this generalization · {n}	この汎化に · {n}
+str		Or type a number or range	または数値か範囲を入力
+str		Pick a multiplicity	多重度を選ぶ
 str		Relationship kinds	関係の種類
 str		Shared	共有
 str		Specific	特化
 str		Supplier	サプライヤー
+str		The lower bound cannot be *.	下限を * にはできません。
+str		The upper bound must be at least {lower}.	上限は {lower} 以上にしてください。
 str		This association	この関連
 str		This dependency	この依存
 str		This generalization	この汎化
 str		To	終点
+str		Type a whole number, a range such as 2..5, or *.	整数、2..5 のような範囲、または * を入力してください。
 str		{what} removed	{what}を削除しました
 # パッケージ
 str		Class · {package}	クラス · {package}

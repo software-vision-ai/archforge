@@ -505,6 +505,7 @@ str		This operation	Esta operação
 str		Visibility	Visibilidade
 str		Place class	Colocar classe
 # Relacionar classes
+str		A bound can be at most {max}.	Um limite pode ser no máximo {max}.
 str		A relationship joins two classes	Uma relação liga duas classes
 str		Add association	Adicionar associação
 str		Add dependency	Adicionar dependência
@@ -512,6 +513,7 @@ str		Add generalization	Adicionar generalização
 str		Aggregation	Agregação
 str		Association	Associação
 str		Association · model	Associação · modelo
+str		Clear	Limpar
 str		Client	Cliente
 str		Composite	Composta
 str		Composition	Composição
@@ -529,14 +531,19 @@ str		Navigable	Navegável
 str		On this association · {n}	Nesta associação · {n}
 str		On this dependency · {n}	Nesta dependência · {n}
 str		On this generalization · {n}	Nesta generalização · {n}
+str		Or type a number or range	Ou escreva um número ou um intervalo
+str		Pick a multiplicity	Escolher uma multiplicidade
 str		Relationship kinds	Tipos de relação
 str		Shared	Partilhada
 str		Specific	Específica
 str		Supplier	Fornecedor
+str		The lower bound cannot be *.	O limite inferior não pode ser *.
+str		The upper bound must be at least {lower}.	O limite superior tem de ser pelo menos {lower}.
 str		This association	Esta associação
 str		This dependency	Esta dependência
 str		This generalization	Esta generalização
 str		To	Para
+str		Type a whole number, a range such as 2..5, or *.	Escreva um número inteiro, um intervalo como 2..5, ou *.
 str		{what} removed	Removido: {what}
 # Pacotes
 str		Class · {package}	Classe · {package}

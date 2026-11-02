@@ -505,6 +505,7 @@ str		This operation	Cette opération
 str		Visibility	Visibilité
 str		Place class	Placer la classe
 # Relier des classes
+str		A bound can be at most {max}.	Une borne vaut au plus {max}.
 str		A relationship joins two classes	Une relation joint deux classes
 str		Add association	Ajouter une association
 str		Add dependency	Ajouter une dépendance
@@ -512,6 +513,7 @@ str		Add generalization	Ajouter une généralisation
 str		Aggregation	Agrégation
 str		Association	Association
 str		Association · model	Association · modèle
+str		Clear	Effacer
 str		Client	Client
 str		Composite	Composite
 str		Composition	Composition
@@ -529,14 +531,19 @@ str		Navigable	Navigable
 str		On this association · {n}	Sur cette association · {n}
 str		On this dependency · {n}	Sur cette dépendance · {n}
 str		On this generalization · {n}	Sur cette généralisation · {n}
+str		Or type a number or range	Ou saisissez un nombre ou une plage
+str		Pick a multiplicity	Choisir une multiplicité
 str		Relationship kinds	Types de relation
 str		Shared	Partagée
 str		Specific	Spécifique
 str		Supplier	Fournisseur
+str		The lower bound cannot be *.	La borne inférieure ne peut pas être *.
+str		The upper bound must be at least {lower}.	La borne supérieure doit valoir au moins {lower}.
 str		This association	Cette association
 str		This dependency	Cette dépendance
 str		This generalization	Cette généralisation
 str		To	Vers
+str		Type a whole number, a range such as 2..5, or *.	Saisissez un nombre entier, une plage comme 2..5, ou *.
 str		{what} removed	Supprimé : {what}
 # Paquetages
 str		Class · {package}	Classe · {package}
