@@ -333,6 +333,10 @@ What is UML's own, beside the shared rules above.
 - A new association is a plain line: no roles, no multiplicities, navigable to neither end (owner
   decision); a directed one navigates to its second class; an association owns both its ends, so drawing lines never changes a class's
   attributes (owner decision).
+- A right click on a class opens its menu: Open in Models, Add attribute, Remove from this diagram
+  and Delete from the model…, which asks first, naming the relationships and diagrams that go with
+  it, as a table's does. Delete removes the selected cards from the diagram; Shift+Delete asks to
+  delete from the model.
 - A selected class-diagram line shows a round handle at each end; one dragged onto another class
   moves that end there, its lines on every diagram following. Delete removes the line's
   relationship with a toast and Undo.
