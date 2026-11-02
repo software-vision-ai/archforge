@@ -1138,6 +1138,13 @@ impl Shell {
         // Cmd+S (Ctrl+S) saves the open project and Cmd+O (Ctrl+O) opens one; on macOS the menu
         // bar takes both first.
         let now = ctx.input(|i| i.time);
+        // File → Generate…'s keys, on every platform.
+        if self.can_generate()
+            && self.ask.is_none()
+            && ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND | egui::Modifiers::SHIFT, egui::Key::G))
+        {
+            self.open_generate();
+        }
         if self.session.is_some() && ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::S)) {
             self.save();
         }

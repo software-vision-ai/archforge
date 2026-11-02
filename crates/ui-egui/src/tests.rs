@@ -5185,6 +5185,12 @@ fn generate_hands_a_schema_and_its_export_skills_to_an_agent_as_a_request_it_can
     h.run();
     assert!(painted(&h).iter().any(|t| t.starts_with("The model changed after the request was copied")));
     assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add entity"), "the dialog itself changes nothing");
+    // Behind the dialog the workspace's keys rest: Delete removes nothing and undo undoes nothing.
+    h.state_mut().canvas.focused = true;
+    let revision = h.state().session.as_ref().unwrap().revision();
+    key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
+    key(&mut h, egui::Key::Z, egui::Modifiers::COMMAND);
+    assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "nothing behind the dialog changed");
     // Documentation takes no dialect.
     let at = rect_of(&h, "generate.output.documentation").center();
     click(&mut h, at);
@@ -5193,6 +5199,25 @@ fn generate_hands_a_schema_and_its_export_skills_to_an_agent_as_a_request_it_can
     let at = rect_of(&h, "generate.close").center();
     click(&mut h, at);
     assert!(h.state().generate.is_none());
+    // On every platform: its keys open it, and so does a table's menu.
+    key(&mut h, egui::Key::G, egui::Modifiers::COMMAND | egui::Modifiers::SHIFT);
+    assert!(h.state().generate.is_some(), "Ctrl or Cmd with Shift and G");
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    let node = {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let c = st.by_uuid(archforge_mof::Uuid::parse(&_customer).unwrap()).unwrap();
+        st.uuid(archforge_diagram::views_of(st, c).2[0]).unwrap()
+    };
+    let at = rect_of(&h, &format!("workspace.canvas.node.{node}")).center();
+    h.event(egui::Event::PointerMoved(at));
+    h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Secondary, pressed: true, modifiers: egui::Modifiers::NONE });
+    h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Secondary, pressed: false, modifiers: egui::Modifiers::NONE });
+    h.run();
+    let at = rect_of(&h, "workspace.canvas.menu.generate").center();
+    click(&mut h, at);
+    assert!(h.state().generate.is_some(), "from the table's menu");
+    assert!(painted(&h).iter().any(|t| t == "Table · Customer"), "{:?}", painted(&h));
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
     // With nothing to be from, there is no request to copy.
     run(&mut h, "view.select", serde_json::json!({ "ids": [] }));
     h.state_mut().canvas.active = None;

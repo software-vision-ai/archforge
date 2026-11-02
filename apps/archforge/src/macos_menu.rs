@@ -32,7 +32,7 @@ pub fn build() -> Result<NativeMenu, String> {
     let file = Submenu::new(tr("File"), true);
     let open = MenuItem::with_id(OPEN, tr("Open…"), false, Accelerator::from_str("CmdOrCtrl+O").ok());
     let save = MenuItem::with_id(SAVE, tr("Save"), false, Accelerator::from_str("CmdOrCtrl+S").ok());
-    let generate = MenuItem::with_id(GENERATE, tr("Generate…"), false, None);
+    let generate = MenuItem::with_id(GENERATE, tr("Generate…"), false, Accelerator::from_str("CmdOrCtrl+Shift+G").ok());
     file.append_items(&[&open, &PredefinedMenuItem::separator(), &save, &PredefinedMenuItem::separator(), &generate]).map_err(err)?;
     menu.append_items(&[&app, &file]).map_err(err)?;
     menu.init_for_nsapp();
