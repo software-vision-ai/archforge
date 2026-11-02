@@ -1685,6 +1685,8 @@ fn entity_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, menu: &En
     if collapsible {
         rows.push(("collapse", "Collapse into a relationship", "", true, false));
     }
+    // The handoff to an agent, on every platform (AR-64).
+    rows.push(("generate", "Generate…", if mac { "⇧⌘G" } else { "Ctrl Shift G" }, true, false));
     rows.push(("remove", "Remove from this diagram", delete_chord, true, false));
     rows.push(("delete", "Delete from the model…", model_chord, true, true));
     let separators: Vec<usize> = if table { vec![1, rows.len() - 2] } else { vec![rows.len() - 2] };
@@ -1750,6 +1752,10 @@ fn entity_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, menu: &En
                 shell.canvas.notice = Some(e);
             }
         }
+        "generate" => {
+            select(shell, vec![menu.entity]);
+            shell.open_generate();
+        }
         "remove" => unplace(shell, vec![menu.node]),
         "delete" => ask_delete(shell, menu.node, menu.entity),
         _ => {}
@@ -1760,6 +1766,7 @@ fn entity_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, menu: &En
 /// from the diagram (with Shift, asks before deleting from the model), the arrows nudge.
 fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
     if !shell.canvas.focused
+        || shell.generate.is_some()
         || shell.canvas.rename.is_some()
         || shell.canvas.inline.is_some()
         || shell.canvas.note_edit.is_some()
@@ -1885,6 +1892,7 @@ pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
         "Stack vertically",
         "Show related tables",
         "Open in Models",
+        "Generate…",
         "Remove from this diagram",
         "Delete from the model…",
     ]

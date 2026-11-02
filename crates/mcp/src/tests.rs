@@ -30,13 +30,132 @@ fn initialize_answers_the_clients_version_when_spoken_and_the_newest_otherwise()
     let fake = Fake::ok();
     let r = ask(&fake, json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize", "params": { "protocolVersion": "2025-03-26" } }));
     assert_eq!(r["result"]["protocolVersion"], "2025-03-26");
-    assert_eq!(r["result"]["capabilities"], json!({ "tools": { "listChanged": false } }));
+    assert_eq!(r["result"]["capabilities"], json!({ "tools": { "listChanged": false }, "resources": { "subscribe": false, "listChanged": false } }));
     let r = ask(&fake, json!({ "jsonrpc": "2.0", "id": 2, "method": "initialize", "params": { "protocolVersion": "1999-01-01" } }));
     assert_eq!(r["result"]["protocolVersion"], "2025-06-18");
     assert_eq!(ask(&fake, json!({ "jsonrpc": "2.0", "id": "p", "method": "ping" }))["result"], json!({}));
     // A notification is never answered.
     assert!(handle(br#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#, &fake, &Catalog::default()).is_none());
-    assert_eq!(ask(&fake, json!({ "jsonrpc": "2.0", "id": 3, "method": "resources/list" }))["error"]["code"], -32601);
+    assert_eq!(ask(&fake, json!({ "jsonrpc": "2.0", "id": 3, "method": "prompts/list" }))["error"]["code"], -32601);
+}
+
+/// A stand-in that answers as Archforge does with a project open: a schema `s1` with a table `t1`,
+/// skills in effect on either; anything else unknown.
+struct Model {
+    open: bool,
+    calls: RefCell<Vec<(String, Value)>>,
+    /// Edits the user makes while reads go on: each project read after the first takes one, until
+    /// none are left.
+    edits: std::cell::Cell<u32>,
+    revision: std::cell::Cell<u64>,
+}
+
+impl Model {
+    fn open() -> Model {
+        Model { open: true, calls: RefCell::new(Vec::new()), edits: 0.into(), revision: 7.into() }
+    }
+}
+
+impl Backend for Model {
+    fn call(&self, method: &str, params: Value) -> Result<Value, CallError> {
+        self.calls.borrow_mut().push((method.to_string(), params.clone()));
+        let refused = |why: &str| Err(CallError::Refused(why.to_string()));
+        if method == "document.inspect" {
+            let inspected = self.calls.borrow().iter().filter(|(m, _)| m == "document.inspect").count();
+            if inspected > 1 && self.edits.get() > 0 {
+                self.edits.set(self.edits.get() - 1);
+                self.revision.set(self.revision.get() + 1);
+            }
+            return Ok(if self.open {
+                json!({ "open": true, "revision": self.revision.get(), "project": { "name": "Shop" } })
+            } else {
+                json!({ "open": false })
+            });
+        }
+        let p = &params["params"];
+        let answer = match params["command"].as_str().unwrap_or_default() {
+            "er.schema.get" if p["schema"] == "s1" => {
+                json!({ "id": "s1", "name": "shop", "entities": [{ "id": "t1", "attributes": [{ "name": "id" }] }] })
+            }
+            "er.entity.get" if p["entity"] == "t1" => json!({ "id": "t1", "name": "customer", "attributes": [{ "name": "id" }] }),
+            "skill.list" => json!({ "skills": [{ "id": "k1", "name": "DDL" }] }),
+            "skill.effective" if p["element"] == "s1" || p["element"] == "t1" => {
+                json!({ "skills": [{ "id": "k1", "name": "DDL", "origin": null, "overridden_by": null, "trigger": p["trigger"] }] })
+            }
+            "skill.effective" => return refused("there is no element x"),
+            _ => return refused("unknown"),
+        };
+        Ok(json!({ "result": answer }))
+    }
+}
+
+fn read(backend: &dyn Backend, uri: &str) -> Value {
+    ask(backend, json!({ "jsonrpc": "2.0", "id": 9, "method": "resources/read", "params": { "uri": uri } }))
+}
+
+/// The text of a read's one content, as JSON.
+fn content(r: &Value) -> Value {
+    assert_eq!(r["result"]["contents"][0]["mimeType"], "application/json", "{r}");
+    serde_json::from_str(r["result"]["contents"][0]["text"].as_str().unwrap()).unwrap()
+}
+
+#[test]
+fn the_model_and_its_skills_read_as_resources_with_the_revision_and_say_what_they_cannot_read() {
+    let model = Model::open();
+    let listed = ask(&model, json!({ "jsonrpc": "2.0", "id": 1, "method": "resources/list" }));
+    let uris: Vec<&str> = listed["result"]["resources"].as_array().unwrap().iter().map(|r| r["uri"].as_str().unwrap()).collect();
+    assert_eq!(uris, ["archforge://project", "archforge://skills"]);
+    let templates = ask(&model, json!({ "jsonrpc": "2.0", "id": 2, "method": "resources/templates/list" }));
+    assert_eq!(templates["result"]["resourceTemplates"].as_array().unwrap().len(), 3);
+    assert_eq!(content(&read(&model, "archforge://project"))["revision"], 7);
+    assert_eq!(content(&read(&model, "archforge://skills"))["skills"][0]["name"], "DDL");
+    // A schema reads with its tables; a table alone.
+    let schema = content(&read(&model, "archforge://element/s1"));
+    assert_eq!((schema["kind"].as_str(), schema["revision"].as_i64()), (Some("schema"), Some(7)));
+    assert_eq!(schema["schema"]["entities"][0]["attributes"][0]["name"], "id");
+    assert_eq!(content(&read(&model, "archforge://element/t1"))["kind"], "table");
+    // The skills in effect, for every trigger or for one, as skill.effective gives them.
+    let effective = content(&read(&model, "archforge://skills/effective/t1/export"));
+    assert_eq!((effective["trigger"].as_str(), effective["skills"][0]["name"].as_str()), (Some("export"), Some("DDL")));
+    assert_eq!(content(&read(&model, "archforge://skills/effective/s1"))["trigger"], Value::Null);
+    // Every read only reads: inspections and queries, never a command that changes the model.
+    for (method, params) in model.calls.borrow().iter() {
+        let command = params["command"].as_str().unwrap_or_default();
+        assert!(
+            method == "document.inspect" || command.ends_with(".get") || command.ends_with(".list") || command == "skill.effective",
+            "{method} {params}"
+        );
+    }
+    // What it cannot read is said, with what it can.
+    let unknown = read(&model, "archforge://element/zz");
+    assert_eq!(unknown["error"]["code"], -32002, "{unknown}");
+    assert!(unknown["error"]["message"].as_str().unwrap().contains("packages and other elements"), "{unknown}");
+    let bad = read(&model, "archforge://skills/effective/t1/everything");
+    assert!(bad["error"]["message"].as_str().unwrap().contains("modelling, drawing, naming, export"), "{bad}");
+    let other = read(&model, "file:///etc/passwd");
+    assert!(other["error"]["message"].as_str().unwrap().contains("archforge://project"), "{other}");
+    assert_eq!(read(&model, "archforge://skills/effective/x")["error"]["code"], -32002);
+    assert_eq!(ask(&model, json!({ "jsonrpc": "2.0", "id": 3, "method": "resources/read", "params": {} }))["error"]["code"], -32602);
+    // With no project open, nothing reads.
+    let closed = Model { open: false, ..Model::open() };
+    assert!(read(&closed, "archforge://skills")["error"]["message"].as_str().unwrap().contains("no project is open"));
+}
+
+#[test]
+fn a_read_that_straddles_an_edit_is_made_again_and_one_that_never_settles_is_refused() {
+    // One edit lands while the table is read: the read is made again, at the revision after it.
+    let model = Model::open();
+    model.edits.set(1);
+    let table = content(&read(&model, "archforge://element/t1"));
+    assert_eq!(table["revision"], 8, "the content carries the revision it was read at");
+    assert_eq!(model.calls.borrow().iter().filter(|(m, _)| m == "document.inspect").count(), 4);
+    // Edits that never stop: the read is refused rather than labelled with a revision it was not
+    // read at.
+    let busy = Model::open();
+    busy.edits.set(u32::MAX);
+    let refused = read(&busy, "archforge://skills");
+    assert_eq!(refused["error"]["code"], -32003, "{refused}");
+    assert!(refused["error"]["message"].as_str().unwrap().contains("read it again"), "{refused}");
 }
 
 #[test]

@@ -18,6 +18,7 @@ mod er_kind;
 mod er_ui;
 pub mod explorer;
 pub mod fonts;
+pub mod generate;
 pub mod home;
 pub mod home_search;
 pub mod i18n;
@@ -356,6 +357,8 @@ pub struct Shell {
     /// still asks about, the save a closing waits for (its project and ticket), and whether
     /// quitting was answered for every project, so the window may close.
     pub ask: Option<close_ask::Ask>,
+    /// File → Generate…'s handoff to an agent, while it is open.
+    pub generate: Option<generate::Generate>,
     quitting: Option<Vec<std::path::PathBuf>>,
     close_after_save: Vec<(std::path::PathBuf, u64)>,
     quit_confirmed: bool,
@@ -414,6 +417,7 @@ impl Shell {
             saves: std::collections::VecDeque::new(),
             opening: None,
             ask: None,
+            generate: None,
             quitting: None,
             close_after_save: Vec::new(),
             quit_confirmed: false,
@@ -823,12 +827,58 @@ impl Shell {
                     self.written = Some(s.revision());
                 }
                 self.session = Some(s);
+                self.resume_view();
             }
             Err(e) => {
                 log::error!("the project's model could not be opened: {e:?}");
                 self.session_error = Some(e);
             }
         }
+    }
+
+    /// Opens the tabs the project was left with, in their order, the one it showed, panned and
+    /// zoomed as it was (AR-59). A tab whose diagram or skill is gone is left out; with none left,
+    /// the project opens on no tab, as a new one does. Opening a diagram is a view command, so
+    /// nothing is changed and nothing joins the history.
+    fn resume_view(&mut self) {
+        let (Some(project), Some(session)) = (&self.project, &self.session) else { return };
+        let Some(view) = self.state.view_of(&project.path).cloned() else { return };
+        let store = session.doc();
+        let opens = |id: &archforge_mof::Uuid| {
+            store.by_uuid(*id).is_some_and(|o| store.class_of(o).ok() == Some(archforge_diagram::DIAGRAM) || skill_tab::is_skill(store, *id))
+        };
+        let tabs: Vec<archforge_mof::Uuid> = view.tabs.iter().filter_map(|t| archforge_mof::Uuid::parse(t)).filter(opens).collect();
+        let active = view.active.as_deref().and_then(archforge_mof::Uuid::parse).filter(|a| tabs.contains(a)).or_else(|| tabs.first().copied());
+        let Some(active) = active else { return };
+        canvas::open(self, active);
+        self.canvas.tabs = tabs;
+        self.canvas.active = Some(active);
+        self.canvas.pan = egui::vec2(view.pan[0], view.pan[1]);
+        self.canvas.zoom = view.zoom;
+        self.canvas.fit_pending = false;
+    }
+
+    /// Keeps the view the open project shows as the one to resume it in, once its canvas has
+    /// settled (a diagram just opened is fitted first).
+    fn keep_view(&mut self) {
+        let Some(project) = &self.project else { return };
+        if self.session.is_none() || self.adopted.as_ref() != Some(&project.path) || self.canvas.fit_pending {
+            return;
+        }
+        let label = self
+            .session
+            .as_ref()
+            .and_then(|s| self.canvas.active.and_then(|a| s.doc().by_uuid(a)).map(|d| settings::clean(&archforge_core::name_of(s.doc(), d))))
+            .unwrap_or_default();
+        let view = state::SavedView {
+            tabs: self.canvas.tabs.iter().take(state::MAX_VIEW_TABS).map(|t| t.to_string()).collect(),
+            active: self.canvas.active.map(|a| a.to_string()),
+            pan: [self.canvas.pan.x, self.canvas.pan.y],
+            zoom: self.canvas.zoom,
+            label,
+        };
+        let path = project.path.clone();
+        self.state.keep_view(&path, view);
     }
 
     /// Hands the model to the host when it changed since the last hand-over; the host writes it a
@@ -998,6 +1048,16 @@ impl Shell {
         self.session.is_some() && self.saving.is_none()
     }
 
+    /// Whether File → Generate… can open: a project is open and the dialog is not.
+    pub fn can_generate(&self) -> bool {
+        self.session.is_some() && self.generate.is_none()
+    }
+
+    /// Opens File → Generate…'s handoff to an agent.
+    pub fn open_generate(&mut self) {
+        generate::open(self);
+    }
+
     /// Whether Open can act now: the host opens projects, no opening is under way, the New
     /// project dialog is closed and a tab is free.
     pub fn can_open_project(&self) -> bool {
@@ -1104,6 +1164,7 @@ impl Shell {
             self.applied_theme = Some(self.state.theme);
         }
         self.adopt_project();
+        self.keep_view();
         self.poll_host();
         control::drain(self);
         // While the host works on an opening, a save or a write, the window looks again soon, so
@@ -1124,6 +1185,13 @@ impl Shell {
         // Cmd+S (Ctrl+S) saves the open project and Cmd+O (Ctrl+O) opens one; on macOS the menu
         // bar takes both first.
         let now = ctx.input(|i| i.time);
+        // File → Generate…'s keys, on every platform.
+        if self.can_generate()
+            && self.ask.is_none()
+            && ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND | egui::Modifiers::SHIFT, egui::Key::G))
+        {
+            self.open_generate();
+        }
         if self.session.is_some() && ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::S)) {
             self.save();
         }
@@ -1188,6 +1256,7 @@ impl Shell {
         }
         new_project::show(self, ui);
         settings::show(self, ui);
+        generate::show(self, ui);
         close_ask::show(self, ui);
     }
 }

@@ -45,10 +45,10 @@ const EXPLORERS: [(&str, Explorer, &ux::Icon, &str); 3] = [
 /// The panels of the right rail: automation id, the panel, its icon and its title.
 const PANELS: [(&str, Panel, &ux::Icon, &str); 4] = [
     // Chat is coming (owner, AR-63): its panel says so; its id stays the agent's.
-    ("agent", Panel::Agent, &icons::CHAT, "Chat"),
-    ("appearance", Panel::Appearance, &icons::BRUSH, "Appearance"),
-    ("properties", Panel::Properties, &icons::TABLE, "Properties"),
-    ("skills", Panel::Skills, &icons::SKILL, "Skills"),
+    ("agent", Panel::Agent, &icons::CHAT_BUBBLE, "Chat"),
+    ("appearance", Panel::Appearance, &icons::PALETTE, "Appearance"),
+    ("properties", Panel::Properties, &icons::PROPERTIES, "Properties"),
+    ("skills", Panel::Skills, &icons::SKILLS, "Skills"),
 ];
 
 /// Every text of the tables to translate: they reach `tr` through the tables, where the catalogue
@@ -300,7 +300,7 @@ pub(crate) fn project_tabs(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rec
 
 /// Undo and redo from the keyboard, through the engine, while no field has the keyboard.
 fn undo_redo(shell: &mut Shell, ui: &egui::Ui) {
-    if ui.memory(|m| m.focused().is_some()) || shell.explorer.delete.is_some() || shell.diagrams.new.is_some() {
+    if ui.memory(|m| m.focused().is_some()) || shell.explorer.delete.is_some() || shell.diagrams.new.is_some() || shell.generate.is_some() {
         return;
     }
     let (undo, redo) = ui.input(|i| {

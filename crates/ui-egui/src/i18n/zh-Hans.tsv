@@ -5,6 +5,35 @@ str		Quit Archforge	退出 Archforge
 str		File	文件
 str		Open…	打开…
 str		Save	存储
+# 生成
+str		Generate…	生成…
+str		Generate	生成
+str		An agent connected to Archforge writes it from the model and its skills.	连接到 Archforge 的代理会根据模型及其技能来编写。
+str		Nothing selected	未选择任何内容
+str		{kind} · {name}	{kind} · {name}
+str		Output	输出
+str		SQL DDL	SQL DDL
+str		Documentation	文档
+str		Dialect	方言
+str		Skills in effect for export	导出时生效的技能
+str		No skill applies to it for export.	此处没有适用于导出的技能。
+str		from the project	来自项目
+str		on this element	在此元素上
+str		from {name}	来自 {name}
+str		overridden	已被覆盖
+str		Request for your agent	给代理的请求
+str		{kind} "{name}"	{kind}“{name}”
+str		Generate SQL DDL ({dialect}) for the {what} of the Archforge project "{project}", model revision {revision}.	为 Archforge 项目“{project}”的{what}生成 SQL DDL（{dialect}），模型修订版本为 {revision}。
+str		Write Markdown documentation for the {what} of the Archforge project "{project}", model revision {revision}.	为 Archforge 项目“{project}”的{what}编写 Markdown 文档，模型修订版本为 {revision}。
+str		Read it through Archforge's MCP server:	通过 Archforge 的 MCP 服务器读取：
+str		Follow the skills in effect, the more specific over the outer. Give the result for review; do not run it on a database.	遵循生效的技能，更具体的优先于外层的。将结果交给他人审阅；不要在数据库上运行。
+str		Follow the skills in effect, the more specific over the outer. Give the result for review.	遵循生效的技能，更具体的优先于外层的。将结果交给他人审阅。
+str		Select a schema, a table, a class or a diagram first.	请先选择一个模式、一张表、一个类或一个图表。
+str		Agent access is on: a connected agent reads this context through MCP. Nothing is generated here.	代理访问已开启：已连接的代理通过 MCP 读取此上下文。此处不会生成任何内容。
+str		Agent access is off: start Archforge with --control <port> so an agent can read this context.	代理访问已关闭：请使用 --control <port> 启动 Archforge，以便代理读取此上下文。
+str		Copied. Paste the request to your agent; it reads the model through MCP.	已复制。请将请求粘贴给你的代理；它会通过 MCP 读取模型。
+str		The model changed after the request was copied; copy it again so the agent reads this revision.	复制请求后模型已更改；请重新复制，以便代理读取此修订版本。
+str		Copy request	复制请求
 str		{name} — Archforge	{name} — Archforge
 # 主页
 str		Recent projects	最近的项目
@@ -399,6 +428,7 @@ str		Unpin	取消固定
 str		Open	打开
 str		Remove from recent projects	从最近的项目中移除
 str		Pick up in the exact view you left.	从你离开时的视图继续。
+str		Last view: {name}	上次的视图：{name}
 str		Just now	刚刚
 plural		{n} minute ago	{n} 分钟前
 plural		{n} hour ago	{n} 小时前

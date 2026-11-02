@@ -5,6 +5,35 @@ str		Quit Archforge	Sair do Archforge
 str		File	Ficheiro
 str		Open…	Abrir…
 str		Save	Guardar
+# Gerar
+str		Generate…	Gerar…
+str		Generate	Gerar
+str		An agent connected to Archforge writes it from the model and its skills.	Um agente ligado ao Archforge escreve-o a partir do modelo e das suas competências.
+str		Nothing selected	Nada selecionado
+str		{kind} · {name}	{kind} · {name}
+str		Output	Resultado
+str		SQL DDL	DDL de SQL
+str		Documentation	Documentação
+str		Dialect	Dialeto
+str		Skills in effect for export	Competências em vigor para exportar
+str		No skill applies to it for export.	Nenhuma competência se aplica aqui ao exportar.
+str		from the project	do projeto
+str		on this element	neste elemento
+str		from {name}	de {name}
+str		overridden	substituída
+str		Request for your agent	Pedido para o seu agente
+str		{kind} "{name}"	{kind} «{name}»
+str		Generate SQL DDL ({dialect}) for the {what} of the Archforge project "{project}", model revision {revision}.	Gera DDL de SQL ({dialect}) para {what} do projeto Archforge «{project}», revisão do modelo {revision}.
+str		Write Markdown documentation for the {what} of the Archforge project "{project}", model revision {revision}.	Escreve documentação em Markdown para {what} do projeto Archforge «{project}», revisão do modelo {revision}.
+str		Read it through Archforge's MCP server:	Lê-o através do servidor MCP do Archforge:
+str		Follow the skills in effect, the more specific over the outer. Give the result for review; do not run it on a database.	Segue as competências em vigor, as mais específicas antes das gerais. Entrega o resultado para revisão; não o executes numa base de dados.
+str		Follow the skills in effect, the more specific over the outer. Give the result for review.	Segue as competências em vigor, as mais específicas antes das gerais. Entrega o resultado para revisão.
+str		Select a schema, a table, a class or a diagram first.	Selecione primeiro um esquema, uma tabela, uma classe ou um diagrama.
+str		Agent access is on: a connected agent reads this context through MCP. Nothing is generated here.	O acesso de agentes está ligado: um agente ligado lê este contexto através do MCP. Nada é gerado aqui.
+str		Agent access is off: start Archforge with --control <port> so an agent can read this context.	O acesso de agentes está desligado: inicie o Archforge com --control <port> para que um agente possa ler este contexto.
+str		Copied. Paste the request to your agent; it reads the model through MCP.	Copiado. Cole o pedido no seu agente; ele lê o modelo através do MCP.
+str		The model changed after the request was copied; copy it again so the agent reads this revision.	O modelo mudou depois de o pedido ser copiado; copie-o de novo para que o agente leia esta revisão.
+str		Copy request	Copiar pedido
 str		{name} — Archforge	{name} — Archforge
 # Início
 str		Recent projects	Projetos recentes
@@ -399,6 +428,7 @@ str		Unpin	Desafixar
 str		Open	Abrir
 str		Remove from recent projects	Remover dos projetos recentes
 str		Pick up in the exact view you left.	Retome exatamente na vista onde ficou.
+str		Last view: {name}	Última vista: {name}
 str		Just now	Agora mesmo
 plural		{n} minute ago	há {n} minuto|há {n} minutos
 plural		{n} hour ago	há {n} hora|há {n} horas
