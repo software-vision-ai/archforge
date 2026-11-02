@@ -858,11 +858,11 @@ fn draw_rows(inner: &egui::Painter, p: &Palette, card: &archforge_diagram::figur
     let fits = |top: f32| top + ENTITY_ROW <= height + 1.0;
     // Where the rows stop: the first that does not fit, and the place before it the rest is said in.
     let first = slots.iter().position(|(top, s)| matches!(s, Slot::Row(_)) && !fits(*top));
-    let cue = first.and_then(|f| slots[..f].iter().rposition(|(top, s)| !matches!(s, Slot::Line) && fits(*top)));
+    let cue = first.and_then(|f| slots.iter().take(f).rposition(|(top, s)| !matches!(s, Slot::Line) && fits(*top)));
     // Without such a place (not even a row fits under the header) only what is above the first is drawn.
     let end = cue.or(first).unwrap_or(slots.len());
     let mut shown = 0;
-    for (top, slot) in &slots[..end] {
+    for (top, slot) in slots.iter().take(end) {
         let y = rect.top() + top * z;
         match slot {
             Slot::Line if y < rect.bottom() => {
@@ -884,10 +884,10 @@ fn draw_rows(inner: &egui::Painter, p: &Palette, card: &archforge_diagram::figur
             _ => {}
         }
     }
-    if let Some(i) = cue {
+    if let Some((top, _)) = cue.and_then(|i| slots.get(i)) {
         let total: usize = card.compartments.iter().map(Vec::len).sum();
         let more = total.saturating_sub(shown);
-        let y = rect.top() + slots[i].0 * z;
+        let y = rect.top() + top * z;
         let text = trn(card.more.0, card.more.1, more as u64);
         ux::text(inner, pos2(rect.left() + ENTITY_TEXT * z, y), &text, types::UI.scaled(z), p.text_muted, room);
     }
