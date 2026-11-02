@@ -1378,6 +1378,7 @@ fn minimap(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, bounds: Optio
     ux::shadow(&paint, m, 8.0, p.shadow);
     paint.rect_filled(m, 8.0, p.surface);
     paint.rect_stroke(m, 8.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
+    widgets::record_visible(ui, &mut shell.registry, "workspace.minimap", "panel", m);
     ux::text(&paint, m.min + vec2(12.0, 11.0), &tr("Minimap").to_uppercase(), types::EYEBROW, p.text_secondary, Some(120.0));
     let hide = Rect::from_min_size(pos2(m.right() - 12.0 - 28.0, m.top() + 3.0), vec2(28.0, 26.0));
     paint.rect_filled(hide, 7.0, p.page);
@@ -1522,6 +1523,13 @@ fn layout(kind: Option<&'static dyn crate::kinds::DiagramKind>) -> Layout {
 fn minimap_shown(shell: &Shell, r: Rect) -> bool {
     let width = layout(crate::kinds::active_kind(shell)).width;
     shell.canvas.minimap_open && r.width() >= 16.0 + width + 16.0 + MINIMAP.x + MINIMAP_GAP.x
+}
+
+/// The minimap's box on the canvas `r` while it shows, for what must keep clear of it (the
+/// toast with Undo, AR-75).
+pub(crate) fn minimap_box(shell: &Shell, r: Rect) -> Option<Rect> {
+    let m = Rect::from_min_size(pos2(r.right() - MINIMAP_GAP.x - MINIMAP.x, r.bottom() - MINIMAP_GAP.y - MINIMAP.y), MINIMAP);
+    (minimap_shown(shell, r) && m.left() >= r.left() && m.top() >= r.top()).then_some(m)
 }
 
 /// The floating toolbar at the canvas's bottom centre: Select and Pan, the open diagram kind's
