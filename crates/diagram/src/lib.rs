@@ -218,7 +218,7 @@ pub fn remove_views_of(store: &mut Store, element: Obj) -> Result<usize, Invalid
         let mut gone = 0;
         for d in diagrams {
             if st.is_alive(d) {
-                gone += st.destroy(d)?;
+                gone += archforge_core::destroy_with_links(st, d)?;
             }
         }
         for e in edges {

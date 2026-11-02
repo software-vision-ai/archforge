@@ -1485,7 +1485,7 @@ fn skill_rows(store: &Store, subject: &Subject) -> (Vec<SkillRow>, Vec<SkillRow>
             .filter(|e| e.origin != Some(element))
             .filter_map(|e| {
                 let origin = match e.origin {
-                    Some(o) => archforge_core::name_of(store, o),
+                    Some(o) => crate::diagrams::subject_name(store, o),
                     None => tr("project"),
                 };
                 Some(SkillRow {

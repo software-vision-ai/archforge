@@ -211,7 +211,7 @@ fn diagram_rename<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
 
 fn diagram_remove<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let d = one_of(ctx.doc, p, "diagram", DIAGRAM, "a diagram")?;
-    let gone = ctx.doc.destroy(d).map_err(fail)?;
+    let gone = archforge_core::destroy_with_links(ctx.doc, d).map_err(fail)?;
     Ok(json!({ "removed": gone }))
 }
 

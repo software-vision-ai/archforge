@@ -28,7 +28,8 @@ without an element is an anchor and has a note at one end; a label's slot is one
 A notation may require an element (`needs_element`) and keep a diagram to its scope (`may_show`,
 such as a schema's own entities). Removing a model element removes, for it and everything it
 contains, the diagrams of them, the edges that show them and the nodes that show them with the
-edges on those nodes (`remove_views_of`); a notation calls it before it destroys an element.
+edges on those nodes (`remove_views_of`); a notation calls it before it destroys an element. A
+diagram goes with the skills on it, whether `diagram.remove` or its element's removal takes it.
 
 **The metaclasses.** `Diagram` (kind, name, element, node, edge, style), `Node` (element, kind,
 text, x, y, width, height, child, style), `Edge` (element, source, target, waypoint, label, style),
@@ -43,7 +44,7 @@ tables.
 | Item | Signature |
 |---|---|
 | `DiagramView` | the view's policy, asked of the view: the open diagram and selection, `kinds`, `home`, `is_of`, `needs_element`, `shows`, `may_show`, `connects`, `ends`, `text_slots`, `default_size` |
-| `Notation`, `ProjectView` | what a notation answers for its own kinds and classes (the diagram policy, where skills sit, `remove`, `describe`); the view of a project holding several notations, which asks the right one (`of_kind`, `of_class`, `of_element`) and implements `DiagramView` and `SkillHost` |
+| `Notation`, `ProjectView` | what a notation answers for its own kinds and classes (the diagram policy, where skills sit, `remove`, `describe`); the view of a project holding several notations, which asks the right one (`of_kind`, `of_class`, `of_element`) and implements `DiagramView` and `SkillHost`: a diagram carries skills too and inherits those of the element it shows |
 | `figure::{Card, Row, Line, End, EndMark, Text}` | what a notation draws, without a toolkit: a node's card (eyebrow, name, compartments of rows), an edge's line (end marks and texts, roles, dashes, status, a note); `Notation::card`, `line` and `slot_text` give them and the canvas draws them alike |
 | `project::specs` | the shared commands: `view.select`, `element.remove` (each notation removes its own) and `element.describe` |
 | `commands::specs` | `pub fn specs<V: DiagramView>() -> Vec<CommandSpec<Store, V>>`: the diagram commands for a notation's registry |

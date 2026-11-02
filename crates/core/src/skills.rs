@@ -1,8 +1,8 @@
 //! Skills: text the user writes on a model element to guide the AI when it
 //! draws, names, changes the model or exports it. A skill sits on a subject (a schema, a package,
-//! a table, a column, or the whole model when it has none), may aim at a kind below the subject
+//! a table, a column, a diagram, or the whole model when it has none), may aim at a kind below the subject
 //! (every table, every relationship, columns of a type) and is inherited down the hierarchy: the
-//! effective skills of an element are those of its containers outermost first, then its own, so
+//! effective skills of an element are those of its levels outermost first, then its own, so
 //! the most specific is read last; a skill with the name of an earlier one replaces it. The core
 //! knows no notation: what may carry a skill and what a skill may aim at comes from the
 //! notation's view through [`SkillHost`], as the diagram commands take their policy from theirs.
@@ -49,6 +49,12 @@ pub trait SkillHost: View<Store> {
     /// Why `element`, of a subject or kind class, still carries no skill and is aimed at by none,
     /// when it does not: in UML an association's end is a property but no attribute.
     fn skill_problem(&self, store: &Store, element: Obj) -> Option<&'static str> {
+        let _ = (store, element);
+        None
+    }
+    /// The level a skill is inherited from above `element` when it is not the element's
+    /// container: a diagram's is the element it shows. None follows the container.
+    fn level_above(&self, store: &Store, element: Obj) -> Option<Obj> {
         let _ = (store, element);
         None
     }
@@ -258,12 +264,14 @@ fn specificity(store: &Store, s: Obj) -> u8 {
     }
 }
 
-/// An element's containers outermost first, then the element itself.
-pub fn levels(store: &Store, element: Obj) -> Vec<Obj> {
+/// An element's levels outermost first, then the element itself: its containers, or where the
+/// notation's view names another level above an element (a diagram's element), that one.
+pub fn levels<V: SkillHost>(view: &V, store: &Store, element: Obj) -> Vec<Obj> {
     let mut chain = vec![element];
     let mut seen = BTreeSet::from([element]);
     let mut cur = element;
-    while let Ok(Some((parent, _))) = store.container(cur) {
+    let above = |o: Obj| view.level_above(store, o).or_else(|| store.container(o).ok().flatten().map(|(parent, _)| parent));
+    while let Some(parent) = above(cur) {
         if !seen.insert(parent) {
             break;
         }
@@ -278,7 +286,7 @@ pub fn levels(store: &Store, element: Obj) -> Vec<Obj> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EffectiveSkill {
     pub skill: Obj,
-    /// The level it comes from: the element, one of its containers, or None for the model root.
+    /// The level it comes from: the element, one of its levels above, or None for the model root.
     pub origin: Option<Obj>,
     /// The deeper skill of the same name that replaces it, when one does.
     pub overridden_by: Option<Obj>,
@@ -292,7 +300,7 @@ pub fn effective_skills<V: SkillHost>(view: &V, store: &Store, element: Obj, tri
     let all = skills(store);
     let model = model_of(store);
     let mut out: Vec<EffectiveSkill> = Vec::new();
-    for level in levels(store, element) {
+    for level in levels(view, store, element) {
         let at_level = |s: &Obj| {
             let subject = subject_of(store, *s);
             subject == Some(level) || (subject.is_none() && Some(level) == model)
@@ -442,6 +450,9 @@ fn target_params<V: SkillHost>(view: &V, store: &Store, p: &Params, subject: Opt
     let home = subject.and_then(|o| store.class_of(o).ok()).map(|c| c.metamodel());
     let kinds: Vec<(ClassId, &str)> = view.skill_kinds().into_iter().filter(|(c, _)| home.is_none_or(|m| c.metamodel() == m)).collect();
     let Some((class, _)) = kinds.iter().find(|(_, w)| *w == word) else {
+        if kinds.is_empty() {
+            return Err(refuse("applies_to", "a skill here aims at no kind; leave applies_to empty for the subject itself"));
+        }
         let words: Vec<&str> = kinds.iter().map(|(_, w)| *w).collect();
         return Err(refuse("applies_to", format!("{word:?} is not one of {}", words.join(", "))));
     };
@@ -685,7 +696,7 @@ pub fn specs<V: SkillHost>() -> Vec<CommandSpec<Store, V>> {
                 "body: string = \"\"; the instructions, Markdown\n",
                 "triggers: array = []; when it applies: modelling, drawing, naming, export; none for always\n",
                 "dialect: string = \"\"; the SQL dialect of an export skill, or empty for every dialect\n",
-                "applies_to: string = \"\"; what it aims at below the subject, a kind of the subject's notation (ER: table, relationship, column; UML: class, attribute, operation, association), or empty for the subject itself\n",
+                "applies_to: string = \"\"; what it aims at below the subject, a kind of the subject's notation (ER: table, relationship, column; UML: class, attribute, operation, association; a diagram takes none), or empty for the subject itself\n",
                 "type_pattern: string = \"\"; with applies_to column: an exact type or a category (text, number, date, boolean, binary)"
             ),
             has_model::<V>,
@@ -703,7 +714,7 @@ pub fn specs<V: SkillHost>() -> Vec<CommandSpec<Store, V>> {
                 "body: string; the instructions, Markdown, or empty\n",
                 "triggers: array; when it applies: modelling, drawing, naming, export; none for always\n",
                 "dialect: string; the SQL dialect of an export skill, or empty for every dialect\n",
-                "applies_to: string; what it aims at below the subject, a kind of the subject's notation (ER: table, relationship, column; UML: class, attribute, operation, association), or empty for the subject itself\n",
+                "applies_to: string; what it aims at below the subject, a kind of the subject's notation (ER: table, relationship, column; UML: class, attribute, operation, association; a diagram takes none), or empty for the subject itself\n",
                 "type_pattern: string; with applies_to column: an exact type or a category, or empty"
             ),
             has_skills::<V>,

@@ -270,3 +270,95 @@ fn a_skill_aims_only_at_kinds_of_its_subjects_notation_and_moves_only_within_it(
     assert!(e.contains("every column cannot sit on Class"), "{e}");
     id(&mut s, "skill.move", json!({ "skill": columns, "subject": "" }));
 }
+
+/// The names of the skills that apply to `element`, each with whether a later one replaces it.
+fn applying(s: &Session, element: &str) -> Vec<(String, bool)> {
+    let st = s.doc();
+    let o = st.by_uuid(Uuid::parse(element).unwrap()).unwrap();
+    archforge_core::skills::effective_skills(s.view(), st, o, None)
+        .into_iter()
+        .map(|e| (archforge_core::skills::name_of(st, e.skill), e.overridden_by.is_some()))
+        .collect()
+}
+
+fn skill_count(s: &Session) -> usize {
+    archforge_core::skills::skills(s.doc()).len()
+}
+
+#[test]
+fn a_diagram_carries_skills_and_inherits_the_projects_and_its_elements() {
+    let mut s = new_project_session("Shop", ids(0)).unwrap();
+    let sales = id(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+    let orders = id(&mut s, "uml.package.add", json!({ "name": "Orders", "parent": sales }));
+    let diagram = id(&mut s, "diagram.add", json!({ "kind": "uml.class", "element": orders, "name": "Orders" }));
+    id(&mut s, "skill.add", json!({ "subject": "", "name": "House style" }));
+    id(&mut s, "skill.add", json!({ "subject": sales, "name": "Layout" }));
+    id(&mut s, "skill.add", json!({ "subject": sales, "name": "Classes", "applies_to": "class" }));
+    id(&mut s, "skill.add", json!({ "subject": orders, "name": "Naming" }));
+    id(&mut s, "skill.add", json!({ "subject": diagram, "name": "Layout", "triggers": ["drawing"] }));
+    assert_eq!(
+        applying(&s, &diagram),
+        [("House style".into(), false), ("Layout".into(), true), ("Naming".into(), false), ("Layout".into(), false)],
+        "the project's, the shown package's and its parent's, then its own; a skill for every class aims not at it"
+    );
+    // A diagram's skill aims at no kind, and a kind's skill does not move onto it.
+    let e = s.execute("skill.add", &json!({ "subject": diagram, "name": "Classes", "applies_to": "class" })).unwrap_err().to_string();
+    assert!(e.contains("aims at no kind"), "{e}");
+    let classes = archforge_core::skills::skills(s.doc()).into_iter().find(|k| archforge_core::skills::name_of(s.doc(), *k) == "Classes").unwrap();
+    let classes = uuid(s.doc(), classes);
+    let e = s.execute("skill.move", &json!({ "skill": classes, "subject": diagram })).unwrap_err().to_string();
+    assert!(e.contains("cannot sit on Diagram"), "{e}");
+}
+
+#[test]
+fn a_diagrams_skills_go_with_it_whether_it_or_its_element_goes_and_come_back_with_undo() {
+    let mut s = new_project_session("Shop", ids(0)).unwrap();
+    let sales = id(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+    let schema = id(&mut s, "er.schema.add", json!({ "name": "shop" }));
+    let class_diagram = id(&mut s, "diagram.add", json!({ "kind": "uml.class", "element": sales, "name": "Sales" }));
+    let er_diagram = id(&mut s, "diagram.add", json!({ "kind": "er", "element": schema, "name": "shop" }));
+    id(&mut s, "skill.add", json!({ "subject": class_diagram, "name": "Layout" }));
+    id(&mut s, "skill.add", json!({ "subject": er_diagram, "name": "Layout" }));
+    assert_eq!(skill_count(&s), 2);
+    // The diagram removed alone.
+    s.execute("diagram.remove", &json!({ "diagram": class_diagram })).unwrap();
+    assert_eq!(skill_count(&s), 1, "its skill went with it, none turned model-wide");
+    s.undo().unwrap();
+    assert_eq!(skill_count(&s), 2);
+    // With the element it shows, in either notation.
+    for element in [&sales, &schema] {
+        s.execute("element.remove", &json!({ "ids": [element] })).unwrap();
+        assert_eq!(skill_count(&s), 1, "{element}");
+        assert!(archforge_core::skills::skills(s.doc()).into_iter().all(|k| archforge_core::skills::subject_of(s.doc(), k).is_some()));
+        s.undo().unwrap();
+        assert_eq!(skill_count(&s), 2);
+    }
+}
+
+#[test]
+fn a_nested_packages_diagram_keeps_its_skill_when_the_package_goes_and_inherits_from_the_parent() {
+    let mut s = new_project_session("Shop", ids(0)).unwrap();
+    let sales = id(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+    let orders = id(&mut s, "uml.package.add", json!({ "name": "Orders", "parent": sales }));
+    let diagram = id(&mut s, "diagram.add", json!({ "kind": "uml.class", "element": orders, "name": "Orders" }));
+    id(&mut s, "skill.add", json!({ "subject": sales, "name": "Sales style" }));
+    id(&mut s, "skill.add", json!({ "subject": orders, "name": "Orders style" }));
+    id(&mut s, "skill.add", json!({ "subject": diagram, "name": "Layout" }));
+    s.execute("element.remove", &json!({ "ids": [orders] })).unwrap();
+    assert_eq!(applying(&s, &diagram), [("Sales style".into(), false), ("Layout".into(), false)], "moved up to Sales with its skill");
+}
+
+#[test]
+fn a_diagram_crafted_to_show_itself_inherits_from_what_holds_it() {
+    let mut st = store(ids(0)).unwrap();
+    let model = st.create(archforge_core::MODEL).unwrap();
+    let d = st.create(archforge_diagram::DIAGRAM).unwrap();
+    st.push(model, archforge_core::model::MEMBER, Value::Ref(d)).unwrap();
+    st.set(d, archforge_diagram::diagram::ELEMENT, Value::Ref(d)).unwrap();
+    let project = st.create(archforge_core::SKILL).unwrap();
+    st.push(model, archforge_core::model::SKILL, Value::Ref(project)).unwrap();
+    let levels = archforge_core::skills::levels(&archforge_notations::view(), &st, d);
+    assert_eq!(levels, [model, d], "the model above it, not the diagram again");
+    let applying = archforge_core::skills::effective_skills(&archforge_notations::view(), &st, d, None);
+    assert_eq!(applying.iter().map(|e| e.skill).collect::<Vec<_>>(), [project]);
+}
