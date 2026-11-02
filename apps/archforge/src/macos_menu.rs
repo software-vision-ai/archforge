@@ -1,5 +1,5 @@
-//! The native menu bar on macOS: the application menu (Hide and Quit) and File (Open… and Save,
-//! each enabled while it can act). When it cannot be built, the window works without it.
+//! The native menu bar on macOS: the application menu (Hide and Quit) and File (Open…, Save and
+//! Generate…, each enabled while it can act). When it cannot be built, the window works without it.
 #![cfg(target_os = "macos")]
 
 use std::str::FromStr;
@@ -13,11 +13,13 @@ use archforge_ui_egui::i18n::tr;
 const QUIT: &str = "app.quit";
 const OPEN: &str = "file.open";
 const SAVE: &str = "file.save";
+const GENERATE: &str = "file.generate";
 
 pub struct NativeMenu {
     _menu: Menu,
     open: MenuItem,
     save: MenuItem,
+    generate: MenuItem,
 }
 
 /// Builds the menu bar and installs it for the application.
@@ -30,10 +32,11 @@ pub fn build() -> Result<NativeMenu, String> {
     let file = Submenu::new(tr("File"), true);
     let open = MenuItem::with_id(OPEN, tr("Open…"), false, Accelerator::from_str("CmdOrCtrl+O").ok());
     let save = MenuItem::with_id(SAVE, tr("Save"), false, Accelerator::from_str("CmdOrCtrl+S").ok());
-    file.append_items(&[&open, &PredefinedMenuItem::separator(), &save]).map_err(err)?;
+    let generate = MenuItem::with_id(GENERATE, tr("Generate…"), false, None);
+    file.append_items(&[&open, &PredefinedMenuItem::separator(), &save, &PredefinedMenuItem::separator(), &generate]).map_err(err)?;
     menu.append_items(&[&app, &file]).map_err(err)?;
     menu.init_for_nsapp();
-    Ok(NativeMenu { _menu: menu, open, save })
+    Ok(NativeMenu { _menu: menu, open, save, generate })
 }
 
 impl NativeMenu {
@@ -44,10 +47,12 @@ impl NativeMenu {
                 QUIT => shell.request_quit(),
                 OPEN => shell.open_from_picker(),
                 SAVE => shell.save(),
+                GENERATE => shell.open_generate(),
                 _ => {}
             }
         }
         self.open.set_enabled(shell.can_open_project());
         self.save.set_enabled(shell.can_save());
+        self.generate.set_enabled(shell.can_generate());
     }
 }

@@ -249,6 +249,14 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   text. Where a skill applies and when are not shown for now (owner, 2026-10-31): skills will be
   used in contexts still to come, and a fixed list such as Export misleads. The model keeps those
   fields; they come back when the contexts are known.
+- Generation is an agent's, never the window's (owner, AR-64): File → Generate… opens a handoff
+  for the selected schema, table, class or diagram (else the open diagram): From, Output (SQL
+  DDL with its dialect, which the export skills in effect suggest, or documentation), the export
+  skills in effect with where each comes from and what overrides it, and the request to copy for
+  the agent, naming the MCP resources it reads (`archforge://element/{id}`,
+  `archforge://skills/effective/{id}/export`) and the model's revision. Its status line says
+  whether agent access is on, that the request was copied, and when the model changed after;
+  nothing in it shows output or claims the agent did anything. The dialog changes nothing.
 
 ## Messages
 - Problems show as an orange badge on the box or line and in a Problems section of Properties,
