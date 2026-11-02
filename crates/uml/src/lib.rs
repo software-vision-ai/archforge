@@ -31,7 +31,7 @@ pub const CLASS_DIAGRAM: &str = "uml.class";
 
 /// A class card's width and height when the user names none: the header, an attribute row, an
 /// operation row and the line between them.
-pub const CLASS_SIZE: (f64, f64) = (240.0, 120.0);
+pub const CLASS_SIZE: (f64, f64) = (240.0, 136.0);
 
 /// UML in a project's view: class diagrams of a package showing its
 /// classes as plain cards with their attributes and operations, and the associations,

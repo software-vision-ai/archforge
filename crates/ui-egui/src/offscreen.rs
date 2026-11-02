@@ -60,6 +60,9 @@ pub enum Screen {
     WorkspaceClassDiagram,
     /// The sample class model to read: members, every line kind and end.
     WorkspaceClassDiagramRead,
+    /// A class diagram of three cards: a new class with its first operation at the default size, one
+    /// grown to show its members, and one made short by hand saying the rows it hides.
+    WorkspaceClassSizing,
     /// The sample class model with Order selected: its Properties, Abstract and its members
     ///.
     WorkspaceClassMembers,
@@ -250,6 +253,10 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
     if screen == Screen::WorkspaceClassDiagram {
         shell.adopt_project();
         sample_class_diagram(&mut shell)?;
+    }
+    if screen == Screen::WorkspaceClassSizing {
+        shell.adopt_project();
+        sample_class_sizing(&mut shell)?;
     }
     if screen == Screen::WorkspaceClassDiagramRead {
         shell.adopt_project();
@@ -684,6 +691,46 @@ fn sample_class_diagram(shell: &mut Shell) -> Result<(), String> {
         }
     }
     run(session, "view.select", json!({ "ids": [order] }))?;
+    session.mark_saved().map_err(|e| format!("mark_saved: {e:?}"))?;
+    let (Some(package), Some(diagram)) = (archforge_mof::Uuid::parse(&package), archforge_mof::Uuid::parse(&diagram)) else {
+        return Err("the sample's ids".into());
+    };
+    shell.explorer.expanded.insert(package);
+    crate::canvas::open(shell, diagram);
+    Ok(())
+}
+
+/// A package, Billing, on its class diagram: ReviewInvoice new with its first operation, Invoice
+/// as tall as its members, Order made shorter by hand than its members need.
+fn sample_class_sizing(shell: &mut Shell) -> Result<(), String> {
+    use serde_json::json;
+    let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
+    let run = |session: &mut archforge_notations::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
+        let out = session.execute(command, &params).map_err(|e| format!("{command}: {e:?}"))?;
+        Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
+    };
+    let package = run(session, "uml.package.add", json!({ "name": "Billing" }))?;
+    let diagram = run(session, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": package, "name": "Billing" }))?;
+    let members: [(&str, &[&str], &[&str], f64); 3] = [
+        ("ReviewInvoice", &[], &["calculateTotal"], archforge_uml::CLASS_SIZE.1),
+        ("Invoice", &["number", "issuedAt", "total"], &["send", "cancel"], crate::uml_ui::members_height(3, 2)),
+        ("Order", &["id", "placedAt"], &["submit", "cancel"], 120.0),
+    ];
+    for (i, (name, attributes, operations, height)) in members.into_iter().enumerate() {
+        let class = run(session, "uml.class.add", json!({ "package": package, "name": name }))?;
+        for a in attributes {
+            run(session, "uml.attribute.add", json!({ "class": class, "name": a }))?;
+        }
+        for o in operations {
+            run(session, "uml.operation.add", json!({ "class": class, "name": o }))?;
+        }
+        let x = 80.0 + 320.0 * i as f64;
+        run(
+            session,
+            "diagram.place",
+            json!({ "diagram": diagram, "element": class, "x": x, "y": 120, "width": archforge_uml::CLASS_SIZE.0, "height": height }),
+        )?;
+    }
     session.mark_saved().map_err(|e| format!("mark_saved: {e:?}"))?;
     let (Some(package), Some(diagram)) = (archforge_mof::Uuid::parse(&package), archforge_mof::Uuid::parse(&diagram)) else {
         return Err("the sample's ids".into());
