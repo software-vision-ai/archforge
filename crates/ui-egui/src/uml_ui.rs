@@ -179,6 +179,12 @@ impl DiagramKind for UmlKind {
         Some(("add-attribute", "Add attribute"))
     }
 
+    /// A class's menu: open in Models, add an attribute, remove from the diagram, delete from the
+    /// model.
+    fn menu(&self) -> bool {
+        true
+    }
+
     /// A class from the tree, with its lines to the classes the diagram shows; one already there is
     /// said so and left.
     fn drop(&self, shell: &mut Shell, d: Obj, element: Uuid, at: (f64, f64)) {

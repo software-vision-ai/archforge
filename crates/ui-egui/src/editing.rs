@@ -1658,27 +1658,34 @@ fn rename_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, rect: Rect, z
     }
 }
 
-/// The entity menu: the design's rows with their shortcuts.
+/// The element menu: the design's rows with their shortcuts. A table's adds its related tables,
+/// its new column and its collapse; any other element's adds the new row its kind's adorner opens
+/// (a class's attribute).
 fn entity_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, menu: &EntityMenu) {
     let paint = ui.painter().clone();
     let mac = ui.ctx().os() == egui::os::OperatingSystem::Mac;
     let (add_chord, delete_chord, model_chord) = if mac { ("⌘↩", "⌫", "⇧⌫") } else { ("Ctrl Enter", "Del", "Shift Del") };
-    let collapsible = shell
-        .session
-        .as_ref()
-        .and_then(|s| s.doc().by_uuid(menu.entity).map(|e| archforge_er::rules::collapse_problem(s.doc(), e).is_none()))
-        .unwrap_or(false);
-    let mut rows: Vec<(&str, &str, &str, bool, bool)> = vec![
-        ("related", "Show related tables", "R", false, false),
-        ("open", "Open in Models", "", true, false),
-        ("add-column", "Add column", add_chord, true, false),
-    ];
+    let store = shell.session.as_ref().map(|s| s.doc());
+    let element = store.and_then(|st| st.by_uuid(menu.entity));
+    let table = store.zip(element).is_some_and(|(st, e)| st.class_of(e).ok() == Some(archforge_er::ENTITY));
+    let collapsible = table && store.zip(element).is_some_and(|(st, e)| archforge_er::rules::collapse_problem(st, e).is_none());
+    let kind = crate::kinds::active_kind(shell);
+    let mut rows: Vec<(&str, &str, &str, bool, bool)> = Vec::new();
+    if table {
+        rows.push(("related", "Show related tables", "R", false, false));
+    }
+    rows.push(("open", "Open in Models", "", true, false));
+    if table {
+        rows.push(("add-column", "Add column", add_chord, true, false));
+    } else if let Some((_, label)) = kind.and_then(|k| k.adorner()) {
+        rows.push(("add-row", label, add_chord, true, false));
+    }
     if collapsible {
         rows.push(("collapse", "Collapse into a relationship", "", true, false));
     }
     rows.push(("remove", "Remove from this diagram", delete_chord, true, false));
     rows.push(("delete", "Delete from the model…", model_chord, true, true));
-    let separators = [1, rows.len() - 2];
+    let separators: Vec<usize> = if table { vec![1, rows.len() - 2] } else { vec![rows.len() - 2] };
     let height = 8.0 + rows.len() as f32 * MENU_ROW + 2.0;
     let x = menu.at.x.min(r.right() - MENU_WIDTH - 8.0).max(r.left() + 8.0);
     let y = menu.at.y.min(r.bottom() - height - 8.0).max(r.top() + 8.0);
@@ -1729,6 +1736,11 @@ fn entity_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, menu: &En
         "add-column" => {
             crate::panels::open_column(shell, menu.entity, None);
             shell.state.show_panel(crate::state::Panel::Properties);
+        }
+        "add-row" => {
+            if let Some(kind) = kind {
+                kind.open(shell, menu.entity, None);
+            }
         }
         "collapse" => {
             // The command selects the relationship it makes.

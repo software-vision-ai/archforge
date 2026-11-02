@@ -5527,3 +5527,64 @@ fn a_diagram_takes_a_skill_from_the_skills_panel_and_shows_its_schemas_as_inheri
     assert_eq!(own.len(), 1, "the diagram carries the new skill");
     assert_eq!(h.state().canvas.active, Some(st.uuid(own[0]).unwrap()), "it opens in its tab");
 }
+
+#[test]
+fn a_class_is_deleted_from_the_model_through_its_menu_and_comes_back_with_undo() {
+    let (mut h, d, _) = read_class_diagram("paid by");
+    let class_named = |h: &Harness<'static, Shell>, name: &str| {
+        let st = h.state().session.as_ref().unwrap().doc();
+        st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(st, *o) == name)
+    };
+    let node_of = |h: &Harness<'static, Shell>, name: &str| {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let c = class_named(h, name).unwrap();
+        let n = archforge_diagram::views_of(st, c).2.into_iter().find(|n| st.container(*n).ok().flatten().map(|(p, _)| p) == Some(d)).unwrap();
+        format!("workspace.canvas.node.{}", st.uuid(n).unwrap())
+    };
+    let customer = node_of(&h, "Customer");
+    let lines_before = h.state().session.as_ref().unwrap().doc().list(d, archforge_diagram::diagram::EDGE).unwrap().len();
+    // A right click on a class opens its menu: Add attribute, Remove from this diagram, Delete from the model.
+    let at = rect_of(&h, &customer).center();
+    h.event(egui::Event::PointerMoved(at));
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Secondary, pressed, modifiers: egui::Modifiers::NONE });
+    }
+    h.run();
+    assert!(h.state().canvas.menu.is_some(), "the menu opened");
+    let found = ids(&h);
+    for row in ["open", "add-row", "remove", "delete"] {
+        assert!(found.contains(&format!("workspace.canvas.menu.{row}")), "{row}: {found:?}");
+    }
+    assert!(!found.iter().any(|i| i == "workspace.canvas.menu.related" || i == "workspace.canvas.menu.add-column"), "no table rows");
+    // Delete from the model asks first, naming what goes with it, then deletes.
+    let at = rect_of(&h, "workspace.canvas.menu.delete").center();
+    click(&mut h, at);
+    let ask = h.state().explorer.delete.clone().expect("the dialog asks");
+    assert_eq!((ask.name.as_str(), ask.relationships, ask.diagrams), ("Customer", 1, 1));
+    let at = rect_of(&h, "workspace.explorer.delete.confirm").center();
+    click(&mut h, at);
+    assert!(class_named(&h, "Customer").is_none(), "the class left the model");
+    assert!(!ids(&h).contains(&customer), "and the diagram");
+    let st = h.state().session.as_ref().unwrap().doc();
+    assert_eq!(st.list(d, archforge_diagram::diagram::EDGE).unwrap().len(), lines_before - 1, "its line went with it");
+    // Undo brings the class, its card and its line back; redo deletes them again.
+    h.state_mut().session.as_mut().unwrap().undo().unwrap();
+    h.run();
+    assert!(class_named(&h, "Customer").is_some());
+    assert!(ids(&h).contains(&customer));
+    h.state_mut().session.as_mut().unwrap().redo().unwrap();
+    h.run();
+    assert!(class_named(&h, "Customer").is_none());
+    // Remove from this diagram keeps the class in the model.
+    let order = node_of(&h, "OrderLine");
+    let at = rect_of(&h, &order).center();
+    h.event(egui::Event::PointerMoved(at));
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Secondary, pressed, modifiers: egui::Modifiers::NONE });
+    }
+    h.run();
+    let at = rect_of(&h, "workspace.canvas.menu.remove").center();
+    click(&mut h, at);
+    assert!(!ids(&h).contains(&order), "the card left the diagram");
+    assert!(class_named(&h, "OrderLine").is_some(), "the class stays in the model");
+}
