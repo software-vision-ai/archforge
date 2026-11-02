@@ -311,6 +311,41 @@ mod tests {
     }
 
     #[test]
+    fn the_onboarding_names_only_what_the_table_has_and_both_modes_say_the_same_scope() {
+        let all = infos().unwrap();
+        let ids: Vec<&str> = all.iter().map(|c| c["id"].as_str().unwrap()).collect();
+        let mut scopes = Vec::new();
+        for compact in [false, true] {
+            let catalog = archforge_mcp::Catalog::new(&all, compact);
+            let list = catalog.list();
+            let tools: Vec<&str> = list["tools"].as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap()).collect();
+            let init = archforge_mcp::handle(
+                br#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#,
+                &Recorder(std::cell::RefCell::new(Vec::new())),
+                &catalog,
+            )
+            .unwrap();
+            let text = init["result"]["instructions"].as_str().unwrap().to_string();
+            for word in text.split(|c: char| !(c.is_ascii_lowercase() || c == '_' || c == '.')).map(|w| w.trim_matches('.')) {
+                if word.contains('_') {
+                    assert!(tools.contains(&word), "compact {compact}: {word} is not a listed tool");
+                } else if word.contains('.') {
+                    // A command id, or the kind diagram.add takes for a class diagram.
+                    assert!(ids.contains(&word) || word == "uml.class", "compact {compact}: {word} is not a command");
+                }
+            }
+            for promise in ["UML class diagrams", "ER diagrams", "agent access", "undo"] {
+                assert!(text.contains(promise), "compact {compact}: says nothing of {promise}");
+            }
+            for future in ["interface", "enum", "C4"] {
+                assert!(!text.contains(future), "compact {compact}: advertises {future}");
+            }
+            scopes.push(text.split(". ").take(2).collect::<Vec<_>>().join(". "));
+        }
+        assert_eq!(scopes[0], scopes[1], "both modes describe the same scope and the same access");
+    }
+
+    #[test]
     fn the_offline_listing_is_the_registry() {
         let all = infos().unwrap();
         assert!(all.iter().any(|c| c["id"] == "er.entity.add"));
