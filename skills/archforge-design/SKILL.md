@@ -316,8 +316,9 @@ What is UML's own, beside the shared rules above.
   visibility sign only when one is set, the multiplicity only when it is not 1. A bound pair of
   none to many is written `*`.
 - An association end a class owns is the line's role, not a row of the card.
-- An association's arrow shows only where it navigates one way; navigable both ways, it shows no
-  arrows. A diamond sits at the whole: hollow for a shared aggregation, filled for a composition.
+- An association shows an open arrow at every end it navigates to, both ends when it navigates both
+  ways (owner decision). A diamond sits at the whole, in place of an arrow there: hollow for a
+  shared aggregation, filled for a composition.
   Its name sits at the middle, its roles and multiplicities at their ends.
 - A generalization draws to a hollow triangle at the general class, in the muted ink, as ER's.
 - A dependency is dashed, with an open arrow at its supplier.
@@ -329,8 +330,8 @@ What is UML's own, beside the shared rules above.
   the specific class to the general one, from the client to the supplier; dropped on empty canvas
   it makes a new class there, named in place. A refusal (a cycle, a class on itself) is said at the
   canvas's top and draws nothing.
-- A new association is a plain line: no roles, no multiplicities, navigable both ways (owner
-  decision); an association owns both its ends, so drawing lines never changes a class's
+- A new association is a plain line: no roles, no multiplicities, navigable to neither end (owner
+  decision); a directed one navigates to its second class; an association owns both its ends, so drawing lines never changes a class's
   attributes (owner decision).
 - A selected class-diagram line shows a round handle at each end; one dragged onto another class
   moves that end there, its lines on every diagram following. Delete removes the line's

@@ -1,8 +1,8 @@
 //! What a class diagram draws: a class as a plain card with its attributes
 //! (visibility, name, type, multiplicity) and its operations (visibility, name, parameters, return
 //! type), its name slanted when it is abstract; an association as a line with its name, its ends'
-//! roles and multiplicities, an open arrow at an end only it navigates to (navigable both ways, it
-//! shows none), and a diamond at the whole of an aggregation (hollow) or a composition (filled); a
+//! roles and multiplicities, an open arrow at every end it navigates to (owner decision), and a
+//! diamond, which takes the place of an arrow at its end, at the whole of an aggregation (hollow) or a composition (filled); a
 //! generalization as a line to a hollow triangle at the general class; a dependency dashed, with an
 //! open arrow at its supplier. The canvas draws these descriptions.
 
@@ -209,14 +209,13 @@ pub fn line(store: &Store, element: Obj) -> Option<Line> {
     match store.class_of(element).ok()? {
         c if c == ASSOCIATION => {
             let ends = member_ends(store, element)?;
-            let both = ends.iter().all(|e| navigable(store, element, *e));
             let end = |i: usize| {
                 let (here, there) = (ends[i], ends[1 - i]);
                 // The diamond sits at the whole: the end opposite the part that aggregates.
                 let mark = match aggregation(store, there) {
                     AggregationKind::Composite => EndMark::FilledDiamond,
                     AggregationKind::Shared => EndMark::HollowDiamond,
-                    AggregationKind::NoneKind if !both && navigable(store, element, here) => EndMark::OpenArrow,
+                    AggregationKind::NoneKind if navigable(store, element, here) => EndMark::OpenArrow,
                     AggregationKind::NoneKind => EndMark::None,
                 };
                 let m = multiplicity(store, here);

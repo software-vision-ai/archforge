@@ -5,8 +5,8 @@
 //!
 //! An association owns both its ends; navigability is marked by the association listing the end
 //! as navigable, so relating classes never changes a class's attributes (owner decision). A new
-//! association is a plain line: no roles, no multiplicities, navigable both ways (owner decision);
-//! a directed one is navigable to its second class only. Aggregation and composition sit on the
+//! association is a plain line: no roles, no multiplicities, navigable to neither end (owner
+//! decision); a directed one is navigable to its second class only. Aggregation and composition sit on the
 //! part's end, the line drawn from the whole to the part, and the diamond shows at the whole.
 //!
 //! What would make the model wrong is refused with a reason before anything changes: a class that
@@ -167,9 +167,9 @@ fn association_add(ctx: &mut C<'_>, p: &Params) -> R {
         }
         ends.push(end);
     }
-    // Navigable both ways, or only to the second class; the part's end aggregates.
-    set_navigable(ctx.doc, a, ends[0], kind != "directed")?;
-    set_navigable(ctx.doc, a, ends[1], true)?;
+    // Navigable to neither end, or only to the second class; the part's end aggregates.
+    set_navigable(ctx.doc, a, ends[0], false)?;
+    set_navigable(ctx.doc, a, ends[1], kind == "directed")?;
     let aggregation = match kind {
         "aggregation" => 1,
         "composition" => 2,

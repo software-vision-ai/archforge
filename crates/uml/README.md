@@ -48,7 +48,7 @@ the package Types the first time it is used; a multiplicity is typed, `1`, `0..1
 `2..5`; members are removed through `element.remove`), `figures::{card, line, ends, text_slots, slot_text, attribute_text,
 operation_text, multiplicity, visibility, member_ends, navigable}` (a class's card with its
 members' visibility, type and multiplicity, abstract names slanted; an association's line with its
-name, roles, multiplicities, an arrow at an end only it navigates to and a diamond at the whole of
+name, roles, multiplicities, an arrow at every end it navigates to and a diamond at the whole of
 an aggregation or a composition; a generalization's triangle; a dependency dashed with an open
 arrow), and the card's `WORDS` and `PLURALS` for the shell's catalogue. Where an association's two
 ends pair a derived end with a stored one, the generator gives neither an opposite: a derived end
