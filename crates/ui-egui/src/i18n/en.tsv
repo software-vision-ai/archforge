@@ -435,6 +435,7 @@ str		Choose a file	Choose a file
 str		Pinned folders	Pinned folders
 str		Keep your project locations close.	Keep your project locations close.
 str		Pin a folder	Pin a folder
+str		Choose project location	Choose project location
 str		Open a project here	Open a project here
 str		Unpin	Unpin
 str		Open	Open

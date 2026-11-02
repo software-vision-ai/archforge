@@ -436,6 +436,7 @@ str		Choose a file	选择文件
 str		Pinned folders	已固定的文件夹
 str		Keep your project locations close.	让项目位置触手可及。
 str		Pin a folder	固定文件夹
+str		Choose project location	选择项目位置
 str		Open a project here	在此打开项目
 str		Unpin	取消固定
 str		Open	打开

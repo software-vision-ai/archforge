@@ -153,7 +153,8 @@ fn start(shell: &Shell, dialog: &mut Dialog) {
 /// a picker that could not appear says why under the field.
 fn change_folder(shell: &Shell, dialog: &mut Dialog) {
     let Some(pick) = shell.services.pick_folder.clone() else { return };
-    match pick() {
+    // The picker says what the folder is for: where the project goes, not a folder to pin.
+    match pick(&tr("Choose project location")) {
         Some(path) => {
             dialog.folder = Some(path);
             dialog.picker = None;

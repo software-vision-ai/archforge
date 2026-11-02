@@ -234,8 +234,12 @@ fn change_picks_the_folder_the_project_is_made_in_and_a_cancel_keeps_the_last_on
     let (mut h, host) = creating_harness();
     let answers = std::sync::Arc::new(std::sync::Mutex::new(vec![None, Some(std::path::PathBuf::from("/Volumes/Work/Clients/Acme"))]));
     let unavailable = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let (next, probe) = (answers.clone(), unavailable.clone());
-    h.state_mut().services.pick_folder = Some(std::sync::Arc::new(move || next.lock().unwrap().pop().flatten()));
+    let titles = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+    let (next, probe, asked) = (answers.clone(), unavailable.clone(), titles.clone());
+    h.state_mut().services.pick_folder = Some(std::sync::Arc::new(move |title: &str| {
+        asked.lock().unwrap().push(title.to_string());
+        next.lock().unwrap().pop().flatten()
+    }));
     h.state_mut().services.picker_unavailable =
         Some(std::sync::Arc::new(move || probe.load(std::sync::atomic::Ordering::SeqCst).then(|| "this system has no desktop portal".to_string())));
     h.run();
@@ -244,6 +248,8 @@ fn change_picks_the_folder_the_project_is_made_in_and_a_cancel_keeps_the_last_on
     let change = centre_of(&h, "new-project.location.change");
     press(&mut h, change);
     assert!(painted(&h).iter().any(|t| t == "Clients / Acme"), "{:?}", painted(&h));
+    // The picker says what the folder is for: the project's location, not a folder to pin (AR-74).
+    assert_eq!(titles.lock().unwrap().as_slice(), ["Choose project location"]);
     // A cancel keeps the name and the folder picked before it, and says nothing.
     press(&mut h, change);
     assert!(painted(&h).iter().any(|t| t == "Clients / Acme"), "{:?}", painted(&h));
@@ -855,7 +861,7 @@ fn a_pinned_folder_is_pinned_from_the_picker_opens_the_project_picker_in_it_and_
             seen.lock().unwrap().push(start.map(std::path::Path::to_path_buf));
             None
         })),
-        pick_folder: Some(std::sync::Arc::new(|| Some(std::path::PathBuf::from("/Users/robin/Work/Models")))),
+        pick_folder: Some(std::sync::Arc::new(|_| Some(std::path::PathBuf::from("/Users/robin/Work/Models")))),
         ..Services::default()
     };
     let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1120.0)).build_ui_state(
@@ -6435,11 +6441,16 @@ fn a_picker_that_cannot_appear_is_said_on_home_and_a_cancel_says_nothing() {
     let host = std::sync::Arc::new(SavingHost::default());
     let unavailable = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     let probe = unavailable.clone();
+    let titles = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+    let asked = titles.clone();
     let services = Services {
         projects: Some(host),
         ids: Some(test_ids()),
         pick_project: Some(std::sync::Arc::new(|_| None)),
-        pick_folder: Some(std::sync::Arc::new(|| None)),
+        pick_folder: Some(std::sync::Arc::new(move |title: &str| {
+            asked.lock().unwrap().push(title.to_string());
+            None
+        })),
         picker_unavailable: Some(std::sync::Arc::new(move || {
             probe.load(std::sync::atomic::Ordering::SeqCst).then(|| "this system has no desktop portal".to_string())
         })),
@@ -6470,6 +6481,8 @@ fn a_picker_that_cannot_appear_is_said_on_home_and_a_cancel_says_nothing() {
     unavailable.store(true, std::sync::atomic::Ordering::SeqCst);
     h.state_mut().pin_from_picker();
     assert_eq!(h.state().picker_error.as_deref(), Some("this system has no desktop portal"));
+    // Home's picker says it pins a folder (AR-74).
+    assert!(titles.lock().unwrap().iter().all(|t| t == "Pin a folder") && !titles.lock().unwrap().is_empty(), "{:?}", titles.lock().unwrap());
 }
 
 #[test]
@@ -6752,4 +6765,50 @@ fn about_closes_the_bars_search_and_its_keys_never_reach_the_search_behind_it() 
     assert!(h.state().home_search.open, "nothing in the search ran");
     assert_eq!(h.state().state.panel, shown);
     assert_eq!(h.state().session.as_ref().unwrap().view().selection, selection, "the selection is as it was");
+}
+
+#[test]
+fn the_removal_toast_keeps_clear_of_the_minimap_at_every_width_and_its_undo_still_undoes() {
+    let (mut h, _customer, _diagram) = diagram_harness();
+    let schema = {
+        let st = h.state().session.as_ref().unwrap().doc();
+        st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap()).unwrap()
+    };
+    let tables = |h: &Harness<'static, Shell>| {
+        let st = h.state().session.as_ref().unwrap().doc();
+        st.alive().filter(|o| st.class_of(*o).ok() == Some(archforge_er::ENTITY)).count()
+    };
+    let before = tables(&h);
+    h.state_mut()
+        .session
+        .as_mut()
+        .unwrap()
+        .execute("er.entity.add", &serde_json::json!({ "schema": schema.to_string(), "name": "Invoice" }))
+        .unwrap();
+    // A long message, as a translation makes it, on the toast the removal would show.
+    let text = "Orders entfernt; was es enthielt, wurde nach Commerce UML verschoben, mit allen Klassen und Beziehungen".to_string();
+    let mut beside_minimap = Vec::new();
+    // The report's 1505-point window among them; at the narrower ones the minimap folds away.
+    for size in [egui::vec2(1600.0, 1000.0), egui::vec2(1505.0, 1040.0), egui::vec2(1420.0, 900.0), egui::vec2(980.0, 900.0)] {
+        h.set_size(size);
+        let undo_label = h.state().session.as_ref().unwrap().undo_label().map(str::to_string);
+        let until = h.state().frames + 1000;
+        h.state_mut().canvas.toast = Some(crate::connect::Toast { text: text.clone(), until, undo_label });
+        h.run();
+        let toast = rect_of(&h, "workspace.toast");
+        let undo = rect_of(&h, "workspace.toast.undo");
+        assert!(toast.contains_rect(undo), "{size:?}: Undo {undo:?} lies within the toast {toast:?}");
+        if ids(&h).iter().any(|i| i == "workspace.minimap") {
+            let minimap = rect_of(&h, "workspace.minimap");
+            assert!(!toast.intersects(minimap), "{size:?}: the toast {toast:?} is clear of the minimap {minimap:?}");
+            beside_minimap.push(size);
+        }
+        assert!(painted(&h).iter().any(|t| t.starts_with("Orders entfernt") && t.ends_with("Beziehungen")), "{size:?}: the whole message shows");
+    }
+    // The minimap showed at the wider widths, so the check above ran there.
+    assert!(beside_minimap.len() >= 2, "{beside_minimap:?}");
+    // Its Undo, at the narrowest width, undoes what the toast is about.
+    let at = rect_of(&h, "workspace.toast.undo").center();
+    click(&mut h, at);
+    assert_eq!(tables(&h), before, "Undo took the table back");
 }

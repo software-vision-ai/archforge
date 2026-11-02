@@ -74,9 +74,10 @@ pub struct Services {
     /// sends them once and then calls the wake it was given; none leaves Home's search to the
     /// recent projects.
     pub find_projects: Option<std::sync::Arc<FindProjects>>,
-    /// Asks the user for a folder to pin on Home (the native folder picker); none keeps Pin a
-    /// folder unavailable.
-    pub pick_folder: Option<std::sync::Arc<dyn Fn() -> Option<std::path::PathBuf> + Send + Sync>>,
+    /// Asks the user for a folder (the native folder picker), headed with the title given, which
+    /// says what the folder is for (Pin a folder on Home, Choose project location in New project);
+    /// none keeps both unavailable.
+    pub pick_folder: Option<std::sync::Arc<dyn Fn(&str) -> Option<std::path::PathBuf> + Send + Sync>>,
     /// Why the native folder picker cannot appear, when the platform can tell (Linux without a
     /// desktop portal answers nothing, as a cancel does); asked when a pick comes back empty.
     pub picker_unavailable: Option<std::sync::Arc<dyn Fn() -> Option<String> + Send + Sync>>,
@@ -965,7 +966,7 @@ impl Shell {
     /// Pin a folder: asks the user for a folder and pins it on Home.
     pub fn pin_from_picker(&mut self) {
         let Some(pick) = self.services.pick_folder.clone() else { return };
-        match pick() {
+        match pick(&crate::i18n::tr("Pin a folder")) {
             Some(path) => {
                 self.picker_error = None;
                 self.state.pin(&path);

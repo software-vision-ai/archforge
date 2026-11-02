@@ -93,7 +93,8 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   (newest first) or by name; both choices are kept in the preferences.
 - One project holds one model, named as the project. The New project dialog asks for a name and a
   location only; a taken or unfinished name is said in plain words under the field. Change… picks
-  the location with the system's folder picker and shows it in the field; a cancel keeps the
+  the location with the system's folder picker, titled Choose project location (AR-74; Home's
+  Pin a folder keeps its own title), and shows it in the field; a cancel keeps the
   folder before it, and a picker that cannot appear says why under the field (AR-66). What it says
   a project holds is only what is built: ER and UML class diagrams, skills, agent access, undo
   and saves (AR-67); nothing still to come is promised.
@@ -283,7 +284,9 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   notice, never a refusal. It says in the model's words what is wrong, why, and which choice
   avoids it.
 - A refusal shows where the action happened: under the field, under the box's name or under the
-  tree. Removals that take other things with them show a toast with Undo.
+  tree. Removals that take other things with them show a toast with Undo. The toast keeps clear
+  of the minimap (AR-75): at the canvas's foot, left of the minimap while there is room beside it,
+  else above it; its text wraps to three lines rather than running under Undo.
 
 ## Saving
 - Every edit is written to the project on its own a moment after it settles, so a crash loses
