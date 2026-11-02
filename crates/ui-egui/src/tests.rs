@@ -234,8 +234,12 @@ fn change_picks_the_folder_the_project_is_made_in_and_a_cancel_keeps_the_last_on
     let (mut h, host) = creating_harness();
     let answers = std::sync::Arc::new(std::sync::Mutex::new(vec![None, Some(std::path::PathBuf::from("/Volumes/Work/Clients/Acme"))]));
     let unavailable = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let (next, probe) = (answers.clone(), unavailable.clone());
-    h.state_mut().services.pick_folder = Some(std::sync::Arc::new(move || next.lock().unwrap().pop().flatten()));
+    let titles = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+    let (next, probe, asked) = (answers.clone(), unavailable.clone(), titles.clone());
+    h.state_mut().services.pick_folder = Some(std::sync::Arc::new(move |title: &str| {
+        asked.lock().unwrap().push(title.to_string());
+        next.lock().unwrap().pop().flatten()
+    }));
     h.state_mut().services.picker_unavailable =
         Some(std::sync::Arc::new(move || probe.load(std::sync::atomic::Ordering::SeqCst).then(|| "this system has no desktop portal".to_string())));
     h.run();
@@ -244,6 +248,8 @@ fn change_picks_the_folder_the_project_is_made_in_and_a_cancel_keeps_the_last_on
     let change = centre_of(&h, "new-project.location.change");
     press(&mut h, change);
     assert!(painted(&h).iter().any(|t| t == "Clients / Acme"), "{:?}", painted(&h));
+    // The picker says what the folder is for: the project's location, not a folder to pin (AR-74).
+    assert_eq!(titles.lock().unwrap().as_slice(), ["Choose project location"]);
     // A cancel keeps the name and the folder picked before it, and says nothing.
     press(&mut h, change);
     assert!(painted(&h).iter().any(|t| t == "Clients / Acme"), "{:?}", painted(&h));
@@ -855,7 +861,7 @@ fn a_pinned_folder_is_pinned_from_the_picker_opens_the_project_picker_in_it_and_
             seen.lock().unwrap().push(start.map(std::path::Path::to_path_buf));
             None
         })),
-        pick_folder: Some(std::sync::Arc::new(|| Some(std::path::PathBuf::from("/Users/robin/Work/Models")))),
+        pick_folder: Some(std::sync::Arc::new(|_| Some(std::path::PathBuf::from("/Users/robin/Work/Models")))),
         ..Services::default()
     };
     let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1120.0)).build_ui_state(
@@ -6435,11 +6441,16 @@ fn a_picker_that_cannot_appear_is_said_on_home_and_a_cancel_says_nothing() {
     let host = std::sync::Arc::new(SavingHost::default());
     let unavailable = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     let probe = unavailable.clone();
+    let titles = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+    let asked = titles.clone();
     let services = Services {
         projects: Some(host),
         ids: Some(test_ids()),
         pick_project: Some(std::sync::Arc::new(|_| None)),
-        pick_folder: Some(std::sync::Arc::new(|| None)),
+        pick_folder: Some(std::sync::Arc::new(move |title: &str| {
+            asked.lock().unwrap().push(title.to_string());
+            None
+        })),
         picker_unavailable: Some(std::sync::Arc::new(move || {
             probe.load(std::sync::atomic::Ordering::SeqCst).then(|| "this system has no desktop portal".to_string())
         })),
@@ -6470,6 +6481,8 @@ fn a_picker_that_cannot_appear_is_said_on_home_and_a_cancel_says_nothing() {
     unavailable.store(true, std::sync::atomic::Ordering::SeqCst);
     h.state_mut().pin_from_picker();
     assert_eq!(h.state().picker_error.as_deref(), Some("this system has no desktop portal"));
+    // Home's picker says it pins a folder (AR-74).
+    assert!(titles.lock().unwrap().iter().all(|t| t == "Pin a folder") && !titles.lock().unwrap().is_empty(), "{:?}", titles.lock().unwrap());
 }
 
 #[test]
