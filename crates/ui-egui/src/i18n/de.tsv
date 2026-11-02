@@ -264,7 +264,7 @@ str		Model	Modell
 str		Name	Name
 str		Models	Modelle
 str		Source Control	Quellverwaltung
-str		Agent	Agent
+str		Chat	Chat
 str		Appearance	Darstellung
 str		Properties	Eigenschaften
 str		Skills	Skills
@@ -358,7 +358,7 @@ str		Select a table or a line on the diagram	Eine Tabelle oder Linie im Diagramm
 str		Selection · this diagram	Auswahl · dieses Diagramm
 str		{kind} · this diagram	{kind} · dieses Diagramm
 plural		{n} item	{n} Element|{n} Elemente
-str		No agent connected	Kein Agent verbunden
+str		Coming soon	Demnächst verfügbar
 str		The model could not be opened	Das Modell konnte nicht geöffnet werden
 str		The host gives no ids for the model's elements	Der Host liefert keine Ids für die Elemente des Modells
 str		Collapse panel	Leiste einklappen
