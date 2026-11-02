@@ -428,6 +428,7 @@ str		Unpin	固定を解除
 str		Open	開く
 str		Remove from recent projects	最近のプロジェクトから削除
 str		Pick up in the exact view you left.	中断したビューからそのまま再開できます。
+str		Last view: {name}	前回のビュー: {name}
 str		Just now	たった今
 plural		{n} minute ago	{n} 分前
 plural		{n} hour ago	{n} 時間前

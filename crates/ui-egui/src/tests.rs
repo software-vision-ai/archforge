@@ -722,7 +722,7 @@ fn the_recent_list_keeps_each_project_once_newest_first_and_drops_what_it_cannot
     assert_eq!(state.recent.iter().filter(|r| r.name == "P15").count(), 1, "once");
     // A preferences file may hold anything: what the window does not take is dropped.
     let at = |file: &str| std::env::temp_dir().join(file);
-    let entry = |name: &str, path: std::path::PathBuf| crate::state::RecentProject { name: name.into(), path, opened: 1 };
+    let entry = |name: &str, path: std::path::PathBuf| crate::state::RecentProject { name: name.into(), path, opened: 1, view: None };
     let long = "x".repeat(230);
     state.recent = vec![
         entry("Good", at("Good.archforge")),
@@ -5442,6 +5442,85 @@ fn an_inline_row_keeps_a_type_by_what_it_is_refuses_a_name_two_types_share_and_k
     h.output().shapes.iter().for_each(|c| texts(&c.shape, c.clip_rect, &mut found));
     let (_, pos, clip) = found.iter().find(|(t, pos, _)| t == "+ total() : Money" && canvas.contains(*pos)).expect("the operation drawn on the card");
     assert!(clip.contains(*pos + egui::vec2(1.0, 8.0)), "{pos:?} inside {clip:?}");
+}
+
+/// A window over `shell`, as the workspace harness builds one.
+fn harness_over(shell: Shell) -> Harness<'static, Shell> {
+    let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1000.0)).with_step_dt(1.0 / 60.0).build_ui_state(
+        |ui, shell: &mut Shell| {
+            shell.logic(ui.ctx());
+            shell.ui(ui);
+        },
+        shell,
+    );
+    h.run();
+    h
+}
+
+#[test]
+fn a_project_opened_again_resumes_its_tabs_the_diagram_it_showed_and_its_view() {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    crate::uml_ui::open_sample(h.state_mut()).unwrap();
+    h.run();
+    let class_diagram = h.state().canvas.active.expect("the sample's class diagram");
+    // An ER diagram beside it, then the class diagram shown again, panned and zoomed.
+    let er = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let schema = s.execute("er.schema.add", &serde_json::json!({ "name": "shop" })).unwrap().value["id"].as_str().unwrap().to_string();
+        let d = s.execute("diagram.add", &serde_json::json!({ "kind": "er", "element": schema, "name": "Shop" })).unwrap().value;
+        archforge_mof::Uuid::parse(d["id"].as_str().unwrap()).unwrap()
+    };
+    crate::canvas::open(h.state_mut(), er);
+    h.run();
+    crate::canvas::open(h.state_mut(), class_diagram);
+    h.run();
+    h.state_mut().canvas.zoom = 1.5;
+    h.state_mut().canvas.pan = egui::vec2(-120.0, 40.0);
+    h.run();
+    let path = h.state().project.as_ref().unwrap().path.clone();
+    let kept = h.state().state.view_of(&path).cloned().expect("the view is kept with the recent entry");
+    assert_eq!(kept.tabs, [class_diagram.to_string(), er.to_string()]);
+    assert_eq!((kept.active.as_deref(), kept.zoom, kept.pan), (Some(class_diagram.to_string().as_str()), 1.5, [-120.0, 40.0]));
+    assert_eq!(kept.label, "Commerce", "the shown diagram's name, for Home");
+    // Home's recent row says it.
+    h.state_mut().go_home();
+    h.run();
+    assert!(painted(&h).iter().any(|t| t.ends_with("Last view: Commerce")), "{:?}", painted(&h));
+    let at = rect_of(&h, "workspace.header.project.0").center();
+    click(&mut h, egui::pos2(at.x - 20.0, at.y));
+    h.run();
+    // Saved, closed and opened again in a new window with the same preferences: the same tabs,
+    // the same diagram shown, panned and zoomed as it was, and nothing changed or undoable.
+    let (tables, junctions) = archforge_notations::storage();
+    let rows = std::sync::Arc::new(archforge_mof::rows::snapshot(h.state().session.as_ref().unwrap().doc(), &tables, &junctions).unwrap());
+    let reopen = |state: crate::state::UiState| {
+        let mut shell = Shell::new(Services { ids: Some(test_ids()), ..Services::default() });
+        shell.state = state;
+        shell.open_project(crate::Opened { name: "Commerce platform".into(), path: path.clone(), model: Some(rows.clone()), unsaved: false });
+        harness_over(shell)
+    };
+    let back = reopen(h.state().state.clone());
+    let canvas = &back.state().canvas;
+    assert_eq!((canvas.tabs.clone(), canvas.active), (vec![class_diagram, er], Some(class_diagram)));
+    assert_eq!((canvas.zoom, canvas.pan), (1.5, egui::vec2(-120.0, 40.0)));
+    let session = back.state().session.as_ref().unwrap();
+    assert!(!session.can_undo() && !session.is_dirty(), "resuming the view changes nothing");
+    // A tab whose diagram is gone is left out; a view that does not read opens on no tab.
+    let mut state = h.state().state.clone();
+    let gone = archforge_mof::Uuid::v7(1_761_670_900_000, [5; 10]).to_string();
+    state.keep_view(
+        &path,
+        crate::state::SavedView { tabs: vec![gone.clone(), er.to_string()], active: Some(gone), pan: [0.0, 0.0], zoom: 1.0, label: String::new() },
+    );
+    let back = reopen(state.clone());
+    assert_eq!((back.state().canvas.tabs.clone(), back.state().canvas.active), (vec![er], Some(er)));
+    state.keep_view(
+        &path,
+        crate::state::SavedView { tabs: vec!["not an id".into()], active: None, pan: [f32::NAN, 0.0], zoom: 99.0, label: String::new() },
+    );
+    state.sanitize();
+    assert!(state.view_of(&path).is_none());
+    assert!(reopen(state).state().canvas.tabs.is_empty());
 }
 
 #[test]

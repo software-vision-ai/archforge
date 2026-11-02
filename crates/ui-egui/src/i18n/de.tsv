@@ -428,6 +428,7 @@ str		Unpin	Lösen
 str		Open	Öffnen
 str		Remove from recent projects	Aus den letzten Projekten entfernen
 str		Pick up in the exact view you left.	Machen Sie genau in der Ansicht weiter, die Sie verlassen haben.
+str		Last view: {name}	Zuletzt angezeigt: {name}
 str		Just now	Gerade eben
 plural		{n} minute ago	vor {n} Minute|vor {n} Minuten
 plural		{n} hour ago	vor {n} Stunde|vor {n} Stunden

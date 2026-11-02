@@ -33,7 +33,7 @@ const GRID_STEP: f32 = 32.0;
 const GRID_MIN: f32 = 12.0;
 const GRID_MAX_DOTS: f32 = 6000.0;
 /// The zoom's range and a step of the zoom buttons.
-const ZOOM_RANGE: (f32, f32) = (0.1, 4.0);
+pub(crate) const ZOOM_RANGE: (f32, f32) = (0.1, 4.0);
 const ZOOM_STEP: f32 = 1.25;
 /// The margin "Whole diagram" leaves around the nodes.
 const FIT_MARGIN: f32 = 48.0;

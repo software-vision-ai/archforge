@@ -70,7 +70,12 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
 - A start card for what cannot be done at all yet (Explore an example, Import a model) is left
   off Home, and the cards left share the row (AR-67).
 - Recent projects keep the last twelve (name, folder, last opened) across restarts; a row opens
-  its project, or shows its tab when it is open already. A row or card under the pointer shows a
+  its project, or shows its tab when it is open already. Each keeps the view it was left in
+  (AR-59): its diagram and skill tabs in order, the one shown, and the canvas's pan and zoom; the
+  row says the folder and "Last view: {diagram}", and opening it again resumes that view, a tab
+  whose diagram is gone left out. The view is the window's preference, never the model's: resuming
+  it changes nothing and joins no history. The explorer and the panel, and whether they are folded,
+  are the window's for every project, kept as they were left. A row or card under the pointer shows a
   More button whose menu offers Open and Remove from recent projects; removing leaves the project
   where it is, asks nothing, and opening it again lists it again.
 - Pin a folder picks a folder with the system's picker and pins it on Home, up to eight, kept in
