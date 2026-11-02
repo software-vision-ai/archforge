@@ -6611,3 +6611,49 @@ fn a_class_is_deleted_from_the_model_through_its_menu_and_comes_back_with_undo()
     assert!(!ids(&h).contains(&order), "the card left the diagram");
     assert!(class_named(&h, "OrderLine").is_some(), "the class stays in the model");
 }
+
+#[test]
+fn the_removal_toast_keeps_clear_of_the_minimap_at_every_width_and_its_undo_still_undoes() {
+    let (mut h, _customer, _diagram) = diagram_harness();
+    let schema = {
+        let st = h.state().session.as_ref().unwrap().doc();
+        st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap()).unwrap()
+    };
+    let tables = |h: &Harness<'static, Shell>| {
+        let st = h.state().session.as_ref().unwrap().doc();
+        st.alive().filter(|o| st.class_of(*o).ok() == Some(archforge_er::ENTITY)).count()
+    };
+    let before = tables(&h);
+    h.state_mut()
+        .session
+        .as_mut()
+        .unwrap()
+        .execute("er.entity.add", &serde_json::json!({ "schema": schema.to_string(), "name": "Invoice" }))
+        .unwrap();
+    // A long message, as a translation makes it, on the toast the removal would show.
+    let text = "Orders entfernt; was es enthielt, wurde nach Commerce UML verschoben, mit allen Klassen und Beziehungen".to_string();
+    let mut beside_minimap = Vec::new();
+    // The report's 1505-point window among them; at the narrower ones the minimap folds away.
+    for size in [egui::vec2(1600.0, 1000.0), egui::vec2(1505.0, 1040.0), egui::vec2(1420.0, 900.0), egui::vec2(980.0, 900.0)] {
+        h.set_size(size);
+        let undo_label = h.state().session.as_ref().unwrap().undo_label().map(str::to_string);
+        let until = h.state().frames + 1000;
+        h.state_mut().canvas.toast = Some(crate::connect::Toast { text: text.clone(), until, undo_label });
+        h.run();
+        let toast = rect_of(&h, "workspace.toast");
+        let undo = rect_of(&h, "workspace.toast.undo");
+        assert!(toast.contains_rect(undo), "{size:?}: Undo {undo:?} lies within the toast {toast:?}");
+        if ids(&h).iter().any(|i| i == "workspace.minimap") {
+            let minimap = rect_of(&h, "workspace.minimap");
+            assert!(!toast.intersects(minimap), "{size:?}: the toast {toast:?} is clear of the minimap {minimap:?}");
+            beside_minimap.push(size);
+        }
+        assert!(painted(&h).iter().any(|t| t.starts_with("Orders entfernt") && t.ends_with("Beziehungen")), "{size:?}: the whole message shows");
+    }
+    // The minimap showed at the wider widths, so the check above ran there.
+    assert!(beside_minimap.len() >= 2, "{beside_minimap:?}");
+    // Its Undo, at the narrowest width, undoes what the toast is about.
+    let at = rect_of(&h, "workspace.toast.undo").center();
+    click(&mut h, at);
+    assert_eq!(tables(&h), before, "Undo took the table back");
+}

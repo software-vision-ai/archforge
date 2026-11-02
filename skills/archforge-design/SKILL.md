@@ -279,7 +279,9 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   notice, never a refusal. It says in the model's words what is wrong, why, and which choice
   avoids it.
 - A refusal shows where the action happened: under the field, under the box's name or under the
-  tree. Removals that take other things with them show a toast with Undo.
+  tree. Removals that take other things with them show a toast with Undo. The toast keeps clear
+  of the minimap (AR-75): at the canvas's foot, left of the minimap while there is room beside it,
+  else above it; its text wraps to three lines rather than running under Undo.
 
 ## Saving
 - Every edit is written to the project on its own a moment after it settles, so a crash loses

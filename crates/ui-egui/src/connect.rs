@@ -29,6 +29,10 @@ const CHOICE_PITCH: f32 = 76.0;
 const OFFER: Vec2 = vec2(300.0, 200.0);
 /// A toast's size and how many frames it stays.
 const TOAST: Vec2 = vec2(440.0, 40.0);
+/// The narrowest toast beside the minimap; with less room it moves above the minimap.
+const TOAST_MIN: f32 = 300.0;
+/// The most lines a toast's text wraps to.
+const TOAST_ROWS: usize = 3;
 const TOAST_FRAMES: u64 = 300;
 /// How far a self relationship's loop reaches out of its entity.
 /// The diagram's self-loop, on screen (the grid hit-tests the same shape).
@@ -514,13 +518,30 @@ pub(crate) fn toast(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
         return;
     }
     let paint = ui.painter().clone();
-    let m = Rect::from_min_size(pos2(r.center().x - TOAST.x / 2.0, r.bottom() - 78.0 - TOAST.y), TOAST);
+    // Clear of the minimap (AR-75): at the canvas's foot, left of the minimap while there is room
+    // beside it, else above it; the text wraps rather than running under Undo.
+    let edge = 16.0;
+    let minimap = crate::canvas::minimap_box(shell, r);
+    let right = minimap.map_or(r.right() - edge, |m| m.left() - edge);
+    let beside = right - (r.left() + edge) >= TOAST_MIN;
+    let width = if beside { TOAST.x.min(right - r.left() - edge) } else { TOAST.x.min(r.width() - 2.0 * edge) }.max(0.0);
+    let undo = ux::galley(&paint, &tr("Undo"), types::SMALL, p.accent_tint, None);
+    let undo_w = undo.size().x + 16.0;
+    let text = ux::galley_rows(&paint, &t.text, types::SMALL, p.surface, Some((width - 16.0 - 12.0 - undo_w - 8.0).max(0.0)), TOAST_ROWS);
+    let height = (text.size().y + 22.0).max(TOAST.y);
+    let bottom = match (beside, minimap) {
+        (false, Some(mm)) => mm.top() - 12.0,
+        _ => r.bottom() - 78.0,
+    };
+    let left = if beside { (r.center().x - width / 2.0).min(right - width) } else { r.center().x - width / 2.0 };
+    let left = left.min(r.right() - edge - width).max(r.left() + edge);
+    let m = Rect::from_min_size(pos2(left, bottom - height), vec2(width, height));
     ux::shadow(&paint, m, 8.0, p.shadow);
     paint.rect_filled(m, 8.0, p.text);
-    let undo = ux::galley(&paint, &tr("Undo"), types::SMALL, p.accent_tint, None);
-    let b = Rect::from_min_max(pos2(m.right() - 16.0 - undo.size().x - 8.0, m.top() + 6.0), pos2(m.right() - 8.0, m.bottom() - 6.0));
-    ux::text(&paint, m.min + vec2(16.0, 11.0), &t.text, types::SMALL, p.surface, Some((b.left() - 12.0 - m.left() - 16.0).max(0.0)));
+    let b = Rect::from_min_size(pos2(m.right() - 8.0 - undo_w, m.center().y - 14.0), vec2(undo_w, 28.0));
+    paint.galley(pos2(m.left() + 16.0, m.center().y - text.size().y / 2.0), text, p.surface);
     paint.galley(b.min + vec2(8.0, (b.height() - undo.size().y) / 2.0), undo, p.accent_tint);
+    widgets::record_visible(ui, &mut shell.registry, "workspace.toast", "toast", m);
     if control(shell, ui, "workspace.toast.undo", "button", b, true).clicked() {
         shell.canvas.toast = None;
         if let Err(e) = run(shell, "edit.undo", serde_json::Value::Null) {

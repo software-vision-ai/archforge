@@ -98,6 +98,8 @@ pub enum Screen {
     WorkspaceDiagramEmpty,
     /// A diagram of two tables and their relationship, the first table selected.
     WorkspaceDiagram,
+    /// The same with a removal's toast and its Undo, clear of the minimap.
+    WorkspaceToast,
     /// The filled diagram with its schema selected, export skills on the project and the schema,
     /// and File → Generate… open over it.
     WorkspaceGenerate,
@@ -363,6 +365,7 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
         screen,
         Screen::WorkspaceDiagramEmpty
             | Screen::WorkspaceDiagram
+            | Screen::WorkspaceToast
             | Screen::WorkspaceGenerate
             | Screen::WorkspaceAppearance
             | Screen::WorkspaceAppearanceLine
@@ -382,6 +385,7 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
             matches!(
                 screen,
                 Screen::WorkspaceDiagram
+                    | Screen::WorkspaceToast
                     | Screen::WorkspaceGenerate
                     | Screen::WorkspaceAppearance
                     | Screen::WorkspaceAppearanceLine
@@ -402,6 +406,11 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
         }
         if screen == Screen::WorkspaceGenerate {
             sample_generate(&mut shell)?;
+        }
+        if screen == Screen::WorkspaceToast {
+            let undo_label = shell.session.as_ref().and_then(|s| s.undo_label().map(str::to_string));
+            let text = crate::i18n::fmt(&crate::i18n::tr("{what} removed"), &[("what", "region")]);
+            shell.canvas.toast = Some(crate::connect::Toast { text, until: u64::MAX, undo_label });
         }
         if screen == Screen::WorkspaceCrossSchema {
             sample_cross_schema(&mut shell)?;
