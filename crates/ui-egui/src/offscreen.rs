@@ -68,6 +68,8 @@ pub enum Screen {
     WorkspaceClassMembers,
     /// The same with Customer's operation rename open in its editor, its parameter on a row.
     WorkspaceMemberEditor,
+    /// The sample class model with Catalog selected and a new attribute typed on its card.
+    WorkspaceInlineMember,
     /// The sample class model with the association "paid by" selected: its line's end handles and
     /// its Properties with both ends.
     WorkspaceAssociation,
@@ -298,6 +300,36 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
             shell.canvas.tool = crate::canvas::Tool::Connect("relationship");
             shell.canvas.uml_relation = crate::uml_relate::Relate::Composition;
             shell.canvas.popover = true;
+        }
+    }
+    if screen == Screen::WorkspaceInlineMember {
+        shell.adopt_project();
+        crate::uml_ui::open_sample(&mut shell)?;
+        let class = {
+            let store = shell.session.as_ref().ok_or("no project is open")?.doc();
+            let c = store
+                .alive()
+                .find(|o| store.class_of(*o).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(store, *o) == "Catalog")
+                .ok_or("the sample has no such class")?;
+            store.uuid(c).map_err(|e| e.to_string())?
+        };
+        if !crate::uml_inline::open(&mut shell, class, crate::uml_panel::MemberKind::Attribute, None) {
+            return Err("the class's card cannot hold a row".into());
+        }
+        if let Some(inline) = shell.canvas.inline.as_mut() {
+            inline.edit.name = "code".into();
+            inline.ty = "Integer".into();
+        }
+        // Catalog at a working zoom near the canvas's top left.
+        let at = shell.session.as_ref().and_then(|s| {
+            let store = s.doc();
+            let n = archforge_diagram::views_of(store, store.by_uuid(class)?).2.into_iter().next()?;
+            Some(archforge_diagram::grid::bounds_of(store, n))
+        });
+        if let Some(b) = at {
+            shell.canvas.fit_pending = false;
+            shell.canvas.zoom = 1.25;
+            shell.canvas.pan = egui::vec2(200.0 - b.x as f32 * 1.25, 160.0 - b.y as f32 * 1.25);
         }
     }
     if matches!(screen, Screen::WorkspaceClassMembers | Screen::WorkspaceMemberEditor) {

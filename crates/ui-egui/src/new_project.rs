@@ -208,14 +208,7 @@ fn header(shell: &mut Shell, ui: &egui::Ui, p: &Palette, frame: Rect, live: bool
     ux::icon_in_tile(paint, tile, &icons::FOLDER, p.accent);
     let room = (frame.width() - 88.0 - 72.0).max(0.0);
     ux::text(paint, at(88.0, 30.0), &tr("New project"), types::SECTION, p.text, Some(room));
-    ux::text(
-        paint,
-        at(88.0, 61.0),
-        &tr("Your models, every view of them, and the issues and conversations about them."),
-        types::BODY,
-        p.text_secondary,
-        Some(room),
-    );
+    ux::text(paint, at(88.0, 61.0), &tr("Your models and every view of them, in one project."), types::BODY, p.text_secondary, Some(room));
     let close = Rect::from_min_size(at(frame.width() - 60.0, 28.0), Vec2::splat(32.0));
     let resp = control(shell, ui, "new-project.close", "button", close, live);
     let resp = if live { resp.on_hover_text(tr("Close")) } else { resp };
@@ -335,7 +328,7 @@ fn content(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, origin: Pos2, inne
     ux::text(&paint, at(DIAGRAMS), &tr("Diagrams"), types::UI_STRONG, p.text, Some(inner));
     let line = ux::galley_rows(
         &paint,
-        &tr("Add diagrams of any kind as you go: UML 2, C4 and many more. Every diagram shows the same model."),
+        &tr("Add ER and UML class diagrams as you go. Every diagram shows the same model."),
         types::SMALL,
         p.text_secondary,
         Some(inner),
@@ -345,9 +338,9 @@ fn content(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, origin: Pos2, inne
     // What every project holds.
     ux::text(&paint, at(PARTS), &tr("In every project"), types::UI_STRONG, p.text, Some(inner));
     let parts = [
-        (tr("Issues"), tr("Work tracked on the elements it concerns."), &icons::ISSUE, p.amber, p.amber_tint),
-        (tr("Conversations"), tr("Chats and prompts, linked to what they touched."), &icons::BUBBLE, p.purple, p.purple_tint),
-        (tr("History"), tr("Every change kept, to compare or restore."), &icons::HISTORY, p.green, p.green_tint),
+        (tr("Skills"), tr("Guidance for agents, written on the elements it applies to."), &icons::SKILL, p.purple, p.purple_tint),
+        (tr("Agent access"), tr("Agents work on the open model through MCP; undo covers their changes."), &icons::LINK, p.amber, p.amber_tint),
+        (tr("Undo and saves"), tr("Every change can be undone; Save writes the model to the project."), &icons::HISTORY, p.green, p.green_tint),
     ];
     let three = inner >= THREE_UP;
     let (w, h) = if three { ((inner - 2.0 * GAP) / 3.0, 92.0) } else { (inner, 64.0) };

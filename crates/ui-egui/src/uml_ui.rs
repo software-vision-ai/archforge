@@ -167,16 +167,32 @@ impl DiagramKind for UmlKind {
             };
             Some((kind, store.uuid(o).ok()?))
         });
+        let (kind, target) = member.map_or((MemberKind::Attribute, None), |(kind, id)| (kind, Some(id)));
+        // Typed in place on the card (AR-62); Properties' editor where the card cannot hold it.
+        if crate::uml_inline::open(shell, element, kind, target) {
+            return;
+        }
         let _ = crate::editing::run(shell, "view.select", json!({ "ids": [element.to_string()] }));
         shell.state.show_panel(crate::state::Panel::Properties);
-        match member {
-            Some((kind, id)) => crate::uml_panel::open(shell, element, kind, Some(id)),
-            None => crate::uml_panel::open(shell, element, MemberKind::Attribute, None),
-        }
+        crate::uml_panel::open(shell, element, kind, target);
     }
 
     fn adorner(&self) -> Option<(&'static str, &'static str)> {
         Some(("add-attribute", "Add attribute"))
+    }
+
+    /// A class's operation, typed in place as its attribute is.
+    fn open_second(&self, shell: &mut Shell, element: Uuid) {
+        if !crate::uml_inline::open(shell, element, MemberKind::Operation, None) {
+            let _ = crate::editing::run(shell, "view.select", json!({ "ids": [element.to_string()] }));
+            shell.state.show_panel(crate::state::Panel::Properties);
+            crate::uml_panel::open(shell, element, MemberKind::Operation, None);
+        }
+    }
+
+    /// The + of each compartment.
+    fn card_controls(&self, shell: &mut Shell, ui: &egui::Ui, p: &Palette, clip: Rect, rect: Rect, element: Uuid) {
+        crate::uml_inline::add_buttons(shell, ui, p, clip, rect, element);
     }
 
     /// A class's menu: open in Models, add an attribute, remove from the diagram, delete from the

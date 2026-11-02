@@ -376,7 +376,7 @@ str		New project	新規プロジェクト
 str		A clean start for your next idea.	次のアイデアを、まっさらな状態から。
 str		Create project	プロジェクトを作成
 # 新規プロジェクトのダイアログ
-str		Your models, every view of them, and the issues and conversations about them.	モデル、そのすべてのビュー、そしてそれに関する課題と会話。
+str		Your models and every view of them, in one project.	モデルとそのすべてのビューを、1 つのプロジェクトに。
 str		Project name	プロジェクト名
 str		Name your project	プロジェクトに名前を付ける
 str		You can rename it later.	名前はあとで変更できます。
@@ -394,14 +394,13 @@ str		Creates {file} here: one versioned project file that keeps every change.	�
 str		The project file is made here: one versioned file that keeps every change.	プロジェクトファイルはここに作成されます。すべての変更を残す、バージョン管理されたファイルです。
 str		Diagrams	ダイアグラム
 str		Elements	要素
-str		Add diagrams of any kind as you go: UML 2, C4 and many more. Every diagram shows the same model.	作業しながら、あらゆる種類のダイアグラムを追加できます：UML 2、C4 など多数。どのダイアグラムも同じモデルを表します。
+str		Add ER and UML class diagrams as you go. Every diagram shows the same model.	作業しながら ER 図と UML クラス図を追加できます。どのダイアグラムも同じモデルを表示します。
 str		In every project	すべてのプロジェクトに
-str		Issues	課題
-str		Work tracked on the elements it concerns.	関係する要素に紐づけて追跡される作業。
-str		Conversations	会話
-str		Chats and prompts, linked to what they touched.	チャットとリクエスト。触れた要素に紐づけて残ります。
-str		History	履歴
-str		Every change kept, to compare or restore.	すべての変更を保存。比較や復元に使えます。
+str		Guidance for agents, written on the elements it applies to.	エージェント向けのガイダンスを、適用先の要素に書き込みます。
+str		Agent access	エージェントのアクセス
+str		Agents work on the open model through MCP; undo covers their changes.	エージェントは MCP を通じて開いているモデルを編集します。その変更も元に戻せます。
+str		Undo and saves	元に戻すと保存
+str		Every change can be undone; Save writes the model to the project.	すべての変更は元に戻せます。保存するとモデルがプロジェクトに書き込まれます。
 str		Cancel	キャンセル
 str		Creating…	作成中…
 str		A project called {name} is already in this folder.	{name} という名前のプロジェクトがこのフォルダーにすでにあります。
@@ -510,6 +509,9 @@ plural		+ {n} more member	+ 他 {n} メンバー
 str		Abstract	抽象
 str		Add attribute	属性を追加
 str		Add operation	操作を追加
+str		More details in Properties	詳細はプロパティで
+str		There is no type named {name}.	{name} という名前の型はありません。
+str		Several types are named {name}; pick one from the menu.	{name} という名前の型が複数あります。メニューから 1 つ選んでください。
 str		Add parameter	パラメーターを追加
 str		Attribute	属性
 str		Attribute · model	属性 · モデル

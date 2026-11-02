@@ -872,10 +872,12 @@ fn delete_dialog_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: 
         buttons.push(("workspace.explorer.delete.unplace", tr("Remove from this diagram only"), false));
     }
     for (id, label, primary) in buttons {
-        let g = ux::galley(paint, &label, types::SMALL, p.text, None);
+        // Laid out in the ink it is drawn in: a galley keeps the colour it was laid out with.
+        let ink = if primary { p.on_accent } else { p.text };
+        let g = ux::galley(paint, &label, types::SMALL, ink, None);
         let b = Rect::from_min_max(pos2(x - g.size().x - 24.0, dialog.bottom() - 48.0), pos2(x, dialog.bottom() - 20.0));
         paint.rect_filled(b, 6.0, if primary { p.danger } else { p.field });
-        paint.galley(b.min + vec2(12.0, (b.height() - g.size().y) / 2.0), g, if primary { p.on_accent } else { p.text });
+        paint.galley(b.min + vec2(12.0, (b.height() - g.size().y) / 2.0), g, ink);
         if control(shell, ui, id, "button", b, true).clicked() {
             shell.explorer.delete = None;
             if primary {
