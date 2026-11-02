@@ -40,6 +40,11 @@ pub struct Dialog;
 
 pub fn open(shell: &mut Shell) {
     if shell.about.is_none() {
+        // The bar's search closes: its list would otherwise take Enter and the arrows behind the
+        // dialog.
+        if shell.home_search.open {
+            crate::home_search::close(shell);
+        }
         shell.about = Some(Dialog);
     }
 }

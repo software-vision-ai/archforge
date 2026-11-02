@@ -6726,3 +6726,30 @@ fn about_scrolls_its_body_in_a_short_window_and_keeps_done_clear() {
     click(&mut h, at);
     assert!(h.state().about.is_none());
 }
+
+#[test]
+fn about_closes_the_bars_search_and_its_keys_never_reach_the_search_behind_it() {
+    let (mut h, _order) = class_properties("Order");
+    crate::home_search::open_with(h.state_mut(), "order");
+    h.run();
+    assert!(h.state().home_search.open);
+    h.state_mut().open_about();
+    h.run();
+    assert!(!h.state().home_search.open, "About closes the search");
+    // Were the search open behind it, Enter and the arrows stay the dialog's.
+    h.state_mut().home_search.open = true;
+    h.state_mut().home_search.query = "order".into();
+    let shown = h.state().state.panel;
+    let selection = h.state().session.as_ref().unwrap().view().selection.clone();
+    for k in [egui::Key::ArrowDown, egui::Key::Enter] {
+        h.event(egui::Event::Key { key: k, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::NONE });
+        h.step();
+        h.event(egui::Event::Key { key: k, physical_key: None, pressed: false, repeat: false, modifiers: egui::Modifiers::NONE });
+        h.run();
+    }
+    assert!(h.state().about.is_some(), "About is still open");
+    assert_eq!(h.state().home_search.highlight, 0, "the search's highlight did not move");
+    assert!(h.state().home_search.open, "nothing in the search ran");
+    assert_eq!(h.state().state.panel, shown);
+    assert_eq!(h.state().session.as_ref().unwrap().view().selection, selection, "the selection is as it was");
+}
