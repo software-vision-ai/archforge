@@ -481,6 +481,8 @@ plural		+ {n} more member	+ {n} membre de plus|+ {n} membres de plus
 str		Abstract	Abstraite
 str		Add attribute	Ajouter un attribut
 str		Add operation	Ajouter une opération
+str		More details in Properties	Plus de détails dans Propriétés
+str		There is no type named {name}.	Il n’existe aucun type nommé {name}.
 str		Add parameter	Ajouter un paramètre
 str		Attribute	Attribut
 str		Attribute · model	Attribut · modèle

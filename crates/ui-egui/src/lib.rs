@@ -40,6 +40,7 @@ pub mod state;
 pub mod subtypes;
 pub mod theme;
 pub mod types;
+mod uml_inline;
 mod uml_panel;
 mod uml_relate;
 mod uml_ui;
@@ -1141,6 +1142,7 @@ impl Shell {
             canvas::retain_valid(&mut self.canvas, session.doc());
             skill_tab::retain_valid(&mut self.canvas);
             panels::retain_valid(&mut self.panels, session.doc());
+            uml_inline::retain_valid(&mut self.canvas.inline, session.doc());
             self.problems = problems::by_element(self.notation_uis, session.doc());
         }
         // Quitting, by the menu or the window's close button, asks about unsaved projects first;

@@ -49,11 +49,11 @@ pub(crate) const ENTITY_HEADER: f32 = 66.0;
 pub(crate) const ENTITY_FIRST_ROW: f32 = 77.0;
 pub(crate) const ENTITY_ROW: f32 = 20.0;
 const ENTITY_INSET: f32 = 18.0;
-const ENTITY_TEXT: f32 = 42.0;
+pub(crate) const ENTITY_TEXT: f32 = 42.0;
 /// How strongly a table of another schema shows: the design's 60 %.
 const FOREIGN_ALPHA: f32 = 0.6;
 /// Below this zoom a node shows its name only.
-const DETAIL_ZOOM: f32 = 0.5;
+pub(crate) const DETAIL_ZOOM: f32 = 0.5;
 
 /// The canvas tools.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -112,6 +112,8 @@ pub struct State {
     /// Editing (slice E1): a name typed in a node, the pointer gesture under way, the entity menu,
     /// and whether the canvas has the keyboard.
     pub rename: Option<crate::editing::NodeRename>,
+    /// A class's attribute or operation typed in place on its card.
+    pub(crate) inline: Option<crate::uml_inline::InlineMember>,
     pub gesture: Option<crate::editing::Gesture>,
     pub menu: Option<crate::editing::EntityMenu>,
     pub focused: bool,
@@ -158,6 +160,7 @@ impl Default for State {
             key_status: true,
             notice: None,
             rename: None,
+            inline: None,
             gesture: None,
             menu: None,
             focused: false,
@@ -569,6 +572,7 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
             end_drag: crate::editing::end_preview(shell, pointer),
             segment_drag: crate::editing::segment_preview(shell, view, pointer),
             ends: std::cell::RefCell::new(Vec::new()),
+            draft: crate::uml_inline::draft(shell, store),
         };
         for e in &visible.edges {
             if let Some(badge) = draw_edge(&clip, &draw, *e, &mut shell.registry, ui) {
@@ -667,6 +671,8 @@ struct Drawing<'a> {
     segment_drag: Option<(Uuid, Vec<(f64, f64)>)>,
     /// The cardinality texts drawn this frame, for the next frame's press.
     ends: std::cell::RefCell<Vec<EndText>>,
+    /// A row typed in place on a card: its element, compartment and row (none for a new one).
+    draft: Option<(Obj, usize, Option<usize>)>,
 }
 
 impl Drawing<'_> {
@@ -712,7 +718,18 @@ fn draw_node(
     let selected = selection.contains(&n) || element.is_some_and(|e| selection.contains(&e));
     let inner = paint.with_clip_rect(rect.intersect(paint.clip_rect()));
     // The card the element's notation describes, when it describes one.
-    let card = element.and_then(|e| d.notations.of_element(store, e)?.card(store, e, d.diagram));
+    let mut card = element.and_then(|e| d.notations.of_element(store, e)?.card(store, e, d.diagram));
+    // A row typed in place: its place is kept blank under the field, and a new one's card grows to
+    // hold it while it is typed.
+    let mut rect = rect;
+    if let (Some(c), Some((of, compartment, row))) = (card.as_mut(), d.draft)
+        && element == Some(of)
+    {
+        with_draft(c, compartment, row);
+        if row.is_none() {
+            rect.max.y = rect.max.y.max(rect.top() + card_height(c) * z);
+        }
+    }
     match element {
         Some(_) if let Some(card) = card => {
             // An element of another scope: dimmed, dashed, its scope named in the eyebrow.
@@ -823,6 +840,62 @@ pub(crate) fn row_at(card: &archforge_diagram::figure::Card, y: f32) -> Option<u
     None
 }
 
+/// A card's places under its header, each with its top in units below the card's and the
+/// compartment it is in: a row a pitch apart, half a pitch and a dividing line between
+/// compartments, an empty compartment of several still a row.
+fn slots(card: &archforge_diagram::figure::Card) -> Vec<(f32, Slot<'_>, usize)> {
+    let mut out = Vec::new();
+    // Where the next row sits, in pitches below the first.
+    let mut at = 0.0_f32;
+    for (c, rows) in card.compartments.iter().enumerate() {
+        if c > 0 {
+            out.push((ENTITY_FIRST_ROW + at * ENTITY_ROW - 4.0, Slot::Line, c));
+            at += 0.5;
+        }
+        if rows.is_empty() && card.compartments.len() > 1 {
+            out.push((ENTITY_FIRST_ROW + at * ENTITY_ROW, Slot::Empty, c));
+            at += 1.0;
+        }
+        for row in rows {
+            out.push((ENTITY_FIRST_ROW + at * ENTITY_ROW, Slot::Row(row), c));
+            at += 1.0;
+        }
+    }
+    out
+}
+
+/// The top of row `index` of `card`, counted across its compartments, in units below the card's.
+pub(crate) fn row_top(card: &archforge_diagram::figure::Card, index: usize) -> Option<f32> {
+    slots(card).into_iter().filter(|(_, s, _)| matches!(s, Slot::Row(_))).nth(index).map(|(top, _, _)| top)
+}
+
+/// The top of compartment `c`'s first place (its first row, or the row an empty one takes).
+pub(crate) fn compartment_top(card: &archforge_diagram::figure::Card, c: usize) -> Option<f32> {
+    slots(card).into_iter().find(|(_, s, at)| *at == c && !matches!(s, Slot::Line)).map(|(top, _, _)| top)
+}
+
+/// How tall `card` is to show every place it has.
+pub(crate) fn card_height(card: &archforge_diagram::figure::Card) -> f32 {
+    slots(card).last().map_or(ENTITY_HEADER, |(top, _, _)| top + ENTITY_ROW + 9.0)
+}
+
+/// `card` with a row being typed in place: a new, blank one at the end of compartment
+/// `compartment`, or row `row` (counted across the compartments) blanked under its field.
+pub(crate) fn with_draft(card: &mut archforge_diagram::figure::Card, compartment: usize, row: Option<usize>) {
+    match row {
+        None => {
+            if let Some(rows) = card.compartments.get_mut(compartment) {
+                rows.push(archforge_diagram::figure::Row { mark: None, text: String::new(), linked: false, slanted: false });
+            }
+        }
+        Some(index) => {
+            if let Some(r) = card.compartments.iter_mut().flatten().nth(index) {
+                r.text.clear();
+            }
+        }
+    }
+}
+
 /// One place in a card's compartments, at its top in units below the card's.
 enum Slot<'a> {
     Row(&'a archforge_diagram::figure::Row),
@@ -837,23 +910,7 @@ enum Slot<'a> {
 /// foot or beside its eyebrow when no row's place fits, so a card made short never looks empty
 /// (AR-57).
 fn draw_rows(inner: &egui::Painter, p: &Palette, card: &archforge_diagram::figure::Card, rect: Rect, z: f32, key_status: bool, room: Option<f32>) {
-    let mut slots: Vec<(f32, Slot<'_>)> = Vec::new();
-    // Where the next row sits, in pitches below the first.
-    let mut at = 0.0_f32;
-    for (c, rows) in card.compartments.iter().enumerate() {
-        if c > 0 {
-            slots.push((ENTITY_FIRST_ROW + at * ENTITY_ROW - 4.0, Slot::Line));
-            at += 0.5;
-        }
-        if rows.is_empty() && card.compartments.len() > 1 {
-            slots.push((ENTITY_FIRST_ROW + at * ENTITY_ROW, Slot::Empty));
-            at += 1.0;
-        }
-        for row in rows {
-            slots.push((ENTITY_FIRST_ROW + at * ENTITY_ROW, Slot::Row(row)));
-            at += 1.0;
-        }
-    }
+    let slots: Vec<(f32, Slot<'_>)> = slots(card).into_iter().map(|(top, slot, _)| (top, slot)).collect();
     // A row fits when it ends within the card, a unit of slack for rounding.
     let height = rect.height() / z;
     let fits = |top: f32| top + ENTITY_ROW <= height + 1.0;

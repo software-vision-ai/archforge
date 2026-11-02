@@ -480,6 +480,8 @@ plural		+ {n} more member	+ {n} more member|+ {n} more members
 str		Abstract	Abstract
 str		Add attribute	Add attribute
 str		Add operation	Add operation
+str		More details in Properties	More details in Properties
+str		There is no type named {name}.	There is no type named {name}.
 str		Add parameter	Add parameter
 str		Attribute	Attribute
 str		Attribute · model	Attribute · model

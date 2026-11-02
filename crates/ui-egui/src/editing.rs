@@ -1408,6 +1408,7 @@ pub(crate) fn overlays(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rec
     if let Some(rect) = rename_rect {
         rename_field(shell, ui, p, rect, view.zoom);
     }
+    crate::uml_inline::row(shell, ui, p, view);
     let note_rect = shell
         .session
         .as_ref()
@@ -1510,6 +1511,7 @@ fn adorners(
             shell.canvas.gesture = Some(Gesture::Connect { tool, from_node: node, from });
         }
     }
+    kind.card_controls(shell, ui, p, r, rect, entity);
 }
 
 /// A selected note's link handle at its top right: dragged onto a table or a relationship's line,
@@ -1759,6 +1761,7 @@ fn entity_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, menu: &En
 fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
     if !shell.canvas.focused
         || shell.canvas.rename.is_some()
+        || shell.canvas.inline.is_some()
         || shell.canvas.note_edit.is_some()
         || shell.canvas.menu.is_some()
         || shell.explorer.delete.is_some()
@@ -1815,7 +1818,7 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
         if let [(_, Some(entity))] = selected.as_slice()
             && let Some(kind) = kind.filter(|k| k.adorner().is_some())
         {
-            kind.open(shell, *entity, None);
+            if shift { kind.open_second(shell, *entity) } else { kind.open(shell, *entity, None) }
         }
         return;
     }

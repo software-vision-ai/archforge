@@ -186,6 +186,8 @@ pub enum Menu {
     MemberVisibility,
     MemberType,
     ParamType(usize),
+    /// The type menu of a member typed in place on its class's card.
+    InlineType,
     /// An association end's aggregation and its multiplicity's presets.
     EndAggregation(usize),
     EndMultiplicity(usize),
