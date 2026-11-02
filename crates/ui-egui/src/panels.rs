@@ -519,10 +519,19 @@ pub(crate) fn editable_select(
         .desired_width(inner.width());
     let resp = edit.show(&mut ui.new_child(egui::UiBuilder::new().max_rect(inner))).response;
     let _ = (*resp).clone().accessible_name(c.name);
-    // Leaving the field writes what was typed, unless the press that left it picks from the menu.
-    let into_list = was_open && ui.input(|i| i.pointer.press_origin().is_some_and(|o| list.contains(o)));
-    if out == ComboOut::Idle && resp.lost_focus() && !into_list {
-        out = ComboOut::Commit;
+    // Leaving the field writes what was typed, unless the press that left it is on the field's own
+    // chevron or its open menu: then the typing stays a draft and the field takes the keyboard back,
+    // so a pick replaces the draft and Escape still brings the written value back.
+    // The field gives the keyboard up on the press or on the click, so either edge counts.
+    let pressed_in =
+        |r: Rect| ui.input(|i| (i.pointer.any_pressed() || i.pointer.any_released()) && i.pointer.interact_pos().is_some_and(|o| r.contains(o)));
+    let own = pressed_in(chevron) || (was_open && pressed_in(list));
+    if out == ComboOut::Idle && resp.lost_focus() {
+        if own {
+            ui.memory_mut(|m| m.request_focus(eid));
+        } else {
+            out = ComboOut::Commit;
+        }
     }
     let ring = if c.refused { Some(p.danger) } else { (resp.has_focus() || shell.panels.menu == Some(c.menu)).then_some(p.focus) };
     if let Some(ink) = ring {

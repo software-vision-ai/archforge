@@ -5422,6 +5422,35 @@ fn a_multiplicity_refusal_stays_until_its_own_field_is_written_and_reads_in_full
 }
 
 #[test]
+fn the_chevron_keeps_a_typed_multiplicity_a_draft_so_a_pick_is_one_step_and_escape_still_cancels() {
+    let (mut h, paid) = paid_by(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    let id = crate::widgets::egui_id("workspace.properties.end.0.multiplicity");
+    // Typed over the written 1, then the chevron: nothing is written and the field keeps the keyboard.
+    let before = revision(&h);
+    retype(&mut h, "workspace.properties.end.0.multiplicity", "3");
+    let at = rect_of(&h, "workspace.properties.end.0.multiplicity.menu").center();
+    click(&mut h, at);
+    assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::EndMultiplicity(0)));
+    assert_eq!((end_multiplicities(&h, paid).0[0].as_str(), typed_multiplicity(&h, 0)), ("1", "3".to_string()));
+    assert_eq!(revision(&h), before);
+    assert!(h.ctx.memory(|m| m.has_focus(id)));
+    // Escape closes the menu, then brings the 1 back; still nothing written.
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    assert_eq!((typed_multiplicity(&h, 0), revision(&h)), ("1".to_string(), before));
+    // Typed, then a preset picked: the preset is written as one step, which one undo takes back.
+    retype(&mut h, "workspace.properties.end.0.multiplicity", "3");
+    let at = rect_of(&h, "workspace.properties.end.0.multiplicity.menu").center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.properties.end.0.multiplicity.menu.3").center();
+    click(&mut h, at);
+    assert_eq!(end_multiplicities(&h, paid).0[0], "1..*");
+    h.state_mut().session.as_mut().unwrap().undo().unwrap();
+    h.run();
+    assert_eq!(end_multiplicities(&h, paid).0[0], "1", "one undo goes back past the pick to the 1, not to a 3");
+}
+
+#[test]
 fn an_end_multiplicity_menu_opens_above_its_field_when_the_window_has_no_room_below() {
     let (mut h, _) = paid_by(ThemeKind::Light, egui::vec2(1600.0, 820.0));
     for (i, above) in [(0, false), (1, true)] {
