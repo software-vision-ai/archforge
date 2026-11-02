@@ -5120,6 +5120,187 @@ fn a_table_box_shorter_than_its_columns_shows_those_that_fit_and_counts_the_rest
 }
 
 #[test]
+fn a_selected_class_takes_attributes_and_operations_typed_on_its_card_each_one_undo_step() {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    crate::uml_ui::open_sample(h.state_mut()).unwrap();
+    let st = h.state().session.as_ref().unwrap().doc();
+    let c = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(st, *o) == "Catalog").unwrap();
+    let catalog = st.uuid(c).unwrap();
+    let select = |h: &mut Harness<'static, Shell>| {
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [catalog.to_string()] })).unwrap();
+        h.run();
+    };
+    select(&mut h);
+    let revision = |h: &Harness<'static, Shell>| h.state().session.as_ref().unwrap().revision();
+    // The attributes' + opens a draft row with the name taking the keys; Tab moves to the type.
+    let at = rect_of(&h, "workspace.canvas.class.add-attribute").center();
+    click(&mut h, at);
+    assert!(h.state().canvas.inline.as_ref().is_some_and(|i| i.edit.kind == crate::uml_panel::MemberKind::Attribute && i.edit.target.is_none()));
+    h.event(egui::Event::Text("code".into()));
+    h.run();
+    key(&mut h, egui::Key::Tab, egui::Modifiers::NONE);
+    h.event(egui::Event::Text("Integer".into()));
+    h.run();
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    assert_eq!(member_rows(&h, catalog, false), ["+ name : String", "+ code : Integer"]);
+    assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add attribute"), "one undo step");
+    let written = revision(&h);
+    assert!(painted(&h).iter().any(|t| t == "+ code : Integer"), "the card shows it");
+    // The next draft is open; a type the model does not have is refused beside it, nothing written.
+    assert!(h.state().canvas.inline.as_ref().is_some_and(|i| i.edit.name.is_empty() && i.edit.target.is_none()));
+    h.event(egui::Event::Text("rating".into()));
+    h.run();
+    key(&mut h, egui::Key::Tab, egui::Modifiers::NONE);
+    h.event(egui::Event::Text("Currency".into()));
+    h.run();
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    let refused = h.state().canvas.inline.as_ref().and_then(|i| i.refused.clone()).expect("refused");
+    assert!(refused.contains("Currency"), "{refused}");
+    assert!(painted(&h).contains(&refused), "said beside the row");
+    assert_eq!(h.state().canvas.inline.as_ref().unwrap().edit.name, "rating", "the text stays");
+    assert_eq!((member_rows(&h, catalog, false).len(), revision(&h)), (2, written), "nothing written");
+    // Escape drops only the draft; undo takes back the member written.
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    assert!(h.state().canvas.inline.is_none());
+    assert_eq!(member_rows(&h, catalog, false).len(), 2);
+    h.state_mut().session.as_mut().unwrap().undo().unwrap();
+    assert_eq!(member_rows(&h, catalog, false), ["+ name : String"]);
+    h.state_mut().session.as_mut().unwrap().redo().unwrap();
+    h.run();
+    // The operations' + and the type menu: the pick fills the return type.
+    select(&mut h);
+    let at = rect_of(&h, "workspace.canvas.class.add-operation").center();
+    click(&mut h, at);
+    assert_eq!(h.state().canvas.inline.as_ref().map(|i| i.edit.kind), Some(crate::uml_panel::MemberKind::Operation));
+    h.event(egui::Event::Text("reprice".into()));
+    h.run();
+    let at = rect_of(&h, "workspace.canvas.member.type.menu").center();
+    click(&mut h, at);
+    let real = crate::uml_panel::type_choices(h.state().session.as_ref().unwrap().doc()).iter().position(|(l, _)| l == "Real").unwrap();
+    let at = rect_of(&h, &format!("workspace.canvas.member.type.{real}")).center();
+    click(&mut h, at);
+    assert_eq!(h.state().canvas.inline.as_ref().unwrap().ty, "Real");
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    assert_eq!(member_rows(&h, catalog, true), ["+ reprice() : Real"]);
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    // A draft with a name is written when the pointer goes elsewhere; an empty one only goes.
+    select(&mut h);
+    let at = rect_of(&h, "workspace.canvas.class.add-attribute").center();
+    click(&mut h, at);
+    h.event(egui::Event::Text("notes".into()));
+    h.run();
+    let canvas = rect_of(&h, "workspace.canvas");
+    click(&mut h, canvas.left_top() + egui::vec2(30.0, 30.0));
+    assert!(h.state().canvas.inline.is_none());
+    assert_eq!(member_rows(&h, catalog, false).last().map(String::as_str), Some("+ notes"));
+    // So is one whose type menu was open when the pointer went elsewhere.
+    select(&mut h);
+    let at = rect_of(&h, "workspace.canvas.class.add-attribute").center();
+    click(&mut h, at);
+    h.event(egui::Event::Text("tags".into()));
+    h.run();
+    let at = rect_of(&h, "workspace.canvas.member.type.menu").center();
+    click(&mut h, at);
+    assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::InlineType));
+    click(&mut h, canvas.left_top() + egui::vec2(30.0, 30.0));
+    assert!(h.state().canvas.inline.is_none(), "{:?}", h.state().canvas.inline);
+    assert_eq!(member_rows(&h, catalog, false).last().map(String::as_str), Some("+ tags"));
+    // ⋯ takes the draft to Properties' editor with what was typed.
+    select(&mut h);
+    let at = rect_of(&h, "workspace.canvas.class.add-attribute").center();
+    click(&mut h, at);
+    h.event(egui::Event::Text("reference".into()));
+    h.run();
+    let at = rect_of(&h, "workspace.canvas.member.details").center();
+    click(&mut h, at);
+    assert!(h.state().canvas.inline.is_none());
+    let edit = h.state().panels.member.clone().expect("Properties' editor");
+    assert_eq!((edit.name.as_str(), edit.target, edit.class), ("reference", None, catalog));
+    h.state_mut().panels.member = None;
+    // ⇧⌘↩ opens an operation's row from the keys.
+    select(&mut h);
+    h.state_mut().canvas.focused = true;
+    key(&mut h, egui::Key::Enter, egui::Modifiers { command: true, shift: true, ..Default::default() });
+    assert_eq!(h.state().canvas.inline.as_ref().map(|i| i.edit.kind), Some(crate::uml_panel::MemberKind::Operation));
+    // An agent removing the class drops the row.
+    h.state_mut().session.as_mut().unwrap().execute("element.remove", &serde_json::json!({ "ids": [catalog.to_string()] })).unwrap();
+    h.run();
+    assert!(h.state().canvas.inline.is_none());
+    h.state_mut().session.as_mut().unwrap().undo().unwrap();
+    h.run();
+    // Drawn too small for its rows, the card leaves the member to Properties' editor.
+    h.state_mut().canvas.zoom = 0.4;
+    select(&mut h);
+    h.state_mut().canvas.focused = true;
+    key(&mut h, egui::Key::Enter, egui::Modifiers { command: true, ..Default::default() });
+    assert!(h.state().canvas.inline.is_none());
+    assert!(h.state().panels.member.as_ref().is_some_and(|e| e.class == catalog && e.target.is_none()));
+}
+
+#[test]
+fn an_inline_row_keeps_a_type_by_what_it_is_refuses_a_name_two_types_share_and_keeps_moved_rows_in_sight() {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    crate::uml_ui::open_sample(h.state_mut()).unwrap();
+    let run = |h: &mut Harness<'static, Shell>, command: &str, params: serde_json::Value| {
+        let out = h.state_mut().session.as_mut().unwrap().execute(command, &params).unwrap_or_else(|e| panic!("{command}: {e}"));
+        out.value["id"].as_str().map(|i| archforge_mof::Uuid::parse(i).unwrap())
+    };
+    let class = |h: &Harness<'static, Shell>, name: &str| {
+        let st = h.state().session.as_ref().unwrap().doc();
+        st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(st, *o) == name).unwrap()).unwrap()
+    };
+    let catalog = class(&h, "Catalog");
+    // A second Money, in another package; Catalog's fee is of that one.
+    let billing = run(&mut h, "uml.package.add", serde_json::json!({ "name": "Billing" })).unwrap();
+    let money = run(&mut h, "uml.class.add", serde_json::json!({ "package": billing.to_string(), "name": "Money" })).unwrap();
+    let fee =
+        run(&mut h, "uml.attribute.add", serde_json::json!({ "class": catalog.to_string(), "name": "fee", "type": money.to_string() })).unwrap();
+    let type_of = |h: &Harness<'static, Shell>| {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let t = st.get(st.by_uuid(fee).unwrap(), archforge_uml::typed_element::TYPE).unwrap().as_ref().unwrap();
+        st.uuid(t).unwrap()
+    };
+    // Renamed in place, it keeps that Money.
+    assert!(crate::uml_inline::open(h.state_mut(), catalog, crate::uml_panel::MemberKind::Attribute, Some(fee)));
+    h.run();
+    h.state_mut().canvas.inline.as_mut().unwrap().edit.name = "charge".into();
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    assert!(h.state().canvas.inline.is_none(), "{:?}", h.state().canvas.inline);
+    assert_eq!(type_of(&h), money, "the type stays the one it was");
+    // Typing a name two types share is refused, the type unchanged.
+    assert!(crate::uml_inline::open(h.state_mut(), catalog, crate::uml_panel::MemberKind::Attribute, Some(fee)));
+    h.run();
+    h.state_mut().canvas.inline.as_mut().unwrap().ty = "money".into();
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    let refused = h.state().canvas.inline.as_ref().and_then(|i| i.refused.clone()).expect("refused");
+    assert!(refused.contains("money"), "{refused}");
+    assert_eq!(type_of(&h), money);
+    // A type no type has stays with the row when ⋯ is pressed, rather than going over as another.
+    h.state_mut().canvas.inline.as_mut().unwrap().ty = "Currency".into();
+    let at = rect_of(&h, "workspace.canvas.member.details").center();
+    click(&mut h, at);
+    assert!(h.state().panels.member.is_none(), "Properties' editor stays closed");
+    assert!(h.state().canvas.inline.as_ref().and_then(|i| i.refused.clone()).is_some_and(|r| r.contains("Currency")));
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    // A draft at the end of Order's attributes moves its operation down, still drawn in the card.
+    let order = class(&h, "Order");
+    assert!(crate::uml_inline::open(h.state_mut(), order, crate::uml_panel::MemberKind::Attribute, None));
+    h.run();
+    let canvas = rect_of(&h, "workspace.canvas");
+    fn texts(s: &egui::Shape, clip: egui::Rect, out: &mut Vec<(String, egui::Pos2, egui::Rect)>) {
+        match s {
+            egui::Shape::Text(t) => out.push((t.galley.text().to_string(), t.pos, clip)),
+            egui::Shape::Vec(v) => v.iter().for_each(|s| texts(s, clip, out)),
+            _ => {}
+        }
+    }
+    let mut found = Vec::new();
+    h.output().shapes.iter().for_each(|c| texts(&c.shape, c.clip_rect, &mut found));
+    let (_, pos, clip) = found.iter().find(|(t, pos, _)| t == "+ total() : Money" && canvas.contains(*pos)).expect("the operation drawn on the card");
+    assert!(clip.contains(*pos + egui::vec2(1.0, 8.0)), "{pos:?} inside {clip:?}");
+}
+
+#[test]
 fn a_class_dragged_from_models_onto_a_second_diagram_stays_one_element_and_leaves_by_delete_or_shift_delete() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
     crate::uml_ui::open_sample(h.state_mut()).unwrap();
@@ -5167,17 +5348,21 @@ fn a_class_dragged_from_models_onto_a_second_diagram_stays_one_element_and_leave
     drag(&mut h, row, canvas.center());
     assert_eq!(shown(&h), (2, 1));
     assert_eq!(h.state().canvas.notice.as_deref(), Some("Already on this diagram"));
-    // The selected class's adorner opens a new attribute's editor; Enter applies it.
+    // The selected class's adorner opens a new attribute's row on the card; Enter writes it and
+    // opens the next, which Escape drops.
     h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [order.to_string()] })).unwrap();
     h.run();
     let at = rect_of(&h, "workspace.canvas.adorn.add-attribute").center();
     click(&mut h, at);
-    assert!(h.state().panels.member.as_ref().is_some_and(|e| e.target.is_none() && e.class == order));
+    assert!(h.state().canvas.inline.as_ref().is_some_and(|i| i.edit.target.is_none() && i.edit.class == order));
     h.event(egui::Event::Text("status".into()));
     h.run();
     key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
     assert_eq!(member_rows(&h, order, false), ["+ id : Integer", "+ placedAt : Date", "+ status"]);
-    // A double click on the operation's row of the card opens its editor.
+    assert!(h.state().canvas.inline.as_ref().is_some_and(|i| i.edit.target.is_none() && i.edit.name.is_empty()), "the next draft");
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    assert!(h.state().canvas.inline.is_none());
+    // A double click on the operation's row of the card edits it in place.
     let st = h.state().session.as_ref().unwrap().doc();
     let node = archforge_diagram::views_of(st, st.by_uuid(order).unwrap())
         .2
@@ -5199,9 +5384,9 @@ fn a_class_dragged_from_models_onto_a_second_diagram_stays_one_element_and_leave
     h.run();
     let st = h.state().session.as_ref().unwrap().doc();
     let total = st.uuid(archforge_uml::members::operations(st, st.by_uuid(order).unwrap())[0]).unwrap();
-    assert_eq!(h.state().panels.member.as_ref().and_then(|e| e.target), Some(total), "{:?}", h.state().panels.member);
-    let at = rect_of(&h, "workspace.properties.member.cancel").center();
-    click(&mut h, at);
+    assert_eq!(h.state().canvas.inline.as_ref().and_then(|i| i.edit.target), Some(total), "{:?}", h.state().canvas.inline);
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    assert!(h.state().canvas.inline.is_none());
     // Delete takes it off this diagram only; Shift+Delete asks, then takes it from the model.
     let at = rect_of(&h, &format!("workspace.canvas.node.{node_id}")).center();
     click(&mut h, at);
