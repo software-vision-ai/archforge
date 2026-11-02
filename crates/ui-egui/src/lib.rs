@@ -1058,7 +1058,7 @@ impl Shell {
 
     /// Whether File → Generate… can open: a project is open and the dialog is not.
     pub fn can_generate(&self) -> bool {
-        self.session.is_some() && self.generate.is_none()
+        self.session.is_some() && self.generate.is_none() && self.about.is_none()
     }
 
     /// Opens About Archforge, with how to support its development.
@@ -1074,7 +1074,7 @@ impl Shell {
     /// Whether Open can act now: the host opens projects, no opening is under way, the New
     /// project dialog is closed and a tab is free.
     pub fn can_open_project(&self) -> bool {
-        home::can_open(self) && self.opening.is_none() && self.new_project.is_none()
+        home::can_open(self) && self.opening.is_none() && self.new_project.is_none() && self.about.is_none()
     }
 
     /// Tab `i`'s project stays open: it shows again, its status bar saying why.
@@ -1208,7 +1208,7 @@ impl Shell {
         if self.session.is_some() && ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::S)) {
             self.save();
         }
-        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::O)) {
+        if self.about.is_none() && ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::O)) {
             self.open_from_picker();
         }
         // A skill's text is kept once its typing pauses, and all of it before quitting.
@@ -1264,10 +1264,17 @@ impl Shell {
             ui.ctx().send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
             self.last_title = title;
         }
+        // While About is over the window, the window behind it takes no keys (AR-76): its tree,
+        // canvas and editors read keys directly, so the frame's keys are held back while it is
+        // drawn and given back for the dialogs.
+        let held = if self.about.is_some() { hold_keys(ui.ctx()) } else { Vec::new() };
         if self.project.is_some() {
             workspace::show(self, ui);
         } else {
             home::show(self, ui);
+        }
+        if !held.is_empty() {
+            ui.ctx().input_mut(|i| i.events.extend(held));
         }
         new_project::show(self, ui);
         settings::show(self, ui);
@@ -1275,6 +1282,21 @@ impl Shell {
         generate::show(self, ui);
         close_ask::show(self, ui);
     }
+}
+
+/// Takes the frame's keyboard events out of the input (keys, typed text, clipboard and
+/// composition), leaving pointer and window events, and gives them back.
+fn hold_keys(ctx: &egui::Context) -> Vec<egui::Event> {
+    ctx.input_mut(|i| {
+        let (keys, rest): (Vec<_>, Vec<_>) = std::mem::take(&mut i.events).into_iter().partition(|e| {
+            matches!(
+                e,
+                egui::Event::Key { .. } | egui::Event::Text(_) | egui::Event::Copy | egui::Event::Cut | egui::Event::Paste(_) | egui::Event::Ime(_)
+            )
+        });
+        i.events = rest;
+        keys
+    })
 }
 
 #[cfg(test)]
