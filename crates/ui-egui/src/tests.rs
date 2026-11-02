@@ -5363,6 +5363,65 @@ fn an_end_multiplicity_menu_follows_the_keys_and_escape_closes_it_before_it_canc
 }
 
 #[test]
+fn a_multiplicity_refusal_stays_until_its_own_field_is_written_and_reads_in_full() {
+    let (mut h, paid) = paid_by(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    let refused = |h: &Harness<'static, Shell>, i: usize| h.state().panels.ends.as_ref().unwrap().refused[i].clone();
+    // Writing another field of the end keeps the reason while the refused text stays.
+    retype(&mut h, "workspace.properties.end.1.multiplicity", "abc");
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    assert!(refused(&h, 1).is_some());
+    // Out of the field first, so the Navigable click writes on its own.
+    let at = rect_of(&h, "workspace.properties.relationship.from").center();
+    click(&mut h, at);
+    assert!(refused(&h, 1).is_some());
+    let at = rect_of(&h, "workspace.properties.end.1.navigable").center();
+    click(&mut h, at);
+    let navigable = |h: &Harness<'static, Shell>| {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let a = st.by_uuid(paid).unwrap();
+        archforge_uml::figures::navigable(st, a, archforge_uml::figures::member_ends(st, a).unwrap()[1])
+    };
+    assert!(!navigable(&h), "Navigable was written");
+    assert_eq!(end_multiplicities(&h, paid).0[1], "0..1");
+    assert_eq!(typed_multiplicity(&h, 1), "abc");
+    assert!(refused(&h, 1).is_some(), "the field still holds text that was never written");
+    // Picking the value the model has already takes the reason away, though nothing is written.
+    let at = rect_of(&h, "workspace.properties.end.1.multiplicity.menu").center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.properties.end.1.multiplicity.menu.0").center();
+    click(&mut h, at);
+    assert_eq!((typed_multiplicity(&h, 1), refused(&h, 1)), ("0..1".to_string(), None));
+    // A composition's whole allows one at most: the model's refusal on Enter keeps the keyboard
+    // in the field and shows its whole reason under it.
+    let at = rect_of(&h, "workspace.properties.end.1.aggregation").center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.properties.end.1.aggregation.2").center();
+    click(&mut h, at);
+    retype(&mut h, "workspace.properties.end.0.multiplicity", "2");
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    let why = refused(&h, 0).expect("the model refuses");
+    assert!(why.contains("composition's whole"), "{why}");
+    assert_eq!(end_multiplicities(&h, paid).0[0], "1");
+    let id = crate::widgets::egui_id("workspace.properties.end.0.multiplicity");
+    assert!(h.ctx.memory(|m| m.has_focus(id)), "the field keeps the keyboard");
+    fn galleys(s: &egui::Shape, out: &mut Vec<std::sync::Arc<egui::Galley>>) {
+        match s {
+            egui::Shape::Text(t) => out.push(t.galley.clone()),
+            egui::Shape::Vec(v) => v.iter().for_each(|s| galleys(s, out)),
+            _ => {}
+        }
+    }
+    let mut all = Vec::new();
+    for clipped in h.output().shapes.iter() {
+        galleys(&clipped.shape, &mut all);
+    }
+    let said = all.iter().find(|g| g.text() == why).expect("the reason is drawn");
+    assert!(!said.elided && said.rows.len() > 1, "the reason wraps instead of being cut: {:?} rows", said.rows.len());
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    assert_eq!((typed_multiplicity(&h, 0), refused(&h, 0)), ("1".to_string(), None));
+}
+
+#[test]
 fn an_end_multiplicity_menu_opens_above_its_field_when_the_window_has_no_room_below() {
     let (mut h, _) = paid_by(ThemeKind::Light, egui::vec2(1600.0, 820.0));
     for (i, above) in [(0, false), (1, true)] {

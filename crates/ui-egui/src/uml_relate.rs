@@ -475,7 +475,9 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
                     }
                 }
                 Ok(bounds) if Ok(bounds) == archforge_uml::members::parse_multiplicity(&edit.written[i]) => {
+                    // Corrected back to what the model has: nothing to write, and nothing wrong.
                     edit.multiplicity[i] = edit.written[i].clone();
+                    edit.refused[i] = None;
                     write_multiplicity = false;
                 }
                 Ok(_) => {}
@@ -483,8 +485,12 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
         }
         y += 17.0 + FIELD + 12.0;
         if let Some(why) = &edit.refused[i] {
-            let said = ux::text(&ui.painter().clone(), pos2(r.left() + PAD, y - 2.0), why, types::CAPTION, p.danger, Some(width));
-            y += (said.height() + 26.0).max(42.0);
+            // Wrapped, so a long refusal from the model shows its reason, not only its start.
+            let paint = ui.painter().clone();
+            let said = ux::galley_rows(&paint, why, types::CAPTION, p.danger, Some(width), 4);
+            let height = said.size().y;
+            paint.galley(pos2(r.left() + PAD, y - 2.0), said, p.danger);
+            y += (height + 26.0).max(42.0);
         }
         // The whole's end, where the diamond sits, is never navigable: it shows no Navigable.
         let whole = aggregations[1 - i] != 0;
@@ -527,7 +533,11 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
                 Ok(_) => {
                     shell.panels.notice = None;
                     if let Some(e) = shell.panels.ends.as_mut() {
-                        e.refused[i] = None;
+                        // A refused multiplicity still in its field keeps its reason while
+                        // another field of the end is written.
+                        if write_multiplicity {
+                            e.refused[i] = None;
+                        }
                         e.role[i] = e.role[i].trim().to_string();
                     }
                 }
@@ -536,6 +546,9 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
                 Err(e) if write_multiplicity => {
                     if let Some(ends) = shell.panels.ends.as_mut() {
                         ends.refused[i] = Some(e);
+                    }
+                    if ui.input(|inp| inp.key_pressed(egui::Key::Enter)) {
+                        ui.memory_mut(|m| m.request_focus(crate::widgets::egui_id(&format!("{key}.multiplicity"))));
                     }
                 }
                 Err(e) => shell.panels.notice = Some(e),
