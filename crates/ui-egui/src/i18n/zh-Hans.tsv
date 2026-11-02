@@ -399,6 +399,7 @@ str		Unpin	取消固定
 str		Open	打开
 str		Remove from recent projects	从最近的项目中移除
 str		Pick up in the exact view you left.	从你离开时的视图继续。
+str		Last view: {name}	上次的视图：{name}
 str		Just now	刚刚
 plural		{n} minute ago	{n} 分钟前
 plural		{n} hour ago	{n} 小时前

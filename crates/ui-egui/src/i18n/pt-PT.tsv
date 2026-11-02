@@ -399,6 +399,7 @@ str		Unpin	Desafixar
 str		Open	Abrir
 str		Remove from recent projects	Remover dos projetos recentes
 str		Pick up in the exact view you left.	Retome exatamente na vista onde ficou.
+str		Last view: {name}	Última vista: {name}
 str		Just now	Agora mesmo
 plural		{n} minute ago	há {n} minuto|há {n} minutos
 plural		{n} hour ago	há {n} hora|há {n} horas

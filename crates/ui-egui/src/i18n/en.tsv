@@ -398,6 +398,7 @@ str		Unpin	Unpin
 str		Open	Open
 str		Remove from recent projects	Remove from recent projects
 str		Pick up in the exact view you left.	Pick up in the exact view you left.
+str		Last view: {name}	Last view: {name}
 str		Just now	Just now
 plural		{n} minute ago	{n} minute ago|{n} minutes ago
 plural		{n} hour ago	{n} hour ago|{n} hours ago

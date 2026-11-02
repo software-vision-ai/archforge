@@ -453,6 +453,7 @@ mod tests {
                     name: "Commerce platform".into(),
                     path: std::env::temp_dir().join("Commerce platform.archforge"),
                     opened: 1_761_670_800,
+                    view: None,
                 }],
                 ..archforge_ui_egui::UiState::default()
             },
@@ -462,7 +463,12 @@ mod tests {
         assert_eq!(prefs::capture(&shell), stored);
         // A recent entry the window does not take (here a relative folder) is dropped on applying.
         let mut planted = stored.clone();
-        planted.ui.recent.push(archforge_ui_egui::state::RecentProject { name: "Elsewhere".into(), path: "../elsewhere".into(), opened: 1 });
+        planted.ui.recent.push(archforge_ui_egui::state::RecentProject {
+            name: "Elsewhere".into(),
+            path: "../elsewhere".into(),
+            opened: 1,
+            view: None,
+        });
         prefs::apply(&planted, &mut shell);
         assert_eq!(prefs::capture(&shell), stored);
         assert_eq!(archforge_ui_egui::i18n::language(), "de");
