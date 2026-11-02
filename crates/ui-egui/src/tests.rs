@@ -5451,6 +5451,57 @@ fn the_chevron_keeps_a_typed_multiplicity_a_draft_so_a_pick_is_one_step_and_esca
 }
 
 #[test]
+fn leaving_a_multiplicity_closes_its_menu_and_its_rows_and_refusal_reach_assistive_technology() {
+    use egui_kittest::kittest::{NodeT, Queryable};
+    let (mut h, paid) = paid_by(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    let open = |h: &Harness<'static, Shell>| h.state().panels.menu == Some(crate::panels::Menu::EndMultiplicity(1));
+    // The menu's rows and the chevron carry their words.
+    let at = rect_of(&h, "workspace.properties.end.1.multiplicity.menu").center();
+    click(&mut h, at);
+    assert!(open(&h));
+    assert!(h.query_by_label("End at Payment · Pick a multiplicity").is_some());
+    assert!(h.query_by_label("End at Order · Pick a multiplicity").is_some(), "each chevron names its end");
+    for word in ["0..1", "1", "0..*", "1..*", "*", "Clear"] {
+        assert!(!h.query_all_by_label(word).collect::<Vec<_>>().is_empty(), "{word} has an accessible name");
+    }
+    // Tab out of the field with the menu open and a row reached: the menu closes, and Enter
+    // afterwards picks nothing.
+    key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+    key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+    assert_eq!(h.state().panels.highlight, Some(2), "from the current 0..1 down to 0..*");
+    key(&mut h, egui::Key::Tab, egui::Modifiers::NONE);
+    assert!(!open(&h), "leaving the field closes its menu");
+    assert_eq!(end_multiplicities(&h, paid).0[1], "0..1", "nothing was picked");
+    // Tab reached the chevron, whose Enter opens the menu again; Escape closes it.
+    let chevron = crate::widgets::egui_id("workspace.properties.end.1.multiplicity.menu");
+    assert!(h.ctx.memory(|m| m.has_focus(chevron)));
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    assert!(open(&h));
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    assert!(!open(&h));
+    // Typing with the menu open takes over from the row reached: Enter writes the typing.
+    let at = rect_of(&h, "workspace.properties.end.1.multiplicity").center();
+    click(&mut h, at);
+    key(&mut h, egui::Key::ArrowDown, egui::Modifiers::ALT);
+    assert_eq!((open(&h), h.state().panels.highlight), (true, Some(0)));
+    h.event(egui::Event::Key { key: egui::Key::A, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::COMMAND });
+    h.event(egui::Event::Text("2..*".into()));
+    h.run();
+    assert_eq!(h.state().panels.highlight, None);
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    assert_eq!(end_multiplicities(&h, paid).0[1], "2..*");
+    // A refusal is the field's description, and the field says it is invalid.
+    retype(&mut h, "workspace.properties.end.1.multiplicity", "5..2");
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    let field = h.get_by_label("End at Payment · Multiplicity");
+    assert_eq!(field.accesskit_node().description().as_deref(), Some("The upper bound must be at least 5."));
+    assert_eq!(field.accesskit_node().data().invalid(), Some(egui::accesskit::Invalid::True));
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    let field = h.get_by_label("End at Payment · Multiplicity");
+    assert_eq!((field.accesskit_node().description(), field.accesskit_node().data().invalid()), (None, None));
+}
+
+#[test]
 fn an_end_multiplicity_menu_opens_above_its_field_when_the_window_has_no_room_below() {
     let (mut h, _) = paid_by(ThemeKind::Light, egui::vec2(1600.0, 820.0));
     for (i, above) in [(0, false), (1, true)] {

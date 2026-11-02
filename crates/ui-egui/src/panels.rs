@@ -422,11 +422,15 @@ pub(crate) struct Combo<'a> {
     pub options: &'a [&'a str],
     /// The option the model's value is, ticked in the menu.
     pub current: Option<usize>,
-    /// The chevron's tooltip, the line under the options, and the last row, which empties it.
+    /// The chevron's tooltip and its accessible name, which names the field too; the line under
+    /// the options, and the last row, which empties it.
     pub pick: &'a str,
+    pub pick_name: &'a str,
     pub hint: &'a str,
     pub clear: &'a str,
-    pub refused: bool,
+    /// Why the text was refused: ringed in the danger colour, and told to assistive technology;
+    /// the caller draws it under the field.
+    pub refused: Option<&'a str>,
     pub menu: Menu,
     pub limit: usize,
 }
@@ -454,7 +458,8 @@ fn combo_height(n: usize) -> f32 {
 /// A label over a filled field that takes typing, with a chevron that opens its options above or
 /// under it. The keys go to the menu while it is open (the arrows move, Enter picks, Escape
 /// closes it) and to the field otherwise (Alt+Down opens the menu, Enter commits, Escape cancels).
-/// A refused field is ringed in the danger colour; the caller says why under it.
+/// A refused field is ringed in the danger colour and its reason is the field's description;
+/// the caller draws the reason under it. Leaving the field closes its menu.
 pub(crate) fn editable_select(
     shell: &mut Shell,
     ui: &mut egui::Ui,
@@ -518,7 +523,17 @@ pub(crate) fn editable_select(
         .event_filter(filter)
         .desired_width(inner.width());
     let resp = edit.show(&mut ui.new_child(egui::UiBuilder::new().max_rect(inner))).response;
-    let _ = (*resp).clone().accessible_name(c.name);
+    // Typing takes over from the row the keys reached: Enter then writes the typing.
+    if resp.changed() && shell.panels.menu == Some(c.menu) {
+        shell.panels.highlight = None;
+    }
+    ui.ctx().accesskit_node_builder(resp.id, |node| {
+        node.set_label(c.name);
+        if let Some(why) = c.refused {
+            node.set_description(why);
+            node.set_invalid(egui::accesskit::Invalid::True);
+        }
+    });
     // Leaving the field writes what was typed, unless the press that left it is on the field's own
     // chevron or its open menu: then the typing stays a draft and the field takes the keyboard back,
     // so a pick replaces the draft and Escape still brings the written value back.
@@ -530,15 +545,19 @@ pub(crate) fn editable_select(
         if own {
             ui.memory_mut(|m| m.request_focus(eid));
         } else {
+            // Left another way (a click elsewhere, Tab): its menu goes too, so its keys stop.
             out = ComboOut::Commit;
+            if shell.panels.menu == Some(c.menu) {
+                shell.panels.menu = None;
+            }
         }
     }
-    let ring = if c.refused { Some(p.danger) } else { (resp.has_focus() || shell.panels.menu == Some(c.menu)).then_some(p.focus) };
+    let ring = if c.refused.is_some() { Some(p.danger) } else { (resp.has_focus() || shell.panels.menu == Some(c.menu)).then_some(p.focus) };
     if let Some(ink) = ring {
         paint.rect_stroke(field, 6.0, Stroke::new(1.0, ink), StrokeKind::Inside);
     }
     ux::icon_mid(&paint, pos2(field.right() - 16.0, field.center().y), &icons::CHEVRON_DOWN, p.text_secondary);
-    if control(shell, ui, &format!("{}.menu", c.id), "button", chevron, true).on_hover_text(c.pick).clicked() {
+    if control(shell, ui, &format!("{}.menu", c.id), "button", chevron, true).on_hover_text(c.pick).accessible_name(c.pick_name).clicked() {
         if shell.panels.menu == Some(c.menu) {
             shell.panels.menu = None;
         } else {
@@ -569,7 +588,7 @@ fn combo_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, r: Re
     let mut picked = None;
     for (i, word, top, id) in rows.chain([clear]) {
         let row = Rect::from_min_size(pos2(r.left() + 4.0, r.top() + top), vec2(r.width() - 8.0, 30.0));
-        let resp = control(shell, ui, &id, "menu-item", row, true);
+        let resp = control(shell, ui, &id, "menu-item", row, true).accessible_name(word.as_str());
         let on = c.current == Some(i);
         if on {
             paint.rect_filled(row, 5.0, p.accent_tint);

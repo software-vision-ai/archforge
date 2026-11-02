@@ -430,6 +430,7 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
             true,
         );
         let typed = edit.multiplicity[i].clone();
+        let refusal = edit.refused[i].clone();
         let combo = Combo {
             id: &format!("{key}.multiplicity"),
             label: &tr("Multiplicity"),
@@ -438,9 +439,10 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
             options: &MULTIPLICITIES,
             current: MULTIPLICITIES.iter().position(|m| *m == edit.written[i]),
             pick: &tr("Pick a multiplicity"),
+            pick_name: &format!("{title} · {}", tr("Pick a multiplicity")),
             hint: &tr("Or type a number or range"),
             clear: &tr("Clear"),
-            refused: edit.refused[i].is_some(),
+            refused: refusal.as_deref(),
             menu: Menu::EndMultiplicity(i),
             limit: 24,
         };
