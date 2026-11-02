@@ -263,7 +263,7 @@ str		Model	Model
 str		Name	Name
 str		Models	Models
 str		Source Control	Source Control
-str		Agent	Agent
+str		Chat	Chat
 str		Appearance	Appearance
 str		Properties	Properties
 str		Skills	Skills
@@ -357,7 +357,7 @@ str		Select a table or a line on the diagram	Select a table or a line on the dia
 str		Selection · this diagram	Selection · this diagram
 str		{kind} · this diagram	{kind} · this diagram
 plural		{n} item	{n} item|{n} items
-str		No agent connected	No agent connected
+str		Coming soon	Coming soon
 str		The model could not be opened	The model could not be opened
 str		The host gives no ids for the model's elements	The host gives no ids for the model's elements
 str		Collapse panel	Collapse panel

@@ -264,7 +264,7 @@ str		Model	モデル
 str		Name	名前
 str		Models	モデル
 str		Source Control	ソース管理
-str		Agent	エージェント
+str		Chat	チャット
 str		Appearance	外観
 str		Properties	プロパティ
 str		Skills	スキル
@@ -358,7 +358,7 @@ str		Select a table or a line on the diagram	図のテーブルか線を選択�
 str		Selection · this diagram	選択 · この図
 str		{kind} · this diagram	{kind} · この図
 plural		{n} item	{n} 個の項目
-str		No agent connected	エージェントは接続されていません
+str		Coming soon	近日公開
 str		The model could not be opened	モデルを開けませんでした
 str		The host gives no ids for the model's elements	ホストがモデル要素の ID を提供していません
 str		Collapse panel	パネルを折りたたむ

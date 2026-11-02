@@ -44,7 +44,8 @@ const EXPLORERS: [(&str, Explorer, &ux::Icon, &str); 3] = [
 
 /// The panels of the right rail: automation id, the panel, its icon and its title.
 const PANELS: [(&str, Panel, &ux::Icon, &str); 4] = [
-    ("agent", Panel::Agent, &icons::CHAT_BUBBLE, "Agent"),
+    // Chat is coming (owner, AR-63): its panel says so; its id stays the agent's.
+    ("agent", Panel::Agent, &icons::CHAT_BUBBLE, "Chat"),
     ("appearance", Panel::Appearance, &icons::PALETTE, "Appearance"),
     ("properties", Panel::Properties, &icons::PROPERTIES, "Properties"),
     ("skills", Panel::Skills, &icons::SKILLS, "Skills"),

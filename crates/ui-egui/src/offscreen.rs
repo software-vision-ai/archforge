@@ -62,6 +62,8 @@ pub enum Screen {
     WorkspaceClassDiagram,
     /// The sample class model to read: members, every line kind and end.
     WorkspaceClassDiagramRead,
+    /// The sample class model with the Chat panel open: Coming soon.
+    WorkspaceChat,
     /// A class diagram of three cards: a new class with its first operation at the default size, one
     /// grown to show its members, and two made short by hand saying the rows they hide.
     WorkspaceClassSizing,
@@ -277,6 +279,11 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
     if screen == Screen::WorkspaceClassSizing {
         shell.adopt_project();
         sample_class_sizing(&mut shell)?;
+    }
+    if screen == Screen::WorkspaceChat {
+        shell.adopt_project();
+        crate::uml_ui::open_sample(&mut shell)?;
+        shell.state.show_panel(crate::state::Panel::Agent);
     }
     if screen == Screen::WorkspaceClassDiagramRead {
         shell.adopt_project();
