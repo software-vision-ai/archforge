@@ -293,11 +293,22 @@ fn association_set_end(ctx: &mut C<'_>, p: &Params) -> R {
     if aggregation(ctx.doc, other) == 2 && bounds.is_some_and(|(_, u)| u.is_none_or(|u| u > 1)) {
         return Err(refuse("multiplicity", "this end is a composition's whole, which allows one at most"));
     }
+    // The whole's end, where the diamond sits, is never navigable (owner decision).
+    let whole = aggregation(ctx.doc, other) != 0;
+    let navigable = p.bool("navigable").unwrap_or(!whole);
+    if whole && navigable {
+        return Err(refuse("navigable", "the whole's end of an aggregation or composition is not navigable"));
+    }
     own_end(ctx.doc, a, end)?;
     set_name(ctx.doc, end, role)?;
     crate::members::set_multiplicity(ctx.doc, end, typed, "multiplicity")?;
-    set_navigable(ctx.doc, a, end, p.bool("navigable").unwrap_or(true))?;
+    set_navigable(ctx.doc, a, end, navigable)?;
     ctx.doc.set(end, property::AGGREGATION, Value::Enum(kind as u32)).map_err(fail)?;
+    // This end aggregating makes the other end the whole's: it stops being navigable.
+    if kind != 0 {
+        own_end(ctx.doc, a, other)?;
+        set_navigable(ctx.doc, a, other, false)?;
+    }
     Ok(json!({ "id": uuid_of(ctx.doc, end)? }))
 }
 
@@ -415,7 +426,7 @@ macro_rules! end_lines {
             "end: integer, 0..1; which end, 0 at the class it was drawn from, 1 at the other\n",
             "role: string = \"\"; the end's role name, or nothing\n",
             "multiplicity: string = \"\"; 1, 0..1, *, 1..*, 2..5, or nothing\n",
-            "navigable: bool = true; the association navigates to this end\n",
+            "navigable: bool = true; the association navigates to this end; never the whole's end of an aggregation or composition (default false there)\n",
             "aggregation: string = \"none\", none|shared|composite; this end is a part of the other end's class, shared or composed"
         )
     };

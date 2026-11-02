@@ -318,7 +318,9 @@ What is UML's own, beside the shared rules above.
 - An association end a class owns is the line's role, not a row of the card.
 - An association shows an open arrow at every end it navigates to, both ends when it navigates both
   ways (owner decision). A diamond sits at the whole, in place of an arrow there: hollow for a
-  shared aggregation, filled for a composition.
+  shared aggregation, filled for a composition. The whole's end is never navigable (owner
+  decision): an end that starts to aggregate makes the other end not navigable, and Properties
+  shows no Navigable on the whole's end.
   Its name sits at the middle, its roles and multiplicities at their ends.
 - A generalization draws to a hollow triangle at the general class, in the muted ink, as ER's.
 - A dependency is dashed, with an open arrow at its supplier.

@@ -395,9 +395,13 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
             true,
         );
         y += 17.0 + FIELD + 12.0;
-        let mut nav = navigable[i];
-        check(shell, ui, p, pos2(r.left() + PAD, y + 6.0), &format!("{key}.navigable"), &tr("Navigable"), &mut nav);
-        y += 32.0;
+        // The whole's end, where the diamond sits, is never navigable: it shows no Navigable.
+        let whole = aggregations[1 - i] != 0;
+        let mut nav = navigable[i] && !whole;
+        if !whole {
+            check(shell, ui, p, pos2(r.left() + PAD, y + 6.0), &format!("{key}.navigable"), &tr("Navigable"), &mut nav);
+            y += 32.0;
+        }
         let field = select_field(
             shell,
             ui,
@@ -417,7 +421,7 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
             agg = k;
         }
         shell.panels.ends = Some(edit.clone());
-        if role || m || nav != navigable[i] || agg != aggregations[i] {
+        if role || m || (!whole && nav != navigable[i]) || agg != aggregations[i] {
             let params = json!({
                 "association": id.to_string(),
                 "end": i,

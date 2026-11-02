@@ -114,7 +114,8 @@ fn each_kind_of_association_draws_as_a_plain_line_its_kind_marks_and_no_class_ga
     let set = |a: &str, end: u8, nav: bool| json!({ "association": a, "end": end, "role": "", "multiplicity": "", "navigable": nav, "aggregation": if end == 1 && a == kinds[3] { "composite" } else { "none" } });
     for end in [0, 1] {
         run(&mut s, "uml.association.set-end", set(&kinds[0], end, true));
-        run(&mut s, "uml.association.set-end", set(&kinds[3], end, true));
+        // The composition's whole end, at Order, is never navigable; its part end is.
+        run(&mut s, "uml.association.set-end", set(&kinds[3], end, end == 1));
     }
     assert_eq!(marks(&s, &kinds[0]), [M::OpenArrow, M::OpenArrow], "navigable both ways: an arrow at each end");
     assert_eq!(marks(&s, &kinds[3]), [M::FilledDiamond, M::OpenArrow], "the diamond at the whole, the arrow at the part");
@@ -150,6 +151,23 @@ fn an_association_end_takes_a_role_multiplicity_navigability_and_aggregation_and
     use archforge_diagram::figure::EndMark as M;
     assert_eq!(r[0]["role"], "order", "the ends keep their order");
     assert_eq!(marks(&s, &a), [M::FilledDiamond, M::OpenArrow], "the diamond at the whole, the arrow at the part it navigates to");
+    // The whole's end is never navigable (owner decision): asking for it is refused.
+    refused(&mut s, "uml.association.set-end", set(0, end("order", "1", true, "none")), "navigable");
+    // An end that starts to aggregate makes the other end, now the whole's, not navigable.
+    let both = run(&mut s, "uml.association.add", json!({ "from": c[0], "to": c[1] }));
+    let set_both = |i: u8, e: Json| {
+        let mut p = e;
+        p["association"] = json!(both);
+        p["end"] = json!(i);
+        p
+    };
+    run(&mut s, "uml.association.set-end", set_both(0, end("", "1", true, "none")));
+    run(&mut s, "uml.association.set-end", set_both(1, end("", "*", true, "none")));
+    assert_eq!(marks(&s, &both), [M::OpenArrow, M::OpenArrow]);
+    round_trip(&mut s, "uml.association.set-end", set_both(1, end("", "*", true, "shared")));
+    assert_eq!(marks(&s, &both), [M::HollowDiamond, M::OpenArrow]);
+    let row = relationships(&mut s, &c[0]).into_iter().find(|r| r["id"] == json!(both)).unwrap();
+    assert_eq!((row["ends"][0]["navigable"].clone(), row["ends"][1]["navigable"].clone()), (json!(false), json!(true)));
     // The same role on both ends, both ends aggregating, a whole that allows many: refused.
     refused(&mut s, "uml.association.set-end", set(0, end("Lines", "1", true, "none")), "role");
     refused(&mut s, "uml.association.set-end", set(0, end("order", "1", true, "shared")), "aggregation");

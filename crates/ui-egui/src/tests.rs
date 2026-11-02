@@ -5206,15 +5206,28 @@ fn a_selected_associations_ends_are_set_in_properties_its_end_drags_to_another_c
     key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
     let ends = |h: &mut Harness<'static, Shell>| related(h, "Payment").into_iter().find(|r| r["name"] == "paid by").unwrap()["ends"].clone();
     assert_eq!(ends(&mut h)[1]["role"], "settlement");
-    // Composite on the Payment end: the Order end allows one, so it is fine; then not navigable.
+    // Both ends navigable: each shows Navigable.
+    assert!(ids(&h).contains(&"workspace.properties.end.0.navigable".to_string()));
+    // Composite on the Payment end: the Order end allows one, so it is fine. The Order end is now
+    // the whole's, where the diamond sits: it stops being navigable and shows no Navigable
+    // (owner decision); the Payment end keeps its own.
     let at = rect_of(&h, "workspace.properties.end.1.aggregation").center();
     click(&mut h, at);
     let at = rect_of(&h, "workspace.properties.end.1.aggregation.2").center();
     click(&mut h, at);
     assert_eq!(ends(&mut h)[1]["aggregation"], "composite");
-    let at = rect_of(&h, "workspace.properties.end.0.navigable").center();
-    click(&mut h, at);
     assert_eq!(ends(&mut h)[0]["navigable"], false);
+    let found = ids(&h);
+    assert!(!found.contains(&"workspace.properties.end.0.navigable".to_string()), "{found:?}");
+    assert!(found.contains(&"workspace.properties.end.1.navigable".to_string()));
+    // Undo puts the plain association back, both ends navigable and both showing Navigable.
+    h.state_mut().session.as_mut().unwrap().undo().unwrap();
+    h.run();
+    assert_eq!((ends(&mut h)[0]["navigable"].clone(), ends(&mut h)[1]["aggregation"].clone()), (serde_json::json!(true), serde_json::json!("none")));
+    assert!(ids(&h).contains(&"workspace.properties.end.0.navigable".to_string()));
+    h.state_mut().session.as_mut().unwrap().redo().unwrap();
+    h.run();
+    assert!(!ids(&h).contains(&"workspace.properties.end.0.navigable".to_string()));
     // Shared on the Order end too is refused, and said.
     let at = rect_of(&h, "workspace.properties.end.0.aggregation").center();
     click(&mut h, at);
