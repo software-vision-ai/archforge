@@ -823,51 +823,85 @@ pub(crate) fn row_at(card: &archforge_diagram::figure::Card, y: f32) -> Option<u
     None
 }
 
+/// One place in a card's compartments, at its top in units below the card's.
+enum Slot<'a> {
+    Row(&'a archforge_diagram::figure::Row),
+    /// The row an empty compartment of several still takes, so the line between them shows.
+    Empty,
+    Line,
+}
+
 /// A card's compartments under its header: a row a pitch apart, half a pitch and a dividing line
-/// between compartments, and the rows past the card's height said in one row.
+/// between compartments. When a row does not fit the card's height, the rows from the last place
+/// that fits are said in one muted row there, whichever compartment they are in, or at the card's
+/// foot or beside its eyebrow when no row's place fits, so a card made short never looks empty
+/// (AR-57).
 fn draw_rows(inner: &egui::Painter, p: &Palette, card: &archforge_diagram::figure::Card, rect: Rect, z: f32, key_status: bool, room: Option<f32>) {
-    let total: usize = card.compartments.iter().map(Vec::len).sum();
-    let mut shown = 0;
+    let mut slots: Vec<(f32, Slot<'_>)> = Vec::new();
     // Where the next row sits, in pitches below the first.
-    let mut slot = 0.0_f32;
+    let mut at = 0.0_f32;
     for (c, rows) in card.compartments.iter().enumerate() {
         if c > 0 {
-            let line_y = rect.top() + (ENTITY_FIRST_ROW + slot * ENTITY_ROW - 4.0) * z;
-            if line_y >= rect.bottom() {
-                return;
-            }
-            inner.rect_filled(Rect::from_min_size(pos2(rect.left(), line_y), vec2(rect.width(), 1.0)), 0.0, p.entity_line);
-            slot += 0.5;
+            slots.push((ENTITY_FIRST_ROW + at * ENTITY_ROW - 4.0, Slot::Line));
+            at += 0.5;
         }
-        // An empty compartment of several still takes a row, so the line between them shows.
         if rows.is_empty() && card.compartments.len() > 1 {
-            slot += 1.0;
+            slots.push((ENTITY_FIRST_ROW + at * ENTITY_ROW, Slot::Empty));
+            at += 1.0;
         }
         for row in rows {
-            let y = rect.top() + (ENTITY_FIRST_ROW + slot * ENTITY_ROW) * z;
-            let last_shown = shown + 1 < total && y + 2.0 * ENTITY_ROW * z > rect.bottom();
-            if y + ENTITY_ROW * z > rect.bottom() + z {
-                return;
+            slots.push((ENTITY_FIRST_ROW + at * ENTITY_ROW, Slot::Row(row)));
+            at += 1.0;
+        }
+    }
+    // A row fits when it ends within the card, a unit of slack for rounding.
+    let height = rect.height() / z;
+    let fits = |top: f32| top + ENTITY_ROW <= height + 1.0;
+    // Where the rows stop: the first that does not fit, and the place before it the rest is said in.
+    let first = slots.iter().position(|(top, s)| matches!(s, Slot::Row(_)) && !fits(*top));
+    let cue = first.and_then(|f| slots.iter().take(f).rposition(|(top, s)| !matches!(s, Slot::Line) && fits(*top)));
+    // Without such a place (not even a row fits under the header) only what is above the first is drawn.
+    let end = cue.or(first).unwrap_or(slots.len());
+    let mut shown = 0;
+    for (top, slot) in slots.iter().take(end) {
+        let y = rect.top() + top * z;
+        match slot {
+            Slot::Line if y < rect.bottom() => {
+                inner.rect_filled(Rect::from_min_size(pos2(rect.left(), y), vec2(rect.width(), 1.0)), 0.0, p.entity_line);
             }
-            if last_shown {
-                // The rows past the node's height, said in one row.
-                let more = total - shown;
-                let text = trn(card.more.0, card.more.1, more as u64);
-                ux::text(inner, pos2(rect.left() + ENTITY_TEXT * z, y), &text, types::UI.scaled(z), p.text_muted, room);
-                return;
+            Slot::Row(row) => {
+                if key_status && let Some(b) = row.mark {
+                    ux::text(inner, pos2(rect.left() + ENTITY_INSET * z, y + z), b, types::CAPTION.scaled(z), p.entity_ink, None);
+                }
+                let text_x = rect.left() + ENTITY_TEXT * z;
+                let room_x = (rect.right() - ENTITY_INSET * z - text_x - if row.linked { 18.0 * z } else { 0.0 }).max(0.0);
+                let text = if row.slanted { ux::text_slanted } else { ux::text };
+                let drawn = text(inner, pos2(text_x, y), &row.text, types::UI.scaled(z), p.text, Some(room_x));
+                if row.linked {
+                    ux::icon(inner, pos2(drawn.right() + 6.0 * z, y + 6.0 * z), &icons::LINK, 12.0 * z, p.text_secondary);
+                }
+                shown += 1;
             }
-            if key_status && let Some(b) = row.mark {
-                ux::text(inner, pos2(rect.left() + ENTITY_INSET * z, y + z), b, types::CAPTION.scaled(z), p.entity_ink, None);
-            }
-            let text_x = rect.left() + ENTITY_TEXT * z;
-            let room_x = (rect.right() - ENTITY_INSET * z - text_x - if row.linked { 18.0 * z } else { 0.0 }).max(0.0);
-            let text = if row.slanted { ux::text_slanted } else { ux::text };
-            let drawn = text(inner, pos2(text_x, y), &row.text, types::UI.scaled(z), p.text, Some(room_x));
-            if row.linked {
-                ux::icon(inner, pos2(drawn.right() + 6.0 * z, y + 6.0 * z), &icons::LINK, 12.0 * z, p.text_secondary);
-            }
-            shown += 1;
-            slot += 1.0;
+            _ => {}
+        }
+    }
+    if first.is_none() {
+        return;
+    }
+    let total: usize = card.compartments.iter().map(Vec::len).sum();
+    let text = trn(card.more.0, card.more.1, total.saturating_sub(shown) as u64);
+    // In the last place that fits; with none, a row's height above the card's foot while that is
+    // still under the header; on a card shorter still, at the right of its eyebrow's line.
+    let place = cue.and_then(|i| slots.get(i)).map(|(top, _)| *top).or(Some(height - ENTITY_ROW).filter(|top| *top >= ENTITY_HEADER - 4.0));
+    match place {
+        Some(top) => {
+            ux::text(inner, pos2(rect.left() + ENTITY_TEXT * z, rect.top() + top * z), &text, types::UI.scaled(z), p.text_muted, room);
+        }
+        None => {
+            let style = types::CAPTION.scaled(z);
+            let width = ux::galley(inner, &text, style, p.text_muted, room).size().x;
+            let x = (rect.right() - ENTITY_INSET * z - width).max(rect.left() + ENTITY_INSET * z);
+            ux::text(inner, pos2(x, rect.top() + 11.0 * z), &text, style, p.text_muted, room);
         }
     }
 }

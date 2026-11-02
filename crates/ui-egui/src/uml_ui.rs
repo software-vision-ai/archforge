@@ -210,10 +210,32 @@ impl DiagramKind for UmlKind {
 /// How tall a class's card is to show its members: its attributes, the dividing line and its
 /// operations, an empty compartment a row; never less than a new class nor more than a node may be.
 fn content_height(store: &Store, c: Obj) -> f64 {
+    members_height(archforge_uml::members::attributes(store, c).len(), archforge_uml::members::operations(store, c).len())
+}
+
+/// How tall a card is to show `attributes` and `operations` rows.
+pub(crate) fn members_height(attributes: usize, operations: usize) -> f64 {
     use crate::canvas::{ENTITY_FIRST_ROW, ENTITY_ROW};
     let rows = |n: usize| n.max(1) as f64;
-    let slots = rows(archforge_uml::members::attributes(store, c).len()) + 0.5 + rows(archforge_uml::members::operations(store, c).len());
+    let slots = rows(attributes) + 0.5 + rows(operations);
     (f64::from(ENTITY_FIRST_ROW) + 9.0 + slots * f64::from(ENTITY_ROW)).clamp(archforge_uml::CLASS_SIZE.1, archforge_diagram::rules::MAX_SIZE)
+}
+
+/// Every card of class `c`, on every diagram, too short for its members once it has `more`
+/// attributes and operations besides those it has: each with its width and the height that shows
+/// them all. A card is only ever grown, so one the user made taller keeps its height.
+pub(crate) fn short_cards(store: &Store, c: Obj, more: (usize, usize)) -> Vec<(Uuid, f64, f64)> {
+    let attributes = archforge_uml::members::attributes(store, c).len().saturating_add(more.0);
+    let operations = archforge_uml::members::operations(store, c).len().saturating_add(more.1);
+    let needed = members_height(attributes, operations);
+    archforge_diagram::views_of(store, c)
+        .2
+        .into_iter()
+        .filter_map(|n| {
+            let b = archforge_diagram::grid::bounds_of(store, n);
+            (b.height < needed).then_some((store.uuid(n).ok()?, b.width, needed))
+        })
+        .collect()
 }
 
 /// UML in the shell's explorers, search and panels.

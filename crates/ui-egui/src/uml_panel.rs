@@ -628,7 +628,7 @@ fn commit(shell: &mut Shell, edit: &MemberEdit) {
         (Some(t), MemberKind::Operation) => params["operation"] = json!(t.to_string()),
         (None, _) => params["class"] = json!(edit.class.to_string()),
     }
-    match run(shell, cmd, params) {
+    match write_in_sight(shell, edit, cmd, params) {
         Ok(_) => {
             shell.panels.member = None;
             shell.panels.notice = None;
@@ -636,6 +636,40 @@ fn commit(shell: &mut Shell, edit: &MemberEdit) {
         }
         Err(e) => refuse(shell, Some(e)),
     }
+}
+
+/// Runs the member's command and, in the same undo step, grows every card of its class that would
+/// then hide a member, on every diagram, keeping its width (owner decision: a card the user made
+/// shorter stays so until a member of its class is added or edited).
+fn write_in_sight(shell: &mut Shell, edit: &MemberEdit, cmd: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
+    let Some(session) = shell.session.as_mut() else { return Err(tr("The model could not be opened")) };
+    let store = session.doc();
+    let more = match (edit.target, edit.kind) {
+        (None, MemberKind::Attribute) => (1, 0),
+        (None, MemberKind::Operation) => (0, 1),
+        (Some(_), _) => (0, 0),
+    };
+    let short = store.by_uuid(edit.class).map(|c| crate::uml_ui::short_cards(store, c, more)).unwrap_or_default();
+    if short.is_empty() {
+        return session.execute(cmd, &params).map(|o| o.value).map_err(|e| e.to_string());
+    }
+    // The command's own label, as the step would carry without the growing.
+    let label = match cmd {
+        "uml.attribute.add" => "Add attribute",
+        "uml.attribute.set" => "Set attribute",
+        "uml.operation.add" => "Add operation",
+        _ => "Set operation",
+    };
+    session
+        .batch(label, |b| {
+            b.execute(cmd, &params)?;
+            for (node, width, height) in &short {
+                b.execute("diagram.resize", &json!({ "node": node.to_string(), "width": width, "height": height }))?;
+            }
+            Ok(())
+        })
+        .map(|o| o.value.get(0).cloned().unwrap_or(serde_json::Value::Null))
+        .map_err(|e| e.to_string())
 }
 
 /// Drops the editor whose class or member is gone.
