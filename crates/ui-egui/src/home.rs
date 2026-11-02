@@ -106,9 +106,9 @@ const STARTS: [(&str, &str, &str, &str, &ux::Icon, Hue); 4] = [
     ("import", "Import a model", "Bring existing elements into a project.", "Choose a file", &icons::IMPORT, Hue::Amber),
 ];
 
-/// The start cards left off Home while what they lead to cannot be done at all: importing a
-/// model. Their texts stay in the catalogues for when they come back.
-const HIDDEN_STARTS: [&str; 1] = ["import"];
+/// The start cards left off Home while what they lead to cannot be done at all: exploring an
+/// example and importing a model. Their texts stay in the catalogues for when they come back.
+const HIDDEN_STARTS: [&str; 2] = ["example", "import"];
 
 /// The start cards Home shows.
 fn shown_starts() -> Vec<&'static (&'static str, &'static str, &'static str, &'static str, &'static ux::Icon, Hue)> {
@@ -383,15 +383,16 @@ fn content(shell: &mut Shell, ui: &egui::Ui, p: &Palette, origin: Pos2, width: f
         Some(inner),
     );
     let starts = shown_starts();
-    // As many a row as the width takes, and no more columns than cards.
-    let per_row: usize = if inner >= TWO_UP {
+    // The page's grid, as many columns as the width takes; the start cards fill a row of it, no
+    // more columns than cards, and two cards line up with four columns below.
+    let columns_for_width: usize = if inner >= TWO_UP {
         4
     } else if inner >= ONE_UP {
         2
     } else {
         1
-    }
-    .min(starts.len().max(1));
+    };
+    let per_row = columns_for_width.min(starts.len().max(1));
     let card_w = (inner - GAP * (per_row as f32 - 1.0)) / per_row as f32;
     let cards_top = y + 72.0;
     for (i, start) in starts.iter().enumerate() {
@@ -489,8 +490,8 @@ fn content(shell: &mut Shell, ui: &egui::Ui, p: &Palette, origin: Pos2, width: f
                 row_top += ROW - ROW_PITCH + 11.0;
             }
             RecentView::Gallery => {
-                // The cards stand in the start cards' columns, so the page lines up.
-                let columns = per_row as f32;
+                // The cards stand in the page's grid, so they line up with the start cards.
+                let columns = columns_for_width as f32;
                 let width = ((inner - (columns - 1.0) * GAP) / columns).max(0.0);
                 for (i, project) in projects.iter().enumerate() {
                     let (row, column) = ((i as f32 / columns).floor(), i as f32 % columns);

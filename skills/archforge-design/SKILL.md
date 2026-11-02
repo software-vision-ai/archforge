@@ -67,8 +67,8 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
 ## Home and projects
 - Home fills the window on its own, without menu bar, toolbar or status bar. Its welcome has no
   button: a project opens from the Open a project card or the title strip's + Open project.
-- A start card for what cannot be done at all yet (Import a model) is left off Home, and the
-  cards left share the row.
+- A start card for what cannot be done at all yet (Explore an example, Import a model) is left
+  off Home, and the cards left share the row (AR-67).
 - Recent projects keep the last twelve (name, folder, last opened) across restarts; a row opens
   its project, or shows its tab when it is open already. A row or card under the pointer shows a
   More button whose menu offers Open and Remove from recent projects; removing leaves the project
@@ -80,10 +80,13 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   the projects in the pinned folders (two levels down, looked for each time it opens, one search
   at a time), up to eight projects in all, the pinned folders and Home's actions, each worded for the state it is in. Every word typed must
   be found; the arrows move, Enter runs, Esc or a click elsewhere closes.
-- The recent projects show as rows or as a gallery of cards standing in the start cards' columns,
-  sorted by last opened (newest first) or by name; both choices are kept in the preferences.
+- The recent projects show as rows or as a gallery of cards in the page's grid (four columns
+  where the width takes them, so two start cards line up with them), sorted by last opened
+  (newest first) or by name; both choices are kept in the preferences.
 - One project holds one model, named as the project. The New project dialog asks for a name and a
-  location only; a taken or unfinished name is said in plain words under the field.
+  location only; a taken or unfinished name is said in plain words under the field. What it says
+  a project holds is only what is built: ER and UML class diagrams, skills, agent access, undo
+  and saves (AR-67); nothing still to come is promised.
 - Open project uses the system's folder picker; a damaged, newer or foreign project is refused
   with a dialog, and the project open already stays as it was.
 - The shortest way to drawing: + in the diagram tab strip, a name, Enter. The New diagram dialog
