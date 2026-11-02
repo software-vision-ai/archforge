@@ -254,6 +254,7 @@ pub(crate) fn row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, view: View)
         paint.galley(back.min + vec2(4.0, 2.0), g, p.danger);
     }
     // The type menu, under the type field: a pick sets the type and gives the field the keyboard.
+    let mut picked = false;
     if shell.panels.menu == Some(crate::panels::Menu::InlineType) {
         let choices = shell.session.as_ref().map(|s| crate::uml_panel::type_choices(s.doc())).unwrap_or_default();
         let labels: Vec<String> = choices.iter().map(|(label, _)| label.clone()).collect();
@@ -264,11 +265,16 @@ pub(crate) fn row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, view: View)
             inline.edit.ty = value;
             inline.field = InlineField::Type;
             inline.focus = true;
+            picked = true;
         }
     }
     let menu_open = shell.panels.menu == Some(crate::panels::Menu::InlineType);
     // A press on the row itself (its chevron, its details) is no click away.
-    let pressed_on_row = ui.input(|i| i.pointer.any_pressed() && i.pointer.interact_pos().is_some_and(|pos| row.contains(pos)));
+    let pressed = ui.input(|i| i.pointer.any_pressed().then(|| i.pointer.interact_pos()).flatten());
+    let pressed_on_row = pressed.is_some_and(|pos| row.contains(pos));
+    // A press elsewhere is a click away whether or not a field had the keyboard: the chevron takes
+    // it from them, and the menu's closing on that press gives it back to neither.
+    let pressed_away = pressed.is_some() && !pressed_on_row && !picked;
     let has_focus = name_resp.has_focus() || type_resp.has_focus();
     let lost = name_resp.lost_focus() || type_resp.lost_focus();
     let (enter, escape) = ui.input(|i| (i.key_pressed(egui::Key::Enter), i.key_pressed(egui::Key::Escape)));
@@ -279,7 +285,7 @@ pub(crate) fn row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, view: View)
         cancel(shell);
     } else if enter && (has_focus || lost) && !menu_open {
         commit(shell, true);
-    } else if lost && !has_focus && !switched && !pressed_on_row && !menu_open && !enter {
+    } else if ((lost && !switched && !pressed_on_row) || pressed_away) && !has_focus && !menu_open && !enter {
         commit(shell, false);
     }
 }

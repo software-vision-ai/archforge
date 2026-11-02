@@ -5192,6 +5192,18 @@ fn a_selected_class_takes_attributes_and_operations_typed_on_its_card_each_one_u
     click(&mut h, canvas.left_top() + egui::vec2(30.0, 30.0));
     assert!(h.state().canvas.inline.is_none());
     assert_eq!(member_rows(&h, catalog, false).last().map(String::as_str), Some("+ notes"));
+    // So is one whose type menu was open when the pointer went elsewhere.
+    select(&mut h);
+    let at = rect_of(&h, "workspace.canvas.class.add-attribute").center();
+    click(&mut h, at);
+    h.event(egui::Event::Text("tags".into()));
+    h.run();
+    let at = rect_of(&h, "workspace.canvas.member.type.menu").center();
+    click(&mut h, at);
+    assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::InlineType));
+    click(&mut h, canvas.left_top() + egui::vec2(30.0, 30.0));
+    assert!(h.state().canvas.inline.is_none(), "{:?}", h.state().canvas.inline);
+    assert_eq!(member_rows(&h, catalog, false).last().map(String::as_str), Some("+ tags"));
     // ⋯ takes the draft to Properties' editor with what was typed.
     select(&mut h);
     let at = rect_of(&h, "workspace.canvas.class.add-attribute").center();
