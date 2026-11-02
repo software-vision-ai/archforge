@@ -253,6 +253,36 @@ fn a_model_past_one_transactions_steps_opens_again_from_its_rows() {
 }
 
 #[test]
+fn a_class_skill_named_as_a_project_skill_opens_again_and_one_subject_never_holds_two() {
+    // AR-68: every skill sits in the model's one list, so the siblings' name check refused a
+    // class's skill that overrides the project's of the same name, and the project would not open.
+    let mut s = new_project_session("Review", ids(0)).unwrap();
+    let project = id(&mut s, "skill.add", json!({ "name": "Review export conventions", "body": "Everywhere." }));
+    let package = id(&mut s, "uml.package.add", json!({ "name": "Review domain" }));
+    let invoice = id(&mut s, "uml.class.add", json!({ "package": package, "name": "Invoice" }));
+    let own = id(&mut s, "skill.add", json!({ "subject": invoice, "name": "Review export conventions", "body": "Invoices only." }));
+    let (tables, junctions) = storage();
+    let written = rows::snapshot(s.doc(), &tables, &junctions).unwrap();
+    let back = session_from_rows(&written, ids(1 << 40)).expect("the override opens again");
+    assert_eq!(rows::snapshot(back.doc(), &tables, &junctions).unwrap(), written);
+    let st = back.doc();
+    let obj = |id: &str| st.by_uuid(Uuid::parse(id).unwrap()).unwrap();
+    let effective = archforge_core::skills::effective_skills(back.view(), st, obj(&invoice), None);
+    let found: Vec<(Obj, Option<Obj>, Option<Obj>)> = effective.iter().map(|e| (e.skill, e.origin, e.overridden_by)).collect();
+    assert_eq!(found, [(obj(&project), None, Some(obj(&own))), (obj(&own), Some(obj(&invoice)), None)], "the class's own overrides the project's");
+    // Two of one name on one subject still do not open, whichever way the rows came to hold them.
+    let mut st = store(ids(1 << 41)).unwrap();
+    rows::restore(&mut st, &written, &tables, &junctions).unwrap();
+    let model = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_core::MODEL)).unwrap();
+    let twin = st.create(archforge_core::SKILL).unwrap();
+    st.set(twin, archforge_core::named_element::NAME, Value::str("review EXPORT conventions")).unwrap();
+    st.set(twin, archforge_core::skill::SUBJECT, Value::Ref(st.by_uuid(Uuid::parse(&invoice).unwrap()).unwrap())).unwrap();
+    st.push(model, archforge_core::model::SKILL, Value::Ref(twin)).unwrap();
+    let e = session_from_rows(&rows::snapshot(&st, &tables, &junctions).unwrap(), ids(1 << 42)).err().expect("refused");
+    assert!(e.contains("DuplicateName"), "{e}");
+}
+
+#[test]
 fn a_skill_aims_only_at_kinds_of_its_subjects_notation_and_moves_only_within_it() {
     let mut s = new_project_session("Shop", ids(0)).unwrap();
     let schema = id(&mut s, "er.schema.add", json!({ "name": "shop" }));
