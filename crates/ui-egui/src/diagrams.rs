@@ -96,6 +96,16 @@ pub fn diagram_name(store: &Store, d: Obj) -> String {
     store.get(d, diagram::NAME).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default()
 }
 
+/// What a skill's subject or origin is called: a diagram by its name, or "Unnamed diagram" when it
+/// has none; any other element by its name.
+pub fn subject_name(store: &Store, o: Obj) -> String {
+    if store.class_of(o).ok() != Some(archforge_diagram::DIAGRAM) {
+        return archforge_core::name_of(store, o);
+    }
+    let name = diagram_name(store, o);
+    if name.is_empty() { tr("Unnamed diagram") } else { name }
+}
+
 /// The schema a diagram is of, when it has one.
 pub fn schema_of(store: &Store, d: Obj) -> Option<Obj> {
     store.get(d, diagram::ELEMENT).ok().and_then(|v| v.as_ref()).filter(|o| store.is_alive(*o))

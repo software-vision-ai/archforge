@@ -231,7 +231,7 @@ pub fn retain_valid(state: &mut crate::canvas::State) {
 /// Where the skill sits, as the line under its name.
 fn place(store: &Store, s: Obj) -> String {
     match archforge_core::skills::subject_of(store, s) {
-        Some(o) => fmt(&tr("Skill · on {subject}"), &[("subject", &archforge_core::name_of(store, o))]),
+        Some(o) => fmt(&tr("Skill · on {subject}"), &[("subject", &crate::diagrams::subject_name(store, o))]),
         None => tr("Skill · on the project"),
     }
 }

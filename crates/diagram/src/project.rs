@@ -243,8 +243,9 @@ impl SkillHost for ProjectView {
         &mut self.selection
     }
 
+    /// Every notation's subjects, and a diagram (owner decision).
     fn skill_subjects(&self) -> Vec<ClassId> {
-        self.notations.iter().flat_map(|n| n.skill_subjects().iter().copied()).collect()
+        self.notations.iter().flat_map(|n| n.skill_subjects().iter().copied()).chain([crate::DIAGRAM]).collect()
     }
 
     fn skill_kinds(&self) -> Vec<(ClassId, &'static str)> {
@@ -257,6 +258,19 @@ impl SkillHost for ProjectView {
 
     fn skill_problem(&self, store: &Store, element: Obj) -> Option<&'static str> {
         self.of_element(store, element)?.skill_problem(store, element)
+    }
+
+    /// A diagram inherits the skills of the element it shows (owner decision); one that shows
+    /// none, or a diagram or something inside itself (a crafted file), those of what holds it.
+    fn level_above(&self, store: &Store, element: Obj) -> Option<Obj> {
+        if store.class_of(element).ok() != Some(crate::DIAGRAM) {
+            return None;
+        }
+        store
+            .get(element, crate::diagram::ELEMENT)
+            .ok()
+            .and_then(|v| v.as_ref())
+            .filter(|o| store.is_alive(*o) && store.class_of(*o).ok() != Some(crate::DIAGRAM) && !store.contains(element, *o))
     }
 }
 

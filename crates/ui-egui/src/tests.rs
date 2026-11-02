@@ -5503,3 +5503,27 @@ fn a_class_and_an_attribute_take_a_skill_from_the_skills_panel_and_the_tree_list
     h.run();
     assert_eq!(on(&h, attribute).len(), 1, "the attribute carries its own");
 }
+
+#[test]
+fn a_diagram_takes_a_skill_from_the_skills_panel_and_shows_its_schemas_as_inherited() {
+    let (mut h, _, diagram) = diagram_harness();
+    let schema_skill = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let st = s.doc();
+        let schema = st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap()).unwrap().to_string();
+        let out = s.execute("skill.add", &serde_json::json!({ "subject": schema, "name": "Layout" })).unwrap();
+        s.execute("view.select", &serde_json::json!({ "ids": [diagram] })).unwrap();
+        out.value["id"].as_str().unwrap().to_string()
+    };
+    h.state_mut().state.show_panel(crate::state::Panel::Skills);
+    h.run();
+    assert!(ids(&h).contains(&format!("workspace.skills.row.{schema_skill}")), "the schema's skill shows as inherited");
+    let at = rect_of(&h, "workspace.skills.add").center();
+    click(&mut h, at);
+    h.run();
+    let st = h.state().session.as_ref().unwrap().doc();
+    let d = st.by_uuid(archforge_mof::Uuid::parse(&diagram).unwrap()).unwrap();
+    let own: Vec<_> = archforge_core::skills::skills(st).into_iter().filter(|s| archforge_core::skills::subject_of(st, *s) == Some(d)).collect();
+    assert_eq!(own.len(), 1, "the diagram carries the new skill");
+    assert_eq!(h.state().canvas.active, Some(st.uuid(own[0]).unwrap()), "it opens in its tab");
+}
