@@ -18,6 +18,9 @@ cargo xtask shot dark                     # an offscreen screenshot and a small 
   working and the gate before proposing a change; a change is proposed only from a green gate.
 - Look at every change to the user interface in a screenshot (`cargo xtask shot`, `light` or
   `dark`), not only in the tests.
+- A change to a flow a user sees updates the user manual's chapter for it (`docs/manual/`) in the
+  same change. The manual's pictures are rendered, never committed: a chapter names a snapshot
+  screen, and `cargo xtask manual` draws them under `plan/manual/`.
 - Build output, logs, screenshots and plans never enter the repository; the ignored `plan/`
   folder holds them.
 
