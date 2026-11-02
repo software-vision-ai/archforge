@@ -427,6 +427,8 @@ fn the_first_problem_is_found_in_time_linear_in_the_model() {
         st.push(pkgs[0], PACKAGE_PACKAGED_ELEMENT, Value::Ref(c)).unwrap();
     }
     assert!(matches!(st.first_problem(), Some(Problem::DuplicateName { .. })));
+    // A class named by a rule of its own is left out of the siblings' check.
+    assert_eq!(st.first_problem_except(&[CLASS]), None);
     assert!(started.elapsed() < std::time::Duration::from_secs(5), "{:?}", started.elapsed());
 }
 

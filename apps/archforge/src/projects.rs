@@ -818,6 +818,53 @@ mod tests {
     }
 
     #[test]
+    fn a_project_whose_class_skill_overrides_a_project_skill_saves_and_opens_again() {
+        // AR-68: the project saved, but its model would not open again.
+        let base = std::env::temp_dir().join(format!("af-skills-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        let host = Projects::new(&base.join("settings"), "Archforge test".into());
+        let path = wait(&host.create(&base.join("Documents/Archforge"), "MVPFlowReview")).unwrap().path;
+        let mut n = 0u64;
+        let ids = move || {
+            n += 1;
+            let mut r = [0u8; 10];
+            r[2..].copy_from_slice(&n.to_be_bytes());
+            archforge_mof::Uuid::v7(1_761_670_800_000, r)
+        };
+        let mut s = archforge_notations::new_project_session("MVPFlowReview", Box::new(ids)).unwrap();
+        let mut id = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap().to_string();
+        id("skill.add", serde_json::json!({ "name": "Review export conventions", "body": "Everywhere." }));
+        let package = id("uml.package.add", serde_json::json!({ "name": "Review domain" }));
+        let invoice = id("uml.class.add", serde_json::json!({ "package": package, "name": "Invoice" }));
+        let diagram = id("diagram.add", serde_json::json!({ "kind": "uml.class", "element": package, "name": "Review domain" }));
+        id("diagram.place", serde_json::json!({ "diagram": diagram, "element": invoice, "x": 100, "y": 120 }));
+        id("skill.add", serde_json::json!({ "subject": invoice, "name": "Review export conventions", "body": "Invoices only." }));
+        let (tables, junctions) = archforge_notations::storage();
+        let rows = archforge_mof::rows::snapshot(s.doc(), &tables, &junctions).unwrap();
+        host.write(&path, rows.clone());
+        assert_eq!(saved(&host, &path), Ok(true));
+        close(&host, &path).unwrap();
+        // Opened again, its rows make a model as the window makes it, with both skills and the class's
+        // box on its diagram.
+        let back = wait(&host.open(&path)).unwrap();
+        assert_eq!(back.model.as_deref(), Some(&rows));
+        let more = Box::new(|| archforge_mof::Uuid::v7(1_761_670_900_000, [7; 10]));
+        let session = archforge_notations::session_from_rows(back.model.as_deref().unwrap(), more).expect("the model opens");
+        let st = session.doc();
+        let bodies: Vec<String> = archforge_core::skills::skills(st)
+            .into_iter()
+            .map(|k| st.get(k, archforge_core::skill::BODY).unwrap().as_str().unwrap_or_default().to_string())
+            .collect();
+        assert_eq!(bodies, ["Everywhere.", "Invoices only."]);
+        let d = st.by_uuid(archforge_mof::Uuid::parse(&diagram).unwrap()).unwrap();
+        assert_eq!(st.list(d, archforge_diagram::diagram::NODE).unwrap().len(), 1);
+        close(&host, &path).unwrap();
+        host.shutdown();
+        remove_settled(&base);
+    }
+
+    #[test]
     fn the_host_writes_saves_and_reopens_models_and_drops_rows_for_a_closed_project() {
         let base = std::env::temp_dir().join(format!("af-save-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);

@@ -1209,6 +1209,13 @@ impl Store {
     /// without gathering the rest: a missing value, or two siblings of one container whose
     /// names differ only in case. For checking a model as it opens, whatever its size.
     pub fn first_problem(&self) -> Option<Problem> {
+        self.first_problem_except(&[])
+    }
+
+    /// [`first_problem`](Self::first_problem), with the names of objects of the classes `own_rule`
+    /// left out of the siblings' check: a class whose names are unique by a rule of its own, such
+    /// as skills, one name per subject they sit on though they all share one container.
+    pub fn first_problem_except(&self, own_rule: &[ClassId]) -> Option<Problem> {
         let mut names: std::collections::HashMap<(Obj, PropId, String), Obj> = std::collections::HashMap::new();
         for obj in self.alive() {
             let Ok(class) = self.class_of(obj) else { continue };
@@ -1223,6 +1230,9 @@ impl Store {
                 if found < prop.lower as usize {
                     return Some(Problem::Missing { obj, prop: *p, lower: prop.lower, found });
                 }
+            }
+            if own_rule.contains(&class) {
+                continue;
             }
             // An empty name names nothing, as `validate` sees it: unnamed siblings never clash.
             if let (Some(np), Ok(Some((c, _)))) = (info.name_prop, self.container(obj))

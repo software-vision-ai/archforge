@@ -7,7 +7,7 @@
 //! knows no notation: what may carry a skill and what a skill may aim at comes from the
 //! notation's view through [`SkillHost`], as the diagram commands take their policy from theirs.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 
 use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, View, cmd};
 use archforge_mof::{ClassId, Invalid, Obj, PropId, Store, TypeRef, Uuid, Value};
@@ -342,7 +342,7 @@ pub enum SkillProblem {
 /// The skill rules over the whole store: names unique per subject, subjects alive, kinds known.
 pub fn problems(store: &Store) -> Vec<SkillProblem> {
     let mut out = Vec::new();
-    let mut seen: Vec<(Option<Obj>, String, Obj)> = Vec::new();
+    let mut seen: HashMap<(Option<Obj>, String), Obj> = HashMap::new();
     for s in skills(store) {
         let subject_ref = store.get(s, skill::SUBJECT).ok().and_then(|v| v.as_ref());
         if subject_ref.is_some_and(|o| !store.is_alive(o)) {
@@ -355,13 +355,29 @@ pub fn problems(store: &Store) -> Vec<SkillProblem> {
             continue;
         }
         let name = name_of(store, s).to_lowercase();
-        if let Some((_, _, first)) = seen.iter().find(|(sub, n, _)| *sub == subject_ref && *n == name) {
-            out.push(SkillProblem::DuplicateName { subject: subject_ref, name, skills: [*first, s] });
-        } else {
-            seen.push((subject_ref, name, s));
+        match seen.get(&(subject_ref, name.clone())) {
+            Some(first) => out.push(SkillProblem::DuplicateName { subject: subject_ref, name, skills: [*first, s] }),
+            None => {
+                seen.insert((subject_ref, name), s);
+            }
         }
     }
     out
+}
+
+/// The first two skills of one name on one subject, found in time linear in the skills: the name
+/// rule a model is checked by as it opens. Skills of one name on different subjects are not one:
+/// the more specific overrides the other (AR-68).
+pub fn first_duplicate(store: &Store) -> Option<SkillProblem> {
+    let mut seen: HashMap<(Option<Obj>, String), Obj> = HashMap::new();
+    for s in skills(store) {
+        let subject = store.get(s, skill::SUBJECT).ok().and_then(|v| v.as_ref());
+        let name = name_of(store, s).to_lowercase();
+        if let Some(first) = seen.insert((subject, name.clone()), s) {
+            return Some(SkillProblem::DuplicateName { subject, name, skills: [first, s] });
+        }
+    }
+    None
 }
 
 // Commands.

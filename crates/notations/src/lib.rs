@@ -143,7 +143,11 @@ pub fn session_from_rows_repaired(
     // Built without an undo log, so a model of any size the read budgets let through opens.
     let mut st = archforge_mof::rows::restore_into_empty(store(ids)?, rows, &tables, &junctions).map_err(|e| e.to_string())?;
     repair(&mut st);
-    if let Some(problem) = st.first_problem() {
+    // Skills share the model's one list but are named uniquely per subject, by their own rule.
+    if let Some(problem) = st.first_problem_except(&[archforge_core::SKILL]) {
+        return Err(format!("the model does not hold together: {problem:?}"));
+    }
+    if let Some(problem) = archforge_core::skills::first_duplicate(&st) {
         return Err(format!("the model does not hold together: {problem:?}"));
     }
     if !st.alive().any(|o| st.class_of(o).ok() == Some(archforge_core::MODEL)) {
