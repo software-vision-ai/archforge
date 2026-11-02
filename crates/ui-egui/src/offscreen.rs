@@ -68,6 +68,10 @@ pub enum Screen {
     /// The sample class model with the association "paid by" selected: its line's end handles and
     /// its Properties with both ends.
     WorkspaceAssociation,
+    /// The same with its Payment end's multiplicity presets open, the current one ticked.
+    WorkspaceMultiplicityPresets,
+    /// The same with `5..2` typed into the Payment end's multiplicity and refused under it.
+    WorkspaceMultiplicityRefused,
     /// The sample class model with the Relationship tool active and its kinds' menu open.
     WorkspaceRelateKinds,
     /// The sample class model edited, unsaved, and its close asking Save, Don't save or Cancel
@@ -259,10 +263,11 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
         }
         shell.close_project();
     }
-    if matches!(screen, Screen::WorkspaceAssociation | Screen::WorkspaceRelateKinds) {
+    let association = matches!(screen, Screen::WorkspaceAssociation | Screen::WorkspaceMultiplicityPresets | Screen::WorkspaceMultiplicityRefused);
+    if association || screen == Screen::WorkspaceRelateKinds {
         shell.adopt_project();
         crate::uml_ui::open_sample(&mut shell)?;
-        if screen == Screen::WorkspaceAssociation {
+        if association {
             let id = {
                 let store = shell.session.as_ref().ok_or("no project is open")?.doc();
                 let a = store
@@ -273,6 +278,12 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
             };
             crate::panels::run(&mut shell, "view.select", serde_json::json!({ "ids": [id.to_string()] }))?;
             shell.state.show_panel(crate::state::Panel::Properties);
+            if screen == Screen::WorkspaceMultiplicityPresets {
+                shell.panels.menu = Some(crate::panels::Menu::EndMultiplicity(1));
+            }
+            if screen == Screen::WorkspaceMultiplicityRefused {
+                crate::uml_relate::refuse_typed(&mut shell, id, 1, "5..2")?;
+            }
         } else {
             shell.canvas.tool = crate::canvas::Tool::Connect("relationship");
             shell.canvas.uml_relation = crate::uml_relate::Relate::Composition;

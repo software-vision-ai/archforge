@@ -6,7 +6,7 @@ use archforge_diagram::ProjectView;
 use archforge_engine::testing::sweep_with;
 use archforge_engine::{Options, Session};
 use archforge_mof::{CompositeSlabs, Store, Uuid, Value};
-use archforge_uml::members::parse_multiplicity;
+use archforge_uml::members::{MultiplicityError, parse_multiplicity};
 use archforge_uml::{ALONE, registry};
 use serde_json::{Value as Json, json};
 
@@ -68,9 +68,32 @@ fn multiplicities_read_as_typed_and_the_rest_are_refused() {
     assert_eq!(parse_multiplicity("*"), Ok(Some((0, None))));
     assert_eq!(parse_multiplicity(" 1..* "), Ok(Some((1, None))));
     assert_eq!(parse_multiplicity("2..5"), Ok(Some((2, Some(5)))));
-    for bad in ["5..2", "*..1", "0", "0..0", "a", "1..", "-1", "1..2..3", "99999999999"] {
-        assert!(parse_multiplicity(bad).is_err(), "{bad:?}");
+    // The story's examples (AR-51): exact numbers, ranges, unbounded ranges and `*` for `0..*`.
+    for (typed, bounds) in [
+        ("0", (0, Some(0))),
+        ("12", (12, Some(12))),
+        ("0..*", (0, None)),
+        ("2..*", (2, None)),
+        ("\t2..5 ", (2, Some(5))),
+        ("1000000", (1_000_000, Some(1_000_000))),
+    ] {
+        assert_eq!(parse_multiplicity(typed), Ok(Some(bounds)), "{typed:?}");
     }
+    assert_eq!(parse_multiplicity("   "), Ok(None), "only whitespace is no multiplicity");
+    // The rest is refused with its reason, never coerced.
+    let malformed = |s: &str| Err(MultiplicityError::Malformed(s.into()));
+    for bad in ["-1", "1.5", "abc", "..3", "3..", "1...*", "1..2..3", "+5", "2 .. 5", "1..**", "**", "1,5", "١"] {
+        assert_eq!(parse_multiplicity(bad), malformed(bad.trim()), "{bad:?}");
+    }
+    assert_eq!(parse_multiplicity("5..2"), Err(MultiplicityError::Reversed(5)));
+    assert_eq!(parse_multiplicity("*..1"), Err(MultiplicityError::LowerMany));
+    for big in ["1000001", "99999999999", "18446744073709551616", "0..99999999999999999999999"] {
+        assert_eq!(parse_multiplicity(big), Err(MultiplicityError::TooLarge), "{big:?}");
+    }
+    // A refusal says why after "the multiplicity".
+    assert_eq!(MultiplicityError::Reversed(5).to_string(), "needs an upper bound of at least 5");
+    let long = "x".repeat(200);
+    assert!(matches!(parse_multiplicity(&long), Err(MultiplicityError::Malformed(s)) if s.chars().count() == 40));
 }
 
 #[test]

@@ -504,6 +504,7 @@ str		This operation	This operation
 str		Visibility	Visibility
 str		Place class	Place class
 # Relating classes
+str		A bound can be at most {max}.	A bound can be at most {max}.
 str		A relationship joins two classes	A relationship joins two classes
 str		Add association	Add association
 str		Add dependency	Add dependency
@@ -511,6 +512,7 @@ str		Add generalization	Add generalization
 str		Aggregation	Aggregation
 str		Association	Association
 str		Association · model	Association · model
+str		Clear	Clear
 str		Client	Client
 str		Composite	Composite
 str		Composition	Composition
@@ -528,14 +530,19 @@ str		Navigable	Navigable
 str		On this association · {n}	On this association · {n}
 str		On this dependency · {n}	On this dependency · {n}
 str		On this generalization · {n}	On this generalization · {n}
+str		Or type a number or range	Or type a number or range
+str		Pick a multiplicity	Pick a multiplicity
 str		Relationship kinds	Relationship kinds
 str		Shared	Shared
 str		Specific	Specific
 str		Supplier	Supplier
+str		The lower bound cannot be *.	The lower bound cannot be *.
+str		The upper bound must be at least {lower}.	The upper bound must be at least {lower}.
 str		This association	This association
 str		This dependency	This dependency
 str		This generalization	This generalization
 str		To	To
+str		Type a whole number, a range such as 2..5, or *.	Type a whole number, a range such as 2..5, or *.
 str		{what} removed	{what} removed
 # Packages
 str		Class · {package}	Class · {package}

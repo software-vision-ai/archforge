@@ -187,6 +187,29 @@ fn an_association_end_takes_a_role_multiplicity_navigability_and_aggregation_and
 }
 
 #[test]
+fn an_end_takes_any_multiplicity_that_reads_drops_it_when_empty_and_refuses_the_rest_unchanged() {
+    let mut s = session();
+    let (_, _, c, _) = classes(&mut s, &["Order", "Payment"], 0);
+    let a = run(&mut s, "uml.association.add", json!({ "from": c[0], "to": c[1] }));
+    let set = |m: &str| json!({ "association": a, "end": 1, "role": "", "multiplicity": m, "navigable": false, "aggregation": "none" });
+    let shown = |s: &mut S| relationships(s, &c[0])[0]["ends"][1]["multiplicity"].clone();
+    assert_eq!(shown(&mut s), "", "a new association names no multiplicity");
+    for (typed, written) in [("0", "0"), ("12", "12"), (" 2..5 ", "2..5"), ("2..*", "2..*"), ("0..*", "*"), ("*", "*"), ("0..1", "0..1")] {
+        round_trip(&mut s, "uml.association.set-end", set(typed));
+        assert_eq!(shown(&mut s), written, "{typed:?}");
+    }
+    let label = |s: &S| archforge_uml::figures::slot_text(s.doc(), obj(s, &a), "to_end");
+    assert_eq!(label(&s), "0..1", "the line's end text follows the model");
+    for bad in ["5..2", "-1", "1.5", "abc", "..3", "3..", "1...*", "99999999999"] {
+        refused(&mut s, "uml.association.set-end", set(bad), "multiplicity");
+    }
+    // Empty takes the multiplicity away again, one undo step.
+    round_trip(&mut s, "uml.association.set-end", set(""));
+    assert_eq!(shown(&mut s), "");
+    assert_eq!(label(&s), "");
+}
+
+#[test]
 fn generalizations_and_dependencies_are_drawn_and_a_cycle_a_repeat_or_a_class_on_itself_is_refused() {
     let mut s = session();
     let (_, _, c, _) = classes(&mut s, &["Payment", "Card", "Gift", "Pricing"], 0);

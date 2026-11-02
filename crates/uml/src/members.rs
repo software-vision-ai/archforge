@@ -63,35 +63,58 @@ pub fn parameters(store: &Store, op: Obj) -> (Vec<Obj>, Option<Obj>) {
     (all.iter().copied().filter(|p| !is_return(p)).collect(), all.into_iter().find(|p| is_return(p)))
 }
 
+/// Why a typed multiplicity does not read; its text follows "the multiplicity" in a refusal.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MultiplicityError {
+    /// Not a whole number, a range `lower..upper` or `*`: the text as typed, cut short.
+    Malformed(String),
+    /// A bound above [`MAX_BOUND`].
+    TooLarge,
+    /// A range that starts at `*`.
+    LowerMany,
+    /// A range whose upper bound is below its lower one, the lower bound named.
+    Reversed(u64),
+}
+
+impl std::fmt::Display for MultiplicityError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MultiplicityError::Malformed(s) => write!(f, "{s:?} is not a whole number, a range such as 2..5, or *"),
+            MultiplicityError::TooLarge => write!(f, "has a bound above {MAX_BOUND}"),
+            MultiplicityError::LowerMany => write!(f, "cannot start at *"),
+            MultiplicityError::Reversed(lower) => write!(f, "needs an upper bound of at least {lower}"),
+        }
+    }
+}
+
 /// A multiplicity as typed: none (empty), or the lower bound and the upper one (None: many).
-pub fn parse_multiplicity(s: &str) -> Result<Option<(u64, Option<u64>)>, String> {
+/// Whitespace around it is dropped; inside it, only digits, one `..` and `*` read (owner decision):
+/// `0`, `2`, `0..1`, `2..5`, `1..*`, and `*` for `0..*`.
+pub fn parse_multiplicity(s: &str) -> Result<Option<(u64, Option<u64>)>, MultiplicityError> {
     let s = s.trim();
     if s.is_empty() {
         return Ok(None);
     }
-    let bound = |b: &str| -> Result<Option<u64>, String> {
-        match b.trim() {
-            "*" => Ok(None),
-            n => n
-                .parse::<u64>()
-                .ok()
-                .filter(|n| *n <= MAX_BOUND)
-                .map(Some)
-                .ok_or_else(|| format!("{:?} is not a bound: a whole number up to {MAX_BOUND}, or *", short(n))),
+    let malformed = || MultiplicityError::Malformed(short(s));
+    let bound = |b: &str| -> Result<Option<u64>, MultiplicityError> {
+        if b == "*" {
+            return Ok(None);
         }
+        if b.is_empty() || !b.bytes().all(|c| c.is_ascii_digit()) {
+            return Err(malformed());
+        }
+        // Digits that overflow are a bound too large, not a typing error.
+        b.parse::<u64>().ok().filter(|n| *n <= MAX_BOUND).map(Some).ok_or(MultiplicityError::TooLarge)
     };
     let (lower, upper) = match s.split_once("..") {
-        Some((l, u)) => (bound(l)?.ok_or("the lower bound cannot be *")?, bound(u)?),
+        Some((l, u)) => (bound(l)?.ok_or(MultiplicityError::LowerMany)?, bound(u)?),
         None => match bound(s)? {
             None => (0, None),
             Some(n) => (n, Some(n)),
         },
     };
     if upper.is_some_and(|u| u < lower) {
-        return Err(format!("the upper bound is below the lower one, {lower}"));
-    }
-    if upper == Some(0) {
-        return Err("the upper bound must be at least 1".into());
+        return Err(MultiplicityError::Reversed(lower));
     }
     Ok(Some((lower, upper)))
 }
