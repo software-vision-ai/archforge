@@ -833,8 +833,9 @@ enum Slot<'a> {
 
 /// A card's compartments under its header: a row a pitch apart, half a pitch and a dividing line
 /// between compartments. When a row does not fit the card's height, the rows from the last place
-/// that fits are said in one muted row there, whichever compartment they are in, so a card made
-/// short never looks empty (AR-57).
+/// that fits are said in one muted row there, whichever compartment they are in, or at the card's
+/// foot or beside its eyebrow when no row's place fits, so a card made short never looks empty
+/// (AR-57).
 fn draw_rows(inner: &egui::Painter, p: &Palette, card: &archforge_diagram::figure::Card, rect: Rect, z: f32, key_status: bool, room: Option<f32>) {
     let mut slots: Vec<(f32, Slot<'_>)> = Vec::new();
     // Where the next row sits, in pitches below the first.
@@ -884,12 +885,24 @@ fn draw_rows(inner: &egui::Painter, p: &Palette, card: &archforge_diagram::figur
             _ => {}
         }
     }
-    if let Some((top, _)) = cue.and_then(|i| slots.get(i)) {
-        let total: usize = card.compartments.iter().map(Vec::len).sum();
-        let more = total.saturating_sub(shown);
-        let y = rect.top() + top * z;
-        let text = trn(card.more.0, card.more.1, more as u64);
-        ux::text(inner, pos2(rect.left() + ENTITY_TEXT * z, y), &text, types::UI.scaled(z), p.text_muted, room);
+    if first.is_none() {
+        return;
+    }
+    let total: usize = card.compartments.iter().map(Vec::len).sum();
+    let text = trn(card.more.0, card.more.1, total.saturating_sub(shown) as u64);
+    // In the last place that fits; with none, a row's height above the card's foot while that is
+    // still under the header; on a card shorter still, at the right of its eyebrow's line.
+    let place = cue.and_then(|i| slots.get(i)).map(|(top, _)| *top).or(Some(height - ENTITY_ROW).filter(|top| *top >= ENTITY_HEADER - 4.0));
+    match place {
+        Some(top) => {
+            ux::text(inner, pos2(rect.left() + ENTITY_TEXT * z, rect.top() + top * z), &text, types::UI.scaled(z), p.text_muted, room);
+        }
+        None => {
+            let style = types::CAPTION.scaled(z);
+            let width = ux::galley(inner, &text, style, p.text_muted, room).size().x;
+            let x = (rect.right() - ENTITY_INSET * z - width).max(rect.left() + ENTITY_INSET * z);
+            ux::text(inner, pos2(x, rect.top() + 11.0 * z), &text, style, p.text_muted, room);
+        }
     }
 }
 

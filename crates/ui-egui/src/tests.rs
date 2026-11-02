@@ -5031,6 +5031,14 @@ fn a_new_class_shows_the_operations_added_to_it_and_a_card_made_short_says_what_
         assert!(texts.iter().any(|t| t == "+ 2 more members"), "{theme:?}: {texts:?}");
         assert!(!on_card(&h, "+ calculateTotal()") && !on_card(&h, "+ approve()"), "{texts:?}");
         assert_eq!(height(&h), 120.0);
+        // Shorter than a row's place under the header, it says so at its foot, then beside its eyebrow.
+        for short in [90, 60] {
+            run(&mut h, "diagram.resize", serde_json::json!({ "node": node.to_string(), "width": 240, "height": short }));
+            h.run();
+            assert!(painted(&h).iter().any(|t| t == "+ 2 more members"), "{short} tall: {:?}", painted(&h));
+        }
+        run(&mut h, "diagram.resize", serde_json::json!({ "node": node.to_string(), "width": 240, "height": 120 }));
+        h.run();
         // Seen at a reduced zoom, the card still says it.
         let zoom = h.state().canvas.zoom;
         h.state_mut().canvas.zoom = 0.6;

@@ -61,7 +61,7 @@ pub enum Screen {
     /// The sample class model to read: members, every line kind and end.
     WorkspaceClassDiagramRead,
     /// A class diagram of three cards: a new class with its first operation at the default size, one
-    /// grown to show its members, and one made short by hand saying the rows it hides.
+    /// grown to show its members, and two made short by hand saying the rows they hide.
     WorkspaceClassSizing,
     /// The sample class model with Order selected: its Properties, Abstract and its members
     ///.
@@ -701,7 +701,8 @@ fn sample_class_diagram(shell: &mut Shell) -> Result<(), String> {
 }
 
 /// A package, Billing, on its class diagram: ReviewInvoice new with its first operation, Invoice
-/// as tall as its members, Order made shorter by hand than its members need.
+/// as tall as its members, Order made shorter by hand than its members need, Payment shorter than
+/// its header and a row.
 fn sample_class_sizing(shell: &mut Shell) -> Result<(), String> {
     use serde_json::json;
     let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
@@ -711,10 +712,11 @@ fn sample_class_sizing(shell: &mut Shell) -> Result<(), String> {
     };
     let package = run(session, "uml.package.add", json!({ "name": "Billing" }))?;
     let diagram = run(session, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": package, "name": "Billing" }))?;
-    let members: [(&str, &[&str], &[&str], f64); 3] = [
+    let members: [(&str, &[&str], &[&str], f64); 4] = [
         ("ReviewInvoice", &[], &["calculateTotal"], archforge_uml::CLASS_SIZE.1),
         ("Invoice", &["number", "issuedAt", "total"], &["send", "cancel"], crate::uml_ui::members_height(3, 2)),
         ("Order", &["id", "placedAt"], &["submit", "cancel"], 120.0),
+        ("Payment", &["amount"], &["authorise"], 60.0),
     ];
     for (i, (name, attributes, operations, height)) in members.into_iter().enumerate() {
         let class = run(session, "uml.class.add", json!({ "package": package, "name": name }))?;

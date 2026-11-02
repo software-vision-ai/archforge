@@ -393,7 +393,9 @@ What is UML's own, beside the shared rules above.
   that would hide one, on every diagram, in the same undo step and keeping its width; a card is
   never shrunk. A card made shorter by hand stays so until a member of its class is next applied;
   the rows it cannot show are said in one muted row, `+ n more members`, in the last place that
-  fits, whichever compartment they are in. Below the detail zoom every card shows only its name.
+  fits, whichever compartment they are in; with no row's place left, a row above the card's foot
+  while that is under the header, and on a card shorter still at the right of its eyebrow's line.
+  Below the detail zoom every card shows only its name.
 
 On every line: a role, and a label at the line's middle, sit above a level stretch of the line and
 beside an upright one, never on the line or its mark.
