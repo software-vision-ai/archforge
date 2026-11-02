@@ -180,7 +180,7 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
         }
         // Change… as a host with a folder picker shows it.
         if screen == Screen::NewProjectFolder {
-            shell.services.pick_folder = Some(std::sync::Arc::new(|| None));
+            shell.services.pick_folder = Some(std::sync::Arc::new(|_| None));
         }
     }
     if screen == Screen::WorkspaceSchema {

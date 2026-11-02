@@ -424,6 +424,7 @@ str		Choose a file	ファイルを選択
 str		Pinned folders	ピン留めしたフォルダー
 str		Keep your project locations close.	プロジェクトの保存場所を、すぐ手の届くところに。
 str		Pin a folder	フォルダーをピン留め
+str		Choose project location	プロジェクトの保存場所を選択
 str		Open a project here	ここでプロジェクトを開く
 str		Unpin	固定を解除
 str		Open	開く

@@ -213,9 +213,10 @@ fn find_projects(folders: Vec<PathBuf>, wake: Box<dyn Fn() + Send>) -> std::sync
     rx
 }
 
-/// The platform's folder picker, for Pin a folder on Home: it starts in the user's Documents.
-fn pick_folder() -> Option<PathBuf> {
-    let mut dialog = rfd::FileDialog::new().set_title(archforge_ui_egui::i18n::tr("Pin a folder"));
+/// The platform's folder picker, headed with the title the shell gives for what the folder is for
+/// (Pin a folder, Choose project location): it starts in the user's Documents.
+fn pick_folder(title: &str) -> Option<PathBuf> {
+    let mut dialog = rfd::FileDialog::new().set_title(title);
     if let Some(documents) = projects_folder().and_then(|f| f.path.parent().map(PathBuf::from)) {
         dialog = dialog.set_directory(documents);
     }
