@@ -235,7 +235,7 @@ str		Model	模型
 str		Name	名称
 str		Models	模型
 str		Source Control	源代码管理
-str		Agent	代理
+str		Chat	聊天
 str		Appearance	外观
 str		Properties	属性
 str		Skills	技能
@@ -329,7 +329,7 @@ str		Select a table or a line on the diagram	在图表中选择一个表或一�
 str		Selection · this diagram	所选内容 · 此图表
 str		{kind} · this diagram	{kind} · 此图表
 plural		{n} item	{n} 个项目
-str		No agent connected	未连接代理
+str		Coming soon	即将推出
 str		The model could not be opened	无法打开模型
 str		The host gives no ids for the model's elements	宿主未提供模型元素的 ID
 str		Collapse panel	折叠面板

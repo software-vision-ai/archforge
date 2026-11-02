@@ -5119,6 +5119,34 @@ fn a_table_box_shorter_than_its_columns_shows_those_that_fit_and_counts_the_rest
 }
 
 #[test]
+fn the_chat_icon_opens_a_panel_that_says_chat_is_coming_and_nothing_else() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, order) = class_properties("Order");
+        h.state_mut().state.theme = theme;
+        h.run();
+        let at = rect_of(&h, "workspace.panels.agent").center();
+        click(&mut h, at);
+        assert_eq!(h.state().state.panel, crate::state::Panel::Agent);
+        let texts = painted(&h);
+        assert!(texts.iter().any(|t| t == "Chat") && texts.iter().any(|t| t == "Coming soon"), "{theme:?}: {texts:?}");
+        // No control that looks as if it worked: no provider, message or history.
+        let panel_ids: Vec<String> =
+            ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.") || i.starts_with("workspace.skills.")).collect();
+        assert!(panel_ids.is_empty(), "{panel_ids:?}");
+        // Back to Properties, the selection is as it was.
+        let at = rect_of(&h, "workspace.panels.properties").center();
+        click(&mut h, at);
+        assert_eq!(crate::panels::selected_id(h.state()), Some(order));
+        assert!(painted(&h).iter().any(|t| t == "Order"));
+        // A second click on the open panel's icon folds the dock.
+        let at = rect_of(&h, "workspace.panels.agent").center();
+        click(&mut h, at);
+        click(&mut h, at);
+        assert!(h.state().state.panel_collapsed);
+    }
+}
+
+#[test]
 fn a_class_dragged_from_models_onto_a_second_diagram_stays_one_element_and_leaves_by_delete_or_shift_delete() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
     crate::uml_ui::open_sample(h.state_mut()).unwrap();

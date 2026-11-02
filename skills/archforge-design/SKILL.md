@@ -56,7 +56,8 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
 - Diagrams and skills open as tabs inside the project; the + that makes a new diagram sits in
   that tab strip.
 - The left rail holds Models, Diagrams and Source Control; the right rail, between the canvas and
-  the panel, holds Agent, Appearance, Properties and Skills.
+  the panel, holds Chat, Appearance, Properties and Skills. Chat's panel says only Coming soon
+  (owner, AR-63): no provider, message or history control until built-in chat is.
 - Clicking the open column's own rail icon folds it; any rail icon opens a folded column on its
   content; the panel's collapse button folds the panel. Folded columns are kept in the preferences.
 - The status bar says only what is true: the save state, the agent state, the location.

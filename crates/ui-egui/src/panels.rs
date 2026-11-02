@@ -1775,13 +1775,13 @@ pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
 // The panel.
 
 /// Draws the panel body for `panel` under its header, from `y`: Properties and Skills follow the
-/// selection; Agent and Appearance say what is true.
+/// selection; Chat and Appearance say what is true, Chat that it is coming (AR-63).
 pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, panel: Panel, project: &str) {
     let paint = ui.painter().clone();
     let s = subject(shell, project);
     match panel {
         Panel::Agent => {
-            ux::text(&paint, r.min + vec2(PAD, y), &tr("No agent connected"), types::UI, p.text_muted, Some((r.width() - 2.0 * PAD).max(0.0)));
+            ux::text(&paint, r.min + vec2(PAD, y), &tr("Coming soon"), types::SECTION, p.text, Some((r.width() - 2.0 * PAD).max(0.0)));
             return;
         }
         Panel::Appearance => {
