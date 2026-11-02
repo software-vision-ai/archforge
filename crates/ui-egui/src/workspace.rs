@@ -44,10 +44,10 @@ const EXPLORERS: [(&str, Explorer, &ux::Icon, &str); 3] = [
 
 /// The panels of the right rail: automation id, the panel, its icon and its title.
 const PANELS: [(&str, Panel, &ux::Icon, &str); 4] = [
-    ("agent", Panel::Agent, &icons::CHAT, "Agent"),
-    ("appearance", Panel::Appearance, &icons::BRUSH, "Appearance"),
-    ("properties", Panel::Properties, &icons::TABLE, "Properties"),
-    ("skills", Panel::Skills, &icons::SKILL, "Skills"),
+    ("agent", Panel::Agent, &icons::CHAT_BUBBLE, "Agent"),
+    ("appearance", Panel::Appearance, &icons::PALETTE, "Appearance"),
+    ("properties", Panel::Properties, &icons::PROPERTIES, "Properties"),
+    ("skills", Panel::Skills, &icons::SKILLS, "Skills"),
 ];
 
 /// Every text of the tables to translate: they reach `tr` through the tables, where the catalogue

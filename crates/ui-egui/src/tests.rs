@@ -5524,6 +5524,32 @@ fn a_project_opened_again_resumes_its_tabs_the_diagram_it_showed_and_its_view() 
 }
 
 #[test]
+fn each_rail_icon_opens_its_own_panel_in_both_appearances() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = class_properties("Order");
+        h.state_mut().state.theme = theme;
+        h.run();
+        for (id, panel) in [
+            ("agent", crate::state::Panel::Agent),
+            ("appearance", crate::state::Panel::Appearance),
+            ("skills", crate::state::Panel::Skills),
+            ("properties", crate::state::Panel::Properties),
+        ] {
+            let at = rect_of(&h, &format!("workspace.panels.{id}")).center();
+            click(&mut h, at);
+            assert_eq!((h.state().state.panel, h.state().state.panel_collapsed), (panel, false), "{theme:?}: {id}");
+        }
+    }
+    // Four shapes of their own (AR-61), none the drawing another control uses.
+    let rail = [&crate::ux::icons::CHAT_BUBBLE, &crate::ux::icons::PALETTE, &crate::ux::icons::PROPERTIES, &crate::ux::icons::SKILLS];
+    for (i, a) in rail.iter().enumerate() {
+        for b in rail.iter().skip(i + 1) {
+            assert!(!std::ptr::eq(*a, *b));
+        }
+    }
+}
+
+#[test]
 fn a_class_dragged_from_models_onto_a_second_diagram_stays_one_element_and_leaves_by_delete_or_shift_delete() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
     crate::uml_ui::open_sample(h.state_mut()).unwrap();
