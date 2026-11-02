@@ -407,6 +407,7 @@ str		A project called {name} is already in this folder.	Já existe um projeto ch
 str		An unfinished project called {name} is in this folder; delete it or choose another name.	Há um projeto inacabado chamado {name} nesta pasta; elimine-o ou escolha outro nome.
 str		This name cannot be used.	Este nome não pode ser usado.
 str		The folder cannot hold projects.	A pasta não pode conter projetos.
+str		The folder picker could not open.	Não foi possível abrir o seletor de pastas.
 str		Archforge cannot find Dolt, which keeps its projects.	O Archforge não encontra o Dolt, que guarda os seus projetos.
 str		The project could not be created.	Não foi possível criar o projeto.
 str		The work stopped without an answer.	O trabalho parou sem resposta.

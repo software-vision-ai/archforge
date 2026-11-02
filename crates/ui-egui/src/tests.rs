@@ -230,6 +230,39 @@ fn answer(h: &mut Harness<'static, Shell>, host: &FakeHost, result: Result<crate
 }
 
 #[test]
+fn change_picks_the_folder_the_project_is_made_in_and_a_cancel_keeps_the_last_one() {
+    let (mut h, host) = creating_harness();
+    let answers = std::sync::Arc::new(std::sync::Mutex::new(vec![None, Some(std::path::PathBuf::from("/Volumes/Work/Clients/Acme"))]));
+    let unavailable = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let (next, probe) = (answers.clone(), unavailable.clone());
+    h.state_mut().services.pick_folder = Some(std::sync::Arc::new(move || next.lock().unwrap().pop().flatten()));
+    h.state_mut().services.picker_unavailable =
+        Some(std::sync::Arc::new(move || probe.load(std::sync::atomic::Ordering::SeqCst).then(|| "this system has no desktop portal".to_string())));
+    h.run();
+    assert!(painted(&h).iter().any(|t| t == "Documents / Archforge"), "{:?}", painted(&h));
+    // A pick: the field shows it, and the project is made there.
+    let change = centre_of(&h, "new-project.location.change");
+    press(&mut h, change);
+    assert!(painted(&h).iter().any(|t| t == "Clients / Acme"), "{:?}", painted(&h));
+    // A cancel keeps the name and the folder picked before it, and says nothing.
+    press(&mut h, change);
+    assert!(painted(&h).iter().any(|t| t == "Clients / Acme"), "{:?}", painted(&h));
+    assert!(!painted(&h).iter().any(|t| t == "The folder picker could not open."));
+    // A picker that cannot appear says why, under the field.
+    unavailable.store(true, std::sync::atomic::Ordering::SeqCst);
+    press(&mut h, change);
+    assert!(painted(&h).iter().any(|t| t == "The folder picker could not open."), "{:?}", painted(&h));
+    assert!(painted(&h).iter().any(|t| t == "this system has no desktop portal"), "{:?}", painted(&h));
+    let at = centre_of(&h, "new-project.create");
+    press(&mut h, at);
+    assert_eq!(host.asked.lock().unwrap().as_slice(), [("/Volumes/Work/Clients/Acme".into(), "Commerce platform".to_string())]);
+    // The creation's own failure shows in place of what the picker said before it.
+    answer(&mut h, &host, Err(crate::CreateError::FolderUnusable { detail: "read-only volume".into() }));
+    assert!(painted(&h).iter().any(|t| t == "The folder cannot hold projects."), "{:?}", painted(&h));
+    assert!(!painted(&h).iter().any(|t| t == "The folder picker could not open."), "{:?}", painted(&h));
+}
+
+#[test]
 fn create_project_asks_the_host_and_opens_the_project_it_made() {
     let (mut h, host) = creating_harness();
     let at = centre_of(&h, "new-project.create");
