@@ -347,7 +347,7 @@ str		New project	Nuevo proyecto
 str		A clean start for your next idea.	Un comienzo limpio para su próxima idea.
 str		Create project	Crear proyecto
 # Diálogo Nuevo proyecto
-str		Your models, every view of them, and the issues and conversations about them.	Sus modelos, cada vista de ellos y las tareas y conversaciones sobre ellos.
+str		Your models and every view of them, in one project.	Tus modelos y cada vista de ellos, en un solo proyecto.
 str		Project name	Nombre del proyecto
 str		Name your project	Ponga nombre a su proyecto
 str		You can rename it later.	Puede cambiarle el nombre más tarde.
@@ -365,14 +365,13 @@ str		Creates {file} here: one versioned project file that keeps every change.	Cr
 str		The project file is made here: one versioned file that keeps every change.	El archivo del proyecto se crea aquí: un archivo versionado que guarda cada cambio.
 str		Diagrams	Diagramas
 str		Elements	Elementos
-str		Add diagrams of any kind as you go: UML 2, C4 and many more. Every diagram shows the same model.	Añada diagramas de cualquier tipo sobre la marcha: UML 2, C4 y muchos más. Cada diagrama muestra el mismo modelo.
+str		Add ER and UML class diagrams as you go. Every diagram shows the same model.	Añade diagramas ER y de clases UML sobre la marcha. Cada diagrama muestra el mismo modelo.
 str		In every project	En cada proyecto
-str		Issues	Tareas
-str		Work tracked on the elements it concerns.	Trabajo seguido en los elementos a los que afecta.
-str		Conversations	Conversaciones
-str		Chats and prompts, linked to what they touched.	Chats y prompts, vinculados a lo que tocaron.
-str		History	Historial
-str		Every change kept, to compare or restore.	Cada cambio se conserva, para comparar o restaurar.
+str		Guidance for agents, written on the elements it applies to.	Indicaciones para agentes, escritas en los elementos a los que se aplican.
+str		Agent access	Acceso de agentes
+str		Agents work on the open model through MCP; undo covers their changes.	Los agentes trabajan en el modelo abierto mediante MCP; deshacer también cubre sus cambios.
+str		Undo and saves	Deshacer y guardar
+str		Every change can be undone; Save writes the model to the project.	Cada cambio se puede deshacer; Guardar escribe el modelo en el proyecto.
 str		Cancel	Cancelar
 str		Creating…	Creando…
 str		A project called {name} is already in this folder.	Ya hay un proyecto llamado {name} en esta carpeta.

@@ -346,7 +346,7 @@ str		New project	New project
 str		A clean start for your next idea.	A clean start for your next idea.
 str		Create project	Create project
 # New project dialog
-str		Your models, every view of them, and the issues and conversations about them.	Your models, every view of them, and the issues and conversations about them.
+str		Your models and every view of them, in one project.	Your models and every view of them, in one project.
 str		Project name	Project name
 str		Name your project	Name your project
 str		You can rename it later.	You can rename it later.
@@ -364,14 +364,13 @@ str		Creates {file} here: one versioned project file that keeps every change.	Cr
 str		The project file is made here: one versioned file that keeps every change.	The project file is made here: one versioned file that keeps every change.
 str		Diagrams	Diagrams
 str		Elements	Elements
-str		Add diagrams of any kind as you go: UML 2, C4 and many more. Every diagram shows the same model.	Add diagrams of any kind as you go: UML 2, C4 and many more. Every diagram shows the same model.
+str		Add ER and UML class diagrams as you go. Every diagram shows the same model.	Add ER and UML class diagrams as you go. Every diagram shows the same model.
 str		In every project	In every project
-str		Issues	Issues
-str		Work tracked on the elements it concerns.	Work tracked on the elements it concerns.
-str		Conversations	Conversations
-str		Chats and prompts, linked to what they touched.	Chats and prompts, linked to what they touched.
-str		History	History
-str		Every change kept, to compare or restore.	Every change kept, to compare or restore.
+str		Guidance for agents, written on the elements it applies to.	Guidance for agents, written on the elements it applies to.
+str		Agent access	Agent access
+str		Agents work on the open model through MCP; undo covers their changes.	Agents work on the open model through MCP; undo covers their changes.
+str		Undo and saves	Undo and saves
+str		Every change can be undone; Save writes the model to the project.	Every change can be undone; Save writes the model to the project.
 str		Cancel	Cancel
 str		Creating…	Creating…
 str		A project called {name} is already in this folder.	A project called {name} is already in this folder.

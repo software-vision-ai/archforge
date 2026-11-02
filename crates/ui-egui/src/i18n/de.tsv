@@ -347,7 +347,7 @@ str		New project	Neues Projekt
 str		A clean start for your next idea.	Ein sauberer Start für Ihre nächste Idee.
 str		Create project	Projekt erstellen
 # Dialog Neues Projekt
-str		Your models, every view of them, and the issues and conversations about them.	Ihre Modelle, jede Sicht darauf und die Aufgaben und Gespräche dazu.
+str		Your models and every view of them, in one project.	Ihre Modelle und jede Ansicht davon, in einem Projekt.
 str		Project name	Projektname
 str		Name your project	Projekt benennen
 str		You can rename it later.	Sie können es später umbenennen.
@@ -365,14 +365,13 @@ str		Creates {file} here: one versioned project file that keeps every change.	Er
 str		The project file is made here: one versioned file that keeps every change.	Die Projektdatei entsteht hier: eine versionierte Datei, die jede Änderung bewahrt.
 str		Diagrams	Diagramme
 str		Elements	Elemente
-str		Add diagrams of any kind as you go: UML 2, C4 and many more. Every diagram shows the same model.	Fügen Sie beim Arbeiten Diagramme jeder Art hinzu: UML 2, C4 und viele mehr. Jedes Diagramm zeigt dasselbe Modell.
+str		Add ER and UML class diagrams as you go. Every diagram shows the same model.	Fügen Sie beim Arbeiten ER- und UML-Klassendiagramme hinzu. Jedes Diagramm zeigt dasselbe Modell.
 str		In every project	In jedem Projekt
-str		Issues	Aufgaben
-str		Work tracked on the elements it concerns.	Arbeit, verfolgt an den Elementen, die sie betrifft.
-str		Conversations	Gespräche
-str		Chats and prompts, linked to what they touched.	Chats und Prompts, verknüpft mit dem, was sie berührt haben.
-str		History	Verlauf
-str		Every change kept, to compare or restore.	Jede Änderung bleibt erhalten, zum Vergleichen oder Wiederherstellen.
+str		Guidance for agents, written on the elements it applies to.	Anleitungen für Agenten, geschrieben an die Elemente, für die sie gelten.
+str		Agent access	Agentenzugriff
+str		Agents work on the open model through MCP; undo covers their changes.	Agenten arbeiten über MCP am geöffneten Modell; Rückgängig erfasst auch ihre Änderungen.
+str		Undo and saves	Rückgängig und Sichern
+str		Every change can be undone; Save writes the model to the project.	Jede Änderung lässt sich rückgängig machen; Sichern schreibt das Modell ins Projekt.
 str		Cancel	Abbrechen
 str		Creating…	Wird erstellt…
 str		A project called {name} is already in this folder.	Ein Projekt namens {name} ist schon in diesem Ordner.
