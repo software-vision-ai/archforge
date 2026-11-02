@@ -628,8 +628,11 @@ fn projects_open_in_tabs_that_keep_their_models_and_home_keeps_them_open() {
     let at = rect_of(&h, "workspace.header.project.0.close").center();
     click(&mut h, at);
     h.run_steps(2);
-    // It holds unsaved changes, so it asks: Save, and once saved it closes.
-    let at = rect_of(&h, "close-ask.save").center();
+    // It holds unsaved changes, so it asks: Save, its label white on the accent (AR-60), and once
+    // saved it closes.
+    let save = rect_of(&h, "close-ask.save");
+    assert_eq!(label_colours(&h, "Save", save), [crate::ux::palette(false).on_accent]);
+    let at = save.center();
     click(&mut h, at);
     h.run_steps(2);
     host.saves.lock().unwrap().pop().expect("the save asked for").send(Ok(true)).unwrap();
@@ -4240,6 +4243,22 @@ impl archforge_diagram::Notation for Sketch {
 static SKETCHED: &[&dyn archforge_diagram::Notation] = &[&archforge_er::ErNotation, &Sketch];
 
 /// Every text the last frame painted.
+/// The colours the text `label` is laid out in, where it is painted inside `within`.
+fn label_colours(h: &Harness<'static, Shell>, label: &str, within: egui::Rect) -> Vec<egui::Color32> {
+    fn walk(s: &egui::Shape, label: &str, within: egui::Rect, out: &mut Vec<egui::Color32>) {
+        match s {
+            egui::Shape::Text(t) if t.galley.text() == label && within.contains(t.pos) => {
+                out.extend(t.galley.job.sections.iter().map(|section| section.format.color));
+            }
+            egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, label, within, out)),
+            _ => {}
+        }
+    }
+    let mut out = Vec::new();
+    h.output().shapes.iter().for_each(|c| walk(&c.shape, label, within, &mut out));
+    out
+}
+
 fn painted(h: &Harness<'static, Shell>) -> Vec<String> {
     fn walk(s: &egui::Shape, out: &mut Vec<String>) {
         match s {
