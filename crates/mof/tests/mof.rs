@@ -454,7 +454,7 @@ fn random_edit(rng: &mut Rng, st: &mut Store) -> Result<(), Invalid> {
     let props = of(st, PROPERTY);
     let assocs = of(st, ASSOCIATION);
     let n = rng.next();
-    match rng.below(14) {
+    match rng.below(17) {
         0 => {
             let p = st.create(PACKAGE)?;
             st.set(p, NAMED_ELEMENT_NAME, s(&format!("p{n}")))?;
@@ -534,6 +534,22 @@ fn random_edit(rng: &mut Rng, st: &mut Store) -> Result<(), Invalid> {
                 st.destroy(c)?;
             }
         }
+        // An end owned by an association, which makes it a member end with the association as
+        // its own; then an owned or member end let go.
+        14 => {
+            if let (Some(p), Some(a)) = (rng.pick(&props), rng.pick(&assocs)) {
+                st.push(a, ASSOCIATION_OWNED_END, Value::Ref(p))?;
+            }
+        }
+        15 | 16 => {
+            let list = if rng.below(2) == 0 { ASSOCIATION_OWNED_END } else { ASSOCIATION_MEMBER_END };
+            if let Some(a) = rng.pick(&assocs) {
+                let l = st.list(a, list)?.len();
+                if l > 0 {
+                    st.remove_at(a, list, rng.below(l) as u32)?;
+                }
+            }
+        }
         _ => {
             if let Some(p) = rng.pick(&props) {
                 st.destroy(p)?;
@@ -607,6 +623,7 @@ fn random_sequences_keep_the_store_consistent_and_undo_exactly() {
                 (Err(_), None) => assert_eq!(picture(&st), before, "seed {seed} step {i}: a refusal changed something"),
             }
             assert_eq!(kept_indexes(&st), rebuilt_indexes(&st), "seed {seed} step {i}: indexes");
+            ends_agree(&st);
             // Every live contained object is in its container's list, and the other way round.
             for o in st.alive() {
                 if let Some((c, p)) = st.container(o).unwrap() {
@@ -951,4 +968,75 @@ fn a_refused_change_half_way_is_taken_back() {
     st.destroy(lit).unwrap();
     assert_eq!(picture(&st), before);
     assert!(st.corrupt().is_none());
+}
+
+/// Every association's member ends point back at it, every end that points at an association is
+/// among its member ends, and its owned ends are member ends.
+fn ends_agree(st: &Store) {
+    for o in st.alive() {
+        let class = st.class_of(o).unwrap();
+        if class == ASSOCIATION {
+            let members = st.list(o, ASSOCIATION_MEMBER_END).unwrap();
+            for v in &members {
+                assert_eq!(st.get(v.as_ref().unwrap(), PROPERTY_ASSOCIATION).unwrap(), Value::Ref(o), "a member end points back");
+            }
+            for v in st.list(o, ASSOCIATION_OWNED_END).unwrap() {
+                assert!(members.contains(&v), "an owned end is a member end");
+            }
+        } else if class == PROPERTY
+            && let Value::Ref(a) = st.get(o, PROPERTY_ASSOCIATION).unwrap()
+        {
+            assert!(st.list(a, ASSOCIATION_MEMBER_END).unwrap().contains(&Value::Ref(o)), "its association lists the end");
+        }
+    }
+}
+
+#[test]
+fn a_value_pushed_into_a_subset_list_sets_the_supersets_opposite_and_lets_go_of_it_again() {
+    let mut st = store();
+    let a = st.create(ASSOCIATION).unwrap();
+    let b = st.create(ASSOCIATION).unwrap();
+    let end = st.create(PROPERTY).unwrap();
+    let before = picture(&st);
+    // Pushed into ownedEnd: in memberEnd too, and the end's association is set.
+    st.begin();
+    st.push(a, ASSOCIATION_OWNED_END, Value::Ref(end)).unwrap();
+    let delta = st.end().unwrap();
+    assert_eq!(st.list(a, ASSOCIATION_MEMBER_END).unwrap(), vec![Value::Ref(end)]);
+    assert_eq!(st.get(end, PROPERTY_ASSOCIATION).unwrap(), Value::Ref(a));
+    ends_agree(&st);
+    undo_and_check(&mut st, &before, &delta);
+    st.push(a, ASSOCIATION_OWNED_END, Value::Ref(end)).unwrap();
+    // Moved to another association's owned ends: the first lets go of it in both lists.
+    st.push(b, ASSOCIATION_OWNED_END, Value::Ref(end)).unwrap();
+    assert_eq!(st.list(a, ASSOCIATION_MEMBER_END).unwrap(), vec![]);
+    assert_eq!(st.list(a, ASSOCIATION_OWNED_END).unwrap(), vec![]);
+    assert_eq!(st.get(end, PROPERTY_ASSOCIATION).unwrap(), Value::Ref(b));
+    ends_agree(&st);
+    // Its association set to the first: it leaves the second's member ends and, with them, its
+    // owned ends.
+    st.set(end, PROPERTY_ASSOCIATION, Value::Ref(a)).unwrap();
+    assert_eq!(st.list(b, ASSOCIATION_OWNED_END).unwrap(), vec![]);
+    assert_eq!(st.list(a, ASSOCIATION_MEMBER_END).unwrap(), vec![Value::Ref(end)]);
+    ends_agree(&st);
+    // Owned again, then taken out of the owned ends: it leaves the member ends, and its
+    // association is unset.
+    st.push(a, ASSOCIATION_OWNED_END, Value::Ref(end)).unwrap();
+    ends_agree(&st);
+    st.remove_value(a, ASSOCIATION_OWNED_END, &Value::Ref(end)).unwrap();
+    assert_eq!(st.list(a, ASSOCIATION_MEMBER_END).unwrap(), vec![]);
+    assert_eq!(st.get(end, PROPERTY_ASSOCIATION).unwrap(), Value::Null);
+    ends_agree(&st);
+    // Owned, then taken out of the member ends: it leaves the owned ends too.
+    st.push(b, ASSOCIATION_OWNED_END, Value::Ref(end)).unwrap();
+    st.remove_value(b, ASSOCIATION_MEMBER_END, &Value::Ref(end)).unwrap();
+    assert_eq!(st.list(b, ASSOCIATION_OWNED_END).unwrap(), vec![]);
+    assert_eq!(st.get(end, PROPERTY_ASSOCIATION).unwrap(), Value::Null);
+    ends_agree(&st);
+    // Owned, then its association destroyed: the end goes with it, nothing dangles.
+    st.push(b, ASSOCIATION_OWNED_END, Value::Ref(end)).unwrap();
+    st.destroy(b).unwrap();
+    assert!(!st.is_alive(end));
+    ends_agree(&st);
+    assert_eq!(kept_indexes(&st), rebuilt_indexes(&st));
 }

@@ -146,6 +146,10 @@
         <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Association-memberEnd-_lowerValue"/>
         <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="Association-memberEnd-_upperValue" value="*"/>
       </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="Association-ownedEnd" name="ownedEnd" type="Property" isOrdered="true" aggregation="composite" subsettedProperty="Association-memberEnd Element-ownedElement">
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="Association-ownedEnd-_lowerValue"/>
+        <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="Association-ownedEnd-_upperValue" value="*"/>
+      </ownedAttribute>
     </packagedElement>
     <packagedElement xmi:type="uml:Class" xmi:id="LiteralInteger" name="LiteralInteger">
       <generalization xmi:type="uml:Generalization" xmi:id="LiteralInteger-_generalization" general="Element"/>

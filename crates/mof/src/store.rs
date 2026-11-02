@@ -763,11 +763,12 @@ impl Store {
         if let (Some(o), Value::Ref(y)) = (p.opposite, &value) {
             self.room_in_opposite(*y, o, obj)?;
         }
-        for q in self.subsetted_of(obj, prop)? {
-            if self.position(obj, q, &value)?.is_none() {
-                let qp = self.property(q)?.clone();
-                let l = self.list_len(obj, q)?;
-                self.room_for(q, &qp, l)?;
+        let supersets = self.subsetted_of(obj, prop)?;
+        for q in &supersets {
+            if self.position(obj, *q, &value)?.is_none() {
+                let qp = self.property(*q)?.clone();
+                let l = self.list_len(obj, *q)?;
+                self.room_for(*q, &qp, l)?;
             }
         }
         self.atomic(|st| {
@@ -778,6 +779,16 @@ impl Store {
                 st.attach(*y, o, obj, prop)?;
             }
             st.append_to_subsetted(obj, prop, &value)?;
+            // An opposite kept in step may have put the value here already; only a list the
+            // cascade changed is searched again, so a reading stays linear. No metamodel today has
+            // a cascade that reaches back into the list it started from.
+            if st.list_len(obj, prop)? != len {
+                if p.is_unique && st.position(obj, prop, &value)?.is_some() {
+                    return Ok(());
+                }
+                let at = index.min(st.list_len(obj, prop)? as u32);
+                return st.perform(Op::Insert { obj, prop, index: at, value });
+            }
             st.perform(Op::Insert { obj, prop, index, value })
         })
     }
@@ -814,28 +825,74 @@ impl Store {
         Ok(self.universe.info(class).and_then(|i| i.subsetted.get(&prop)).cloned().unwrap_or_default())
     }
 
-    /// Puts `value` into the stored properties `prop` subsets, where it is not yet.
+    /// Puts `value` into the stored properties `prop` subsets, where it is not yet, and gives it
+    /// their opposites: a value that arrives through a subset is held by the superset's opposite
+    /// too.
     fn append_to_subsetted(&mut self, obj: Obj, prop: PropId, value: &Value) -> R<()> {
         for q in self.subsetted_of(obj, prop)? {
             if self.position(obj, q, value)?.is_none() {
                 let at = self.list_len(obj, q)? as u32;
                 self.perform(Op::Insert { obj, prop: q, index: at, value: value.clone() })?;
+                if let (Some(o), Value::Ref(y)) = (self.property(q)?.opposite, value) {
+                    self.attach(*y, o, obj, q)?;
+                }
             }
         }
         Ok(())
     }
 
     /// Takes `value` out of the stored properties `prop` subsets, unless another subsetting
-    /// property of the object still holds it.
+    /// property of the object still holds it; their opposites let go of `obj` too.
     fn drop_from_subsetted(&mut self, obj: Obj, prop: PropId, value: &Value) -> R<()> {
+        self.drop_from_supersets(obj, prop, value, true)
+    }
+
+    /// As [`Store::drop_from_subsetted`]; with `release` off the value's opposites are left as they
+    /// are, for a value that is about to die.
+    fn drop_from_supersets(&mut self, obj: Obj, prop: PropId, value: &Value, release: bool) -> R<()> {
         let class = self.class_of(obj)?;
         let Some(info) = self.universe.info(class).cloned() else { return Ok(()) };
         let Some(subsetted) = info.subsetted.get(&prop) else { return Ok(()) };
         for q in subsetted {
             let still_held = info.subsetted.iter().any(|(other, qs)| *other != prop && qs.contains(q) && self.holds(obj, *other, value));
-            if !still_held && let Some(i) = self.position(obj, *q, value)? {
-                self.perform(Op::Remove { obj, prop: *q, index: i as u32, value: value.clone() })?;
+            if still_held {
+                continue;
             }
+            // Removed before its opposite lets go, so a cascade that comes back finds it gone.
+            let Some(i) = self.position(obj, *q, value)? else { continue };
+            self.perform(Op::Remove { obj, prop: *q, index: i as u32, value: value.clone() })?;
+            if release && let (Some(o), Value::Ref(y)) = (self.property(*q)?.opposite, value) {
+                self.detach(*y, o, obj)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Takes `value` out of `obj`'s stored properties that subset `prop`, as it leaves `prop`: a
+    /// subset never holds what its superset does not. Their opposites let go of `obj` too, and
+    /// the value leaves their other supersets, as it would leaving the subset itself. Called once
+    /// the value has left `prop`.
+    fn drop_from_subsets(&mut self, obj: Obj, prop: PropId, value: &Value) -> R<()> {
+        let class = self.class_of(obj)?;
+        let Some(info) = self.universe.info(class).filter(|i| !i.subsetted.is_empty()).cloned() else { return Ok(()) };
+        for (sub, supers) in &info.subsetted {
+            if *sub == prop || !supers.contains(&prop) {
+                continue;
+            }
+            let sp = self.property(*sub)?.clone();
+            // Removed before its opposite lets go, so a cascade that comes back finds it gone.
+            if sp.is_many() {
+                let Some(i) = self.position(obj, *sub, value)? else { continue };
+                self.perform(Op::Remove { obj, prop: *sub, index: i as u32, value: value.clone() })?;
+            } else if &self.single(obj, *sub)? == value {
+                self.perform(Op::Set { obj, prop: *sub, old: value.clone(), new: Value::Null })?;
+            } else {
+                continue;
+            }
+            if let (Some(o), Value::Ref(y)) = (sp.opposite, value) {
+                self.detach(*y, o, obj)?;
+            }
+            self.drop_from_supersets(obj, *sub, value, true)?;
         }
         Ok(())
     }
@@ -854,11 +911,13 @@ impl Store {
         let len = self.list_len(obj, prop)?;
         let value = self.slice(obj, prop)?.get(index as usize).cloned().ok_or(Invalid::IndexOutOfRange { prop: self.pname(prop), index, len })?;
         self.atomic(|st| {
+            // Removed first, so the cascades that follow find it gone where they come back.
+            st.perform(Op::Remove { obj, prop, index, value: value.clone() })?;
+            st.drop_from_subsets(obj, prop, &value)?;
             if let (Some(o), Value::Ref(x)) = (p.opposite, &value) {
                 st.detach(*x, o, obj)?;
             }
             st.drop_from_subsetted(obj, prop, &value)?;
-            st.perform(Op::Remove { obj, prop, index, value: value.clone() })?;
             Ok(value)
         })
     }
@@ -961,7 +1020,7 @@ impl Store {
                     .map(|(i, v)| (i, v.clone()))
                     .collect();
                 for (i, v) in doomed.into_iter().rev() {
-                    st.drop_from_subsetted(src, prop, &v)?;
+                    st.drop_from_supersets(src, prop, &v, false)?;
                     st.perform(Op::Remove { obj: src, prop, index: i as u32, value: v })?;
                 }
             }
@@ -1025,8 +1084,9 @@ impl Store {
         let p = self.property(cp)?.clone();
         if p.is_many() {
             if let Some(i) = self.position(c, cp, &Value::Ref(child))? {
-                self.drop_from_subsetted(c, cp, &Value::Ref(child))?;
                 self.perform(Op::Remove { obj: c, prop: cp, index: i as u32, value: Value::Ref(child) })?;
+                self.drop_from_subsets(c, cp, &Value::Ref(child))?;
+                self.drop_from_subsetted(c, cp, &Value::Ref(child))?;
             }
         } else if self.single(c, cp)? == Value::Ref(child) {
             self.perform(Op::Set { obj: c, prop: cp, old: Value::Ref(child), new: Value::Null })?;
@@ -1047,13 +1107,19 @@ impl Store {
             let len = self.list_len(target, opposite)?;
             self.room_for(opposite, &o, len)?;
             self.append_to_subsetted(target, opposite, &Value::Ref(source))?;
-            self.perform(Op::Insert { obj: target, prop: opposite, index: len as u32, value: Value::Ref(source) })
+            // A cascade that changed the list may have put the source there already.
+            let now = self.list_len(target, opposite)?;
+            if now != len && self.position(target, opposite, &Value::Ref(source))?.is_some() {
+                return Ok(());
+            }
+            self.perform(Op::Insert { obj: target, prop: opposite, index: now as u32, value: Value::Ref(source) })
         } else {
             let old = self.single(target, opposite)?;
             if old == Value::Ref(source) {
                 return Ok(());
             }
-            // The previous holder of this end loses it (MOF 12.5.6).
+            // The previous holder of this end loses it (MOF 12.5.6), from the lists that subset
+            // it too.
             if let Value::Ref(z) = old
                 && z != source
                 && self.is_alive(z)
@@ -1062,12 +1128,18 @@ impl Store {
                 let zp = self.property(prop)?.clone();
                 if zp.is_many() {
                     if let Some(i) = self.position(z, prop, &Value::Ref(target))? {
-                        self.drop_from_subsetted(z, prop, &Value::Ref(target))?;
                         self.perform(Op::Remove { obj: z, prop, index: i as u32, value: Value::Ref(target) })?;
+                        self.drop_from_subsets(z, prop, &Value::Ref(target))?;
+                        self.drop_from_subsetted(z, prop, &Value::Ref(target))?;
                     }
                 } else if self.single(z, prop)? == Value::Ref(target) {
                     self.perform(Op::Set { obj: z, prop, old: Value::Ref(target), new: Value::Null })?;
                 }
+            }
+            // Letting go may have changed the slot; it is read again.
+            let old = self.single(target, opposite)?;
+            if old == Value::Ref(source) {
+                return Ok(());
             }
             self.perform(Op::Set { obj: target, prop: opposite, old, new: Value::Ref(source) })
         }
@@ -1084,8 +1156,9 @@ impl Store {
         }
         if o.is_many() {
             if let Some(i) = self.position(target, opposite, &Value::Ref(source))? {
-                self.drop_from_subsetted(target, opposite, &Value::Ref(source))?;
                 self.perform(Op::Remove { obj: target, prop: opposite, index: i as u32, value: Value::Ref(source) })?;
+                self.drop_from_subsets(target, opposite, &Value::Ref(source))?;
+                self.drop_from_subsetted(target, opposite, &Value::Ref(source))?;
             }
             Ok(())
         } else {

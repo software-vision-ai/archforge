@@ -58,7 +58,9 @@ store as the engine's document (rollback on panic and on failure, batch, gesture
 **Known lacks.** A destroyed object keeps its slot until the store is dropped: the engine does not
 yet tell the document when a history step is gone. `validate_all` over many
 same-named siblings in one container is quadratic; `first_problem` is the linear check.
-Redefinitions resolve the property table; a redefining property with a different type is not
+A value set into a single-valued subset (such as
+`InterfaceRealization::contract`) does not reach its stored superset, though it leaves the subset when it
+leaves the superset. Redefinitions resolve the property table; a redefining property with a different type is not
 checked further.
 
 **Non-goals.** The generator, XMI, storage in Dolt, any real metamodel, OCL,
