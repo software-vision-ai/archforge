@@ -118,6 +118,11 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   JD for John Doe. Archforge never reads the name from the operating system's account. The avatar
   and the command key with comma open Settings, which for now holds Your name, with the initials
   beside it changing as it is typed; Done, the close button, Enter or Esc close it.
+- The bar's Help button (and, on macOS, Archforge ▸ About Archforge…) opens About Archforge
+  (AR-69): what Archforge is, and Support Archforge with GitHub Sponsors and Ko-fi, each opening
+  its provider's page in the browser. Only an approved HTTPS address of the provider opens; one
+  the host has not set up says Not set up yet and takes no click. It says a contribution unlocks
+  nothing; it never opens by itself, and it is modal, so Tab stays in it and nothing behind moves.
 
 ## Explorer
 - Models shows the model's elements, a notation's own containers first; diagrams appear only in the

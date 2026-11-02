@@ -14,6 +14,8 @@ pub enum Screen {
     HomeSearch,
     /// Home with the Settings dialog open, a name entered.
     HomeSettings,
+    /// Home with About Archforge open, its support destinations not set up yet.
+    HomeAbout,
     /// The New project dialog over Home, a name typed and the usual folder.
     NewProject,
     /// The same after a creation failed for want of Dolt.
@@ -149,12 +151,16 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
         shell.state.user_name = "Ada Lovelace".into();
         crate::settings::open(&mut shell);
     }
+    if screen == Screen::HomeAbout {
+        crate::support::open(&mut shell);
+    }
     if !matches!(
         screen,
         Screen::Home
             | Screen::HomeGallery
             | Screen::HomeSearch
             | Screen::HomeSettings
+            | Screen::HomeAbout
             | Screen::NewProject
             | Screen::NewProjectFailed
             | Screen::NewProjectFolder

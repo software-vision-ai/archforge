@@ -136,8 +136,9 @@ fn take_found(shell: &mut Shell) {
         .collect();
 }
 
-/// Opens the search in the open project with `query` typed, for the pictures of the design.
-#[cfg(feature = "snapshot")]
+/// Opens the search in the open project with `query` typed, for the pictures of the design and
+/// the tests.
+#[cfg(any(test, feature = "snapshot"))]
 pub(crate) fn open_with(shell: &mut Shell, query: &str) {
     shell.home_search.open = true;
     shell.home_search.scope = scope(shell);
@@ -161,7 +162,7 @@ fn fresh_index(shell: &mut Shell) {
 }
 
 /// Closes the list and forgets the query; the projects found stay for the next time.
-fn close(shell: &mut Shell) {
+pub(crate) fn close(shell: &mut Shell) {
     let search = &mut shell.home_search;
     search.open = false;
     search.query.clear();
@@ -323,10 +324,15 @@ pub(crate) fn field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Re
         return;
     }
     widgets::record_visible(ui, &mut shell.registry, &id, "field", field);
-    // The list's keys before the field sees them: the arrows move, Enter runs, Esc closes.
+    // The list's keys before the field sees them: the arrows move, Enter runs, Esc closes; none
+    // while a dialog over the window has them (About, AR-69).
     let groups = hits(shell, &shell.home_search.query.clone());
     let count = groups.iter().map(|(_, h)| h.len()).sum::<usize>();
+    let modal = shell.about.is_some();
     let (up, down, enter, escape) = ui.input_mut(|i| {
+        if modal {
+            return (false, false, false, false);
+        }
         (
             i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowUp),
             i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown),

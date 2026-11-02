@@ -39,6 +39,7 @@ pub mod settings;
 pub mod skill_tab;
 pub mod state;
 pub mod subtypes;
+pub mod support;
 pub mod theme;
 pub mod types;
 mod uml_inline;
@@ -80,6 +81,9 @@ pub struct Services {
     /// Why the native folder picker cannot appear, when the platform can tell (Linux without a
     /// desktop portal answers nothing, as a cancel does); asked when a pick comes back empty.
     pub picker_unavailable: Option<std::sync::Arc<dyn Fn() -> Option<String> + Send + Sync>>,
+    /// Where About Archforge sends support (AR-69): the provider pages the host has set up; a
+    /// destination left out says it is not set up yet.
+    pub support: support::Destinations,
 }
 
 /// The host's search for projects in folders: the folders and a wake in, the projects found sent
@@ -327,6 +331,8 @@ pub struct Shell {
     pub new_project: Option<new_project::Dialog>,
     /// The Settings dialog while it is open.
     pub settings: Option<settings::Dialog>,
+    /// About Archforge, with how to support it, while it is open.
+    pub about: Option<support::Dialog>,
     /// The open projects, one tab each, in the bar's order; the one shown has its state in the
     /// fields below, the others keep theirs parked in their tab.
     pub tabs: Vec<Tab>,
@@ -405,6 +411,7 @@ impl Shell {
             home_search: home_search::Search::default(),
             new_project: None,
             settings: None,
+            about: None,
             tabs: Vec::new(),
             active: None,
             project: None,
@@ -1054,6 +1061,11 @@ impl Shell {
         self.session.is_some() && self.generate.is_none()
     }
 
+    /// Opens About Archforge, with how to support its development.
+    pub fn open_about(&mut self) {
+        support::open(self);
+    }
+
     /// Opens File → Generate…'s handoff to an agent.
     pub fn open_generate(&mut self) {
         generate::open(self);
@@ -1243,6 +1255,8 @@ impl Shell {
     pub fn ui(&mut self, ui: &mut egui::Ui) {
         self.registry.begin_frame();
         settings::shortcut(self, ui.ctx());
+        // Escape closes About before the window behind it is drawn, so no editor there reads it.
+        support::dismiss_key(self, ui.ctx());
         // The OS window title follows the in-app title; on a host with a native title bar it is
         // the only title the user sees.
         let title = self.title();
@@ -1257,6 +1271,7 @@ impl Shell {
         }
         new_project::show(self, ui);
         settings::show(self, ui);
+        support::show(self, ui);
         generate::show(self, ui);
         close_ask::show(self, ui);
     }

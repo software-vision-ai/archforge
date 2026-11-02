@@ -1,5 +1,5 @@
 //! The host services the shell may call: the installed fonts, the folder new projects go in, the
-//! folder picker, and the projects themselves.
+//! folder picker, the projects themselves, and where support for Archforge goes.
 
 use std::path::PathBuf;
 
@@ -16,7 +16,18 @@ pub fn native(projects: std::sync::Arc<crate::projects::Projects>) -> Services {
         picker_unavailable: Some(std::sync::Arc::new(picker_unavailable)),
         find_projects: Some(std::sync::Arc::new(find_projects)),
         ids: Some(std::sync::Arc::new(fresh_id)),
+        support: support(),
     }
+}
+
+/// The owner's approved support pages (AR-69, AR-70): GitHub Sponsors goes to the company's
+/// organization, Ko-fi to the owner. Each is set once its page can take support; until then About
+/// Archforge says it is not set up yet. The organization's Sponsors profile is not public yet.
+const GITHUB_SPONSORS: Option<&str> = None;
+const KO_FI: Option<&str> = Some("https://ko-fi.com/dejanwho");
+
+fn support() -> archforge_ui_egui::support::Destinations {
+    archforge_ui_egui::support::Destinations { github_sponsors: GITHUB_SPONSORS.map(str::to_string), ko_fi: KO_FI.map(str::to_string) }
 }
 
 /// The platform's folder picker, for Open project: it starts in the folder given (a pinned
@@ -261,5 +272,20 @@ mod tests {
         assert_eq!(classify(false, no_backend), Probe::Missing, "a portal without a file chooser backend");
         assert_eq!(classify(false, "Error org.freedesktop.DBus.Error.NoReply: Did not receive a reply"), Probe::Unknown, "no answer claims nothing");
         assert_eq!(classify(false, "Failed to open connection to session bus"), Probe::Unknown);
+    }
+}
+
+#[cfg(test)]
+mod support_tests {
+    use archforge_ui_egui::support::approved;
+
+    #[test]
+    fn every_support_page_set_is_one_the_dialog_opens() {
+        let d = super::support();
+        assert_eq!(d.ko_fi.as_deref(), Some("https://ko-fi.com/dejanwho"));
+        assert_eq!(approved(d.ko_fi.as_deref(), "https://ko-fi.com/"), d.ko_fi.as_deref());
+        if let Some(github) = d.github_sponsors.as_deref() {
+            assert_eq!(approved(Some(github), "https://github.com/sponsors/"), Some(github));
+        }
     }
 }

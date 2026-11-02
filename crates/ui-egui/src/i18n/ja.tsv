@@ -286,6 +286,18 @@ str		Arrange diagram	ダイアグラムを整列
 str		Move cardinality	多重度を移動
 str		Settings	設定
 str		How Archforge knows you.	Archforge があなたを識別する方法です。
+str		About Archforge	Archforge について
+str		About Archforge…	Archforge について…
+str		Free and open source modelling for ER and UML class diagrams.	ER 図と UML クラス図のための、無料のオープンソース モデリング。
+str		Support Archforge	Archforge を支援
+str		Archforge is free. If it helps your work, you can support its development. A contribution unlocks nothing: every feature stays free for everyone.	Archforge は無料です。お仕事の役に立っているなら、開発を支援できます。支援で解放される機能はありません。すべての機能は誰でも無料のままです。
+str		GitHub Sponsors	GitHub Sponsors
+str		One-time or monthly, on GitHub	1 回または毎月、GitHub で
+str		Ko-fi	Ko-fi
+str		A one-time tip, on Ko-fi	1 回限りのチップ、Ko-fi で
+str		Opens in your browser	ブラウザーで開きます
+str		Not set up yet	まだ設定されていません
+str		Payment happens on the provider’s page in your browser; Archforge never sees it, and your project stays open here.	支払いはブラウザーで開く提供元のページで行われ、その内容を Archforge が見ることはありません。プロジェクトはここで開いたままです。
 str		Your name	あなたの名前
 str		The bar shows your initials. Without a name they are JD, for John Doe.	バーにはあなたのイニシャルが表示されます。名前がない場合は John Doe の JD です。
 str		Done	完了

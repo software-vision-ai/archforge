@@ -1,5 +1,5 @@
-//! The native menu bar on macOS: the application menu (Hide and Quit) and File (Open…, Save and
-//! Generate…, each enabled while it can act). When it cannot be built, the window works without it.
+//! The native menu bar on macOS: the application menu (About Archforge…, Hide and Quit) and File
+//! (Open…, Save and Generate…, each enabled while it can act). When it cannot be built, the window works without it.
 #![cfg(target_os = "macos")]
 
 use std::str::FromStr;
@@ -10,6 +10,7 @@ use muda::{Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
 use archforge_ui_egui::Shell;
 use archforge_ui_egui::i18n::tr;
 
+const ABOUT: &str = "app.about";
 const QUIT: &str = "app.quit";
 const OPEN: &str = "file.open";
 const SAVE: &str = "file.save";
@@ -28,7 +29,9 @@ pub fn build() -> Result<NativeMenu, String> {
     let menu = Menu::new();
     let app = Submenu::new("Archforge", true);
     let quit = MenuItem::with_id(QUIT, tr("Quit Archforge"), true, Accelerator::from_str("CmdOrCtrl+Q").ok());
-    app.append_items(&[&PredefinedMenuItem::hide(None), &PredefinedMenuItem::separator(), &quit]).map_err(err)?;
+    let about = MenuItem::with_id(ABOUT, tr("About Archforge…"), true, None);
+    app.append_items(&[&about, &PredefinedMenuItem::separator(), &PredefinedMenuItem::hide(None), &PredefinedMenuItem::separator(), &quit])
+        .map_err(err)?;
     let file = Submenu::new(tr("File"), true);
     let open = MenuItem::with_id(OPEN, tr("Open…"), false, Accelerator::from_str("CmdOrCtrl+O").ok());
     let save = MenuItem::with_id(SAVE, tr("Save"), false, Accelerator::from_str("CmdOrCtrl+S").ok());
@@ -44,6 +47,7 @@ impl NativeMenu {
     pub fn frame(&self, shell: &mut Shell) {
         while let Ok(event) = MenuEvent::receiver().try_recv() {
             match event.id().0.as_str() {
+                ABOUT => shell.open_about(),
                 QUIT => shell.request_quit(),
                 OPEN => shell.open_from_picker(),
                 SAVE => shell.save(),

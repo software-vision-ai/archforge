@@ -68,6 +68,18 @@ the PATH, or its absolute path in `ARCHFORGE_DOLT`. Maintainers also run an opti
 
 None yet.
 
+## Supporting Archforge
+
+Archforge is free and stays free: a contribution unlocks nothing. If it helps your work, you can
+support its development:
+
+- [Ko-fi](https://ko-fi.com/dejanwho): a one-time tip to Dejan, who develops Archforge.
+- GitHub Sponsors, one-time or monthly, for the software-vision-ai organization: the link appears
+  here once its Sponsors profile is published.
+
+The repository's Sponsor button and the app's About Archforge (the bar's Help button) offer the
+same.
+
 ## Contributing
 
 Read `CONTRIBUTING.md` for how to propose a change and `AGENTS.md` for the rules every change

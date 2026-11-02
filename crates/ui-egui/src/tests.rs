@@ -6612,6 +6612,161 @@ fn a_class_is_deleted_from_the_model_through_its_menu_and_comes_back_with_undo()
     assert!(class_named(&h, "OrderLine").is_some(), "the class stays in the model");
 }
 
+/// The links the last frame asked the window to open.
+fn opened_links(h: &Harness<'static, Shell>) -> Vec<String> {
+    h.output()
+        .platform_output
+        .commands
+        .iter()
+        .filter_map(|c| match c {
+            egui::OutputCommand::OpenUrl(u) => Some(u.url.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn help_opens_about_archforge_whose_support_destinations_say_they_are_not_set_up_yet() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = harness(theme);
+        h.run();
+        let at = rect_of(&h, "home.header.help").center();
+        click(&mut h, at);
+        assert!(h.state().about.is_some(), "{theme:?}");
+        let texts = painted(&h);
+        assert!(texts.iter().any(|t| t == "About Archforge") && texts.iter().any(|t| t == "Support Archforge"), "{theme:?}: {texts:?}");
+        assert!(texts.iter().any(|t| t == "GitHub Sponsors") && texts.iter().any(|t| t == "Ko-fi"), "{texts:?}");
+        assert_eq!(texts.iter().filter(|t| *t == "Not set up yet").count(), 2, "{texts:?}");
+        // A destination that is not set up opens nothing.
+        let row = rect_of(&h, "about.support.ko-fi").center();
+        h.event(egui::Event::PointerMoved(row));
+        for pressed in [true, false] {
+            h.event(egui::Event::PointerButton { pos: row, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE });
+        }
+        h.step();
+        assert!(opened_links(&h).is_empty(), "{:?}", opened_links(&h));
+        h.run();
+        assert!(h.state().about.is_some());
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert!(h.state().about.is_none(), "Escape closes it");
+    }
+}
+
+#[test]
+fn a_set_up_destination_opens_its_page_by_click_or_keyboard_and_the_project_stays_as_it_was() {
+    let (mut h, _order) = class_properties("Order");
+    h.state_mut().services.support = crate::support::Destinations {
+        github_sponsors: Some("https://github.com/sponsors/DejanWho".into()),
+        ko_fi: Some("https://ko-fi.com/archforge".into()),
+    };
+    let revision = h.state().session.as_ref().unwrap().revision();
+    h.state_mut().open_about();
+    h.run();
+    assert_eq!(painted(&h).iter().filter(|t| *t == "Opens in your browser").count(), 2, "{:?}", painted(&h));
+    // A click opens the provider's page in the browser.
+    let row = rect_of(&h, "about.support.github-sponsors").center();
+    h.event(egui::Event::PointerMoved(row));
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton { pos: row, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE });
+    }
+    h.step();
+    assert_eq!(opened_links(&h), ["https://github.com/sponsors/DejanWho"]);
+    h.run();
+    // From the keyboard: Tab to a destination and Enter.
+    h.state_mut().canvas.focused = true;
+    for _ in 0..8 {
+        if h.ctx.memory(|m| m.has_focus(crate::widgets::egui_id("about.support.ko-fi"))) {
+            break;
+        }
+        key(&mut h, egui::Key::Tab, egui::Modifiers::NONE);
+    }
+    assert!(h.ctx.memory(|m| m.has_focus(crate::widgets::egui_id("about.support.ko-fi"))), "Tab reaches Ko-fi");
+    h.event(egui::Event::Key { key: egui::Key::Enter, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::NONE });
+    h.step();
+    assert_eq!(opened_links(&h), ["https://ko-fi.com/archforge"]);
+    h.event(egui::Event::Key { key: egui::Key::Enter, physical_key: None, pressed: false, repeat: false, modifiers: egui::Modifiers::NONE });
+    h.run();
+    // Behind it the workspace's keys rest, and the project is as it was.
+    key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
+    key(&mut h, egui::Key::Z, egui::Modifiers::COMMAND);
+    assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "nothing behind the dialog changed");
+    let at = rect_of(&h, "about.done").center();
+    click(&mut h, at);
+    assert!(h.state().about.is_none());
+    assert!(painted(&h).iter().any(|t| t == "Order"), "the project is still open");
+}
+
+#[test]
+fn escape_closes_about_and_leaves_a_draft_behind_it_as_it_was() {
+    let (mut h, _customer) = class_properties("Customer");
+    let at = rect_of(&h, "workspace.properties.attributes.add").center();
+    click(&mut h, at);
+    assert!(h.state().panels.member.is_some(), "an attribute draft is open");
+    h.state_mut().open_about();
+    h.run();
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    assert!(h.state().about.is_none(), "Escape closes About");
+    assert!(h.state().panels.member.is_some(), "and the draft behind it stays");
+}
+
+#[test]
+fn about_scrolls_its_body_in_a_short_window_and_keeps_done_clear() {
+    let mut h = harness(ThemeKind::Light);
+    h.state_mut().services.support = crate::support::Destinations { github_sponsors: None, ko_fi: Some("https://ko-fi.com/archforge".into()) };
+    // The smallest window the app allows.
+    h.set_size(egui::vec2(800.0, 400.0));
+    h.state_mut().open_about();
+    h.run();
+    let foot = rect_of(&h, "about.done").top() - 22.0;
+    let ko_fi = |h: &Harness<'static, Shell>| ids(h).iter().any(|i| i == "about.support.ko-fi").then(|| rect_of(h, "about.support.ko-fi"));
+    assert!(ko_fi(&h).is_none_or(|r| r.bottom() > foot), "Ko-fi does not fit above the footer before scrolling");
+    let over = rect_of(&h, "about.support.github-sponsors").center();
+    h.event(egui::Event::PointerMoved(over));
+    for _ in 0..6 {
+        h.event(egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Point,
+            delta: egui::vec2(0.0, -1200.0),
+            modifiers: egui::Modifiers::NONE,
+            phase: egui::TouchPhase::Move,
+            source: egui::MouseWheelSource::Wheel,
+        });
+        h.run_steps(30);
+    }
+    let r = ko_fi(&h).expect("Ko-fi in view");
+    assert!(r.bottom() <= foot, "{r:?} ends above the footer at {foot}");
+    // A click on Done is Done's, not the row's.
+    let at = rect_of(&h, "about.done").center();
+    click(&mut h, at);
+    assert!(h.state().about.is_none());
+}
+
+#[test]
+fn about_closes_the_bars_search_and_its_keys_never_reach_the_search_behind_it() {
+    let (mut h, _order) = class_properties("Order");
+    crate::home_search::open_with(h.state_mut(), "order");
+    h.run();
+    assert!(h.state().home_search.open);
+    h.state_mut().open_about();
+    h.run();
+    assert!(!h.state().home_search.open, "About closes the search");
+    // Were the search open behind it, Enter and the arrows stay the dialog's.
+    h.state_mut().home_search.open = true;
+    h.state_mut().home_search.query = "order".into();
+    let shown = h.state().state.panel;
+    let selection = h.state().session.as_ref().unwrap().view().selection.clone();
+    for k in [egui::Key::ArrowDown, egui::Key::Enter] {
+        h.event(egui::Event::Key { key: k, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::NONE });
+        h.step();
+        h.event(egui::Event::Key { key: k, physical_key: None, pressed: false, repeat: false, modifiers: egui::Modifiers::NONE });
+        h.run();
+    }
+    assert!(h.state().about.is_some(), "About is still open");
+    assert_eq!(h.state().home_search.highlight, 0, "the search's highlight did not move");
+    assert!(h.state().home_search.open, "nothing in the search ran");
+    assert_eq!(h.state().state.panel, shown);
+    assert_eq!(h.state().session.as_ref().unwrap().view().selection, selection, "the selection is as it was");
+}
+
 #[test]
 fn the_removal_toast_keeps_clear_of_the_minimap_at_every_width_and_its_undo_still_undoes() {
     let (mut h, _customer, _diagram) = diagram_harness();
