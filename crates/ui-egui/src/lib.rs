@@ -1254,6 +1254,8 @@ impl Shell {
     pub fn ui(&mut self, ui: &mut egui::Ui) {
         self.registry.begin_frame();
         settings::shortcut(self, ui.ctx());
+        // Escape closes About before the window behind it is drawn, so no editor there reads it.
+        support::dismiss_key(self, ui.ctx());
         // The OS window title follows the in-app title; on a host with a native title bar it is
         // the only title the user sees.
         let title = self.title();

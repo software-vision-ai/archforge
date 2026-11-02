@@ -6682,3 +6682,47 @@ fn a_set_up_destination_opens_its_page_by_click_or_keyboard_and_the_project_stay
     assert!(h.state().about.is_none());
     assert!(painted(&h).iter().any(|t| t == "Order"), "the project is still open");
 }
+
+#[test]
+fn escape_closes_about_and_leaves_a_draft_behind_it_as_it_was() {
+    let (mut h, _customer) = class_properties("Customer");
+    let at = rect_of(&h, "workspace.properties.attributes.add").center();
+    click(&mut h, at);
+    assert!(h.state().panels.member.is_some(), "an attribute draft is open");
+    h.state_mut().open_about();
+    h.run();
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    assert!(h.state().about.is_none(), "Escape closes About");
+    assert!(h.state().panels.member.is_some(), "and the draft behind it stays");
+}
+
+#[test]
+fn about_scrolls_its_body_in_a_short_window_and_keeps_done_clear() {
+    let mut h = harness(ThemeKind::Light);
+    h.state_mut().services.support = crate::support::Destinations { github_sponsors: None, ko_fi: Some("https://ko-fi.com/archforge".into()) };
+    // The smallest window the app allows.
+    h.set_size(egui::vec2(800.0, 400.0));
+    h.state_mut().open_about();
+    h.run();
+    let foot = rect_of(&h, "about.done").top() - 22.0;
+    let ko_fi = |h: &Harness<'static, Shell>| ids(h).iter().any(|i| i == "about.support.ko-fi").then(|| rect_of(h, "about.support.ko-fi"));
+    assert!(ko_fi(&h).is_none_or(|r| r.bottom() > foot), "Ko-fi does not fit above the footer before scrolling");
+    let over = rect_of(&h, "about.support.github-sponsors").center();
+    h.event(egui::Event::PointerMoved(over));
+    for _ in 0..6 {
+        h.event(egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Point,
+            delta: egui::vec2(0.0, -1200.0),
+            modifiers: egui::Modifiers::NONE,
+            phase: egui::TouchPhase::Move,
+            source: egui::MouseWheelSource::Wheel,
+        });
+        h.run_steps(30);
+    }
+    let r = ko_fi(&h).expect("Ko-fi in view");
+    assert!(r.bottom() <= foot, "{r:?} ends above the footer at {foot}");
+    // A click on Done is Done's, not the row's.
+    let at = rect_of(&h, "about.done").center();
+    click(&mut h, at);
+    assert!(h.state().about.is_none());
+}
