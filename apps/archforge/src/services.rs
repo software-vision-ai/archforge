@@ -1,5 +1,5 @@
 //! The host services the shell may call: the installed fonts, the folder new projects go in, the
-//! folder picker, and the projects themselves.
+//! folder picker, the projects themselves, and where support for Archforge goes.
 
 use std::path::PathBuf;
 
@@ -16,7 +16,18 @@ pub fn native(projects: std::sync::Arc<crate::projects::Projects>) -> Services {
         picker_unavailable: Some(std::sync::Arc::new(picker_unavailable)),
         find_projects: Some(std::sync::Arc::new(find_projects)),
         ids: Some(std::sync::Arc::new(fresh_id)),
+        support: support(),
     }
+}
+
+/// The owner's approved support pages (AR-69, AR-70): set each once its account can take
+/// support; until then About Archforge says it is not set up yet. Support goes to the owner
+/// personally.
+const GITHUB_SPONSORS: Option<&str> = None;
+const KO_FI: Option<&str> = None;
+
+fn support() -> archforge_ui_egui::support::Destinations {
+    archforge_ui_egui::support::Destinations { github_sponsors: GITHUB_SPONSORS.map(str::to_string), ko_fi: KO_FI.map(str::to_string) }
 }
 
 /// The platform's folder picker, for Open project: it starts in the folder given (a pinned

@@ -1767,6 +1767,7 @@ fn entity_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, menu: &En
 fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
     if !shell.canvas.focused
         || shell.generate.is_some()
+        || shell.about.is_some()
         || shell.canvas.rename.is_some()
         || shell.canvas.inline.is_some()
         || shell.canvas.note_edit.is_some()

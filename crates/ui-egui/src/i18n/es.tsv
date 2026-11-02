@@ -286,6 +286,18 @@ str		Arrange diagram	Ordenar el diagrama
 str		Move cardinality	Mover la cardinalidad
 str		Settings	Ajustes
 str		How Archforge knows you.	Cómo te conoce Archforge.
+str		About Archforge	Acerca de Archforge
+str		About Archforge…	Acerca de Archforge…
+str		Free and open source modelling for ER and UML class diagrams.	Modelado libre y de código abierto para diagramas ER y de clases UML.
+str		Support Archforge	Apoyar Archforge
+str		Archforge is free. If it helps your work, you can support its development. A contribution unlocks nothing: every feature stays free for everyone.	Archforge es gratuito. Si te ayuda en tu trabajo, puedes apoyar su desarrollo. Una contribución no desbloquea nada: todas las funciones siguen siendo gratuitas para todos.
+str		GitHub Sponsors	GitHub Sponsors
+str		One-time or monthly, on GitHub	Una vez o cada mes, en GitHub
+str		Ko-fi	Ko-fi
+str		A one-time tip, on Ko-fi	Una propina única, en Ko-fi
+str		Opens in your browser	Se abre en tu navegador
+str		Not set up yet	Aún no configurado
+str		Payment happens on the provider’s page in your browser; Archforge never sees it, and your project stays open here.	El pago se hace en la página del proveedor, en tu navegador; Archforge nunca lo ve, y tu proyecto sigue abierto aquí.
 str		Your name	Tu nombre
 str		The bar shows your initials. Without a name they are JD, for John Doe.	La barra muestra tus iniciales. Sin nombre son JD, de John Doe.
 str		Done	Listo

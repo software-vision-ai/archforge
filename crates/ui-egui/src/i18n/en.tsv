@@ -285,6 +285,18 @@ str		Arrange diagram	Arrange diagram
 str		Move cardinality	Move cardinality
 str		Settings	Settings
 str		How Archforge knows you.	How Archforge knows you.
+str		About Archforge	About Archforge
+str		About Archforge…	About Archforge…
+str		Free and open source modelling for ER and UML class diagrams.	Free and open source modelling for ER and UML class diagrams.
+str		Support Archforge	Support Archforge
+str		Archforge is free. If it helps your work, you can support its development. A contribution unlocks nothing: every feature stays free for everyone.	Archforge is free. If it helps your work, you can support its development. A contribution unlocks nothing: every feature stays free for everyone.
+str		GitHub Sponsors	GitHub Sponsors
+str		One-time or monthly, on GitHub	One-time or monthly, on GitHub
+str		Ko-fi	Ko-fi
+str		A one-time tip, on Ko-fi	A one-time tip, on Ko-fi
+str		Opens in your browser	Opens in your browser
+str		Not set up yet	Not set up yet
+str		Payment happens on the provider’s page in your browser; Archforge never sees it, and your project stays open here.	Payment happens on the provider’s page in your browser; Archforge never sees it, and your project stays open here.
 str		Your name	Your name
 str		The bar shows your initials. Without a name they are JD, for John Doe.	The bar shows your initials. Without a name they are JD, for John Doe.
 str		Done	Done

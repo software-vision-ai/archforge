@@ -293,8 +293,15 @@ pub(crate) fn bar_tail(
         }
     }
     let help = Rect::from_center_size(pos2(right - 68.0, mid), Vec2::splat(28.0));
+    // Help: About Archforge, and how to support it.
+    let resp = control(shell, ui, &format!("{prefix}.help"), "button", help, true).on_hover_text(tr("About Archforge"));
+    if resp.hovered() {
+        paint.rect_filled(help, 8.0, p.border);
+    }
     ux::icon_mid(paint, help.center(), &icons::HELP, p.text_secondary);
-    control(shell, ui, &format!("{prefix}.help"), "button", help, false);
+    if resp.clicked() {
+        crate::support::open(shell);
+    }
     // The search field keeps its distance from the left part when the window is narrow.
     let end = help.left() - 12.0;
     let start = (end - 300.0).max(start);

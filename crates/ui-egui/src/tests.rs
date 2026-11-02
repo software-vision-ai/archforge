@@ -6598,3 +6598,87 @@ fn a_class_is_deleted_from_the_model_through_its_menu_and_comes_back_with_undo()
     assert!(!ids(&h).contains(&order), "the card left the diagram");
     assert!(class_named(&h, "OrderLine").is_some(), "the class stays in the model");
 }
+
+/// The links the last frame asked the window to open.
+fn opened_links(h: &Harness<'static, Shell>) -> Vec<String> {
+    h.output()
+        .platform_output
+        .commands
+        .iter()
+        .filter_map(|c| match c {
+            egui::OutputCommand::OpenUrl(u) => Some(u.url.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn help_opens_about_archforge_whose_support_destinations_say_they_are_not_set_up_yet() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = harness(theme);
+        h.run();
+        let at = rect_of(&h, "home.header.help").center();
+        click(&mut h, at);
+        assert!(h.state().about.is_some(), "{theme:?}");
+        let texts = painted(&h);
+        assert!(texts.iter().any(|t| t == "About Archforge") && texts.iter().any(|t| t == "Support Archforge"), "{theme:?}: {texts:?}");
+        assert!(texts.iter().any(|t| t == "GitHub Sponsors") && texts.iter().any(|t| t == "Ko-fi"), "{texts:?}");
+        assert_eq!(texts.iter().filter(|t| *t == "Not set up yet").count(), 2, "{texts:?}");
+        // A destination that is not set up opens nothing.
+        let row = rect_of(&h, "about.support.ko-fi").center();
+        h.event(egui::Event::PointerMoved(row));
+        for pressed in [true, false] {
+            h.event(egui::Event::PointerButton { pos: row, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE });
+        }
+        h.step();
+        assert!(opened_links(&h).is_empty(), "{:?}", opened_links(&h));
+        h.run();
+        assert!(h.state().about.is_some());
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert!(h.state().about.is_none(), "Escape closes it");
+    }
+}
+
+#[test]
+fn a_set_up_destination_opens_its_page_by_click_or_keyboard_and_the_project_stays_as_it_was() {
+    let (mut h, _order) = class_properties("Order");
+    h.state_mut().services.support = crate::support::Destinations {
+        github_sponsors: Some("https://github.com/sponsors/DejanWho".into()),
+        ko_fi: Some("https://ko-fi.com/archforge".into()),
+    };
+    let revision = h.state().session.as_ref().unwrap().revision();
+    h.state_mut().open_about();
+    h.run();
+    assert_eq!(painted(&h).iter().filter(|t| *t == "Opens in your browser").count(), 2, "{:?}", painted(&h));
+    // A click opens the provider's page in the browser.
+    let row = rect_of(&h, "about.support.github-sponsors").center();
+    h.event(egui::Event::PointerMoved(row));
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton { pos: row, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE });
+    }
+    h.step();
+    assert_eq!(opened_links(&h), ["https://github.com/sponsors/DejanWho"]);
+    h.run();
+    // From the keyboard: Tab to a destination and Enter.
+    h.state_mut().canvas.focused = true;
+    for _ in 0..8 {
+        if h.ctx.memory(|m| m.has_focus(crate::widgets::egui_id("about.support.ko-fi"))) {
+            break;
+        }
+        key(&mut h, egui::Key::Tab, egui::Modifiers::NONE);
+    }
+    assert!(h.ctx.memory(|m| m.has_focus(crate::widgets::egui_id("about.support.ko-fi"))), "Tab reaches Ko-fi");
+    h.event(egui::Event::Key { key: egui::Key::Enter, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::NONE });
+    h.step();
+    assert_eq!(opened_links(&h), ["https://ko-fi.com/archforge"]);
+    h.event(egui::Event::Key { key: egui::Key::Enter, physical_key: None, pressed: false, repeat: false, modifiers: egui::Modifiers::NONE });
+    h.run();
+    // Behind it the workspace's keys rest, and the project is as it was.
+    key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
+    key(&mut h, egui::Key::Z, egui::Modifiers::COMMAND);
+    assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "nothing behind the dialog changed");
+    let at = rect_of(&h, "about.done").center();
+    click(&mut h, at);
+    assert!(h.state().about.is_none());
+    assert!(painted(&h).iter().any(|t| t == "Order"), "the project is still open");
+}
