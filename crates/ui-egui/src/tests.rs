@@ -6812,3 +6812,57 @@ fn the_removal_toast_keeps_clear_of_the_minimap_at_every_width_and_its_undo_stil
     click(&mut h, at);
     assert_eq!(tables(&h), before, "Undo took the table back");
 }
+
+#[test]
+fn while_about_is_open_no_key_reaches_the_models_explorer_or_the_workspace_behind_it() {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1120.0));
+    crate::explorer::add(h.state_mut(), "schema");
+    h.run();
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    crate::explorer::add(h.state_mut(), "table");
+    h.run();
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    // The table, childless, selected in Models with the explorer holding the keys.
+    let rows = crate::explorer::rows(h.state().notation_uis, h.state().session.as_ref().unwrap().doc(), &h.state().explorer);
+    let at = rect_of(&h, &format!("workspace.explorer.row.{}", rows[1].id)).center();
+    click(&mut h, at);
+    h.state_mut().explorer.focused = true;
+    let selection = h.state().session.as_ref().unwrap().view().selection.clone();
+    let revision = h.state().session.as_ref().unwrap().revision();
+    let tables = |h: &Harness<'static, Shell>| {
+        let st = h.state().session.as_ref().unwrap().doc();
+        st.alive().filter(|o| st.class_of(*o).ok() == Some(archforge_er::ENTITY)).count()
+    };
+    assert_eq!(tables(&h), 1);
+    // About opens as the native menu opens it: nothing in the dialog has the keyboard yet.
+    h.state_mut().open_about();
+    h.run();
+    for (k, m) in [
+        (egui::Key::ArrowUp, egui::Modifiers::NONE),
+        (egui::Key::ArrowDown, egui::Modifiers::NONE),
+        (egui::Key::Delete, egui::Modifiers::NONE),
+        (egui::Key::Backspace, egui::Modifiers::NONE),
+        (egui::Key::Enter, egui::Modifiers::NONE),
+        (egui::Key::F2, egui::Modifiers::NONE),
+        (egui::Key::Z, egui::Modifiers::COMMAND),
+        (egui::Key::G, egui::Modifiers::COMMAND | egui::Modifiers::SHIFT),
+    ] {
+        h.event(egui::Event::Key { key: k, physical_key: None, pressed: true, repeat: false, modifiers: m });
+        h.step();
+        h.event(egui::Event::Key { key: k, physical_key: None, pressed: false, repeat: false, modifiers: m });
+        h.run();
+        assert!(h.state().about.is_some(), "{k:?}: About is still open");
+    }
+    assert_eq!(h.state().session.as_ref().unwrap().view().selection, selection, "the selection is as it was");
+    assert_eq!(tables(&h), 1, "the table is still there");
+    assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "nothing was done or undone");
+    assert!(h.state().explorer.delete.is_none() && h.state().explorer.rename.is_none());
+    assert!(h.state().generate.is_none(), "Generate does not open over About");
+    // Escape closes About and goes no further; then the explorer's keys work again.
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    assert!(h.state().about.is_none());
+    assert_eq!(h.state().session.as_ref().unwrap().view().selection, selection);
+    h.state_mut().explorer.focused = true;
+    key(&mut h, egui::Key::ArrowUp, egui::Modifiers::NONE);
+    assert_ne!(h.state().session.as_ref().unwrap().view().selection, selection, "the arrows walk the tree again");
+}
