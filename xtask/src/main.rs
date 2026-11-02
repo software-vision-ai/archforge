@@ -10,6 +10,7 @@ mod brands;
 mod generate;
 mod ico;
 mod layers;
+mod manual;
 mod resize;
 mod shot;
 mod skills;
@@ -36,6 +37,7 @@ const USAGE: &str = "usage: cargo xtask <verb>
   ico <out> <png>... pack PNGs into a Windows icon
   resize <in> <out> <size> [--grid]  scale a square PNG down, on the icon grid with --grid
   shot [light|dark] [--size WxH] [--max-edge N]  a screenshot and a small copy under plan/shots
+  manual             the user manual with its pictures, rendered from the interface, under plan/manual
   stats              tests and lines per crate";
 
 type Step = (&'static str, Box<dyn Fn() -> Result<(), String>>);
@@ -181,6 +183,7 @@ fn main() {
         Some("ico") => ico::run(rest),
         Some("resize") => resize::run(rest),
         Some("shot") => shot::run(rest),
+        Some("manual") => manual::run(),
         Some("stats") => stats::run(),
         Some("help" | "--help" | "-h") => {
             println!("{USAGE}");
