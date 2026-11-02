@@ -4995,6 +4995,23 @@ fn a_new_class_shows_the_operations_added_to_it_and_a_card_made_short_says_what_
             archforge_diagram::grid::bounds_of(st, st.by_uuid(node).unwrap()).height
         };
         assert_eq!(height(&h), archforge_uml::CLASS_SIZE.1, "a new class is as tall as a row in each compartment");
+        // The same class on two more diagrams: wider and short, and already tall.
+        let mut others = Vec::new();
+        for (name, width, tall) in [("Wide", 300, 140), ("Tall", 260, 400)] {
+            let other = run(&mut h, "diagram.add", serde_json::json!({ "kind": "uml.class", "element": pkg.to_string(), "name": name })).unwrap();
+            let n = run(
+                &mut h,
+                "diagram.place",
+                serde_json::json!({ "diagram": other.to_string(), "element": class.to_string(), "x": 0, "y": 0, "width": width, "height": tall }),
+            )
+            .unwrap();
+            others.push(n);
+        }
+        let size = |h: &Harness<'static, Shell>, n: archforge_mof::Uuid| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let b = archforge_diagram::grid::bounds_of(st, st.by_uuid(n).unwrap());
+            (b.width, b.height)
+        };
         h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [class.to_string()] })).unwrap();
         h.state_mut().state.show_panel(crate::state::Panel::Properties);
         h.run();
@@ -5020,10 +5037,14 @@ fn a_new_class_shows_the_operations_added_to_it_and_a_card_made_short_says_what_
         let grown = height(&h);
         assert!(grown > archforge_uml::CLASS_SIZE.1, "{grown}");
         assert!(on_card(&h, "+ calculateTotal()") && on_card(&h, "+ approve()"), "{:?}", painted(&h));
+        // Every card of the class grows on every diagram, keeping its width; a taller one is left.
+        assert_eq!((size(&h, others[0]), size(&h, others[1])), ((300.0, grown), (260.0, 400.0)));
         h.state_mut().session.as_mut().unwrap().undo().unwrap();
         assert_eq!((member_rows(&h, class, true).len(), height(&h)), (1, archforge_uml::CLASS_SIZE.1), "one undo takes back both");
+        assert_eq!((size(&h, others[0]), size(&h, others[1])), ((300.0, 140.0), (260.0, 400.0)), "and every card's height");
         h.state_mut().session.as_mut().unwrap().redo().unwrap();
         assert_eq!((member_rows(&h, class, true).len(), height(&h)), (2, grown));
+        assert_eq!(size(&h, others[0]), (300.0, grown));
         // Made short by hand it stays so, and says what it hides rather than looking empty.
         run(&mut h, "diagram.resize", serde_json::json!({ "node": node.to_string(), "width": 240, "height": 120 }));
         h.run();
@@ -5045,6 +5066,14 @@ fn a_new_class_shows_the_operations_added_to_it_and_a_card_made_short_says_what_
         h.run();
         assert!(painted(&h).iter().any(|t| t == "+ 2 more members"), "at 60 %");
         h.state_mut().canvas.zoom = zoom;
+        // With an attribute it shows, the hint takes an operation's place and counts the rest.
+        run(&mut h, "uml.attribute.add", serde_json::json!({ "class": class.to_string(), "name": "number" }));
+        run(&mut h, "diagram.resize", serde_json::json!({ "node": node.to_string(), "width": 240, "height": archforge_uml::CLASS_SIZE.1 }));
+        h.run();
+        let texts = painted(&h);
+        assert!(on_card(&h, "+ number"), "{texts:?}");
+        assert!(texts.iter().any(|t| t == "+ 2 more members"), "{texts:?}");
+        assert!(!on_card(&h, "+ calculateTotal()") && !on_card(&h, "+ approve()"), "{texts:?}");
         // Editing a member grows it again.
         let st = h.state().session.as_ref().unwrap().doc();
         let op = st.uuid(archforge_uml::members::operations(st, st.by_uuid(class).unwrap())[1]).unwrap();
@@ -5065,6 +5094,28 @@ fn a_new_class_shows_the_operations_added_to_it_and_a_card_made_short_says_what_
         assert_eq!(archforge_diagram::grid::bounds_of(st, st.by_uuid(node).unwrap()).height, grown);
         assert_eq!(archforge_uml::members::operations(st, st.by_uuid(class).unwrap()).len(), 2);
     }
+}
+
+#[test]
+fn a_table_box_shorter_than_its_columns_shows_those_that_fit_and_counts_the_rest() {
+    let (mut h, customer, diagram) = diagram_harness();
+    let s = h.state_mut().session.as_mut().unwrap();
+    for name in ["name", "phone", "city"] {
+        s.execute("er.attribute.add", &serde_json::json!({ "entity": customer, "name": name, "type": "TEXT" })).unwrap();
+    }
+    h.run();
+    let st = h.state().session.as_ref().unwrap().doc();
+    let (e, d) =
+        (st.by_uuid(archforge_mof::Uuid::parse(&customer).unwrap()).unwrap(), st.by_uuid(archforge_mof::Uuid::parse(&diagram).unwrap()).unwrap());
+    let rows: Vec<String> =
+        archforge_diagram::Notation::card(&archforge_er::ErNotation, st, e, d).unwrap().compartments[0].iter().map(|r| r.text.clone()).collect();
+    assert_eq!(rows.len(), 5);
+    // Its box, 166 tall, holds four rows' places: three columns, then the two past it said in one.
+    // A column is painted in the Models tree and, when it shows, in its box too.
+    let texts = painted(&h);
+    let times = |row: &String| texts.iter().filter(|t| *t == row).count();
+    assert_eq!(rows.iter().map(times).collect::<Vec<_>>(), [2, 2, 2, 1, 1], "{texts:?}");
+    assert!(texts.iter().any(|t| t == "+ 2 more columns"), "{texts:?}");
 }
 
 #[test]
