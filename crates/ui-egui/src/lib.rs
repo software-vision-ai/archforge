@@ -1281,6 +1281,11 @@ impl Shell {
         support::show(self, ui);
         generate::show(self, ui);
         close_ask::show(self, ui);
+        // A project shown in this frame (made, opened or recalled from its tab) gets its model on
+        // the next: that frame is asked for now, not left to the pointer's next move (AR-78).
+        if self.project.as_ref().is_some_and(|p| self.adopted.as_ref() != Some(&p.path)) {
+            ui.ctx().request_repaint();
+        }
     }
 }
 

@@ -6866,3 +6866,24 @@ fn while_about_is_open_no_key_reaches_the_models_explorer_or_the_workspace_behin
     key(&mut h, egui::Key::ArrowUp, egui::Modifiers::NONE);
     assert_ne!(h.state().session.as_ref().unwrap().view().selection, selection, "the arrows walk the tree again");
 }
+
+#[test]
+fn a_created_project_opens_its_model_without_waiting_for_the_pointer() {
+    let (mut h, host) = creating_harness();
+    let at = centre_of(&h, "new-project.create");
+    press(&mut h, at);
+    let tx = host.pending.lock().unwrap().pop().expect("a creation was asked for");
+    tx.send(Ok(crate::Opened {
+        name: "Commerce platform".into(),
+        path: "/Users/robin/Documents/Archforge/Commerce platform.archforge".into(),
+        ..Default::default()
+    }))
+    .unwrap();
+    // The frame that takes the answer opens the project's tab; its model opens on the next frame,
+    // which the window asks for at once rather than waiting for the pointer to move (AR-78).
+    h.step();
+    assert!(h.state().project.is_some(), "the tab is open");
+    assert!(h.ctx.has_requested_repaint(), "the window asks for the frame that opens the model");
+    h.step();
+    assert_eq!(h.state().adopted.as_deref(), Some(std::path::Path::new("/Users/robin/Documents/Archforge/Commerce platform.archforge")));
+}
