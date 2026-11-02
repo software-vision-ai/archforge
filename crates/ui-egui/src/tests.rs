@@ -5225,6 +5225,69 @@ fn a_selected_class_takes_attributes_and_operations_typed_on_its_card_each_one_u
 }
 
 #[test]
+fn an_inline_row_keeps_a_type_by_what_it_is_refuses_a_name_two_types_share_and_keeps_moved_rows_in_sight() {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    crate::uml_ui::open_sample(h.state_mut()).unwrap();
+    let run = |h: &mut Harness<'static, Shell>, command: &str, params: serde_json::Value| {
+        let out = h.state_mut().session.as_mut().unwrap().execute(command, &params).unwrap_or_else(|e| panic!("{command}: {e}"));
+        out.value["id"].as_str().map(|i| archforge_mof::Uuid::parse(i).unwrap())
+    };
+    let class = |h: &Harness<'static, Shell>, name: &str| {
+        let st = h.state().session.as_ref().unwrap().doc();
+        st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(st, *o) == name).unwrap()).unwrap()
+    };
+    let catalog = class(&h, "Catalog");
+    // A second Money, in another package; Catalog's fee is of that one.
+    let billing = run(&mut h, "uml.package.add", serde_json::json!({ "name": "Billing" })).unwrap();
+    let money = run(&mut h, "uml.class.add", serde_json::json!({ "package": billing.to_string(), "name": "Money" })).unwrap();
+    let fee =
+        run(&mut h, "uml.attribute.add", serde_json::json!({ "class": catalog.to_string(), "name": "fee", "type": money.to_string() })).unwrap();
+    let type_of = |h: &Harness<'static, Shell>| {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let t = st.get(st.by_uuid(fee).unwrap(), archforge_uml::typed_element::TYPE).unwrap().as_ref().unwrap();
+        st.uuid(t).unwrap()
+    };
+    // Renamed in place, it keeps that Money.
+    assert!(crate::uml_inline::open(h.state_mut(), catalog, crate::uml_panel::MemberKind::Attribute, Some(fee)));
+    h.run();
+    h.state_mut().canvas.inline.as_mut().unwrap().edit.name = "charge".into();
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    assert!(h.state().canvas.inline.is_none(), "{:?}", h.state().canvas.inline);
+    assert_eq!(type_of(&h), money, "the type stays the one it was");
+    // Typing a name two types share is refused, the type unchanged.
+    assert!(crate::uml_inline::open(h.state_mut(), catalog, crate::uml_panel::MemberKind::Attribute, Some(fee)));
+    h.run();
+    h.state_mut().canvas.inline.as_mut().unwrap().ty = "money".into();
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    let refused = h.state().canvas.inline.as_ref().and_then(|i| i.refused.clone()).expect("refused");
+    assert!(refused.contains("money"), "{refused}");
+    assert_eq!(type_of(&h), money);
+    // A type no type has stays with the row when ⋯ is pressed, rather than going over as another.
+    h.state_mut().canvas.inline.as_mut().unwrap().ty = "Currency".into();
+    let at = rect_of(&h, "workspace.canvas.member.details").center();
+    click(&mut h, at);
+    assert!(h.state().panels.member.is_none(), "Properties' editor stays closed");
+    assert!(h.state().canvas.inline.as_ref().and_then(|i| i.refused.clone()).is_some_and(|r| r.contains("Currency")));
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    // A draft at the end of Order's attributes moves its operation down, still drawn in the card.
+    let order = class(&h, "Order");
+    assert!(crate::uml_inline::open(h.state_mut(), order, crate::uml_panel::MemberKind::Attribute, None));
+    h.run();
+    let canvas = rect_of(&h, "workspace.canvas");
+    fn texts(s: &egui::Shape, clip: egui::Rect, out: &mut Vec<(String, egui::Pos2, egui::Rect)>) {
+        match s {
+            egui::Shape::Text(t) => out.push((t.galley.text().to_string(), t.pos, clip)),
+            egui::Shape::Vec(v) => v.iter().for_each(|s| texts(s, clip, out)),
+            _ => {}
+        }
+    }
+    let mut found = Vec::new();
+    h.output().shapes.iter().for_each(|c| texts(&c.shape, c.clip_rect, &mut found));
+    let (_, pos, clip) = found.iter().find(|(t, pos, _)| t == "+ total() : Money" && canvas.contains(*pos)).expect("the operation drawn on the card");
+    assert!(clip.contains(*pos + egui::vec2(1.0, 8.0)), "{pos:?} inside {clip:?}");
+}
+
+#[test]
 fn a_class_dragged_from_models_onto_a_second_diagram_stays_one_element_and_leaves_by_delete_or_shift_delete() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
     crate::uml_ui::open_sample(h.state_mut()).unwrap();

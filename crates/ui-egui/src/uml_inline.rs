@@ -67,18 +67,23 @@ fn type_text(store: &Store, ty: &str) -> String {
     if ty.is_empty() { String::new() } else { crate::uml_panel::type_label(store, ty) }
 }
 
-/// The type `text` names, as the commands take it: none for empty, a built-in type's name or
-/// one of the model's types by its id; any other name is refused, naming it.
-fn resolve(store: &Store, text: &str) -> Result<String, String> {
-    let text = text.trim();
+/// The row's type as the commands take it. The type it holds (the member's, or the one picked
+/// from the menu) is kept while the text still shows its name, so two types of one name in
+/// different packages stay apart; text typed over it names a type: none for empty, a built-in
+/// type or one of the model's; a name no type has, or that several have, is refused, naming it.
+fn resolve(store: &Store, inline: &InlineMember) -> Result<String, String> {
+    let text = inline.ty.trim();
+    if text == type_text(store, &inline.edit.ty) {
+        return Ok(inline.edit.ty.clone());
+    }
     if text.is_empty() {
         return Ok(String::new());
     }
-    crate::uml_panel::type_choices(store)
-        .into_iter()
-        .find(|(label, _)| label.eq_ignore_ascii_case(text))
-        .map(|(_, value)| value)
-        .ok_or_else(|| fmt(&tr("There is no type named {name}."), &[("name", text)]))
+    match crate::uml_panel::types_named(store, text).as_slice() {
+        [one] => Ok(one.clone()),
+        [] => Err(fmt(&tr("There is no type named {name}."), &[("name", text)])),
+        _ => Err(fmt(&tr("Several types are named {name}; pick one from the menu."), &[("name", text)])),
+    }
 }
 
 /// Opens a row on `class`'s card on the open diagram: a new member of `kind`, or `target`. Gives
@@ -253,7 +258,10 @@ pub(crate) fn row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, view: View)
         let choices = shell.session.as_ref().map(|s| crate::uml_panel::type_choices(s.doc())).unwrap_or_default();
         let labels: Vec<String> = choices.iter().map(|(label, _)| label.clone()).collect();
         if let Some(i) = crate::panels::menu(shell, ui, p, type_rect, TYPE_ID, &labels) {
-            inline.ty = choices.get(i).filter(|(_, v)| !v.is_empty()).map(|(label, _)| label.clone()).unwrap_or_default();
+            // The pick is kept by what it is, its name shown.
+            let value = choices.get(i).map(|(_, v)| v.clone()).unwrap_or_default();
+            inline.ty = shell.session.as_ref().map(|s| type_text(s.doc(), &value)).unwrap_or_default();
+            inline.edit.ty = value;
             inline.field = InlineField::Type;
             inline.focus = true;
         }
@@ -297,7 +305,7 @@ fn commit(shell: &mut Shell, next: bool) {
         return;
     }
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
-    match resolve(store, &inline.ty) {
+    match resolve(store, &inline) {
         Ok(ty) => inline.edit.ty = ty,
         Err(e) => {
             inline.refused = Some(e);
@@ -329,15 +337,24 @@ fn commit(shell: &mut Shell, next: bool) {
     }
 }
 
-/// Takes the row to Properties' editor, with what was typed, for what the row does not show.
+/// Takes the row to Properties' editor, with what was typed, for what the row does not show; a
+/// type that does not resolve keeps the row, its reason under it, rather than going over as
+/// another type.
 fn to_properties(shell: &mut Shell) {
-    let Some(inline) = shell.canvas.inline.take() else { return };
-    let mut edit = inline.edit;
-    if let Some(store) = shell.session.as_ref().map(|s| s.doc())
-        && let Ok(ty) = resolve(store, &inline.ty)
-    {
-        edit.ty = ty;
+    let Some(mut inline) = shell.canvas.inline.clone() else { return };
+    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+    match resolve(store, &inline) {
+        Ok(ty) => inline.edit.ty = ty,
+        Err(e) => {
+            inline.refused = Some(e);
+            inline.field = InlineField::Type;
+            inline.focus = true;
+            shell.canvas.inline = Some(inline);
+            return;
+        }
     }
+    shell.canvas.inline = None;
+    let mut edit = inline.edit;
     edit.refused = None;
     edit.opened = true;
     shell.panels.menu = None;

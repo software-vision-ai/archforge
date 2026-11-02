@@ -483,6 +483,7 @@ str		Add attribute	添加属性
 str		Add operation	添加操作
 str		More details in Properties	在属性中查看更多详细信息
 str		There is no type named {name}.	没有名为 {name} 的类型。
+str		Several types are named {name}; pick one from the menu.	有多个名为 {name} 的类型；请从菜单中选择一个。
 str		Add parameter	添加参数
 str		Attribute	属性
 str		Attribute · model	属性 · 模型

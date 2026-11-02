@@ -332,6 +332,24 @@ pub(crate) fn type_choices(store: &Store) -> Vec<(String, String)> {
         .collect()
 }
 
+/// Every type named `name`, ignoring case, as the commands take it: a built-in type the model has
+/// none of the same name for, and each of the model's own types, whichever package holds it.
+pub(crate) fn types_named(store: &Store, name: &str) -> Vec<String> {
+    let universe = store.universe();
+    let own: Vec<String> = store
+        .alive()
+        .filter(|o| {
+            store.class_of(*o).is_ok_and(|c| {
+                universe.conforms(c, TypeRef::Class(archforge_uml::TYPE)) && !universe.conforms(c, TypeRef::Class(archforge_uml::ASSOCIATION))
+            })
+        })
+        .filter(|t| !built_in(store, *t) && self::name(store, *t).eq_ignore_ascii_case(name))
+        .filter_map(|t| store.uuid(t).ok().map(|u| u.to_string()))
+        .collect();
+    let builtin = BUILT_IN.iter().find(|b| b.eq_ignore_ascii_case(name)).filter(|_| own.is_empty()).map(|b| b.to_string());
+    builtin.into_iter().chain(own).collect()
+}
+
 /// The menu of a type select, when it is open; sets `ty` to the type picked.
 fn type_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Rect, id: &str, ty: &mut String, which: Menu) {
     if shell.panels.menu != Some(which) {

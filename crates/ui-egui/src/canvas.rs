@@ -716,7 +716,6 @@ fn draw_node(
     let renaming = id.is_some() && id == d.renaming;
     let element = element_of(store, n, node::ELEMENT);
     let selected = selection.contains(&n) || element.is_some_and(|e| selection.contains(&e));
-    let inner = paint.with_clip_rect(rect.intersect(paint.clip_rect()));
     // The card the element's notation describes, when it describes one.
     let mut card = element.and_then(|e| d.notations.of_element(store, e)?.card(store, e, d.diagram));
     // A row typed in place: its place is kept blank under the field, and a new one's card grows to
@@ -730,6 +729,8 @@ fn draw_node(
             rect.max.y = rect.max.y.max(rect.top() + card_height(c) * z);
         }
     }
+    // Clipped to the card as drawn, so a draft's growing keeps the rows it moved down in sight.
+    let inner = paint.with_clip_rect(rect.intersect(paint.clip_rect()));
     match element {
         Some(_) if let Some(card) = card => {
             // An element of another scope: dimmed, dashed, its scope named in the eyebrow.

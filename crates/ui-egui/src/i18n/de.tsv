@@ -483,6 +483,7 @@ str		Add attribute	Attribut hinzufügen
 str		Add operation	Operation hinzufügen
 str		More details in Properties	Weitere Angaben in den Eigenschaften
 str		There is no type named {name}.	Es gibt keinen Typ namens {name}.
+str		Several types are named {name}; pick one from the menu.	Mehrere Typen heißen {name}; wählen Sie einen aus dem Menü.
 str		Add parameter	Parameter hinzufügen
 str		Attribute	Attribut
 str		Attribute · model	Attribut · Modell
