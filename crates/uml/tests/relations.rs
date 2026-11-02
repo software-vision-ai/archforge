@@ -101,15 +101,23 @@ fn each_kind_of_association_draws_as_a_plain_line_its_kind_marks_and_no_class_ga
         round_trip(&mut s, "uml.association.add", json!({ "from": c[0], "to": c[1], "kind": kind }));
         kinds.push(relationships(&mut s, &c[0]).last().unwrap()["id"].as_str().unwrap().to_string());
     }
-    assert_eq!(marks(&s, &kinds[0]), [M::None, M::None], "navigable both ways: no arrows");
+    assert_eq!(marks(&s, &kinds[0]), [M::None, M::None], "navigable to neither end: no arrows");
     assert_eq!(marks(&s, &kinds[1]), [M::None, M::OpenArrow], "directed to the second class");
     assert_eq!(marks(&s, &kinds[2]), [M::HollowDiamond, M::None], "the whole is the first class");
     assert_eq!(marks(&s, &kinds[3]), [M::FilledDiamond, M::None]);
     let plain = &relationships(&mut s, &c[0])[0];
     assert_eq!(plain["kind"], "association");
     for end in plain["ends"].as_array().unwrap() {
-        assert_eq!((end["role"].as_str(), end["multiplicity"].as_str(), end["navigable"].as_bool()), (Some(""), Some(""), Some(true)));
+        assert_eq!((end["role"].as_str(), end["multiplicity"].as_str(), end["navigable"].as_bool()), (Some(""), Some(""), Some(false)));
     }
+    // An arrow at every end it navigates to (owner decision), a diamond taking an arrow's place.
+    let set = |a: &str, end: u8, nav: bool| json!({ "association": a, "end": end, "role": "", "multiplicity": "", "navigable": nav, "aggregation": if end == 1 && a == kinds[3] { "composite" } else { "none" } });
+    for end in [0, 1] {
+        run(&mut s, "uml.association.set-end", set(&kinds[0], end, true));
+        run(&mut s, "uml.association.set-end", set(&kinds[3], end, true));
+    }
+    assert_eq!(marks(&s, &kinds[0]), [M::OpenArrow, M::OpenArrow], "navigable both ways: an arrow at each end");
+    assert_eq!(marks(&s, &kinds[3]), [M::FilledDiamond, M::OpenArrow], "the diamond at the whole, the arrow at the part");
     // The ends are the association's: the classes' attributes stay as they were.
     for class in &c {
         assert!(s.execute("uml.class.get", &json!({ "class": class })).unwrap().value["attributes"].as_array().unwrap().is_empty());

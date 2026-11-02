@@ -4775,7 +4775,7 @@ fn a_class_diagram_draws_every_line_kind_and_its_lines_highlight_and_their_texts
     for kind in [M::OpenArrow, M::FilledDiamond, M::HollowDiamond, M::Triangle] {
         assert!(marks.iter().any(|m| m.contains(&kind)), "{kind:?} in {marks:?}");
     }
-    assert!(marks.contains(&[M::None, M::None]), "navigable both ways: no arrows");
+    assert!(marks.contains(&[M::OpenArrow, M::OpenArrow]), "navigable both ways: an arrow at each end");
     assert!(lines.iter().any(|l| l.dashed), "the dependency is dashed");
     let texts = painted(&h);
     for t in ["CLASS", "Payment", "+ amount : Money", "+ authorise() : Boolean", "+ price : Money [0..1]", "paid by", "1..*", "0..1", "lines"] {
