@@ -56,7 +56,9 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
 - Diagrams and skills open as tabs inside the project; the + that makes a new diagram sits in
   that tab strip.
 - The left rail holds Models, Diagrams and Source Control; the right rail, between the canvas and
-  the panel, holds Agent, Appearance, Properties and Skills.
+  the panel, holds Agent, Appearance, Properties and Skills, each with a shape of its own (AR-61,
+  a proposal for the owner to confirm): a rounded speech bubble with two lines, a palette with
+  three dots of paint, three sliders, and a page of rules with a checklist.
 - Clicking the open column's own rail icon folds it; any rail icon opens a folded column on its
   content; the panel's collapse button folds the panel. Folded columns are kept in the preferences.
 - The status bar says only what is true: the save state, the agent state, the location.
@@ -70,7 +72,12 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
 - A start card for what cannot be done at all yet (Explore an example, Import a model) is left
   off Home, and the cards left share the row (AR-67).
 - Recent projects keep the last twelve (name, folder, last opened) across restarts; a row opens
-  its project, or shows its tab when it is open already. A row or card under the pointer shows a
+  its project, or shows its tab when it is open already. Each keeps the view it was left in
+  (AR-59): its diagram and skill tabs in order, the one shown, and the canvas's pan and zoom; the
+  row says the folder and "Last view: {diagram}", and opening it again resumes that view, a tab
+  whose diagram is gone left out. The view is the window's preference, never the model's: resuming
+  it changes nothing and joins no history. The explorer and the panel, and whether they are folded,
+  are the window's for every project, kept as they were left. A row or card under the pointer shows a
   More button whose menu offers Open and Remove from recent projects; removing leaves the project
   where it is, asks nothing, and opening it again lists it again.
 - Pin a folder picks a folder with the system's picker and pins it on Home, up to eight, kept in
@@ -254,6 +261,14 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   text. Where a skill applies and when are not shown for now (owner, 2026-10-31): skills will be
   used in contexts still to come, and a fixed list such as Export misleads. The model keeps those
   fields; they come back when the contexts are known.
+- Generation is an agent's, never the window's (owner, AR-64): File → Generate… opens a handoff
+  for the selected schema, table, class or diagram (else the open diagram): From, Output (SQL
+  DDL with its dialect, which the export skills in effect suggest, or documentation), the export
+  skills in effect with where each comes from and what overrides it, and the request to copy for
+  the agent, naming the MCP resources it reads (`archforge://element/{id}`,
+  `archforge://skills/effective/{id}/export`) and the model's revision. Its status line says
+  whether agent access is on, that the request was copied, and when the model changed after;
+  nothing in it shows output or claims the agent did anything. The dialog changes nothing.
 
 ## Messages
 - Problems show as an orange badge on the box or line and in a Problems section of Properties,

@@ -92,13 +92,49 @@ fn pin_ok(path: &std::path::Path) -> bool {
     path.is_absolute() && path.as_os_str().len() <= MAX_RECENT_PATH && path.file_name().is_some() && path.to_str().is_some()
 }
 
-/// A project opened before: its name, its folder, and when it was last opened (seconds since 1970).
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+/// A project opened before: its name, its folder, when it was last opened (seconds since 1970),
+/// and the working view it was left in.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct RecentProject {
     pub name: String,
     pub path: std::path::PathBuf,
     pub opened: u64,
+    pub view: Option<SavedView>,
+}
+
+/// The working view a project was left in (AR-59): its diagram and skill tabs in order, the one
+/// shown, and how the canvas was panned and zoomed. It is the window's, kept with the recent
+/// entry, never in the model, so resuming it makes no change and no undo step.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SavedView {
+    pub tabs: Vec<String>,
+    pub active: Option<String>,
+    pub pan: [f32; 2],
+    pub zoom: f32,
+    /// The shown diagram's name, for Home's recent row.
+    pub label: String,
+}
+
+/// The most tabs a saved view keeps.
+pub const MAX_VIEW_TABS: usize = 64;
+/// The farthest a saved view's pan reaches, in logical pixels.
+const MAX_PAN: f32 = 1.0e7;
+
+impl SavedView {
+    /// Whether the view reads as one the window can resume: ids, a pan within reach and a zoom
+    /// the canvas takes; one that does not is left out whole, never bent into another.
+    fn ok(&self) -> bool {
+        let id = |t: &String| archforge_mof::Uuid::parse(t).is_some();
+        let (min, max) = crate::canvas::ZOOM_RANGE;
+        self.tabs.len() <= MAX_VIEW_TABS
+            && self.tabs.iter().all(id)
+            && self.active.as_ref().is_none_or(id)
+            && self.pan.iter().all(|v| v.is_finite() && v.abs() <= MAX_PAN)
+            && self.zoom.is_finite()
+            && (min..=max).contains(&self.zoom)
+    }
 }
 
 impl Default for UiState {
@@ -129,9 +165,26 @@ impl UiState {
             log::warn!("the project {} is not listed on Home: its name or folder does not fit the list", path.display());
             return;
         }
+        // Opened again, it keeps the view it was left in.
+        let view = self.recent.iter().find(|r| r.path == path).and_then(|r| r.view.clone());
         self.recent.retain(|r| r.path != path);
-        self.recent.insert(0, RecentProject { name: name.to_string(), path: path.to_path_buf(), opened: now });
+        self.recent.insert(0, RecentProject { name: name.to_string(), path: path.to_path_buf(), opened: now, view });
         self.recent.truncate(MAX_RECENT);
+    }
+
+    /// Keeps `view` as the one the recent project at `path` was left in; a project not listed
+    /// keeps none.
+    pub fn keep_view(&mut self, path: &std::path::Path, view: SavedView) {
+        if let Some(r) = self.recent.iter_mut().find(|r| r.path == path)
+            && r.view.as_ref() != Some(&view)
+        {
+            r.view = Some(view);
+        }
+    }
+
+    /// The view the recent project at `path` was left in, when one was kept.
+    pub fn view_of(&self, path: &std::path::Path) -> Option<&SavedView> {
+        self.recent.iter().find(|r| r.path == path).and_then(|r| r.view.as_ref())
     }
 
     /// Takes the project at `path` off the recent list; the project itself stays where it is.
@@ -180,6 +233,15 @@ impl UiState {
         self.recent.truncate(MAX_RECENT);
         if self.recent.len() < before {
             log::warn!("{} of {before} recent projects in the preferences were left out", before - self.recent.len());
+        }
+        for r in &mut self.recent {
+            if r.view.as_ref().is_some_and(|v| !v.ok()) {
+                log::warn!("the view {} was left in does not read; it opens on no tab", r.path.display());
+                r.view = None;
+            }
+            if let Some(v) = r.view.as_mut() {
+                v.label = crate::settings::clean(&v.label);
+            }
         }
     }
 

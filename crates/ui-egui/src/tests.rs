@@ -755,7 +755,7 @@ fn the_recent_list_keeps_each_project_once_newest_first_and_drops_what_it_cannot
     assert_eq!(state.recent.iter().filter(|r| r.name == "P15").count(), 1, "once");
     // A preferences file may hold anything: what the window does not take is dropped.
     let at = |file: &str| std::env::temp_dir().join(file);
-    let entry = |name: &str, path: std::path::PathBuf| crate::state::RecentProject { name: name.into(), path, opened: 1 };
+    let entry = |name: &str, path: std::path::PathBuf| crate::state::RecentProject { name: name.into(), path, opened: 1, view: None };
     let long = "x".repeat(230);
     state.recent = vec![
         entry("Good", at("Good.archforge")),
@@ -5172,6 +5172,131 @@ fn a_table_box_shorter_than_its_columns_shows_those_that_fit_and_counts_the_rest
 }
 
 #[test]
+fn generate_scrolls_its_body_in_a_short_window_and_keeps_its_footer_clear() {
+    let (mut h, _customer, _diagram) = diagram_harness();
+    let schema = {
+        let st = h.state().session.as_ref().unwrap().doc();
+        st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap()).unwrap()
+    };
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [schema.to_string()] })).unwrap();
+    // The smallest window the app allows.
+    h.set_size(egui::vec2(800.0, 400.0));
+    h.state_mut().open_generate();
+    h.run();
+    let foot = rect_of(&h, "generate.close").top() - 20.0;
+    let request = |h: &Harness<'static, Shell>| ids(h).iter().any(|i| i == "generate.request").then(|| rect_of(h, "generate.request"));
+    assert!(request(&h).is_none_or(|r| r.bottom() > foot), "the request does not fit above the footer before scrolling");
+    // The wheel over the body brings the request into view above the footer.
+    let over = rect_of(&h, "generate.output.ddl").center();
+    h.event(egui::Event::PointerMoved(over));
+    for _ in 0..6 {
+        h.event(egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Point,
+            delta: egui::vec2(0.0, -1200.0),
+            modifiers: egui::Modifiers::NONE,
+            phase: egui::TouchPhase::Move,
+            source: egui::MouseWheelSource::Wheel,
+        });
+        h.run_steps(30);
+    }
+    let r = request(&h).expect("the request in view");
+    assert!(r.bottom() <= foot, "{r:?} ends above the footer at {foot}");
+    assert_eq!(rect_of(&h, "generate.close").top() - 20.0, foot, "the footer stays put");
+}
+
+#[test]
+fn generate_hands_a_schema_and_its_export_skills_to_an_agent_as_a_request_it_can_copy() {
+    let (mut h, _customer, _diagram) = diagram_harness();
+    let schema = {
+        let st = h.state().session.as_ref().unwrap().doc();
+        st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap()).unwrap()
+    };
+    let run = |h: &mut Harness<'static, Shell>, command: &str, params: serde_json::Value| {
+        h.state_mut().session.as_mut().unwrap().execute(command, &params).unwrap_or_else(|e| panic!("{command}: {e}"));
+    };
+    // With nothing selected it is from the open diagram.
+    h.state_mut().open_generate();
+    h.run();
+    assert!(painted(&h).iter().any(|t| t == "Diagram · Shop schema"), "{:?}", painted(&h));
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    assert!(h.state().generate.is_none());
+    // A project's export skill and a schema's of the same name with its dialect: the schema's wins.
+    run(&mut h, "skill.add", serde_json::json!({ "name": "DDL conventions", "body": "Plain CREATE TABLE.", "triggers": ["export"] }));
+    run(
+        &mut h,
+        "skill.add",
+        serde_json::json!({ "subject": schema.to_string(), "name": "DDL conventions", "body": "Named constraints.", "triggers": ["export"], "dialect": "MySQL" }),
+    );
+    run(&mut h, "view.select", serde_json::json!({ "ids": [schema.to_string()] }));
+    h.state_mut().open_generate();
+    h.run();
+    assert_eq!(h.state().generate.as_ref().unwrap().dialect, "MySQL", "the dialect the skills in effect name");
+    let texts = painted(&h);
+    assert!(texts.iter().any(|t| t == "Schema · Shop"), "{texts:?}");
+    assert!(texts.iter().any(|t| t == "DDL conventions · on this element · MySQL"), "{texts:?}");
+    assert!(texts.iter().any(|t| t == "DDL conventions · from the project · overridden"), "{texts:?}");
+    assert!(texts.iter().any(|t| t.starts_with("Agent access is off")), "no control channel in the harness: {texts:?}");
+    // The request names the resources to read and the revision it is of.
+    let revision = h.state().session.as_ref().unwrap().revision();
+    let request = texts.iter().find(|t| t.starts_with("Generate SQL DDL (MySQL)")).expect("the request").clone();
+    assert!(request.contains(&format!("archforge://element/{schema}")), "{request}");
+    assert!(request.contains(&format!("archforge://skills/effective/{schema}/export")), "{request}");
+    assert!(request.contains(&format!("model revision {revision}")), "{request}");
+    // Copied, it says so; a change after copying says to copy again.
+    let at = rect_of(&h, "generate.copy").center();
+    click(&mut h, at);
+    assert_eq!(h.state().generate.as_ref().unwrap().copied, Some(revision));
+    assert!(painted(&h).iter().any(|t| t.starts_with("Copied.")));
+    run(&mut h, "er.entity.add", serde_json::json!({ "schema": schema.to_string(), "name": "Invoice" }));
+    h.run();
+    assert!(painted(&h).iter().any(|t| t.starts_with("The model changed after the request was copied")));
+    assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add entity"), "the dialog itself changes nothing");
+    // Behind the dialog the workspace's keys rest: Delete removes nothing and undo undoes nothing.
+    h.state_mut().canvas.focused = true;
+    let revision = h.state().session.as_ref().unwrap().revision();
+    key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
+    key(&mut h, egui::Key::Z, egui::Modifiers::COMMAND);
+    assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "nothing behind the dialog changed");
+    // Documentation takes no dialect.
+    let at = rect_of(&h, "generate.output.documentation").center();
+    click(&mut h, at);
+    assert!(!ids(&h).iter().any(|i| i == "generate.dialect"));
+    assert!(painted(&h).iter().any(|t| t.starts_with("Write Markdown documentation")));
+    let at = rect_of(&h, "generate.close").center();
+    click(&mut h, at);
+    assert!(h.state().generate.is_none());
+    // On every platform: its keys open it, and so does a table's menu.
+    key(&mut h, egui::Key::G, egui::Modifiers::COMMAND | egui::Modifiers::SHIFT);
+    assert!(h.state().generate.is_some(), "Ctrl or Cmd with Shift and G");
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    let node = {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let c = st.by_uuid(archforge_mof::Uuid::parse(&_customer).unwrap()).unwrap();
+        st.uuid(archforge_diagram::views_of(st, c).2[0]).unwrap()
+    };
+    let at = rect_of(&h, &format!("workspace.canvas.node.{node}")).center();
+    h.event(egui::Event::PointerMoved(at));
+    h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Secondary, pressed: true, modifiers: egui::Modifiers::NONE });
+    h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Secondary, pressed: false, modifiers: egui::Modifiers::NONE });
+    h.run();
+    let at = rect_of(&h, "workspace.canvas.menu.generate").center();
+    click(&mut h, at);
+    assert!(h.state().generate.is_some(), "from the table's menu");
+    assert!(painted(&h).iter().any(|t| t == "Table · Customer"), "{:?}", painted(&h));
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    // With nothing to be from, there is no request to copy.
+    run(&mut h, "view.select", serde_json::json!({ "ids": [] }));
+    h.state_mut().canvas.active = None;
+    h.state_mut().open_generate();
+    h.run();
+    let texts = painted(&h);
+    assert!(texts.iter().any(|t| t == "Nothing selected") && texts.iter().any(|t| t.starts_with("Select a schema")), "{texts:?}");
+    let at = rect_of(&h, "generate.copy").center();
+    click(&mut h, at);
+    assert_eq!(h.state().generate.as_ref().unwrap().copied, None);
+}
+
+#[test]
 fn a_selected_class_takes_attributes_and_operations_typed_on_its_card_each_one_undo_step() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
     crate::uml_ui::open_sample(h.state_mut()).unwrap();
@@ -5350,6 +5475,111 @@ fn an_inline_row_keeps_a_type_by_what_it_is_refuses_a_name_two_types_share_and_k
     h.output().shapes.iter().for_each(|c| texts(&c.shape, c.clip_rect, &mut found));
     let (_, pos, clip) = found.iter().find(|(t, pos, _)| t == "+ total() : Money" && canvas.contains(*pos)).expect("the operation drawn on the card");
     assert!(clip.contains(*pos + egui::vec2(1.0, 8.0)), "{pos:?} inside {clip:?}");
+}
+
+/// A window over `shell`, as the workspace harness builds one.
+fn harness_over(shell: Shell) -> Harness<'static, Shell> {
+    let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1000.0)).with_step_dt(1.0 / 60.0).build_ui_state(
+        |ui, shell: &mut Shell| {
+            shell.logic(ui.ctx());
+            shell.ui(ui);
+        },
+        shell,
+    );
+    h.run();
+    h
+}
+
+#[test]
+fn a_project_opened_again_resumes_its_tabs_the_diagram_it_showed_and_its_view() {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    crate::uml_ui::open_sample(h.state_mut()).unwrap();
+    h.run();
+    let class_diagram = h.state().canvas.active.expect("the sample's class diagram");
+    // An ER diagram beside it, then the class diagram shown again, panned and zoomed.
+    let er = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let schema = s.execute("er.schema.add", &serde_json::json!({ "name": "shop" })).unwrap().value["id"].as_str().unwrap().to_string();
+        let d = s.execute("diagram.add", &serde_json::json!({ "kind": "er", "element": schema, "name": "Shop" })).unwrap().value;
+        archforge_mof::Uuid::parse(d["id"].as_str().unwrap()).unwrap()
+    };
+    crate::canvas::open(h.state_mut(), er);
+    h.run();
+    crate::canvas::open(h.state_mut(), class_diagram);
+    h.run();
+    h.state_mut().canvas.zoom = 1.5;
+    h.state_mut().canvas.pan = egui::vec2(-120.0, 40.0);
+    h.run();
+    let path = h.state().project.as_ref().unwrap().path.clone();
+    let kept = h.state().state.view_of(&path).cloned().expect("the view is kept with the recent entry");
+    assert_eq!(kept.tabs, [class_diagram.to_string(), er.to_string()]);
+    assert_eq!((kept.active.as_deref(), kept.zoom, kept.pan), (Some(class_diagram.to_string().as_str()), 1.5, [-120.0, 40.0]));
+    assert_eq!(kept.label, "Commerce", "the shown diagram's name, for Home");
+    // Home's recent row says it.
+    h.state_mut().go_home();
+    h.run();
+    assert!(painted(&h).iter().any(|t| t.ends_with("Last view: Commerce")), "{:?}", painted(&h));
+    let at = rect_of(&h, "workspace.header.project.0").center();
+    click(&mut h, egui::pos2(at.x - 20.0, at.y));
+    h.run();
+    // Saved, closed and opened again in a new window with the same preferences: the same tabs,
+    // the same diagram shown, panned and zoomed as it was, and nothing changed or undoable.
+    let (tables, junctions) = archforge_notations::storage();
+    let rows = std::sync::Arc::new(archforge_mof::rows::snapshot(h.state().session.as_ref().unwrap().doc(), &tables, &junctions).unwrap());
+    let reopen = |state: crate::state::UiState| {
+        let mut shell = Shell::new(Services { ids: Some(test_ids()), ..Services::default() });
+        shell.state = state;
+        shell.open_project(crate::Opened { name: "Commerce platform".into(), path: path.clone(), model: Some(rows.clone()), unsaved: false });
+        harness_over(shell)
+    };
+    let back = reopen(h.state().state.clone());
+    let canvas = &back.state().canvas;
+    assert_eq!((canvas.tabs.clone(), canvas.active), (vec![class_diagram, er], Some(class_diagram)));
+    assert_eq!((canvas.zoom, canvas.pan), (1.5, egui::vec2(-120.0, 40.0)));
+    let session = back.state().session.as_ref().unwrap();
+    assert!(!session.can_undo() && !session.is_dirty(), "resuming the view changes nothing");
+    // A tab whose diagram is gone is left out; a view that does not read opens on no tab.
+    let mut state = h.state().state.clone();
+    let gone = archforge_mof::Uuid::v7(1_761_670_900_000, [5; 10]).to_string();
+    state.keep_view(
+        &path,
+        crate::state::SavedView { tabs: vec![gone.clone(), er.to_string()], active: Some(gone), pan: [0.0, 0.0], zoom: 1.0, label: String::new() },
+    );
+    let back = reopen(state.clone());
+    assert_eq!((back.state().canvas.tabs.clone(), back.state().canvas.active), (vec![er], Some(er)));
+    state.keep_view(
+        &path,
+        crate::state::SavedView { tabs: vec!["not an id".into()], active: None, pan: [f32::NAN, 0.0], zoom: 99.0, label: String::new() },
+    );
+    state.sanitize();
+    assert!(state.view_of(&path).is_none());
+    assert!(reopen(state).state().canvas.tabs.is_empty());
+}
+
+#[test]
+fn each_rail_icon_opens_its_own_panel_in_both_appearances() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = class_properties("Order");
+        h.state_mut().state.theme = theme;
+        h.run();
+        for (id, panel) in [
+            ("agent", crate::state::Panel::Agent),
+            ("appearance", crate::state::Panel::Appearance),
+            ("skills", crate::state::Panel::Skills),
+            ("properties", crate::state::Panel::Properties),
+        ] {
+            let at = rect_of(&h, &format!("workspace.panels.{id}")).center();
+            click(&mut h, at);
+            assert_eq!((h.state().state.panel, h.state().state.panel_collapsed), (panel, false), "{theme:?}: {id}");
+        }
+    }
+    // Four shapes of their own (AR-61), none the drawing another control uses.
+    let rail = [&crate::ux::icons::CHAT_BUBBLE, &crate::ux::icons::PALETTE, &crate::ux::icons::PROPERTIES, &crate::ux::icons::SKILLS];
+    for (i, a) in rail.iter().enumerate() {
+        for b in rail.iter().skip(i + 1) {
+            assert!(!std::ptr::eq(*a, *b));
+        }
+    }
 }
 
 #[test]

@@ -96,6 +96,9 @@ pub enum Screen {
     WorkspaceDiagramEmpty,
     /// A diagram of two tables and their relationship, the first table selected.
     WorkspaceDiagram,
+    /// The filled diagram with its schema selected, export skills on the project and the schema,
+    /// and File → Generate… open over it.
+    WorkspaceGenerate,
     /// The same with the Appearance panel open on the first table, its fill and border its own.
     WorkspaceAppearance,
     /// The same with the relationship selected and its own width.
@@ -353,6 +356,7 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
         screen,
         Screen::WorkspaceDiagramEmpty
             | Screen::WorkspaceDiagram
+            | Screen::WorkspaceGenerate
             | Screen::WorkspaceAppearance
             | Screen::WorkspaceAppearanceLine
             | Screen::WorkspaceAppearancePicker
@@ -371,6 +375,7 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
             matches!(
                 screen,
                 Screen::WorkspaceDiagram
+                    | Screen::WorkspaceGenerate
                     | Screen::WorkspaceAppearance
                     | Screen::WorkspaceAppearanceLine
                     | Screen::WorkspaceAppearancePicker
@@ -387,6 +392,9 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
         }
         if screen == Screen::WorkspaceSearch {
             crate::home_search::open_with(&mut shell, "order");
+        }
+        if screen == Screen::WorkspaceGenerate {
+            sample_generate(&mut shell)?;
         }
         if screen == Screen::WorkspaceCrossSchema {
             sample_cross_schema(&mut shell)?;
@@ -835,6 +843,31 @@ fn sample_routing(shell: &mut Shell) -> Result<(), String> {
 /// A schema "Shop schema" with its diagram open: empty, as the journey's first diagram; or with
 /// Customer and Order placed, the relationship `places` between them and Customer selected, as
 /// the design's ER frame.
+/// Export skills on the project and on the sample's schema, the schema selected, and File →
+/// Generate… open for it.
+fn sample_generate(shell: &mut Shell) -> Result<(), String> {
+    use serde_json::json;
+    let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
+    let store = session.doc();
+    let schema = store
+        .alive()
+        .find(|o| store.class_of(*o).ok() == Some(archforge_er::SCHEMA))
+        .and_then(|s| store.uuid(s).ok())
+        .ok_or("the sample has no schema")?
+        .to_string();
+    for params in [
+        json!({ "name": "DDL conventions", "body": "Plain CREATE TABLE statements.", "triggers": ["export"] }),
+        json!({ "subject": schema, "name": "DDL conventions", "body": "PostgreSQL; a named constraint per key.", "triggers": ["export"], "dialect": "PostgreSQL" }),
+        json!({ "subject": schema, "name": "Audit columns", "body": "Every table gets created_at.", "triggers": ["export"] }),
+    ] {
+        session.execute("skill.add", &params).map_err(|e| format!("skill.add: {e:?}"))?;
+    }
+    session.execute("view.select", &json!({ "ids": [schema] })).map_err(|e| format!("view.select: {e:?}"))?;
+    session.mark_saved().map_err(|e| format!("mark_saved: {e:?}"))?;
+    shell.open_generate();
+    Ok(())
+}
+
 fn sample_diagram(shell: &mut Shell, filled: bool) -> Result<(), String> {
     use serde_json::json;
     let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;

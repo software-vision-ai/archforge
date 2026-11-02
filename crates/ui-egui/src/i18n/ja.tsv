@@ -5,6 +5,35 @@ str		Quit Archforge	Archforge を終了
 str		File	ファイル
 str		Open…	開く…
 str		Save	保存
+# 生成
+str		Generate…	生成…
+str		Generate	生成
+str		An agent connected to Archforge writes it from the model and its skills.	Archforge に接続したエージェントが、モデルとそのスキルから作成します。
+str		Nothing selected	何も選択されていません
+str		{kind} · {name}	{kind} · {name}
+str		Output	出力
+str		SQL DDL	SQL DDL
+str		Documentation	ドキュメント
+str		Dialect	方言
+str		Skills in effect for export	エクスポートに適用されるスキル
+str		No skill applies to it for export.	エクスポートに適用されるスキルはありません。
+str		from the project	プロジェクトから
+str		on this element	この要素に
+str		from {name}	{name} から
+str		overridden	上書き済み
+str		Request for your agent	エージェントへの依頼
+str		{kind} "{name}"	{kind}「{name}」
+str		Generate SQL DDL ({dialect}) for the {what} of the Archforge project "{project}", model revision {revision}.	Archforge プロジェクト「{project}」の{what}について、SQL DDL（{dialect}）を生成してください。モデルのリビジョンは {revision} です。
+str		Write Markdown documentation for the {what} of the Archforge project "{project}", model revision {revision}.	Archforge プロジェクト「{project}」の{what}について、Markdown のドキュメントを書いてください。モデルのリビジョンは {revision} です。
+str		Read it through Archforge's MCP server:	Archforge の MCP サーバーから読み取ってください:
+str		Follow the skills in effect, the more specific over the outer. Give the result for review; do not run it on a database.	適用されるスキルに従い、より具体的なものを外側のものより優先してください。結果はレビュー用に示し、データベースでは実行しないでください。
+str		Follow the skills in effect, the more specific over the outer. Give the result for review.	適用されるスキルに従い、より具体的なものを外側のものより優先してください。結果はレビュー用に示してください。
+str		Select a schema, a table, a class or a diagram first.	まずスキーマ、テーブル、クラス、またはダイアグラムを選択してください。
+str		Agent access is on: a connected agent reads this context through MCP. Nothing is generated here.	エージェントのアクセスはオンです。接続したエージェントが MCP でこのコンテキストを読み取ります。ここでは何も生成されません。
+str		Agent access is off: start Archforge with --control <port> so an agent can read this context.	エージェントのアクセスはオフです。エージェントがこのコンテキストを読み取れるよう、Archforge を --control <port> 付きで起動してください。
+str		Copied. Paste the request to your agent; it reads the model through MCP.	コピーしました。依頼をエージェントに貼り付けてください。エージェントは MCP でモデルを読み取ります。
+str		The model changed after the request was copied; copy it again so the agent reads this revision.	依頼をコピーした後にモデルが変わりました。エージェントがこのリビジョンを読み取れるよう、もう一度コピーしてください。
+str		Copy request	依頼をコピー
 str		{name} — Archforge	{name} — Archforge
 # ホーム
 str		Recent projects	最近使ったプロジェクト
@@ -400,6 +429,7 @@ str		Unpin	固定を解除
 str		Open	開く
 str		Remove from recent projects	最近のプロジェクトから削除
 str		Pick up in the exact view you left.	中断したビューからそのまま再開できます。
+str		Last view: {name}	前回のビュー: {name}
 str		Just now	たった今
 plural		{n} minute ago	{n} 分前
 plural		{n} hour ago	{n} 時間前
