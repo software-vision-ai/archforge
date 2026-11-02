@@ -347,7 +347,7 @@ str		New project	Novo projeto
 str		A clean start for your next idea.	Um começo limpo para a sua próxima ideia.
 str		Create project	Criar projeto
 # Diálogo Novo projeto
-str		Your models, every view of them, and the issues and conversations about them.	Os seus modelos, cada vista deles e as tarefas e conversas sobre eles.
+str		Your models and every view of them, in one project.	Os seus modelos e todas as vistas deles, num só projeto.
 str		Project name	Nome do projeto
 str		Name your project	Dê um nome ao projeto
 str		You can rename it later.	Pode mudar o nome mais tarde.
@@ -365,14 +365,13 @@ str		Creates {file} here: one versioned project file that keeps every change.	Cr
 str		The project file is made here: one versioned file that keeps every change.	O ficheiro do projeto é criado aqui: um ficheiro com versões que guarda cada alteração.
 str		Diagrams	Diagramas
 str		Elements	Elementos
-str		Add diagrams of any kind as you go: UML 2, C4 and many more. Every diagram shows the same model.	Adicione diagramas de qualquer tipo à medida que trabalha: UML 2, C4 e muitos mais. Cada diagrama mostra o mesmo modelo.
+str		Add ER and UML class diagrams as you go. Every diagram shows the same model.	Adicione diagramas ER e de classes UML à medida que trabalha. Cada diagrama mostra o mesmo modelo.
 str		In every project	Em cada projeto
-str		Issues	Tarefas
-str		Work tracked on the elements it concerns.	Trabalho acompanhado nos elementos a que diz respeito.
-str		Conversations	Conversas
-str		Chats and prompts, linked to what they touched.	Chats e prompts, ligados ao que tocaram.
-str		History	Histórico
-str		Every change kept, to compare or restore.	Cada alteração guardada, para comparar ou restaurar.
+str		Guidance for agents, written on the elements it applies to.	Orientações para agentes, escritas nos elementos a que se aplicam.
+str		Agent access	Acesso de agentes
+str		Agents work on the open model through MCP; undo covers their changes.	Os agentes trabalham no modelo aberto através do MCP; anular também abrange as alterações deles.
+str		Undo and saves	Anular e guardar
+str		Every change can be undone; Save writes the model to the project.	Todas as alterações podem ser anuladas; Guardar escreve o modelo no projeto.
 str		Cancel	Cancelar
 str		Creating…	A criar…
 str		A project called {name} is already in this folder.	Já existe um projeto chamado {name} nesta pasta.
@@ -481,6 +480,9 @@ plural		+ {n} more member	+ {n} membro mais|+ {n} membros mais
 str		Abstract	Abstrata
 str		Add attribute	Adicionar atributo
 str		Add operation	Adicionar operação
+str		More details in Properties	Mais detalhes nas Propriedades
+str		There is no type named {name}.	Não existe nenhum tipo chamado {name}.
+str		Several types are named {name}; pick one from the menu.	Há vários tipos chamados {name}; escolha um no menu.
 str		Add parameter	Adicionar parâmetro
 str		Attribute	Atributo
 str		Attribute · model	Atributo · modelo

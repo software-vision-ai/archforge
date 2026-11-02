@@ -101,6 +101,16 @@ pub(crate) trait DiagramKind: Sync {
     fn adorner(&self) -> Option<(&'static str, &'static str)> {
         None
     }
+    /// The other new row a selected element takes, with Shift added to the adorner's keys (a
+    /// class's operation, beside its attribute); none by default.
+    fn open_second(&self, shell: &mut Shell, element: Uuid) {
+        let _ = (shell, element);
+    }
+    /// Controls a selected element's card holds on it (a class's + for each compartment), drawn
+    /// with its adorners; none by default.
+    fn card_controls(&self, shell: &mut Shell, ui: &egui::Ui, p: &Palette, clip: Rect, rect: Rect, element: Uuid) {
+        let _ = (shell, ui, p, clip, rect, element);
+    }
     /// Whether a right click opens the kind's element menu.
     fn menu(&self) -> bool {
         false

@@ -92,7 +92,7 @@ fn type_value(store: &Store, o: Obj) -> String {
 }
 
 /// A type as the editor shows it.
-fn type_label(store: &Store, ty: &str) -> String {
+pub(crate) fn type_label(store: &Store, ty: &str) -> String {
     if ty.is_empty() {
         return tr("None");
     }
@@ -124,6 +124,14 @@ fn model_types(store: &Store) -> Vec<(String, String)> {
 
 /// Opens the editor of `kind` on `target`, or on a new member of `class`.
 pub(crate) fn open(shell: &mut Shell, class: Uuid, kind: MemberKind, target: Option<Uuid>) {
+    let edit = edit_of(shell.session.as_ref().map(|s| s.doc()), class, kind, target);
+    shell.panels.member = Some(edit);
+    shell.panels.menu = None;
+}
+
+/// The editor's values for `target` as the model holds them, or empty ones for a new member of
+/// `class`: what the Properties editor and the canvas's inline row start from.
+pub(crate) fn edit_of(store: Option<&Store>, class: Uuid, kind: MemberKind, target: Option<Uuid>) -> MemberEdit {
     let mut edit = MemberEdit {
         kind,
         target,
@@ -138,7 +146,7 @@ pub(crate) fn open(shell: &mut Shell, class: Uuid, kind: MemberKind, target: Opt
         refused: None,
         opened: true,
     };
-    if let (Some(t), Some(store)) = (target, shell.session.as_ref().map(|s| s.doc()))
+    if let (Some(t), Some(store)) = (target, store)
         && let Some(o) = store.by_uuid(t)
     {
         edit.name = name(store, o);
@@ -167,8 +175,7 @@ pub(crate) fn open(shell: &mut Shell, class: Uuid, kind: MemberKind, target: Opt
             }
         }
     }
-    shell.panels.member = Some(edit);
-    shell.panels.menu = None;
+    edit
 }
 
 /// The class a member belongs to, with the member's kind: an attribute that is no association's
@@ -323,6 +330,24 @@ pub(crate) fn type_choices(store: &Store) -> Vec<(String, String)> {
         .chain(BUILT_IN.iter().filter(|b| !shadowed(b)).map(|b| (b.to_string(), b.to_string())))
         .chain(own.iter().map(|(id, n)| (n.clone(), id.clone())))
         .collect()
+}
+
+/// Every type named `name`, ignoring case, as the commands take it: a built-in type the model has
+/// none of the same name for, and each of the model's own types, whichever package holds it.
+pub(crate) fn types_named(store: &Store, name: &str) -> Vec<String> {
+    let universe = store.universe();
+    let own: Vec<String> = store
+        .alive()
+        .filter(|o| {
+            store.class_of(*o).is_ok_and(|c| {
+                universe.conforms(c, TypeRef::Class(archforge_uml::TYPE)) && !universe.conforms(c, TypeRef::Class(archforge_uml::ASSOCIATION))
+            })
+        })
+        .filter(|t| !built_in(store, *t) && self::name(store, *t).eq_ignore_ascii_case(name))
+        .filter_map(|t| store.uuid(t).ok().map(|u| u.to_string()))
+        .collect();
+    let builtin = BUILT_IN.iter().find(|b| b.eq_ignore_ascii_case(name)).filter(|_| own.is_empty()).map(|b| b.to_string());
+    builtin.into_iter().chain(own).collect()
 }
 
 /// The menu of a type select, when it is open; sets `ty` to the type picked.
@@ -606,6 +631,19 @@ fn move_member(shell: &mut Shell, edit: &MemberEdit, up: bool) {
 
 /// Writes the member through its command.
 fn commit(shell: &mut Shell, edit: &MemberEdit) {
+    let (cmd, params) = command_of(edit);
+    match write_in_sight(shell, edit, cmd, params) {
+        Ok(_) => {
+            shell.panels.member = None;
+            shell.panels.notice = None;
+            reselect(shell, edit.class);
+        }
+        Err(e) => refuse(shell, Some(e)),
+    }
+}
+
+/// The command that writes the member as edited, with its parameters.
+pub(crate) fn command_of(edit: &MemberEdit) -> (&'static str, serde_json::Value) {
     let visibility = VISIBILITIES[edit.visibility.min(VISIBILITIES.len() - 1)];
     let (cmd, mut params) = match edit.kind {
         MemberKind::Attribute => (
@@ -628,20 +666,13 @@ fn commit(shell: &mut Shell, edit: &MemberEdit) {
         (Some(t), MemberKind::Operation) => params["operation"] = json!(t.to_string()),
         (None, _) => params["class"] = json!(edit.class.to_string()),
     }
-    match write_in_sight(shell, edit, cmd, params) {
-        Ok(_) => {
-            shell.panels.member = None;
-            shell.panels.notice = None;
-            reselect(shell, edit.class);
-        }
-        Err(e) => refuse(shell, Some(e)),
-    }
+    (cmd, params)
 }
 
 /// Runs the member's command and, in the same undo step, grows every card of its class that would
 /// then hide a member, on every diagram, keeping its width (owner decision: a card the user made
 /// shorter stays so until a member of its class is added or edited).
-fn write_in_sight(shell: &mut Shell, edit: &MemberEdit, cmd: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
+pub(crate) fn write_in_sight(shell: &mut Shell, edit: &MemberEdit, cmd: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
     let Some(session) = shell.session.as_mut() else { return Err(tr("The model could not be opened")) };
     let store = session.doc();
     let more = match (edit.target, edit.kind) {

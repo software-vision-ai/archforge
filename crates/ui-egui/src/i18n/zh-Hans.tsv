@@ -347,7 +347,7 @@ str		New project	新建项目
 str		A clean start for your next idea.	从零开始，实现你的下一个想法。
 str		Create project	创建项目
 # 新建项目对话框
-str		Your models, every view of them, and the issues and conversations about them.	你的模型、模型的每个视图，以及与之相关的问题和对话。
+str		Your models and every view of them, in one project.	你的模型及其所有视图，都在一个项目中。
 str		Project name	项目名称
 str		Name your project	为项目命名
 str		You can rename it later.	以后可以重命名。
@@ -365,14 +365,13 @@ str		Creates {file} here: one versioned project file that keeps every change.	�
 str		The project file is made here: one versioned file that keeps every change.	项目文件在此创建：一个保留每次更改的版本化文件。
 str		Diagrams	图表
 str		Elements	元素
-str		Add diagrams of any kind as you go: UML 2, C4 and many more. Every diagram shows the same model.	随时添加任意类型的图表：UML 2、C4 等等。每个图表都显示同一个模型。
+str		Add ER and UML class diagrams as you go. Every diagram shows the same model.	随时添加 ER 图和 UML 类图。每个图表都显示同一个模型。
 str		In every project	每个项目都包含
-str		Issues	问题
-str		Work tracked on the elements it concerns.	在相关元素上跟踪的工作。
-str		Conversations	对话
-str		Chats and prompts, linked to what they touched.	聊天和请求，与它们涉及的元素关联。
-str		History	历史
-str		Every change kept, to compare or restore.	保留每次更改，可比较或恢复。
+str		Guidance for agents, written on the elements it applies to.	写在所适用元素上的代理指导说明。
+str		Agent access	代理访问
+str		Agents work on the open model through MCP; undo covers their changes.	代理通过 MCP 编辑打开的模型；撤销同样涵盖它们的更改。
+str		Undo and saves	撤销与存储
+str		Every change can be undone; Save writes the model to the project.	每项更改都可以撤销；存储会将模型写入项目。
 str		Cancel	取消
 str		Creating…	正在创建…
 str		A project called {name} is already in this folder.	此文件夹中已有名为 {name} 的项目。
@@ -481,6 +480,9 @@ plural		+ {n} more member	+ 另 {n} 个成员
 str		Abstract	抽象
 str		Add attribute	添加属性
 str		Add operation	添加操作
+str		More details in Properties	在属性中查看更多详细信息
+str		There is no type named {name}.	没有名为 {name} 的类型。
+str		Several types are named {name}; pick one from the menu.	有多个名为 {name} 的类型；请从菜单中选择一个。
 str		Add parameter	添加参数
 str		Attribute	属性
 str		Attribute · model	属性 · 模型

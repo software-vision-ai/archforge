@@ -138,7 +138,11 @@ fn body(
     let mut x = dialog.right() - 20.0;
     let mut picked = None;
     for (id, label, answer, primary) in buttons {
-        let g = ux::galley(paint, label, types::SMALL, p.text, None);
+        let danger = matches!(answer, Answer::LoseChanges);
+        // Laid out in the ink it is drawn in: a galley keeps the colour it was laid out with, so
+        // the primary's label is the white on its fill (AR-60).
+        let ink = if danger || *primary { p.on_accent } else { p.text };
+        let g = ux::galley(paint, label, types::SMALL, ink, None);
         let w = g.size().x + 24.0;
         let left_aligned = *answer == Answer::DontSave;
         let b = if left_aligned {
@@ -148,7 +152,6 @@ fn body(
             x = r.left() - 8.0;
             r
         };
-        let danger = matches!(answer, Answer::LoseChanges);
         let fill = if danger {
             p.danger
         } else if *primary {
@@ -157,7 +160,6 @@ fn body(
             p.field
         };
         paint.rect_filled(b, 6.0, fill);
-        let ink = if danger || *primary { p.on_accent } else { p.text };
         paint.galley(b.min + vec2(12.0, (b.height() - g.size().y) / 2.0), g, ink);
         if control(shell, ui, id, "button", b, true).clicked() {
             picked = Some(*answer);

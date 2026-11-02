@@ -68,8 +68,8 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
 ## Home and projects
 - Home fills the window on its own, without menu bar, toolbar or status bar. Its welcome has no
   button: a project opens from the Open a project card or the title strip's + Open project.
-- A start card for what cannot be done at all yet (Import a model) is left off Home, and the
-  cards left share the row.
+- A start card for what cannot be done at all yet (Explore an example, Import a model) is left
+  off Home, and the cards left share the row (AR-67).
 - Recent projects keep the last twelve (name, folder, last opened) across restarts; a row opens
   its project, or shows its tab when it is open already. A row or card under the pointer shows a
   More button whose menu offers Open and Remove from recent projects; removing leaves the project
@@ -81,10 +81,13 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   the projects in the pinned folders (two levels down, looked for each time it opens, one search
   at a time), up to eight projects in all, the pinned folders and Home's actions, each worded for the state it is in. Every word typed must
   be found; the arrows move, Enter runs, Esc or a click elsewhere closes.
-- The recent projects show as rows or as a gallery of cards standing in the start cards' columns,
-  sorted by last opened (newest first) or by name; both choices are kept in the preferences.
+- The recent projects show as rows or as a gallery of cards in the page's grid (four columns
+  where the width takes them, so two start cards line up with them), sorted by last opened
+  (newest first) or by name; both choices are kept in the preferences.
 - One project holds one model, named as the project. The New project dialog asks for a name and a
-  location only; a taken or unfinished name is said in plain words under the field.
+  location only; a taken or unfinished name is said in plain words under the field. What it says
+  a project holds is only what is built: ER and UML class diagrams, skills, agent access, undo
+  and saves (AR-67); nothing still to come is promised.
 - Open project uses the system's folder picker; a damaged, newer or foreign project is refused
   with a dialog, and the project open already stays as it was.
 - The shortest way to drawing: + in the diagram tab strip, a name, Enter. The New diagram dialog
@@ -386,9 +389,19 @@ What is UML's own, beside the shared rules above.
 - A type menu offers None, the built-in types (Integer, String, Boolean, Real, UnlimitedNatural)
   the model has no type of the same name for, then the model's own types by name. A built-in type
   is made in the package Types the first time it is used (owner decision).
-- A selected class's second adorner is Add attribute; a double click on a member's row of its card
-  opens that member's editor. A class dragged from Models lands sized to show its members, with its
-  lines to the classes the diagram shows, as one undo step.
+- A selected class's second adorner is Add attribute. A class dragged from Models lands sized to
+  show its members, with its lines to the classes the diagram shows, as one undo step.
+- Members are typed on the card (AR-62, a proposal for the owner to confirm): a selected class
+  shows a + at the right of each compartment; it, the adorner, the menu's Add attribute and ⌘↩
+  open a draft row at the end of the attributes (⇧⌘↩ and the operations' + at the end of the
+  operations), and a double click on a member's row opens that row. The row is ringed in the
+  accent: the name where a row's text starts, then the type (an operation's return type) with
+  its menu. Tab moves between the two; Enter writes the member as one undo step through
+  Properties' command and opens the next draft in the same compartment; Escape drops the draft; a
+  click away writes a draft with a name and drops an empty one. A refusal sits under the row, the
+  text kept and the model untouched. The row's ⋯ takes what was typed to Properties' editor for
+  visibility, multiplicity, static, abstract and parameters. Below the detail zoom, or without
+  the class's card on the open diagram, Properties' editor opens instead.
 - A card never hides a member silently (2026-11-02, AR-57). A new class is as tall as a row in
   each compartment. Applying a member in Properties, added or edited, grows every card of its class
   that would hide one, on every diagram, in the same undo step and keeping its width; a card is

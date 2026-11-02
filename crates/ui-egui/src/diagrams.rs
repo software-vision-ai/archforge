@@ -460,10 +460,12 @@ fn new_dialog_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: &eg
     let mut x = dialog.right() - 20.0;
     let mut action: Option<bool> = None;
     for (id, label, primary) in [("workspace.new-diagram.create", tr("Create"), true), ("workspace.new-diagram.cancel", tr("Cancel"), false)] {
-        let g = ux::galley(paint, &label, types::SMALL, p.text, None);
+        // Laid out in the ink it is drawn in: a galley keeps the colour it was laid out with.
+        let ink = if primary { p.on_accent } else { p.text };
+        let g = ux::galley(paint, &label, types::SMALL, ink, None);
         let b = Rect::from_min_max(pos2(x - g.size().x - 24.0, dialog.bottom() - 48.0), pos2(x, dialog.bottom() - 20.0));
         paint.rect_filled(b, 6.0, if primary { p.accent_fill } else { p.field });
-        paint.galley(b.min + vec2(12.0, (b.height() - g.size().y) / 2.0), g, if primary { p.on_accent } else { p.text });
+        paint.galley(b.min + vec2(12.0, (b.height() - g.size().y) / 2.0), g, ink);
         if control(shell, ui, id, "button", b, true).clicked() {
             action = Some(primary);
         }

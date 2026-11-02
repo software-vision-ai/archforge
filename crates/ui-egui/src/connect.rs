@@ -405,10 +405,12 @@ pub(crate) fn mapping_offer(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r
     let mut x = m.right() - 16.0;
     let mut action: Option<bool> = None;
     for (id, label, primary) in [("workspace.mapping.add", tr("Add mapping table"), true), ("workspace.mapping.keep", tr("Keep the line"), false)] {
-        let g = ux::galley(&paint, &label, types::SMALL, p.text, None);
+        // Laid out in the ink it is drawn in: a galley keeps the colour it was laid out with.
+        let ink = if primary { p.on_accent } else { p.text };
+        let g = ux::galley(&paint, &label, types::SMALL, ink, None);
         let b = Rect::from_min_max(pos2(x - g.size().x - 24.0, m.bottom() - 44.0), pos2(x, m.bottom() - 16.0));
         paint.rect_filled(b, 6.0, if primary { p.accent_fill } else { p.field });
-        paint.galley(b.min + vec2(12.0, (b.height() - g.size().y) / 2.0), g, if primary { p.on_accent } else { p.text });
+        paint.galley(b.min + vec2(12.0, (b.height() - g.size().y) / 2.0), g, ink);
         if control(shell, ui, id, "button", b, true).clicked() {
             action = Some(primary);
         }
