@@ -5139,6 +5139,39 @@ fn a_table_box_shorter_than_its_columns_shows_those_that_fit_and_counts_the_rest
 }
 
 #[test]
+fn generate_scrolls_its_body_in_a_short_window_and_keeps_its_footer_clear() {
+    let (mut h, _customer, _diagram) = diagram_harness();
+    let schema = {
+        let st = h.state().session.as_ref().unwrap().doc();
+        st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap()).unwrap()
+    };
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [schema.to_string()] })).unwrap();
+    // The smallest window the app allows.
+    h.set_size(egui::vec2(800.0, 400.0));
+    h.state_mut().open_generate();
+    h.run();
+    let foot = rect_of(&h, "generate.close").top() - 20.0;
+    let request = |h: &Harness<'static, Shell>| ids(h).iter().any(|i| i == "generate.request").then(|| rect_of(h, "generate.request"));
+    assert!(request(&h).is_none_or(|r| r.bottom() > foot), "the request does not fit above the footer before scrolling");
+    // The wheel over the body brings the request into view above the footer.
+    let over = rect_of(&h, "generate.output.ddl").center();
+    h.event(egui::Event::PointerMoved(over));
+    for _ in 0..6 {
+        h.event(egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Point,
+            delta: egui::vec2(0.0, -1200.0),
+            modifiers: egui::Modifiers::NONE,
+            phase: egui::TouchPhase::Move,
+            source: egui::MouseWheelSource::Wheel,
+        });
+        h.run_steps(30);
+    }
+    let r = request(&h).expect("the request in view");
+    assert!(r.bottom() <= foot, "{r:?} ends above the footer at {foot}");
+    assert_eq!(rect_of(&h, "generate.close").top() - 20.0, foot, "the footer stays put");
+}
+
+#[test]
 fn generate_hands_a_schema_and_its_export_skills_to_an_agent_as_a_request_it_can_copy() {
     let (mut h, _customer, _diagram) = diagram_harness();
     let schema = {

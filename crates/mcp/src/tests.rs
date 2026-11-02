@@ -44,6 +44,16 @@ fn initialize_answers_the_clients_version_when_spoken_and_the_newest_otherwise()
 struct Model {
     open: bool,
     calls: RefCell<Vec<(String, Value)>>,
+    /// Edits the user makes while reads go on: each project read after the first takes one, until
+    /// none are left.
+    edits: std::cell::Cell<u32>,
+    revision: std::cell::Cell<u64>,
+}
+
+impl Model {
+    fn open() -> Model {
+        Model { open: true, calls: RefCell::new(Vec::new()), edits: 0.into(), revision: 7.into() }
+    }
 }
 
 impl Backend for Model {
@@ -51,7 +61,16 @@ impl Backend for Model {
         self.calls.borrow_mut().push((method.to_string(), params.clone()));
         let refused = |why: &str| Err(CallError::Refused(why.to_string()));
         if method == "document.inspect" {
-            return Ok(if self.open { json!({ "open": true, "revision": 7, "project": { "name": "Shop" } }) } else { json!({ "open": false }) });
+            let inspected = self.calls.borrow().iter().filter(|(m, _)| m == "document.inspect").count();
+            if inspected > 1 && self.edits.get() > 0 {
+                self.edits.set(self.edits.get() - 1);
+                self.revision.set(self.revision.get() + 1);
+            }
+            return Ok(if self.open {
+                json!({ "open": true, "revision": self.revision.get(), "project": { "name": "Shop" } })
+            } else {
+                json!({ "open": false })
+            });
         }
         let p = &params["params"];
         let answer = match params["command"].as_str().unwrap_or_default() {
@@ -82,7 +101,7 @@ fn content(r: &Value) -> Value {
 
 #[test]
 fn the_model_and_its_skills_read_as_resources_with_the_revision_and_say_what_they_cannot_read() {
-    let model = Model { open: true, calls: RefCell::new(Vec::new()) };
+    let model = Model::open();
     let listed = ask(&model, json!({ "jsonrpc": "2.0", "id": 1, "method": "resources/list" }));
     let uris: Vec<&str> = listed["result"]["resources"].as_array().unwrap().iter().map(|r| r["uri"].as_str().unwrap()).collect();
     assert_eq!(uris, ["archforge://project", "archforge://skills"]);
@@ -118,8 +137,25 @@ fn the_model_and_its_skills_read_as_resources_with_the_revision_and_say_what_the
     assert_eq!(read(&model, "archforge://skills/effective/x")["error"]["code"], -32002);
     assert_eq!(ask(&model, json!({ "jsonrpc": "2.0", "id": 3, "method": "resources/read", "params": {} }))["error"]["code"], -32602);
     // With no project open, nothing reads.
-    let closed = Model { open: false, calls: RefCell::new(Vec::new()) };
+    let closed = Model { open: false, ..Model::open() };
     assert!(read(&closed, "archforge://skills")["error"]["message"].as_str().unwrap().contains("no project is open"));
+}
+
+#[test]
+fn a_read_that_straddles_an_edit_is_made_again_and_one_that_never_settles_is_refused() {
+    // One edit lands while the table is read: the read is made again, at the revision after it.
+    let model = Model::open();
+    model.edits.set(1);
+    let table = content(&read(&model, "archforge://element/t1"));
+    assert_eq!(table["revision"], 8, "the content carries the revision it was read at");
+    assert_eq!(model.calls.borrow().iter().filter(|(m, _)| m == "document.inspect").count(), 4);
+    // Edits that never stop: the read is refused rather than labelled with a revision it was not
+    // read at.
+    let busy = Model::open();
+    busy.edits.set(u32::MAX);
+    let refused = read(&busy, "archforge://skills");
+    assert_eq!(refused["error"]["code"], -32003, "{refused}");
+    assert!(refused["error"]["message"].as_str().unwrap().contains("read it again"), "{refused}");
 }
 
 #[test]

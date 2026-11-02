@@ -147,6 +147,9 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
         let paint = ui.painter().clone();
         paint.rect_filled(window, 0.0, p.scrim);
         ui.interact(window, widgets::egui_id("generate.veil"), Sense::click_and_drag());
+        // The overlay spans the window, so the pointer is over it anywhere: the body's wheel
+        // scrolling looks for its layer under the pointer.
+        ui.advance_cursor_after_rect(window);
         let width = WIDTH.min(window.width() - 32.0).max(280.0);
         let inner = width - 64.0;
         let request = text.as_ref().map(|t| ux::galley_rows(&paint, t, types::SMALL, p.text_secondary, Some(inner - 24.0), 12));
@@ -177,85 +180,99 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
         if control(shell, ui, "generate.close-x", "button", x_button, true).on_hover_text(tr("Close")).clicked() {
             close = true;
         }
-        // From: what the request is about.
-        let mut y = dialog.top() + 108.0;
-        ux::text(&paint, pos2(left, y), &tr("From"), types::UI_STRONG, p.text, None);
-        let from = scope.as_ref().map_or_else(|| tr("Nothing selected"), |s| fmt(&tr("{kind} · {name}"), &[("kind", &s.kind), ("name", &s.name)]));
-        ux::text(&paint, pos2(left, y + 24.0), &from, types::UI, if scope.is_some() { p.text } else { p.text_muted }, Some(inner));
-        // Output, and the dialect of SQL DDL.
-        y += 64.0;
-        ux::text(&paint, pos2(left, y), &tr("Output"), types::UI_STRONG, p.text, None);
-        let mut bx = left;
-        for (key, label, output) in [("ddl", tr("SQL DDL"), Output::Ddl), ("documentation", tr("Documentation"), Output::Documentation)] {
-            let w = ux::galley(&paint, &label, types::SMALL, p.text, None).size().x + 32.0;
-            let b = Rect::from_min_size(pos2(bx, y + 26.0), vec2(w, 36.0));
-            let on = g.output == output;
-            paint.rect_filled(b, 8.0, if on { p.accent_tint } else { p.surface });
-            paint.rect_stroke(b, 8.0, Stroke::new(1.0, if on { p.accent } else { p.border }), StrokeKind::Inside);
-            ux::text(&paint, b.min + vec2(16.0, 9.0), &label, types::SMALL, if on { p.accent } else { p.text }, None);
-            if control(shell, ui, &format!("generate.output.{key}"), "toggle", b, true).clicked() {
-                g.output = output;
-            }
-            bx = b.right() + 8.0;
-        }
-        if g.output == Output::Ddl {
-            let dx = (left + inner / 2.0).max(bx + 16.0);
-            ux::text(&paint, pos2(dx, y), &tr("Dialect"), types::UI_STRONG, p.text, None);
-            let field = Rect::from_min_size(pos2(dx, y + 26.0), vec2((left + inner - dx).max(0.0), 36.0));
-            paint.rect_filled(field, 6.0, p.field);
-            widgets::record_visible(ui, &mut shell.registry, "generate.dialect", "field", field);
-            let edit = egui::TextEdit::singleline(&mut g.dialect)
-                .id(widgets::egui_id("generate.dialect"))
-                .frame(egui::Frame::NONE)
-                .font(types::SMALL.font())
-                .text_color(p.text)
-                .char_limit(MAX_DIALECT)
-                .desired_width(field.width() - 24.0);
-            let out = edit.show(&mut ui.new_child(egui::UiBuilder::new().max_rect(field.shrink2(vec2(12.0, 9.0)))));
-            let _ = (*out.response).clone().accessible_name(tr("Dialect"));
-        }
-        y += 82.0;
-        // The export skills in effect, and the request.
-        if let Some(request) = request {
-            ux::text(&paint, pos2(left, y), &tr("Skills in effect for export"), types::UI_STRONG, p.text, None);
-            y += 26.0;
-            if skills.is_empty() {
-                ux::text(&paint, pos2(left, y), &tr("No skill applies to it for export."), types::SMALL, p.text_muted, Some(inner));
-                y += 22.0;
-            }
-            for (name, origin, overridden, dialect) in &skills {
-                let mut line = format!("{name} · {origin}");
-                if !dialect.is_empty() {
-                    line.push_str(&format!(" · {dialect}"));
+        // Between the header and the footer, the body: it scrolls when the window is too short to
+        // show it all, so the request and the status stay reachable and never run under the footer.
+        let body_h = 64.0 + 82.0 + skills_h + request_h + 40.0 + 16.0;
+        let body = Rect::from_min_max(pos2(dialog.left(), dialog.top() + 108.0), pos2(dialog.right(), dialog.bottom() - 76.0));
+        let mut part = ui.new_child(egui::UiBuilder::new().max_rect(body));
+        egui::ScrollArea::vertical().id_salt(widgets::egui_id("generate.body")).auto_shrink([false, false]).max_height(body.height()).show(
+            &mut part,
+            |ui| {
+                let (area, _) = ui.allocate_exact_size(vec2(body.width(), body_h), Sense::hover());
+                let paint = ui.painter().clone();
+                let left = area.left() + 32.0;
+                // From: what the request is about.
+                let mut y = area.top();
+                ux::text(&paint, pos2(left, y), &tr("From"), types::UI_STRONG, p.text, None);
+                let from =
+                    scope.as_ref().map_or_else(|| tr("Nothing selected"), |s| fmt(&tr("{kind} · {name}"), &[("kind", &s.kind), ("name", &s.name)]));
+                ux::text(&paint, pos2(left, y + 24.0), &from, types::UI, if scope.is_some() { p.text } else { p.text_muted }, Some(inner));
+                // Output, and the dialect of SQL DDL.
+                y += 64.0;
+                ux::text(&paint, pos2(left, y), &tr("Output"), types::UI_STRONG, p.text, None);
+                let mut bx = left;
+                for (key, label, output) in [("ddl", tr("SQL DDL"), Output::Ddl), ("documentation", tr("Documentation"), Output::Documentation)] {
+                    let w = ux::galley(&paint, &label, types::SMALL, p.text, None).size().x + 32.0;
+                    let b = Rect::from_min_size(pos2(bx, y + 26.0), vec2(w, 36.0));
+                    let on = g.output == output;
+                    paint.rect_filled(b, 8.0, if on { p.accent_tint } else { p.surface });
+                    paint.rect_stroke(b, 8.0, Stroke::new(1.0, if on { p.accent } else { p.border }), StrokeKind::Inside);
+                    ux::text(&paint, b.min + vec2(16.0, 9.0), &label, types::SMALL, if on { p.accent } else { p.text }, None);
+                    if control(shell, ui, &format!("generate.output.{key}"), "toggle", b, true).clicked() {
+                        g.output = output;
+                    }
+                    bx = b.right() + 8.0;
                 }
-                if *overridden {
-                    line.push_str(&format!(" · {}", tr("overridden")));
+                if g.output == Output::Ddl {
+                    let dx = (left + inner / 2.0).max(bx + 16.0);
+                    ux::text(&paint, pos2(dx, y), &tr("Dialect"), types::UI_STRONG, p.text, None);
+                    let field = Rect::from_min_size(pos2(dx, y + 26.0), vec2((left + inner - dx).max(0.0), 36.0));
+                    paint.rect_filled(field, 6.0, p.field);
+                    widgets::record_visible(ui, &mut shell.registry, "generate.dialect", "field", field);
+                    let edit = egui::TextEdit::singleline(&mut g.dialect)
+                        .id(widgets::egui_id("generate.dialect"))
+                        .frame(egui::Frame::NONE)
+                        .font(types::SMALL.font())
+                        .text_color(p.text)
+                        .char_limit(MAX_DIALECT)
+                        .desired_width(field.width() - 24.0);
+                    let out = edit.show(&mut ui.new_child(egui::UiBuilder::new().max_rect(field.shrink2(vec2(12.0, 9.0)))));
+                    let _ = (*out.response).clone().accessible_name(tr("Dialect"));
                 }
-                ux::text(&paint, pos2(left, y), &line, types::SMALL, if *overridden { p.text_muted } else { p.text }, Some(inner));
-                y += 22.0;
-            }
-            y += 8.0;
-            ux::text(&paint, pos2(left, y), &tr("Request for your agent"), types::UI_STRONG, p.text, None);
-            let boxed = Rect::from_min_size(pos2(left, y + 26.0), vec2(inner, request.size().y + 24.0));
-            paint.rect_filled(boxed, 8.0, p.field);
-            widgets::record_visible(ui, &mut shell.registry, "generate.request", "text", boxed);
-            paint.galley(boxed.min + vec2(12.0, 12.0), request, p.text_secondary);
-            y = boxed.bottom() + 16.0;
-        }
-        // The status line: what the request needs, or what became of it.
-        let (status, ink) = if scope.is_none() {
-            (tr("Select a schema, a table, a class or a diagram first."), p.text_secondary)
-        } else if g.copied.is_some_and(|c| c != revision) {
-            (tr("The model changed after the request was copied; copy it again so the agent reads this revision."), p.amber)
-        } else if g.copied.is_some() {
-            (tr("Copied. Paste the request to your agent; it reads the model through MCP."), p.text_secondary)
-        } else if shell.control.is_some() {
-            (tr("Agent access is on: a connected agent reads this context through MCP. Nothing is generated here."), p.text_secondary)
-        } else {
-            (tr("Agent access is off: start Archforge with --control <port> so an agent can read this context."), p.text_secondary)
-        };
-        let g_status = ux::galley_rows(&paint, &status, types::SMALL, ink, Some(inner), 3);
-        paint.galley(pos2(left, y), g_status, ink);
+                y += 82.0;
+                // The export skills in effect, and the request.
+                if let Some(request) = request {
+                    ux::text(&paint, pos2(left, y), &tr("Skills in effect for export"), types::UI_STRONG, p.text, None);
+                    y += 26.0;
+                    if skills.is_empty() {
+                        ux::text(&paint, pos2(left, y), &tr("No skill applies to it for export."), types::SMALL, p.text_muted, Some(inner));
+                        y += 22.0;
+                    }
+                    for (name, origin, overridden, dialect) in &skills {
+                        let mut line = format!("{name} · {origin}");
+                        if !dialect.is_empty() {
+                            line.push_str(&format!(" · {dialect}"));
+                        }
+                        if *overridden {
+                            line.push_str(&format!(" · {}", tr("overridden")));
+                        }
+                        ux::text(&paint, pos2(left, y), &line, types::SMALL, if *overridden { p.text_muted } else { p.text }, Some(inner));
+                        y += 22.0;
+                    }
+                    y += 8.0;
+                    ux::text(&paint, pos2(left, y), &tr("Request for your agent"), types::UI_STRONG, p.text, None);
+                    let boxed = Rect::from_min_size(pos2(left, y + 26.0), vec2(inner, request.size().y + 24.0));
+                    paint.rect_filled(boxed, 8.0, p.field);
+                    widgets::record_visible(ui, &mut shell.registry, "generate.request", "text", boxed);
+                    paint.galley(boxed.min + vec2(12.0, 12.0), request, p.text_secondary);
+                    y = boxed.bottom() + 16.0;
+                }
+                // The status line: what the request needs, or what became of it.
+                let (status, ink) = if scope.is_none() {
+                    (tr("Select a schema, a table, a class or a diagram first."), p.text_secondary)
+                } else if g.copied.is_some_and(|c| c != revision) {
+                    (tr("The model changed after the request was copied; copy it again so the agent reads this revision."), p.amber)
+                } else if g.copied.is_some() {
+                    (tr("Copied. Paste the request to your agent; it reads the model through MCP."), p.text_secondary)
+                } else if shell.control.is_some() {
+                    (tr("Agent access is on: a connected agent reads this context through MCP. Nothing is generated here."), p.text_secondary)
+                } else {
+                    (tr("Agent access is off: start Archforge with --control <port> so an agent can read this context."), p.text_secondary)
+                };
+                let g_status = ux::galley_rows(&paint, &status, types::SMALL, ink, Some(inner), 3);
+                paint.galley(pos2(left, y), g_status, ink);
+            },
+        );
         // Close, and Copy request while there is one.
         let foot = dialog.bottom() - 76.0;
         paint.rect_filled(Rect::from_min_size(pos2(dialog.left(), foot), vec2(width, 1.0)), 0.0, p.border);
