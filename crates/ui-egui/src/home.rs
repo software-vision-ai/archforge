@@ -375,7 +375,11 @@ fn content(shell: &mut Shell, ui: &egui::Ui, p: &Palette, origin: Pos2, width: f
         paint.galley(pos2(right - g.size().x, origin.y + 81.0), g, p.danger);
     }
     let mut y = 175.0;
-    if !shell.state.home_banner_closed {
+    // Without a Dolt there are no projects: that comes first, in the banner's place.
+    if shell.dolt_missing.is_some() {
+        dolt_notice(shell, ui, p, &paint, Rect::from_min_size(at(0.0, y), vec2(inner, 92.0)));
+        y += 128.0;
+    } else if !shell.state.home_banner_closed {
         banner(shell, ui, p, &paint, Rect::from_min_size(at(0.0, y), vec2(inner, 92.0)));
         y += 128.0;
     }
@@ -572,6 +576,56 @@ fn banner(shell: &mut Shell, ui: &egui::Ui, p: &Palette, paint: &egui::Painter, 
     ux::icon(paint, close.min, &icons::CLOSE, 14.0, if resp.hovered() { p.text } else { p.text_muted });
     if resp.clicked() {
         shell.state.home_banner_closed = true;
+    }
+}
+
+/// Where Dolt's own pages say how to install it on each system.
+pub(crate) const DOLT_INSTALL: &str = "https://docs.dolthub.com/introduction/installation";
+
+/// Home's card while Archforge finds no Dolt it can use: what is missing and why it matters, Install
+/// Dolt (its installation page, in the browser) and Look again. It has no close: nothing works
+/// without it.
+fn dolt_notice(shell: &mut Shell, ui: &egui::Ui, p: &Palette, paint: &egui::Painter, r: Rect) {
+    paint.rect_filled(r, 12.0, p.surface);
+    paint.rect_stroke(r, 12.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
+    let tile = Rect::from_min_size(r.min + vec2(20.0, 22.0), Vec2::splat(48.0));
+    paint.rect_filled(tile, 12.0, p.amber_tint);
+    ux::icon_in_tile(paint, tile, &icons::SCHEMA, p.amber);
+    // The two buttons hug their labels; Look again ends 26 px before the card's right edge.
+    let (again, again_label) = button_rect(paint, Pos2::ZERO, &tr("Look again"), false);
+    let again = again.translate(vec2(r.right() - 26.0 - again.width(), r.top() + 26.0));
+    let (install, install_label) = button_rect(paint, Pos2::ZERO, &tr("Install Dolt"), true);
+    let install = install.translate(vec2(again.left() - 12.0 - install.width(), r.top() + 26.0));
+    let room = Some((install.left() - r.left() - 86.0 - 24.0).max(0.0));
+    ux::text(paint, r.min + vec2(86.0, 21.5), &tr("Install Dolt to keep your projects"), types::LEAD_STRONG, p.text, room);
+    ux::text(
+        paint,
+        r.min + vec2(86.0, 51.5),
+        &tr("Archforge keeps every project in a Dolt database, and finds no Dolt 2.6 or later on this computer."),
+        types::UI,
+        p.text_secondary,
+        room,
+    );
+    let looking = shell.looking_for_dolt();
+    for (id, b, label, link, live) in [("install", install, install_label, true, true), ("look-again", again, again_label, false, !looking)] {
+        let resp = control(shell, ui, &format!("home.dolt.{id}"), "button", b, live);
+        paint.rect_filled(b, 8.0, if live && resp.hovered() { p.page } else { p.surface });
+        paint.rect_stroke(b, 8.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
+        let ink = if live { p.text } else { p.text_muted };
+        let mut x = b.left() + BUTTON_PAD;
+        if link {
+            // The design's button icon: the link mark 16 wide in an 18 px square, on the middle line.
+            ux::icon(paint, pos2(x + 1.0, b.center().y - 4.0), &icons::LINK, 16.0, ink);
+            x += 18.0 + BUTTON_GAP;
+        }
+        paint.galley(pos2(x, b.top() + 10.5), label, ink);
+        if live && resp.clicked() {
+            if link {
+                ui.ctx().open_url(egui::OpenUrl::new_tab(DOLT_INSTALL));
+            } else {
+                shell.look_for_dolt();
+            }
+        }
     }
 }
 

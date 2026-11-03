@@ -420,6 +420,10 @@ str		This name cannot be used.	This name cannot be used.
 str		The folder cannot hold projects.	The folder cannot hold projects.
 str		The folder picker could not open.	The folder picker could not open.
 str		Archforge cannot find Dolt, which keeps its projects.	Archforge cannot find Dolt, which keeps its projects.
+str		Install Dolt to keep your projects	Install Dolt to keep your projects
+str		Archforge keeps every project in a Dolt database, and finds no Dolt 2.6 or later on this computer.	Archforge keeps every project in a Dolt database, and finds no Dolt 2.6 or later on this computer.
+str		Install Dolt	Install Dolt
+str		Look again	Look again
 str		The project could not be created.	The project could not be created.
 str		The work stopped without an answer.	The work stopped without an answer.
 # Home, continued

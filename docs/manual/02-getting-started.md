@@ -22,6 +22,9 @@ cargo run -p archforge
 Archforge opens on **Home**. From Home you start a new project, open one, and come back to the
 projects you used recently.
 
+When Archforge finds no Dolt it can use, Home says so at the top: **Install Dolt** opens Dolt's
+installation page in your browser, and once it is installed, **Look again** finds it.
+
 <!-- picture: home light | Home: start a new project or open one, with your pinned folders and recent projects below -->
 
 ## Creating a project

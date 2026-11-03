@@ -357,6 +357,7 @@ fn content(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, origin: Pos2, inne
     };
     // Under the location: why the picker could not appear, a creation's failure about the folder
     // or the work, or the file line.
+    let dolt_missing = matches!(dialog.failure(), Some(CreateError::DoltMissing { .. })) && dialog.picker.is_none();
     let (headline, detail) = match dialog.failure() {
         _ if dialog.picker.is_some() => (Some(tr("The folder picker could not open.")), dialog.picker.as_deref().unwrap_or_default()),
         Some(CreateError::FolderUnusable { detail }) => (Some(tr("The folder cannot hold projects.")), detail.as_str()),
@@ -366,8 +367,21 @@ fn content(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, origin: Pos2, inne
     };
     match headline {
         Some(h) => {
-            ux::text(&paint, at(LOCATION_HINT), &h, types::SMALL, p.amber, Some(inner));
+            let said = ux::text(&paint, at(LOCATION_HINT), &h, types::SMALL, p.amber, Some(inner));
             ux::text(&paint, at(LOCATION_HINT + 17.0), detail, types::SMALL, p.text_muted, Some(inner));
+            // Without Dolt, the way to install it follows the sentence, as on Home.
+            if dolt_missing {
+                let link = ux::galley(&paint, &tr("Install Dolt"), types::SMALL, p.accent, None);
+                let r = Rect::from_min_size(pos2(said.right() + 8.0, said.top()), link.size());
+                let resp = control(shell, ui, "new-project.install-dolt", "link", r, true);
+                paint.galley(r.min, link, p.accent);
+                if resp.hovered() {
+                    paint.hline(r.x_range(), r.bottom(), Stroke::new(1.0, p.accent));
+                }
+                if resp.clicked() {
+                    ui.ctx().open_url(egui::OpenUrl::new_tab(crate::home::DOLT_INSTALL));
+                }
+            }
         }
         None => {
             ux::text(&paint, at(LOCATION_HINT), &file_line, types::SMALL, p.text_muted, Some(inner));

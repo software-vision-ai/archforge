@@ -158,6 +158,15 @@ pub trait ProjectHost: Send + Sync {
         rx
     }
 
+    /// Starts looking for a Dolt Archforge can keep projects in, and returns at once: the answer
+    /// is nothing when there is one, else why not, in the host's own words. Without it, Dolt is
+    /// taken as there.
+    fn find_dolt(&self) -> std::sync::mpsc::Receiver<Result<(), String>> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let _ = tx.send(Ok(()));
+        rx
+    }
+
     /// Starts closing the project at `project` and returns at once: what waits for it is written,
     /// then it closes. The answer says why when it stays open (its changes could not be written).
     fn close(&self, _project: &std::path::Path) -> std::sync::mpsc::Receiver<Result<(), String>> {
@@ -360,6 +369,12 @@ pub struct Shell {
     saves: std::collections::VecDeque<(u64, SaveState)>,
     /// An opening the host works on.
     opening: Option<std::sync::mpsc::Receiver<Result<Opened, CreateError>>>,
+    /// The look for Dolt the host works on: started at the first frame and by Home's Look again.
+    dolt_check: Option<std::sync::mpsc::Receiver<Result<(), String>>>,
+    dolt_asked: bool,
+    /// Why there is no Dolt Archforge can use, in the host's words, while there is none: Home
+    /// says so, with the way to install it.
+    pub dolt_missing: Option<String>,
     /// Closing and quitting with unsaved changes: the question open, the projects quitting
     /// still asks about, the save a closing waits for (its project and ticket), and whether
     /// quitting was answered for every project, so the window may close.
@@ -424,6 +439,9 @@ impl Shell {
             save_ticket: 0,
             saves: std::collections::VecDeque::new(),
             opening: None,
+            dolt_check: None,
+            dolt_asked: false,
+            dolt_missing: None,
             ask: None,
             generate: None,
             quitting: None,
@@ -1029,6 +1047,17 @@ impl Shell {
         for (ticket, outcome) in done {
             self.finished_save(ticket, outcome);
         }
+        if let Some(rx) = &self.dolt_check {
+            match rx.try_recv() {
+                Ok(answer) => {
+                    self.dolt_missing = answer.err();
+                    self.dolt_check = None;
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {}
+                // No answer: Home keeps what it said, and Look again asks again.
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => self.dolt_check = None,
+            }
+        }
         if let Some(rx) = &self.opening {
             match rx.try_recv() {
                 Ok(Ok(opened)) => {
@@ -1037,6 +1066,10 @@ impl Shell {
                 }
                 Ok(Err(e)) => {
                     self.opening = None;
+                    // Home says so with the way to install it, as after the first look.
+                    if let CreateError::DoltMissing { detail } = &e {
+                        self.dolt_missing = Some(detail.clone());
+                    }
                     self.open_error = Some(match e {
                         CreateError::Failed { detail } | CreateError::FolderUnusable { detail } | CreateError::DoltMissing { detail } => detail,
                         other => format!("{other:?}"),
@@ -1049,6 +1082,22 @@ impl Shell {
                 }
             }
         }
+    }
+
+    /// Asks the host to look for Dolt, unless it is looking already; Home shows the answer.
+    pub fn look_for_dolt(&mut self) {
+        self.dolt_asked = true;
+        if self.dolt_check.is_some() {
+            return;
+        }
+        if let Some(host) = &self.services.projects {
+            self.dolt_check = Some(host.find_dolt());
+        }
+    }
+
+    /// Whether Home is looking for Dolt now.
+    pub fn looking_for_dolt(&self) -> bool {
+        self.dolt_check.is_some()
     }
 
     /// Whether Save can act now: a model is open and no save is under way.
@@ -1178,6 +1227,9 @@ impl Shell {
         }
         self.adopt_project();
         self.keep_view();
+        if !self.dolt_asked {
+            self.look_for_dolt();
+        }
         self.poll_host();
         control::drain(self);
         // While the host works on an opening, a save or a write, the window looks again soon, so
@@ -1192,7 +1244,7 @@ impl Shell {
             _ => false,
         };
         let closing = self.tabs.iter().any(Tab::closing);
-        if self.opening.is_some() || self.saving.is_some() || writing || closing {
+        if self.opening.is_some() || self.dolt_check.is_some() || self.saving.is_some() || writing || closing {
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
         }
         // Cmd+S (Ctrl+S) saves the open project and Cmd+O (Ctrl+O) opens one; on macOS the menu

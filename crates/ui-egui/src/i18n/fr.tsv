@@ -421,6 +421,10 @@ str		This name cannot be used.	Ce nom ne peut pas être utilisé.
 str		The folder cannot hold projects.	Ce dossier ne peut pas accueillir de projets.
 str		The folder picker could not open.	Le sélecteur de dossiers n’a pas pu s’ouvrir.
 str		Archforge cannot find Dolt, which keeps its projects.	Archforge ne trouve pas Dolt, qui conserve ses projets.
+str		Install Dolt to keep your projects	Installez Dolt pour conserver vos projets
+str		Archforge keeps every project in a Dolt database, and finds no Dolt 2.6 or later on this computer.	Archforge conserve chaque projet dans une base de données Dolt et ne trouve pas Dolt 2.6 ou plus récent sur cet ordinateur.
+str		Install Dolt	Installer Dolt
+str		Look again	Chercher à nouveau
 str		The project could not be created.	Le projet n’a pas pu être créé.
 str		The work stopped without an answer.	Le travail s’est arrêté sans réponse.
 # Accueil, suite
