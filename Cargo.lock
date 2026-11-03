@@ -232,6 +232,7 @@ dependencies = [
  "archforge-core",
  "archforge-diagram",
  "archforge-dolt",
+ "archforge-er",
  "archforge-mcp",
  "archforge-mof",
  "archforge-notations",

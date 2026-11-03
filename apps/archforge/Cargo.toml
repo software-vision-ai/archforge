@@ -34,6 +34,7 @@ serde_json.workspace = true
 [dev-dependencies]
 archforge-core.workspace = true
 archforge-diagram.workspace = true
+archforge-er.workspace = true
 archforge-mcp.workspace = true
 egui_kittest.workspace = true
 
