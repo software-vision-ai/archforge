@@ -402,8 +402,8 @@ str		Windows keeps this name for itself; choose another.	Windows 保留了这个
 str		Location	位置
 str		No folder chosen yet	尚未选择文件夹
 str		Change…	更改…
-str		Creates {file} here: one versioned project file that keeps every change.	在此创建 {file}：一个保留每次更改的版本化项目文件。
-str		The project file is made here: one versioned file that keeps every change.	项目文件在此创建：一个保留每次更改的版本化文件。
+str		Creates the folder {file} here: the project and every version of it.	在此创建文件夹 {file}：其中包含项目及其每个版本。
+str		The project is made here as one folder, with every version of it inside.	项目在此创建为一个文件夹，其每个版本都在其中。
 str		Diagrams	图表
 str		Elements	元素
 str		Add ER and UML class diagrams as you go. Every diagram shows the same model.	随时添加 ER 图和 UML 类图。每个图表都显示同一个模型。

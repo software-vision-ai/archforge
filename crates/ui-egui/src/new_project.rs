@@ -106,7 +106,7 @@ pub fn name_problem(name: &str) -> Option<String> {
     })
 }
 
-/// The project file's name for a project called `name`.
+/// The name of the folder a project called `name` is kept in.
 pub fn file_name(name: &str) -> String {
     format!("{name}.{}", archforge_names::EXTENSION)
 }
@@ -351,9 +351,9 @@ fn content(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, origin: Pos2, inne
         change_folder(shell, dialog);
     }
     let file_line = if creatable(&dialog.name) && folder.is_some() {
-        fmt(&tr("Creates {file} here: one versioned project file that keeps every change."), &[("file", &file_name(&dialog.name))])
+        fmt(&tr("Creates the folder {file} here: the project and every version of it."), &[("file", &file_name(&dialog.name))])
     } else {
-        tr("The project file is made here: one versioned file that keeps every change.")
+        tr("The project is made here as one folder, with every version of it inside.")
     };
     // Under the location: why the picker could not appear, a creation's failure about the folder
     // or the work, or the file line.

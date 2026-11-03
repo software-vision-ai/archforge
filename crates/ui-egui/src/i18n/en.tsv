@@ -401,8 +401,8 @@ str		Windows keeps this name for itself; choose another.	Windows keeps this name
 str		Location	Location
 str		No folder chosen yet	No folder chosen yet
 str		Change…	Change…
-str		Creates {file} here: one versioned project file that keeps every change.	Creates {file} here: one versioned project file that keeps every change.
-str		The project file is made here: one versioned file that keeps every change.	The project file is made here: one versioned file that keeps every change.
+str		Creates the folder {file} here: the project and every version of it.	Creates the folder {file} here: the project and every version of it.
+str		The project is made here as one folder, with every version of it inside.	The project is made here as one folder, with every version of it inside.
 str		Diagrams	Diagrams
 str		Elements	Elements
 str		Add ER and UML class diagrams as you go. Every diagram shows the same model.	Add ER and UML class diagrams as you go. Every diagram shows the same model.
