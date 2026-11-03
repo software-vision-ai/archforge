@@ -66,7 +66,7 @@ pub fn run() -> Result<(), String> {
             render(screen, theme, &out.join(format!("{screen}-{theme}.png")))?;
         }
         let page = out.join(format!("{theme}.html"));
-        std::fs::write(&page, sheet(&screens, theme)).map_err(|e| format!("{}: {e}", page.display()))?;
+        craft_atomic::atomic_write(&page, sheet(&screens, theme).as_bytes()).map_err(|e| format!("{}: {e}", page.display()))?;
     }
     println!("screens: {} screens in {} appearances, with light.html and dark.html, under {}", screens.len(), THEMES.len(), out.display());
     Ok(())
