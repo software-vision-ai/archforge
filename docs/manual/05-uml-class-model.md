@@ -7,8 +7,9 @@ new one.
 ## 1. Make a class diagram
 
 1. Choose the **+** at the start of the centre's tab strip.
-2. In the **New diagram** dialog choose **Class diagram**. Its second field is **Package**: choose
-   **New package** and name it *Commerce*. Name the diagram *Commerce* and choose **Create**.
+2. In the **New diagram** dialog choose **Class diagram**, and leave its second field, **Package**,
+   on **New package**. Name the diagram *Commerce* and choose **Create**. Archforge also creates a
+   package called *Commerce*, which you see in Models.
 
 ## 2. Add classes
 
