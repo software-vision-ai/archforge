@@ -6108,13 +6108,27 @@ fn leaving_a_multiplicity_closes_its_menu_and_its_rows_and_refusal_reach_assisti
     for word in ["0..1", "1", "0..*", "1..*", "*", "Clear"] {
         assert!(!h.query_all_by_label(word).collect::<Vec<_>>().is_empty(), "{word} has an accessible name");
     }
+    // The ticked row is selected; the open field is expanded, the row the keys reach its active
+    // descendant, so a screen reader follows the arrows.
+    let field_node = |h: &Harness<'static, Shell>| h.get_by_label("End at Payment · Multiplicity").accesskit_node().data().clone();
+    assert_eq!(h.get_by_label("0..1").accesskit_node().data().is_selected(), Some(true));
+    assert_eq!(h.get_by_label("1..*").accesskit_node().data().is_selected(), Some(false));
+    assert_eq!(field_node(&h).is_expanded(), Some(true));
+    let row = |k: &str| crate::widgets::egui_id(&format!("workspace.properties.end.1.multiplicity.menu.{k}")).accesskit_id();
+    assert_eq!(field_node(&h).active_descendant(), Some(row("0")));
     // Tab out of the field with the menu open and a row reached: the menu closes, and Enter
     // afterwards picks nothing.
     key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
     key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
     assert_eq!(h.state().panels.highlight, Some(2), "from the current 0..1 down to 0..*");
+    assert_eq!(field_node(&h).active_descendant(), Some(row("2")));
+    for _ in 0..4 {
+        key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+    }
+    assert_eq!(field_node(&h).active_descendant(), Some(row("clear")), "the arrows stop at Clear");
     key(&mut h, egui::Key::Tab, egui::Modifiers::NONE);
     assert!(!open(&h), "leaving the field closes its menu");
+    assert_eq!((field_node(&h).is_expanded(), field_node(&h).active_descendant()), (Some(false), None));
     assert_eq!(end_multiplicities(&h, paid).0[1], "0..1", "nothing was picked");
     // Tab reached the chevron, whose Enter opens the menu again; Escape closes it.
     let chevron = crate::widgets::egui_id("workspace.properties.end.1.multiplicity.menu");
