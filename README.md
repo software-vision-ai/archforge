@@ -7,7 +7,8 @@ domains, enum types, subtypes, sequences and views) and class models on UML clas
 (packages, classes, attributes, operations and their relationships), edited on the diagrams and in
 the Properties panel, with skills to guide people and agents, undo and redo for every change, in a
 light and a dark appearance. A project is stored in [Dolt](https://github.com/dolthub/dolt) 2.6 or a
-later 2.x, found on the `PATH` or through `ARCHFORGE_DOLT`.
+later 2.x, found through `ARCHFORGE_DOLT`, on the `PATH`, or on macOS where Homebrew and Dolt's
+installer put it.
 
 The [user manual](docs/manual/README.md) takes a first-time user from starting Archforge to a
 small ER and UML model, and shows how an agent works with it.
