@@ -51,6 +51,7 @@ the packages stay on the run as artefacts.
 |---|---|---|
 | macOS 11 or later, universal (Apple silicon and Intel) | `archforge-<v>-macos-universal.dmg` | `macos-15` |
 | Windows 10 or later, x64 | `archforge-<v>-windows-x64.msi`, `archforge-<v>-windows-x64.zip` | `windows-latest` |
+| Windows 11 on ARM, ARM64 | `archforge-<v>-windows-arm64.msi`, `archforge-<v>-windows-arm64.zip` | `windows-11-arm` |
 | Linux x86_64 and aarch64, glibc 2.35 or later | `archforge-<v>-linux-<arch>.{AppImage,AppImage.zsync,deb,rpm,tar.gz}` | `ubuntu-22.04`, `ubuntu-22.04-arm` |
 
 Each comes from its script under `packaging/`. Every package reports its version, commit and date

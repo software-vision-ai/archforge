@@ -1,7 +1,7 @@
 # Release: every package from one workflow, into a draft release published by hand.
 #
 #   macOS universal         .dmg                                packaging/macos/package.sh
-#   Windows x64             .msi and a portable .zip            packaging/windows/package.ps1
+#   Windows x64, ARM64      .msi and a portable .zip            packaging/windows/package.ps1
 #   Linux x86_64, aarch64   AppImage (+ .zsync), .deb, .rpm,    packaging/linux/package.sh
 #                           .tar.gz
 #
@@ -105,16 +105,25 @@ jobs:
           if-no-files-found: error
 
   windows:
-    name: Windows x64
+    name: Windows ${{ matrix.arch }}
     needs: version
-    runs-on: windows-latest
+    # ARM64 is built natively on GitHub's Windows 11 ARM runner, and checked there.
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x64, runner: windows-latest, target: x86_64-pc-windows-msvc }
+          - { arch: arm64, runner: windows-11-arm, target: aarch64-pc-windows-msvc }
     env:
       VERSION: ${{ needs.version.outputs.version }}
       # Every package reports its version, commit and date (apps/archforge/build.rs).
       ARCHFORGE_BUILD_SHA: ${{ needs.version.outputs.sha }}
       ARCHFORGE_BUILD_DATE: ${{ needs.version.outputs.date }}
       WIX_VERSION: 5.0.2
+      ARCH: ${{ matrix.arch }}
+      TARGET: ${{ matrix.target }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: The interface's fonts, from craft-fonts beside the checkout
@@ -123,8 +132,19 @@ jobs:
       - name: Rust and WiX
         shell: pwsh
         run: |
+          # The ARM image may come without rustup: then it is fetched for this machine, from rust-lang.org.
+          if (-not (Get-Command rustup -ErrorAction SilentlyContinue)) {
+            $init = Join-Path $env:RUNNER_TEMP 'rustup-init.exe'
+            Invoke-WebRequest "https://static.rust-lang.org/rustup/dist/$env:TARGET/rustup-init.exe" -OutFile $init
+            & $init -y --default-toolchain none --profile minimal
+            if ($LASTEXITCODE -ne 0) { throw 'rustup-init failed' }
+            $bin = Join-Path $env:USERPROFILE '.cargo\bin'
+            Add-Content $env:GITHUB_PATH $bin
+            $env:PATH = "$bin;$env:PATH"
+          }
           rustup toolchain install stable --profile minimal
           rustup default stable
+          rustup target add $env:TARGET
           dotnet tool install --global wix --version $env:WIX_VERSION
           wix extension add -g "WixToolset.UI.wixext/$env:WIX_VERSION" "WixToolset.Util.wixext/$env:WIX_VERSION"
       - name: The icon in every size
@@ -132,20 +152,24 @@ jobs:
         run: sh packaging/icons.sh
       - name: Build and package (msi, zip)
         shell: pwsh
-        run: packaging/windows/package.ps1 -Version $env:VERSION
+        run: packaging/windows/package.ps1 -Version $env:VERSION -Arch $env:ARCH -Target $env:TARGET
       - name: Check the packages
         shell: pwsh
         run: |
-          $zip = "dist/windows/archforge-$env:VERSION-windows-x64.zip"
+          $zip = "dist/windows/archforge-$env:VERSION-windows-$env:ARCH.zip"
           $names = (Get-ChildItem dist/windows -File).Name
-          if (-not ($names -contains "archforge-$env:VERSION-windows-x64.msi")) { throw "no msi among $names" }
+          if (-not ($names -contains "archforge-$env:VERSION-windows-$env:ARCH.msi")) { throw "no msi among $names" }
           Expand-Archive $zip -DestinationPath "$env:RUNNER_TEMP/portable"
           foreach ($f in 'archforge.exe', 'LICENSE-MIT', 'LICENSE-APACHE', 'NOTICE', 'ATTRIBUTION.md') {
             if (-not (Test-Path "$env:RUNNER_TEMP/portable/$f")) { throw "$zip lacks $f" }
           }
+          # The executable runs here, on its own architecture, and reports this build.
+          $line = & "$env:RUNNER_TEMP/portable/archforge.exe" --version | Out-String
+          Write-Output $line
+          if (-not $line.Contains("archforge $env:VERSION ($env:ARCHFORGE_BUILD_SHA, $env:ARCHFORGE_BUILD_DATE)")) { throw "archforge.exe reports $line" }
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: release-windows
+          name: release-windows-${{ matrix.arch }}
           path: |
             dist/windows/*.msi
             dist/windows/*.zip
@@ -234,7 +258,7 @@ jobs:
       - name: Notes, from the pull requests merged since the last release
         run: |
           cat >notes.md <<NOTES
-          Archforge $VERSION, for macOS (universal), Windows (x64) and Linux (x86_64, aarch64).
+          Archforge $VERSION, for macOS (universal), Windows (x64, ARM64) and Linux (x86_64, aarch64).
 
           **Before you start:** Archforge keeps projects in [Dolt](https://docs.dolthub.com/introduction/installation) 2.6 or a later 2.x. Install it first; Archforge finds it on the PATH, where Homebrew and Dolt's installer put it on macOS, or where \`ARCHFORGE_DOLT\` says.
 
