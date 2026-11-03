@@ -77,7 +77,25 @@ release, follow the [release checklist](docs/release-checklist.md) once in the r
 
 ## Downloads
 
-None yet.
+Ready-made packages are on the [Releases](https://github.com/software-vision-ai/archforge/releases)
+page, each with its SHA-256 in `SHA256SUMS`:
+
+| System | Download | To install |
+|---|---|---|
+| macOS 11 or later (Apple silicon and Intel) | `archforge-<version>-macos-universal.dmg` | Open it and drag Archforge to Applications. |
+| Windows 10 or later (x64) | `archforge-<version>-windows-x64.msi`, or the `.zip` to run without installing | Run the installer. |
+| Linux (x86_64, aarch64; glibc 2.35 or later) | the `.AppImage`, or the `.deb`, `.rpm` or `.tar.gz` | Make the AppImage executable and start it, or install the package. |
+
+**Install Dolt first.** Archforge keeps every project in [Dolt](https://docs.dolthub.com/introduction/installation)
+2.6 or a later 2.x. It finds `dolt` through `ARCHFORGE_DOLT` (its absolute path), else on the
+`PATH`; on macOS also where Homebrew and Dolt's installer put it (`/opt/homebrew/bin`,
+`/usr/local/bin`), so an Archforge opened from Finder finds it too.
+
+The packages are not signed yet, so the system asks before it opens Archforge the first time:
+
+- **macOS** says it cannot check Archforge for malicious software. Open **System Settings** →
+  **Privacy & Security**, and next to the message about Archforge choose **Open Anyway**.
+- **Windows** SmartScreen says it protected your PC. Choose **More info**, then **Run anyway**.
 
 ## Supporting Archforge
 
