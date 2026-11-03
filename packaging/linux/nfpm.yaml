@@ -1,4 +1,4 @@
-# deb and rpm. package.sh sets STAGE, VERSION, ARCH and POSTINST.
+# deb and rpm. package.sh fills in STAGE, VERSION, ARCH and POSTINST before nfpm reads this.
 name: archforge
 arch: ${ARCH}
 platform: linux
