@@ -529,8 +529,19 @@ pub(crate) fn editable_select(
     if resp.changed() && shell.panels.menu == Some(c.menu) {
         shell.panels.highlight = None;
     }
+    // The row the keys reached is the field's active descendant, so a screen reader says which
+    // one Enter picks as the arrows move.
+    let open = shell.panels.menu == Some(c.menu);
+    let reached = shell.panels.highlight.filter(|_| open).map(|h| {
+        let row = if h < c.options.len() { format!("{}.menu.{h}", c.id) } else { format!("{}.menu.clear", c.id) };
+        widgets::egui_id(&row).accesskit_id()
+    });
     ui.ctx().accesskit_node_builder(resp.id, |node| {
         node.set_label(c.name);
+        node.set_expanded(open);
+        if let Some(row) = reached {
+            node.set_active_descendant(row);
+        }
         if let Some(why) = c.refused {
             node.set_description(why);
             node.set_invalid(egui::accesskit::Invalid::True);
@@ -592,6 +603,7 @@ fn combo_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, r: Re
         let row = Rect::from_min_size(pos2(r.left() + 4.0, r.top() + top), vec2(r.width() - 8.0, 30.0));
         let resp = control(shell, ui, &id, "menu-item", row, true).accessible_name(word.as_str());
         let on = c.current == Some(i);
+        ui.ctx().accesskit_node_builder(resp.id, |node| node.set_selected(on));
         if on {
             paint.rect_filled(row, 5.0, p.accent_tint);
         } else if resp.hovered() || shell.panels.highlight == Some(i) {
