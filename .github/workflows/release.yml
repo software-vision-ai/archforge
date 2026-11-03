@@ -1,0 +1,227 @@
+# Release: every package from one workflow, into a draft release published by hand.
+#
+#   macOS universal         .dmg                                packaging/macos/package.sh
+#   Windows x64             .msi and a portable .zip            packaging/windows/package.ps1
+#   Linux x86_64, aarch64   AppImage (+ .zsync), .deb, .rpm,    packaging/linux/package.sh
+#                           .tar.gz
+#
+# A pushed tag v<version> builds every package and attaches them, with SHA256SUMS, to a DRAFT
+# release; the tag must name the version in Cargo.toml's [workspace.package]. The owner reads the
+# draft and publishes it. A pull request that touches packaging or this file, and a run started
+# by hand, build every package as a dry run: the packages stay workflow artefacts and nothing is
+# released. Nothing is signed yet; the scripts' signing steps wait for their secrets.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - ".github/workflows/release.yml"
+      - "packaging/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: v
+        name: Read the version, and check the tag names it
+        run: |
+          version=$(awk '/^\[workspace.package\]/{p=1;next} /^\[/{p=0} p&&/^version/{gsub(/[" ]/,"",$3);print $3;exit}' Cargo.toml)
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::Cargo.toml's [workspace.package] holds no version like 1.2.3 or 1.2.3-rc.1"
+            exit 1
+          fi
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::the tag $GITHUB_REF_NAME does not name Cargo.toml's version $version (expected v$version)"
+            exit 1
+          fi
+          echo "version=$version" >>"$GITHUB_OUTPUT"
+          echo "### Archforge $version (\`${GITHUB_SHA::9}\`)" >>"$GITHUB_STEP_SUMMARY"
+
+  macos:
+    name: macOS universal
+    needs: version
+    runs-on: macos-15
+    timeout-minutes: 90
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: The interface's fonts, from craft-fonts beside the checkout
+        run: git clone --depth 1 https://github.com/storytold/craft-fonts ../craft-fonts
+      - name: Rust for both halves of the universal binary
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup target add x86_64-apple-darwin aarch64-apple-darwin
+      - name: Build and package (dmg)
+        run: sh packaging/macos/package.sh "$VERSION"
+      - name: Check the disk image
+        run: |
+          dmg="dist/macos/archforge-$VERSION-macos-universal.dmg"
+          mkdir -p "$RUNNER_TEMP/dmg"
+          hdiutil attach "$dmg" -readonly -nobrowse -mountpoint "$RUNNER_TEMP/dmg" >/dev/null
+          app="$RUNNER_TEMP/dmg/Archforge.app"
+          lipo -archs "$app/Contents/MacOS/archforge" | grep -q x86_64
+          lipo -archs "$app/Contents/MacOS/archforge" | grep -q arm64
+          test -f "$app/Contents/Resources/LICENSE-MIT"
+          plutil -extract CFBundleShortVersionString raw "$app/Contents/Info.plist" | grep -qx "$VERSION"
+          hdiutil detach "$RUNNER_TEMP/dmg" >/dev/null
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-macos
+          path: dist/macos/*.dmg
+          if-no-files-found: error
+
+  windows:
+    name: Windows x64
+    needs: version
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      WIX_VERSION: 5.0.2
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: The interface's fonts, from craft-fonts beside the checkout
+        shell: bash
+        run: git clone --depth 1 https://github.com/storytold/craft-fonts ../craft-fonts
+      - name: Rust and WiX
+        shell: pwsh
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          dotnet tool install --global wix --version $env:WIX_VERSION
+          wix extension add -g "WixToolset.UI.wixext/$env:WIX_VERSION" "WixToolset.Util.wixext/$env:WIX_VERSION"
+      - name: The icon in every size
+        shell: bash
+        run: sh packaging/icons.sh
+      - name: Build and package (msi, zip)
+        shell: pwsh
+        run: packaging/windows/package.ps1 -Version $env:VERSION
+      - name: Check the packages
+        shell: pwsh
+        run: |
+          $zip = "dist/windows/archforge-$env:VERSION-windows-x64.zip"
+          $names = (Get-ChildItem dist/windows -File).Name
+          if (-not ($names -contains "archforge-$env:VERSION-windows-x64.msi")) { throw "no msi among $names" }
+          Expand-Archive $zip -DestinationPath "$env:RUNNER_TEMP/portable"
+          foreach ($f in 'archforge.exe', 'LICENSE-MIT', 'LICENSE-APACHE', 'NOTICE', 'ATTRIBUTION.md') {
+            if (-not (Test-Path "$env:RUNNER_TEMP/portable/$f")) { throw "$zip lacks $f" }
+          }
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-windows
+          path: |
+            dist/windows/*.msi
+            dist/windows/*.zip
+          if-no-files-found: error
+
+  linux:
+    name: Linux ${{ matrix.arch }}
+    needs: version
+    # The oldest hosted image, so the binaries need only glibc 2.35.
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x86_64, runner: ubuntu-22.04 }
+          - { arch: aarch64, runner: ubuntu-22.04-arm }
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: The interface's fonts, from craft-fonts beside the checkout
+        run: git clone --depth 1 https://github.com/storytold/craft-fonts ../craft-fonts
+      - name: Rust and the window system's development packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libxkbcommon-dev libwayland-dev libx11-dev \
+            libxrandr-dev libxi-dev libxcursor-dev libgl1-mesa-dev zsync
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+      - name: Build and package (AppImage, deb, rpm, tar.gz)
+        run: sh packaging/linux/package.sh "$VERSION" "${{ matrix.arch }}"
+      - name: Check the packages
+        run: |
+          base="dist/linux/archforge-$VERSION-linux-${{ matrix.arch }}"
+          tar -tzf "$base.tar.gz" | grep -qx ./bin/archforge
+          dpkg-deb --contents "$base.deb" | grep -q 'usr/bin/archforge$'
+          test -s "$base.rpm"
+          test -s "$base.AppImage.zsync"
+          chmod +x "$base.AppImage"
+          "$base.AppImage" --appimage-extract >/dev/null
+          test -x squashfs-root/usr/bin/archforge
+          rm -rf squashfs-root
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-linux-${{ matrix.arch }}
+          path: |
+            dist/linux/*.AppImage
+            dist/linux/*.AppImage.zsync
+            dist/linux/*.deb
+            dist/linux/*.rpm
+            dist/linux/*.tar.gz
+          if-no-files-found: error
+
+  release:
+    name: Draft release
+    needs: [version, macos, windows, linux]
+    # Only a pushed tag releases: a run started by hand on a tag stays a dry run.
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    # The one job that may write: it creates or updates the draft release.
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: release-*
+          path: assets
+          merge-multiple: true
+      - name: Checksums
+        run: |
+          cd assets
+          sha256sum -- * >SHA256SUMS
+          cat SHA256SUMS >>"$GITHUB_STEP_SUMMARY"
+      - name: Create or update the draft
+        run: |
+          tag="v$VERSION"
+          cat >notes.md <<NOTES
+          Archforge $VERSION, for macOS (universal), Windows (x64) and Linux (x86_64, aarch64).
+
+          **Before you start:** Archforge keeps projects in [Dolt](https://docs.dolthub.com/introduction/installation) 2.6 or a later 2.x. Install it first, so that \`dolt\` is on the PATH, or name it in \`ARCHFORGE_DOLT\`.
+
+          These packages are not signed yet. The [README](https://github.com/$GITHUB_REPOSITORY#downloads) says how to open them on macOS and Windows. \`SHA256SUMS\` holds every file's checksum.
+          NOTES
+          if draft=$(gh release view "$tag" -R "$GITHUB_REPOSITORY" --json isDraft -q .isDraft 2>/dev/null); then
+            # A published release keeps the files people downloaded; only a draft is refreshed.
+            if [ "$draft" != true ]; then
+              echo "::error::$tag is published already; its files are left as they are"
+              exit 1
+            fi
+            gh release upload "$tag" assets/* --clobber -R "$GITHUB_REPOSITORY"
+          else
+            gh release create "$tag" assets/* --draft --verify-tag --title "Archforge $VERSION" --notes-file notes.md -R "$GITHUB_REPOSITORY"
+          fi

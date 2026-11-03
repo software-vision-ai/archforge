@@ -10,7 +10,9 @@
 //! cannot drive the port (CS-6). Lines, requests, replies, connections and waits are capped (CS-7).
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
-use std::io::{BufRead, BufReader, Read, Write};
+#[cfg(unix)]
+use std::io::Read;
+use std::io::{BufRead, BufReader, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -72,6 +74,7 @@ pub fn same_token(a: &str, b: &str) -> bool {
     a.len() == b.len() && std::hint::black_box(a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y))) == 0
 }
 
+#[cfg_attr(not(unix), allow(dead_code))]
 fn is_token(t: &str) -> bool {
     t.len() == TOKEN_LEN && t.bytes().all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
 }
