@@ -129,7 +129,9 @@ pub fn resource_file(version: [u16; 4], strings: &[(&str, &str)], ico: Option<&[
 
 /// `x.y.z` as the four numbers of a Windows version.
 pub fn parse_version(v: &str) -> Option<[u16; 4]> {
-    let mut parts = v.split('.').map(|p| p.parse::<u16>().ok());
+    // A pre-release (0.2.0-rc.1) keeps its numbers; Windows' version resource holds no suffix.
+    let numbers = v.split('-').next()?;
+    let mut parts = numbers.split('.').map(|p| p.parse::<u16>().ok());
     Some([parts.next()??, parts.next()??, parts.next()??, 0])
 }
 
@@ -177,5 +179,6 @@ mod tests {
     fn versions_parse_from_the_workspace_form() {
         assert_eq!(parse_version("1.2.3"), Some([1, 2, 3, 0]));
         assert_eq!(parse_version("1.x.3"), None);
+        assert_eq!(parse_version("0.2.0-rc.1"), Some([0, 2, 0, 0]), "a pre-release keeps its numbers");
     }
 }

@@ -6,6 +6,8 @@ macOS, in the light appearance and again in the dark one (the moon or sun at the
 them). Each item takes a few minutes, says what to do and what you should see, and names what it
 covers that the gate cannot.
 
+[Releasing](releasing.md) says how a release is cut; this list is its fourth step.
+
 Start from a clean build of the release commit:
 
 ```sh

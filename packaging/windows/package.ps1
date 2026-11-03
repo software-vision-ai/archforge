@@ -72,7 +72,7 @@ Test-Executable (Join-Path $Bin "$App.exe") 2
 
 & (Join-Path $PSScriptRoot 'check-icons.ps1') -Wxs (Join-Path $PSScriptRoot "$App.wxs")
 
-# The installer.
+# The installer, its version the numbers only (0.2.0 of 0.2.0-rc.1): Windows Installer takes no suffix.
 if (-not $env:WIX_NAMESPACE) { $env:WIX_NAMESPACE = 'http://wixtoolset.org/schemas/v4' }
 $Work = Join-Path $env:TEMP "$App-wix"
 New-Item -ItemType Directory -Force -Path $Work | Out-Null
@@ -82,7 +82,7 @@ foreach ($f in "$App.wxs", "$App.wxl") {
 $Icon = Join-Path $Root 'dist/icons/archforge.ico'
 if (-not (Test-Path $Icon)) { throw "$Icon is missing: run packaging/icons.sh first; the application icon is drawn from assets/app-icon" }
 & wix build -arch $Arch -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext `
-    -d "Version=$Version" -d "BinDir=$Bin" -d "IconFile=$Icon" -d "RootDir=$Root" `
+    -d "Version=$(($Version -split '-')[0])" -d "BinDir=$Bin" -d "IconFile=$Icon" -d "RootDir=$Root" `
     -loc (Join-Path $Work "$App.wxl") -o (Join-Path $Out (Get-ArtefactName 'msi')) (Join-Path $Work "$App.wxs")
 if ($LASTEXITCODE -ne 0) { throw 'wix build failed' }
 

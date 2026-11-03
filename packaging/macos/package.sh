@@ -6,6 +6,7 @@
 . "$(dirname "$0")/../common.sh"
 
 version=${1:?usage: package.sh <version> [--sign]}
+# The bundle carries the numbers only (0.2.0 of 0.2.0-rc.1): macOS reads its versions as numbers.
 sign=${2:-}
 need cargo lipo hdiutil osascript
 out="$ROOT/dist/macos"
@@ -20,7 +21,7 @@ if [ "$sign" != "--sign" ]; then
   mkdir -p "$bundle/Contents/MacOS" "$bundle/Contents/Resources"
   lipo -create -output "$bundle/Contents/MacOS/$APP" \
     "$TARGET_DIR/x86_64-apple-darwin/release/$APP" "$TARGET_DIR/aarch64-apple-darwin/release/$APP"
-  sed -e "s|__VERSION__|$version|g; s|__BUNDLE_ID__|$BUNDLE_ID|g" "$ROOT/packaging/macos/Info.plist.in" >"$bundle/Contents/Info.plist"
+  sed -e "s|__VERSION__|${version%%-*}|g; s|__BUNDLE_ID__|$BUNDLE_ID|g" "$ROOT/packaging/macos/Info.plist.in" >"$bundle/Contents/Info.plist"
   # Inside the bundle, so signing covers them and a copy of the application carries them.
   ship_licences "$bundle/Contents/Resources"
   if [ -f "$ROOT/assets/app-icon/icon.png" ]; then
