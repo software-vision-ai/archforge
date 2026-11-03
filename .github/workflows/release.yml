@@ -185,7 +185,8 @@ jobs:
   release:
     name: Draft release
     needs: [version, macos, windows, linux]
-    if: github.ref_type == 'tag'
+    # Only a pushed tag releases: a run started by hand on a tag stays a dry run.
+    if: github.event_name == 'push' && github.ref_type == 'tag'
     runs-on: ubuntu-latest
     # The one job that may write: it creates or updates the draft release.
     permissions:
@@ -214,7 +215,12 @@ jobs:
 
           These packages are not signed yet. The [README](https://github.com/$GITHUB_REPOSITORY#downloads) says how to open them on macOS and Windows. \`SHA256SUMS\` holds every file's checksum.
           NOTES
-          if gh release view "$tag" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+          if draft=$(gh release view "$tag" -R "$GITHUB_REPOSITORY" --json isDraft -q .isDraft 2>/dev/null); then
+            # A published release keeps the files people downloaded; only a draft is refreshed.
+            if [ "$draft" != true ]; then
+              echo "::error::$tag is published already; its files are left as they are"
+              exit 1
+            fi
             gh release upload "$tag" assets/* --clobber -R "$GITHUB_REPOSITORY"
           else
             gh release create "$tag" assets/* --draft --verify-tag --title "Archforge $VERSION" --notes-file notes.md -R "$GITHUB_REPOSITORY"
