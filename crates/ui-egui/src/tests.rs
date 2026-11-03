@@ -6887,3 +6887,14 @@ fn a_created_project_opens_its_model_without_waiting_for_the_pointer() {
     h.step();
     assert_eq!(h.state().adopted.as_deref(), Some(std::path::Path::new("/Users/robin/Documents/Archforge/Commerce platform.archforge")));
 }
+
+#[test]
+fn the_new_project_dialog_calls_a_project_the_folder_it_is_kept_in() {
+    let (h, _host) = creating_harness();
+    let texts = painted(&h);
+    assert!(texts.iter().any(|t| t == "Creates the folder Commerce platform.archforge here: the project and every version of it."), "{texts:?}");
+    assert!(
+        !texts.iter().any(|t| t.contains("versioned file") || t.contains("project file")),
+        "a project is a folder, never a file (AR-79): {texts:?}"
+    );
+}

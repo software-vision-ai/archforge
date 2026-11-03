@@ -402,8 +402,8 @@ str		Windows keeps this name for itself; choose another.	この名前は Windows
 str		Location	保存場所
 str		No folder chosen yet	フォルダーはまだ選ばれていません
 str		Change…	変更…
-str		Creates {file} here: one versioned project file that keeps every change.	ここに {file} を作成します。すべての変更を残す、バージョン管理されたプロジェクトファイルです。
-str		The project file is made here: one versioned file that keeps every change.	プロジェクトファイルはここに作成されます。すべての変更を残す、バージョン管理されたファイルです。
+str		Creates the folder {file} here: the project and every version of it.	ここにフォルダー {file} を作成します。プロジェクトとそのすべてのバージョンが入ります。
+str		The project is made here as one folder, with every version of it inside.	プロジェクトはここに 1 つのフォルダーとして作成され、そのすべてのバージョンが中に入ります。
 str		Diagrams	ダイアグラム
 str		Elements	要素
 str		Add ER and UML class diagrams as you go. Every diagram shows the same model.	作業しながら ER 図と UML クラス図を追加できます。どのダイアグラムも同じモデルを表示します。

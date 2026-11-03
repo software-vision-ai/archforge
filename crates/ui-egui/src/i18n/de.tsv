@@ -402,8 +402,8 @@ str		Windows keeps this name for itself; choose another.	Windows behält sich di
 str		Location	Speicherort
 str		No folder chosen yet	Noch kein Ordner gewählt
 str		Change…	Ändern…
-str		Creates {file} here: one versioned project file that keeps every change.	Erstellt hier {file}: eine versionierte Projektdatei, die jede Änderung bewahrt.
-str		The project file is made here: one versioned file that keeps every change.	Die Projektdatei entsteht hier: eine versionierte Datei, die jede Änderung bewahrt.
+str		Creates the folder {file} here: the project and every version of it.	Erstellt hier den Ordner {file}: das Projekt und jede seiner Versionen.
+str		The project is made here as one folder, with every version of it inside.	Das Projekt entsteht hier als ein Ordner, mit jeder seiner Versionen darin.
 str		Diagrams	Diagramme
 str		Elements	Elemente
 str		Add ER and UML class diagrams as you go. Every diagram shows the same model.	Fügen Sie beim Arbeiten ER- und UML-Klassendiagramme hinzu. Jedes Diagramm zeigt dasselbe Modell.
