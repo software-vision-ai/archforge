@@ -5,8 +5,10 @@
 Archforge has no ready-made download yet; you build it from its source. You need:
 
 - Stable [Rust](https://www.rust-lang.org/tools/install) 1.95 or later.
-- [Dolt](https://github.com/dolthub/dolt) 2.6 or a later 2.x, on your `PATH` (or its full path in
-  the `ARCHFORGE_DOLT` environment variable). Archforge keeps every project in a Dolt database.
+- [Dolt](https://github.com/dolthub/dolt) 2.6 or a later 2.x. Archforge keeps every project in a
+  Dolt database, and looks for it first where the `ARCHFORGE_DOLT` environment variable says (its
+  full path), then on your `PATH`, then on macOS in `/opt/homebrew/bin` and `/usr/local/bin`, where
+  Homebrew and Dolt's installer put it, so an Archforge opened from Finder finds it too.
 - On Linux, the development packages for xkbcommon, Wayland, X11, Xrandr, Xi and Mesa GL.
 - Optionally, a checkout of [craft-fonts](https://github.com/storytold/craft-fonts) next to the
   Archforge checkout, so the interface is drawn in Inter.
