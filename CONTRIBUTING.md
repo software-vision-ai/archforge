@@ -9,6 +9,7 @@ come one at a time. Small, focused changes are the easiest to review.
   the work fits the design before you spend time on it.
 - Read `AGENTS.md`: it holds the rules every change follows, whether a person or a coding agent
   writes it.
+- Taking part means agreeing to the code of conduct, `CODE_OF_CONDUCT.md`.
 
 ## Making a change
 
