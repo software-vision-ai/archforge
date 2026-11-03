@@ -5296,6 +5296,7 @@ name = "xtask"
 version = "0.1.0"
 dependencies = [
  "archforge-mof",
+ "craft-atomic",
  "png",
  "quick-xml",
  "serde_json",
