@@ -1,8 +1,11 @@
-//! The MVP's end-to-end test: the real shell over the real project host, driven through
-//! its controls as a user would. A new project from Home; a class diagram; classes placed with the
+//! The MVP's end-to-end tests: the real shell over the real project host, driven through
+//! its controls as a user would, for each notation. UML: a new project from Home; a class diagram; classes placed with the
 //! Class tool and named in place; an attribute and an operation added in Properties; one line of
 //! each relationship kind drawn with the Relationship tool; undo and redo from the keyboard; Save;
 //! the project closed and opened again from Home's recent list, its model and layout as they were.
+//! ER: a new project; an ER diagram with its schema; two tables placed with the Entity tool; their
+//! columns and primary keys in Properties; a one-to-many relationship chosen in the tool's popover
+//! and drawn, its foreign key added; undo and redo; saved, closed, reopened and compared.
 //! While the host works on its own threads the test draws only the frames the window asks for, as
 //! the real window does, so a window that would wait for the pointer to move fails it.
 
@@ -103,10 +106,11 @@ fn edges(h: &H) -> usize {
     st.alive().filter(|o| st.class_of(*o).ok() == Some(archforge_diagram::EDGE)).count()
 }
 
-#[test]
-fn a_user_models_a_class_diagram_saves_it_closes_it_and_opens_it_again_as_it_was() {
+/// The real shell over the real project host, in a folder of its own named after `journey`, on
+/// Home: the harness, the host and the folder to remove after.
+fn start(journey: &str) -> (H, std::sync::Arc<crate::projects::Projects>, std::path::PathBuf) {
     archforge_ui_egui::i18n::set_language("en");
-    let base = std::env::temp_dir().join(format!("af-acceptance-{}", std::process::id()));
+    let base = std::env::temp_dir().join(format!("af-acceptance-{journey}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&base);
     std::fs::create_dir_all(&base).unwrap();
     let host = std::sync::Arc::new(crate::projects::Projects::new(&base.join("settings"), "Archforge acceptance".into()));
@@ -126,13 +130,40 @@ fn a_user_models_a_class_diagram_saves_it_closes_it_and_opens_it_again_as_it_was
         Shell::new(services),
     );
     h.run();
+    (h, host, base)
+}
+
+/// A new project named `name`, made from Home's start card, open and its model ready.
+fn new_project(h: &mut H, name: &str) {
+    click_on(h, "home.start.new-project");
+    h.state_mut().new_project.as_mut().expect("the dialog opens").name = name.into();
+    h.run();
+    click_on(h, "new-project.create");
+    wait(h, "the project opening", |s| s.session.is_some());
+}
+
+/// Save, close (nothing asks, since nothing is unsaved), and open the project again from Home's
+/// recent list; gives the rows saved, to compare with what comes back.
+fn save_close_reopen(h: &mut H) -> archforge_mof::rows::Rows {
+    key(h, egui::Key::S, egui::Modifiers::COMMAND);
+    wait(h, "the save", |s| s.session.as_ref().is_some_and(|x| !x.is_dirty()) && !s.is_saving());
+    let saved = rows(h);
+    click_on(h, "workspace.header.project.0.close");
+    assert!(h.state().ask.is_none(), "a saved project closes without asking");
+    wait(h, "the closing", |s| s.tabs.is_empty());
+    click_on(h, "home.recent.0");
+    wait(h, "the opening's answer", |s| !s.is_opening());
+    assert!(h.state().session_error.is_none(), "{:?}", h.state().session_error);
+    wait(h, "the opening again", |s| s.session.is_some());
+    saved
+}
+
+#[test]
+fn a_user_models_a_class_diagram_saves_it_closes_it_and_opens_it_again_as_it_was() {
+    let (mut h, host, base) = start("uml");
 
     // 1. A new project from Home.
-    click_on(&mut h, "home.start.new-project");
-    h.state_mut().new_project.as_mut().expect("the dialog opens").name = "Shop".into();
-    h.run();
-    click_on(&mut h, "new-project.create");
-    wait(&mut h, "the project opening", |s| s.session.is_some());
+    new_project(&mut h, "Shop");
     assert_eq!(h.state().title(), "Shop — Archforge");
 
     // 2. A class diagram, its package made with it.
@@ -201,24 +232,107 @@ fn a_user_models_a_class_diagram_saves_it_closes_it_and_opens_it_again_as_it_was
     key(&mut h, egui::Key::Z, cmd | egui::Modifiers::SHIFT);
     assert_eq!(edges(&h), 6);
 
-    // 7. Save, then close: nothing asks, since nothing is unsaved.
-    key(&mut h, egui::Key::S, cmd);
-    wait(&mut h, "the save", |s| s.session.as_ref().is_some_and(|x| !x.is_dirty()) && !s.is_saving());
-    let saved = rows(&h);
-    click_on(&mut h, "workspace.header.project.0.close");
-    assert!(h.state().ask.is_none(), "a saved project closes without asking");
-    wait(&mut h, "the closing", |s| s.tabs.is_empty());
-
-    // 8. Opened again from Home's recent list: the model and its layout as they were, saved.
-    click_on(&mut h, "home.recent.0");
-    wait(&mut h, "the opening's answer", |s| !s.is_opening());
-    assert!(h.state().session_error.is_none(), "{:?}", h.state().session_error);
-    wait(&mut h, "the opening again", |s| s.session.is_some());
+    // 7 and 8. Saved, closed and opened again from Home's recent list: the model and its layout
+    // as they were, saved.
+    let saved = save_close_reopen(&mut h);
     // The project hands rows back in id order, not the order they were made in: each table is
     // compared as the set of its rows.
     assert_eq!(sorted(rows(&h)), sorted(saved), "the model and its diagram come back exactly");
     assert!(!h.state().session.as_ref().unwrap().is_dirty());
     assert_eq!(h.state().title(), "Shop — Archforge");
+
+    host.shutdown();
+    let _ = std::fs::remove_dir_all(&base);
+}
+
+/// The objects of class `class` in the open model.
+fn count(h: &H, class: archforge_mof::ClassId) -> usize {
+    let st = h.state().session.as_ref().unwrap().doc();
+    st.alive().filter(|o| st.class_of(*o).ok() == Some(class)).count()
+}
+
+/// A column added to the selected table in Properties: its name, its type and whether it is the
+/// table's primary key, then Apply.
+fn add_column(h: &mut H, name: &str, ty: &str, primary_key: bool) {
+    click_on(h, "workspace.properties.columns.add");
+    let edit = h.state_mut().panels.column.as_mut().unwrap_or_else(|| panic!("{name}: the column editor opens"));
+    edit.name = name.into();
+    edit.ty = ty.into();
+    edit.primary_key = primary_key;
+    edit.not_null = primary_key;
+    h.run();
+    click_on(h, "workspace.properties.column.apply");
+    assert!(h.state().panels.column.is_none(), "{name}: Apply writes the column and closes the editor: {:?}", h.state().panels.notice);
+}
+
+#[test]
+fn a_user_models_an_er_diagram_saves_it_closes_it_and_opens_it_again_as_it_was() {
+    let (mut h, host, base) = start("er");
+
+    // 1. A new project from Home.
+    new_project(&mut h, "Library");
+
+    // 2. An ER diagram, its schema made with it.
+    click_on(&mut h, "workspace.tabs.add");
+    h.state_mut().diagrams.new.as_mut().expect("New diagram opens").name = "Library schema".into();
+    h.run();
+    click_on(&mut h, "workspace.new-diagram.create");
+    assert!(h.state().diagrams.new.is_none());
+    assert_eq!(count(&h, archforge_er::SCHEMA), 1, "the diagram's schema is made with it");
+
+    // 3. Two tables placed with the Entity tool and named in place.
+    let canvas = rect_of(&h, "workspace.canvas");
+    let c = canvas.center();
+    for (name, dx) in [("Author", -260.0), ("Book", 260.0)] {
+        click_on(&mut h, "workspace.tools.entity");
+        click(&mut h, c + egui::vec2(dx, -60.0));
+        h.state_mut().canvas.rename.as_mut().unwrap_or_else(|| panic!("{name} is named in place")).text = name.into();
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    }
+    assert_eq!(count(&h, archforge_er::ENTITY), 2);
+
+    // 4. Columns in Properties, each table's first one its primary key.
+    h.state_mut().state.show_panel(archforge_ui_egui::state::Panel::Properties);
+    for (table, columns) in
+        [("Author", [("author_id", "BIGINT", true), ("name", "TEXT", false)]), ("Book", [("book_id", "BIGINT", true), ("title", "TEXT", false)])]
+    {
+        let node = node_of(&h, table);
+        click_on(&mut h, &node);
+        for (name, ty, primary_key) in columns {
+            add_column(&mut h, name, ty, primary_key);
+        }
+    }
+    assert_eq!(count(&h, archforge_er::ATTRIBUTE), 4);
+    assert_eq!(count(&h, archforge_er::PRIMARY_KEY), 2, "each table has its primary key");
+
+    // 5. One to many, chosen in the Relationship tool's popover, drawn from Author to Book: the
+    // line, and the foreign key with its column that it adds to Book.
+    click(&mut h, canvas.left_top() + egui::vec2(40.0, 40.0));
+    click_on(&mut h, "workspace.tools.relationship-types");
+    click_on(&mut h, "workspace.cardinality.preset.0");
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    click_on(&mut h, "workspace.tools.relationship");
+    let (author, book) = (rect_of(&h, &node_of(&h, "Author")).center(), rect_of(&h, &node_of(&h, "Book")).center());
+    drag(&mut h, author, book);
+    assert_eq!(edges(&h), 1, "the relationship's line: {:?}", h.state().canvas.notice);
+    assert_eq!(count(&h, archforge_er::RELATIONSHIP), 1);
+    assert_eq!(count(&h, archforge_er::FOREIGN_KEY), 1, "drawing it adds Book's foreign key");
+    assert_eq!(count(&h, archforge_er::ATTRIBUTE), 5, "and the column it refers to Author with");
+
+    // 6. Undo and redo from the keyboard: the relationship, its key and column go and come back.
+    click(&mut h, canvas.left_top() + egui::vec2(40.0, 40.0));
+    let cmd = egui::Modifiers::COMMAND;
+    key(&mut h, egui::Key::Z, cmd);
+    assert_eq!((edges(&h), count(&h, archforge_er::FOREIGN_KEY), count(&h, archforge_er::ATTRIBUTE)), (0, 0, 4));
+    key(&mut h, egui::Key::Z, cmd | egui::Modifiers::SHIFT);
+    assert_eq!((edges(&h), count(&h, archforge_er::FOREIGN_KEY), count(&h, archforge_er::ATTRIBUTE)), (1, 1, 5));
+
+    // 7 and 8. Saved, closed and opened again from Home's recent list: the model and its layout
+    // as they were, saved.
+    let saved = save_close_reopen(&mut h);
+    assert_eq!(sorted(rows(&h)), sorted(saved), "the model and its diagram come back exactly");
+    assert!(!h.state().session.as_ref().unwrap().is_dirty());
+    assert_eq!(h.state().title(), "Library — Archforge");
 
     host.shutdown();
     let _ = std::fs::remove_dir_all(&base);
