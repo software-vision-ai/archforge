@@ -30,7 +30,8 @@ These are not in Archforge yet. Where the window shows a place for them, it says
   from outside, through agent access (see [Working with an agent](07-agents.md)).
 - Source control for projects, beyond the versions Save makes.
 - A menu bar with every command; on macOS, the application and File menus exist already.
-- Ready-made packages to install; today Archforge is built from its source.
+- Signed packages: today's packages are not signed, so macOS and Windows ask before they first
+  open Archforge (see [Getting started](02-getting-started.md)).
 
 ## Words used in this manual
 

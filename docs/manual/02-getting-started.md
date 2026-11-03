@@ -2,18 +2,26 @@
 
 ## What you need
 
-Archforge has no ready-made download yet; you build it from its source. You need:
+- **Dolt** 2.6 or a later 2.x: Archforge keeps every project in a Dolt database. Install it from
+  [Dolt's installation page](https://docs.dolthub.com/introduction/installation) (on macOS also
+  with Homebrew, `brew install dolt`) before you start Archforge. Archforge finds it on your `PATH`,
+  in the folders Homebrew and Dolt's installer use on macOS, or where the `ARCHFORGE_DOLT`
+  environment variable says (its full path).
+- **Archforge**, from the [Releases](https://github.com/software-vision-ai/archforge/releases)
+  page: the `.dmg` for macOS, the `.msi` for Windows, or the AppImage, `.deb` or `.rpm` for Linux.
+  The packages are not signed yet, so the first time, macOS asks you to allow Archforge in
+  **System Settings** → **Privacy & Security** (**Open Anyway**), and Windows SmartScreen asks you
+  to choose **More info**, then **Run anyway**.
 
-- Stable [Rust](https://www.rust-lang.org/tools/install) 1.95 or later.
-- [Dolt](https://github.com/dolthub/dolt) 2.6 or a later 2.x, on your `PATH` (or its full path in
-  the `ARCHFORGE_DOLT` environment variable). Archforge keeps every project in a Dolt database.
-- On Linux, the development packages for xkbcommon, Wayland, X11, Xrandr, Xi and Mesa GL.
-- Optionally, a checkout of [craft-fonts](https://github.com/storytold/craft-fonts) next to the
-  Archforge checkout, so the interface is drawn in Inter.
+To build Archforge from its source instead, you need stable [Rust](https://www.rust-lang.org/tools/install)
+1.95 or later; on Linux also the development packages for xkbcommon, Wayland, X11, Xrandr, Xi and
+Mesa GL; and optionally a checkout of [craft-fonts](https://github.com/storytold/craft-fonts) next
+to the Archforge checkout, so the interface is drawn in Inter.
 
 ## Starting Archforge
 
-From the Archforge checkout:
+Start Archforge as you start any application. Built from its source, start it from the Archforge
+checkout:
 
 ```sh
 cargo run -p archforge
