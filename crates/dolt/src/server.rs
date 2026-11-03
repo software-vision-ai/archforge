@@ -271,6 +271,7 @@ fn stop_foreign(pid: u32, command: &[String], budget: Duration) -> Result<(), Er
 }
 
 /// Stops this process's own child: a polite signal on unix, then a kill after `budget`.
+#[cfg_attr(not(unix), allow(unused_variables))]
 fn stop_child(child: &mut Child, budget: Duration) -> Result<(), Error> {
     if let Ok(Some(_)) = child.try_wait() {
         return Ok(());

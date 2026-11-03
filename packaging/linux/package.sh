@@ -146,11 +146,16 @@ fetch_verified "${NFPM_URL:-$nfpm_url}" "${NFPM_SHA256:-$nfpm_sha256}" "$nfpm"
 tar -C "$out" -xzf "$nfpm" nfpm
 rm -f "$nfpm"
 case "$arch" in x86_64) debarch=amd64 ;; aarch64) debarch=arm64 ;; esac
+# nfpm expands variables in a few fields only, not in contents or scripts: the configuration is
+# filled in here instead.
+config=$(mktemp)
+sed -e "s|\${STAGE}|$stage|g; s|\${VERSION}|$version|g; s|\${ARCH}|$debarch|g; s|\${POSTINST}|$here/postinst.sh|g" \
+  "$here/nfpm.yaml" >"$config"
+if grep -q '\${' "$config"; then die "packaging/linux/nfpm.yaml names a variable package.sh does not fill in"; fi
 for packager in deb rpm; do
   ext=$packager
-  STAGE="$stage" VERSION="$version" ARCH="$debarch" POSTINST="$here/postinst.sh" \
-    "$out/nfpm" package --config "$here/nfpm.yaml" --packager "$packager" --target "$out/$(artefact_name "$version" linux "$arch" "$ext")"
+  "$out/nfpm" package --config "$config" --packager "$packager" --target "$out/$(artefact_name "$version" linux "$arch" "$ext")"
 done
-rm -f "$out/nfpm"
+rm -f "$out/nfpm" "$config"
 rm -rf "$stage"
 echo "linux: $out"

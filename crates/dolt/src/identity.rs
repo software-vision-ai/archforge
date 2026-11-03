@@ -19,6 +19,7 @@ pub(crate) enum Args {
     /// The arguments one by one (Linux, Windows).
     List(Vec<String>),
     /// The arguments joined with spaces, as `ps` prints them (macOS and the other unixes).
+    #[cfg_attr(any(target_os = "linux", windows), allow(dead_code))]
     Joined(String),
     /// Unreadable: too long, or another user's process. Neither dolt nor ours.
     Unknown,
@@ -176,7 +177,7 @@ mod platform {
 mod platform {
     use std::ffi::OsStr;
 
-    use super::{Identity, parse_cim};
+    use super::{Identity, cim_answer};
     use crate::Error;
     use crate::runner;
 
@@ -193,7 +194,7 @@ mod platform {
 
 /// `ps -o state=,lstart=,args=` output: the state token, exactly 24 characters of start time, then
 /// the command line. `Some(None)` for a zombie; `None` when it cannot be read.
-#[cfg_attr(target_os = "linux", allow(dead_code))]
+#[cfg_attr(any(target_os = "linux", windows), allow(dead_code))]
 pub(crate) fn parse_ps(out: &str) -> Option<Option<Identity>> {
     let line = out.lines().find(|l| !l.trim().is_empty())?.trim_start();
     let (state, rest) = line.split_once(char::is_whitespace)?;
