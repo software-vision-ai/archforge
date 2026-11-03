@@ -36,6 +36,9 @@ description: "Use when writing, placing or running tests in Archforge: a regress
 ## Running
 - While working: `cargo test -p archforge-ui-egui`, `cargo test -p archforge` or `cargo test -p xtask`,
   with a name filter after it.
+- Before a release: `docs/release-checklist.md`, by hand in the running app on macOS, for what
+  the gate cannot drive (the menu bar, system pickers, the browser, the real window). A change to
+  such behaviour updates that list.
 - Before proposing a change: the gate, `cargo xtask ci`. Its steps are update (craft-libs to their
   newest main), format, lint, test, assets, skills, layers, portable, brands and deny. It stops at the
   first failure and prints a table of steps.

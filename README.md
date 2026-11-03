@@ -69,6 +69,9 @@ the PATH, or its absolute path in `ARCHFORGE_DOLT`. Maintainers also run an opti
 (`FORGE_BRANDS`) the gate skips it and says so. `cargo xtask shot` renders the window offscreen to
 `plan/shots/`.
 
+The gate drives every journey end to end in a test harness, but not the operating system: before a
+release, follow the [release checklist](docs/release-checklist.md) once in the running app.
+
 ## Downloads
 
 None yet.
