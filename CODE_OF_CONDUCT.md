@@ -59,9 +59,11 @@ representative at an online or offline event.
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported to the community leaders responsible for enforcement: contact the
-project maintainer, [DejanWho](https://github.com/DejanWho), privately on
-GitHub. Please do not report an incident in a public issue.
+reported to the community leaders responsible for enforcement through the
+repository's private reporting form: the **Security** tab, then **Report a
+vulnerability**. Only the maintainer can read what you send there. Start the
+title with "Code of conduct" so it is not taken for a security report. Please do
+not report an incident in a public issue.
 All complaints will be reviewed and investigated promptly and fairly.
 
 All community leaders are obligated to respect the privacy and security of the
