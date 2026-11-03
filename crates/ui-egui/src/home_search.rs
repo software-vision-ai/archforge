@@ -325,7 +325,7 @@ pub(crate) fn field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Re
     }
     widgets::record_visible(ui, &mut shell.registry, &id, "field", field);
     // The list's keys before the field sees them: the arrows move, Enter runs, Esc closes; none
-    // while a dialog over the window has them (About, AR-69).
+    // while a dialog over the window has them (About).
     let groups = hits(shell, &shell.home_search.query.clone());
     let count = groups.iter().map(|(_, h)| h.len()).sum::<usize>();
     let modal = shell.about.is_some();

@@ -1777,7 +1777,7 @@ pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
 // The panel.
 
 /// Draws the panel body for `panel` under its header, from `y`: Properties and Skills follow the
-/// selection; Chat and Appearance say what is true, Chat that it is coming (AR-63).
+/// selection; Chat and Appearance say what is true, Chat that it is coming.
 pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, panel: Panel, project: &str) {
     let paint = ui.painter().clone();
     let s = subject(shell, project);

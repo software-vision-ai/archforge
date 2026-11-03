@@ -1,4 +1,4 @@
-//! The model and its skills as MCP resources (AR-64): read-only context an agent reads before it
+//! The model and its skills as MCP resources: read-only context an agent reads before it
 //! generates something from the model (SQL DDL from a schema, say), beside the tools that read the
 //! same. Every read goes through the running Archforge's control channel, as the tools do, and
 //! carries the model's revision, so an agent can tell whether what it generated is still current.

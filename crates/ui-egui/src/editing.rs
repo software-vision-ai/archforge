@@ -1685,7 +1685,7 @@ fn entity_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, menu: &En
     if collapsible {
         rows.push(("collapse", "Collapse into a relationship", "", true, false));
     }
-    // The handoff to an agent, on every platform (AR-64).
+    // The handoff to an agent, on every platform.
     rows.push(("generate", "Generate…", if mac { "⇧⌘G" } else { "Ctrl Shift G" }, true, false));
     rows.push(("remove", "Remove from this diagram", delete_chord, true, false));
     rows.push(("delete", "Delete from the model…", model_chord, true, true));

@@ -908,8 +908,7 @@ enum Slot<'a> {
 /// A card's compartments under its header: a row a pitch apart, half a pitch and a dividing line
 /// between compartments. When a row does not fit the card's height, the rows from the last place
 /// that fits are said in one muted row there, whichever compartment they are in, or at the card's
-/// foot or beside its eyebrow when no row's place fits, so a card made short never looks empty
-/// (AR-57).
+/// foot or beside its eyebrow when no row's place fits, so a card made short never looks empty.
 fn draw_rows(inner: &egui::Painter, p: &Palette, card: &archforge_diagram::figure::Card, rect: Rect, z: f32, key_status: bool, room: Option<f32>) {
     let slots: Vec<(f32, Slot<'_>)> = slots(card).into_iter().map(|(top, slot, _)| (top, slot)).collect();
     // A row fits when it ends within the card, a unit of slack for rounding.
@@ -1526,7 +1525,7 @@ fn minimap_shown(shell: &Shell, r: Rect) -> bool {
 }
 
 /// The minimap's box on the canvas `r` while it shows, for what must keep clear of it (the
-/// toast with Undo, AR-75).
+/// toast with Undo).
 pub(crate) fn minimap_box(shell: &Shell, r: Rect) -> Option<Rect> {
     let m = Rect::from_min_size(pos2(r.right() - MINIMAP_GAP.x - MINIMAP.x, r.bottom() - MINIMAP_GAP.y - MINIMAP.y), MINIMAP);
     (minimap_shown(shell, r) && m.left() >= r.left() && m.top() >= r.top()).then_some(m)

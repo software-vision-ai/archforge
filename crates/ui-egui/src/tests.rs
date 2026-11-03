@@ -248,7 +248,7 @@ fn change_picks_the_folder_the_project_is_made_in_and_a_cancel_keeps_the_last_on
     let change = centre_of(&h, "new-project.location.change");
     press(&mut h, change);
     assert!(painted(&h).iter().any(|t| t == "Clients / Acme"), "{:?}", painted(&h));
-    // The picker says what the folder is for: the project's location, not a folder to pin (AR-74).
+    // The picker says what the folder is for: the project's location, not a folder to pin.
     assert_eq!(titles.lock().unwrap().as_slice(), ["Choose project location"]);
     // A cancel keeps the name and the folder picked before it, and says nothing.
     press(&mut h, change);
@@ -668,7 +668,7 @@ fn projects_open_in_tabs_that_keep_their_models_and_home_keeps_them_open() {
     let at = rect_of(&h, "workspace.header.project.0.close").center();
     click(&mut h, at);
     h.run_steps(2);
-    // It holds unsaved changes, so it asks: Save, its label white on the accent (AR-60), and once
+    // It holds unsaved changes, so it asks: Save, its label white on the accent, and once
     // saved it closes.
     let save = rect_of(&h, "close-ask.save");
     assert_eq!(label_colours(&h, "Save", save), [crate::ux::palette(false).on_accent]);
@@ -5607,7 +5607,7 @@ fn each_rail_icon_opens_its_own_panel_in_both_appearances() {
             assert_eq!((h.state().state.panel, h.state().state.panel_collapsed), (panel, false), "{theme:?}: {id}");
         }
     }
-    // Four shapes of their own (AR-61), none the drawing another control uses.
+    // Four shapes of their own, none the drawing another control uses.
     let rail = [&crate::ux::icons::CHAT_BUBBLE, &crate::ux::icons::PALETTE, &crate::ux::icons::PROPERTIES, &crate::ux::icons::SKILLS];
     for (i, a) in rail.iter().enumerate() {
         for b in rail.iter().skip(i + 1) {
@@ -6481,7 +6481,7 @@ fn a_picker_that_cannot_appear_is_said_on_home_and_a_cancel_says_nothing() {
     unavailable.store(true, std::sync::atomic::Ordering::SeqCst);
     h.state_mut().pin_from_picker();
     assert_eq!(h.state().picker_error.as_deref(), Some("this system has no desktop portal"));
-    // Home's picker says it pins a folder (AR-74).
+    // Home's picker says it pins a folder.
     assert!(titles.lock().unwrap().iter().all(|t| t == "Pin a folder") && !titles.lock().unwrap().is_empty(), "{:?}", titles.lock().unwrap());
 }
 
@@ -6880,7 +6880,7 @@ fn a_created_project_opens_its_model_without_waiting_for_the_pointer() {
     }))
     .unwrap();
     // The frame that takes the answer opens the project's tab; its model opens on the next frame,
-    // which the window asks for at once rather than waiting for the pointer to move (AR-78).
+    // which the window asks for at once rather than waiting for the pointer to move.
     h.step();
     assert!(h.state().project.is_some(), "the tab is open");
     assert!(h.ctx.has_requested_repaint(), "the window asks for the frame that opens the model");
@@ -6893,8 +6893,5 @@ fn the_new_project_dialog_calls_a_project_the_folder_it_is_kept_in() {
     let (h, _host) = creating_harness();
     let texts = painted(&h);
     assert!(texts.iter().any(|t| t == "Creates the folder Commerce platform.archforge here: the project and every version of it."), "{texts:?}");
-    assert!(
-        !texts.iter().any(|t| t.contains("versioned file") || t.contains("project file")),
-        "a project is a folder, never a file (AR-79): {texts:?}"
-    );
+    assert!(!texts.iter().any(|t| t.contains("versioned file") || t.contains("project file")), "a project is a folder, never a file: {texts:?}");
 }

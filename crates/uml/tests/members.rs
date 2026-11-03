@@ -68,7 +68,7 @@ fn multiplicities_read_as_typed_and_the_rest_are_refused() {
     assert_eq!(parse_multiplicity("*"), Ok(Some((0, None))));
     assert_eq!(parse_multiplicity(" 1..* "), Ok(Some((1, None))));
     assert_eq!(parse_multiplicity("2..5"), Ok(Some((2, Some(5)))));
-    // The story's examples (AR-51): exact numbers, ranges, unbounded ranges and `*` for `0..*`.
+    // The owner's examples: exact numbers, ranges, unbounded ranges and `*` for `0..*`.
     for (typed, bounds) in [
         ("0", (0, Some(0))),
         ("12", (12, Some(12))),

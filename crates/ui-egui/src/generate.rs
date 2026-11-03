@@ -1,4 +1,4 @@
-//! Generate (AR-64): File → Generate… hands the selection to an agent connected to Archforge,
+//! Generate: File → Generate… hands the selection to an agent connected to Archforge,
 //! which writes SQL DDL or documentation from the model and its skills. Nothing is generated in
 //! the window. The dialog shows what it is from (the selected schema, table, class or diagram,
 //! else the open diagram), the output and its dialect, the export skills in effect there with

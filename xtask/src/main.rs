@@ -15,6 +15,7 @@ mod resize;
 mod shot;
 mod skills;
 mod stats;
+mod tracker;
 mod util;
 mod version;
 mod wasm;

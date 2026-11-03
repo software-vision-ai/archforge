@@ -168,7 +168,7 @@ impl DiagramKind for UmlKind {
             Some((kind, store.uuid(o).ok()?))
         });
         let (kind, target) = member.map_or((MemberKind::Attribute, None), |(kind, id)| (kind, Some(id)));
-        // Typed in place on the card (AR-62); Properties' editor where the card cannot hold it.
+        // Typed in place on the card; Properties' editor where the card cannot hold it.
         if crate::uml_inline::open(shell, element, kind, target) {
             return;
         }
