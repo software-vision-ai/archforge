@@ -31,7 +31,7 @@ Agent access works on macOS and Linux for now.
 3. Let your agent run its MCP server, bridged to that port: `target/debug/archforge-cli mcp --bridge
    47000`. The repository's `.mcp.json` registers exactly this for agents that read it.
 
-The status bar says when agent access is on. The port listens only on your own computer, and a
+**File ▸ Generate…** says whether agent access is on. The port listens only on your own computer, and a
 token made for each start, kept in a file only you can read, guards it. Without `--control`,
 nothing listens.
 

@@ -13,8 +13,7 @@ An open project fills the window with its workspace.
 - **The right rail** opens the right panel on **Chat**, **Appearance**, **Properties** or
   **Skills**. Clicking the rail icon of the open column folds it away; clicking any icon opens it
   again.
-- **The status bar** at the bottom says whether the project is saved, whether an agent is
-  connected, and where the project is.
+- **The status bar** at the bottom says whether the project is saved, and where the project is.
 
 ## Models and Diagrams
 
