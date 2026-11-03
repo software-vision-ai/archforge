@@ -3,6 +3,8 @@
 //! Class tool and named in place; an attribute and an operation added in Properties; one line of
 //! each relationship kind drawn with the Relationship tool; undo and redo from the keyboard; Save;
 //! the project closed and opened again from Home's recent list, its model and layout as they were.
+//! While the host works on its own threads the test draws only the frames the window asks for, as
+//! the real window does, so a window that would wait for the pointer to move fails it.
 
 use std::time::{Duration, Instant};
 
@@ -50,12 +52,18 @@ fn type_text(h: &mut H, text: &str) {
     h.run();
 }
 
-/// Runs frames until `done` holds, the host answering on its own threads; fails past a minute.
+/// Waits until `done` holds, the host answering on its own threads, drawing only the frames the
+/// window asks for, as the real window does: the next one once the delay it asked for has passed,
+/// never one it did not ask for. A window that asks for no frame while `done` does not hold yet
+/// would wait for the pointer to move, so the test fails there, naming the step. Past a minute it
+/// fails too.
 fn wait(h: &mut H, what: &str, done: impl Fn(&Shell) -> bool) {
     let started = Instant::now();
     while !done(h.state()) {
         assert!(started.elapsed() < Duration::from_secs(60), "{what} did not happen in time");
-        std::thread::sleep(Duration::from_millis(20));
+        let delay = h.output().viewport_output.get(&egui::ViewportId::ROOT).map_or(Duration::MAX, |v| v.repaint_delay);
+        assert!(delay != Duration::MAX, "{what}: the window asked for no frame and would wait for the pointer to move");
+        std::thread::sleep(delay);
         h.run();
     }
 }
