@@ -75,6 +75,9 @@ release.
 The gate drives every journey end to end in a test harness, but not the operating system: before a
 release, follow the [release checklist](docs/release-checklist.md) once in the running app.
 
+Releases are cut as [docs/releasing.md](docs/releasing.md) describes: bump the version with
+`cargo xtask version`, push `main` to the `release` branch, and publish the draft it builds.
+
 ## Downloads
 
 Ready-made packages are on the [Releases](https://github.com/software-vision-ai/archforge/releases)

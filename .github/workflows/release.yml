@@ -5,16 +5,20 @@
 #   Linux x86_64, aarch64   AppImage (+ .zsync), .deb, .rpm,    packaging/linux/package.sh
 #                           .tar.gz
 #
-# A pushed tag v<version> builds every package and attaches them, with SHA256SUMS, to a DRAFT
-# release; the tag must name the version in Cargo.toml's [workspace.package]. The owner reads the
-# draft and publishes it. A pull request that touches packaging or this file, and a run started
-# by hand, build every package as a dry run: the packages stay workflow artefacts and nothing is
-# released. Nothing is signed yet; the scripts' signing steps wait for their secrets.
+# A push to the `release` branch builds every package and attaches them, with SHA256SUMS, to a
+# DRAFT release named Archforge v<version>, the version from Cargo.toml's [workspace.package]
+# (docs/releasing.md). Its notes are GitHub's, made from the pull requests merged since the last
+# release, under Archforge's own lines. The owner reads the draft and publishes it, which creates
+# the tag v<version>. A version with a suffix (0.2.0-rc.1) is a pre-release. A version published
+# already is refused: bump it first. A pull request that touches packaging or this file, and a run
+# started by hand, build every package as a dry run: the packages stay workflow artefacts and
+# nothing is released. Every package reports its version, commit and date. Nothing is signed yet;
+# the scripts' signing steps wait for their secrets.
 name: Release
 
 on:
   push:
-    tags: ["v*"]
+    branches: [release]
   pull_request:
     paths:
       - ".github/workflows/release.yml"
@@ -37,21 +41,28 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.v.outputs.version }}
+      prerelease: ${{ steps.v.outputs.prerelease }}
+      sha: ${{ steps.v.outputs.sha }}
+      date: ${{ steps.v.outputs.date }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - id: v
-        name: Read the version, and check the tag names it
+        name: Read the version, and refuse one published already
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           version=$(awk '/^\[workspace.package\]/{p=1;next} /^\[/{p=0} p&&/^version/{gsub(/[" ]/,"",$3);print $3;exit}' Cargo.toml)
           if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
             echo "::error::Cargo.toml's [workspace.package] holds no version like 1.2.3 or 1.2.3-rc.1"
             exit 1
           fi
-          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "v$version" ]; then
-            echo "::error::the tag $GITHUB_REF_NAME does not name Cargo.toml's version $version (expected v$version)"
+          draft=$(gh release view "v$version" -R "$GITHUB_REPOSITORY" --json isDraft -q .isDraft 2>/dev/null || echo none)
+          if [ "$draft" = false ]; then
+            echo "::error::Archforge v$version is published already; bump the version (cargo xtask version) before releasing again"
             exit 1
           fi
-          echo "version=$version" >>"$GITHUB_OUTPUT"
+          case "$version" in *-*) prerelease=true ;; *) prerelease=false ;; esac
+          { echo "version=$version"; echo "prerelease=$prerelease"; echo "sha=${GITHUB_SHA::9}"; echo "date=$(date -u +%Y-%m-%d)"; } >>"$GITHUB_OUTPUT"
           echo "### Archforge $version (\`${GITHUB_SHA::9}\`)" >>"$GITHUB_STEP_SUMMARY"
 
   macos:
@@ -61,6 +72,9 @@ jobs:
     timeout-minutes: 90
     env:
       VERSION: ${{ needs.version.outputs.version }}
+      # Every package reports its version, commit and date (apps/archforge/build.rs).
+      ARCHFORGE_BUILD_SHA: ${{ needs.version.outputs.sha }}
+      ARCHFORGE_BUILD_DATE: ${{ needs.version.outputs.date }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: The interface's fonts, from craft-fonts beside the checkout
@@ -81,7 +95,7 @@ jobs:
           lipo -archs "$app/Contents/MacOS/archforge" | grep -q x86_64
           lipo -archs "$app/Contents/MacOS/archforge" | grep -q arm64
           test -f "$app/Contents/Resources/LICENSE-MIT"
-          plutil -extract CFBundleShortVersionString raw "$app/Contents/Info.plist" | grep -qx "$VERSION"
+          plutil -extract CFBundleShortVersionString raw "$app/Contents/Info.plist" | grep -qx "${VERSION%%-*}"
           hdiutil detach "$RUNNER_TEMP/dmg" >/dev/null
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -96,6 +110,9 @@ jobs:
     timeout-minutes: 90
     env:
       VERSION: ${{ needs.version.outputs.version }}
+      # Every package reports its version, commit and date (apps/archforge/build.rs).
+      ARCHFORGE_BUILD_SHA: ${{ needs.version.outputs.sha }}
+      ARCHFORGE_BUILD_DATE: ${{ needs.version.outputs.date }}
       WIX_VERSION: 5.0.2
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -147,6 +164,9 @@ jobs:
           - { arch: aarch64, runner: ubuntu-22.04-arm }
     env:
       VERSION: ${{ needs.version.outputs.version }}
+      # Every package reports its version, commit and date (apps/archforge/build.rs).
+      ARCHFORGE_BUILD_SHA: ${{ needs.version.outputs.sha }}
+      ARCHFORGE_BUILD_DATE: ${{ needs.version.outputs.date }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: The interface's fonts, from craft-fonts beside the checkout
@@ -170,6 +190,8 @@ jobs:
           chmod +x "$base.AppImage"
           "$base.AppImage" --appimage-extract >/dev/null
           test -x squashfs-root/usr/bin/archforge
+          # The binary reports this build, not a dev build.
+          squashfs-root/usr/bin/archforge --version | tee /dev/stderr | grep -F "archforge $VERSION ($ARCHFORGE_BUILD_SHA, $ARCHFORGE_BUILD_DATE)"
           rm -rf squashfs-root
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -185,14 +207,17 @@ jobs:
   release:
     name: Draft release
     needs: [version, macos, windows, linux]
-    # Only a pushed tag releases: a run started by hand on a tag stays a dry run.
-    if: github.event_name == 'push' && github.ref_type == 'tag'
+    # Only a push to the release branch releases: everything else is a dry run.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/release'
     runs-on: ubuntu-latest
     # The one job that may write: it creates or updates the draft release.
     permissions:
       contents: write
     env:
       VERSION: ${{ needs.version.outputs.version }}
+      # Every package reports its version, commit and date (apps/archforge/build.rs).
+      ARCHFORGE_BUILD_SHA: ${{ needs.version.outputs.sha }}
+      ARCHFORGE_BUILD_DATE: ${{ needs.version.outputs.date }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -205,16 +230,26 @@ jobs:
           cd assets
           sha256sum -- * >SHA256SUMS
           cat SHA256SUMS >>"$GITHUB_STEP_SUMMARY"
-      - name: Create or update the draft
+      - name: Notes, from the pull requests merged since the last release
         run: |
-          tag="v$VERSION"
           cat >notes.md <<NOTES
           Archforge $VERSION, for macOS (universal), Windows (x64) and Linux (x86_64, aarch64).
 
-          **Before you start:** Archforge keeps projects in [Dolt](https://docs.dolthub.com/introduction/installation) 2.6 or a later 2.x. Install it first, so that \`dolt\` is on the PATH, or name it in \`ARCHFORGE_DOLT\`.
+          **Before you start:** Archforge keeps projects in [Dolt](https://docs.dolthub.com/introduction/installation) 2.6 or a later 2.x. Install it first; Archforge finds it on the PATH, where Homebrew and Dolt's installer put it on macOS, or where \`ARCHFORGE_DOLT\` says.
 
-          These packages are not signed yet. The [README](https://github.com/$GITHUB_REPOSITORY#downloads) says how to open them on macOS and Windows. \`SHA256SUMS\` holds every file's checksum.
+          The packages are not signed yet: the [README](https://github.com/$GITHUB_REPOSITORY#downloads) says how to open them on macOS and Windows. Agent access is not available on Windows yet. \`SHA256SUMS\` holds every file's checksum.
+
           NOTES
+          # GitHub's own notes: What's Changed, New Contributors and the Full Changelog link.
+          gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" -f tag_name="v$VERSION" -f target_commitish="$GITHUB_SHA" -q .body >>notes.md
+          cat notes.md >>"$GITHUB_STEP_SUMMARY"
+      - name: Create or update the draft
+        env:
+          PRERELEASE: ${{ needs.version.outputs.prerelease }}
+        run: |
+          tag="v$VERSION"
+          pre=()
+          [ "$PRERELEASE" = true ] && pre=(--prerelease)
           if draft=$(gh release view "$tag" -R "$GITHUB_REPOSITORY" --json isDraft -q .isDraft 2>/dev/null); then
             # A published release keeps the files people downloaded; only a draft is refreshed.
             if [ "$draft" != true ]; then
@@ -222,6 +257,8 @@ jobs:
               exit 1
             fi
             gh release upload "$tag" assets/* --clobber -R "$GITHUB_REPOSITORY"
+            gh release edit "$tag" --target "$GITHUB_SHA" --notes-file notes.md "${pre[@]}" -R "$GITHUB_REPOSITORY"
           else
-            gh release create "$tag" assets/* --draft --verify-tag --title "Archforge $VERSION" --notes-file notes.md -R "$GITHUB_REPOSITORY"
+            # The tag is made when the owner publishes the draft, on the commit built here.
+            gh release create "$tag" assets/* --draft --target "$GITHUB_SHA" --title "Archforge v$VERSION" --notes-file notes.md "${pre[@]}" -R "$GITHUB_REPOSITORY"
           fi

@@ -1,5 +1,5 @@
 //! The version tool: the version lives in one place, `[workspace.package]` in the
-//! workspace manifest. `cargo xtask version` prints it; `cargo xtask version <x.y.z>` sets it and
+//! workspace manifest. `cargo xtask version` prints it; `cargo xtask version <x.y.z>` (or a pre-release, `<x.y.z>-rc.1`) sets it and
 //! refreshes the lockfile.
 
 use crate::util;
@@ -23,9 +23,18 @@ fn find(text: &str) -> Option<(usize, String)> {
     None
 }
 
+/// `x.y.z`, or a pre-release of it, `x.y.z-rc.1`: the suffix is dot-separated letters, digits and
+/// hyphens, as semantic versioning has it.
 pub fn valid(v: &str) -> bool {
-    let parts: Vec<&str> = v.split('.').collect();
-    parts.len() == 3 && parts.iter().all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()) && (p.len() == 1 || !p.starts_with('0')))
+    let (numbers, pre) = match v.split_once('-') {
+        Some((n, p)) => (n, Some(p)),
+        None => (v, None),
+    };
+    let parts: Vec<&str> = numbers.split('.').collect();
+    let numbers_ok =
+        parts.len() == 3 && parts.iter().all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()) && (p.len() == 1 || !p.starts_with('0')));
+    let pre_ok = pre.is_none_or(|p| p.split('.').all(|id| !id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')));
+    numbers_ok && pre_ok
 }
 
 pub fn current() -> Result<String, String> {
@@ -38,7 +47,7 @@ pub fn run(new: Option<&str>) -> Result<(), String> {
         return Ok(());
     };
     if !valid(new) {
-        return Err(format!("{new:?} is not a version of the form x.y.z"));
+        return Err(format!("{new:?} is not a version of the form x.y.z or x.y.z-rc.1"));
     }
     let text = manifest()?;
     let (line, old) = find(&text).ok_or("no version in [workspace.package]")?;
@@ -65,5 +74,7 @@ mod tests {
         let text = "[package]\nversion = \"9.9.9\"\n[workspace.package]\nversion = \"1.2.3\"\n";
         assert_eq!(find(text), Some((3, "1.2.3".to_string())));
         assert!(valid("1.2.3") && !valid("1.2") && !valid("01.2.3") && !valid("1.2.x"));
+        // A pre-release: dot-separated letters, digits and hyphens after the dash.
+        assert!(valid("0.2.0-rc.1") && valid("1.0.0-beta") && !valid("0.2.0-") && !valid("0.2.0-rc..1") && !valid("0.2.0-rc_1"));
     }
 }
