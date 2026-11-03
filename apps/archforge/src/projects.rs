@@ -819,7 +819,7 @@ mod tests {
 
     #[test]
     fn a_project_whose_class_skill_overrides_a_project_skill_saves_and_opens_again() {
-        // AR-68: the project saved, but its model would not open again.
+        // The project saved, but its model would not open again.
         let base = std::env::temp_dir().join(format!("af-skills-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();

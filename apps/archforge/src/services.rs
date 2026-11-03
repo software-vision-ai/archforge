@@ -20,7 +20,7 @@ pub fn native(projects: std::sync::Arc<crate::projects::Projects>) -> Services {
     }
 }
 
-/// The owner's approved support pages (AR-69, AR-70): GitHub Sponsors goes to the company's
+/// The owner's approved support pages: GitHub Sponsors goes to the company's
 /// organization, Ko-fi to the owner. Each is set once its page can take support; until then About
 /// Archforge says it is not set up yet. The organization's Sponsors profile is not public yet.
 const GITHUB_SPONSORS: Option<&str> = None;

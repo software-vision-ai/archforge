@@ -1,4 +1,4 @@
-//! About Archforge (AR-69): what Archforge is, and how to support its development through
+//! About Archforge: what Archforge is, and how to support its development through
 //! GitHub Sponsors or Ko-fi. It opens from the bar's Help button and, on macOS, from the
 //! application menu.
 //!

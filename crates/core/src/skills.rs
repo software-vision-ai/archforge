@@ -367,7 +367,7 @@ pub fn problems(store: &Store) -> Vec<SkillProblem> {
 
 /// The first two skills of one name on one subject, found in time linear in the skills: the name
 /// rule a model is checked by as it opens. Skills of one name on different subjects are not one:
-/// the more specific overrides the other (AR-68).
+/// the more specific overrides the other.
 pub fn first_duplicate(store: &Store) -> Option<SkillProblem> {
     let mut seen: HashMap<(Option<Obj>, String), Obj> = HashMap::new();
     for s in skills(store) {

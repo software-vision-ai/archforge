@@ -56,10 +56,10 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
 - Diagrams and skills open as tabs inside the project; the + that makes a new diagram sits in
   that tab strip.
 - The left rail holds Models, Diagrams and Source Control; the right rail, between the canvas and
-  the panel, holds Chat, Appearance, Properties and Skills, each with a shape of its own (AR-61,
-  a proposal for the owner to confirm): a rounded speech bubble with two lines, a palette with
+  the panel, holds Chat, Appearance, Properties and Skills, each with a shape of its own (a
+  proposal for the owner to confirm): a rounded speech bubble with two lines, a palette with
   three dots of paint, three sliders, and a page of rules with a checklist. Chat's panel says
-  only Coming soon (owner, AR-63): no provider, message or history control until built-in chat is.
+  only Coming soon (owner): no provider, message or history control until built-in chat is.
 - Clicking the open column's own rail icon folds it; any rail icon opens a folded column on its
   content; the panel's collapse button folds the panel. Folded columns are kept in the preferences.
 - The status bar says only what is true: the save state, the agent state, the location.
@@ -71,10 +71,10 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
 - Home fills the window on its own, without menu bar, toolbar or status bar. Its welcome has no
   button: a project opens from the Open a project card or the title strip's + Open project.
 - A start card for what cannot be done at all yet (Explore an example, Import a model) is left
-  off Home, and the cards left share the row (AR-67).
+  off Home, and the cards left share the row.
 - Recent projects keep the last twelve (name, folder, last opened) across restarts; a row opens
-  its project, or shows its tab when it is open already. Each keeps the view it was left in
-  (AR-59): its diagram and skill tabs in order, the one shown, and the canvas's pan and zoom; the
+  its project, or shows its tab when it is open already. Each keeps the view it was left in:
+  its diagram and skill tabs in order, the one shown, and the canvas's pan and zoom; the
   row says the folder and "Last view: {diagram}", and opening it again resumes that view, a tab
   whose diagram is gone left out. The view is the window's preference, never the model's: resuming
   it changes nothing and joins no history. The explorer and the panel, and whether they are folded,
@@ -93,11 +93,11 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   (newest first) or by name; both choices are kept in the preferences.
 - One project holds one model, named as the project. The New project dialog asks for a name and a
   location only; a taken or unfinished name is said in plain words under the field. Change… picks
-  the location with the system's folder picker, titled Choose project location (AR-74; Home's
+  the location with the system's folder picker, titled Choose project location (Home's
   Pin a folder keeps its own title), and shows it in the field; a cancel keeps the
-  folder before it, and a picker that cannot appear says why under the field (AR-66). What it says
+  folder before it, and a picker that cannot appear says why under the field. What it says
   a project holds is only what is built: ER and UML class diagrams, skills, agent access, undo
-  and saves (AR-67); nothing still to come is promised.
+  and saves; nothing still to come is promised.
 - Open project uses the system's folder picker; a damaged, newer or foreign project is refused
   with a dialog, and the project open already stays as it was.
 - The shortest way to drawing: + in the diagram tab strip, a name, Enter. The New diagram dialog
@@ -118,8 +118,8 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   JD for John Doe. Archforge never reads the name from the operating system's account. The avatar
   and the command key with comma open Settings, which for now holds Your name, with the initials
   beside it changing as it is typed; Done, the close button, Enter or Esc close it.
-- The bar's Help button (and, on macOS, Archforge ▸ About Archforge…) opens About Archforge
-  (AR-69): what Archforge is, and Support Archforge with GitHub Sponsors and Ko-fi, each opening
+- The bar's Help button (and, on macOS, Archforge ▸ About Archforge…) opens About Archforge:
+  what Archforge is, and Support Archforge with GitHub Sponsors and Ko-fi, each opening
   its provider's page in the browser. Only an approved HTTPS address of the provider opens; one
   the host has not set up says Not set up yet and takes no click. It says a contribution unlocks
   nothing; it never opens by itself, and it is modal, so Tab stays in it and nothing behind moves.
@@ -268,7 +268,7 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   text. Where a skill applies and when are not shown for now (owner, 2026-10-31): skills will be
   used in contexts still to come, and a fixed list such as Export misleads. The model keeps those
   fields; they come back when the contexts are known.
-- Generation is an agent's, never the window's (owner, AR-64): File → Generate… opens a handoff
+- Generation is an agent's, never the window's (owner): File → Generate… opens a handoff
   for the selected schema, table, class or diagram (else the open diagram): From, Output (SQL
   DDL with its dialect, which the export skills in effect suggest, or documentation), the export
   skills in effect with where each comes from and what overrides it, and the request to copy for
@@ -285,7 +285,7 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   avoids it.
 - A refusal shows where the action happened: under the field, under the box's name or under the
   tree. Removals that take other things with them show a toast with Undo. The toast keeps clear
-  of the minimap (AR-75): at the canvas's foot, left of the minimap while there is room beside it,
+  of the minimap: at the canvas's foot, left of the minimap while there is room beside it,
   else above it; its text wraps to three lines rather than running under Undo.
 
 ## Saving
@@ -416,7 +416,7 @@ What is UML's own, beside the shared rules above.
   is made in the package Types the first time it is used (owner decision).
 - A selected class's second adorner is Add attribute. A class dragged from Models lands sized to
   show its members, with its lines to the classes the diagram shows, as one undo step.
-- Members are typed on the card (AR-62, a proposal for the owner to confirm): a selected class
+- Members are typed on the card (a proposal for the owner to confirm): a selected class
   shows a + at the right of each compartment; it, the adorner, the menu's Add attribute and ⌘↩
   open a draft row at the end of the attributes (⇧⌘↩ and the operations' + at the end of the
   operations), and a double click on a member's row opens that row. The row is ringed in the
@@ -427,7 +427,7 @@ What is UML's own, beside the shared rules above.
   text kept and the model untouched. The row's ⋯ takes what was typed to Properties' editor for
   visibility, multiplicity, static, abstract and parameters. Below the detail zoom, or without
   the class's card on the open diagram, Properties' editor opens instead.
-- A card never hides a member silently (2026-11-02, AR-57). A new class is as tall as a row in
+- A card never hides a member silently (2026-11-02). A new class is as tall as a row in
   each compartment. Applying a member in Properties, added or edited, grows every card of its class
   that would hide one, on every diagram, in the same undo step and keeping its width; a card is
   never shrunk. A card made shorter by hand stays so until a member of its class is next applied;

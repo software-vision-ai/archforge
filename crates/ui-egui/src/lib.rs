@@ -81,7 +81,7 @@ pub struct Services {
     /// Why the native folder picker cannot appear, when the platform can tell (Linux without a
     /// desktop portal answers nothing, as a cancel does); asked when a pick comes back empty.
     pub picker_unavailable: Option<std::sync::Arc<dyn Fn() -> Option<String> + Send + Sync>>,
-    /// Where About Archforge sends support (AR-69): the provider pages the host has set up; a
+    /// Where About Archforge sends support: the provider pages the host has set up; a
     /// destination left out says it is not set up yet.
     pub support: support::Destinations,
 }
@@ -845,7 +845,7 @@ impl Shell {
     }
 
     /// Opens the tabs the project was left with, in their order, the one it showed, panned and
-    /// zoomed as it was (AR-59). A tab whose diagram or skill is gone is left out; with none left,
+    /// zoomed as it was. A tab whose diagram or skill is gone is left out; with none left,
     /// the project opens on no tab, as a new one does. Opening a diagram is a view command, so
     /// nothing is changed and nothing joins the history.
     fn resume_view(&mut self) {
@@ -1264,7 +1264,7 @@ impl Shell {
             ui.ctx().send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
             self.last_title = title;
         }
-        // While About is over the window, the window behind it takes no keys (AR-76): its tree,
+        // While About is over the window, the window behind it takes no keys: its tree,
         // canvas and editors read keys directly, so the frame's keys are held back while it is
         // drawn and given back for the dialogs.
         let held = if self.about.is_some() { hold_keys(ui.ctx()) } else { Vec::new() };
@@ -1282,7 +1282,7 @@ impl Shell {
         generate::show(self, ui);
         close_ask::show(self, ui);
         // A project shown in this frame (made, opened or recalled from its tab) gets its model on
-        // the next: that frame is asked for now, not left to the pointer's next move (AR-78).
+        // the next: that frame is asked for now, not left to the pointer's next move.
         if self.project.as_ref().is_some_and(|p| self.adopted.as_ref() != Some(&p.path)) {
             ui.ctx().request_repaint();
         }

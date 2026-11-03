@@ -1,8 +1,8 @@
-//! A class's attribute or operation typed in place on its card (AR-62): a row in its compartment,
+//! A class's attribute or operation typed in place on its card: a row in its compartment,
 //! ringed in the accent while it is a draft, holding the name and the type (an attribute's type,
 //! an operation's return type) with the type menu beside it. Tab moves between the two; Enter
 //! writes the member as one undo step through the same command as Properties' editor, a new one
-//! growing its cards to show it (AR-57), and opens the next draft in the same compartment;
+//! growing its cards to show it, and opens the next draft in the same compartment;
 //! Escape drops the draft; a click away writes a draft that has a name and drops an empty one,
 //! as the multiplicity field writes on leaving it. A refusal stays under the row with the text
 //! as typed, the model untouched. The row's ⋯ takes it to Properties' editor for the rest

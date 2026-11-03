@@ -783,7 +783,7 @@ fn recent_row(
     model_thumb(p, paint, Rect::from_min_size(r.min + vec2(12.0, 2.0), vec2(82.0, 48.0)), [Hue::Blue, Hue::Green, Hue::Purple][i % 3]);
     let w = r.width();
     ux::text(paint, r.min + vec2(112.0, 6.0), &project.name, types::BODY_STRONG, p.text, Some(w * 0.674 - 136.0));
-    // Where it is, and the diagram it was left showing (AR-59).
+    // Where it is, and the diagram it was left showing.
     let mut place = shell.location_of(&project.path).unwrap_or_default();
     if let Some(view) = project.view.as_ref().filter(|v| !v.label.is_empty()) {
         let last = crate::i18n::fmt(&tr("Last view: {name}"), &[("name", &view.label)]);

@@ -9,7 +9,7 @@
 //! Create project, or Enter in the name field, asks the host to create the project; the dialog
 //! then waits, taking no other click, and closes on success with the project open, or keeps the
 //! name and says what went wrong. The name follows the rules both sides share (`archforge-names`).
-//! Change… asks the host's folder picker for the folder the project goes in (AR-66); a pick shows
+//! Change… asks the host's folder picker for the folder the project goes in; a pick shows
 //! there and is where the project is made, a cancel keeps the name and the folder as they were,
 //! and a picker that cannot appear says why. Cancel, the close button and Escape close the dialog;
 //! the window behind it takes no clicks while it is open.

@@ -518,7 +518,7 @@ pub(crate) fn toast(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
         return;
     }
     let paint = ui.painter().clone();
-    // Clear of the minimap (AR-75): at the canvas's foot, left of the minimap while there is room
+    // Clear of the minimap: at the canvas's foot, left of the minimap while there is room
     // beside it, else above it; the text wraps rather than running under Undo.
     let edge = 16.0;
     let minimap = crate::canvas::minimap_box(shell, r);
