@@ -15,7 +15,7 @@ The rules a change cannot break. `AGENTS.md` lists them in one line each.
 - The optional trademark check, `cargo xtask brands`, reads the list `FORGE_BRANDS` names and fails
   on a listed name in code, comments, strings, test names, manifests and packaging sources. It does
   not read Markdown, so a skill, the README or a contributor document is checked by eye.
-- The repository carries no tracker ids, no private paths and no names of private files. Plans,
+- The repository carries no private paths and no names of private files. Plans,
   notes and screenshots belong in the ignored `plan/` folder.
 
 ## Licences and dependencies
