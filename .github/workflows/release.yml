@@ -56,8 +56,9 @@ jobs:
             echo "::error::Cargo.toml's [workspace.package] holds no version like 1.2.3 or 1.2.3-rc.1"
             exit 1
           fi
+          # Only a release is refused for a published version: a dry run builds and checks the packages whatever the version.
           draft=$(gh release view "v$version" -R "$GITHUB_REPOSITORY" --json isDraft -q .isDraft 2>/dev/null || echo none)
-          if [ "$draft" = false ]; then
+          if [ "$draft" = false ] && [ "$GITHUB_EVENT_NAME" = push ] && [ "$GITHUB_REF" = refs/heads/release ]; then
             echo "::error::Archforge v$version is published already; bump the version (cargo xtask version) before releasing again"
             exit 1
           fi

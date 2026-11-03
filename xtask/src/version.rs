@@ -33,7 +33,12 @@ pub fn valid(v: &str) -> bool {
     let parts: Vec<&str> = numbers.split('.').collect();
     let numbers_ok =
         parts.len() == 3 && parts.iter().all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()) && (p.len() == 1 || !p.starts_with('0')));
-    let pre_ok = pre.is_none_or(|p| p.split('.').all(|id| !id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')));
+    // As semantic versioning (and Cargo) has it, a numeric identifier carries no leading zero.
+    let identifier = |id: &str| {
+        let numeric = id.chars().all(|c| c.is_ascii_digit());
+        !id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') && !(numeric && id.len() > 1 && id.starts_with('0'))
+    };
+    let pre_ok = pre.is_none_or(|p| p.split('.').all(identifier));
     numbers_ok && pre_ok
 }
 
@@ -76,5 +81,6 @@ mod tests {
         assert!(valid("1.2.3") && !valid("1.2") && !valid("01.2.3") && !valid("1.2.x"));
         // A pre-release: dot-separated letters, digits and hyphens after the dash.
         assert!(valid("0.2.0-rc.1") && valid("1.0.0-beta") && !valid("0.2.0-") && !valid("0.2.0-rc..1") && !valid("0.2.0-rc_1"));
+        assert!(!valid("0.2.0-rc.01") && valid("0.2.0-rc.0") && valid("0.2.0-0a"), "no leading zero in a numeric identifier");
     }
 }
