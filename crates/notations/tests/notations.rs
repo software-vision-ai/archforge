@@ -254,7 +254,7 @@ fn a_model_past_one_transactions_steps_opens_again_from_its_rows() {
 
 #[test]
 fn a_class_skill_named_as_a_project_skill_opens_again_and_one_subject_never_holds_two() {
-    // AR-68: every skill sits in the model's one list, so the siblings' name check refused a
+    // Every skill sits in the model's one list, so the siblings' name check refused a
     // class's skill that overrides the project's of the same name, and the project would not open.
     let mut s = new_project_session("Review", ids(0)).unwrap();
     let project = id(&mut s, "skill.add", json!({ "name": "Review export conventions", "body": "Everywhere." }));

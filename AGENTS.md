@@ -55,6 +55,8 @@ cargo xtask shot dark                     # an offscreen screenshot and a small 
 - Behaviour, icons and wording are our own: never copy another product's, and never name another
   modelling product in the repository.
 - A lint added by a toolchain release is fixed in code at once, never by pinning the toolchain.
+- The tree names no ticket of the tracker: code, comments, tests, skills and the manual say what a
+  thing is and why in their own words (a test in the gate checks it).
 - Hot files (the translation catalogues in `crates/ui-egui/src/i18n/`, `xtask/src/layers.rs`,
   `ATTRIBUTION.toml`) are edited surgically, with new rows placed beside related entries and never
   appended at the end of the file.

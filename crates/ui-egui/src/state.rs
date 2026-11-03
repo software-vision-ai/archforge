@@ -103,7 +103,7 @@ pub struct RecentProject {
     pub view: Option<SavedView>,
 }
 
-/// The working view a project was left in (AR-59): its diagram and skill tabs in order, the one
+/// The working view a project was left in: its diagram and skill tabs in order, the one
 /// shown, and how the canvas was panned and zoomed. It is the window's, kept with the recent
 /// entry, never in the model, so resuming it makes no change and no undo step.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]

@@ -140,7 +140,7 @@ fn body(
     for (id, label, answer, primary) in buttons {
         let danger = matches!(answer, Answer::LoseChanges);
         // Laid out in the ink it is drawn in: a galley keeps the colour it was laid out with, so
-        // the primary's label is the white on its fill (AR-60).
+        // the primary's label is the white on its fill.
         let ink = if danger || *primary { p.on_accent } else { p.text };
         let g = ux::galley(paint, label, types::SMALL, ink, None);
         let w = g.size().x + 24.0;

@@ -459,7 +459,7 @@ pub const BRUSH: Icon = Icon {
     ],
 };
 
-/// Adjustable controls: Properties (AR-61).
+/// Adjustable controls: Properties.
 pub const PROPERTIES: Icon = Icon {
     size: [18.0, 18.0],
     stroke: 1.4,
@@ -485,7 +485,7 @@ pub const PROPERTIES: Icon = Icon {
     ],
 };
 
-/// A page of rules to follow, its corner folded: Skills (AR-61).
+/// A page of rules to follow, its corner folded: Skills.
 pub const SKILLS: Icon = Icon {
     size: [18.0, 18.0],
     stroke: 1.3,
@@ -506,7 +506,7 @@ pub const SKILLS: Icon = Icon {
     ],
 };
 
-/// A rounded speech bubble with two lines: Chat (AR-61).
+/// A rounded speech bubble with two lines: Chat.
 pub const CHAT_BUBBLE: Icon = Icon {
     size: [18.0, 18.0],
     stroke: 1.4,
@@ -527,7 +527,7 @@ pub const CHAT_BUBBLE: Icon = Icon {
     ],
 };
 
-/// A palette with three dots of paint: Appearance (AR-61).
+/// A palette with three dots of paint: Appearance.
 pub const PALETTE: Icon = Icon {
     size: [18.0, 18.0],
     stroke: 1.3,
