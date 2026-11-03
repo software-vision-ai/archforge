@@ -93,7 +93,8 @@ same.
 ## Contributing
 
 Read `CONTRIBUTING.md` for how to propose a change and `AGENTS.md` for the rules every change
-follows. Report security problems as `SECURITY.md` describes, not in a public issue.
+follows. Everyone taking part agrees to `CODE_OF_CONDUCT.md`. Report security problems as
+`SECURITY.md` describes, not in a public issue.
 
 ## Licence
 
