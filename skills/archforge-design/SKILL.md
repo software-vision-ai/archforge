@@ -70,6 +70,11 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
 ## Home and projects
 - Home fills the window on its own, without menu bar, toolbar or status bar. Its welcome has no
   button: a project opens from the Open a project card or the title strip's + Open project.
+- Archforge looks for Dolt when it starts. Without a Dolt it can keep projects in, Home shows a
+  card in the banner's place (2026-11-03): an amber database tile, "Install Dolt to keep your
+  projects" and why, Install Dolt (Dolt's installation page, in the browser) and Look again; it has
+  no close. With Dolt found it goes, and the banner is back. The New project dialog's Dolt failure
+  links to the same page.
 - A start card for what cannot be done at all yet (Explore an example, Import a model) is left
   off Home, and the cards left share the row.
 - Recent projects keep the last twelve (name, folder, last opened) across restarts; a row opens

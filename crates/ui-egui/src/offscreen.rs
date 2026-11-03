@@ -16,6 +16,8 @@ pub enum Screen {
     HomeSettings,
     /// Home with About Archforge open, its support destinations not set up yet.
     HomeAbout,
+    /// Home when no Dolt Archforge can use is found: the notice with Install Dolt and Look again.
+    HomeDoltMissing,
     /// The New project dialog over Home, a name typed and the usual folder.
     NewProject,
     /// The same after a creation failed for want of Dolt.
@@ -154,6 +156,9 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
     if screen == Screen::HomeAbout {
         crate::support::open(&mut shell);
     }
+    if screen == Screen::HomeDoltMissing {
+        shell.dolt_missing = Some("ARCHFORGE_DOLT is not set and no dolt is on the PATH".into());
+    }
     if !matches!(
         screen,
         Screen::Home
@@ -161,6 +166,7 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
             | Screen::HomeSearch
             | Screen::HomeSettings
             | Screen::HomeAbout
+            | Screen::HomeDoltMissing
             | Screen::NewProject
             | Screen::NewProjectFailed
             | Screen::NewProjectFolder

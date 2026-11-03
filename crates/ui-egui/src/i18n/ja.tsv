@@ -421,6 +421,10 @@ str		This name cannot be used.	この名前は使えません。
 str		The folder cannot hold projects.	このフォルダーにはプロジェクトを置けません。
 str		The folder picker could not open.	フォルダーの選択画面を開けませんでした。
 str		Archforge cannot find Dolt, which keeps its projects.	プロジェクトを保存する Dolt が見つかりません。
+str		Install Dolt to keep your projects	プロジェクトを保存するには Dolt をインストールしてください
+str		Archforge keeps every project in a Dolt database, and finds no Dolt 2.6 or later on this computer.	Archforge はすべてのプロジェクトを Dolt データベースに保存しますが、このコンピュータに Dolt 2.6 以降が見つかりません。
+str		Install Dolt	Dolt をインストール
+str		Look again	もう一度探す
 str		The project could not be created.	プロジェクトを作成できませんでした。
 str		The work stopped without an answer.	処理が応答なしで止まりました。
 # ホーム（続き）

@@ -6909,3 +6909,109 @@ fn the_new_project_dialog_calls_a_project_the_folder_it_is_kept_in() {
     assert!(texts.iter().any(|t| t == "Creates the folder Commerce platform.archforge here: the project and every version of it."), "{texts:?}");
     assert!(!texts.iter().any(|t| t.contains("versioned file") || t.contains("project file")), "a project is a folder, never a file: {texts:?}");
 }
+
+/// A host whose Dolt is missing until the test installs it; it counts the looks for it.
+#[derive(Default)]
+struct DoltHost {
+    installed: std::sync::atomic::AtomicBool,
+    looks: std::sync::atomic::AtomicUsize,
+}
+
+impl crate::ProjectHost for DoltHost {
+    fn create(&self, _folder: &std::path::Path, _name: &str) -> std::sync::mpsc::Receiver<Result<crate::Opened, crate::CreateError>> {
+        std::sync::mpsc::channel().1
+    }
+
+    fn find_dolt(&self) -> std::sync::mpsc::Receiver<Result<(), String>> {
+        self.looks.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let (tx, rx) = std::sync::mpsc::channel();
+        let installed = self.installed.load(std::sync::atomic::Ordering::SeqCst);
+        tx.send(if installed { Ok(()) } else { Err("no dolt on the PATH".into()) }).unwrap();
+        rx
+    }
+}
+
+fn dolt_harness(theme: ThemeKind, installed: bool) -> (Harness<'static, Shell>, std::sync::Arc<DoltHost>) {
+    crate::i18n::set_language("en");
+    let host = std::sync::Arc::new(DoltHost::default());
+    host.installed.store(installed, std::sync::atomic::Ordering::SeqCst);
+    let mut shell = Shell::new(Services { projects: Some(host.clone()), ..Services::default() });
+    shell.state.theme = theme;
+    let mut h = harness_over(shell);
+    h.run_steps(4);
+    (h, host)
+}
+
+/// A press and release on `id` in one frame, after the pointer has come to it, so the frame's
+/// output holds what the click asked for.
+fn click_in_one_frame(h: &mut Harness<'static, Shell>, id: &str) {
+    let at = centre_of(h, id);
+    h.event(egui::Event::PointerMoved(at));
+    h.run();
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE });
+    }
+    h.step();
+}
+
+#[test]
+fn home_says_when_dolt_is_missing_with_its_install_page_and_looks_again() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, host) = dolt_harness(theme, false);
+        assert_eq!(h.state().dolt_missing.as_deref(), Some("no dolt on the PATH"), "{theme:?}: looked for at the start");
+        let ids = ids(&h);
+        for id in ["home.dolt.install", "home.dolt.look-again"] {
+            assert!(ids.iter().any(|i| i == id), "{theme:?}: {id} in {ids:?}");
+        }
+        assert!(!ids.iter().any(|i| i == "home.banner.close"), "{theme:?}: the notice stands in the banner's place");
+        let texts = painted(&h);
+        assert!(texts.iter().any(|t| t == "Install Dolt to keep your projects"), "{theme:?}: {texts:?}");
+        click_in_one_frame(&mut h, "home.dolt.install");
+        assert_eq!(opened_links(&h), [crate::home::DOLT_INSTALL], "{theme:?}: Dolt's installation page, in the browser");
+        // Installed meanwhile: Look again finds it, and Home is as it always was.
+        host.installed.store(true, std::sync::atomic::Ordering::SeqCst);
+        let at = centre_of(&h, "home.dolt.look-again");
+        click(&mut h, at);
+        h.run_steps(4);
+        assert!(h.state().dolt_missing.is_none(), "{theme:?}");
+        assert_eq!(host.looks.load(std::sync::atomic::Ordering::SeqCst), 2, "{theme:?}: once at the start, once for Look again");
+        let ids = self::ids(&h);
+        assert!(!ids.iter().any(|i| i.starts_with("home.dolt.")), "{theme:?}: {ids:?}");
+        assert!(ids.iter().any(|i| i == "home.banner.close"), "{theme:?}: the banner is back");
+    }
+}
+
+#[test]
+fn a_project_made_or_opened_ends_the_notice_without_looking_again() {
+    let (mut h, host) = dolt_harness(ThemeKind::Light, false);
+    assert!(h.state().dolt_missing.is_some());
+    // Dolt was installed and a project opened, Look again never pressed.
+    h.state_mut().open_project(crate::Opened { name: "Commerce".into(), path: "/Users/robin/Commerce.archforge".into(), ..Default::default() });
+    assert!(h.state().dolt_missing.is_none());
+    assert_eq!(host.looks.load(std::sync::atomic::Ordering::SeqCst), 1);
+}
+
+#[test]
+fn with_dolt_there_home_shows_no_notice_and_looks_once() {
+    let (mut h, host) = dolt_harness(ThemeKind::Light, true);
+    h.run_steps(8);
+    assert!(h.state().dolt_missing.is_none());
+    assert!(!ids(&h).iter().any(|i| i.starts_with("home.dolt.")));
+    assert_eq!(host.looks.load(std::sync::atomic::Ordering::SeqCst), 1);
+}
+
+#[test]
+fn the_new_project_dialog_links_to_dolts_install_page_when_dolt_is_missing() {
+    let (mut h, host) = creating_harness();
+    assert!(!ids(&h).iter().any(|i| i == "new-project.install-dolt"), "no link before a failure");
+    let at = centre_of(&h, "new-project.create");
+    press(&mut h, at);
+    answer(&mut h, &host, Err(crate::CreateError::DoltMissing { detail: "no dolt on the PATH".into() }));
+    click_in_one_frame(&mut h, "new-project.install-dolt");
+    assert_eq!(opened_links(&h), [crate::home::DOLT_INSTALL]);
+    // Any other failure has no such link.
+    let at = centre_of(&h, "new-project.create");
+    press(&mut h, at);
+    answer(&mut h, &host, Err(crate::CreateError::Failed { detail: "the server did not start".into() }));
+    assert!(!ids(&h).iter().any(|i| i == "new-project.install-dolt"));
+}

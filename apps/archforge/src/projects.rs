@@ -197,6 +197,24 @@ impl ProjectHost for Projects {
         self.close_unwritten(project, false)
     }
 
+    fn find_dolt(&self) -> Receiver<Result<(), String>> {
+        let (tx, rx) = channel();
+        let inner = self.inner.clone();
+        let reply = tx.clone();
+        // `dolt version` runs off the interface thread; one that is found is kept for every project.
+        let looked = std::thread::Builder::new().name("archforge-dolt".into()).spawn(move || {
+            let answer = dolt(&inner).map(|_| ()).map_err(|e| match e {
+                CreateError::DoltMissing { detail } | CreateError::Failed { detail } | CreateError::FolderUnusable { detail } => detail,
+                other => format!("{other:?}"),
+            });
+            let _ = reply.send(answer);
+        });
+        if let Err(e) = looked {
+            let _ = tx.send(Err(format!("the look for dolt could not start: {e}")));
+        }
+        rx
+    }
+
     fn create(&self, folder: &Path, name: &str) -> Receiver<Result<Opened, CreateError>> {
         let (tx, rx) = channel();
         let inner = self.inner.clone();
