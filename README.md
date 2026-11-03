@@ -86,7 +86,7 @@ page, each with its SHA-256 in `SHA256SUMS`:
 | System | Download | To install |
 |---|---|---|
 | macOS 11 or later (Apple silicon and Intel) | `archforge-<version>-macos-universal.dmg` | Open it and drag Archforge to Applications. |
-| Windows 10 or later (x64) | `archforge-<version>-windows-x64.msi`, or the `.zip` to run without installing | Run the installer. |
+| Windows 10 or later (x64), Windows 11 on ARM (ARM64) | `archforge-<version>-windows-x64.msi` or `-windows-arm64.msi`, or the `.zip` to run without installing | Run the installer. |
 | Linux (x86_64, aarch64; glibc 2.35 or later) | the `.AppImage`, or the `.deb`, `.rpm` or `.tar.gz` | Make the AppImage executable and start it, or install the package. |
 
 **Install Dolt first.** Archforge keeps every project in [Dolt](https://docs.dolthub.com/introduction/installation)
