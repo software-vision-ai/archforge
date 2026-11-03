@@ -36,7 +36,9 @@ eframe = { version = "0.37", default-features = false, features = ["accesskit", 
 # decorations), as eframe's own default features gave it.
 winit = "0.30"
 egui_kittest = "0.37"
-muda = "0.21"
+# The macOS menu bar. Without its default gtk3 feature, so no GTK, glib or their Linux libraries
+# enter the lockfile: Archforge draws no native menu on Linux.
+muda = { version = "0.21", default-features = false }
 # The native folder picker for Open project (owner decision): MIT; on Linux it
 # asks the desktop portal over D-Bus, pure Rust, no GTK.
 rfd = "0.17"

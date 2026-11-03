@@ -28,12 +28,11 @@ allow = ["OFL-1.1", "Ubuntu-font-1.0"]
 
 [advisories]
 # Unmaintained, with no release Archforge can reach until a parent moves, and reached only through
-# crates Archforge depends on: proc-macro-error and ttf-parser have no patched release, and the
+# crates Archforge depends on: ttf-parser has no patched release, and the
 # zbus family's successor, zbus 6, waits on accesskit_unix and atspi. Each comes back when its
 # parent updates.
 # A vulnerability is never ignored here: it is fixed by an upgrade.
 ignore = [
-    { id = "RUSTSEC-2024-0370", reason = "proc-macro-error 1.0.4, a build-time macro helper of glib-macros, through gtk 0.18 for muda's Linux menu bar" },
     { id = "RUSTSEC-2026-0192", reason = "ttf-parser 0.25.1, through ab_glyph and sctk-adwaita for winit's Linux window decorations" },
     { id = "RUSTSEC-2026-0370", reason = "zvariant 5.15.1, through atspi and accesskit_unix for egui-winit's Linux accessibility bridge" },
     { id = "RUSTSEC-2026-0371", reason = "zbus_names 4.3.5, through atspi and accesskit_unix for egui-winit's Linux accessibility bridge" },
