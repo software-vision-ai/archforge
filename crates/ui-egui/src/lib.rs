@@ -465,6 +465,8 @@ impl Shell {
     /// project already open in a tab is shown in it instead.
     pub fn open_project(&mut self, opened: Opened) {
         self.open_error = None;
+        // A project made or opened is kept in Dolt: Home no longer asks to install it.
+        self.dolt_missing = None;
         // Home's recent list puts it first.
         let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
         self.state.remember(&opened.name, &opened.path, now);

@@ -6982,6 +6982,16 @@ fn home_says_when_dolt_is_missing_with_its_install_page_and_looks_again() {
 }
 
 #[test]
+fn a_project_made_or_opened_ends_the_notice_without_looking_again() {
+    let (mut h, host) = dolt_harness(ThemeKind::Light, false);
+    assert!(h.state().dolt_missing.is_some());
+    // Dolt was installed and a project opened, Look again never pressed.
+    h.state_mut().open_project(crate::Opened { name: "Commerce".into(), path: "/Users/robin/Commerce.archforge".into(), ..Default::default() });
+    assert!(h.state().dolt_missing.is_none());
+    assert_eq!(host.looks.load(std::sync::atomic::Ordering::SeqCst), 1);
+}
+
+#[test]
 fn with_dolt_there_home_shows_no_notice_and_looks_once() {
     let (mut h, host) = dolt_harness(ThemeKind::Light, true);
     h.run_steps(8);
