@@ -193,6 +193,8 @@ pub enum Menu {
     EndMultiplicity(usize),
     /// A class's package.
     ClassPackage,
+    /// The package a package sits in (AR-102).
+    PackageParent,
 }
 
 /// The selection the panels describe.

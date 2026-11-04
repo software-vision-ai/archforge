@@ -557,6 +557,10 @@ str		Visibility	Visibilidad
 str		Place class	Colocar clase
 str		Add package	Añadir paquete
 str		Place package	Colocar paquete
+str		Move package	Mover paquete
+str		Parent package	Paquete superior
+str		Move {what} into {where}	Mover {what} a {where}
+str		{what} moved into {where}	{what} movido a {where}
 str		Open this package's diagram	Abrir el diagrama de este paquete
 str		Open this package's diagram (⌘↓)	Abrir el diagrama de este paquete (⌘↓)
 str		Only a package this diagram's package holds goes on it	Solo cabe un paquete que esté dentro del paquete de este diagrama

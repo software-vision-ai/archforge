@@ -656,6 +656,12 @@ fn commit(shell: &mut Shell, view: View, d: Obj, pointer: Option<Pos2>, shift: b
             if delta.length() < DRAG_MIN {
                 return;
             }
+            // A package let go on another package, or on an ancestor in the path bar, goes into it.
+            if let [node] = nodes.as_slice()
+                && crate::package_nav::drop_moves(shell, view, d, *node, pointer)
+            {
+                return;
+            }
             let ids: Vec<String> = nodes.iter().map(Uuid::to_string).collect();
             if let Err(e) = run(shell, "diagram.move", json!({ "nodes": ids, "dx": delta.x as f64, "dy": delta.y as f64 })) {
                 shell.canvas.notice = Some(e);

@@ -111,4 +111,25 @@ name.
 
 <!-- picture: workspace-inside-package dark | Inside Sales: its classes, its own package Payments, and the path bar back to the root -->
 
+### Move a package
+
+A package moves into another package with everything it holds and its own diagram. Four ways
+lead there:
+
+- **On a diagram**, drag its card onto another package's card. While you hold it there, that
+  card is ringed and a label says what the drop does (*Move Sales into Billing*). Let go, and the
+  package leaves this diagram for the diagram of its new home, and a toast offers **Undo**.
+- **Up the path bar**: drag a card onto one of the packages named in the path bar, such as your
+  project's root, to move it up there.
+- **In Models**, drag its row onto another package's row, or onto a class there.
+- **From the keyboard**, select it, and in **Properties** choose its **Parent package**. The menu
+  lists every package it may go into, never itself nor one it holds.
+
+A package can't go into itself or into a package it holds. In Models, such a row is ringed in
+amber while you hold the package over it, and the drop is refused with the reason. Let go anywhere
+else and the package only moves on the diagram; the model is not changed. Each move is one step
+you can undo, and the project keeps it once saved.
+
+<!-- picture: workspace-package-parent light | Properties for the package Sales: its Parent package menu lists the root and Billing -->
+
 Next: [Skills](06-skills.md).

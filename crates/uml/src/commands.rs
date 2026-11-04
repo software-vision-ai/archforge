@@ -297,6 +297,17 @@ fn package_move(ctx: &mut C<'_>, p: &Params) -> R {
     check_name(ctx.doc, &name_of(ctx.doc, pkg), &siblings_of(ctx.doc, to), Some(pkg), "package")?;
     detach(ctx.doc, pkg)?;
     place_package(ctx.doc, pkg, to)?;
+    // Its cards go from the diagrams of a package that no longer holds it (AR-102): a class
+    // diagram shows the packages its own package holds. Its own diagram and what it holds stay.
+    let parent = package_of(ctx.doc, pkg);
+    let (_, _, nodes) = archforge_diagram::views_of(ctx.doc, pkg);
+    for n in nodes {
+        let shown_on = ctx.doc.container(n).map_err(fail)?.map(|(d, _)| d);
+        let of = shown_on.and_then(|d| ctx.doc.get(d, archforge_diagram::diagram::ELEMENT).ok().and_then(|v| v.as_ref()));
+        if of != parent && ctx.doc.is_alive(n) {
+            archforge_diagram::destroy_node_with_edges(ctx.doc, n).map_err(fail)?;
+        }
+    }
     ctx.view.selection = vec![pkg];
     Ok(json!({ "id": uuid_of(ctx.doc, pkg)? }))
 }

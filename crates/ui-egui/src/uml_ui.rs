@@ -499,11 +499,25 @@ impl NotationUi for UmlUi {
             c if c == archforge_uml::CLASS && package_of(store, dragged) != Some(to) => {
                 Some(("uml.class.move", json!({ "class": id(dragged)?, "package": id(to)? })))
             }
-            c if c == archforge_uml::PACKAGE && !archforge_uml::commands::is_within(store, to, dragged) && package_of(store, dragged) != Some(to) => {
+            // Into itself or a package it holds too: the engine refuses it and says why (AR-102).
+            c if c == archforge_uml::PACKAGE && package_of(store, dragged) != Some(to) => {
                 Some(("uml.package.move", json!({ "package": id(dragged)?, "to": id(to)? })))
             }
             _ => None,
         }
+    }
+
+    /// A package held over itself or a package it holds: a drop there is refused.
+    fn drop_refused(&self, store: &Store, dragged: Obj, target: Obj) -> bool {
+        let to = match class(store, target) {
+            Some(c) if c == archforge_uml::PACKAGE => target,
+            Some(c) if c == archforge_uml::CLASS => match package_of(store, target) {
+                Some(p) => p,
+                None => return false,
+            },
+            _ => return false,
+        };
+        class(store, dragged) == Some(archforge_uml::PACKAGE) && archforge_uml::commands::is_within(store, to, dragged)
     }
 
     fn entry(&self, store: &Store, o: Obj) -> Option<Entry> {
@@ -573,6 +587,9 @@ impl NotationUi for UmlUi {
             let Ok(id) = store.uuid(c) else { return };
             let of = Subject::of(c, id, archforge_uml::CLASS, words);
             return crate::uml_panel::class_body(shell, ui, p, r, y, &of);
+        }
+        if class(store, o) == Some(archforge_uml::PACKAGE) && archforge_uml::commands::root_package(store) != Some(o) {
+            return crate::uml_panel::package_body(shell, ui, p, r, y, subject);
         }
         let Some((cmd, key)) = self.rename(store, o) else { return };
         let width = r.width() - 2.0 * crate::panels::PAD;

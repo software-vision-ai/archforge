@@ -537,7 +537,14 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
         let i = rows.iter().position(|x| x.id == target.id).unwrap_or(0);
         let y = r.top() + FIRST_ROW + i as f32 * ROW - offset;
         let hit = Rect::from_min_max(pos2(r.left() + 8.0, y - 7.0), pos2(r.right() - 8.0, y - 7.0 + ROW_HEIGHT));
-        clip.painter().rect_stroke(hit, 6.0, Stroke::new(1.5, p.accent), StrokeKind::Inside);
+        let refused = shell.session.as_ref().is_some_and(|s| {
+            let store = s.doc();
+            store
+                .by_uuid(dragged)
+                .zip(crate::notation_ui::of(shell.notation_uis, store, target.obj))
+                .is_some_and(|(d, ui)| ui.drop_refused(store, d, target.obj))
+        });
+        clip.painter().rect_stroke(hit, 6.0, Stroke::new(1.5, if refused { p.amber } else { p.accent }), StrokeKind::Inside);
     }
     if let Some((dragged, at)) = shell.explorer.dropped
         && tree.contains(at)

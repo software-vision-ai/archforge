@@ -2607,6 +2607,129 @@ fn a_package_placed_on_a_class_diagram_leads_to_its_own_diagram_by_open_the_path
 }
 
 #[test]
+fn a_package_moves_onto_another_package_or_up_the_path_bar_from_properties_and_in_models_refusing_itself() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+        let (top, sales, billing, sales_card, billing_card) = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value).to_string();
+            let top = id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": root, "name": "Top" })).unwrap().value);
+            let mut made = Vec::new();
+            for (name, x) in [("Sales", 80), ("Billing", 520)] {
+                let p = id(s.execute("uml.package.add", &serde_json::json!({ "name": name })).unwrap().value);
+                let card = id(s
+                    .execute(
+                        "diagram.place",
+                        &serde_json::json!({ "diagram": top.to_string(), "element": p.to_string(), "x": x, "y": 120, "width": 240, "height": 148 }),
+                    )
+                    .unwrap()
+                    .value);
+                s.execute("uml.package.diagram", &serde_json::json!({ "package": p.to_string() })).unwrap();
+                made.push((p, card));
+            }
+            (top, made[0].0, made[1].0, made[0].1, made[1].1)
+        };
+        crate::canvas::open(h.state_mut(), top);
+        h.run();
+        let parent = |h: &Harness<'static, Shell>, p: archforge_mof::Uuid| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            archforge_uml::commands::package_of(st, st.by_uuid(p).unwrap()).map(|o| archforge_core::name_of(st, o))
+        };
+        // Dragged onto Billing: ringed while held there, then Sales goes into it as one step.
+        let (from, to) = (
+            rect_of(&h, &format!("workspace.canvas.node.{sales_card}")).center(),
+            rect_of(&h, &format!("workspace.canvas.node.{billing_card}")).center(),
+        );
+        h.event(egui::Event::PointerMoved(from));
+        h.event(egui::Event::PointerButton { pos: from, button: egui::PointerButton::Primary, pressed: true, modifiers: egui::Modifiers::NONE });
+        h.run();
+        h.event(egui::Event::PointerMoved(to));
+        h.run();
+        assert!(painted(&h).iter().any(|t| t == "Move Sales into Billing"), "{theme:?}: the drop is said");
+        h.event(egui::Event::PointerButton { pos: to, button: egui::PointerButton::Primary, pressed: false, modifiers: egui::Modifiers::NONE });
+        h.run();
+        assert_eq!(parent(&h, sales).as_deref(), Some("Billing"));
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Move package"));
+        assert!(!ids(&h).iter().any(|i| i == &format!("workspace.canvas.node.{sales_card}")), "{theme:?}: gone from the root's diagram");
+        let on_billing = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let bd = archforge_uml::commands::diagram_of(st, st.by_uuid(billing).unwrap()).unwrap();
+            crate::editing::on_diagram(st, bd, st.by_uuid(sales).unwrap())
+        };
+        assert!(on_billing, "{theme:?}: on Billing's diagram now");
+        assert!(painted(&h).iter().any(|t| t == "Sales moved into Billing"), "{theme:?}: the toast");
+        // Undo puts it back where it was, its card too.
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        h.run();
+        assert_eq!(parent(&h, sales).as_deref(), Some("Commerce platform"));
+        assert!(ids(&h).iter().any(|i| i == &format!("workspace.canvas.node.{sales_card}")));
+        // Let go on empty canvas: only moved, still in the root.
+        let empty = rect_of(&h, "workspace.canvas").center() + egui::vec2(0.0, 260.0);
+        drag(&mut h, from, empty);
+        assert_eq!(parent(&h, sales).as_deref(), Some("Commerce platform"), "{theme:?}: nothing moved in the model");
+        // Properties: the parent package, the keyboard's way; then up the path bar back to the root.
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [sales.to_string()] })).unwrap();
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        h.run();
+        let at = rect_of(&h, "workspace.properties.package.parent").center();
+        click(&mut h, at);
+        let choices: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.package.parent.")).collect();
+        assert_eq!(choices.len(), 2, "{theme:?}: the root and Billing, never Sales itself: {choices:?}");
+        let at = rect_of(&h, "workspace.properties.package.parent.1").center();
+        click(&mut h, at);
+        assert_eq!(parent(&h, sales).as_deref(), Some("Billing"));
+        let inner = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            st.uuid(archforge_uml::commands::diagram_of(st, st.by_uuid(billing).unwrap()).unwrap()).unwrap()
+        };
+        h.state_mut()
+            .session
+            .as_mut()
+            .unwrap()
+            .execute(
+                "diagram.place",
+                &serde_json::json!({ "diagram": inner.to_string(), "element": sales.to_string(), "x": 80, "y": 120, "width": 240, "height": 148 }),
+            )
+            .unwrap();
+        crate::canvas::open(h.state_mut(), inner);
+        h.run();
+        let card = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let d = st.by_uuid(inner).unwrap();
+            let n = st.list(d, archforge_diagram::diagram::NODE).unwrap().iter().filter_map(archforge_mof::Value::as_ref).next().unwrap();
+            st.uuid(n).unwrap()
+        };
+        let from = rect_of(&h, &format!("workspace.canvas.node.{card}")).center();
+        let root_pill = rect_of(&h, "workspace.canvas.path.0").center();
+        drag(&mut h, from, root_pill);
+        assert_eq!(parent(&h, sales).as_deref(), Some("Commerce platform"), "{theme:?}: up into the root by the path bar");
+        // In Models, a package dropped onto a package it holds is refused, and says so.
+        let lines = id(h
+            .state_mut()
+            .session
+            .as_mut()
+            .unwrap()
+            .execute("uml.package.add", &serde_json::json!({ "name": "Lines", "parent": sales.to_string() }))
+            .unwrap()
+            .value);
+        h.state_mut().state.show_explorer(crate::state::Explorer::Models);
+        let root = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            st.uuid(archforge_uml::commands::root_package(st).unwrap()).unwrap()
+        };
+        h.state_mut().explorer.expanded.extend([root, sales]);
+        h.run();
+        let (from, target) =
+            (rect_of(&h, &format!("workspace.explorer.row.{sales}")).center(), rect_of(&h, &format!("workspace.explorer.row.{lines}")).center());
+        drag(&mut h, from, target);
+        assert_eq!(parent(&h, sales).as_deref(), Some("Commerce platform"), "{theme:?}: not moved");
+        let notice = h.state().explorer.notice.clone().unwrap_or_default();
+        assert!(notice.contains("cannot go into itself"), "{theme:?}: {notice}");
+    }
+}
+
+#[test]
 fn the_canvas_draws_the_diagram_and_the_pointer_selects_pans_and_zooms() {
     let (mut h, customer, diagram) = diagram_harness();
     let found = ids(&h);

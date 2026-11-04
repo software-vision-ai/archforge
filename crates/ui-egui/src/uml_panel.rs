@@ -240,6 +240,53 @@ pub(crate) fn class_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
     }
 }
 
+/// A package's panel: its name, and the package it sits in, a pick moving it there with what it
+/// holds and its diagram (AR-102), the keyboard's way to move it. The root package stays, so it
+/// shows its name alone.
+pub(crate) fn package_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, subject: &Subject) {
+    let (Some(package), Some(package_id)) = (subject.obj, subject.id) else { return };
+    let width = r.width() - 2.0 * PAD;
+    crate::panels::name_field(shell, ui, p, pos2(r.left() + PAD, y), width, subject, "uml.package.rename", "package");
+    // Where it may go: every package but itself and those it holds, on a row of its own, so the
+    // menu has room for their paths.
+    let (here, choices) = match shell.session.as_ref() {
+        Some(s) => {
+            let store = s.doc();
+            let here = archforge_uml::commands::package_of(store, package).map(|p| package_path(store, p)).unwrap_or_default();
+            let choices: Vec<(Uuid, String)> = archforge_uml::commands::all_packages(store)
+                .into_iter()
+                .filter(|o| !archforge_uml::commands::is_within(store, *o, package))
+                .filter_map(|o| Some((store.uuid(o).ok()?, package_path(store, o))))
+                .collect();
+            (here, choices)
+        }
+        None => (String::new(), Vec::new()),
+    };
+    let parent_id = "workspace.properties.package.parent";
+    let field = select_field(
+        shell,
+        ui,
+        p,
+        pos2(r.left() + PAD, y + 17.0 + FIELD + 12.0),
+        width,
+        parent_id,
+        &tr("Parent package"),
+        &here,
+        Menu::PackageParent,
+    );
+    if shell.panels.menu == Some(Menu::PackageParent) {
+        let items: Vec<String> = choices.iter().map(|(_, n)| n.clone()).collect();
+        if let Some(i) = menu(shell, ui, p, field, parent_id, &items)
+            && let Some((to, _)) = choices.get(i)
+        {
+            match run(shell, "uml.package.move", json!({ "package": package_id.to_string(), "to": to.to_string() })) {
+                Ok(_) => shell.panels.notice = None,
+                Err(e) => shell.panels.notice = Some(e),
+            }
+        }
+    }
+}
+
 /// A package as the menus name it: its path from the top, `sales › orders`.
 fn package_path(store: &Store, package: Obj) -> String {
     let mut names = Vec::new();
