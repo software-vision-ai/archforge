@@ -252,6 +252,8 @@ str		New ER diagram	新建ER图
 str		New class diagram	新建类图
 str		Tables, their columns and keys, and the relationships between them.	表及其列和键，以及表之间的关系。
 str		Classes with their attributes and operations, and the lines between them.	类及其属性和操作，以及它们之间的连线。
+str		Customer	客户
+str		Order	订单
 str		Create	创建
 str		ER diagram	ER图
 str		ER diagrams	ER图

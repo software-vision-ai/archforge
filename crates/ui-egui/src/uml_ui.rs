@@ -70,10 +70,11 @@ impl DiagramKind for UmlKind {
         let at = |x: f32, y: f32| r.center() + vec2(x - 134.0, y - 50.0);
         let order = egui::Rect::from_min_size(at(30.0, 14.0), vec2(96.0, 70.0));
         let customer = egui::Rect::from_min_size(at(170.0, 26.0), vec2(70.0, 46.0));
-        for (card, name, rule) in [(order, "Order", 22.0), (customer, "Customer", 20.0)] {
+        // The sample classes' names, in the user's language, as the rest of the card is.
+        for (card, name, rule) in [(order, tr("Order"), 22.0), (customer, tr("Customer"), 20.0)] {
             paint.rect_filled(card, 5.0, p.surface);
             paint.rect_stroke(card, 5.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
-            crate::ux::text(paint, card.min + vec2(10.0, 4.0), name, crate::ux::types::TINY, p.text, Some(card.width() - 14.0));
+            crate::ux::text(paint, card.min + vec2(10.0, 4.0), &name, crate::ux::types::TINY, p.text, Some(card.width() - 14.0));
             paint.line_segment([pos2(card.left(), card.top() + rule), pos2(card.right(), card.top() + rule)], Stroke::new(1.0, p.border));
         }
         paint.line_segment([pos2(order.left(), order.top() + 44.0), pos2(order.right(), order.top() + 44.0)], Stroke::new(1.0, p.border));

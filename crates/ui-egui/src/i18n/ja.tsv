@@ -252,6 +252,8 @@ str		New ER diagram	新しいER図
 str		New class diagram	新しいクラス図
 str		Tables, their columns and keys, and the relationships between them.	テーブルとその列やキー、そしてテーブル間のリレーションシップ。
 str		Classes with their attributes and operations, and the lines between them.	属性と操作を持つクラスと、その間の線。
+str		Customer	顧客
+str		Order	注文
 str		Create	作成
 str		ER diagram	ER図
 str		ER diagrams	ER図

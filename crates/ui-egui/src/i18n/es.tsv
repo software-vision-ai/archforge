@@ -252,6 +252,8 @@ str		New ER diagram	Nuevo diagrama ER
 str		New class diagram	Nuevo diagrama de clases
 str		Tables, their columns and keys, and the relationships between them.	Tablas, sus columnas y claves, y las relaciones entre ellas.
 str		Classes with their attributes and operations, and the lines between them.	Clases con sus atributos y operaciones, y las líneas entre ellas.
+str		Customer	Cliente
+str		Order	Pedido
 str		Create	Crear
 str		ER diagram	Diagrama ER
 str		ER diagrams	Diagramas ER
