@@ -526,11 +526,11 @@ fn decide(
             }
             if resp.clicked() {
                 let (x, y) = view.to_canvas(pos);
-                let target = match grid.hit(x, y) {
-                    Some(Hit::Node(n)) => element_of(store, n).unwrap_or(n),
-                    Some(Hit::Edge(e)) => store.get(e, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref()).unwrap_or(e),
-                    // A package's tab is its card's (AR-113).
-                    None => tab_at(shell, store, pos).map_or(d, |n| element_of(store, n).unwrap_or(n)),
+                // A package's tab is its card's (AR-113), over any line that crosses it.
+                let target = match (grid.hit(x, y), tab_at(shell, store, pos)) {
+                    (Some(Hit::Node(n)), _) | (_, Some(n)) => element_of(store, n).unwrap_or(n),
+                    (Some(Hit::Edge(e)), None) => store.get(e, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref()).unwrap_or(e),
+                    (None, None) => d,
                 };
                 let Some(id) = uuid(store, target) else { return Action::Nothing };
                 return if shift && target != d { Action::Toggle(id) } else { Action::Select(vec![id]) };

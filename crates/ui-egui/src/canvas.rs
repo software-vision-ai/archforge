@@ -984,11 +984,10 @@ pub(crate) fn preview(store: &Store, notations: &archforge_diagram::ProjectView,
         };
         boxes.push((r, look, rows));
     }
-    let lines: Vec<Vec<Pos2>> = all
-        .edges
-        .iter()
-        .filter_map(|e| grid.line(*e))
-        .map(|points| points.iter().map(|(x, y)| pos2(*x as f32, *y as f32)).collect::<Vec<_>>())
+    // Every line's route in one pass over the index, not a lookup per line.
+    let lines: Vec<Vec<Pos2>> = grid
+        .lines()
+        .map(|(_, points)| points.iter().map(|(x, y)| pos2(*x as f32, *y as f32)).collect::<Vec<_>>())
         .filter(|points| points.len() >= 2 && points.iter().all(|q| q.is_finite()))
         .collect();
     // A package's tab stands above its card, so it is in the bounds too.
@@ -1032,7 +1031,8 @@ fn draw_preview(paint: &egui::Painter, d: &Drawing<'_>, package: Obj, rect: Rect
         clip.add(egui::Shape::line(line.clone(), Stroke::new(1.0, p.text_secondary)));
     }
     for c in &shown.cards {
-        mini_card(&clip, p, c, shown.scale * z);
+        // The preview's scale is already the screen's: the area it was fitted to is zoomed.
+        mini_card(&clip, p, c, shown.scale);
     }
     area
 }

@@ -3241,6 +3241,50 @@ fn a_package_cards_thumbnail_is_its_own_diagram_scaled_and_follows_it() {
 }
 
 #[test]
+fn a_click_on_a_packages_tab_selects_the_package_though_a_line_crosses_the_tab() {
+    let (mut h, top, sales, card, _, _) = package_preview_harness(ThemeKind::Light);
+    // Two classes on Top, their association running across Sales's tab, above its card (y 150).
+    {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let root = s.execute("uml.model.root", &serde_json::json!({})).unwrap().value["id"].as_str().unwrap().to_string();
+        let mut class = |name: &str, x: i64| {
+            let c =
+                s.execute("uml.class.add", &serde_json::json!({ "package": root, "name": name })).unwrap().value["id"].as_str().unwrap().to_string();
+            s.execute(
+                "diagram.place",
+                &serde_json::json!({ "diagram": top.to_string(), "element": c, "x": x, "y": 100, "width": 100, "height": 100 }),
+            )
+            .unwrap();
+            c
+        };
+        let (a, b) = (class("Left", 0), class("Right", 600));
+        s.execute("uml.association.add", &serde_json::json!({ "from": a, "to": b })).unwrap();
+        let _ = s.execute("diagram.connect-all", &serde_json::json!({ "diagram": top.to_string() }));
+    }
+    h.run();
+    let tab = rect_of(&h, &format!("workspace.canvas.node.{card}.tab"));
+    let (view, store) = (h.state().canvas.zoom, h.state().session.as_ref().unwrap().doc());
+    let d = store.by_uuid(top).unwrap();
+    let grid = archforge_diagram::Grid::build(store, d);
+    let origin = rect_of(&h, &format!("workspace.canvas.node.{card}")).min - egui::vec2(200.0, 160.0) * view;
+    let x = f64::from((tab.center().x - origin.x) / view);
+    // Where the line runs across the tab: its horizontal segment over the tab's middle.
+    let y = grid
+        .lines()
+        .flat_map(|(_, p)| p.windows(2).map(|w| (w[0], w[1])).collect::<Vec<_>>())
+        .find(|((x0, y0), (x1, y1))| (y0 - y1).abs() < 1e-6 && x0.min(*x1) <= x && x <= x0.max(*x1))
+        .map(|((_, y0), _)| y0)
+        .expect("a segment across the tab");
+    let at = egui::pos2(tab.center().x, origin.y + y as f32 * view);
+    assert!(tab.contains(at), "the line crosses the tab: {at:?} {tab:?}");
+    assert!(matches!(grid.hit(x, y), Some(archforge_diagram::Hit::Edge(_))), "and only the line is there in the grid");
+    click(&mut h, at);
+    let s = h.state().session.as_ref().unwrap();
+    let picked: Vec<_> = s.view().selection.iter().filter_map(|o| s.doc().uuid(*o).ok()).collect();
+    assert_eq!(picked, vec![sales], "the tab, not the line under it");
+}
+
+#[test]
 fn a_packages_tab_selects_drags_and_renames_its_card_and_the_name_is_typed_in_the_tab() {
     let (mut h, _, sales, card, _, _) = package_preview_harness(ThemeKind::Light);
     let tab = rect_of(&h, &format!("workspace.canvas.node.{card}.tab"));

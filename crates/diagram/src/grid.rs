@@ -264,6 +264,12 @@ impl Grid {
         self.nodes.is_empty() && self.edges.is_empty()
     }
 
+    /// Every line indexed with its points, in drawing order: one pass, where [`Grid::line`] looks
+    /// up one.
+    pub fn lines(&self) -> impl Iterator<Item = (Obj, &[(f64, f64)])> {
+        self.edges.iter().map(|item| (item.obj, item.points.as_slice()))
+    }
+
     /// The points of `e`'s line as indexed: as the canvas draws it from the store.
     pub fn line(&self, e: Obj) -> Option<&[(f64, f64)]> {
         self.edges.iter().find(|item| item.obj == e).map(|item| item.points.as_slice())
