@@ -349,6 +349,12 @@ What is ER's own, beside the shared rules above.
 What is UML's own, beside the shared rules above.
 - A class diagram is of a package. New diagram offers Class diagram beside ER diagram; its second
   field is Package, with New package as ER has New schema.
+- Every UML model has one root package (owner, 2026-11-04): a plain package named after the
+  project, marked with the tag `archforge.root`, the top row of Models. It holds what has no other
+  home: a package or class added without one, the first class diagram (the Package field names the
+  root while it is still to be made, and Create makes it). It cannot be moved or removed; removing
+  a package hands its contents up, in the end into the root. A project opened without one gets it,
+  its top-level packages moved in, as one undoable step.
 - A class is a plain card: the surface's white with the plain border, its eyebrow CLASS, its name,
   then two compartments under dividing lines, attributes and operations, each shown even when
   empty. An abstract class's name, and an abstract operation, are slanted.
@@ -386,7 +392,7 @@ What is UML's own, beside the shared rules above.
   then its classes, and under an open class its attributes (with their type) and operations
   (`name()`, with their return type), every level folded until opened; Expand all opens packages
   and classes. `+` adds a class or a package inside the selected package (or the package of what is
-  selected); with nothing selected, a top-level package.
+  selected); with nothing selected, a package in the root package.
 - A class moves to another package by dragging its row onto a package's row (or onto a class of
   that package), the target ringed while held over it, or with the Package select beside Name in
   its Properties (packages named by their path, `sales › orders`). A package row drags onto

@@ -849,10 +849,20 @@ impl Shell {
             p.model = None;
         }
         match built {
-            Ok(s) => {
+            Ok(mut s) => {
                 // What was read is what the project holds: nothing to write yet.
                 if read {
                     self.written = Some(s.revision());
+                }
+                // A project from before the model's root package: its top-level packages go into
+                // the root, named after the project, as one step that is written and can be undone
+                // (owner, 2026-11-04).
+                let store = s.doc();
+                if !archforge_uml::commands::packages(store).is_empty()
+                    && archforge_uml::commands::root_package(store).is_none()
+                    && let Err(e) = s.execute("uml.model.root", &serde_json::json!({}))
+                {
+                    log::warn!("the model's packages could not be put under its root package: {e}");
                 }
                 self.session = Some(s);
                 self.resume_view();

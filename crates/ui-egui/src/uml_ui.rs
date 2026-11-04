@@ -67,6 +67,19 @@ impl DiagramKind for UmlKind {
         tr("New package")
     }
 
+    /// Before the model has its root package, a new class diagram goes into the root, named after
+    /// the project and made on Create (owner, 2026-11-04); after, "New package" makes a package in it.
+    fn new_owner_in(&self, store: &Store) -> String {
+        if archforge_uml::commands::root_package(store).is_some() {
+            return self.new_owner();
+        }
+        archforge_uml::commands::model(store)
+            .map(|m| archforge_core::name_of(store, m))
+            .ok()
+            .filter(|n| !n.trim().is_empty())
+            .unwrap_or_else(|| tr("Model"))
+    }
+
     fn owners(&self, store: &Store) -> Vec<Obj> {
         archforge_uml::commands::all_packages(store)
     }
@@ -76,8 +89,13 @@ impl DiagramKind for UmlKind {
     }
 
     fn add_owner(&self, shell: &mut Shell, name: &str) -> Result<String, String> {
-        crate::editing::run(shell, "uml.package.add", json!({ "name": name }))
-            .map(|v| v.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
+        let has_root = shell.session.as_ref().is_some_and(|s| archforge_uml::commands::root_package(s.doc()).is_some());
+        let made = if has_root {
+            crate::editing::run(shell, "uml.package.add", json!({ "name": name }))
+        } else {
+            crate::editing::run(shell, "uml.model.root", json!({}))
+        };
+        made.map(|v| v.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
     }
 
     fn takes_part(&self, store: &Store, element: Obj) -> bool {
@@ -293,6 +311,13 @@ impl NotationUi for UmlUi {
         let mut parents: Vec<Uuid> = home.map(|h| chain(store, h)).unwrap_or_default().into_iter().filter_map(|p| store.uuid(p).ok()).collect();
         let out = match key {
             "package" => {
+                // With nothing selected it goes into the root package, so its name is free there;
+                // without a root yet, the packages at the top are the ones the root takes in.
+                let home = home.or_else(|| {
+                    let root = archforge_uml::commands::root_package(store)?;
+                    parents.extend(store.uuid(root).ok());
+                    Some(root)
+                });
                 let siblings = home.map_or_else(|| packages(store), |h| archforge_uml::commands::subpackages(store, h));
                 let Some(name) = fresh_name("Package", siblings.into_iter().map(|p| name(store, p)), false) else { return no_name() };
                 let parent = home.and_then(|h| store.uuid(h).ok()).map(|u| u.to_string()).unwrap_or_default();

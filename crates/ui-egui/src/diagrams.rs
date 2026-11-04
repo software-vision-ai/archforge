@@ -676,9 +676,10 @@ fn new_dialog_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: &eg
     let enter = out.response.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
     // The kind and what it is of, side by side.
     let half = (width - 16.0) / 2.0;
+    let new_word = shell.session.as_ref().map(|s| kind.new_owner_in(s.doc())).unwrap_or_else(|| kind.new_owner());
     let schema_word = match edit.schema {
-        Some(id) => schemas.iter().find(|(s, _)| *s == id).map(|(_, n)| n.clone()).unwrap_or_else(|| kind.new_owner()),
-        None => kind.new_owner(),
+        Some(id) => schemas.iter().find(|(s, _)| *s == id).map(|(_, n)| n.clone()).unwrap_or_else(|| new_word.clone()),
+        None => new_word.clone(),
     };
     let kind_field = select(shell, ui, p, at(20.0, 121.0), half, "workspace.new-diagram.kind", &tr("Kind"), &kind.word(), Field::Kind);
     let schema_field =
@@ -722,7 +723,7 @@ fn new_dialog_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: &eg
         }
         Some(Field::Schema) => {
             let mut items: Vec<String> = schemas.iter().map(|(_, n)| n.clone()).collect();
-            items.push(kind.new_owner());
+            items.push(new_word.clone());
             if let Some(i) = menu(shell, ui, p, schema_field, "workspace.new-diagram.schema", &items)
                 && let Some(edit) = shell.diagrams.new.as_mut()
             {

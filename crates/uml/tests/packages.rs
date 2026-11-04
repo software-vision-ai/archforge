@@ -84,7 +84,8 @@ fn packages_nest_their_names_are_told_apart_among_siblings_and_the_list_names_ea
     let mut s = session();
     let sales = run(&mut s, "uml.package.add", json!({ "name": "sales" }));
     round_trip(&mut s, "uml.package.add", json!({ "name": "orders", "parent": sales }));
-    let orders = s.execute("uml.package.list", &json!({})).unwrap().value["packages"][1]["id"].as_str().unwrap().to_string();
+    // The model's root package comes first; sales and its orders follow.
+    let orders = s.execute("uml.package.list", &json!({})).unwrap().value["packages"][2]["id"].as_str().unwrap().to_string();
     let deep = run(&mut s, "uml.package.add", json!({ "name": "lines", "parent": orders }));
     // The same name in another parent is fine; twice in one parent, whatever the case, is not.
     run(&mut s, "uml.package.add", json!({ "name": "orders" }));
@@ -92,7 +93,12 @@ fn packages_nest_their_names_are_told_apart_among_siblings_and_the_list_names_ea
     refused(&mut s, "uml.package.add", json!({ "name": "x", "parent": "not-an-id" }), "parent");
     let listed = s.execute("uml.package.list", &json!({})).unwrap().value["packages"].as_array().unwrap().clone();
     let names: Vec<(&str, Option<&str>)> = listed.iter().map(|p| (p["name"].as_str().unwrap(), p["parent"].as_str())).collect();
-    assert_eq!(names, [("sales", None), ("orders", Some(sales.as_str())), ("lines", Some(orders.as_str())), ("orders", None)]);
+    let root = listed[0]["id"].as_str().unwrap();
+    assert_eq!(
+        names,
+        [("Model", None), ("sales", Some(root)), ("orders", Some(sales.as_str())), ("lines", Some(orders.as_str())), ("orders", Some(root))],
+        "a package with no parent goes into the root, which this unnamed model calls Model"
+    );
     assert_eq!(parent_of(&s, &deep), Some(obj(&s, &orders)));
 }
 
@@ -116,19 +122,19 @@ fn a_class_and_a_package_move_a_cycle_or_a_clash_is_refused_and_the_diagrams_kee
     // A class named like one already there is refused.
     let other = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "order" }));
     refused(&mut s, "uml.class.move", json!({ "class": other, "package": billing }), "named order already");
-    // A package goes into another, or back to the top; into itself or what it holds is refused.
+    // A package goes into another, or back into the model's root; into itself or what it holds is refused.
     round_trip(&mut s, "uml.package.move", json!({ "package": billing, "to": inner }));
     assert_eq!(parent_of(&s, &billing), Some(obj(&s, &inner)));
     refused(&mut s, "uml.package.move", json!({ "package": sales, "to": billing }), "into itself");
     refused(&mut s, "uml.package.move", json!({ "package": sales, "to": sales }), "into itself");
     round_trip(&mut s, "uml.package.move", json!({ "package": billing, "to": "" }));
-    assert_eq!(parent_of(&s, &billing), None);
+    assert_eq!(parent_of(&s, &billing), archforge_uml::commands::root_package(s.doc()));
     run(&mut s, "uml.package.add", json!({ "name": "inner" }));
     refused(&mut s, "uml.package.move", json!({ "package": inner, "to": "" }), "named inner already");
 }
 
 #[test]
-fn a_nested_package_removed_hands_its_contents_and_diagrams_up_and_a_top_level_one_takes_them_along() {
+fn a_package_removed_hands_its_contents_and_diagrams_up_to_its_parent_the_root_included() {
     let mut s = session();
     let sales = run(&mut s, "uml.package.add", json!({ "name": "sales" }));
     let orders = run(&mut s, "uml.package.add", json!({ "name": "orders", "parent": sales }));
@@ -150,15 +156,17 @@ fn a_nested_package_removed_hands_its_contents_and_diagrams_up_and_a_top_level_o
     let dup = run(&mut s, "uml.package.add", json!({ "name": "dup", "parent": sales }));
     run(&mut s, "uml.class.add", json!({ "package": dup, "name": "customer" }));
     refused(&mut s, "element.remove", json!({ "ids": [dup] }), "named customer already");
-    // A top-level package takes everything along, the relationships of its classes too.
+    // Every package sits in the model's root package, so sales too hands everything up: into
+    // the root, the relationships of its classes kept.
     let other = run(&mut s, "uml.package.add", json!({ "name": "other" }));
     let outside = run(&mut s, "uml.class.add", json!({ "package": other, "name": "Outside" }));
     let dep = run(&mut s, "uml.dependency.add", json!({ "client": outside, "supplier": customer }));
     round_trip(&mut s, "element.remove", json!({ "ids": [sales] }));
-    for gone in [&sales, &customer, &order, &deep, &a, &dep, &d] {
-        assert!(!alive(&s, gone), "{gone} went with sales");
+    assert!(!alive(&s, &sales));
+    for kept in [&customer, &order, &deep, &a, &dep, &d, &outside] {
+        assert!(alive(&s, kept), "{kept} stays");
     }
-    assert!(alive(&s, &outside));
+    assert_eq!(parent_of(&s, &deep), archforge_uml::commands::root_package(s.doc()));
 }
 
 #[test]
