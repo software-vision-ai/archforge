@@ -48,6 +48,8 @@ fn run() -> Result<(), String> {
             Some("workspace-inside-package") => Screen::WorkspaceInsidePackage,
             Some("workspace-package-parent") => Screen::WorkspacePackageParent,
             Some("workspace-diagrams") => Screen::WorkspaceDiagrams,
+            Some("workspace-new-diagram-kind") => Screen::WorkspaceNewDiagramKind,
+            Some("workspace-new-diagram-details") => Screen::WorkspaceNewDiagramDetails,
             Some("workspace-chat") => Screen::WorkspaceChat,
             Some("workspace-class-sizing") => Screen::WorkspaceClassSizing,
             Some("workspace-class-members") => Screen::WorkspaceClassMembers,

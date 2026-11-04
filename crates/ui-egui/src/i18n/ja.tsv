@@ -243,6 +243,17 @@ str		A skill's text is at most {n} characters.	スキルのテキストは最大
 str		A skill's text could not be kept; its tab says why.	スキルのテキストを保持できませんでした。理由はそのタブに表示されています。
 str		Element	要素
 str		New diagram	新しい図
+str		Continue	続ける
+str		Back	戻る
+str		Step 1 of 2 · Choose what the diagram shows	ステップ 1/2 · 図の種類を選択
+str		Step 2 of 2 · Name it and say what it is of	ステップ 2/2 · 名前と対象を指定
+str		Diagram name	図の名前
+str		New ER diagram	新しいER図
+str		New class diagram	新しいクラス図
+str		Tables, their columns and keys, and the relationships between them.	テーブルとその列やキー、そしてテーブル間のリレーションシップ。
+str		Classes with their attributes and operations, and the lines between them.	属性と操作を持つクラスと、その間の線。
+str		Customer	顧客
+str		Order	注文
 str		Create	作成
 str		ER diagram	ER図
 str		ER diagrams	ER図

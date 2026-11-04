@@ -242,6 +242,17 @@ str		A skill's text is at most {n} characters.	A skill's text is at most {n} cha
 str		A skill's text could not be kept; its tab says why.	A skill's text could not be kept; its tab says why.
 str		Element	Element
 str		New diagram	New diagram
+str		Continue	Continue
+str		Back	Back
+str		Step 1 of 2 · Choose what the diagram shows	Step 1 of 2 · Choose what the diagram shows
+str		Step 2 of 2 · Name it and say what it is of	Step 2 of 2 · Name it and say what it is of
+str		Diagram name	Diagram name
+str		New ER diagram	New ER diagram
+str		New class diagram	New class diagram
+str		Tables, their columns and keys, and the relationships between them.	Tables, their columns and keys, and the relationships between them.
+str		Classes with their attributes and operations, and the lines between them.	Classes with their attributes and operations, and the lines between them.
+str		Customer	Customer
+str		Order	Order
 str		Create	Create
 str		ER diagram	ER diagram
 str		ER diagrams	ER diagrams

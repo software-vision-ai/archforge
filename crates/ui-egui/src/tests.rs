@@ -2409,8 +2409,12 @@ fn the_diagrams_explorer_creates_a_diagram_through_the_dialog_and_opens_it_in_a_
     let at = rect_of(&h, "workspace.diagrams.add").center();
     click(&mut h, at);
     let edit = h.state().diagrams.new.clone().expect("the dialog opened");
+    assert_eq!(edit.step, crate::diagrams::Step::Kind, "the kind comes first");
     assert_eq!(edit.name, "Shop");
     assert!(edit.schema.is_some());
+    let at = rect_of(&h, "workspace.new-diagram.continue").center();
+    click(&mut h, at);
+    assert_eq!(h.state().diagrams.new.as_ref().map(|n| n.step), Some(crate::diagrams::Step::Details));
     let at = rect_of(&h, "workspace.new-diagram.create").center();
     click(&mut h, at);
     assert!(h.state().diagrams.new.is_none(), "the dialog closed");
@@ -2450,6 +2454,8 @@ fn the_diagrams_explorer_creates_a_diagram_through_the_dialog_and_opens_it_in_a_
     h.state_mut().diagrams.filter.clear();
     // A second diagram of a new schema: the schema is made with the diagram's name.
     let at = rect_of(&h, "workspace.tabs.add").center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.new-diagram.continue").center();
     click(&mut h, at);
     h.state_mut().diagrams.new.as_mut().unwrap().name = "Billing".into();
     let at = rect_of(&h, "workspace.new-diagram.schema").center();
@@ -2639,6 +2645,98 @@ fn typing_a_groups_name_opens_the_folded_folders_its_diagrams_sit_in() {
     assert_eq!(diagram_rows(&h), vec![row(0, "Class diagrams", 1), row(1, "Views", 1), row(0, "ER diagrams", 1), row(1, "Views", 1)]);
     h.state_mut().diagrams.filter = "class".into();
     assert_eq!(diagram_rows(&h), vec![row(0, "Class diagrams", 1), row(1, "Views", 1), row(2, "Sales", 0)]);
+}
+
+#[test]
+fn new_diagram_asks_the_kind_first_then_its_details_and_back_keeps_what_was_typed() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let elements = |h: &Harness<'static, Shell>| h.state().session.as_ref().unwrap().doc().alive().count();
+        let before = elements(&h);
+        let step = |h: &Harness<'static, Shell>| h.state().diagrams.new.as_ref().map(|n| n.step);
+        // Step 1: a card for each kind, side by side, the first chosen.
+        let at = rect_of(&h, "workspace.tabs.add").center();
+        click(&mut h, at);
+        assert_eq!(step(&h), Some(crate::diagrams::Step::Kind));
+        let (er, class) = (rect_of(&h, "workspace.new-diagram.type.er"), rect_of(&h, "workspace.new-diagram.type.uml.class"));
+        assert!(er.right() < class.left() && (er.top() - class.top()).abs() < 0.5, "{theme:?}: side by side");
+        assert!(er.width() >= 240.0, "{theme:?}: room for the card to read");
+        assert!(painted(&h).iter().any(|t| t == "Step 1 of 2 · Choose what the diagram shows"));
+        assert_eq!(h.state().diagrams.new.as_ref().unwrap().kind, "er");
+        // The arrow keys move the choice; the name the dialog gave follows the kind.
+        key(&mut h, egui::Key::ArrowRight, egui::Modifiers::NONE);
+        assert_eq!(h.state().diagrams.new.as_ref().unwrap().kind, archforge_uml::CLASS_DIAGRAM);
+        key(&mut h, egui::Key::ArrowLeft, egui::Modifiers::NONE);
+        assert_eq!(h.state().diagrams.new.as_ref().unwrap().kind, "er");
+        // Cancel makes nothing.
+        let at = rect_of(&h, "workspace.new-diagram.cancel").center();
+        click(&mut h, at);
+        assert!(h.state().diagrams.new.is_none());
+        assert_eq!(elements(&h), before, "{theme:?}: nothing made");
+        // The class card, then Enter: its details, the root package named after the project.
+        let at = rect_of(&h, "workspace.tabs.add").center();
+        click(&mut h, at);
+        let at = rect_of(&h, "workspace.new-diagram.type.uml.class").center();
+        click(&mut h, at);
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert_eq!(step(&h), Some(crate::diagrams::Step::Details));
+        let found = painted(&h);
+        assert!(found.iter().any(|t| t == "New class diagram") && found.iter().any(|t| t == "Commerce platform"), "{found:?}");
+        // A name typed survives Back and another kind; an empty name is refused, and Back clears it.
+        h.state_mut().diagrams.new.as_mut().unwrap().name = "Domain".into();
+        h.run();
+        let at = rect_of(&h, "workspace.new-diagram.back").center();
+        click(&mut h, at);
+        assert_eq!(step(&h), Some(crate::diagrams::Step::Kind));
+        let at = rect_of(&h, "workspace.new-diagram.type.er").center();
+        click(&mut h, at);
+        let at = rect_of(&h, "workspace.new-diagram.continue").center();
+        click(&mut h, at);
+        assert_eq!(h.state().diagrams.new.as_ref().map(|n| (n.kind, n.name.as_str())), Some(("er", "Domain")));
+        h.state_mut().diagrams.new.as_mut().unwrap().name = "  ".into();
+        let at = rect_of(&h, "workspace.new-diagram.create").center();
+        click(&mut h, at);
+        assert!(h.state().diagrams.new.as_ref().is_some_and(|n| n.refused.is_some()), "{theme:?}: the empty name is refused");
+        assert_eq!(elements(&h), before, "{theme:?}: a refusal makes nothing, no schema either");
+        let at = rect_of(&h, "workspace.new-diagram.back").center();
+        click(&mut h, at);
+        assert!(h.state().diagrams.new.as_ref().is_some_and(|n| n.refused.is_none()));
+        // A double click on a card goes straight on; Create opens the diagram in its group.
+        let at = rect_of(&h, "workspace.new-diagram.type.uml.class").center();
+        // Past egui's double-click window, so the clicks before don't count with these two.
+        for _ in 0..40 {
+            h.step();
+        }
+        double_click(&mut h, at);
+        assert_eq!(step(&h), Some(crate::diagrams::Step::Details));
+        h.state_mut().diagrams.new.as_mut().unwrap().name = "Domain".into();
+        let at = rect_of(&h, "workspace.new-diagram.create").center();
+        click(&mut h, at);
+        assert!(h.state().diagrams.new.is_none());
+        let at = rect_of(&h, "workspace.explorers.diagrams").center();
+        click(&mut h, at);
+        assert_eq!(diagram_rows(&h)[..2], [(0, "Class diagrams".to_string(), 1), (1, "Domain".to_string(), 0)]);
+        assert!(h.state().canvas.active.is_some(), "it opens at once");
+        // A group's + has chosen the kind: the dialog opens on the details, Back before them.
+        let at = rect_of(&h, "workspace.diagrams.group.er.add").center();
+        click(&mut h, at);
+        assert_eq!(h.state().diagrams.new.as_ref().map(|n| (n.step, n.kind)), Some((crate::diagrams::Step::Details, "er")));
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert!(h.state().diagrams.new.is_none());
+    }
+}
+
+#[test]
+fn in_a_narrow_window_the_kinds_cards_stand_one_above_the_other() {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(520.0, 900.0));
+    h.state_mut().state.explorer_collapsed = true;
+    h.run();
+    crate::diagrams::open_new(h.state_mut());
+    h.run();
+    let (er, class) = (rect_of(&h, "workspace.new-diagram.type.er"), rect_of(&h, "workspace.new-diagram.type.uml.class"));
+    assert!(er.bottom() < class.top() && (er.left() - class.left()).abs() < 0.5, "{er:?} {class:?}");
+    let window = h.ctx.content_rect();
+    assert!(window.contains_rect(er) && window.contains_rect(class), "both fit");
 }
 
 #[test]
@@ -3131,6 +3229,25 @@ fn a_class_over_a_package_card_keeps_a_package_dropped_on_it_where_it_was() {
     let st = h.state().session.as_ref().unwrap().doc();
     let parent = archforge_uml::commands::package_of(st, st.by_uuid(sales).unwrap()).map(|p| archforge_core::name_of(st, p));
     assert_eq!(parent.as_deref(), Some("Commerce platform"), "the class on top took the drop: only a move on the diagram");
+}
+
+#[test]
+fn enter_on_new_diagrams_focused_cancel_cancels_and_on_a_card_goes_on() {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    let before = h.state().session.as_ref().unwrap().doc().alive().count();
+    let at = rect_of(&h, "workspace.tabs.add").center();
+    click(&mut h, at);
+    // Tab brought to Cancel: Enter is its press.
+    h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id("workspace.new-diagram.cancel")));
+    h.run();
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    assert!(h.state().diagrams.new.is_none(), "Cancel took Enter");
+    assert_eq!(h.state().session.as_ref().unwrap().doc().alive().count(), before, "nothing made");
+    // Elsewhere, Enter goes on to the details.
+    let at = rect_of(&h, "workspace.tabs.add").center();
+    click(&mut h, at);
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    assert_eq!(h.state().diagrams.new.as_ref().map(|n| n.step), Some(crate::diagrams::Step::Details));
 }
 
 #[test]
@@ -5115,6 +5232,12 @@ impl crate::kinds::DiagramKind for SketchKind {
     fn group_word(&self) -> String {
         "Sketches".into()
     }
+    fn description(&self) -> String {
+        "A sketch of classes".into()
+    }
+    fn new_word(&self) -> String {
+        "New sketch".into()
+    }
     fn owner_word(&self) -> String {
         "Package".into()
     }
@@ -5371,12 +5494,12 @@ fn class_diagram_shown(h: &Harness<'static, Shell>) -> (String, Vec<String>) {
 #[test]
 fn a_new_project_makes_a_class_diagram_in_three_steps_and_its_class_tool_places_a_class_named_in_place() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
-    // 1. The tab strip's + opens New diagram; 2. the kind is Class diagram; 3. Create.
+    // 1. The tab strip's + opens New diagram; 2. the Class diagram card, Continue; 3. Create.
     let at = rect_of(&h, "workspace.tabs.add").center();
     click(&mut h, at);
-    let at = rect_of(&h, "workspace.new-diagram.kind").center();
+    let at = rect_of(&h, "workspace.new-diagram.type.uml.class").center();
     click(&mut h, at);
-    let at = rect_of(&h, "workspace.new-diagram.kind.1").center();
+    let at = rect_of(&h, "workspace.new-diagram.continue").center();
     click(&mut h, at);
     let edit = h.state().diagrams.new.clone().expect("the dialog is open");
     assert_eq!(edit.kind, archforge_uml::CLASS_DIAGRAM);
@@ -5444,9 +5567,9 @@ fn an_er_project_makes_a_class_diagram_beside_its_er_diagrams_and_an_agent_makes
     let at = rect_of(&h, "workspace.tabs.add").center();
     click(&mut h, at);
     assert_eq!(h.state().diagrams.new.as_ref().unwrap().kind, archforge_er::DIAGRAM_KIND, "an ER project starts at ER");
-    let at = rect_of(&h, "workspace.new-diagram.kind").center();
+    let at = rect_of(&h, "workspace.new-diagram.type.uml.class").center();
     click(&mut h, at);
-    let at = rect_of(&h, "workspace.new-diagram.kind.1").center();
+    let at = rect_of(&h, "workspace.new-diagram.continue").center();
     click(&mut h, at);
     h.state_mut().diagrams.new.as_mut().unwrap().name = "Domain".into();
     let at = rect_of(&h, "workspace.new-diagram.create").center();

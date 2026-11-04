@@ -11,9 +11,9 @@ first package), and you can rename it like any package.
 ## 1. Make a class diagram
 
 1. Choose the **+** at the start of the centre's tab strip.
-2. In the **New diagram** dialog choose **Class diagram**. Its second field, **Package**, shows your
-   project's name: the root package, made when you choose **Create**. Name the diagram *Commerce*
-   and choose **Create**.
+2. In the **New diagram** dialog choose the **Class diagram** card and **Continue**. On the second
+   step, **Package** shows your project's name: the root package, made when you choose **Create**.
+   Name the diagram *Commerce* and choose **Create**.
 
 The root package is the top row of **Models**, with what it holds below it. Once it exists, the
 **Package** field of a later class diagram offers it and every other package, and **New package**

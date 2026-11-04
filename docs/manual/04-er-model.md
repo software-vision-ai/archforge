@@ -8,9 +8,10 @@ This chapter builds a small database model: a schema *Shop* with two tables, *Cu
 
 1. In **Models**, choose **+**. A schema appears, named *Schema 1* and ready to type. Type *Shop* and
    press Enter.
-2. Choose the **+** at the start of the centre's tab strip. The **New diagram** dialog asks for a
-   name, a kind and a schema. Keep **ER diagram**, choose the schema *Shop*, name the diagram
-   *Shop schema* and choose **Create**. (Without a schema, the dialog offers **New schema**.)
+2. Choose the **+** at the start of the centre's tab strip. The **New diagram** dialog first asks
+   what the diagram shows: keep the **ER diagram** card and choose **Continue**. Then it asks for a
+   name and a schema: choose the schema *Shop*, name the diagram *Shop schema* and choose
+   **Create**. (Without a schema, the dialog offers **New schema**.)
 
 The empty diagram opens in its tab.
 

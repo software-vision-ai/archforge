@@ -43,6 +43,36 @@ impl DiagramKind for ErKind {
         tr("ER diagrams")
     }
 
+    fn description(&self) -> String {
+        tr("Tables, their columns and keys, and the relationships between them.")
+    }
+
+    fn new_word(&self) -> String {
+        tr("New ER diagram")
+    }
+
+    /// Two tables, Customer and Order, joined by a relationship with its many end.
+    fn sketch(&self, paint: &egui::Painter, p: &crate::ux::Palette, r: egui::Rect) {
+        use egui::{Stroke, StrokeKind, pos2, vec2};
+        let at = |x: f32, y: f32| r.center() + vec2(x - 134.0, y - 50.0);
+        // The sample tables' names, in the user's language, as the rest of the card is.
+        for (x, name) in [(24.0, tr("Customer")), (160.0, tr("Order"))] {
+            let table = egui::Rect::from_min_size(at(x, 20.0), vec2(84.0, 58.0));
+            paint.rect_filled(table, 5.0, p.entity);
+            paint.rect_stroke(table, 5.0, Stroke::new(1.0, p.entity_edge), StrokeKind::Inside);
+            crate::ux::text(paint, table.min + vec2(8.0, 3.0), &name, crate::ux::types::TINY, p.text, Some(table.width() - 12.0));
+            paint.line_segment([pos2(table.left(), table.top() + 18.0), pos2(table.right(), table.top() + 18.0)], Stroke::new(1.0, p.entity_line));
+            for (i, w) in [52.0, 38.0].into_iter().enumerate() {
+                paint.rect_filled(egui::Rect::from_min_size(table.min + vec2(8.0, 26.0 + i as f32 * 11.0), vec2(w, 4.0)), 2.0, p.entity_line);
+            }
+        }
+        let (from, to) = (at(108.0, 49.0), at(160.0, 49.0));
+        let ink = Stroke::new(1.2, p.text_secondary);
+        paint.line_segment([from, to], ink);
+        paint.line_segment([to + vec2(-6.0, -5.0), to], ink);
+        paint.line_segment([to + vec2(-6.0, 5.0), to], ink);
+    }
+
     fn owner_word(&self) -> String {
         tr("Schema")
     }
