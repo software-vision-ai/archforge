@@ -199,6 +199,10 @@ fn a_package_leads_to_one_class_diagram_of_its_own_named_like_it() {
     assert_eq!(st.get(diagram, archforge_diagram::diagram::KIND).unwrap().as_str(), Some(archforge_uml::CLASS_DIAGRAM));
     assert_eq!(st.get(diagram, archforge_diagram::diagram::ELEMENT).unwrap().as_ref(), Some(obj(&s, &orders)));
     assert_eq!(st.get(diagram, archforge_diagram::diagram::NAME).unwrap().as_str(), Some("Orders"));
+    // Made as diagram.add makes one: its lines at right angles around the classes.
+    let look = st.get(diagram, archforge_diagram::diagram::STYLE).unwrap().as_ref().expect("its style");
+    assert_eq!(st.get(look, archforge_diagram::style::ROUTING).unwrap(), Value::Enum(archforge_diagram::Routing::RightAngled.index()));
+    assert_eq!(st.get(look, archforge_diagram::style::AVOID).unwrap(), Value::Bool(true));
     assert_eq!(archforge_uml::commands::diagram_of(s.doc(), obj(&s, &orders)), Some(diagram));
     s.undo().unwrap();
     s.undo().unwrap();

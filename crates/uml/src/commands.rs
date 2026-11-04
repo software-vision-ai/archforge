@@ -214,20 +214,15 @@ pub fn diagram_of(store: &Store, package: Obj) -> Option<Obj> {
 /// The package's diagram, made when it has none: a class diagram of the package named like it,
 /// beside the model's other diagrams. `made` says which.
 fn package_diagram(ctx: &mut C<'_>, p: &Params) -> R {
-    use archforge_diagram::diagram;
     let pkg = id_of(ctx.doc, p, "package", PACKAGE, "package")?;
     if let Some(d) = diagram_of(ctx.doc, pkg) {
         return Ok(json!({ "id": uuid_of(ctx.doc, d)?, "made": false }));
     }
     let m = model(ctx.doc)?;
     let name: String = name_of(ctx.doc, pkg).chars().take(archforge_diagram::rules::MAX_NAME).collect();
-    let d = ctx.doc.create(archforge_diagram::DIAGRAM).map_err(fail)?;
-    ctx.doc.set(d, diagram::KIND, Value::str(crate::CLASS_DIAGRAM)).map_err(fail)?;
-    if !name.is_empty() {
-        ctx.doc.set(d, diagram::NAME, Value::str(&name)).map_err(fail)?;
-    }
-    ctx.doc.set(d, diagram::ELEMENT, Value::Ref(pkg)).map_err(fail)?;
-    ctx.doc.push(m, archforge_core::model::MEMBER, Value::Ref(d)).map_err(fail)?;
+    // Made as diagram.add makes one, its lines at right angles around the classes.
+    let d = archforge_diagram::commands::new_diagram(ctx.doc, crate::CLASS_DIAGRAM, &name, Some(pkg), Some((m, archforge_core::model::MEMBER)))
+        .map_err(fail)?;
     Ok(json!({ "id": uuid_of(ctx.doc, d)?, "made": true }))
 }
 
