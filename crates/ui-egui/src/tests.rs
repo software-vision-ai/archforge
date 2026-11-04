@@ -2543,8 +2543,9 @@ fn the_diagrams_explorer_groups_the_diagrams_by_kind_and_opens_each_with_its_pac
         {
             let st = h.state().session.as_ref().unwrap().doc();
             let package = st.by_uuid(archforge_mof::Uuid::parse(&orders_package).unwrap()).unwrap();
-            assert_eq!(crate::diagrams::trail(st, "Commerce", package), "Commerce / Sales / Orders");
-            assert_eq!(crate::diagrams::trail(st, "Sales", package), "Sales / Orders", "a root named like the project is said once");
+            // The project, then the packages holding Orders; a root package named like the project
+            // is said once.
+            assert_eq!(crate::diagrams::trail(st, "Commerce platform", package), "Commerce platform / Sales / Orders");
         }
         // A group folds and opens with a click.
         let at = rect_of(&h, "workspace.diagrams.group.uml.class").center();
