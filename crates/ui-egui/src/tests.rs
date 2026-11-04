@@ -3020,6 +3020,25 @@ fn a_package_card_tall_enough_for_its_fifty_rows_still_says_how_many_more_it_hol
 }
 
 #[test]
+fn enter_on_new_diagrams_focused_cancel_cancels_and_on_a_card_goes_on() {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    let before = h.state().session.as_ref().unwrap().doc().alive().count();
+    let at = rect_of(&h, "workspace.tabs.add").center();
+    click(&mut h, at);
+    // Tab brought to Cancel: Enter is its press.
+    h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id("workspace.new-diagram.cancel")));
+    h.run();
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    assert!(h.state().diagrams.new.is_none(), "Cancel took Enter");
+    assert_eq!(h.state().session.as_ref().unwrap().doc().alive().count(), before, "nothing made");
+    // Elsewhere, Enter goes on to the details.
+    let at = rect_of(&h, "workspace.tabs.add").center();
+    click(&mut h, at);
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    assert_eq!(h.state().diagrams.new.as_ref().map(|n| n.step), Some(crate::diagrams::Step::Details));
+}
+
+#[test]
 fn the_canvas_draws_the_diagram_and_the_pointer_selects_pans_and_zooms() {
     let (mut h, customer, diagram) = diagram_harness();
     let found = ids(&h);

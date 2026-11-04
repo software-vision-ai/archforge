@@ -753,12 +753,16 @@ fn kind_step(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: &egui::Pa
             pick = Some((kind.kind(), false));
         }
     }
-    // The arrow keys move the choice; Enter goes on with it.
+    // The arrow keys move the choice; Enter goes on with it, unless Tab has reached Continue or
+    // Cancel, whose own press it then is.
+    let on_button = ui
+        .memory(|m| m.focused())
+        .is_some_and(|f| [widgets::egui_id("workspace.new-diagram.continue"), widgets::egui_id("workspace.new-diagram.cancel")].contains(&f));
     let (back, forth, enter) = ui.input_mut(|i| {
         (
             i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowLeft) || i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowUp),
             i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowRight) || i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown),
-            i.consume_key(egui::Modifiers::NONE, egui::Key::Enter),
+            !on_button && i.consume_key(egui::Modifiers::NONE, egui::Key::Enter),
         )
     });
     if (back || forth)
