@@ -2465,6 +2465,101 @@ fn the_diagrams_explorer_creates_a_diagram_through_the_dialog_and_opens_it_in_a_
     assert_eq!(selected_name(&h), "Billing");
 }
 
+/// The Diagrams explorer's rows: each one's depth, name and count.
+fn diagram_rows(h: &Harness<'static, Shell>) -> Vec<(u8, String, usize)> {
+    let st = h.state().session.as_ref().unwrap().doc();
+    crate::diagrams::rows(st, &h.state().diagrams, h.state().kinds).into_iter().map(|r| (r.depth, r.label, r.count)).collect()
+}
+
+#[test]
+fn the_diagrams_explorer_groups_the_diagrams_by_kind_and_opens_each_with_its_package() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        let at = rect_of(&h, "workspace.explorers.diagrams").center();
+        click(&mut h, at);
+        // Every kind the shell knows has its group, by name, empty or not, with its +.
+        let row = |depth: u8, label: &str, count: usize| (depth, label.to_string(), count);
+        assert_eq!(diagram_rows(&h), vec![row(0, "Class diagrams", 0), row(0, "ER diagrams", 0)]);
+        let found = ids(&h);
+        for id in [
+            "workspace.diagrams.group.uml.class",
+            "workspace.diagrams.group.uml.class.add",
+            "workspace.diagrams.group.er",
+            "workspace.diagrams.group.er.add",
+        ] {
+            assert!(found.iter().any(|i| i == id), "{id} in {found:?}");
+        }
+        // A group's + opens the New diagram dialog on its kind.
+        let at = rect_of(&h, "workspace.diagrams.group.uml.class.add").center();
+        click(&mut h, at);
+        assert_eq!(h.state().diagrams.new.as_ref().map(|n| n.kind), Some(archforge_uml::CLASS_DIAGRAM));
+        h.state_mut().diagrams.new = None;
+        let at = rect_of(&h, "workspace.diagrams.group.er.add").center();
+        click(&mut h, at);
+        assert_eq!(h.state().diagrams.new.as_ref().map(|n| n.kind), Some("er"));
+        h.state_mut().diagrams.new = None;
+        // A diagram of a nested package and one of a schema land in their groups at once.
+        let (orders_package, orders) = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
+            let schema = id(s.execute("er.schema.add", &serde_json::json!({ "name": "Shop" })).unwrap().value);
+            let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
+            let orders_package = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Orders", "parent": sales })).unwrap().value);
+            s.execute("diagram.add", &serde_json::json!({ "kind": "er", "element": schema, "name": "Shop" })).unwrap();
+            s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": sales, "name": "Sales" })).unwrap();
+            let orders =
+                id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": orders_package, "name": "Orders" })).unwrap().value);
+            (orders_package, orders)
+        };
+        h.run();
+        assert_eq!(
+            diagram_rows(&h),
+            vec![row(0, "Class diagrams", 2), row(1, "Sales", 0), row(1, "Orders", 0), row(0, "ER diagrams", 1), row(1, "Shop", 0)]
+        );
+        // Grouping is the explorer's alone: the model keeps each diagram once, where it was.
+        {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let model = archforge_core::skills::model_of(st).unwrap();
+            let held = st
+                .list(model, archforge_core::model::MEMBER)
+                .unwrap()
+                .iter()
+                .filter_map(archforge_mof::Value::as_ref)
+                .filter(|o| st.class_of(*o).ok() == Some(archforge_diagram::DIAGRAM))
+                .count();
+            assert_eq!(held, 3);
+        }
+        // The row opens the diagram; it says where its package sits, as the footer does.
+        let at = rect_of(&h, &format!("workspace.diagrams.row.{orders}")).center();
+        click(&mut h, at);
+        assert_eq!(h.state().canvas.active.map(|a| a.to_string()), Some(orders.clone()));
+        {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let package = st.by_uuid(archforge_mof::Uuid::parse(&orders_package).unwrap()).unwrap();
+            assert_eq!(crate::diagrams::trail(st, "Commerce", package), "Commerce / Sales / Orders");
+            assert_eq!(crate::diagrams::trail(st, "Sales", package), "Sales / Orders", "a root named like the project is said once");
+        }
+        // A group folds and opens with a click.
+        let at = rect_of(&h, "workspace.diagrams.group.uml.class").center();
+        click(&mut h, at);
+        assert_eq!(diagram_rows(&h), vec![row(0, "Class diagrams", 2), row(0, "ER diagrams", 1), row(1, "Shop", 0)]);
+        assert!(!ids(&h).iter().any(|i| i == &format!("workspace.diagrams.row.{orders}")));
+        let at = rect_of(&h, "workspace.diagrams.group.uml.class").center();
+        click(&mut h, at);
+        assert_eq!(diagram_rows(&h).len(), 5);
+        // The filter narrows the diagrams, or shows a whole group named by it; groups with no match go.
+        h.state_mut().diagrams.filter = "ord".into();
+        h.run();
+        assert_eq!(diagram_rows(&h), vec![row(0, "Class diagrams", 1), row(1, "Orders", 0)]);
+        h.state_mut().diagrams.filter = "class".into();
+        h.run();
+        assert_eq!(diagram_rows(&h), vec![row(0, "Class diagrams", 2), row(1, "Sales", 0), row(1, "Orders", 0)]);
+        h.state_mut().diagrams.filter = "zzz".into();
+        h.run();
+        assert!(diagram_rows(&h).is_empty());
+    }
+}
+
 #[test]
 fn the_canvas_draws_the_diagram_and_the_pointer_selects_pans_and_zooms() {
     let (mut h, customer, diagram) = diagram_harness();
@@ -4442,6 +4537,9 @@ impl crate::kinds::DiagramKind for SketchKind {
     }
     fn word(&self) -> String {
         "Sketch".into()
+    }
+    fn group_word(&self) -> String {
+        "Sketches".into()
     }
     fn owner_word(&self) -> String {
         "Package".into()

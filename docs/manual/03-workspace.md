@@ -17,7 +17,16 @@ An open project fills the window with its workspace.
 
 ## Diagrams and Models
 
-**Diagrams** lists the project's diagrams; choose one to open it in its tab.
+**Diagrams** lists the project's diagrams, grouped by kind: **Class diagrams** and **ER diagrams**,
+each with how many it holds. Choose a diagram to open it in its tab; a group's arrow folds it, and
+its **+** makes a new diagram of that kind. A class diagram of a nested package sits in Class
+diagrams like any other: hold the pointer over it to see where its package is, and the foot of the
+explorer says the same for the open diagram (for example *Commerce platform / Sales / Orders*). The
+filter field narrows the list to the diagrams whose name holds what you type, or to a whole group
+when you type its name. Grouping only arranges the list: each diagram stays where it is in the
+model. Other kinds of diagram get their own group once Archforge supports them.
+
+<!-- picture: workspace-diagrams light | The Diagrams explorer: class diagrams and ER diagrams in their groups, a nested package's diagram open -->
 
 **Models** lists the model's elements: an ER model's schemas with their tables and columns, a UML
 model's packages with their classes, attributes and operations. It starts folded; open a row with

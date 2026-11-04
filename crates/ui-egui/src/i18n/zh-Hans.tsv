@@ -245,6 +245,7 @@ str		Element	元素
 str		New diagram	新建图
 str		Create	创建
 str		ER diagram	ER图
+str		ER diagrams	ER图
 str		New schema	新架构
 str		Name the diagram	请为图命名
 str		Saving…	正在保存…
@@ -272,6 +273,7 @@ str		Filter models…	筛选模型…
 str		Filter diagrams…	筛选图…
 str		Filter changes…	筛选更改…
 str		No diagrams yet	还没有图
+str		Other diagrams	其他图
 str		Select	选择
 str		Pan	平移
 str		Entity	实体
@@ -514,6 +516,7 @@ str		{parent} has no primary key yet, so there is nothing in {child} to point at
 str		Add class	添加类
 str		Class	类
 str		Class diagram	类图
+str		Class diagrams	类图
 str		Class · model, in every diagram	类 · 模型，在每个图中
 str		New package	新包
 str		On this class · {n}	此类上 · {n}

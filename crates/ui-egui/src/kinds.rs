@@ -42,6 +42,8 @@ pub(crate) trait DiagramKind: Sync {
     fn tools(&self) -> &'static [KindTool];
     /// Its name in the New diagram dialog.
     fn word(&self) -> String;
+    /// The name of its group in the Diagrams explorer, which holds its diagrams.
+    fn group_word(&self) -> String;
     /// The icon its diagrams show in their tabs, the Diagrams explorer and the search.
     fn icon(&self) -> &'static Icon {
         &crate::ux::icons::ER_DIAGRAM
