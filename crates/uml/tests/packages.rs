@@ -239,8 +239,7 @@ fn a_class_diagram_shows_the_packages_its_package_holds_as_tabbed_cards() {
     assert_eq!(card.tone, archforge_diagram::figure::Tone::Tabbed);
     assert_eq!(card.eyebrow, archforge_diagram::figure::Text::said("Package"));
     assert_eq!(card.name, "Orders");
-    let rows: Vec<&str> = card.compartments[0].iter().map(|r| r.text.as_str()).collect();
-    assert_eq!(rows, ["Order", "▸ Lines"], "its classes, then its packages marked");
+    assert!(card.compartments.is_empty() && card.hidden == 0, "no rows: its card shows its own diagram instead (AR-113)");
 }
 
 #[test]
@@ -269,7 +268,7 @@ fn a_package_moved_leaves_the_diagrams_of_its_old_parent_and_keeps_its_own_diagr
 }
 
 #[test]
-fn a_package_card_lists_at_most_fifty_of_what_it_holds_and_counts_the_rest() {
+fn a_package_card_builds_no_rows_however_much_it_holds() {
     let mut s = session();
     let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
     let d = run(&mut s, "diagram.add", json!({ "kind": "uml.class", "element": sales, "name": "Sales" }));
@@ -278,5 +277,6 @@ fn a_package_card_lists_at_most_fifty_of_what_it_holds_and_counts_the_rest() {
         run(&mut s, "uml.class.add", json!({ "package": crowded, "name": format!("C{i}") }));
     }
     let card = archforge_diagram::Notation::card(&archforge_uml::UmlNotation, s.doc(), obj(&s, &crowded), obj(&s, &d)).unwrap();
-    assert_eq!((card.compartments[0].len(), card.hidden), (50, 10), "fifty rows built, ten counted");
+    // Its card shows its own diagram in small instead (AR-113): nothing listed, nothing counted.
+    assert_eq!((card.compartments.len(), card.hidden, card.name.as_str()), (0, 0, "Crowded"));
 }

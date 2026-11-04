@@ -358,8 +358,14 @@ What is UML's own, beside the shared rules above.
   root while it is still to be made, and Create makes it). It cannot be moved or removed; removing
   a package hands its contents up, in the end into the root. A project opened without one gets it,
   its top-level packages moved in, as one undoable step.
-- A package on a class diagram (AR-95, owner decisions 2026-11-04) is a tabbed card, eyebrow
-  PACKAGE, listing what it holds (classes, then its packages marked ▸). Only a package the
+- A package on a class diagram (AR-95, owner decisions 2026-11-04) is a tabbed card. Its tab
+  (AR-113) holds the name in 12 px SemiBold, 22 px high with 12 px padding, never narrower than
+  56 px nor wider than the card (a longer name ends in "…", the tab's hover shows it whole); it
+  follows a rename as it is typed, and the rename field is the tab. The tab is part of the card for
+  click, drag and double click. The card's body is a thumbnail of the package's own diagram on the
+  page tint, 10 px in from the card, fitted and enlarged at most 50 %: mini cards with a name bar,
+  a header line and a bar per row, nested packages with a tab, notes amber, and the lines; "Empty
+  diagram" when it shows nothing; below 50 % zoom the name centred instead. Only a package the
   diagram's package holds goes on it. Every package placed on a canvas has its own class diagram,
   made with it in one undo step (an existing one is reused); renaming the package renames a diagram
   still named like it. Selected, its card shows Open; ⌘↓ opens it too, and zooming in until it

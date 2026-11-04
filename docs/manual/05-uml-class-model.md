@@ -86,9 +86,16 @@ into it, as one step you can undo.
 
 ## Packages on a diagram, and the diagram inside each
 
-A package can sit on a class diagram beside classes, drawn as a card with a tab, like a folder,
-listing the classes and packages it holds. Every package on a diagram leads to a class diagram of
-its own.
+A package can sit on a class diagram beside classes, drawn as a card with a tab, like a folder.
+The tab holds the package's name and is as wide as the name needs, up to the card's width; a
+longer name ends in "…", and pointing at the tab shows it whole. Every package on a diagram leads
+to a class diagram of its own, and the card shows that diagram in small: its classes and packages
+where they sit there, and the lines between them. When you change that diagram, the card follows.
+A package whose diagram has nothing on it says *Empty diagram*. Zoomed out below 50 %, the card
+shows the package's name in its middle instead, as every card does.
+
+The tab is part of the card: click it to select the package, drag it to move the card, and double
+click it to rename the package there. The tab grows as you type.
 
 - **Add one** with the **Package** tool of the toolbar: click where it goes and type its name. The
   package goes into the diagram's package, and its own diagram, named like it, is made with it.
@@ -112,7 +119,7 @@ then zoom again to go on.
 Renaming a package renames its diagram too, as long as the diagram still carries the package's
 name.
 
-<!-- picture: workspace-packages light | A class diagram of the root package: Customer and two packages, Sales selected with its Open -->
+<!-- picture: workspace-packages light | A class diagram of the root package: Customer and two packages, Sales selected with its Open and its own diagram in small, Billing's diagram empty -->
 
 <!-- picture: workspace-inside-package dark | Inside Sales: its classes, its own package Payments, and the path bar back to the root -->
 

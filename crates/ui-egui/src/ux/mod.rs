@@ -297,6 +297,7 @@ pub mod types {
     pub const UI: Type = Type::regular(13.0, 19.0);
     pub const UI_STRONG: Type = Type::semibold(13.0, 19.0);
     pub const SMALL: Type = Type::regular(12.0, 17.0);
+    pub const SMALL_STRONG: Type = Type::semibold(12.0, 17.0);
     pub const CAPTION: Type = Type::regular(11.0, 16.0);
     pub const CAPTION_STRONG: Type = Type::semibold(11.0, 16.0);
     /// Small capitals above a heading, spaced out.
