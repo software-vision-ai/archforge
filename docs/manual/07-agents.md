@@ -32,8 +32,13 @@ Agent access works on macOS and Linux for now.
    47000`. The repository's `.mcp.json` registers exactly this for agents that read it.
 
 **File ▸ Generate…** says whether agent access is on. The port listens only on your own computer, and a
-token made for each start, kept in a file only you can read, guards it. Without `--control`,
-nothing listens.
+token made for each start, kept in a file only you can read in Archforge's settings folder, guards
+it. Without `--control`, nothing listens.
+
+For an agent short of context, `archforge-cli mcp --bridge 47000 --compact` lists a few general
+tools and `search_tools` in place of one tool per command. To try agent access by hand,
+`archforge-cli app <method> [<json>] --port 47000` sends one request to the running window, and
+`archforge-cli commands` lists the commands there are.
 
 ## What the agent can do
 

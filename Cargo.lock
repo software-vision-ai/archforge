@@ -941,7 +941,7 @@ dependencies = [
 [[package]]
 name = "craft-atomic"
 version = "0.1.0"
-source = "git+https://github.com/storytold/craft-libs?branch=main#b8f7d93b00dfb8f172938f3d2d796ae62dcfe123"
+source = "git+https://github.com/storytold/craft-libs?branch=main#38740b43a901022bf8cf0ede19e59ea606dc11a9"
 dependencies = [
  "rustix 1.1.5",
 ]
