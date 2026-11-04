@@ -2,11 +2,14 @@
 <component type="desktop-application">
   <id>ai.software_vision.archforge</id>
   <name>Archforge</name>
-  <summary>A desktop modelling application</summary>
+  <summary>Model software systems on diagrams</summary>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT OR Apache-2.0</project_license>
   <description>
-    <p>Archforge is a desktop modelling application.</p>
+    <p>Archforge is a software modelling tool. You describe a software system as a model and draw it
+      on diagrams: UML class diagrams for its classes, and ER diagrams for its databases.</p>
+    <p>An AI agent can work in the same open model while you watch: every change it makes shows at
+      once, and you can undo any of them.</p>
   </description>
   <launchable type="desktop-id">ai.software_vision.archforge.desktop</launchable>
   <provides>

@@ -301,7 +301,7 @@ str		Settings	Ajustes
 str		How Archforge knows you.	Cómo te conoce Archforge.
 str		About Archforge	Acerca de Archforge
 str		About Archforge…	Acerca de Archforge…
-str		Free and open source modelling for ER and UML class diagrams.	Modelado libre y de código abierto para diagramas ER y de clases UML.
+str		Free and open source modelling of software systems.	Modelado libre y de código abierto de sistemas de software.
 str		Support Archforge	Apoyar Archforge
 str		Archforge is free. If it helps your work, you can support its development. A contribution unlocks nothing: every feature stays free for everyone.	Archforge es gratuito. Si te ayuda en tu trabajo, puedes apoyar su desarrollo. Una contribución no desbloquea nada: todas las funciones siguen siendo gratuitas para todos.
 str		GitHub Sponsors	GitHub Sponsors
@@ -577,6 +577,7 @@ str		Move {what} into {where}	Mover {what} a {where}
 str		{what} moved into {where}	{what} movido a {where}
 str		Open this package's diagram	Abrir el diagrama de este paquete
 str		Open this package's diagram (⌘↓)	Abrir el diagrama de este paquete (⌘↓)
+str		This is the top package: zooming out goes no further	Este es el paquete superior: alejar más no lleva más arriba
 str		Only a package this diagram's package holds goes on it	Solo cabe un paquete que esté dentro del paquete de este diagrama
 # Relacionar clases
 str		A bound can be at most {max}.	Un límite puede ser como máximo {max}.

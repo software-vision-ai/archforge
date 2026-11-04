@@ -76,6 +76,8 @@ pub enum Screen {
     WorkspaceInsidePackage,
     /// The root's diagram with Sales selected and Properties' Parent package menu open (AR-102).
     WorkspacePackageParent,
+    /// The root's diagram zoomed out to 10 %, its notice saying no package is above (AR-110).
+    WorkspacePackageTop,
     /// The Diagrams explorer with its groups: two class diagrams, one of a nested package and
     /// open, and an ER diagram.
     WorkspaceDiagrams,
@@ -323,6 +325,14 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
             shell.state.show_panel(crate::state::Panel::Properties);
             shell.panels.menu = Some(crate::panels::Menu::PackageParent);
         }
+    }
+    if screen == Screen::WorkspacePackageTop {
+        shell.adopt_project();
+        sample_packages(&mut shell, false)?;
+        shell.canvas.fit_pending = false;
+        shell.canvas.zoom = crate::canvas::ZOOM_RANGE.0;
+        shell.canvas.pan = egui::vec2(420.0, 380.0);
+        shell.canvas.notice = Some(crate::i18n::tr("This is the top package: zooming out goes no further"));
     }
     if screen == Screen::WorkspaceDiagrams {
         shell.adopt_project();

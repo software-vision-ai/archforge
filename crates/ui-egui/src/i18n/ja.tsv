@@ -301,7 +301,7 @@ str		Settings	設定
 str		How Archforge knows you.	Archforge があなたを識別する方法です。
 str		About Archforge	Archforge について
 str		About Archforge…	Archforge について…
-str		Free and open source modelling for ER and UML class diagrams.	ER 図と UML クラス図のための、無料のオープンソース モデリング。
+str		Free and open source modelling of software systems.	ソフトウェアシステムのための、無料のオープンソース モデリング。
 str		Support Archforge	Archforge を支援
 str		Archforge is free. If it helps your work, you can support its development. A contribution unlocks nothing: every feature stays free for everyone.	Archforge は無料です。お仕事の役に立っているなら、開発を支援できます。支援で解放される機能はありません。すべての機能は誰でも無料のままです。
 str		GitHub Sponsors	GitHub Sponsors
@@ -577,6 +577,7 @@ str		Move {what} into {where}	{what} を {where} に移動
 str		{what} moved into {where}	{what} を {where} に移動しました
 str		Open this package's diagram	このパッケージの図を開く
 str		Open this package's diagram (⌘↓)	このパッケージの図を開く (⌘↓)
+str		This is the top package: zooming out goes no further	ここが最上位のパッケージです。これ以上ズームアウトしても上には移動しません
 str		Only a package this diagram's package holds goes on it	この図のパッケージに含まれるパッケージだけを置けます
 # クラスの関係
 str		A bound can be at most {max}.	境界は最大 {max} までです。
