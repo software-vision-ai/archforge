@@ -88,21 +88,43 @@ The gallery stays whole in two ways:
   checked through `latest`.
 
 A release published without the pictures (v0.1.0 was, before the Screenshots job existed) shows
-broken pictures on the front page until they are attached. Render them from that release's tag,
-then upload them to it:
+broken pictures on the front page until they are attached. Render them from that release's tag
+into a clean `dist/screenshots`:
 
 ```sh
 git switch --detach v<version>
+rm -rf dist/screenshots && mkdir -p dist/screenshots
 cargo xtask screens --gallery dist/screenshots
-gh release upload v<version> dist/screenshots/*.png --clobber
 ```
 
-Uploading adds files to a published release and leaves its packages and `SHA256SUMS` as they
-are. A tag older than the `--gallery` option (v0.1.0 is one) renders with plain
-`cargo xtask screens`, which writes every screen to `plan/screens/<screen>-<light|dark>.png`: copy
-the four screens `GALLERY` names to their gallery names, for example `workspace-cross-schema-dark.png`
-to `screenshot-er-diagram-dark.png`, and look at them before uploading. Rendered from the tag, they
-show only what that release has.
+A tag older than the `--gallery` option (v0.1.0 is one) ignores it and writes every screen to
+`plan/screens/<screen>-<light|dark>.png` instead. Copy the four screens `GALLERY` names to their
+gallery names there:
+
+```sh
+rm -rf dist/screenshots && mkdir -p dist/screenshots
+cargo xtask screens
+for pair in home:home workspace-cross-schema:er-diagram workspace-class-members:class-diagram workspace-generate:generate; do
+  for theme in light dark; do
+    cp "plan/screens/${pair%%:*}-$theme.png" "dist/screenshots/screenshot-${pair##*:}-$theme.png"
+  done
+done
+```
+
+Look at them before uploading: rendered from the tag, they show only what that release has. Then
+attach them with a `SHA256SUMS` that lists them, made from the release's own files (on macOS,
+`shasum -a 256` in place of `sha256sum`):
+
+```sh
+assets=$(mktemp -d)
+gh release download v<version> --dir "$assets"
+cp dist/screenshots/*.png "$assets"/
+rm "$assets/SHA256SUMS"
+(cd "$assets" && sha256sum -- * >SHA256SUMS)
+gh release upload v<version> dist/screenshots/*.png "$assets/SHA256SUMS" --clobber
+```
+
+The packages themselves stay as they were; only the pictures and the checksum list change.
 
 To change what the gallery shows, edit `GALLERY` and the README's Screenshots section together (a
 test keeps them in step), and render them locally with the same command to look at them first.
