@@ -3285,6 +3285,49 @@ fn a_click_on_a_packages_tab_selects_the_package_though_a_line_crosses_the_tab()
 }
 
 #[test]
+fn a_packages_tab_drawn_over_another_card_takes_the_click_and_the_card_on_top_of_a_tab_keeps_it() {
+    let (mut h, top, sales, card, _, _) = package_preview_harness(ThemeKind::Light);
+    // A class whose card lies under Sales's tab: placed after Sales, it is drawn over the tab.
+    let under = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let root = s.execute("uml.model.root", &serde_json::json!({})).unwrap().value["id"].as_str().unwrap().to_string();
+        let c =
+            s.execute("uml.class.add", &serde_json::json!({ "package": root, "name": "Under" })).unwrap().value["id"].as_str().unwrap().to_string();
+        s.execute("diagram.place", &serde_json::json!({ "diagram": top.to_string(), "element": c, "x": 150, "y": 60, "width": 140, "height": 110 }))
+            .unwrap();
+        archforge_mof::Uuid::parse(&c).unwrap()
+    };
+    h.run();
+    let ids = |h: &Harness<'static, Shell>| {
+        let s = h.state().session.as_ref().unwrap();
+        s.view().selection.iter().filter_map(|o| s.doc().uuid(*o).ok()).collect::<Vec<_>>()
+    };
+    let at = rect_of(&h, &format!("workspace.canvas.node.{card}.tab")).center();
+    click(&mut h, at);
+    assert_eq!(ids(&h), vec![under], "the class, drawn over the tab, takes the click");
+    // Sales placed again comes after the class, its tab drawn over the class's card: the tab takes it.
+    let card = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        s.execute("diagram.unplace", &serde_json::json!({ "nodes": [card.to_string()] })).unwrap();
+        let v = s
+            .execute(
+                "diagram.place",
+                &serde_json::json!({ "diagram": top.to_string(), "element": sales.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 }),
+            )
+            .unwrap()
+            .value;
+        archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap()
+    };
+    for _ in 0..45 {
+        h.step();
+    }
+    h.run();
+    let at = rect_of(&h, &format!("workspace.canvas.node.{card}.tab")).center();
+    click(&mut h, at);
+    assert_eq!(ids(&h), vec![sales], "the tab, drawn over the class, takes the click");
+}
+
+#[test]
 fn a_packages_tab_selects_drags_and_renames_its_card_and_the_name_is_typed_in_the_tab() {
     let (mut h, _, sales, card, _, _) = package_preview_harness(ThemeKind::Light);
     let tab = rect_of(&h, &format!("workspace.canvas.node.{card}.tab"));

@@ -346,10 +346,11 @@ fn decide(
     let kind = crate::kinds::kind_of(shell, store, d);
     let hit_node = |pos: Pos2| {
         let (x, y) = view.to_canvas(pos);
-        match grid.hit(x, y) {
+        let card = match grid.hit(x, y) {
             Some(Hit::Node(n)) => Some(n),
-            _ => tab_at(shell, store, pos),
-        }
+            _ => None,
+        };
+        on_top(shell, store, d, card, pos)
     };
     match shell.canvas.tool {
         Tool::Pan => Action::Nothing,
@@ -526,11 +527,17 @@ fn decide(
             }
             if resp.clicked() {
                 let (x, y) = view.to_canvas(pos);
-                // A package's tab is its card's (AR-113), over any line that crosses it.
-                let target = match (grid.hit(x, y), tab_at(shell, store, pos)) {
-                    (Some(Hit::Node(n)), _) | (_, Some(n)) => element_of(store, n).unwrap_or(n),
-                    (Some(Hit::Edge(e)), None) => store.get(e, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref()).unwrap_or(e),
-                    (None, None) => d,
+                // A package's tab is its card's (AR-113), over any line that crosses it; a card and a
+                // tab over each other give the one drawn on top.
+                let hit = grid.hit(x, y);
+                let card = match hit {
+                    Some(Hit::Node(n)) => Some(n),
+                    _ => None,
+                };
+                let target = match (on_top(shell, store, d, card, pos), hit) {
+                    (Some(n), _) => element_of(store, n).unwrap_or(n),
+                    (None, Some(Hit::Edge(e))) => store.get(e, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref()).unwrap_or(e),
+                    (None, _) => d,
                 };
                 let Some(id) = uuid(store, target) else { return Action::Nothing };
                 return if shift && target != d { Action::Toggle(id) } else { Action::Select(vec![id]) };
@@ -817,12 +824,22 @@ fn remove_selected_link(shell: &mut Shell) -> bool {
 fn node_at(shell: &Shell, view: View, d: Obj, at: Pos2) -> Option<Uuid> {
     let store = shell.session.as_ref()?.doc();
     let kind = crate::kinds::kind_of(shell, store, d);
-    nodes_of(store, d)
-        .into_iter()
-        .rev()
-        .find(|n| part_of_node(kind, store, *n).is_some() && view.rect(&bounds_of(store, *n)).contains(at))
-        .or_else(|| tab_at(shell, store, at).filter(|n| part_of_node(kind, store, *n).is_some()))
-        .and_then(|n| uuid(store, n))
+    let card =
+        nodes_of(store, d).into_iter().rev().find(|n| part_of_node(kind, store, *n).is_some() && view.rect(&bounds_of(store, *n)).contains(at));
+    on_top(shell, store, d, card, at).filter(|n| part_of_node(kind, store, *n).is_some()).and_then(|n| uuid(store, n))
+}
+
+/// Of the card under a point and the package tab under it, the one drawn on top: the later on the
+/// diagram, as the canvas draws its nodes in order (AR-113).
+fn on_top(shell: &Shell, store: &Store, d: Obj, card: Option<Obj>, at: Pos2) -> Option<Obj> {
+    match (card, tab_at(shell, store, at)) {
+        (Some(c), Some(t)) if c != t => {
+            let order = nodes_of(store, d);
+            let place = |n: Obj| order.iter().position(|m| *m == n);
+            Some(if place(t) > place(c) { t } else { c })
+        }
+        (c, t) => c.or(t),
+    }
 }
 
 /// The package whose tab the last frame drew under a screen point, the topmost first: the tab is
