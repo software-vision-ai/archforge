@@ -307,6 +307,13 @@ impl NotationUi for UmlUi {
         let mut parents: Vec<Uuid> = home.map(|h| chain(store, h)).unwrap_or_default().into_iter().filter_map(|p| store.uuid(p).ok()).collect();
         let out = match key {
             "package" => {
+                // With nothing selected it goes into the root package, so its name is free there;
+                // without a root yet, the packages at the top are the ones the root takes in.
+                let home = home.or_else(|| {
+                    let root = archforge_uml::commands::root_package(store)?;
+                    parents.extend(store.uuid(root).ok());
+                    Some(root)
+                });
                 let siblings = home.map_or_else(|| packages(store), |h| archforge_uml::commands::subpackages(store, h));
                 let Some(name) = fresh_name("Package", siblings.into_iter().map(|p| name(store, p)), false) else { return no_name() };
                 let parent = home.and_then(|h| store.uuid(h).ok()).map(|u| u.to_string()).unwrap_or_default();
