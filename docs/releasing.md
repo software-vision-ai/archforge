@@ -60,5 +60,18 @@ Each comes from its script under `packaging/`. Every package reports its version
 only numbers (the macOS bundle, the Windows installer and version resource), a pre-release carries
 its numbers alone, `0.2.0` of `0.2.0-rc.1`; file names keep the whole version.
 
+## Screenshots
+
+The README's gallery shows four screens in the visitor's appearance: Home, an ER diagram, a UML
+class diagram and File → Generate. The pictures are never committed. The workflow renders them
+from the release's own commit with `cargo xtask screens --gallery <dir>` (the screens and their
+file names are `GALLERY` in `xtask/src/screens.rs`) and attaches them to the release as
+`screenshot-<name>-<light|dark>.png`. The README loads them from
+`releases/latest/download/`, so every published release refreshes them, and they always show the
+current release.
+
+To change what the gallery shows, edit `GALLERY` and the README's Screenshots section together (a
+test keeps them in step), and render them locally with the same command to look at them first.
+
 Nothing is signed yet. The macOS and Windows scripts have their signing steps, which wait for their
 secrets: until then macOS and Windows ask before they first open Archforge, as the README says.

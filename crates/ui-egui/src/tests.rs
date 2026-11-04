@@ -7070,3 +7070,20 @@ fn a_project_from_before_the_root_package_opens_with_its_packages_in_the_root_as
     assert!(archforge_uml::commands::root_package(st).is_none());
     assert_eq!(archforge_uml::commands::packages(st).len(), 2);
 }
+
+#[test]
+fn the_activity_rail_puts_diagrams_above_models_in_its_look_and_its_keyboard_order() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let (diagrams, models, source) = (
+            rect_of(&h, "workspace.explorers.diagrams"),
+            rect_of(&h, "workspace.explorers.models"),
+            rect_of(&h, "workspace.explorers.source-control"),
+        );
+        assert!(diagrams.bottom() <= models.top() && models.bottom() <= source.top(), "{theme:?}: Diagrams, then Models, then Source Control");
+        // Tab follows the order the controls are made in, which is the order drawn.
+        let ids = ids(&h);
+        let at = |id: &str| ids.iter().position(|i| i == id).unwrap();
+        assert!(at("workspace.explorers.diagrams") < at("workspace.explorers.models"), "{theme:?}: {ids:?}");
+    }
+}

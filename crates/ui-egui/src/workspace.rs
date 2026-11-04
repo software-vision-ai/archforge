@@ -35,10 +35,11 @@ const DIVIDER: f32 = 12.0;
 const RAIL_BUTTON: Vec2 = vec2(32.0, 36.0);
 const RAIL_PITCH: f32 = 46.0;
 
-/// The explorers of the activity rail: automation id, the explorer, its icon and its title.
+/// The explorers of the activity rail, top to bottom: automation id, the explorer, its icon and its
+/// title. Diagrams comes first, so the diagrams are found first (owner, 2026-11-04).
 const EXPLORERS: [(&str, Explorer, &ux::Icon, &str); 3] = [
-    ("models", Explorer::Models, &icons::CUBE, "Models"),
     ("diagrams", Explorer::Diagrams, &icons::DIAGRAM, "Diagrams"),
+    ("models", Explorer::Models, &icons::CUBE, "Models"),
     ("source-control", Explorer::SourceControl, &icons::BRANCH, "Source Control"),
 ];
 

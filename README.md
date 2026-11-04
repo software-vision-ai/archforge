@@ -13,6 +13,39 @@ installer put it.
 The [user manual](docs/manual/README.md) takes a first-time user from starting Archforge to a
 small ER and UML model, and shows how an agent works with it.
 
+## Screenshots
+
+From the latest release, in your appearance (light or dark); the [user manual](docs/manual/README.md)
+walks through each screen.
+
+**Home**
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-home-dark.png">
+  <img src="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-home-light.png" alt="Home: start a new project or open one, with pinned folders and recent projects below." width="100%">
+</picture>
+
+**An ER diagram**
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-er-diagram-dark.png">
+  <img src="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-er-diagram-light.png" alt="An ER diagram: tables with their keys and relationships, one from a second schema, and the selected table's columns in Properties." width="100%">
+</picture>
+
+**A UML class diagram**
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-class-diagram-dark.png">
+  <img src="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-class-diagram-light.png" alt="A UML class diagram of a package, with the selected class's attributes and operations in Properties." width="100%">
+</picture>
+
+**Generate**
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-generate-dark.png">
+  <img src="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-generate-light.png" alt="File → Generate: what an agent connected to Archforge writes from the model and its skills, here SQL DDL, and the request to hand it." width="100%">
+</picture>
+
 ## Building
 
 ```sh
