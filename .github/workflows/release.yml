@@ -257,6 +257,17 @@ jobs:
             test "$(stat -c %s "$f")" -gt 20000 || { echo "::error::$f is too small to be a screen"; exit 1; }
           done
           ls -l dist/screenshots
+      - name: Every picture the README shows
+        # The README loads its gallery from the latest release, so a release without one of these
+        # files shows a broken picture on the repository's front page: no draft is made without it.
+        run: |
+          shown=$(grep -o 'releases/latest/download/screenshot-[a-z-]*-[a-z]*\.png' README.md | sed 's|.*/||' | sort -u)
+          test -n "$shown" || { echo "::error::README.md shows no screenshot from the latest release"; exit 1; }
+          missing=0
+          for f in $shown; do
+            test -s "dist/screenshots/$f" || { echo "::error::README.md shows $f, which the gallery did not render"; missing=1; }
+          done
+          exit "$missing"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-screenshots
@@ -296,7 +307,7 @@ jobs:
 
           **Before you start:** Archforge keeps projects in [Dolt](https://docs.dolthub.com/introduction/installation) 2.6 or a later 2.x. Install it first; Archforge finds it on the PATH, where Homebrew and Dolt's installer put it on macOS, or where \`ARCHFORGE_DOLT\` says.
 
-          The packages are not signed yet: the [README](https://github.com/$GITHUB_REPOSITORY#downloads) says how to open them on macOS and Windows. Agent access is not available on Windows yet. \`SHA256SUMS\` holds every file's checksum.
+          The packages are not signed yet: the [README](https://github.com/$GITHUB_REPOSITORY#get-started) says how to open them on macOS and Windows. Agent access is not available on Windows yet. \`SHA256SUMS\` holds every file's checksum.
 
           NOTES
           # GitHub's own notes: What's Changed, New Contributors and the Full Changelog link.

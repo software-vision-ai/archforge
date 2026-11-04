@@ -1,12 +1,14 @@
 # Archforge
 
-Archforge helps you design software systems with diagrams. Draw a database with an ER diagram or
-explore classes and their relationships with a UML class diagram. You can work on the model
-yourself, or invite an AI agent to work alongside you and see its changes appear on screen.
+Archforge is a free software modelling tool for macOS, Windows and Linux. You describe a software
+system as a model and draw it on diagrams. Today that means UML class diagrams for the system's
+classes, where Archforge's development started, and ER diagrams for its databases, one more aspect
+of the same system. You can work on the model yourself, or, on macOS and Linux, invite an AI agent
+to work alongside you and see its changes appear on screen.
 
-[Download Archforge](https://github.com/software-vision-ai/archforge/releases) or follow the
-[first steps in the user manual](docs/manual/README.md). Archforge runs on macOS, Windows and
-Linux.
+[Download Archforge](https://github.com/software-vision-ai/archforge/releases), then follow the
+[beginner's guide in the wiki](https://github.com/software-vision-ai/archforge/wiki) from installing
+to your first diagram. The [user manual](docs/manual/README.md) covers every screen and option.
 
 ## Screenshots
 
@@ -20,18 +22,18 @@ walks through each screen.
   <img src="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-home-light.png" alt="Home: start a new project or open one, with pinned folders and recent projects below." width="100%">
 </picture>
 
-**Plan a database**
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-er-diagram-dark.png">
-  <img src="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-er-diagram-light.png" alt="Customer, Order and Account tables connected in a database diagram, with Order's details on the right." width="100%">
-</picture>
-
-**Explore classes**
+**Model a system's classes**
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-class-diagram-dark.png">
   <img src="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-class-diagram-light.png" alt="A class diagram connecting Customer, Order and related classes, with Order's details on the right." width="100%">
+</picture>
+
+**Design its database**
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-er-diagram-dark.png">
+  <img src="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-er-diagram-light.png" alt="Customer, Order and Account tables connected in a database diagram, with Order's details on the right." width="100%">
 </picture>
 
 **Create an output with an agent**
@@ -50,9 +52,11 @@ walks through each screen.
 3. Open Archforge and follow [Getting started](docs/manual/02-getting-started.md) to create your
    first project.
 
-The current packages are not signed, so your system may ask for an extra confirmation the first
-time you open Archforge. The [getting-started guide](docs/manual/02-getting-started.md) explains
-what to expect.
+The packages are not signed yet, so the first time you open Archforge your system asks first:
+
+- **macOS** says it cannot check Archforge for malicious software. Open **System Settings** →
+  **Privacy & Security**, and next to the message about Archforge choose **Open Anyway**.
+- **Windows** SmartScreen says it protected your PC. Choose **More info**, then **Run anyway**.
 
 ## Work with an AI agent
 

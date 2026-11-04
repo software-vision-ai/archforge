@@ -29,17 +29,21 @@ can't be released again, so the next release always bumps it first.
 
    The workflow starts by itself.
 3. **Wait for the draft.** After about 40 minutes the Releases page has the draft
-   `Archforge v<version>`, with every package, `SHA256SUMS` and all README gallery screenshot files.
-   Do not publish a draft with missing screenshots: the README's gallery will show broken images
-   when that draft becomes the latest release. Its notes are Archforge's own lines
+   `Archforge v<version>`, with every package, `SHA256SUMS` and the README gallery's eight
+   screenshots: the workflow makes no draft without them (see [Screenshots](#screenshots)). Its
+   notes are Archforge's own lines
    (install Dolt first, the packages are unsigned, what isn't available yet) above GitHub's notes
    from the pull requests merged since the last release: *What's Changed*, *New Contributors* and the
    *Full Changelog* link.
 4. **Check it.** Download a package or two, and follow the
    [release checklist](release-checklist.md) in the running app.
 5. **Publish** the draft on GitHub. Publishing creates the tag `v<version>` on the commit that was
-   built. Open the rendered README and check that all four gallery images load in both light and
-   dark appearance.
+   built.
+6. **Look at the pictures.** A release becomes the latest once it is published, and the README's
+   gallery then shows its screenshots: open the repository's front page in a light and in a dark
+   appearance and see that all four load. A pre-release never becomes the latest, so the README
+   keeps showing the previous release's pictures; check the pre-release's own instead, at
+   `releases/download/v<version>/screenshot-<name>-<light|dark>.png`.
 
 Pushing to `release` again before publishing rebuilds the same draft: its packages and notes are
 replaced. Once the draft is published, the workflow refuses that version, so bump it first.
@@ -69,9 +73,36 @@ The README's gallery shows four screens in the visitor's appearance: Home, an ER
 class diagram and File → Generate. The pictures are never committed. The workflow renders them
 from the release's own commit with `cargo xtask screens --gallery <dir>` (the screens and their
 file names are `GALLERY` in `xtask/src/screens.rs`) and attaches them to the release as
-`screenshot-<name>-<light|dark>.png`. The README loads them from
-`releases/latest/download/`, so every published release refreshes them, and they always show the
-current release.
+`screenshot-<name>-<light|dark>.png`. The README and the wiki load them from
+`releases/latest/download/`, so every published release refreshes them, and they show the latest
+release. A pre-release carries its own pictures too, but `latest` skips it.
+
+The gallery stays whole in two ways:
+
+- **The workflow refuses a release without it.** After rendering, the Screenshots job checks that
+  every `screenshot-*.png` the README names is among the pictures. The draft needs that job, so a
+  missing picture stops the release before anything is published. A test in `xtask/src/screens.rs`
+  keeps `GALLERY` and the README's pictures in step.
+- **Look after publishing**, as step 6 above says: the front page for a release, the
+  pre-release's own `releases/download/v<version>/` files for a pre-release. A draft can't be
+  checked through `latest`.
+
+A release published without the pictures (v0.1.0 was, before the Screenshots job existed) shows
+broken pictures on the front page until they are attached. Render them from that release's tag,
+then upload them to it:
+
+```sh
+git switch --detach v<version>
+cargo xtask screens --gallery dist/screenshots
+gh release upload v<version> dist/screenshots/*.png --clobber
+```
+
+Uploading adds files to a published release and leaves its packages and `SHA256SUMS` as they
+are. A tag older than the `--gallery` option (v0.1.0 is one) renders with plain
+`cargo xtask screens`, which writes every screen to `plan/screens/<screen>-<light|dark>.png`: copy
+the four screens `GALLERY` names to their gallery names, for example `workspace-cross-schema-dark.png`
+to `screenshot-er-diagram-dark.png`, and look at them before uploading. Rendered from the tag, they
+show only what that release has.
 
 To change what the gallery shows, edit `GALLERY` and the README's Screenshots section together (a
 test keeps them in step), and render them locally with the same command to look at them first.
