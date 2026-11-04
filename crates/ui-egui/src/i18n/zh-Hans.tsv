@@ -536,6 +536,7 @@ str		The diagram is of no package	该图不属于任何包
 str		This class	此类
 str		This package	此包
 plural		+ {n} more member	+ 另 {n} 个成员
+plural		+ {n} more element	+ 另 {n} 个元素
 # 属性面板中的类成员
 str		Abstract	抽象
 str		Add attribute	添加属性
@@ -566,6 +567,11 @@ str		This attribute	此属性
 str		This operation	此操作
 str		Visibility	可见性
 str		Place class	放置类
+str		Add package	添加包
+str		Place package	放置包
+str		Open this package's diagram	打开此包的图
+str		Open this package's diagram (⌘↓)	打开此包的图 (⌘↓)
+str		Only a package this diagram's package holds goes on it	只能放入此图所属包中的包
 # 关联类
 str		A bound can be at most {max}.	界限最多为 {max}。
 str		A relationship joins two classes	关系连接两个类

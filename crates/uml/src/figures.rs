@@ -15,6 +15,9 @@ use crate::{
     typed_element,
 };
 
+/// The most rows a package's card lists of what it holds.
+const MAX_HELD: usize = 50;
+
 /// The most parameters an operation's row names, and the longest row a card draws: a row is
 /// built every frame, so neither grows with what the model holds.
 const MAX_PARAMETERS: usize = 8;
@@ -135,8 +138,10 @@ pub fn operation_text(store: &Store, op: Obj) -> String {
 /// operations; a class of another package than the diagram's is drawn as an outsider, its package
 /// named in the eyebrow.
 pub fn card(store: &Store, c: Obj, diagram: Obj) -> Option<Card> {
-    if store.class_of(c).ok()? != CLASS {
-        return None;
+    match store.class_of(c).ok()? {
+        k if k == crate::PACKAGE => return Some(package_card(store, c)),
+        k if k != CLASS => return None,
+        _ => {}
     }
     let here = store.get(diagram, archforge_diagram::diagram::ELEMENT).ok().and_then(|v| v.as_ref()).filter(|o| store.is_alive(*o));
     let elsewhere = crate::commands::package_of(store, c).filter(|p| here.is_some_and(|h| h != *p));
@@ -160,6 +165,7 @@ pub fn card(store: &Store, c: Obj, diagram: Obj) -> Option<Card> {
         name: name(store, c),
         compartments: vec![attributes, operations],
         more: ("+ {n} more member", "+ {n} more members"),
+        hidden: 0,
         elsewhere: elsewhere.is_some(),
         tone: Tone::Plain,
         slanted: flag(store, c, class::IS_ABSTRACT),
@@ -272,5 +278,32 @@ pub fn slot_text(store: &Store, element: Obj, slot: &str) -> String {
         (Some(c), "from_role") if c == ASSOCIATION => end(0).map(|e| name(store, e)).unwrap_or_default(),
         (Some(c), "to_role") if c == ASSOCIATION => end(1).map(|e| name(store, e)).unwrap_or_default(),
         _ => String::new(),
+    }
+}
+
+/// A package as a tabbed card: its name, then what it holds, its classes and, marked, its own
+/// packages, each of which leads to its own diagram.
+fn package_card(store: &Store, p: Obj) -> Card {
+    let row = |text: String| Row { mark: None, text: cut(text), linked: false, slanted: false };
+    let listed: Vec<Obj> = list(store, p, crate::package::PACKAGED_ELEMENT)
+        .into_iter()
+        .filter(|o| store.class_of(*o).ok().is_some_and(|k| k == CLASS || k == crate::PACKAGE))
+        .collect();
+    // At most MAX_HELD rows are built; the rest are counted, so "+ n more" says them all.
+    let hidden = listed.len().saturating_sub(MAX_HELD);
+    let held: Vec<Row> = listed
+        .into_iter()
+        .take(MAX_HELD)
+        .map(|o| if store.class_of(o).ok() == Some(CLASS) { row(name(store, o)) } else { row(format!("▸ {}", name(store, o))) })
+        .collect();
+    Card {
+        eyebrow: Text::said("Package"),
+        name: name(store, p),
+        compartments: vec![held],
+        more: ("+ {n} more element", "+ {n} more elements"),
+        hidden,
+        elsewhere: false,
+        tone: Tone::Tabbed,
+        slanted: false,
     }
 }

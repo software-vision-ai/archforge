@@ -1449,8 +1449,9 @@ fn workspace_harness(theme: ThemeKind, size: egui::Vec2) -> Harness<'static, She
     let mut shell = Shell::new(Services { ids: Some(test_ids()), ..Services::default() });
     shell.state.theme = theme;
     shell.open_project(crate::Opened { name: "Commerce platform".into(), path: "/tmp/Commerce platform.archforge".into(), ..Default::default() });
-    // Frames a sixtieth of a second apart, as on screen, so two clicks in a row read as a double click.
-    let mut h = Harness::builder().with_size(size).with_step_dt(1.0 / 60.0).build_ui_state(
+    // Frames a sixtieth of a second apart, as on screen, so two clicks in a row read as a double click;
+    // enough of them to settle a package switch's fade (AR-95).
+    let mut h = Harness::builder().with_size(size).with_step_dt(1.0 / 60.0).with_max_steps(32).build_ui_state(
         |ui, shell: &mut Shell| {
             shell.logic(ui.ctx());
             shell.ui(ui);
@@ -2753,6 +2754,269 @@ fn a_package_added_with_nothing_selected_takes_a_name_free_in_the_root_package()
         h.run();
     }
     assert_eq!(names(&h), ["Package 1", "Package 2"], "the second package is named apart from the first, both in the root");
+}
+
+/// Lets package navigation's thresholds rest after a switch.
+fn rest(h: &mut Harness<'static, Shell>) {
+    for _ in 0..45 {
+        h.step();
+    }
+    h.run();
+}
+
+#[test]
+fn a_package_placed_on_a_class_diagram_leads_to_its_own_diagram_by_open_the_path_keys_and_zoom() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let root_diagram = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let root = s.execute("uml.model.root", &serde_json::json!({})).unwrap().value["id"].as_str().unwrap().to_string();
+            let d =
+                s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": root, "name": "Commerce platform" })).unwrap().value;
+            archforge_mof::Uuid::parse(d["id"].as_str().unwrap()).unwrap()
+        };
+        crate::canvas::open(h.state_mut(), root_diagram);
+        h.run();
+        let active = |h: &Harness<'static, Shell>| h.state().canvas.active;
+        // The Package tool: a package in the root, its card and its own diagram, its name open.
+        let at = rect_of(&h, "workspace.tools.package").center();
+        click(&mut h, at);
+        let centre = rect_of(&h, "workspace.canvas").center();
+        click(&mut h, centre);
+        let rename = h.state().canvas.rename.clone().expect("the package is named in place");
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add package"), "{theme:?}: one undo step");
+        h.event(egui::Event::Text("Sales".into()));
+        h.run();
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        let (package, inner) = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let p = st.by_uuid(rename.entity).unwrap();
+            assert_eq!(archforge_core::name_of(st, p), "Sales");
+            let d = archforge_uml::commands::diagram_of(st, p).expect("its own diagram");
+            assert_eq!(crate::diagrams::diagram_name(st, d), "Sales", "{theme:?}: named with the package");
+            (rename.entity, st.uuid(d).unwrap())
+        };
+        // Open on the selected package; the path bar leads back, to the view as it was left.
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [package.to_string()] })).unwrap();
+        h.run();
+        let left = (h.state().canvas.pan, h.state().canvas.zoom);
+        let at = rect_of(&h, &format!("workspace.canvas.node.{}.enter", rename.node)).center();
+        click(&mut h, at);
+        assert_eq!(active(&h), Some(inner), "{theme:?}: Open opens the package's diagram");
+        let found = ids(&h);
+        assert!(found.iter().any(|i| i == "workspace.canvas.path.0") && found.iter().any(|i| i == "workspace.canvas.path.1"), "{found:?}");
+        rest(&mut h);
+        let at = rect_of(&h, "workspace.canvas.path.0").center();
+        click(&mut h, at);
+        assert_eq!(active(&h), Some(root_diagram));
+        assert_eq!((h.state().canvas.pan, h.state().canvas.zoom), left, "{theme:?}: the parent as it was left");
+        // ⌘↓ and ⌘↑ do the same from the keyboard.
+        rest(&mut h);
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [package.to_string()] })).unwrap();
+        h.state_mut().canvas.focused = true;
+        h.run();
+        key(&mut h, egui::Key::ArrowDown, egui::Modifiers::COMMAND);
+        assert_eq!(active(&h), Some(inner), "{theme:?}: ⌘↓");
+        rest(&mut h);
+        h.state_mut().canvas.focused = true;
+        key(&mut h, egui::Key::ArrowUp, egui::Modifiers::COMMAND);
+        assert_eq!(active(&h), Some(root_diagram), "{theme:?}: ⌘↑");
+        // Zooming in until the package fills the view enters it; zooming out on it comes back.
+        rest(&mut h);
+        let node = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            st.by_uuid(rename.node).unwrap()
+        };
+        let card = rect_of(&h, &format!("workspace.canvas.node.{}", rename.node)).center();
+        h.event(egui::Event::PointerMoved(card));
+        for _ in 0..40 {
+            if active(&h) == Some(inner) {
+                break;
+            }
+            h.event(egui::Event::Zoom(1.2));
+            h.step();
+        }
+        assert_eq!(active(&h), Some(inner), "{theme:?}: zooming in entered Sales");
+        rest(&mut h);
+        h.event(egui::Event::PointerMoved(rect_of(&h, "workspace.canvas").center()));
+        for _ in 0..40 {
+            if active(&h) == Some(root_diagram) {
+                break;
+            }
+            h.event(egui::Event::Zoom(0.8));
+            h.step();
+        }
+        assert_eq!(active(&h), Some(root_diagram), "{theme:?}: zooming out came back");
+        h.run();
+        let canvas = rect_of(&h, "workspace.canvas");
+        let shown = rect_of(&h, &format!("workspace.canvas.node.{}", rename.node));
+        let share = shown.width() / canvas.width();
+        assert!((share - crate::package_nav::REVEAL).abs() < 0.02, "{theme:?}: the package at a third of the view, {share}");
+        assert!(shown.width() * shown.height() / (canvas.width() * canvas.height()) < crate::package_nav::ENTER_COVER);
+        // A double click still renames; it does not navigate.
+        rest(&mut h);
+        let _ = node;
+        double_click(&mut h, shown.center());
+        assert_eq!(h.state().canvas.rename.as_ref().map(|r| r.entity), Some(package), "{theme:?}: renaming");
+        assert_eq!(active(&h), Some(root_diagram));
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        // Saved and opened again, the package leads to the same diagram.
+        let rows = {
+            let (tables, junctions) = archforge_notations::storage();
+            archforge_mof::rows::snapshot(h.state().session.as_ref().unwrap().doc(), &tables, &junctions).unwrap()
+        };
+        let mut again = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        again.state_mut().open_project(crate::Opened {
+            name: "Commerce platform".into(),
+            path: "/tmp/Again.archforge".into(),
+            model: Some(std::sync::Arc::new(rows)),
+            ..Default::default()
+        });
+        again.run();
+        let st = again.state().session.as_ref().unwrap().doc();
+        let p = st.by_uuid(package).expect("the package");
+        assert_eq!(archforge_uml::commands::diagram_of(st, p).and_then(|d| st.uuid(d).ok()), Some(inner), "{theme:?}: the same diagram");
+    }
+}
+
+#[test]
+fn going_back_from_a_package_returns_to_the_parent_diagram_it_was_entered_from() {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+    // The root has two class diagrams; Sales is on the second.
+    let (second, sales) = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value).to_string();
+        s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": root, "name": "First" })).unwrap();
+        let second = id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": root, "name": "Second" })).unwrap().value);
+        let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
+        s.execute(
+            "diagram.place",
+            &serde_json::json!({ "diagram": second.to_string(), "element": sales.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 }),
+        )
+        .unwrap();
+        s.execute("uml.package.diagram", &serde_json::json!({ "package": sales.to_string() })).unwrap();
+        (second, sales)
+    };
+    crate::canvas::open(h.state_mut(), second);
+    h.run();
+    let left = (h.state().canvas.pan, h.state().canvas.zoom);
+    crate::package_nav::enter(h.state_mut(), sales, 0.0);
+    h.run();
+    rest(&mut h);
+    let at = rect_of(&h, "workspace.canvas.path.0").center();
+    click(&mut h, at);
+    assert_eq!(h.state().canvas.active, Some(second), "back on Second, not the root's first diagram");
+    assert_eq!((h.state().canvas.pan, h.state().canvas.zoom), left, "as it was left");
+}
+
+#[test]
+fn a_long_package_path_folds_its_first_ancestors_and_keeps_the_nearest_ones_clickable() {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1400.0, 900.0));
+    let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+    // Six packages deep, each with a long name, and the deepest one's diagram open.
+    let (chain, deepest) = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let mut parent = String::new();
+        let mut chain = Vec::new();
+        for i in 0..6 {
+            let p = id(s
+                .execute("uml.package.add", &serde_json::json!({ "name": format!("Package with a long name {i}"), "parent": parent }))
+                .unwrap()
+                .value);
+            parent = p.to_string();
+            chain.push(p);
+        }
+        let d = id(s.execute("uml.package.diagram", &serde_json::json!({ "package": parent })).unwrap().value);
+        (chain, d)
+    };
+    crate::canvas::open(h.state_mut(), deepest);
+    h.run();
+    let found = ids(&h);
+    let bar = rect_of(&h, "workspace.canvas.path");
+    let canvas = rect_of(&h, "workspace.canvas");
+    assert!(bar.right() <= canvas.right(), "the bar keeps within the canvas");
+    assert!(found.iter().any(|i| i == "workspace.canvas.path.more"), "the first ancestors fold into …: {found:?}");
+    // The root, then the six packages: the open one and its parent are shown whole.
+    let (here, parent) = (chain.len(), chain.len() - 1);
+    for i in [here, parent] {
+        let pill = rect_of(&h, &format!("workspace.canvas.path.{i}"));
+        assert!(bar.contains_rect(pill), "path.{i} in the bar");
+    }
+    // The parent is a click away; … leads to the nearest ancestor it folds.
+    let at = rect_of(&h, &format!("workspace.canvas.path.{parent}")).center();
+    click(&mut h, at);
+    let open_package = |h: &Harness<'static, Shell>| {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let d = st.by_uuid(h.state().canvas.active.unwrap()).unwrap();
+        st.uuid(crate::package_nav::package_of_diagram(st, d).unwrap()).unwrap()
+    };
+    assert_eq!(open_package(&h), chain[chain.len() - 2]);
+    // Narrower still, the parent folds too, and … leads to it.
+    rest(&mut h);
+    crate::canvas::open(h.state_mut(), deepest);
+    h.state_mut().state.explorer_collapsed = false;
+    h.set_size(egui::vec2(1000.0, 900.0));
+    h.run();
+    // … leads to the ancestor just before the first one still shown (path.0 is the root).
+    let found = ids(&h);
+    let first_shown = (1..=chain.len()).find(|i| found.iter().any(|f| f == &format!("workspace.canvas.path.{i}"))).unwrap();
+    assert!(first_shown >= 2, "some ancestors are folded: {found:?}");
+    let at = rect_of(&h, "workspace.canvas.path.more").center();
+    click(&mut h, at);
+    assert_eq!(open_package(&h), chain[first_shown - 2], "… leads to the nearest folded ancestor");
+}
+
+#[test]
+fn shift_delete_on_a_selected_package_card_asks_to_delete_the_package() {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+    let (top, sales) = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value).to_string();
+        let top = id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": root, "name": "Top" })).unwrap().value);
+        let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
+        s.execute(
+            "diagram.place",
+            &serde_json::json!({ "diagram": top.to_string(), "element": sales.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 }),
+        )
+        .unwrap();
+        (top, sales)
+    };
+    crate::canvas::open(h.state_mut(), top);
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [sales.to_string()] })).unwrap();
+    h.state_mut().canvas.focused = true;
+    h.run();
+    key(&mut h, egui::Key::Delete, egui::Modifiers::SHIFT);
+    assert_eq!(h.state().explorer.delete.as_ref().map(|d| d.ids.clone()), Some(vec![sales]), "the delete dialog, for the package");
+}
+
+#[test]
+fn a_package_card_tall_enough_for_its_fifty_rows_still_says_how_many_more_it_holds() {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+    let top = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value).to_string();
+        let top = id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": root, "name": "Top" })).unwrap().value);
+        let crowded = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Crowded" })).unwrap().value);
+        for i in 0..60 {
+            s.execute("uml.class.add", &serde_json::json!({ "package": crowded.to_string(), "name": format!("C{i}") })).unwrap();
+        }
+        // Tall enough for every row the card lists.
+        s.execute(
+            "diagram.place",
+            &serde_json::json!({ "diagram": top.to_string(), "element": crowded.to_string(), "x": 0, "y": 0, "width": 240, "height": 1200 }),
+        )
+        .unwrap();
+        top
+    };
+    crate::canvas::open(h.state_mut(), top);
+    h.state_mut().canvas.fit_pending = false;
+    h.state_mut().canvas.zoom = 0.75;
+    h.run();
+    // Fifty rows listed, the last place saying the rest: 60 − 49.
+    assert!(painted(&h).iter().any(|t| t == "+ 11 more elements"), "{:?}", painted(&h).iter().filter(|t| t.contains("more")).collect::<Vec<_>>());
 }
 
 #[test]
@@ -4551,6 +4815,7 @@ impl archforge_diagram::Notation for Sketch {
             name: archforge_core::name_of(store, element),
             compartments: vec![rows(archforge_uml::class::OWNED_ATTRIBUTE), rows(archforge_uml::class::OWNED_OPERATION)],
             more: ("+ {n} more column", "+ {n} more columns"),
+            hidden: 0,
             elsewhere: false,
             tone: archforge_diagram::figure::Tone::Tinted,
             slanted: false,
@@ -5711,7 +5976,7 @@ fn a_selected_class_takes_attributes_and_operations_typed_on_its_card_each_one_u
     h.event(egui::Event::Text("notes".into()));
     h.run();
     let canvas = rect_of(&h, "workspace.canvas");
-    click(&mut h, canvas.left_top() + egui::vec2(30.0, 30.0));
+    click(&mut h, canvas.left_top() + egui::vec2(30.0, 64.0));
     assert!(h.state().canvas.inline.is_none());
     assert_eq!(member_rows(&h, catalog, false).last().map(String::as_str), Some("+ notes"));
     // So is one whose type menu was open when the pointer went elsewhere.
@@ -5723,7 +5988,7 @@ fn a_selected_class_takes_attributes_and_operations_typed_on_its_card_each_one_u
     let at = rect_of(&h, "workspace.canvas.member.type.menu").center();
     click(&mut h, at);
     assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::InlineType));
-    click(&mut h, canvas.left_top() + egui::vec2(30.0, 30.0));
+    click(&mut h, canvas.left_top() + egui::vec2(30.0, 64.0));
     assert!(h.state().canvas.inline.is_none(), "{:?}", h.state().canvas.inline);
     assert_eq!(member_rows(&h, catalog, false).last().map(String::as_str), Some("+ tags"));
     // ⋯ takes the draft to Properties' editor with what was typed.
