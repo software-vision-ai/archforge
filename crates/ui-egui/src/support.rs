@@ -111,7 +111,7 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
         ux::text(&paint, at(88.0, 30.0), &tr("About Archforge"), types::SECTION, p.text, Some(room));
         // The line sits below the close button, so it may run to the inner edge.
         let line_room = (frame.width() - 88.0 - PAD).max(0.0);
-        ux::text(&paint, at(88.0, 61.0), &tr("Free and open source modelling for ER and UML class diagrams."), types::BODY, p.text_secondary, Some(line_room));
+        ux::text(&paint, at(88.0, 61.0), &tr("Free and open source modelling of software systems."), types::BODY, p.text_secondary, Some(line_room));
         let x = Rect::from_min_size(at(frame.width() - 60.0, 28.0), Vec2::splat(32.0));
         let resp = control(shell, ui, "about.close", "button", x, true).on_hover_text(tr("Close"));
         if resp.hovered() {

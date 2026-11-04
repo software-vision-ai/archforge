@@ -8,7 +8,8 @@ section: graphics
 priority: optional
 maintainer: The Archforge contributors
 description: |
-  Archforge, a desktop modelling application.
+  Archforge, a software modelling tool: model a software system on UML class
+  and ER diagrams, by yourself or with an AI agent.
 license: MIT OR Apache-2.0
 depends:
   - libxkbcommon0

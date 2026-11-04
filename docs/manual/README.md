@@ -1,8 +1,8 @@
 # Archforge user manual
 
-Archforge is a desktop application where people and AI agents work on the same software model
-together. This manual takes you from opening Archforge for the first time to a small model you can
-build on, and shows how an agent joins in.
+Archforge is a software modelling tool: a desktop application where people and AI agents work on
+the same model of a software system together. This manual takes you from opening Archforge for
+the first time to a small model you can build on, and shows how an agent joins in.
 
 ## Chapters
 
@@ -12,8 +12,8 @@ build on, and shows how an agent joins in.
    and finding a project.
 3. [The workspace](03-workspace.md): Diagrams and Models, Properties, search, undo, and removing
    versus deleting.
-4. [A first ER model](04-er-model.md): a small database model with tables, columns, keys and a
-   relationship.
+4. [A first ER model](04-er-model.md): the database aspect of a system, with tables, columns,
+   keys and a relationship.
 5. [A first UML class model](05-uml-class-model.md): classes, attributes, operations and an
    association with multiplicity and navigability.
 6. [Skills](06-skills.md): guidance written on the model for people and agents.
