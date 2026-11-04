@@ -106,8 +106,11 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   and saves; nothing still to come is promised.
 - Open project uses the system's folder picker; a damaged, newer or foreign project is refused
   with a dialog, and the project open already stays as it was.
-- The shortest way to drawing: + in the diagram tab strip, a name, Enter. The New diagram dialog
-  asks for a name, a kind and a schema, and makes a schema when the project has none.
+- The shortest way to drawing: + in the diagram tab strip, Enter, a name, Enter. New diagram has
+  two steps: first a card for each kind Archforge makes (a picture, its name, what it shows; never
+  a card for a kind still to come), then the chosen kind's name and schema or package, with Back
+  (which keeps what was typed), Cancel and Create; it makes a schema or package when the project
+  has none, and nothing before Create. A Diagrams group's + skips to the second step.
 - New things get default names (Schema 1, Diagram 1, Entity, Entity 2) with the name open for
   typing in place.
 
@@ -347,8 +350,8 @@ What is ER's own, beside the shared rules above.
 
 ## UML notation
 What is UML's own, beside the shared rules above.
-- A class diagram is of a package. New diagram offers Class diagram beside ER diagram; its second
-  field is Package, with New package as ER has New schema.
+- A class diagram is of a package. New diagram offers a Class diagram card beside the ER diagram
+  card; its second step has Package, with New package as ER has New schema.
 - Every UML model has one root package (owner, 2026-11-04): a plain package named after the
   project, marked with the tag `archforge.root`, the top row of Models. It holds what has no other
   home: a package or class added without one, the first class diagram (the Package field names the

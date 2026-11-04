@@ -243,6 +243,15 @@ str		A skill's text is at most {n} characters.	Le texte d’une compétence comp
 str		A skill's text could not be kept; its tab says why.	Le texte d’une compétence n’a pas pu être conservé ; son onglet indique pourquoi.
 str		Element	Élément
 str		New diagram	Nouveau diagramme
+str		Continue	Continuer
+str		Back	Retour
+str		Step 1 of 2 · Choose what the diagram shows	Étape 1 sur 2 · Choisissez ce que montre le diagramme
+str		Step 2 of 2 · Name it and say what it is of	Étape 2 sur 2 · Nommez-le et indiquez de quoi il est
+str		Diagram name	Nom du diagramme
+str		New ER diagram	Nouveau diagramme ER
+str		New class diagram	Nouveau diagramme de classes
+str		Tables, their columns and keys, and the relationships between them.	Des tables, leurs colonnes et clés, et les relations entre elles.
+str		Classes with their attributes and operations, and the lines between them.	Des classes avec leurs attributs et opérations, et les liens entre elles.
 str		Create	Créer
 str		ER diagram	Diagramme ER
 str		ER diagrams	Diagrammes ER

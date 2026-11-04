@@ -44,6 +44,14 @@ pub(crate) trait DiagramKind: Sync {
     fn word(&self) -> String;
     /// The name of its group in the Diagrams explorer, which holds its diagrams.
     fn group_word(&self) -> String;
+    /// What its diagrams show, in a sentence: the New diagram dialog's card for it.
+    fn description(&self) -> String;
+    /// The New diagram dialog's title once it is chosen ("New class diagram").
+    fn new_word(&self) -> String;
+    /// A small picture of one of its diagrams in `r`, for its card in the New diagram dialog.
+    fn sketch(&self, paint: &egui::Painter, p: &Palette, r: Rect) {
+        let _ = (paint, p, r);
+    }
     /// The icon its diagrams show in their tabs, the Diagrams explorer and the search.
     fn icon(&self) -> &'static Icon {
         &crate::ux::icons::ER_DIAGRAM

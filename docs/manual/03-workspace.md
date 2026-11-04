@@ -9,11 +9,34 @@ An open project fills the window with its workspace.
 - **The left rail** switches the left column between **Diagrams**, at the top, and **Models**. (Source Control
   is planned and not available yet.)
 - **The centre** shows the open diagrams and skills, each in a tab. The **+** at the start of the
-  tab strip makes a new diagram.
+  tab strip makes a new diagram (see *New diagram* below).
 - **The right rail** opens the right panel on **Chat**, **Appearance**, **Properties** or
   **Skills**. Clicking the rail icon of the open column folds it away; clicking any icon opens it
   again.
 - **The status bar** at the bottom says whether the project is saved, and where the project is.
+
+## New diagram
+
+The **+** of the tab strip, or of **Diagrams**, opens **New diagram** in two steps.
+
+1. **What the diagram shows.** A card for each kind of diagram Archforge makes: **ER diagram**
+   (tables, their columns and keys, and their relationships) and **Class diagram** (classes with
+   their attributes and operations, and the lines between them). Choose a card, with a click or
+   the arrow keys, and **Continue** (or press Enter, or double-click the card). Other kinds get
+   their card once Archforge supports them.
+
+   <!-- picture: workspace-new-diagram-kind light | New diagram's first step: an ER diagram card and a Class diagram card, Class diagram chosen -->
+
+2. **Its name and what it is of.** The diagram's name, and the schema or package it shows: the
+   one selected, else the first there is, else a new one named like the diagram (for a class
+   diagram, the project's root package). **Create** makes the diagram and opens it in its tab.
+
+   <!-- picture: workspace-new-diagram-details light | New diagram's second step for a class diagram: its name and the Package it is of -->
+
+**Back** returns to the cards with what you typed kept; choosing another kind there gives it that
+kind's schema or package. **Cancel**, or Escape, closes the dialog and makes nothing: nothing is
+made until **Create**. A group's **+** in **Diagrams** has chosen the kind already, so it opens on
+the second step.
 
 ## Diagrams and Models
 

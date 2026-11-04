@@ -55,6 +55,33 @@ impl DiagramKind for UmlKind {
         tr("Class diagrams")
     }
 
+    fn description(&self) -> String {
+        tr("Classes with their attributes and operations, and the lines between them.")
+    }
+
+    fn new_word(&self) -> String {
+        tr("New class diagram")
+    }
+
+    /// Two class cards joined by an association: Order with its compartments, and Customer.
+    fn sketch(&self, paint: &egui::Painter, p: &crate::ux::Palette, r: egui::Rect) {
+        use egui::{Stroke, StrokeKind, pos2, vec2};
+        let at = |x: f32, y: f32| r.center() + vec2(x - 134.0, y - 50.0);
+        let order = egui::Rect::from_min_size(at(30.0, 14.0), vec2(96.0, 70.0));
+        let customer = egui::Rect::from_min_size(at(170.0, 26.0), vec2(70.0, 46.0));
+        for (card, name, rule) in [(order, "Order", 22.0), (customer, "Customer", 20.0)] {
+            paint.rect_filled(card, 5.0, p.surface);
+            paint.rect_stroke(card, 5.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
+            crate::ux::text(paint, card.min + vec2(10.0, 4.0), name, crate::ux::types::TINY, p.text, Some(card.width() - 14.0));
+            paint.line_segment([pos2(card.left(), card.top() + rule), pos2(card.right(), card.top() + rule)], Stroke::new(1.0, p.border));
+        }
+        paint.line_segment([pos2(order.left(), order.top() + 44.0), pos2(order.right(), order.top() + 44.0)], Stroke::new(1.0, p.border));
+        for (y, w) in [(28.0, 50.0), (35.0, 38.0), (51.0, 44.0)] {
+            paint.rect_filled(egui::Rect::from_min_size(order.min + vec2(10.0, y), vec2(w, 3.0)), 1.5, p.text_muted);
+        }
+        paint.line_segment([pos2(order.right(), r.center().y - 1.0), pos2(customer.left(), r.center().y - 1.0)], Stroke::new(1.2, p.text_secondary));
+    }
+
     fn icon(&self) -> &'static crate::ux::Icon {
         &icons::CLASS_DIAGRAM
     }

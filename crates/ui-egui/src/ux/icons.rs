@@ -670,6 +670,9 @@ pub const SCHEMA: Icon = Icon {
 /// A chevron pointing right: a folded row.
 pub const CHEVRON_RIGHT: Icon = Icon { size: [16.0, 16.0], stroke: 1.5, segments: &[L([6.0, 3.0], [11.0, 8.0]), L([11.0, 8.0], [6.0, 13.0])] };
 
+/// The chevron of Back, pointing left.
+pub const CHEVRON_LEFT: Icon = Icon { size: [16.0, 16.0], stroke: 1.5, segments: &[L([10.0, 3.0], [5.0, 8.0]), L([5.0, 8.0], [10.0, 13.0])] };
+
 /// A chevron pointing up and one pointing down: move a row up or down its list.
 pub const MOVE_UP: Icon = Icon { size: [16.0, 16.0], stroke: 1.5, segments: &[L([3.0, 10.5], [8.0, 5.5]), L([8.0, 5.5], [13.0, 10.5])] };
 pub const MOVE_DOWN: Icon = Icon { size: [16.0, 16.0], stroke: 1.5, segments: &[L([3.0, 5.5], [8.0, 10.5]), L([8.0, 10.5], [13.0, 5.5])] };

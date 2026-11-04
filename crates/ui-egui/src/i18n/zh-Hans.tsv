@@ -243,6 +243,15 @@ str		A skill's text is at most {n} characters.	技能文本最多 {n} 个字符�
 str		A skill's text could not be kept; its tab says why.	无法保存某个技能的文本；其标签页说明了原因。
 str		Element	元素
 str		New diagram	新建图
+str		Continue	继续
+str		Back	返回
+str		Step 1 of 2 · Choose what the diagram shows	第 1 步，共 2 步 · 选择图要显示的内容
+str		Step 2 of 2 · Name it and say what it is of	第 2 步，共 2 步 · 为图命名并指定其对象
+str		Diagram name	图名称
+str		New ER diagram	新建ER图
+str		New class diagram	新建类图
+str		Tables, their columns and keys, and the relationships between them.	表及其列和键，以及表之间的关系。
+str		Classes with their attributes and operations, and the lines between them.	类及其属性和操作，以及它们之间的连线。
 str		Create	创建
 str		ER diagram	ER图
 str		ER diagrams	ER图

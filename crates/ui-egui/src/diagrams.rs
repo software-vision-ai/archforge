@@ -54,24 +54,32 @@ pub struct State {
     pub scroll: crate::explorer::TreeScroll,
 }
 
-/// The New diagram dialog's fields: the name, the kind, the element the diagram is of (a schema, a
-/// package; none for a new one named like the diagram), the select that is open, the engine's
-/// refusal.
+/// The New diagram dialog's fields: the step it is at, the name, the kind, the element the
+/// diagram is of (a schema, a package; none for a new one named like the diagram), the select that
+/// is open, the engine's refusal.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NewDiagram {
+    pub step: Step,
     pub name: String,
     pub kind: &'static str,
     pub schema: Option<Uuid>,
     pub menu: Option<Field>,
     pub refused: Option<String>,
-    /// True until the name field has taken the keyboard once.
+    /// True until the name field has taken the keyboard once on the second step.
     pub opened: bool,
+}
+
+/// The New diagram dialog's steps: the kind first, on a card for each, then its name and what it
+/// is of.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Step {
+    Kind,
+    Details,
 }
 
 /// The dialog's selects.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Field {
-    Kind,
     Schema,
 }
 
@@ -341,15 +349,18 @@ fn kind_named(shell: &Shell, kind: &str) -> Option<&'static dyn crate::kinds::Di
     shell.kinds.iter().copied().find(|k| k.kind() == kind)
 }
 
-/// Opens the New diagram dialog: the kind and what it is of start from the selection (its schema
-/// or package), else the first kind and its first element, else a new one named like the diagram.
+/// Opens the New diagram dialog at its first step, the kind: the kind and what it is of start from
+/// the selection (its schema or package), else the first kind and its first element, else a new
+/// one named like the diagram.
 pub fn open_new(shell: &mut Shell) {
     open_new_of(shell, None);
 }
 
-/// Opens the New diagram dialog on the kind `kind` when it is given (a group's `+`), else as
-/// `open_new` does; what the diagram is of starts from the selection when it fits the kind.
+/// Opens the New diagram dialog on the kind `kind` when it is given (a group's `+`), at its second
+/// step, else as `open_new` does, at its first; what the diagram is of starts from the selection
+/// when it fits the kind.
 pub(crate) fn open_new_of(shell: &mut Shell, kind: Option<&'static dyn crate::kinds::DiagramKind>) {
+    let from_group = kind.is_some();
     let Some(session) = shell.session.as_ref() else { return };
     let store = session.doc();
     let selected = session.view().selection.first().copied().filter(|o| store.is_alive(*o));
@@ -362,9 +373,23 @@ pub(crate) fn open_new_of(shell: &mut Shell, kind: Option<&'static dyn crate::ki
         Some(s) => archforge_core::name_of(store, s),
         None => crate::explorer::fresh_name(&tr("Diagram"), taken, false).unwrap_or_default(),
     };
+    // A group's + has chosen the kind already: the dialog opens on its details, Back before them.
+    let step = if from_group { Step::Details } else { Step::Kind };
     shell.diagrams.new =
-        Some(NewDiagram { name, kind: kind.kind(), schema: schema.and_then(|s| store.uuid(s).ok()), menu: None, refused: None, opened: true });
+        Some(NewDiagram { step, name, kind: kind.kind(), schema: schema.and_then(|s| store.uuid(s).ok()), menu: None, refused: None, opened: true });
     shell.diagrams.notice = None;
+}
+
+/// What a diagram of `kind` is of when nothing else says, and the name it starts with: the kind's
+/// first element and its name, else none and a free "Diagram" name.
+fn defaults(store: &Store, kind: &dyn crate::kinds::DiagramKind) -> (Option<Uuid>, String) {
+    let schema = kind.owners(store).first().copied();
+    let taken = store.alive().filter(|o| store.class_of(*o).ok() == Some(DIAGRAM)).map(|d| diagram_name(store, d));
+    let name = match schema {
+        Some(s) => archforge_core::name_of(store, s),
+        None => crate::explorer::fresh_name(&tr("Diagram"), taken, false).unwrap_or_default(),
+    };
+    (schema.and_then(|s| store.uuid(s).ok()), name)
 }
 
 /// Creates the diagram the dialog describes: the schema first when a new one is asked for, then
@@ -625,16 +650,183 @@ pub(crate) fn new_dialog(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette) {
 }
 
 fn new_dialog_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: &egui::Painter, window: Rect) {
-    let size = vec2(440.0_f32.min((window.width() - 32.0).max(200.0)), 228.0);
+    match shell.diagrams.new.as_ref().map(|n| n.step) {
+        Some(Step::Kind) => kind_step(shell, ui, p, paint, window),
+        Some(Step::Details) => details_step(shell, ui, p, paint, window),
+        None => {}
+    }
+}
+
+/// The dialog's frame of `size`, centred in `window`, with its title and the step under it.
+fn dialog_frame(paint: &egui::Painter, p: &Palette, window: Rect, size: Vec2, title: &str, step: &str) -> Rect {
     let dialog = Rect::from_center_size(window.center(), size);
     ux::shadow(paint, dialog, 10.0, p.shadow);
     paint.rect_filled(dialog, 10.0, p.surface);
     paint.rect_stroke(dialog, 10.0, Stroke::new(1.0, p.dialog_edge), StrokeKind::Inside);
-    let at = |x: f32, y: f32| dialog.min + vec2(x, y);
-    let width = size.x - 40.0;
-    ux::text(paint, at(20.0, 20.0), &tr("New diagram"), types::CARD_TITLE, p.text, Some(width));
-    // The kind, and the elements the diagram may be of, read once.
+    let width = Some((size.x - 40.0).max(0.0));
+    ux::text(paint, dialog.min + vec2(20.0, 20.0), title, types::CARD_TITLE, p.text, width);
+    ux::text(paint, dialog.min + vec2(20.0, 46.0), step, types::SMALL, p.text_secondary, width);
+    dialog
+}
+
+/// The dialog's buttons from the right edge leftwards, each `(id, label, primary)`; the one
+/// clicked.
+fn buttons(shell: &mut Shell, ui: &egui::Ui, p: &Palette, paint: &egui::Painter, dialog: Rect, row: &[(&str, String, bool)]) -> Option<usize> {
+    let mut x = dialog.right() - 20.0;
+    let mut clicked = None;
+    for (i, (id, label, primary)) in row.iter().enumerate() {
+        // Laid out in the ink it is drawn in: a galley keeps the colour it was laid out with.
+        let ink = if *primary { p.on_accent } else { p.text };
+        let g = ux::galley(paint, label, types::SMALL, ink, None);
+        let b = Rect::from_min_max(pos2(x - g.size().x - 24.0, dialog.bottom() - 48.0), pos2(x, dialog.bottom() - 20.0));
+        paint.rect_filled(b, 6.0, if *primary { p.accent_fill } else { p.field });
+        paint.galley(b.min + vec2(12.0, (b.height() - g.size().y) / 2.0), g, ink);
+        let resp = control(shell, ui, id, "button", b, true);
+        if resp.has_focus() {
+            paint.rect_stroke(b.expand(2.0), 8.0, Stroke::new(2.0, p.focus), StrokeKind::Outside);
+        }
+        if resp.clicked() {
+            clicked = Some(i);
+        }
+        x = b.left() - 8.0;
+    }
+    clicked
+}
+
+/// The card of a kind: its sketch, its name and what its diagrams show.
+const CARD: f32 = 196.0;
+/// Narrower than this, the cards stand one above the other.
+const SIDE_BY_SIDE: f32 = 560.0;
+
+/// The first step: a card for each kind the shell knows, the chosen one marked; Continue (or
+/// Enter, or a double click) goes on to its details, the arrow keys move between the cards, and
+/// Cancel (or Escape) closes the dialog with nothing made.
+fn kind_step(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: &egui::Painter, window: Rect) {
+    let kinds = shell.kinds;
+    let Some(chosen) = shell.diagrams.new.as_ref().map(|n| n.kind) else { return };
+    let width = 640.0_f32.min((window.width() - 32.0).max(240.0));
+    let stacked = width < SIDE_BY_SIDE;
+    let count = kinds.len().max(1) as f32;
+    let card_w = if stacked { width - 40.0 } else { (width - 40.0 - 16.0 * (count - 1.0)) / count };
+    let cards_h = if stacked { count * CARD + (count - 1.0) * 16.0 } else { CARD };
+    let dialog =
+        dialog_frame(paint, p, window, vec2(width, 76.0 + cards_h + 72.0), &tr("New diagram"), &tr("Step 1 of 2 · Choose what the diagram shows"));
+    let mut pick: Option<(&'static str, bool)> = None;
+    for (i, kind) in kinds.iter().enumerate() {
+        let offset = i as f32 * if stacked { CARD + 16.0 } else { card_w + 16.0 };
+        let card = if stacked {
+            Rect::from_min_size(dialog.min + vec2(20.0, 76.0 + offset), vec2(card_w, CARD))
+        } else {
+            Rect::from_min_size(dialog.min + vec2(20.0 + offset, 76.0), vec2(card_w, CARD))
+        };
+        let selected = kind.kind() == chosen;
+        let id = format!("workspace.new-diagram.type.{}", kind.kind());
+        widgets::record_visible(ui, &mut shell.registry, &id, "radio", card);
+        let resp = ui.interact(card, widgets::egui_id(&id), Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand);
+        resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::RadioButton, true, selected, kind.word()));
+        if resp.has_focus() {
+            paint.rect_stroke(card.expand(3.0), 11.0, Stroke::new(2.0, p.focus), StrokeKind::Inside);
+        }
+        paint.rect_filled(card, 8.0, if selected { p.accent_tint } else { p.surface });
+        paint.rect_stroke(card, 8.0, Stroke::new(if selected { 2.0 } else { 1.0 }, if selected { p.accent } else { p.border }), StrokeKind::Inside);
+        let picture = Rect::from_min_size(card.min + vec2(12.0, 12.0), vec2(card.width() - 24.0, 100.0));
+        paint.rect_filled(picture, 6.0, p.page);
+        kind.sketch(&paint.with_clip_rect(picture), p, picture);
+        let room = Some((card.width() - 32.0).max(0.0));
+        ux::text(paint, card.min + vec2(16.0, 124.0), &kind.word(), types::UI_STRONG, p.text, room);
+        let g = ux::galley_rows(paint, &kind.description(), types::CAPTION, p.text_secondary, room, 3);
+        paint.galley(card.min + vec2(16.0, 148.0), g, p.text_secondary);
+        if selected {
+            let mark = pos2(card.right() - 21.0, card.top() + 27.0);
+            paint.circle_filled(mark, 9.0, p.accent_fill);
+            let ink = Stroke::new(1.8, p.on_accent);
+            paint.line_segment([mark + vec2(-5.0, 0.0), mark + vec2(-1.5, 3.5)], ink);
+            paint.line_segment([mark + vec2(-1.5, 3.5), mark + vec2(5.0, -3.0)], ink);
+        }
+        if resp.double_clicked() {
+            pick = Some((kind.kind(), true));
+        } else if resp.clicked() {
+            pick = Some((kind.kind(), false));
+        }
+    }
+    // The arrow keys move the choice; Enter goes on with it.
+    let (back, forth, enter) = ui.input_mut(|i| {
+        (
+            i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowLeft) || i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowUp),
+            i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowRight) || i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown),
+            i.consume_key(egui::Modifiers::NONE, egui::Key::Enter),
+        )
+    });
+    if (back || forth)
+        && let Some(at) = kinds.iter().position(|k| k.kind() == chosen)
+    {
+        let next = if forth { (at + 1).min(kinds.len() - 1) } else { at.saturating_sub(1) };
+        pick = kinds.get(next).map(|k| (k.kind(), false));
+    }
+    let clicked = buttons(
+        shell,
+        ui,
+        p,
+        paint,
+        dialog,
+        &[("workspace.new-diagram.continue", tr("Continue"), true), ("workspace.new-diagram.cancel", tr("Cancel"), false)],
+    );
+    if let Some((kind, go_on)) = pick {
+        choose_kind(shell, kind);
+        if go_on {
+            continue_to_details(shell);
+        }
+    }
+    if ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) || clicked == Some(1) {
+        shell.diagrams.new = None;
+    } else if clicked == Some(0) || enter {
+        continue_to_details(shell);
+    }
+}
+
+/// Chooses another kind on the first step: what the diagram is of becomes the kind's default, and
+/// so does the name while it is still the one the dialog gave; a name typed is kept.
+fn choose_kind(shell: &mut Shell, kind: &'static str) {
+    let Some(picked) = kind_named(shell, kind) else { return };
+    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+    let Some(edit) = shell.diagrams.new.as_ref() else { return };
+    if edit.kind == kind {
+        return;
+    }
+    let given = kind_named(shell, edit.kind).map(|k| defaults(store, k).1);
+    let (schema, name) = defaults(store, picked);
+    let keep = given.is_none_or(|g| g != edit.name) && !edit.name.trim().is_empty();
+    if let Some(edit) = shell.diagrams.new.as_mut() {
+        edit.kind = kind;
+        edit.schema = schema;
+        if !keep {
+            edit.name = name;
+        }
+        edit.refused = None;
+        edit.menu = None;
+    }
+}
+
+fn continue_to_details(shell: &mut Shell) {
+    if let Some(edit) = shell.diagrams.new.as_mut() {
+        edit.step = Step::Details;
+        edit.opened = true;
+        edit.refused = None;
+    }
+}
+
+/// The second step: the kind's name for a new diagram as the title, the name, what it is of, the
+/// engine's refusal; Back returns to the kinds with all of it kept, Cancel (or Escape) closes with
+/// nothing made, Create (or Enter) makes it.
+fn details_step(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: &egui::Painter, window: Rect) {
     let Some(kind) = shell.diagrams.new.as_ref().and_then(|n| kind_named(shell, n.kind)) else { return };
+    let refused = shell.diagrams.new.as_ref().and_then(|e| e.refused.clone());
+    let width = 440.0_f32.min((window.width() - 32.0).max(240.0));
+    let size = vec2(width, 242.0 + if refused.is_some() { 36.0 } else { 0.0 });
+    let dialog = dialog_frame(paint, p, window, size, &kind.new_word(), &tr("Step 2 of 2 · Name it and say what it is of"));
+    let at = |x: f32, y: f32| dialog.min + vec2(x, y);
+    let inner_w = width - 40.0;
+    // The elements the diagram may be of, read once.
     let (schemas, taken_focus) = match (shell.session.as_ref(), shell.diagrams.new.as_ref()) {
         (Some(s), Some(n)) => {
             let store = s.doc();
@@ -646,11 +838,11 @@ fn new_dialog_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: &eg
         _ => return,
     };
     // The name.
-    ux::text(paint, at(20.0, 56.0), &tr("Name"), types::CAPTION, p.text_secondary, Some(width));
-    let field = Rect::from_min_size(at(20.0, 73.0), vec2(width, 28.0));
+    ux::text(paint, at(20.0, 76.0), &tr("Name"), types::CAPTION, p.text_secondary, Some(inner_w));
+    let field = Rect::from_min_size(at(20.0, 93.0), vec2(inner_w, 28.0));
     paint.rect_filled(field, 6.0, p.field);
     widgets::record_visible(ui, &mut shell.registry, "workspace.new-diagram.name", "field", field);
-    let inner = crate::panels::field_inner(ui, Rect::from_min_max(pos2(field.left(), field.top()), pos2(field.right(), field.bottom())));
+    let inner = crate::panels::field_inner(ui, field);
     let Some(edit) = shell.diagrams.new.as_mut() else { return };
     let text_edit = egui::TextEdit::singleline(&mut edit.name)
         .id(widgets::egui_id("workspace.new-diagram.name"))
@@ -658,6 +850,7 @@ fn new_dialog_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: &eg
         .margin(egui::Margin::ZERO)
         .font(types::SMALL.font())
         .text_color(p.text)
+        .hint_text(egui::RichText::new(tr("Diagram name")).color(p.text_muted).font(types::SMALL.font()))
         .char_limit(MAX_NAME)
         .desired_width(inner.width());
     let out = text_edit.show(&mut ui.new_child(egui::UiBuilder::new().max_rect(inner)));
@@ -666,77 +859,65 @@ fn new_dialog_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: &eg
         out.response.request_focus();
         edit.opened = false;
     }
-    if out.response.has_focus() {
+    if refused.is_some() {
+        paint.rect_stroke(field, 6.0, Stroke::new(1.0, p.amber), StrokeKind::Inside);
+    } else if out.response.has_focus() {
         paint.rect_stroke(field, 6.0, Stroke::new(1.0, p.focus), StrokeKind::Inside);
     }
     let enter = out.response.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-    // The kind and what it is of, side by side.
-    let half = (width - 16.0) / 2.0;
+    // What it is of, the whole width.
     let new_word = shell.session.as_ref().map(|s| kind.new_owner_in(s.doc())).unwrap_or_else(|| kind.new_owner());
-    let schema_word = match edit.schema {
+    let schema_word = match shell.diagrams.new.as_ref().and_then(|e| e.schema) {
         Some(id) => schemas.iter().find(|(s, _)| *s == id).map(|(_, n)| n.clone()).unwrap_or_else(|| new_word.clone()),
         None => new_word.clone(),
     };
-    let kind_field = select(shell, ui, p, at(20.0, 121.0), half, "workspace.new-diagram.kind", &tr("Kind"), &kind.word(), Field::Kind);
     let schema_field =
-        select(shell, ui, p, at(20.0 + half + 16.0, 121.0), half, "workspace.new-diagram.schema", &kind.owner_word(), &schema_word, Field::Schema);
-    if let Some(refused) = shell.diagrams.new.as_ref().and_then(|e| e.refused.clone()) {
-        ux::text(paint, at(20.0, dialog.height() - 44.0), &refused, types::CAPTION, p.amber, Some((width - 200.0).max(0.0)));
+        select(shell, ui, p, at(20.0, 133.0), inner_w, "workspace.new-diagram.schema", &kind.owner_word(), &schema_word, Field::Schema);
+    if let Some(refused) = &refused {
+        let r = Rect::from_min_size(at(20.0, 190.0), vec2(inner_w, 24.0));
+        paint.rect_filled(r, 6.0, p.amber_tint);
+        ux::text_mid(paint, r.left() + 10.0, r.center().y, refused, types::CAPTION, p.amber, Some((inner_w - 20.0).max(0.0)));
     }
-    // Cancel and Create.
-    let mut x = dialog.right() - 20.0;
-    let mut action: Option<bool> = None;
-    for (id, label, primary) in [("workspace.new-diagram.create", tr("Create"), true), ("workspace.new-diagram.cancel", tr("Cancel"), false)] {
-        // Laid out in the ink it is drawn in: a galley keeps the colour it was laid out with.
-        let ink = if primary { p.on_accent } else { p.text };
-        let g = ux::galley(paint, &label, types::SMALL, ink, None);
-        let b = Rect::from_min_max(pos2(x - g.size().x - 24.0, dialog.bottom() - 48.0), pos2(x, dialog.bottom() - 20.0));
-        paint.rect_filled(b, 6.0, if primary { p.accent_fill } else { p.field });
-        paint.galley(b.min + vec2(12.0, (b.height() - g.size().y) / 2.0), g, ink);
-        if control(shell, ui, id, "button", b, true).clicked() {
-            action = Some(primary);
-        }
-        x = b.left() - 8.0;
+    // Back at the left; Cancel and Create at the right.
+    let back = Rect::from_min_size(pos2(dialog.left() + 20.0, dialog.bottom() - 48.0), vec2(70.0, 28.0));
+    paint.rect_filled(back, 6.0, p.field);
+    ux::icon_mid(paint, pos2(back.left() + 16.0, back.center().y), &icons::CHEVRON_LEFT, p.text);
+    ux::text_mid(paint, back.left() + 28.0, back.center().y, &tr("Back"), types::SMALL, p.text, Some(38.0));
+    let back_resp = control(shell, ui, "workspace.new-diagram.back", "button", back, true);
+    if back_resp.has_focus() {
+        paint.rect_stroke(back.expand(2.0), 8.0, Stroke::new(2.0, p.focus), StrokeKind::Outside);
     }
+    let clicked = buttons(
+        shell,
+        ui,
+        p,
+        paint,
+        dialog,
+        &[("workspace.new-diagram.create", tr("Create"), true), ("workspace.new-diagram.cancel", tr("Cancel"), false)],
+    );
     // The open select's menu, over the rest.
     let open = shell.diagrams.new.as_ref().and_then(|e| e.menu);
-    match open {
-        Some(Field::Kind) => {
-            let kinds = shell.kinds;
-            let words: Vec<String> = kinds.iter().map(|k| k.word()).collect();
-            if let Some(i) = menu(shell, ui, p, kind_field, "workspace.new-diagram.kind", &words)
-                && let Some(picked) = kinds.get(i)
-                && picked.kind() != kind.kind()
-            {
-                // Another kind: its first element, or a new one.
-                let first = shell.session.as_ref().and_then(|s| picked.owners(s.doc()).first().and_then(|o| s.doc().uuid(*o).ok()));
-                if let Some(edit) = shell.diagrams.new.as_mut() {
-                    edit.kind = picked.kind();
-                    edit.schema = first;
-                    edit.refused = None;
-                }
-            }
+    if open == Some(Field::Schema) {
+        let mut items: Vec<String> = schemas.iter().map(|(_, n)| n.clone()).collect();
+        items.push(new_word.clone());
+        if let Some(i) = menu(shell, ui, p, schema_field, "workspace.new-diagram.schema", &items)
+            && let Some(edit) = shell.diagrams.new.as_mut()
+        {
+            edit.schema = schemas.get(i).map(|(id, _)| *id);
+            edit.refused = None;
         }
-        Some(Field::Schema) => {
-            let mut items: Vec<String> = schemas.iter().map(|(_, n)| n.clone()).collect();
-            items.push(new_word.clone());
-            if let Some(i) = menu(shell, ui, p, schema_field, "workspace.new-diagram.schema", &items)
-                && let Some(edit) = shell.diagrams.new.as_mut()
-            {
-                edit.schema = schemas.get(i).map(|(id, _)| *id);
-                edit.refused = None;
-            }
+    }
+    let escape = open.is_none() && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
+    if back_resp.clicked() {
+        if let Some(edit) = shell.diagrams.new.as_mut() {
+            edit.step = Step::Kind;
+            edit.menu = None;
+            edit.refused = None;
         }
-        None => {}
-    }
-    if ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
-        action = Some(false);
-    }
-    match action {
-        Some(true) => create(shell),
-        Some(false) => shell.diagrams.new = None,
-        None if enter && open.is_none() => create(shell),
-        None => {}
+    } else if escape || clicked == Some(1) {
+        shell.diagrams.new = None;
+    } else if clicked == Some(0) || (enter && open.is_none()) {
+        create(shell);
     }
 }
 
