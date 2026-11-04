@@ -421,7 +421,12 @@ fn open_control(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, d: Obj, 
 
 /// Where a package node dragged on `d` would go if let go at `at`: another package's card under
 /// it, or an ancestor in the path bar (AR-102).
-fn drop_target(shell: &Shell, view: crate::canvas::View, d: Obj, node: Uuid, at: egui::Pos2) -> Option<(Obj, Obj)> {
+fn drop_target(shell: &Shell, view: crate::canvas::View, canvas: Rect, d: Obj, node: Uuid, at: egui::Pos2) -> Option<(Obj, Obj)> {
+    // Let go outside the canvas (over Properties or Models), nothing there takes it, not even a
+    // card panned under the panel out of sight.
+    if !canvas.contains(at) {
+        return None;
+    }
     let store = shell.session.as_ref()?.doc();
     let n = store.by_uuid(node)?;
     let package = element(store, n).filter(|e| is_package(store, *e))?;
@@ -441,7 +446,7 @@ fn drop_feedback(shell: &Shell, ui: &egui::Ui, p: &Palette, r: Rect, d: Obj) {
     let [node] = moved.as_slice() else { return };
     let Some(at) = ui.input(|i| i.pointer.hover_pos()) else { return };
     let view = crate::canvas::View { origin: r.min, pan: shell.canvas.pan, zoom: shell.canvas.zoom };
-    let Some((package, to)) = drop_target(shell, view, d, *node, at) else { return };
+    let Some((package, to)) = drop_target(shell, view, r, d, *node, at) else { return };
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
     let paint = ui.painter().with_clip_rect(r);
     let ring = shell
@@ -465,8 +470,8 @@ fn drop_feedback(shell: &Shell, ui: &egui::Ui, p: &Palette, r: Rect, d: Obj) {
 /// A package node let go on `d` at `at`: when it is over another package or an ancestor in the
 /// path bar, it goes there ([`move_and_place`]); true when it went (the drag moved nothing on `d`
 /// then).
-pub(crate) fn drop_moves(shell: &mut Shell, view: crate::canvas::View, d: Obj, node: Uuid, at: egui::Pos2) -> bool {
-    let Some((package, to)) = drop_target(shell, view, d, node, at) else { return false };
+pub(crate) fn drop_moves(shell: &mut Shell, view: crate::canvas::View, canvas: Rect, d: Obj, node: Uuid, at: egui::Pos2) -> bool {
+    let Some((package, to)) = drop_target(shell, view, canvas, d, node, at) else { return false };
     if let Err(e) = move_and_place(shell, package, to) {
         shell.canvas.notice = Some(e);
     }

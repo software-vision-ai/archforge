@@ -658,7 +658,7 @@ fn commit(shell: &mut Shell, view: View, d: Obj, pointer: Option<Pos2>, shift: b
             }
             // A package let go on another package, or on an ancestor in the path bar, goes into it.
             if let [node] = nodes.as_slice()
-                && crate::package_nav::drop_moves(shell, view, d, *node, pointer)
+                && crate::package_nav::drop_moves(shell, view, canvas, d, *node, pointer)
             {
                 return;
             }

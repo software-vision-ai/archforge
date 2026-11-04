@@ -3190,6 +3190,20 @@ fn a_parent_package_menu_longer_than_the_window_scrolls_to_its_last_choice() {
     let st = h.state().session.as_ref().unwrap().doc();
     let parent = archforge_uml::commands::package_of(st, st.by_uuid(mover).unwrap()).map(|p| archforge_core::name_of(st, p));
     assert_eq!(parent.as_deref(), Some("Package 39"), "the last choice, picked");
+    // From the keyboard: the arrow keys reach a choice out of sight, scrolled into view; Enter picks it.
+    h.run();
+    let at = rect_of(&h, "workspace.properties.package.parent").center();
+    click(&mut h, at);
+    for _ in 0..41 {
+        key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+    }
+    assert!(choices(&h).contains(&last), "the last choice brought into sight");
+    // The last choice is Package 39 (the root comes first); one row up is Package 38.
+    key(&mut h, egui::Key::ArrowUp, egui::Modifiers::NONE);
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    let st = h.state().session.as_ref().unwrap().doc();
+    let parent = archforge_uml::commands::package_of(st, st.by_uuid(mover).unwrap()).map(|p| archforge_core::name_of(st, p));
+    assert_eq!(parent.as_deref(), Some("Package 38"), "picked from the keyboard");
 }
 
 #[test]
@@ -3248,6 +3262,47 @@ fn enter_on_new_diagrams_focused_cancel_cancels_and_on_a_card_goes_on() {
     click(&mut h, at);
     key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
     assert_eq!(h.state().diagrams.new.as_ref().map(|n| n.step), Some(crate::diagrams::Step::Details));
+}
+
+#[test]
+fn a_package_let_go_outside_the_canvas_stays_where_it_was() {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+    let (top, sales, sales_card) = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value);
+        let top =
+            id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": root.to_string(), "name": "Top" })).unwrap().value);
+        let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
+        let billing = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Billing" })).unwrap().value);
+        let sales_card = id(s
+            .execute(
+                "diagram.place",
+                &serde_json::json!({ "diagram": top.to_string(), "element": sales.to_string(), "x": 400, "y": 120, "width": 240, "height": 148 }),
+            )
+            .unwrap()
+            .value);
+        // Billing far to the left, its card under the Models explorer once the view is at 0,0.
+        s.execute(
+            "diagram.place",
+            &serde_json::json!({ "diagram": top.to_string(), "element": billing.to_string(), "x": -300, "y": 120, "width": 240, "height": 148 }),
+        )
+        .unwrap();
+        (top, sales, sales_card)
+    };
+    crate::canvas::open(h.state_mut(), top);
+    h.state_mut().canvas.fit_pending = false;
+    h.state_mut().canvas.zoom = 1.0;
+    h.state_mut().canvas.pan = egui::Vec2::ZERO;
+    h.run();
+    let canvas = rect_of(&h, "workspace.canvas");
+    let from = rect_of(&h, &format!("workspace.canvas.node.{sales_card}")).center();
+    // Over the Models explorer, where Billing's card lies out of sight.
+    let outside = egui::pos2(canvas.left() - 120.0, canvas.top() + 120.0 + 74.0);
+    drag(&mut h, from, outside);
+    let st = h.state().session.as_ref().unwrap().doc();
+    let parent = archforge_uml::commands::package_of(st, st.by_uuid(sales).unwrap()).map(|p| archforge_core::name_of(st, p));
+    assert_eq!(parent.as_deref(), Some("Commerce platform"), "not moved into a package out of sight");
 }
 
 #[test]
