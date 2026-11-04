@@ -245,6 +245,7 @@ str		Element	Elemento
 str		New diagram	Nuevo diagrama
 str		Create	Crear
 str		ER diagram	Diagrama ER
+str		ER diagrams	Diagramas ER
 str		New schema	Nuevo esquema
 str		Name the diagram	Ponga nombre al diagrama
 str		Saving…	Guardando…
@@ -272,6 +273,7 @@ str		Filter models…	Filtrar modelos…
 str		Filter diagrams…	Filtrar diagramas…
 str		Filter changes…	Filtrar cambios…
 str		No diagrams yet	Aún no hay diagramas
+str		Other diagrams	Otros diagramas
 str		Select	Seleccionar
 str		Pan	Desplazar
 str		Entity	Entidad
@@ -514,6 +516,7 @@ str		{parent} has no primary key yet, so there is nothing in {child} to point at
 str		Add class	Añadir clase
 str		Class	Clase
 str		Class diagram	Diagrama de clases
+str		Class diagrams	Diagramas de clases
 str		Class · model, in every diagram	Clase · modelo, en cada diagrama
 str		New package	Nuevo paquete
 str		On this class · {n}	En esta clase · {n}

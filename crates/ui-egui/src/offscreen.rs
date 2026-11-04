@@ -70,6 +70,9 @@ pub enum Screen {
     WorkspacePackages,
     /// Inside Sales: its classes, a package of its own, and the path bar back to the root.
     WorkspaceInsidePackage,
+    /// The Diagrams explorer with its groups: two class diagrams, one of a nested package and
+    /// open, and an ER diagram.
+    WorkspaceDiagrams,
     /// The sample class model with the Chat panel open: Coming soon.
     WorkspaceChat,
     /// A class diagram of three cards: a new class with its first operation at the default size, one
@@ -297,6 +300,10 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
     if matches!(screen, Screen::WorkspacePackages | Screen::WorkspaceInsidePackage) {
         shell.adopt_project();
         sample_packages(&mut shell, screen == Screen::WorkspaceInsidePackage)?;
+    }
+    if screen == Screen::WorkspaceDiagrams {
+        shell.adopt_project();
+        sample_diagrams(&mut shell)?;
     }
     if screen == Screen::WorkspaceClassSizing {
         shell.adopt_project();
@@ -835,6 +842,32 @@ fn sample_packages(shell: &mut Shell, inside: bool) -> Result<(), String> {
         run(session, "view.select", json!({ "ids": [sales] }))?;
     }
     shell.canvas.fit_pending = true;
+    Ok(())
+}
+
+/// A schema and two packages, Orders inside Sales, each with its diagram; the Orders diagram open
+/// in the Diagrams explorer, which groups them by kind.
+fn sample_diagrams(shell: &mut Shell) -> Result<(), String> {
+    use serde_json::json;
+    let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
+    let run = |session: &mut archforge_notations::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
+        let out = session.execute(command, &params).map_err(|e| format!("{command}: {e:?}"))?;
+        Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
+    };
+    let schema = run(session, "er.schema.add", json!({ "name": "Shop" }))?;
+    run(session, "diagram.add", json!({ "kind": "er", "element": schema, "name": "Shop schema" }))?;
+    let sales = run(session, "uml.package.add", json!({ "name": "Sales" }))?;
+    let orders = run(session, "uml.package.add", json!({ "name": "Orders", "parent": sales }))?;
+    run(session, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": sales, "name": "Sales" }))?;
+    let diagram = run(session, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": orders, "name": "Orders" }))?;
+    for (name, x, y) in [("Order", 120, 120), ("OrderLine", 480, 120)] {
+        let class = run(session, "uml.class.add", json!({ "package": orders, "name": name }))?;
+        run(session, "diagram.place", json!({ "diagram": diagram, "element": class, "x": x, "y": y }))?;
+    }
+    session.mark_saved().map_err(|e| format!("mark_saved: {e:?}"))?;
+    let d = archforge_mof::Uuid::parse(&diagram).ok_or_else(|| "the diagram's id does not parse".to_string())?;
+    crate::canvas::open(shell, d);
+    shell.state.show_explorer(crate::state::Explorer::Diagrams);
     Ok(())
 }
 

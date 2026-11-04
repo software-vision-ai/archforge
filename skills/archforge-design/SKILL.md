@@ -133,6 +133,11 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
 ## Explorer
 - Models shows the model's elements, a notation's own containers first; diagrams appear only in the
   Diagrams explorer.
+- The Diagrams explorer groups diagrams by kind (Class diagrams, ER diagrams), a group for each kind
+  Archforge supports, empty or not, with its count and a + that opens New diagram on that kind. A
+  group is navigation alone: the model keeps each diagram once, where it was. A diagram's hover
+  text and the footer say where its package or schema sits (project / package / subpackage). Never
+  show a group for a kind that can't be made yet.
 - Models starts folded: only the top-level containers (an ER model's schemas) show, and the user drills in. The button beside + opens
   every row (Expand all), or folds them all (Collapse all) once everything is open; a filter opens
   what it shows, and the button rests while one is typed. An element selected on the canvas or in

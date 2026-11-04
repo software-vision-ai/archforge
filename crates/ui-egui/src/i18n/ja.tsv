@@ -245,6 +245,7 @@ str		Element	要素
 str		New diagram	新しい図
 str		Create	作成
 str		ER diagram	ER図
+str		ER diagrams	ER図
 str		New schema	新しいスキーマ
 str		Name the diagram	図に名前を付けてください
 str		Saving…	保存中…
@@ -272,6 +273,7 @@ str		Filter models…	モデルを絞り込む…
 str		Filter diagrams…	図を絞り込む…
 str		Filter changes…	変更を絞り込む…
 str		No diagrams yet	図はまだありません
+str		Other diagrams	その他の図
 str		Select	選択
 str		Pan	パン
 str		Entity	エンティティ
@@ -514,6 +516,7 @@ str		{parent} has no primary key yet, so there is nothing in {child} to point at
 str		Add class	クラスを追加
 str		Class	クラス
 str		Class diagram	クラス図
+str		Class diagrams	クラス図
 str		Class · model, in every diagram	クラス · モデル、すべての図に
 str		New package	新しいパッケージ
 str		On this class · {n}	このクラスに · {n}
