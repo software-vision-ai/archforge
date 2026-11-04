@@ -7015,3 +7015,20 @@ fn the_new_project_dialog_links_to_dolts_install_page_when_dolt_is_missing() {
     answer(&mut h, &host, Err(crate::CreateError::Failed { detail: "the server did not start".into() }));
     assert!(!ids(&h).iter().any(|i| i == "new-project.install-dolt"));
 }
+
+#[test]
+fn the_activity_rail_puts_diagrams_above_models_in_its_look_and_its_keyboard_order() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let (diagrams, models, source) = (
+            rect_of(&h, "workspace.explorers.diagrams"),
+            rect_of(&h, "workspace.explorers.models"),
+            rect_of(&h, "workspace.explorers.source-control"),
+        );
+        assert!(diagrams.bottom() <= models.top() && models.bottom() <= source.top(), "{theme:?}: Diagrams, then Models, then Source Control");
+        // Tab follows the order the controls are made in, which is the order drawn.
+        let ids = ids(&h);
+        let at = |id: &str| ids.iter().position(|i| i == id).unwrap();
+        assert!(at("workspace.explorers.diagrams") < at("workspace.explorers.models"), "{theme:?}: {ids:?}");
+    }
+}

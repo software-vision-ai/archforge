@@ -6,7 +6,7 @@ An open project fills the window with its workspace.
 
 - **The bar at the top** holds Home, the open projects' tabs, the search field, Help and your
   avatar (which opens Settings, where you enter your name).
-- **The left rail** switches the left column between **Models** and **Diagrams**. (Source Control
+- **The left rail** switches the left column between **Diagrams**, at the top, and **Models**. (Source Control
   is planned and not available yet.)
 - **The centre** shows the open diagrams and skills, each in a tab. The **+** at the start of the
   tab strip makes a new diagram.
@@ -15,15 +15,15 @@ An open project fills the window with its workspace.
   again.
 - **The status bar** at the bottom says whether the project is saved, and where the project is.
 
-## Models and Diagrams
+## Diagrams and Models
+
+**Diagrams** lists the project's diagrams; choose one to open it in its tab.
 
 **Models** lists the model's elements: an ER model's schemas with their tables and columns, a UML
 model's packages with their classes, attributes and operations. It starts folded; open a row with
 its arrow, or open every row with the button beside **+**. The filter field narrows the tree to
 what matches. **+** adds what fits the selection, with its name ready to type: press Enter to keep
 it, Escape to cancel.
-
-**Diagrams** lists the project's diagrams; choose one to open it in its tab.
 
 An element exists once in the model and can appear on many diagrams. Drag an element from Models
 onto a diagram to show it there.

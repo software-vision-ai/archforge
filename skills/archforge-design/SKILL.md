@@ -55,7 +55,8 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   changes cannot be written does not close; it stays open and says why.
 - Diagrams and skills open as tabs inside the project; the + that makes a new diagram sits in
   that tab strip.
-- The left rail holds Models, Diagrams and Source Control; the right rail, between the canvas and
+- The left rail holds Diagrams, Models and Source Control, in that order (owner, 2026-11-04: the
+  diagrams are found first); the right rail, between the canvas and
   the panel, holds Chat, Appearance, Properties and Skills, each with a shape of its own (a
   proposal for the owner to confirm): a rounded speech bubble with two lines, a palette with
   three dots of paint, three sliders, and a page of rules with a checklist. Chat's panel says
