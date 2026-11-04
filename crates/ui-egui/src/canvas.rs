@@ -943,7 +943,8 @@ fn draw_rows(inner: &egui::Painter, p: &Palette, card: &archforge_diagram::figur
     let height = rect.height() / z;
     let fits = |top: f32| top + ENTITY_ROW <= height + 1.0;
     // Where the rows stop: the first that does not fit, and the place before it the rest is said in.
-    let first = slots.iter().position(|(top, s)| matches!(s, Slot::Row(_)) && !fits(*top));
+    // Rows the notation left out count as not fitting: the last place that fits says them.
+    let first = slots.iter().position(|(top, s)| matches!(s, Slot::Row(_)) && !fits(*top)).or((card.hidden > 0).then_some(slots.len()));
     let cue = first.and_then(|f| slots.iter().take(f).rposition(|(top, s)| !matches!(s, Slot::Line) && fits(*top)));
     // Without such a place (not even a row fits under the header) only what is above the first is drawn.
     let end = cue.or(first).unwrap_or(slots.len());
@@ -973,7 +974,7 @@ fn draw_rows(inner: &egui::Painter, p: &Palette, card: &archforge_diagram::figur
     if first.is_none() {
         return;
     }
-    let total: usize = card.compartments.iter().map(Vec::len).sum();
+    let total: usize = card.compartments.iter().map(Vec::len).sum::<usize>() + card.hidden;
     let text = trn(card.more.0, card.more.1, total.saturating_sub(shown) as u64);
     // In the last place that fits; with none, a row's height above the card's foot while that is
     // still under the header; on a card shorter still, at the right of its eyebrow's line.

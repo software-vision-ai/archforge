@@ -2719,6 +2719,34 @@ fn shift_delete_on_a_selected_package_card_asks_to_delete_the_package() {
 }
 
 #[test]
+fn a_package_card_tall_enough_for_its_fifty_rows_still_says_how_many_more_it_holds() {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+    let top = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value).to_string();
+        let top = id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": root, "name": "Top" })).unwrap().value);
+        let crowded = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Crowded" })).unwrap().value);
+        for i in 0..60 {
+            s.execute("uml.class.add", &serde_json::json!({ "package": crowded.to_string(), "name": format!("C{i}") })).unwrap();
+        }
+        // Tall enough for every row the card lists.
+        s.execute(
+            "diagram.place",
+            &serde_json::json!({ "diagram": top.to_string(), "element": crowded.to_string(), "x": 0, "y": 0, "width": 240, "height": 1200 }),
+        )
+        .unwrap();
+        top
+    };
+    crate::canvas::open(h.state_mut(), top);
+    h.state_mut().canvas.fit_pending = false;
+    h.state_mut().canvas.zoom = 0.75;
+    h.run();
+    // Fifty rows listed, the last place saying the rest: 60 − 49.
+    assert!(painted(&h).iter().any(|t| t == "+ 11 more elements"), "{:?}", painted(&h).iter().filter(|t| t.contains("more")).collect::<Vec<_>>());
+}
+
+#[test]
 fn the_canvas_draws_the_diagram_and_the_pointer_selects_pans_and_zooms() {
     let (mut h, customer, diagram) = diagram_harness();
     let found = ids(&h);
@@ -4514,6 +4542,7 @@ impl archforge_diagram::Notation for Sketch {
             name: archforge_core::name_of(store, element),
             compartments: vec![rows(archforge_uml::class::OWNED_ATTRIBUTE), rows(archforge_uml::class::OWNED_OPERATION)],
             more: ("+ {n} more column", "+ {n} more columns"),
+            hidden: 0,
             elsewhere: false,
             tone: archforge_diagram::figure::Tone::Tinted,
             slanted: false,

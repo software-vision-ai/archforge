@@ -28,6 +28,9 @@ pub struct Card {
     pub compartments: Vec<Vec<Row>>,
     /// The words for the rows past the card's height, one and many, each with `{n}`.
     pub more: (&'static str, &'static str),
+    /// Rows the notation left out of its compartments, past the most it lists (a package holding
+    /// many elements): counted with those past the card's height.
+    pub hidden: usize,
     /// An element of another scope than the diagram's (a table of another schema): drawn dimmed,
     /// its outline dashed.
     pub elsewhere: bool,

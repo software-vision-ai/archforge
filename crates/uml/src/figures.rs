@@ -165,6 +165,7 @@ pub fn card(store: &Store, c: Obj, diagram: Obj) -> Option<Card> {
         name: name(store, c),
         compartments: vec![attributes, operations],
         more: ("+ {n} more member", "+ {n} more members"),
+        hidden: 0,
         elsewhere: elsewhere.is_some(),
         tone: Tone::Plain,
         slanted: flag(store, c, class::IS_ABSTRACT),
@@ -284,20 +285,23 @@ pub fn slot_text(store: &Store, element: Obj, slot: &str) -> String {
 /// packages, each of which leads to its own diagram.
 fn package_card(store: &Store, p: Obj) -> Card {
     let row = |text: String| Row { mark: None, text: cut(text), linked: false, slanted: false };
-    let held: Vec<Row> = list(store, p, crate::package::PACKAGED_ELEMENT)
+    let listed: Vec<Obj> = list(store, p, crate::package::PACKAGED_ELEMENT)
         .into_iter()
-        .filter_map(|o| match store.class_of(o).ok()? {
-            k if k == CLASS => Some(row(name(store, o))),
-            k if k == crate::PACKAGE => Some(row(format!("▸ {}", name(store, o)))),
-            _ => None,
-        })
+        .filter(|o| store.class_of(*o).ok().is_some_and(|k| k == CLASS || k == crate::PACKAGE))
+        .collect();
+    // At most MAX_HELD rows are built; the rest are counted, so "+ n more" says them all.
+    let hidden = listed.len().saturating_sub(MAX_HELD);
+    let held: Vec<Row> = listed
+        .into_iter()
         .take(MAX_HELD)
+        .map(|o| if store.class_of(o).ok() == Some(CLASS) { row(name(store, o)) } else { row(format!("▸ {}", name(store, o))) })
         .collect();
     Card {
         eyebrow: Text::said("Package"),
         name: name(store, p),
         compartments: vec![held],
         more: ("+ {n} more element", "+ {n} more elements"),
+        hidden,
         elsewhere: false,
         tone: Tone::Tabbed,
         slanted: false,

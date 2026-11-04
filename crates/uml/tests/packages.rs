@@ -242,3 +242,16 @@ fn a_class_diagram_shows_the_packages_its_package_holds_as_tabbed_cards() {
     let rows: Vec<&str> = card.compartments[0].iter().map(|r| r.text.as_str()).collect();
     assert_eq!(rows, ["Order", "▸ Lines"], "its classes, then its packages marked");
 }
+
+#[test]
+fn a_package_card_lists_at_most_fifty_of_what_it_holds_and_counts_the_rest() {
+    let mut s = session();
+    let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+    let d = run(&mut s, "diagram.add", json!({ "kind": "uml.class", "element": sales, "name": "Sales" }));
+    let crowded = run(&mut s, "uml.package.add", json!({ "name": "Crowded", "parent": sales }));
+    for i in 0..60 {
+        run(&mut s, "uml.class.add", json!({ "package": crowded, "name": format!("C{i}") }));
+    }
+    let card = archforge_diagram::Notation::card(&archforge_uml::UmlNotation, s.doc(), obj(&s, &crowded), obj(&s, &d)).unwrap();
+    assert_eq!((card.compartments[0].len(), card.hidden), (50, 10), "fifty rows built, ten counted");
+}
