@@ -88,7 +88,9 @@ pub enum Field {
 pub enum Kind {
     /// The group of a diagram kind's diagrams, by the kind; "" for the kinds the shell doesn't know.
     Group(&'static str),
-    Folder,
+    /// A folder, in the group of the kind named: a folder holding diagrams of two kinds shows in
+    /// both groups, a row in each.
+    Folder(&'static str),
     Diagram,
 }
 
@@ -299,7 +301,7 @@ impl Walk<'_> {
                     let Some(&count) = self.folders.get(&(m, self.group)) else { continue };
                     let label = archforge_core::name_of(self.store, m);
                     let expanded = self.open || !self.state.collapsed.contains(&id);
-                    out.push(Row { id, obj: m, depth, kind: Kind::Folder, label, expandable: true, expanded, count });
+                    out.push(Row { id, obj: m, depth, kind: Kind::Folder(self.g.kind), label, expandable: true, expanded, count });
                     if expanded && self.walk(m, archforge_core::folder::MEMBER, depth.saturating_add(1), out, left) {
                         return true;
                     }
@@ -560,7 +562,9 @@ fn tree_row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, column: Rect, y: 
     }
     let id = match row.kind {
         Kind::Group(kind) => format!("workspace.diagrams.group.{}", group_key(kind)),
-        _ => format!("workspace.diagrams.row.{}", row.id),
+        // A folder may show in two groups: each row its own control.
+        Kind::Folder(kind) => format!("workspace.diagrams.group.{}.folder.{}", group_key(kind), row.id),
+        Kind::Diagram => format!("workspace.diagrams.row.{}", row.id),
     };
     let mut resp = control(shell, ui, &id, "row", hit, true);
     if row.kind == Kind::Diagram
@@ -582,7 +586,7 @@ fn tree_row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, column: Rect, y: 
         (Kind::Diagram, Some(s)) => crate::kinds::diagram_icon(shell.kinds, s.doc(), row.obj),
         (Kind::Diagram, None) => &icons::ER_DIAGRAM,
         (Kind::Group(kind), _) => known(kind).map_or(&icons::FOLDER, |k| k.icon()),
-        (Kind::Folder, _) => &icons::FOLDER,
+        (Kind::Folder(_), _) => &icons::FOLDER,
     };
     ux::icon_mid(&paint, pos2(column.left() + 38.5 + indent, mid), icon, icon_ink);
     let name_x = column.left() + 53.0 + indent;
@@ -616,7 +620,7 @@ fn tree_row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, column: Rect, y: 
                     shell.diagrams.folded.remove(kind);
                 }
             }
-            Kind::Folder => {
+            Kind::Folder(_) => {
                 if row.expanded {
                     shell.diagrams.collapsed.insert(row.id);
                 } else {
