@@ -63,6 +63,19 @@ impl DiagramKind for UmlKind {
         tr("New package")
     }
 
+    /// Before the model has its root package, a new class diagram goes into the root, named after
+    /// the project and made on Create (owner, 2026-11-04); after, "New package" makes a package in it.
+    fn new_owner_in(&self, store: &Store) -> String {
+        if archforge_uml::commands::root_package(store).is_some() {
+            return self.new_owner();
+        }
+        archforge_uml::commands::model(store)
+            .map(|m| archforge_core::name_of(store, m))
+            .ok()
+            .filter(|n| !n.trim().is_empty())
+            .unwrap_or_else(|| tr("Model"))
+    }
+
     fn owners(&self, store: &Store) -> Vec<Obj> {
         archforge_uml::commands::all_packages(store)
     }
@@ -72,8 +85,13 @@ impl DiagramKind for UmlKind {
     }
 
     fn add_owner(&self, shell: &mut Shell, name: &str) -> Result<String, String> {
-        crate::editing::run(shell, "uml.package.add", json!({ "name": name }))
-            .map(|v| v.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
+        let has_root = shell.session.as_ref().is_some_and(|s| archforge_uml::commands::root_package(s.doc()).is_some());
+        let made = if has_root {
+            crate::editing::run(shell, "uml.package.add", json!({ "name": name }))
+        } else {
+            crate::editing::run(shell, "uml.model.root", json!({}))
+        };
+        made.map(|v| v.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
     }
 
     fn takes_part(&self, store: &Store, element: Obj) -> bool {

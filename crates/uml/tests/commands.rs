@@ -7,7 +7,7 @@ use archforge_diagram::{DiagramView, ProjectView};
 use archforge_engine::testing::sweep_with;
 use archforge_engine::{Options, Session};
 use archforge_mof::{CompositeSlabs, Obj, Store, Uuid, Value};
-use archforge_uml::{ALONE, CLASS, CLASS_DIAGRAM, PACKAGE, registry};
+use archforge_uml::{ALONE, CLASS_DIAGRAM, PACKAGE, registry};
 use serde_json::{Value as Json, json};
 
 type S = Session<Store, ProjectView>;
@@ -92,8 +92,10 @@ fn packages_and_classes_are_added_renamed_listed_and_refused_by_key() {
     let names: Vec<&str> = listed["classes"].as_array().unwrap().iter().map(|c| c["name"].as_str().unwrap()).collect();
     assert_eq!(names, ["Purchase", "Customer", "Invoice"]);
     let packages = s.execute("uml.package.list", &json!({})).unwrap().value;
-    assert_eq!(packages["packages"][0]["name"], "selling");
-    assert_eq!(packages["packages"][0]["classes"], 3);
+    // A package added with no parent goes into the model's root package, named after the project.
+    assert_eq!(packages["packages"][0]["name"], "Shop");
+    assert_eq!(packages["packages"][1]["name"], "selling");
+    assert_eq!(packages["packages"][1]["classes"], 3);
     // Refusals name their key and change nothing.
     for (cmd, p, key) in [
         ("uml.package.add", json!({ "name": "" }), "name"),
@@ -144,14 +146,21 @@ fn a_class_diagram_shows_its_packages_classes_and_removing_the_package_takes_the
     let before = picture(&st);
     assert!(archforge_uml::commands::remove_elements(&mut st, &[pkg, model]).is_err());
     assert_eq!(picture(&st), before, "nothing went");
-    // The package goes with its classes and its diagram, in one undo step.
+    // Every package sits in the model's root, so the package goes and its class and its diagram
+    // move up into the root, in one undo step.
     let before = picture(s.doc());
     let out = s.execute("element.remove", &json!({ "ids": [sales] })).unwrap();
-    assert!(out.value["removed"].as_u64().unwrap() >= 3, "{}", out.value);
+    assert_eq!(out.value["removed"], 1, "{}", out.value);
     let st = s.doc();
-    assert!(!st.alive().any(|o| st.class_of(o).ok() == Some(CLASS) && archforge_core::name_of(st, o) == "Order"));
-    assert!(!st.alive().any(|o| st.class_of(o).ok() == Some(archforge_diagram::DIAGRAM)));
-    assert_eq!(st.alive().filter(|o| st.class_of(*o).ok() == Some(PACKAGE)).count(), 1);
+    let root = archforge_uml::commands::root_package(st).unwrap();
+    let order_obj = obj(st, &order);
+    assert_eq!(archforge_uml::commands::package_of(st, order_obj), Some(root));
+    let diagram = obj(st, &d);
+    assert_eq!(st.get(diagram, archforge_diagram::diagram::ELEMENT).unwrap().as_ref(), Some(root));
+    assert_eq!(st.alive().filter(|o| st.class_of(*o).ok() == Some(PACKAGE)).count(), 2, "billing and the root are left");
+    // The root itself stays.
+    let root_id = st.uuid(root).unwrap().to_string();
+    assert!(s.execute("element.remove", &json!({ "ids": [root_id] })).is_err());
     s.undo().unwrap();
     assert_eq!(picture(s.doc()), before);
     s.redo().unwrap();
@@ -181,4 +190,58 @@ fn every_command_undoes_and_redoes_and_the_sweep_breaks_nothing() {
     let ids = [pkg.as_str(), class.as_str(), d.as_str(), "not-an-id", "00000000-0000-7000-8000-000000000000"];
     let calls = sweep_with(&mut s, &ids, picture).unwrap();
     assert!(calls > 100, "{calls}");
+}
+
+#[test]
+fn one_root_package_named_after_the_project_holds_what_has_no_other_home() {
+    let mut s = session();
+    assert!(archforge_uml::commands::root_package(s.doc()).is_none(), "a new project has none yet");
+    let first = run(&mut s, "uml.package.add", json!({ "name": "sales" }));
+    let root = archforge_uml::commands::root_package(s.doc()).expect("made with the first package");
+    let st = s.doc();
+    assert_eq!(archforge_core::name_of(st, root), "Shop");
+    assert_eq!(archforge_uml::commands::packages(st), vec![root], "the root alone is at the top level");
+    assert_eq!(archforge_uml::commands::subpackages(st, root), vec![obj(st, &first)]);
+    // Asking again makes no second root, whoever asks.
+    let again = run(&mut s, "uml.model.root", json!({}));
+    run(&mut s, "uml.package.add", json!({ "name": "billing" }));
+    let st = s.doc();
+    assert_eq!(obj(st, &again), root);
+    assert_eq!(archforge_uml::commands::packages(st), vec![root]);
+    assert_eq!(st.alive().filter(|o| st.class_of(*o).ok() == Some(archforge_core::TAG)).count(), 1);
+    // The root stays where it is; a package moved to nothing goes back into it.
+    let root_id = st.uuid(root).unwrap().to_string();
+    assert!(refused_key(&mut s, "uml.package.move", json!({ "package": root_id, "to": first })).contains("package"));
+    let inner = run(&mut s, "uml.package.add", json!({ "name": "inner", "parent": first }));
+    run(&mut s, "uml.package.move", json!({ "package": inner, "to": "" }));
+    let st = s.doc();
+    assert!(archforge_uml::commands::subpackages(st, root).contains(&obj(st, &inner)));
+    // Undoing the first package takes the root with it: one step.
+    while s.undo().is_ok() {}
+    assert!(archforge_uml::commands::root_package(s.doc()).is_none());
+}
+
+#[test]
+fn an_older_model_s_top_level_packages_go_into_the_root_and_one_named_after_the_project_becomes_it() {
+    // Two top-level packages, as projects had them before the root.
+    let mut st = store();
+    let model = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_core::MODEL)).unwrap();
+    let mut top = Vec::new();
+    for name in ["Commerce", "Billing"] {
+        let p = st.create(PACKAGE).unwrap();
+        st.set(p, archforge_uml::named_element::NAME, Value::str(name)).unwrap();
+        st.push(model, archforge_core::model::MEMBER, Value::Ref(p)).unwrap();
+        top.push(p);
+    }
+    let root = archforge_uml::commands::ensure_root(&mut st).unwrap();
+    assert_eq!(archforge_core::name_of(&st, root), "Shop");
+    assert_eq!(archforge_uml::commands::packages(&st), vec![root]);
+    assert_eq!(archforge_uml::commands::subpackages(&st, root), top, "both, in their order");
+    // One already named after the project is the root, and keeps what it holds.
+    let mut st = store();
+    let model = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_core::MODEL)).unwrap();
+    let shop = st.create(PACKAGE).unwrap();
+    st.set(shop, archforge_uml::named_element::NAME, Value::str("Shop")).unwrap();
+    st.push(model, archforge_core::model::MEMBER, Value::Ref(shop)).unwrap();
+    assert_eq!(archforge_uml::commands::ensure_root(&mut st).unwrap(), shop);
 }

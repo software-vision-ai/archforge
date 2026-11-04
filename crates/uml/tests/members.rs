@@ -107,7 +107,8 @@ fn attributes_and_operations_are_added_changed_moved_and_removed_as_one_step_eac
     run(&mut s, "uml.attribute.add", json!({ "class": order, "name": "count", "type": "integer" }));
     let listed = s.execute("uml.package.list", &json!({})).unwrap().value;
     let names: Vec<&str> = listed["packages"].as_array().unwrap().iter().map(|p| p["name"].as_str().unwrap()).collect();
-    assert_eq!(names, ["sales", "Types"], "the Types package, made once");
+    // The model's root package first (this model has no name, so it is "Model"), then what it holds.
+    assert_eq!(names, ["Model", "sales", "Types"], "the Types package, made once");
     let types = s.execute("uml.type.list", &json!({})).unwrap().value;
     assert_eq!(types["types"].as_array().unwrap().iter().filter(|t| t["name"] == "Integer").count(), 1, "Integer made once");
     // A model class as a type, a multiplicity, at a place.

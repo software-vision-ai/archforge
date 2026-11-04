@@ -61,7 +61,7 @@ pub(crate) fn id_of(store: &Store, p: &Params, key: &str, class: ClassId, what: 
 }
 
 /// The project's Model, the root that holds the packages.
-pub(crate) fn model(store: &Store) -> Result<Obj, CommandError> {
+pub fn model(store: &Store) -> Result<Obj, CommandError> {
     store.alive().find(|o| store.class_of(*o).ok() == Some(archforge_core::MODEL)).ok_or_else(|| CommandError::new("the project has no model root"))
 }
 
@@ -95,6 +95,55 @@ pub fn all_packages(store: &Store) -> Vec<Obj> {
         stack.extend(subpackages(store, p).into_iter().rev());
     }
     out
+}
+
+/// The name of the tag that marks the model's root package (owner, 2026-11-04): one plain package,
+/// named after the project, that holds every package and diagram without another home.
+pub const ROOT_TAG: &str = "archforge.root";
+
+/// The model's root package: the top-level package the root tag marks, if there is one yet.
+pub fn root_package(store: &Store) -> Option<Obj> {
+    let top = packages(store);
+    let m = model(store).ok()?;
+    store.list(m, archforge_core::model::TAG).ok()?.iter().filter_map(Value::as_ref).find_map(|tag| {
+        let named = store.get(tag, archforge_core::tag::NAME).ok().and_then(|v| v.as_str().map(str::to_string)).as_deref() == Some(ROOT_TAG);
+        let element = store.list(tag, archforge_core::tag::ELEMENT).ok()?.iter().filter_map(Value::as_ref).next();
+        element.filter(|e| named && top.contains(e))
+    })
+}
+
+/// The root package, made when there is none: named after the project's model (a top-level
+/// package of that name becomes it), marked with the root tag, and holding every other top-level
+/// package whose name is free in it. Gives the root.
+pub fn ensure_root(store: &mut Store) -> Result<Obj, CommandError> {
+    if let Some(root) = root_package(store) {
+        return Ok(root);
+    }
+    let m = model(store)?;
+    let wanted = archforge_core::name_of(store, m);
+    let wanted = if wanted.trim().is_empty() { "Model".to_string() } else { wanted };
+    let top = packages(store);
+    let root = match top.iter().copied().find(|p| name_of(store, *p).eq_ignore_ascii_case(&wanted)) {
+        Some(existing) => existing,
+        None => {
+            let pkg = store.create(PACKAGE).map_err(fail)?;
+            set_name(store, pkg, &wanted)?;
+            place_package(store, pkg, None)?;
+            pkg
+        }
+    };
+    let tag = store.create(archforge_core::TAG).map_err(fail)?;
+    store.set(tag, archforge_core::tag::NAME, Value::str(ROOT_TAG)).map_err(fail)?;
+    store.push(tag, archforge_core::tag::ELEMENT, Value::Ref(root)).map_err(fail)?;
+    store.push(m, archforge_core::model::TAG, Value::Ref(tag)).map_err(fail)?;
+    for pkg in top.into_iter().filter(|p| *p != root) {
+        let taken = subpackages(store, root).iter().any(|s| name_of(store, *s).eq_ignore_ascii_case(&name_of(store, pkg)));
+        if !taken {
+            detach(store, pkg)?;
+            place_package(store, pkg, Some(root))?;
+        }
+    }
+    Ok(root)
 }
 
 /// The packages beside `package`: its parent's, or the model's top level.
@@ -142,8 +191,14 @@ pub(crate) fn set_name(store: &mut Store, obj: Obj, name: &str) -> Result<(), Co
 }
 
 /// The package under `key`, or none when it is empty: the model's top level.
-fn parent_param(store: &Store, p: &Params, key: &str) -> Result<Option<Obj>, CommandError> {
-    if text(p, key).is_empty() { Ok(None) } else { id_of(store, p, key, PACKAGE, "a package").map(Some) }
+/// The package `key` names, or the root package, made when there is none, when it names nothing.
+fn parent_param(store: &mut Store, p: &Params, key: &str) -> Result<Option<Obj>, CommandError> {
+    if text(p, key).is_empty() { ensure_root(store).map(Some) } else { id_of(store, p, key, PACKAGE, "a package").map(Some) }
+}
+
+fn model_root(ctx: &mut C<'_>, _p: &Params) -> R {
+    let root = ensure_root(ctx.doc)?;
+    Ok(json!({ "id": uuid_of(ctx.doc, root)? }))
 }
 
 /// Puts `pkg` into `parent`, or at the model's top level.
@@ -184,6 +239,9 @@ fn detach(store: &mut Store, obj: Obj) -> Result<(), CommandError> {
 
 fn package_move(ctx: &mut C<'_>, p: &Params) -> R {
     let pkg = id_of(ctx.doc, p, "package", PACKAGE, "a package")?;
+    if Some(pkg) == root_package(ctx.doc) {
+        return Err(refuse("package", "the model's root package holds the others and stays where it is"));
+    }
     let to = parent_param(ctx.doc, p, "to")?;
     if to.is_some_and(|t| is_within(ctx.doc, t, pkg)) {
         return Err(refuse("to", "a package cannot go into itself or a package it holds"));
@@ -300,6 +358,9 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
         if !removable.contains(&class) || end {
             return Err(refuse("ids", format!("{} cannot be removed yet", uuid_of(store, *o)?)));
         }
+        if Some(*o) == root_package(store) {
+            return Err(refuse("ids", "the model's root package holds the whole model and stays"));
+        }
         if class == PACKAGE
             && let Some(parent) = package_of(store, *o)
             && let Some(why) = hand_up_problem(store, *o, parent)
@@ -363,16 +424,17 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Add package",
             &["Package"],
             None,
-            "name: string; the package's name\nparent: string = \"\"; the id of the package it goes into, or nothing for the model's top level",
+            "name: string; the package's name\nparent: string = \"\"; the id of the package it goes into, or nothing for the model's root package (made when there is none)",
             always,
             package_add
         ),
+        cmd!("uml.model.root", "Make the root package", &["Package"], None, "", always, model_root),
         cmd!(
             "uml.package.move",
             "Move package",
             &["Package"],
             None,
-            "package: string; the package's id\nto: string = \"\"; the id of the package it goes into, or nothing for the model's top level",
+            "package: string; the package's id\nto: string = \"\"; the id of the package it goes into, or nothing for the model's root package",
             has_packages,
             package_move
         ),
