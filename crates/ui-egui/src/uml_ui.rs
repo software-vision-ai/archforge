@@ -51,6 +51,10 @@ impl DiagramKind for UmlKind {
         tr("Class diagram")
     }
 
+    fn group_word(&self) -> String {
+        tr("Class diagrams")
+    }
+
     fn icon(&self) -> &'static crate::ux::Icon {
         &icons::CLASS_DIAGRAM
     }

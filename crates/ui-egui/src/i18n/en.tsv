@@ -244,6 +244,7 @@ str		Element	Element
 str		New diagram	New diagram
 str		Create	Create
 str		ER diagram	ER diagram
+str		ER diagrams	ER diagrams
 str		New schema	New schema
 str		Name the diagram	Name the diagram
 str		Saving…	Saving…
@@ -271,6 +272,7 @@ str		Filter models…	Filter models…
 str		Filter diagrams…	Filter diagrams…
 str		Filter changes…	Filter changes…
 str		No diagrams yet	No diagrams yet
+str		Other diagrams	Other diagrams
 str		Select	Select
 str		Pan	Pan
 str		Entity	Entity
@@ -513,6 +515,7 @@ str		{parent} has no primary key yet, so there is nothing in {child} to point at
 str		Add class	Add class
 str		Class	Class
 str		Class diagram	Class diagram
+str		Class diagrams	Class diagrams
 str		Class · model, in every diagram	Class · model, in every diagram
 str		New package	New package
 str		On this class · {n}	On this class · {n}

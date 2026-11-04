@@ -2465,6 +2465,181 @@ fn the_diagrams_explorer_creates_a_diagram_through_the_dialog_and_opens_it_in_a_
     assert_eq!(selected_name(&h), "Billing");
 }
 
+/// The Diagrams explorer's rows: each one's depth, name and count.
+fn diagram_rows(h: &Harness<'static, Shell>) -> Vec<(u8, String, usize)> {
+    let st = h.state().session.as_ref().unwrap().doc();
+    crate::diagrams::rows(st, &h.state().diagrams, h.state().kinds).rows.into_iter().map(|r| (r.depth, r.label, r.count)).collect()
+}
+
+#[test]
+fn the_diagrams_explorer_groups_the_diagrams_by_kind_and_opens_each_with_its_package() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        let at = rect_of(&h, "workspace.explorers.diagrams").center();
+        click(&mut h, at);
+        // Every kind the shell knows has its group, by name, empty or not, with its +.
+        let row = |depth: u8, label: &str, count: usize| (depth, label.to_string(), count);
+        assert_eq!(diagram_rows(&h), vec![row(0, "Class diagrams", 0), row(0, "ER diagrams", 0)]);
+        let found = ids(&h);
+        for id in [
+            "workspace.diagrams.group.uml.class",
+            "workspace.diagrams.group.uml.class.add",
+            "workspace.diagrams.group.er",
+            "workspace.diagrams.group.er.add",
+        ] {
+            assert!(found.iter().any(|i| i == id), "{id} in {found:?}");
+        }
+        // A group's + opens the New diagram dialog on its kind.
+        let at = rect_of(&h, "workspace.diagrams.group.uml.class.add").center();
+        click(&mut h, at);
+        assert_eq!(h.state().diagrams.new.as_ref().map(|n| n.kind), Some(archforge_uml::CLASS_DIAGRAM));
+        h.state_mut().diagrams.new = None;
+        let at = rect_of(&h, "workspace.diagrams.group.er.add").center();
+        click(&mut h, at);
+        assert_eq!(h.state().diagrams.new.as_ref().map(|n| n.kind), Some("er"));
+        h.state_mut().diagrams.new = None;
+        // A diagram of a nested package and one of a schema land in their groups at once.
+        let (orders_package, orders) = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
+            let schema = id(s.execute("er.schema.add", &serde_json::json!({ "name": "Shop" })).unwrap().value);
+            let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
+            let orders_package = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Orders", "parent": sales })).unwrap().value);
+            s.execute("diagram.add", &serde_json::json!({ "kind": "er", "element": schema, "name": "Shop" })).unwrap();
+            s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": sales, "name": "Sales" })).unwrap();
+            let orders =
+                id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": orders_package, "name": "Orders" })).unwrap().value);
+            (orders_package, orders)
+        };
+        h.run();
+        assert_eq!(
+            diagram_rows(&h),
+            vec![row(0, "Class diagrams", 2), row(1, "Sales", 0), row(1, "Orders", 0), row(0, "ER diagrams", 1), row(1, "Shop", 0)]
+        );
+        // Grouping is the explorer's alone: the model keeps each diagram once, where it was.
+        {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let model = archforge_core::skills::model_of(st).unwrap();
+            let held = st
+                .list(model, archforge_core::model::MEMBER)
+                .unwrap()
+                .iter()
+                .filter_map(archforge_mof::Value::as_ref)
+                .filter(|o| st.class_of(*o).ok() == Some(archforge_diagram::DIAGRAM))
+                .count();
+            assert_eq!(held, 3);
+        }
+        // The count and the walk each have a budget of visits: past it the tree says it stopped short.
+        {
+            let st = h.state().session.as_ref().unwrap().doc();
+            assert!(!crate::diagrams::rows(st, &h.state().diagrams, h.state().kinds).cut);
+            let short = crate::diagrams::rows_within(st, &h.state().diagrams, h.state().kinds, 2);
+            assert!(short.cut, "{short:?}");
+        }
+        // The row opens the diagram; it says where its package sits, as the footer does.
+        let at = rect_of(&h, &format!("workspace.diagrams.row.{orders}")).center();
+        click(&mut h, at);
+        assert_eq!(h.state().canvas.active.map(|a| a.to_string()), Some(orders.clone()));
+        {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let package = st.by_uuid(archforge_mof::Uuid::parse(&orders_package).unwrap()).unwrap();
+            // The project, then the packages holding Orders; a root package named like the project
+            // is said once.
+            assert_eq!(crate::diagrams::trail(st, "Commerce platform", package), "Commerce platform / Sales / Orders");
+        }
+        // A group folds and opens with a click.
+        let at = rect_of(&h, "workspace.diagrams.group.uml.class").center();
+        click(&mut h, at);
+        assert_eq!(diagram_rows(&h), vec![row(0, "Class diagrams", 2), row(0, "ER diagrams", 1), row(1, "Shop", 0)]);
+        assert!(!ids(&h).iter().any(|i| i == &format!("workspace.diagrams.row.{orders}")));
+        let at = rect_of(&h, "workspace.diagrams.group.uml.class").center();
+        click(&mut h, at);
+        assert_eq!(diagram_rows(&h).len(), 5);
+        // The filter narrows the diagrams, or shows a whole group named by it; groups with no match go.
+        h.state_mut().diagrams.filter = "ord".into();
+        h.run();
+        assert_eq!(diagram_rows(&h), vec![row(0, "Class diagrams", 1), row(1, "Orders", 0)]);
+        h.state_mut().diagrams.filter = "class".into();
+        h.run();
+        assert_eq!(diagram_rows(&h), vec![row(0, "Class diagrams", 2), row(1, "Sales", 0), row(1, "Orders", 0)]);
+        h.state_mut().diagrams.filter = "zzz".into();
+        h.run();
+        assert!(diagram_rows(&h).is_empty());
+    }
+}
+
+#[test]
+fn typing_a_groups_name_opens_the_folded_folders_its_diagrams_sit_in() {
+    // A model with a folder holding a class diagram, as a project may keep one.
+    let minted = |at: u64| -> Box<dyn FnMut() -> archforge_mof::Uuid + Send> {
+        let mut n: u64 = 0;
+        Box::new(move || {
+            n += 1;
+            let mut r = [0u8; 10];
+            r[2..].copy_from_slice(&n.to_be_bytes());
+            archforge_mof::Uuid::v7(at, r)
+        })
+    };
+    let (tables, junctions) = archforge_notations::storage();
+    let fresh = archforge_notations::new_project_session("Commerce platform", minted(1_761_670_800_000)).unwrap();
+    let rows = archforge_mof::rows::snapshot(fresh.doc(), &tables, &junctions).unwrap();
+    let foldered = archforge_notations::session_from_rows_repaired(&rows, minted(1_761_670_810_000), |st| {
+        use archforge_mof::Value;
+        let model = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_core::MODEL)).unwrap();
+        let package = st.create(archforge_uml::PACKAGE).unwrap();
+        st.set(package, archforge_uml::named_element::NAME, Value::str("Sales")).unwrap();
+        st.push(model, archforge_core::model::MEMBER, Value::Ref(package)).unwrap();
+        let folder = st.create(archforge_core::FOLDER).unwrap();
+        st.set(folder, archforge_core::named_element::NAME, Value::str("Views")).unwrap();
+        st.push(model, archforge_core::model::MEMBER, Value::Ref(folder)).unwrap();
+        let d = st.create(archforge_diagram::DIAGRAM).unwrap();
+        st.set(d, archforge_diagram::diagram::KIND, Value::str(archforge_uml::CLASS_DIAGRAM)).unwrap();
+        st.set(d, archforge_diagram::diagram::NAME, Value::str("Sales")).unwrap();
+        st.set(d, archforge_diagram::diagram::ELEMENT, Value::Ref(package)).unwrap();
+        st.push(folder, archforge_core::folder::MEMBER, Value::Ref(d)).unwrap();
+        // And an ER diagram beside it, so the folder shows in both groups.
+        let schema = st.create(archforge_er::SCHEMA).unwrap();
+        st.set(schema, archforge_er::named_element::NAME, Value::str("Shop")).unwrap();
+        st.push(model, archforge_core::model::MEMBER, Value::Ref(schema)).unwrap();
+        let e = st.create(archforge_diagram::DIAGRAM).unwrap();
+        st.set(e, archforge_diagram::diagram::KIND, Value::str("er")).unwrap();
+        st.set(e, archforge_diagram::diagram::NAME, Value::str("Shop")).unwrap();
+        st.set(e, archforge_diagram::diagram::ELEMENT, Value::Ref(schema)).unwrap();
+        st.push(folder, archforge_core::folder::MEMBER, Value::Ref(e)).unwrap();
+    })
+    .unwrap();
+    let rows = archforge_mof::rows::snapshot(foldered.doc(), &tables, &junctions).unwrap();
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    h.state_mut().open_project(crate::Opened {
+        name: "Commerce platform".into(),
+        path: "/Users/robin/Documents/Archforge/Foldered.archforge".into(),
+        model: Some(std::sync::Arc::new(rows)),
+        ..Default::default()
+    });
+    h.run();
+    let row = |depth: u8, label: &str, count: usize| (depth, label.to_string(), count);
+    assert_eq!(
+        diagram_rows(&h),
+        vec![row(0, "Class diagrams", 1), row(1, "Views", 1), row(2, "Sales", 0), row(0, "ER diagrams", 1), row(1, "Views", 1), row(2, "Shop", 0)]
+    );
+    // The folder's row in each group is a control of its own.
+    let folder = {
+        let st = h.state().session.as_ref().unwrap().doc();
+        st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_core::FOLDER)).and_then(|f| st.uuid(f).ok()).unwrap()
+    };
+    let at = rect_of(&h, "workspace.explorers.diagrams").center();
+    click(&mut h, at);
+    let found = ids(&h);
+    for id in [format!("workspace.diagrams.group.uml.class.folder.{folder}"), format!("workspace.diagrams.group.er.folder.{folder}")] {
+        assert_eq!(found.iter().filter(|i| **i == id).count(), 1, "{id} once in {found:?}");
+    }
+    // Folded shut, the folder hides its diagrams; typing a group's name opens it again.
+    h.state_mut().diagrams.collapsed.insert(folder);
+    assert_eq!(diagram_rows(&h), vec![row(0, "Class diagrams", 1), row(1, "Views", 1), row(0, "ER diagrams", 1), row(1, "Views", 1)]);
+    h.state_mut().diagrams.filter = "class".into();
+    assert_eq!(diagram_rows(&h), vec![row(0, "Class diagrams", 1), row(1, "Views", 1), row(2, "Sales", 0)]);
+}
+
 #[test]
 fn a_package_added_with_nothing_selected_takes_a_name_free_in_the_root_package() {
     use crate::notation_ui::NotationUi;
@@ -4459,6 +4634,9 @@ impl crate::kinds::DiagramKind for SketchKind {
     }
     fn word(&self) -> String {
         "Sketch".into()
+    }
+    fn group_word(&self) -> String {
+        "Sketches".into()
     }
     fn owner_word(&self) -> String {
         "Package".into()

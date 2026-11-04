@@ -44,6 +44,7 @@ fn run() -> Result<(), String> {
             Some("workspace-routing") => Screen::WorkspaceRouting,
             Some("workspace-class-diagram") => Screen::WorkspaceClassDiagram,
             Some("workspace-class-diagram-read") => Screen::WorkspaceClassDiagramRead,
+            Some("workspace-diagrams") => Screen::WorkspaceDiagrams,
             Some("workspace-chat") => Screen::WorkspaceChat,
             Some("workspace-class-sizing") => Screen::WorkspaceClassSizing,
             Some("workspace-class-members") => Screen::WorkspaceClassMembers,
