@@ -5,7 +5,8 @@
 //! appearance, into the ignored `plan/screens/`, and writes beside them one contact sheet per
 //! appearance (`light.html`, `dark.html`) with every picture under its screen's name. The list of
 //! screens is read from the snapshot example itself, so a screen added there is rendered here too.
-//! The pictures are never committed; a picture is compared by eye, not by pixel, so a font or
+//! `--gallery <dir>` renders the README's gallery alone, as the release workflow does to attach it to
+//! every release. The pictures are never committed; a picture is compared by eye, not by pixel, so a font or
 //! theme change never breaks the gate.
 
 use std::path::Path;
@@ -14,6 +15,12 @@ use crate::util;
 
 const SIZE: (u32, u32) = (1440, 900);
 const THEMES: [&str; 2] = ["light", "dark"];
+
+/// The README's gallery, in its order: a screen of the snapshot example and the file stem it is
+/// published as (`screenshot-<stem>-<light|dark>.png`, attached to every release). Only screens of
+/// what the application does today.
+pub const GALLERY: [(&str, &str); 4] =
+    [("home", "home"), ("workspace-cross-schema", "er-diagram"), ("workspace-class-members", "class-diagram"), ("workspace-generate", "generate")];
 
 /// The screens the snapshot example's `--screen` takes, in its order: each `Some("<name>") =>
 /// Screen::…` arm of its match.
@@ -51,7 +58,24 @@ fn sheet(screens: &[String], theme: &str) -> String {
     )
 }
 
-pub fn run() -> Result<(), String> {
+/// `cargo xtask screens --gallery <dir>`: the README's gallery in both appearances, into `dir`.
+pub fn gallery(out: &Path) -> Result<(), String> {
+    std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
+    for (screen, stem) in GALLERY {
+        for theme in THEMES {
+            render(screen, theme, &out.join(format!("screenshot-{stem}-{theme}.png")))?;
+        }
+    }
+    println!("screens: the gallery's {} screens in {} appearances, under {}", GALLERY.len(), THEMES.len(), out.display());
+    Ok(())
+}
+
+pub fn run(args: &[String]) -> Result<(), String> {
+    match args {
+        [] => {}
+        [flag, dir] if flag == "--gallery" => return gallery(Path::new(dir)),
+        _ => return Err(format!("{args:?}: usage: cargo xtask screens [--gallery <dir>]")),
+    }
     let root = util::root();
     let snapshot = root.join("crates/ui-egui/examples/snapshot.rs");
     let text = std::fs::read_to_string(&snapshot).map_err(|e| format!("{}: {e}", snapshot.display()))?;
@@ -86,6 +110,25 @@ mod tests {
 
     /// Every screen the offscreen renderer can draw is one the snapshot example names, so the
     /// command renders them all.
+    #[test]
+    fn every_screen_of_the_gallery_is_one_the_snapshot_example_names() {
+        let snapshot = std::fs::read_to_string(util::root().join("crates/ui-egui/examples/snapshot.rs")).unwrap();
+        let named = screens(&snapshot);
+        for (screen, _) in GALLERY {
+            assert!(named.iter().any(|n| n == screen), "the gallery's {screen} is no screen of the snapshot example");
+        }
+        // The README shows each, from the latest release, in both appearances.
+        let readme = std::fs::read_to_string(util::root().join("README.md")).unwrap();
+        for (_, stem) in GALLERY {
+            for theme in THEMES {
+                assert!(
+                    readme.contains(&format!("releases/latest/download/screenshot-{stem}-{theme}.png")),
+                    "README.md shows no screenshot-{stem}-{theme}.png"
+                );
+            }
+        }
+    }
+
     #[test]
     fn every_screen_the_renderer_draws_is_rendered() {
         let root = util::root();
