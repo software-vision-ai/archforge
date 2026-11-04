@@ -52,7 +52,8 @@ walks through each screen.
 3. Open Archforge and follow [Getting started](docs/manual/02-getting-started.md) to create your
    first project.
 
-The packages are not signed yet, so the first time you open Archforge your system asks first:
+The packages are not signed yet, so the first time you open Archforge your system shows a warning
+before it lets Archforge start. To open it anyway:
 
 - **macOS** says it cannot check Archforge for malicious software. Open **System Settings** →
   **Privacy & Security**, and next to the message about Archforge choose **Open Anyway**.
