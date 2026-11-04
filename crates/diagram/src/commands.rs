@@ -175,7 +175,18 @@ fn diagram_add<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
         Some(e)
     };
     let home = ctx.view.home(ctx.doc).map_err(CommandError::new)?;
-    let d = ctx.doc.transaction(|st| {
+    let d = new_diagram(ctx.doc, kind, name, element, home).map_err(fail)?;
+    ctx.view.set_open_diagram(Some(d));
+    select(ctx, vec![d]);
+    Ok(json!({ "id": uuid_of(ctx.doc, d)? }))
+}
+
+/// A new diagram of `kind` named `name` (none when empty), of `element`, in `home`: its lines run
+/// at right angles around the nodes (owner decision; one made earlier keeps straight lines). Every
+/// diagram made, by `diagram.add` or by a notation (a package's own diagram), starts so. All or
+/// nothing.
+pub fn new_diagram(store: &mut Store, kind: &str, name: &str, element: Option<Obj>, home: Option<(Obj, PropId)>) -> Result<Obj, Invalid> {
+    store.transaction(|st| {
         let d = st.create(DIAGRAM)?;
         st.set(d, diagram::KIND, Value::str(kind))?;
         if !name.is_empty() {
@@ -184,8 +195,6 @@ fn diagram_add<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
         if let Some(e) = element {
             st.set(d, diagram::ELEMENT, Value::Ref(e))?;
         }
-        // A new diagram's lines run at right angles around the tables (owner decision);
-        // one made earlier keeps straight lines.
         let look = st.create(STYLE)?;
         st.set(look, style::ROUTING, Value::Enum(Routing::RightAngled.index()))?;
         st.set(look, style::AVOID, Value::Bool(true))?;
@@ -194,11 +203,7 @@ fn diagram_add<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
             st.push(owner, prop, Value::Ref(d))?;
         }
         Ok(d)
-    });
-    let d = d.map_err(fail)?;
-    ctx.view.set_open_diagram(Some(d));
-    select(ctx, vec![d]);
-    Ok(json!({ "id": uuid_of(ctx.doc, d)? }))
+    })
 }
 
 fn diagram_rename<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {

@@ -2607,6 +2607,37 @@ fn a_package_placed_on_a_class_diagram_leads_to_its_own_diagram_by_open_the_path
 }
 
 #[test]
+fn going_back_from_a_package_returns_to_the_parent_diagram_it_was_entered_from() {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+    // The root has two class diagrams; Sales is on the second.
+    let (second, sales) = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value).to_string();
+        s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": root, "name": "First" })).unwrap();
+        let second = id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": root, "name": "Second" })).unwrap().value);
+        let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
+        s.execute(
+            "diagram.place",
+            &serde_json::json!({ "diagram": second.to_string(), "element": sales.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 }),
+        )
+        .unwrap();
+        s.execute("uml.package.diagram", &serde_json::json!({ "package": sales.to_string() })).unwrap();
+        (second, sales)
+    };
+    crate::canvas::open(h.state_mut(), second);
+    h.run();
+    let left = (h.state().canvas.pan, h.state().canvas.zoom);
+    crate::package_nav::enter(h.state_mut(), sales, 0.0);
+    h.run();
+    rest(&mut h);
+    let at = rect_of(&h, "workspace.canvas.path.0").center();
+    click(&mut h, at);
+    assert_eq!(h.state().canvas.active, Some(second), "back on Second, not the root's first diagram");
+    assert_eq!((h.state().canvas.pan, h.state().canvas.zoom), left, "as it was left");
+}
+
+#[test]
 fn the_canvas_draws_the_diagram_and_the_pointer_selects_pans_and_zooms() {
     let (mut h, customer, diagram) = diagram_harness();
     let found = ids(&h);

@@ -44,6 +44,9 @@ pub struct Nav {
     pub(crate) intent: f32,
     /// The view each diagram had when it was left for another level, by diagram.
     pub(crate) views: HashMap<Uuid, (Vec2, f32)>,
+    /// The diagram each package's diagram was entered from, by the diagram entered: going back
+    /// returns there, though the parent package has other class diagrams too.
+    pub(crate) came_from: HashMap<Uuid, Uuid>,
     /// When the last switch happened, and when it began to fade in.
     pub(crate) switched: Option<f64>,
     /// The package to show at [`REVEAL`] of the canvas on the next frame, after a zoom out.
@@ -118,6 +121,9 @@ pub(crate) fn enter(shell: &mut Shell, package: Uuid, now: f64) {
     let Some(from) = shell.canvas.active else { return };
     let Some(d) = diagram_of(shell, package) else { return };
     shell.canvas.nav.views.insert(from, (shell.canvas.pan, shell.canvas.zoom));
+    if d != from {
+        shell.canvas.nav.came_from.insert(d, from);
+    }
     crate::canvas::open(shell, d);
     shell.canvas.fit_pending = true;
     shell.canvas.nav.switched = Some(now);
@@ -127,7 +133,8 @@ pub(crate) fn enter(shell: &mut Shell, package: Uuid, now: f64) {
 /// package just left, then shows at [`REVEAL`] of the canvas.
 pub(crate) fn leave(shell: &mut Shell, package: Uuid, reveal: Option<Uuid>, now: f64) {
     let from = shell.canvas.active;
-    let Some(d) = diagram_of(shell, package) else { return };
+    // The diagram of `package` the way in came through, while it is still of it; else its first.
+    let Some(d) = from.and_then(|f| entered_from(shell, f, package)).or_else(|| diagram_of(shell, package)) else { return };
     if let Some(from) = from {
         shell.canvas.nav.views.insert(from, (shell.canvas.pan, shell.canvas.zoom));
     }
@@ -142,6 +149,22 @@ pub(crate) fn leave(shell: &mut Shell, package: Uuid, reveal: Option<Uuid>, now:
     }
     shell.canvas.nav.reveal = reveal;
     shell.canvas.nav.switched = Some(now);
+}
+
+/// The diagram of `package` on the way that led to the diagram `from`, walking back the levels
+/// entered.
+fn entered_from(shell: &Shell, from: Uuid, package: Uuid) -> Option<Uuid> {
+    let store = shell.session.as_ref()?.doc();
+    let package = store.by_uuid(package)?;
+    let mut at = from;
+    for _ in 0..MAX_DEPTH {
+        let up = *shell.canvas.nav.came_from.get(&at)?;
+        if store.by_uuid(up).and_then(|d| package_of_diagram(store, d)) == Some(package) {
+            return Some(up);
+        }
+        at = up;
+    }
+    None
 }
 
 /// Before the canvas draws: shows the package a zoom out left, takes ⌘↓, ⌘↑ and the zoom keys,
