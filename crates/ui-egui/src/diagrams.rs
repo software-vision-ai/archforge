@@ -11,7 +11,7 @@
 //! parent, the chevron at x 13, the icon at x 31 and the name at x 53 of the first level; the
 //! footer 128 px above the column's bottom.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 
 use archforge_diagram::{DIAGRAM, diagram};
 use archforge_mof::{Obj, Store, Uuid, Value};
@@ -130,24 +130,73 @@ fn kind_word(store: &Store, d: Obj) -> String {
     store.get(d, diagram::KIND).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default()
 }
 
-/// Whether the diagram `d` shows in the group `of_kind` picks and under `filter`.
-fn shows(store: &Store, d: Obj, of_kind: &dyn Fn(&str) -> bool, filter: &str) -> bool {
-    of_kind(&kind_word(store, d)) && (filter.is_empty() || diagram_name(store, d).to_lowercase().contains(filter))
+/// The most members of the model the tree visits in a frame, once to count and once to walk; a
+/// model past it gets the filter.
+const MAX_VISITS: usize = 200_000;
+
+/// The tree's rows, and whether the walk stopped short of the model: at `MAX_ROWS` rows,
+/// `MAX_VISITS` visits or `MAX_DEPTH` levels.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct Tree {
+    pub rows: Vec<Row>,
+    pub cut: bool,
 }
 
-/// The diagrams under `owner` that show in a group, its folders' included.
-fn holds(store: &Store, owner: Obj, prop: archforge_mof::PropId, of_kind: &dyn Fn(&str) -> bool, filter: &str, depth: u8) -> usize {
-    if depth >= MAX_DEPTH {
-        return 0;
+/// A group of the tree: its diagram kind ("" for those the shell doesn't know), its name and the
+/// filter its diagrams answer to (none when the typed filter names the group).
+struct Group {
+    kind: &'static str,
+    label: String,
+    filter: String,
+}
+
+impl Group {
+    /// Whether a diagram of `kind` named `name` (lower-cased) shows in the group.
+    fn shows(&self, known: &[&str], kind: &str, name: &str) -> bool {
+        let ours = if self.kind.is_empty() { !known.contains(&kind) } else { kind == self.kind };
+        ours && (self.filter.is_empty() || name.contains(&self.filter))
     }
-    members(store, owner, prop)
-        .into_iter()
-        .map(|m| match store.class_of(m).ok() {
-            Some(c) if c == archforge_core::FOLDER => holds(store, m, archforge_core::folder::MEMBER, of_kind, filter, depth.saturating_add(1)),
-            Some(c) if c == DIAGRAM => usize::from(shows(store, m, of_kind, filter)),
-            _ => 0,
-        })
-        .sum()
+}
+
+/// The diagrams the model's folders hold for each group, from one visit of the model.
+struct Tally {
+    folders: HashMap<(Obj, usize), usize>,
+    left: usize,
+    cut: bool,
+}
+
+/// Counts the diagrams under `owner` that show in each group, noting each folder's counts in
+/// `t`; every member visited is taken from its budget.
+fn tally(store: &Store, owner: Obj, prop: archforge_mof::PropId, groups: &[Group], known: &[&str], depth: u8, t: &mut Tally) -> Vec<usize> {
+    let mut here = vec![0; groups.len()];
+    if depth >= MAX_DEPTH {
+        t.cut = true;
+        return here;
+    }
+    for m in members(store, owner, prop) {
+        if t.left == 0 {
+            t.cut = true;
+            break;
+        }
+        t.left -= 1;
+        match store.class_of(m).ok() {
+            Some(c) if c == archforge_core::FOLDER => {
+                let held = tally(store, m, archforge_core::folder::MEMBER, groups, known, depth.saturating_add(1), t);
+                for (i, n) in held.into_iter().enumerate().filter(|(_, n)| *n > 0) {
+                    t.folders.insert((m, i), n);
+                    here[i] += n;
+                }
+            }
+            Some(c) if c == DIAGRAM => {
+                let (kind, name) = (kind_word(store, m), diagram_name(store, m).to_lowercase());
+                for (i, g) in groups.iter().enumerate() {
+                    here[i] += usize::from(g.shows(known, &kind, &name));
+                }
+            }
+            _ => {}
+        }
+    }
+    here
 }
 
 /// The tree's rows: a group for each kind the shell knows, in the order of their names, holding
@@ -155,75 +204,108 @@ fn holds(store: &Store, owner: Obj, prop: archforge_mof::PropId, of_kind: &dyn F
 /// diagrams of kinds the shell doesn't know, when there are any. Grouping is the explorer's alone:
 /// the model keeps each diagram once, where it was. A filter shows the diagrams whose name holds
 /// it, or every diagram of a group whose name holds it, with their folders and groups, all open;
-/// without one every known kind's group shows, empty or not. The walk stops at `MAX_ROWS` rows
-/// and `MAX_DEPTH` levels, so a model past either gets the filter.
-pub(crate) fn rows(store: &Store, state: &State, kinds: &[&dyn crate::kinds::DiagramKind]) -> Vec<Row> {
-    let filter = state.filter.trim().to_lowercase();
-    let mut out = Vec::new();
-    let Some(model) = archforge_core::skills::model_of(store) else { return out };
-    let mut groups: Vec<(&'static str, String)> = kinds.iter().map(|k| (k.kind(), k.group_word())).collect();
-    groups.sort_by_key(|(_, word)| word.to_lowercase());
-    let known: Vec<&'static str> = groups.iter().map(|(k, _)| *k).collect();
-    groups.push(("", tr("Other diagrams")));
-    for (kind, label) in groups {
-        let of_kind = |k: &str| if kind.is_empty() { !known.contains(&k) } else { k == kind };
-        let filter = if label.to_lowercase().contains(&filter) { String::new() } else { filter.clone() };
-        let named = filter.is_empty() && !state.filter.trim().is_empty();
-        let count = holds(store, model, archforge_core::model::MEMBER, &of_kind, &filter, 0);
-        if count == 0 && (kind.is_empty() || !state.filter.trim().is_empty()) {
-            continue;
-        }
-        if out.len() >= MAX_ROWS {
-            break;
-        }
-        let expanded = count > 0 && (named || !filter.is_empty() || !state.folded.contains(kind));
-        out.push(Row { id: GROUP_ID, obj: model, depth: 0, kind: Kind::Group(kind), label, expandable: count > 0, expanded, count });
-        if expanded {
-            walk(store, state, &filter, &of_kind, model, archforge_core::model::MEMBER, 1, &mut out);
-        }
-    }
-    out
+/// without one every known kind's group shows, empty or not.
+pub(crate) fn rows(store: &Store, state: &State, kinds: &[&dyn crate::kinds::DiagramKind]) -> Tree {
+    rows_within(store, state, kinds, MAX_VISITS)
 }
 
-#[allow(clippy::too_many_arguments, reason = "the walk carries the group it fills and how deep it is")]
-fn walk(
-    store: &Store,
-    state: &State,
-    filter: &str,
-    of_kind: &dyn Fn(&str) -> bool,
-    owner: Obj,
-    prop: archforge_mof::PropId,
-    depth: u8,
-    out: &mut Vec<Row>,
-) {
-    if depth >= MAX_DEPTH {
-        return;
+/// The tree's rows, visiting at most `visits` members of the model to count them and as many to
+/// walk them.
+pub(crate) fn rows_within(store: &Store, state: &State, kinds: &[&dyn crate::kinds::DiagramKind], visits: usize) -> Tree {
+    let typed = state.filter.trim().to_lowercase();
+    let open = !typed.is_empty();
+    let mut tree = Tree::default();
+    let Some(model) = archforge_core::skills::model_of(store) else { return tree };
+    let mut groups: Vec<Group> = kinds.iter().map(|k| Group { kind: k.kind(), label: k.group_word(), filter: String::new() }).collect();
+    groups.sort_by_key(|g| g.label.to_lowercase());
+    let known: Vec<&'static str> = groups.iter().map(|g| g.kind).collect();
+    groups.push(Group { kind: "", label: tr("Other diagrams"), filter: String::new() });
+    for g in &mut groups {
+        if !g.label.to_lowercase().contains(&typed) {
+            g.filter = typed.clone();
+        }
     }
-    for m in members(store, owner, prop) {
-        if out.len() >= MAX_ROWS {
-            return;
+    let mut t = Tally { folders: HashMap::new(), left: visits, cut: false };
+    let counts = tally(store, model, archforge_core::model::MEMBER, &groups, &known, 0, &mut t);
+    tree.cut = t.cut;
+    let mut left = visits;
+    for (i, g) in groups.iter().enumerate() {
+        let count = counts[i];
+        if count == 0 && (g.kind.is_empty() || open) {
+            continue;
         }
-        let Ok(id) = store.uuid(m) else { continue };
-        match store.class_of(m).ok() {
-            Some(c) if c == archforge_core::FOLDER => {
-                // A folder shows in a group while it holds a diagram the group shows.
-                let count = holds(store, m, archforge_core::folder::MEMBER, of_kind, filter, depth.saturating_add(1));
-                if count == 0 {
-                    continue;
-                }
-                let label = archforge_core::name_of(store, m);
-                let expanded = !filter.is_empty() || !state.collapsed.contains(&id);
-                out.push(Row { id, obj: m, depth, kind: Kind::Folder, label, expandable: true, expanded, count });
-                if expanded {
-                    walk(store, state, filter, of_kind, m, archforge_core::folder::MEMBER, depth.saturating_add(1), out);
-                }
-            }
-            Some(c) if c == DIAGRAM && shows(store, m, of_kind, filter) => {
-                let label = diagram_name(store, m);
-                out.push(Row { id, obj: m, depth, kind: Kind::Diagram, label, expandable: false, expanded: false, count: 0 });
-            }
-            _ => {}
+        if tree.rows.len() >= MAX_ROWS {
+            tree.cut = true;
+            break;
         }
+        let expanded = count > 0 && (open || !state.folded.contains(g.kind));
+        tree.rows.push(Row {
+            id: GROUP_ID,
+            obj: model,
+            depth: 0,
+            kind: Kind::Group(g.kind),
+            label: g.label.clone(),
+            expandable: count > 0,
+            expanded,
+            count,
+        });
+        if expanded {
+            let walk = Walk { store, state, open, group: i, g, known: &known, folders: &t.folders };
+            if walk.walk(model, archforge_core::model::MEMBER, 1, &mut tree.rows, &mut left) {
+                tree.cut = true;
+                break;
+            }
+        }
+    }
+    tree
+}
+
+/// What a group's walk reads: the model, the explorer's state, whether a filter is typed (which
+/// opens every folder), the group and the counts.
+struct Walk<'a> {
+    store: &'a Store,
+    state: &'a State,
+    open: bool,
+    group: usize,
+    g: &'a Group,
+    known: &'a [&'static str],
+    folders: &'a HashMap<(Obj, usize), usize>,
+}
+
+impl Walk<'_> {
+    /// Adds the group's rows under `owner`: each folder holding a diagram the group shows, open
+    /// unless folded shut (a typed filter opens it), and the group's diagrams. True when it stopped
+    /// short, at `MAX_ROWS` rows or with `left` spent.
+    fn walk(&self, owner: Obj, prop: archforge_mof::PropId, depth: u8, out: &mut Vec<Row>, left: &mut usize) -> bool {
+        if depth >= MAX_DEPTH {
+            return true;
+        }
+        for m in members(self.store, owner, prop) {
+            if out.len() >= MAX_ROWS || *left == 0 {
+                return true;
+            }
+            *left -= 1;
+            let Ok(id) = self.store.uuid(m) else { continue };
+            match self.store.class_of(m).ok() {
+                Some(c) if c == archforge_core::FOLDER => {
+                    let Some(&count) = self.folders.get(&(m, self.group)) else { continue };
+                    let label = archforge_core::name_of(self.store, m);
+                    let expanded = self.open || !self.state.collapsed.contains(&id);
+                    out.push(Row { id, obj: m, depth, kind: Kind::Folder, label, expandable: true, expanded, count });
+                    if expanded && self.walk(m, archforge_core::folder::MEMBER, depth.saturating_add(1), out, left) {
+                        return true;
+                    }
+                }
+                Some(c) if c == DIAGRAM => {
+                    let label = diagram_name(self.store, m);
+                    if self.g.shows(self.known, &kind_word(self.store, m), &label.to_lowercase()) {
+                        out.push(Row { id, obj: m, depth, kind: Kind::Diagram, label, expandable: false, expanded: false, count: 0 });
+                    }
+                }
+                _ => {}
+            }
+        }
+        false
     }
 }
 
@@ -348,9 +430,9 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
         open_new(shell);
     }
     filter_field(shell, ui, p, Rect::from_min_max(at(16.0, 65.0), pos2(r.right() - 16.0, r.top() + 97.0)));
-    let rows = match &shell.session {
+    let Tree { rows, cut } = match &shell.session {
         Some(s) => rows(s.doc(), &shell.diagrams, shell.kinds),
-        None => Vec::new(),
+        None => Tree::default(),
     };
     let active = shell.canvas.active;
     let footer = active.is_some();
@@ -363,7 +445,7 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     }
     // The rows scroll under the filter; the diagram newly opened is brought into view.
     let follow = active.and_then(|a| rows.iter().position(|row| row.id == a).zip(Some(a)));
-    let tail = if rows.len() >= MAX_ROWS { 40.0 } else { 12.0 };
+    let tail = if cut { 40.0 } else { 12.0 };
     let wheel = shell.diagrams.new.is_none();
     let offset = crate::explorer::scroll_tree(ui, p, tree, r.top() + FIRST_ROW, rows.len(), ROW, tail, wheel, follow, &mut shell.diagrams.scroll);
     let mut clip = ui.new_child(egui::UiBuilder::new().max_rect(tree));
@@ -375,7 +457,7 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
         }
         tree_row(shell, &mut clip, p, r, y, row, active == Some(row.id));
     }
-    if rows.len() >= MAX_ROWS {
+    if cut {
         let y = r.top() + FIRST_ROW + rows.len() as f32 * ROW - offset;
         ux::text(
             &clip.painter().clone(),
