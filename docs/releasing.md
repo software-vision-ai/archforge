@@ -29,14 +29,17 @@ can't be released again, so the next release always bumps it first.
 
    The workflow starts by itself.
 3. **Wait for the draft.** After about 40 minutes the Releases page has the draft
-   `Archforge v<version>`, with every package and `SHA256SUMS`. Its notes are Archforge's own lines
+   `Archforge v<version>`, with every package, `SHA256SUMS` and all README gallery screenshot files.
+   Do not publish a draft with missing screenshots: the README's gallery will show broken images
+   when that draft becomes the latest release. Its notes are Archforge's own lines
    (install Dolt first, the packages are unsigned, what isn't available yet) above GitHub's notes
    from the pull requests merged since the last release: *What's Changed*, *New Contributors* and the
    *Full Changelog* link.
 4. **Check it.** Download a package or two, and follow the
    [release checklist](release-checklist.md) in the running app.
 5. **Publish** the draft on GitHub. Publishing creates the tag `v<version>` on the commit that was
-   built.
+   built. Open the rendered README and check that all four gallery images load in both light and
+   dark appearance.
 
 Pushing to `release` again before publishing rebuilds the same draft: its packages and notes are
 replaced. Once the draft is published, the workflow refuses that version, so bump it first.

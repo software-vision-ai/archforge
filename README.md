@@ -1,52 +1,90 @@
 # Archforge
 
-Archforge is a desktop modelling application for macOS, Windows and Linux, built as one Rust
-workspace, where people and AI agents work on the same model. Today it designs relational
-databases on ER diagrams (schemas with tables, columns, keys, relationships, checks, indexes,
-domains, enum types, subtypes, sequences and views) and class models on UML class diagrams
-(packages, classes, attributes, operations and their relationships), edited on the diagrams and in
-the Properties panel, with skills to guide people and agents, undo and redo for every change, in a
-light and a dark appearance. A project is stored in [Dolt](https://github.com/dolthub/dolt) 2.6 or a
-later 2.x, found through `ARCHFORGE_DOLT`, on the `PATH`, or on macOS where Homebrew and Dolt's
-installer put it.
+Archforge helps you design software systems with diagrams. Draw a database with an ER diagram or
+explore classes and their relationships with a UML class diagram. You can work on the model
+yourself, or invite an AI agent to work alongside you and see its changes appear on screen.
 
-The [user manual](docs/manual/README.md) takes a first-time user from starting Archforge to a
-small ER and UML model, and shows how an agent works with it.
+[Download Archforge](https://github.com/software-vision-ai/archforge/releases) or follow the
+[first steps in the user manual](docs/manual/README.md). Archforge runs on macOS, Windows and
+Linux.
 
 ## Screenshots
 
 From the latest release, in your appearance (light or dark); the [user manual](docs/manual/README.md)
 walks through each screen.
 
-**Home**
+**Start a project**
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-home-dark.png">
   <img src="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-home-light.png" alt="Home: start a new project or open one, with pinned folders and recent projects below." width="100%">
 </picture>
 
-**An ER diagram**
+**Plan a database**
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-er-diagram-dark.png">
-  <img src="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-er-diagram-light.png" alt="An ER diagram: tables with their keys and relationships, one from a second schema, and the selected table's columns in Properties." width="100%">
+  <img src="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-er-diagram-light.png" alt="Customer, Order and Account tables connected in a database diagram, with Order's details on the right." width="100%">
 </picture>
 
-**A UML class diagram**
+**Explore classes**
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-class-diagram-dark.png">
-  <img src="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-class-diagram-light.png" alt="A UML class diagram of a package, with the selected class's attributes and operations in Properties." width="100%">
+  <img src="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-class-diagram-light.png" alt="A class diagram connecting Customer, Order and related classes, with Order's details on the right." width="100%">
 </picture>
 
-**Generate**
+**Create an output with an agent**
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-generate-dark.png">
-  <img src="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-generate-light.png" alt="File → Generate: what an agent connected to Archforge writes from the model and its skills, here SQL DDL, and the request to hand it." width="100%">
+  <img src="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-generate-light.png" alt="The Generate dialog offers SQL or documentation and a request to copy to an external AI agent." width="100%">
 </picture>
 
-## Building
+## Get started
+
+1. [Install Dolt](https://docs.dolthub.com/introduction/installation), which Archforge uses to
+   save your projects. Use version 2.6 or a later 2.x.
+2. [Download Archforge](https://github.com/software-vision-ai/archforge/releases) for macOS,
+   Windows or Linux.
+3. Open Archforge and follow [Getting started](docs/manual/02-getting-started.md) to create your
+   first project.
+
+The current packages are not signed, so your system may ask for an extra confirmation the first
+time you open Archforge. The [getting-started guide](docs/manual/02-getting-started.md) explains
+what to expect.
+
+## Work with an AI agent
+
+An external AI agent can help you explore or change the project you have open. Its changes appear
+in Archforge as they happen, and you can undo them. You can also ask an agent to write SQL or
+documentation from your model. Agent access is optional and currently available on macOS and
+Linux.
+
+See [Working with an agent](docs/manual/07-agents.md) for setup steps and an example.
+
+## Supporting Archforge
+
+Archforge is free and stays free: a contribution unlocks nothing. If it helps your work, you can
+support its development:
+
+- [Ko-fi](https://ko-fi.com/dejanwho): a one-time tip to Dejan, who develops Archforge.
+- GitHub Sponsors, one-time or monthly, for the software-vision-ai organization: the link appears
+  here once its Sponsors profile is published.
+
+The repository's Sponsor button and the app's About Archforge (the bar's Help button) offer the
+same.
+
+## Contributing
+
+Read [Contributing](CONTRIBUTING.md) for how to propose a change and [Contributor rules](AGENTS.md)
+for how we work. Everyone taking part agrees to the [Code of Conduct](CODE_OF_CONDUCT.md).
+Report security problems as [Security](SECURITY.md) describes, not in a public issue.
+
+<details>
+<summary>Building and checking from source (for contributors)</summary>
+
+### Building
 
 ```sh
 cargo run -p archforge
@@ -65,28 +103,7 @@ The interface is drawn in Inter. The build embeds it from a checkout of
 git clone https://github.com/storytold/craft-fonts ../craft-fonts
 ```
 
-## Agent access
-
-An agent can work in the open project while you watch: start Archforge with a control port, and
-let the agent run the MCP server of `archforge-cli`, bridged to that port.
-
-```sh
-cargo run -p archforge -- --control 47000
-cargo build -p archforge-cli
-```
-
-`.mcp.json` registers `target/debug/archforge-cli mcp --bridge 47000` for agents that read it. The
-agent gets one tool per command (`er_entity_add`, `er_relationship_add`, `diagram_place`, ...) with
-its parameters, plus `batch`, `undo`, `redo`, `inspect_document` and `save_project`, which saves the project as
-the Save button does; `--compact` lists the general
-tools and `search_tools` instead, for agents short of context. Every
-change the agent makes runs through Archforge's commands, so it shows in the window at once and
-undo takes it back. The port listens on the loopback interface only, and a token minted for each
-start, in a file only you can read in Archforge's settings folder, guards it. Without
-`--control` nothing listens. macOS and Linux for now. `archforge-cli app <method> [<json>] --port
-47000` sends one request by hand; `archforge-cli commands` lists the commands.
-
-## Checking
+### Checking
 
 ```sh
 cargo xtask ci
@@ -111,45 +128,7 @@ release, follow the [release checklist](docs/release-checklist.md) once in the r
 Releases are cut as [docs/releasing.md](docs/releasing.md) describes: bump the version with
 `cargo xtask version`, push `main` to the `release` branch, and publish the draft it builds.
 
-## Downloads
-
-Ready-made packages are on the [Releases](https://github.com/software-vision-ai/archforge/releases)
-page, each with its SHA-256 in `SHA256SUMS`:
-
-| System | Download | To install |
-|---|---|---|
-| macOS 11 or later (Apple silicon and Intel) | `archforge-<version>-macos-universal.dmg` | Open it and drag Archforge to Applications. |
-| Windows 10 or later (x64), Windows 11 on ARM (ARM64) | `archforge-<version>-windows-x64.msi` or `-windows-arm64.msi`, or the `.zip` to run without installing | Run the installer. |
-| Linux (x86_64, aarch64; glibc 2.35 or later) | the `.AppImage`, or the `.deb`, `.rpm` or `.tar.gz` | Make the AppImage executable and start it, or install the package. |
-
-**Install Dolt first.** Archforge keeps every project in [Dolt](https://docs.dolthub.com/introduction/installation)
-2.6 or a later 2.x. It finds `dolt` through `ARCHFORGE_DOLT` (its absolute path), else on the
-`PATH`; on macOS also where Homebrew and Dolt's installer put it (`/opt/homebrew/bin`,
-`/usr/local/bin`), so an Archforge opened from Finder finds it too.
-
-The packages are not signed yet, so the system asks before it opens Archforge the first time:
-
-- **macOS** says it cannot check Archforge for malicious software. Open **System Settings** →
-  **Privacy & Security**, and next to the message about Archforge choose **Open Anyway**.
-- **Windows** SmartScreen says it protected your PC. Choose **More info**, then **Run anyway**.
-
-## Supporting Archforge
-
-Archforge is free and stays free: a contribution unlocks nothing. If it helps your work, you can
-support its development:
-
-- [Ko-fi](https://ko-fi.com/dejanwho): a one-time tip to Dejan, who develops Archforge.
-- GitHub Sponsors, one-time or monthly, for the software-vision-ai organization: the link appears
-  here once its Sponsors profile is published.
-
-The repository's Sponsor button and the app's About Archforge (the bar's Help button) offer the
-same.
-
-## Contributing
-
-Read `CONTRIBUTING.md` for how to propose a change and `AGENTS.md` for the rules every change
-follows. Everyone taking part agrees to `CODE_OF_CONDUCT.md`. Report security problems as
-`SECURITY.md` describes, not in a public issue.
+</details>
 
 ## Licence
 
