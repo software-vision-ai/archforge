@@ -58,8 +58,15 @@ fn sheet(screens: &[String], theme: &str) -> String {
     )
 }
 
+/// `dir` as the caller meant it, from where they ran the command: the renderer runs from the
+/// repository's root, where a relative path would point elsewhere.
+fn resolved(dir: &Path) -> Result<std::path::PathBuf, String> {
+    std::path::absolute(dir).map_err(|e| format!("{}: {e}", dir.display()))
+}
+
 /// `cargo xtask screens --gallery <dir>`: the README's gallery in both appearances, into `dir`.
 pub fn gallery(out: &Path) -> Result<(), String> {
+    let out = &resolved(out)?;
     std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
     for (screen, stem) in GALLERY {
         for theme in THEMES {
@@ -99,6 +106,13 @@ pub fn run(args: &[String]) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_relative_gallery_directory_is_taken_from_where_the_command_ran() {
+        let dir = resolved(Path::new("pictures")).unwrap();
+        assert!(dir.is_absolute());
+        assert_eq!(dir, std::env::current_dir().unwrap().join("pictures"));
+    }
 
     #[test]
     fn the_screens_are_read_from_the_snapshot_examples_match() {
