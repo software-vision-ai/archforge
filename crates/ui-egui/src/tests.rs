@@ -2720,6 +2720,23 @@ fn in_a_narrow_window_the_kinds_cards_stand_one_above_the_other() {
 }
 
 #[test]
+fn a_package_added_with_nothing_selected_takes_a_name_free_in_the_root_package() {
+    use crate::notation_ui::NotationUi;
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    let names = |h: &Harness<'static, Shell>| {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let root = archforge_uml::commands::root_package(st).expect("the root package");
+        archforge_uml::commands::subpackages(st, root).into_iter().map(|p| archforge_core::name_of(st, p)).collect::<Vec<_>>()
+    };
+    for _ in 0..2 {
+        let added = crate::uml_ui::UmlUi.add(h.state_mut(), "package", None).expect("a package offer");
+        assert!(added.as_ref().err().is_none(), "{:?}", added.err());
+        h.run();
+    }
+    assert_eq!(names(&h), ["Package 1", "Package 2"], "the second package is named apart from the first, both in the root");
+}
+
+#[test]
 fn the_canvas_draws_the_diagram_and_the_pointer_selects_pans_and_zooms() {
     let (mut h, customer, diagram) = diagram_harness();
     let found = ids(&h);
