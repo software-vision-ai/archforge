@@ -355,6 +355,16 @@ What is UML's own, beside the shared rules above.
   root while it is still to be made, and Create makes it). It cannot be moved or removed; removing
   a package hands its contents up, in the end into the root. A project opened without one gets it,
   its top-level packages moved in, as one undoable step.
+- A package on a class diagram (AR-95, owner decisions 2026-11-04) is a tabbed card, eyebrow
+  PACKAGE, listing what it holds (classes, then its packages marked ▸). Only a package the
+  diagram's package holds goes on it. Every package placed on a canvas has its own class diagram,
+  made with it in one undo step (an existing one is reused); renaming the package renames a diagram
+  still named like it. Selected, its card shows Open; ⌘↓ opens it too, and zooming in until it
+  covers 60 % of the canvas does. The path bar at the canvas's top left (root to here, ancestors as
+  buttons), ⌘↑, or zooming out until the diagram covers under 20 % (or the least zoom) goes back,
+  the parent's view as it was left, after a zoom out the package a third of the view wide.
+  Thresholds rest 0.6 s after a switch; a switch fades in over 0.2 s. A double click renames, never
+  navigates.
 - A class is a plain card: the surface's white with the plain border, its eyebrow CLASS, its name,
   then two compartments under dividing lines, attributes and operations, each shown even when
   empty. An abstract class's name, and an abstract operation, are slanted.

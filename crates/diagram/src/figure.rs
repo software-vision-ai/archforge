@@ -28,6 +28,9 @@ pub struct Card {
     pub compartments: Vec<Vec<Row>>,
     /// The words for the rows past the card's height, one and many, each with `{n}`.
     pub more: (&'static str, &'static str),
+    /// Rows the notation left out of its compartments, past the most it lists (a package holding
+    /// many elements): counted with those past the card's height.
+    pub hidden: usize,
     /// An element of another scope than the diagram's (a table of another schema): drawn dimmed,
     /// its outline dashed.
     pub elsewhere: bool,
@@ -44,6 +47,8 @@ pub enum Tone {
     Tinted,
     /// The plain surface with the plain border, its eyebrow muted: a class.
     Plain,
+    /// [`Tone::Plain`] with a tab at its top left, as a folder: a package.
+    Tabbed,
 }
 
 /// A row of a compartment: a mark before it (such as `PK`, shown while the status marks are on),

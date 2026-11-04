@@ -526,6 +526,7 @@ str		The diagram is of no package	The diagram is of no package
 str		This class	This class
 str		This package	This package
 plural		+ {n} more member	+ {n} more member|+ {n} more members
+plural		+ {n} more element	+ {n} more element|+ {n} more elements
 # Class members in Properties
 str		Abstract	Abstract
 str		Add attribute	Add attribute
@@ -556,6 +557,11 @@ str		This attribute	This attribute
 str		This operation	This operation
 str		Visibility	Visibility
 str		Place class	Place class
+str		Add package	Add package
+str		Place package	Place package
+str		Open this package's diagram	Open this package's diagram
+str		Open this package's diagram (⌘↓)	Open this package's diagram (⌘↓)
+str		Only a package this diagram's package holds goes on it	Only a package this diagram's package holds goes on it
 # Relating classes
 str		A bound can be at most {max}.	A bound can be at most {max}.
 str		A relationship joins two classes	A relationship joins two classes

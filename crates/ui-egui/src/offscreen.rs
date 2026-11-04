@@ -66,6 +66,10 @@ pub enum Screen {
     WorkspaceClassDiagram,
     /// The sample class model to read: members, every line kind and end.
     WorkspaceClassDiagramRead,
+    /// A class diagram of the root package with two packages on it, Sales selected with its Open.
+    WorkspacePackages,
+    /// Inside Sales: its classes, a package of its own, and the path bar back to the root.
+    WorkspaceInsidePackage,
     /// The Diagrams explorer with its groups: two class diagrams, one of a nested package and
     /// open, and an ER diagram.
     WorkspaceDiagrams,
@@ -292,6 +296,10 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
     if screen == Screen::WorkspaceClassDiagram {
         shell.adopt_project();
         sample_class_diagram(&mut shell)?;
+    }
+    if matches!(screen, Screen::WorkspacePackages | Screen::WorkspaceInsidePackage) {
+        shell.adopt_project();
+        sample_packages(&mut shell, screen == Screen::WorkspaceInsidePackage)?;
     }
     if screen == Screen::WorkspaceDiagrams {
         shell.adopt_project();
@@ -791,6 +799,49 @@ fn sample_class_diagram(shell: &mut Shell) -> Result<(), String> {
         shell.explorer.expanded.insert(root);
     }
     crate::canvas::open(shell, diagram);
+    Ok(())
+}
+
+/// The root package's class diagram with Customer and two packages, Sales and Billing, each with
+/// its own diagram; Sales holds Order, OrderLine and a package Payments. Sales is selected, or,
+/// `inside`, its diagram is open.
+fn sample_packages(shell: &mut Shell, inside: bool) -> Result<(), String> {
+    use serde_json::json;
+    let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
+    let run = |session: &mut archforge_notations::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
+        let out = session.execute(command, &params).map_err(|e| format!("{command}: {e:?}"))?;
+        Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
+    };
+    let root = run(session, "uml.model.root", json!({}))?;
+    let top = run(session, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": root, "name": "Commerce platform" }))?;
+    let customer = run(session, "uml.class.add", json!({ "package": root, "name": "Customer" }))?;
+    run(session, "diagram.place", json!({ "diagram": top, "element": customer, "x": 80, "y": 120 }))?;
+    let (w, h) = archforge_uml::PACKAGE_SIZE;
+    let mut sales = String::new();
+    for (name, x) in [("Sales", 420), ("Billing", 760)] {
+        let p = run(session, "uml.package.add", json!({ "name": name, "parent": root }))?;
+        run(session, "diagram.place", json!({ "diagram": top, "element": p, "x": x, "y": 120, "width": w, "height": h }))?;
+        run(session, "uml.package.diagram", json!({ "package": p }))?;
+        if name == "Sales" {
+            sales = p;
+        }
+    }
+    let inner = run(session, "uml.package.diagram", json!({ "package": sales }))?;
+    for (name, x) in [("Order", 80), ("OrderLine", 420)] {
+        let c = run(session, "uml.class.add", json!({ "package": sales, "name": name }))?;
+        run(session, "diagram.place", json!({ "diagram": inner, "element": c, "x": x, "y": 120 }))?;
+    }
+    let payments = run(session, "uml.package.add", json!({ "name": "Payments", "parent": sales }))?;
+    run(session, "diagram.place", json!({ "diagram": inner, "element": payments, "x": 760, "y": 120, "width": w, "height": h }))?;
+    run(session, "uml.package.diagram", json!({ "package": payments }))?;
+    session.mark_saved().map_err(|e| format!("mark_saved: {e:?}"))?;
+    let id = |s: &str| archforge_mof::Uuid::parse(s).ok_or_else(|| "the sample's ids".to_string());
+    crate::canvas::open(shell, id(if inside { &inner } else { &top })?);
+    if !inside {
+        let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
+        run(session, "view.select", json!({ "ids": [sales] }))?;
+    }
+    shell.canvas.fit_pending = true;
     Ok(())
 }
 

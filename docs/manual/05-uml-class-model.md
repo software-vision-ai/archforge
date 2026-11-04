@@ -84,4 +84,31 @@ what it holds up to the package around it, in the end the root package, which it
 A project made before the root package existed gets one when it opens: its top-level packages move
 into it, as one step you can undo.
 
+## Packages on a diagram, and the diagram inside each
+
+A package can sit on a class diagram beside classes, drawn as a card with a tab, like a folder,
+listing the classes and packages it holds. Every package on a diagram leads to a class diagram of
+its own.
+
+- **Add one** with the **Package** tool of the toolbar: click where it goes and type its name. The
+  package goes into the diagram's package, and its own diagram, named like it, is made with it.
+  Both are one step you can undo. A package dragged from Models onto the diagram of the package
+  that holds it lands there too, and gets its diagram if it has none yet.
+- **Go in.** Select the package and choose **Open** on its card, or press ⌘↓ (Ctrl+↓). Or zoom in
+  on it, with a pinch, the scroll wheel with ⌘ (Ctrl), the zoom buttons, or + while the canvas has
+  the keyboard. Once the package covers most of the view, its diagram opens. A double click still
+  renames the package, as it does a class.
+- **Come back.** The path bar at the canvas's top left names the packages from your project's root
+  down to the one open. Choose one of them, or press ⌘↑ (Ctrl+↑) for the parent. Or zoom out until
+  what the diagram shows is small. The parent comes back as you left it; after a zoom out, the
+  package you were in shows a third of the view wide.
+
+After a switch, zooming rests for a moment, so one long gesture never passes through two levels.
+Renaming a package renames its diagram too, as long as the diagram still carries the package's
+name.
+
+<!-- picture: workspace-packages light | A class diagram of the root package: Customer and two packages, Sales selected with its Open -->
+
+<!-- picture: workspace-inside-package dark | Inside Sales: its classes, its own package Payments, and the path bar back to the root -->
+
 Next: [Skills](06-skills.md).

@@ -32,6 +32,8 @@ pub const CLASS_DIAGRAM: &str = "uml.class";
 /// A class card's width and height when the user names none: the header, an attribute row, an
 /// operation row and the line between them.
 pub const CLASS_SIZE: (f64, f64) = (240.0, 136.0);
+/// A package's card as it is placed: its name, and a few of what it holds.
+pub const PACKAGE_SIZE: (f64, f64) = (240.0, 148.0);
 
 /// UML in a project's view: class diagrams of a package showing its
 /// classes as plain cards with their attributes and operations, and the associations,
@@ -62,17 +64,21 @@ impl Notation for UmlNotation {
     }
 
     fn shows(&self, _kind: &str, class: ClassId) -> bool {
-        class == CLASS
+        class == CLASS || class == PACKAGE
     }
 
-    /// A package's diagram shows its own classes and, as outsiders, classes of other packages.
+    /// A package's diagram shows its own classes and, as outsiders, classes of other packages; and
+    /// the packages it holds, each leading to its own diagram (AR-95).
     fn may_show(&self, store: &Store, diagram: Obj, element: Obj) -> bool {
         let of = store.get(diagram, archforge_diagram::diagram::ELEMENT).ok().and_then(|v| v.as_ref());
-        of.is_some() && commands::package_of(store, element).is_some()
+        match store.class_of(element).ok() {
+            Some(c) if c == PACKAGE => of.is_some() && commands::package_of(store, element) == of,
+            _ => of.is_some() && commands::package_of(store, element).is_some(),
+        }
     }
 
-    fn default_size(&self, _class: ClassId) -> (f64, f64) {
-        CLASS_SIZE
+    fn default_size(&self, class: ClassId) -> (f64, f64) {
+        if class == PACKAGE { PACKAGE_SIZE } else { CLASS_SIZE }
     }
 
     /// Associations, generalizations and dependencies.
@@ -126,8 +132,8 @@ impl Notation for UmlNotation {
 pub static ALONE: &[&dyn Notation] = &[&UmlNotation];
 
 /// The words UML's figures say, for the shell's catalogue: the texts, and the plural.
-pub const WORDS: &[&str] = &["Class", "Class · {package}"];
-pub const PLURALS: &[&str] = &["+ {n} more member"];
+pub const WORDS: &[&str] = &["Class", "Class · {package}", "Package"];
+pub const PLURALS: &[&str] = &["+ {n} more member", "+ {n} more element"];
 
 /// The command registry of UML alone: the edit area, the shared element commands, UML's, the
 /// diagrams' and the skills'.

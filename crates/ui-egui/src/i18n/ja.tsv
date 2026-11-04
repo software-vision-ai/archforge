@@ -527,6 +527,7 @@ str		The diagram is of no package	この図はどのパッケージにも属し�
 str		This class	このクラス
 str		This package	このパッケージ
 plural		+ {n} more member	+ 他 {n} メンバー
+plural		+ {n} more element	+ 他 {n} 要素
 # プロパティのクラスメンバー
 str		Abstract	抽象
 str		Add attribute	属性を追加
@@ -557,6 +558,11 @@ str		This attribute	この属性
 str		This operation	この操作
 str		Visibility	可視性
 str		Place class	クラスを配置
+str		Add package	パッケージを追加
+str		Place package	パッケージを配置
+str		Open this package's diagram	このパッケージの図を開く
+str		Open this package's diagram (⌘↓)	このパッケージの図を開く (⌘↓)
+str		Only a package this diagram's package holds goes on it	この図のパッケージに含まれるパッケージだけを置けます
 # クラスの関係
 str		A bound can be at most {max}.	境界は最大 {max} までです。
 str		A relationship joins two classes	関係は 2 つのクラスを結びます

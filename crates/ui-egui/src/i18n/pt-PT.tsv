@@ -527,6 +527,7 @@ str		The diagram is of no package	O diagrama não é de nenhum pacote
 str		This class	Esta classe
 str		This package	Este pacote
 plural		+ {n} more member	+ {n} membro mais|+ {n} membros mais
+plural		+ {n} more element	+ {n} elemento mais|+ {n} elementos mais
 # Membros de classe nas Propriedades
 str		Abstract	Abstrata
 str		Add attribute	Adicionar atributo
@@ -557,6 +558,11 @@ str		This attribute	Este atributo
 str		This operation	Esta operação
 str		Visibility	Visibilidade
 str		Place class	Colocar classe
+str		Add package	Adicionar pacote
+str		Place package	Colocar pacote
+str		Open this package's diagram	Abrir o diagrama deste pacote
+str		Open this package's diagram (⌘↓)	Abrir o diagrama deste pacote (⌘↓)
+str		Only a package this diagram's package holds goes on it	Só cabe um pacote que esteja dentro do pacote deste diagrama
 # Relacionar classes
 str		A bound can be at most {max}.	Um limite pode ser no máximo {max}.
 str		A relationship joins two classes	Uma relação liga duas classes

@@ -29,6 +29,7 @@ pub(crate) struct UmlKind;
 
 const TOOLS: &[KindTool] = &[
     KindTool { key: "class", icon: &icons::TOOL_CLASS, hint: "Class", use_: ToolUse::Place, chevron: None },
+    KindTool { key: "package", icon: &icons::PACKAGE, hint: "Package", use_: ToolUse::Place, chevron: None },
     KindTool {
         key: "relationship",
         icon: &icons::TOOL_RELATIONSHIP,
@@ -104,7 +105,11 @@ impl DiagramKind for UmlKind {
 
     /// A class in the diagram's package, its card centred under the click, as one undo step; then
     /// its name is open for typing.
-    fn place(&self, shell: &mut Shell, _tool: &'static str, d: Obj, x: f64, y: f64) {
+    fn place(&self, shell: &mut Shell, tool: &'static str, d: Obj, x: f64, y: f64) {
+        if tool == "package" {
+            place_package(shell, d, x, y);
+            return;
+        }
         shell.canvas.notice = None;
         let Some(session) = shell.session.as_mut() else { return };
         let store = session.doc();
@@ -173,7 +178,25 @@ impl DiagramKind for UmlKind {
     }
 
     fn rename(&self, shell: &mut Shell, element: Uuid, name: &str) -> Result<(), String> {
+        let package = shell
+            .session
+            .as_ref()
+            .map(|s| s.doc())
+            .is_some_and(|st| st.by_uuid(element).is_some_and(|o| class(st, o) == Some(archforge_uml::PACKAGE)));
+        if package {
+            return crate::editing::run(shell, "uml.package.rename", json!({ "package": element.to_string(), "name": name })).map(|_| ());
+        }
         crate::editing::run(shell, "uml.class.rename", json!({ "class": element.to_string(), "name": name })).map(|_| ())
+    }
+
+    /// A class, or a package on the diagram, goes from the model with ⇧⌫ (AR-95).
+    fn deletes(&self, store: &Store, element: Obj) -> bool {
+        matches!(class(store, element), Some(c) if c == archforge_uml::CLASS || c == archforge_uml::PACKAGE)
+    }
+
+    /// A package on a class diagram renames in place with a double click, as a class does.
+    fn renames_in_place(&self, store: &Store, element: Obj) -> bool {
+        class(store, element) == Some(archforge_uml::PACKAGE)
     }
 
     /// The class in Properties with the editor of the member at `row` of its card (its
@@ -228,6 +251,10 @@ impl DiagramKind for UmlKind {
     fn drop(&self, shell: &mut Shell, d: Obj, element: Uuid, at: (f64, f64)) {
         shell.canvas.notice = None;
         let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+        if store.by_uuid(element).is_some_and(|o| class(store, o) == Some(archforge_uml::PACKAGE)) {
+            drop_package(shell, d, element, at);
+            return;
+        }
         let Some(c) = store.by_uuid(element).filter(|c| class(store, *c) == Some(archforge_uml::CLASS)) else { return };
         if crate::editing::on_diagram(store, d, c) {
             shell.canvas.notice = Some(tr("Already on this diagram"));
@@ -242,6 +269,81 @@ impl DiagramKind for UmlKind {
             .collect();
         let (width, _) = archforge_uml::CLASS_SIZE;
         crate::editing::place_with_lines(shell, d, c, at, (width, content_height(store, c)), &links, &notation, &tr("Place class"));
+    }
+}
+
+/// The Package tool: a package in the diagram's package, its card centred under the click, and the
+/// package's own diagram, as one undo step (AR-95); then its name is open for typing.
+fn place_package(shell: &mut Shell, d: Obj, x: f64, y: f64) {
+    shell.canvas.notice = None;
+    let Some(session) = shell.session.as_mut() else { return };
+    let store = session.doc();
+    let Some(parent) = store.get(d, archforge_diagram::diagram::ELEMENT).ok().and_then(|v| v.as_ref()) else {
+        shell.canvas.notice = Some(tr("The diagram is of no package"));
+        return;
+    };
+    let (Ok(parent_id), Ok(diagram_id)) = (store.uuid(parent), store.uuid(d)) else { return };
+    let taken = archforge_uml::commands::subpackages(store, parent).into_iter().map(|p| name(store, p));
+    let Some(package_name) = fresh_name("Package", taken, false) else {
+        shell.canvas.notice = Some(tr("No free name is left"));
+        return;
+    };
+    let (w, h) = archforge_uml::PACKAGE_SIZE;
+    let (px, py) = ((x - w / 2.0).round(), (y - h / 2.0).round());
+    let for_batch = package_name.clone();
+    let out = session.batch(&tr("Add package"), |b| {
+        let made = b.execute("uml.package.add", &json!({ "name": for_batch, "parent": parent_id.to_string() }))?;
+        let package = made.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string();
+        b.execute("diagram.place", &json!({ "diagram": diagram_id.to_string(), "element": package, "x": px, "y": py, "width": w, "height": h }))?;
+        b.execute("uml.package.diagram", &json!({ "package": package }))?;
+        Ok(())
+    });
+    match out {
+        Ok(o) => {
+            let id_at = |i: usize| o.value.get(i).and_then(|v| v.get("id")).and_then(|v| v.as_str()).and_then(Uuid::parse);
+            if let (Some(package), Some(node)) = (id_at(0), id_at(1)) {
+                let _ = crate::editing::run(shell, "view.select", json!({ "ids": [package.to_string()] }));
+                shell.canvas.rename = Some(crate::editing::NodeRename { node, entity: package, text: package_name, opened: true, refused: None });
+                shell.canvas.focused = true;
+            }
+            shell.canvas.tool = crate::canvas::Tool::Select;
+        }
+        Err(e) => shell.canvas.notice = Some(e.to_string()),
+    }
+}
+
+/// A package dragged from Models onto a class diagram: placed where it was let go, with its own
+/// diagram made when it has none, as one undo step. Only a package the diagram's package holds
+/// goes on it.
+fn drop_package(shell: &mut Shell, d: Obj, element: Uuid, at: (f64, f64)) {
+    let Some(session) = shell.session.as_mut() else { return };
+    let store = session.doc();
+    let Some(package) = store.by_uuid(element) else { return };
+    if crate::editing::on_diagram(store, d, package) {
+        shell.canvas.notice = Some(tr("Already on this diagram"));
+        return;
+    }
+    let here = store.get(d, archforge_diagram::diagram::ELEMENT).ok().and_then(|v| v.as_ref());
+    if here.is_none() || package_of(store, package) != here {
+        shell.canvas.notice = Some(tr("Only a package this diagram's package holds goes on it"));
+        return;
+    }
+    let Ok(diagram_id) = store.uuid(d) else { return };
+    let (w, h) = archforge_uml::PACKAGE_SIZE;
+    let (px, py) = ((at.0 - w / 2.0).round(), (at.1 - h / 2.0).round());
+    let out = session.batch(&tr("Place package"), |b| {
+        b.execute(
+            "diagram.place",
+            &json!({ "diagram": diagram_id.to_string(), "element": element.to_string(), "x": px, "y": py, "width": w, "height": h }),
+        )?;
+        b.execute("uml.package.diagram", &json!({ "package": element.to_string() }))?;
+        Ok(())
+    });
+    match out {
+        Ok(_) => {
+            let _ = crate::editing::run(shell, "view.select", json!({ "ids": [element.to_string()] }));
+        }
+        Err(e) => shell.canvas.notice = Some(e.to_string()),
     }
 }
 
