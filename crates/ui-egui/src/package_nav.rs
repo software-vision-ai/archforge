@@ -428,12 +428,11 @@ fn drop_target(shell: &Shell, view: crate::canvas::View, d: Obj, node: Uuid, at:
     if let Some((_, to)) = shell.canvas.nav.pills.iter().find(|(r, _)| r.contains(at)) {
         return store.by_uuid(*to).map(|t| (package, t)).filter(|(p, t)| archforge_uml::commands::package_of(store, *p) != Some(*t));
     }
-    let target = nodes(store, d)
-        .into_iter()
-        .rev()
-        .filter(|m| *m != n)
-        .find(|m| screen(view, store, *m).contains(at) && element(store, *m).is_some_and(|e| is_package(store, e)))?;
-    Some((package, element(store, target)?))
+    // The topmost card under the pointer, the dragged one aside: a package's takes the drop; a
+    // class or note over one keeps it a move on the diagram.
+    let top = nodes(store, d).into_iter().rev().filter(|m| *m != n).find(|m| screen(view, store, *m).contains(at))?;
+    let target = element(store, top).filter(|e| is_package(store, *e))?;
+    Some((package, target))
 }
 
 /// A package's card held over a place it may go: that place ringed, and what the drop does said.
@@ -468,17 +467,19 @@ fn drop_feedback(shell: &Shell, ui: &egui::Ui, p: &Palette, r: Rect, d: Obj) {
 /// then).
 pub(crate) fn drop_moves(shell: &mut Shell, view: crate::canvas::View, d: Obj, node: Uuid, at: egui::Pos2) -> bool {
     let Some((package, to)) = drop_target(shell, view, d, node, at) else { return false };
-    move_and_place(shell, package, to);
+    if let Err(e) = move_and_place(shell, package, to) {
+        shell.canvas.notice = Some(e);
+    }
     true
 }
 
 /// Moves `package` into `to` with what it holds and its own diagram, and places it on the diagram
 /// of `to` (made when it has none), right of what that shows: one undo step, with a toast offering
-/// Undo, as a canvas drop and Properties' Parent package both do (AR-102). A refusal is said on
-/// the canvas.
-pub(crate) fn move_and_place(shell: &mut Shell, package: Obj, to: Obj) {
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
-    let (Ok(package_id), Ok(to_id)) = (store.uuid(package), store.uuid(to)) else { return };
+/// Undo, as a canvas drop, Properties' Parent package and a drop in Models all do (AR-102); the
+/// engine's refusal (into itself or a package it holds) is given back for the caller to say.
+pub(crate) fn move_and_place(shell: &mut Shell, package: Obj, to: Obj) -> Result<(), String> {
+    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return Ok(()) };
+    let (Ok(package_id), Ok(to_id)) = (store.uuid(package), store.uuid(to)) else { return Ok(()) };
     let (what, into) = (archforge_core::name_of(store, package), archforge_core::name_of(store, to));
     // On the new home's diagram, right of what it shows.
     let shown: Vec<archforge_diagram::Rect> = archforge_uml::commands::diagram_of(store, to)
@@ -489,7 +490,7 @@ pub(crate) fn move_and_place(shell: &mut Shell, package: Obj, to: Obj) {
     let (x, y) = if shown.is_empty() { (80.0, 80.0) } else { ((right + 60.0).round(), top.round()) };
     let (w, h) = archforge_uml::PACKAGE_SIZE;
     let label = tr("Move package");
-    let Some(session) = shell.session.as_mut() else { return };
+    let Some(session) = shell.session.as_mut() else { return Ok(()) };
     let out = session.batch(&label, |b| {
         b.execute("uml.package.move", &json!({ "package": package_id.to_string(), "to": to_id.to_string() }))?;
         let td = b.execute("uml.package.diagram", &json!({ "package": to_id.to_string() }))?;
@@ -501,7 +502,24 @@ pub(crate) fn move_and_place(shell: &mut Shell, package: Obj, to: Obj) {
         Ok(_) => {
             let text = crate::i18n::fmt(&tr("{what} moved into {where}"), &[("what", what.as_str()), ("where", into.as_str())]);
             shell.canvas.toast = Some(crate::connect::Toast { text, until: shell.frames.saturating_add(300), undo_label: Some(label) });
+            Ok(())
         }
-        Err(e) => shell.canvas.notice = Some(e.to_string()),
+        Err(e) => Err(e.to_string()),
     }
+}
+
+/// A package moved by Properties or Models into `to`: shown on a diagram, it goes onto its new
+/// home's diagram too ([`move_and_place`]); shown nowhere, it only moves. The engine's refusal is
+/// given back.
+pub(crate) fn move_package(shell: &mut Shell, package: Obj, to: Obj) -> Result<(), String> {
+    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return Ok(()) };
+    if archforge_uml::commands::package_of(store, package) == Some(to) {
+        return Ok(());
+    }
+    if !archforge_diagram::views_of(store, package).2.is_empty() {
+        return move_and_place(shell, package, to);
+    }
+    let (Ok(package_id), Ok(to_id)) = (store.uuid(package), store.uuid(to)) else { return Ok(()) };
+    let Some(session) = shell.session.as_mut() else { return Ok(()) };
+    session.execute("uml.package.move", &json!({ "package": package_id.to_string(), "to": to_id.to_string() })).map(|_| ()).map_err(|e| e.to_string())
 }

@@ -551,9 +551,18 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     {
         shell.explorer.dropped = None;
         let todo = row_at(at).filter(|t| t.id != dragged).and_then(|t| drop_of(shell, dragged, t));
-        if let Some((cmd, params)) = todo
-            && let Err(e) = run(shell, cmd, params)
-        {
+        // A package moved here goes as Properties and the canvas move it: shown on a diagram, it
+        // goes onto its new home's diagram too (AR-102).
+        let package_to = todo.as_ref().filter(|(cmd, _)| *cmd == "uml.package.move").and_then(|(_, params)| {
+            let store = shell.session.as_ref()?.doc();
+            Some((store.by_uuid(dragged)?, store.by_uuid(Uuid::parse(params.get("to")?.as_str()?)?)?))
+        });
+        let out = match (package_to, todo) {
+            (Some((package, to)), _) => crate::package_nav::move_package(shell, package, to),
+            (None, Some((cmd, params))) => run(shell, cmd, params).map(|_| ()),
+            (None, None) => Ok(()),
+        };
+        if let Err(e) = out {
             shell.explorer.notice = Some(e);
         }
     }

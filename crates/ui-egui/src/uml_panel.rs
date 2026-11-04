@@ -244,7 +244,7 @@ pub(crate) fn class_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
 /// holds and its diagram (AR-102), the keyboard's way to move it. The root package stays, so it
 /// shows its name alone.
 pub(crate) fn package_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, subject: &Subject) {
-    let (Some(package), Some(package_id)) = (subject.obj, subject.id) else { return };
+    let (Some(package), Some(_)) = (subject.obj, subject.id) else { return };
     let width = r.width() - 2.0 * PAD;
     crate::panels::name_field(shell, ui, p, pos2(r.left() + PAD, y), width, subject, "uml.package.rename", "package");
     // Where it may go: every package but itself and those it holds, on a row of its own, so the
@@ -279,22 +279,10 @@ pub(crate) fn package_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r:
         if let Some(i) = menu(shell, ui, p, field, parent_id, &items)
             && let Some((to, _)) = choices.get(i)
         {
-            // A package shown on a diagram goes onto its new home's diagram too, as a canvas drop
-            // takes it; one shown nowhere only moves.
-            let shown = shell
-                .session
-                .as_ref()
-                .map(|s| s.doc())
-                .and_then(|st| Some((st.by_uuid(*to)?, !archforge_diagram::views_of(st, package).2.is_empty())));
-            match shown {
-                Some((to, true)) if shell.session.as_ref().is_some_and(|s| archforge_uml::commands::package_of(s.doc(), package) != Some(to)) => {
-                    crate::package_nav::move_and_place(shell, package, to);
-                    shell.panels.notice = shell.canvas.notice.take();
-                }
-                _ => match run(shell, "uml.package.move", json!({ "package": package_id.to_string(), "to": to.to_string() })) {
-                    Ok(_) => shell.panels.notice = None,
-                    Err(e) => shell.panels.notice = Some(e),
-                },
+            // Shown on a diagram, it goes onto its new home's diagram too, as a canvas drop takes it.
+            let to = shell.session.as_ref().and_then(|s| s.doc().by_uuid(*to));
+            if let Some(to) = to {
+                shell.panels.notice = crate::package_nav::move_package(shell, package, to).err();
             }
         }
     }

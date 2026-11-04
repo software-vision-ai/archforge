@@ -2896,6 +2896,14 @@ fn a_package_moves_onto_another_package_or_up_the_path_bar_from_properties_and_i
         assert_eq!(parent(&h, sales).as_deref(), Some("Commerce platform"), "{theme:?}: not moved");
         let notice = h.state().explorer.notice.clone().unwrap_or_default();
         assert!(notice.contains("cannot go into itself"), "{theme:?}: {notice}");
+        // Onto Billing's row: shown on a diagram, it goes onto Billing's diagram too.
+        let (from, target) =
+            (rect_of(&h, &format!("workspace.explorer.row.{sales}")).center(), rect_of(&h, &format!("workspace.explorer.row.{billing}")).center());
+        drag(&mut h, from, target);
+        assert_eq!(parent(&h, sales).as_deref(), Some("Billing"), "{theme:?}: moved in Models");
+        let st = h.state().session.as_ref().unwrap().doc();
+        let bd = archforge_uml::commands::diagram_of(st, st.by_uuid(billing).unwrap()).unwrap();
+        assert!(crate::editing::on_diagram(st, bd, st.by_uuid(sales).unwrap()), "{theme:?}: on Billing's diagram");
     }
 }
 
@@ -3084,6 +3092,45 @@ fn a_parent_package_menu_longer_than_the_window_scrolls_to_its_last_choice() {
     let st = h.state().session.as_ref().unwrap().doc();
     let parent = archforge_uml::commands::package_of(st, st.by_uuid(mover).unwrap()).map(|p| archforge_core::name_of(st, p));
     assert_eq!(parent.as_deref(), Some("Package 39"), "the last choice, picked");
+}
+
+#[test]
+fn a_class_over_a_package_card_keeps_a_package_dropped_on_it_where_it_was() {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+    let (top, sales, sales_card, class_card) = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value);
+        let top =
+            id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": root.to_string(), "name": "Top" })).unwrap().value);
+        let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
+        let billing = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Billing" })).unwrap().value);
+        let place = |s: &mut archforge_notations::Session, e: archforge_mof::Uuid, x: i32| {
+            id(s.execute(
+                "diagram.place",
+                &serde_json::json!({ "diagram": top.to_string(), "element": e.to_string(), "x": x, "y": 120, "width": 240, "height": 148 }),
+            )
+            .unwrap()
+            .value)
+        };
+        let sales_card = place(s, sales, 40);
+        place(s, billing, 600);
+        // A class drawn over Billing's card, on top of it.
+        let order = id(s.execute("uml.class.add", &serde_json::json!({ "package": root.to_string(), "name": "Order" })).unwrap().value);
+        let class_card = place(s, order, 620);
+        (top, sales, sales_card, class_card)
+    };
+    crate::canvas::open(h.state_mut(), top);
+    h.state_mut().canvas.fit_pending = false;
+    h.state_mut().canvas.zoom = 1.0;
+    h.state_mut().canvas.pan = egui::Vec2::ZERO;
+    h.run();
+    let from = rect_of(&h, &format!("workspace.canvas.node.{sales_card}")).center();
+    let onto = rect_of(&h, &format!("workspace.canvas.node.{class_card}")).center();
+    drag(&mut h, from, onto);
+    let st = h.state().session.as_ref().unwrap().doc();
+    let parent = archforge_uml::commands::package_of(st, st.by_uuid(sales).unwrap()).map(|p| archforge_core::name_of(st, p));
+    assert_eq!(parent.as_deref(), Some("Commerce platform"), "the class on top took the drop: only a move on the diagram");
 }
 
 #[test]
