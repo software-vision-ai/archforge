@@ -2571,7 +2571,7 @@ fn the_diagrams_explorer_groups_the_diagrams_by_kind_and_opens_each_with_its_pac
 #[test]
 fn typing_a_groups_name_opens_the_folded_folders_its_diagrams_sit_in() {
     // A model with a folder holding a class diagram, as a project may keep one.
-    let ids = |at: u64| -> Box<dyn FnMut() -> archforge_mof::Uuid + Send> {
+    let minted = |at: u64| -> Box<dyn FnMut() -> archforge_mof::Uuid + Send> {
         let mut n: u64 = 0;
         Box::new(move || {
             n += 1;
@@ -2581,9 +2581,9 @@ fn typing_a_groups_name_opens_the_folded_folders_its_diagrams_sit_in() {
         })
     };
     let (tables, junctions) = archforge_notations::storage();
-    let fresh = archforge_notations::new_project_session("Commerce platform", ids(1_761_670_800_000)).unwrap();
+    let fresh = archforge_notations::new_project_session("Commerce platform", minted(1_761_670_800_000)).unwrap();
     let rows = archforge_mof::rows::snapshot(fresh.doc(), &tables, &junctions).unwrap();
-    let foldered = archforge_notations::session_from_rows_repaired(&rows, ids(1_761_670_810_000), |st| {
+    let foldered = archforge_notations::session_from_rows_repaired(&rows, minted(1_761_670_810_000), |st| {
         use archforge_mof::Value;
         let model = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_core::MODEL)).unwrap();
         let package = st.create(archforge_uml::PACKAGE).unwrap();
@@ -2597,6 +2597,15 @@ fn typing_a_groups_name_opens_the_folded_folders_its_diagrams_sit_in() {
         st.set(d, archforge_diagram::diagram::NAME, Value::str("Sales")).unwrap();
         st.set(d, archforge_diagram::diagram::ELEMENT, Value::Ref(package)).unwrap();
         st.push(folder, archforge_core::folder::MEMBER, Value::Ref(d)).unwrap();
+        // And an ER diagram beside it, so the folder shows in both groups.
+        let schema = st.create(archforge_er::SCHEMA).unwrap();
+        st.set(schema, archforge_er::named_element::NAME, Value::str("Shop")).unwrap();
+        st.push(model, archforge_core::model::MEMBER, Value::Ref(schema)).unwrap();
+        let e = st.create(archforge_diagram::DIAGRAM).unwrap();
+        st.set(e, archforge_diagram::diagram::KIND, Value::str("er")).unwrap();
+        st.set(e, archforge_diagram::diagram::NAME, Value::str("Shop")).unwrap();
+        st.set(e, archforge_diagram::diagram::ELEMENT, Value::Ref(schema)).unwrap();
+        st.push(folder, archforge_core::folder::MEMBER, Value::Ref(e)).unwrap();
     })
     .unwrap();
     let rows = archforge_mof::rows::snapshot(foldered.doc(), &tables, &junctions).unwrap();
@@ -2609,14 +2618,24 @@ fn typing_a_groups_name_opens_the_folded_folders_its_diagrams_sit_in() {
     });
     h.run();
     let row = |depth: u8, label: &str, count: usize| (depth, label.to_string(), count);
-    assert_eq!(diagram_rows(&h), vec![row(0, "Class diagrams", 1), row(1, "Views", 1), row(2, "Sales", 0), row(0, "ER diagrams", 0)]);
-    // Folded shut, the folder hides its diagram; typing the group's name opens it again.
+    assert_eq!(
+        diagram_rows(&h),
+        vec![row(0, "Class diagrams", 1), row(1, "Views", 1), row(2, "Sales", 0), row(0, "ER diagrams", 1), row(1, "Views", 1), row(2, "Shop", 0)]
+    );
+    // The folder's row in each group is a control of its own.
     let folder = {
         let st = h.state().session.as_ref().unwrap().doc();
         st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_core::FOLDER)).and_then(|f| st.uuid(f).ok()).unwrap()
     };
+    let at = rect_of(&h, "workspace.explorers.diagrams").center();
+    click(&mut h, at);
+    let found = ids(&h);
+    for id in [format!("workspace.diagrams.group.uml.class.folder.{folder}"), format!("workspace.diagrams.group.er.folder.{folder}")] {
+        assert_eq!(found.iter().filter(|i| **i == id).count(), 1, "{id} once in {found:?}");
+    }
+    // Folded shut, the folder hides its diagrams; typing a group's name opens it again.
     h.state_mut().diagrams.collapsed.insert(folder);
-    assert_eq!(diagram_rows(&h), vec![row(0, "Class diagrams", 1), row(1, "Views", 1), row(0, "ER diagrams", 0)]);
+    assert_eq!(diagram_rows(&h), vec![row(0, "Class diagrams", 1), row(1, "Views", 1), row(0, "ER diagrams", 1), row(1, "Views", 1)]);
     h.state_mut().diagrams.filter = "class".into();
     assert_eq!(diagram_rows(&h), vec![row(0, "Class diagrams", 1), row(1, "Views", 1), row(2, "Sales", 0)]);
 }
