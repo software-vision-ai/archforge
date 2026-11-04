@@ -1,8 +1,8 @@
 # A first ER model
 
-This chapter builds a small database model: a schema *Shop* with two tables, *Customer* and
-*Order*, where a customer places many orders. Start from a new, empty project (see
-[Getting started](02-getting-started.md)).
+This chapter models a system's database, one aspect of a software system beside its classes: a
+schema *Shop* with two tables, *Customer* and *Order*, where a customer places many orders. Start
+from a new, empty project (see [Getting started](02-getting-started.md)).
 
 ## 1. Make a schema and a diagram
 
