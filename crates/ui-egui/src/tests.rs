@@ -3427,6 +3427,42 @@ fn a_new_gesture_after_a_pause_goes_up_though_no_idle_frame_was_drawn_between() 
 }
 
 #[test]
+fn a_zoom_out_to_a_parent_without_the_packages_card_centres_the_parents_content() {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+    // Sales' diagram shows a class far from the origin, and no card of Orders.
+    let (sales_d, orders_d, ledger_card) = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
+        let orders = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Orders", "parent": sales.to_string() })).unwrap().value);
+        let sales_d = id(s.execute("uml.package.diagram", &serde_json::json!({ "package": sales.to_string() })).unwrap().value);
+        let orders_d = id(s.execute("uml.package.diagram", &serde_json::json!({ "package": orders.to_string() })).unwrap().value);
+        let ledger = id(s.execute("uml.class.add", &serde_json::json!({ "package": sales.to_string(), "name": "Ledger" })).unwrap().value);
+        let card = id(s
+            .execute("diagram.place", &serde_json::json!({ "diagram": sales_d.to_string(), "element": ledger.to_string(), "x": 2400, "y": 1800 }))
+            .unwrap()
+            .value);
+        (sales_d, orders_d, card)
+    };
+    crate::canvas::open(h.state_mut(), orders_d);
+    h.state_mut().canvas.fit_pending = false;
+    h.state_mut().canvas.zoom = 0.11;
+    h.state_mut().canvas.pan = egui::vec2(-900.0, -700.0);
+    h.run();
+    rest(&mut h);
+    h.event(egui::Event::PointerMoved(rect_of(&h, "workspace.canvas").center()));
+    h.run();
+    h.event(egui::Event::Zoom(0.8));
+    h.step();
+    h.run();
+    assert_eq!(h.state().canvas.active, Some(sales_d));
+    assert_eq!(h.state().canvas.zoom, 1.0);
+    let canvas = rect_of(&h, "workspace.canvas");
+    let card = rect_of(&h, &format!("workspace.canvas.node.{ledger_card}"));
+    assert!((card.center() - canvas.center()).length() < 2.0, "what Sales shows, centred: {card:?} in {canvas:?}");
+}
+
+#[test]
 fn the_canvas_draws_the_diagram_and_the_pointer_selects_pans_and_zooms() {
     let (mut h, customer, diagram) = diagram_harness();
     let found = ids(&h);

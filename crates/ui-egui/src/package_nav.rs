@@ -198,7 +198,14 @@ pub(crate) fn before_draw(shell: &mut Shell, ui: &egui::Ui, r: Rect, d: Obj) {
     // A switch landed: at 100 %, the package just left centred, or the content entered.
     let left = shell.canvas.nav.reveal.take();
     let target = match left {
-        Some(left) => store.by_uuid(left).and_then(|p| nodes(store, d).into_iter().find(|n| element(store, *n) == Some(p))).map(|n| vec![n]),
+        // The package left, centred; a parent with no card of it centres what it shows instead,
+        // so its content never opens off the canvas.
+        Some(left) => Some(
+            store
+                .by_uuid(left)
+                .and_then(|p| nodes(store, d).into_iter().find(|n| element(store, *n) == Some(p)))
+                .map_or_else(|| nodes(store, d), |n| vec![n]),
+        ),
         None => std::mem::take(&mut shell.canvas.nav.centre).then(|| nodes(store, d)),
     };
     if let Some(shown) = target {
