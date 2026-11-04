@@ -4935,8 +4935,13 @@ fn a_class_takes_attributes_in_properties_typed_checked_moved_and_removed_each_o
     assert_eq!(member_rows(&h, customer, false), ["+ id : Integer", "- email : String", "+ rating : Real [0..1]"]);
     let st = h.state().session.as_ref().unwrap().doc();
     assert!(
-        archforge_uml::commands::packages(st).iter().any(|p| archforge_core::name_of(st, *p) == archforge_uml::members::TYPES),
+        archforge_uml::commands::all_packages(st).iter().any(|p| archforge_core::name_of(st, *p) == archforge_uml::members::TYPES),
         "Real is kept in Types"
+    );
+    let root = archforge_uml::commands::root_package(st).expect("the root package");
+    assert!(
+        archforge_uml::commands::subpackages(st, root).iter().any(|p| archforge_core::name_of(st, *p) == archforge_uml::members::TYPES),
+        "Types sits in the root package"
     );
     h.run();
     assert!(painted(&h).iter().any(|t| t == "+ rating : Real [0..1]"), "the card and the row show it");

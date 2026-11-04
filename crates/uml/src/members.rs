@@ -11,7 +11,7 @@ use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, always, cm
 use archforge_mof::{Obj, Store, TypeRef, Uuid, Value};
 use serde_json::{Value as Json, json};
 
-use crate::commands::{fail, id_of, model, name_of, packages, refuse, set_name, short, text, uuid_of};
+use crate::commands::{fail, id_of, name_of, packages, refuse, set_name, short, text, uuid_of};
 use crate::{
     CLASS, OPERATION, PACKAGE, PARAMETER, PRIMITIVE_TYPE, PROPERTY, TYPE, behavioral_feature, class, feature, literal_integer,
     literal_unlimited_natural, multiplicity_element, named_element, operation, package, parameter, property, typed_element,
@@ -138,13 +138,16 @@ pub(crate) fn set_multiplicity(store: &mut Store, o: Obj, typed: &str, key: &str
 
 /// The package that keeps the built-in types, made in the model when there is none.
 fn types_package(store: &mut Store) -> Result<Obj, CommandError> {
-    if let Some(p) = packages(store).into_iter().find(|p| name_of(store, *p) == TYPES) {
+    // Types sits in the model's root package, as every package does; making the root takes in a
+    // Types an older project kept at the top level, so its types are used again.
+    let root = crate::commands::ensure_root(store)?;
+    let held = crate::commands::subpackages(store, root).into_iter().chain(packages(store)).find(|p| name_of(store, *p) == TYPES);
+    if let Some(p) = held {
         return Ok(p);
     }
-    let m = model(store)?;
     let p = store.create(PACKAGE).map_err(fail)?;
     set_name(store, p, TYPES)?;
-    store.push(m, archforge_core::model::MEMBER, Value::Ref(p)).map_err(fail)?;
+    store.push(root, package::PACKAGED_ELEMENT, Value::Ref(p)).map_err(fail)?;
     Ok(p)
 }
 

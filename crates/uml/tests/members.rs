@@ -13,6 +13,11 @@ use serde_json::{Value as Json, json};
 type S = Session<Store, ProjectView>;
 
 fn session() -> S {
+    session_over(|_| {})
+}
+
+/// A session over a model `shape` fills in first, as an older project saved it.
+fn session_over(shape: impl FnOnce(&mut Store)) -> S {
     let mut n: u64 = 0;
     let ids = Box::new(move || {
         n += 1;
@@ -31,6 +36,7 @@ fn session() -> S {
     .unwrap();
     let mut st = Store::new(universe, Box::new(slabs), ids);
     st.create(archforge_core::MODEL).unwrap();
+    shape(&mut st);
     Session::with_view(registry().unwrap(), st, 1, Options::default(), ProjectView::new(ALONE))
 }
 
@@ -109,6 +115,7 @@ fn attributes_and_operations_are_added_changed_moved_and_removed_as_one_step_eac
     let names: Vec<&str> = listed["packages"].as_array().unwrap().iter().map(|p| p["name"].as_str().unwrap()).collect();
     // The model's root package first (this model has no name, so it is "Model"), then what it holds.
     assert_eq!(names, ["Model", "sales", "Types"], "the Types package, made once");
+    assert_eq!(listed["packages"][2]["parent"], listed["packages"][0]["id"], "Types sits in the root package");
     let types = s.execute("uml.type.list", &json!({})).unwrap().value;
     assert_eq!(types["types"].as_array().unwrap().iter().filter(|t| t["name"] == "Integer").count(), 1, "Integer made once");
     // A model class as a type, a multiplicity, at a place.
@@ -171,4 +178,34 @@ fn attributes_and_operations_are_added_changed_moved_and_removed_as_one_step_eac
     .unwrap();
     assert!(calls > 100, "{calls}");
     let _ = Value::Null;
+}
+
+#[test]
+fn a_types_package_an_older_project_kept_at_the_top_level_is_taken_into_the_root_and_its_types_reused() {
+    let named = |st: &mut Store, class, name: &str| {
+        let o = st.create(class).unwrap();
+        st.set(o, archforge_uml::named_element::NAME, Value::str(name)).unwrap();
+        o
+    };
+    let mut s = session_over(|st| {
+        let model = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_core::MODEL)).unwrap();
+        for name in ["sales", "Types"] {
+            let p = named(st, archforge_uml::PACKAGE, name);
+            st.push(model, archforge_core::model::MEMBER, Value::Ref(p)).unwrap();
+            if name == "Types" {
+                let integer = named(st, archforge_uml::PRIMITIVE_TYPE, "Integer");
+                st.push(p, archforge_uml::package::PACKAGED_ELEMENT, Value::Ref(integer)).unwrap();
+            }
+        }
+    });
+    let sales = s.execute("uml.package.list", &json!({})).unwrap().value["packages"][0]["id"].as_str().unwrap().to_string();
+    let order = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Order" }));
+    run(&mut s, "uml.attribute.add", json!({ "class": order, "name": "id", "type": "Integer" }));
+    let listed = s.execute("uml.package.list", &json!({})).unwrap().value;
+    let packages = listed["packages"].as_array().unwrap();
+    let names: Vec<&str> = packages.iter().map(|p| p["name"].as_str().unwrap()).collect();
+    assert_eq!(names, ["Model", "sales", "Types"], "one Types package, in the root");
+    assert_eq!(packages[2]["parent"], packages[0]["id"]);
+    let types = s.execute("uml.type.list", &json!({})).unwrap().value;
+    assert_eq!(types["types"].as_array().unwrap().iter().filter(|t| t["name"] == "Integer").count(), 1, "the older Integer, used again");
 }
