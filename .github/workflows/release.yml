@@ -12,7 +12,8 @@
 # the tag v<version>. A version with a suffix (0.2.0-rc.1) is a pre-release. A version published
 # already is refused: bump it first. A pull request that touches packaging or this file, and a run
 # started by hand, build every package as a dry run: the packages stay workflow artefacts and
-# nothing is released. Every package reports its version, commit and date. Nothing is signed yet;
+# nothing is released. Every package reports its version, commit and date. The README's
+# screenshots (`cargo xtask screens --gallery`) are rendered here and attached to every release. Nothing is signed yet;
 # the scripts' signing steps wait for their secrets.
 name: Release
 
@@ -229,9 +230,42 @@ jobs:
             dist/linux/*.tar.gz
           if-no-files-found: error
 
+  screenshots:
+    name: Screenshots
+    needs: version
+    # The README's gallery, rendered from this commit and attached to the release: the README shows
+    # the latest release's. Mesa's software Vulkan driver stands in for a GPU.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: The interface's fonts, from craft-fonts beside the checkout
+        run: git clone --depth 1 https://github.com/storytold/craft-fonts ../craft-fonts
+      - name: Rust, the window system's development packages and a software Vulkan driver
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libxkbcommon-dev libwayland-dev libx11-dev \
+            libxrandr-dev libxi-dev libxcursor-dev libgl1-mesa-dev mesa-vulkan-drivers libvulkan1
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+      - name: Render the gallery
+        run: cargo xtask screens --gallery dist/screenshots
+      - name: Check the pictures
+        run: |
+          for f in dist/screenshots/*.png; do
+            test "$(head -c 8 "$f" | od -An -tx1 | tr -d ' \n')" = 89504e470d0a1a0a || { echo "::error::$f is not a PNG"; exit 1; }
+            test "$(stat -c %s "$f")" -gt 20000 || { echo "::error::$f is too small to be a screen"; exit 1; }
+          done
+          ls -l dist/screenshots
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-screenshots
+          path: dist/screenshots/*.png
+          if-no-files-found: error
+
   release:
     name: Draft release
-    needs: [version, macos, windows, linux]
+    needs: [version, macos, windows, linux, screenshots]
     # Only a push to the release branch releases: everything else is a dry run.
     if: github.event_name == 'push' && github.ref == 'refs/heads/release'
     runs-on: ubuntu-latest

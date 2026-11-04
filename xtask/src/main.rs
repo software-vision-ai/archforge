@@ -38,7 +38,8 @@ const USAGE: &str = "usage: cargo xtask <verb>
   ico <out> <png>... pack PNGs into a Windows icon
   resize <in> <out> <size> [--grid]  scale a square PNG down, on the icon grid with --grid
   shot [light|dark] [--size WxH] [--max-edge N]  a screenshot and a small copy under plan/shots
-  screens            every screen in both appearances, with a contact sheet each, under plan/screens
+  screens [--gallery <dir>]  every screen in both appearances, with a contact sheet each, under
+                     plan/screens; or the README's gallery alone, into <dir>
   manual             the user manual with its pictures, rendered from the interface, under plan/manual
   stats              tests and lines per crate";
 
@@ -185,7 +186,7 @@ fn main() {
         Some("ico") => ico::run(rest),
         Some("resize") => resize::run(rest),
         Some("shot") => shot::run(rest),
-        Some("screens") => screens::run(),
+        Some("screens") => screens::run(rest),
         Some("manual") => manual::run(),
         Some("stats") => stats::run(),
         Some("help" | "--help" | "-h") => {
