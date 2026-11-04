@@ -49,6 +49,11 @@ pub(crate) trait DiagramKind: Sync {
     /// What its diagrams are of: the word for it, and the choice that makes a new one.
     fn owner_word(&self) -> String;
     fn new_owner(&self) -> String;
+    /// The words for "a new one" in the New diagram dialog, as `store` stands: by default
+    /// `new_owner`; a kind with a default home names that home while it is still to be made.
+    fn new_owner_in(&self, _store: &Store) -> String {
+        self.new_owner()
+    }
     /// The elements its diagrams may be of, in the model's order.
     fn owners(&self, store: &Store) -> Vec<Obj>;
     /// The element a diagram of it would be of, from the selection.
