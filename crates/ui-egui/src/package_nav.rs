@@ -219,13 +219,15 @@ pub(crate) fn before_draw(shell: &mut Shell, ui: &egui::Ui, r: Rect, d: Obj) {
     keys(shell, ui, r, d, here, now);
     let intent = std::mem::take(&mut shell.canvas.nav.intent);
     let nav = &mut shell.canvas.nav;
+    // The gesture that made the last switch ends once the zoom has rested; only then may another.
+    // The rest is measured before this frame's zoom is noted, so the first frame of a new gesture
+    // after a pause re-arms, though no idle frame was drawn in between.
+    let rested = nav.last_zoom.is_none_or(|t| now - t >= QUIET) && nav.switched.is_none_or(|t| now - t >= REST);
+    if nav.disarmed && rested {
+        nav.disarmed = false;
+    }
     if intent != 0.0 {
         nav.last_zoom = Some(now);
-    }
-    // The gesture that made the last switch ends once the zoom has rested; only then may another.
-    let rested = nav.last_zoom.is_none_or(|t| now - t >= QUIET) && nav.switched.is_none_or(|t| now - t >= REST);
-    if nav.disarmed && intent == 0.0 && rested {
-        nav.disarmed = false;
     }
     if intent == 0.0 || (intent - 1.0).abs() < f32::EPSILON || nav.disarmed || shell.canvas.fit_pending {
         return;

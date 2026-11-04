@@ -3396,6 +3396,37 @@ fn zooming_out_to_ten_percent_climbs_one_level_per_gesture_each_at_a_hundred_and
 }
 
 #[test]
+fn a_new_gesture_after_a_pause_goes_up_though_no_idle_frame_was_drawn_between() {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+    let (sales_d, orders_d) = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
+        let orders = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Orders", "parent": sales.to_string() })).unwrap().value);
+        let sales_d = id(s.execute("uml.package.diagram", &serde_json::json!({ "package": sales.to_string() })).unwrap().value);
+        let orders_d = id(s.execute("uml.package.diagram", &serde_json::json!({ "package": orders.to_string() })).unwrap().value);
+        (sales_d, orders_d)
+    };
+    crate::canvas::open(h.state_mut(), orders_d);
+    h.state_mut().canvas.fit_pending = false;
+    h.run();
+    h.event(egui::Event::PointerMoved(rect_of(&h, "workspace.canvas").center()));
+    h.run();
+    // Just above 10 %, the last switch and the last zoom long past, and still disarmed: as an idle
+    // window leaves it, having drawn no frame since.
+    let now = h.ctx.input(|i| i.time);
+    let nav = &mut h.state_mut().canvas.nav;
+    nav.disarmed = true;
+    nav.switched = Some(now - 5.0);
+    nav.last_zoom = Some(now - 5.0);
+    h.state_mut().canvas.zoom = 0.11;
+    // The new gesture's first frame reaches 10 % and goes up.
+    h.event(egui::Event::Zoom(0.8));
+    h.step();
+    assert_eq!(h.state().canvas.active, Some(sales_d), "the pause re-armed it");
+}
+
+#[test]
 fn the_canvas_draws_the_diagram_and_the_pointer_selects_pans_and_zooms() {
     let (mut h, customer, diagram) = diagram_harness();
     let found = ids(&h);
