@@ -51,6 +51,8 @@ pub struct Nav {
     pub(crate) switched: Option<f64>,
     /// The package to show at [`REVEAL`] of the canvas on the next frame, after a zoom out.
     pub(crate) reveal: Option<Uuid>,
+    /// The path bar's ancestors as last drawn, where a package dragged on the canvas may go.
+    pub(crate) pills: Vec<(Rect, Uuid)>,
 }
 
 /// Notes a zoom the user made by `factor`.
@@ -274,6 +276,9 @@ pub(crate) fn after_draw(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect,
     if let Some(here) = package_of_diagram(store, d) {
         below = path_bar(shell, ui, p, r, here, now);
         open_control(shell, ui, p, r, d, now);
+        drop_feedback(shell, ui, p, r, d);
+    } else {
+        shell.canvas.nav.pills.clear();
     }
     // The switch fades in: the canvas's colour over it, thinning out.
     if let Some(t) = shell.canvas.nav.switched {
@@ -323,12 +328,16 @@ fn path_bar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, here: Obj, n
     let clip = paint.with_clip_rect(bar);
     let mut x = bar.left() + 4.0;
     let mut go: Option<Uuid> = None;
+    let mut pills = Vec::new();
     let chevron =
         |x: f32, y: f32| ux::icon_in(&clip, Rect::from_center_size(pos2(x + 9.0, y), Vec2::splat(12.0)), &icons::CHEVRON_RIGHT, p.text_muted);
     if start > 0 {
         // "…" stands for the ancestors folded away and leads to the nearest of them.
         let b = Rect::from_min_size(pos2(x, bar.top() + 4.0), vec2(MORE, 22.0));
         let hidden: Vec<&str> = path[..start].iter().map(|(_, n)| n.as_str()).collect();
+        if let Some((id, _)) = path.get(start - 1) {
+            pills.push((b, *id));
+        }
         let resp = control(shell, ui, "workspace.canvas.path.more", "button", b, true).on_hover_text(hidden.join(" › "));
         clip.rect_filled(b, 5.0, if resp.hovered() { p.accent_tint } else { p.field });
         if resp.has_focus() {
@@ -346,6 +355,7 @@ fn path_bar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, here: Obj, n
         let last = i + 1 == path.len();
         let b = Rect::from_min_size(pos2(x, bar.top() + 4.0), vec2(g.size().x + 20.0, 22.0));
         if !last {
+            pills.push((b.intersect(bar), *id));
             let resp = control(shell, ui, &format!("workspace.canvas.path.{i}"), "button", b.intersect(bar), true)
                 .on_hover_text(tr("Open this package's diagram"));
             clip.rect_filled(b, 5.0, if resp.hovered() { p.accent_tint } else { p.field });
@@ -366,6 +376,7 @@ fn path_bar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, here: Obj, n
             x += CHEVRON;
         }
     }
+    shell.canvas.nav.pills = pills;
     if let Some(id) = go {
         leave(shell, id, None, now);
     }
@@ -406,4 +417,114 @@ fn open_control(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, d: Obj, 
     if resp.clicked() {
         enter(shell, package, now);
     }
+}
+
+/// Where a package node dragged on `d` would go if let go at `at`: another package's card under
+/// it, or an ancestor in the path bar (AR-102).
+fn drop_target(shell: &Shell, view: crate::canvas::View, canvas: Rect, d: Obj, node: Uuid, at: egui::Pos2) -> Option<(Obj, Obj)> {
+    // Let go outside the canvas (over Properties or Models), nothing there takes it, not even a
+    // card panned under the panel out of sight.
+    if !canvas.contains(at) {
+        return None;
+    }
+    let store = shell.session.as_ref()?.doc();
+    let n = store.by_uuid(node)?;
+    let package = element(store, n).filter(|e| is_package(store, *e))?;
+    if let Some((_, to)) = shell.canvas.nav.pills.iter().find(|(r, _)| r.contains(at)) {
+        return store.by_uuid(*to).map(|t| (package, t)).filter(|(p, t)| archforge_uml::commands::package_of(store, *p) != Some(*t));
+    }
+    // The topmost card under the pointer, the dragged one aside: a package's takes the drop; a
+    // class or note over one keeps it a move on the diagram.
+    let top = nodes(store, d).into_iter().rev().filter(|m| *m != n).find(|m| screen(view, store, *m).contains(at))?;
+    let target = element(store, top).filter(|e| is_package(store, *e))?;
+    Some((package, target))
+}
+
+/// A package's card held over a place it may go: that place ringed, and what the drop does said.
+fn drop_feedback(shell: &Shell, ui: &egui::Ui, p: &Palette, r: Rect, d: Obj) {
+    let Some(crate::editing::Gesture::Move { nodes: moved, .. }) = shell.canvas.gesture.as_ref() else { return };
+    let [node] = moved.as_slice() else { return };
+    let Some(at) = ui.input(|i| i.pointer.hover_pos()) else { return };
+    let view = crate::canvas::View { origin: r.min, pan: shell.canvas.pan, zoom: shell.canvas.zoom };
+    let Some((package, to)) = drop_target(shell, view, r, d, *node, at) else { return };
+    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+    let paint = ui.painter().with_clip_rect(r);
+    let ring = shell
+        .canvas
+        .nav
+        .pills
+        .iter()
+        .find(|(_, id)| store.uuid(to).ok() == Some(*id))
+        .map(|(pill, _)| *pill)
+        .or_else(|| nodes(store, d).into_iter().find(|m| element(store, *m) == Some(to)).map(|m| screen(view, store, m)));
+    let Some(ring) = ring else { return };
+    paint.rect_stroke(ring.expand(3.0), 8.0, Stroke::new(2.0, p.accent), StrokeKind::Outside);
+    let names = [("what", archforge_core::name_of(store, package)), ("where", archforge_core::name_of(store, to))];
+    let says = crate::i18n::fmt(&tr("Move {what} into {where}"), &[("what", names[0].1.as_str()), ("where", names[1].1.as_str())]);
+    let g = ux::galley(&paint, &says, types::CAPTION_STRONG, p.on_accent, Some(320.0));
+    let tag = Rect::from_min_size(at + vec2(14.0, 14.0), g.size() + vec2(16.0, 8.0));
+    paint.rect_filled(tag, 6.0, p.accent_fill);
+    paint.galley(tag.min + vec2(8.0, 4.0), g, p.on_accent);
+}
+
+/// A package node let go on `d` at `at`: when it is over another package or an ancestor in the
+/// path bar, it goes there ([`move_and_place`]); true when it went (the drag moved nothing on `d`
+/// then).
+pub(crate) fn drop_moves(shell: &mut Shell, view: crate::canvas::View, canvas: Rect, d: Obj, node: Uuid, at: egui::Pos2) -> bool {
+    let Some((package, to)) = drop_target(shell, view, canvas, d, node, at) else { return false };
+    if let Err(e) = move_and_place(shell, package, to) {
+        shell.canvas.notice = Some(e);
+    }
+    true
+}
+
+/// Moves `package` into `to` with what it holds and its own diagram, and places it on the diagram
+/// of `to` (made when it has none), right of what that shows: one undo step, with a toast offering
+/// Undo, as a canvas drop, Properties' Parent package and a drop in Models all do (AR-102); the
+/// engine's refusal (into itself or a package it holds) is given back for the caller to say.
+pub(crate) fn move_and_place(shell: &mut Shell, package: Obj, to: Obj) -> Result<(), String> {
+    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return Ok(()) };
+    let (Ok(package_id), Ok(to_id)) = (store.uuid(package), store.uuid(to)) else { return Ok(()) };
+    let (what, into) = (archforge_core::name_of(store, package), archforge_core::name_of(store, to));
+    // On the new home's diagram, right of what it shows.
+    let shown: Vec<archforge_diagram::Rect> = archforge_uml::commands::diagram_of(store, to)
+        .map(|td| nodes(store, td).into_iter().map(|n| bounds_of(store, n)).collect())
+        .unwrap_or_default();
+    let right = shown.iter().map(|b| b.x + b.width).fold(f64::NEG_INFINITY, f64::max);
+    let top = shown.iter().map(|b| b.y).fold(f64::INFINITY, f64::min);
+    let (x, y) = if shown.is_empty() { (80.0, 80.0) } else { ((right + 60.0).round(), top.round()) };
+    let (w, h) = archforge_uml::PACKAGE_SIZE;
+    let label = tr("Move package");
+    let Some(session) = shell.session.as_mut() else { return Ok(()) };
+    let out = session.batch(&label, |b| {
+        b.execute("uml.package.move", &json!({ "package": package_id.to_string(), "to": to_id.to_string() }))?;
+        let td = b.execute("uml.package.diagram", &json!({ "package": to_id.to_string() }))?;
+        let td = td.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string();
+        b.execute("diagram.place", &json!({ "diagram": td, "element": package_id.to_string(), "x": x, "y": y, "width": w, "height": h }))?;
+        Ok(())
+    });
+    match out {
+        Ok(_) => {
+            let text = crate::i18n::fmt(&tr("{what} moved into {where}"), &[("what", what.as_str()), ("where", into.as_str())]);
+            shell.canvas.toast = Some(crate::connect::Toast { text, until: shell.frames.saturating_add(300), undo_label: Some(label) });
+            Ok(())
+        }
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+/// A package moved by Properties or Models into `to`: shown on a diagram, it goes onto its new
+/// home's diagram too ([`move_and_place`]); shown nowhere, it only moves. The engine's refusal is
+/// given back.
+pub(crate) fn move_package(shell: &mut Shell, package: Obj, to: Obj) -> Result<(), String> {
+    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return Ok(()) };
+    if archforge_uml::commands::package_of(store, package) == Some(to) {
+        return Ok(());
+    }
+    if !archforge_diagram::views_of(store, package).2.is_empty() {
+        return move_and_place(shell, package, to);
+    }
+    let (Ok(package_id), Ok(to_id)) = (store.uuid(package), store.uuid(to)) else { return Ok(()) };
+    let Some(session) = shell.session.as_mut() else { return Ok(()) };
+    session.execute("uml.package.move", &json!({ "package": package_id.to_string(), "to": to_id.to_string() })).map(|_| ()).map_err(|e| e.to_string())
 }

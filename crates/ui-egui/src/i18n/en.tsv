@@ -570,6 +570,10 @@ str		Visibility	Visibility
 str		Place class	Place class
 str		Add package	Add package
 str		Place package	Place package
+str		Move package	Move package
+str		Parent package	Parent package
+str		Move {what} into {where}	Move {what} into {where}
+str		{what} moved into {where}	{what} moved into {where}
 str		Open this package's diagram	Open this package's diagram
 str		Open this package's diagram (⌘↓)	Open this package's diagram (⌘↓)
 str		Only a package this diagram's package holds goes on it	Only a package this diagram's package holds goes on it

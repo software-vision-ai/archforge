@@ -537,16 +537,32 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
         let i = rows.iter().position(|x| x.id == target.id).unwrap_or(0);
         let y = r.top() + FIRST_ROW + i as f32 * ROW - offset;
         let hit = Rect::from_min_max(pos2(r.left() + 8.0, y - 7.0), pos2(r.right() - 8.0, y - 7.0 + ROW_HEIGHT));
-        clip.painter().rect_stroke(hit, 6.0, Stroke::new(1.5, p.accent), StrokeKind::Inside);
+        let refused = shell.session.as_ref().is_some_and(|s| {
+            let store = s.doc();
+            store
+                .by_uuid(dragged)
+                .zip(crate::notation_ui::of(shell.notation_uis, store, target.obj))
+                .is_some_and(|(d, ui)| ui.drop_refused(store, d, target.obj))
+        });
+        clip.painter().rect_stroke(hit, 6.0, Stroke::new(1.5, if refused { p.amber } else { p.accent }), StrokeKind::Inside);
     }
     if let Some((dragged, at)) = shell.explorer.dropped
         && tree.contains(at)
     {
         shell.explorer.dropped = None;
         let todo = row_at(at).filter(|t| t.id != dragged).and_then(|t| drop_of(shell, dragged, t));
-        if let Some((cmd, params)) = todo
-            && let Err(e) = run(shell, cmd, params)
-        {
+        // A package moved here goes as Properties and the canvas move it: shown on a diagram, it
+        // goes onto its new home's diagram too (AR-102).
+        let package_to = todo.as_ref().filter(|(cmd, _)| *cmd == "uml.package.move").and_then(|(_, params)| {
+            let store = shell.session.as_ref()?.doc();
+            Some((store.by_uuid(dragged)?, store.by_uuid(Uuid::parse(params.get("to")?.as_str()?)?)?))
+        });
+        let out = match (package_to, todo) {
+            (Some((package, to)), _) => crate::package_nav::move_package(shell, package, to),
+            (None, Some((cmd, params))) => run(shell, cmd, params).map(|_| ()),
+            (None, None) => Ok(()),
+        };
+        if let Err(e) = out {
             shell.explorer.notice = Some(e);
         }
     }

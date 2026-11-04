@@ -74,6 +74,8 @@ pub enum Screen {
     WorkspacePackages,
     /// Inside Sales: its classes, a package of its own, and the path bar back to the root.
     WorkspaceInsidePackage,
+    /// The root's diagram with Sales selected and Properties' Parent package menu open (AR-102).
+    WorkspacePackageParent,
     /// The Diagrams explorer with its groups: two class diagrams, one of a nested package and
     /// open, and an ER diagram.
     WorkspaceDiagrams,
@@ -314,9 +316,13 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
             }
         }
     }
-    if matches!(screen, Screen::WorkspacePackages | Screen::WorkspaceInsidePackage) {
+    if matches!(screen, Screen::WorkspacePackages | Screen::WorkspaceInsidePackage | Screen::WorkspacePackageParent) {
         shell.adopt_project();
         sample_packages(&mut shell, screen == Screen::WorkspaceInsidePackage)?;
+        if screen == Screen::WorkspacePackageParent {
+            shell.state.show_panel(crate::state::Panel::Properties);
+            shell.panels.menu = Some(crate::panels::Menu::PackageParent);
+        }
     }
     if screen == Screen::WorkspaceDiagrams {
         shell.adopt_project();

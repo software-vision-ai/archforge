@@ -35,6 +35,11 @@ pub struct State {
     pub column: Option<ColumnEdit>,
     /// The select menu that is open.
     pub menu: Option<Menu>,
+    /// How far the open menu's rows are scrolled, by the menu's id: a menu longer than the window
+    /// has room for scrolls within it.
+    pub menu_scroll: Option<(String, f32)>,
+    /// The row of the open menu the arrow keys have reached, by the menu's id: Enter picks it.
+    pub menu_reached: Option<(String, usize)>,
     /// The item of an editable select's open menu the arrow keys have reached.
     pub highlight: Option<usize>,
     /// The Appearance panel's colour picker, while it is open.
@@ -193,6 +198,8 @@ pub enum Menu {
     EndMultiplicity(usize),
     /// A class's package.
     ClassPackage,
+    /// The package a package sits in (AR-102).
+    PackageParent,
 }
 
 /// The selection the panels describe.
@@ -631,31 +638,81 @@ fn combo_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, r: Re
 /// A menu under `anchor` with `items`; gives the index picked, closing the menu on a pick or a
 /// click elsewhere.
 pub(crate) fn menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, id: &str, items: &[String]) -> Option<usize> {
-    let height = 8.0 + items.len() as f32 * 30.0;
-    let r = ux::drop_rect(ui, anchor, anchor.left(), vec2(anchor.width(), height));
+    let full = 8.0 + items.len() as f32 * MENU_ROW;
+    // Under the field, else above it; longer than either side has room for, it takes the side with
+    // more and its rows scroll.
+    let window = ui.ctx().content_rect();
+    let (below, above) = (window.bottom() - 8.0 - (anchor.bottom() + 4.0), anchor.top() - 4.0 - (window.top() + 8.0));
+    let r = if full <= below.max(0.0) || (full > above && below >= above) {
+        Rect::from_min_size(pos2(anchor.left(), anchor.bottom() + 4.0), vec2(anchor.width(), full.min(below.max(8.0 + MENU_ROW))))
+    } else {
+        let height = full.min(above.max(8.0 + MENU_ROW));
+        Rect::from_min_size(pos2(anchor.left(), anchor.top() - 4.0 - height), vec2(anchor.width(), height))
+    };
     ux::overlay(ui, crate::widgets::egui_id(&format!("{id}.layer")), r, |ui| menu_body(shell, ui, p, anchor, r, id, items))
 }
+
+/// A menu row's height.
+const MENU_ROW: f32 = 30.0;
 
 fn menu_body(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, r: Rect, id: &str, items: &[String]) -> Option<usize> {
     let paint = ui.painter();
     ux::shadow(paint, r, 8.0, p.shadow);
     paint.rect_filled(r, 8.0, p.surface);
     paint.rect_stroke(r, 8.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
+    // Its rows scroll with the wheel over it, as far as the last.
+    let most = (8.0 + items.len() as f32 * MENU_ROW - r.height()).max(0.0);
+    let mut offset = shell.panels.menu_scroll.as_ref().filter(|(of, _)| of == id).map_or(0.0, |(_, o)| *o);
+    if ui.input(|i| i.pointer.hover_pos().is_some_and(|at| r.contains(at))) {
+        offset -= ui.input(|i| i.smooth_scroll_delta.y);
+    }
+    // The arrow keys reach a row, scrolled into sight; Enter picks it.
+    let mut reached = shell.panels.menu_reached.as_ref().filter(|(of, _)| of == id).map(|(_, i)| *i);
+    let (down, up, enter) = ui.input_mut(|i| {
+        (
+            i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown),
+            i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowUp),
+            reached.is_some() && i.consume_key(egui::Modifiers::NONE, egui::Key::Enter),
+        )
+    });
+    if !items.is_empty() && (down || up) {
+        let next = match reached {
+            None => 0,
+            Some(i) if down => (i + 1).min(items.len() - 1),
+            Some(i) => i.saturating_sub(1),
+        };
+        reached = Some(next);
+        let (top, bottom) = (4.0 + next as f32 * MENU_ROW, 4.0 + (next + 1) as f32 * MENU_ROW);
+        if top < offset + 4.0 {
+            offset = top - 4.0;
+        } else if bottom > offset + r.height() - 4.0 {
+            offset = bottom - r.height() + 4.0;
+        }
+    }
+    shell.panels.menu_reached = reached.map(|i| (id.to_string(), i));
+    let offset = offset.clamp(0.0, most);
+    shell.panels.menu_scroll = Some((id.to_string(), offset));
+    let rows = r.shrink2(vec2(0.0, 4.0));
+    let paint = paint.with_clip_rect(rows);
     let mut picked = None;
     for (i, item) in items.iter().enumerate() {
-        let row = Rect::from_min_size(pos2(r.left() + 4.0, r.top() + 4.0 + i as f32 * 30.0), vec2(r.width() - 8.0, 30.0));
-        let resp = control(shell, ui, &format!("{id}.{i}"), "menu-item", row, true);
-        if resp.hovered() {
+        let row = Rect::from_min_size(pos2(r.left() + 4.0, r.top() + 4.0 + i as f32 * MENU_ROW - offset), vec2(r.width() - 8.0, MENU_ROW));
+        if !rows.intersects(row) {
+            continue;
+        }
+        let resp = control(shell, ui, &format!("{id}.{i}"), "menu-item", row.intersect(rows), true);
+        if resp.hovered() || reached == Some(i) {
             paint.rect_filled(row, 5.0, p.page);
         }
-        ux::text(paint, row.min + vec2(10.0, 7.5), item, types::SMALL, p.text, Some((row.width() - 20.0).max(0.0)));
-        if resp.clicked() {
+        ux::text(&paint, row.min + vec2(10.0, 7.5), item, types::SMALL, p.text, Some((row.width() - 20.0).max(0.0)));
+        if resp.clicked() || (enter && reached == Some(i)) {
             picked = Some(i);
         }
     }
     let outside = ui.input(|i| i.pointer.any_pressed() && !i.pointer.interact_pos().is_some_and(|pos| r.contains(pos) || anchor.contains(pos)));
     if picked.is_some() || outside || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
         shell.panels.menu = None;
+        shell.panels.menu_reached = None;
     }
     picked
 }

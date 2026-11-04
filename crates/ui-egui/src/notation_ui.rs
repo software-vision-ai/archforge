@@ -74,6 +74,12 @@ pub(crate) trait NotationUi: Sync {
         let _ = (store, obj);
         None
     }
+    /// Whether a drop of `dragged` on `target` is one the model refuses (a package into itself):
+    /// its target is ringed in amber, not the accent.
+    fn drop_refused(&self, store: &Store, dragged: Obj, target: Obj) -> bool {
+        let _ = (store, dragged, target);
+        false
+    }
     /// The command, with its parameters, that a tree row `dragged` dropped on the row `target`
     /// runs (a class moved into a package); none when the drop means nothing there.
     fn drop_on(&self, store: &Store, dragged: Obj, target: Obj) -> Option<(&'static str, serde_json::Value)> {

@@ -368,6 +368,12 @@ What is UML's own, beside the shared rules above.
   the parent's view as it was left, after a zoom out the package a third of the view wide.
   Thresholds rest 0.6 s after a switch; a switch fades in over 0.2 s. A double click renames, never
   navigates.
+- A package moves (AR-102) by dragging its card onto another package's card (ringed, with a
+  "Move … into …" tag while held) or onto an ancestor in the path bar, its row in Models onto
+  another package's, or Properties' Parent package (the keyboard's way; never itself or one it
+  holds). It goes with what it holds and its own diagram, onto its new home's diagram, its card
+  leaving diagrams of a package that no longer holds it; one undo step, with a toast offering Undo.
+  Into itself or a package it holds is refused with the reason; Models rings such a row in amber.
 - A class is a plain card: the surface's white with the plain border, its eyebrow CLASS, its name,
   then two compartments under dividing lines, attributes and operations, each shown even when
   empty. An abstract class's name, and an abstract operation, are slanted.

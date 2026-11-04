@@ -244,6 +244,31 @@ fn a_class_diagram_shows_the_packages_its_package_holds_as_tabbed_cards() {
 }
 
 #[test]
+fn a_package_moved_leaves_the_diagrams_of_its_old_parent_and_keeps_its_own_diagram_and_contents() {
+    let mut s = session();
+    let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+    let billing = run(&mut s, "uml.package.add", json!({ "name": "Billing" }));
+    let root = archforge_uml::commands::root_package(s.doc()).map(|r| s.doc().uuid(r).unwrap().to_string()).unwrap();
+    let order = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Order" }));
+    let top = run(&mut s, "diagram.add", json!({ "kind": "uml.class", "element": root, "name": "Top" }));
+    let card = run(&mut s, "diagram.place", json!({ "diagram": top, "element": sales, "x": 0, "y": 0 }));
+    let own = s.execute("uml.package.diagram", &json!({ "package": sales })).unwrap().value["id"].as_str().unwrap().to_string();
+    // Into Billing: its card leaves the root's diagram; its class and its own diagram stay with it.
+    round_trip(&mut s, "uml.package.move", json!({ "package": sales, "to": billing }));
+    assert_eq!(parent_of(&s, &sales), Some(obj(&s, &billing)));
+    assert!(!alive(&s, &card), "no card of it on a diagram of a package that no longer holds it");
+    assert!(alive(&s, &own) && alive(&s, &order));
+    assert_eq!(archforge_uml::commands::diagram_of(s.doc(), obj(&s, &sales)).map(|d| s.doc().uuid(d).unwrap().to_string()), Some(own.clone()));
+    // Into itself or a package it holds: refused, nothing changed.
+    let lines = run(&mut s, "uml.package.add", json!({ "name": "Lines", "parent": sales }));
+    refused(&mut s, "uml.package.move", json!({ "package": sales, "to": sales }), "cannot go into itself");
+    refused(&mut s, "uml.package.move", json!({ "package": sales, "to": lines }), "cannot go into itself");
+    // Back to the root, given as nothing.
+    run(&mut s, "uml.package.move", json!({ "package": sales, "to": "" }));
+    assert_eq!(parent_of(&s, &sales), Some(obj(&s, &root)));
+}
+
+#[test]
 fn a_package_card_lists_at_most_fifty_of_what_it_holds_and_counts_the_rest() {
     let mut s = session();
     let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
