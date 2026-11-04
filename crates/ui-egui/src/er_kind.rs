@@ -39,6 +39,10 @@ impl DiagramKind for ErKind {
         tr("ER diagram")
     }
 
+    fn group_word(&self) -> String {
+        tr("ER diagrams")
+    }
+
     fn owner_word(&self) -> String {
         tr("Schema")
     }
