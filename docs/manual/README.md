@@ -10,7 +10,7 @@ build on, and shows how an agent joins in.
    this manual uses.
 2. [Getting started](02-getting-started.md): running Archforge, and creating, saving, reopening
    and finding a project.
-3. [The workspace](03-workspace.md): Models and Diagrams, Properties, search, undo, and removing
+3. [The workspace](03-workspace.md): Diagrams and Models, Properties, search, undo, and removing
    versus deleting.
 4. [A first ER model](04-er-model.md): a small database model with tables, columns, keys and a
    relationship.
