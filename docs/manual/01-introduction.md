@@ -1,8 +1,9 @@
 # What Archforge is
 
 Archforge is a software modelling tool for macOS, Windows and Linux. You describe a software
-system as a model, draw it on diagrams, and an AI agent can read and change the same model while
-you watch. Every change, yours or the agent's, shows in the window at once and can be undone.
+system as a model and draw it on diagrams. On macOS and Linux, an AI agent can also read and change
+the same model while you watch (agent access is not available on Windows yet). Every change, yours
+or the agent's, shows in the window at once and can be undone.
 
 A model covers more than one aspect of a system. Class modelling is where Archforge's
 development started, and a system's databases are one more aspect, kept in the same model. Those
