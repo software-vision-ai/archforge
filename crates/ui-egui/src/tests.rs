@@ -3325,6 +3325,30 @@ fn a_packages_tab_drawn_over_another_card_takes_the_click_and_the_card_on_top_of
     let at = rect_of(&h, &format!("workspace.canvas.node.{card}.tab")).center();
     click(&mut h, at);
     assert_eq!(ids(&h), vec![sales], "the tab, drawn over the class, takes the click");
+    // A package nested in Sales's card, its tab over Sales's body: the nested tab, drawn after its
+    // parent, takes the click.
+    let (inner, inner_card) = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let root = s.execute("uml.model.root", &serde_json::json!({})).unwrap().value["id"].as_str().unwrap().to_string();
+        let p =
+            s.execute("uml.package.add", &serde_json::json!({ "name": "Inner", "parent": root })).unwrap().value["id"].as_str().unwrap().to_string();
+        let v = s
+            .execute(
+                "diagram.place",
+                &serde_json::json!({ "diagram": top.to_string(), "element": p, "parent": card.to_string(), "x": 220, "y": 230, "width": 160, "height": 60 }),
+            )
+            .unwrap()
+            .value;
+        (archforge_mof::Uuid::parse(&p).unwrap(), archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap())
+    };
+    for _ in 0..45 {
+        h.step();
+    }
+    h.run();
+    let inner_tab = rect_of(&h, &format!("workspace.canvas.node.{inner_card}.tab"));
+    assert!(rect_of(&h, &format!("workspace.canvas.node.{card}")).contains(inner_tab.center()), "the nested tab lies on Sales's body");
+    click(&mut h, inner_tab.center());
+    assert_eq!(ids(&h), vec![inner], "the nested package's tab, not its parent's card");
 }
 
 #[test]

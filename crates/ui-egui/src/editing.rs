@@ -350,7 +350,7 @@ fn decide(
             Some(Hit::Node(n)) => Some(n),
             _ => None,
         };
-        on_top(shell, store, d, card, pos)
+        on_top(shell, store, grid, card, pos)
     };
     match shell.canvas.tool {
         Tool::Pan => Action::Nothing,
@@ -534,7 +534,7 @@ fn decide(
                     Some(Hit::Node(n)) => Some(n),
                     _ => None,
                 };
-                let target = match (on_top(shell, store, d, card, pos), hit) {
+                let target = match (on_top(shell, store, grid, card, pos), hit) {
                     (Some(n), _) => element_of(store, n).unwrap_or(n),
                     (None, Some(Hit::Edge(e))) => store.get(e, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref()).unwrap_or(e),
                     (None, _) => d,
@@ -826,18 +826,14 @@ fn node_at(shell: &Shell, view: View, d: Obj, at: Pos2) -> Option<Uuid> {
     let kind = crate::kinds::kind_of(shell, store, d);
     let card =
         nodes_of(store, d).into_iter().rev().find(|n| part_of_node(kind, store, *n).is_some() && view.rect(&bounds_of(store, *n)).contains(at));
-    on_top(shell, store, d, card, at).filter(|n| part_of_node(kind, store, *n).is_some()).and_then(|n| uuid(store, n))
+    on_top(shell, store, &Grid::build(store, d), card, at).filter(|n| part_of_node(kind, store, *n).is_some()).and_then(|n| uuid(store, n))
 }
 
-/// Of the card under a point and the package tab under it, the one drawn on top: the later on the
-/// diagram, as the canvas draws its nodes in order (AR-113).
-fn on_top(shell: &Shell, store: &Store, d: Obj, card: Option<Obj>, at: Pos2) -> Option<Obj> {
+/// Of the card under a point and the package tab under it, the one drawn on top: the later in
+/// the grid's drawing order, nested nodes included, as the canvas draws them (AR-113).
+fn on_top(shell: &Shell, store: &Store, grid: &Grid, card: Option<Obj>, at: Pos2) -> Option<Obj> {
     match (card, tab_at(shell, store, at)) {
-        (Some(c), Some(t)) if c != t => {
-            let order = nodes_of(store, d);
-            let place = |n: Obj| order.iter().position(|m| *m == n);
-            Some(if place(t) > place(c) { t } else { c })
-        }
+        (Some(c), Some(t)) if c != t => Some(if grid.drawn_at(t) > grid.drawn_at(c) { t } else { c }),
         (c, t) => c.or(t),
     }
 }
