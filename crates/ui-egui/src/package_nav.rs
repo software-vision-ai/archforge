@@ -464,12 +464,21 @@ fn drop_feedback(shell: &Shell, ui: &egui::Ui, p: &Palette, r: Rect, d: Obj) {
 }
 
 /// A package node let go on `d` at `at`: when it is over another package or an ancestor in the
-/// path bar, it goes there, with what it holds and its own diagram, onto that package's diagram,
-/// as one undo step; true when it went (the drag moved nothing on `d` then).
+/// path bar, it goes there ([`move_and_place`]); true when it went (the drag moved nothing on `d`
+/// then).
 pub(crate) fn drop_moves(shell: &mut Shell, view: crate::canvas::View, d: Obj, node: Uuid, at: egui::Pos2) -> bool {
     let Some((package, to)) = drop_target(shell, view, d, node, at) else { return false };
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return false };
-    let (Ok(package_id), Ok(to_id)) = (store.uuid(package), store.uuid(to)) else { return false };
+    move_and_place(shell, package, to);
+    true
+}
+
+/// Moves `package` into `to` with what it holds and its own diagram, and places it on the diagram
+/// of `to` (made when it has none), right of what that shows: one undo step, with a toast offering
+/// Undo, as a canvas drop and Properties' Parent package both do (AR-102). A refusal is said on
+/// the canvas.
+pub(crate) fn move_and_place(shell: &mut Shell, package: Obj, to: Obj) {
+    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+    let (Ok(package_id), Ok(to_id)) = (store.uuid(package), store.uuid(to)) else { return };
     let (what, into) = (archforge_core::name_of(store, package), archforge_core::name_of(store, to));
     // On the new home's diagram, right of what it shows.
     let shown: Vec<archforge_diagram::Rect> = archforge_uml::commands::diagram_of(store, to)
@@ -480,7 +489,7 @@ pub(crate) fn drop_moves(shell: &mut Shell, view: crate::canvas::View, d: Obj, n
     let (x, y) = if shown.is_empty() { (80.0, 80.0) } else { ((right + 60.0).round(), top.round()) };
     let (w, h) = archforge_uml::PACKAGE_SIZE;
     let label = tr("Move package");
-    let Some(session) = shell.session.as_mut() else { return false };
+    let Some(session) = shell.session.as_mut() else { return };
     let out = session.batch(&label, |b| {
         b.execute("uml.package.move", &json!({ "package": package_id.to_string(), "to": to_id.to_string() }))?;
         let td = b.execute("uml.package.diagram", &json!({ "package": to_id.to_string() }))?;
@@ -495,5 +504,4 @@ pub(crate) fn drop_moves(shell: &mut Shell, view: crate::canvas::View, d: Obj, n
         }
         Err(e) => shell.canvas.notice = Some(e.to_string()),
     }
-    true
 }

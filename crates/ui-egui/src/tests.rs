@@ -2854,19 +2854,14 @@ fn a_package_moves_onto_another_package_or_up_the_path_bar_from_properties_and_i
         let at = rect_of(&h, "workspace.properties.package.parent.1").center();
         click(&mut h, at);
         assert_eq!(parent(&h, sales).as_deref(), Some("Billing"));
+        // Shown on a diagram, it goes onto its new home's diagram too, as a canvas drop takes it.
         let inner = {
             let st = h.state().session.as_ref().unwrap().doc();
-            st.uuid(archforge_uml::commands::diagram_of(st, st.by_uuid(billing).unwrap()).unwrap()).unwrap()
+            let d = archforge_uml::commands::diagram_of(st, st.by_uuid(billing).unwrap()).unwrap();
+            assert!(crate::editing::on_diagram(st, d, st.by_uuid(sales).unwrap()), "{theme:?}: on Billing's diagram");
+            st.uuid(d).unwrap()
         };
-        h.state_mut()
-            .session
-            .as_mut()
-            .unwrap()
-            .execute(
-                "diagram.place",
-                &serde_json::json!({ "diagram": inner.to_string(), "element": sales.to_string(), "x": 80, "y": 120, "width": 240, "height": 148 }),
-            )
-            .unwrap();
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Move package"), "{theme:?}: one step");
         crate::canvas::open(h.state_mut(), inner);
         h.run();
         let card = {
@@ -3042,6 +3037,53 @@ fn a_package_card_tall_enough_for_its_fifty_rows_still_says_how_many_more_it_hol
     h.run();
     // Fifty rows listed, the last place saying the rest: 60 − 49.
     assert!(painted(&h).iter().any(|t| t == "+ 11 more elements"), "{:?}", painted(&h).iter().filter(|t| t.contains("more")).collect::<Vec<_>>());
+}
+
+#[test]
+fn a_parent_package_menu_longer_than_the_window_scrolls_to_its_last_choice() {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 700.0));
+    let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+    let mover = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        for i in 0..40 {
+            s.execute("uml.package.add", &serde_json::json!({ "name": format!("Package {i:02}") })).unwrap();
+        }
+        id(s.execute("uml.package.add", &serde_json::json!({ "name": "Mover" })).unwrap().value)
+    };
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [mover.to_string()] })).unwrap();
+    h.state_mut().state.show_panel(crate::state::Panel::Properties);
+    h.run();
+    let at = rect_of(&h, "workspace.properties.package.parent").center();
+    click(&mut h, at);
+    let window = h.ctx.content_rect();
+    let choices =
+        |h: &Harness<'static, Shell>| ids(h).into_iter().filter(|i| i.starts_with("workspace.properties.package.parent.")).collect::<Vec<_>>();
+    // The root and the forty packages: 41 choices, not all in sight at once.
+    let last = "workspace.properties.package.parent.40".to_string();
+    assert!(!choices(&h).contains(&last), "the last choice starts out of sight");
+    let first = rect_of(&h, "workspace.properties.package.parent.0");
+    assert!(window.contains_rect(first), "the menu keeps within the window");
+    for _ in 0..30 {
+        h.event(egui::Event::PointerMoved(first.center()));
+        h.event(egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Point,
+            delta: egui::vec2(0.0, -200.0),
+            modifiers: egui::Modifiers::NONE,
+            phase: egui::TouchPhase::Move,
+            source: egui::MouseWheelSource::Wheel,
+        });
+        h.run_steps(10);
+        if choices(&h).contains(&last) {
+            break;
+        }
+    }
+    assert!(choices(&h).contains(&last), "scrolled to the last choice");
+    let at = rect_of(&h, &last);
+    assert!(window.contains_rect(at), "in the window");
+    click(&mut h, at.center());
+    let st = h.state().session.as_ref().unwrap().doc();
+    let parent = archforge_uml::commands::package_of(st, st.by_uuid(mover).unwrap()).map(|p| archforge_core::name_of(st, p));
+    assert_eq!(parent.as_deref(), Some("Package 39"), "the last choice, picked");
 }
 
 #[test]

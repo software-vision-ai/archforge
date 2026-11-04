@@ -279,9 +279,22 @@ pub(crate) fn package_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r:
         if let Some(i) = menu(shell, ui, p, field, parent_id, &items)
             && let Some((to, _)) = choices.get(i)
         {
-            match run(shell, "uml.package.move", json!({ "package": package_id.to_string(), "to": to.to_string() })) {
-                Ok(_) => shell.panels.notice = None,
-                Err(e) => shell.panels.notice = Some(e),
+            // A package shown on a diagram goes onto its new home's diagram too, as a canvas drop
+            // takes it; one shown nowhere only moves.
+            let shown = shell
+                .session
+                .as_ref()
+                .map(|s| s.doc())
+                .and_then(|st| Some((st.by_uuid(*to)?, !archforge_diagram::views_of(st, package).2.is_empty())));
+            match shown {
+                Some((to, true)) if shell.session.as_ref().is_some_and(|s| archforge_uml::commands::package_of(s.doc(), package) != Some(to)) => {
+                    crate::package_nav::move_and_place(shell, package, to);
+                    shell.panels.notice = shell.canvas.notice.take();
+                }
+                _ => match run(shell, "uml.package.move", json!({ "package": package_id.to_string(), "to": to.to_string() })) {
+                    Ok(_) => shell.panels.notice = None,
+                    Err(e) => shell.panels.notice = Some(e),
+                },
             }
         }
     }
