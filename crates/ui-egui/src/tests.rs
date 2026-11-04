@@ -2761,6 +2761,87 @@ fn going_back_from_a_package_returns_to_the_parent_diagram_it_was_entered_from()
 }
 
 #[test]
+fn a_long_package_path_folds_its_first_ancestors_and_keeps_the_nearest_ones_clickable() {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1400.0, 900.0));
+    let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+    // Six packages deep, each with a long name, and the deepest one's diagram open.
+    let (chain, deepest) = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let mut parent = String::new();
+        let mut chain = Vec::new();
+        for i in 0..6 {
+            let p = id(s
+                .execute("uml.package.add", &serde_json::json!({ "name": format!("Package with a long name {i}"), "parent": parent }))
+                .unwrap()
+                .value);
+            parent = p.to_string();
+            chain.push(p);
+        }
+        let d = id(s.execute("uml.package.diagram", &serde_json::json!({ "package": parent })).unwrap().value);
+        (chain, d)
+    };
+    crate::canvas::open(h.state_mut(), deepest);
+    h.run();
+    let found = ids(&h);
+    let bar = rect_of(&h, "workspace.canvas.path");
+    let canvas = rect_of(&h, "workspace.canvas");
+    assert!(bar.right() <= canvas.right(), "the bar keeps within the canvas");
+    assert!(found.iter().any(|i| i == "workspace.canvas.path.more"), "the first ancestors fold into …: {found:?}");
+    // The root, then the six packages: the open one and its parent are shown whole.
+    let (here, parent) = (chain.len(), chain.len() - 1);
+    for i in [here, parent] {
+        let pill = rect_of(&h, &format!("workspace.canvas.path.{i}"));
+        assert!(bar.contains_rect(pill), "path.{i} in the bar");
+    }
+    // The parent is a click away; … leads to the nearest ancestor it folds.
+    let at = rect_of(&h, &format!("workspace.canvas.path.{parent}")).center();
+    click(&mut h, at);
+    let open_package = |h: &Harness<'static, Shell>| {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let d = st.by_uuid(h.state().canvas.active.unwrap()).unwrap();
+        st.uuid(crate::package_nav::package_of_diagram(st, d).unwrap()).unwrap()
+    };
+    assert_eq!(open_package(&h), chain[chain.len() - 2]);
+    // Narrower still, the parent folds too, and … leads to it.
+    rest(&mut h);
+    crate::canvas::open(h.state_mut(), deepest);
+    h.state_mut().state.explorer_collapsed = false;
+    h.set_size(egui::vec2(1000.0, 900.0));
+    h.run();
+    // … leads to the ancestor just before the first one still shown (path.0 is the root).
+    let found = ids(&h);
+    let first_shown = (1..=chain.len()).find(|i| found.iter().any(|f| f == &format!("workspace.canvas.path.{i}"))).unwrap();
+    assert!(first_shown >= 2, "some ancestors are folded: {found:?}");
+    let at = rect_of(&h, "workspace.canvas.path.more").center();
+    click(&mut h, at);
+    assert_eq!(open_package(&h), chain[first_shown - 2], "… leads to the nearest folded ancestor");
+}
+
+#[test]
+fn shift_delete_on_a_selected_package_card_asks_to_delete_the_package() {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+    let (top, sales) = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value).to_string();
+        let top = id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": root, "name": "Top" })).unwrap().value);
+        let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
+        s.execute(
+            "diagram.place",
+            &serde_json::json!({ "diagram": top.to_string(), "element": sales.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 }),
+        )
+        .unwrap();
+        (top, sales)
+    };
+    crate::canvas::open(h.state_mut(), top);
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [sales.to_string()] })).unwrap();
+    h.state_mut().canvas.focused = true;
+    h.run();
+    key(&mut h, egui::Key::Delete, egui::Modifiers::SHIFT);
+    assert_eq!(h.state().explorer.delete.as_ref().map(|d| d.ids.clone()), Some(vec![sales]), "the delete dialog, for the package");
+}
+
+#[test]
 fn the_canvas_draws_the_diagram_and_the_pointer_selects_pans_and_zooms() {
     let (mut h, customer, diagram) = diagram_harness();
     let found = ids(&h);
