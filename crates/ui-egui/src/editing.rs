@@ -494,6 +494,14 @@ fn decide(
             {
                 return Action::EditNote(node);
             }
+            // A double click on a card that renames in place alone (a package): it renames.
+            if (resp.double_clicked() || resp.triple_clicked())
+                && let Some(n) = hit_node(pos)
+                && let Some(e) = element_of(store, n).filter(|e| kind.is_some_and(|k| k.renames_in_place(store, *e)))
+                && let (Some(node), Some(e)) = (uuid(store, n), uuid(store, e))
+            {
+                return Action::Rename(node, e);
+            }
             // A double click on a card: its header renames it in place, a row opens its editor there.
             if (resp.double_clicked() || resp.triple_clicked())
                 && let Some(n) = hit_node(pos)

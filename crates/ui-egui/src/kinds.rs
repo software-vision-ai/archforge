@@ -84,6 +84,12 @@ pub(crate) trait DiagramKind: Sync {
     /// A line of the tool `tool` dropped on empty canvas at `(x, y)`: a new element there, joined
     /// to the node's.
     fn connect_to_new(&self, shell: &mut Shell, tool: &'static str, d: Obj, from_node: Uuid, x: f64, y: f64);
+    /// Whether an element that takes no part in the gestures still renames in place with a double
+    /// click on its card (a package on a class diagram).
+    fn renames_in_place(&self, store: &Store, element: Obj) -> bool {
+        let _ = (store, element);
+        false
+    }
     /// Renames the element as typed in place.
     fn rename(&self, shell: &mut Shell, element: Uuid, name: &str) -> Result<(), String>;
     /// Opens the element's editor, at the row of its card under a double click (None: the editor's

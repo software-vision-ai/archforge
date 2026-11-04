@@ -201,6 +201,36 @@ fn model_root(ctx: &mut C<'_>, _p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, root)? }))
 }
 
+/// The class diagram a package leads to (AR-95): the first of the package's class diagrams.
+pub fn diagram_of(store: &Store, package: Obj) -> Option<Obj> {
+    use archforge_diagram::diagram;
+    store.alive().find(|d| {
+        store.class_of(*d).ok() == Some(archforge_diagram::DIAGRAM)
+            && store.get(*d, diagram::KIND).ok().and_then(|v| v.as_str().map(|k| k == crate::CLASS_DIAGRAM)).unwrap_or(false)
+            && store.get(*d, diagram::ELEMENT).ok().and_then(|v| v.as_ref()) == Some(package)
+    })
+}
+
+/// The package's diagram, made when it has none: a class diagram of the package named like it,
+/// beside the model's other diagrams. `made` says which.
+fn package_diagram(ctx: &mut C<'_>, p: &Params) -> R {
+    use archforge_diagram::diagram;
+    let pkg = id_of(ctx.doc, p, "package", PACKAGE, "package")?;
+    if let Some(d) = diagram_of(ctx.doc, pkg) {
+        return Ok(json!({ "id": uuid_of(ctx.doc, d)?, "made": false }));
+    }
+    let m = model(ctx.doc)?;
+    let name: String = name_of(ctx.doc, pkg).chars().take(archforge_diagram::rules::MAX_NAME).collect();
+    let d = ctx.doc.create(archforge_diagram::DIAGRAM).map_err(fail)?;
+    ctx.doc.set(d, diagram::KIND, Value::str(crate::CLASS_DIAGRAM)).map_err(fail)?;
+    if !name.is_empty() {
+        ctx.doc.set(d, diagram::NAME, Value::str(&name)).map_err(fail)?;
+    }
+    ctx.doc.set(d, diagram::ELEMENT, Value::Ref(pkg)).map_err(fail)?;
+    ctx.doc.push(m, archforge_core::model::MEMBER, Value::Ref(d)).map_err(fail)?;
+    Ok(json!({ "id": uuid_of(ctx.doc, d)?, "made": true }))
+}
+
 /// Puts `pkg` into `parent`, or at the model's top level.
 fn place_package(store: &mut Store, pkg: Obj, parent: Option<Obj>) -> Result<(), CommandError> {
     match parent {
@@ -225,7 +255,22 @@ fn package_rename(ctx: &mut C<'_>, p: &Params) -> R {
     let pkg = id_of(ctx.doc, p, "package", PACKAGE, "a package")?;
     let name = text(p, "name");
     check_name(ctx.doc, name, &siblings_of(ctx.doc, package_of(ctx.doc, pkg)), Some(pkg), "package")?;
+    let old = name_of(ctx.doc, pkg);
     set_name(ctx.doc, pkg, name)?;
+    // Its class diagrams still named like it follow the new name (AR-95: a package's own diagram).
+    let follows: Vec<Obj> = ctx
+        .doc
+        .alive()
+        .filter(|d| ctx.doc.class_of(*d).ok() == Some(archforge_diagram::DIAGRAM))
+        .filter(|d| ctx.doc.get(*d, archforge_diagram::diagram::ELEMENT).ok().and_then(|v| v.as_ref()) == Some(pkg))
+        .filter(|d| {
+            ctx.doc.get(*d, archforge_diagram::diagram::NAME).ok().and_then(|v| v.as_str().map(str::to_string)).as_deref() == Some(old.as_str())
+        })
+        .collect();
+    let diagram_name: String = name.chars().take(archforge_diagram::rules::MAX_NAME).collect();
+    for d in follows {
+        ctx.doc.set(d, archforge_diagram::diagram::NAME, Value::str(&diagram_name)).map_err(fail)?;
+    }
     Ok(json!({ "id": uuid_of(ctx.doc, pkg)? }))
 }
 
@@ -429,6 +474,15 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             package_add
         ),
         cmd!("uml.model.root", "Make the root package", &["Package"], None, "", always, model_root),
+        cmd!(
+            "uml.package.diagram",
+            "Package's diagram",
+            &["Package", "Diagram"],
+            None,
+            "package: string; the package's id",
+            has_packages,
+            package_diagram
+        ),
         cmd!(
             "uml.package.move",
             "Move package",

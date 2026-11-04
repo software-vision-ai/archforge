@@ -31,6 +31,7 @@ mod notation_ui;
 pub mod objects;
 #[cfg(feature = "snapshot")]
 pub mod offscreen;
+pub(crate) mod package_nav;
 pub mod panels;
 pub mod problems;
 mod project_search;

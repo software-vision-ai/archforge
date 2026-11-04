@@ -44,6 +44,8 @@ pub enum Tone {
     Tinted,
     /// The plain surface with the plain border, its eyebrow muted: a class.
     Plain,
+    /// [`Tone::Plain`] with a tab at its top left, as a folder: a package.
+    Tabbed,
 }
 
 /// A row of a compartment: a mark before it (such as `PK`, shown while the status marks are on),

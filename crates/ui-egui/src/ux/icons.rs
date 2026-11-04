@@ -668,6 +668,10 @@ pub const SCHEMA: Icon = Icon {
 };
 
 /// A chevron pointing right: a folded row.
+/// Open: an arrow out to the top right, into what it opens.
+pub const OPEN_IN: Icon =
+    Icon { size: [16.0, 16.0], stroke: 1.5, segments: &[L([3.0, 13.0], [13.0, 3.0]), L([6.0, 3.0], [13.0, 3.0]), L([13.0, 3.0], [13.0, 10.0])] };
+
 pub const CHEVRON_RIGHT: Icon = Icon { size: [16.0, 16.0], stroke: 1.5, segments: &[L([6.0, 3.0], [11.0, 8.0]), L([11.0, 8.0], [6.0, 13.0])] };
 
 /// A chevron pointing up and one pointing down: move a row up or down its list.

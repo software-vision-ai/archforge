@@ -182,3 +182,59 @@ fn the_sweep_finds_no_command_that_breaks_the_store_with_packages_nested() {
     assert!(calls > 100, "{calls}");
     let _ = Value::Null;
 }
+
+#[test]
+fn a_package_leads_to_one_class_diagram_of_its_own_named_like_it() {
+    let mut s = session();
+    let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+    let orders = run(&mut s, "uml.package.add", json!({ "name": "Orders", "parent": sales }));
+    // The first ask makes it, as one undo step; the next ones find the same diagram.
+    let made = s.execute("uml.package.diagram", &json!({ "package": orders })).unwrap().value;
+    assert_eq!(made["made"], true);
+    let d = made["id"].as_str().unwrap().to_string();
+    let again = s.execute("uml.package.diagram", &json!({ "package": orders })).unwrap().value;
+    assert_eq!((again["id"].as_str().unwrap(), again["made"].as_bool()), (d.as_str(), Some(false)), "never a second");
+    let diagram = obj(&s, &d);
+    let st = s.doc();
+    assert_eq!(st.get(diagram, archforge_diagram::diagram::KIND).unwrap().as_str(), Some(archforge_uml::CLASS_DIAGRAM));
+    assert_eq!(st.get(diagram, archforge_diagram::diagram::ELEMENT).unwrap().as_ref(), Some(obj(&s, &orders)));
+    assert_eq!(st.get(diagram, archforge_diagram::diagram::NAME).unwrap().as_str(), Some("Orders"));
+    assert_eq!(archforge_uml::commands::diagram_of(s.doc(), obj(&s, &orders)), Some(diagram));
+    s.undo().unwrap();
+    s.undo().unwrap();
+    assert!(!alive(&s, &d), "undo takes the diagram back");
+    s.redo().unwrap();
+    s.redo().unwrap();
+    // Renamed, the package takes its diagram's name along while the diagram still has the old one.
+    run(&mut s, "uml.package.rename", json!({ "package": orders, "name": "Ordering" }));
+    assert_eq!(s.doc().get(obj(&s, &d), archforge_diagram::diagram::NAME).unwrap().as_str(), Some("Ordering"));
+    run(&mut s, "diagram.rename", json!({ "diagram": d, "name": "Order flow" }));
+    run(&mut s, "uml.package.rename", json!({ "package": orders, "name": "Orders" }));
+    assert_eq!(s.doc().get(obj(&s, &d), archforge_diagram::diagram::NAME).unwrap().as_str(), Some("Order flow"), "a name of its own stays");
+    round_trip(&mut s, "uml.package.diagram", json!({ "package": sales }));
+}
+
+#[test]
+fn a_class_diagram_shows_the_packages_its_package_holds_as_tabbed_cards() {
+    let mut s = session();
+    let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+    let orders = run(&mut s, "uml.package.add", json!({ "name": "Orders", "parent": sales }));
+    let billing = run(&mut s, "uml.package.add", json!({ "name": "Billing" }));
+    run(&mut s, "uml.class.add", json!({ "package": orders, "name": "Order" }));
+    run(&mut s, "uml.package.add", json!({ "name": "Lines", "parent": orders }));
+    let d = run(&mut s, "diagram.add", json!({ "kind": "uml.class", "element": sales, "name": "Sales" }));
+    // A package Sales holds goes on its diagram; one it does not hold is refused.
+    let node = run(&mut s, "diagram.place", json!({ "diagram": d, "element": orders, "x": 0, "y": 0 }));
+    let e = s.execute("diagram.place", &json!({ "diagram": d, "element": billing, "x": 300, "y": 0 })).expect_err("another package's");
+    assert!(!e.to_string().is_empty());
+    let st = s.doc();
+    let n = obj(&s, &node);
+    let b = archforge_diagram::grid::bounds_of(st, n);
+    assert_eq!((b.width, b.height), archforge_uml::PACKAGE_SIZE, "placed at a package's size");
+    let card = archforge_diagram::Notation::card(&archforge_uml::UmlNotation, st, obj(&s, &orders), obj(&s, &d)).expect("a card");
+    assert_eq!(card.tone, archforge_diagram::figure::Tone::Tabbed);
+    assert_eq!(card.eyebrow, archforge_diagram::figure::Text::said("Package"));
+    assert_eq!(card.name, "Orders");
+    let rows: Vec<&str> = card.compartments[0].iter().map(|r| r.text.as_str()).collect();
+    assert_eq!(rows, ["Order", "▸ Lines"], "its classes, then its packages marked");
+}

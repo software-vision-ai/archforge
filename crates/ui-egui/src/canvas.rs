@@ -34,7 +34,7 @@ const GRID_MIN: f32 = 12.0;
 const GRID_MAX_DOTS: f32 = 6000.0;
 /// The zoom's range and a step of the zoom buttons.
 pub(crate) const ZOOM_RANGE: (f32, f32) = (0.1, 4.0);
-const ZOOM_STEP: f32 = 1.25;
+pub(crate) const ZOOM_STEP: f32 = 1.25;
 /// The margin "Whole diagram" leaves around the nodes.
 const FIT_MARGIN: f32 = 48.0;
 /// The minimap's box and the toolbar's pill.
@@ -131,6 +131,8 @@ pub struct State {
     pub skills: Vec<crate::skill_tab::Doc>,
     /// The cardinality texts the last frame drew, where a press grabs one.
     pub ends: Vec<EndText>,
+    /// Moving between a package's diagram and its parent's (AR-95).
+    pub(crate) nav: crate::package_nav::Nav,
 }
 
 /// A cardinality text as drawn: its line, which end (0 the line's start, 1 its end), where it
@@ -172,6 +174,7 @@ impl Default for State {
             note_edit: None,
             skills: Vec::new(),
             ends: Vec::new(),
+            nav: crate::package_nav::Nav::default(),
         }
     }
 }
@@ -351,6 +354,13 @@ fn zoom_about(state: &mut State, factor: f32, at: Vec2) {
     state.zoom = new;
 }
 
+/// A zoom the user makes by `factor` about `at`: the canvas zooms, and package navigation hears
+/// of it.
+pub(crate) fn zoom_by(state: &mut State, factor: f32, at: Vec2) {
+    zoom_about(state, factor, at);
+    crate::package_nav::intend(&mut state.nav, factor);
+}
+
 /// Fits the whole diagram into the canvas, or shows an empty one at 100 % from its top left.
 fn fit(state: &mut State, size: Vec2, bounds: Option<Rect>) {
     match bounds {
@@ -505,7 +515,7 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
         let (scroll, pinch, pointer) = ui.input(|i| (i.smooth_scroll_delta, i.zoom_delta(), i.pointer.hover_pos()));
         let at = pointer.map_or(r.center(), |pos| pos - r.min.to_vec2()).to_vec2();
         if (pinch - 1.0).abs() > f32::EPSILON {
-            zoom_about(&mut shell.canvas, pinch, at);
+            zoom_by(&mut shell.canvas, pinch, at);
         } else if scroll != Vec2::ZERO {
             shell.canvas.pan += scroll;
         }
@@ -513,6 +523,8 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     if !shell.canvas.pan.is_finite() {
         shell.canvas.pan = Vec2::ZERO;
     }
+    // A zoom across a package's threshold, ⌘↓ or ⌘↑ moves to another level (AR-95).
+    crate::package_nav::before_draw(shell, ui, r, d);
     let view = View { origin: r.min, pan: shell.canvas.pan, zoom: shell.canvas.zoom };
     // An element dragged from the Models explorer lands where it was let go (slice S7), as the
     // diagram's kind places it.
@@ -595,6 +607,7 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
         crate::editing::pointer(shell, ui, &resp, view, grid, d);
     }
     crate::editing::overlays(shell, ui, p, r, view, d, &overrides);
+    let below_path = crate::package_nav::after_draw(shell, ui, p, r, d);
     crate::connect::mapping_offer(shell, ui, p, r);
     crate::connect::toast(shell, ui, p, r);
     if minimap_shown(shell, r) {
@@ -615,7 +628,7 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     }
     toolbar(shell, ui, p, r);
     if let Some(notice) = shell.canvas.notice.clone() {
-        ux::text(&paint, r.min + vec2(16.0, 12.0), &notice, types::CAPTION, p.amber, Some((r.width() - 32.0).max(0.0)));
+        ux::text(&paint, r.min + vec2(16.0, 12.0 + below_path), &notice, types::CAPTION, p.amber, Some((r.width() - 32.0).max(0.0)));
     }
 }
 
@@ -743,7 +756,8 @@ fn draw_node(
                 None => p,
             };
             // A plain card (a class) takes the surface, the border and the muted eyebrow.
-            let plain = card.tone == archforge_diagram::figure::Tone::Plain;
+            let tabbed = card.tone == archforge_diagram::figure::Tone::Tabbed;
+            let plain = tabbed || card.tone == archforge_diagram::figure::Tone::Plain;
             let (fill, edge, eyebrow, line) =
                 if plain { (p.surface, p.border, ink.text_secondary, p.border) } else { (p.entity, p.entity_edge, ink.entity_ink, p.entity_line) };
             let p = &Palette {
@@ -757,11 +771,25 @@ fn draw_node(
                 ..*p
             };
             let border = look.width.map_or(1.0, |w| (w * z).max(1.0));
+            // A package's tab, as a folder's, over its top left.
+            let tab = Rect::from_min_size(rect.min - vec2(0.0, 16.0 * z), vec2((88.0 * z).min(rect.width() * 0.6), 17.0 * z));
+            if tabbed {
+                paint.rect_filled(tab, 4.0 * z, p.entity);
+                paint.rect_stroke(tab, 4.0 * z, Stroke::new(border, p.entity_edge), StrokeKind::Inside);
+            }
             paint.rect_filled(rect, 6.0 * z, p.entity);
             if card.elsewhere {
                 dashed_rect(paint, rect, Stroke::new(border, p.entity_edge), 4.0 * z, 3.0 * z);
             } else {
                 paint.rect_stroke(rect, 6.0 * z, Stroke::new(border, p.entity_edge), StrokeKind::Inside);
+            }
+            if tabbed {
+                // The tab joins the card: no border between them.
+                paint.rect_filled(
+                    Rect::from_min_max(pos2(tab.left() + border, rect.top() - z), pos2(tab.right() - border, rect.top() + border)),
+                    0.0,
+                    p.entity,
+                );
             }
             let room = Some((rect.width() - 2.0 * ENTITY_INSET * z).max(0.0));
             if z >= DETAIL_ZOOM {
@@ -1465,10 +1493,10 @@ fn minimap(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, bounds: Optio
     paint.galley(pos2(m.right() - 48.0 - g.size().x / 2.0, m.top() + 142.0 - g.size().y / 2.0), g, p.text);
     let centre = r.size() / 2.0;
     if control(shell, ui, "workspace.zoom.in", "button", plus, true).on_hover_text(tr("Zoom in")).clicked() {
-        zoom_about(&mut shell.canvas, ZOOM_STEP, centre);
+        zoom_by(&mut shell.canvas, ZOOM_STEP, centre);
     }
     if control(shell, ui, "workspace.zoom.out", "button", minus, true).on_hover_text(tr("Zoom out")).clicked() {
-        zoom_about(&mut shell.canvas, 1.0 / ZOOM_STEP, centre);
+        zoom_by(&mut shell.canvas, 1.0 / ZOOM_STEP, centre);
     }
 }
 

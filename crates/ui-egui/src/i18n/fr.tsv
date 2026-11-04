@@ -524,6 +524,7 @@ str		The diagram is of no package	Le diagramme n’est d’aucun paquetage
 str		This class	Cette classe
 str		This package	Ce paquetage
 plural		+ {n} more member	+ {n} membre de plus|+ {n} membres de plus
+plural		+ {n} more element	+ {n} élément de plus|+ {n} éléments de plus
 # Membres de classe dans Propriétés
 str		Abstract	Abstraite
 str		Add attribute	Ajouter un attribut
@@ -554,6 +555,11 @@ str		This attribute	Cet attribut
 str		This operation	Cette opération
 str		Visibility	Visibilité
 str		Place class	Placer la classe
+str		Add package	Ajouter un paquetage
+str		Place package	Placer le paquetage
+str		Open this package's diagram	Ouvrir le diagramme de ce paquetage
+str		Open this package's diagram (⌘↓)	Ouvrir le diagramme de ce paquetage (⌘↓)
+str		Only a package this diagram's package holds goes on it	Seul un paquetage contenu dans le paquetage de ce diagramme peut y aller
 # Relier des classes
 str		A bound can be at most {max}.	Une borne vaut au plus {max}.
 str		A relationship joins two classes	Une relation joint deux classes
