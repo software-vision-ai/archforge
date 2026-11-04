@@ -527,7 +527,7 @@ pub const STROKE: f32 = 1.2;
 /// the brand mark and illustrations, which keep the size they are given.
 fn standard_size(icon: &Icon) -> Option<f32> {
     use icons::*;
-    let table: [(&Icon, f32); 49] = [
+    let table: [(&Icon, f32); 50] = [
         (&COLUMN, 11.0),
         (&PLUS, 10.0),
         (&CLOSE, 9.0),
@@ -538,6 +538,7 @@ fn standard_size(icon: &Icon) -> Option<f32> {
         (&CHEVRON_DOWN, 8.0),
         (&CHEVRON_SMALL, 8.0),
         (&CHEVRON_RIGHT, 9.0),
+        (&CHEVRON_LEFT, 9.0),
         (&OPEN_IN, 10.0),
         (&COLLAPSE, 14.0),
         (&EXPAND_ALL, 9.0),

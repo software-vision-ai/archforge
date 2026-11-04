@@ -66,6 +66,10 @@ pub enum Screen {
     WorkspaceClassDiagram,
     /// The sample class model to read: members, every line kind and end.
     WorkspaceClassDiagramRead,
+    /// New diagram's first step: a card for each kind, Class diagram chosen.
+    WorkspaceNewDiagramKind,
+    /// New diagram's second step for a class diagram: its name and the root package.
+    WorkspaceNewDiagramDetails,
     /// A class diagram of the root package with two packages on it, Sales selected with its Open.
     WorkspacePackages,
     /// Inside Sales: its classes, a package of its own, and the path bar back to the root.
@@ -296,6 +300,19 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
     if screen == Screen::WorkspaceClassDiagram {
         shell.adopt_project();
         sample_class_diagram(&mut shell)?;
+    }
+    if matches!(screen, Screen::WorkspaceNewDiagramKind | Screen::WorkspaceNewDiagramDetails) {
+        shell.adopt_project();
+        sample_diagram(&mut shell, true)?;
+        crate::diagrams::open_new(&mut shell);
+        if let Some(edit) = shell.diagrams.new.as_mut() {
+            edit.kind = archforge_uml::CLASS_DIAGRAM;
+            edit.schema = None;
+            edit.name = "Domain model".into();
+            if screen == Screen::WorkspaceNewDiagramDetails {
+                edit.step = crate::diagrams::Step::Details;
+            }
+        }
     }
     if matches!(screen, Screen::WorkspacePackages | Screen::WorkspaceInsidePackage) {
         shell.adopt_project();
