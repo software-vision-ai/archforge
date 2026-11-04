@@ -47,6 +47,7 @@ fn run() -> Result<(), String> {
             Some("workspace-packages") => Screen::WorkspacePackages,
             Some("workspace-inside-package") => Screen::WorkspaceInsidePackage,
             Some("workspace-package-parent") => Screen::WorkspacePackageParent,
+            Some("workspace-package-top") => Screen::WorkspacePackageTop,
             Some("workspace-diagrams") => Screen::WorkspaceDiagrams,
             Some("workspace-new-diagram-kind") => Screen::WorkspaceNewDiagramKind,
             Some("workspace-new-diagram-details") => Screen::WorkspaceNewDiagramDetails,

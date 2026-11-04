@@ -363,11 +363,13 @@ What is UML's own, beside the shared rules above.
   diagram's package holds goes on it. Every package placed on a canvas has its own class diagram,
   made with it in one undo step (an existing one is reused); renaming the package renames a diagram
   still named like it. Selected, its card shows Open; ⌘↓ opens it too, and zooming in until it
-  covers 60 % of the canvas does. The path bar at the canvas's top left (root to here, ancestors as
-  buttons), ⌘↑, or zooming out until the diagram covers under 20 % (or the least zoom) goes back,
-  the parent's view as it was left, after a zoom out the package a third of the view wide.
-  Thresholds rest 0.6 s after a switch; a switch fades in over 0.2 s. A double click renames, never
-  navigates.
+  covers 60 % of the canvas does; each opens the package's diagram at 100 %, its content centred
+  (AR-110). Zooming out stays in a package's diagram down to the least zoom, 10 %; reaching it
+  opens the parent's diagram at 100 %, the package left centred; at the root, 10 % stays put with a
+  notice ("This is the top package: zooming out goes no further"). The path bar at the canvas's top
+  left (root to here, ancestors as buttons) and ⌘↑ go back to the parent as it was left. One level
+  per gesture: a switch waits for the zoom to rest 0.3 s and for 0.6 s to pass since the last; a
+  switch fades in over 0.2 s. A double click renames, never navigates.
 - A package moves (AR-102) by dragging its card onto another package's card (ringed, with a
   "Move … into …" tag while held) or onto an ancestor in the path bar, its row in Models onto
   another package's, or Properties' Parent package (the keyboard's way; never itself or one it
