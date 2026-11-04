@@ -185,6 +185,11 @@ impl DiagramKind for UmlKind {
         crate::editing::run(shell, "uml.class.rename", json!({ "class": element.to_string(), "name": name })).map(|_| ())
     }
 
+    /// A class, or a package on the diagram, goes from the model with ⇧⌫ (AR-95).
+    fn deletes(&self, store: &Store, element: Obj) -> bool {
+        matches!(class(store, element), Some(c) if c == archforge_uml::CLASS || c == archforge_uml::PACKAGE)
+    }
+
     /// A package on a class diagram renames in place with a double click, as a class does.
     fn renames_in_place(&self, store: &Store, element: Obj) -> bool {
         class(store, element) == Some(archforge_uml::PACKAGE)

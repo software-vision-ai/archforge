@@ -1840,7 +1840,16 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
     }
     if delete {
         if shift {
-            if let Some((node, Some(entity))) = selected.first().copied() {
+            // Deleting from the model takes any element the kind deletes, a package's card too,
+            // not only those taking part in its gestures.
+            let deletable = |node: Uuid| {
+                let store = shell.session.as_ref()?.doc();
+                let e = element_of(store, store.by_uuid(node)?)?;
+                kind.filter(|k| k.deletes(store, e)).and_then(|_| uuid(store, e))
+            };
+            if let Some((node, entity)) = selected.first().copied()
+                && let Some(entity) = entity.or_else(|| deletable(node))
+            {
                 ask_delete(shell, node, entity);
             }
         } else {

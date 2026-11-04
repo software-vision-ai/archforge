@@ -303,15 +303,46 @@ fn path_bar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, here: Obj, n
             ux::galley(&paint, name, ty, if last { p.text } else { p.accent }, Some(180.0))
         })
         .collect();
-    let width = galleys.iter().map(|g| g.size().x + 20.0).sum::<f32>() + 18.0 * path.len().saturating_sub(1) as f32 + 8.0;
-    let bar = Rect::from_min_size(r.min + vec2(16.0, 14.0), vec2(width.min(room), 30.0));
+    // Too long for the canvas: the ancestors nearest the root fold into "…", so the package open
+    // and its nearest parents stay in sight and clickable.
+    const MORE: f32 = 30.0;
+    const CHEVRON: f32 = 18.0;
+    let widths: Vec<f32> = galleys.iter().map(|g| g.size().x + 20.0).collect();
+    let width_from = |start: usize| -> f32 {
+        let shown: f32 = widths[start..].iter().sum::<f32>() + CHEVRON * (widths.len() - start).saturating_sub(1) as f32;
+        shown + if start > 0 { MORE + CHEVRON } else { 0.0 } + 8.0
+    };
+    let mut start = 0;
+    while start + 1 < widths.len() && width_from(start) > room {
+        start += 1;
+    }
+    let bar = Rect::from_min_size(r.min + vec2(16.0, 14.0), vec2(width_from(start).min(room), 30.0));
     widgets_record(shell, ui, bar);
     paint.rect_filled(bar, 8.0, p.surface);
     paint.rect_stroke(bar, 8.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
     let clip = paint.with_clip_rect(bar);
     let mut x = bar.left() + 4.0;
     let mut go: Option<Uuid> = None;
-    for (i, ((id, _), g)) in path.iter().zip(galleys).enumerate() {
+    let chevron =
+        |x: f32, y: f32| ux::icon_in(&clip, Rect::from_center_size(pos2(x + 9.0, y), Vec2::splat(12.0)), &icons::CHEVRON_RIGHT, p.text_muted);
+    if start > 0 {
+        // "…" stands for the ancestors folded away and leads to the nearest of them.
+        let b = Rect::from_min_size(pos2(x, bar.top() + 4.0), vec2(MORE, 22.0));
+        let hidden: Vec<&str> = path[..start].iter().map(|(_, n)| n.as_str()).collect();
+        let resp = control(shell, ui, "workspace.canvas.path.more", "button", b, true).on_hover_text(hidden.join(" › "));
+        clip.rect_filled(b, 5.0, if resp.hovered() { p.accent_tint } else { p.field });
+        if resp.has_focus() {
+            clip.rect_stroke(b, 5.0, Stroke::new(2.0, p.focus), StrokeKind::Inside);
+        }
+        ux::text_mid(&clip, b.left() + 9.0, b.center().y, "…", types::UI, p.accent, None);
+        if resp.clicked() {
+            go = path.get(start - 1).map(|(id, _)| *id);
+        }
+        x = b.right();
+        chevron(x, b.center().y);
+        x += CHEVRON;
+    }
+    for (i, ((id, _), g)) in path.iter().zip(galleys).enumerate().skip(start) {
         let last = i + 1 == path.len();
         let b = Rect::from_min_size(pos2(x, bar.top() + 4.0), vec2(g.size().x + 20.0, 22.0));
         if !last {
@@ -331,8 +362,8 @@ fn path_bar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, here: Obj, n
         clip.galley(pos2(b.left() + 10.0, b.center().y - g.size().y / 2.0), g, ink);
         x = b.right();
         if !last {
-            ux::icon_in(&clip, Rect::from_center_size(pos2(x + 9.0, b.center().y), Vec2::splat(12.0)), &icons::CHEVRON_RIGHT, p.text_muted);
-            x += 18.0;
+            chevron(x, b.center().y);
+            x += CHEVRON;
         }
     }
     if let Some(id) = go {
