@@ -860,13 +860,24 @@ fn sample_packages(shell: &mut Shell, inside: bool) -> Result<(), String> {
         }
     }
     let inner = run(session, "uml.package.diagram", json!({ "package": sales }))?;
-    for (name, x) in [("Order", 80), ("OrderLine", 420)] {
+    // Sales's own diagram, which its card shows as a thumbnail (AR-113): two classes with their
+    // attributes, the association between them, and its own package Payments with a class.
+    let mut classes = Vec::new();
+    for (name, x, attributes) in [("Order", 80, ["id", "placedAt"].as_slice()), ("OrderLine", 420, ["quantity"].as_slice())] {
         let c = run(session, "uml.class.add", json!({ "package": sales, "name": name }))?;
+        for a in attributes {
+            run(session, "uml.attribute.add", json!({ "class": c, "name": a }))?;
+        }
         run(session, "diagram.place", json!({ "diagram": inner, "element": c, "x": x, "y": 120 }))?;
+        classes.push(c);
     }
+    run(session, "uml.association.add", json!({ "from": classes[0], "to": classes[1], "name": "lines" }))?;
     let payments = run(session, "uml.package.add", json!({ "name": "Payments", "parent": sales }))?;
     run(session, "diagram.place", json!({ "diagram": inner, "element": payments, "x": 760, "y": 120, "width": w, "height": h }))?;
-    run(session, "uml.package.diagram", json!({ "package": payments }))?;
+    let own = run(session, "uml.package.diagram", json!({ "package": payments }))?;
+    let payment = run(session, "uml.class.add", json!({ "package": payments, "name": "Payment" }))?;
+    run(session, "diagram.place", json!({ "diagram": own, "element": payment, "x": 80, "y": 80 }))?;
+    let _ = session.execute("diagram.connect-all", &json!({ "diagram": inner }));
     session.mark_saved().map_err(|e| format!("mark_saved: {e:?}"))?;
     let id = |s: &str| archforge_mof::Uuid::parse(s).ok_or_else(|| "the sample's ids".to_string());
     crate::canvas::open(shell, id(if inside { &inner } else { &top })?);

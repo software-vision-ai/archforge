@@ -264,6 +264,17 @@ impl Grid {
         self.nodes.is_empty() && self.edges.is_empty()
     }
 
+    /// Where `n` comes in the drawing order, nested nodes included: later is drawn on top.
+    pub fn drawn_at(&self, n: Obj) -> Option<usize> {
+        self.nodes.iter().position(|item| item.obj == n)
+    }
+
+    /// Every line indexed with its points, in drawing order: one pass, where [`Grid::line`] looks
+    /// up one.
+    pub fn lines(&self) -> impl Iterator<Item = (Obj, &[(f64, f64)])> {
+        self.edges.iter().map(|item| (item.obj, item.points.as_slice()))
+    }
+
     /// The points of `e`'s line as indexed: as the canvas draws it from the store.
     pub fn line(&self, e: Obj) -> Option<&[(f64, f64)]> {
         self.edges.iter().find(|item| item.obj == e).map(|item| item.points.as_slice())

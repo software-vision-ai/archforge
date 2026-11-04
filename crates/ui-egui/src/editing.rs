@@ -346,10 +346,11 @@ fn decide(
     let kind = crate::kinds::kind_of(shell, store, d);
     let hit_node = |pos: Pos2| {
         let (x, y) = view.to_canvas(pos);
-        match grid.hit(x, y) {
+        let card = match grid.hit(x, y) {
             Some(Hit::Node(n)) => Some(n),
             _ => None,
-        }
+        };
+        on_top(shell, store, grid, card, pos)
     };
     match shell.canvas.tool {
         Tool::Pan => Action::Nothing,
@@ -526,10 +527,17 @@ fn decide(
             }
             if resp.clicked() {
                 let (x, y) = view.to_canvas(pos);
-                let target = match grid.hit(x, y) {
-                    Some(Hit::Node(n)) => element_of(store, n).unwrap_or(n),
-                    Some(Hit::Edge(e)) => store.get(e, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref()).unwrap_or(e),
-                    None => d,
+                // A package's tab is its card's (AR-113), over any line that crosses it; a card and a
+                // tab over each other give the one drawn on top.
+                let hit = grid.hit(x, y);
+                let card = match hit {
+                    Some(Hit::Node(n)) => Some(n),
+                    _ => None,
+                };
+                let target = match (on_top(shell, store, grid, card, pos), hit) {
+                    (Some(n), _) => element_of(store, n).unwrap_or(n),
+                    (None, Some(Hit::Edge(e))) => store.get(e, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref()).unwrap_or(e),
+                    (None, _) => d,
                 };
                 let Some(id) = uuid(store, target) else { return Action::Nothing };
                 return if shift && target != d { Action::Toggle(id) } else { Action::Select(vec![id]) };
@@ -812,15 +820,28 @@ fn remove_selected_link(shell: &mut Shell) -> bool {
 }
 
 /// The topmost node of `d` under a screen point whose element takes part in the diagram kind's
-/// gestures.
+/// gestures: on its card, or on its package's tab.
 fn node_at(shell: &Shell, view: View, d: Obj, at: Pos2) -> Option<Uuid> {
     let store = shell.session.as_ref()?.doc();
     let kind = crate::kinds::kind_of(shell, store, d);
-    nodes_of(store, d)
-        .into_iter()
-        .rev()
-        .find(|n| part_of_node(kind, store, *n).is_some() && view.rect(&bounds_of(store, *n)).contains(at))
-        .and_then(|n| uuid(store, n))
+    let card =
+        nodes_of(store, d).into_iter().rev().find(|n| part_of_node(kind, store, *n).is_some() && view.rect(&bounds_of(store, *n)).contains(at));
+    on_top(shell, store, &Grid::build(store, d), card, at).filter(|n| part_of_node(kind, store, *n).is_some()).and_then(|n| uuid(store, n))
+}
+
+/// Of the card under a point and the package tab under it, the one drawn on top: the later in
+/// the grid's drawing order, nested nodes included, as the canvas draws them (AR-113).
+fn on_top(shell: &Shell, store: &Store, grid: &Grid, card: Option<Obj>, at: Pos2) -> Option<Obj> {
+    match (card, tab_at(shell, store, at)) {
+        (Some(c), Some(t)) if c != t => Some(if grid.drawn_at(t) > grid.drawn_at(c) { t } else { c }),
+        (c, t) => c.or(t),
+    }
+}
+
+/// The package whose tab the last frame drew under a screen point, the topmost first: the tab is
+/// part of its card (AR-113).
+fn tab_at(shell: &Shell, store: &Store, at: Pos2) -> Option<Obj> {
+    shell.canvas.package_tabs.iter().rev().find(|t| t.rect.contains(at)).and_then(|t| store.by_uuid(t.node)).filter(|n| store.is_alive(*n))
 }
 
 /// Places a note at `(x, y)`, its centre under the click, and opens its text for typing.
@@ -1632,7 +1653,16 @@ fn pos2_of((x, y): (f64, f64)) -> Pos2 {
 /// selected when the entity is new; Enter commits, Escape closes, a refusal stays under it.
 fn rename_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, rect: Rect, z: f32) {
     let paint = ui.painter().clone();
-    let field = Rect::from_min_size(rect.min + vec2(14.0, 28.0) * z, vec2((rect.width() - 28.0 * z).max(0.0), 30.0 * z));
+    // A package's name is typed in its tab, which grows with it (AR-113).
+    let in_tab = shell.canvas.rename.as_ref().is_some_and(|rn| shell.canvas.package_tabs.iter().any(|t| t.node == rn.node));
+    let field = if in_tab {
+        let text = shell.canvas.rename.as_ref().map(|rn| rn.text.clone()).unwrap_or_default();
+        let (tab, _, _) = crate::canvas::package_tab(&paint, rect, &text, z, p.text);
+        tab.shrink2(vec2(4.0, 3.0) * z)
+    } else {
+        Rect::from_min_size(rect.min + vec2(14.0, 28.0) * z, vec2((rect.width() - 28.0 * z).max(0.0), 30.0 * z))
+    };
+    let font = if in_tab { types::SMALL_STRONG.scaled(z) } else { types::SECTION.scaled(z) };
     paint.rect_filled(field, 2.0 * z, p.accent_tint);
     widgets::record_visible(ui, &mut shell.registry, "workspace.canvas.rename", "field", field);
     let Some(rn) = shell.canvas.rename.as_mut() else { return };
@@ -1645,7 +1675,7 @@ fn rename_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, rect: Rect, z
     let edit = egui::TextEdit::singleline(&mut rn.text)
         .id(id)
         .frame(egui::Frame::NONE)
-        .font(types::SECTION.scaled(z).font())
+        .font(font.font())
         .text_color(p.text)
         .char_limit(MAX_NAME)
         .desired_width(inner.width());

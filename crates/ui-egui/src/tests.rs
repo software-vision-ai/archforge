@@ -3120,32 +3120,279 @@ fn shift_delete_on_a_selected_package_card_asks_to_delete_the_package() {
     assert_eq!(h.state().explorer.delete.as_ref().map(|d| d.ids.clone()), Some(vec![sales]), "the delete dialog, for the package");
 }
 
-#[test]
-fn a_package_card_tall_enough_for_its_fifty_rows_still_says_how_many_more_it_holds() {
-    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+/// The root's diagram Top with the package Sales on it (240 × 148 at 200, 160), and Sales's own
+/// diagram with Order and OrderLine side by side, joined by an association: the harness, Top,
+/// Sales, its card's node, its own diagram and the two classes' nodes there (AR-113).
+fn package_preview_harness(
+    theme: ThemeKind,
+) -> (Harness<'static, Shell>, archforge_mof::Uuid, archforge_mof::Uuid, archforge_mof::Uuid, archforge_mof::Uuid, [archforge_mof::Uuid; 2]) {
+    let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
     let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
-    let top = {
+    let ids = {
         let s = h.state_mut().session.as_mut().unwrap();
-        let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value).to_string();
-        let top = id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": root, "name": "Top" })).unwrap().value);
-        let crowded = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Crowded" })).unwrap().value);
-        for i in 0..60 {
-            s.execute("uml.class.add", &serde_json::json!({ "package": crowded.to_string(), "name": format!("C{i}") })).unwrap();
-        }
-        // Tall enough for every row the card lists.
-        s.execute(
+        let mut run = |c: &str, p: serde_json::Value| id(s.execute(c, &p).unwrap().value);
+        let root = run("uml.model.root", serde_json::json!({}));
+        let top = run("diagram.add", serde_json::json!({ "kind": "uml.class", "element": root.to_string(), "name": "Top" }));
+        let sales = run("uml.package.add", serde_json::json!({ "name": "Sales" }));
+        let card = run(
             "diagram.place",
-            &serde_json::json!({ "diagram": top.to_string(), "element": crowded.to_string(), "x": 0, "y": 0, "width": 240, "height": 1200 }),
-        )
-        .unwrap();
-        top
+            serde_json::json!({ "diagram": top.to_string(), "element": sales.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 }),
+        );
+        let own = run("uml.package.diagram", serde_json::json!({ "package": sales.to_string() }));
+        let order = run("uml.class.add", serde_json::json!({ "package": sales.to_string(), "name": "Order" }));
+        let line = run("uml.class.add", serde_json::json!({ "package": sales.to_string(), "name": "OrderLine" }));
+        run("uml.association.add", serde_json::json!({ "from": order.to_string(), "to": line.to_string() }));
+        let a = run("diagram.place", serde_json::json!({ "diagram": own.to_string(), "element": order.to_string(), "x": 0, "y": 0 }));
+        let b = run("diagram.place", serde_json::json!({ "diagram": own.to_string(), "element": line.to_string(), "x": 400, "y": 0 }));
+        (top, sales, card, own, [a, b])
     };
+    let (top, sales, card, own, classes) = ids;
+    // The association shows on Sales's diagram, whether placing drew it or not.
+    if let Some(s) = h.state_mut().session.as_mut() {
+        let _ = s.execute("diagram.connect-all", &serde_json::json!({ "diagram": own.to_string() }));
+    }
     crate::canvas::open(h.state_mut(), top);
     h.state_mut().canvas.fit_pending = false;
-    h.state_mut().canvas.zoom = 0.75;
+    h.state_mut().canvas.zoom = 1.0;
+    h.state_mut().canvas.pan = egui::Vec2::ZERO;
     h.run();
-    // Fifty rows listed, the last place saying the rest: 60 − 49.
-    assert!(painted(&h).iter().any(|t| t == "+ 11 more elements"), "{:?}", painted(&h).iter().filter(|t| t.contains("more")).collect::<Vec<_>>());
+    (h, top, sales, card, own, classes)
+}
+
+#[test]
+fn a_package_card_names_its_package_in_a_tab_that_fits_the_name_and_follows_a_rename() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _, sales, card, _, _) = package_preview_harness(theme);
+        let body = rect_of(&h, &format!("workspace.canvas.node.{card}"));
+        let tab = |h: &Harness<'static, Shell>| rect_of(h, &format!("workspace.canvas.node.{card}.tab"));
+        let short = tab(&h);
+        assert!(painted(&h).iter().any(|t| t == "Sales"), "the name is in the tab");
+        assert!(
+            (short.left() - body.left()).abs() < 0.5 && (short.bottom() - body.top() - 1.0).abs() < 0.5,
+            "over the card's top left: {short:?} {body:?}"
+        );
+        assert!(short.width() >= 56.0 && short.width() < 100.0, "fitted to Sales and its padding: {short:?}");
+        assert!(short.height() > 20.0 && short.height() < 24.0);
+        // A longer name widens it; one longer than the card stops at the card and is cut.
+        let rename = |h: &mut Harness<'static, Shell>, name: &str| {
+            h.state_mut()
+                .session
+                .as_mut()
+                .unwrap()
+                .execute("uml.package.rename", &serde_json::json!({ "package": sales.to_string(), "name": name }))
+                .unwrap();
+            h.run();
+        };
+        rename(&mut h, "Sales and Marketing");
+        let longer = tab(&h);
+        assert!(longer.width() > short.width() + 40.0 && longer.width() < body.width(), "{longer:?}");
+        assert!(painted(&h).iter().any(|t| t == "Sales and Marketing"));
+        rename(&mut h, "Customer Relationship Management Integrations");
+        let longest = tab(&h);
+        assert!(longest.width() <= body.width() + 0.5 && longest.width() > body.width() - 30.0, "never wider than the card: {longest:?}");
+        let whole = "Customer Relationship Management Integrations";
+        // In the tab its glyphs stop short of the whole name, with the ellipsis.
+        let in_tab = texts_in(&h, longest);
+        assert!(in_tab.iter().any(|(t, glyphs)| t == whole && *glyphs < whole.chars().count()), "cut: {in_tab:?}");
+        let before = painted(&h).iter().filter(|t| *t == whole).count();
+        assert!(h.state().canvas.package_tabs.iter().any(|t| t.cut.as_deref() == Some("Customer Relationship Management Integrations")));
+        // On the tab, the pointer shows the whole name.
+        h.event(egui::Event::PointerMoved(longest.center()));
+        for _ in 0..40 {
+            h.step();
+        }
+        assert_eq!(painted(&h).iter().filter(|t| *t == whole).count(), before + 1, "the whole name on hover, as well as in Models");
+    }
+}
+
+#[test]
+fn a_package_cards_thumbnail_is_its_own_diagram_scaled_and_follows_it() {
+    let (mut h, _, _, card, own, [order, line]) = package_preview_harness(ThemeKind::Light);
+    let body = rect_of(&h, &format!("workspace.canvas.node.{card}"));
+    let area = rect_of(&h, &format!("workspace.canvas.node.{card}.preview"));
+    assert!(body.contains_rect(area) && area.width() > body.width() - 24.0, "the thumbnail fills the card inside its margin: {area:?}");
+    assert!(!painted(&h).iter().any(|t| t == "Order" || t == "OrderLine"), "no list of class names any more");
+    let shown = |h: &Harness<'static, Shell>| {
+        let s = h.state().session.as_ref().unwrap();
+        let st = s.doc();
+        crate::canvas::preview(st, s.view(), st.by_uuid(own).unwrap(), area).expect("a thumbnail")
+    };
+    let first = shown(&h);
+    assert_eq!(first.cards.len(), 2, "both classes");
+    assert_eq!(first.lines.len(), 1, "and the association between them");
+    assert!(first.cards.iter().all(|c| area.contains_rect(c.rect) && c.look == crate::canvas::MiniLook::Plain && c.rows == vec![0, 0]));
+    let (a, b) = (first.cards[0].rect, first.cards[1].rect);
+    assert!(a.right() < b.left() && (a.top() - b.top()).abs() < 0.5, "laid out as on the diagram: side by side");
+    assert!(first.scale > 0.0 && first.scale <= 0.5);
+    // Moving OrderLine below Order there moves it in the thumbnail too.
+    let s = h.state_mut().session.as_mut().unwrap();
+    s.execute("diagram.move", &serde_json::json!({ "nodes": [line.to_string()], "dx": -400, "dy": 300 })).unwrap();
+    h.run();
+    let moved = shown(&h);
+    let (a, b) = (moved.cards[0].rect, moved.cards[1].rect);
+    assert!(b.top() > a.bottom() && (a.left() - b.left()).abs() < 0.5, "now one under the other: {a:?} {b:?}");
+    // With nothing left on the diagram, the card says so.
+    let s = h.state_mut().session.as_mut().unwrap();
+    s.execute("diagram.unplace", &serde_json::json!({ "nodes": [order.to_string(), line.to_string()] })).unwrap();
+    h.run();
+    let st = h.state().session.as_ref().unwrap();
+    assert!(crate::canvas::preview(st.doc(), st.view(), st.doc().by_uuid(own).unwrap(), area).is_none());
+    assert!(painted(&h).iter().any(|t| t == "Empty diagram"));
+}
+
+#[test]
+fn a_click_on_a_packages_tab_selects_the_package_though_a_line_crosses_the_tab() {
+    let (mut h, top, sales, card, _, _) = package_preview_harness(ThemeKind::Light);
+    // Two classes on Top, their association running across Sales's tab, above its card (y 150).
+    {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let root = s.execute("uml.model.root", &serde_json::json!({})).unwrap().value["id"].as_str().unwrap().to_string();
+        let mut class = |name: &str, x: i64| {
+            let c =
+                s.execute("uml.class.add", &serde_json::json!({ "package": root, "name": name })).unwrap().value["id"].as_str().unwrap().to_string();
+            s.execute(
+                "diagram.place",
+                &serde_json::json!({ "diagram": top.to_string(), "element": c, "x": x, "y": 100, "width": 100, "height": 100 }),
+            )
+            .unwrap();
+            c
+        };
+        let (a, b) = (class("Left", 0), class("Right", 600));
+        s.execute("uml.association.add", &serde_json::json!({ "from": a, "to": b })).unwrap();
+        let _ = s.execute("diagram.connect-all", &serde_json::json!({ "diagram": top.to_string() }));
+    }
+    h.run();
+    let tab = rect_of(&h, &format!("workspace.canvas.node.{card}.tab"));
+    let (view, store) = (h.state().canvas.zoom, h.state().session.as_ref().unwrap().doc());
+    let d = store.by_uuid(top).unwrap();
+    let grid = archforge_diagram::Grid::build(store, d);
+    let origin = rect_of(&h, &format!("workspace.canvas.node.{card}")).min - egui::vec2(200.0, 160.0) * view;
+    let x = f64::from((tab.center().x - origin.x) / view);
+    // Where the line runs across the tab: its horizontal segment over the tab's middle.
+    let y = grid
+        .lines()
+        .flat_map(|(_, p)| p.windows(2).map(|w| (w[0], w[1])).collect::<Vec<_>>())
+        .find(|((x0, y0), (x1, y1))| (y0 - y1).abs() < 1e-6 && x0.min(*x1) <= x && x <= x0.max(*x1))
+        .map(|((_, y0), _)| y0)
+        .expect("a segment across the tab");
+    let at = egui::pos2(tab.center().x, origin.y + y as f32 * view);
+    assert!(tab.contains(at), "the line crosses the tab: {at:?} {tab:?}");
+    assert!(matches!(grid.hit(x, y), Some(archforge_diagram::Hit::Edge(_))), "and only the line is there in the grid");
+    click(&mut h, at);
+    let s = h.state().session.as_ref().unwrap();
+    let picked: Vec<_> = s.view().selection.iter().filter_map(|o| s.doc().uuid(*o).ok()).collect();
+    assert_eq!(picked, vec![sales], "the tab, not the line under it");
+}
+
+#[test]
+fn a_packages_tab_drawn_over_another_card_takes_the_click_and_the_card_on_top_of_a_tab_keeps_it() {
+    let (mut h, top, sales, card, _, _) = package_preview_harness(ThemeKind::Light);
+    // A class whose card lies under Sales's tab: placed after Sales, it is drawn over the tab.
+    let under = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let root = s.execute("uml.model.root", &serde_json::json!({})).unwrap().value["id"].as_str().unwrap().to_string();
+        let c =
+            s.execute("uml.class.add", &serde_json::json!({ "package": root, "name": "Under" })).unwrap().value["id"].as_str().unwrap().to_string();
+        s.execute("diagram.place", &serde_json::json!({ "diagram": top.to_string(), "element": c, "x": 150, "y": 60, "width": 140, "height": 110 }))
+            .unwrap();
+        archforge_mof::Uuid::parse(&c).unwrap()
+    };
+    h.run();
+    let ids = |h: &Harness<'static, Shell>| {
+        let s = h.state().session.as_ref().unwrap();
+        s.view().selection.iter().filter_map(|o| s.doc().uuid(*o).ok()).collect::<Vec<_>>()
+    };
+    let at = rect_of(&h, &format!("workspace.canvas.node.{card}.tab")).center();
+    click(&mut h, at);
+    assert_eq!(ids(&h), vec![under], "the class, drawn over the tab, takes the click");
+    // Sales placed again comes after the class, its tab drawn over the class's card: the tab takes it.
+    let card = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        s.execute("diagram.unplace", &serde_json::json!({ "nodes": [card.to_string()] })).unwrap();
+        let v = s
+            .execute(
+                "diagram.place",
+                &serde_json::json!({ "diagram": top.to_string(), "element": sales.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 }),
+            )
+            .unwrap()
+            .value;
+        archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap()
+    };
+    for _ in 0..45 {
+        h.step();
+    }
+    h.run();
+    let at = rect_of(&h, &format!("workspace.canvas.node.{card}.tab")).center();
+    click(&mut h, at);
+    assert_eq!(ids(&h), vec![sales], "the tab, drawn over the class, takes the click");
+    // A package nested in Sales's card, its tab over Sales's body: the nested tab, drawn after its
+    // parent, takes the click.
+    let (inner, inner_card) = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let root = s.execute("uml.model.root", &serde_json::json!({})).unwrap().value["id"].as_str().unwrap().to_string();
+        let p =
+            s.execute("uml.package.add", &serde_json::json!({ "name": "Inner", "parent": root })).unwrap().value["id"].as_str().unwrap().to_string();
+        let v = s
+            .execute(
+                "diagram.place",
+                &serde_json::json!({ "diagram": top.to_string(), "element": p, "parent": card.to_string(), "x": 220, "y": 230, "width": 160, "height": 60 }),
+            )
+            .unwrap()
+            .value;
+        (archforge_mof::Uuid::parse(&p).unwrap(), archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap())
+    };
+    for _ in 0..45 {
+        h.step();
+    }
+    h.run();
+    let inner_tab = rect_of(&h, &format!("workspace.canvas.node.{inner_card}.tab"));
+    assert!(rect_of(&h, &format!("workspace.canvas.node.{card}")).contains(inner_tab.center()), "the nested tab lies on Sales's body");
+    click(&mut h, inner_tab.center());
+    assert_eq!(ids(&h), vec![inner], "the nested package's tab, not its parent's card");
+}
+
+#[test]
+fn a_packages_tab_selects_drags_and_renames_its_card_and_the_name_is_typed_in_the_tab() {
+    let (mut h, _, sales, card, _, _) = package_preview_harness(ThemeKind::Light);
+    let tab = rect_of(&h, &format!("workspace.canvas.node.{card}.tab"));
+    let body = rect_of(&h, &format!("workspace.canvas.node.{card}"));
+    click(&mut h, tab.center());
+    assert_eq!(
+        h.state()
+            .session
+            .as_ref()
+            .unwrap()
+            .view()
+            .selection
+            .iter()
+            .filter_map(|o| h.state().session.as_ref().unwrap().doc().uuid(*o).ok())
+            .collect::<Vec<_>>(),
+        vec![sales],
+        "a click on the tab selects the package"
+    );
+    // A drag by the tab moves the card.
+    for _ in 0..45 {
+        h.step();
+    }
+    drag(&mut h, tab.center(), tab.center() + egui::vec2(80.0, 40.0));
+    let moved = rect_of(&h, &format!("workspace.canvas.node.{card}"));
+    assert!((moved.left() - body.left() - 80.0).abs() < 1.0 && (moved.top() - body.top() - 40.0).abs() < 1.0, "{moved:?} from {body:?}");
+    // A double click on the tab renames it there, and the tab grows with the name typed.
+    for _ in 0..45 {
+        h.step();
+    }
+    let tab = rect_of(&h, &format!("workspace.canvas.node.{card}.tab"));
+    double_click(&mut h, tab.center());
+    assert!(h.state().canvas.rename.as_ref().is_some_and(|r| r.text == "Sales"), "{:?}", h.state().canvas.rename);
+    let field = rect_of(&h, "workspace.canvas.rename");
+    assert!(tab.contains_rect(field), "the field is in the tab: {field:?} {tab:?}");
+    h.state_mut().canvas.rename.as_mut().unwrap().text = "Sales and Marketing".into();
+    h.run();
+    let typed = rect_of(&h, &format!("workspace.canvas.node.{card}.tab"));
+    assert!(typed.width() > tab.width() + 40.0, "the tab follows the typing: {typed:?}");
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    let st = h.state().session.as_ref().unwrap().doc();
+    assert_eq!(archforge_core::name_of(st, st.by_uuid(sales).unwrap()), "Sales and Marketing");
 }
 
 #[test]
@@ -5294,6 +5541,22 @@ fn label_colours(h: &Harness<'static, Shell>, label: &str, within: egui::Rect) -
     }
     let mut out = Vec::new();
     h.output().shapes.iter().for_each(|c| walk(&c.shape, label, within, &mut out));
+    out
+}
+
+/// The texts painted with their top left inside `r`, each with how many glyphs it was laid out in.
+fn texts_in(h: &Harness<'static, Shell>, r: egui::Rect) -> Vec<(String, usize)> {
+    fn walk(s: &egui::Shape, r: egui::Rect, out: &mut Vec<(String, usize)>) {
+        match s {
+            egui::Shape::Text(t) if r.contains(t.pos) => {
+                out.push((t.galley.text().to_string(), t.galley.rows.iter().map(|row| row.glyphs.len()).sum()))
+            }
+            egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, r, out)),
+            _ => {}
+        }
+    }
+    let mut out = Vec::new();
+    h.output().shapes.iter().for_each(|c| walk(&c.shape, r, &mut out));
     out
 }
 
