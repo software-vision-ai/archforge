@@ -2803,6 +2803,7 @@ fn a_package_placed_on_a_class_diagram_leads_to_its_own_diagram_by_open_the_path
         let at = rect_of(&h, &format!("workspace.canvas.node.{}.enter", rename.node)).center();
         click(&mut h, at);
         assert_eq!(active(&h), Some(inner), "{theme:?}: Open opens the package's diagram");
+        assert_eq!(h.state().canvas.zoom, 1.0, "{theme:?}: at 100 % (AR-110)");
         let found = ids(&h);
         assert!(found.iter().any(|i| i == "workspace.canvas.path.0") && found.iter().any(|i| i == "workspace.canvas.path.1"), "{found:?}");
         rest(&mut h);
@@ -2837,6 +2838,8 @@ fn a_package_placed_on_a_class_diagram_leads_to_its_own_diagram_by_open_the_path
             h.step();
         }
         assert_eq!(active(&h), Some(inner), "{theme:?}: zooming in entered Sales");
+        h.run();
+        assert_eq!(h.state().canvas.zoom, 1.0, "{theme:?}: entered at 100 %");
         rest(&mut h);
         h.event(egui::Event::PointerMoved(rect_of(&h, "workspace.canvas").center()));
         for _ in 0..40 {
@@ -2848,11 +2851,11 @@ fn a_package_placed_on_a_class_diagram_leads_to_its_own_diagram_by_open_the_path
         }
         assert_eq!(active(&h), Some(root_diagram), "{theme:?}: zooming out came back");
         h.run();
+        // The parent at 100 %, the package left centred in the canvas.
+        assert_eq!(h.state().canvas.zoom, 1.0, "{theme:?}: the parent at 100 %");
         let canvas = rect_of(&h, "workspace.canvas");
         let shown = rect_of(&h, &format!("workspace.canvas.node.{}", rename.node));
-        let share = shown.width() / canvas.width();
-        assert!((share - crate::package_nav::REVEAL).abs() < 0.02, "{theme:?}: the package at a third of the view, {share}");
-        assert!(shown.width() * shown.height() / (canvas.width() * canvas.height()) < crate::package_nav::ENTER_COVER);
+        assert!((shown.center() - canvas.center()).length() < 2.0, "{theme:?}: the package left centred, {shown:?} in {canvas:?}");
         // A double click still renames; it does not navigate.
         rest(&mut h);
         let _ = node;
@@ -3303,6 +3306,93 @@ fn a_package_let_go_outside_the_canvas_stays_where_it_was() {
     let st = h.state().session.as_ref().unwrap().doc();
     let parent = archforge_uml::commands::package_of(st, st.by_uuid(sales).unwrap()).map(|p| archforge_core::name_of(st, p));
     assert_eq!(parent.as_deref(), Some("Commerce platform"), "not moved into a package out of sight");
+}
+
+#[test]
+fn zooming_out_to_ten_percent_climbs_one_level_per_gesture_each_at_a_hundred_and_stops_at_the_root() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+        // Root > Sales > Orders, each with its diagram, the next one's card on it.
+        let (top, sales_d, orders_d) = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value);
+            let top =
+                id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": root.to_string(), "name": "Top" })).unwrap().value);
+            let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
+            let orders = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Orders", "parent": sales.to_string() })).unwrap().value);
+            let sales_d = id(s.execute("uml.package.diagram", &serde_json::json!({ "package": sales.to_string() })).unwrap().value);
+            let orders_d = id(s.execute("uml.package.diagram", &serde_json::json!({ "package": orders.to_string() })).unwrap().value);
+            s.execute(
+                "diagram.place",
+                &serde_json::json!({ "diagram": top.to_string(), "element": sales.to_string(), "x": 100, "y": 100, "width": 240, "height": 148 }),
+            )
+            .unwrap();
+            s.execute("diagram.place", &serde_json::json!({ "diagram": sales_d.to_string(), "element": orders.to_string(), "x": 300, "y": 200, "width": 240, "height": 148 })).unwrap();
+            (top, sales_d, orders_d)
+        };
+        crate::canvas::open(h.state_mut(), orders_d);
+        h.state_mut().canvas.fit_pending = false;
+        h.state_mut().canvas.zoom = 1.0;
+        h.run();
+        rest(&mut h);
+        let active = |h: &Harness<'static, Shell>| h.state().canvas.active;
+        h.event(egui::Event::PointerMoved(rect_of(&h, "workspace.canvas").center()));
+        // Above 10 % it stays; at 10 % it goes up one level, at 100 %. The same gesture going on
+        // stays on Sales, whatever its zoom.
+        let mut zooms = Vec::new();
+        for _ in 0..60 {
+            h.event(egui::Event::Zoom(0.8));
+            h.step();
+            if active(&h) == Some(orders_d) {
+                zooms.push(h.state().canvas.zoom);
+            }
+        }
+        assert!(zooms.iter().all(|z| *z >= crate::canvas::ZOOM_RANGE.0), "{theme:?}: never below 10 %");
+        assert!(zooms.windows(2).all(|w| w[1] <= w[0]), "{theme:?}: Orders zoomed out steadily before leaving");
+        assert_eq!(active(&h), Some(sales_d), "{theme:?}: one level up, not two, from one long gesture");
+        // Once the gesture rests, the next one goes up again, landing at 100 %.
+        rest(&mut h);
+        h.event(egui::Event::PointerMoved(rect_of(&h, "workspace.canvas").center()));
+        for _ in 0..30 {
+            if active(&h) == Some(top) {
+                break;
+            }
+            h.event(egui::Event::Zoom(0.8));
+            h.step();
+        }
+        assert_eq!(active(&h), Some(top), "{theme:?}: Sales to the root");
+        h.run();
+        assert_eq!(h.state().canvas.zoom, 1.0, "{theme:?}: the root at 100 %");
+        // At the root, 10 % stays put and says so.
+        rest(&mut h);
+        h.event(egui::Event::PointerMoved(rect_of(&h, "workspace.canvas").center()));
+        for _ in 0..30 {
+            h.event(egui::Event::Zoom(0.8));
+            h.step();
+        }
+        h.run();
+        assert_eq!(active(&h), Some(top), "{theme:?}: the root stays");
+        assert!((h.state().canvas.zoom - crate::canvas::ZOOM_RANGE.0).abs() < 1e-4, "{theme:?}: at 10 %");
+        assert!(painted(&h).iter().any(|t| t == "This is the top package: zooming out goes no further"), "{theme:?}: says so");
+        // The − key reaches 10 % too, the keyboard's way.
+        crate::canvas::open(h.state_mut(), orders_d);
+        h.state_mut().canvas.zoom = 0.2;
+        h.state_mut().canvas.focused = true;
+        h.run();
+        rest(&mut h);
+        h.state_mut().canvas.focused = true;
+        for _ in 0..12 {
+            if active(&h) != Some(orders_d) {
+                break;
+            }
+            key(&mut h, egui::Key::Minus, egui::Modifiers::NONE);
+            rest(&mut h);
+            h.state_mut().canvas.focused = true;
+        }
+        assert_eq!(active(&h), Some(sales_d), "{theme:?}: − to 10 % goes up one level");
+        assert_eq!(h.state().canvas.zoom, 1.0, "{theme:?}: at 100 %");
+    }
 }
 
 #[test]

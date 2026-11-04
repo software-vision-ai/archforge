@@ -1,16 +1,16 @@
-//! Package navigation (AR-95, from the design's "Canvas · A package on a class diagram, selected,
-//! with Open and the path bar", "Canvas · Inside a package: the path bar leads back" and "Package
-//! navigation · thresholds, keys and transitions" frames). Each package on a class diagram leads to
-//! its own class diagram, made with the package when it is placed.
+//! Package navigation (AR-95, AR-110, from the design's "Canvas · A package on a class diagram,
+//! selected, with Open and the path bar", "Canvas · Inside a package: the path bar leads back" and
+//! "Package navigation · thresholds, keys and transitions" frames). Each package on a class
+//! diagram leads to its own class diagram, made with the package when it is placed.
 //!
 //! - **In**: a selected package's Open, ⌘↓, or zooming in until one package covers
-//!   [`ENTER_COVER`] of the canvas opens the package's diagram, fitted.
-//! - **Out**: the path bar's ancestors, ⌘↑, or zooming out on a package's diagram until what it
-//!   shows covers less than [`LEAVE_COVER`] of the canvas (or the zoom is at its least) opens the
-//!   parent's diagram as it was left; after a zoom out the package shows at [`REVEAL`] of the
-//!   canvas's width, below the threshold.
-//! - Thresholds rest for [`REST`] seconds after a switch, and only a zoom made by the user counts,
-//!   so one gesture never passes through two levels. A switch fades in over [`FADE`] seconds.
+//!   [`ENTER_COVER`] of the canvas opens the package's diagram at 100 %, its content centred.
+//! - **Out by zoom**: a package's diagram stays open until the zoom reaches its least, 10 %
+//!   ([`crate::canvas::ZOOM_RANGE`]); there the parent's diagram opens at 100 %, the package left
+//!   centred. At the root, 10 % stays put and says so.
+//! - **Out by the path bar or ⌘↑**: the ancestor's diagram as it was left.
+//! - One level per gesture: after a switch the zoom must rest [`QUIET`] seconds, and [`REST`]
+//!   seconds must pass, before the next switch. A switch fades in over [`FADE`] seconds.
 
 use std::collections::HashMap;
 
@@ -26,14 +26,14 @@ use crate::ux::{self, Palette, icons, types};
 
 /// The share of the canvas one package covers once zooming in opens it.
 pub const ENTER_COVER: f32 = 0.6;
-/// The share of the canvas a package's diagram covers once zooming out leaves it.
-pub const LEAVE_COVER: f32 = 0.2;
 /// How long the thresholds rest after a switch, in seconds.
 pub const REST: f64 = 0.6;
 /// How long a switch fades in, in seconds.
 pub const FADE: f64 = 0.2;
-/// The share of the canvas's width the package left takes after a zoom out.
-pub const REVEAL: f32 = 0.33;
+/// How long the zoom must rest after a switch before the next one: the end of a gesture.
+pub const QUIET: f64 = 0.3;
+/// The zoom a diagram opens at when a switch by zoom or Open lands on it (AR-110).
+pub const LANDING: f32 = 1.0;
 /// The deepest package chain the path bar walks.
 const MAX_DEPTH: usize = 256;
 
@@ -49,8 +49,14 @@ pub struct Nav {
     pub(crate) came_from: HashMap<Uuid, Uuid>,
     /// When the last switch happened, and when it began to fade in.
     pub(crate) switched: Option<f64>,
-    /// The package to show at [`REVEAL`] of the canvas on the next frame, after a zoom out.
+    /// The package to centre at [`LANDING`] on the next frame, after a zoom out.
     pub(crate) reveal: Option<Uuid>,
+    /// True while the diagram just entered is still to be centred at [`LANDING`].
+    pub(crate) centre: bool,
+    /// When the user last zoomed, and whether the gesture that made the last switch is still on:
+    /// no switch happens until it has ended.
+    pub(crate) last_zoom: Option<f64>,
+    pub(crate) disarmed: bool,
     /// The path bar's ancestors as last drawn, where a package dragged on the canvas may go.
     pub(crate) pills: Vec<(Rect, Uuid)>,
 }
@@ -127,12 +133,17 @@ pub(crate) fn enter(shell: &mut Shell, package: Uuid, now: f64) {
         shell.canvas.nav.came_from.insert(d, from);
     }
     crate::canvas::open(shell, d);
-    shell.canvas.fit_pending = true;
+    // At 100 %, its content centred on the next frame (AR-110).
+    shell.canvas.fit_pending = false;
+    shell.canvas.zoom = LANDING;
+    shell.canvas.nav.centre = true;
+    shell.canvas.nav.reveal = None;
     shell.canvas.nav.switched = Some(now);
+    shell.canvas.nav.disarmed = true;
 }
 
-/// Opens the diagram of `package`, an ancestor of the open one, as it was left; `reveal`, the
-/// package just left, then shows at [`REVEAL`] of the canvas.
+/// Opens the diagram of `package`, an ancestor of the open one: after a zoom out (`reveal`, the
+/// package just left) at 100 % with that package centred; by the path bar or ⌘↑ as it was left.
 pub(crate) fn leave(shell: &mut Shell, package: Uuid, reveal: Option<Uuid>, now: f64) {
     let from = shell.canvas.active;
     // The diagram of `package` the way in came through, while it is still of it; else its first.
@@ -141,16 +152,22 @@ pub(crate) fn leave(shell: &mut Shell, package: Uuid, reveal: Option<Uuid>, now:
         shell.canvas.nav.views.insert(from, (shell.canvas.pan, shell.canvas.zoom));
     }
     crate::canvas::open(shell, d);
-    match shell.canvas.nav.views.get(&d).copied() {
-        Some((pan, zoom)) => {
+    match (reveal, shell.canvas.nav.views.get(&d).copied()) {
+        (Some(_), _) => {
+            shell.canvas.zoom = LANDING;
+            shell.canvas.fit_pending = false;
+        }
+        (None, Some((pan, zoom))) => {
             shell.canvas.pan = pan;
             shell.canvas.zoom = zoom;
             shell.canvas.fit_pending = false;
         }
-        None => shell.canvas.fit_pending = true,
+        (None, None) => shell.canvas.fit_pending = true,
     }
     shell.canvas.nav.reveal = reveal;
+    shell.canvas.nav.centre = false;
     shell.canvas.nav.switched = Some(now);
+    shell.canvas.nav.disarmed = true;
 }
 
 /// The diagram of `package` on the way that led to the diagram `from`, walking back the levels
@@ -178,25 +195,39 @@ pub(crate) fn before_draw(shell: &mut Shell, ui: &egui::Ui, r: Rect, d: Obj) {
         shell.canvas.nav.intent = 0.0;
         return;
     };
-    // The package just left, at a third of the canvas, centred: below the threshold, in sight.
-    if let Some(left) = shell.canvas.nav.reveal.take()
-        && let Some(n) = store.by_uuid(left).and_then(|p| nodes(store, d).into_iter().find(|n| element(store, *n) == Some(p)))
-    {
-        let b = bounds_of(store, n);
-        let (lo, hi) = crate::canvas::ZOOM_RANGE;
-        let zoom = (REVEAL * r.width() / b.width.max(1.0) as f32).clamp(lo, hi);
-        let centre = vec2((b.x + b.width / 2.0) as f32, (b.y + b.height / 2.0) as f32);
-        let pan = r.size() / 2.0 - centre * zoom;
-        if pan.is_finite() {
-            shell.canvas.zoom = zoom;
-            shell.canvas.pan = pan;
-            shell.canvas.fit_pending = false;
-        }
+    // A switch landed: at 100 %, the package just left centred, or the content entered.
+    let left = shell.canvas.nav.reveal.take();
+    let target = match left {
+        Some(left) => store.by_uuid(left).and_then(|p| nodes(store, d).into_iter().find(|n| element(store, *n) == Some(p))).map(|n| vec![n]),
+        None => std::mem::take(&mut shell.canvas.nav.centre).then(|| nodes(store, d)),
+    };
+    if let Some(shown) = target {
+        let boxes: Vec<archforge_diagram::Rect> = shown.into_iter().map(|n| bounds_of(store, n)).collect();
+        let centre = if boxes.is_empty() {
+            None
+        } else {
+            let (x0, y0) = boxes.iter().fold((f64::INFINITY, f64::INFINITY), |(x, y), b| (x.min(b.x), y.min(b.y)));
+            let (x1, y1) = boxes.iter().fold((f64::NEG_INFINITY, f64::NEG_INFINITY), |(x, y), b| (x.max(b.x + b.width), y.max(b.y + b.height)));
+            Some(vec2(((x0 + x1) / 2.0) as f32, ((y0 + y1) / 2.0) as f32))
+        };
+        shell.canvas.zoom = LANDING;
+        shell.canvas.fit_pending = false;
+        // An empty diagram opens at 100 % from its top left, as a new one does.
+        let pan = centre.map_or(Vec2::ZERO, |c| r.size() / 2.0 - c * LANDING);
+        shell.canvas.pan = if pan.is_finite() { pan } else { Vec2::ZERO };
     }
     keys(shell, ui, r, d, here, now);
     let intent = std::mem::take(&mut shell.canvas.nav.intent);
-    let resting = shell.canvas.nav.switched.is_some_and(|t| now - t < REST);
-    if intent == 0.0 || (intent - 1.0).abs() < f32::EPSILON || resting || shell.canvas.fit_pending {
+    let nav = &mut shell.canvas.nav;
+    if intent != 0.0 {
+        nav.last_zoom = Some(now);
+    }
+    // The gesture that made the last switch ends once the zoom has rested; only then may another.
+    let rested = nav.last_zoom.is_none_or(|t| now - t >= QUIET) && nav.switched.is_none_or(|t| now - t >= REST);
+    if nav.disarmed && intent == 0.0 && rested {
+        nav.disarmed = false;
+    }
+    if intent == 0.0 || (intent - 1.0).abs() < f32::EPSILON || nav.disarmed || shell.canvas.fit_pending {
         return;
     }
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
@@ -214,15 +245,20 @@ pub(crate) fn before_draw(shell: &mut Shell, ui: &egui::Ui, r: Rect, d: Obj) {
         {
             enter(shell, id, now);
         }
-    } else if let Some(parent) = archforge_uml::commands::package_of(store, here) {
-        // Out: what the diagram shows has become small, or the zoom is at its least.
-        let shown = nodes(store, d).into_iter().map(|n| screen(view, store, n)).reduce(Rect::union);
-        let small = shown.is_none_or(|s| area(s.intersect(r)) / canvas_area < LEAVE_COVER);
-        let least = shell.canvas.zoom <= crate::canvas::ZOOM_RANGE.0 + f32::EPSILON;
-        if (small || least)
-            && let (Ok(parent), Ok(here)) = (store.uuid(parent), store.uuid(here))
-        {
-            leave(shell, parent, Some(here), now);
+    } else if shell.canvas.zoom <= crate::canvas::ZOOM_RANGE.0 + f32::EPSILON {
+        // Out: the zoom has reached its least, 10 %: one level up, or at the root, no further.
+        match archforge_uml::commands::package_of(store, here) {
+            Some(parent) => {
+                if let (Ok(parent), Ok(here)) = (store.uuid(parent), store.uuid(here)) {
+                    leave(shell, parent, Some(here), now);
+                }
+            }
+            None => {
+                // Said under the path bar until the next action.
+                shell.canvas.notice = Some(tr("This is the top package: zooming out goes no further"));
+                shell.canvas.nav.disarmed = true;
+                shell.canvas.nav.switched = Some(now);
+            }
         }
     }
 }

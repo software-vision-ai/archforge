@@ -577,6 +577,7 @@ str		Move {what} into {where}	Déplacer {what} dans {where}
 str		{what} moved into {where}	{what} déplacé dans {where}
 str		Open this package's diagram	Ouvrir le diagramme de ce paquetage
 str		Open this package's diagram (⌘↓)	Ouvrir le diagramme de ce paquetage (⌘↓)
+str		This is the top package: zooming out goes no further	Ceci est le paquetage le plus haut : dézoomer ne mène pas plus loin
 str		Only a package this diagram's package holds goes on it	Seul un paquetage contenu dans le paquetage de ce diagramme peut y aller
 # Relier des classes
 str		A bound can be at most {max}.	Une borne vaut au plus {max}.

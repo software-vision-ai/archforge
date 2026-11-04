@@ -96,20 +96,27 @@ its own.
   that holds it lands there too, and gets its diagram if it has none yet.
 - **Go in.** Select the package and choose **Open** on its card, or press ⌘↓ (Ctrl+↓). Or zoom in
   on it, with a pinch, the scroll wheel with ⌘ (Ctrl), the zoom buttons, or + while the canvas has
-  the keyboard. Once the package covers most of the view, its diagram opens. A double click still
-  renames the package, as it does a class.
-- **Come back.** The path bar at the canvas's top left names the packages from your project's root
-  down to the one open. Choose one of them, or press ⌘↑ (Ctrl+↑) for the parent. Or zoom out until
-  what the diagram shows is small. The parent comes back as you left it; after a zoom out, the
-  package you were in shows a third of the view wide.
+  the keyboard. Once the package covers most of the view, its diagram opens. However you go in,
+  the package's diagram opens at 100 %, what it shows centred. A double click still renames the
+  package, as it does a class.
+- **Come back by zooming out.** A package's diagram stays open while you zoom out, down to the
+  least zoom, 10 %. Reach 10 % and its parent's diagram opens, at 100 %, with the package you were
+  in at its centre. Zoom out to 10 % again to go up another level. At your project's root there is
+  no parent: the diagram stays at 10 %, and a note under the path bar says so.
+- **Come back by the path bar.** The path bar at the canvas's top left names the packages from
+  your project's root down to the one open. Choose one of them, or press ⌘↑ (Ctrl+↑) for the
+  parent; it comes back as you left it.
 
-After a switch, zooming rests for a moment, so one long gesture never passes through two levels.
+One gesture moves one level: after a switch, keep zooming and you stay where you landed. Pause,
+then zoom again to go on.
 Renaming a package renames its diagram too, as long as the diagram still carries the package's
 name.
 
 <!-- picture: workspace-packages light | A class diagram of the root package: Customer and two packages, Sales selected with its Open -->
 
 <!-- picture: workspace-inside-package dark | Inside Sales: its classes, its own package Payments, and the path bar back to the root -->
+
+<!-- picture: workspace-package-top light | The root's diagram zoomed out to 10 %: the note under the path bar says there is no package above -->
 
 ### Move a package
 
