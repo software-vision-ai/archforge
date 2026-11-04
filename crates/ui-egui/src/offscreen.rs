@@ -786,6 +786,10 @@ fn sample_class_diagram(shell: &mut Shell) -> Result<(), String> {
         return Err("the sample's ids".into());
     };
     shell.explorer.expanded.insert(package);
+    // The model's root package, which holds it, open too.
+    if let Some(root) = shell.session.as_ref().and_then(|s| archforge_uml::commands::root_package(s.doc()).and_then(|r| s.doc().uuid(r).ok())) {
+        shell.explorer.expanded.insert(root);
+    }
     crate::canvas::open(shell, diagram);
     Ok(())
 }
@@ -854,6 +858,10 @@ fn sample_class_sizing(shell: &mut Shell) -> Result<(), String> {
         return Err("the sample's ids".into());
     };
     shell.explorer.expanded.insert(package);
+    // The model's root package, which holds it, open too.
+    if let Some(root) = shell.session.as_ref().and_then(|s| archforge_uml::commands::root_package(s.doc()).and_then(|r| s.doc().uuid(r).ok())) {
+        shell.explorer.expanded.insert(root);
+    }
     crate::canvas::open(shell, diagram);
     Ok(())
 }

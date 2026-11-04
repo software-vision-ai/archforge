@@ -196,9 +196,10 @@ fn a_skill_goes_with_the_element_it_sits_on_and_comes_back_with_undo() {
     let st = s.doc();
     assert!(skills(st).into_iter().any(|k| archforge_core::skills::subject_of(st, k) == Some(obj(&s, &line))), "Line keeps its skill");
     s.undo().unwrap();
-    // A top-level package takes everything below it along.
+    // sales sits in the model's root package too: its own skill goes, and everything below it
+    // moves up into the root with its skills.
     run(&mut s, "element.remove", json!({ "ids": [m.sales] }));
-    assert_eq!(sitting(&s), (0, 0));
+    assert_eq!(sitting(&s), (5, 0));
     s.undo().unwrap();
     assert_eq!(sitting(&s), (6, 0));
 }

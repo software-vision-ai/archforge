@@ -4866,14 +4866,20 @@ fn a_new_project_makes_a_class_diagram_in_three_steps_and_its_class_tool_places_
     click(&mut h, at);
     let edit = h.state().diagrams.new.clone().expect("the dialog is open");
     assert_eq!(edit.kind, archforge_uml::CLASS_DIAGRAM);
-    assert_eq!(edit.schema, None, "a project without a package gets one");
+    assert_eq!(edit.schema, None, "a project without a package gets its root package");
+    assert!(painted(&h).iter().any(|t| t == "Commerce platform"), "the Package field names the root, after the project");
     h.state_mut().diagrams.new.as_mut().unwrap().name = "Domain".into();
     let at = rect_of(&h, "workspace.new-diagram.create").center();
     click(&mut h, at);
     assert!(h.state().diagrams.new.is_none(), "{:?}", h.state().diagrams.new);
     assert_eq!(class_diagram_shown(&h), (archforge_uml::CLASS_DIAGRAM.to_string(), Vec::new()), "an empty class diagram is open");
+    // The diagram is of the model's root package, named after the project; no other package.
     let st = h.state().session.as_ref().unwrap().doc();
-    assert_eq!(archforge_uml::commands::packages(st).iter().map(|p| archforge_core::name_of(st, *p)).collect::<Vec<_>>(), ["Domain"]);
+    let root = archforge_uml::commands::root_package(st).expect("the root package is made");
+    assert_eq!(archforge_uml::commands::all_packages(st), vec![root]);
+    assert_eq!(archforge_core::name_of(st, root), "Commerce platform");
+    let shown = st.by_uuid(h.state().canvas.active.expect("a diagram is open")).unwrap();
+    assert_eq!(st.get(shown, archforge_diagram::diagram::ELEMENT).unwrap().as_ref(), Some(root));
     // Its toolbar: Class, Relationship with its kinds, Note and Link note; ER's tools and its key
     // status are not there.
     let found = ids(&h);
@@ -4897,7 +4903,7 @@ fn a_new_project_makes_a_class_diagram_in_three_steps_and_its_class_tool_places_
     h.state_mut().canvas.rename.as_mut().unwrap().text = "Order".into();
     key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
     assert_eq!(class_diagram_shown(&h).1, ["Order"]);
-    // The tree shows the package with its class; the search finds it.
+    // The tree shows the root package, after the project, with its class; the search finds it.
     let st = h.state().session.as_ref().unwrap().doc();
     let pkg = st.uuid(archforge_uml::commands::packages(st)[0]).unwrap();
     h.state_mut().explorer.expanded.insert(pkg);
@@ -4905,7 +4911,7 @@ fn a_new_project_makes_a_class_diagram_in_three_steps_and_its_class_tool_places_
         .into_iter()
         .map(|r| r.label)
         .collect();
-    assert_eq!(rows, ["Domain", "Order"]);
+    assert_eq!(rows, ["Commerce platform", "Order"]);
     let index = crate::project_search::index(h.state().kinds, h.state().notation_uis, h.state().session.as_ref().unwrap().doc());
     assert!(crate::project_search::hits(&index, "ord").1.iter().any(|e| e.label == "Order"));
     // Saved and opened again, as the project's rows: the class diagram comes back.
@@ -5087,8 +5093,13 @@ fn a_class_takes_attributes_in_properties_typed_checked_moved_and_removed_each_o
     assert_eq!(member_rows(&h, customer, false), ["+ id : Integer", "- email : String", "+ rating : Real [0..1]"]);
     let st = h.state().session.as_ref().unwrap().doc();
     assert!(
-        archforge_uml::commands::packages(st).iter().any(|p| archforge_core::name_of(st, *p) == archforge_uml::members::TYPES),
+        archforge_uml::commands::all_packages(st).iter().any(|p| archforge_core::name_of(st, *p) == archforge_uml::members::TYPES),
         "Real is kept in Types"
+    );
+    let root = archforge_uml::commands::root_package(st).expect("the root package");
+    assert!(
+        archforge_uml::commands::subpackages(st, root).iter().any(|p| archforge_core::name_of(st, *p) == archforge_uml::members::TYPES),
+        "Types sits in the root package"
     );
     h.run();
     assert!(painted(&h).iter().any(|t| t == "+ rating : Real [0..1]"), "the card and the row show it");
@@ -7172,6 +7183,55 @@ fn the_new_project_dialog_links_to_dolts_install_page_when_dolt_is_missing() {
     press(&mut h, at);
     answer(&mut h, &host, Err(crate::CreateError::Failed { detail: "the server did not start".into() }));
     assert!(!ids(&h).iter().any(|i| i == "new-project.install-dolt"));
+}
+
+#[test]
+fn a_project_from_before_the_root_package_opens_with_its_packages_in_the_root_as_one_undoable_step() {
+    // A model as older projects saved it: two packages at the top level, no root package.
+    // Each session its own ids, so none is given twice.
+    let ids = |at: u64| -> Box<dyn FnMut() -> archforge_mof::Uuid + Send> {
+        let mut n: u64 = 0;
+        Box::new(move || {
+            n += 1;
+            let mut r = [0u8; 10];
+            r[2..].copy_from_slice(&n.to_be_bytes());
+            archforge_mof::Uuid::v7(at, r)
+        })
+    };
+    let (tables, junctions) = archforge_notations::storage();
+    let fresh = archforge_notations::new_project_session("Commerce platform", ids(1_761_670_800_000)).unwrap();
+    let rows = archforge_mof::rows::snapshot(fresh.doc(), &tables, &junctions).unwrap();
+    let older = archforge_notations::session_from_rows_repaired(&rows, ids(1_761_670_810_000), |st| {
+        let model = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_core::MODEL)).unwrap();
+        for name in ["Commerce", "Billing"] {
+            let p = st.create(archforge_uml::PACKAGE).unwrap();
+            st.set(p, archforge_uml::named_element::NAME, archforge_mof::Value::str(name)).unwrap();
+            st.push(model, archforge_core::model::MEMBER, archforge_mof::Value::Ref(p)).unwrap();
+        }
+    })
+    .unwrap();
+    let rows = archforge_mof::rows::snapshot(older.doc(), &tables, &junctions).unwrap();
+    assert_eq!(archforge_uml::commands::packages(older.doc()).len(), 2, "the older shape");
+    // Opened: the two go into the root, named after the project.
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    h.state_mut().open_project(crate::Opened {
+        name: "Commerce platform".into(),
+        path: "/Users/robin/Documents/Archforge/Older.archforge".into(),
+        model: Some(std::sync::Arc::new(rows)),
+        ..Default::default()
+    });
+    h.run();
+    let st = h.state().session.as_ref().unwrap().doc();
+    let root = archforge_uml::commands::root_package(st).expect("the root is made on opening");
+    assert_eq!(archforge_core::name_of(st, root), "Commerce platform");
+    assert_eq!(archforge_uml::commands::packages(st), vec![root]);
+    let held: Vec<String> = archforge_uml::commands::subpackages(st, root).into_iter().map(|p| archforge_core::name_of(st, p)).collect();
+    assert_eq!(held, ["Commerce", "Billing"], "nothing lost, in their order");
+    // One step: undo puts the older shape back.
+    h.state_mut().session.as_mut().unwrap().undo().unwrap();
+    let st = h.state().session.as_ref().unwrap().doc();
+    assert!(archforge_uml::commands::root_package(st).is_none());
+    assert_eq!(archforge_uml::commands::packages(st).len(), 2);
 }
 
 #[test]

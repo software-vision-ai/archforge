@@ -355,10 +355,11 @@ fn a_diagrams_skills_go_with_it_whether_it_or_its_element_goes_and_come_back_wit
     assert_eq!(skill_count(&s), 1, "its skill went with it, none turned model-wide");
     s.undo().unwrap();
     assert_eq!(skill_count(&s), 2);
-    // With the element it shows, in either notation.
-    for element in [&sales, &schema] {
+    // With the element it shows: a schema's diagram goes with it; a package sits in the model's
+    // root package, so its diagram moves up into the root and keeps its skill.
+    for (element, left) in [(&sales, 2), (&schema, 1)] {
         s.execute("element.remove", &json!({ "ids": [element] })).unwrap();
-        assert_eq!(skill_count(&s), 1, "{element}");
+        assert_eq!(skill_count(&s), left, "{element}");
         assert!(archforge_core::skills::skills(s.doc()).into_iter().all(|k| archforge_core::skills::subject_of(s.doc(), k).is_some()));
         s.undo().unwrap();
         assert_eq!(skill_count(&s), 2);

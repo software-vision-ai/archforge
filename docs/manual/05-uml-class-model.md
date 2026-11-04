@@ -1,15 +1,23 @@
 # A first UML class model
 
-This chapter builds a small class model: a package *Commerce* with a class *Customer* that places
-many *Order*s. It can live in the same project as the ER model of the previous chapter, or in a
-new one.
+This chapter builds a small class model: a class *Customer* that places many *Order*s. It can live
+in the same project as the ER model of the previous chapter, or in a new one.
+
+Every UML model has one **root package**, named after the project, that holds everything without
+another home: the classes and packages you add without choosing a package, and the first class
+diagram. You don't need to set it up. Archforge makes it with your first class diagram (or your
+first package), and you can rename it like any package.
 
 ## 1. Make a class diagram
 
 1. Choose the **+** at the start of the centre's tab strip.
-2. In the **New diagram** dialog choose **Class diagram**, and leave its second field, **Package**,
-   on **New package**. Name the diagram *Commerce* and choose **Create**. Archforge also creates a
-   package called *Commerce*, which you see in Models.
+2. In the **New diagram** dialog choose **Class diagram**. Its second field, **Package**, shows your
+   project's name: the root package, made when you choose **Create**. Name the diagram *Commerce*
+   and choose **Create**.
+
+The root package is the top row of **Models**, with what it holds below it. Once it exists, the
+**Package** field of a later class diagram offers it and every other package, and **New package**
+makes a new package inside the root, named like the diagram.
 
 ## 2. Add classes
 
@@ -64,13 +72,16 @@ diamond) or a composition (a filled one) at the whole's end.
 
 ## The result
 
-The package *Commerce* holds two classes. *Customer* has an attribute and an operation, and a
-navigable association *places* leads to many *Order*s. In Models, open *Commerce*, then a class,
-to see its attributes and operations.
+The root package holds two classes. *Customer* has an attribute and an operation, and a navigable
+association *places* leads to many *Order*s. In Models, open the root package (your project's name),
+then a class, to see its attributes and operations.
 
 <!-- picture: workspace-class-diagram light | A class diagram of a small commerce model -->
 
 Drag a class's row onto another package's row in Models to move it there; a class of another
-package on a diagram is drawn dimmed, its package named above its name.
+package on a diagram is drawn dimmed, its package named above its name. Removing a package hands
+what it holds up to the package around it, in the end the root package, which itself stays.
+A project made before the root package existed gets one when it opens: its top-level packages move
+into it, as one step you can undo.
 
 Next: [Skills](06-skills.md).
