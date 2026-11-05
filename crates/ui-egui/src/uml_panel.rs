@@ -992,6 +992,7 @@ pub struct TargetChoices {
     pub key: String,
     pub subsets: Vec<Target>,
     pub redefines: Vec<Target>,
+    /// At most [`archforge_uml::members::MAX_LITERALS`], as an enumeration holds.
     pub literals: Option<Vec<String>>,
 }
 
@@ -1027,9 +1028,9 @@ pub(crate) fn take_targets(
         out.sort_by_key(|t| t.label.to_lowercase());
         out
     };
-    let literals = enumeration(store)
-        .filter(|e| store.class_of(*e).ok() == Some(archforge_uml::ENUMERATION))
-        .map(|e| archforge_uml::commands::literals(store, e).into_iter().map(|l| name(store, l)).collect());
+    let literals = enumeration(store).filter(|e| store.class_of(*e).ok() == Some(archforge_uml::ENUMERATION)).map(|e| {
+        archforge_uml::commands::literals(store, e).into_iter().take(archforge_uml::members::MAX_LITERALS).map(|l| name(store, l)).collect()
+    });
     match shape(store) {
         Some(sh) => TargetChoices {
             key,
@@ -1120,30 +1121,32 @@ pub(crate) fn modifier_refusal(store: &Store, edit: &MemberEdit) -> Option<(&'st
     let ids = |ts: Vec<Obj>| -> Vec<Uuid> { ts.into_iter().filter_map(|t| store.uuid(t).ok()).collect() };
     let had_subsets = current.map(|c| ids(archforge_uml::modifiers::subsets(store, c))).unwrap_or_default();
     let had_redefines = current.map(|c| ids(archforge_uml::modifiers::redefines(store, c))).unwrap_or_default();
-    target_refusals(store, &shape, (&edit.subsets, &had_subsets), (&edit.redefines, &had_redefines))
+    let was = current.map(|c| archforge_uml::modifiers::Shape::of(store, c));
+    target_refusals(store, &shape, was.as_ref(), (&edit.subsets, &had_subsets), (&edit.redefines, &had_redefines))
 }
 
 /// Why `shape` may not subset one of `subsets` or redefine one of `redefines` (each with what the
 /// property has already), in the user's words, with the field it sits under; none when the rules
-/// allow each. Only what a list adds is checked, as the commands do, so a target the model no
-/// longer allows never blocks another edit.
+/// allow each. As the commands do, every target is checked against the new shape except one the
+/// property had (`was` its shape in the model) that the rules no longer allowed already, which never
+/// blocks another edit.
 pub(crate) fn target_refusals(
     store: &Store,
     shape: &archforge_uml::modifiers::Shape,
+    was: Option<&archforge_uml::modifiers::Shape>,
     subsets: (&[Uuid], &[Uuid]),
     redefines: (&[Uuid], &[Uuid]),
 ) -> Option<(&'static str, String)> {
+    let problem_of = |sh: &archforge_uml::modifiers::Shape, t: Obj, redefining: bool| {
+        if redefining { archforge_uml::modifiers::redefines_problem(store, sh, t) } else { archforge_uml::modifiers::subsets_problem(store, sh, t) }
+    };
     for ((ids, had), redefining, field) in [(subsets, false, "subsets"), (redefines, true, "redefines")] {
-        for id in ids.iter().filter(|i| !had.contains(i)) {
+        for id in ids {
             let Some(t) = store.by_uuid(*id).filter(|t| store.is_alive(*t)) else {
                 return Some((field, tr("A property chosen here is gone; choose again.")));
             };
-            let problem = if redefining {
-                archforge_uml::modifiers::redefines_problem(store, shape, t)
-            } else {
-                archforge_uml::modifiers::subsets_problem(store, shape, t)
-            };
-            if let Some(problem) = problem {
+            let stale = had.contains(id) && was.is_some_and(|w| problem_of(w, t, redefining).is_some());
+            if let Some(problem) = problem_of(shape, t, redefining).filter(|_| !stale) {
                 return Some((field, target_refusal(&name(store, t), problem, redefining)));
             }
         }

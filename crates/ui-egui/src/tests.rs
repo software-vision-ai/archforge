@@ -11541,12 +11541,16 @@ fn an_association_end_s_modifiers_are_written_by_their_apply_and_its_line_says_t
         click(&mut h, at);
         assert_eq!(line(&h), (Some("/items".into()), Some("* = none {ordered, subsets lines}".into())));
         assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Set association end"));
+        assert!(h.state().panels.ends.as_ref().is_some_and(|e| !e.modifiers_open[1]), "written, the Modifiers close");
+        assert!(!ids(&h).iter().any(|i| i == "workspace.properties.end.1.apply"));
         h.state_mut().session.as_mut().unwrap().undo().unwrap();
         assert_eq!(line(&h), (Some("items".into()), Some("*".into())), "one step");
         h.state_mut().session.as_mut().unwrap().redo().unwrap();
         h.run();
         let shown = painted(&h);
         assert!(shown.iter().any(|t| t == "/items") && shown.iter().any(|t| t == "* = none {ordered, subsets lines}"), "the line says it: {shown:?}");
+        let at = rect_of(&h, "workspace.properties.end.1.modifiers").center();
+        click(&mut h, at);
         // Cancel and Escape bring the model's back.
         for way in ["cancel", "escape"] {
             let at = rect_of(&h, "workspace.properties.end.1.read-only").center();
@@ -11571,6 +11575,17 @@ fn an_association_end_s_modifiers_are_written_by_their_apply_and_its_line_says_t
         assert_eq!(refused, Some(("redefines", "lines is not a property this one can redefine.".to_string())));
         assert!(painted(&h).iter().any(|t| t == "lines is not a property this one can redefine."), "under its field");
         assert_eq!(line(&h).1.as_deref(), Some("* = none {ordered, subsets lines}"), "nothing written");
+        assert!(h.state().panels.ends.as_ref().is_some_and(|e| e.modifiers_open[1]), "refused, the Modifiers stay open");
+        // Enter in the Default field applies, as Apply does, and closes the Modifiers.
+        h.state_mut().panels.ends.as_mut().unwrap().modifiers[1].redefines.clear();
+        let at = rect_of(&h, "workspace.properties.end.1.default").center();
+        click(&mut h, at);
+        key(&mut h, egui::Key::A, egui::Modifiers::COMMAND);
+        h.event(egui::Event::Text("few".into()));
+        h.run();
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert_eq!(line(&h).1.as_deref(), Some("* = few {ordered, subsets lines}"), "Enter applied");
+        assert!(h.state().panels.ends.as_ref().is_some_and(|e| !e.modifiers_open[1] && e.modifier_refused[1].is_none()));
         // The role written at once keeps the modifiers.
         h.state_mut().panels.ends.as_mut().unwrap().modifiers[1].redefines.clear();
         let at = rect_of(&h, "workspace.properties.end.1.role").center();
@@ -11579,7 +11594,7 @@ fn an_association_end_s_modifiers_are_written_by_their_apply_and_its_line_says_t
         h.event(egui::Event::Text("goods".into()));
         h.run();
         key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
-        assert_eq!(line(&h), (Some("/goods".into()), Some("* = none {ordered, subsets lines}".into())));
+        assert_eq!(line(&h), (Some("/goods".into()), Some("* = few {ordered, subsets lines}".into())));
     }
 }
 

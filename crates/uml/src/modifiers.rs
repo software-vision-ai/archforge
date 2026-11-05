@@ -511,7 +511,8 @@ pub enum TargetProblem {
     OutOfReach,
     /// The same name, whatever the case: a subset takes another.
     SameName,
-    /// It subsets the property already: two properties never subset each other.
+    /// It subsets the property already, directly or through others: subsets never run round a
+    /// cycle.
     Cycle,
     /// Its type is not one the shape's type conforms to.
     Type,
@@ -538,7 +539,7 @@ impl TargetProblem {
                 "is not a property of a classifier this property's classifier specializes, which is what it may redefine"
             }
             (TargetProblem::SameName, _) => "has this property's name, whatever the case; a subset takes another name",
-            (TargetProblem::Cycle, _) => "subsets this property already, and two properties never subset each other",
+            (TargetProblem::Cycle, _) => "subsets this property already, directly or through others, and subsets never run round a cycle",
             (TargetProblem::Type, _) => "has a type this property's type does not conform to; its type must be that type or one that specializes it",
             (TargetProblem::Upper, _) => "allows fewer values than this property; a subset's upper bound is not above the one it subsets",
             (TargetProblem::Multiplicity, _) => "has a multiplicity this property's lower and upper bounds do not both lie within",
@@ -570,7 +571,7 @@ fn subsets_problem_in(store: &Store, shape: &Shape, t: Obj, reach: &Reach, named
     if named && name_of(store, t).to_lowercase() == shape.name.trim().to_lowercase() {
         return Some(TargetProblem::SameName);
     }
-    if shape.itself.is_some_and(|me| subsets(store, t).contains(&me)) {
+    if shape.itself.is_some_and(|me| subsets_reaches(store, t, me)) {
         return Some(TargetProblem::Cycle);
     }
     if !shape.conforms(store, t) {
@@ -583,6 +584,22 @@ fn subsets_problem_in(store: &Store, shape: &Shape, t: Obj, reach: &Reach, named
         (Some(mine), Some(theirs)) => mine > theirs,
     };
     above.then_some(TargetProblem::Upper)
+}
+
+/// Whether `from` subsets `to`, directly or through the properties it subsets, and so on: a
+/// seen-set bounds the walk, so a cycle the model holds already never hangs it.
+fn subsets_reaches(store: &Store, from: Obj, to: Obj) -> bool {
+    let mut seen = std::collections::BTreeSet::new();
+    let mut stack = subsets(store, from);
+    while let Some(p) = stack.pop() {
+        if p == to {
+            return true;
+        }
+        if seen.insert(p) {
+            stack.extend(subsets(store, p));
+        }
+    }
+    false
 }
 
 /// Why `shape` may not redefine `t`, when it may not, its targets in `reach`.
@@ -676,6 +693,9 @@ fn targets(store: &Store, items: &[Json], key: &str) -> Result<Vec<Obj>, Command
     }
     let mut out = Vec::with_capacity(items.len());
     for item in items {
+        if let Some(extra) = item.as_object().and_then(|o| o.keys().find(|k| *k != "id" && *k != "name")) {
+            return Err(refuse(key, format!("{} is not a key of a property here; an object holds id and name", short(extra))));
+        }
         let Some(id) = item.as_str().or_else(|| item.get("id").and_then(Json::as_str)) else {
             return Err(refuse(
                 key,
@@ -700,32 +720,38 @@ fn targets(store: &Store, items: &[Json], key: &str) -> Result<Vec<Obj>, Command
 /// The modifiers the parameters ask of a property shaped `shape`, checked before anything
 /// changes; `current` is the property as the model has it (none while it is being added), and a
 /// modifier the call leaves out keeps its value there (a new property's the usual: no default,
-/// unique, nothing else). The default is read by the shape's type: a kept or resent default that
-/// fitted the old type but not a new one refuses the type change, naming the default, never
-/// clearing it. Only the properties a list adds to what it subsets or redefines are checked, so a
-/// target the model no longer allows never blocks another edit; a refusal names the target, why,
-/// and the properties it may name instead.
+/// unique, nothing else). A default left out is kept as stored; one typed, or kept under a new type,
+/// is read by the shape's type, and one that fitted the old type but not a new one refuses the type
+/// change, naming the default, never clearing it. Every target is checked against the new shape
+/// except one the property had that the rules no longer allowed already, which never blocks an
+/// unrelated edit; a refusal names the target, why, and the properties it may name instead.
 pub fn read(store: &Store, p: &Params, shape: &Shape, current: Option<Obj>) -> Result<Modifiers, CommandError> {
     let stored = current.map(|c| default_text(store, c)).unwrap_or_default();
-    let typed = p.str("default").unwrap_or(&stored);
+    let type_changed = current.is_some_and(|c| one(store, c, typed_element::TYPE) != shape.ty);
     let form = DefaultForm::of(store, shape.ty);
-    let default = match parse_default(store, form, typed) {
-        Ok(d) => d,
-        Err(e) => {
-            let type_changed = current.is_some_and(|c| one(store, c, typed_element::TYPE) != shape.ty);
-            if type_changed && !stored.is_empty() && typed.trim() == stored.trim() {
-                let ty = shape.ty.map(|t| name_of(store, t)).unwrap_or_else(|| "no type".into());
-                return Err(refuse(
-                    "type",
-                    format!(
-                        "the default value {:?} does not fit {ty}: {}; change or clear the default before changing the type",
-                        short(typed.trim()),
-                        form.accepted(store)
-                    ),
-                ));
-            }
-            return Err(refuse("default", e.said(store)));
-        }
+    let type_refusal = |typed: &str| {
+        let ty = shape.ty.map(|t| name_of(store, t)).unwrap_or_else(|| "no type".into());
+        refuse(
+            "type",
+            format!(
+                "the default value {:?} does not fit {ty}: {}; change or clear the default before changing the type",
+                short(typed.trim()),
+                form.accepted(store)
+            ),
+        )
+    };
+    let default = match (p.str("default"), current) {
+        // Left out under the same type: the stored value as it is, never read again, so one that
+        // would not read back never blocks another edit.
+        (None, Some(c)) if !type_changed => stored_default(store, c),
+        // Left out under a new type: the kept default must fit it.
+        (None, Some(_)) => parse_default(store, form, &stored).map_err(|_| type_refusal(&stored))?,
+        (None, None) => None,
+        (Some(typed), _) => match parse_default(store, form, typed) {
+            Ok(d) => d,
+            Err(_) if type_changed && !stored.is_empty() && typed.trim() == stored.trim() => return Err(type_refusal(typed)),
+            Err(e) => return Err(refuse("default", e.said(store))),
+        },
     };
     let id = |o: Obj| uuid_of(store, o).unwrap_or_default();
     let list_of = |key: &str, kept: Vec<Obj>| -> Result<(Vec<Obj>, Vec<Obj>), CommandError> {
@@ -734,16 +760,22 @@ pub fn read(store: &Store, p: &Params, shape: &Shape, current: Option<Obj>) -> R
             None => Ok((kept.clone(), kept)),
         }
     };
+    // A target the property had and the rules no longer allowed it already is tolerated, so it
+    // never blocks an unrelated edit; one this call adds, or one it keeps that its new shape breaks
+    // (a multiplicity, an aggregation or a type), is refused.
+    let was = current.map(|c| Shape::of(store, c));
     let (subsets_wanted, subsets_had) = list_of("subsets", current.map(|c| subsets(store, c)).unwrap_or_default())?;
-    for t in subsets_wanted.iter().filter(|t| !subsets_had.contains(t)) {
-        if let Some(problem) = subsets_problem(store, shape, *t) {
+    for t in &subsets_wanted {
+        let stale = subsets_had.contains(t) && was.as_ref().is_some_and(|w| subsets_problem(store, w, *t).is_some());
+        if let Some(problem) = subsets_problem(store, shape, *t).filter(|_| !stale) {
             let may = listed(store, &subsets_candidates(store, shape));
             return Err(refuse("subsets", format!("{} ({}) {}; it may subset: {may}", id(*t), name_of(store, *t), problem.why(false))));
         }
     }
     let (redefines_wanted, redefines_had) = list_of("redefines", current.map(|c| redefines(store, c)).unwrap_or_default())?;
-    for t in redefines_wanted.iter().filter(|t| !redefines_had.contains(t)) {
-        if let Some(problem) = redefines_problem(store, shape, *t) {
+    for t in &redefines_wanted {
+        let stale = redefines_had.contains(t) && was.as_ref().is_some_and(|w| redefines_problem(store, w, *t).is_some());
+        if let Some(problem) = redefines_problem(store, shape, *t).filter(|_| !stale) {
             let may = listed(store, &redefines_candidates(store, shape));
             return Err(refuse("redefines", format!("{} ({}) {}; it may redefine: {may}", id(*t), name_of(store, *t), problem.why(true))));
         }

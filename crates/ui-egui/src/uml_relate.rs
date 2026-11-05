@@ -745,7 +745,7 @@ pub(crate) fn end_refusal(store: &Store, end: Obj, m: &EndModifiers) -> Option<(
     }
     let shape = archforge_uml::modifiers::Shape::of(store, end);
     let had = EndModifiers::of(store, end);
-    crate::uml_panel::target_refusals(store, &shape, (&m.subsets, &had.subsets), (&m.redefines, &had.redefines))
+    crate::uml_panel::target_refusals(store, &shape, Some(&shape), (&m.subsets, &had.subsets), (&m.redefines, &had.redefines))
 }
 
 /// `typed` in end `end`'s multiplicity of association `id`, committed and refused, as a sample
@@ -1156,13 +1156,15 @@ fn end_modifiers(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
     let m = &mut edit.modifiers[i];
     let limit = archforge_uml::modifiers::MAX_DEFAULT;
     let default_id = format!("{key}.default");
+    // Enter in the Default field applies, as in the attribute editor.
+    let mut enter = false;
     let default = match &targets.literals {
         Some(_) => {
             let shown = if m.default.trim().is_empty() { tr("None") } else { m.default.clone() };
             Some(select_field(shell, ui, p, pos2(left, y), width, &default_id, &tr("Default value"), &shown, Menu::EndDefault(i)))
         }
         None => {
-            text_field(shell, ui, p, pos2(left, y), width, &default_id, &tr("Default value"), &mut m.default, limit, false, false);
+            enter = text_field(shell, ui, p, pos2(left, y), width, &default_id, &tr("Default value"), &mut m.default, limit, false, false);
             None
         }
     };
@@ -1254,7 +1256,7 @@ fn end_modifiers(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
     let escape = edited && shell.panels.menu.is_none() && ui.input(|inp| inp.key_pressed(egui::Key::Escape));
     let asked = if cancel || escape {
         Asked::Cancel
-    } else if apply {
+    } else if apply || enter {
         Asked::Apply
     } else {
         Asked::Nothing
@@ -1263,8 +1265,9 @@ fn end_modifiers(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
 }
 
 /// Writes end `i`'s (`end`'s) modifiers as edited, with its role, multiplicity, navigability and
-/// aggregation as the model has them, as one undo step; a refusal sits under its field in the
-/// user's words, the edit kept, and nothing is written.
+/// aggregation as the model has them, as one undo step, then closes the end's Modifiers; a refusal
+/// sits under its field in the user's words, the edit kept and the Modifiers open, and nothing is
+/// written.
 #[allow(clippy::too_many_arguments, reason = "the end's other fields go as the model has them")]
 fn apply_end_modifiers(shell: &mut Shell, id: Uuid, end: Obj, i: usize, role: &str, multiplicity: &str, navigable: bool, aggregation: usize) {
     let Some(m) = shell.panels.ends.as_ref().filter(|e| e.association == id).map(|e| e.modifiers[i].clone()) else { return };
@@ -1284,10 +1287,12 @@ fn apply_end_modifiers(shell: &mut Shell, id: Uuid, end: Obj, i: usize, role: &s
     });
     m.put_into(&mut params);
     match run(shell, "uml.association.set-end", params) {
+        // Written, the end's Modifiers close, their summary saying what they are now.
         Ok(_) => {
             shell.panels.notice = None;
             if let Some(e) = shell.panels.ends.as_mut() {
                 e.modifier_refused[i] = None;
+                e.modifiers_open[i] = false;
             }
         }
         // Anything the shell did not foresee is said at the panel's foot, as for the end's other

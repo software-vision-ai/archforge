@@ -646,7 +646,6 @@ fn association_set_end(ctx: &mut C<'_>, p: &Params) -> R {
     }
     let kind = match p.str("aggregation") {
         None => aggregation(ctx.doc, end),
-        Some("") => 0,
         Some(k) => AGGREGATIONS
             .iter()
             .position(|w| *w == k)
@@ -655,9 +654,11 @@ fn association_set_end(ctx: &mut C<'_>, p: &Params) -> R {
     if kind != 0 && aggregation(ctx.doc, other) != 0 {
         return Err(refuse("aggregation", "the other end aggregates already: only the part's end can"));
     }
-    let kept_multiplicity = crate::figures::multiplicity(ctx.doc, end);
-    let typed = p.str("multiplicity").unwrap_or(&kept_multiplicity);
-    let bounds = crate::members::parse_multiplicity(typed).map_err(|why| refuse("multiplicity", format!("the multiplicity {why}")))?;
+    // Left out, the multiplicity is the stored one as it is, never read again.
+    let bounds = match p.str("multiplicity") {
+        Some(typed) => crate::members::parse_multiplicity(typed).map_err(|why| refuse("multiplicity", format!("the multiplicity {why}")))?,
+        None => Some(crate::modifiers::bounds(ctx.doc, end)),
+    };
     // A part belongs to at most one whole: the whole's end allows one at most.
     if kind == 2 && upper(ctx.doc, other).is_none_or(|u| u > 1) {
         return Err(refuse("aggregation", "a composition's whole end allows one at most; set the other end's multiplicity to 1 or 0..1 first"));
@@ -685,11 +686,10 @@ fn association_set_end(ctx: &mut C<'_>, p: &Params) -> R {
     };
     let modifiers = crate::modifiers::read(ctx.doc, p, &shape, Some(end))?;
     let role = role.to_string();
-    let typed = typed.to_string();
     own_end(ctx.doc, a, end)?;
     set_name(ctx.doc, end, &role)?;
-    if p.str("multiplicity").is_some() {
-        crate::members::set_multiplicity(ctx.doc, end, &typed, "multiplicity")?;
+    if let Some(typed) = p.str("multiplicity") {
+        crate::members::set_multiplicity(ctx.doc, end, typed, "multiplicity")?;
     }
     if let Some(on) = p.bool("static") {
         ctx.doc.set(end, crate::feature::IS_STATIC, Value::Bool(on)).map_err(fail)?;

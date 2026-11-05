@@ -699,9 +699,12 @@ member and drawing a relationship stay three separate gestures:
   when it is removed, as a property's type does. A long end text is drawn further along its line so
   it clears the card, and clear of the end's arrowhead, diamond or triangle. For agents, a field
   `uml.attribute.set` or `uml.association.set-end` is not given keeps its value; clearing is said
-  explicitly. Only the properties a Subsets or Redefines list adds are checked, so a target the
-  model no longer allows never blocks another edit; moving an association's end drops, in the same
-  step, what its ends no longer subset or redefine, and the canvas says which.
+  explicitly. Every target is checked against the property's new shape, so a multiplicity, type or
+  aggregation change that breaks a kept target is refused; only a target the rules no longer
+  allowed already is tolerated, so it never blocks an unrelated edit. Moving an association's end
+  drops, in the same step, what the moved association's own two ends no longer subset or redefine,
+  and the canvas says which; other properties that subset or redefine those ends are not looked at
+  (they keep their entries, tolerated as above until edited).
 
 ## Not decided yet
 The menu bar's structure; how a colour chosen in Appearance and the key-status colour combine;

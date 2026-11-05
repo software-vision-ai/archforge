@@ -73,6 +73,10 @@ The line now shows an open arrow at *Order*, the end it navigates to, with the r
 multiplicities beside its ends. **Aggregation** makes the line a shared aggregation (a hollow
 diamond) or a composition (a filled one) at the whole's end.
 
+Drag an end of the selected line onto another class or interface to move it. An end that subsets
+or redefines a property it can no longer reach from there (section 12) loses that Subsets or
+Redefines entry in the same step, which you can undo, and the canvas names what was dropped.
+
 ## 6. Add an interface
 
 An interface names what a class offers, without saying how: its attributes and operations, all
@@ -282,7 +286,8 @@ only, then a section for each end, **End at Customer** and **End at Product**, w
 **Attributes** and **Operations** with their editors, as a class has. Its attributes and operations
 are typed on its card as on a class's: select it and use the **+** of a compartment, the **Add
 attribute** button beside the card, or ⌘↩ (⇧⌘↩ for an operation). Drag an end of the selected line
-onto another class to move it; the same rules apply.
+onto another class to move it; the same rules apply, and an end's Subsets or Redefines entries it
+can no longer keep go in the same step, named at the canvas's top.
 
 Its name is one of its package's names, as a class's is: a class and an association class of one
 package cannot share a name. Its attributes and its ends' roles share its own names: an attribute

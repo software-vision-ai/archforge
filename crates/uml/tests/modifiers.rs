@@ -407,22 +407,21 @@ fn subsets_and_redefines_on_attributes_take_only_valid_targets() {
     refused(&mut s, "uml.attribute.set", base(json!({ "subsets": [7] })), "subsets", &["7"]);
     let many: Vec<String> = (0..33).map(|_| all.clone()).collect();
     refused(&mut s, "uml.attribute.set", base(json!({ "subsets": many })), "subsets", &["at most 32"]);
-    // Only what a list adds is checked: a target the model no longer allows never blocks another
-    // edit, resent unchanged or left out; added anew, it is refused, the refusal listing what it
-    // may name instead.
+    // A kept target is checked against the new shape: a multiplicity that breaks it is refused,
+    // whether the list is resent or left out, naming the target, why and what it may name.
     run(&mut s, "uml.attribute.set", json!({ "attribute": lines, "name": "lines", "type": "String", "multiplicity": "0..1", "subsets": [label] }));
-    round_trip(&mut s, "uml.attribute.set", json!({ "attribute": lines, "multiplicity": "*", "subsets": [label] }));
+    for p in [json!({ "attribute": lines, "multiplicity": "*", "subsets": [label] }), json!({ "attribute": lines, "multiplicity": "*" })] {
+        let e = refused(&mut s, "uml.attribute.set", p, "subsets", &[label.as_str(), "allows fewer values", "it may subset: "]);
+        assert!(!e.contains("label (Item)"), "label is not among the accepted: {e}");
+    }
+    // A target that went stale through a change elsewhere (label now holds none) never blocks an
+    // unrelated edit, resent or left out; added anew it is refused.
+    run(&mut s, "uml.attribute.set", json!({ "attribute": label, "multiplicity": "0" }));
     round_trip(&mut s, "uml.attribute.set", json!({ "attribute": lines, "name": "rows" }));
+    round_trip(&mut s, "uml.attribute.set", json!({ "attribute": lines, "subsets": [label], "read_only": true }));
     run(&mut s, "uml.attribute.set", json!({ "attribute": lines, "subsets": [] }));
-    let e = refused(
-        &mut s,
-        "uml.attribute.set",
-        json!({ "attribute": lines, "subsets": [label] }),
-        "subsets",
-        &[label.as_str(), "allows fewer values", "it may subset: "],
-    );
-    assert!(!e.contains("label (Item)"), "label is not among the accepted: {e}");
-    // Two properties never subset each other.
+    refused(&mut s, "uml.attribute.set", json!({ "attribute": lines, "subsets": [label] }), "subsets", &[label.as_str(), "allows fewer values"]);
+    // Subsets never run round a cycle, however long.
     let more = run(&mut s, "uml.attribute.add", json!({ "class": order, "name": "more", "type": item, "multiplicity": "*", "subsets": [all] }));
     refused(
         &mut s,
@@ -430,6 +429,52 @@ fn subsets_and_redefines_on_attributes_take_only_valid_targets() {
         json!({ "attribute": all, "subsets": [more] }),
         "subsets",
         &[more.as_str(), "subsets this property already"],
+    );
+    let most = run(&mut s, "uml.attribute.add", json!({ "class": order, "name": "most", "type": item, "multiplicity": "*", "subsets": [more] }));
+    refused(&mut s, "uml.attribute.set", json!({ "attribute": all, "subsets": [most] }), "subsets", &[most.as_str(), "through others"]);
+    // An object holds id and name alone.
+    refused(&mut s, "uml.attribute.set", json!({ "attribute": all, "subsets": [{ "id": parts, "kind": "x" }] }), "subsets", &["kind", "id and name"]);
+}
+
+/// A type change that breaks a kept Subsets target is refused, naming it; so is an aggregation
+/// change that breaks a kept Redefines target on an end.
+#[test]
+fn a_type_or_aggregation_change_that_breaks_a_kept_target_is_refused() {
+    let mut s = session();
+    let (pkg, _, item, order, _) = shop(&mut s);
+    let parts = run(&mut s, "uml.attribute.add", json!({ "class": item, "name": "parts", "type": item, "multiplicity": "*" }));
+    let lines = run(&mut s, "uml.attribute.add", json!({ "class": order, "name": "lines", "type": order, "multiplicity": "*", "subsets": [parts] }));
+    refused(
+        &mut s,
+        "uml.attribute.set",
+        json!({ "attribute": lines, "type": "String" }),
+        "subsets",
+        &[parts.as_str(), "does not conform", "it may subset: "],
+    );
+    assert_eq!(row(&s, &lines), "+ lines : Order [*] {subsets parts}");
+    // An end redefining a composite end keeps being composite.
+    let product = run(&mut s, "uml.class.add", json!({ "package": pkg, "name": "Product" }));
+    let held = run(&mut s, "uml.association.add", json!({ "from": item, "to": product, "kind": "composition" }));
+    run(&mut s, "uml.association.set-end", json!({ "association": held, "end": 0, "multiplicity": "1", "navigable": false }));
+    run(&mut s, "uml.association.set-end", json!({ "association": held, "end": 1, "role": "products", "multiplicity": "1..*" }));
+    let products = s.doc().uuid(archforge_uml::figures::member_ends(s.doc(), obj(&s, &held)).unwrap()[1]).unwrap().to_string();
+    let a = run(&mut s, "uml.association.add", json!({ "from": order, "to": product, "kind": "composition" }));
+    run(&mut s, "uml.association.set-end", json!({ "association": a, "end": 0, "multiplicity": "1", "navigable": false }));
+    run(&mut s, "uml.association.set-end", json!({ "association": a, "end": 1, "role": "goods", "multiplicity": "1..*", "redefines": [products] }));
+    refused(
+        &mut s,
+        "uml.association.set-end",
+        json!({ "association": a, "end": 1, "aggregation": "none" }),
+        "redefines",
+        &[products.as_str(), "composite"],
+    );
+    // And a multiplicity whose lower bound leaves the target's.
+    refused(
+        &mut s,
+        "uml.association.set-end",
+        json!({ "association": a, "end": 1, "multiplicity": "*" }),
+        "redefines",
+        &[products.as_str(), "lie within"],
     );
 }
 
