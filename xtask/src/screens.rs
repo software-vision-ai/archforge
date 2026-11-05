@@ -5,8 +5,8 @@
 //! appearance, into the ignored `plan/screens/`, and writes beside them one contact sheet per
 //! appearance (`light.html`, `dark.html`) with every picture under its screen's name. The list of
 //! screens is read from the snapshot example itself, so a screen added there is rendered here too.
-//! `--gallery <dir>` renders the README's gallery alone, as the release workflow does to attach it to
-//! every release. The pictures are never committed; a picture is compared by eye, not by pixel, so a font or
+//! `--gallery <dir>` renders the README's gallery and the wiki's guide screens alone, as the release
+//! workflow does to attach them to every release. The pictures are never committed; a picture is compared by eye, not by pixel, so a font or
 //! theme change never breaks the gate.
 
 use std::path::Path;
@@ -21,6 +21,21 @@ const THEMES: [&str; 2] = ["light", "dark"];
 /// what the application does today.
 pub const GALLERY: [(&str, &str); 4] =
     [("home", "home"), ("workspace-cross-schema", "er-diagram"), ("workspace-class-members", "class-diagram"), ("workspace-generate", "generate")];
+
+/// The wiki's guide screens: a screen of the snapshot example and the file stem it is published as,
+/// beside the README's gallery (`screenshot-<stem>-<light|dark>.png`, attached to every release).
+/// The wiki loads them from the latest release; the README shows none of them.
+pub const WIKI_GALLERY: [(&str, &str); 9] = [
+    ("workspace-guide-classifier-kinds", "guide-classifier-kinds"),
+    ("workspace-guide-relate-kinds", "guide-relate-kinds"),
+    ("workspace-guide-literals", "guide-literals"),
+    ("workspace-guide-data-type", "guide-data-type"),
+    ("workspace-guide-primitive-type", "guide-primitive-type"),
+    ("workspace-guide-realization", "guide-realization"),
+    ("workspace-guide-association-class", "guide-association-class"),
+    ("workspace-guide-modifiers", "guide-modifiers"),
+    ("workspace-guide-result", "guide-result"),
+];
 
 /// The screens the snapshot example's `--screen` takes, in its order: each `Some("<name>") =>
 /// Screen::…` arm of its match.
@@ -64,16 +79,23 @@ fn resolved(dir: &Path) -> Result<std::path::PathBuf, String> {
     std::path::absolute(dir).map_err(|e| format!("{}: {e}", dir.display()))
 }
 
-/// `cargo xtask screens --gallery <dir>`: the README's gallery in both appearances, into `dir`.
+/// `cargo xtask screens --gallery <dir>`: the README's gallery and the wiki's guide screens in both
+/// appearances, into `dir`.
 pub fn gallery(out: &Path) -> Result<(), String> {
     let out = &resolved(out)?;
     std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
-    for (screen, stem) in GALLERY {
+    for (screen, stem) in GALLERY.iter().chain(WIKI_GALLERY.iter()) {
         for theme in THEMES {
             render(screen, theme, &out.join(format!("screenshot-{stem}-{theme}.png")))?;
         }
     }
-    println!("screens: the gallery's {} screens in {} appearances, under {}", GALLERY.len(), THEMES.len(), out.display());
+    println!(
+        "screens: the README's {} and the wiki's {} screens in {} appearances, under {}",
+        GALLERY.len(),
+        WIKI_GALLERY.len(),
+        THEMES.len(),
+        out.display()
+    );
     Ok(())
 }
 
@@ -141,6 +163,21 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// Every guide screen the wiki shows is one the snapshot example names, and each is published
+    /// under its own name, apart from the README's.
+    #[test]
+    fn every_screen_of_the_wiki_gallery_is_one_the_snapshot_example_names() {
+        let snapshot = std::fs::read_to_string(util::root().join("crates/ui-egui/examples/snapshot.rs")).unwrap();
+        let named = screens(&snapshot);
+        for (screen, _) in WIKI_GALLERY {
+            assert!(named.iter().any(|n| n == screen), "the wiki gallery's {screen} is no screen of the snapshot example");
+        }
+        let mut stems: Vec<&str> = GALLERY.iter().chain(WIKI_GALLERY.iter()).map(|(_, stem)| *stem).collect();
+        stems.sort_unstable();
+        let shared: Vec<&str> = stems.windows(2).filter(|pair| pair[0] == pair[1]).map(|pair| pair[0]).collect();
+        assert!(shared.is_empty(), "two published screenshots share a name: {shared:?}");
     }
 
     #[test]
