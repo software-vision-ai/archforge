@@ -14,8 +14,9 @@ the first time to a small model you can build on, and shows how an agent joins i
    versus deleting.
 4. [A first ER model](04-er-model.md): the database aspect of a system, with tables, columns,
    keys and a relationship.
-5. [A first UML class model](05-uml-class-model.md): classes, attributes, operations and an
-   association with multiplicity and navigability.
+5. [A first UML class model](05-uml-class-model.md): one walkthrough from a first class to
+   interfaces, enumerations, data types, primitive types, association classes and property
+   modifiers, with a guide to which element you need and a reference of the rules.
 6. [Skills](06-skills.md): guidance written on the model for people and agents.
 7. [Working with an agent](07-agents.md): letting an agent read and change the model, and the
    Generate handoff.
