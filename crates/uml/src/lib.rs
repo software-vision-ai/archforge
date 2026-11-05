@@ -38,6 +38,15 @@ pub fn is_classifier(class: ClassId) -> bool {
     CLASSIFIERS.contains(&class)
 }
 
+/// The relationships a class diagram draws as lines: associations, generalizations, dependencies
+/// and interface realizations.
+pub const RELATIONSHIPS: [ClassId; 4] = [ASSOCIATION, GENERALIZATION, DEPENDENCY, INTERFACE_REALIZATION];
+
+/// Whether `class` is one of the [`RELATIONSHIPS`].
+pub fn is_relationship(class: ClassId) -> bool {
+    RELATIONSHIPS.contains(&class)
+}
+
 /// A class card's width and height when the user names none: the header, an attribute row, an
 /// operation row and the line between them.
 pub const CLASS_SIZE: (f64, f64) = (240.0, 136.0);
@@ -46,8 +55,8 @@ pub const PACKAGE_SIZE: (f64, f64) = (240.0, 148.0);
 
 /// UML in a project's view: class diagrams of a package showing its
 /// classes and interfaces as plain cards with their attributes and operations, and the associations,
-/// generalizations and dependencies between them as lines (`figures`); packages and classes removed
-/// with what they hold.
+/// generalizations, dependencies and interface realizations between them as lines (`figures`);
+/// packages and classes removed with what they hold.
 pub struct UmlNotation;
 
 impl Notation for UmlNotation {
@@ -91,9 +100,9 @@ impl Notation for UmlNotation {
         if class == PACKAGE { PACKAGE_SIZE } else { CLASS_SIZE }
     }
 
-    /// Associations, generalizations and dependencies.
+    /// Associations, generalizations, dependencies and interface realizations.
     fn connects(&self, _kind: &str, class: ClassId) -> bool {
-        class == ASSOCIATION || class == GENERALIZATION || class == DEPENDENCY
+        is_relationship(class)
     }
 
     fn ends(&self, store: &Store, element: Obj) -> Option<(Obj, Obj)> {

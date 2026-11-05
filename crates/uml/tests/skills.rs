@@ -90,14 +90,19 @@ fn a_package_a_class_an_attribute_and_an_operation_each_carry_a_skill_in_one_und
     }
 }
 
+/// An association and an interface realization carry no skill: the refusal names what does, and nothing changes.
 #[test]
 fn a_relationship_carries_no_skill_and_the_refusal_names_what_does() {
     let mut s = session();
     let m = model(&mut s);
+    let payable = run(&mut s, "uml.interface.add", json!({ "package": m.sales, "name": "Payable" }));
+    let realization = run(&mut s, "uml.realization.add", json!({ "class": m.order, "interface": payable }));
     let before = skills(s.doc()).len();
-    let e = s.execute("skill.add", &json!({ "subject": m.association, "name": "Ends" })).unwrap_err().to_string();
-    for word in ["Association", "Package", "Class", "Property", "Operation"] {
-        assert!(e.contains(word), "{e}");
+    for (subject, kind) in [(&m.association, "Association"), (&realization, "InterfaceRealization")] {
+        let e = s.execute("skill.add", &json!({ "subject": subject, "name": "Ends" })).unwrap_err().to_string();
+        for word in [kind, "Package", "Class", "Property", "Operation"] {
+            assert!(e.contains(word), "{e}");
+        }
     }
     assert_eq!(skills(s.doc()).len(), before, "nothing changed");
 }

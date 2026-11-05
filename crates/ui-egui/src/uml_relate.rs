@@ -1,10 +1,14 @@
 //! Relating classes on a class diagram: the Relationship tool draws the kind
 //! its chevron's menu chose (Association, Directed association, Aggregation, Composition,
-//! Generalization or Dependency) from class to class, from the whole to the part, from the specific
-//! class to the general one, from the client to the supplier; dropped on empty canvas it makes a new
-//! class there, named in place. A selected line's ends drag onto another class to reconnect it.
+//! Generalization or Dependency, and after a separator Interface realization) from class to class,
+//! from the whole to the part, from the specific class to the general one, from the client to the
+//! supplier, from the implementing class to its interface; dropped on empty canvas it makes a new
+//! class there, or for a realization a new interface, named in place. A realization starts only at
+//! a class and ends only at an interface it does not realize yet; anything else is said at the
+//! canvas's top and draws nothing. A selected line's ends drag onto another class to reconnect it.
 //! Properties shows an association's name and both its ends (role, multiplicity, navigable,
-//! aggregation), a dependency's name and its classes, a generalization's classes.
+//! aggregation), a dependency's name and its classes, a generalization's classes, a realization's
+//! implementing class and interface.
 
 use archforge_diagram::figure::EndMark;
 use archforge_mof::{Obj, Store, Uuid};
@@ -27,11 +31,20 @@ pub enum Relate {
     Composition,
     Generalization,
     Dependency,
+    /// An interface realization, from the implementing class to its interface.
+    Realization,
 }
 
 impl Relate {
-    pub(crate) const ALL: [Relate; 6] =
-        [Relate::Association, Relate::Directed, Relate::Aggregation, Relate::Composition, Relate::Generalization, Relate::Dependency];
+    pub(crate) const ALL: [Relate; 7] = [
+        Relate::Association,
+        Relate::Directed,
+        Relate::Aggregation,
+        Relate::Composition,
+        Relate::Generalization,
+        Relate::Dependency,
+        Relate::Realization,
+    ];
 
     /// Its name in the menu, in the catalogue.
     fn word(self) -> &'static str {
@@ -42,7 +55,26 @@ impl Relate {
             Relate::Composition => "Composition",
             Relate::Generalization => "Generalization",
             Relate::Dependency => "Dependency",
+            Relate::Realization => "Interface realization",
         }
+    }
+
+    /// What it draws and which way, where its word alone does not say: the tool's tooltip and the
+    /// accessible name of the tool and of its menu row.
+    fn hint(self) -> Option<&'static str> {
+        (self == Relate::Realization).then_some("Interface realization: from the implementing class to its interface")
+    }
+
+    /// Whether a separator sets it apart above it in the menu: realizing is neither relating nor
+    /// specializing.
+    fn after_separator(self) -> bool {
+        self == Relate::Realization
+    }
+
+    /// Whether its line carries the relationship's name at its middle: a generalization and a
+    /// realization have none.
+    fn named(self) -> bool {
+        !matches!(self, Relate::Generalization | Relate::Realization)
     }
 
     /// Its automation key.
@@ -54,6 +86,7 @@ impl Relate {
             Relate::Composition => "composition",
             Relate::Generalization => "generalization",
             Relate::Dependency => "dependency",
+            Relate::Realization => "realization",
         }
     }
 
@@ -66,6 +99,7 @@ impl Relate {
             Relate::Composition => ([EndMark::FilledDiamond, EndMark::None], false),
             Relate::Generalization => ([EndMark::None, EndMark::Triangle], false),
             Relate::Dependency => ([EndMark::None, EndMark::OpenArrow], true),
+            Relate::Realization => ([EndMark::None, EndMark::Triangle], true),
         }
     }
 
@@ -75,6 +109,7 @@ impl Relate {
         match self {
             Relate::Generalization => ("uml.generalization.add", json!({ "specific": from, "general": to }), "Add generalization"),
             Relate::Dependency => ("uml.dependency.add", json!({ "client": from, "supplier": to }), "Add dependency"),
+            Relate::Realization => ("uml.realization.add", json!({ "class": from, "interface": to }), "Add interface realization"),
             k => ("uml.association.add", json!({ "from": from, "to": to, "kind": k.key() }), "Add association"),
         }
     }
@@ -110,10 +145,21 @@ pub(crate) fn tool_face(shell: &Shell, paint: &egui::Painter, p: &Palette, b: Re
     sample(paint, b.center() - vec2(24.0, 0.0), b.center() + vec2(24.0, 0.0), shell.canvas.uml_relation, ink, fill);
 }
 
+/// The height of the separator between the menu's groups of kinds: a hairline with room above and
+/// below it.
+const SEPARATOR: f32 = 13.0;
+
+/// The top of the menu's row `i`, from the menu's top: under the heading, each row 36 high, and a
+/// separator above every kind that starts a group.
+fn row_top(i: usize) -> f32 {
+    let separators = Relate::ALL.iter().take(i.saturating_add(1)).filter(|k| k.after_separator()).count();
+    40.0 + i as f32 * 36.0 + separators as f32 * SEPARATOR
+}
+
 /// The menu of kinds above the Relationship tool's chevron; a pick chooses and closes it.
 pub(crate) fn popover(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, anchor: Rect) {
     let paint = ui.painter().clone();
-    let size = vec2(248.0, 44.0 + Relate::ALL.len() as f32 * 36.0 + 8.0);
+    let size = vec2(248.0, row_top(Relate::ALL.len()) + 4.0 + 8.0);
     let x = (anchor.center().x - size.x / 2.0).clamp(r.left() + 8.0, (r.right() - size.x - 8.0).max(r.left() + 8.0));
     let y = (anchor.top() - 8.0 - size.y).max(r.top() + 8.0);
     let m = Rect::from_min_size(pos2(x, y), size);
@@ -123,8 +169,13 @@ pub(crate) fn popover(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, an
     ux::text(&paint, m.min + vec2(16.0, 14.0), &tr("Relationship").to_uppercase(), types::EYEBROW, p.text_secondary, Some(200.0));
     let chosen = shell.canvas.uml_relation;
     for (i, kind) in Relate::ALL.iter().enumerate() {
-        let row = Rect::from_min_size(m.min + vec2(8.0, 40.0 + i as f32 * 36.0), vec2(size.x - 16.0, 34.0));
-        let resp = control(shell, ui, &format!("workspace.relate.{}", kind.key()), "menu-item", row, true);
+        let row = Rect::from_min_size(m.min + vec2(8.0, row_top(i)), vec2(size.x - 16.0, 34.0));
+        if kind.after_separator() {
+            let y = row.top() - SEPARATOR / 2.0 - 1.0;
+            paint.line_segment([pos2(m.left() + 16.0, y), pos2(m.right() - 16.0, y)], Stroke::new(1.0, p.border));
+        }
+        let name = tr(kind.hint().unwrap_or(kind.word()));
+        let resp = control(shell, ui, &format!("workspace.relate.{}", kind.key()), "menu-item", row, true).accessible_name(name);
         let on = *kind == chosen;
         if on {
             paint.rect_filled(row, 6.0, p.accent_tint);
@@ -160,6 +211,40 @@ fn class_of_node(store: &Store, node: Uuid) -> Option<Obj> {
     store.class_of(c).is_ok_and(archforge_uml::is_classifier).then_some(c)
 }
 
+/// Why a realization from `implementing` to `contract` is refused, in the user's language, when it
+/// is: neither may be missing (a node of something else than a classifier), only a class
+/// implements, only an interface is realized, and a class realizes an interface once. `except` is
+/// the realization being reconnected.
+fn realization_refusal(store: &Store, implementing: Option<Obj>, contract: Option<Obj>, except: Option<Obj>) -> Option<String> {
+    use archforge_uml::relations::RealizationProblem as P;
+    let problem = match (implementing, contract) {
+        (Some(i), Some(c)) => archforge_uml::relations::realization_problem(store, i, c, except)?,
+        (None, _) => P::NotAClass,
+        (Some(_), None) => P::NotAnInterface,
+    };
+    Some(match problem {
+        P::NotAClass => tr("Only a class implements an interface"),
+        P::NotAnInterface => tr("A class realizes only an interface"),
+        P::Again => tr("This class realizes that interface already"),
+    })
+}
+
+/// Why `kind` starts no line at `element`, when it does not: a realization starts only at a class.
+fn kind_start_problem(kind: Relate, store: &Store, element: Obj) -> Option<String> {
+    (kind == Relate::Realization && store.class_of(element).ok() != Some(archforge_uml::CLASS)).then(|| tr("Only a class implements an interface"))
+}
+
+/// Why the chosen kind starts no line at `element`, when it does not.
+pub(crate) fn start_problem(shell: &Shell, store: &Store, element: Obj) -> Option<String> {
+    kind_start_problem(shell.canvas.uml_relation, store, element)
+}
+
+/// The Relationship tool's tooltip and accessible name when the kind it draws needs its direction
+/// said: none takes the tool's own.
+pub(crate) fn tool_hint(shell: &Shell) -> Option<String> {
+    shell.canvas.uml_relation.hint().map(tr)
+}
+
 /// Draws the chosen kind between the classes of two nodes, its line on diagram `d` with its name
 /// at the middle, as one undo step; selects it. A refusal is said at the canvas's top.
 pub(crate) fn connect(shell: &mut Shell, d: Obj, from_node: Uuid, to_node: Uuid) {
@@ -167,6 +252,13 @@ pub(crate) fn connect(shell: &mut Shell, d: Obj, from_node: Uuid, to_node: Uuid)
     let kind = shell.canvas.uml_relation;
     let Some(session) = shell.session.as_mut() else { return };
     let store = session.doc();
+    // A realization refused draws nothing, and says why in the user's words.
+    if kind == Relate::Realization
+        && let Some(why) = realization_refusal(store, class_of_node(store, from_node), class_of_node(store, to_node), None)
+    {
+        shell.canvas.notice = Some(why);
+        return;
+    }
     let (Some(from), Some(to)) = (class_of_node(store, from_node), class_of_node(store, to_node)) else {
         shell.canvas.notice = Some(tr("A relationship joins two classes or interfaces"));
         return;
@@ -180,7 +272,7 @@ pub(crate) fn connect(shell: &mut Shell, d: Obj, from_node: Uuid, to_node: Uuid)
             "diagram.connect",
             &json!({ "diagram": diagram.to_string(), "element": element, "source": from_node.to_string(), "target": to_node.to_string() }),
         )?;
-        if kind != Relate::Generalization {
+        if kind.named() {
             let edge = e.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string();
             b.execute("diagram.label", &json!({ "edge": edge, "kind": "name", "at": "middle" }))?;
         }
@@ -200,7 +292,8 @@ pub(crate) fn connect(shell: &mut Shell, d: Obj, from_node: Uuid, to_node: Uuid)
 
 /// The chosen kind dropped on empty canvas at `(x, y)`: a new class there, related to the node's,
 /// as one undo step; its name opens for typing. A generalization dragged out of an interface makes
-/// an interface, the only kind an interface specializes.
+/// an interface, the only kind an interface specializes, and a realization an interface, the only
+/// kind a class realizes.
 pub(crate) fn connect_to_new(shell: &mut Shell, d: Obj, from_node: Uuid, x: f64, y: f64) {
     shell.canvas.notice = None;
     let kind = shell.canvas.uml_relation;
@@ -214,8 +307,13 @@ pub(crate) fn connect_to_new(shell: &mut Shell, d: Obj, from_node: Uuid, x: f64,
         shell.canvas.notice = Some(tr("A relationship joins two classes or interfaces"));
         return;
     };
+    if let Some(why) = kind_start_problem(kind, store, from) {
+        shell.canvas.notice = Some(why);
+        return;
+    }
     let (Ok(package_id), Ok(diagram), Ok(from_id)) = (store.uuid(package), store.uuid(d), store.uuid(from)) else { return };
     let made = match crate::uml_classifier::Classifier::of(store, from) {
+        _ if kind == Relate::Realization => crate::uml_classifier::Classifier::Interface,
         Some(crate::uml_classifier::Classifier::Interface) if kind == Relate::Generalization => crate::uml_classifier::Classifier::Interface,
         _ => crate::uml_classifier::Classifier::Class,
     };
@@ -242,7 +340,7 @@ pub(crate) fn connect_to_new(shell: &mut Shell, d: Obj, from_node: Uuid, x: f64,
             "diagram.connect",
             &json!({ "diagram": diagram.to_string(), "element": element, "source": from_node.to_string(), "target": node }),
         )?;
-        if kind != Relate::Generalization {
+        if kind.named() {
             let edge = e.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string();
             b.execute("diagram.label", &json!({ "edge": edge, "kind": "name", "at": "middle" }))?;
         }
@@ -262,10 +360,31 @@ pub(crate) fn connect_to_new(shell: &mut Shell, d: Obj, from_node: Uuid, x: f64,
 }
 
 /// Moves the source or target end of `element` to the class of `to_node`; dropped back on its own
-/// class it changes nothing, and a refusal is said at the canvas's top.
+/// class it changes nothing, and a refusal is said at the canvas's top: a realization's in the
+/// user's words.
 pub(crate) fn reconnect(shell: &mut Shell, element: Uuid, source: bool, to_node: Uuid) {
     shell.canvas.notice = None;
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+    let line = store.by_uuid(element);
+    if let Some(r) = line.filter(|r| store.class_of(*r).ok() == Some(archforge_uml::INTERFACE_REALIZATION))
+        && let Some((implementing, contract)) = archforge_uml::figures::ends(store, r)
+    {
+        let moved = class_of_node(store, to_node);
+        let (i, c) = if source { (moved, Some(contract)) } else { (Some(implementing), moved) };
+        // When the end that stays is wrong already (a project edited by hand), the model says so.
+        let staying_fine = if source {
+            store.class_of(contract).ok() == Some(archforge_uml::INTERFACE)
+        } else {
+            store.class_of(implementing).ok() == Some(archforge_uml::CLASS)
+        };
+        if staying_fine
+            && moved != Some(if source { implementing } else { contract })
+            && let Some(why) = realization_refusal(store, i, c, Some(r))
+        {
+            shell.canvas.notice = Some(why);
+            return;
+        }
+    }
     let Some(target) = class_of_node(store, to_node) else {
         shell.canvas.notice = Some(tr("A relationship joins two classes or interfaces"));
         return;
@@ -344,8 +463,8 @@ fn aggregation_words() -> [String; 3] {
     [tr("None"), tr("Shared"), tr("Composite")]
 }
 
-/// A line's Properties: an association's or a dependency's name, its classes, an association's
-/// ends.
+/// A line's Properties: an association's or a dependency's name, its classes (a realization's
+/// implementing class and the interface it realizes), an association's ends.
 pub(crate) fn body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, subject: &Subject) {
     let paint = ui.painter().clone();
     let width = (r.width() - 2.0 * PAD).max(0.0);
@@ -355,7 +474,8 @@ pub(crate) fn body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, m
     let name = |c: Option<Obj>| c.map(|c| archforge_core::name_of(store, c)).unwrap_or_default();
     let ends = archforge_uml::figures::ends(store, o);
     let (from, to) = (name(ends.map(|e| e.0)), name(ends.map(|e| e.1)));
-    if class != Some(archforge_uml::GENERALIZATION) {
+    // A generalization and a realization have no name to show.
+    if class != Some(archforge_uml::GENERALIZATION) && class != Some(archforge_uml::INTERFACE_REALIZATION) {
         crate::panels::name_field(shell, ui, p, pos2(r.left() + PAD, y), width, subject, "uml.relationship.rename", "relationship");
         y += 17.0 + FIELD + 12.0;
     }
@@ -363,6 +483,7 @@ pub(crate) fn body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, m
     let (first, second) = match class {
         Some(c) if c == archforge_uml::GENERALIZATION => (tr("Specific"), tr("General")),
         Some(c) if c == archforge_uml::DEPENDENCY => (tr("Client"), tr("Supplier")),
+        Some(c) if c == archforge_uml::INTERFACE_REALIZATION => (tr("Implementing class"), tr("Realized interface")),
         _ => (tr("From"), tr("To")),
     };
     let half = ((width - 8.0) / 2.0).max(0.0);
@@ -375,8 +496,17 @@ pub(crate) fn body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, m
         control(shell, ui, &format!("workspace.properties.relationship.{}", ["from", "to"][i]), "field", field, false);
     }
     y += 17.0 + FIELD + 8.0;
-    ux::text(&paint, pos2(r.left() + PAD, y), &tr("Drag a line end onto another class."), types::CAPTION, p.text_muted, Some(width));
-    y += 28.0;
+    // A realization's ends each move onto their own kind.
+    let hint = if class == Some(archforge_uml::INTERFACE_REALIZATION) {
+        tr("Drag the class end onto another class, the interface end onto another interface.")
+    } else {
+        tr("Drag a line end onto another class.")
+    };
+    // Wrapped, so the realization's longer hint reads whole in a narrow panel.
+    let said = ux::galley_rows(&paint, &hint, types::CAPTION, p.text_muted, Some(width), 3);
+    let height = said.size().y;
+    paint.galley(pos2(r.left() + PAD, y), said, p.text_muted);
+    y += (height + 12.0).max(28.0);
     if class == Some(archforge_uml::ASSOCIATION) {
         ends_sections(shell, ui, p, r, y, o, id);
     }
@@ -568,5 +698,10 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
 /// Every word the kinds' menu and the panels say through `tr` at run time, for the catalogue.
 #[cfg(test)]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
-    Relate::ALL.iter().map(|k| k.word()).chain(["Add association", "Add generalization", "Add dependency"])
+    Relate::ALL.iter().flat_map(|k| std::iter::once(k.word()).chain(k.hint())).chain([
+        "Add association",
+        "Add generalization",
+        "Add dependency",
+        "Add interface realization",
+    ])
 }

@@ -107,6 +107,10 @@ pub enum Screen {
     WorkspaceInterface,
     /// The same with the classifier tool's kinds menu open, Interface the current kind.
     WorkspaceClassifierKinds,
+    /// Two classes, Order and Invoice, each realizing the interface Payable: Order's realization
+    /// selected with its class and interface in Properties, and the Relationship tool showing
+    /// Interface realization.
+    WorkspaceRealization,
     /// The sample class model edited, unsaved, and its close asking Save, Don't save or Cancel
     ///.
     WorkspaceCloseAsk,
@@ -399,6 +403,14 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
             shell.canvas.tool = crate::canvas::Tool::Place(crate::uml_classifier::TOOL);
             shell.canvas.popover = Some(crate::uml_classifier::KINDS);
         }
+    }
+    if screen == Screen::WorkspaceRealization {
+        shell.adopt_project();
+        sample_realizations(&mut shell)?;
+        // The Relationship tool armed after the line was selected, as a click on it leaves the
+        // selection: the toolbar shows Interface realization active beside its Properties.
+        shell.canvas.tool = crate::canvas::Tool::Connect("relationship");
+        shell.canvas.uml_relation = crate::uml_relate::Relate::Realization;
     }
     if screen == Screen::WorkspaceInlineMember {
         shell.adopt_project();
@@ -1028,6 +1040,56 @@ fn sample_interfaces(shell: &mut Shell) -> Result<(), String> {
     }
     crate::canvas::open(shell, diagram);
     crate::panels::run(shell, "view.select", json!({ "ids": [payable] }))?;
+    shell.state.show_panel(crate::state::Panel::Properties);
+    Ok(())
+}
+
+/// A package Payments on its diagram: the interface Payable with two operations, realized by the
+/// classes Order, beside it, and Invoice, below it; Order's realization selected, Properties
+/// shown.
+fn sample_realizations(shell: &mut Shell) -> Result<(), String> {
+    use serde_json::json;
+    let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
+    let run = |session: &mut archforge_notations::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
+        let out = session.execute(command, &params).map_err(|e| format!("{command}: {e:?}"))?;
+        Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
+    };
+    let package = run(session, "uml.package.add", json!({ "name": "Payments" }))?;
+    let diagram = run(session, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": package, "name": "Payments" }))?;
+    let payable = run(session, "uml.interface.add", json!({ "package": package, "name": "Payable" }))?;
+    run(
+        session,
+        "uml.operation.add",
+        json!({ "class": payable, "name": "pay", "parameters": [{ "name": "amount", "type": "Real" }], "returns": "Boolean" }),
+    )?;
+    run(session, "uml.operation.add", json!({ "class": payable, "name": "refund", "returns": "Boolean" }))?;
+    let order = run(session, "uml.class.add", json!({ "package": package, "name": "Order" }))?;
+    run(session, "uml.attribute.add", json!({ "class": order, "name": "id", "type": "Integer" }))?;
+    run(session, "uml.attribute.add", json!({ "class": order, "name": "placedAt", "type": "String" }))?;
+    run(session, "uml.operation.add", json!({ "class": order, "name": "total", "returns": "Real" }))?;
+    let invoice = run(session, "uml.class.add", json!({ "package": package, "name": "Invoice" }))?;
+    run(session, "uml.attribute.add", json!({ "class": invoice, "name": "number", "type": "Integer" }))?;
+    run(session, "uml.attribute.add", json!({ "class": invoice, "name": "total", "type": "Real" }))?;
+    let realized = run(session, "uml.realization.add", json!({ "class": order, "interface": payable }))?;
+    run(session, "uml.realization.add", json!({ "class": invoice, "interface": payable }))?;
+    let (w, _) = archforge_uml::CLASS_SIZE;
+    // Order and Payable side by side, the same height, so Order's line runs straight; Invoice under
+    // Payable, its line straight up.
+    let top = crate::uml_ui::members_height(2, 2);
+    for (element, x, y, height) in [(&order, 80, 140, top), (&payable, 560, 140, top), (&invoice, 560, 460, crate::uml_ui::members_height(2, 0))] {
+        run(session, "diagram.place", json!({ "diagram": diagram, "element": element, "x": x, "y": y, "width": w + 40.0, "height": height }))?;
+    }
+    run(session, "diagram.connect-all", json!({ "diagram": diagram }))?;
+    session.mark_saved().map_err(|e| format!("mark_saved: {e:?}"))?;
+    let (Some(package), Some(diagram)) = (archforge_mof::Uuid::parse(&package), archforge_mof::Uuid::parse(&diagram)) else {
+        return Err("the sample's ids".into());
+    };
+    shell.explorer.expanded.insert(package);
+    if let Some(root) = shell.session.as_ref().and_then(|s| archforge_uml::commands::root_package(s.doc()).and_then(|r| s.doc().uuid(r).ok())) {
+        shell.explorer.expanded.insert(root);
+    }
+    crate::canvas::open(shell, diagram);
+    crate::panels::run(shell, "view.select", json!({ "ids": [realized] }))?;
     shell.state.show_panel(crate::state::Panel::Properties);
     Ok(())
 }

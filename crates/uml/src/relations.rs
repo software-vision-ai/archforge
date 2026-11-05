@@ -1,5 +1,5 @@
-//! Relating classes and interfaces: associations, generalizations and
-//! dependencies drawn between them, an association's ends set (role, multiplicity, navigability, aggregation),
+//! Relating classes and interfaces: associations, generalizations,
+//! dependencies and interface realizations drawn between them, an association's ends set (role, multiplicity, navigability, aggregation),
 //! any of them reconnected to another class, and the relationships that touch a class listed so
 //! removing the class can say them and take them along.
 //!
@@ -13,7 +13,9 @@
 //! that specializes anything but an interface, a class that specializes an interface, a classifier
 //! that specializes itself, directly or round a cycle, the same generalization twice, a class depending
 //! on itself, both ends of an association aggregating, a composition whose whole's end allows more
-//! than one, and two ends of one association with the same role.
+//! than one, two ends of one association with the same role, and an interface realization from
+//! anything but a class, to anything but an interface, or from a class to an interface it realizes
+//! already. A realization is owned by its implementing class, as UML has it.
 
 use archforge_diagram::ProjectView;
 use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, cmd};
@@ -22,8 +24,8 @@ use serde_json::{Value as Json, json};
 
 use crate::commands::{a_what, classifier_of, fail, id_of, name_of, package_of, refuse, set_name, text, uuid_of, what};
 use crate::{
-    ASSOCIATION, DEPENDENCY, GENERALIZATION, INTERFACE, PROPERTY, association, classifier, dependency, generalization, package, property,
-    typed_element,
+    ASSOCIATION, CLASS, DEPENDENCY, GENERALIZATION, INTERFACE, INTERFACE_REALIZATION, PROPERTY, association, behaviored_classifier, classifier,
+    dependency, generalization, interface_realization, package, property, typed_element,
 };
 
 type C<'a> = Ctx<'a, Store, ProjectView>;
@@ -86,7 +88,8 @@ fn upper(store: &Store, end: Obj) -> Option<u64> {
 }
 
 /// The relationships that touch class `c`: the associations with an end typed by it, the
-/// generalizations to and from it, and the dependencies it is a client or supplier of; each once.
+/// generalizations to and from it, the dependencies it is a client or supplier of, and the
+/// interface realizations it implements or is the contract of; each once.
 pub fn relationships_of(store: &Store, c: Obj) -> Vec<Obj> {
     let mut out = Vec::new();
     for (src, prop) in store.referrers(c) {
@@ -94,7 +97,15 @@ pub fn relationships_of(store: &Store, c: Obj) -> Vec<Obj> {
             // Its association, or the association that owns it.
             let owner = store.container(src).ok().flatten().map(|(o, _)| o).filter(|o| store.class_of(*o).ok() == Some(ASSOCIATION));
             one(store, src, property::ASSOCIATION).or(owner)
-        } else if prop == generalization::GENERAL || prop == dependency::CLIENT || prop == dependency::SUPPLIER {
+        } else if [
+            generalization::GENERAL,
+            dependency::CLIENT,
+            dependency::SUPPLIER,
+            interface_realization::CONTRACT,
+            interface_realization::IMPLEMENTING_CLASSIFIER,
+        ]
+        .contains(&prop)
+        {
             Some(src)
         } else {
             None
@@ -102,6 +113,7 @@ pub fn relationships_of(store: &Store, c: Obj) -> Vec<Obj> {
         out.extend(r.filter(|r| store.is_alive(*r)));
     }
     out.extend(list(store, c, classifier::GENERALIZATION));
+    out.extend(list(store, c, behaviored_classifier::INTERFACE_REALIZATION));
     out.sort();
     out.dedup();
     out
@@ -248,6 +260,90 @@ fn dependency_add(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, d)? }))
 }
 
+/// Why a classifier may not realize another: what a realization from anything but a class, to
+/// anything but an interface, or a second one between the same two would be refused for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RealizationProblem {
+    /// Only a class implements: UML's implementing classifier is behaviored.
+    NotAClass,
+    /// Only an interface is a contract.
+    NotAnInterface,
+    /// The class realizes that interface already.
+    Again,
+}
+
+impl RealizationProblem {
+    /// The parameter of `uml.realization.add` a refusal names.
+    pub fn key(self) -> &'static str {
+        match self {
+            RealizationProblem::NotAClass => "class",
+            RealizationProblem::NotAnInterface | RealizationProblem::Again => "interface",
+        }
+    }
+
+    /// Why, as a refusal says it.
+    pub fn why(self) -> &'static str {
+        match self {
+            RealizationProblem::NotAClass => "only a class implements an interface",
+            RealizationProblem::NotAnInterface => "a class realizes only an interface",
+            RealizationProblem::Again => "the class realizes that interface already",
+        }
+    }
+}
+
+/// Why `implementing` may not realize `contract`, when it may not: only a class implements, only an
+/// interface is a contract, and a class realizes an interface once. `except` is a realization being
+/// reconnected, which never clashes with itself.
+pub fn realization_problem(store: &Store, implementing: Obj, contract: Obj, except: Option<Obj>) -> Option<RealizationProblem> {
+    if store.class_of(implementing).ok() != Some(CLASS) {
+        return Some(RealizationProblem::NotAClass);
+    }
+    if store.class_of(contract).ok() != Some(INTERFACE) {
+        return Some(RealizationProblem::NotAnInterface);
+    }
+    let again = list(store, implementing, behaviored_classifier::INTERFACE_REALIZATION)
+        .into_iter()
+        .any(|r| Some(r) != except && one(store, r, interface_realization::CONTRACT) == Some(contract));
+    again.then_some(RealizationProblem::Again)
+}
+
+/// Keeps a realization's client and supplier, the dependency's ends its implementing classifier and
+/// contract subset, holding exactly those two: the store carries a list into the lists it subsets,
+/// but not a single reference.
+fn mirror_ends(store: &mut Store, r: Obj) -> Result<(), CommandError> {
+    let ends = [
+        (dependency::CLIENT, one(store, r, interface_realization::IMPLEMENTING_CLASSIFIER)),
+        (dependency::SUPPLIER, one(store, r, interface_realization::CONTRACT)),
+    ];
+    for (prop, want) in ends {
+        for old in list(store, r, prop).into_iter().filter(|o| Some(*o) != want) {
+            store.remove_value(r, prop, &Value::Ref(old)).map_err(fail)?;
+        }
+        if let Some(w) = want
+            && !list(store, r, prop).contains(&w)
+        {
+            store.push(r, prop, Value::Ref(w)).map_err(fail)?;
+        }
+    }
+    Ok(())
+}
+
+/// `uml.realization.add`: a class realizes an interface, the realization owned by the class.
+fn realization_add(ctx: &mut C<'_>, p: &Params) -> R {
+    let implementing = classifier_of(ctx.doc, p, "class")?;
+    let contract = classifier_of(ctx.doc, p, "interface")?;
+    if let Some(problem) = realization_problem(ctx.doc, implementing, contract, None) {
+        return Err(refuse(problem.key(), problem.why()));
+    }
+    let r = ctx.doc.create(INTERFACE_REALIZATION).map_err(fail)?;
+    ctx.doc.set(r, interface_realization::CONTRACT, Value::Ref(contract)).map_err(fail)?;
+    // Owned by the class, which makes the class its implementing classifier and its client.
+    ctx.doc.push(implementing, behaviored_classifier::INTERFACE_REALIZATION, Value::Ref(r)).map_err(fail)?;
+    mirror_ends(ctx.doc, r)?;
+    ctx.view.selection = vec![r];
+    Ok(json!({ "id": uuid_of(ctx.doc, r)? }))
+}
+
 /// The association or dependency under `key`.
 fn named_relationship(store: &Store, p: &Params, key: &str) -> Result<Obj, CommandError> {
     let r = id_of(store, p, key, ASSOCIATION, "an association").or_else(|_| id_of(store, p, key, DEPENDENCY, "a dependency"));
@@ -360,14 +456,21 @@ fn follow_ends(store: &mut Store, element: Obj) -> Result<(), CommandError> {
     Ok(())
 }
 
+/// Why a realization's end that stays, `end`, named `which`, is wrong already: its id, the kind it
+/// is, and the kind it needs (`needs`, with its article).
+fn wrong_end(store: &Store, which: &str, end: Obj, needs: &str) -> String {
+    let id = uuid_of(store, end).unwrap_or_default();
+    let is = store.class_of(end).map(|c| store.universe().class_name(c)).unwrap_or_else(|_| "nothing".into());
+    format!("the realization's existing {which} end {id} is of kind {is}; it must be {needs}")
+}
+
 /// `uml.relationship.reconnect`: one end of a relationship moved to another classifier, its rules kept and its lines following.
 fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
     let key = "relationship";
     let id = text(p, key);
-    let r = [ASSOCIATION, GENERALIZATION, DEPENDENCY]
-        .into_iter()
-        .find_map(|k| id_of(ctx.doc, p, key, k, "").ok())
-        .ok_or_else(|| refuse(key, format!("{} is no association, generalization or dependency", crate::commands::short(id))))?;
+    let r = crate::RELATIONSHIPS.into_iter().find_map(|k| id_of(ctx.doc, p, key, k, "").ok()).ok_or_else(|| {
+        refuse(key, format!("{} is no association, generalization, dependency or interface realization", crate::commands::short(id)))
+    })?;
     let source = match text(p, "end") {
         "source" => true,
         "target" => false,
@@ -391,6 +494,28 @@ fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
             ctx.doc.push(s, classifier::GENERALIZATION, Value::Ref(r)).map_err(fail)?;
         }
         ctx.doc.set(r, generalization::GENERAL, Value::Ref(g)).map_err(fail)?;
+    } else if class == INTERFACE_REALIZATION {
+        let (implementing, contract) =
+            crate::figures::ends(ctx.doc, r).ok_or_else(|| refuse(key, "the interface realization joins no class and interface"))?;
+        let (i, c) = if source { (c, contract) } else { (implementing, c) };
+        // The end that stays may be wrong already (a project edited by hand): that is the
+        // realization's fault, not the classifier the moved end was dropped on.
+        match realization_problem(ctx.doc, i, c, Some(r)) {
+            Some(RealizationProblem::NotAClass) if !source => {
+                return Err(refuse(key, wrong_end(ctx.doc, "implementing", implementing, "a Class")));
+            }
+            Some(RealizationProblem::NotAnInterface) if source => {
+                return Err(refuse(key, wrong_end(ctx.doc, "contract", contract, "an Interface")));
+            }
+            Some(problem) => return Err(refuse("class", problem.why())),
+            None => {}
+        }
+        if i != implementing {
+            ctx.doc.remove_value(implementing, behaviored_classifier::INTERFACE_REALIZATION, &Value::Ref(r)).map_err(fail)?;
+            ctx.doc.push(i, behaviored_classifier::INTERFACE_REALIZATION, Value::Ref(r)).map_err(fail)?;
+        }
+        ctx.doc.set(r, interface_realization::CONTRACT, Value::Ref(c)).map_err(fail)?;
+        mirror_ends(ctx.doc, r)?;
     } else {
         let (client, supplier) = crate::figures::ends(ctx.doc, r).ok_or_else(|| refuse(key, "the dependency joins no two classifiers"))?;
         let (cl, su) = if source { (c, supplier) } else { (client, c) };
@@ -431,6 +556,7 @@ fn describe(store: &Store, r: Obj) -> Json {
             json!({ "id": id(r), "kind": "association", "name": name_of(store, r), "from": from, "to": to, "ends": ends })
         }
         Some(c) if c == GENERALIZATION => json!({ "id": id(r), "kind": "generalization", "specific": from, "general": to }),
+        Some(c) if c == INTERFACE_REALIZATION => json!({ "id": id(r), "kind": "realization", "implementing": from, "contract": to }),
         _ => json!({ "id": id(r), "kind": "dependency", "name": name_of(store, r), "client": from, "supplier": to }),
     }
 }
@@ -495,6 +621,18 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             dependency_add
         ),
         cmd!(
+            "uml.realization.add",
+            "Add interface realization",
+            &["Interface realization"],
+            None,
+            concat!(
+                "class: string; the id of the class that implements the interface, its implementing classifier; only a class implements\n",
+                "interface: string; the id of the interface it implements, its contract; a class realizes an interface once"
+            ),
+            has_classes,
+            realization_add
+        ),
+        cmd!(
             "uml.relationship.rename",
             "Rename relationship",
             &["Association", "Dependency"],
@@ -506,16 +644,16 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
         cmd!(
             "uml.relationship.reconnect",
             "Reconnect relationship",
-            &["Association", "Generalization", "Dependency"],
+            &["Association", "Generalization", "Dependency", "Interface realization"],
             None,
             concat!(
-                "relationship: string; the association's, generalization's or dependency's id\n",
-                "end: string, source|target; the end to move: the class or interface it was drawn from (the specific one, the client) or to\n",
-                "class: string; the id of the class or interface the end moves to; a generalization's end keeps its rules: an interface specializes only an interface, a class never one"
+                "relationship: string; the association's, generalization's, dependency's or interface realization's id\n",
+                "end: string, source|target; the end to move: the class or interface it was drawn from (the specific one, the client, the implementing class) or to\n",
+                "class: string; the id of the class or interface the end moves to; a generalization's end keeps its rules: an interface specializes only an interface, a class never one; a realization's source is a class and its target an interface, the class realizing it once"
             ),
             has_classes,
             relationship_reconnect
         ),
-        cmd!(query "uml.relationship.list", "List relationships", &["Association", "Generalization", "Dependency"], None, "class: string; the class's or interface's id", has_classes, relationship_list),
+        cmd!(query "uml.relationship.list", "List relationships", &["Association", "Generalization", "Dependency", "Interface realization"], None, "class: string; the class's or interface's id", has_classes, relationship_list),
     ]
 }

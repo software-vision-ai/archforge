@@ -591,10 +591,12 @@ str		This is the top package: zooming out goes no further	Dies ist das oberste P
 str		Only a package this diagram's package holds goes on it	Nur ein Paket, das im Paket dieses Diagramms liegt, kann darauf
 # Klassen in Beziehung setzen
 str		A bound can be at most {max}.	Eine Grenze darf höchstens {max} sein.
+str		A class realizes only an interface	Eine Klasse realisiert nur eine Schnittstelle
 str		A relationship joins two classes or interfaces	Eine Beziehung verbindet zwei Klassen oder Schnittstellen
 str		Add association	Assoziation hinzufügen
 str		Add dependency	Abhängigkeit hinzufügen
 str		Add generalization	Generalisierung hinzufügen
+str		Add interface realization	Schnittstellenrealisierung hinzufügen
 str		Aggregation	Aggregation
 str		Association	Assoziation
 str		Association · model	Assoziation · Modell
@@ -607,17 +609,25 @@ str		Dependency · model	Abhängigkeit · Modell
 str		Directed association	Gerichtete Assoziation
 str		Drag a line end onto another class.	Ziehen Sie ein Linienende auf eine andere Klasse.
 str		Drag onto another class to move this end	Auf eine andere Klasse ziehen, um dieses Ende zu verschieben
+str		Drag the class end onto another class, the interface end onto another interface.	Ziehen Sie das Klassenende auf eine andere Klasse, das Schnittstellenende auf eine andere Schnittstelle.
 str		End at {class}	Ende bei {class}
 str		From	Von
 str		General	Allgemein
 str		Generalization	Generalisierung
 str		Generalization · model	Generalisierung · Modell
+str		Implementing class	Implementierende Klasse
+str		Interface realization	Schnittstellenrealisierung
+str		Interface realization · model	Schnittstellenrealisierung · Modell
+str		Interface realization: from the implementing class to its interface	Schnittstellenrealisierung: von der implementierenden Klasse zu ihrer Schnittstelle
 str		Navigable	Navigierbar
 str		On this association · {n}	An dieser Assoziation · {n}
 str		On this dependency · {n}	An dieser Abhängigkeit · {n}
 str		On this generalization · {n}	An dieser Generalisierung · {n}
+str		On this interface realization · {n}	An dieser Schnittstellenrealisierung · {n}
+str		Only a class implements an interface	Nur eine Klasse implementiert eine Schnittstelle
 str		Or type a number or range	Oder eine Zahl oder einen Bereich eingeben
 str		Pick a multiplicity	Multiplizität wählen
+str		Realized interface	Realisierte Schnittstelle
 str		Relationship kinds	Beziehungsarten
 str		Shared	Geteilt
 str		Specific	Speziell
@@ -625,8 +635,10 @@ str		Supplier	Lieferant
 str		The lower bound cannot be *.	Die Untergrenze darf nicht * sein.
 str		The upper bound must be at least {lower}.	Die Obergrenze muss mindestens {lower} sein.
 str		This association	Diese Assoziation
+str		This class realizes that interface already	Diese Klasse realisiert diese Schnittstelle bereits
 str		This dependency	Diese Abhängigkeit
 str		This generalization	Diese Generalisierung
+str		This interface realization	Diese Schnittstellenrealisierung
 str		To	Nach
 str		Type a whole number, a range such as 2..5, or *.	Geben Sie eine ganze Zahl, einen Bereich wie 2..5 oder * ein.
 str		{what} removed	{what} entfernt

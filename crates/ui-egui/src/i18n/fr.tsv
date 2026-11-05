@@ -591,10 +591,12 @@ str		This is the top package: zooming out goes no further	Ceci est le paquetage 
 str		Only a package this diagram's package holds goes on it	Seul un paquetage contenu dans le paquetage de ce diagramme peut y aller
 # Relier des classes
 str		A bound can be at most {max}.	Une borne vaut au plus {max}.
+str		A class realizes only an interface	Une classe ne réalise qu’une interface
 str		A relationship joins two classes or interfaces	Une relation joint deux classes ou interfaces
 str		Add association	Ajouter une association
 str		Add dependency	Ajouter une dépendance
 str		Add generalization	Ajouter une généralisation
+str		Add interface realization	Ajouter une réalisation d’interface
 str		Aggregation	Agrégation
 str		Association	Association
 str		Association · model	Association · modèle
@@ -607,17 +609,25 @@ str		Dependency · model	Dépendance · modèle
 str		Directed association	Association orientée
 str		Drag a line end onto another class.	Faites glisser une extrémité de la ligne sur une autre classe.
 str		Drag onto another class to move this end	Faire glisser sur une autre classe pour déplacer cette extrémité
+str		Drag the class end onto another class, the interface end onto another interface.	Faites glisser l’extrémité de la classe sur une autre classe, et celle de l’interface sur une autre interface.
 str		End at {class}	Extrémité sur {class}
 str		From	De
 str		General	Générale
 str		Generalization	Généralisation
 str		Generalization · model	Généralisation · modèle
+str		Implementing class	Classe qui implémente
+str		Interface realization	Réalisation d’interface
+str		Interface realization · model	Réalisation d’interface · modèle
+str		Interface realization: from the implementing class to its interface	Réalisation d’interface : de la classe qui implémente à son interface
 str		Navigable	Navigable
 str		On this association · {n}	Sur cette association · {n}
 str		On this dependency · {n}	Sur cette dépendance · {n}
 str		On this generalization · {n}	Sur cette généralisation · {n}
+str		On this interface realization · {n}	Sur cette réalisation d’interface · {n}
+str		Only a class implements an interface	Seule une classe implémente une interface
 str		Or type a number or range	Ou saisissez un nombre ou une plage
 str		Pick a multiplicity	Choisir une multiplicité
+str		Realized interface	Interface réalisée
 str		Relationship kinds	Types de relation
 str		Shared	Partagée
 str		Specific	Spécifique
@@ -625,8 +635,10 @@ str		Supplier	Fournisseur
 str		The lower bound cannot be *.	La borne inférieure ne peut pas être *.
 str		The upper bound must be at least {lower}.	La borne supérieure doit valoir au moins {lower}.
 str		This association	Cette association
+str		This class realizes that interface already	Cette classe réalise déjà cette interface
 str		This dependency	Cette dépendance
 str		This generalization	Cette généralisation
+str		This interface realization	Cette réalisation d’interface
 str		To	Vers
 str		Type a whole number, a range such as 2..5, or *.	Saisissez un nombre entier, une plage comme 2..5, ou *.
 str		{what} removed	Supprimé : {what}

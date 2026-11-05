@@ -591,10 +591,12 @@ str		This is the top package: zooming out goes no further	这是最上层的包�
 str		Only a package this diagram's package holds goes on it	只能放入此图所属包中的包
 # 关联类
 str		A bound can be at most {max}.	界限最多为 {max}。
+str		A class realizes only an interface	类只能实现接口
 str		A relationship joins two classes or interfaces	关系连接两个类或接口
 str		Add association	添加关联
 str		Add dependency	添加依赖
 str		Add generalization	添加泛化
+str		Add interface realization	添加接口实现
 str		Aggregation	聚合
 str		Association	关联
 str		Association · model	关联 · 模型
@@ -607,17 +609,25 @@ str		Dependency · model	依赖 · 模型
 str		Directed association	有向关联
 str		Drag a line end onto another class.	将线的一端拖到另一个类上。
 str		Drag onto another class to move this end	拖到另一个类上以移动此端
+str		Drag the class end onto another class, the interface end onto another interface.	将类一端拖到另一个类上，将接口一端拖到另一个接口上。
 str		End at {class}	{class} 端
 str		From	从
 str		General	一般
 str		Generalization	泛化
 str		Generalization · model	泛化 · 模型
+str		Implementing class	实现类
+str		Interface realization	接口实现
+str		Interface realization · model	接口实现 · 模型
+str		Interface realization: from the implementing class to its interface	接口实现：从实现类指向其接口
 str		Navigable	可导航
 str		On this association · {n}	在此关联上 · {n}
 str		On this dependency · {n}	在此依赖上 · {n}
 str		On this generalization · {n}	在此泛化上 · {n}
+str		On this interface realization · {n}	在此接口实现上 · {n}
+str		Only a class implements an interface	只有类能实现接口
 str		Or type a number or range	或输入数字或范围
 str		Pick a multiplicity	选择多重性
+str		Realized interface	被实现的接口
 str		Relationship kinds	关系类型
 str		Shared	共享
 str		Specific	特殊
@@ -625,8 +635,10 @@ str		Supplier	供应者
 str		The lower bound cannot be *.	下限不能为 *。
 str		The upper bound must be at least {lower}.	上限必须至少为 {lower}。
 str		This association	此关联
+str		This class realizes that interface already	此类已经实现了该接口
 str		This dependency	此依赖
 str		This generalization	此泛化
+str		This interface realization	此接口实现
 str		To	到
 str		Type a whole number, a range such as 2..5, or *.	请输入整数、范围（如 2..5）或 *。
 str		{what} removed	已移除{what}

@@ -130,6 +130,8 @@ enum Action {
     /// A cardinality text put back in its place, and a line's route worked out anew.
     ResetEnd(Uuid, u8),
     ResetRoute(Uuid),
+    /// Something refused before it began, said at the canvas's top: a line the tool starts nowhere.
+    Notice(String),
 }
 
 pub(crate) fn run(shell: &mut Shell, id: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
@@ -361,7 +363,11 @@ fn decide(
             let Some(pos) = pos else { return Action::Nothing };
             if resp.drag_started_by(egui::PointerButton::Primary) && shell.canvas.gesture.is_none() {
                 let from = origin.filter(|o| o.is_finite()).unwrap_or(pos);
-                return match hit_node(from).filter(|n| part_of_node(kind, store, *n).is_some()).and_then(|n| uuid(store, n)) {
+                let Some((n, element)) = hit_node(from).and_then(|n| Some((n, part_of_node(kind, store, n)?))) else { return Action::Nothing };
+                if let Some(why) = kind.and_then(|k| k.line_start_problem(shell, store, tool, element)) {
+                    return Action::Notice(why);
+                }
+                return match uuid(store, n) {
                     Some(from_node) => Action::Start(Gesture::Connect { tool, from_node, from }, None),
                     None => Action::Nothing,
                 };
@@ -582,6 +588,7 @@ pub(crate) fn pointer(shell: &mut Shell, ui: &egui::Ui, resp: &egui::Response, v
             }
             select(shell, ids);
         }
+        Action::Notice(why) => shell.canvas.notice = Some(why),
         Action::Start(gesture, select_first) => {
             if let Some(id) = select_first {
                 select(shell, vec![id]);
@@ -1548,8 +1555,17 @@ fn adorners(
             && resp.drag_started_by(egui::PointerButton::Primary)
             && shell.canvas.gesture.is_none()
         {
-            let from = ui.input(|i| i.pointer.press_origin()).filter(|o| o.is_finite()).unwrap_or(b.center());
-            shell.canvas.gesture = Some(Gesture::Connect { tool, from_node: node, from });
+            // A line the tool starts nowhere at this element is said, and not begun.
+            let problem = shell.session.as_ref().and_then(|s| {
+                let store = s.doc();
+                store.by_uuid(entity).and_then(|e| kind.line_start_problem(shell, store, tool, e))
+            });
+            if let Some(why) = problem {
+                shell.canvas.notice = Some(why);
+            } else {
+                let from = ui.input(|i| i.pointer.press_origin()).filter(|o| o.is_finite()).unwrap_or(b.center());
+                shell.canvas.gesture = Some(Gesture::Connect { tool, from_node: node, from });
+            }
         }
     }
     kind.card_controls(shell, ui, p, r, rect, entity);
