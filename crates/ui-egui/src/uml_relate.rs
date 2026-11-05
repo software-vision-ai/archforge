@@ -371,7 +371,14 @@ pub(crate) fn reconnect(shell: &mut Shell, element: Uuid, source: bool, to_node:
     {
         let moved = class_of_node(store, to_node);
         let (i, c) = if source { (moved, Some(contract)) } else { (Some(implementing), moved) };
-        if moved != Some(if source { implementing } else { contract })
+        // When the end that stays is wrong already (a project edited by hand), the model says so.
+        let staying_fine = if source {
+            store.class_of(contract).ok() == Some(archforge_uml::INTERFACE)
+        } else {
+            store.class_of(implementing).ok() == Some(archforge_uml::CLASS)
+        };
+        if staying_fine
+            && moved != Some(if source { implementing } else { contract })
             && let Some(why) = realization_refusal(store, i, c, Some(r))
         {
             shell.canvas.notice = Some(why);

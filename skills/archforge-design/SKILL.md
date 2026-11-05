@@ -397,14 +397,22 @@ What is UML's own, beside the shared rules above.
   Its name sits at the middle, its roles and multiplicities at their ends.
 - A generalization draws to a hollow triangle at the general class, in the muted ink, as ER's.
 - A dependency is dashed, with an open arrow at its supplier.
+- An interface realization is dashed in the muted ink, with a hollow triangle at its interface: it
+  is neither a generalization (solid) nor a dependency (an open arrow).
 - The class diagram's toolbar is Class, Relationship with its chevron, Note and Link note. A
   class is added only with the Class tool, never by a click in Select.
 - The Relationship tool's face is a sample of the kind it draws; its chevron opens a menu of
-  Association, Directed association, Aggregation, Composition, Generalization and Dependency, each
-  a row with its sample line, and a pick closes it. A line is drawn from the whole to the part, from
-  the specific class to the general one, from the client to the supplier; dropped on empty canvas
-  it makes a new class there, named in place. A refusal (a cycle, a class on itself) is said at the
-  canvas's top and draws nothing.
+  Association, Directed association, Aggregation, Composition, Generalization and Dependency, then
+  after a separator Interface realization, each a row with its sample line, and a pick closes it.
+  A line is drawn from the whole to the part, from the specific class to the general one, from the
+  client to the supplier, from the implementing class to its interface; dropped on empty canvas it
+  makes a new class there, named in place, and for a realization a new interface. A refusal (a
+  cycle, a class on itself) is said at the canvas's top and draws nothing.
+- Interface realization: only a class starts one; from anything else the tool starts no line and
+  says so at the canvas's top. A drop on anything but an interface, or a second realization from
+  the same class to the same interface, is refused there and draws nothing; several classes may
+  realize one interface. Its tooltip and accessible name say it runs from the implementing class to
+  its interface.
 - A new association is a plain line: no roles, no multiplicities, navigable to neither end (owner
   decision); a directed one navigates to its second class; an association owns both its ends, so drawing lines never changes a class's
   attributes (owner decision).
@@ -432,7 +440,8 @@ What is UML's own, beside the shared rules above.
 - An association's Properties: Name, its From and To classes read only with "Drag a line end onto
   another class.", then a section per end, "End at {class}": Role (written on Enter or leaving the
   field) and Multiplicity, Navigable and Aggregation (None, Shared, Composite; written when
-  changed). A dependency shows Name, Client and Supplier; a generalization Specific and General.
+  changed). A dependency shows Name, Client and Supplier; a generalization Specific and General; an
+  interface realization Implementing class and Realized interface, with no name.
 - An end's Multiplicity is an editable select (owner, 2026-11-02): its text takes typing, its
   chevron (or Alt+Down) opens `0..1`, `1`, `0..*`, `1..*` and `*` with the current one ticked, the
   hint "Or type a number or range" and Clear. A preset writes on its pick; typing writes on Enter

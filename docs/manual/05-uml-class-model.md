@@ -122,9 +122,11 @@ apply. Delete removes the realization, and removing its class or its interface t
 
 ## The result
 
-The root package holds two classes. *Customer* has an attribute and an operation, and a navigable
-association *places* leads to many *Order*s. In Models, open the root package (your project's name),
-then a class, to see its attributes and operations.
+The root package holds two classes and an interface. *Customer* has an attribute and an
+operation, and a navigable association *places* leads to many *Order*s. *Order* realizes the
+interface *Payable*, a dashed line with a hollow triangle at *Payable*. In Models, open the root
+package (your project's name), then a class or the interface, to see its attributes and
+operations.
 
 <!-- picture: workspace-class-diagram light | A class diagram of a small commerce model -->
 

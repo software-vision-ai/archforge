@@ -490,8 +490,17 @@ fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
         let (implementing, contract) =
             crate::figures::ends(ctx.doc, r).ok_or_else(|| refuse(key, "the interface realization joins no class and interface"))?;
         let (i, c) = if source { (c, contract) } else { (implementing, c) };
-        if let Some(problem) = realization_problem(ctx.doc, i, c, Some(r)) {
-            return Err(refuse("class", problem.why()));
+        // The end that stays may be wrong already (a project edited by hand): that is the
+        // realization's fault, not the classifier the moved end was dropped on.
+        match realization_problem(ctx.doc, i, c, Some(r)) {
+            Some(RealizationProblem::NotAClass) if !source => {
+                return Err(refuse(key, "the realization's existing implementing end is not a class"));
+            }
+            Some(RealizationProblem::NotAnInterface) if source => {
+                return Err(refuse(key, "the realization's existing contract end is not an interface"));
+            }
+            Some(problem) => return Err(refuse("class", problem.why())),
+            None => {}
         }
         if i != implementing {
             ctx.doc.remove_value(implementing, behaviored_classifier::INTERFACE_REALIZATION, &Value::Ref(r)).map_err(fail)?;

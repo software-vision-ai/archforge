@@ -427,6 +427,26 @@ fn a_realization_reconnects_with_its_rules_kept_and_goes_alone_or_with_either_en
     assert_eq!(edges(&s), 0);
 }
 
+/// A realization whose end that stays is wrong already, owned by something else than a class (a
+/// project edited by hand), is refused when its other end moves, naming the realization's own end.
+#[test]
+fn a_realization_whose_staying_end_is_not_a_class_says_so_when_its_other_end_moves() {
+    let mut st = store(0);
+    st.create(archforge_core::MODEL).unwrap();
+    let actor = st.create(archforge_uml::ACTOR).unwrap();
+    let [payable, refundable] = [st.create(archforge_uml::INTERFACE).unwrap(), st.create(archforge_uml::INTERFACE).unwrap()];
+    let r = st.create(archforge_uml::INTERFACE_REALIZATION).unwrap();
+    st.set(r, archforge_uml::interface_realization::CONTRACT, Value::Ref(payable)).unwrap();
+    st.push(actor, archforge_uml::behaviored_classifier::INTERFACE_REALIZATION, Value::Ref(r)).unwrap();
+    let id = |o| st.uuid(o).unwrap().to_string();
+    let (r, refundable) = (id(r), id(refundable));
+    let mut s = Session::with_view(registry().unwrap(), st, 1, Options::default(), ProjectView::new(ALONE));
+    let before = snapshot(&s);
+    let e = s.execute("uml.relationship.reconnect", &json!({ "relationship": r, "end": "target", "class": refundable })).unwrap_err().to_string();
+    assert!(e.contains("relationship: the realization") && e.contains("existing implementing end is not a class"), "{e}");
+    assert_eq!(snapshot(&s), before, "nothing changed");
+}
+
 /// Realizations, with their lines, come back from their rows identical, as a saved project opens.
 #[test]
 fn realizations_come_back_from_their_rows_identical() {
