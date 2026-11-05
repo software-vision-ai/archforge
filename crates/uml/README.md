@@ -80,7 +80,12 @@ classes, owning both its ends as an association does, its ends set with `uml.ass
 its members with the member commands, renamed and moved with `uml.association-class.rename` and
 `.move` among its package's classifiers, refused at anything but a class; nothing specializes it),
 `commands::going_with` (the relationships that go with classifiers, an association class's own
-among them), `RELATIONSHIPS`, `is_relationship` and `is_association`, and the card's `WORDS` and `PLURALS` for the shell's catalogue. Where an association's two
+among them), `modifiers::{read, apply, parse_default, default_text, braces, suffix, Shape,
+subsets_candidates, redefines_candidates, subsets_problem, redefines_problem}` (AR-126: a
+property's default value read by its type, derived, read only, ordered, unique, and the properties
+it subsets and redefines, set by `uml.attribute.add`/`set` and `uml.association.set-end`, checked
+against UML's rules before anything changes; the card's and the line's notation, `figures::end_role`
+and `figures::end_text`), `RELATIONSHIPS`, `is_relationship` and `is_association`, and the card's `WORDS` and `PLURALS` for the shell's catalogue. Where an association's two
 ends pair a derived end with a stored one, the generator gives neither an opposite: a derived end
 keeps no field to keep in step.
 
@@ -96,7 +101,10 @@ store (both ends of `ownedAttribute` and `class`, containment, `ownedElement`, `
 the million-object test (release only). `tests/skills.rs`: skills on a package, a class, an
 attribute and an operation, each one undo step; a relationship and an association's end refused;
 the kinds a skill aims at; inheritance down the package tree with an override by name; a skill
-going with its element, a nested package's too, and back with undo.
+going with its element, a nested package's too, and back with undo. `tests/modifiers.rs` (AR-126):
+each modifier set and cleared on an attribute and an end, one undo step each; defaults for every
+built-in type, an enumeration and opaque text, and the type-change refusal; Subsets and Redefines
+valid and refused; the card's and the line's notation; rows read back identical; the sweep.
 
 **Known lacks.** No derived getters yet (`Classifier::general`, `MultiplicityElement::lower`, …
 read as Derived until a notation writes them). No hand-written rules beyond the core's. No

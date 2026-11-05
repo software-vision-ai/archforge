@@ -1,0 +1,757 @@
+//! A property's modifiers (AR-126): its default value; whether it is derived, read only, ordered and
+//! unique; and the properties it subsets and redefines. They are set with the attribute commands
+//! and with `uml.association.set-end`, never on their own, and kept in the property's own UML
+//! fields: `defaultValue`, `isDerived`, `isReadOnly`, `isOrdered`, `isUnique`, `subsettedProperty`
+//! and `redefinedProperty`. Static stays where it was, beside them.
+//!
+//! A default value is typed as text and read by the property's type: an Integer's as a whole
+//! number, a Real's as a number, a Boolean's as true or false, an UnlimitedNatural's as a whole
+//! number of 0 or more or `*`, a String's as any text, an enumeration's as one of its literals,
+//! kept as an InstanceValue that refers to the literal; any other type, or none, takes the text as
+//! an opaque expression's body. A default that does not read is refused, naming the value and the
+//! form its type accepts.
+//!
+//! Subsets offers the other properties of the property's context and of the classifiers that
+//! context specializes, whose type the property's type conforms to, whose upper bound is not below
+//! the property's, and whose name differs from the property's (UML 2.5.1, 9.9.17). Redefines
+//! offers the properties of the classifiers the context specializes alone, those the property is
+//! consistent with: a conforming type, a multiplicity whose bounds both lie within the target's,
+//! and composite wherever the target is. An attribute's context is its classifier; an association
+//! end's is the classifier at the association's other end, so the properties of a classifier are
+//! its attributes and the ends that face it. A property without a name is never offered: it could
+//! not be named in the braces.
+
+use archforge_mof::{Obj, Store, Uuid, Value};
+use serde_json::{Value as Json, json};
+
+use crate::commands::{fail, name_of, refuse, short, uuid_of};
+use crate::{
+    ENUMERATION, ENUMERATION_LITERAL, INSTANCE_VALUE, LITERAL_BOOLEAN, LITERAL_INTEGER, LITERAL_REAL, LITERAL_STRING, LITERAL_UNLIMITED_NATURAL,
+    OPAQUE_EXPRESSION, PROPERTY, association, instance_value, literal_boolean, literal_integer, literal_real, literal_string,
+    literal_unlimited_natural, multiplicity_element, opaque_expression, property, structural_feature, typed_element,
+};
+use archforge_engine::{CommandError, Params};
+
+/// The longest default value, in characters.
+pub const MAX_DEFAULT: usize = 1000;
+/// The most properties one property subsets, and the most it redefines.
+pub const MAX_TARGETS: usize = 32;
+/// The most literals a refusal lists as the accepted ones.
+const LISTED: usize = 12;
+
+/// The live element `o` names under the single reference `prop`, when it names one.
+fn one(store: &Store, o: Obj, prop: archforge_mof::PropId) -> Option<Obj> {
+    store.get(o, prop).ok().and_then(|v| v.as_ref()).filter(|x| store.is_alive(*x))
+}
+
+/// The live elements `o` lists under `prop`, in their order.
+fn list(store: &Store, o: Obj, prop: archforge_mof::PropId) -> Vec<Obj> {
+    store.list(o, prop).unwrap_or_default().iter().filter_map(Value::as_ref).filter(|x| store.is_alive(*x)).collect()
+}
+
+/// The boolean `prop` of `o`, `otherwise` when it is unset.
+fn flag(store: &Store, o: Obj, prop: archforge_mof::PropId, otherwise: bool) -> bool {
+    store.get(o, prop).ok().and_then(|v| v.as_bool()).unwrap_or(otherwise)
+}
+
+/// How a default value is read, by the property's type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DefaultForm {
+    /// The built-in Integer: a whole number.
+    Integer,
+    /// The built-in Real: a number.
+    Real,
+    /// The built-in Boolean: true or false.
+    Boolean,
+    /// The built-in UnlimitedNatural: a whole number of 0 or more, or `*`.
+    UnlimitedNatural,
+    /// The built-in String: any text.
+    String,
+    /// An enumeration: one of its literals.
+    Enumeration(Obj),
+    /// Any other type, or none: the text of an opaque expression.
+    Opaque,
+}
+
+impl DefaultForm {
+    /// The form of the built-in type named `name`, exactly; none for any other name.
+    pub fn built_in(name: &str) -> Option<DefaultForm> {
+        Some(match name {
+            "Integer" => DefaultForm::Integer,
+            "Real" => DefaultForm::Real,
+            "Boolean" => DefaultForm::Boolean,
+            "UnlimitedNatural" => DefaultForm::UnlimitedNatural,
+            "String" => DefaultForm::String,
+            _ => return None,
+        })
+    }
+
+    /// The form a property typed by `ty` reads its default in.
+    pub fn of(store: &Store, ty: Option<Obj>) -> DefaultForm {
+        match ty {
+            Some(t) if crate::members::is_built_in(store, t) => DefaultForm::built_in(&name_of(store, t)).unwrap_or(DefaultForm::Opaque),
+            Some(t) if store.class_of(t).ok() == Some(ENUMERATION) => DefaultForm::Enumeration(t),
+            _ => DefaultForm::Opaque,
+        }
+    }
+
+    /// What the form accepts, as a refusal says it: the type and an example, or an enumeration's
+    /// literals.
+    pub fn accepted(self, store: &Store) -> String {
+        match self {
+            DefaultForm::Integer => "an Integer's default is a whole number, such as 42 or -7".into(),
+            DefaultForm::Real => "a Real's default is a number, such as 2.5 or -1e3".into(),
+            DefaultForm::Boolean => "a Boolean's default is true or false".into(),
+            DefaultForm::UnlimitedNatural => "an UnlimitedNatural's default is a whole number of 0 or more, or *".into(),
+            DefaultForm::String => "a String's default is any text".into(),
+            DefaultForm::Opaque => "this type's default is any text".into(),
+            DefaultForm::Enumeration(e) => {
+                let names: Vec<String> = crate::commands::literals(store, e).into_iter().map(|l| name_of(store, l)).collect();
+                if names.is_empty() {
+                    return format!("the enumeration {} has no literals yet, so it takes no default", name_of(store, e));
+                }
+                let more = names.len().saturating_sub(LISTED);
+                let shown = names.into_iter().take(LISTED).collect::<Vec<_>>().join(", ");
+                let tail = if more > 0 { format!(" and {more} more") } else { String::new() };
+                format!("a default of the enumeration {} is one of its literals: {shown}{tail}", name_of(store, e))
+            }
+        }
+    }
+}
+
+/// A default value as it is kept, read from its text.
+#[derive(Debug, Clone, PartialEq)]
+pub enum DefaultValue {
+    Integer(i64),
+    Real(f64),
+    Boolean(bool),
+    /// None is `*`.
+    Unlimited(Option<u64>),
+    String(String),
+    /// The literal of an enumeration, kept as an InstanceValue that refers to it.
+    Literal(Obj),
+    /// An opaque expression's body.
+    Opaque(String),
+}
+
+/// Why a typed default does not read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DefaultError {
+    /// Longer than [`MAX_DEFAULT`] characters.
+    TooLong,
+    /// Not of the form its type accepts: the value as typed, cut short, and the form.
+    Malformed(String, DefaultForm),
+}
+
+impl DefaultError {
+    /// Why, as a refusal says it: the value and the form its type accepts.
+    pub fn said(&self, store: &Store) -> String {
+        match self {
+            DefaultError::TooLong => format!("the default value is longer than {MAX_DEFAULT} characters; a default is at most {MAX_DEFAULT}"),
+            DefaultError::Malformed(value, form) => format!("the default value {value:?} does not read: {}", form.accepted(store)),
+        }
+    }
+}
+
+/// Whether `s` is a whole number as a default writes one: an optional sign, then digits.
+fn whole(s: &str) -> bool {
+    let digits = s.strip_prefix(['+', '-']).unwrap_or(s);
+    !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit())
+}
+
+/// The default typed as `text`, read in `form`: none for an empty text (or one of spaces alone).
+/// Whitespace around a number, a Boolean or a literal is dropped; a String's or an expression's
+/// text is kept as typed.
+pub fn parse_default(store: &Store, form: DefaultForm, text: &str) -> Result<Option<DefaultValue>, DefaultError> {
+    let t = text.trim();
+    if t.is_empty() {
+        return Ok(None);
+    }
+    if text.chars().count() > MAX_DEFAULT {
+        return Err(DefaultError::TooLong);
+    }
+    let bad = || DefaultError::Malformed(short(t), form);
+    Ok(Some(match form {
+        DefaultForm::Integer => DefaultValue::Integer(if whole(t) { t.parse::<i64>().map_err(|_| bad())? } else { return Err(bad()) }),
+        DefaultForm::Real => {
+            // Digits, a point, an exponent and signs only: never inf or NaN, and always finite.
+            let plain = t.bytes().all(|b| b.is_ascii_digit() || matches!(b, b'+' | b'-' | b'.' | b'e' | b'E'));
+            let n = if plain && t.bytes().any(|b| b.is_ascii_digit()) { t.parse::<f64>().map_err(|_| bad())? } else { return Err(bad()) };
+            if !n.is_finite() {
+                return Err(bad());
+            }
+            DefaultValue::Real(n)
+        }
+        DefaultForm::Boolean => match t.to_ascii_lowercase().as_str() {
+            "true" => DefaultValue::Boolean(true),
+            "false" => DefaultValue::Boolean(false),
+            _ => return Err(bad()),
+        },
+        DefaultForm::UnlimitedNatural => {
+            if t == "*" {
+                DefaultValue::Unlimited(None)
+            } else if t.bytes().all(|b| b.is_ascii_digit()) {
+                // Kept in a signed 64-bit column: no larger.
+                let n = t.parse::<u64>().ok().filter(|n| i64::try_from(*n).is_ok()).ok_or_else(bad)?;
+                DefaultValue::Unlimited(Some(n))
+            } else {
+                return Err(bad());
+            }
+        }
+        DefaultForm::String => DefaultValue::String(text.to_string()),
+        DefaultForm::Opaque => DefaultValue::Opaque(text.to_string()),
+        DefaultForm::Enumeration(e) => {
+            let wanted = t.to_lowercase();
+            let l = crate::commands::literals(store, e).into_iter().find(|l| name_of(store, *l).to_lowercase() == wanted).ok_or_else(bad)?;
+            DefaultValue::Literal(l)
+        }
+    }))
+}
+
+/// The default of `p` as it is typed: a number, true or false, `*`, a String's text, a literal's
+/// name or an expression's text; empty when it has none.
+pub fn default_text(store: &Store, p: Obj) -> String {
+    let Some(v) = one(store, p, property::DEFAULT_VALUE) else { return String::new() };
+    let get = |prop| store.get(v, prop).ok();
+    match store.class_of(v).ok() {
+        Some(c) if c == LITERAL_INTEGER => match get(literal_integer::VALUE) {
+            Some(Value::Int(n)) => n.to_string(),
+            _ => String::new(),
+        },
+        Some(c) if c == LITERAL_REAL => match get(literal_real::VALUE) {
+            Some(Value::Real(n)) => n.to_string(),
+            _ => String::new(),
+        },
+        Some(c) if c == LITERAL_BOOLEAN => get(literal_boolean::VALUE).and_then(|b| b.as_bool()).map(|b| b.to_string()).unwrap_or_default(),
+        Some(c) if c == LITERAL_UNLIMITED_NATURAL => match get(literal_unlimited_natural::VALUE) {
+            Some(Value::Unlimited(None)) => "*".into(),
+            Some(Value::Unlimited(Some(n))) => n.to_string(),
+            _ => String::new(),
+        },
+        Some(c) if c == LITERAL_STRING => get(literal_string::VALUE).and_then(|s| s.as_str().map(str::to_string)).unwrap_or_default(),
+        Some(c) if c == INSTANCE_VALUE => one(store, v, instance_value::INSTANCE).map(|l| name_of(store, l)).unwrap_or_default(),
+        Some(c) if c == OPAQUE_EXPRESSION => {
+            store.list(v, opaque_expression::BODY).ok().and_then(|b| b.first().and_then(|s| s.as_str().map(str::to_string))).unwrap_or_default()
+        }
+        _ => String::new(),
+    }
+}
+
+/// The default of `p` as a card writes it after `=`: a String's text in double quotes, any other
+/// as it is typed; none when it has none.
+pub fn default_shown(store: &Store, p: Obj) -> Option<String> {
+    let text = default_text(store, p);
+    if text.is_empty() {
+        return None;
+    }
+    let string = one(store, p, property::DEFAULT_VALUE).is_some_and(|v| store.class_of(v).ok() == Some(LITERAL_STRING));
+    Some(if string { format!("\"{text}\"") } else { text })
+}
+
+/// Gives `p` the default `value`, replacing the one it had; none takes it away.
+pub fn set_default(store: &mut Store, p: Obj, value: Option<&DefaultValue>) -> Result<(), CommandError> {
+    if let Some(old) = one(store, p, property::DEFAULT_VALUE) {
+        store.destroy(old).map_err(fail)?;
+    }
+    let Some(value) = value else { return Ok(()) };
+    let (class, prop, v) = match value {
+        DefaultValue::Integer(n) => (LITERAL_INTEGER, literal_integer::VALUE, Value::Int(*n)),
+        DefaultValue::Real(n) => (LITERAL_REAL, literal_real::VALUE, Value::Real(*n)),
+        DefaultValue::Boolean(b) => (LITERAL_BOOLEAN, literal_boolean::VALUE, Value::Bool(*b)),
+        DefaultValue::Unlimited(n) => (LITERAL_UNLIMITED_NATURAL, literal_unlimited_natural::VALUE, Value::Unlimited(*n)),
+        DefaultValue::String(s) => (LITERAL_STRING, literal_string::VALUE, Value::str(s)),
+        DefaultValue::Literal(l) => (INSTANCE_VALUE, instance_value::INSTANCE, Value::Ref(*l)),
+        DefaultValue::Opaque(s) => {
+            let e = store.create(OPAQUE_EXPRESSION).map_err(fail)?;
+            store.push(e, opaque_expression::BODY, Value::str(s)).map_err(fail)?;
+            return store.set(p, property::DEFAULT_VALUE, Value::Ref(e)).map_err(fail);
+        }
+    };
+    let o = store.create(class).map_err(fail)?;
+    store.set(o, prop, v).map_err(fail)?;
+    store.set(p, property::DEFAULT_VALUE, Value::Ref(o)).map_err(fail)
+}
+
+/// The defaults that refer to a literal, each with that literal: what removing the literal, or the
+/// enumeration or package that holds it, takes along, since an InstanceValue needs its instance.
+pub fn literal_defaults(store: &Store) -> Vec<(Obj, Obj)> {
+    store
+        .alive()
+        .filter(|o| store.class_of(*o).ok() == Some(INSTANCE_VALUE))
+        .filter_map(|v| {
+            let l = one(store, v, instance_value::INSTANCE)?;
+            (store.class_of(l).ok() == Some(ENUMERATION_LITERAL)).then_some((v, l))
+        })
+        .collect()
+}
+
+/// A property's bounds: its lower one, and its upper one (none: many); one each when it names
+/// none, as UML has it.
+pub fn bounds(store: &Store, p: Obj) -> (u64, Option<u64>) {
+    let lower = match one(store, p, multiplicity_element::LOWER_VALUE).map(|v| store.get(v, literal_integer::VALUE)) {
+        Some(Ok(Value::Int(n))) => u64::try_from(n).unwrap_or(0),
+        _ => 1,
+    };
+    let upper = match one(store, p, multiplicity_element::UPPER_VALUE).map(|v| store.get(v, literal_unlimited_natural::VALUE)) {
+        Some(Ok(Value::Unlimited(n))) => n,
+        _ => Some(1),
+    };
+    (lower, upper)
+}
+
+/// Whether `p` holds more than one value: its upper bound is above 1 or many. Ordered and unique
+/// say something only then.
+pub fn multi_valued(store: &Store, p: Obj) -> bool {
+    bounds(store, p).1.is_none_or(|u| u > 1)
+}
+
+/// Whether `p` is composite: an end whose aggregation is composite.
+pub fn is_composite(store: &Store, p: Obj) -> bool {
+    matches!(store.get(p, property::AGGREGATION), Ok(Value::Enum(2)))
+}
+
+/// The modifier flags of `p`: derived, read only, ordered and unique.
+pub fn flags(store: &Store, p: Obj) -> (bool, bool, bool, bool) {
+    (
+        flag(store, p, property::IS_DERIVED, false),
+        flag(store, p, structural_feature::IS_READ_ONLY, false),
+        flag(store, p, multiplicity_element::IS_ORDERED, false),
+        flag(store, p, multiplicity_element::IS_UNIQUE, true),
+    )
+}
+
+/// The properties `p` subsets, in their order.
+pub fn subsets(store: &Store, p: Obj) -> Vec<Obj> {
+    list(store, p, property::SUBSETTED_PROPERTY)
+}
+
+/// The properties `p` redefines, in their order.
+pub fn redefines(store: &Store, p: Obj) -> Vec<Obj> {
+    list(store, p, property::REDEFINED_PROPERTY)
+}
+
+/// The words in braces a card writes after `p`: what differs from the usual. Read only always;
+/// ordered and nonunique only for a multi-valued property, where they say something; then each
+/// property it subsets and each it redefines, by name.
+pub fn braces(store: &Store, p: Obj) -> Vec<String> {
+    let (_, read_only, ordered, unique) = flags(store, p);
+    let multi = multi_valued(store, p);
+    let mut out = Vec::new();
+    if read_only {
+        out.push("readOnly".to_string());
+    }
+    if multi && ordered {
+        out.push("ordered".into());
+    }
+    if multi && !unique {
+        out.push("nonunique".into());
+    }
+    out.extend(subsets(store, p).into_iter().map(|t| format!("subsets {}", name_of(store, t))));
+    out.extend(redefines(store, p).into_iter().map(|t| format!("redefines {}", name_of(store, t))));
+    out
+}
+
+/// What follows a property's multiplicity on a card or beside its end: ` = default` when it has
+/// one, then ` {…}` when [`braces`] has anything to say; empty otherwise.
+pub fn suffix(store: &Store, p: Obj) -> String {
+    let mut text = String::new();
+    if let Some(d) = default_shown(store, p) {
+        text.push_str(&format!(" = {d}"));
+    }
+    let b = braces(store, p);
+    if !b.is_empty() {
+        text.push_str(&format!(" {{{}}}", b.join(", ")));
+    }
+    text
+}
+
+/// Whether `p` is derived: a card writes `/` before its name.
+pub fn is_derived(store: &Store, p: Obj) -> bool {
+    flag(store, p, property::IS_DERIVED, false)
+}
+
+/// The association `p` is an end of, when it is one.
+fn association_of(store: &Store, p: Obj) -> Option<Obj> {
+    one(store, p, property::ASSOCIATION)
+}
+
+/// A property's context: an attribute's classifier, or the classifiers at an association end's
+/// other ends.
+pub fn context_of(store: &Store, p: Obj) -> Vec<Obj> {
+    match association_of(store, p) {
+        Some(a) => {
+            list(store, a, association::MEMBER_END).into_iter().filter(|e| *e != p).filter_map(|e| one(store, e, typed_element::TYPE)).collect()
+        }
+        None => {
+            store.container(p).ok().flatten().map(|(c, _)| c).filter(|c| store.class_of(*c).is_ok_and(crate::is_classifier)).into_iter().collect()
+        }
+    }
+}
+
+/// The properties of classifier `c`: its attributes, and the association ends whose context it is,
+/// those across from an end at `c`.
+pub fn properties_of(store: &Store, c: Obj) -> Vec<Obj> {
+    let mut out = crate::members::attributes(store, c);
+    for (src, prop) in store.referrers(c) {
+        if prop != typed_element::TYPE || store.class_of(src).ok() != Some(PROPERTY) {
+            continue;
+        }
+        let Some(a) = association_of(store, src) else { continue };
+        out.extend(list(store, a, association::MEMBER_END).into_iter().filter(|e| *e != src));
+    }
+    let mut seen = std::collections::BTreeSet::new();
+    out.retain(|p| seen.insert(*p));
+    out
+}
+
+/// The classifiers `c` specializes, directly or through others, each once, `c` itself not among
+/// them.
+pub fn generals_of(store: &Store, c: Obj) -> Vec<Obj> {
+    let mut seen = std::collections::BTreeSet::from([c]);
+    let mut stack = crate::relations::generals(store, c);
+    let mut out = Vec::new();
+    while let Some(g) = stack.pop() {
+        if seen.insert(g) {
+            out.push(g);
+            stack.extend(crate::relations::generals(store, g));
+        }
+    }
+    out
+}
+
+/// A property as its subsets and redefines are checked against: the property itself (none while
+/// it is being added), its context, its type (`typed` with no `ty` for a built-in type not made
+/// yet), its bounds, whether it is composite, and its name.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Shape {
+    pub itself: Option<Obj>,
+    pub context: Vec<Obj>,
+    pub ty: Option<Obj>,
+    pub typed: bool,
+    pub lower: u64,
+    pub upper: Option<u64>,
+    pub composite: bool,
+    pub name: String,
+}
+
+impl Shape {
+    /// The shape `p` has in the model.
+    pub fn of(store: &Store, p: Obj) -> Shape {
+        let (lower, upper) = bounds(store, p);
+        let ty = one(store, p, typed_element::TYPE);
+        Shape {
+            itself: Some(p),
+            context: context_of(store, p),
+            ty,
+            typed: ty.is_some(),
+            lower,
+            upper,
+            composite: is_composite(store, p),
+            name: name_of(store, p),
+        }
+    }
+
+    /// The classifiers whose properties Subsets offers: the context, then what it specializes.
+    fn subset_owners(&self, store: &Store) -> Vec<Obj> {
+        let mut out = self.context.clone();
+        for c in &self.context {
+            out.extend(generals_of(store, *c));
+        }
+        let mut seen = std::collections::BTreeSet::new();
+        out.retain(|c| seen.insert(*c));
+        out
+    }
+
+    /// The classifiers whose properties Redefines offers: what the context specializes.
+    fn redefine_owners(&self, store: &Store) -> Vec<Obj> {
+        let mut out = Vec::new();
+        for c in &self.context {
+            out.extend(generals_of(store, *c));
+        }
+        let mut seen = std::collections::BTreeSet::new();
+        out.retain(|c| seen.insert(*c));
+        out
+    }
+
+    /// Whether this shape's type conforms to `target`'s: an untyped target takes any type; a typed
+    /// one the same type or one that specializes it.
+    fn conforms(&self, store: &Store, target: Obj) -> bool {
+        match (one(store, target, typed_element::TYPE), self.ty) {
+            (None, _) => true,
+            (Some(t), Some(mine)) => mine == t || crate::relations::specializes(store, mine, t),
+            (Some(_), None) => false,
+        }
+    }
+}
+
+/// Why a property may not be subset or redefined by a shape.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TargetProblem {
+    /// Not a property at all.
+    NotAProperty,
+    /// The property itself.
+    Itself,
+    /// It has no name to be named by in the braces.
+    Unnamed,
+    /// Not a property of the context or of what the context specializes (Subsets), or not one of
+    /// what the context specializes (Redefines).
+    OutOfReach,
+    /// The same name, whatever the case: a subset takes another.
+    SameName,
+    /// Its type is not one the shape's type conforms to.
+    Type,
+    /// Its upper bound is below the shape's.
+    Upper,
+    /// The shape's bounds do not both lie within its bounds.
+    Multiplicity,
+    /// It is composite and the shape is not.
+    Composite,
+}
+
+impl TargetProblem {
+    /// Why, as a refusal says it after the target's id and name, with the rule.
+    pub fn why(self, redefining: bool) -> &'static str {
+        match (self, redefining) {
+            (TargetProblem::NotAProperty, _) => "is not a property; an attribute or an association's end is",
+            (TargetProblem::Itself, false) => "is the property itself; a property subsets another",
+            (TargetProblem::Itself, true) => "is the property itself; a property redefines another",
+            (TargetProblem::Unnamed, _) => "has no name, so the braces could not name it; name it first",
+            (TargetProblem::OutOfReach, false) => {
+                "is not a property of this property's classifier or of a classifier it specializes, which is where a subset's properties are"
+            }
+            (TargetProblem::OutOfReach, true) => {
+                "is not a property of a classifier this property's classifier specializes, which is what it may redefine"
+            }
+            (TargetProblem::SameName, _) => "has this property's name, whatever the case; a subset takes another name",
+            (TargetProblem::Type, _) => "has a type this property's type does not conform to; its type must be that type or one that specializes it",
+            (TargetProblem::Upper, _) => "allows fewer values than this property; a subset's upper bound is not above the one it subsets",
+            (TargetProblem::Multiplicity, _) => "has a multiplicity this property's lower and upper bounds do not both lie within",
+            (TargetProblem::Composite, _) => "is composite and this property is not; only a composite property redefines a composite one",
+        }
+    }
+}
+
+/// Whether `t` is a property, with a name, other than the shape's own.
+fn basic_problem(store: &Store, shape: &Shape, t: Obj) -> Option<TargetProblem> {
+    if store.class_of(t).ok() != Some(PROPERTY) || !store.is_alive(t) {
+        return Some(TargetProblem::NotAProperty);
+    }
+    if shape.itself == Some(t) {
+        return Some(TargetProblem::Itself);
+    }
+    name_of(store, t).trim().is_empty().then_some(TargetProblem::Unnamed)
+}
+
+/// Why `shape` may not subset `t`, when it may not, checked against `owners` (from
+/// [`Shape::subset_owners`]).
+fn subsets_problem_in(store: &Store, shape: &Shape, t: Obj, owners: &[Obj]) -> Option<TargetProblem> {
+    if let Some(p) = basic_problem(store, shape, t) {
+        return Some(p);
+    }
+    if !owners.iter().any(|c| properties_of(store, *c).contains(&t)) {
+        return Some(TargetProblem::OutOfReach);
+    }
+    if name_of(store, t).to_lowercase() == shape.name.trim().to_lowercase() {
+        return Some(TargetProblem::SameName);
+    }
+    if !shape.conforms(store, t) {
+        return Some(TargetProblem::Type);
+    }
+    let (_, upper) = bounds(store, t);
+    let above = match (shape.upper, upper) {
+        (_, None) => false,
+        (None, Some(_)) => true,
+        (Some(mine), Some(theirs)) => mine > theirs,
+    };
+    above.then_some(TargetProblem::Upper)
+}
+
+/// Why `shape` may not redefine `t`, when it may not, checked against `owners` (from
+/// [`Shape::redefine_owners`]).
+fn redefines_problem_in(store: &Store, shape: &Shape, t: Obj, owners: &[Obj]) -> Option<TargetProblem> {
+    if let Some(p) = basic_problem(store, shape, t) {
+        return Some(p);
+    }
+    if !owners.iter().any(|c| properties_of(store, *c).contains(&t)) {
+        return Some(TargetProblem::OutOfReach);
+    }
+    if !shape.conforms(store, t) {
+        return Some(TargetProblem::Type);
+    }
+    let (lower, upper) = bounds(store, t);
+    let upper_within = match (shape.upper, upper) {
+        (_, None) => true,
+        (None, Some(_)) => false,
+        (Some(mine), Some(theirs)) => mine <= theirs,
+    };
+    if shape.lower < lower || !upper_within {
+        return Some(TargetProblem::Multiplicity);
+    }
+    (is_composite(store, t) && !shape.composite).then_some(TargetProblem::Composite)
+}
+
+/// Why `shape` may not subset `t`, when it may not.
+pub fn subsets_problem(store: &Store, shape: &Shape, t: Obj) -> Option<TargetProblem> {
+    subsets_problem_in(store, shape, t, &shape.subset_owners(store))
+}
+
+/// Why `shape` may not redefine `t`, when it may not.
+pub fn redefines_problem(store: &Store, shape: &Shape, t: Obj) -> Option<TargetProblem> {
+    redefines_problem_in(store, shape, t, &shape.redefine_owners(store))
+}
+
+/// The properties `shape` may subset, each once, in the order of its classifiers, the context
+/// first.
+pub fn subsets_candidates(store: &Store, shape: &Shape) -> Vec<Obj> {
+    let owners = shape.subset_owners(store);
+    let mut out: Vec<Obj> = owners.iter().flat_map(|c| properties_of(store, *c)).collect();
+    let mut seen = std::collections::BTreeSet::new();
+    out.retain(|t| seen.insert(*t) && subsets_problem_in(store, shape, *t, &owners).is_none());
+    out
+}
+
+/// The properties `shape` may redefine, each once, in the order of the classifiers its context
+/// specializes.
+pub fn redefines_candidates(store: &Store, shape: &Shape) -> Vec<Obj> {
+    let owners = shape.redefine_owners(store);
+    let mut out: Vec<Obj> = owners.iter().flat_map(|c| properties_of(store, *c)).collect();
+    let mut seen = std::collections::BTreeSet::new();
+    out.retain(|t| seen.insert(*t) && redefines_problem_in(store, shape, *t, &owners).is_none());
+    out
+}
+
+/// A property's modifiers as a command sets them, read and checked.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Modifiers {
+    pub default: Option<DefaultValue>,
+    pub derived: bool,
+    pub read_only: bool,
+    pub ordered: bool,
+    pub unique: bool,
+    pub subsets: Vec<Obj>,
+    pub redefines: Vec<Obj>,
+}
+
+/// The ids under `key` (an array of strings), at most [`MAX_TARGETS`], each a live element, each
+/// once.
+fn targets(store: &Store, p: &Params, key: &str) -> Result<Vec<Obj>, CommandError> {
+    let items = p.get(key).and_then(Json::as_array).cloned().unwrap_or_default();
+    if items.len() > MAX_TARGETS {
+        return Err(refuse(key, format!("{} ids; a property names at most {MAX_TARGETS} here", items.len())));
+    }
+    let mut out = Vec::with_capacity(items.len());
+    for item in &items {
+        let Some(id) = item.as_str() else {
+            return Err(refuse(key, format!("{} is not a property's id; the list holds ids as text", short(&item.to_string()))));
+        };
+        let o = Uuid::parse(id)
+            .and_then(|u| store.by_uuid(u))
+            .filter(|o| store.is_alive(*o))
+            .ok_or_else(|| refuse(key, format!("there is no element {}; the list holds ids of attributes or association ends", short(id))))?;
+        if out.contains(&o) {
+            return Err(refuse(key, format!("{id} is named twice; name each property once")));
+        }
+        out.push(o);
+    }
+    Ok(out)
+}
+
+/// The modifiers the parameters ask of a property shaped `shape`, its type having been `was`
+/// (none for a new property), checked before anything changes: the default read by the shape's
+/// type, and each property it subsets and redefines checked against the rules. A default that
+/// fitted the old type but not a new one refuses the type change, naming the default; the default
+/// is never cleared for it.
+pub fn read(store: &Store, p: &Params, shape: &Shape, was: Option<Option<Obj>>, stored_default: &str) -> Result<Modifiers, CommandError> {
+    let typed = p.str("default").unwrap_or_default();
+    let form = DefaultForm::of(store, shape.ty);
+    let default = match parse_default(store, form, typed) {
+        Ok(d) => d,
+        Err(e) => {
+            let type_changed = was.is_some_and(|w| w != shape.ty);
+            if type_changed && !stored_default.is_empty() && typed.trim() == stored_default.trim() {
+                let ty = shape.ty.map(|t| name_of(store, t)).unwrap_or_else(|| "no type".into());
+                return Err(refuse(
+                    "type",
+                    format!(
+                        "the default value {:?} does not fit {ty}: {}; change or clear the default before changing the type",
+                        short(typed.trim()),
+                        form.accepted(store)
+                    ),
+                ));
+            }
+            return Err(refuse("default", e.said(store)));
+        }
+    };
+    let id = |o: Obj| uuid_of(store, o).unwrap_or_default();
+    let subsets = targets(store, p, "subsets")?;
+    for t in &subsets {
+        if let Some(problem) = subsets_problem(store, shape, *t) {
+            return Err(refuse("subsets", format!("{} ({}) {}", id(*t), name_of(store, *t), problem.why(false))));
+        }
+    }
+    let redefines = targets(store, p, "redefines")?;
+    for t in &redefines {
+        if let Some(problem) = redefines_problem(store, shape, *t) {
+            return Err(refuse("redefines", format!("{} ({}) {}", id(*t), name_of(store, *t), problem.why(true))));
+        }
+    }
+    Ok(Modifiers {
+        default,
+        derived: p.bool("derived").unwrap_or(false),
+        read_only: p.bool("read_only").unwrap_or(false),
+        ordered: p.bool("ordered").unwrap_or(false),
+        unique: p.bool("unique").unwrap_or(true),
+        subsets,
+        redefines,
+    })
+}
+
+/// Replaces the list `prop` of `p` with `want`, in its order.
+fn set_list(store: &mut Store, p: Obj, prop: archforge_mof::PropId, want: &[Obj]) -> Result<(), CommandError> {
+    if list(store, p, prop) == want {
+        return Ok(());
+    }
+    for old in store.list(p, prop).map_err(fail)? {
+        store.remove_value(p, prop, &old).map_err(fail)?;
+    }
+    for t in want {
+        store.push(p, prop, Value::Ref(*t)).map_err(fail)?;
+    }
+    Ok(())
+}
+
+/// Gives `p` the modifiers `m`, replacing the ones it had.
+pub fn apply(store: &mut Store, p: Obj, m: &Modifiers) -> Result<(), CommandError> {
+    set_default(store, p, m.default.as_ref())?;
+    store.set(p, property::IS_DERIVED, Value::Bool(m.derived)).map_err(fail)?;
+    store.set(p, structural_feature::IS_READ_ONLY, Value::Bool(m.read_only)).map_err(fail)?;
+    store.set(p, multiplicity_element::IS_ORDERED, Value::Bool(m.ordered)).map_err(fail)?;
+    store.set(p, multiplicity_element::IS_UNIQUE, Value::Bool(m.unique)).map_err(fail)?;
+    set_list(store, p, property::SUBSETTED_PROPERTY, &m.subsets)?;
+    set_list(store, p, property::REDEFINED_PROPERTY, &m.redefines)
+}
+
+/// The modifiers of `p` as the query commands give them, and as the commands take them back.
+pub fn json(store: &Store, p: Obj) -> Json {
+    let (derived, read_only, ordered, unique) = flags(store, p);
+    let named = |ts: Vec<Obj>| -> Vec<Json> {
+        ts.into_iter().map(|t| json!({ "id": uuid_of(store, t).unwrap_or_default(), "name": name_of(store, t) })).collect()
+    };
+    let default = default_text(store, p);
+    json!({
+        "default": if default.is_empty() { Json::Null } else { json!(default) },
+        "derived": derived,
+        "read_only": read_only,
+        "ordered": ordered,
+        "unique": unique,
+        "subsets": named(subsets(store, p)),
+        "redefines": named(redefines(store, p)),
+    })
+}
+
+/// Merges the modifiers of `p` ([`json`]) into the object `out`.
+pub fn merge_into(store: &Store, p: Obj, out: &mut Json) {
+    if let (Some(fields), Json::Object(m)) = (out.as_object_mut(), json(store, p)) {
+        fields.extend(m);
+    }
+}

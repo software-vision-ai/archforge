@@ -696,7 +696,8 @@ fn hand_up_problem(store: &Store, pkg: Obj, parent: Obj) -> Option<String> {
 /// nested package hands what it holds, and its diagrams, up to its parent first (owner decision); a
 /// top-level package takes them along. A classifier takes the relationships that touch it along,
 /// and an association class among them takes its own ([`going_with`]); a member's type that goes is
-/// dropped from what had it.
+/// dropped from what had it, and so is a default that is a literal that goes (AR-126), as the
+/// property's own type would be.
 pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, CommandError> {
     // Every id is checked before anything goes, so a refusal leaves the store as it was.
     let removable = [
@@ -767,12 +768,19 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
     }
     let mut all = going_with(store, &classes);
     all.extend(objs);
+    // A default that is a literal goes with the literal: an InstanceValue needs its instance.
+    let defaults = crate::modifiers::literal_defaults(store);
     for o in all {
         if !store.is_alive(o) {
             continue;
         }
         gone += store
             .transaction(|st| {
+                for (value, literal) in &defaults {
+                    if st.is_alive(*value) && (*literal == o || st.contains(o, *literal)) {
+                        st.destroy(*value)?;
+                    }
+                }
                 let views = archforge_diagram::remove_views_of(st, o)?;
                 Ok(views + archforge_core::destroy_with_links(st, o)?)
             })
