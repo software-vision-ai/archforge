@@ -1487,8 +1487,14 @@ pub(crate) fn overlays(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rec
     keyboard(shell, ui, d);
 }
 
-/// The selected line element of `d` and the route of its line there, when one line is selected.
-fn selected_line(store: &Store, d: Obj, selection: &[Obj]) -> Option<(Uuid, Vec<(f64, f64)>)> {
+/// The selected line element of `d`, the route of its line there and its ends' marks, when one
+/// line is selected.
+fn selected_line(
+    store: &Store,
+    view: &archforge_diagram::ProjectView,
+    d: Obj,
+    selection: &[Obj],
+) -> Option<(Uuid, Vec<(f64, f64)>, [archforge_diagram::figure::EndMark; 2])> {
     let [element] = selection else { return None };
     let (_, edges, nodes) = archforge_diagram::views_of(store, *element);
     // A card's element has no line, but an association class has both: its line keeps its handles.
@@ -1497,23 +1503,30 @@ fn selected_line(store: &Store, d: Obj, selection: &[Obj]) -> Option<(Uuid, Vec<
     }
     let edge = edges.into_iter().find(|e| store.container(*e).ok().flatten().is_some_and(|(c, _)| c == d))?;
     let route = Grid::build(store, d).line(edge)?.to_vec();
-    Some((uuid(store, *element)?, route))
+    let line = view.of_element(store, *element).and_then(|n| n.line(store, *element)).unwrap_or_default();
+    Some((uuid(store, *element)?, route, [line.ends[0].mark, line.ends[1].mark]))
 }
 
-/// A selected line's two end handles: each drags onto another element to move
-/// that end there.
+/// A selected line's two end handles, each on the line clear of its end's mark so the mark shows
+/// whole, on the end itself where it has none, the two kept apart on screen
+/// ([`crate::canvas::end_handles_at`]): each drags onto another element to move that end there.
 fn line_ends(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, view: View, d: Obj) {
-    let Some((element, route)) = shell.session.as_ref().and_then(|s| selected_line(s.doc(), d, &s.view().selection)) else { return };
-    let (Some(first), Some(last)) = (route.first().copied(), route.last().copied()) else { return };
+    let Some((element, route, marks)) = shell.session.as_ref().and_then(|s| selected_line(s.doc(), s.view(), d, &s.view().selection)) else {
+        return;
+    };
+    let screen: Vec<Pos2> = route.iter().map(|(x, y)| view.to_screen(*x, *y)).collect();
+    let (Some(a), Some(b)) = (screen.first().copied(), screen.last().copied()) else { return };
+    // Both handles placed together, so their hit boxes never meet on screen.
+    let [at_source, at_target] = crate::canvas::end_handles_at(&screen, marks, view.zoom);
     let paint = ui.painter().with_clip_rect(r);
-    let (a, b) = (view.to_screen(first.0, first.1), view.to_screen(last.0, last.1));
-    for (source, at, fixed) in [(true, a, b), (false, b, a)] {
+    for (source, at, fixed) in [(true, at_source.unwrap_or(a), b), (false, at_target.unwrap_or(b), a)] {
         let handle = Rect::from_center_size(at, Vec2::splat(12.0));
         if !r.contains(at) {
             continue;
         }
-        paint.circle_filled(at, 5.0, p.surface);
-        paint.circle_stroke(at, 5.0, Stroke::new(1.5, p.accent));
+        let radius = crate::canvas::END_HANDLE;
+        paint.circle_filled(at, radius, p.surface);
+        paint.circle_stroke(at, radius, Stroke::new(1.5, p.accent));
         let id = format!("workspace.canvas.line-end.{}", if source { "source" } else { "target" });
         widgets::record_visible(ui, &mut shell.registry, &id, "button", handle);
         let resp = ui

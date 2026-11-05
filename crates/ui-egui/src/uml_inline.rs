@@ -48,8 +48,10 @@ pub(crate) struct InlineMember {
 
 const NAME_ID: &str = "workspace.canvas.member.name";
 const TYPE_ID: &str = "workspace.canvas.member.type";
-/// The row's height over a row's pitch, and its details button and type chevron, in units.
-const ROW_HEIGHT: f32 = ENTITY_ROW + 4.0;
+/// The ring's height, a row's pitch, so a draft takes its row's place and no more and stays clear
+/// of the row over it; its fields' inset in it; and its details button and type chevron, in units.
+const ROW_HEIGHT: f32 = ENTITY_ROW;
+const INSET: f32 = 2.0;
 const BUTTON: f32 = 18.0;
 
 /// The compartment of its card a member of `kind` is listed in: an enumeration's literals are its
@@ -189,14 +191,18 @@ pub(crate) fn row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, view: View)
     };
     let z = view.zoom;
     let paint = ui.painter().clone();
-    let row =
-        Rect::from_min_size(pos2(card.left() + 8.0 * z, card.top() + (top - 3.0) * z), vec2((card.width() - 16.0 * z).max(0.0), ROW_HEIGHT * z));
+    // Centred on the line a row's text takes, so the typed text sits where the row's will, a pitch
+    // under the row over it, whatever the kind of member.
+    let row = Rect::from_center_size(
+        pos2(card.center().x, card.top() + (top + types::UI.line / 2.0) * z),
+        vec2((card.width() - 16.0 * z).max(0.0), ROW_HEIGHT * z),
+    );
     paint.rect_filled(row, 4.0 * z, p.accent_tint);
     paint.rect_stroke(row, 4.0 * z, Stroke::new(1.0, p.accent), StrokeKind::Inside);
     let font = types::UI.scaled(z);
-    let inner_top = row.top() + 3.0 * z;
-    let field_h = (ROW_HEIGHT - 6.0) * z;
-    let details = Rect::from_min_size(pos2(row.right() - (BUTTON + 3.0) * z, row.top() + 3.0 * z), vec2(BUTTON * z, field_h));
+    let inner_top = row.top() + INSET * z;
+    let field_h = (ROW_HEIGHT - 2.0 * INSET) * z;
+    let details = Rect::from_min_size(pos2(row.right() - (BUTTON + INSET) * z, inner_top), vec2(BUTTON * z, field_h));
     // The name where a row's text starts, so the draft reads as the row it becomes.
     let left = card.left() + crate::canvas::ENTITY_TEXT * z;
     let usable = (details.left() - 4.0 * z - left).max(0.0);
@@ -272,7 +278,9 @@ pub(crate) fn row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, view: View)
             shell.panels.menu = if menu_open { None } else { Some(crate::panels::Menu::InlineType) };
         }
     }
-    ux::icon_in(&paint, details.shrink(2.0 * z), &icons::MORE, p.text_secondary);
+    // The details button on the surface, as the type field is, so its ⋯ reads on every row.
+    paint.rect_filled(details, 3.0 * z, p.surface);
+    ux::icon_in(&paint, details, &icons::MORE, details_ink(p));
     let to_details =
         control(shell, ui, "workspace.canvas.member.details", "button", details, true).on_hover_text(tr("More details in Properties")).clicked();
     if let Some(refused) = inline.refused.clone() {
@@ -285,7 +293,7 @@ pub(crate) fn row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, view: View)
     let mut picked = false;
     if shell.panels.menu == Some(crate::panels::Menu::InlineType) && !literal {
         let choices = crate::uml_panel::choices_for_menu(shell);
-        let chosen = crate::panels::menu_noted(shell, ui, p, type_rect, TYPE_ID, &choices.labels, &choices.notes);
+        let chosen = crate::panels::menu_noted(shell, ui, p, type_rect, TYPE_ID, &choices.labels, &choices.notes, &choices.note_parts);
         let value = chosen.map(|i| choices.values.get(i).cloned().unwrap_or_default());
         crate::uml_panel::keep_choices(shell, choices);
         if let Some(value) = value {
@@ -317,6 +325,12 @@ pub(crate) fn row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, view: View)
     } else if ((lost && !switched && !pressed_on_row) || pressed_away) && !has_focus && !menu_open && !enter {
         commit(shell, false);
     }
+}
+
+/// The ink of a draft row's ⋯, one for every kind of member: an attribute's, an operation's and a
+/// literal's rows read alike.
+pub(crate) fn details_ink(p: &Palette) -> egui::Color32 {
+    p.text_secondary
 }
 
 fn type_hint_of(operation: bool) -> String {

@@ -30,7 +30,7 @@ use crate::Shell;
 use crate::home::control;
 use crate::i18n::{fmt, tr};
 use crate::panels::{Combo, ComboOut, FIELD, Menu, PAD, Subject, check, editable_select, menu, run, section, select_field, text_field};
-use crate::ux::{self, Palette, types};
+use crate::ux::{self, Palette, icons, types};
 
 /// What the Relationship tool draws.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -192,7 +192,8 @@ fn row_top(i: usize) -> f32 {
     40.0 + i as f32 * 36.0 + separators as f32 * SEPARATOR
 }
 
-/// The menu of kinds above the Relationship tool's chevron; a pick chooses and closes it.
+/// The menu of kinds above the Relationship tool's chevron, the current one tinted and ticked; a
+/// pick chooses and closes it.
 pub(crate) fn popover(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, anchor: Rect) {
     let paint = ui.painter().clone();
     let size = vec2(248.0, row_top(Relate::ALL.len()) + 4.0 + 8.0);
@@ -227,8 +228,12 @@ pub(crate) fn popover(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, an
             &tr(kind.word()),
             types::UI,
             if on { p.accent } else { p.text },
-            Some(row.width() - 78.0),
+            Some(row.width() - 70.0 - 32.0),
         );
+        // The current kind ticked at the row's right, as the classifier tool's menu ticks its own.
+        if on {
+            ux::icon_mid(&paint, row.right_center() - vec2(16.0, 0.0), &icons::TICK, p.accent);
+        }
         if resp.clicked() {
             shell.canvas.uml_relation = *kind;
             shell.canvas.popover = None;
@@ -762,8 +767,9 @@ pub(crate) fn refuse_typed(shell: &mut Shell, id: Uuid, end: usize, typed: &str)
     Ok(())
 }
 
-/// The common multiplicities an end's menu offers, in the design's order.
-pub(crate) const MULTIPLICITIES: [&str; 5] = ["0..1", "1", "0..*", "1..*", "*"];
+/// The common multiplicities an end's menu offers, in the design's order: none to many once, as
+/// `*`, the way the model writes it; `0..*` typed still reads as it.
+pub(crate) const MULTIPLICITIES: [&str; 4] = ["0..1", "1", "*", "1..*"];
 
 /// Why a typed multiplicity does not read, in the user's language.
 pub(crate) fn multiplicity_problem(e: &archforge_uml::members::MultiplicityError) -> String {

@@ -6502,6 +6502,279 @@ fn a_class_takes_operations_with_parameters_and_turns_abstract_in_properties() {
     assert_eq!(member_rows(&h, payment, true), ["+ refund(to : Customer) : Boolean"]);
 }
 
+/// A class diagram of the package Orders, two deep under the root (root › Fulfilment › Orders), at
+/// 100 %: the class Order (`number : Integer`, `total : Money`, `pay() : Boolean`) at (80, 80) and
+/// the enumeration OrderStatus (Placed, Paid, Shipped) at (480, 80). Gives the harness, Order's id
+/// and OrderStatus's id.
+fn nested_orders(theme: ThemeKind) -> (Harness<'static, Shell>, archforge_mof::Uuid, archforge_mof::Uuid) {
+    let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+    let run = |h: &mut Harness<'static, Shell>, command: &str, params: serde_json::Value| {
+        let out = h.state_mut().session.as_mut().unwrap().execute(command, &params).unwrap_or_else(|e| panic!("{command}: {e}"));
+        out.value["id"].as_str().map(|i| archforge_mof::Uuid::parse(i).unwrap())
+    };
+    let fulfilment = run(&mut h, "uml.package.add", serde_json::json!({ "name": "Fulfilment" })).unwrap();
+    let orders = run(&mut h, "uml.package.add", serde_json::json!({ "name": "Orders", "parent": fulfilment.to_string() })).unwrap();
+    let d = run(&mut h, "diagram.add", serde_json::json!({ "kind": "uml.class", "element": orders.to_string(), "name": "Orders" })).unwrap();
+    let money = run(&mut h, "uml.data-type.add", serde_json::json!({ "package": orders.to_string(), "name": "Money" })).unwrap();
+    let order = run(&mut h, "uml.class.add", serde_json::json!({ "package": orders.to_string(), "name": "Order" })).unwrap();
+    run(&mut h, "uml.attribute.add", serde_json::json!({ "class": order.to_string(), "name": "number", "type": "Integer" }));
+    run(&mut h, "uml.attribute.add", serde_json::json!({ "class": order.to_string(), "name": "total", "type": money.to_string() }));
+    run(&mut h, "uml.operation.add", serde_json::json!({ "class": order.to_string(), "name": "pay", "returns": "Boolean" }));
+    let status = run(&mut h, "uml.enumeration.add", serde_json::json!({ "package": orders.to_string(), "name": "OrderStatus" })).unwrap();
+    for (element, x, height) in [(order, 80, crate::uml_ui::members_height(2, 1)), (status, 480, crate::uml_ui::literals_height(3))] {
+        let place = serde_json::json!({ "diagram": d.to_string(), "element": element.to_string(), "x": x, "y": 80, "width": 280, "height": height });
+        run(&mut h, "diagram.place", place);
+    }
+    crate::uml_ui::put_literals(h.state_mut(), status, &["Placed", "Paid", "Shipped"]).unwrap();
+    crate::canvas::open(h.state_mut(), d);
+    h.run();
+    let shell = h.state_mut();
+    shell.canvas.fit_pending = false;
+    shell.canvas.zoom = 1.0;
+    shell.canvas.pan = egui::Vec2::ZERO;
+    h.run();
+    (h, order, status)
+}
+
+/// Every text the last frame painted, with the box its galley took.
+fn text_boxes(h: &Harness<'static, Shell>) -> Vec<(String, egui::Rect)> {
+    fn walk(s: &egui::Shape, out: &mut Vec<(String, egui::Rect)>) {
+        match s {
+            egui::Shape::Text(t) => out.push((t.galley.text().to_string(), egui::Rect::from_min_size(t.pos, t.galley.size()))),
+            egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, out)),
+            _ => {}
+        }
+    }
+    let mut out = Vec::new();
+    h.output().shapes.iter().for_each(|c| walk(&c.shape, &mut out));
+    out
+}
+
+/// Every rectangle the last frame painted, with its fill and its stroke's colour.
+fn rect_shapes(h: &Harness<'static, Shell>) -> Vec<(egui::Rect, egui::Color32, egui::Color32)> {
+    fn walk(s: &egui::Shape, out: &mut Vec<(egui::Rect, egui::Color32, egui::Color32)>) {
+        match s {
+            egui::Shape::Rect(r) => out.push((r.rect, r.fill, r.stroke.color)),
+            egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, out)),
+            _ => {}
+        }
+    }
+    let mut out = Vec::new();
+    h.output().shapes.iter().for_each(|c| walk(&c.shape, &mut out));
+    out
+}
+
+/// Properties' Package select of a classifier in a nested package shows the package's own name:
+/// a path too long for the field is cut from its front (`… › Orders`), never from its end, and the
+/// whole path is its accessible name and its tooltip (AR-191); in light and dark.
+#[test]
+fn a_package_select_cuts_a_long_path_from_its_front_so_the_package_name_shows() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, order, _) = nested_orders(theme);
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [order.to_string()] })).unwrap();
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        h.run();
+        let path = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let root = archforge_core::name_of(st, archforge_uml::commands::root_package(st).unwrap());
+            format!("{root} › Fulfilment › Orders")
+        };
+        let field = rect_of(&h, "workspace.properties.class.package");
+        let shown: Vec<String> = text_boxes(&h).into_iter().filter(|(_, r)| field.contains(r.center())).map(|(t, _)| t).collect();
+        assert_eq!(shown, ["… › Orders"], "{theme:?}: the package's own name, its path's front folded");
+        {
+            use egui_kittest::kittest::Queryable;
+            assert!(h.query_by_label(&format!("Package: {path}")).is_some(), "the whole path is its accessible name");
+        }
+        // Hovered long enough, its tooltip says the whole path.
+        h.event(egui::Event::PointerMoved(field.center()));
+        for _ in 0..90 {
+            h.step();
+        }
+        assert!(painted(&h).contains(&path), "{theme:?}: the tooltip says {path:?} in {:?}", painted(&h));
+        // A package whose own name holds the separator is one part: the fold never splits it.
+        let orders = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            st.uuid(archforge_uml::commands::package_of(st, st.by_uuid(order).unwrap()).unwrap()).unwrap()
+        };
+        let renamed = serde_json::json!({ "package": orders.to_string(), "name": "Orders › EU" });
+        h.state_mut().session.as_mut().unwrap().execute("uml.package.rename", &renamed).unwrap();
+        h.event(egui::Event::PointerMoved(egui::pos2(5.0, 5.0)));
+        h.run();
+        let shown: Vec<String> = text_boxes(&h).into_iter().filter(|(_, r)| field.contains(r.center())).map(|(t, _)| t).collect();
+        assert_eq!(shown, ["Orders › EU"], "{theme:?}: the name kept whole, never folded at its own › into `… › EU`");
+    }
+    // The cut keeps the last part: whole, else its front parts folded, else the last part alone,
+    // which the field cuts at its end as it cuts any name. The parts are given, so a name holding
+    // the separator stays one part.
+    let fits = |room: usize| move |t: &str| t.chars().count() <= room;
+    let cut = |parts: &[&str], room: usize| crate::ux::cut_front(parts, " › ", fits(room));
+    assert_eq!(cut(&["Commerce", "Orders"], 40), ("Commerce › Orders".to_string(), false));
+    assert_eq!(cut(&["Commerce", "Fulfilment", "Orders"], 23), ("… › Fulfilment › Orders".to_string(), true));
+    assert_eq!(cut(&["Commerce", "Fulfilment", "Orders"], 12), ("… › Orders".to_string(), true));
+    assert_eq!(cut(&["Commerce", "Orders"], 4), ("Orders".to_string(), true));
+    assert_eq!(cut(&["Commerce platform"], 4), ("Commerce platform".to_string(), true));
+    assert_eq!(cut(&["Commerce", "Orders › EU"], 15), ("… › Orders › EU".to_string(), true), "one part, though it holds the separator");
+    assert_eq!(cut(&["Commerce", "Orders › EU"], 8), ("Orders › EU".to_string(), true), "never folded inside a name");
+}
+
+/// The index of `package` among every package, as Properties' Package menu lists them.
+fn st_index(st: &archforge_mof::Store, package: archforge_mof::Obj) -> usize {
+    archforge_uml::commands::all_packages(st).iter().position(|p| *p == package).unwrap()
+}
+
+/// A package's path names every ancestor up to the root, however deep (here 40 packages, past
+/// any fixed cap and wider than the window): the Package field and its menu's row fold it from the
+/// front, its last packages showing, and say it whole on hover. A walk that comes back on itself,
+/// as a damaged file's could, ends with each element named once (AR-191).
+#[test]
+fn a_package_path_names_every_ancestor_and_a_cycle_ends() {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    let mut parent: Option<String> = None;
+    for i in 1..=40 {
+        let mut params = serde_json::json!({ "name": format!("Package {i}") });
+        if let Some(p) = &parent {
+            params["parent"] = serde_json::json!(p);
+        }
+        let out = h.state_mut().session.as_mut().unwrap().execute("uml.package.add", &params).unwrap();
+        parent = out.value["id"].as_str().map(String::from);
+    }
+    let deepest_id = parent.unwrap();
+    let st = h.state().session.as_ref().unwrap().doc();
+    let deepest = st.by_uuid(archforge_mof::Uuid::parse(&deepest_id).unwrap()).unwrap();
+    let parts = crate::uml_panel::package_parts(st, deepest);
+    let root = archforge_core::name_of(st, archforge_uml::commands::root_package(st).unwrap());
+    assert_eq!(parts.len(), 41, "the root and all 40: {parts:?}");
+    assert_eq!((parts[0].as_str(), parts[1].as_str(), parts[40].as_str()), (root.as_str(), "Package 1", "Package 40"));
+    let whole = parts.join(" › ");
+    let row_of = st_index(st, deepest);
+    // A class in the deepest package: Properties' Package field and its menu's row both fold the
+    // path from its front, the last packages showing, and say it whole on hover.
+    let class =
+        h.state_mut().session.as_mut().unwrap().execute("uml.class.add", &serde_json::json!({ "package": deepest_id, "name": "Deep" })).unwrap();
+    let class = class.value["id"].as_str().unwrap().to_string();
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [class] })).unwrap();
+    h.state_mut().state.show_panel(crate::state::Panel::Properties);
+    h.run();
+    let field = rect_of(&h, "workspace.properties.class.package");
+    let shown: Vec<String> = text_boxes(&h).into_iter().filter(|(_, r)| field.contains(r.center())).map(|(t, _)| t).collect();
+    let [shown] = shown.as_slice() else { panic!("one text in the field: {shown:?}") };
+    assert!(shown.ends_with("Package 40") && !shown.starts_with(root.as_str()), "the field keeps the package's own name: {shown:?}");
+    click(&mut h, field.center());
+    assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::ClassPackage));
+    for _ in 0..=row_of {
+        key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+    }
+    let row = rect_of(&h, &format!("workspace.properties.class.package.{row_of}"));
+    // The row's text, over what the window shows under the menu.
+    let drawn: Vec<String> = text_boxes(&h).into_iter().filter(|(t, r)| row.contains(r.center()) && t.contains("Package")).map(|(t, _)| t).collect();
+    let [drawn] = drawn.as_slice() else { panic!("one path in the row: {drawn:?}") };
+    assert!(
+        drawn.starts_with("… › ") && drawn.ends_with(" › Package 38 › Package 39 › Package 40") && !drawn.contains(root.as_str()),
+        "the row's end shows: {drawn:?}"
+    );
+    assert!(!drawn.ends_with('…'), "never cut at its end: {drawn:?}");
+    h.event(egui::Event::PointerMoved(row.center()));
+    for _ in 0..90 {
+        h.step();
+    }
+    assert!(painted(&h).contains(&whole), "the row's tooltip says the whole path");
+    // A cycle, which the model refuses to make but a damaged file could hold, and a loop on itself.
+    let name = |n: u32| n.to_string();
+    assert_eq!(crate::uml_panel::path_parts(0_u32, |n| Some((n + 1) % 3), name), ["2", "1", "0"]);
+    assert_eq!(crate::uml_panel::path_parts(7_u32, Some, name), ["7"]);
+    assert_eq!(crate::uml_panel::path_parts(5_u32, |n| n.checked_sub(1), name), ["0", "1", "2", "3", "4", "5"]);
+}
+
+/// Every compartment of a class's card is padded as the card is (AR-191): the last attribute's
+/// text ends as far over the dividing line as the last operation's over the card's foot, and the
+/// first operation starts as far under that line as the first attribute under the header's; a new
+/// class's default size holds a row in each, and a card one unit short says the row it hides; in
+/// light and dark.
+#[test]
+fn a_class_cards_compartments_are_padded_so_no_row_sits_on_a_dividing_line() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (h, order, _) = nested_orders(theme);
+        let card = rect_of(&h, &format!("workspace.canvas.node.{}", node_of(&h, order)));
+        let boxes = text_boxes(&h);
+        let row =
+            |t: &str| boxes.iter().find(|(s, r)| s == t && card.contains(r.center())).map(|(_, r)| *r).unwrap_or_else(|| panic!("{t} on the card"));
+        let (first_attribute, last_attribute, operation) = (row("+ number : Integer"), row("+ total : Money"), row("+ pay() : Boolean"));
+        // The lines across the card: the header's, then the one between its compartments.
+        let mut lines: Vec<f32> = rect_shapes(&h)
+            .into_iter()
+            .filter(|(r, _, _)| (r.height() - 1.0).abs() < 0.01 && (r.width() - card.width()).abs() < 0.5 && card.contains(r.center()))
+            .map(|(r, _, _)| r.top())
+            .collect();
+        lines.sort_by(f32::total_cmp);
+        let [header, divider] = lines[..] else { panic!("{theme:?}: two lines across the card, not {lines:?}") };
+        assert!(divider > last_attribute.bottom() + 8.0, "{theme:?}: the line {divider} clear of the row ending at {}", last_attribute.bottom());
+        let near = |a: f32, b: f32| (a - b).abs() < 0.5;
+        assert!(near(divider - last_attribute.bottom(), card.bottom() - operation.bottom()), "{theme:?}: a compartment's foot is the card's");
+        assert!(near(operation.top() - divider, first_attribute.top() - header), "{theme:?}: a compartment's head is the first one's");
+    }
+    // A new class shows a row in each compartment at its default size; the card height grows by
+    // a pitch for each row, and made too short for its last row it counts the rows it hides, the
+    // last one that fits saying so.
+    assert_eq!(crate::uml_ui::members_height(1, 1), archforge_uml::CLASS_SIZE.1);
+    assert_eq!(crate::uml_ui::members_height(2, 1) - crate::uml_ui::members_height(1, 1), f64::from(crate::canvas::ENTITY_ROW));
+    let (mut h, order, _) = nested_orders(ThemeKind::Light);
+    let node = node_of(&h, order);
+    let height = crate::uml_ui::members_height(2, 1) - 11.0;
+    h.state_mut().session.as_mut().unwrap().execute("diagram.resize", &serde_json::json!({ "node": node, "width": 280, "height": height })).unwrap();
+    h.run();
+    let texts = painted(&h);
+    assert!(texts.iter().any(|t| t == "+ 2 more members") && texts.iter().any(|t| t == "+ number : Integer"), "{texts:?}");
+}
+
+/// A literal's draft row is spaced as an attribute's and an operation's (AR-191): each ring takes
+/// its row's pitch, clear of the row over it, the typed text on the line the row's text takes, and
+/// its ⋯ on the surface in the same ink; in light and dark.
+#[test]
+fn a_literal_draft_row_is_spaced_as_an_attribute_draft_row_and_clear_of_the_row_over_it() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, order, status) = nested_orders(theme);
+        let p = crate::ux::palette(theme == ThemeKind::Dark);
+        let mut rings = Vec::new();
+        for (class, kind, over) in [
+            (status, crate::uml_panel::MemberKind::Literal, "Shipped"),
+            (order, crate::uml_panel::MemberKind::Attribute, "+ total : Money"),
+            (order, crate::uml_panel::MemberKind::Operation, "+ pay() : Boolean"),
+        ] {
+            assert!(crate::uml_inline::open(h.state_mut(), class, kind, None), "{kind:?}'s draft opens");
+            h.state_mut().canvas.inline.as_mut().unwrap().edit.name = "Returned".into();
+            h.run();
+            // Its ring: the accent's outline round the tinted row, a row's height, not a card's.
+            let tinted: Vec<egui::Rect> = rect_shapes(&h).into_iter().filter(|(_, fill, _)| *fill == p.accent_tint).map(|(r, _, _)| r).collect();
+            let ring = rect_shapes(&h).into_iter().find(|(r, _, stroke)| *stroke == p.accent && tinted.contains(r)).map(|(r, _, _)| r);
+            let ring = ring.unwrap_or_else(|| panic!("{theme:?}: {kind:?}'s draft ringed"));
+            let boxes = text_boxes(&h);
+            let card = rect_of(&h, &format!("workspace.canvas.node.{}", node_of(&h, class)));
+            let above = boxes.iter().find(|(t, r)| t == over && card.contains(r.center())).map(|(_, r)| *r).expect("the row over the draft");
+            let typed = boxes.iter().find(|(t, r)| t == "Returned" && ring.contains(r.center())).map(|(_, r)| *r).expect("the typed name");
+            assert!(ring.top() >= above.bottom(), "{theme:?}: {kind:?}'s ring at {} clear of {over} ending at {}", ring.top(), above.bottom());
+            assert!((ring.height() - crate::canvas::ENTITY_ROW).abs() < 0.5, "{theme:?}: a row's pitch, not {}", ring.height());
+            // The typed text sits on the line a row's text takes: a pitch under the row over it.
+            let pitch = typed.center().y - above.center().y;
+            assert!((pitch - crate::canvas::ENTITY_ROW).abs() < 1.0, "{theme:?}: {kind:?}'s draft a pitch under {over}, not {pitch}");
+            // Its ⋯ on the surface at the ring's right.
+            assert!(
+                rect_shapes(&h).iter().any(|(r, fill, _)| *fill == p.surface && ring.contains_rect(*r) && r.right() > ring.right() - 24.0),
+                "{theme:?}: {kind:?}'s ⋯ on the surface"
+            );
+            rings.push((ring.top() - above.bottom(), ring.height()));
+            key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+            assert!(h.state().canvas.inline.is_none());
+        }
+        assert_eq!(rings[0], rings[1], "{theme:?}: a literal's draft is spaced as an attribute's");
+        assert_eq!(rings[0], rings[2], "{theme:?}: a literal's draft is spaced as an operation's");
+        assert_eq!(crate::uml_inline::details_ink(p), p.text_secondary, "one ⋯ ink for every member's row");
+    }
+}
+
+/// A new class is placed at its default size, grows on every diagram as operations are added (one
+/// undo step taking back the growth), keeps a size set by hand and then says the rows it hides in
+/// its `+ n more` row, at any zoom; in light and dark.
 #[test]
 fn a_new_class_shows_the_operations_added_to_it_and_a_card_made_short_says_what_it_hides() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
@@ -6523,7 +6796,7 @@ fn a_new_class_shows_the_operations_added_to_it_and_a_card_made_short_says_what_
         assert_eq!(height(&h), archforge_uml::CLASS_SIZE.1, "a new class is as tall as a row in each compartment");
         // The same class on two more diagrams: wider and short, and already tall.
         let mut others = Vec::new();
-        for (name, width, tall) in [("Wide", 300, 140), ("Tall", 260, 400)] {
+        for (name, width, tall) in [("Wide", 300, 150), ("Tall", 260, 400)] {
             let other = run(&mut h, "diagram.add", serde_json::json!({ "kind": "uml.class", "element": pkg.to_string(), "name": name })).unwrap();
             let n = run(
                 &mut h,
@@ -6567,7 +6840,7 @@ fn a_new_class_shows_the_operations_added_to_it_and_a_card_made_short_says_what_
         assert_eq!((size(&h, others[0]), size(&h, others[1])), ((300.0, grown), (260.0, 400.0)));
         h.state_mut().session.as_mut().unwrap().undo().unwrap();
         assert_eq!((member_rows(&h, class, true).len(), height(&h)), (1, archforge_uml::CLASS_SIZE.1), "one undo takes back both");
-        assert_eq!((size(&h, others[0]), size(&h, others[1])), ((300.0, 140.0), (260.0, 400.0)), "and every card's height");
+        assert_eq!((size(&h, others[0]), size(&h, others[1])), ((300.0, 150.0), (260.0, 400.0)), "and every card's height");
         h.state_mut().session.as_mut().unwrap().redo().unwrap();
         assert_eq!((member_rows(&h, class, true).len(), height(&h)), (2, grown));
         assert_eq!(size(&h, others[0]), (300.0, grown));
@@ -7248,6 +7521,367 @@ fn related(h: &mut Harness<'static, Shell>, name: &str) -> Vec<serde_json::Value
 fn edge_count(h: &Harness<'static, Shell>) -> usize {
     let st = h.state().session.as_ref().unwrap().doc();
     st.list(st.by_uuid(h.state().canvas.active.unwrap()).unwrap(), archforge_diagram::diagram::EDGE).unwrap().len()
+}
+
+/// The boxes of the icons the last frame painted in `color`: each a mesh tinted that colour.
+fn icon_boxes(h: &Harness<'static, Shell>, color: egui::Color32) -> Vec<egui::Rect> {
+    fn walk(s: &egui::Shape, color: egui::Color32, out: &mut Vec<egui::Rect>) {
+        match s {
+            egui::Shape::Mesh(m) if !m.vertices.is_empty() && m.vertices.iter().all(|v| v.color == color) => {
+                out.push(egui::Rect::from_points(&m.vertices.iter().map(|v| v.pos).collect::<Vec<_>>()));
+            }
+            egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, color, out)),
+            _ => {}
+        }
+    }
+    let mut out = Vec::new();
+    h.output().shapes.iter().for_each(|c| walk(&c.shape, color, &mut out));
+    out
+}
+
+/// The Relationship tool's menu ticks its current kind at the row's right, as the classifier
+/// tool's menu ticks its own (AR-191): one tick, in the current row, at the same place; in light
+/// and dark.
+#[test]
+fn the_relationship_menu_ticks_its_current_kind_as_the_classifier_menu_does() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        let accent = crate::ux::palette(theme == ThemeKind::Dark).accent;
+        // Where each menu ticks its current row: the tick's centre from the row's right.
+        let tick_in = |h: &Harness<'static, Shell>, row: egui::Rect| -> Vec<f32> {
+            icon_boxes(h, accent)
+                .into_iter()
+                .filter(|b| row.contains(b.center()) && b.center().x > row.right() - 28.0)
+                .map(|b| row.right() - b.center().x)
+                .collect()
+        };
+        let at = rect_of(&h, "workspace.tools.classifier-kinds").center();
+        click(&mut h, at);
+        let classifier = tick_in(&h, rect_of(&h, "workspace.classifier.class"));
+        assert_eq!(classifier.len(), 1, "{theme:?}: the classifier menu ticks Class");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        for kind in ["composition", "generalization"] {
+            let at = rect_of(&h, "workspace.tools.relationship-kinds").center();
+            click(&mut h, at);
+            let at = rect_of(&h, &format!("workspace.relate.{kind}")).center();
+            click(&mut h, at);
+            let at = rect_of(&h, "workspace.tools.relationship-kinds").center();
+            click(&mut h, at);
+            assert_eq!(h.state().canvas.popover, Some("relationship-kinds"));
+            let rows = ["association", "directed", "aggregation", "composition", "generalization", "dependency", "realization", "association-class"];
+            for row in rows {
+                let ticks = tick_in(&h, rect_of(&h, &format!("workspace.relate.{row}")));
+                if row == kind {
+                    assert_eq!(ticks.len(), 1, "{theme:?}: {row}, the current kind, is ticked");
+                    assert!((ticks[0] - classifier[0]).abs() < 0.5, "{theme:?}: ticked where the classifier menu ticks: {ticks:?} {classifier:?}");
+                } else {
+                    assert!(ticks.is_empty(), "{theme:?}: {row} is not ticked while {kind} is current");
+                }
+            }
+            key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        }
+    }
+}
+
+/// A selected line's end handles sit on the line just past its ends' marks, so a generalization's
+/// triangle, a realization's, a navigable end's arrowhead and a composition's diamond show whole;
+/// an end without a mark keeps its handle, and its small square, on the card's border; past a mark
+/// no square is drawn on the tip (AR-191).
+#[test]
+fn a_selected_lines_end_handles_sit_past_its_end_marks() {
+    use archforge_diagram::figure::EndMark;
+    let (mut h, _) = related_sample_in(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    // Order realizes an interface Payable placed beside the sample, so a realization is drawn too.
+    let d = h.state().canvas.active.unwrap();
+    let (package, order) = {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let order = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(st, *o) == "Order").unwrap();
+        (st.uuid(archforge_uml::commands::package_of(st, order).unwrap()).unwrap(), st.uuid(order).unwrap())
+    };
+    let s = h.state_mut().session.as_mut().unwrap();
+    let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
+    let payable = id(s.execute("uml.interface.add", &serde_json::json!({ "package": package.to_string(), "name": "Payable" })).unwrap().value);
+    s.execute("diagram.place", &serde_json::json!({ "diagram": d.to_string(), "element": payable, "x": 560, "y": 700, "width": 290, "height": 146 }))
+        .unwrap();
+    s.execute("uml.realization.add", &serde_json::json!({ "class": order.to_string(), "interface": payable })).unwrap();
+    s.execute("diagram.connect-all", &serde_json::json!({ "diagram": d.to_string() })).unwrap();
+    h.run();
+    let (lines, nodes) = {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let dg = st.by_uuid(d).unwrap();
+        let lines: Vec<(archforge_mof::Uuid, [EndMark; 2], bool)> = st
+            .list(dg, archforge_diagram::diagram::EDGE)
+            .unwrap()
+            .iter()
+            .filter_map(archforge_mof::Value::as_ref)
+            .filter_map(|e| {
+                let a = st.get(e, archforge_diagram::edge::ELEMENT).ok()?.as_ref()?;
+                let line = archforge_uml::figures::line(st, a)?;
+                Some((st.uuid(a).ok()?, [line.ends[0].mark, line.ends[1].mark], line.styled))
+            })
+            .collect();
+        let nodes: Vec<String> = st
+            .list(dg, archforge_diagram::diagram::NODE)
+            .unwrap()
+            .iter()
+            .filter_map(archforge_mof::Value::as_ref)
+            .filter_map(|n| st.uuid(n).ok().map(|u| u.to_string()))
+            .collect();
+        (lines, nodes)
+    };
+    let marks: Vec<EndMark> = lines.iter().flat_map(|(_, m, _)| *m).collect();
+    for kind in [EndMark::Triangle, EndMark::OpenArrow, EndMark::FilledDiamond, EndMark::None] {
+        assert!(marks.contains(&kind), "the sample has an end with {kind:?}");
+    }
+    // At zooms that show the whole sample, the marks at their full size and at their least.
+    let mut checked = std::collections::BTreeSet::new();
+    let mut squared = 0;
+    for zoom in [0.6, 0.5] {
+        h.state_mut().canvas.zoom = zoom;
+        h.state_mut().canvas.pan = egui::Vec2::ZERO;
+        h.state_mut().canvas.fit_pending = false;
+        for (line, ends, styled) in &lines {
+            h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [line.to_string()] })).unwrap();
+            h.run();
+            let cards: Vec<egui::Rect> = nodes.iter().map(|n| rect_of(&h, &format!("workspace.canvas.node.{n}"))).collect();
+            // The small square at a selected relationship line's end (a thin generalization or
+            // realization draws none) shows only where the round handle stayed on the end: past a
+            // mark the handle marks the end, and a square would sit on the mark.
+            let accent = crate::ux::palette(false).accent;
+            let squares = rect_shapes(&h)
+                .iter()
+                .filter(|(r, _, stroke)| *stroke == accent && (r.width() - 6.0).abs() < 0.01 && (r.height() - 6.0).abs() < 0.01)
+                .count();
+            let unmoved = ends
+                .iter()
+                .filter(|m| !matches!(m, EndMark::Triangle | EndMark::OpenArrow | EndMark::HollowDiamond | EndMark::FilledDiamond))
+                .count();
+            assert_eq!(squares, if *styled { unmoved } else { 0 }, "{line} at {zoom}: {ends:?}");
+            squared += squares;
+            for (end, mark) in ["source", "target"].into_iter().zip(ends) {
+                let id = format!("workspace.canvas.line-end.{end}");
+                if !ids(&h).contains(&id) {
+                    continue;
+                }
+                let at = rect_of(&h, &id).center();
+                let off = cards.iter().map(|c| c.distance_to_pos(at)).fold(f32::INFINITY, f32::min);
+                let reach = match mark {
+                    EndMark::Triangle | EndMark::OpenArrow => 12.0,
+                    EndMark::HollowDiamond | EndMark::FilledDiamond => 20.0,
+                    _ => 0.0,
+                } * f32::max(zoom, 0.6);
+                checked.insert(format!("{mark:?}"));
+                if reach > 0.0 {
+                    assert!(
+                        off >= reach + crate::canvas::END_HANDLE - 0.5,
+                        "{line} {end} {mark:?} at {zoom}: the handle {off} off the card covers its mark"
+                    );
+                } else {
+                    assert!(off < 0.5, "{line} {end} at {zoom}: an end without a mark keeps its handle on the border, not {off} off it");
+                }
+            }
+        }
+    }
+    assert_eq!(checked.len(), 5, "every kind of end was looked at: {checked:?}");
+    assert!(squared > 0, "an end without a mark keeps its square");
+}
+
+/// An end handle is placed by its mark as drawn (AR-191): on a long straight line a few points past
+/// the triangle's base, the arrow's strokes and the diamond's far corner, as before; where the line
+/// bends close to the end it stays as clear of the mark; on a short line the two ends' handles stay
+/// a hit box apart, never meeting in the middle; an end without such a mark keeps its handle.
+#[test]
+fn an_end_handle_is_placed_by_its_marks_drawn_outline_and_two_never_meet() {
+    use crate::canvas::{END_HANDLE, END_HANDLE_HIT, end_handle_at, mark_outline};
+    use archforge_diagram::figure::EndMark;
+    // How far `at` is from the mark drawn at the route's start: from its nearest corner or edge.
+    let clear_of = |route: &[egui::Pos2], mark: EndMark, at: egui::Pos2| {
+        let outline = mark_outline(mark, route[0], route[1], 1.0);
+        (0..outline.len())
+            .map(|i| {
+                let (a, b) = (outline[i], outline[(i + 1) % outline.len()]);
+                let t = ((at - a).dot(b - a) / (b - a).length_sq()).clamp(0.0, 1.0);
+                (at - (a + (b - a) * t)).length()
+            })
+            .fold(f32::INFINITY, f32::min)
+    };
+    let straight = [egui::pos2(0.0, 0.0), egui::pos2(400.0, 0.0)];
+    for (mark, reach) in [(EndMark::Triangle, 12.0), (EndMark::OpenArrow, 12.0), (EndMark::FilledDiamond, 20.0), (EndMark::HollowDiamond, 20.0)] {
+        let at = end_handle_at(&straight, mark, 1.0).expect("moved past its mark");
+        assert!((at.x - (reach + 8.0)).abs() <= 0.5 && at.y == 0.0, "{mark:?}: {at:?}");
+        assert!(clear_of(&straight, mark, at) >= END_HANDLE + 2.5, "{mark:?}");
+    }
+    for mark in [EndMark::None, EndMark::ExactlyOne, EndMark::ZeroOrMore] {
+        assert_eq!(end_handle_at(&straight, mark, 1.0), None, "{mark:?} keeps its handle at the end");
+    }
+    // A bend 13 points from the end, inside the triangle's reach: the handle turns the corner and
+    // goes on until it is as clear of the triangle's base corner as on a straight line.
+    let bent = [egui::pos2(0.0, 0.0), egui::pos2(13.0, 0.0), egui::pos2(13.0, 300.0)];
+    for mark in [EndMark::Triangle, EndMark::FilledDiamond, EndMark::OpenArrow] {
+        let at = end_handle_at(&bent, mark, 1.0).unwrap();
+        assert!(clear_of(&bent, mark, at) >= END_HANDLE + 2.5, "{mark:?} at {at:?} is clear of its mark");
+        assert!(at.x == 13.0 && at.y > 0.0, "{mark:?}: on the line past the bend, {at:?}");
+    }
+    // A short line: each handle stops half a hit box short of the middle, so they never meet and
+    // both take a press; a long one is placed as before.
+    for length in [10.0, 30.0, 40.0, 60.0] {
+        let line = [egui::pos2(0.0, 0.0), egui::pos2(length, 0.0)];
+        let back = [line[1], line[0]];
+        let (a, b) = (end_handle_at(&line, EndMark::Triangle, 1.0).unwrap(), end_handle_at(&back, EndMark::FilledDiamond, 1.0).unwrap());
+        let apart = (b - a).length();
+        assert!(apart >= END_HANDLE_HIT.min(length) - 0.01, "{length}: the handles {apart} apart");
+        assert!(a.x <= b.x, "{length}: each on its own half");
+    }
+}
+
+/// On a short line between two cards the two end handles keep a hit box apart and each takes its
+/// own press, in light and dark (AR-191).
+#[test]
+fn a_short_lines_two_end_handles_stay_apart_and_each_takes_its_own_press() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, order, _) = nested_orders(theme);
+        let (orders, d) = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let p = st.uuid(archforge_uml::commands::package_of(st, st.by_uuid(order).unwrap()).unwrap()).unwrap();
+            (p, h.state().canvas.active.unwrap())
+        };
+        // Refund, 24 points right of Order, specializes it: the line runs between their borders.
+        let s = h.state_mut().session.as_mut().unwrap();
+        let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
+        let refund = id(s.execute("uml.class.add", &serde_json::json!({ "package": orders.to_string(), "name": "Refund" })).unwrap().value);
+        let place = serde_json::json!({ "diagram": d.to_string(), "element": refund, "x": 384, "y": 80, "width": 80, "height": crate::uml_ui::members_height(2, 1) });
+        s.execute("diagram.place", &place).unwrap();
+        let g = id(s.execute("uml.generalization.add", &serde_json::json!({ "specific": refund, "general": order.to_string() })).unwrap().value);
+        s.execute("diagram.connect-all", &serde_json::json!({ "diagram": d.to_string() })).unwrap();
+        s.execute("view.select", &serde_json::json!({ "ids": [g] })).unwrap();
+        h.run();
+        let (source, target) = (rect_of(&h, "workspace.canvas.line-end.source"), rect_of(&h, "workspace.canvas.line-end.target"));
+        assert!(!source.expand(2.0).intersects(target.expand(2.0)), "{theme:?}: {source:?} and {target:?} apart");
+        // Each takes its own press: a drag from either starts moving that end.
+        for (rect, is_source) in [(source, true), (target, false)] {
+            h.event(egui::Event::PointerMoved(rect.center()));
+            h.event(egui::Event::PointerButton {
+                pos: rect.center(),
+                button: egui::PointerButton::Primary,
+                pressed: true,
+                modifiers: egui::Modifiers::NONE,
+            });
+            h.run();
+            h.event(egui::Event::PointerMoved(rect.center() + egui::vec2(0.0, 40.0)));
+            h.run();
+            let moving = matches!(h.state().canvas.gesture, Some(crate::editing::Gesture::Reconnect { source, .. }) if source == is_source);
+            assert!(moving, "{theme:?}: the {} handle takes its press, {:?}", if is_source { "source" } else { "target" }, h.state().canvas.gesture);
+            // Let go with the gesture dropped, so the line stays as it is for the other end.
+            h.state_mut().canvas.gesture = None;
+            h.event(egui::Event::PointerButton {
+                pos: rect.center(),
+                button: egui::PointerButton::Primary,
+                pressed: false,
+                modifiers: egui::Modifiers::NONE,
+            });
+            h.run();
+        }
+    }
+}
+
+/// The two end handles of a line bent back on itself are placed together so their hit boxes never
+/// meet on screen: a short U whose ends come back close, a diamond at one and an arrow at the
+/// other, gets two handles apart, falling short of the marks' clearance only as far as it must;
+/// a line whose handles are apart already keeps the places each takes alone (AR-191).
+#[test]
+fn a_bent_lines_two_end_handles_are_placed_together_so_their_hit_boxes_never_meet() {
+    use crate::canvas::{END_HANDLE_HIT, end_handle_at, end_handles_at};
+    use archforge_diagram::figure::EndMark;
+    let hit = |at: egui::Pos2| egui::Rect::from_center_size(at, egui::Vec2::splat(END_HANDLE_HIT));
+    let u = [egui::pos2(0.0, 0.0), egui::pos2(30.0, 0.0), egui::pos2(30.0, 12.0), egui::pos2(0.0, 12.0)];
+    let back: Vec<egui::Pos2> = u.iter().rev().copied().collect();
+    let marks = [EndMark::FilledDiamond, EndMark::OpenArrow];
+    let alone = [end_handle_at(&u, marks[0], 0.5).unwrap(), end_handle_at(&back, marks[1], 0.5).unwrap()];
+    assert!(hit(alone[0]).intersects(hit(alone[1])), "placed alone, their boxes meet: {alone:?}");
+    let [a, b] = end_handles_at(&u, marks, 0.5);
+    let (a, b) = (a.unwrap_or(u[0]), b.unwrap_or(u[3]));
+    assert!(!hit(a).intersects(hit(b)), "placed together, apart: {a:?} {b:?}");
+    // A long straight line keeps the places each end takes alone.
+    let straight = [egui::pos2(0.0, 0.0), egui::pos2(400.0, 0.0)];
+    let backwards = [straight[1], straight[0]];
+    assert_eq!(
+        end_handles_at(&straight, [EndMark::Triangle, EndMark::FilledDiamond], 1.0),
+        [end_handle_at(&straight, EndMark::Triangle, 1.0), end_handle_at(&backwards, EndMark::FilledDiamond, 1.0)]
+    );
+}
+
+/// On the canvas, a composition routed in a short U between two small cards, its ends close at
+/// 50 %, shows its two end handles with hit boxes apart, and each press reconnects its own end; in
+/// light and dark (AR-191).
+#[test]
+fn a_short_u_shaped_lines_end_handles_stay_apart_and_each_takes_its_own_press() {
+    use archforge_diagram::figure::EndMark;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, order, _) = nested_orders(theme);
+        let (orders, d) = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let p = st.uuid(archforge_uml::commands::package_of(st, st.by_uuid(order).unwrap()).unwrap()).unwrap();
+            (p, h.state().canvas.active.unwrap())
+        };
+        let s = h.state_mut().session.as_mut().unwrap();
+        let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
+        let mut add = |name: &str, y: i32| {
+            let c = id(s.execute("uml.class.add", &serde_json::json!({ "package": orders.to_string(), "name": name })).unwrap().value);
+            s.execute("diagram.place", &serde_json::json!({ "diagram": d.to_string(), "element": c, "x": 100, "y": y, "width": 40, "height": 20 }))
+                .unwrap();
+            c
+        };
+        let (whole, part) = (add("Whole", 600), add("Part", 624));
+        let a = id(s.execute("uml.association.add", &serde_json::json!({ "from": whole, "to": part, "kind": "composition" })).unwrap().value);
+        s.execute("uml.association.set-end", &serde_json::json!({ "association": a, "end": 1, "navigable": true })).unwrap();
+        s.execute("diagram.connect-all", &serde_json::json!({ "diagram": d.to_string() })).unwrap();
+        // Out of both cards' right sides and back: a U whose ends are 24 apart, 12 at 50 %.
+        let edge = {
+            let st = s.doc();
+            let a = st.by_uuid(archforge_mof::Uuid::parse(&a).unwrap()).unwrap();
+            st.uuid(archforge_diagram::views_of(st, a).1[0]).unwrap()
+        };
+        let route = serde_json::json!({ "edge": edge.to_string(), "points": [{ "x": 200, "y": 610 }, { "x": 200, "y": 634 }] });
+        s.execute("diagram.route", &route).unwrap();
+        s.execute("view.select", &serde_json::json!({ "ids": [a] })).unwrap();
+        let marks = {
+            let st = s.doc();
+            let line = archforge_uml::figures::line(st, st.by_uuid(archforge_mof::Uuid::parse(&a).unwrap()).unwrap()).unwrap();
+            [line.ends[0].mark, line.ends[1].mark]
+        };
+        assert!(marks.iter().all(|m| *m != EndMark::None), "a mark at both ends: {marks:?}");
+        h.state_mut().canvas.zoom = 0.5;
+        h.run();
+        let (source, target) = (rect_of(&h, "workspace.canvas.line-end.source"), rect_of(&h, "workspace.canvas.line-end.target"));
+        assert!(!source.expand(2.0).intersects(target.expand(2.0)), "{theme:?}: hit boxes {source:?} and {target:?} apart");
+        for (rect, is_source) in [(source, true), (target, false)] {
+            h.event(egui::Event::PointerMoved(rect.center()));
+            h.event(egui::Event::PointerButton {
+                pos: rect.center(),
+                button: egui::PointerButton::Primary,
+                pressed: true,
+                modifiers: egui::Modifiers::NONE,
+            });
+            h.run();
+            h.event(egui::Event::PointerMoved(rect.center() + egui::vec2(40.0, 40.0)));
+            h.run();
+            let moving = matches!(h.state().canvas.gesture, Some(crate::editing::Gesture::Reconnect { source, .. }) if source == is_source);
+            assert!(
+                moving,
+                "{theme:?}: the {} handle takes its own press, {:?}",
+                if is_source { "source" } else { "target" },
+                h.state().canvas.gesture
+            );
+            h.state_mut().canvas.gesture = None;
+            h.event(egui::Event::PointerButton {
+                pos: rect.center(),
+                button: egui::PointerButton::Primary,
+                pressed: false,
+                modifiers: egui::Modifiers::NONE,
+            });
+            h.run();
+        }
+    }
 }
 
 /// The Relationship tool draws the kind its menu chose, refuses a cycle, and makes a class on empty canvas.
@@ -10518,6 +11152,8 @@ fn revision(h: &Harness<'static, Shell>) -> u64 {
     h.state().session.as_ref().unwrap().revision()
 }
 
+/// An end's Multiplicity takes a preset or typing, each written as one undo step that its line
+/// follows; its menu offers none to many once, as `*`, which `0..*` typed reads as and ticks.
 #[test]
 fn an_association_end_multiplicity_is_picked_or_typed_one_undo_step_each_its_line_following_and_kept_on_reopen() {
     let size = egui::vec2(1600.0, 1000.0);
@@ -10538,9 +11174,10 @@ fn an_association_end_multiplicity_is_picked_or_typed_one_undo_step_each_its_lin
     click(&mut h, at);
     assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::EndMultiplicity(0)));
     let found = ids(&h);
-    for item in ["0", "1", "2", "3", "4", "clear"] {
+    for item in ["0", "1", "2", "3", "clear"] {
         assert!(found.contains(&format!("workspace.properties.end.0.multiplicity.menu.{item}")), "{item} in {found:?}");
     }
+    assert!(!found.contains(&"workspace.properties.end.0.multiplicity.menu.4".to_string()), "none to many is offered once");
     assert!(painted(&h).iter().any(|t| t == "Or type a number or range"));
     let at = rect_of(&h, "workspace.properties.end.0.multiplicity.menu.3").center();
     click(&mut h, at);
@@ -10640,6 +11277,19 @@ fn an_end_multiplicity_menu_follows_the_keys_and_escape_closes_it_before_it_canc
     click(&mut h, at);
     assert_eq!(end_multiplicities(&h, paid).0[1], "*");
     assert_eq!(typed_multiplicity(&h, 1), "*");
+    // Its menu offers none to many once, as `*`, and ticks it (AR-191).
+    {
+        use egui_kittest::kittest::{NodeT, Queryable};
+        let at = rect_of(&h, "workspace.properties.end.1.multiplicity.menu").center();
+        click(&mut h, at);
+        assert!(h.query_all_by_label("0..*").next().is_none(), "no 0..* row beside *");
+        let star = crate::widgets::egui_id("workspace.properties.end.1.multiplicity.menu.2").accesskit_id();
+        let field = h.get_by_label("End at Payment · Multiplicity").accesskit_node().data().clone();
+        assert_eq!(field.active_descendant(), Some(star), "the menu opens on its `*` row");
+        let ticked = h.query_all_by_label("*").filter(|n| n.accesskit_node().data().is_selected() == Some(true)).count();
+        assert_eq!(ticked, 1, "the `*` row is ticked");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    }
     // The keys reach the end chosen: the Order end kept its own.
     assert_eq!(end_multiplicities(&h, paid).0[0], "1");
 }
@@ -10732,6 +11382,8 @@ fn the_chevron_keeps_a_typed_multiplicity_a_draft_so_a_pick_is_one_step_and_esca
     assert_eq!(end_multiplicities(&h, paid).0[0], "1", "one undo goes back past the pick to the 1, not to a 3");
 }
 
+/// Leaving a multiplicity field closes its menu; its rows, its ticked preset, the row the arrows
+/// reach and its refusal reach assistive technology.
 #[test]
 fn leaving_a_multiplicity_closes_its_menu_and_its_rows_and_refusal_reach_assistive_technology() {
     use egui_kittest::kittest::{NodeT, Queryable};
@@ -10743,7 +11395,7 @@ fn leaving_a_multiplicity_closes_its_menu_and_its_rows_and_refusal_reach_assisti
     assert!(open(&h));
     assert!(h.query_by_label("End at Payment · Pick a multiplicity").is_some());
     assert!(h.query_by_label("End at Order · Pick a multiplicity").is_some(), "each chevron names its end");
-    for word in ["0..1", "1", "0..*", "1..*", "*", "Clear"] {
+    for word in ["0..1", "1", "*", "1..*", "Clear"] {
         assert!(!h.query_all_by_label(word).collect::<Vec<_>>().is_empty(), "{word} has an accessible name");
     }
     // The ticked row is selected; the open field is expanded, the row the keys reach its active
@@ -10758,7 +11410,7 @@ fn leaving_a_multiplicity_closes_its_menu_and_its_rows_and_refusal_reach_assisti
     // afterwards picks nothing.
     key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
     key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
-    assert_eq!(h.state().panels.highlight, Some(2), "from the current 0..1 down to 0..*");
+    assert_eq!(h.state().panels.highlight, Some(2), "from the current 0..1 down to *");
     assert_eq!(field_node(&h).active_descendant(), Some(row("2")));
     for _ in 0..4 {
         key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);

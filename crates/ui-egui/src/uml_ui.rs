@@ -492,11 +492,12 @@ pub(crate) fn literals_height(literals: usize) -> f64 {
     (f64::from(ENTITY_FIRST_ROW) + 9.0 + slots * f64::from(ENTITY_ROW)).clamp(archforge_uml::CLASS_SIZE.1, archforge_diagram::rules::MAX_SIZE)
 }
 
-/// How tall a card is to show `attributes` and `operations` rows.
+/// How tall a card is to show `attributes` and `operations` rows, each compartment padded at its
+/// foot and the next at its head.
 pub(crate) fn members_height(attributes: usize, operations: usize) -> f64 {
-    use crate::canvas::{ENTITY_FIRST_ROW, ENTITY_ROW};
+    use crate::canvas::{COMPARTMENT_GAP, ENTITY_FIRST_ROW, ENTITY_ROW};
     let rows = |n: usize| n.max(1) as f64;
-    let slots = rows(attributes) + 0.5 + rows(operations);
+    let slots = rows(attributes) + f64::from(COMPARTMENT_GAP) + rows(operations);
     (f64::from(ENTITY_FIRST_ROW) + 9.0 + slots * f64::from(ENTITY_ROW)).clamp(archforge_uml::CLASS_SIZE.1, archforge_diagram::rules::MAX_SIZE)
 }
 
@@ -1156,9 +1157,8 @@ pub(crate) fn open_sample(shell: &mut Shell) -> Result<Uuid, String> {
         .iter()
         .filter_map(|(n, x, y)| {
             let c = by_name(n)?;
-            let count = |n: usize| n.max(1) as f64;
-            let rows = count(archforge_uml::members::attributes(store, c).len()) + count(archforge_uml::members::operations(store, c).len());
-            Some((uuid(c), *x, *y, 77.0 + (rows + 0.5) * 20.0 + 6.0))
+            let height = members_height(archforge_uml::members::attributes(store, c).len(), archforge_uml::members::operations(store, c).len());
+            Some((uuid(c), *x, *y, height))
         })
         .collect();
     let lines: Vec<(String, bool)> = store

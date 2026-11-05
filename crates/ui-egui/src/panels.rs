@@ -450,6 +450,38 @@ pub(crate) fn select_field(
     field
 }
 
+/// [`select_field`] for a package's path, its names from the top in `parts` (`Commerce platform
+/// › Orders`): too long for the field, it is cut from its front, so the package's own name shows
+/// (`… › Orders`); the whole path is its tooltip and accessible name.
+pub(crate) fn path_select_field(
+    shell: &mut Shell,
+    ui: &egui::Ui,
+    p: &Palette,
+    at: egui::Pos2,
+    width: f32,
+    id: &str,
+    label: &str,
+    parts: &[String],
+    menu: Menu,
+) -> Rect {
+    let paint = ui.painter();
+    let path = parts.join(PATH_SEP);
+    ux::text(paint, at, label, types::CAPTION, p.text_secondary, Some(width.max(0.0)));
+    let field = Rect::from_min_size(at + vec2(0.0, 17.0), vec2(width.max(0.0), FIELD));
+    paint.rect_filled(field, 6.0, p.field);
+    ux::text_mid_front(paint, field.left() + 8.0, field.center().y, parts, PATH_SEP, types::SMALL, p.text, (width - 36.0).max(0.0));
+    ux::icon_mid(paint, pos2(field.right() - 14.0, field.center().y), &icons::CHEVRON_DOWN, p.text_secondary);
+    let resp = control(shell, ui, id, "select", field, true).accessible_name(format!("{label}: {path}"));
+    let resp = if path.is_empty() { resp } else { resp.on_hover_text(&path) };
+    if resp.clicked() {
+        shell.panels.menu = if shell.panels.menu == Some(menu) { None } else { Some(menu) };
+    }
+    field
+}
+
+/// What joins a package's path: `Commerce platform › Orders`.
+pub(crate) const PATH_SEP: &str = " › ";
+
 /// An editable select: what it shows and offers.
 pub(crate) struct Combo<'a> {
     pub id: &'a str,
@@ -668,19 +700,58 @@ fn combo_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, r: Re
 /// A menu under `anchor` with `items`; gives the index picked, closing the menu on a pick or a
 /// click elsewhere.
 pub(crate) fn menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, id: &str, items: &[String]) -> Option<usize> {
-    menu_noted(shell, ui, p, anchor, id, items, &[])
+    menu_frame(shell, ui, p, anchor, id, MenuRows { items, notes: &[], item_parts: &[], note_parts: &[] }, 0.0)
 }
 
 /// [`menu`] with a muted note after an item's text where `notes` has one (empty for none), such as
 /// the package that tells two types of one name apart; the note joins the row's accessible name.
-pub(crate) fn menu_noted(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, id: &str, items: &[String], notes: &[String]) -> Option<usize> {
-    let full = 8.0 + items.len() as f32 * MENU_ROW;
-    // Under the field, else above it; longer than either side has room for, it takes the side with
-    // more and its rows scroll.
+/// `note_parts` holds a note's parts when it is a package's path: too long for its row, it folds
+/// from its front (`… › Orders › EU`) and the row's tooltip says it whole.
+pub(crate) fn menu_noted(
+    shell: &mut Shell,
+    ui: &egui::Ui,
+    p: &Palette,
+    anchor: Rect,
+    id: &str,
+    items: &[String],
+    notes: &[String],
+    note_parts: &[Vec<String>],
+) -> Option<usize> {
+    let width = noted_width(ui, p, items, notes);
+    menu_frame(shell, ui, p, anchor, id, MenuRows { items, notes, item_parts: &[], note_parts }, width)
+}
+
+/// [`menu`] of package paths, each given by its names from the top (`paths`): as wide as the
+/// longest needs, inside the window; a path still too long folds from its front, so the packages
+/// at its end, the ones that tell it apart, show (`… › Orders › EU`), and its row's tooltip says
+/// it whole.
+pub(crate) fn menu_paths(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, id: &str, paths: &[Vec<String>]) -> Option<usize> {
+    let items: Vec<String> = paths.iter().map(|parts| parts.join(PATH_SEP)).collect();
+    let width = {
+        let paint = ui.painter();
+        items.iter().take(MAX_MEASURED).map(|t| 8.0 + 10.0 + ux::galley(paint, t, types::SMALL, p.text, None).size().x + 10.0).fold(0.0, f32::max)
+    };
+    menu_frame(shell, ui, p, anchor, id, MenuRows { items: &items, notes: &[], item_parts: paths, note_parts: &[] }, width)
+}
+
+/// What a menu's rows show: each item, its muted note (empty for none), and, where the item or the
+/// note is a package's path, its parts, which fold from the front when the row is too narrow.
+#[derive(Clone, Copy)]
+struct MenuRows<'a> {
+    items: &'a [String],
+    notes: &'a [String],
+    item_parts: &'a [Vec<String>],
+    note_parts: &'a [Vec<String>],
+}
+
+/// The open menu under `anchor`, at least `wanted` wide and as wide as the anchor, inside the
+/// window: under the field, else above it; longer than either side has room for, it takes the
+/// side with more and its rows scroll.
+fn menu_frame(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, id: &str, rows: MenuRows<'_>, wanted: f32) -> Option<usize> {
+    let full = 8.0 + rows.items.len() as f32 * MENU_ROW;
     let window = ui.ctx().content_rect();
     let (below, above) = (window.bottom() - 8.0 - (anchor.bottom() + 4.0), anchor.top() - 4.0 - (window.top() + 8.0));
-    let width = noted_width(ui, p, items, notes).max(anchor.width()).min((window.width() - 16.0).max(anchor.width()));
-    // As wide as its noted rows need, kept inside the window.
+    let width = wanted.max(anchor.width()).min((window.width() - 16.0).max(anchor.width()));
     let left = anchor.left().min(window.right() - 8.0 - width).max(window.left() + 8.0);
     let r = if full <= below.max(0.0) || (full > above && below >= above) {
         Rect::from_min_size(pos2(left, anchor.bottom() + 4.0), vec2(width, full.min(below.max(8.0 + MENU_ROW))))
@@ -688,7 +759,7 @@ pub(crate) fn menu_noted(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: 
         let height = full.min(above.max(8.0 + MENU_ROW));
         Rect::from_min_size(pos2(left, anchor.top() - 4.0 - height), vec2(width, height))
     };
-    ux::overlay(ui, crate::widgets::egui_id(&format!("{id}.layer")), r, |ui| menu_body(shell, ui, p, anchor, r, id, items, notes))
+    ux::overlay(ui, crate::widgets::egui_id(&format!("{id}.layer")), r, |ui| menu_body(shell, ui, p, anchor, r, id, rows))
 }
 
 /// A menu row's height.
@@ -696,6 +767,8 @@ const MENU_ROW: f32 = 30.0;
 /// The most noted rows a menu measures for its width: a note marks a name several types share,
 /// which few do, and the rest fit or are cut as any row is.
 const MAX_NOTED: usize = 64;
+/// The most path rows a menu of paths measures for its width; the rest fold to fit.
+const MAX_MEASURED: usize = 256;
 
 /// How wide a menu is to show its noted rows whole, each item, a gap and its muted note inside the
 /// row's insets; nothing without a note. Only the first [`MAX_NOTED`] noted rows are measured.
@@ -722,13 +795,17 @@ pub struct TypeChoices {
     pub labels: Vec<String>,
     pub values: Vec<String>,
     pub notes: Vec<String>,
+    /// Each note's parts, a package's path by its names, folded from its front when its row is
+    /// too narrow; empty for none.
+    pub note_parts: Vec<Vec<String>>,
 }
 
 /// The open menu's frame inside `r`: its rows, those in sight laid out, each with its note muted
 /// after its text where `notes` has one; the wheel and the arrow keys scroll, Enter or a click
 /// picks, Escape or a press elsewhere closes.
 #[allow(clippy::too_many_arguments, reason = "a menu is drawn for its anchor, frame, id, items and notes")]
-fn menu_body(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, r: Rect, id: &str, items: &[String], notes: &[String]) -> Option<usize> {
+fn menu_body(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, r: Rect, id: &str, rows_of: MenuRows<'_>) -> Option<usize> {
+    let MenuRows { items, notes, item_parts, note_parts } = rows_of;
     let paint = ui.painter();
     ux::shadow(paint, r, 8.0, p.shadow);
     paint.rect_filled(r, 8.0, p.surface);
@@ -786,12 +863,41 @@ fn menu_body(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, r: Rec
             paint.rect_filled(row, 5.0, p.page);
         }
         let room = (row.width() - 20.0).max(0.0);
-        let drawn = ux::text(&paint, row.min + vec2(10.0, 7.5), item, types::SMALL, p.text, Some(room));
+        // A path too long for its room folds from its front, its end, the packages that tell it
+        // apart, kept; the row's tooltip says it whole.
+        let fits = |t: &str, width: f32| ux::galley(&paint, t, types::SMALL, p.text, None).size().x <= width;
+        let mut folded = false;
+        let shown = match item_parts.get(i).filter(|parts| !parts.is_empty()) {
+            Some(parts) => {
+                let (shown, cut) = ux::cut_front(parts, PATH_SEP, |t| fits(t, room));
+                folded |= cut;
+                shown
+            }
+            None => item.clone(),
+        };
+        let drawn = ux::text(&paint, row.min + vec2(10.0, 7.5), &shown, types::SMALL, p.text, Some(room));
         if let Some(n) = note {
             let left = drawn.right() + 6.0;
             let rest = (row.left() + 10.0 + room - left).max(0.0);
-            ux::text(&paint, pos2(left, row.top() + 7.5), n, types::SMALL, p.text_muted, Some(rest));
+            let n = match note_parts.get(i).filter(|parts| !parts.is_empty()) {
+                Some(parts) => {
+                    let (shown, cut) = ux::cut_front(parts, PATH_SEP, |t| fits(t, rest));
+                    folded |= cut;
+                    shown
+                }
+                None => n.clone(),
+            };
+            ux::text(&paint, pos2(left, row.top() + 7.5), &n, types::SMALL, p.text_muted, Some(rest));
         }
+        let resp = if folded {
+            let whole = match note {
+                Some(n) => fmt(&tr("{name} · {where}"), &[("name", item), ("where", n)]),
+                None => item.clone(),
+            };
+            resp.on_hover_text(whole)
+        } else {
+            resp
+        };
         if resp.clicked() || (enter && reached == Some(i)) {
             picked = Some(i);
         }

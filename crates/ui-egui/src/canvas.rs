@@ -48,6 +48,12 @@ const TOOLBAR_GAP: f32 = 14.0;
 pub(crate) const ENTITY_HEADER: f32 = 66.0;
 pub(crate) const ENTITY_FIRST_ROW: f32 = 77.0;
 pub(crate) const ENTITY_ROW: f32 = 20.0;
+/// The pitches between the last row of a card's compartment and the first of the next: the
+/// compartment's foot, as far as a card's last row is from its foot, and the next one's head.
+pub(crate) const COMPARTMENT_GAP: f32 = 1.0;
+/// How far a compartment's first row is under the line over it: as far as a card's first row is
+/// under its header's line.
+const COMPARTMENT_TOP: f32 = ENTITY_FIRST_ROW - ENTITY_HEADER;
 const ENTITY_INSET: f32 = 18.0;
 pub(crate) const ENTITY_TEXT: f32 = 42.0;
 /// How strongly a table of another schema shows: the design's 60 %.
@@ -1082,7 +1088,7 @@ fn mini_card(paint: &egui::Painter, p: &Palette, c: &MiniCard, s: f32) {
     let mut y = r.top() + ENTITY_FIRST_ROW * s;
     for (i, rows) in c.rows.iter().enumerate() {
         if i > 0 {
-            y += 0.5 * ENTITY_ROW * s;
+            y += COMPARTMENT_GAP * ENTITY_ROW * s;
         }
         for _ in 0..*rows {
             bar(y + 4.0 * s, 0.45, 5.0 * s, p.border);
@@ -1092,40 +1098,25 @@ fn mini_card(paint: &egui::Painter, p: &Palette, c: &MiniCard, s: f32) {
 }
 
 /// The row of `card` at `y` units below its top, counted across its compartments as
-/// [`draw_rows`] lays them out; none on a dividing line or past the last row.
+/// [`draw_rows`] lays them out: a row takes its pitch from a little over its top; none on a
+/// compartment's padding or past the last row.
 pub(crate) fn row_at(card: &archforge_diagram::figure::Card, y: f32) -> Option<usize> {
-    let mut slot = 0.0_f32;
-    let mut index = 0;
-    for (c, rows) in card.compartments.iter().enumerate() {
-        if c > 0 {
-            slot += 0.5;
-        }
-        if rows.is_empty() && card.compartments.len() > 1 {
-            slot += 1.0;
-        }
-        for _ in rows {
-            let top = ENTITY_FIRST_ROW - 4.0 + slot * ENTITY_ROW;
-            if (top..top + ENTITY_ROW).contains(&y) {
-                return Some(index);
-            }
-            index += 1;
-            slot += 1.0;
-        }
-    }
-    None
+    slots(card).into_iter().filter(|(_, s, _)| matches!(s, Slot::Row(_))).position(|(top, _, _)| (top - 4.0..top - 4.0 + ENTITY_ROW).contains(&y))
 }
 
 /// A card's places under its header, each with its top in units below the card's and the
-/// compartment it is in: a row a pitch apart, half a pitch and a dividing line between
-/// compartments, an empty compartment of several still a row.
+/// compartment it is in: a row a pitch apart, an empty compartment of several still a row. Each
+/// compartment is padded as the card's first and last are: its rows start as far under its
+/// dividing line as the first row under the header's, and end as far over the next line as the
+/// last row over the card's foot, so a pitch and a dividing line part two compartments.
 fn slots(card: &archforge_diagram::figure::Card) -> Vec<(f32, Slot<'_>, usize)> {
     let mut out = Vec::new();
     // Where the next row sits, in pitches below the first.
     let mut at = 0.0_f32;
     for (c, rows) in card.compartments.iter().enumerate() {
         if c > 0 {
-            out.push((ENTITY_FIRST_ROW + at * ENTITY_ROW - 4.0, Slot::Line, c));
-            at += 0.5;
+            at += COMPARTMENT_GAP;
+            out.push((ENTITY_FIRST_ROW + at * ENTITY_ROW - COMPARTMENT_TOP, Slot::Line, c));
         }
         if rows.is_empty() && card.compartments.len() > 1 {
             out.push((ENTITY_FIRST_ROW + at * ENTITY_ROW, Slot::Empty, c));
@@ -1331,24 +1322,40 @@ fn mark_shape(mark: EndMark, tip: Pos2, back: Pos2, z: f32) -> (Vec2, Pos2, Vec2
     (dir, tip - dir * len, vec2(-dir.y, dir.x) * half, len)
 }
 
-/// Draws a line's triangle, diamond or open arrow at `tip`, coming from `back`, a hollow one filled
-/// with `bg`.
-#[allow(clippy::too_many_arguments, reason = "a mark is drawn at its end, in its stroke and over what it is drawn on")]
-pub(crate) fn line_mark(paint: &egui::Painter, mark: EndMark, tip: Pos2, back: Pos2, stroke: Stroke, z: f32, bg: egui::Color32) {
+/// The corners of a line's mark as it is drawn at `tip`, coming from `back`: a triangle's tip and
+/// base corners, a diamond's four corners, an open arrow's tip and the ends of its two strokes;
+/// none for any other mark.
+pub(crate) fn mark_outline(mark: EndMark, tip: Pos2, back: Pos2, z: f32) -> Vec<Pos2> {
     let (dir, base, side, len) = mark_shape(mark, tip, back, z);
     match mark {
-        EndMark::Triangle => {
-            paint.add(egui::Shape::convex_polygon(vec![tip, base + side, base - side], bg, stroke));
-        }
+        EndMark::Triangle => vec![tip, base + side, base - side],
         EndMark::HollowDiamond | EndMark::FilledDiamond => {
             let middle = tip - dir * (len / 2.0);
-            let fill = if mark == EndMark::FilledDiamond { stroke.color } else { bg };
-            paint.add(egui::Shape::convex_polygon(vec![tip, middle + side, base, middle - side], fill, stroke));
+            vec![tip, middle + side, base, middle - side]
         }
         EndMark::OpenArrow => {
             let back = tip - dir * 12.0 * z.max(0.6);
-            paint.line_segment([tip, back + side], stroke);
-            paint.line_segment([tip, back - side], stroke);
+            vec![tip, back + side, back - side]
+        }
+        _ => Vec::new(),
+    }
+}
+
+/// Draws a line's triangle, diamond or open arrow at `tip`, coming from `back`, a hollow one filled
+/// with `bg`, at its [`mark_outline`].
+#[allow(clippy::too_many_arguments, reason = "a mark is drawn at its end, in its stroke and over what it is drawn on")]
+pub(crate) fn line_mark(paint: &egui::Painter, mark: EndMark, tip: Pos2, back: Pos2, stroke: Stroke, z: f32, bg: egui::Color32) {
+    let outline = mark_outline(mark, tip, back, z);
+    match (mark, outline.as_slice()) {
+        (EndMark::Triangle | EndMark::HollowDiamond, [_, ..]) => {
+            paint.add(egui::Shape::convex_polygon(outline, bg, stroke));
+        }
+        (EndMark::FilledDiamond, [_, ..]) => {
+            paint.add(egui::Shape::convex_polygon(outline, stroke.color, stroke));
+        }
+        (EndMark::OpenArrow, [tip, left, right]) => {
+            paint.line_segment([*tip, *left], stroke);
+            paint.line_segment([*tip, *right], stroke);
         }
         _ => {}
     }
@@ -1522,7 +1529,10 @@ fn draw_edge(
             paint.galley(at + offset, g, p.text_secondary);
         }
         if selected {
-            for q in [points[0], points[n - 1]] {
+            // A square at each end, but where the end's round handle moved past its mark: the
+            // handle marks that end, and a square at the tip would sit on the mark.
+            let moved = end_handles_at(&points, [line.ends[0].mark, line.ends[1].mark], z);
+            for (q, _) in [(points[0], moved[0]), (points[n - 1], moved[1])].into_iter().filter(|(_, at)| at.is_none()) {
                 let h = Rect::from_center_size(q, Vec2::splat(6.0));
                 paint.rect_filled(h, 1.0, p.surface);
                 paint.rect_stroke(h, 1.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
@@ -1586,6 +1596,139 @@ fn bare_name(paint: &egui::Painter, d: &Drawing<'_>, element: Obj, points: &[Pos
     let rect = Rect::from_min_size(at, g.size());
     paint.galley(at, g, p.text_secondary);
     Some(rect)
+}
+
+/// The radius of a selected line's end handle, and the room between it and the end's mark.
+pub(crate) const END_HANDLE: f32 = 5.0;
+const END_HANDLE_GAP: f32 = 3.0;
+
+/// A selected line's end handle's hit box across, which two handles must not share.
+pub(crate) const END_HANDLE_HIT: f32 = 16.0;
+/// The step a handle's place is looked for in along the line, and the most steps taken.
+const END_HANDLE_STEP: f32 = 0.5;
+const END_HANDLE_STEPS: usize = 4096;
+
+/// Where a selected line's end handle sits when its end's mark (an arrowhead, a triangle, a
+/// diamond) would hide under it, `points` running from that end along the line: the first place
+/// along the line a few points clear of the mark as drawn ([`mark_outline`]), measured from the
+/// mark itself, so a bend close to the end never brings the handle onto it. It goes no further
+/// than half a hit box short of the line's middle, so the two ends' handles stay apart and both
+/// take a press on a short line. None, the handle on the end itself, for an end without such a
+/// mark or a line of no length.
+pub(crate) fn end_handle_at(points: &[Pos2], mark: EndMark, z: f32) -> Option<Pos2> {
+    let (&tip, &next) = (points.first()?, points.get(1)?);
+    let outline = mark_outline(mark, tip, next, z);
+    let total: f32 = points.windows(2).map(|w| (w[1] - w[0]).length()).sum();
+    if outline.is_empty() || total <= 0.0 || !total.is_finite() {
+        return None;
+    }
+    let limit = (total / 2.0 - END_HANDLE_HIT / 2.0).max(0.0);
+    let clear = END_HANDLE + END_HANDLE_GAP;
+    // The steps short of `limit`, at most END_HANDLE_STEPS of them, then `limit` itself once, so
+    // the farthest place is looked at too and none is looked at twice.
+    let steps = (limit / END_HANDLE_STEP).ceil().clamp(0.0, END_HANDLE_STEPS as f32) as usize;
+    let at = (0..steps)
+        .map(|i| i as f32 * END_HANDLE_STEP)
+        .filter(|d| *d < limit)
+        .chain(std::iter::once(limit))
+        .map(|d| at_length(points, d))
+        .find(|at| outside_by(&outline, *at) >= clear);
+    Some(at.unwrap_or_else(|| at_length(points, limit)))
+}
+
+/// The most places along each half of a line the two end handles are tried at together.
+const END_HANDLE_TRIES: usize = 64;
+
+/// Where a selected line's two end handles sit, `points` running from its first end to its
+/// second, `marks` its ends' marks: each as [`end_handle_at`] places it (None, on its end), unless
+/// the two hit boxes would meet on screen, as on a short line bent back on itself. Then the pair
+/// is chosen together, each on its own half of the line, so the boxes stay apart: one that clears
+/// both marks if there is one, else one that keeps both pressable, falling short of the marks'
+/// clearance by as little as it can; the nearest to where they were placed alone. Where no two
+/// places are apart, the pair furthest apart is taken.
+pub(crate) fn end_handles_at(points: &[Pos2], marks: [EndMark; 2], z: f32) -> [Option<Pos2>; 2] {
+    let backwards: Vec<Pos2> = points.iter().rev().copied().collect();
+    let alone = [end_handle_at(points, marks[0], z), end_handle_at(&backwards, marks[1], z)];
+    let (Some(&start), Some(&end)) = (points.first(), points.last()) else { return alone };
+    let placed = [alone[0].unwrap_or(start), alone[1].unwrap_or(end)];
+    let total: f32 = points.windows(2).map(|w| (w[1] - w[0]).length()).sum();
+    if handles_apart(placed[0], placed[1]) || points.len() < 2 || total <= 0.0 || !total.is_finite() {
+        return alone;
+    }
+    // Each end's places on its own half, with how far each falls short of clearing its mark.
+    let half = total / 2.0;
+    let step = half / END_HANDLE_TRIES as f32;
+    let clear = END_HANDLE + END_HANDLE_GAP;
+    let places = |route: &[Pos2], mark: EndMark| -> Vec<(f32, Pos2, f32)> {
+        let outline = route.get(1).map(|next| mark_outline(mark, route[0], *next, z)).unwrap_or_default();
+        (0..=END_HANDLE_TRIES)
+            .map(|i| {
+                let d = i as f32 * step;
+                let at = at_length(route, d);
+                let short = if outline.is_empty() { 0.0 } else { (clear - outside_by(&outline, at)).max(0.0) };
+                (d, at, short)
+            })
+            .collect()
+    };
+    let (first, second) = (places(points, marks[0]), places(&backwards, marks[1]));
+    let mut best: Option<(f32, [(f32, Pos2); 2])> = None;
+    let mut widest: Option<(f32, [(f32, Pos2); 2])> = None;
+    for &(da, a, sa) in &first {
+        for &(db, b, sb) in &second {
+            let gap = (a.x - b.x).abs().max((a.y - b.y).abs());
+            if widest.is_none_or(|(w, _)| gap > w) {
+                widest = Some((gap, [(da, a), (db, b)]));
+            }
+            if handles_apart(a, b) {
+                // Falling short of a mark's clearance weighs far more than moving a handle.
+                let cost = (sa + sb) * 1000.0 + (a - placed[0]).length() + (b - placed[1]).length();
+                if best.is_none_or(|(c, _)| cost < c) {
+                    best = Some((cost, [(da, a), (db, b)]));
+                }
+            }
+        }
+    }
+    match best.or(widest) {
+        Some((_, pair)) => pair.map(|(d, at)| (d > 0.0).then_some(at)),
+        None => alone,
+    }
+}
+
+/// Whether two end handles at `a` and `b` keep their hit boxes apart on screen, with a point
+/// between them.
+fn handles_apart(a: Pos2, b: Pos2) -> bool {
+    (a.x - b.x).abs().max((a.y - b.y).abs()) >= END_HANDLE_HIT + 1.0
+}
+
+/// The point `d` along the polyline `points` from its start; its end when it is shorter.
+fn at_length(points: &[Pos2], d: f32) -> Pos2 {
+    let mut left = d.max(0.0);
+    for w in points.windows(2) {
+        let len = (w[1] - w[0]).length();
+        if left <= len {
+            return w[0] + (w[1] - w[0]) * if len > 0.0 { left / len } else { 0.0 };
+        }
+        left -= len;
+    }
+    points.last().copied().unwrap_or(Pos2::ZERO)
+}
+
+/// How far `at` is outside the convex `outline`: its distance to the nearest edge, none inside.
+fn outside_by(outline: &[Pos2], at: Pos2) -> f32 {
+    let n = outline.len();
+    let edges = || (0..n).filter_map(|i| Some((*outline.get(i)?, *outline.get((i + 1) % n)?)));
+    let cross = |(a, b): (Pos2, Pos2)| (b - a).x * (at - a).y - (b - a).y * (at - a).x;
+    let inside = n >= 3 && (edges().all(|e| cross(e) >= 0.0) || edges().all(|e| cross(e) <= 0.0));
+    if inside {
+        return 0.0;
+    }
+    edges()
+        .map(|(a, b)| {
+            let ab = b - a;
+            let t = if ab.length_sq() > 0.0 { ((at - a).dot(ab) / ab.length_sq()).clamp(0.0, 1.0) } else { 0.0 };
+            (at - (a + ab * t)).length()
+        })
+        .fold(f32::INFINITY, f32::min)
 }
 
 /// How far a line's end mark reaches back along the line from its tip, and how far it spreads to
