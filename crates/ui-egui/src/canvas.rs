@@ -1991,7 +1991,6 @@ pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
         .map(|(_, _, hint)| *hint)
         .chain(["Key status", "Grid", "complete", "disjoint", "overlapping", "Arrange diagram"])
         .chain(crate::kinds::KINDS.iter().flat_map(|k| k.tools().iter().flat_map(|t| std::iter::once(t.hint).chain(t.chevron.map(|(_, hint)| hint)))))
-        .chain(crate::kinds::KINDS.iter().filter_map(|k| k.adorner().map(|(_, hint)| hint)))
         .chain(archforge_er::figures::WORDS.iter().copied())
         .chain(archforge_uml::WORDS.iter().copied())
 }

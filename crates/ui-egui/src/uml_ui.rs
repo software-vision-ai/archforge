@@ -1,8 +1,8 @@
 //! What UML brings to the shell: the class diagram's tools and gestures (the
 //! classifier tool places a class, an interface or an enumeration named in place, its card renames
 //! in place), and its packages, classes, interfaces and enumerations in the Models tree, the search
-//! and Properties. An enumeration's literals show read-only: editing them comes with their own
-//! story.
+//! and Properties. An enumeration's literals are typed on its card and edited in Properties and
+//! Models, as a class's members are (AR-122).
 
 use archforge_mof::{Obj, Store, Uuid};
 use archforge_uml::commands::{classifiers, package_of, packages};
@@ -38,17 +38,17 @@ fn is_enumeration(store: &Store, o: Obj) -> bool {
     class(store, o) == Some(archforge_uml::ENUMERATION)
 }
 
-/// The enumeration a literal belongs to.
-pub(crate) fn literal_of(store: &Store, o: Obj) -> Option<Obj> {
-    if class(store, o)? != archforge_uml::ENUMERATION_LITERAL {
-        return None;
+/// The enumeration `o` is, or the one whose literal it is: where Models' `+` adds a literal.
+fn enumeration_at(store: &Store, o: Obj) -> Option<Obj> {
+    if is_enumeration(store, o) {
+        return Some(o);
     }
-    store.container(o).ok().flatten().map(|(e, _)| e).filter(|e| is_enumeration(store, *e))
+    member_of(store, o).filter(|(_, kind)| *kind == MemberKind::Literal).map(|(e, _)| e)
 }
 
 /// The classifier a member or a literal belongs to: what Properties shows for it.
 fn owner_of(store: &Store, o: Obj) -> Option<Obj> {
-    member_of(store, o).map(|(c, _)| c).or_else(|| literal_of(store, o))
+    member_of(store, o).map(|(c, _)| c)
 }
 
 /// The class diagram in the shell.
@@ -167,12 +167,6 @@ impl DiagramKind for UmlKind {
     /// A class, an interface or an enumeration takes part in the class diagram's gestures.
     fn takes_part(&self, store: &Store, element: Obj) -> bool {
         classifier(store, element)
-    }
-
-    /// A class's or an interface's card takes new attributes and operations; an enumeration's
-    /// takes none, its literals coming with their own story.
-    fn takes_rows(&self, store: &Store, element: Obj) -> bool {
-        !is_enumeration(store, element)
     }
 
     /// A class, an interface or an enumeration, as the classifier tool's kind says, in the diagram's
@@ -295,16 +289,17 @@ impl DiagramKind for UmlKind {
         class(store, element) == Some(archforge_uml::PACKAGE)
     }
 
-    /// The class in Properties with the editor of the member at `row` of its card (its
-    /// attributes, then its operations), or of a new attribute. An enumeration opens in Properties,
-    /// where its literals are listed.
+    /// The member at `row` of the classifier's card (its attributes, then its operations; an
+    /// enumeration's literals), or a new attribute (a new literal), typed in place on the card, or
+    /// in Properties' editor where the card cannot hold it.
     fn open(&self, shell: &mut Shell, element: Uuid, row: Option<usize>) {
-        if enumeration_in_properties(shell, element) {
-            return;
-        }
+        let enumeration = shell.session.as_ref().is_some_and(|s| s.doc().by_uuid(element).is_some_and(|e| is_enumeration(s.doc(), e)));
         let member = row.and_then(|row| {
             let store = shell.session.as_ref()?.doc();
             let c = store.by_uuid(element)?;
+            if enumeration {
+                return Some((MemberKind::Literal, store.uuid(*archforge_uml::commands::literals(store, c).get(row)?).ok()?));
+            }
             let attributes = archforge_uml::members::attributes(store, c);
             let (kind, o) = match attributes.get(row) {
                 Some(a) => (MemberKind::Attribute, *a),
@@ -312,7 +307,8 @@ impl DiagramKind for UmlKind {
             };
             Some((kind, store.uuid(o).ok()?))
         });
-        let (kind, target) = member.map_or((MemberKind::Attribute, None), |(kind, id)| (kind, Some(id)));
+        let new = if enumeration { MemberKind::Literal } else { MemberKind::Attribute };
+        let (kind, target) = member.map_or((new, None), |(kind, id)| (kind, Some(id)));
         // Typed in place on the card; Properties' editor where the card cannot hold it.
         if crate::uml_inline::open(shell, element, kind, target) {
             return;
@@ -322,14 +318,15 @@ impl DiagramKind for UmlKind {
         crate::uml_panel::open(shell, element, kind, target);
     }
 
-    /// A selected card's second adorner adds an attribute, on a card that takes new rows.
-    fn adorner(&self) -> Option<(&'static str, &'static str)> {
-        Some(("add-attribute", "Add attribute"))
+    /// A selected card's second adorner adds an attribute, or an enumeration's a literal.
+    fn adorner(&self, store: &Store, element: Obj) -> Option<(&'static str, &'static str)> {
+        Some(if is_enumeration(store, element) { ("add-literal", "Add literal") } else { ("add-attribute", "Add attribute") })
     }
 
-    /// A class's operation, typed in place as its attribute is; an enumeration opens in Properties.
+    /// A class's operation, typed in place as its attribute is; an enumeration takes no operation,
+    /// so ⇧⌘↩ adds nothing to it.
     fn open_second(&self, shell: &mut Shell, element: Uuid) {
-        if enumeration_in_properties(shell, element) {
+        if shell.session.as_ref().is_some_and(|s| s.doc().by_uuid(element).is_some_and(|e| is_enumeration(s.doc(), e))) {
             return;
         }
         if !crate::uml_inline::open(shell, element, MemberKind::Operation, None) {
@@ -339,7 +336,7 @@ impl DiagramKind for UmlKind {
         }
     }
 
-    /// The + of each compartment.
+    /// The + of each compartment: a class's attributes and operations, an enumeration's literals.
     fn card_controls(&self, shell: &mut Shell, ui: &egui::Ui, p: &Palette, clip: Rect, rect: Rect, element: Uuid) {
         crate::uml_inline::add_buttons(shell, ui, p, clip, rect, element);
     }
@@ -373,17 +370,6 @@ impl DiagramKind for UmlKind {
         let (width, _) = archforge_uml::CLASS_SIZE;
         crate::editing::place_with_lines(shell, d, c, at, (width, content_height(store, c)), &links, &notation, &kind.place_step());
     }
-}
-
-/// When `element` is an enumeration, selects it and shows it in Properties, where its literals are
-/// listed, and says so: its card takes no new rows of its own yet.
-fn enumeration_in_properties(shell: &mut Shell, element: Uuid) -> bool {
-    let enumeration = shell.session.as_ref().is_some_and(|s| s.doc().by_uuid(element).is_some_and(|e| is_enumeration(s.doc(), e)));
-    if enumeration {
-        let _ = crate::editing::run(shell, "view.select", json!({ "ids": [element.to_string()] }));
-        shell.state.show_panel(crate::state::Panel::Properties);
-    }
-    enumeration
 }
 
 /// The Package tool: a package in the diagram's package, its card centred under the click, and the
@@ -487,12 +473,17 @@ pub(crate) fn members_height(attributes: usize, operations: usize) -> f64 {
 }
 
 /// Every card of class `c`, on every diagram, too short for its members once it has `more`
-/// attributes and operations besides those it has: each with its width and the height that shows
-/// them all. A card is only ever grown, so one the user made taller keeps its height.
+/// attributes and operations besides those it has (an enumeration: `more.0` literals): each with
+/// its width and the height that shows them all. A card is only ever grown, so one the user made
+/// taller keeps its height.
 pub(crate) fn short_cards(store: &Store, c: Obj, more: (usize, usize)) -> Vec<(Uuid, f64, f64)> {
-    let attributes = archforge_uml::members::attributes(store, c).len().saturating_add(more.0);
-    let operations = archforge_uml::members::operations(store, c).len().saturating_add(more.1);
-    let needed = members_height(attributes, operations);
+    let needed = if is_enumeration(store, c) {
+        literals_height(archforge_uml::commands::literals(store, c).len().saturating_add(more.0))
+    } else {
+        let attributes = archforge_uml::members::attributes(store, c).len().saturating_add(more.0);
+        let operations = archforge_uml::members::operations(store, c).len().saturating_add(more.1);
+        members_height(attributes, operations)
+    };
     archforge_diagram::views_of(store, c)
         .2
         .into_iter()
@@ -522,15 +513,17 @@ impl NotationUi for UmlUi {
         package_rows(store, package, 0, t)
     }
 
-    /// What Models' `+` offers at the selection: a class, an interface, an enumeration and a
-    /// package in its package, else a package.
+    /// What Models' `+` offers at the selection: a literal first at an enumeration or one of its
+    /// literals, then a class, an interface, an enumeration and a package in its package, else a
+    /// package.
     fn offers(&self, store: &Store, selection: Option<Obj>) -> Vec<Offer> {
         let offer = |key, word: String| Offer { key, word };
         // A classifier of each kind or a package goes into the selected package, or the package of
         // what is selected.
         match selection.and_then(|o| home_of(store, o)) {
             Some(_) => {
-                let mut out: Vec<Offer> = Classifier::ALL.iter().map(|k| offer(k.key(), k.word())).collect();
+                let literal = selection.and_then(|o| enumeration_at(store, o)).map(|_| offer("literal", tr("Literal")));
+                let mut out: Vec<Offer> = literal.into_iter().chain(Classifier::ALL.iter().map(|k| offer(k.key(), k.word()))).collect();
                 out.push(offer("package", tr("Package")));
                 out
             }
@@ -546,6 +539,18 @@ impl NotationUi for UmlUi {
         // The packages it sits under open, so its row shows.
         let mut parents: Vec<Uuid> = home.map(|h| chain(store, h)).unwrap_or_default().into_iter().filter_map(|p| store.uuid(p).ok()).collect();
         let out = match key {
+            "literal" => {
+                // At the end of the selected enumeration, or of the selected literal's, its card
+                // growing to show it.
+                let e = sel.and_then(|o| enumeration_at(store, o))?;
+                let taken = archforge_uml::commands::literals(store, e).into_iter().map(|l| name(store, l));
+                let Some(name) = fresh_name("Literal", taken, false) else { return no_name() };
+                let id = store.uuid(e).ok()?;
+                parents.push(id);
+                let edit = crate::uml_panel::MemberEdit { name, ..crate::uml_panel::edit_of(Some(store), id, MemberKind::Literal, None) };
+                let (cmd, params) = crate::uml_panel::command_of(&edit);
+                crate::uml_panel::write_in_sight(shell, &edit, cmd, params)
+            }
             "package" => {
                 // With nothing selected it goes into the root package, so its name is free there;
                 // without a root yet, the packages at the top are the ones the root takes in.
@@ -576,10 +581,12 @@ impl NotationUi for UmlUi {
         }
     }
 
-    /// The command that renames `obj`, and the key that names it.
+    /// The command that renames `obj`, and the key that names it: a package, a classifier or a
+    /// literal renames in place.
     fn rename(&self, store: &Store, obj: Obj) -> Option<(&'static str, &'static str)> {
         match class(store, obj)? {
             c if c == archforge_uml::PACKAGE => Some(("uml.package.rename", "package")),
+            c if c == archforge_uml::ENUMERATION_LITERAL => Some(("uml.literal.rename", "literal")),
             _ => Classifier::of(store, obj).map(Classifier::rename_command),
         }
     }
@@ -708,12 +715,6 @@ impl NotationUi for UmlUi {
         }
     }
 
-    /// A literal is read-only here: removing one on its own comes with its own story, so Delete
-    /// leaves it and says that it goes with its enumeration.
-    fn kept(&self, store: &Store, o: Obj) -> Option<String> {
-        literal_of(store, o).map(|_| tr("Literals are removed with their enumeration"))
-    }
-
     /// How Properties names `o`: its kind line, its word, This …, and On this … · {n}.
     fn words(&self, store: &Store, o: Obj) -> Option<Words> {
         let words = |kind: String, word: String, this: String, on_this: String| Words { kind, word, this, on_this, name: name(store, o) };
@@ -725,9 +726,6 @@ impl NotationUi for UmlUi {
             }
             c if c == archforge_uml::ENUMERATION => {
                 words(tr("Enumeration · model, in every diagram"), tr("Enumeration"), tr("This enumeration"), tr("On this enumeration · {n}"))
-            }
-            c if c == archforge_uml::ENUMERATION_LITERAL => {
-                words(tr("Literal · model"), tr("Literal"), tr("This literal"), tr("On this literal · {n}"))
             }
             c if c == archforge_uml::ASSOCIATION => {
                 words(tr("Association · model"), tr("Association"), tr("This association"), tr("On this association · {n}"))
@@ -747,6 +745,7 @@ impl NotationUi for UmlUi {
             _ => match member_of(store, o)?.1 {
                 MemberKind::Attribute => words(tr("Attribute · model"), tr("Attribute"), tr("This attribute"), tr("On this attribute · {n}")),
                 MemberKind::Operation => words(tr("Operation · model"), tr("Operation"), tr("This operation"), tr("On this operation · {n}")),
+                MemberKind::Literal => words(tr("Literal · model"), tr("Literal"), tr("This literal"), tr("On this literal · {n}")),
             },
         })
     }
@@ -841,7 +840,7 @@ fn package_rows(store: &Store, package: Obj, depth: u8, t: &Tree<'_>) -> Vec<Row
 
 /// A classifier's rows: itself, draggable onto a diagram or a package, then, when open, its
 /// skills, its attributes and operations, each with its type, or an enumeration's literals in
-/// their order, read-only.
+/// their order, each renamed in place and removed with Delete.
 fn class_rows(store: &Store, c: Obj, depth: u8, t: &Tree<'_>) -> Vec<Row> {
     let mut members = t.skill_rows(c, depth.saturating_add(1));
     for l in archforge_uml::commands::literals(store, c) {
@@ -881,42 +880,21 @@ fn class_rows(store: &Store, c: Obj, depth: u8, t: &Tree<'_>) -> Vec<Row> {
     out
 }
 
-/// Puts literals named `names` at the end of the enumeration `enumeration` straight in the store,
-/// as a saved project holds them, for the snapshot screens and the tests: the open project is read
-/// back from its rows with them into a new session, saved as it stands. Commands for literals come
-/// with their own story.
+/// Adds literals named `names` at the end of the enumeration `enumeration` through
+/// `uml.literal.add`, as one step, for the snapshot screens and the tests; the project is then
+/// marked saved as it stands.
 #[cfg(any(test, feature = "snapshot"))]
 pub(crate) fn put_literals(shell: &mut Shell, enumeration: Uuid, names: &[&str]) -> Result<(), String> {
-    use archforge_mof::{Value, rows};
-    let session = shell.session.as_ref().ok_or("the literals need a session")?;
-    let (tables, junctions) = archforge_notations::storage();
-    let saved = rows::snapshot(session.doc(), &tables, &junctions).map_err(|e| e.to_string())?;
-    let n = std::sync::atomic::AtomicU64::new(1 << 36);
-    let ids = Box::new(move || {
-        let i = n.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let mut r = [0u8; 10];
-        r[2..].copy_from_slice(&i.to_be_bytes());
-        Uuid::v7(1_761_670_800_000, r)
-    });
-    let mut failed: Option<String> = None;
-    let mut session = archforge_notations::session_from_rows_repaired(&saved, ids, |st| {
-        let put = |st: &mut Store| -> Result<(), String> {
-            let e = st.by_uuid(enumeration).filter(|e| is_enumeration(st, *e)).ok_or("no such enumeration")?;
+    let session = shell.session.as_mut().ok_or("the literals need a session")?;
+    session
+        .batch("Add literal", |b| {
             for name in names {
-                let l = st.create(archforge_uml::ENUMERATION_LITERAL).map_err(|e| e.to_string())?;
-                st.set(l, archforge_uml::named_element::NAME, Value::str(name)).map_err(|e| e.to_string())?;
-                st.push(e, archforge_uml::enumeration::OWNED_LITERAL, Value::Ref(l)).map_err(|e| e.to_string())?;
+                b.execute("uml.literal.add", &json!({ "enumeration": enumeration.to_string(), "name": name }))?;
             }
             Ok(())
-        };
-        failed = put(st).err();
-    })?;
-    if let Some(e) = failed {
-        return Err(e);
-    }
-    session.mark_saved().map_err(|e| e.to_string())?;
-    shell.session = Some(session);
-    Ok(())
+        })
+        .map_err(|e| e.to_string())?;
+    session.mark_saved().map_err(|e| e.to_string())
 }
 
 /// A class model to read, for the snapshot screens and the tests: in a package,

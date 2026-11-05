@@ -86,13 +86,6 @@ pub(crate) trait NotationUi: Sync {
         let _ = (store, dragged, target);
         None
     }
-    /// Why Delete leaves `obj` in Models, in the user's words, when it does: by default Delete
-    /// removes every element; one shown read-only (a UML literal, for now) stays, and Models says
-    /// where it goes instead.
-    fn kept(&self, store: &Store, obj: Obj) -> Option<String> {
-        let _ = (store, obj);
-        None
-    }
     /// Why `obj`, which the model says carries no skill, carries none, in the user's words for the
     /// Skills panel ("Relationships carry no skills"); none takes the panel's general line.
     fn no_skills(&self, store: &Store, obj: Obj) -> Option<String> {

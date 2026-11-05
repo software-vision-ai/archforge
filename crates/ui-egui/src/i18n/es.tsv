@@ -563,8 +563,10 @@ plural		+ {n} more element	+ {n} elemento más|+ {n} elementos más
 str		Abstract	Abstracta
 str		Add attribute	Añadir atributo
 str		Add operation	Añadir operación
+str		Add literal	Añadir literal
 str		More details in Properties	Más detalles en Propiedades
 str		There is no type named {name}.	No hay ningún tipo llamado {name}.
+str		There is a literal named {name} already.	Ya hay un literal llamado {name}.
 str		Several types are named {name}; pick one from the menu.	Hay varios tipos llamados {name}; elige uno del menú.
 str		Add parameter	Añadir parámetro
 str		Attribute	Atributo
@@ -574,7 +576,6 @@ str		Literal · model	Literal · modelo
 str		Attributes · {n}	Atributos · {n}
 str		Literals · {n}	Literales · {n}
 str		No literals yet	Aún no hay literales
-str		Literals are removed with their enumeration	Los literales se eliminan con su enumeración
 str		Move down	Bajar
 str		Move up	Subir
 str		Multiplicity	Multiplicidad

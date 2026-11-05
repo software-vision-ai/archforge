@@ -1523,14 +1523,13 @@ fn adorners(
 ) {
     let paint = ui.painter().with_clip_rect(r);
     let connect = kind.tools().iter().find(|t| t.use_ == crate::kinds::ToolUse::Connect).map(|t| t.key);
-    // A card that takes no new rows (an enumeration's) shows neither the second adorner nor its
-    // card's controls.
-    let takes_rows = shell.session.as_ref().is_some_and(|s| s.doc().by_uuid(entity).is_some_and(|e| kind.takes_rows(s.doc(), e)));
+    // The second adorner is the element's own: a class's attribute, an enumeration's literal.
+    let second = shell.session.as_ref().and_then(|s| s.doc().by_uuid(entity).and_then(|e| kind.adorner(s.doc(), e)));
     let mut boxes = Vec::new();
     if connect.is_some() {
         boxes.push(("connect", &icons::ADORN_CONNECT, "Connect", pos2(rect.right() + ADORNER_GAP, rect.top() - ADORNER - 6.0), true));
     }
-    if let Some((key, hint)) = kind.adorner().filter(|_| takes_rows) {
+    if let Some((key, hint)) = second {
         boxes.push((key, &icons::ADORN_ADD, hint, pos2(rect.right() + ADORNER_GAP, rect.bottom() - ADORNER + 6.0), true));
     }
     for (key, icon, hint, at, live) in boxes {
@@ -1571,9 +1570,7 @@ fn adorners(
             }
         }
     }
-    if takes_rows {
-        kind.card_controls(shell, ui, p, r, rect, entity);
-    }
+    kind.card_controls(shell, ui, p, r, rect, entity);
 }
 
 /// A selected note's link handle at its top right: dragged onto a table or a relationship's line,
@@ -1733,7 +1730,7 @@ fn rename_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, rect: Rect, z
 
 /// The element menu: the design's rows with their shortcuts. A table's adds its related tables,
 /// its new column and its collapse; any other element's adds the new row its kind's adorner opens
-/// (a class's attribute) when its card takes new rows.
+/// for it (a class's attribute, an enumeration's literal), when it has one.
 fn entity_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, menu: &EntityMenu) {
     let paint = ui.painter().clone();
     let mac = ui.ctx().os() == egui::os::OperatingSystem::Mac;
@@ -1748,11 +1745,10 @@ fn entity_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, menu: &En
         rows.push(("related", "Show related tables", "R", false, false));
     }
     rows.push(("open", "Open in Models", "", true, false));
-    // Only a card that takes new rows offers its kind's new row.
-    let takes_rows = store.zip(element).zip(kind).is_some_and(|((st, e), k)| k.takes_rows(st, e));
+    // Its kind's new row for it, as its adorner names it (a class's attribute, an enumeration's literal).
     if table {
         rows.push(("add-column", "Add column", add_chord, true, false));
-    } else if let Some((_, label)) = kind.and_then(|k| k.adorner()).filter(|_| takes_rows) {
+    } else if let Some((_, label)) = store.zip(element).zip(kind).and_then(|((st, e), k)| k.adorner(st, e)) {
         rows.push(("add-row", label, add_chord, true, false));
     }
     if collapsible {
@@ -1907,10 +1903,10 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
     // The kind's new row, as its adorner opens it (ER's add column).
     if add_column {
         let takes_rows = |k: &&'static dyn crate::kinds::DiagramKind, entity: Uuid| {
-            shell.session.as_ref().is_some_and(|s| s.doc().by_uuid(entity).is_some_and(|e| k.takes_rows(s.doc(), e)))
+            shell.session.as_ref().is_some_and(|s| s.doc().by_uuid(entity).is_some_and(|e| k.adorner(s.doc(), e).is_some()))
         };
         if let [(_, Some(entity))] = selected.as_slice()
-            && let Some(kind) = kind.filter(|k| k.adorner().is_some() && takes_rows(k, *entity))
+            && let Some(kind) = kind.filter(|k| takes_rows(k, *entity))
         {
             if shift { kind.open_second(shell, *entity) } else { kind.open(shell, *entity, None) }
         }

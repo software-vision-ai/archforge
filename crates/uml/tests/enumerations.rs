@@ -3,8 +3,11 @@
 //! a card with the keyword «enumeration» and one compartment of literals, empty when it has none;
 //! taking no attributes or operations; offered as a type, which a member keeps through a rename and
 //! a move; specialized only by and only of enumerations, and joined by no association; saved as rows
-//! and read back identical; the sweep. Literals are put straight in the store here: commands for
-//! them come with their own story.
+//! and read back identical; the sweep. Literals (AR-122) are added, renamed, moved and removed,
+//! each one undo step, keeping their identity, their names told apart within their enumeration
+//! whatever the case; their order is saved and read back; a card lists at most a bounded number
+//! of them and counts the rest. Some tests put literals straight in the store, as a saved project
+//! holds them, so the round trip checks the stored order rather than the order of their ids.
 
 use archforge_diagram::ProjectView;
 use archforge_engine::testing::sweep_with;
@@ -411,6 +414,137 @@ fn enumerations_with_literals_and_relationships_come_back_from_their_rows_identi
     assert_eq!(rows_of(&card(&back, &status, &d)), [vec!["Placed", "Paid", "Shipped"]]);
 }
 
+/// The names of `enumeration`'s literals, in their order.
+fn literal_names(s: &S, enumeration: &str) -> Vec<String> {
+    let st = s.doc();
+    archforge_uml::commands::literals(st, obj(st, enumeration)).into_iter().map(|l| archforge_core::name_of(st, l)).collect()
+}
+
+/// Literals are added at the end or at a place, renamed, moved and removed, each one undo step;
+/// a literal keeps its identity through a rename and a move; names clash within their enumeration
+/// whatever the case, and every refusal names the value it refuses and what is accepted, changing
+/// nothing.
+#[test]
+fn literals_are_added_renamed_moved_and_removed_each_one_step_their_names_apart_whatever_the_case() {
+    let mut s = session();
+    let sales = run(&mut s, "uml.package.add", json!({ "name": "sales" }));
+    let status = run(&mut s, "uml.enumeration.add", json!({ "package": sales, "name": "OrderStatus" }));
+    let other = run(&mut s, "uml.enumeration.add", json!({ "package": sales, "name": "Priority" }));
+    let order = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Order" }));
+    let placed = run(&mut s, "uml.literal.add", json!({ "enumeration": status, "name": "Placed" }));
+    let st = s.doc();
+    assert_eq!(st.class_of(obj(st, &placed)).unwrap(), ENUMERATION_LITERAL);
+    assert_eq!(s.view().selection, vec![obj(st, &placed)], "the new literal is selected");
+    let shipped = one_step(&mut s, "uml.literal.add", json!({ "enumeration": status, "name": "Shipped" }));
+    // At a place: between the two.
+    let paid = one_step(&mut s, "uml.literal.add", json!({ "enumeration": status, "name": "Paid", "at": 1 }));
+    assert_eq!(literal_names(&s, &status), ["Placed", "Paid", "Shipped"]);
+    // The same name in another enumeration is free.
+    run(&mut s, "uml.literal.add", json!({ "enumeration": other, "name": "Paid" }));
+    // Renamed in place: the same element, at the same place; its own name in another case is free.
+    assert_eq!(one_step(&mut s, "uml.literal.rename", json!({ "literal": paid, "name": "Settled" })), paid);
+    assert_eq!(literal_names(&s, &status), ["Placed", "Settled", "Shipped"]);
+    one_step(&mut s, "uml.literal.rename", json!({ "literal": paid, "name": "SETTLED" }));
+    // Moved up and down: the same element at its new place.
+    assert_eq!(one_step(&mut s, "uml.literal.move", json!({ "literal": shipped, "at": 0 })), shipped);
+    assert_eq!(literal_names(&s, &status), ["Shipped", "Placed", "SETTLED"]);
+    one_step(&mut s, "uml.literal.move", json!({ "literal": shipped, "at": 2 }));
+    assert_eq!(literal_names(&s, &status), ["Placed", "SETTLED", "Shipped"]);
+    let st = s.doc();
+    let ids: Vec<String> = archforge_uml::commands::literals(st, obj(st, &status)).into_iter().map(|l| st.uuid(l).unwrap().to_string()).collect();
+    assert_eq!(ids, [placed.clone(), paid.clone(), shipped.clone()], "each keeps its identity");
+    // Refusals: each names the offending value and what is accepted, under its key.
+    for (cmd, p, key, why) in [
+        (
+            "uml.literal.add",
+            json!({ "enumeration": status, "name": "placed" }),
+            "name",
+            "there is a literal named Placed already in OrderStatus, and \\\"placed\\\" matches it",
+        ),
+        ("uml.literal.add", json!({ "enumeration": status, "name": "shipped" }), "name", "choose a name none of OrderStatus's other literals has"),
+        ("uml.literal.rename", json!({ "literal": placed, "name": "Settled" }), "name", "there is a literal named SETTLED already"),
+        ("uml.literal.add", json!({ "enumeration": status, "name": "" }), "name", "the name is empty"),
+        ("uml.literal.add", json!({ "enumeration": status, "name": " Lost" }), "name", "starts or ends with a space"),
+        (
+            "uml.literal.add",
+            json!({ "enumeration": status, "name": "Lost", "at": 4 }),
+            "at",
+            "4 is past the end of 3 literals; a place from 0 to 3, or -1 for the end",
+        ),
+        ("uml.literal.add", json!({ "enumeration": order, "name": "Lost" }), "enumeration", "is not an enumeration"),
+        ("uml.literal.rename", json!({ "literal": order, "name": "Lost" }), "literal", "is not a literal"),
+        ("uml.literal.move", json!({ "literal": placed, "at": 3 }), "at", "3 is past the last literal; a place from 0 to 2"),
+        ("uml.literal.move", json!({ "literal": "nope", "at": 0 }), "literal", "\\\"nope\\\" is not an id"),
+    ] {
+        let e = refused(&mut s, cmd, p.clone());
+        assert!(e.contains(why), "{cmd} {p}: {e}");
+        assert!(e.contains(&format!("key: Some(\"{key}\")")), "{cmd} {p} refused under {key}: {e}");
+    }
+    // The one rule the shell asks too.
+    let st = s.doc();
+    assert_eq!(archforge_uml::members::literal_clash(st, obj(st, &status), "pLaCeD", None), Some(obj(st, &placed)));
+    assert_eq!(archforge_uml::members::literal_clash(st, obj(st, &status), "Placed", Some(obj(st, &placed))), None, "its own name");
+    assert_eq!(archforge_uml::members::literal_owner(st, obj(st, &placed)), Some(obj(st, &status)));
+    // Removed through element.remove, one step; the others keep their order.
+    let before = picture(s.doc());
+    s.execute("element.remove", &json!({ "ids": [paid] })).unwrap();
+    assert_eq!(literal_names(&s, &status), ["Placed", "Shipped"]);
+    let after = picture(s.doc());
+    s.undo().unwrap();
+    assert_eq!(picture(s.doc()), before, "undo of the removal");
+    assert_eq!(literal_names(&s, &status), ["Placed", "SETTLED", "Shipped"]);
+    s.redo().unwrap();
+    assert_eq!(picture(s.doc()), after, "redo of the removal");
+    // uml.class.get gives them in their order.
+    let got = s.execute("uml.class.get", &json!({ "class": status })).unwrap().value;
+    assert_eq!(got["literals"], json!([{ "id": placed, "name": "Placed" }, { "id": shipped, "name": "Shipped" }]));
+}
+
+/// Literals added and moved through the commands keep their order through a save and a reopen.
+#[test]
+fn literals_added_and_moved_keep_their_order_through_save_and_reopen() {
+    let mut s = session();
+    let pkg = run(&mut s, "uml.package.add", json!({ "name": "sales" }));
+    let status = run(&mut s, "uml.enumeration.add", json!({ "package": pkg, "name": "OrderStatus" }));
+    let d = run(&mut s, "diagram.add", json!({ "kind": CLASS_DIAGRAM, "element": pkg }));
+    run(&mut s, "diagram.place", json!({ "diagram": d, "element": status, "x": 0, "y": 0 }));
+    for name in ["Paid", "Shipped", "Cancelled"] {
+        run(&mut s, "uml.literal.add", json!({ "enumeration": status, "name": name }));
+    }
+    let placed = run(&mut s, "uml.literal.add", json!({ "enumeration": status, "name": "Placed", "at": 0 }));
+    let cancelled = archforge_uml::commands::literals(s.doc(), obj(s.doc(), &status))[3];
+    let cancelled = s.doc().uuid(cancelled).unwrap().to_string();
+    run(&mut s, "uml.literal.move", json!({ "literal": cancelled, "at": 1 }));
+    let order = ["Placed", "Cancelled", "Paid", "Shipped"];
+    assert_eq!(literal_names(&s, &status), order);
+    let (tables, junctions) = tables();
+    let saved = rows::snapshot(s.doc(), &tables, &junctions).unwrap();
+    let mut back = store(1 << 30);
+    rows::restore(&mut back, &saved, &tables, &junctions).unwrap();
+    let back = session_over(back);
+    assert_eq!(literal_names(&back, &status), order, "in their order after the reopen");
+    assert_eq!(rows_of(&card(&back, &status, &d)), [order.to_vec()]);
+    let st = back.doc();
+    assert_eq!(st.uuid(archforge_uml::commands::literals(st, obj(st, &status))[0]).unwrap().to_string(), placed, "the same literals");
+}
+
+/// A card lists at most `MAX_CARD_ROWS` literals and counts the rest in `hidden`, so the rows built
+/// every frame stay bounded; a class's members are capped the same way.
+#[test]
+fn a_card_lists_a_bounded_number_of_rows_and_counts_the_rest() {
+    let mut s = session();
+    let pkg = run(&mut s, "uml.package.add", json!({ "name": "sales" }));
+    let status = run(&mut s, "uml.enumeration.add", json!({ "package": pkg, "name": "Codes" }));
+    let d = run(&mut s, "diagram.add", json!({ "kind": CLASS_DIAGRAM, "element": pkg }));
+    let max = archforge_uml::figures::MAX_CARD_ROWS;
+    let names: Vec<String> = (0..max + 3).map(|i| format!("C{i}")).collect();
+    let names: Vec<&str> = names.iter().map(String::as_str).collect();
+    let s = with_literals(&s, &status, &names, 1 << 20);
+    let c = card(&s, &status, &d);
+    assert_eq!((c.compartments[0].len(), c.hidden), (max, 3), "the rest counted, not listed");
+    assert_eq!(c.compartments[0][0].text, "C0", "the first ones listed, in their order");
+}
+
 /// The command sweep, with an enumeration, one of its literals and a class among the ids, breaks
 /// nothing.
 #[test]
@@ -419,11 +553,13 @@ fn the_sweep_over_enumerations_breaks_nothing() {
     let pkg = run(&mut s, "uml.package.add", json!({ "name": "sales" }));
     let status = run(&mut s, "uml.enumeration.add", json!({ "package": pkg, "name": "OrderStatus" }));
     let class = run(&mut s, "uml.class.add", json!({ "package": pkg, "name": "Order" }));
-    let mut s = with_literals(&s, &status, &["Placed"], 1 << 20);
-    let literal = {
-        let st = s.doc();
-        st.uuid(archforge_uml::commands::literals(st, obj(st, &status))[0]).unwrap().to_string()
-    };
+    let literal = run(&mut s, "uml.literal.add", json!({ "enumeration": status, "name": "Placed" }));
+    run(&mut s, "uml.literal.add", json!({ "enumeration": status, "name": "Paid" }));
+    // The literal commands are in the registry the sweep walks.
+    let listed: Vec<String> = s.registry().infos(&s.facts()).into_iter().map(|i| i.id.to_string()).collect();
+    for cmd in ["uml.literal.add", "uml.literal.rename", "uml.literal.move"] {
+        assert!(listed.iter().any(|c| c == cmd), "{cmd} is swept");
+    }
     let ids = [pkg.as_str(), status.as_str(), literal.as_str(), class.as_str(), "not-an-id"];
     let calls = sweep_with(&mut s, &ids, picture).unwrap();
     assert!(calls > 100, "{calls}");
