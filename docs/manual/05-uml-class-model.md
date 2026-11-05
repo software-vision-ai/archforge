@@ -40,7 +40,8 @@ A class is a card with its name and two compartments under it: attributes, then 
 <!-- picture: workspace-inline-member light | Typing an attribute on the card: its name, then its type -->
 
 Built-in types (*Integer*, *String*, *Boolean*, *Real*, *UnlimitedNatural*) are made in a package
-*Types* the first time you use one. For visibility, multiplicity, *static*, *abstract* and an
+*Types* the first time you use one; section 10 says how they sit beside primitive types of your
+own. For visibility, multiplicity, *static*, *abstract* and an
 operation's parameters, use the row's **⋯**, which opens the member's editor in **Properties**.
 **Properties** of a class lists its **Attributes** and **Operations**, each row with its edit
 button.
@@ -213,6 +214,42 @@ empty canvas, a generalization makes a new data type there. A data type carries 
 package's skill can aim at every data type in it.
 
 <!-- picture: workspace-data-type light | The data type Money with its attributes and operation, selected with its members in Properties and under it in Models, the data type Price specializing it, and the class Order whose total and refund it types -->
+
+## 10. Add a primitive type
+
+A primitive type is a plain value of your own, such as a *Sku* or a postcode, with nothing inside
+it: no attributes, no operations. The built-in types *Integer*, *String*, *Boolean*, *Real* and
+*UnlimitedNatural* are primitive types too, but you never make those: they are made for you in the
+package *Types* the first time you use one, and they stay as they are.
+
+1. Open the chevron beside the classifier tool and choose **Primitive type**, below **Data type**.
+   The tool now shows a small box with a ring inside, and its tooltip says *Primitive type*.
+2. Click on the canvas, type *Sku* and press Enter. Its card says `«primitive»` above its name and
+   has no compartment under it: there is nothing to add, so it has no **+**, no add button beside
+   it when selected, no **Add attribute** in its menu, and ⌘↩ opens no row.
+
+Select it to see it in **Properties**: its **Name**, **Package** and **Description**, and nothing
+more. In **Models** it is a row under its package, with nothing below it; the **+** of a package
+offers **Primitive type** after **Data type**, and you can drag one onto a diagram or onto another
+package's row. It shares its package's names with the other classifiers there. The built-in types
+do not appear in **Models** or the search, as before.
+
+A primitive type is offered wherever you choose a type, once. When it has the name of another type,
+say you made your own *Integer*, the type menu lists both and tells them apart with a muted note:
+*built-in* beside the built-in one, the package beside yours. Each pick types the member with the
+one you picked; choosing the built-in *Integer* always means the one in *Types*. Typed by name on a
+card, a name several types share is refused until you pick one from the menu. In the package
+*Types*, the built-in names are kept for the built-in types, so you cannot add your own *Integer*
+there.
+
+The **Relationship** tool draws no association to or from a primitive type, and says so. A
+generalization joins a primitive type only to another primitive type: your *Gtin* may specialize
+your *Sku*. Dragged out of a primitive type onto empty canvas, a generalization makes a new
+primitive type there. No interface realization starts at one; a dependency may lead to or from one.
+Your own primitive types carry skills, and a package's skill can aim at every primitive type in it;
+a skill for every data type does not reach them. The built-in types carry no skills.
+
+<!-- picture: workspace-primitive-type light | The primitive types Sku and Gtin on the Catalog diagram, Gtin specializing Sku, Sku selected with its name, package and description in Properties and listed in Models, and the class Product whose attributes and operation they type -->
 
 ## The result
 

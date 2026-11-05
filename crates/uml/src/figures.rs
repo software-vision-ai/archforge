@@ -1,5 +1,6 @@
 //! What a class diagram draws: a class, an interface or a data type as a plain card, an
-//! interface's eyebrow its keyword «interface» and a data type's «dataType»; an enumeration as a plain card with the keyword «enumeration» and one
+//! interface's eyebrow its keyword «interface» and a data type's «dataType»; a primitive type as a
+//! plain card with the keyword «primitive» over its name and no compartment; an enumeration as a plain card with the keyword «enumeration» and one
 //! compartment of its literals, in their order; a class's, an interface's or a data type's attributes
 //! (visibility, name, type, multiplicity) and its operations (visibility, name, parameters, return
 //! type), its name slanted when it is abstract; an association as a line with its name, its ends'
@@ -13,7 +14,7 @@ use archforge_diagram::figure::{Card, End, EndMark, Line, Row, Text, Tone};
 use archforge_mof::{Obj, Store, Value};
 
 use crate::{
-    ASSOCIATION, AggregationKind, CLASS, DATA_TYPE, DEPENDENCY, ENUMERATION, GENERALIZATION, INTERFACE, INTERFACE_REALIZATION,
+    ASSOCIATION, AggregationKind, CLASS, DATA_TYPE, DEPENDENCY, ENUMERATION, GENERALIZATION, INTERFACE, INTERFACE_REALIZATION, PRIMITIVE_TYPE,
     ParameterDirectionKind, VisibilityKind, association, behavioral_feature, class, dependency, generalization, interface_realization,
     literal_integer, literal_unlimited_natural, multiplicity_element, named_element, operation, parameter, property, typed_element,
 };
@@ -152,12 +153,13 @@ pub fn operation_text(store: &Store, op: Obj) -> String {
 /// it is abstract, its attributes and its operations; one of another package than the diagram's is
 /// drawn as an outsider, its package named in the eyebrow. A class's eyebrow says Class, an
 /// interface's and a data type's their keyword («interface», «dataType»); an enumeration's card is
-/// its own, and a package's too.
+/// its own, a primitive type's too, and a package's.
 pub fn card(store: &Store, c: Obj, diagram: Obj) -> Option<Card> {
     // The eyebrow alone, and with the outsider's package beside it.
     let (here, away, is_class) = match store.class_of(c).ok()? {
         k if k == crate::PACKAGE => return Some(package_card(store, c)),
         k if k == ENUMERATION => return Some(enumeration_card(store, c, diagram)),
+        k if k == PRIMITIVE_TYPE => return Some(primitive_type_card(store, c, diagram)),
         k if k == CLASS => ("Class", "Class · {package}", true),
         k if k == INTERFACE => ("«interface»", "«interface» · {package}", false),
         k if k == DATA_TYPE => ("«dataType»", "«dataType» · {package}", false),
@@ -192,6 +194,26 @@ pub fn card(store: &Store, c: Obj, diagram: Obj) -> Option<Card> {
 fn elsewhere(store: &Store, c: Obj, diagram: Obj) -> Option<Obj> {
     let here = store.get(diagram, archforge_diagram::diagram::ELEMENT).ok().and_then(|v| v.as_ref()).filter(|o| store.is_alive(*o));
     crate::commands::package_of(store, c).filter(|p| here.is_some_and(|h| h != *p))
+}
+
+/// A primitive type's card on `diagram`: the keyword «primitive» in its eyebrow, its package beside
+/// it when it is an outsider, and its name, with no compartment, since it has no members.
+fn primitive_type_card(store: &Store, t: Obj, diagram: Obj) -> Card {
+    let elsewhere = elsewhere(store, t, diagram);
+    let eyebrow = match elsewhere {
+        Some(p) => Text::Said("«primitive» · {package}", vec![("package", name(store, p))]),
+        None => Text::said("«primitive»"),
+    };
+    Card {
+        eyebrow,
+        name: name(store, t),
+        compartments: Vec::new(),
+        more: ("+ {n} more member", "+ {n} more members"),
+        hidden: 0,
+        elsewhere: elsewhere.is_some(),
+        tone: Tone::Plain,
+        slanted: false,
+    }
 }
 
 /// An enumeration's card on `diagram`: the keyword «enumeration» in its eyebrow, its package beside

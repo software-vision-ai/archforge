@@ -6315,10 +6315,8 @@ fn a_class_takes_operations_with_parameters_and_turns_abstract_in_properties() {
     click(&mut h, at);
     let edit = h.state().panels.member.clone().unwrap();
     assert_eq!((edit.name.as_str(), edit.params.len(), edit.is_abstract), ("refund", 2, true));
-    // The model's own Boolean, by its id, rather than a built-in one.
-    let st = h.state().session.as_ref().unwrap().doc();
-    let ty = st.by_uuid(archforge_mof::Uuid::parse(&edit.ty).expect("an id")).unwrap();
-    assert_eq!(archforge_core::name_of(st, ty), "Boolean");
+    // The built-in Boolean, by its name, which the commands resolve to the one in Types.
+    assert_eq!(edit.ty, "Boolean");
     let at = rect_of(&h, "workspace.properties.member.parameter.1.remove").center();
     click(&mut h, at);
     let at = rect_of(&h, "workspace.properties.member.apply").center();
@@ -7305,7 +7303,7 @@ fn interfaces_are_listed_under_their_package_added_with_the_plus_found_and_dragg
     // Models' + offers each classifier kind and a package in the selected package.
     let st = h.state().session.as_ref().unwrap().doc();
     let offers: Vec<&str> = crate::uml_ui::UmlUi.offers(st, st.by_uuid(commerce)).into_iter().map(|o| o.key).collect();
-    assert_eq!(offers, ["class", "interface", "enumeration", "data-type", "package"]);
+    assert_eq!(offers, ["class", "interface", "enumeration", "data-type", "primitive-type", "package"]);
     crate::explorer::add(h.state_mut(), "interface");
     let rename = h.state().explorer.rename.clone().expect("named in place");
     assert_eq!(rename.text, "Interface 1");
@@ -8057,7 +8055,7 @@ fn enumerations_are_listed_with_their_literals_edited_in_place_added_with_the_pl
     let commerce = select_named(&mut h, archforge_uml::PACKAGE, "Commerce");
     let st = h.state().session.as_ref().unwrap().doc();
     let offers: Vec<&str> = crate::uml_ui::UmlUi.offers(st, st.by_uuid(commerce)).into_iter().map(|o| o.key).collect();
-    assert_eq!(offers, ["class", "interface", "enumeration", "data-type", "package"]);
+    assert_eq!(offers, ["class", "interface", "enumeration", "data-type", "primitive-type", "package"]);
     crate::explorer::add(h.state_mut(), "enumeration");
     let rename = h.state().explorer.rename.clone().expect("named in place");
     assert_eq!(rename.text, "Enumeration 1");
@@ -8105,7 +8103,7 @@ fn enumerations_are_listed_with_their_literals_edited_in_place_added_with_the_pl
     // enumeration's end, named in place.
     let st = h.state().session.as_ref().unwrap().doc();
     let offers: Vec<&str> = crate::uml_ui::UmlUi.offers(st, st.by_uuid(placed)).into_iter().map(|o| o.key).collect();
-    assert_eq!(offers, ["literal", "class", "interface", "enumeration", "data-type", "package"]);
+    assert_eq!(offers, ["literal", "class", "interface", "enumeration", "data-type", "primitive-type", "package"]);
     crate::explorer::add(h.state_mut(), "literal");
     let rename = h.state().explorer.rename.clone().expect("the new literal's name is open");
     assert_eq!(rename.text, "Literal 1");
@@ -8492,7 +8490,7 @@ fn data_type_sample(
             s.execute("diagram.place", &serde_json::json!({ "diagram": d, "element": id, "x": x, "y": 1000, "width": 290, "height": 136 })).unwrap();
         (archforge_mof::Uuid::parse(&id).unwrap(), n.value["id"].as_str().unwrap().to_string())
     };
-    // Not Money: the sample keeps a primitive type of that name in Commerce.
+    // Not Money: the sample keeps a primitive type of that name in Types.
     let (money, money_node) = place("Amount", 560);
     let (price, price_node) = place("Price", 1040);
     h.state_mut().canvas.fit_pending = true;
@@ -8618,7 +8616,7 @@ fn data_types_are_listed_with_their_members_added_with_the_plus_found_and_dragge
         let commerce = select_named(&mut h, archforge_uml::PACKAGE, "Commerce");
         let st = h.state().session.as_ref().unwrap().doc();
         let offers: Vec<&str> = crate::uml_ui::UmlUi.offers(st, st.by_uuid(commerce)).into_iter().map(|o| o.key).collect();
-        assert_eq!(offers, ["class", "interface", "enumeration", "data-type", "package"]);
+        assert_eq!(offers, ["class", "interface", "enumeration", "data-type", "primitive-type", "package"]);
         crate::explorer::add(h.state_mut(), "data-type");
         let rename = h.state().explorer.rename.clone().expect("named in place");
         assert_eq!(rename.text, "DataType 1");
@@ -8959,6 +8957,371 @@ fn the_relationship_tool_joins_no_association_to_a_data_type_and_specializes_one
         drag(&mut h, handle, to);
         assert_eq!(h.state().canvas.notice.as_deref(), Some(NO_ASSOCIATION));
         assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "nothing changed");
+    }
+}
+
+/// The sample class model with two primitive types of the model's own in Commerce, Sku and Code,
+/// each on its diagram as the tool places one; gives their ids and their nodes.
+fn primitive_type_sample(
+    theme: ThemeKind,
+) -> (Harness<'static, Shell>, std::collections::BTreeMap<String, String>, [archforge_mof::Uuid; 2], [String; 2]) {
+    let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+    let d = h.state().canvas.active.unwrap().to_string();
+    let s = h.state_mut().session.as_mut().unwrap();
+    let st = s.doc();
+    let commerce =
+        st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::PACKAGE) && archforge_core::name_of(st, *o) == "Commerce").unwrap();
+    let commerce = st.uuid(commerce).unwrap().to_string();
+    let (w, height) = archforge_uml::PRIMITIVE_TYPE_SIZE;
+    let mut place = |name: &str, x: i32| {
+        let id = s.execute("uml.primitive-type.add", &serde_json::json!({ "package": commerce, "name": name })).unwrap().value["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let n =
+            s.execute("diagram.place", &serde_json::json!({ "diagram": d, "element": id, "x": x, "y": 1000, "width": w, "height": height })).unwrap();
+        (archforge_mof::Uuid::parse(&id).unwrap(), n.value["id"].as_str().unwrap().to_string())
+    };
+    let (sku, sku_node) = place("Sku", 560);
+    let (code, code_node) = place("Code", 1040);
+    h.state_mut().canvas.fit_pending = true;
+    h.run();
+    (h, nodes, [sku, code], [sku_node, code_node])
+}
+
+/// The height of the card `node` on the open diagram.
+fn node_height(h: &Harness<'static, Shell>, node: &str) -> f64 {
+    let st = h.state().session.as_ref().unwrap().doc();
+    archforge_diagram::grid::bounds_of(st, st.by_uuid(archforge_mof::Uuid::parse(node).unwrap()).unwrap()).height
+}
+
+/// The classifier tool places a primitive type named in place, as one step, its kind kept and its
+/// face, tooltip and accessible name naming it (the design's Tool · Primitive type); the card says
+/// «primitive» over its name alone, a header's height, and offers no member: no adorner but
+/// Connect, no compartment `+`, no menu row, and ⌘↩, ⇧⌘↩ and a double click open nothing; in light
+/// and dark.
+#[test]
+fn the_classifier_tool_places_a_primitive_type_named_in_place_whose_card_is_its_name_alone() {
+    use crate::uml_classifier::Classifier;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        // The menu lists Primitive type after Data type, named for assistive technology; the arrows
+        // walk to it and Enter picks it, arming the tool.
+        let at = rect_of(&h, "workspace.tools.classifier-kinds").center();
+        click(&mut h, at);
+        let (data_type, primitive) = (rect_of(&h, "workspace.classifier.data-type"), rect_of(&h, "workspace.classifier.primitive-type"));
+        assert!(primitive.top() >= data_type.bottom(), "Primitive type under Data type");
+        {
+            use egui_kittest::kittest::Queryable;
+            assert!(h.query_by_label("Primitive type").is_some(), "the row's accessible name");
+        }
+        assert!(painted(&h).iter().any(|t| t == "Primitive type"), "the row names the kind");
+        for _ in 0..4 {
+            key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+        }
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert_eq!((h.state().canvas.popover, h.state().canvas.uml_classifier), (None, Classifier::PrimitiveType));
+        assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Place(crate::uml_classifier::TOOL));
+        assert_eq!(classifier_hint(&h), "Primitive type", "the tooltip and accessible name name the kind");
+        assert_eq!(*Classifier::PrimitiveType.tool_icon(), crate::ux::icons::TOOL_PRIMITIVE_TYPE, "the face shows the kind's icon");
+        // A click places one in the diagram's package, named in place, as one undo step.
+        let at = empty_spot(&h, &nodes);
+        click(&mut h, at);
+        let rename = h.state().canvas.rename.clone().expect("its name is open for typing");
+        assert_eq!(rename.text, "PrimitiveType 1");
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add primitive type"));
+        h.state_mut().canvas.rename.as_mut().unwrap().text = "Sku".into();
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        let sku = named(&h, archforge_uml::PRIMITIVE_TYPE, "Sku");
+        let st = h.state().session.as_ref().unwrap().doc();
+        let home = archforge_uml::commands::package_of(st, st.by_uuid(sku).unwrap()).map(|p| archforge_core::name_of(st, p));
+        assert_eq!(home.as_deref(), Some("Commerce"), "in the diagram's package");
+        assert!(painted(&h).iter().any(|t| t == "«primitive»"), "its eyebrow is its keyword, as written");
+        let node = node_of(&h, sku);
+        assert_eq!(node_height(&h, &node), archforge_uml::PRIMITIVE_TYPE_SIZE.1, "a header's height: no compartment under it");
+        assert_eq!(h.state().canvas.uml_classifier, Classifier::PrimitiveType, "the kind stays for the window");
+        // Selected, its card offers a line and no member.
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [sku.to_string()] })).unwrap();
+        h.run();
+        let found = ids(&h);
+        assert!(found.iter().any(|i| i == "workspace.canvas.adorn.connect"), "{found:?}");
+        for none in [
+            "workspace.canvas.adorn.add-attribute",
+            "workspace.canvas.adorn.add-literal",
+            "workspace.canvas.class.add-attribute",
+            "workspace.canvas.class.add-operation",
+            "workspace.canvas.enumeration.add-literal",
+        ] {
+            assert!(!found.iter().any(|i| i == none), "{none} on a primitive type's card");
+        }
+        // ⌘↩, ⇧⌘↩ and a double click on the card open no draft, here or in Properties.
+        for modifiers in [egui::Modifiers::COMMAND, egui::Modifiers::COMMAND | egui::Modifiers::SHIFT] {
+            h.state_mut().canvas.focused = true;
+            key(&mut h, egui::Key::Enter, modifiers);
+            assert!(h.state().canvas.inline.is_none() && h.state().panels.member.is_none(), "{modifiers:?} opens nothing");
+        }
+        let card = rect_of(&h, &format!("workspace.canvas.node.{node}")).center();
+        double_click(&mut h, card + egui::vec2(0.0, 12.0));
+        assert!(h.state().canvas.inline.is_none() && h.state().panels.member.is_none(), "a double click opens nothing");
+        h.state_mut().canvas.rename = None;
+        // Its menu has no row to add a member.
+        right_click(&mut h, card);
+        assert!(ids(&h).iter().any(|i| i == "workspace.canvas.menu.remove"), "the menu is open");
+        assert!(!ids(&h).iter().any(|i| i == "workspace.canvas.menu.add-row"), "no member row");
+        assert!(!painted(&h).iter().any(|t| t == "Add attribute"));
+    }
+}
+
+/// Models lists primitive types of the model's own under their package with no rows below them,
+/// `+` adds one named in place, the search finds it, and it drags onto a diagram; the built-in
+/// types stay out of Models and the search, as before. Properties shows its name, package and
+/// description and no member section; Skills offers a skill on it and says a built-in type
+/// carries none; in light and dark.
+#[test]
+fn primitive_types_are_listed_added_with_the_plus_found_and_dragged_while_the_built_in_ones_stay_out() {
+    use crate::notation_ui::NotationUi;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        let commerce = select_named(&mut h, archforge_uml::PACKAGE, "Commerce");
+        let st = h.state().session.as_ref().unwrap().doc();
+        let offers: Vec<&str> = crate::uml_ui::UmlUi.offers(st, st.by_uuid(commerce)).into_iter().map(|o| o.key).collect();
+        assert_eq!(offers, ["class", "interface", "enumeration", "data-type", "primitive-type", "package"]);
+        crate::explorer::add(h.state_mut(), "primitive-type");
+        let rename = h.state().explorer.rename.clone().expect("named in place");
+        assert_eq!(rename.text, "PrimitiveType 1");
+        h.state_mut().explorer.rename.as_mut().unwrap().text = "Sku".into();
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        h.run();
+        let sku = named(&h, archforge_uml::PRIMITIVE_TYPE, "Sku");
+        // Its row under Commerce with the primitive type's icon, nothing below it.
+        let types = named(&h, archforge_uml::PACKAGE, "Types");
+        h.state_mut().explorer.expanded.insert(types);
+        h.run();
+        let rows = crate::explorer::rows(h.state().notation_uis, h.state().session.as_ref().unwrap().doc(), &h.state().explorer);
+        let at = rows.iter().position(|r| r.label == "Sku").expect("listed under Commerce");
+        let package_depth = rows.iter().find(|r| r.label == "Commerce").map(|r| r.depth).unwrap();
+        assert_eq!((rows[at].kind, rows[at].depth, rows[at].expandable), ("primitive-type", package_depth + 1, false), "{:?}", tree_labels(&h));
+        assert_eq!(*rows[at].icon, crate::ux::icons::PRIMITIVE_TYPE);
+        // Types shows the model's own Date and Money, never the built-in Integer, String or Boolean.
+        let t = rows.iter().position(|r| r.label == "Types").expect("Types is listed");
+        let under: Vec<&str> = rows[t + 1..].iter().take_while(|r| r.depth > rows[t].depth).map(|r| r.label.as_str()).collect();
+        assert_eq!(under, ["Date", "Money"], "{:?}", tree_labels(&h));
+        // The search finds it as a primitive type of Commerce, and no built-in type.
+        let index = crate::project_search::index(h.state().kinds, h.state().notation_uis, h.state().session.as_ref().unwrap().doc());
+        let hit = crate::project_search::hits(&index, "sku").1.into_iter().find(|e| e.label == "Sku").map(|e| e.detail.clone());
+        assert_eq!(hit.as_deref(), Some("Primitive type · Commerce"));
+        assert!(crate::project_search::hits(&index, "integer").1.into_iter().all(|e| e.label != "Integer"), "no built-in type is found");
+        // Dragged from Models onto the diagram: its card, a header's height, as one undo step.
+        let before = edge_count(&h);
+        let from = rect_of(&h, &format!("workspace.explorer.row.{sku}")).center();
+        let to = empty_spot(&h, &nodes);
+        drag(&mut h, from, to);
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Place primitive type"), "notice {:?}", h.state().canvas.notice);
+        assert_eq!(node_height(&h, &node_of(&h, sku)), archforge_uml::PRIMITIVE_TYPE_SIZE.1);
+        assert_eq!(edge_count(&h), before, "it has no lines yet");
+        // Properties: its kind line, name, package and description, no member section.
+        select_named(&mut h, archforge_uml::PRIMITIVE_TYPE, "Sku");
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        h.run();
+        let texts = painted(&h);
+        for want in ["Primitive type · model, in every diagram", "Primitive type"] {
+            assert!(texts.iter().any(|t| t == want), "{want} in {texts:?}");
+        }
+        let found = ids(&h);
+        for id in ["workspace.properties.name", "workspace.properties.description", "workspace.properties.class.package"] {
+            assert!(found.iter().any(|i| i == id), "{id} in {found:?}");
+        }
+        for none in [
+            "workspace.properties.class.abstract",
+            "workspace.properties.attributes.add",
+            "workspace.properties.operations.add",
+            "workspace.properties.literals.add",
+        ] {
+            assert!(!found.iter().any(|i| i == none), "{none} for a primitive type");
+        }
+        assert!(!texts.iter().any(|t| t.starts_with("Attributes ·") || t.starts_with("Operations ·")), "{texts:?}");
+        // Skills: it carries one, and a skill for every primitive type is said so.
+        h.state_mut().state.show_panel(crate::state::Panel::Skills);
+        h.run();
+        assert!(painted(&h).iter().any(|t| t == "On this primitive type · 0"));
+        assert!(ids(&h).iter().any(|i| i == "workspace.skills.add"), "a primitive type carries skills");
+        let skill = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let out = s
+                .execute("skill.add", &serde_json::json!({ "subject": commerce.to_string(), "name": "Codes", "applies_to": "primitive type" }))
+                .unwrap();
+            archforge_mof::Uuid::parse(out.value["id"].as_str().unwrap()).unwrap()
+        };
+        let st = h.state().session.as_ref().unwrap().doc();
+        assert_eq!(crate::panels::target_word(st, st.by_uuid(skill).unwrap()), "every primitive type");
+        // A built-in type, selected, carries none: the panel says so in place of +.
+        let integer = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let t = st.alive().find(|o| archforge_uml::members::is_built_in(st, *o) && archforge_core::name_of(st, *o) == "Integer").unwrap();
+            st.uuid(t).unwrap()
+        };
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [integer.to_string()] })).unwrap();
+        h.run();
+        assert!(painted(&h).iter().any(|t| t == "Built-in types carry no skills"), "{:?}", painted(&h));
+        assert!(!ids(&h).iter().any(|i| i == "workspace.skills.add"), "no + on a built-in type");
+    }
+}
+
+/// A primitive type of the model's own named Integer is offered beside the built-in Integer, never
+/// in its place: the type menu lists both, each with a muted note saying where it is from
+/// ("built-in", or its package's path), in its accessible name too; each pick types the member by
+/// the one picked, the built-in one in Types and never a second of it. Typed on a card, the shared
+/// name is refused until one is picked from the menu. In light and dark.
+#[test]
+fn the_type_menu_tells_same_named_types_apart_and_never_swaps_a_built_in_type_for_the_model_s_own() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        let commerce = named(&h, archforge_uml::PACKAGE, "Commerce");
+        let own = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let out = s.execute("uml.primitive-type.add", &serde_json::json!({ "package": commerce.to_string(), "name": "Integer" })).unwrap();
+            archforge_mof::Uuid::parse(out.value["id"].as_str().unwrap()).unwrap()
+        };
+        h.run();
+        let customer = select_named(&mut h, archforge_uml::CLASS, "Customer");
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        h.run();
+        let at = rect_of(&h, "workspace.properties.attributes.add").center();
+        click(&mut h, at);
+        h.event(egui::Event::Text("count".into()));
+        h.run();
+        let at = rect_of(&h, "workspace.properties.member.type").center();
+        click(&mut h, at);
+        // Both are offered, once each, told apart by their notes; a name no other shares has none.
+        let kept = h.state().panels.type_choices.clone().expect("the open menu keeps its choices");
+        let both: Vec<usize> = kept.labels.iter().enumerate().filter(|(_, l)| *l == "Integer").map(|(i, _)| i).collect();
+        assert_eq!(both.len(), 2, "{:?}", kept.labels);
+        let (builtin, mine) = (both[0], both[1]);
+        assert_eq!((kept.values[builtin].as_str(), kept.notes[builtin].as_str()), ("Integer", "built-in"));
+        assert_eq!(kept.values[mine], own.to_string());
+        assert!(kept.notes[mine].ends_with("Commerce") && kept.notes[mine] != "built-in", "{:?}", kept.notes[mine]);
+        let real = kept.labels.iter().position(|l| l == "Real").unwrap();
+        assert_eq!(kept.notes[real], "", "a name no other shares has no note");
+        let texts = painted(&h);
+        assert!(texts.iter().any(|t| t == "built-in") && texts.iter().any(|t| *t == kept.notes[mine]), "the notes show: {texts:?}");
+        {
+            use egui_kittest::kittest::Queryable;
+            assert!(h.query_by_label("Integer · built-in").is_some(), "the note joins the accessible name");
+            assert!(h.query_by_label(&format!("Integer · {}", kept.notes[mine])).is_some());
+        }
+        // The built-in one picked: the member's type is the built-in Integer in Types.
+        let at = rect_of(&h, &format!("workspace.properties.member.type.{builtin}")).center();
+        click(&mut h, at);
+        let at = rect_of(&h, "workspace.properties.member.apply").center();
+        click(&mut h, at);
+        let typed = |h: &Harness<'static, Shell>, attribute: &str| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let a = archforge_uml::members::attributes(st, st.by_uuid(customer).unwrap())
+                .into_iter()
+                .find(|a| archforge_core::name_of(st, *a) == attribute)
+                .unwrap();
+            st.get(a, archforge_uml::typed_element::TYPE).unwrap().as_ref().unwrap()
+        };
+        let st = h.state().session.as_ref().unwrap().doc();
+        assert!(archforge_uml::members::is_built_in(st, typed(&h, "count")), "the built-in Integer, never the model's own");
+        // The model's own picked: the member's type is that one.
+        select_named(&mut h, archforge_uml::CLASS, "Customer");
+        let at = rect_of(&h, "workspace.properties.attributes.add").center();
+        click(&mut h, at);
+        h.event(egui::Event::Text("code".into()));
+        h.run();
+        let at = rect_of(&h, "workspace.properties.member.type").center();
+        click(&mut h, at);
+        let at = rect_of(&h, &format!("workspace.properties.member.type.{mine}")).center();
+        click(&mut h, at);
+        let at = rect_of(&h, "workspace.properties.member.apply").center();
+        click(&mut h, at);
+        let st = h.state().session.as_ref().unwrap().doc();
+        assert_eq!(st.uuid(typed(&h, "code")).ok(), Some(own), "the model's own Integer, never the built-in one");
+        let builtins = st.alive().filter(|o| archforge_uml::members::is_built_in(st, *o) && archforge_core::name_of(st, *o) == "Integer").count();
+        assert_eq!(builtins, 1, "the built-in Integer once");
+        // Typed on a card, the shared name is refused until one is picked from the menu.
+        let catalog = named(&h, archforge_uml::CLASS, "Catalog");
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [catalog.to_string()] })).unwrap();
+        h.run();
+        let at = rect_of(&h, "workspace.canvas.class.add-attribute").center();
+        click(&mut h, at);
+        h.event(egui::Event::Text("size".into()));
+        h.run();
+        key(&mut h, egui::Key::Tab, egui::Modifiers::NONE);
+        h.event(egui::Event::Text("Integer".into()));
+        h.run();
+        let revision = h.state().session.as_ref().unwrap().revision();
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        let refused = h.state().canvas.inline.as_ref().and_then(|i| i.refused.clone()).expect("refused");
+        assert_eq!(refused, "Several types are named Integer; pick one from the menu.");
+        assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "nothing written");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    }
+}
+
+/// The Relationship tool joins no association to or from a primitive type, saying so in its own
+/// words; a primitive type specializes only a primitive type, the refusals said too, and a
+/// generalization dragged out of one onto empty canvas makes a primitive type, a header's height;
+/// a dependency may touch it; no realization starts at one; in light and dark.
+#[test]
+fn the_relationship_tool_joins_no_association_to_a_primitive_type_and_specializes_one_only_by_a_primitive_type() {
+    use crate::uml_relate::Relate;
+    const NO_ASSOCIATION: &str = "A primitive type joins no association";
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, nodes, [sku, _], [sku_node, code_node]) = primitive_type_sample(theme);
+        let node = |h: &Harness<'static, Shell>, id: &str| rect_of(h, &format!("workspace.canvas.node.{id}")).center();
+        let relate = |h: &mut Harness<'static, Shell>, kind: Relate, from: egui::Pos2, to: egui::Pos2| {
+            h.state_mut().canvas.uml_relation = kind;
+            h.state_mut().canvas.notice = None;
+            let at = rect_of(h, "workspace.tools.relationship").center();
+            click(h, at);
+            drag(h, from, to);
+        };
+        let before = edge_count(&h);
+        // A primitive type specializes a primitive type, and a class depends on one: a line each.
+        let (from, to) = (node(&h, &sku_node), node(&h, &code_node));
+        relate(&mut h, Relate::Generalization, from, to);
+        assert_eq!(edge_count(&h), before + 1, "notice {:?}", h.state().canvas.notice);
+        let (from, to) = (node(&h, &nodes["OrderLine"]), node(&h, &sku_node));
+        relate(&mut h, Relate::Dependency, from, to);
+        assert_eq!(edge_count(&h), before + 2, "notice {:?}", h.state().canvas.notice);
+        // Refused, said in the user's words, and nothing changes.
+        let revision = h.state().session.as_ref().unwrap().revision();
+        for (kind, from, to, why) in [
+            (Relate::Association, nodes["OrderLine"].clone(), sku_node.clone(), NO_ASSOCIATION),
+            (Relate::Composition, nodes["Order"].clone(), sku_node.clone(), NO_ASSOCIATION),
+            (Relate::Directed, sku_node.clone(), nodes["OrderLine"].clone(), NO_ASSOCIATION),
+            (Relate::Generalization, nodes["OrderLine"].clone(), sku_node.clone(), "Only a primitive type specializes a primitive type"),
+            (Relate::Generalization, sku_node.clone(), nodes["Order"].clone(), "A primitive type specializes only a primitive type"),
+            (Relate::Realization, sku_node.clone(), code_node.clone(), "Only a class implements an interface"),
+        ] {
+            let (a, b) = (node(&h, &from), node(&h, &to));
+            relate(&mut h, kind, a, b);
+            let notice = h.state().canvas.notice.clone().expect("the refusal is said");
+            assert_eq!(notice, why, "{kind:?}");
+            assert_eq!((edge_count(&h), h.state().session.as_ref().unwrap().revision()), (before + 2, revision), "nothing changed: {why}");
+        }
+        // A generalization dragged out of one onto empty canvas makes a primitive type there, as one step.
+        let empty = egui::pos2(node(&h, &nodes["Catalog"]).x, node(&h, &sku_node).y);
+        let from = node(&h, &sku_node);
+        relate(&mut h, Relate::Generalization, from, empty);
+        let rename = h.state().canvas.rename.clone().expect("its name is open for typing");
+        assert_eq!(rename.text, "PrimitiveType 1", "notice {:?}", h.state().canvas.notice);
+        let made = named(&h, archforge_uml::PRIMITIVE_TYPE, "PrimitiveType 1");
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add primitive type"));
+        assert_eq!(edge_count(&h), before + 3);
+        assert_eq!(node_height(&h, &node_of(&h, made)), archforge_uml::PRIMITIVE_TYPE_SIZE.1, "a header's height");
+        let general = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let g = st.by_uuid(made).unwrap();
+            archforge_uml::relations::relationships_of(st, g)
+                .into_iter()
+                .filter_map(|r| archforge_uml::figures::ends(st, r))
+                .any(|(specific, general)| general == g && st.uuid(specific).ok() == Some(sku))
+        };
+        assert!(general, "Sku specializes the new primitive type");
+        h.state_mut().canvas.rename = None;
     }
 }
 

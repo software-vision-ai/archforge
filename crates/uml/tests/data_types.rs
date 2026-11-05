@@ -432,8 +432,13 @@ fn a_data_type_specializes_only_data_types_joins_no_association_and_realizes_not
 fn generalization_joins_two_classifiers_of_one_kind_and_every_other_pair_is_refused_naming_the_end_that_breaks_the_rule() {
     let mut s = session();
     let pkg = run(&mut s, "uml.package.add", json!({ "name": "kinds" }));
-    let kinds =
-        [("class", "uml.class.add"), ("interface", "uml.interface.add"), ("enumeration", "uml.enumeration.add"), ("data type", "uml.data-type.add")];
+    let kinds = [
+        ("class", "uml.class.add"),
+        ("interface", "uml.interface.add"),
+        ("enumeration", "uml.enumeration.add"),
+        ("data type", "uml.data-type.add"),
+        ("primitive type", "uml.primitive-type.add"),
+    ];
     let made: Vec<(&str, String, String)> = kinds
         .iter()
         .map(|(kind, cmd)| {

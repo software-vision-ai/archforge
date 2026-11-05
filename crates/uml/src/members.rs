@@ -4,12 +4,15 @@
 //! members are public, as UML has them; a data type keeps its own as a class does, in
 //! DataType's ownedAttribute and ownedOperation; an enumeration takes neither, its members being its
 //! literals, which are added, renamed and moved here (`uml.literal.*`), their names told apart
-//! within their enumeration whatever the case, and removed through `element.remove`. A type is
-//! named by an element's id
-//! (a class of the model, an interface, an enumeration, a data type, or any type it holds) or by a built-in type's name: Integer, String,
-//! Boolean, Real or UnlimitedNatural, which the project keeps in a package named Types, made the
-//! first time one is used (owner decision). A multiplicity is typed (`1`, `0..1`, `*`, `1..*`,
-//! `2..5`) and refused with a reason when it does not read (owner decision).
+//! within their enumeration whatever the case, and removed through `element.remove`; a primitive
+//! type has no members at all. A type is named by an element's id
+//! (a class of the model, an interface, an enumeration, a data type, a primitive type, or any type
+//! it holds) or by a built-in type's name: Integer, String, Boolean, Real or UnlimitedNatural,
+//! which the project keeps as primitive types in a package named Types, made the first time one is
+//! used (owner decision). A built-in type's name always names the one in Types, never a type of the
+//! model's own named alike, and in a package named Types those names are kept for the built-in
+//! types (AR-124). A multiplicity is typed (`1`, `0..1`, `*`, `1..*`, `2..5`) and refused with a
+//! reason when it does not read (owner decision).
 
 use archforge_diagram::ProjectView;
 use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, always, cmd};
@@ -35,7 +38,41 @@ pub const MAX_PARAMETERS: usize = 64;
 /// The largest bound a multiplicity names.
 pub const MAX_BOUND: u64 = 1_000_000;
 /// Why a command is not available.
-pub const NO_CLASSES: &str = "There is no class, interface, enumeration or data type yet.";
+pub const NO_CLASSES: &str = "There is no class, interface, enumeration, data type or primitive type yet.";
+
+/// Whether `t` is a built-in type: a primitive type named Integer, String, Boolean, Real or
+/// UnlimitedNatural, exactly, kept in a package named [`TYPES`]. No primitive type of the model's own
+/// can be one, since those names are kept for the built-in types there ([`reserved_problem`]).
+pub fn is_built_in(store: &Store, t: Obj) -> bool {
+    let in_types = store.container(t).ok().flatten().is_some_and(|(p, _)| store.class_of(p).ok() == Some(PACKAGE) && name_of(store, p) == TYPES);
+    in_types && store.class_of(t).ok() == Some(PRIMITIVE_TYPE) && BUILT_IN.contains(&name_of(store, t).as_str())
+}
+
+/// Why a classifier named `name` may not sit in `package`, when it may not: in a package named
+/// [`TYPES`] the built-in types' names, whatever the case, are kept for them, made there the first
+/// time one is used, so a type of the model's own never stands in for one. The refusal names the
+/// name and what may be done instead.
+pub(crate) fn reserved_problem(store: &Store, package: Obj, name: &str) -> Option<String> {
+    if name_of(store, package) != TYPES {
+        return None;
+    }
+    let builtin = BUILT_IN.iter().find(|b| b.eq_ignore_ascii_case(name.trim()))?;
+    Some(format!(
+        "{name} is the name of the built-in type {builtin}, kept for it in the package {TYPES}; name it otherwise or put it in another package"
+    ))
+}
+
+/// Why the built-in type `t` may not be `changed` (renamed, moved), when it is one: it keeps its
+/// name and its package. The refusal names its id and name and what may be changed instead.
+pub(crate) fn built_in_problem(store: &Store, t: Obj, changed: &str) -> Option<String> {
+    is_built_in(store, t).then(|| {
+        let id = uuid_of(store, t).unwrap_or_default();
+        format!(
+            "{id} is the built-in type {}, which is never {changed}: it keeps its name and its package {TYPES}; a primitive type of the model's own is",
+            name_of(store, t)
+        )
+    })
+}
 
 /// The most literals an enumeration holds: ER's enum types hold as many
 /// (`archforge_er::rules::MAX_LITERALS`), one rule across the notations, and the card, Properties
@@ -47,8 +84,8 @@ pub const NO_ENUMERATIONS: &str = "There is no enumeration yet.";
 /// The visibilities, in the metamodel's order, as the commands name them.
 const VISIBILITIES: [&str; 4] = ["public", "private", "protected", "package"];
 
-/// Whether a class, an interface, an enumeration or a data type exists, which the member commands
-/// need.
+/// Whether a class, an interface, an enumeration, a data type or a primitive type exists, which the
+/// member commands need.
 fn has_classes(f: &Facts<'_, Store, ProjectView>) -> Result<(), &'static str> {
     if f.doc.alive().any(|o| f.doc.class_of(o).is_ok_and(crate::is_classifier)) { Ok(()) } else { Err(NO_CLASSES) }
 }
@@ -253,14 +290,14 @@ fn check_name(store: &Store, owner: Obj, name: &str, siblings: &[Obj], except: O
     Ok(())
 }
 
-/// Why `c` takes no `members` (attributes or operations): its id, that an enumeration's members are
-/// its literals, and what keeps them instead.
+/// Why `c` takes no `members` (attributes or operations): its id, what it is (an enumeration,
+/// whose members are its literals, or a primitive type, which has none), and what keeps them
+/// instead.
 fn no_members(store: &Store, c: Obj, members: &str) -> String {
     let id = uuid_of(store, c).unwrap_or_default();
-    format!(
-        "{id} is {} and keeps no {members}, its members being its literals; a class, an interface or a data type does",
-        crate::commands::a_what(store, c)
-    )
+    let because =
+        if store.class_of(c).ok() == Some(PRIMITIVE_TYPE) { "a primitive type having no members" } else { "its members being its literals" };
+    format!("{id} is {} and keeps no {members}, {because}; a class, an interface or a data type does", crate::commands::a_what(store, c))
 }
 
 /// The class, interface or data type that owns `member` in its list of attributes or operations.
@@ -551,9 +588,10 @@ fn flag(store: &Store, o: Obj, prop: archforge_mof::PropId) -> bool {
     store.get(o, prop).ok().and_then(|v| v.as_bool()).unwrap_or(false)
 }
 
-/// A class, an interface, an enumeration or a data type with its members, as an agent reads it:
-/// an enumeration's are its literals, in their order. Its `kind` is a word without spaces
-/// (`class`, `interface`, `enumeration`, `data_type`).
+/// A class, an interface, an enumeration, a data type or a primitive type with its members, as an
+/// agent reads it: an enumeration's are its literals, in their order; a primitive type has none and
+/// says whether it is a built-in type. Its `kind` is a word without spaces (`class`, `interface`,
+/// `enumeration`, `data_type`, `primitive_type`).
 fn class_get(ctx: &mut C<'_>, p: &Params) -> R {
     let store = &*ctx.doc;
     let c = classifier_of(store, p, "class")?;
@@ -590,6 +628,11 @@ fn class_get(ctx: &mut C<'_>, p: &Params) -> R {
         "id": uuid_of(store, c)?, "kind": crate::commands::what(store, c).replace(' ', "_"), "name": name_of(store, c),
         "abstract": is_class && flag(store, c, class::IS_ABSTRACT), "attributes": attrs, "operations": ops,
     });
+    if store.class_of(c).ok() == Some(PRIMITIVE_TYPE)
+        && let Some(fields) = out.as_object_mut()
+    {
+        fields.insert("built_in".to_string(), Json::Bool(is_built_in(store, c)));
+    }
     if store.class_of(c).ok() == Some(crate::ENUMERATION) {
         let literals: Vec<Json> = crate::commands::literals(store, c)
             .into_iter()
@@ -615,7 +658,7 @@ fn type_list(ctx: &mut C<'_>, _: &Params) -> R {
 
 macro_rules! type_line {
     () => {
-        "type: string = \"\"; a type's id, or Integer, String, Boolean, Real or UnlimitedNatural (kept in the package Types), or nothing"
+        "type: string = \"\"; a type's id, or Integer, String, Boolean, Real or UnlimitedNatural, the built-in types kept in the package Types (never a type of the model's own named alike), or nothing"
     };
 }
 macro_rules! multiplicity_line {
@@ -757,9 +800,9 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
         cmd!(
             query "uml.class.get",
             "Get class",
-            &["Class", "Interface", "Enumeration", "Data type"],
+            &["Class", "Interface", "Enumeration", "Data type", "Primitive type"],
             None,
-            "class: string; the class's, interface's, enumeration's or data type's id; an enumeration comes with its literals",
+            "class: string; the class's, interface's, enumeration's, data type's or primitive type's id; an enumeration comes with its literals, and a primitive type has no members",
             has_classes,
             class_get
         ),

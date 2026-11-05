@@ -1,4 +1,4 @@
-//! Relating classes, interfaces, enumerations and data types: associations, generalizations,
+//! Relating classes, interfaces, enumerations, data types and primitive types: associations, generalizations,
 //! dependencies and interface realizations drawn between them, an association's ends set (role, multiplicity, navigability, aggregation),
 //! any of them reconnected to another class, and the relationships that touch a class listed so
 //! removing the class can say them and take them along.
@@ -12,9 +12,10 @@
 //! What would make the model wrong is refused with a reason before anything changes: an interface
 //! that specializes anything but an interface, a class that specializes an interface, an
 //! enumeration that specializes anything but an enumeration or is specialized by anything else, a
-//! data type that specializes anything but a data type or is specialized by anything else, an
-//! association to or from an enumeration or a data type (whose values are no instances to link), a
-//! classifier
+//! data type that specializes anything but a data type or is specialized by anything else, a
+//! primitive type likewise, a built-in type that would specialize anything, an
+//! association to or from an enumeration, a data type or a primitive type (whose values are no
+//! instances to link), a classifier
 //! that specializes itself, directly or round a cycle, the same generalization twice, a class depending
 //! on itself, both ends of an association aggregating, a composition whose whole's end allows more
 //! than one, two ends of one association with the same role, and an interface realization from
@@ -28,7 +29,7 @@ use serde_json::{Value as Json, json};
 
 use crate::commands::{a_what, classifier_of, fail, id_of, name_of, package_of, refuse, set_name, text, uuid_of, what};
 use crate::{
-    ASSOCIATION, CLASS, DATA_TYPE, DEPENDENCY, ENUMERATION, GENERALIZATION, INTERFACE, INTERFACE_REALIZATION, PROPERTY, association,
+    ASSOCIATION, CLASS, DATA_TYPE, DEPENDENCY, ENUMERATION, GENERALIZATION, INTERFACE, INTERFACE_REALIZATION, PRIMITIVE_TYPE, PROPERTY, association,
     behaviored_classifier, classifier, dependency, generalization, interface_realization, package, property, typed_element,
 };
 
@@ -42,7 +43,8 @@ const AGGREGATIONS: [&str; 3] = ["none", "shared", "composite"];
 /// Why a command is not available.
 pub const NO_CLASSES: &str = crate::members::NO_CLASSES;
 
-/// Whether a class, an interface, an enumeration or a data type exists, which relating needs.
+/// Whether a class, an interface, an enumeration, a data type or a primitive type exists, which
+/// relating needs.
 fn has_classes(f: &Facts<'_, Store, ProjectView>) -> Result<(), &'static str> {
     if f.doc.alive().any(|o| f.doc.class_of(o).is_ok_and(crate::is_classifier)) { Ok(()) } else { Err(NO_CLASSES) }
 }
@@ -123,7 +125,7 @@ pub fn relationships_of(store: &Store, c: Obj) -> Vec<Obj> {
     out
 }
 
-/// The class, interface, enumeration or data type under `key`, which must sit in a package.
+/// The classifier under `key`, which must sit in a package.
 fn class_in_package(store: &Store, p: &Params, key: &str) -> Result<(Obj, Obj), CommandError> {
     let c = classifier_of(store, p, key)?;
     let pkg = package_of(store, c).ok_or_else(|| refuse(key, format!("the {} is in no package", what(store, c))))?;
@@ -162,12 +164,14 @@ fn set_navigable(store: &mut Store, a: Obj, end: Obj, navigable: bool) -> Result
 }
 
 /// Why an association may not have an end at `c`, when it may not: a data type, an enumeration
-/// among them, has values without identity, and an association joins classes and interfaces,
-/// whose instances it links. The refusal names `c`'s id, what it is and what an end may be.
+/// and a primitive type among them, has values without identity, and an association joins classes
+/// and interfaces, whose instances it links. The refusal names `c`'s id, what it is and what an end
+/// may be.
 pub fn association_end_problem(store: &Store, c: Obj) -> Option<String> {
     let is = match store.class_of(c).ok() {
         Some(k) if k == ENUMERATION => "an enumeration, a data type,",
         Some(k) if k == DATA_TYPE => "a data type",
+        Some(k) if k == PRIMITIVE_TYPE => "a primitive type",
         _ => return None,
     };
     let id = uuid_of(store, c).unwrap_or_default();
@@ -175,7 +179,7 @@ pub fn association_end_problem(store: &Store, c: Obj) -> Option<String> {
 }
 
 /// `uml.association.add`: an association of the kind asked for between two classifiers, owning
-/// both ends; never to or from an enumeration or a data type.
+/// both ends; never to or from an enumeration, a data type or a primitive type.
 fn association_add(ctx: &mut C<'_>, p: &Params) -> R {
     let (from, pkg) = class_in_package(ctx.doc, p, "from")?;
     let to = classifier_of(ctx.doc, p, "to")?;
@@ -235,6 +239,12 @@ pub enum GeneralizationProblem {
     NotADataType,
     /// Only a data type specializes a data type, and the specific one is none.
     NoDataType,
+    /// A primitive type specializes only a primitive type, and the general one is none.
+    NotAPrimitiveType,
+    /// Only a primitive type specializes a primitive type, and the specific one is none.
+    NoPrimitiveType,
+    /// A built-in type is never changed, so it specializes nothing: the specific one is one.
+    BuiltIn,
     /// A classifier specializes another, never itself.
     Itself,
     /// The specific classifier specializes the general one already.
@@ -247,7 +257,11 @@ impl GeneralizationProblem {
     /// The parameter of `uml.generalization.add` a refusal names: the end that breaks the rule.
     pub fn key(self) -> &'static str {
         match self {
-            GeneralizationProblem::ClassOfInterface | GeneralizationProblem::NoEnumeration | GeneralizationProblem::NoDataType => "specific",
+            GeneralizationProblem::ClassOfInterface
+            | GeneralizationProblem::NoEnumeration
+            | GeneralizationProblem::NoDataType
+            | GeneralizationProblem::NoPrimitiveType
+            | GeneralizationProblem::BuiltIn => "specific",
             _ => "general",
         }
     }
@@ -276,6 +290,18 @@ impl GeneralizationProblem {
             GeneralizationProblem::NoDataType => {
                 format!("{s} is {a_kind}; only a data type specializes a data type")
             }
+            GeneralizationProblem::NotAPrimitiveType => {
+                format!("{g} is {}; a primitive type specializes only a primitive type", a_what(store, general))
+            }
+            GeneralizationProblem::NoPrimitiveType => {
+                format!("{s} is {a_kind}; only a primitive type specializes a primitive type")
+            }
+            GeneralizationProblem::BuiltIn => {
+                format!(
+                    "{s} is the built-in type {}, which specializes nothing; a primitive type of the model's own may specialize it",
+                    name_of(store, specific)
+                )
+            }
             GeneralizationProblem::Itself => format!("{s}: {a_kind} cannot specialize itself; it specializes another {kind}"),
             GeneralizationProblem::Again => format!("{s}: the {kind} specializes that {kind} already, {g}; one generalization joins two"),
             GeneralizationProblem::Cycle => {
@@ -287,14 +313,16 @@ impl GeneralizationProblem {
 
 /// Why `specific` may not specialize `general`, when it may not: an interface specializes only an
 /// interface, and a class never specializes one; an enumeration specializes only an enumeration,
-/// and only an enumeration specializes one; a data type likewise only a data type; no classifier
-/// specializes itself, another twice, or round a cycle. `except` is a generalization being
-/// reconnected, which never clashes with itself.
+/// and only an enumeration specializes one; a data type likewise only a data type, and a primitive
+/// type only a primitive type; a built-in type specializes nothing, though one of the model's own
+/// may specialize it; no classifier specializes itself, another twice, or round a cycle. `except`
+/// is a generalization being reconnected, which never clashes with itself.
 ///
-/// The kinds are checked in a fixed order, each by its own metaclass (an enumeration is a DataType
-/// in UML's metamodel, but only the DataType metaclass is a data type here): an enumeration's rule
-/// first, then a data type's, then an interface's. So a refusal always names the kind whose rule
-/// is broken, and [`GeneralizationProblem::ClassOfInterface`] is said only of a class.
+/// The kinds are checked in a fixed order, each by its own metaclass (an enumeration and a
+/// primitive type are DataTypes in UML's metamodel, but only the DataType metaclass is a data type
+/// here): an enumeration's rule first, then a data type's, then a primitive type's, then an
+/// interface's. So a refusal always names the kind whose rule is broken, and
+/// [`GeneralizationProblem::ClassOfInterface`] is said only of a class.
 pub fn generalization_problem(store: &Store, specific: Obj, general: Obj, except: Option<Obj>) -> Option<GeneralizationProblem> {
     let is = |o: Obj, k| store.class_of(o).ok() == Some(k);
     match (is(specific, ENUMERATION), is(general, ENUMERATION)) {
@@ -306,6 +334,14 @@ pub fn generalization_problem(store: &Store, specific: Obj, general: Obj, except
         (true, false) => return Some(GeneralizationProblem::NotADataType),
         (false, true) => return Some(GeneralizationProblem::NoDataType),
         _ => {}
+    }
+    match (is(specific, PRIMITIVE_TYPE), is(general, PRIMITIVE_TYPE)) {
+        (true, false) => return Some(GeneralizationProblem::NotAPrimitiveType),
+        (false, true) => return Some(GeneralizationProblem::NoPrimitiveType),
+        _ => {}
+    }
+    if crate::members::is_built_in(store, specific) {
+        return Some(GeneralizationProblem::BuiltIn);
     }
     match (is(specific, INTERFACE), is(general, INTERFACE)) {
         (true, false) => return Some(GeneralizationProblem::NotAnInterface),
@@ -667,8 +703,8 @@ fn describe(store: &Store, r: Obj) -> Json {
     }
 }
 
-/// `uml.relationship.list`: the relationships that touch a class, an interface, an enumeration or a
-/// data type.
+/// `uml.relationship.list`: the relationships that touch a class, an interface, an enumeration, a
+/// data type or a primitive type.
 fn relationship_list(ctx: &mut C<'_>, p: &Params) -> R {
     let store = &*ctx.doc;
     let c = classifier_of(store, p, "class")?;
@@ -697,8 +733,8 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             &["Association"],
             None,
             concat!(
-                "from: string; the id of the class or interface it is drawn from, the whole of an aggregation or composition; never an enumeration or a data type\n",
-                "to: string; the id of the class or interface it is drawn to, the part of an aggregation or composition; never an enumeration or a data type\n",
+                "from: string; the id of the class or interface it is drawn from, the whole of an aggregation or composition; never an enumeration, a data type or a primitive type\n",
+                "to: string; the id of the class or interface it is drawn to, the part of an aggregation or composition; never an enumeration, a data type or a primitive type\n",
                 "kind: string = \"association\", association|directed|aggregation|composition; directed navigates only to the second class\n",
                 "name: string = \"\"; the association's name, or nothing"
             ),
@@ -712,8 +748,8 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             &["Generalization"],
             None,
             concat!(
-                "specific: string; the id of the class, interface, enumeration or data type that specializes\n",
-                "general: string; the id of the class, interface, enumeration or data type it specializes: an interface specializes only an interface, a class never specializes one, an enumeration specializes only an enumeration and is specialized only by one, and a data type likewise only a data type"
+                "specific: string; the id of the class, interface, enumeration, data type or primitive type that specializes; never a built-in type\n",
+                "general: string; the id of the class, interface, enumeration, data type or primitive type it specializes: an interface specializes only an interface, a class never specializes one, an enumeration specializes only an enumeration and is specialized only by one, and a data type and a primitive type likewise only their own kind"
             ),
             has_classes,
             generalization_add
@@ -723,7 +759,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Add dependency",
             &["Dependency"],
             None,
-            "client: string; the id of the class, interface, enumeration or data type that depends\nsupplier: string; the id of the class, interface, enumeration or data type it depends on\nname: string = \"\"; the dependency's name, or nothing",
+            "client: string; the id of the class, interface, enumeration, data type or primitive type that depends\nsupplier: string; the id of the class, interface, enumeration, data type or primitive type it depends on\nname: string = \"\"; the dependency's name, or nothing",
             has_classes,
             dependency_add
         ),
@@ -755,12 +791,12 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             None,
             concat!(
                 "relationship: string; the association's, generalization's, dependency's or interface realization's id\n",
-                "end: string, source|target; the end to move: the class, interface, enumeration or data type it was drawn from (the specific one, the client, the implementing class) or to\n",
-                "class: string; the id of the class, interface, enumeration or data type the end moves to; an association's end never moves to an enumeration or a data type; a generalization's end keeps its rules: an interface specializes only an interface, a class never one, an enumeration only an enumeration, a data type only a data type; a realization's source is a class and its target an interface, the class realizing it once"
+                "end: string, source|target; the end to move: the classifier it was drawn from (the specific one, the client, the implementing class) or to\n",
+                "class: string; the id of the class, interface, enumeration, data type or primitive type the end moves to; an association's end never moves to an enumeration, a data type or a primitive type; a generalization's end keeps its rules: an interface specializes only an interface, a class never one, an enumeration only an enumeration, a data type only a data type, a primitive type only a primitive type, a built-in type nothing; a realization's source is a class and its target an interface, the class realizing it once"
             ),
             has_classes,
             relationship_reconnect
         ),
-        cmd!(query "uml.relationship.list", "List relationships", &["Association", "Generalization", "Dependency", "Interface realization"], None, "class: string; the class's, interface's, enumeration's or data type's id", has_classes, relationship_list),
+        cmd!(query "uml.relationship.list", "List relationships", &["Association", "Generalization", "Dependency", "Interface realization"], None, "class: string; the class's, interface's, enumeration's, data type's or primitive type's id", has_classes, relationship_list),
     ]
 }

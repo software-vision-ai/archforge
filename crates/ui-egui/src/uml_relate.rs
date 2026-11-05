@@ -5,9 +5,10 @@
 //! supplier, from the implementing class to its interface; dropped on empty canvas it makes a new
 //! class there, or for a realization a new interface, named in place. A realization starts only at
 //! a class and ends only at an interface it does not realize yet; an association of any kind
-//! neither starts nor ends at an enumeration or a data type; anything else is said at the canvas's
-//! top and draws nothing. A generalization dragged out of an enumeration onto empty canvas makes an
-//! enumeration, and out of a data type a data type, the only kind each specializes. A selected
+//! neither starts nor ends at an enumeration, a data type or a primitive type; anything else is
+//! said at the canvas's top and draws nothing. A generalization dragged out of an enumeration onto
+//! empty canvas makes an enumeration, out of a data type a data type, and out of a primitive type a
+//! primitive type, the only kind each specializes. A selected
 //! line's ends drag onto another class to reconnect it.
 //! Properties shows an association's name and both its ends (role, multiplicity, navigable,
 //! aggregation), a dependency's name and its classes, a generalization's classes, a realization's
@@ -212,7 +213,8 @@ pub(crate) fn popover(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, an
     }
 }
 
-/// The classifier a node shows: a class, an interface, an enumeration or a data type.
+/// The classifier a node shows: a class, an interface, an enumeration, a data type or a primitive
+/// type.
 fn class_of_node(store: &Store, node: Uuid) -> Option<Obj> {
     let n = store.by_uuid(node)?;
     let c = store.get(n, archforge_diagram::node::ELEMENT).ok()?.as_ref()?;
@@ -249,6 +251,9 @@ fn generalization_refusal(store: &Store, specific: Obj, general: Obj, except: Op
         P::NoEnumeration => tr("Only an enumeration specializes an enumeration"),
         P::NotADataType => tr("A data type specializes only a data type"),
         P::NoDataType => tr("Only a data type specializes a data type"),
+        P::NotAPrimitiveType => tr("A primitive type specializes only a primitive type"),
+        P::NoPrimitiveType => tr("Only a primitive type specializes a primitive type"),
+        P::BuiltIn => tr("A built-in type specializes nothing"),
         P::Itself => tr("A classifier cannot specialize itself"),
         P::Again => tr("This one specializes that one already"),
         P::Cycle => tr("That one specializes this one already, which would make a cycle"),
@@ -256,7 +261,7 @@ fn generalization_refusal(store: &Store, specific: Obj, general: Obj, except: Op
 }
 
 /// Why `kind` starts no line at `element`, when it does not: a realization starts only at a class,
-/// and no association at an enumeration or a data type.
+/// and no association at an enumeration, a data type or a primitive type.
 fn kind_start_problem(kind: Relate, store: &Store, element: Obj) -> Option<String> {
     if kind == Relate::Realization && store.class_of(element).ok() != Some(archforge_uml::CLASS) {
         return Some(tr("Only a class implements an interface"));
@@ -265,15 +270,16 @@ fn kind_start_problem(kind: Relate, store: &Store, element: Obj) -> Option<Strin
 }
 
 /// Why an association of `kind` has no end at `element`, when it has none, in the user's words for
-/// what it is: a data type joins no association, and an enumeration is one.
+/// what it is: a data type joins no association, an enumeration is one, and a primitive type joins
+/// none either.
 fn association_refusal(kind: Relate, store: &Store, element: Obj) -> Option<String> {
     if !kind.associates() || archforge_uml::relations::association_end_problem(store, element).is_none() {
         return None;
     }
-    Some(if store.class_of(element).ok() == Some(archforge_uml::ENUMERATION) {
-        tr("An enumeration is a data type and joins no association")
-    } else {
-        tr("A data type joins no association")
+    Some(match store.class_of(element).ok() {
+        Some(c) if c == archforge_uml::ENUMERATION => tr("An enumeration is a data type and joins no association"),
+        Some(c) if c == archforge_uml::PRIMITIVE_TYPE => tr("A primitive type joins no association"),
+        _ => tr("A data type joins no association"),
     })
 }
 
@@ -291,7 +297,7 @@ pub(crate) fn tool_hint(shell: &Shell) -> Option<String> {
 /// Draws the chosen kind between the classes of two nodes, its line on diagram `d` with its name
 /// at the middle, as one undo step; selects it. A refusal is said at the canvas's top, in the
 /// user's words where the shell knows the rule (a realization's, a generalization's, an
-/// association's at an enumeration or a data type).
+/// association's at an enumeration, a data type or a primitive type).
 pub(crate) fn connect(shell: &mut Shell, d: Obj, from_node: Uuid, to_node: Uuid) {
     shell.canvas.notice = None;
     let kind = shell.canvas.uml_relation;
@@ -308,7 +314,7 @@ pub(crate) fn connect(shell: &mut Shell, d: Obj, from_node: Uuid, to_node: Uuid)
         shell.canvas.notice = Some(tr("A relationship joins two classes or interfaces"));
         return;
     };
-    // An association to or from an enumeration or a data type draws nothing either, nor a generalization the
+    // An association to or from an enumeration, a data type or a primitive type draws nothing either, nor a generalization the
     // classifier rules refuse.
     let refusal = association_refusal(kind, store, from)
         .or_else(|| association_refusal(kind, store, to))
@@ -347,8 +353,8 @@ pub(crate) fn connect(shell: &mut Shell, d: Obj, from_node: Uuid, to_node: Uuid)
 /// The chosen kind dropped on empty canvas at `(x, y)`: a new class there, related to the node's,
 /// as one undo step; its name opens for typing. A generalization dragged out of an interface makes
 /// an interface, the only kind an interface specializes, one out of an enumeration an enumeration,
-/// one out of a data type a data type, and a realization an interface, the only kind a class
-/// realizes.
+/// one out of a data type a data type, one out of a primitive type a primitive type, and a
+/// realization an interface, the only kind a class realizes.
 pub(crate) fn connect_to_new(shell: &mut Shell, d: Obj, from_node: Uuid, x: f64, y: f64) {
     shell.canvas.notice = None;
     let kind = shell.canvas.uml_relation;
@@ -372,6 +378,7 @@ pub(crate) fn connect_to_new(shell: &mut Shell, d: Obj, from_node: Uuid, x: f64,
         Some(crate::uml_classifier::Classifier::Interface) if kind == Relate::Generalization => crate::uml_classifier::Classifier::Interface,
         Some(crate::uml_classifier::Classifier::Enumeration) if kind == Relate::Generalization => crate::uml_classifier::Classifier::Enumeration,
         Some(crate::uml_classifier::Classifier::DataType) if kind == Relate::Generalization => crate::uml_classifier::Classifier::DataType,
+        Some(crate::uml_classifier::Classifier::PrimitiveType) if kind == Relate::Generalization => crate::uml_classifier::Classifier::PrimitiveType,
         _ => crate::uml_classifier::Classifier::Class,
     };
     let names = archforge_uml::commands::classifiers(store, package).into_iter().map(|c| archforge_core::name_of(store, c));
@@ -379,7 +386,7 @@ pub(crate) fn connect_to_new(shell: &mut Shell, d: Obj, from_node: Uuid, x: f64,
         shell.canvas.notice = Some(tr("No free name is left"));
         return;
     };
-    let (w, h) = archforge_uml::CLASS_SIZE;
+    let (w, h) = made.size();
     let (px, py) = ((x - w / 2.0).round(), (y - h / 2.0).round());
     let name_for_batch = name.clone();
     let out = session.batch(&made.add_step(), |b| {
@@ -418,7 +425,7 @@ pub(crate) fn connect_to_new(shell: &mut Shell, d: Obj, from_node: Uuid, x: f64,
 
 /// Moves the source or target end of `element` to the class of `to_node`; dropped back on its own
 /// class it changes nothing, and a refusal is said at the canvas's top: a realization's, a
-/// generalization's, and an association's moved onto an enumeration or a data type, in the user's
+/// generalization's, and an association's moved onto an enumeration, a data type or a primitive type, in the user's
 /// words.
 pub(crate) fn reconnect(shell: &mut Shell, element: Uuid, source: bool, to_node: Uuid) {
     shell.canvas.notice = None;

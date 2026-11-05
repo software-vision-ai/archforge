@@ -424,8 +424,8 @@ What is UML's own, beside the shared rules above.
   icon a pair of braces (Tool · Data type), placed and named in place as `DataType 1`. It is UML's
   DataType itself, never an enumeration or a primitive type, though the metamodel makes those data
   types too: each kind is told by its own metaclass. A skill for every data type reaches neither:
-  an element is aimed at by its most specific kind, and a primitive type counts as a kind of its
-  own there though no skill names it yet (AR-124 decides that), so Integer and String stay out.
+  an element is aimed at by its most specific kind, and a primitive type is a skill kind of its own
+  (AR-124), so Integer, String and the model's own primitive types stay out.
   Its card is plain, `«dataType»` in its eyebrow kept as written, over attributes and operations
   edited on the card and in Properties as a class's are (draft rows, ⌘↩ and ⇧⌘↩, the adorner, the
   menu's row), any visibility allowed. Properties shows Name, Package and Description, then
@@ -440,6 +440,28 @@ What is UML's own, beside the shared rules above.
   generalization dragged out of one onto empty canvas makes a data type. Between a data type and an
   enumeration the enumeration's rule is said. No realization starts at one, since only a class
   implements; a dependency may touch it. It carries skills, aimed at as "every data type".
+- A primitive type (AR-124) is the classifier tool's fifth kind, after Data type, its face and menu
+  icon a plain box with a small ring at its middle (Tool · Primitive type), placed and named in
+  place as `PrimitiveType 1`. It is UML's PrimitiveType, a value of the model's own with no members:
+  its card is plain, `«primitive»` in its eyebrow over its name and no compartment, a header's
+  height (240 × 66) when placed or dragged from Models. Nothing adds a member to it: no adorner but
+  Connect, no compartment `+`, no menu row, and ⌘↩, ⇧⌘↩ and a double click open nothing. Properties
+  shows Name, Package and Description and no member section; Models lists it under its package
+  with nothing below it, its `+` offers Primitive type after Data type, and it drags onto a diagram
+  or a package. It shares its package's names with the other classifiers. It joins no association
+  ("A primitive type joins no association"), specializes only a primitive type and only a
+  primitive type specializes one ("A primitive type specializes only a primitive type", "Only a
+  primitive type specializes a primitive type"), a generalization dragged out of one onto empty
+  canvas makes a primitive type; no realization starts at one; a dependency may touch it. It
+  carries skills, aimed at as "every primitive type".
+- The built-in types (Integer, String, Boolean, Real, UnlimitedNatural) are primitive types made in
+  the package Types the first time one is used (owner decision), and they stay as they were (AR-124
+  decisions, the design being silent): they stay out of Models and the search, so Types shows only
+  what the user put there; they are never renamed or moved, specialize nothing, and carry no skill
+  (the Skills panel says "Built-in types carry no skills"; a package-wide skill with no kind still
+  reaches them). In a package named Types their names, whatever the case, are kept for them, so no
+  classifier of the user's own takes one there. A built-in type's name always means the one in
+  Types, never a type of the user's own named alike, and is never made twice.
 - An attribute reads `+ name : Type [0..1]`, an operation `+ name(param : Type) : Return`; the
   visibility sign only when one is set, the multiplicity only when it is not 1. A bound pair of
   none to many is written `*`.
@@ -521,10 +543,15 @@ What is UML's own, beside the shared rules above.
   Abstract, then its parameters, each on two lines: its name with its ✕, then its type and its
   multiplicity (narrow, `1` as its hint). Remove and Move up and down sit at the editor's foot on
   the left, Cancel and Apply on the right.
-- A type menu offers None, the built-in types (Integer, String, Boolean, Real, UnlimitedNatural)
-  the model has no type of the same name for, then the model's own types by name, every one of
-  them: the menu scrolls, the arrow keys reach any row, and only the rows in sight are laid out
-  (AR-123). A built-in type is made in the package Types the first time it is used (owner decision).
+- A type menu offers None, every built-in type (Integer, String, Boolean, Real, UnlimitedNatural),
+  then the model's own types by name, every one of them: the menu scrolls, the arrow keys reach any
+  row, and only the rows in sight are laid out (AR-123). A built-in type is made in the package
+  Types the first time it is used (owner decision). Where several entries share a name, whatever the
+  case, each has a muted note after it saying where it is from: "built-in", or its package's path
+  below the root package; the note joins the row's accessible name, and the menu widens to show the
+  noted rows whole, kept inside the window (AR-124). A type of the user's own named like a built-in
+  one never hides it. Typed on a card, a name several types share is refused ("Several types are
+  named Integer; pick one from the menu.").
 - A selected class's second adorner is Add attribute. A class dragged from Models lands sized to
   show its members, with its lines to the classes the diagram shows, as one undo step.
 - Members are typed on the card (a proposal for the owner to confirm): a selected class

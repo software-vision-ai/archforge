@@ -13,7 +13,7 @@
 //! words before anything is written.
 
 use archforge_mof::{Obj, PropId, Store, TypeRef, Uuid, Value};
-use archforge_uml::members::{BUILT_IN, TYPES, attributes, operations, parameters};
+use archforge_uml::members::{BUILT_IN, attributes, operations, parameters};
 use egui::{Rect, Stroke, StrokeKind, pos2, vec2};
 use serde_json::json;
 
@@ -82,9 +82,7 @@ fn name(store: &Store, o: Obj) -> String {
 
 /// Whether `t` is a built-in type, kept in the Types package.
 fn built_in(store: &Store, t: Obj) -> bool {
-    let in_types =
-        store.container(t).ok().flatten().is_some_and(|(p, _)| store.class_of(p).ok() == Some(archforge_uml::PACKAGE) && name(store, p) == TYPES);
-    in_types && store.class_of(t).ok() == Some(archforge_uml::PRIMITIVE_TYPE) && BUILT_IN.contains(&name(store, t).as_str())
+    archforge_uml::members::is_built_in(store, t)
 }
 
 /// The type of `o` as the commands take it: a built-in type by its name, any other by its id.
@@ -204,7 +202,8 @@ pub(crate) fn member_of(store: &Store, o: Obj) -> Option<(Obj, MemberKind)> {
 }
 
 /// A classifier's panel: its name and package, then a class's Abstract, a class's, an interface's
-/// or a data type's attributes and operations, or an enumeration's literals, each with its editor.
+/// or a data type's attributes and operations, or an enumeration's literals, each with its editor;
+/// a primitive type has none, so its name, package and description stand alone.
 pub(crate) fn class_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, subject: &Subject) {
     let (Some(class), Some(class_id)) = (subject.obj, subject.id) else { return };
     let kind = shell.session.as_ref().and_then(|s| Classifier::of(s.doc(), class)).unwrap_or_default();
@@ -311,6 +310,20 @@ pub(crate) fn package_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r:
     }
 }
 
+/// A package's path below the root package, `sales › orders`, or the root's name for the root:
+/// short enough for a note, and still telling packages apart, since every one sits under the root.
+fn path_below_root(store: &Store, package: Obj) -> String {
+    let root = archforge_uml::commands::root_package(store);
+    let mut names = Vec::new();
+    let mut at = Some(package);
+    while let Some(p) = at.filter(|p| names.len() < 32 && (Some(*p) != root || names.is_empty())) {
+        names.push(name(store, p));
+        at = archforge_uml::commands::package_of(store, p);
+    }
+    names.reverse();
+    names.join(" › ")
+}
+
 /// A package as the menus name it: its path from the top, `sales › orders`.
 fn package_path(store: &Store, package: Obj) -> String {
     let mut names = Vec::new();
@@ -403,22 +416,49 @@ fn members_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, m
     y + 10.0
 }
 
-/// What a type menu offers, each as it reads and as the commands take it: None, the built-in
-/// types the model has no type of the same name for, then the model's own.
+/// What a type menu offers, each as it reads and as the commands take it: None, every built-in
+/// type by its name, which the commands always resolve to the one in Types, then the model's own
+/// by name. A type of the model's own named like a built-in one never hides it: both are offered,
+/// told apart by [`type_notes`].
 pub(crate) fn type_choices(store: &Store) -> Vec<(String, String)> {
-    let own = model_types(store);
-    let shadowed = |b: &str| own.iter().any(|(_, n)| n.eq_ignore_ascii_case(b));
     std::iter::once((tr("None"), String::new()))
-        .chain(BUILT_IN.iter().filter(|b| !shadowed(b)).map(|b| (b.to_string(), b.to_string())))
-        .chain(own.iter().map(|(id, n)| (n.clone(), id.clone())))
+        .chain(BUILT_IN.iter().map(|b| (b.to_string(), b.to_string())))
+        .chain(model_types(store).into_iter().map(|(id, n)| (n, id)))
         .collect()
 }
 
-/// Every type named `name`, ignoring case, as the commands take it: a built-in type the model has
-/// none of the same name for, and each of the model's own types, whichever package holds it.
+/// The muted note after each of `choices` (from [`type_choices`]) in a type menu, empty for most:
+/// where several choices share a name, whatever the case, each says where it is from, "built-in"
+/// for a built-in type and its package's path below the root package (every package's top) for
+/// one of the model's own, so the entries are told apart.
+pub(crate) fn type_notes(store: &Store, choices: &[(String, String)]) -> Vec<String> {
+    let mut counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    for (label, value) in choices {
+        if !value.is_empty() {
+            *counts.entry(label.to_lowercase()).or_default() += 1;
+        }
+    }
+    choices
+        .iter()
+        .map(|(label, value)| {
+            if value.is_empty() || counts.get(&label.to_lowercase()).copied().unwrap_or(0) < 2 {
+                return String::new();
+            }
+            match Uuid::parse(value).and_then(|u| store.by_uuid(u)) {
+                Some(t) => archforge_uml::commands::package_of(store, t).map(|p| path_below_root(store, p)).unwrap_or_default(),
+                None => tr("built-in"),
+            }
+        })
+        .collect()
+}
+
+/// Every type named `name`, ignoring case, as the commands take it: the built-in type of that
+/// name, and each of the model's own types, whichever package holds it. Typed where several share
+/// the name, it is refused and the menu, which tells them apart, picks one: a built-in type is
+/// never taken for one of the model's own nor one of those for it.
 pub(crate) fn types_named(store: &Store, name: &str) -> Vec<String> {
     let universe = store.universe();
-    let own: Vec<String> = store
+    let own = store
         .alive()
         .filter(|o| {
             store.class_of(*o).is_ok_and(|c| {
@@ -426,9 +466,8 @@ pub(crate) fn types_named(store: &Store, name: &str) -> Vec<String> {
             })
         })
         .filter(|t| !built_in(store, *t) && self::name(store, *t).eq_ignore_ascii_case(name))
-        .filter_map(|t| store.uuid(t).ok().map(|u| u.to_string()))
-        .collect();
-    let builtin = BUILT_IN.iter().find(|b| b.eq_ignore_ascii_case(name)).filter(|_| own.is_empty()).map(|b| b.to_string());
+        .filter_map(|t| store.uuid(t).ok().map(|u| u.to_string()));
+    let builtin = BUILT_IN.iter().find(|b| b.eq_ignore_ascii_case(name)).map(|b| b.to_string());
     builtin.into_iter().chain(own).collect()
 }
 
@@ -444,8 +483,10 @@ pub(crate) fn choices_for_menu(shell: &mut Shell) -> crate::panels::TypeChoices 
     match shell.panels.type_choices.take() {
         Some(kept) if kept.project == project && kept.revision == revision && kept.language == language => kept,
         _ => {
-            let (labels, values) = type_choices(store).into_iter().unzip();
-            crate::panels::TypeChoices { project, revision, language, labels, values }
+            let choices = type_choices(store);
+            let notes = type_notes(store, &choices);
+            let (labels, values) = choices.into_iter().unzip();
+            crate::panels::TypeChoices { project, revision, language, labels, values, notes }
         }
     }
 }
@@ -461,7 +502,7 @@ fn type_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Rect, id: &st
         return;
     }
     let choices = choices_for_menu(shell);
-    if let Some(i) = menu(shell, ui, p, field, id, &choices.labels) {
+    if let Some(i) = crate::panels::menu_noted(shell, ui, p, field, id, &choices.labels, &choices.notes) {
         *ty = choices.values.get(i).cloned().unwrap_or_default();
     }
     keep_choices(shell, choices);

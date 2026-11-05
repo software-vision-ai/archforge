@@ -94,8 +94,8 @@ pub trait Notation: Send + Sync + 'static {
         &[]
     }
     /// Classes that are kinds of their own when a skill is aimed, though no skill may name them
-    /// yet: an element of one is not reached by a skill for a broader kind it conforms to (a UML
-    /// primitive type by a skill for every data type).
+    /// yet: an element of one is not reached by a skill for a broader kind it conforms to. UML
+    /// names none now that a primitive type is a skill kind of its own (AR-124).
     fn aim_only_kinds(&self) -> &'static [ClassId] {
         &[]
     }

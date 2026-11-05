@@ -1,9 +1,10 @@
 //! What UML brings to the shell: the class diagram's tools and gestures (the
-//! classifier tool places a class, an interface, an enumeration or a data type named in place, its
-//! card renames in place), and its packages, classes, interfaces, enumerations and data types in
-//! the Models tree, the search and Properties. An enumeration's literals are typed on its card and
-//! edited in Properties and Models, as a class's members are (AR-122); a data type's attributes and
-//! operations as a class's (AR-123).
+//! classifier tool places a class, an interface, an enumeration, a data type or a primitive type
+//! named in place, its card renames in place), and its packages and classifiers in the Models tree,
+//! the search and Properties. An enumeration's literals are typed on its card and edited in
+//! Properties and Models, as a class's members are (AR-122); a data type's attributes and
+//! operations as a class's (AR-123); a primitive type has none (AR-124). The built-in types in the
+//! package Types stay out of Models and the search, as they did before primitive types were a kind.
 
 use archforge_mof::{Obj, Store, Uuid};
 use archforge_uml::commands::{classifiers, package_of, packages};
@@ -29,9 +30,20 @@ fn name(store: &Store, o: Obj) -> String {
     archforge_core::name_of(store, o)
 }
 
-/// Whether `o` is a class, an interface, an enumeration or a data type.
+/// Whether `o` is a class, an interface, an enumeration, a data type or a primitive type.
 fn classifier(store: &Store, o: Obj) -> bool {
     class(store, o).is_some_and(archforge_uml::is_classifier)
+}
+
+/// Whether `o` has members to add on its card: a primitive type has none.
+fn has_member_kinds(store: &Store, o: Obj) -> bool {
+    Classifier::of(store, o).is_none_or(|k| k.has_members())
+}
+
+/// A package's classifiers as Models and the search show them: every one but the built-in types,
+/// which stay out of sight in Types as they always have.
+fn shown_classifiers(store: &Store, package: Obj) -> Vec<Obj> {
+    classifiers(store, package).into_iter().filter(|c| !archforge_uml::members::is_built_in(store, *c)).collect()
 }
 
 /// Whether `o` is an enumeration.
@@ -165,14 +177,14 @@ impl DiagramKind for UmlKind {
         made.map(|v| v.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
     }
 
-    /// A class, an interface, an enumeration or a data type takes part in the class diagram's
-    /// gestures.
+    /// A classifier takes part in the class diagram's gestures.
     fn takes_part(&self, store: &Store, element: Obj) -> bool {
         classifier(store, element)
     }
 
-    /// A class, an interface, an enumeration or a data type, as the classifier tool's kind says, in the diagram's
-    /// package, its card centred under the click, as one undo step; then its name is open for typing.
+    /// A class, an interface, an enumeration, a data type or a primitive type, as the classifier
+    /// tool's kind says, in the diagram's package, its card (a primitive type's a header's height)
+    /// centred under the click, as one undo step; then its name is open for typing.
     fn place(&self, shell: &mut Shell, tool: &'static str, d: Obj, x: f64, y: f64) {
         if tool == "package" {
             place_package(shell, d, x, y);
@@ -194,7 +206,7 @@ impl DiagramKind for UmlKind {
             shell.canvas.notice = Some(tr("No free name is left"));
             return;
         };
-        let (w, h) = archforge_uml::CLASS_SIZE;
+        let (w, h) = kind.size();
         let (px, py) = ((x - w / 2.0).round(), (y - h / 2.0).round());
         let name_for_batch = name.clone();
         let out = session.batch(&kind.add_step(), |b| {
@@ -268,7 +280,7 @@ impl DiagramKind for UmlKind {
         crate::uml_relate::reconnect(shell, element, source, to_node);
     }
 
-    /// Renames a card's element in place: a package, a class, an interface, an enumeration or a data type,
+    /// Renames a card's element in place: a package or a classifier,
     /// through its own command.
     fn rename(&self, shell: &mut Shell, element: Uuid, name: &str) -> Result<(), String> {
         let store = shell.session.as_ref().map(|s| s.doc());
@@ -293,8 +305,11 @@ impl DiagramKind for UmlKind {
 
     /// The member at `row` of the classifier's card (its attributes, then its operations; an
     /// enumeration's literals), or a new attribute (a new literal), typed in place on the card, or
-    /// in Properties' editor where the card cannot hold it.
+    /// in Properties' editor where the card cannot hold it. A primitive type has no member to open.
     fn open(&self, shell: &mut Shell, element: Uuid, row: Option<usize>) {
+        if shell.session.as_ref().is_some_and(|s| s.doc().by_uuid(element).is_some_and(|e| !has_member_kinds(s.doc(), e))) {
+            return;
+        }
         let enumeration = shell.session.as_ref().is_some_and(|s| s.doc().by_uuid(element).is_some_and(|e| is_enumeration(s.doc(), e)));
         let member = row.and_then(|row| {
             let store = shell.session.as_ref()?.doc();
@@ -320,8 +335,12 @@ impl DiagramKind for UmlKind {
         crate::uml_panel::open(shell, element, kind, target);
     }
 
-    /// A selected card's second adorner adds an attribute, or an enumeration's a literal.
+    /// A selected card's second adorner adds an attribute, or an enumeration's a literal; a
+    /// primitive type's card has none, nor the menu's row or ⌘↩ that go with it.
     fn adorner(&self, store: &Store, element: Obj) -> Option<(&'static str, &'static str)> {
+        if !has_member_kinds(store, element) {
+            return None;
+        }
         Some(if is_enumeration(store, element) { ("add-literal", "Add literal") } else { ("add-attribute", "Add attribute") })
     }
 
@@ -338,7 +357,8 @@ impl DiagramKind for UmlKind {
         }
     }
 
-    /// The + of each compartment: a class's attributes and operations, an enumeration's literals.
+    /// The + of each compartment: a class's attributes and operations, an enumeration's literals; a
+    /// primitive type's card has no compartment.
     fn card_controls(&self, shell: &mut Shell, ui: &egui::Ui, p: &Palette, clip: Rect, rect: Rect, element: Uuid) {
         crate::uml_inline::add_buttons(shell, ui, p, clip, rect, element);
     }
@@ -349,7 +369,7 @@ impl DiagramKind for UmlKind {
         true
     }
 
-    /// A class, an interface, an enumeration or a data type from the tree, with its lines to the classifiers the
+    /// A classifier from the tree (a primitive type a header's height), with its lines to the classifiers the
     /// diagram shows; one already there is said so and left.
     fn drop(&self, shell: &mut Shell, d: Obj, element: Uuid, at: (f64, f64)) {
         shell.canvas.notice = None;
@@ -369,7 +389,7 @@ impl DiagramKind for UmlKind {
             .filter(|l| class(store, *l).is_some_and(archforge_uml::is_relationship))
             .filter(|l| archforge_diagram::Notation::ends(&notation, store, *l).is_some_and(|(a, b)| a == c || b == c))
             .collect();
-        let (width, _) = archforge_uml::CLASS_SIZE;
+        let (width, _) = kind.size();
         crate::editing::place_with_lines(shell, d, c, at, (width, content_height(store, c)), &links, &notation, &kind.place_step());
     }
 }
@@ -451,8 +471,11 @@ fn drop_package(shell: &mut Shell, d: Obj, element: Uuid, at: (f64, f64)) {
 
 /// How tall a class's, an interface's or a data type's card is to show its members: its attributes, the dividing line and its
 /// operations, an empty compartment a row; an enumeration's its literals; never less than a new
-/// class nor more than a node may be.
+/// class nor more than a node may be. A primitive type's is its header alone.
 fn content_height(store: &Store, c: Obj) -> f64 {
+    if class(store, c) == Some(archforge_uml::PRIMITIVE_TYPE) {
+        return archforge_uml::PRIMITIVE_TYPE_SIZE.1;
+    }
     if is_enumeration(store, c) {
         return literals_height(archforge_uml::commands::literals(store, c).len());
     }
@@ -509,7 +532,7 @@ impl NotationUi for UmlUi {
         class(store, member) == Some(archforge_uml::PACKAGE)
     }
 
-    /// A package with the packages it holds, its classes, interfaces, enumerations and data types, and each
+    /// A package with the packages it holds, its classifiers but the built-in types, and each
     /// one's attributes and operations or literals, every level folded until opened.
     fn tree(&self, store: &Store, package: Obj, t: &Tree<'_>) -> Vec<Row> {
         package_rows(store, package, 0, t)
@@ -602,7 +625,7 @@ impl NotationUi for UmlUi {
         crate::uml_panel::literal_refusal(store, &edit)
     }
 
-    /// The relationships that go with a class, an interface, an enumeration or a data type, or with a package's.
+    /// The relationships that go with a classifier, or with a package's.
     fn consequences(&self, store: &Store, obj: Obj) -> (usize, usize, usize) {
         let held = match class(store, obj) {
             Some(c) if archforge_uml::is_classifier(c) => vec![obj],
@@ -653,7 +676,7 @@ impl NotationUi for UmlUi {
         if class(store, obj) == Some(archforge_uml::PACKAGE) { package_of(store, obj) } else { None }
     }
 
-    /// A class, an interface, an enumeration or a data type dragged onto a package, or onto a classifier of
+    /// A classifier dragged onto a package, or onto a classifier of
     /// another package, moves there; a package dragged onto another package moves into it.
     fn drop_on(&self, store: &Store, dragged: Obj, target: Obj) -> Option<(&'static str, serde_json::Value)> {
         let to = match class(store, target)? {
@@ -697,7 +720,7 @@ impl NotationUi for UmlUi {
                 let detail = if at.is_empty() { tr("Package") } else { format!("{} · {at}", tr("Package")) };
                 Some(Entry { icon: &icons::PACKAGE, order: 1, label: name(store, o), detail })
             }
-            c if archforge_uml::is_classifier(c) => {
+            c if archforge_uml::is_classifier(c) && !archforge_uml::members::is_built_in(store, o) => {
                 let kind = Classifier::of(store, o)?;
                 let at = package_of(store, o).map(|p| name(store, p)).unwrap_or_default();
                 let detail = if at.is_empty() { kind.word() } else { format!("{} · {at}", kind.word()) };
@@ -717,8 +740,12 @@ impl NotationUi for UmlUi {
         owner_of(store, o).unwrap_or(o)
     }
 
-    /// A literal and a relationship carry no skills: the Skills panel says so in their words.
+    /// A literal, a relationship and a built-in type carry no skills: the Skills panel says so in
+    /// their words.
     fn no_skills(&self, store: &Store, o: Obj) -> Option<String> {
+        if archforge_uml::members::is_built_in(store, o) {
+            return Some(tr("Built-in types carry no skills"));
+        }
         match class(store, o)? {
             c if c == archforge_uml::ENUMERATION_LITERAL => Some(tr("Literals carry no skills")),
             c if archforge_uml::is_relationship(c) => Some(tr("Relationships carry no skills")),
@@ -741,6 +768,12 @@ impl NotationUi for UmlUi {
             c if c == archforge_uml::DATA_TYPE => {
                 words(tr("Data type · model, in every diagram"), tr("Data type"), tr("This data type"), tr("On this data type · {n}"))
             }
+            c if c == archforge_uml::PRIMITIVE_TYPE => words(
+                tr("Primitive type · model, in every diagram"),
+                tr("Primitive type"),
+                tr("This primitive type"),
+                tr("On this primitive type · {n}"),
+            ),
             c if c == archforge_uml::ASSOCIATION => {
                 words(tr("Association · model"), tr("Association"), tr("This association"), tr("On this association · {n}"))
             }
@@ -825,18 +858,19 @@ fn has_members(store: &Store, c: Obj) -> bool {
 }
 
 /// A package's rows at `depth`: the package, then, when open, its skills, the packages it holds,
-/// its classes, interfaces, enumerations and data types, in its order, and their members. A row whose name holds the filter shows with the rows above it.
+/// its classifiers, in its order, and their members; a primitive type has none, and the built-in
+/// types in Types stay out of sight. A row whose name holds the filter shows with the rows above it.
 fn package_rows(store: &Store, package: Obj, depth: u8, t: &Tree<'_>) -> Vec<Row> {
     let mut under = t.skill_rows(package, depth.saturating_add(1));
     for sub in archforge_uml::commands::subpackages(store, package) {
         under.extend(package_rows(store, sub, depth.saturating_add(1), t));
     }
-    for c in classifiers(store, package) {
-        under.extend(class_rows(store, c, depth.saturating_add(1), t));
+    let shown = shown_classifiers(store, package);
+    for c in &shown {
+        under.extend(class_rows(store, *c, depth.saturating_add(1), t));
     }
     let label = name(store, package);
-    let empty =
-        t.skills(package).is_empty() && archforge_uml::commands::subpackages(store, package).is_empty() && classifiers(store, package).is_empty();
+    let empty = t.skills(package).is_empty() && archforge_uml::commands::subpackages(store, package).is_empty() && shown.is_empty();
     if !t.matches(&label) && under.is_empty() {
         return Vec::new();
     }
@@ -919,7 +953,8 @@ pub(crate) fn put_literals(shell: &mut Shell, enumeration: Uuid, names: &[&str])
 }
 
 /// A class model to read, for the snapshot screens and the tests: in a package,
-/// Commerce, classes with typed attributes and operations, an abstract Payment, associations that
+/// Commerce, classes with typed attributes and operations, their types in the package Types (the
+/// built-in Integer, String and Boolean, and the model's own Date and Money), an abstract Payment, associations that
 /// navigate one way and both, a composition and a shared aggregation, a generalization and a
 /// dependency. Built on the store, since commands for members and relationships come with their
 /// own journeys. Gives the package.
@@ -937,10 +972,14 @@ pub(crate) fn sample_model(st: &mut Store, model: Obj) -> Result<Obj, archforge_
     };
     let pkg = named(st, u::PACKAGE, "Commerce")?;
     st.push(model, archforge_core::model::MEMBER, Value::Ref(pkg))?;
+    // The types sit in the package Types: Integer, String and Boolean the built-in ones, as the
+    // commands make them, and Date and Money primitive types of the model's own beside them.
+    let held = named(st, u::PACKAGE, u::members::TYPES)?;
+    st.push(model, archforge_core::model::MEMBER, Value::Ref(held))?;
     let mut types = std::collections::BTreeMap::new();
     for t in ["Integer", "String", "Date", "Money", "Boolean"] {
         let o = named(st, u::PRIMITIVE_TYPE, t)?;
-        st.push(pkg, u::package::PACKAGED_ELEMENT, Value::Ref(o))?;
+        st.push(held, u::package::PACKAGED_ELEMENT, Value::Ref(o))?;
         types.insert(t, o);
     }
     let public = Value::Enum(0);
