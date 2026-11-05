@@ -456,6 +456,14 @@ fn follow_ends(store: &mut Store, element: Obj) -> Result<(), CommandError> {
     Ok(())
 }
 
+/// Why a realization's end that stays, `end`, named `which`, is wrong already: its id, the kind it
+/// is, and the kind it needs (`needs`, with its article).
+fn wrong_end(store: &Store, which: &str, end: Obj, needs: &str) -> String {
+    let id = uuid_of(store, end).unwrap_or_default();
+    let is = store.class_of(end).map(|c| store.universe().class_name(c)).unwrap_or_else(|_| "nothing".into());
+    format!("the realization's existing {which} end {id} is of kind {is}; it must be {needs}")
+}
+
 /// `uml.relationship.reconnect`: one end of a relationship moved to another classifier, its rules kept and its lines following.
 fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
     let key = "relationship";
@@ -494,10 +502,10 @@ fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
         // realization's fault, not the classifier the moved end was dropped on.
         match realization_problem(ctx.doc, i, c, Some(r)) {
             Some(RealizationProblem::NotAClass) if !source => {
-                return Err(refuse(key, "the realization's existing implementing end is not a class"));
+                return Err(refuse(key, wrong_end(ctx.doc, "implementing", implementing, "a Class")));
             }
             Some(RealizationProblem::NotAnInterface) if source => {
-                return Err(refuse(key, "the realization's existing contract end is not an interface"));
+                return Err(refuse(key, wrong_end(ctx.doc, "contract", contract, "an Interface")));
             }
             Some(problem) => return Err(refuse("class", problem.why())),
             None => {}

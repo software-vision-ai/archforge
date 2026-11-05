@@ -439,11 +439,12 @@ fn a_realization_whose_staying_end_is_not_a_class_says_so_when_its_other_end_mov
     st.set(r, archforge_uml::interface_realization::CONTRACT, Value::Ref(payable)).unwrap();
     st.push(actor, archforge_uml::behaviored_classifier::INTERFACE_REALIZATION, Value::Ref(r)).unwrap();
     let id = |o| st.uuid(o).unwrap().to_string();
-    let (r, refundable) = (id(r), id(refundable));
+    let (r, refundable, actor) = (id(r), id(refundable), id(actor));
     let mut s = Session::with_view(registry().unwrap(), st, 1, Options::default(), ProjectView::new(ALONE));
     let before = snapshot(&s);
     let e = s.execute("uml.relationship.reconnect", &json!({ "relationship": r, "end": "target", "class": refundable })).unwrap_err().to_string();
-    assert!(e.contains("relationship: the realization") && e.contains("existing implementing end is not a class"), "{e}");
+    let want = format!("relationship: the realization's existing implementing end {actor} is of kind Actor; it must be a Class");
+    assert!(e.contains(&want), "{e}");
     assert_eq!(snapshot(&s), before, "nothing changed");
 }
 

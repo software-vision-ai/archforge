@@ -421,8 +421,10 @@ What is UML's own, beside the shared rules above.
   it, as a table's does. Delete removes the selected cards from the diagram; Shift+Delete asks to
   delete from the model.
 - A selected class-diagram line shows a round handle at each end; one dragged onto another class
-  moves that end there, its lines on every diagram following. Delete removes the line's
-  relationship with a toast and Undo.
+  moves that end there, its lines on every diagram following. A realization's class end moves onto
+  another class and its interface end onto another interface, with the same refusals as drawing
+  one: a drop elsewhere, or onto an interface the class realizes already, is said at the canvas's
+  top and changes nothing. Delete removes the line's relationship with a toast and Undo.
 - Packages nest as deep as needed. The Models tree shows a package, then the packages it holds,
   then its classes, and under an open class its attributes (with their type) and operations
   (`name()`, with their return type), every level folded until opened; Expand all opens packages
