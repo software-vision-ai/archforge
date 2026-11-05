@@ -1337,16 +1337,24 @@ fn unplace(shell: &mut Shell, nodes: Vec<Uuid>) {
     }
 }
 
-/// How many diagrams show `element` as a node.
+/// How many diagrams show `element`, as a node or as a line (an association class drawn by its
+/// line alone), each diagram once.
 pub fn diagrams_showing(store: &Store, element: Obj) -> usize {
-    let (_, _, nodes) = archforge_diagram::views_of(store, element);
-    let diagrams: std::collections::BTreeSet<Obj> = nodes.iter().filter_map(|n| archforge_diagram::diagram_of(store, *n)).collect();
+    let (_, edges, nodes) = archforge_diagram::views_of(store, element);
+    let diagrams: std::collections::BTreeSet<Obj> = nodes.iter().chain(&edges).filter_map(|v| archforge_diagram::diagram_of(store, *v)).collect();
     diagrams.len()
 }
 
 /// Asks before an entity goes from the model, with what goes with it; what its notation keeps
 /// (the package Types while it holds the built-in types) is said at the canvas's top instead.
 fn ask_delete(shell: &mut Shell, node: Uuid, entity: Uuid) {
+    ask_delete_of(shell, Some(node), entity);
+}
+
+/// [`ask_delete`] for an entity selected on the diagram by its card `node`, or with none by a line
+/// alone (an association class drawn without its card): the dialog then offers no removal from
+/// the diagram, as the line's own Delete does that.
+fn ask_delete_of(shell: &mut Shell, node: Option<Uuid>, entity: Uuid) {
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
     let Some(e) = store.by_uuid(entity) else { return };
     // What its notation keeps (UML's package Types with the built-in types) is said, not asked.
@@ -1364,7 +1372,7 @@ fn ask_delete(shell: &mut Shell, node: Uuid, entity: Uuid) {
         keys,
         foreign_keys,
         diagrams,
-        node: Some(node),
+        node,
     });
     shell.canvas.menu = None;
 }
@@ -1481,7 +1489,8 @@ pub(crate) fn overlays(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rec
 fn selected_line(store: &Store, d: Obj, selection: &[Obj]) -> Option<(Uuid, Vec<(f64, f64)>)> {
     let [element] = selection else { return None };
     let (_, edges, nodes) = archforge_diagram::views_of(store, *element);
-    if !nodes.is_empty() {
+    // A card's element has no line, but an association class has both: its line keeps its handles.
+    if !nodes.is_empty() && store.class_of(*element).ok() != Some(archforge_uml::ASSOCIATION_CLASS) {
         return None;
     }
     let edge = edges.into_iter().find(|e| store.container(*e).ok().flatten().is_some_and(|(c, _)| c == d))?;
@@ -1905,6 +1914,14 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
         None => Vec::new(),
     };
     if selected.is_empty() {
+        // A line whose element has its card on another diagram only, or on none (an association
+        // class's, drawn here with its classes): Delete takes the line from this diagram, and
+        // Shift+Delete asks to delete the element from the model.
+        if delete && !shift {
+            remove_lines_here(shell, d);
+        } else if delete && let Some(entity) = line_element_here(shell, d, kind) {
+            ask_delete_of(shell, None, entity);
+        }
         return;
     }
     // The kind's new row, as its adorner opens it (ER's add column).
@@ -1949,6 +1966,66 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
     let ids: Vec<String> = selected.iter().map(|(n, _)| n.to_string()).collect();
     if let Err(e) = run(shell, "diagram.move", json!({ "nodes": ids, "dx": dx, "dy": dy, "coalesce": "nudge" })) {
         shell.canvas.notice = Some(e);
+    }
+}
+
+/// The elements of `selection` that diagram `d` is asked about: an element as it is, and a line
+/// selected as a line (`view.select` takes any id, an agent's an edge's too) as the element it
+/// shows, only when that line is on `d`: a line of another diagram never stands for this one's. A
+/// note link, which shows none, is left out. Each once, in the selection's order.
+fn selected_elements(store: &Store, d: Obj, selection: &[Obj]) -> Vec<Obj> {
+    let mut out: Vec<Obj> = Vec::new();
+    for o in selection {
+        let e = if store.class_of(*o).ok() == Some(archforge_diagram::EDGE) {
+            if archforge_diagram::diagram_of(store, *o) != Some(d) {
+                continue;
+            }
+            store.get(*o, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref())
+        } else {
+            Some(*o)
+        };
+        if let Some(e) = e.filter(|e| !out.contains(e)) {
+            out.push(e);
+        }
+    }
+    out
+}
+
+/// The selected element a line of diagram `d` shows that the diagram's kind deletes from the model
+/// (an association class whose card is not on `d`), when there is one.
+fn line_element_here(shell: &Shell, d: Obj, kind: Option<&'static dyn crate::kinds::DiagramKind>) -> Option<Uuid> {
+    let session = shell.session.as_ref()?;
+    let store = session.doc();
+    let element = selected_elements(store, d, &session.view().selection).into_iter().find(|e| {
+        archforge_diagram::views_of(store, *e).1.iter().any(|edge| archforge_diagram::diagram_of(store, *edge) == Some(d))
+            && kind.is_some_and(|k| k.deletes(store, *e))
+    })?;
+    uuid(store, element)
+}
+
+/// Removes from diagram `d` the lines that show the selected elements, as one undo step, the
+/// model untouched: what Delete does to a line whose element's card is not on this diagram.
+fn remove_lines_here(shell: &mut Shell, d: Obj) {
+    let Some(session) = shell.session.as_ref() else { return };
+    let store = session.doc();
+    let edges: Vec<String> = selected_elements(store, d, &session.view().selection)
+        .into_iter()
+        .flat_map(|e| archforge_diagram::views_of(store, e).1)
+        .filter(|e| archforge_diagram::diagram_of(store, *e) == Some(d))
+        .filter_map(|e| uuid(store, e).map(|u| u.to_string()))
+        .collect();
+    if edges.is_empty() {
+        return;
+    }
+    let Some(session) = shell.session.as_mut() else { return };
+    let out = session.batch(&tr("Remove from this diagram"), |b| {
+        for edge in &edges {
+            b.execute("diagram.disconnect", &json!({ "edge": edge }))?;
+        }
+        Ok(())
+    });
+    if let Err(e) = out {
+        shell.canvas.notice = Some(e.to_string());
     }
 }
 

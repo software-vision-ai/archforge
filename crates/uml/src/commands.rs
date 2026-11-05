@@ -1,6 +1,7 @@
 //! UML's commands over the store: packages in the project's Model,
 //! nested as deep as needed, and classes, interfaces, enumerations, data types and primitive types
-//! in a package, added, renamed, moved and listed. A package's classifiers share its names: no two
+//! in a package, added, renamed, moved and listed; an association class, made between two classes
+//! (`relations`), renamed and moved here as the class it is. A package's classifiers share its names: no two
 //! of them are named alike, whatever the case, so a type picked by its name is never in doubt, and
 //! in the package Types the built-in types' names are kept for them. A built-in type keeps its
 //! name and its package. Each
@@ -14,7 +15,7 @@ use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, always, cm
 use archforge_mof::{ClassId, Invalid, Obj, Store, Uuid, Value};
 use serde_json::{Value as Json, json};
 
-use crate::{CLASS, DATA_TYPE, ENUMERATION, INTERFACE, PACKAGE, PRIMITIVE_TYPE, enumeration, named_element, package};
+use crate::{ASSOCIATION_CLASS, CLASS, DATA_TYPE, ENUMERATION, INTERFACE, PACKAGE, PRIMITIVE_TYPE, enumeration, named_element, package};
 
 type C<'a> = Ctx<'a, Store, ProjectView>;
 type R = Result<Json, CommandError>;
@@ -76,11 +77,15 @@ pub(crate) fn a_what(store: &Store, o: Obj) -> String {
     format!("{article} {what}")
 }
 
-/// The class, interface, enumeration, data type or primitive type the id under `key` names.
+/// The class, interface, enumeration, data type, primitive type or association class the id under
+/// `key` names.
 pub(crate) fn classifier_of(store: &Store, p: &Params, key: &str) -> Result<Obj, CommandError> {
     let obj = element_of(store, p, key)?;
     if !store.class_of(obj).is_ok_and(crate::is_classifier) {
-        return Err(refuse(key, format!("{} is not a class, an interface, an enumeration, a data type or a primitive type", text(p, key))));
+        return Err(refuse(
+            key,
+            format!("{} is not a class, an interface, an enumeration, a data type, a primitive type or an association class", text(p, key)),
+        ));
     }
     Ok(obj)
 }
@@ -216,13 +221,19 @@ pub fn primitive_types(store: &Store, package: Obj) -> Vec<Obj> {
     members(store, package, package::PACKAGED_ELEMENT, PRIMITIVE_TYPE)
 }
 
+/// The association classes of a package, in its order.
+pub fn association_classes(store: &Store, package: Obj) -> Vec<Obj> {
+    members(store, package, package::PACKAGED_ELEMENT, ASSOCIATION_CLASS)
+}
+
 /// An enumeration's literals, in their order.
 pub fn literals(store: &Store, enumeration: Obj) -> Vec<Obj> {
     members(store, enumeration, enumeration::OWNED_LITERAL, crate::ENUMERATION_LITERAL)
 }
 
-/// The classifiers of a package, its classes, interfaces, enumerations, data types and primitive
-/// types (the package Types' built-in ones among them), in its order.
+/// The classifiers of a package, its classes, interfaces, enumerations, data types, primitive types
+/// (the package Types' built-in ones among them) and association classes, in its order: the names a
+/// classifier's must differ from.
 pub fn classifiers(store: &Store, package: Obj) -> Vec<Obj> {
     store
         .list(package, package::PACKAGED_ELEMENT)
@@ -234,10 +245,11 @@ pub fn classifiers(store: &Store, package: Obj) -> Vec<Obj> {
 }
 
 /// What an element is, as a refusal names it: a class, an interface, an enumeration, a data type, a
-/// primitive type, a package, a literal.
+/// primitive type, an association class, a package, a literal.
 pub(crate) fn what(store: &Store, o: Obj) -> &'static str {
     match store.class_of(o).ok() {
         Some(c) if c == CLASS => "class",
+        Some(c) if c == ASSOCIATION_CLASS => "association class",
         Some(c) if c == INTERFACE => "interface",
         Some(c) if c == ENUMERATION => "enumeration",
         Some(c) if c == DATA_TYPE => "data type",
@@ -255,7 +267,7 @@ pub fn package_of(store: &Store, class: Obj) -> Option<Obj> {
 
 /// A name a package or a classifier may have, distinct, whatever the case, from its siblings'
 /// (a namespace tells its members apart by name); a refusal names what has it already.
-fn check_name(store: &Store, name: &str, siblings: &[Obj], except: Option<Obj>) -> Result<(), CommandError> {
+pub(crate) fn check_name(store: &Store, name: &str, siblings: &[Obj], except: Option<Obj>) -> Result<(), CommandError> {
     if let Some(p) = archforge_core::skills::name_problem(name, MAX_NAME) {
         return Err(refuse("name", format!("the name {p}")));
     }
@@ -401,7 +413,8 @@ fn package_move(ctx: &mut C<'_>, p: &Params) -> R {
 
 /// The classifier under `key` (of `kind`, `what` naming it) moves into the package under
 /// `package`, its name free among that package's classifiers and, in the package Types, none
-/// of the built-in types'. A built-in type stays in Types.
+/// of the built-in types'. A built-in type stays in Types; an association class without a name
+/// clashes with none.
 fn classifier_move(ctx: &mut C<'_>, p: &Params, kind: ClassId, key: &str, what: &str) -> R {
     let c = id_of(ctx.doc, p, key, kind, what)?;
     let to = id_of(ctx.doc, p, "package", PACKAGE, "a package")?;
@@ -415,7 +428,9 @@ fn classifier_move(ctx: &mut C<'_>, p: &Params, kind: ClassId, key: &str, what: 
     if let Some(why) = crate::members::reserved_problem(ctx.doc, to, &name) {
         return Err(refuse("package", format!("{}: {why}", uuid_of(ctx.doc, c)?)));
     }
-    check_name(ctx.doc, &name, &classifiers(ctx.doc, to), Some(c))?;
+    if !(name.is_empty() && kind == ASSOCIATION_CLASS) {
+        check_name(ctx.doc, &name, &classifiers(ctx.doc, to), Some(c))?;
+    }
     detach(ctx.doc, c)?;
     ctx.doc.push(to, package::PACKAGED_ELEMENT, Value::Ref(c)).map_err(fail)?;
     ctx.view.selection = vec![c];
@@ -439,13 +454,18 @@ fn classifier_add(ctx: &mut C<'_>, p: &Params, kind: ClassId) -> R {
 }
 
 /// The classifier under `key` renamed, its new name free among its package's classifiers and, in
-/// the package Types, none of the built-in types'. A built-in type keeps its name.
+/// the package Types, none of the built-in types'. A built-in type keeps its name. An association
+/// class may go without a name, as an association may.
 fn classifier_rename(ctx: &mut C<'_>, p: &Params, kind: ClassId, key: &str, what: &str) -> R {
     let c = id_of(ctx.doc, p, key, kind, what)?;
     if let Some(why) = crate::members::built_in_problem(ctx.doc, c, "renamed") {
         return Err(refuse(key, why));
     }
     let name = text(p, "name");
+    if name.is_empty() && kind == ASSOCIATION_CLASS {
+        set_name(ctx.doc, c, name)?;
+        return Ok(json!({ "id": uuid_of(ctx.doc, c)? }));
+    }
     if let Some(why) = package_of(ctx.doc, c).and_then(|pkg| crate::members::reserved_problem(ctx.doc, pkg, name)) {
         return Err(refuse("name", why));
     }
@@ -532,8 +552,20 @@ fn primitive_type_rename(ctx: &mut C<'_>, p: &Params) -> R {
     classifier_rename(ctx, p, PRIMITIVE_TYPE, "primitive_type", "a primitive type")
 }
 
+/// `uml.association-class.rename`: an association class renamed as the class it is, its name free
+/// among its package's classifiers, or taken away.
+fn association_class_rename(ctx: &mut C<'_>, p: &Params) -> R {
+    classifier_rename(ctx, p, ASSOCIATION_CLASS, "association_class", "an association class")
+}
+
+/// `uml.association-class.move`: an association class into another package; its ends stay at the
+/// classes they join.
+fn association_class_move(ctx: &mut C<'_>, p: &Params) -> R {
+    classifier_move(ctx, p, ASSOCIATION_CLASS, "association_class", "an association class")
+}
+
 /// `uml.package.list`: every package with its parent and how many classes, interfaces,
-/// enumerations, data types and primitive types it holds.
+/// enumerations, data types, primitive types and association classes it holds.
 fn package_list(ctx: &mut C<'_>, _: &Params) -> R {
     let store = &*ctx.doc;
     let items: Vec<Json> = all_packages(store)
@@ -544,7 +576,7 @@ fn package_list(ctx: &mut C<'_>, _: &Params) -> R {
                 "id": uuid_of(store, pkg).unwrap_or_default(), "name": name_of(store, pkg), "parent": parent,
                 "classes": classes(store, pkg).len(), "interfaces": interfaces(store, pkg).len(),
                 "enumerations": enumerations(store, pkg).len(), "data_types": data_types(store, pkg).len(),
-                "primitive_types": primitive_types(store, pkg).len(),
+                "primitive_types": primitive_types(store, pkg).len(), "association_classes": association_classes(store, pkg).len(),
             })
         })
         .collect();
@@ -657,12 +689,14 @@ fn hand_up_problem(store: &Store, pkg: Obj, parent: Obj) -> Option<String> {
 }
 
 /// Removes UML elements (packages, classes, interfaces, enumerations, data types, attributes,
-/// operations, literals, primitive types, associations, generalizations, dependencies and interface
-/// realizations), each with what it holds (an enumeration its literals, a data type its attributes
-/// and operations) and the diagrams, nodes and lines that show them (`element.remove`, through
-/// [`crate::UmlNotation`]). A nested package hands what it holds, and its diagrams, up to its parent
-/// first (owner decision); a top-level package takes them along. A classifier takes the
-/// relationships that touch it along, and a member's type that goes is dropped from what had it.
+/// operations, literals, primitive types, associations, generalizations, dependencies, interface
+/// realizations and association classes), each with what it holds (an enumeration its literals, a
+/// data type or an association class its attributes and operations, an association its ends) and the
+/// diagrams, nodes and lines that show them (`element.remove`, through [`crate::UmlNotation`]). A
+/// nested package hands what it holds, and its diagrams, up to its parent first (owner decision); a
+/// top-level package takes them along. A classifier takes the relationships that touch it along,
+/// and an association class among them takes its own ([`going_with`]); a member's type that goes is
+/// dropped from what had it.
 pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, CommandError> {
     // Every id is checked before anything goes, so a refusal leaves the store as it was.
     let removable = [
@@ -679,6 +713,7 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
         crate::GENERALIZATION,
         crate::DEPENDENCY,
         crate::INTERFACE_REALIZATION,
+        ASSOCIATION_CLASS,
     ];
     for o in objs.iter().filter(|o| store.is_alive(**o)) {
         let class = store.class_of(*o).map_err(fail)?;
@@ -722,17 +757,15 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
     }
     // The relationships of every classifier that goes, a top-level package's among them,
     // go first: a generalization requires its general classifier.
-    let mut all: Vec<Obj> = Vec::new();
+    let mut classes: Vec<Obj> = Vec::new();
     for o in objs.iter().filter(|o| store.is_alive(**o)) {
-        let classes = match store.class_of(*o).ok() {
-            Some(c) if crate::is_classifier(c) => vec![*o],
-            Some(c) if c == PACKAGE => classifiers_within(store, *o),
-            _ => Vec::new(),
-        };
-        for c in classes {
-            all.extend(crate::relations::relationships_of(store, c));
+        match store.class_of(*o).ok() {
+            Some(c) if crate::is_classifier(c) => classes.push(*o),
+            Some(c) if c == PACKAGE => classes.extend(classifiers_within(store, *o)),
+            _ => {}
         }
     }
+    let mut all = going_with(store, &classes);
     all.extend(objs);
     for o in all {
         if !store.is_alive(o) {
@@ -746,6 +779,26 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
             .map_err(fail)?;
     }
     Ok(gone)
+}
+
+/// The relationships that go when `classes` go: those that touch any of them, and, since an
+/// association class is a classifier too, those that touch an association class going with them,
+/// and so on, each once. A seen-set bounds the walk.
+pub fn going_with(store: &Store, classes: &[Obj]) -> Vec<Obj> {
+    let mut seen: std::collections::BTreeSet<Obj> = classes.iter().copied().collect();
+    let mut queue: Vec<Obj> = classes.to_vec();
+    let mut out = Vec::new();
+    while let Some(c) = queue.pop() {
+        for r in crate::relations::relationships_of(store, c) {
+            if seen.insert(r) {
+                out.push(r);
+                if store.class_of(r).ok() == Some(ASSOCIATION_CLASS) {
+                    queue.push(r);
+                }
+            }
+        }
+    }
+    out
 }
 
 /// UML's own commands; the edit area, the shared element commands, the diagrams' and the skills'
@@ -923,6 +976,24 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "primitive_type: string; the primitive type's id, one of the model's own: a built-in type stays in Types\npackage: string; the id of the package it goes into, where its name is free among the package's classifiers (classes, interfaces, enumerations, data types and primitive types); in the package Types (directly under the root package) never a built-in type's name (Integer, String, Boolean, Real, UnlimitedNatural)",
             has_packages,
             primitive_type_move
+        ),
+        cmd!(
+            "uml.association-class.rename",
+            "Rename association class",
+            &["Association class"],
+            None,
+            "association_class: string; the association class's id\nname: string; the new name, free among its package's classifiers (classes, interfaces, enumerations, data types, primitive types and association classes), or nothing for none; in the package Types (directly under the root package) never a built-in type's name (Integer, String, Boolean, Real, UnlimitedNatural)",
+            has_packages,
+            association_class_rename
+        ),
+        cmd!(
+            "uml.association-class.move",
+            "Move association class",
+            &["Association class"],
+            None,
+            "association_class: string; the association class's id\npackage: string; the id of the package it goes into, where its name is free among the package's classifiers (classes, interfaces, enumerations, data types, primitive types and association classes); in the package Types (directly under the root package) never a built-in type's name (Integer, String, Boolean, Real, UnlimitedNatural); its ends stay at their classes",
+            has_packages,
+            association_class_move
         ),
         cmd!(query "uml.package.list", "List packages", &["Package"], None, "", always, package_list),
         cmd!(query "uml.class.list", "List classes", &["Class"], None, "package: string; the package's id", has_packages, class_list),

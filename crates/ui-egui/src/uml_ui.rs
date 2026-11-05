@@ -370,7 +370,8 @@ impl DiagramKind for UmlKind {
     }
 
     /// A classifier from the tree (a primitive type a header's height), with its lines to the classifiers the
-    /// diagram shows; one already there is said so and left.
+    /// diagram shows; one already there is said so and left. An association class's card comes
+    /// with its own line too, where the diagram shows both its classes.
     fn drop(&self, shell: &mut Shell, d: Obj, element: Uuid, at: (f64, f64)) {
         shell.canvas.notice = None;
         let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
@@ -387,7 +388,9 @@ impl DiagramKind for UmlKind {
         let links: Vec<Obj> = store
             .alive()
             .filter(|l| class(store, *l).is_some_and(archforge_uml::is_relationship))
-            .filter(|l| archforge_diagram::Notation::ends(&notation, store, *l).is_some_and(|(a, b)| a == c || b == c))
+            .filter(|l| *l == c || archforge_diagram::Notation::ends(&notation, store, *l).is_some_and(|(a, b)| a == c || b == c))
+            // A line the diagram draws already (an association class's, its card not yet placed) stays as it is.
+            .filter(|l| archforge_diagram::views_of(store, *l).1.iter().all(|e| archforge_diagram::diagram_of(store, *e) != Some(d)))
             .collect();
         let (width, _) = kind.size();
         crate::editing::place_with_lines(shell, d, c, at, (width, content_height(store, c)), &links, &notation, &kind.place_step());
@@ -634,17 +637,15 @@ impl NotationUi for UmlUi {
             .map(|_| tr("Types keeps the built-in types, so it stays while it holds them"))
     }
 
-    /// The relationships that go with a classifier, or with a package's.
+    /// The relationships that go with a classifier, or with a package's, counted as `element.remove`
+    /// takes them (`going_with`): an association class going along takes what touches it too.
     fn consequences(&self, store: &Store, obj: Obj) -> (usize, usize, usize) {
         let held = match class(store, obj) {
             Some(c) if archforge_uml::is_classifier(c) => vec![obj],
             Some(c) if c == archforge_uml::PACKAGE => classifiers(store, obj),
             _ => Vec::new(),
         };
-        let mut going: Vec<Obj> = held.into_iter().flat_map(|c| archforge_uml::relations::relationships_of(store, c)).collect();
-        going.sort();
-        going.dedup();
-        (going.len(), 0, 0)
+        (archforge_uml::commands::going_with(store, &held).len(), 0, 0)
     }
 
     /// Whether `obj` has rows under it: a package what it holds (the built-in types in Types, which
@@ -757,6 +758,8 @@ impl NotationUi for UmlUi {
         }
         match class(store, o)? {
             c if c == archforge_uml::ENUMERATION_LITERAL => Some(tr("Literals carry no skills")),
+            // An association class carries skills as the class it is.
+            c if c == archforge_uml::ASSOCIATION_CLASS => None,
             c if archforge_uml::is_relationship(c) => Some(tr("Relationships carry no skills")),
             _ => None,
         }
@@ -786,6 +789,12 @@ impl NotationUi for UmlUi {
             c if c == archforge_uml::ASSOCIATION => {
                 words(tr("Association · model"), tr("Association"), tr("This association"), tr("On this association · {n}"))
             }
+            c if c == archforge_uml::ASSOCIATION_CLASS => words(
+                tr("Association class · model, in every diagram"),
+                tr("Association class"),
+                tr("This association class"),
+                tr("On this association class · {n}"),
+            ),
             c if c == archforge_uml::GENERALIZATION => {
                 words(tr("Generalization · model"), tr("Generalization"), tr("This generalization"), tr("On this generalization · {n}"))
             }

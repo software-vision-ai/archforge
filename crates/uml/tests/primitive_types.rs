@@ -247,7 +247,7 @@ fn a_primitive_type_draws_its_name_alone_and_takes_no_member() {
         assert!(e.contains("key: Some(\"class\")") && e.contains(&sku), "{cmd}: {e}");
         assert!(
             e.contains(&format!(
-                "is a primitive type and keeps no {members}, a primitive type having no members; a class, an interface or a data type does"
+                "is a primitive type and keeps no {members}, a primitive type having no members; a class, an interface, a data type or an association class does"
             )),
             "{cmd}: {e}"
         );

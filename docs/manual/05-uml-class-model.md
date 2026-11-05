@@ -252,6 +252,57 @@ a skill for every data type does not reach them. The built-in types carry no ski
 
 <!-- picture: workspace-primitive-type light | The primitive types Sku and Gtin on the Catalog diagram, Gtin specializing Sku, Sku selected with its name, package and description in Properties and listed in Models, and the class Product whose attributes and operation they type -->
 
+## 11. Add an association class
+
+Sometimes the link between two classes has facts of its own: a *Review* that a *Customer* writes
+about a *Product* has its stars and its text, which belong neither to the customer nor to the
+product. An *association class* is that link: an association between the two classes that is a
+class too, with attributes and operations of its own.
+
+1. Open the chevron of the **Relationship** tool and choose **Association class**, the last row,
+   below **Interface realization**. The tool now shows a line with a small card above its middle,
+   and its tooltip says it joins two classes with a card of its own.
+2. Press on *Customer*, drag onto *Product*, then let go.
+
+The line appears between the two classes, and a card above the line's middle, its eyebrow
+`ASSOCIATION CLASS` and its name open for typing: type *Review* and press Enter. A dashed tie in
+the muted ink joins the card to the line's middle. The line, the card and the tie are one element,
+drawn as one step you can undo. A new association class has no roles and no multiplicities and
+navigates to neither class, as a new association does. Let go on empty canvas instead, and a new
+class appears there, its name ready to type, with the association class to it.
+
+Only classes are at its ends. From or to an interface, an enumeration, a data type or a primitive
+type, the tool draws nothing, and the reason shows at the canvas's top.
+
+The card moves on its own: drag it anywhere, and the tie follows. Move a class at either end and
+the line moves, and the tie with it. Click the line or the card to select the association class;
+both show selected. **Properties** shows its **Name** and **Description**, its two classes, read
+only, then a section for each end, **End at Customer** and **End at Product**, with **Role**,
+**Multiplicity**, **Navigable** and **Aggregation** as an association's ends have, and then
+**Attributes** and **Operations** with their editors, as a class has. Its attributes and operations
+are typed on its card as on a class's: select it and use the **+** of a compartment, the **Add
+attribute** button beside the card, or ⌘↩ (⇧⌘↩ for an operation). Drag an end of the selected line
+onto another class to move it; the same rules apply.
+
+Its name is one of its package's names, as a class's is: a class and an association class of one
+package cannot share a name. Its attributes and its ends' roles share its own names: an attribute
+named like one of its ends' roles is refused under its row, and a role named like one of its
+attributes is refused in Properties. **Remove from this diagram**, or Delete, takes the line and the card
+away and keeps the association class in the model; **Delete from the model…** (⇧⌫) asks first, then
+deletes it with its ends, attributes and operations. Removing a class at either end takes it along.
+
+In **Models** it is a row under its package, with its attributes and operations below it. The
+**+** of a package does not offer it: an association class is made only by drawing. Drag its row
+onto a diagram to place its card; where the diagram shows both its classes, its line comes with it.
+A diagram may also show its line without its card, when you place its two classes there: the line
+then carries its name at its middle, as an association's name sits, and Delete on that line takes
+it from the diagram, never from the model.
+An association class carries skills as a class does; a package's skill can aim at every association
+class in it, which a skill for every class or for every association does not reach. It may realize
+an interface, as a class does, but nothing specializes it.
+
+<!-- picture: workspace-association-class light | Customer and Product joined by the association class Review, its card with its attributes above the line's middle and tied to it; Review selected with its ends, attributes and operations in Properties -->
+
 ## The result
 
 The root package holds two classes and an interface. *Customer* has an attribute and an

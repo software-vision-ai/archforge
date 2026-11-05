@@ -1786,7 +1786,7 @@ struct SkillRow {
 }
 
 /// What a skill aims at, as Properties says it: every class, every interface, every enumeration,
-/// every data type, every primitive type, its type pattern, or nothing.
+/// every data type, every primitive type, every association class, its type pattern, or nothing.
 pub(crate) fn target_word(store: &Store, s: Obj) -> String {
     let applies = string_of(store, s, archforge_core::skill::APPLIES_TO);
     let pattern = string_of(store, s, archforge_core::skill::TYPE_PATTERN);
@@ -1798,6 +1798,7 @@ pub(crate) fn target_word(store: &Store, s: Obj) -> String {
         Some("enumeration") => tr("every enumeration"),
         Some("data type") => tr("every data type"),
         Some("primitive type") => tr("every primitive type"),
+        Some("association class") => tr("every association class"),
         Some("attribute") => tr("every attribute"),
         Some("operation") => tr("every operation"),
         Some("association") => tr("every association"),

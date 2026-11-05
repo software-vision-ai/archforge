@@ -212,6 +212,7 @@ str		every interface	every interface
 str		every enumeration	every enumeration
 str		every data type	every data type
 str		every primitive type	every primitive type
+str		every association class	every association class
 str		every attribute	every attribute
 str		every operation	every operation
 str		every association	every association
@@ -539,6 +540,7 @@ str		Add interface	Add interface
 str		Add enumeration	Add enumeration
 str		Add data type	Add data type
 str		Add primitive type	Add primitive type
+str		Add association class	Add association class
 str		Class	Class
 str		Interface	Interface
 str		«interface»	«interface»
@@ -548,6 +550,7 @@ str		Data type	Data type
 str		Primitive type	Primitive type
 str		«dataType»	«dataType»
 str		«primitive»	«primitive»
+str		Association class	Association class
 str		Classifier	Classifier
 str		Classifier kinds	Classifier kinds
 str		Class diagram	Class diagram
@@ -557,6 +560,7 @@ str		Interface · model, in every diagram	Interface · model, in every diagram
 str		Enumeration · model, in every diagram	Enumeration · model, in every diagram
 str		Data type · model, in every diagram	Data type · model, in every diagram
 str		Primitive type · model, in every diagram	Primitive type · model, in every diagram
+str		Association class · model, in every diagram	Association class · model, in every diagram
 str		New package	New package
 str		On this class · {n}	On this class · {n}
 str		On this interface · {n}	On this interface · {n}
@@ -619,6 +623,7 @@ str		Place interface	Place interface
 str		Place enumeration	Place enumeration
 str		Place data type	Place data type
 str		Place primitive type	Place primitive type
+str		Place association class	Place association class
 str		Add package	Add package
 str		Place package	Place package
 str		Move package	Move package
@@ -633,9 +638,13 @@ str		Only a package this diagram's package holds goes on it	Only a package this 
 str		A bound can be at most {max}.	A bound can be at most {max}.
 str		A class realizes only an interface	A class realizes only an interface
 str		A relationship joins two classes or interfaces	A relationship joins two classes or interfaces
+str		An association class does not join itself	An association class does not join itself
+str		This association class has an attribute named {name}; an end's role takes another name.	This association class has an attribute named {name}; an end's role takes another name.
+str		An end of this association class has the role {name}; an attribute takes another name.	An end of this association class has the role {name}; an attribute takes another name.
 str		An enumeration is a data type and joins no association	An enumeration is a data type and joins no association
 str		A data type joins no association	A data type joins no association
 str		A primitive type joins no association	A primitive type joins no association
+str		An association class joins only classes	An association class joins only classes
 str		An interface specializes only an interface	An interface specializes only an interface
 str		A class cannot specialize an interface	A class cannot specialize an interface
 str		An enumeration specializes only an enumeration	An enumeration specializes only an enumeration
@@ -645,6 +654,7 @@ str		Only a data type specializes a data type	Only a data type specializes a dat
 str		A primitive type specializes only a primitive type	A primitive type specializes only a primitive type
 str		Only a primitive type specializes a primitive type	Only a primitive type specializes a primitive type
 str		A built-in type specializes nothing	A built-in type specializes nothing
+str		Nothing specializes an association class	Nothing specializes an association class
 str		A classifier cannot specialize itself	A classifier cannot specialize itself
 str		This one specializes that one already	This one specializes that one already
 str		That one specializes this one already, which would make a cycle	That one specializes this one already, which would make a cycle
@@ -674,8 +684,10 @@ str		Implementing class	Implementing class
 str		Interface realization	Interface realization
 str		Interface realization · model	Interface realization · model
 str		Interface realization: from the implementing class to its interface	Interface realization: from the implementing class to its interface
+str		Association class: between two classes, with a card of its own	Association class: between two classes, with a card of its own
 str		Navigable	Navigable
 str		On this association · {n}	On this association · {n}
+str		On this association class · {n}	On this association class · {n}
 str		On this dependency · {n}	On this dependency · {n}
 str		On this generalization · {n}	On this generalization · {n}
 str		On this interface realization · {n}	On this interface realization · {n}
@@ -690,6 +702,7 @@ str		Supplier	Supplier
 str		The lower bound cannot be *.	The lower bound cannot be *.
 str		The upper bound must be at least {lower}.	The upper bound must be at least {lower}.
 str		This association	This association
+str		This association class	This association class
 str		This class realizes that interface already	This class realizes that interface already
 str		This dependency	This dependency
 str		This generalization	This generalization
@@ -703,6 +716,7 @@ str		«interface» · {package}	«interface» · {package}
 str		«enumeration» · {package}	«enumeration» · {package}
 str		«dataType» · {package}	«dataType» · {package}
 str		«primitive» · {package}	«primitive» · {package}
+str		Association class · {package}	Association class · {package}
 str		{name} removed; what it held moved to {parent}	{name} removed; what it held moved to {parent}
 # Unsaved changes on close
 str		Close and lose changes	Close and lose changes

@@ -24,12 +24,25 @@ pub enum Classifier {
     DataType,
     /// A primitive type of the model's own: a value with no members, its card its name alone.
     PrimitiveType,
+    /// An association class (AR-125): a class and an association at once, made only by drawing
+    /// between two classes, so it is in neither the tool's menu nor Models' `+`.
+    AssociationClass,
 }
 
 impl Classifier {
-    /// The kinds the menu lists, in its order.
+    /// The kinds the menu lists, in its order: those the tool places and Models' `+` adds.
     pub(crate) const ALL: [Classifier; 5] =
         [Classifier::Class, Classifier::Interface, Classifier::Enumeration, Classifier::DataType, Classifier::PrimitiveType];
+    /// Every kind a class diagram shows as a card: the menu's, and the association class, which is
+    /// only drawn.
+    pub(crate) const EVERY: [Classifier; 6] = [
+        Classifier::Class,
+        Classifier::Interface,
+        Classifier::Enumeration,
+        Classifier::DataType,
+        Classifier::PrimitiveType,
+        Classifier::AssociationClass,
+    ];
 
     /// Its name, in the menu, the tooltip and the Models' `+`.
     pub(crate) fn word(self) -> String {
@@ -39,6 +52,7 @@ impl Classifier {
             Classifier::Enumeration => tr("Enumeration"),
             Classifier::DataType => tr("Data type"),
             Classifier::PrimitiveType => tr("Primitive type"),
+            Classifier::AssociationClass => tr("Association class"),
         }
     }
 
@@ -50,11 +64,12 @@ impl Classifier {
             Classifier::Enumeration => "enumeration",
             Classifier::DataType => "data-type",
             Classifier::PrimitiveType => "primitive-type",
+            Classifier::AssociationClass => "association-class",
         }
     }
 
     /// The stem of a fresh name for one: `Class 1`, `Interface 1`, `Enumeration 1`, `DataType 1`,
-    /// `PrimitiveType 1`.
+    /// `PrimitiveType 1`, `AssociationClass 1`.
     pub(crate) fn stem(self) -> &'static str {
         match self {
             Classifier::Class => "Class",
@@ -62,10 +77,12 @@ impl Classifier {
             Classifier::Enumeration => "Enumeration",
             Classifier::DataType => "DataType",
             Classifier::PrimitiveType => "PrimitiveType",
+            Classifier::AssociationClass => "AssociationClass",
         }
     }
 
-    /// Its icon on the tool's face, and beside its name in the menu and in Models.
+    /// Its icon on the tool's face, and beside its name in the menu and in Models; an association
+    /// class, which no tool places, shows its tree icon.
     pub(crate) fn tool_icon(self) -> &'static Icon {
         match self {
             Classifier::Class => &icons::TOOL_CLASS,
@@ -73,6 +90,7 @@ impl Classifier {
             Classifier::Enumeration => &icons::TOOL_ENUMERATION,
             Classifier::DataType => &icons::TOOL_DATA_TYPE,
             Classifier::PrimitiveType => &icons::TOOL_PRIMITIVE_TYPE,
+            Classifier::AssociationClass => &icons::ASSOCIATION_CLASS,
         }
     }
 
@@ -84,6 +102,7 @@ impl Classifier {
             Classifier::Enumeration => &icons::ENUMERATION,
             Classifier::DataType => &icons::DATA_TYPE,
             Classifier::PrimitiveType => &icons::PRIMITIVE_TYPE,
+            Classifier::AssociationClass => &icons::ASSOCIATION_CLASS,
         }
     }
 
@@ -95,17 +114,20 @@ impl Classifier {
             Classifier::Enumeration => archforge_uml::ENUMERATION,
             Classifier::DataType => archforge_uml::DATA_TYPE,
             Classifier::PrimitiveType => archforge_uml::PRIMITIVE_TYPE,
+            Classifier::AssociationClass => archforge_uml::ASSOCIATION_CLASS,
         }
     }
 
-    /// The kind of `o`, when it is a classifier the tool places: by its own metaclass, so an
-    /// enumeration is never taken for a data type.
+    /// The kind of `o`, when it is a classifier a class diagram shows as a card: by its own
+    /// metaclass, so an enumeration is never taken for a data type, nor an association class for a
+    /// class.
     pub(crate) fn of(store: &Store, o: Obj) -> Option<Classifier> {
         let c = store.class_of(o).ok()?;
-        Classifier::ALL.into_iter().find(|k| k.metaclass() == c)
+        Classifier::EVERY.into_iter().find(|k| k.metaclass() == c)
     }
 
-    /// The commands that add, rename and move one, with the key that names it in the latter two.
+    /// The command that adds one in a package; an association class's takes the two classes it
+    /// joins instead, so only the Relationship tool runs it.
     pub(crate) fn add_command(self) -> &'static str {
         match self {
             Classifier::Class => "uml.class.add",
@@ -113,6 +135,7 @@ impl Classifier {
             Classifier::Enumeration => "uml.enumeration.add",
             Classifier::DataType => "uml.data-type.add",
             Classifier::PrimitiveType => "uml.primitive-type.add",
+            Classifier::AssociationClass => "uml.association-class.add",
         }
     }
 
@@ -124,6 +147,7 @@ impl Classifier {
             Classifier::Enumeration => ("uml.enumeration.rename", "enumeration"),
             Classifier::DataType => ("uml.data-type.rename", "data_type"),
             Classifier::PrimitiveType => ("uml.primitive-type.rename", "primitive_type"),
+            Classifier::AssociationClass => ("uml.association-class.rename", "association_class"),
         }
     }
 
@@ -135,6 +159,7 @@ impl Classifier {
             Classifier::Enumeration => ("uml.enumeration.move", "enumeration"),
             Classifier::DataType => ("uml.data-type.move", "data_type"),
             Classifier::PrimitiveType => ("uml.primitive-type.move", "primitive_type"),
+            Classifier::AssociationClass => ("uml.association-class.move", "association_class"),
         }
     }
 
@@ -146,11 +171,13 @@ impl Classifier {
             Classifier::Enumeration => tr("Add enumeration"),
             Classifier::DataType => tr("Add data type"),
             Classifier::PrimitiveType => tr("Add primitive type"),
+            Classifier::AssociationClass => tr("Add association class"),
         }
     }
 
-    /// Whether its card takes attributes and operations: a class's, an interface's and a data
-    /// type's do; an enumeration's members are its literals, and a primitive type has none.
+    /// Whether its card takes attributes and operations: a class's, an interface's, a data type's
+    /// and an association class's do; an enumeration's members are its literals, and a primitive
+    /// type has none.
     pub(crate) fn takes_members(self) -> bool {
         !matches!(self, Classifier::Enumeration | Classifier::PrimitiveType)
     }
@@ -175,6 +202,7 @@ impl Classifier {
             Classifier::Enumeration => tr("Place enumeration"),
             Classifier::DataType => tr("Place data type"),
             Classifier::PrimitiveType => tr("Place primitive type"),
+            Classifier::AssociationClass => tr("Place association class"),
         }
     }
 }

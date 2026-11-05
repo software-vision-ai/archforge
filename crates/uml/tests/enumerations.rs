@@ -239,7 +239,7 @@ fn an_enumeration_draws_its_literals_in_one_compartment_and_takes_no_attributes_
         ("uml.operation.add", json!({ "class": status, "name": "next" }), "is an enumeration and keeps no operations"),
     ] {
         let e = refused(&mut s, cmd, p.clone());
-        assert!(e.contains(why) && e.contains(&status) && e.contains("a class, an interface or a data type does"), "{p}: {e}");
+        assert!(e.contains(why) && e.contains(&status) && e.contains("a class, an interface, a data type or an association class does"), "{p}: {e}");
     }
     // Its literals, in their order, one row each.
     let mut s = with_literals(&s, &status, &["Placed", "Paid", "Shipped"], 1 << 20);

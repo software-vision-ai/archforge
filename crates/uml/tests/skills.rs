@@ -1,7 +1,7 @@
 //! Skills over UML: packages, classes, interfaces, enumerations, data types, primitive types of the
-//! model's own, attributes and operations carry them (owner decision), a relationship and a
-//! built-in type do not; a skill aims at every class, interface, enumeration, data type, primitive
-//! type, attribute, operation or association below
+//! model's own, association classes, attributes and operations carry them (owner decision), a
+//! relationship and a built-in type do not; a skill aims at every class, interface, enumeration,
+//! data type, primitive type, association class, attribute, operation or association below
 //! its subject, is inherited down the package tree and replaced by a deeper one of its name; each
 //! skill.add one undo step.
 
@@ -123,7 +123,7 @@ fn a_package_skill_aims_at_the_kind_it_names_below_it() {
     assert_eq!(names(&s, &m.association), ["Associations"]);
     // An ER kind is not one of UML's.
     let e = s.execute("skill.add", &json!({ "subject": m.sales, "name": "Tables", "applies_to": "table" })).unwrap_err().to_string();
-    assert!(e.contains("class, interface, enumeration, data type, primitive type, attribute, operation, association"), "{e}");
+    assert!(e.contains("class, interface, enumeration, data type, primitive type, association class, attribute, operation, association"), "{e}");
 }
 
 /// An enumeration carries skills as an interface does, and a package skill for enumerations aims
@@ -263,6 +263,42 @@ fn a_built_in_type_refuses_a_skill_naming_it_and_what_carries_one() {
     assert!(archforge_core::skills::subject_problem(s.view(), st, obj(&s, &integer)).is_some(), "the shell asks the same rule before it offers +");
     let sku = run(&mut s, "uml.primitive-type.add", json!({ "package": m.sales, "name": "Sku" }));
     assert!(archforge_core::skills::subject_problem(s.view(), s.doc(), obj(&s, &sku)).is_none(), "a primitive type of the model's own carries one");
+}
+
+/// An association class carries skills as the class it is, its members too; it is a kind of its
+/// own (AR-125): UML's AssociationClass conforms to Class and to Association equally, so the core's
+/// closer-kind rule keeps a skill for every class and one for every association off it, and a skill
+/// for every association class reaches it alone. Its ends carry none, as an association's do not.
+#[test]
+fn an_association_class_carries_skills_and_only_a_skill_for_association_classes_aims_at_it() {
+    let mut s = session();
+    let m = model(&mut s);
+    let buyer = run(&mut s, "uml.class.add", json!({ "package": m.sales, "name": "Buyer" }));
+    let review = run(&mut s, "uml.association-class.add", json!({ "from": buyer, "to": m.order, "name": "Review" }));
+    let stars = run(&mut s, "uml.attribute.add", json!({ "class": review, "name": "stars", "type": "Integer" }));
+    // It takes a skill of its own, as one undo step, which reaches its members.
+    let before = skills(s.doc()).len();
+    let skill = run(&mut s, "skill.add", json!({ "subject": review, "name": "Reviews", "body": "Keep them short." }));
+    assert_eq!(archforge_core::skills::subject_of(s.doc(), obj(&s, &skill)), Some(obj(&s, &review)));
+    s.undo().unwrap();
+    assert_eq!(skills(s.doc()).len(), before);
+    s.redo().unwrap();
+    for (word, name) in
+        [("class", "Classes"), ("association", "Associations"), ("association class", "Association classes"), ("attribute", "Attributes")]
+    {
+        run(&mut s, "skill.add", json!({ "subject": m.sales, "name": name, "applies_to": word }));
+    }
+    let names = |s: &S, e: &str| applying(s, e).into_iter().map(|(n, _, _)| n).collect::<Vec<_>>();
+    assert_eq!(names(&s, &review), ["Association classes", "Reviews"], "neither every class nor every association reaches it");
+    assert_eq!(names(&s, &m.order), ["Classes"], "a plain class is no association class");
+    assert_eq!(names(&s, &m.association), ["Associations"], "nor is a plain association");
+    assert_eq!(names(&s, &stars), ["Attributes", "Reviews"]);
+    // Its end carries no skill, and no attribute skill aims at it.
+    let end = s.execute("uml.class.get", &json!({ "class": review })).unwrap().value["ends"][0]["id"].as_str().unwrap().to_string();
+    assert!(s.execute("skill.add", &json!({ "subject": end, "name": "Ends" })).is_err());
+    assert!(applying(&s, &end).iter().all(|(n, _, _)| n != "Attributes"));
+    run(&mut s, "element.remove", json!({ "ids": [review] }));
+    assert!(skills(s.doc()).iter().all(|k| archforge_core::skills::name_of(s.doc(), *k) != "Reviews"), "its skill went with it");
 }
 
 /// An interface carries skills as a class does, and a package skill for interfaces aims at them alone.

@@ -31,22 +31,30 @@ pub const CLASS_DIAGRAM: &str = "uml.class";
 
 /// The kinds of classifier a class diagram places, each a card with its members: a class, an
 /// interface, an enumeration, whose members are its literals, a data type, a value without
-/// identity with attributes and operations as a class has, and a primitive type, a value with no
-/// members at all (AR-124). Each is matched by its exact metaclass, never by conformance: an
+/// identity with attributes and operations as a class has, a primitive type, a value with no
+/// members at all (AR-124), and an association class, a class and an association at once, whose
+/// card sits above its line (AR-125). Each is matched by its exact metaclass, never by conformance: an
 /// enumeration and a primitive type are DataTypes in UML's metamodel, but the data type kind is the
 /// DataType metaclass alone, and a skill for every data type reaches neither (a primitive type is a
 /// skill kind of its own). The built-in types, Integer, String and the others kept in the package
 /// Types, are primitive types too ([`members::is_built_in`]).
-pub const CLASSIFIERS: [ClassId; 5] = [CLASS, INTERFACE, ENUMERATION, DATA_TYPE, PRIMITIVE_TYPE];
+pub const CLASSIFIERS: [ClassId; 6] = [CLASS, INTERFACE, ENUMERATION, DATA_TYPE, PRIMITIVE_TYPE, ASSOCIATION_CLASS];
 
 /// Whether `class` is one of the [`CLASSIFIERS`].
 pub fn is_classifier(class: ClassId) -> bool {
     CLASSIFIERS.contains(&class)
 }
 
-/// The relationships a class diagram draws as lines: associations, generalizations, dependencies
-/// and interface realizations.
-pub const RELATIONSHIPS: [ClassId; 4] = [ASSOCIATION, GENERALIZATION, DEPENDENCY, INTERFACE_REALIZATION];
+/// The relationships a class diagram draws as lines: associations, generalizations, dependencies,
+/// interface realizations, and association classes, which have a card of their own besides
+/// (AR-125): one element shown twice on a diagram, a node and an edge, so no view record is new.
+pub const RELATIONSHIPS: [ClassId; 5] = [ASSOCIATION, GENERALIZATION, DEPENDENCY, INTERFACE_REALIZATION, ASSOCIATION_CLASS];
+
+/// Whether `class` is an association or an association class: what has ends to set, roles,
+/// multiplicities, navigability and aggregation.
+pub fn is_association(class: ClassId) -> bool {
+    class == ASSOCIATION || class == ASSOCIATION_CLASS
+}
 
 /// Whether `class` is one of the [`RELATIONSHIPS`].
 pub fn is_relationship(class: ClassId) -> bool {
@@ -65,8 +73,9 @@ pub const PACKAGE_SIZE: (f64, f64) = (240.0, 148.0);
 /// UML in a project's view: class diagrams of a package showing its
 /// classes, interfaces and data types as plain cards with their attributes and operations, its
 /// enumerations with their literals, its primitive types with their name alone, and the associations,
-/// generalizations, dependencies and interface realizations between them as lines (`figures`);
-/// packages and classes removed with what they hold.
+/// generalizations, dependencies and interface realizations between them as lines (`figures`); an
+/// association class as a line and a card of its own; packages and classes removed with what they
+/// hold.
 pub struct UmlNotation;
 
 impl Notation for UmlNotation {
@@ -91,8 +100,8 @@ impl Notation for UmlNotation {
         true
     }
 
-    /// A class diagram shows classes, interfaces, enumerations, data types, primitive types and
-    /// packages as cards.
+    /// A class diagram shows classes, interfaces, enumerations, data types, primitive types,
+    /// association classes and packages as cards.
     fn shows(&self, _kind: &str, class: ClassId) -> bool {
         is_classifier(class) || class == PACKAGE
     }
@@ -117,7 +126,7 @@ impl Notation for UmlNotation {
         }
     }
 
-    /// Associations, generalizations, dependencies and interface realizations.
+    /// Associations, generalizations, dependencies, interface realizations and association classes.
     fn connects(&self, _kind: &str, class: ClassId) -> bool {
         is_relationship(class)
     }
@@ -148,15 +157,20 @@ impl Notation for UmlNotation {
     }
 
     /// A skill sits on a package, a class, an interface, an enumeration, a data type, a primitive
-    /// type of the model's own, an attribute or an operation; it aims at every class, interface,
-    /// enumeration, data type, primitive type, attribute, operation or association below its
-    /// subject (owner decision: an interface carries skills as a class does, and an enumeration, a
-    /// data type and a primitive type as an interface does).
+    /// type of the model's own, an association class, an attribute or an operation; it aims at
+    /// every class, interface, enumeration, data type, primitive type, association class,
+    /// attribute, operation or association below its subject (owner decision: an interface carries
+    /// skills as a class does, and an enumeration, a data type and a primitive type as an interface
+    /// does; an association class carries them as the class it is, AR-125).
     fn skill_subjects(&self) -> &'static [ClassId] {
-        &[PACKAGE, CLASS, INTERFACE, ENUMERATION, DATA_TYPE, PRIMITIVE_TYPE, PROPERTY, OPERATION]
+        &[PACKAGE, CLASS, INTERFACE, ENUMERATION, DATA_TYPE, PRIMITIVE_TYPE, ASSOCIATION_CLASS, PROPERTY, OPERATION]
     }
 
-    /// The kinds a package skill may aim at, each with the word that names it.
+    /// The kinds a package skill may aim at, each with the word that names it. An association
+    /// class is a Class and an Association alike in UML's metamodel, conforming to both equally, so
+    /// it is a kind of its own (AR-125): the core's closer-kind rule then keeps a skill for every
+    /// class and one for every association off it, as a skill for every data type misses an
+    /// enumeration; a skill for every association class reaches it.
     fn skill_kinds(&self) -> &'static [(ClassId, &'static str)] {
         &[
             (CLASS, "class"),
@@ -164,6 +178,7 @@ impl Notation for UmlNotation {
             (ENUMERATION, "enumeration"),
             (DATA_TYPE, "data type"),
             (PRIMITIVE_TYPE, "primitive type"),
+            (ASSOCIATION_CLASS, "association class"),
             (PROPERTY, "attribute"),
             (OPERATION, "operation"),
             (ASSOCIATION, "association"),
@@ -203,6 +218,8 @@ pub const WORDS: &[&str] = &[
     "«dataType» · {package}",
     "«primitive»",
     "«primitive» · {package}",
+    "Association class",
+    "Association class · {package}",
     "Package",
 ];
 pub const PLURALS: &[&str] = &["+ {n} more member", "+ {n} more literal", "+ {n} more element"];

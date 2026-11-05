@@ -257,7 +257,7 @@ fn a_data_type_draws_its_attributes_and_operations_which_the_member_commands_edi
     // its literals, and the refusal says what keeps them.
     let status = run(&mut s, "uml.enumeration.add", json!({ "package": pkg, "name": "OrderStatus" }));
     let e = refused(&mut s, "uml.attribute.add", json!({ "class": status, "name": "code" }));
-    assert!(e.contains(&status) && e.contains("a class, an interface or a data type does"), "{e}");
+    assert!(e.contains(&status) && e.contains("a class, an interface, a data type or an association class does"), "{e}");
     // On another package's diagram, its package is named beside the keyword.
     let other = run(&mut s, "uml.package.add", json!({ "name": "billing" }));
     let d2 = run(&mut s, "diagram.add", json!({ "kind": CLASS_DIAGRAM, "element": other }));

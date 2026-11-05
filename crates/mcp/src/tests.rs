@@ -36,6 +36,8 @@ fn initialize_answers_the_clients_version_when_spoken_and_the_newest_otherwise()
     // The instructions name the primitive types an agent may make, beside the built-in ones (AR-124).
     let said = r["result"]["instructions"].as_str().unwrap_or_default();
     assert!(said.contains("primitive types, beside the built-in Integer") && said.contains("uml_primitive_type_add"), "{said}");
+    // And the association classes it may draw between two classes (AR-125).
+    assert!(said.contains("association classes, an association between two classes") && said.contains("uml_association_class_add"), "{said}");
     assert_eq!(ask(&fake, json!({ "jsonrpc": "2.0", "id": "p", "method": "ping" }))["result"], json!({}));
     // A notification is never answered.
     assert!(handle(br#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#, &fake, &Catalog::default()).is_none());
@@ -90,6 +92,9 @@ impl Backend for Model {
             "uml.class.get" if p["class"] == "p1" => {
                 json!({ "id": "p1", "kind": "primitive_type", "name": "Sku", "attributes": [], "operations": [], "built_in": false })
             }
+            "uml.class.get" if p["class"] == "r1" => {
+                json!({ "id": "r1", "kind": "association_class", "name": "Review", "attributes": [], "operations": [], "ends": [{ "id": "e0" }, { "id": "e1" }] })
+            }
             "uml.class.get" if p["class"] == "d1" => {
                 json!({ "id": "d1", "kind": "data_type", "name": "Money", "attributes": [{ "id": "a1", "name": "amount" }], "operations": [] })
             }
@@ -143,6 +148,9 @@ fn the_model_and_its_skills_read_as_resources_with_the_revision_and_say_what_the
     // A primitive type, which the class read gives too, as what it is, saying it is the model's own.
     let primitive = content(&read(&model, "archforge://element/p1"));
     assert_eq!((primitive["kind"].as_str(), primitive["primitive_type"]["built_in"].as_bool()), (Some("primitive_type"), Some(false)));
+    // An association class, which the class read gives too, as what it is, with its ends (AR-125).
+    let review = content(&read(&model, "archforge://element/r1"));
+    assert_eq!((review["kind"].as_str(), review["association_class"]["ends"].as_array().map(Vec::len)), (Some("association_class"), Some(2)));
     // The skills in effect, for every trigger or for one, as skill.effective gives them.
     let effective = content(&read(&model, "archforge://skills/effective/t1/export"));
     assert_eq!((effective["trigger"].as_str(), effective["skills"][0]["name"].as_str()), (Some("export"), Some("DDL")));
@@ -386,7 +394,10 @@ fn the_compact_listing_offers_a_search_and_the_tools_still_answer() {
     let init = handle(br#"{"jsonrpc":"2.0","id":5,"method":"initialize","params":{}}"#, &fake, &catalog).unwrap();
     let said = init["result"]["instructions"].as_str().unwrap();
     assert!(
-        said.contains("search_tools") && said.contains("uml.primitive-type.add") && said.contains("primitive types, beside the built-in"),
+        said.contains("search_tools")
+            && said.contains("uml.primitive-type.add")
+            && said.contains("primitive types, beside the built-in")
+            && said.contains("uml.association-class.add"),
         "{said}"
     );
     let r = handle(

@@ -1,6 +1,7 @@
 //! Relating classes on a class diagram: the Relationship tool draws the kind
 //! its chevron's menu chose (Association, Directed association, Aggregation, Composition,
-//! Generalization or Dependency, and after a separator Interface realization) from class to class,
+//! Generalization or Dependency, and after a separator Interface realization and Association
+//! class) from class to class,
 //! from the whole to the part, from the specific class to the general one, from the client to the
 //! supplier, from the implementing class to its interface; dropped on empty canvas it makes a new
 //! class there, or for a realization a new interface, named in place. A realization starts only at
@@ -13,6 +14,12 @@
 //! Properties shows an association's name and both its ends (role, multiplicity, navigable,
 //! aggregation), a dependency's name and its classes, a generalization's classes, a realization's
 //! implementing class and interface.
+//!
+//! An association class (AR-125) is drawn between two classes as an association is: its line and
+//! its card above the line's middle come as one element and one undo step, the card's name open
+//! for typing; dropped on empty canvas it makes a new class there, named in place. Its ends are
+//! classes only, and a drop on anything else is said at the canvas's top. Its Properties are an
+//! association's, its name, classes and ends, then its attributes and operations as a class's.
 
 use archforge_diagram::figure::EndMark;
 use archforge_mof::{Obj, Store, Uuid};
@@ -37,10 +44,12 @@ pub enum Relate {
     Dependency,
     /// An interface realization, from the implementing class to its interface.
     Realization,
+    /// An association class: a line between two classes with a card of its own (AR-125).
+    AssociationClass,
 }
 
 impl Relate {
-    pub(crate) const ALL: [Relate; 7] = [
+    pub(crate) const ALL: [Relate; 8] = [
         Relate::Association,
         Relate::Directed,
         Relate::Aggregation,
@@ -48,6 +57,7 @@ impl Relate {
         Relate::Generalization,
         Relate::Dependency,
         Relate::Realization,
+        Relate::AssociationClass,
     ];
 
     /// Its name in the menu, in the catalogue.
@@ -60,25 +70,30 @@ impl Relate {
             Relate::Generalization => "Generalization",
             Relate::Dependency => "Dependency",
             Relate::Realization => "Interface realization",
+            Relate::AssociationClass => "Association class",
         }
     }
 
     /// What it draws and which way, where its word alone does not say: the tool's tooltip and the
     /// accessible name of the tool and of its menu row.
     fn hint(self) -> Option<&'static str> {
-        (self == Relate::Realization).then_some("Interface realization: from the implementing class to its interface")
+        match self {
+            Relate::Realization => Some("Interface realization: from the implementing class to its interface"),
+            Relate::AssociationClass => Some("Association class: between two classes, with a card of its own"),
+            _ => None,
+        }
     }
 
     /// Whether a separator sets it apart above it in the menu: realizing is neither relating nor
-    /// specializing.
+    /// specializing; the association class follows the realization in that group.
     fn after_separator(self) -> bool {
         self == Relate::Realization
     }
 
     /// Whether its line carries the relationship's name at its middle: a generalization and a
-    /// realization have none.
+    /// realization have none, and an association class's name is on its card.
     fn named(self) -> bool {
-        !matches!(self, Relate::Generalization | Relate::Realization)
+        !matches!(self, Relate::Generalization | Relate::Realization | Relate::AssociationClass)
     }
 
     /// Whether it draws an association, of any kind.
@@ -96,6 +111,7 @@ impl Relate {
             Relate::Generalization => "generalization",
             Relate::Dependency => "dependency",
             Relate::Realization => "realization",
+            Relate::AssociationClass => "association-class",
         }
     }
 
@@ -109,13 +125,16 @@ impl Relate {
             Relate::Generalization => ([EndMark::None, EndMark::Triangle], false),
             Relate::Dependency => ([EndMark::None, EndMark::OpenArrow], true),
             Relate::Realization => ([EndMark::None, EndMark::Triangle], true),
+            Relate::AssociationClass => ([EndMark::None, EndMark::None], false),
         }
     }
 
-    /// The command that draws it, its parameters for the two classes, and its undo step's name.
+    /// The command that draws it, its parameters for the two classes, and its undo step's name. An
+    /// association class's is drawn with its name by [`connect_class`] instead.
     fn command(self, from: Uuid, to: Uuid) -> (&'static str, serde_json::Value, &'static str) {
         let (from, to) = (from.to_string(), to.to_string());
         match self {
+            Relate::AssociationClass => ("uml.association-class.add", json!({ "from": from, "to": to }), "Add association class"),
             Relate::Generalization => ("uml.generalization.add", json!({ "specific": from, "general": to }), "Add generalization"),
             Relate::Dependency => ("uml.dependency.add", json!({ "client": from, "supplier": to }), "Add dependency"),
             Relate::Realization => ("uml.realization.add", json!({ "class": from, "interface": to }), "Add interface realization"),
@@ -146,6 +165,14 @@ fn sample(paint: &egui::Painter, a: Pos2, b: Pos2, kind: Relate, ink: egui::Colo
     }
     crate::canvas::line_mark(paint, start, a, b, stroke, z, fill);
     crate::canvas::line_mark(paint, end, b, a, stroke, z, fill);
+    // An association class's card, small, above the line's middle, tied to it by a short dash.
+    if kind == Relate::AssociationClass {
+        let middle = a + (b - a) / 2.0;
+        let card = Rect::from_center_size(middle - vec2(0.0, 9.0), vec2(11.0, 7.0));
+        paint.rect_filled(card, 1.0, fill);
+        paint.rect_stroke(card, 1.0, stroke, StrokeKind::Inside);
+        paint.extend(egui::Shape::dashed_line(&[pos2(middle.x, card.bottom()), middle], Stroke::new(1.0, ink), 1.5, 1.5));
+    }
 }
 
 /// The Relationship tool's face: the kind it draws, across its double-width button.
@@ -254,19 +281,33 @@ fn generalization_refusal(store: &Store, specific: Obj, general: Obj, except: Op
         P::NotAPrimitiveType => tr("A primitive type specializes only a primitive type"),
         P::NoPrimitiveType => tr("Only a primitive type specializes a primitive type"),
         P::BuiltIn => tr("A built-in type specializes nothing"),
+        P::AssociationClass => tr("Nothing specializes an association class"),
         P::Itself => tr("A classifier cannot specialize itself"),
         P::Again => tr("This one specializes that one already"),
         P::Cycle => tr("That one specializes this one already, which would make a cycle"),
     })
 }
 
-/// Why `kind` starts no line at `element`, when it does not: a realization starts only at a class,
-/// and no association at an enumeration, a data type or a primitive type.
+/// Whether `element` is a class: a plain class or an association class, which is one too.
+fn is_class(store: &Store, element: Obj) -> bool {
+    store.class_of(element).is_ok_and(|c| c == archforge_uml::CLASS || c == archforge_uml::ASSOCIATION_CLASS)
+}
+
+/// Why `kind` starts no line at `element`, when it does not: a realization starts only at a class
+/// (an association class is one), no association at an enumeration, a data type or a primitive
+/// type, and an association class only at a class.
 fn kind_start_problem(kind: Relate, store: &Store, element: Obj) -> Option<String> {
-    if kind == Relate::Realization && store.class_of(element).ok() != Some(archforge_uml::CLASS) {
+    if kind == Relate::Realization && !is_class(store, element) {
         return Some(tr("Only a class implements an interface"));
     }
-    association_refusal(kind, store, element)
+    association_refusal(kind, store, element).or_else(|| class_end_refusal(kind, store, element))
+}
+
+/// Why an association class of `kind` has no end at `element`, when it has none, in the user's
+/// words: its ends are classes only (`association_class_end_problem`).
+fn class_end_refusal(kind: Relate, store: &Store, element: Obj) -> Option<String> {
+    (kind == Relate::AssociationClass && archforge_uml::relations::association_class_end_problem(store, element, None).is_some())
+        .then(|| tr("An association class joins only classes"))
 }
 
 /// Why an association of `kind` has no end at `element`, when it has none, in the user's words for
@@ -318,9 +359,15 @@ pub(crate) fn connect(shell: &mut Shell, d: Obj, from_node: Uuid, to_node: Uuid)
     // classifier rules refuse.
     let refusal = association_refusal(kind, store, from)
         .or_else(|| association_refusal(kind, store, to))
+        .or_else(|| class_end_refusal(kind, store, from))
+        .or_else(|| class_end_refusal(kind, store, to))
         .or_else(|| (kind == Relate::Generalization).then(|| generalization_refusal(store, from, to, None)).flatten());
     if let Some(why) = refusal {
         shell.canvas.notice = Some(why);
+        return;
+    }
+    if kind == Relate::AssociationClass {
+        connect_class(shell, d, (from, from_node), (to, to_node), None);
         return;
     }
     let (Ok(from), Ok(to), Ok(diagram)) = (store.uuid(from), store.uuid(to), store.uuid(d)) else { return };
@@ -350,6 +397,98 @@ pub(crate) fn connect(shell: &mut Shell, d: Obj, from_node: Uuid, to_node: Uuid)
     }
 }
 
+/// How far above its line's middle an association class's card sits, to the card's foot.
+const CARD_RISE: f64 = 56.0;
+
+/// Where an association class's card goes for a line between the rectangles `a` and `b`: centred
+/// over the middle between them, its foot [`CARD_RISE`] above it, at the card's size.
+fn card_place(a: archforge_diagram::Rect, b: archforge_diagram::Rect) -> (f64, f64, f64, f64) {
+    let (w, h) = crate::uml_classifier::Classifier::AssociationClass.size();
+    let middle = ((a.x + a.width / 2.0 + b.x + b.width / 2.0) / 2.0, (a.y + a.height / 2.0 + b.y + b.height / 2.0) / 2.0);
+    ((middle.0 - w / 2.0).round(), (middle.1 - CARD_RISE - h).round(), w, h)
+}
+
+/// A new class to make for an association class dropped on empty canvas: the class's name and its
+/// card's place, x, y, width and height.
+type NewEnd = (String, (f64, f64, f64, f64));
+
+/// Draws an association class from the class `from` shows to the one `to` shows (each its element
+/// and its node), or, with `new`, to a new class made in the diagram's package at its place (`to`
+/// is then not read): the
+/// element, its line and its card above the line's middle, as one undo step. The association class
+/// takes a fresh name in the first class's package, its card's name opens for typing; with a new
+/// class, that class's name does, as an association's new class's.
+pub(crate) fn connect_class(shell: &mut Shell, d: Obj, from: (Obj, Uuid), to: (Obj, Uuid), new: Option<NewEnd>) {
+    let Some(session) = shell.session.as_mut() else { return };
+    let store = session.doc();
+    let Some(package) = archforge_uml::commands::package_of(store, from.0) else {
+        shell.canvas.notice = Some(tr("A relationship joins two classes or interfaces"));
+        return;
+    };
+    let mut taken: Vec<String> =
+        archforge_uml::commands::classifiers(store, package).into_iter().map(|c| archforge_core::name_of(store, c)).collect();
+    taken.extend(new.as_ref().map(|(n, _)| n.clone()));
+    let Some(name) = crate::explorer::fresh_name(crate::uml_classifier::Classifier::AssociationClass.stem(), taken.into_iter(), false) else {
+        shell.canvas.notice = Some(tr("No free name is left"));
+        return;
+    };
+    let rect_of = |node: Uuid| store.by_uuid(node).map(|n| archforge_diagram::grid::bounds_of(store, n));
+    let to_rect = match &new {
+        Some((_, (x, y, w, h))) => Some(archforge_diagram::Rect::new(*x, *y, *w, *h)),
+        None => rect_of(to.1),
+    };
+    let (Some(from_rect), Some(to_rect)) = (rect_of(from.1), to_rect) else { return };
+    let (cx, cy, cw, ch) = card_place(from_rect, to_rect);
+    let (Ok(diagram), Ok(from_id), Ok(home)) = (store.uuid(d), store.uuid(from.0), store.uuid(package)) else { return };
+    let to_id = store.uuid(to.0).ok();
+    let diagram_package = store.get(d, archforge_diagram::diagram::ELEMENT).ok().and_then(|v| v.as_ref()).and_then(|p| store.uuid(p).ok());
+    let named = name.clone();
+    let made = new.clone();
+    let out = session.batch(&tr("Add association class"), |b| {
+        // A new class at the far end first, placed where the line was let go.
+        let (to_class, to_node) = match &made {
+            Some((class_name, (x, y, w, h))) => {
+                let package = diagram_package.unwrap_or(home).to_string();
+                let c = b.execute("uml.class.add", &json!({ "package": package, "name": class_name }))?;
+                let class = c.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string();
+                let n = b.execute(
+                    "diagram.place",
+                    &json!({ "diagram": diagram.to_string(), "element": class, "x": x, "y": y, "width": w, "height": h }),
+                )?;
+                (class, n.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
+            }
+            None => (to_id.map(|u| u.to_string()).unwrap_or_default(), to.1.to_string()),
+        };
+        let a = b.execute("uml.association-class.add", &json!({ "from": from_id.to_string(), "to": to_class, "name": named }))?;
+        let element = a.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string();
+        b.execute(
+            "diagram.connect",
+            &json!({ "diagram": diagram.to_string(), "element": element, "source": from.1.to_string(), "target": to_node }),
+        )?;
+        b.execute("diagram.place", &json!({ "diagram": diagram.to_string(), "element": element, "x": cx, "y": cy, "width": cw, "height": ch }))?;
+        Ok(())
+    });
+    match out {
+        Ok(o) => {
+            let id_at = |i: usize| o.value.get(i).and_then(|v| v.get("id")).and_then(|v| v.as_str()).and_then(Uuid::parse);
+            // With a new class the steps are its class, its node, the association class, its line
+            // and its card; else the association class, its line and its card.
+            let (element, card) = if new.is_some() { (id_at(2), id_at(4)) } else { (id_at(0), id_at(2)) };
+            let Some(element) = element else { return };
+            let _ = run(shell, "view.select", json!({ "ids": [element.to_string()] }));
+            let rename = match new {
+                Some((class_name, _)) => id_at(0).zip(id_at(1)).map(|(class, node)| (node, class, class_name)),
+                None => card.map(|card| (card, element, name)),
+            };
+            if let Some((node, entity, text)) = rename {
+                shell.canvas.rename = Some(crate::editing::NodeRename { node, entity, text, opened: true, refused: None });
+                shell.canvas.focused = true;
+            }
+        }
+        Err(e) => shell.canvas.notice = Some(e.to_string()),
+    }
+}
+
 /// The chosen kind dropped on empty canvas at `(x, y)`: a new class there, related to the node's,
 /// as one undo step; its name opens for typing. A generalization dragged out of an interface makes
 /// an interface, the only kind an interface specializes, one out of an enumeration an enumeration,
@@ -370,6 +509,17 @@ pub(crate) fn connect_to_new(shell: &mut Shell, d: Obj, from_node: Uuid, x: f64,
     };
     if let Some(why) = kind_start_problem(kind, store, from) {
         shell.canvas.notice = Some(why);
+        return;
+    }
+    if kind == Relate::AssociationClass {
+        let names = archforge_uml::commands::classifiers(store, package).into_iter().map(|c| archforge_core::name_of(store, c));
+        let Some(name) = crate::explorer::fresh_name(crate::uml_classifier::Classifier::Class.stem(), names, false) else {
+            shell.canvas.notice = Some(tr("No free name is left"));
+            return;
+        };
+        let (w, h) = crate::uml_classifier::Classifier::Class.size();
+        let place = ((x - w / 2.0).round(), (y - h / 2.0).round(), w, h);
+        connect_class(shell, d, (from, from_node), (from, from_node), Some((name, place)));
         return;
     }
     let (Ok(package_id), Ok(diagram), Ok(from_id)) = (store.uuid(package), store.uuid(d), store.uuid(from)) else { return };
@@ -437,11 +587,7 @@ pub(crate) fn reconnect(shell: &mut Shell, element: Uuid, source: bool, to_node:
         let moved = class_of_node(store, to_node);
         let (i, c) = if source { (moved, Some(contract)) } else { (Some(implementing), moved) };
         // When the end that stays is wrong already (a project edited by hand), the model says so.
-        let staying_fine = if source {
-            store.class_of(contract).ok() == Some(archforge_uml::INTERFACE)
-        } else {
-            store.class_of(implementing).ok() == Some(archforge_uml::CLASS)
-        };
+        let staying_fine = if source { store.class_of(contract).ok() == Some(archforge_uml::INTERFACE) } else { is_class(store, implementing) };
         if staying_fine
             && moved != Some(if source { implementing } else { contract })
             && let Some(why) = realization_refusal(store, i, c, Some(r))
@@ -459,6 +605,18 @@ pub(crate) fn reconnect(shell: &mut Shell, element: Uuid, source: bool, to_node:
     {
         shell.canvas.notice = Some(why);
         return;
+    }
+    // An association class's end moves onto another class only, never onto its own card.
+    if let Some(l) = line.filter(|l| store.class_of(*l).ok() == Some(archforge_uml::ASSOCIATION_CLASS)) {
+        let why = if l == target {
+            Some(tr("An association class does not join itself"))
+        } else {
+            class_end_refusal(Relate::AssociationClass, store, target)
+        };
+        if let Some(why) = why {
+            shell.canvas.notice = Some(why);
+            return;
+        }
     }
     let ends = line.and_then(|e| archforge_uml::figures::ends(store, e));
     let now = ends.map(|(a, b)| if source { a } else { b });
@@ -544,7 +702,8 @@ fn aggregation_words() -> [String; 3] {
 }
 
 /// A line's Properties: an association's or a dependency's name, its classes (a realization's
-/// implementing class and the interface it realizes), an association's ends.
+/// implementing class and the interface it realizes), an association's ends; an association
+/// class's name, classes and ends, then its attributes and operations as a class's.
 pub(crate) fn body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, subject: &Subject) {
     let paint = ui.painter().clone();
     let width = (r.width() - 2.0 * PAD).max(0.0);
@@ -554,9 +713,13 @@ pub(crate) fn body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, m
     let name = |c: Option<Obj>| c.map(|c| archforge_core::name_of(store, c)).unwrap_or_default();
     let ends = archforge_uml::figures::ends(store, o);
     let (from, to) = (name(ends.map(|e| e.0)), name(ends.map(|e| e.1)));
-    // A generalization and a realization have no name to show.
+    // A generalization and a realization have no name to show; an association class is named as
+    // the classifier it is.
+    let association_class = class == Some(archforge_uml::ASSOCIATION_CLASS);
+    let (rename, key) =
+        if association_class { ("uml.association-class.rename", "association_class") } else { ("uml.relationship.rename", "relationship") };
     if class != Some(archforge_uml::GENERALIZATION) && class != Some(archforge_uml::INTERFACE_REALIZATION) {
-        crate::panels::name_field(shell, ui, p, pos2(r.left() + PAD, y), width, subject, "uml.relationship.rename", "relationship");
+        crate::panels::name_field(shell, ui, p, pos2(r.left() + PAD, y), width, subject, rename, key);
         y += 17.0 + FIELD + 12.0;
     }
     // The classes it joins, read only: its ends drag onto another class on the canvas.
@@ -587,20 +750,25 @@ pub(crate) fn body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, m
     let height = said.size().y;
     paint.galley(pos2(r.left() + PAD, y), said, p.text_muted);
     y += (height + 12.0).max(28.0);
-    if class == Some(archforge_uml::ASSOCIATION) {
-        ends_sections(shell, ui, p, r, y, o, id);
+    if class.is_some_and(archforge_uml::is_association) {
+        y = ends_sections(shell, ui, p, r, y, o, id);
+    }
+    if association_class {
+        use crate::uml_panel::{MemberKind, members_section};
+        let y = members_section(shell, ui, p, r, y, o, id, MemberKind::Attribute);
+        members_section(shell, ui, p, r, y + 4.0, o, id, MemberKind::Operation);
     }
 }
 
-/// An association's two ends, each its own section: role, written when typed; the multiplicity,
-/// an editable select of the common ones, written when picked or typed; Navigable and the
-/// aggregation, written when changed. A multiplicity that does not read stays in its field, with
-/// why under it, and the model keeps the one it had.
+/// An association's or an association class's two ends, each its own section: role, written when
+/// typed; the multiplicity, an editable select of the common ones, written when picked or typed;
+/// Navigable and the aggregation, written when changed. A multiplicity that does not read stays in
+/// its field, with why under it, and the model keeps the one it had. Gives the y under the ends.
 #[allow(clippy::too_many_arguments, reason = "the ends are drawn into the panel for their association")]
-fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, a: Obj, id: Uuid) {
+fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, a: Obj, id: Uuid) -> f32 {
     let width = (r.width() - 2.0 * PAD).max(0.0);
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
-    let Some(ends) = archforge_uml::figures::member_ends(store, a) else { return };
+    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return y };
+    let Some(ends) = archforge_uml::figures::member_ends(store, a) else { return y };
     if shell.panels.ends.as_ref().is_none_or(|e| e.association != id) {
         shell.panels.ends = ends_edit(store, a, id);
     }
@@ -611,7 +779,7 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
     let aggregations = ends.map(|e| aggregation(store, e));
     let roles = ends.map(|e| archforge_core::name_of(store, e));
     let written = ends.map(|e| archforge_uml::figures::multiplicity(store, e));
-    let Some(mut edit) = shell.panels.ends.clone() else { return };
+    let Some(mut edit) = shell.panels.ends.clone() else { return y };
     // A change the model took elsewhere (an undo, a redo, another view) reaches the fields.
     for i in 0..2 {
         if edit.written_role[i] != roles[i] {
@@ -735,6 +903,15 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
             agg = k;
         }
         shell.panels.ends = Some(edit.clone());
+        // An association class's end takes no role one of its attributes is named, as they share
+        // its names: said in the user's words, and nothing is written.
+        let clash = shell.session.as_ref().and_then(|s| archforge_uml::members::attribute_clash(s.doc(), a, edit.role[i].trim()));
+        if role && let Some(attribute) = clash {
+            let named = shell.session.as_ref().map(|s| archforge_core::name_of(s.doc(), attribute)).unwrap_or_default();
+            shell.panels.notice =
+                Some(fmt(&tr("This association class has an attribute named {name}; an end's role takes another name."), &[("name", &named)]));
+            return y;
+        }
         if role || write_multiplicity || (!whole && nav != navigable[i]) || agg != aggregations[i] {
             // Only the field written changes: the others go as the model has them, so a
             // multiplicity still being corrected is never sent with a role or an aggregation.
@@ -770,9 +947,10 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
                 }
                 Err(e) => shell.panels.notice = Some(e),
             }
-            return;
+            return y;
         }
     }
+    y
 }
 
 /// Every word the kinds' menu and the panels say through `tr` at run time, for the catalogue.
@@ -783,5 +961,10 @@ pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
         "Add generalization",
         "Add dependency",
         "Add interface realization",
+        "Add association class",
+        "An association class joins only classes",
+        "An association class does not join itself",
+        "Nothing specializes an association class",
+        "This association class has an attribute named {name}; an end's role takes another name.",
     ])
 }

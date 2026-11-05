@@ -213,6 +213,7 @@ str		every interface	所有接口
 str		every enumeration	所有枚举
 str		every data type	所有数据类型
 str		every primitive type	所有基本类型
+str		every association class	所有关联类
 str		every attribute	所有属性
 str		every operation	所有操作
 str		every association	所有关联
@@ -540,6 +541,7 @@ str		Add interface	添加接口
 str		Add enumeration	添加枚举
 str		Add data type	添加数据类型
 str		Add primitive type	添加基本类型
+str		Add association class	添加关联类
 str		Class	类
 str		Interface	接口
 str		«interface»	«interface»
@@ -549,6 +551,7 @@ str		Data type	数据类型
 str		Primitive type	基本类型
 str		«dataType»	«dataType»
 str		«primitive»	«primitive»
+str		Association class	关联类
 str		Classifier	分类器
 str		Classifier kinds	分类器类型
 str		Class diagram	类图
@@ -558,6 +561,7 @@ str		Interface · model, in every diagram	接口 · 模型，在每个图中
 str		Enumeration · model, in every diagram	枚举 · 模型，在每个图中
 str		Data type · model, in every diagram	数据类型 · 模型，在每个图中
 str		Primitive type · model, in every diagram	基本类型 · 模型，在每个图中
+str		Association class · model, in every diagram	关联类 · 模型，在每个图中
 str		New package	新包
 str		On this class · {n}	此类上 · {n}
 str		On this interface · {n}	此接口上 · {n}
@@ -620,6 +624,7 @@ str		Place interface	放置接口
 str		Place enumeration	放置枚举
 str		Place data type	放置数据类型
 str		Place primitive type	放置基本类型
+str		Place association class	放置关联类
 str		Add package	添加包
 str		Place package	放置包
 str		Move package	移动包
@@ -634,9 +639,13 @@ str		Only a package this diagram's package holds goes on it	只能放入此图�
 str		A bound can be at most {max}.	界限最多为 {max}。
 str		A class realizes only an interface	类只能实现接口
 str		A relationship joins two classes or interfaces	关系连接两个类或接口
+str		An association class does not join itself	关联类不连接自身
+str		This association class has an attribute named {name}; an end's role takes another name.	此关联类已有名为 {name} 的属性；端的角色需使用其他名称。
+str		An end of this association class has the role {name}; an attribute takes another name.	此关联类的一端已有角色 {name}；属性需使用其他名称。
 str		An enumeration is a data type and joins no association	枚举是数据类型，不参与任何关联
 str		A data type joins no association	数据类型不参与任何关联
 str		A primitive type joins no association	基本类型不参与任何关联
+str		An association class joins only classes	关联类只连接类
 str		An interface specializes only an interface	接口只能特化接口
 str		A class cannot specialize an interface	类不能特化接口
 str		An enumeration specializes only an enumeration	枚举只能特化枚举
@@ -646,6 +655,7 @@ str		Only a data type specializes a data type	只有数据类型能特化数据�
 str		A primitive type specializes only a primitive type	基本类型只能特化基本类型
 str		Only a primitive type specializes a primitive type	只有基本类型能特化基本类型
 str		A built-in type specializes nothing	内置类型不特化任何类型
+str		Nothing specializes an association class	任何类型都不能特化关联类
 str		A classifier cannot specialize itself	分类器不能特化自身
 str		This one specializes that one already	此项已特化该项
 str		That one specializes this one already, which would make a cycle	该项已特化此项，这会形成循环
@@ -675,8 +685,10 @@ str		Implementing class	实现类
 str		Interface realization	接口实现
 str		Interface realization · model	接口实现 · 模型
 str		Interface realization: from the implementing class to its interface	接口实现：从实现类指向其接口
+str		Association class: between two classes, with a card of its own	关联类：位于两个类之间，带有自己的卡片
 str		Navigable	可导航
 str		On this association · {n}	在此关联上 · {n}
+str		On this association class · {n}	在此关联类上 · {n}
 str		On this dependency · {n}	在此依赖上 · {n}
 str		On this generalization · {n}	在此泛化上 · {n}
 str		On this interface realization · {n}	在此接口实现上 · {n}
@@ -691,6 +703,7 @@ str		Supplier	供应者
 str		The lower bound cannot be *.	下限不能为 *。
 str		The upper bound must be at least {lower}.	上限必须至少为 {lower}。
 str		This association	此关联
+str		This association class	此关联类
 str		This class realizes that interface already	此类已经实现了该接口
 str		This dependency	此依赖
 str		This generalization	此泛化
@@ -704,6 +717,7 @@ str		«interface» · {package}	«interface» · {package}
 str		«enumeration» · {package}	«enumeration» · {package}
 str		«dataType» · {package}	«dataType» · {package}
 str		«primitive» · {package}	«primitive» · {package}
+str		Association class · {package}	关联类 · {package}
 str		{name} removed; what it held moved to {parent}	已移除 {name}；其内容已移至 {parent}
 # 关闭时未保存的更改
 str		Close and lose changes	关闭并丢弃更改

@@ -388,15 +388,36 @@ fn diagram_resize<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, n)? }))
 }
 
+/// `diagram.unplace`: the nodes go from their diagram with the nodes nested in them and the edges
+/// on any of them, and with the edges of that diagram that show the same element as one of those
+/// nodes does (an association class's line goes with its card, nested or not). An edge alone, its element's node not on the diagram, is left as it is: that is a
+/// state of its own. The model is untouched.
 fn diagram_unplace<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let nodes = list_of(ctx.doc, p, "nodes", &[NODE], "a node")?;
     if nodes.is_empty() {
         return Err(refuse("nodes", "nothing to remove"));
     }
+    // The edges that show what the nodes and the nodes nested in them show, on the nodes' own
+    // diagrams: a card nested in another (`diagram.place` with a parent) goes with it, its line too.
+    let mut lines: Vec<Obj> = Vec::new();
+    for top in &nodes {
+        for n in node_tree(ctx.doc, *top) {
+            if let (Some(e), Some(d)) = (element_of(ctx.doc, n, node::ELEMENT), diagram_of(ctx.doc, n)) {
+                lines.extend(edges_showing(ctx.doc, d, e));
+            }
+        }
+    }
+    lines.sort();
+    lines.dedup();
     let gone = ctx
         .doc
         .transaction(|st| {
             let mut gone = 0;
+            for e in &lines {
+                if st.is_alive(*e) {
+                    gone += crate::destroy_edge_with_links(st, *e)?;
+                }
+            }
             for n in &nodes {
                 if st.is_alive(*n) {
                     gone += crate::destroy_node_with_edges(st, *n)?;
@@ -957,7 +978,7 @@ pub fn specs<V: DiagramView>() -> Vec<CommandSpec<Store, V>> {
             "Remove from diagram",
             &["Diagram"],
             None,
-            "nodes: array; the ids of the nodes removed, with the edges on them",
+            "nodes: array; the ids of the nodes removed, with the nodes nested in them, the edges on any of them, and the edges of their diagram that show the same element as one of them (an association class's line with its card)",
             has_diagrams::<V>,
             diagram_unplace::<V>
         ),

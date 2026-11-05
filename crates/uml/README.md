@@ -67,14 +67,20 @@ name and no compartment; an enumeration's with
 counted in its `hidden`; an association's line with its
 name, roles, multiplicities, an arrow at every end it navigates to and a diamond at the whole of
 an aggregation or a composition; a generalization's triangle; a dependency dashed with an open
-arrow; an interface realization dashed in the muted ink to a hollow triangle at its interface),
-`relations::{specs, relationships_of, generalization_problem, GeneralizationProblem, association_end_problem, realization_problem, RealizationProblem}`
+arrow; an interface realization dashed in the muted ink to a hollow triangle at its interface; an
+association class's line an association's and its card a class's under `Association class`),
+`relations::{specs, relationships_of, generalization_problem, GeneralizationProblem, association_end_problem, association_class_end_problem, realization_problem, RealizationProblem}`
 (an enumeration specializes only an enumeration, a data type only a data type and a primitive type
 only a primitive type, each specialized only by its own kind, a built-in type specializing nothing,
 and none of them joins an association; `uml.realization.add`: a class
 realizes an interface, owned by the class, its client and supplier kept in step with its
 implementing classifier and contract; reconnected through `uml.relationship.reconnect` and removed
-through `element.remove`), `RELATIONSHIPS` and `is_relationship`, and the card's `WORDS` and `PLURALS` for the shell's catalogue. Where an association's two
+through `element.remove`; `uml.association-class.add` (AR-125): one AssociationClass between two
+classes, owning both its ends as an association does, its ends set with `uml.association.set-end`,
+its members with the member commands, renamed and moved with `uml.association-class.rename` and
+`.move` among its package's classifiers, refused at anything but a class; nothing specializes it),
+`commands::going_with` (the relationships that go with classifiers, an association class's own
+among them), `RELATIONSHIPS`, `is_relationship` and `is_association`, and the card's `WORDS` and `PLURALS` for the shell's catalogue. Where an association's two
 ends pair a derived end with a stored one, the generator gives neither an opposite: a derived end
 keeps no field to keep in step.
 
