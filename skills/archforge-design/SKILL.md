@@ -515,8 +515,9 @@ member and drawing a relationship stay three separate gestures:
   Association class.
   - Interface realization is drawn from the implementing classifier to its interface: a dashed
     line in the muted ink, with a hollow triangle at the interface. A drop on anything but an
-    interface, or a second realization from the same classifier to the same interface, is refused at
-    the canvas's top and draws nothing; several classifiers may realize one interface.
+    interface, a drop of an interface on itself, or a second realization from the same classifier to
+    the same interface is refused at the canvas's top and draws nothing; several classifiers may
+    realize one interface.
   - An association class is drawn between two classes as an association is. The line and a card
     above its middle appear as one element and one undo step, the card's name open for typing and
     its eyebrow `ASSOCIATION CLASS`. The card moves on its own; a dashed tie joins it to the line's
