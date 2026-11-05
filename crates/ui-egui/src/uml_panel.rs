@@ -782,14 +782,18 @@ pub(crate) fn command_of(edit: &MemberEdit) -> (&'static str, serde_json::Value)
     (cmd, params)
 }
 
-/// Why the literal as edited cannot be written, in the user's words: a name another literal of
-/// its enumeration has, whatever the case, the rule the command keeps too. None for any other
-/// member.
+/// Why the literal as edited cannot be written, in the user's words: a new one in an enumeration
+/// that holds the most literals it may, or a name another literal of its enumeration has, whatever
+/// the case; the rules the commands keep too. None for any other member.
 pub(crate) fn literal_refusal(store: &Store, edit: &MemberEdit) -> Option<String> {
     if edit.kind != MemberKind::Literal {
         return None;
     }
     let enumeration = store.by_uuid(edit.class)?;
+    let max = archforge_uml::members::MAX_LITERALS;
+    if edit.target.is_none() && archforge_uml::commands::literals(store, enumeration).len() >= max {
+        return Some(fmt(&tr("An enumeration holds at most {n} literals."), &[("n", &max.to_string())]));
+    }
     let except = edit.target.and_then(|t| store.by_uuid(t));
     let clash = archforge_uml::members::literal_clash(store, enumeration, edit.name.trim(), except)?;
     Some(fmt(&tr("There is a literal named {name} already."), &[("name", &name(store, clash))]))

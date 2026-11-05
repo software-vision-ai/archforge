@@ -63,6 +63,12 @@ pub(crate) trait NotationUi: Sync {
     fn add(&self, shell: &mut Shell, key: &str, selection: Option<Obj>) -> Option<Result<Added, String>>;
     /// The command that renames an element of `class` in place, and its key for the element.
     fn rename(&self, store: &Store, obj: Obj) -> Option<(&'static str, &'static str)>;
+    /// Why `obj` cannot be renamed `name`, in the user's words, checked before the rename command
+    /// runs (a UML literal's name another literal has); none lets the command decide.
+    fn rename_refusal(&self, store: &Store, obj: Obj, name: &str) -> Option<String> {
+        let _ = (store, obj, name);
+        None
+    }
     /// What goes with `obj` when it is removed: relationships, keys and foreign keys.
     fn consequences(&self, store: &Store, obj: Obj) -> (usize, usize, usize) {
         let _ = (store, obj);

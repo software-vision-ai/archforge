@@ -567,6 +567,7 @@ str		Add literal	Ajouter un littéral
 str		More details in Properties	Plus de détails dans Propriétés
 str		There is no type named {name}.	Il n’existe aucun type nommé {name}.
 str		There is a literal named {name} already.	Il existe déjà un littéral nommé {name}.
+str		An enumeration holds at most {n} literals.	Une énumération contient au plus {n} littéraux.
 str		Several types are named {name}; pick one from the menu.	Plusieurs types s’appellent {name} ; choisissez-en un dans le menu.
 str		Add parameter	Ajouter un paramètre
 str		Attribute	Attribut

@@ -43,10 +43,11 @@ redefines `isAbstract`), the redefining property is the class's: `class::IS_ABST
 interfaces, enumerations, literals, classifiers, package_of, remove_elements, MAX_NAME}` (`uml.enumeration.{add,
 rename, move, list}`: an enumeration in a package, its name shared with the classes and interfaces
 there, removed with its literals through `element.remove`), `members::{specs, attributes, operations, parameters,
-parse_multiplicity, MultiplicityError, literal_owner, literal_clash, BUILT_IN, TYPES, MAX_PARAMETERS, MAX_BOUND,
+parse_multiplicity, MultiplicityError, literal_owner, literal_clash, MAX_LITERALS, BUILT_IN, TYPES, MAX_PARAMETERS, MAX_BOUND,
 NO_ENUMERATIONS}` (`uml.class.{set, get}`, `uml.attribute.{add, set, move}`, `uml.operation.{add, set, move}`,
 `uml.literal.{add, rename, move}`: an enumeration's literals at a place asked for or the end, their
-names told apart within their enumeration whatever the case, a place past the end refused, removed
+names told apart within their enumeration whatever the case, at most `MAX_LITERALS` (256, as ER's
+enum types) in one, a place past the end refused, removed
 through `element.remove`; `uml.type.list`; a type is an
 element's id or a built-in type's name, Integer, String, Boolean, Real or UnlimitedNatural, made in
 the package Types the first time it is used; a multiplicity is typed, `0`, `1`, `0..1`, `*`, `1..*`,

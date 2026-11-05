@@ -528,6 +528,27 @@ fn literals_added_and_moved_keep_their_order_through_save_and_reopen() {
     assert_eq!(st.uuid(archforge_uml::commands::literals(st, obj(st, &status))[0]).unwrap().to_string(), placed, "the same literals");
 }
 
+/// An enumeration holds at most `MAX_LITERALS` literals: the add past it is refused, naming the
+/// enumeration and the cap, and changes nothing; one removed makes room again.
+#[test]
+fn an_enumeration_takes_no_literal_past_the_cap() {
+    let mut s = session();
+    let pkg = run(&mut s, "uml.package.add", json!({ "name": "sales" }));
+    let status = run(&mut s, "uml.enumeration.add", json!({ "package": pkg, "name": "Codes" }));
+    let max = archforge_uml::members::MAX_LITERALS;
+    assert_eq!(max, 256, "the cap ER's enum types keep too");
+    let names: Vec<String> = (0..max - 1).map(|i| format!("C{i}")).collect();
+    let names: Vec<&str> = names.iter().map(String::as_str).collect();
+    let mut s = with_literals(&s, &status, &names, 1 << 20);
+    let last = one_step(&mut s, "uml.literal.add", json!({ "enumeration": status, "name": "Last" }));
+    assert_eq!(literal_names(&s, &status).len(), max);
+    let e = refused(&mut s, "uml.literal.add", json!({ "enumeration": status, "name": "More" }));
+    assert!(e.contains(&format!("{status} holds 256 literals already, and an enumeration holds at most 256")), "{e}");
+    assert!(e.contains("key: Some(\"enumeration\")"), "{e}");
+    s.execute("element.remove", &json!({ "ids": [last] })).unwrap();
+    run(&mut s, "uml.literal.add", json!({ "enumeration": status, "name": "More" }));
+}
+
 /// A card lists at most `MAX_CARD_ROWS` literals and counts the rest in `hidden`, so the rows built
 /// every frame stay bounded; a class's members are capped the same way.
 #[test]

@@ -146,7 +146,9 @@ package with its literals below it.
    elsewhere writes a row that has a name and drops an empty one.
 
 Each literal is one step you can undo. The card grows to show every literal you add; a card you
-made shorter by hand says how many it cannot show, as `+ 2 more literals`.
+made shorter by hand says how many it cannot show, as `+ 2 more literals`. An enumeration holds at
+most 256 literals, as an ER enum type does; past that, a new one is refused and the reason says
+so.
 
 Double-click a literal's row on the card to rename it in place. Two literals of one enumeration
 cannot share a name, whatever the case: typing *paid* beside *Paid* says "There is a literal named

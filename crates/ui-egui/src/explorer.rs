@@ -331,11 +331,18 @@ fn commit_rename(shell: &mut Shell) {
         shell.explorer.rename = None;
         return;
     }
-    let cmd = crate::notation_ui::of(shell.notation_uis, store, obj).and_then(|ui| ui.rename(store, obj));
-    let Some((cmd, key)) = cmd else {
+    let ui = crate::notation_ui::of(shell.notation_uis, store, obj);
+    let Some((cmd, key)) = ui.and_then(|ui| ui.rename(store, obj)) else {
         shell.explorer.rename = None;
         return;
     };
+    // A refusal the notation says in the user's words comes first, and nothing runs.
+    if let Some(why) = ui.and_then(|ui| ui.rename_refusal(store, obj, &name)) {
+        if let Some(r) = shell.explorer.rename.as_mut() {
+            r.refused = Some(why);
+        }
+        return;
+    }
     match run(shell, cmd, json!({ key: r.target.to_string(), "name": name })) {
         Ok(_) => shell.explorer.rename = None,
         Err(e) => {

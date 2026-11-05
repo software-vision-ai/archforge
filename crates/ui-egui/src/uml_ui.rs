@@ -591,6 +591,15 @@ impl NotationUi for UmlUi {
         }
     }
 
+    /// A literal's name another literal of its enumeration has, whatever the case, said as the
+    /// card and Properties say it.
+    fn rename_refusal(&self, store: &Store, obj: Obj, name: &str) -> Option<String> {
+        let (e, kind) = member_of(store, obj).filter(|(_, k)| *k == MemberKind::Literal)?;
+        let (Ok(class), Ok(target)) = (store.uuid(e), store.uuid(obj)) else { return None };
+        let edit = crate::uml_panel::MemberEdit { name: name.to_string(), ..crate::uml_panel::edit_of(Some(store), class, kind, Some(target)) };
+        crate::uml_panel::literal_refusal(store, &edit)
+    }
+
     /// The relationships that go with a class, an interface or an enumeration, or with a package's.
     fn consequences(&self, store: &Store, obj: Obj) -> (usize, usize, usize) {
         let held = match class(store, obj) {
@@ -840,29 +849,35 @@ fn package_rows(store: &Store, package: Obj, depth: u8, t: &Tree<'_>) -> Vec<Row
 
 /// A classifier's rows: itself, draggable onto a diagram or a package, then, when open, its
 /// skills, its attributes and operations, each with its type, or an enumeration's literals in
-/// their order, each renamed in place and removed with Delete.
+/// their order, each renamed in place and removed with Delete. A folded row without a filter
+/// builds none of them.
 fn class_rows(store: &Store, c: Obj, depth: u8, t: &Tree<'_>) -> Vec<Row> {
-    let mut members = t.skill_rows(c, depth.saturating_add(1));
-    for l in archforge_uml::commands::literals(store, c) {
-        let label = name(store, l);
-        if t.matches(&label) {
-            members.extend(t.row(l, depth.saturating_add(1), "literal", &icons::LITERAL, label));
+    // Its members' rows are built only when they can show: the row open, or a filter that may
+    // match one; a folded row builds none, however many it holds.
+    let mut members = Vec::new();
+    if t.filtering() || t.open(c) {
+        members.extend(t.skill_rows(c, depth.saturating_add(1)));
+        for l in archforge_uml::commands::literals(store, c) {
+            let label = name(store, l);
+            if t.matches(&label) {
+                members.extend(t.row(l, depth.saturating_add(1), "literal", &icons::LITERAL, label));
+            }
         }
-    }
-    for a in archforge_uml::members::attributes(store, c) {
-        let label = name(store, a);
-        if t.matches(&label) {
-            let ty = archforge_uml::figures::attribute_text(store, a);
-            let detail = ty.split_once(" : ").map(|(_, rest)| rest.to_string());
-            members.extend(t.row(a, depth.saturating_add(1), "attribute", &icons::ATTRIBUTE, label).map(|row| Row { detail, ..row }));
+        for a in archforge_uml::members::attributes(store, c) {
+            let label = name(store, a);
+            if t.matches(&label) {
+                let ty = archforge_uml::figures::attribute_text(store, a);
+                let detail = ty.split_once(" : ").map(|(_, rest)| rest.to_string());
+                members.extend(t.row(a, depth.saturating_add(1), "attribute", &icons::ATTRIBUTE, label).map(|row| Row { detail, ..row }));
+            }
         }
-    }
-    for op in archforge_uml::members::operations(store, c) {
-        let label = format!("{}()", name(store, op));
-        if t.matches(&label) {
-            let text = archforge_uml::figures::operation_text(store, op);
-            let detail = text.rsplit_once(") : ").map(|(_, ty)| ty.to_string());
-            members.extend(t.row(op, depth.saturating_add(1), "operation", &icons::OPERATION, label).map(|row| Row { detail, ..row }));
+        for op in archforge_uml::members::operations(store, c) {
+            let label = format!("{}()", name(store, op));
+            if t.matches(&label) {
+                let text = archforge_uml::figures::operation_text(store, op);
+                let detail = text.rsplit_once(") : ").map(|(_, ty)| ty.to_string());
+                members.extend(t.row(op, depth.saturating_add(1), "operation", &icons::OPERATION, label).map(|row| Row { detail, ..row }));
+            }
         }
     }
     let label = name(store, c);

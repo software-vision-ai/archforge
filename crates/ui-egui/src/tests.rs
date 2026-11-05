@@ -7886,6 +7886,55 @@ fn an_enumeration_takes_literals_typed_on_its_card_each_one_undo_step() {
     }
 }
 
+/// An enumeration that holds the most literals it may takes no more: Properties' editor says so in
+/// the user's words and writes nothing; the cap is ER's enum types' too. In light and dark.
+#[test]
+fn an_enumeration_at_its_literal_cap_says_so_and_takes_no_more() {
+    assert_eq!(archforge_uml::members::MAX_LITERALS, archforge_er::rules::MAX_LITERALS, "one rule across the notations");
+    let names: Vec<String> = (0..archforge_uml::members::MAX_LITERALS).map(|i| format!("C{i}")).collect();
+    let names: Vec<&str> = names.iter().map(String::as_str).collect();
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _, status, _) = literal_sample(theme, &names);
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        h.run();
+        let revision = h.state().session.as_ref().unwrap().revision();
+        let at = rect_of(&h, "workspace.properties.literals.add").center();
+        click(&mut h, at);
+        h.event(egui::Event::Text("More".into()));
+        h.run();
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        let refused = h.state().panels.member.as_ref().and_then(|e| e.refused.clone()).expect("refused");
+        assert_eq!(refused, "An enumeration holds at most 256 literals.");
+        assert_eq!((literal_names(&h, status).len(), h.state().session.as_ref().unwrap().revision()), (256, revision), "nothing written");
+    }
+}
+
+/// A card that leaves members out (past `MAX_CARD_ROWS`) takes a new member in Properties' editor,
+/// not as a draft row in the middle of its rows.
+#[test]
+fn a_card_that_lists_only_some_of_its_members_adds_one_in_properties() {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    crate::uml_ui::open_sample(h.state_mut()).unwrap();
+    let catalog = named(&h, archforge_uml::CLASS, "Catalog");
+    {
+        let s = h.state_mut().session.as_mut().unwrap();
+        s.batch("Add attribute", |b| {
+            for i in 0..archforge_uml::figures::MAX_CARD_ROWS {
+                b.execute("uml.attribute.add", &serde_json::json!({ "class": catalog.to_string(), "name": format!("a{i}") }))?;
+            }
+            Ok(())
+        })
+        .unwrap();
+        s.execute("view.select", &serde_json::json!({ "ids": [catalog.to_string()] })).unwrap();
+    }
+    h.state_mut().canvas.zoom = 1.0;
+    h.state_mut().canvas.focused = true;
+    h.run();
+    key(&mut h, egui::Key::Enter, egui::Modifiers::COMMAND);
+    assert!(h.state().canvas.inline.is_none(), "no draft row among the rows");
+    assert!(h.state().panels.member.as_ref().is_some_and(|e| e.class == catalog && e.target.is_none()), "Properties' editor instead");
+}
+
 /// Properties lists an enumeration's literals under `Literals · n`, each with its pencil: `+` and
 /// the pencil open the literal editor (Name; Remove, Move up and Move down on the left, Cancel and
 /// Apply on the right), Apply or Enter writes one undo step and grows the card to show a literal
@@ -8038,7 +8087,7 @@ fn enumerations_are_listed_with_their_literals_edited_in_place_added_with_the_pl
     h.state_mut().explorer.rename.as_mut().unwrap().text = "PAID".into();
     key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
     let refused = h.state().explorer.rename.as_ref().and_then(|r| r.refused.clone()).expect("refused");
-    assert!(refused.contains("there is a literal named Paid already"), "{refused}");
+    assert_eq!(refused, "There is a literal named Paid already.", "said as the card and Properties say it");
     assert_eq!(literal_names(&h, status), ["Placed", "Paid"], "nothing changed");
     // F2 opens it again, with its name as it is.
     h.state_mut().explorer.rename = None;

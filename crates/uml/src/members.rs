@@ -36,6 +36,10 @@ pub const MAX_BOUND: u64 = 1_000_000;
 /// Why a command is not available.
 pub const NO_CLASSES: &str = "There is no class, interface or enumeration yet.";
 
+/// The most literals an enumeration holds: ER's enum types hold as many
+/// (`archforge_er::rules::MAX_LITERALS`), one rule across the notations, and the card, Properties
+/// and Models stay small enough to build every frame.
+pub const MAX_LITERALS: usize = 256;
 /// Why a command for literals is not available.
 pub const NO_ENUMERATIONS: &str = "There is no enumeration yet.";
 
@@ -448,12 +452,22 @@ fn literal_of(store: &Store, p: &Params, key: &str) -> Result<(Obj, Obj), Comman
 
 /// `uml.literal.add`: a literal of an enumeration, its name free among its literals whatever the
 /// case, at the place `at` asks for (from 0 to the count of literals) or, at -1, at the end. A place
-/// past the end is refused, not taken as the end.
+/// past the end is refused, not taken as the end; an enumeration that holds [`MAX_LITERALS`]
+/// already takes no more.
 fn literal_add(ctx: &mut C<'_>, p: &Params) -> R {
     let e = id_of(ctx.doc, p, "enumeration", ENUMERATION, "an enumeration")?;
+    let count = list(ctx.doc, e, enumeration::OWNED_LITERAL).len();
+    if count >= MAX_LITERALS {
+        return Err(refuse(
+            "enumeration",
+            format!(
+                "{} holds {count} literals already, and an enumeration holds at most {MAX_LITERALS}; remove one before adding another",
+                text(p, "enumeration")
+            ),
+        ));
+    }
     let name = text(p, "name");
     check_literal_name(ctx.doc, e, name, None)?;
-    let count = list(ctx.doc, e, enumeration::OWNED_LITERAL).len();
     let at = match p.integer("at").unwrap_or(-1) {
         -1 => count,
         at => usize::try_from(at)
@@ -705,7 +719,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Add literal",
             &["Enumeration"],
             None,
-            "enumeration: string; the enumeration's id\nname: string; the literal's name, free among the enumeration's literals whatever the case\nat: integer = -1, -1..1000000; where among the literals, from 0 to their count, -1 for the end",
+            "enumeration: string; the enumeration's id\nname: string; the literal's name, free among the enumeration's literals whatever the case; an enumeration holds at most 256 literals\nat: integer = -1, -1..1000000; where among the literals, from 0 to their count, -1 for the end",
             has_enumerations,
             literal_add
         ),

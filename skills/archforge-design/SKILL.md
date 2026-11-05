@@ -409,8 +409,11 @@ What is UML's own, beside the shared rules above.
   writes one undo step, Cancel or Escape leaves. A literal applied grows every card of its
   enumeration that would hide it, in the same step. In Models a literal's row renames in place (a
   second click, F2) and Delete removes it; `+` on a selected enumeration or literal offers Literal
-  first, added at the end and named in place (`Literal 1`). A card lists at most 500 rows and
-  counts the rest in its `+ n more` row. Literals carry no skills.
+  first, added at the end and named in place (`Literal 1`); a clashing name there is refused in
+  the same words. An enumeration holds at most 256 literals, as an ER enum type does ("An
+  enumeration holds at most 256 literals."). A card lists at most 500 rows and counts the rest in
+  its `+ n more` row; on such a card a new member opens in Properties' editor, not as a draft row.
+  Literals carry no skills.
 - An enumeration is a data type: no association of any kind starts or ends at one, nor does an
   association's end move onto one; the tool says "An enumeration is a data type and joins no
   association" at the canvas's top and draws nothing. An enumeration specializes only an

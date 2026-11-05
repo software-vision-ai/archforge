@@ -96,15 +96,22 @@ fn resolve(store: &Store, inline: &InlineMember) -> Result<String, String> {
 }
 
 /// Opens a row on `class`'s card on the open diagram: a new member of `kind`, or `target`. Gives
-/// false when the card cannot hold one (no card of the class on the diagram, or the diagram drawn
-/// below the zoom at which cards show their rows); the caller opens Properties' editor then.
+/// false when the card cannot hold one (no card of the class on the diagram, the diagram drawn
+/// below the zoom at which cards show their rows, or, for a new member, a card that lists only
+/// some of its rows, whose end is not the members' end); the caller opens Properties' editor then.
 pub(crate) fn open(shell: &mut Shell, class: Uuid, kind: MemberKind, target: Option<Uuid>) -> bool {
     if shell.canvas.zoom < DETAIL_ZOOM {
         return false;
     }
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return false };
     let Some(c) = store.by_uuid(class) else { return false };
-    if card_node(shell, store, c).is_none() {
+    let Some(n) = card_node(shell, store, c) else { return false };
+    // A card that leaves rows out has its draft's place among them, not at the members' end.
+    let capped = || {
+        let card = shell.session.as_ref().and_then(|s| s.view().of_element(store, c)?.card(store, c, archforge_diagram::diagram_of(store, n)?));
+        card.is_some_and(|card| card.hidden > 0)
+    };
+    if target.is_none() && capped() {
         return false;
     }
     let edit = crate::uml_panel::edit_of(Some(store), class, kind, target);
