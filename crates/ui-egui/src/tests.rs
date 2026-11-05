@@ -9820,6 +9820,72 @@ fn the_delete_dialog_counts_a_diagram_with_an_association_class_s_line_alone_and
     }
 }
 
+/// A selected association class's line shows its end handles though it has a card too: its end
+/// dragged onto another class moves there, and onto an interface it is refused in the user's words.
+/// In light and dark.
+#[test]
+fn an_association_class_s_selected_line_keeps_its_end_handles_and_reconnects() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut r = reviews(theme);
+        let (ac, _, _) = r.review();
+        let at = r.line_middle() + egui::vec2(-60.0, 0.0);
+        click(&mut r.h, at);
+        assert_eq!(r.selection(), [ac.as_str()]);
+        let found = ids(&r.h);
+        for want in ["workspace.canvas.line-end.source", "workspace.canvas.line-end.target"] {
+            assert!(found.contains(&want.to_string()), "{want} in {found:?}");
+        }
+        let ends = |r: &Reviews| {
+            let st = r.h.state().session.as_ref().unwrap().doc();
+            let (a, b) = archforge_uml::figures::ends(st, st.by_uuid(archforge_mof::Uuid::parse(&ac).unwrap()).unwrap()).unwrap();
+            (archforge_core::name_of(st, a), archforge_core::name_of(st, b))
+        };
+        // Onto the interface Rated: refused and said; nothing changes.
+        let revision = r.h.state().session.as_ref().unwrap().revision();
+        let handle = rect_of(&r.h, "workspace.canvas.line-end.target").center();
+        let to = r.at("Rated");
+        drag(&mut r.h, handle, to);
+        assert_eq!(r.h.state().canvas.notice.as_deref(), Some("An association class joins only classes"));
+        assert_eq!(r.h.state().session.as_ref().unwrap().revision(), revision);
+        // Onto the class Store: the end moves there.
+        let at = r.line_middle() + egui::vec2(-60.0, 0.0);
+        click(&mut r.h, at);
+        let handle = rect_of(&r.h, "workspace.canvas.line-end.target").center();
+        let to = r.at("Store");
+        drag(&mut r.h, handle, to);
+        assert_eq!(ends(&r), ("Customer".to_string(), "Store".to_string()), "notice {:?}", r.h.state().canvas.notice);
+    }
+}
+
+/// A line selected by its own id on one diagram never stands for the association class's line on
+/// another: with the first diagram's edge selected and the second diagram open, Delete and
+/// Shift+Delete leave the second's line and the model as they are.
+#[test]
+fn a_line_selected_on_another_diagram_is_not_taken_for_this_one_s() {
+    let mut r = reviews(ThemeKind::Light);
+    let (_, edge, _) = r.review();
+    let (package, customer, product) = (r.package.clone(), r.ids["Customer"].clone(), r.ids["Product"].clone());
+    let s = r.h.state_mut().session.as_mut().unwrap();
+    let mut run = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap_or_default().to_string();
+    let d2 = run("diagram.add", serde_json::json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": package, "name": "Reviews 2" }));
+    for (class, x) in [(&customer, 80), (&product, 760)] {
+        run("diagram.place", serde_json::json!({ "diagram": d2, "element": class, "x": x, "y": 520, "width": 240, "height": 136 }));
+    }
+    run("diagram.connect-all", serde_json::json!({ "diagram": d2 }));
+    crate::canvas::open(r.h.state_mut(), archforge_mof::Uuid::parse(&d2).unwrap());
+    r.h.run();
+    // The first diagram's line selected by its edge's id, the second diagram open.
+    crate::editing::run(r.h.state_mut(), "view.select", serde_json::json!({ "ids": [edge] })).unwrap();
+    r.h.state_mut().canvas.focused = true;
+    r.h.run();
+    let revision = r.h.state().session.as_ref().unwrap().revision();
+    key(&mut r.h, egui::Key::Delete, egui::Modifiers::NONE);
+    key(&mut r.h, egui::Key::Delete, egui::Modifiers::SHIFT);
+    assert!(r.h.state().explorer.delete.is_none(), "nothing is asked");
+    assert_eq!(r.h.state().session.as_ref().unwrap().revision(), revision, "the second diagram's line and the model stay");
+    assert_eq!(r.association_classes(), ["Review"]);
+}
+
 /// The delete dialog of a class names every relationship that goes with it, as `element.remove`
 /// takes them: Product's association class Review, and the dependency on Review, which goes with
 /// Review. In light and dark.
