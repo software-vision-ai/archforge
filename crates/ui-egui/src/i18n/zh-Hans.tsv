@@ -489,6 +489,9 @@ str		On this table · {n}	此表上 · {n}
 str		On this column · {n}	此列上 · {n}
 str		On this skill · {n}	此技能上 · {n}
 str		On this element · {n}	此元素上 · {n}
+str		Literals carry no skills	字面量不带技能
+str		Relationships carry no skills	关系不带技能
+str		This element carries no skills	此元素不带技能
 str		Diagram	图
 str		Diagram · of {schema}	图 · 属于 {schema}
 str		This diagram	此图

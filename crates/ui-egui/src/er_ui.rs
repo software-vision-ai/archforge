@@ -352,10 +352,12 @@ impl NotationUi for ErUi {
         }
     }
 
+    /// A column's problems show on its table.
     fn problem_holder(&self, store: &Store, o: Obj) -> Obj {
         if class(store, o) == Some(archforge_er::ATTRIBUTE) { r::entity_of(store, o).unwrap_or(o) } else { o }
     }
 
+    /// How Properties names an ER element: its kind line, its word, This …, and On this … · {n}.
     fn words(&self, store: &Store, o: Obj) -> Option<Words> {
         let words = |kind: String, word: String, this: String, on_this: String| Words { kind, word, this, on_this, name: name(store, o) };
         Some(match class(store, o)? {
@@ -382,6 +384,11 @@ impl NotationUi for ErUi {
             }
             _ => return None,
         })
+    }
+
+    /// A relationship carries no skills: the Skills panel says so in its words.
+    fn no_skills(&self, store: &Store, o: Obj) -> Option<String> {
+        (class(store, o) == Some(archforge_er::RELATIONSHIP)).then(|| tr("Relationships carry no skills"))
     }
 
     /// A column's panel is its table's, so its first section says Table.

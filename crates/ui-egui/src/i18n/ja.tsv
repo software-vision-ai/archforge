@@ -489,6 +489,9 @@ str		On this table · {n}	このテーブルに · {n}
 str		On this column · {n}	この列に · {n}
 str		On this skill · {n}	このスキルに · {n}
 str		On this element · {n}	この要素に · {n}
+str		Literals carry no skills	リテラルはスキルを持ちません
+str		Relationships carry no skills	関係はスキルを持ちません
+str		This element carries no skills	この要素はスキルを持ちません
 str		Diagram	図
 str		Diagram · of {schema}	図 · {schema} の
 str		This diagram	この図

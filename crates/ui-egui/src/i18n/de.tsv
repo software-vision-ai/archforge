@@ -489,6 +489,9 @@ str		On this table · {n}	Auf dieser Tabelle · {n}
 str		On this column · {n}	Auf dieser Spalte · {n}
 str		On this skill · {n}	Auf diesem Skill · {n}
 str		On this element · {n}	Auf diesem Element · {n}
+str		Literals carry no skills	Literale tragen keine Skills
+str		Relationships carry no skills	Beziehungen tragen keine Skills
+str		This element carries no skills	Dieses Element trägt keine Skills
 str		Diagram	Diagramm
 str		Diagram · of {schema}	Diagramm · von {schema}
 str		This diagram	Dieses Diagramm

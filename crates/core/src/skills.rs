@@ -433,22 +433,29 @@ fn subject_param<V: SkillHost>(view: &V, store: &Store, p: &Params, key: &str) -
         return Ok(None);
     }
     let o = any_of(store, p, key)?;
-    let class = store.class_of(o).map_err(fail)?;
-    if class == MODEL {
+    if store.class_of(o).map_err(fail)? == MODEL {
         return Ok(None);
+    }
+    match subject_problem(view, store, o) {
+        Some(why) => Err(refuse(key, why)),
+        None => Ok(Some(o)),
+    }
+}
+
+/// Why `o` cannot carry a skill, when it cannot: its class is none the notations name as a
+/// subject, or its notation says why (an association's end). The model carries skills. The shell
+/// asks this before it offers to add one, so it offers only what `skill.add` takes.
+pub fn subject_problem<V: SkillHost>(view: &V, store: &Store, o: Obj) -> Option<String> {
+    let class = store.class_of(o).ok()?;
+    if class == MODEL {
+        return None;
     }
     let subjects = view.skill_subjects();
     if !subjects.contains(&class) {
         let allowed: Vec<String> = subjects.iter().filter_map(|c| store.universe().class(*c).map(|c| c.name.to_string())).collect();
-        return Err(refuse(
-            key,
-            format!("a skill cannot sit on {}; it sits on the model, {}", store.universe().class_name(class), allowed.join(", ")),
-        ));
+        return Some(format!("a skill cannot sit on {}; it sits on the model, {}", store.universe().class_name(class), allowed.join(", ")));
     }
-    if let Some(why) = view.skill_problem(store, o) {
-        return Err(refuse(key, why));
-    }
-    Ok(Some(o))
+    view.skill_problem(store, o).map(str::to_string)
 }
 
 /// The kind under `applies_to` (a word the subject's notation declares, any notation's for the

@@ -271,6 +271,10 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
 - The Skills panel lists the skills: a click on a row opens the skill's tab; the bin that shows on
   a hovered row of the element's own skills removes it without opening it (undo brings it back);
   + makes a skill on the selected element and opens its tab with the name selected, ready to type.
+  The + shows only where the model lets the selection carry a skill (the shell asks the same
+  rule `skill.add` does); elsewhere a muted line under the section's title says so in the
+  selection's words: "Relationships carry no skills", "Literals carry no skills", else "This
+  element carries no skills" (AR-121).
 - A new skill's text starts from a template shaped as an agent's skill, in the interface's
   language: a header between `---` lines with `name` (the name as a slug) and a `description`
   that says when to read it, the name as the `#` title, a line on what it is for, then Rules and

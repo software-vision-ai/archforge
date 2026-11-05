@@ -25,7 +25,9 @@ eye switch between writing and a preview. The text is kept a moment after you st
 each keep is one undo step.
 
 **Skills** in the right panel lists the skills that apply to the selection, with where each comes
-from; choose one to open it, or hover over one of the element's own skills to remove it.
+from; choose one to open it, or hover over one of the element's own skills to remove it. Its **+**
+adds a skill to the selection where one can sit; a relationship or an enumeration's literal
+carries none, and the panel says so instead.
 
 <!-- picture: workspace-skills light | The Skills panel lists the skills on the selection and those it inherits -->
 

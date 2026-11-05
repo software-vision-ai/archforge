@@ -7891,6 +7891,66 @@ fn an_enumeration_in_properties_shows_its_literals_read_only_and_is_offered_as_a
     }
 }
 
+/// The Skills panel offers `+` only where the model lets the selection carry a skill: a literal and
+/// an association say in a muted line that they carry none, and a class keeps its `+`; the panel
+/// and `skill.add` ask the same rule. In light and dark.
+#[test]
+fn the_skills_panel_offers_add_skill_only_where_the_selection_carries_skills() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        let priority = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let st = s.doc();
+            let commerce =
+                st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::PACKAGE) && archforge_core::name_of(st, *o) == "Commerce").unwrap();
+            let commerce = st.uuid(commerce).unwrap().to_string();
+            let out = s.execute("uml.enumeration.add", &serde_json::json!({ "package": commerce, "name": "Priority" })).unwrap();
+            archforge_mof::Uuid::parse(out.value["id"].as_str().unwrap()).unwrap()
+        };
+        crate::uml_ui::put_literals(h.state_mut(), priority, &["Low"]).unwrap();
+        h.state_mut().state.show_panel(crate::state::Panel::Skills);
+        h.run();
+        let low = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            st.uuid(archforge_uml::commands::literals(st, st.by_uuid(priority).unwrap())[0]).unwrap()
+        };
+        let paid_by = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let a = st
+                .alive()
+                .find(|o| st.class_of(*o).ok() == Some(archforge_uml::ASSOCIATION) && archforge_core::name_of(st, *o) == "paid by")
+                .unwrap();
+            st.uuid(a).unwrap()
+        };
+        let customer = named(&h, archforge_uml::CLASS, "Customer");
+        for (selected, title, line) in [
+            (low, "On this literal · 0", Some("Literals carry no skills")),
+            (paid_by, "On this association · 0", Some("Relationships carry no skills")),
+            (customer, "On this class · 0", None),
+        ] {
+            h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [selected.to_string()] })).unwrap();
+            h.run();
+            let texts = painted(&h);
+            assert!(texts.iter().any(|t| t == title), "{title} in {texts:?}");
+            let offered = ids(&h).iter().any(|i| i == "workspace.skills.add");
+            assert_eq!(offered, line.is_none(), "{title}: + only where a skill can sit");
+            for said in ["Literals carry no skills", "Relationships carry no skills"] {
+                assert_eq!(texts.iter().any(|t| t == said), line == Some(said), "{title}: {said}");
+            }
+            // The panel and the engine ask the same rule.
+            let s = h.state().session.as_ref().unwrap();
+            let o = s.doc().by_uuid(selected).unwrap();
+            assert_eq!(archforge_core::skills::subject_problem(s.view(), s.doc(), o).is_none(), offered);
+            let s = h.state_mut().session.as_mut().unwrap();
+            let added = s.execute("skill.add", &serde_json::json!({ "subject": selected.to_string(), "name": "Probe" }));
+            assert_eq!(added.is_ok(), offered, "{title}: skill.add agrees with the panel");
+            if added.is_ok() {
+                s.undo().unwrap();
+            }
+        }
+    }
+}
+
 /// The sample class model in `theme` with two enumerations, OrderStatus and ClosingStatus, placed in
 /// its empty bottom row and the whole diagram in view: the harness, every card's node by name, and
 /// the enumerations' nodes.

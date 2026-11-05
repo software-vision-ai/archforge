@@ -488,6 +488,9 @@ str		On this table · {n}	On this table · {n}
 str		On this column · {n}	On this column · {n}
 str		On this skill · {n}	On this skill · {n}
 str		On this element · {n}	On this element · {n}
+str		Literals carry no skills	Literals carry no skills
+str		Relationships carry no skills	Relationships carry no skills
+str		This element carries no skills	This element carries no skills
 str		Diagram	Diagram
 str		Diagram · of {schema}	Diagram · of {schema}
 str		This diagram	This diagram

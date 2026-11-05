@@ -699,6 +699,15 @@ impl NotationUi for UmlUi {
         owner_of(store, o).unwrap_or(o)
     }
 
+    /// A literal and a relationship carry no skills: the Skills panel says so in their words.
+    fn no_skills(&self, store: &Store, o: Obj) -> Option<String> {
+        match class(store, o)? {
+            c if c == archforge_uml::ENUMERATION_LITERAL => Some(tr("Literals carry no skills")),
+            c if archforge_uml::is_relationship(c) => Some(tr("Relationships carry no skills")),
+            _ => None,
+        }
+    }
+
     /// A literal is read-only here: removing it comes with its own story, so Delete leaves it.
     fn removes(&self, store: &Store, o: Obj) -> bool {
         literal_of(store, o).is_none()

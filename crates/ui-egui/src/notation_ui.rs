@@ -92,6 +92,12 @@ pub(crate) trait NotationUi: Sync {
         let _ = (store, obj);
         true
     }
+    /// Why `obj`, which the model says carries no skill, carries none, in the user's words for the
+    /// Skills panel ("Relationships carry no skills"); none takes the panel's general line.
+    fn no_skills(&self, store: &Store, obj: Obj) -> Option<String> {
+        let _ = (store, obj);
+        None
+    }
     /// Whether `obj` holds elements that go with it.
     fn has_children(&self, store: &Store, obj: Obj) -> bool {
         let _ = (store, obj);
