@@ -7,8 +7,9 @@
 //! - `archforge://skills`: every skill, where it sits and when it applies.
 //! - `archforge://element/{id}`: a schema (with its tables, keys and relationships), a table, a
 //!   class, an interface, an enumeration (with its literals), a data type, a primitive type, an
-//!   association class (with its ends) or a diagram; an attribute and an association end with its
-//!   modifiers (AR-126).
+//!   association class (with its ends) or a diagram. The attributes of what has them, and an
+//!   association class's ends, come with their modifiers (AR-126); an attribute or an end is not
+//!   read by its own id.
 //! - `archforge://skills/effective/{id}` and `archforge://skills/effective/{id}/{trigger}`: the
 //!   skills in effect on an element or a diagram, outermost first, with where each comes from and
 //!   what overrides it, as `skill.effective` gives them.

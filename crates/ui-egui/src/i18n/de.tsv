@@ -637,6 +637,8 @@ str		A property without a name cannot be named here.	Eine Eigenschaft ohne Namen
 str		{name} is not a property this one can subset.	{name} ist keine Eigenschaft, deren Teilmenge diese sein kann.
 str		{name} is not a property this one can redefine.	{name} ist keine Eigenschaft, die diese redefinieren kann.
 str		{name} has this property's name; a subset takes another.	{name} hat den Namen dieser Eigenschaft; eine Teilmenge braucht einen anderen.
+str		{name} subsets this property already.	{name} ist bereits eine Teilmenge dieser Eigenschaft.
+str		The moved ends no longer subset or redefine {names}, so those were dropped.	Die verschobenen Enden sind keine Teilmenge und keine Redefinition von {names} mehr; diese Angaben wurden entfernt.
 str		{name} has a type this property's type does not conform to.	{name} hat einen Typ, zu dem der Typ dieser Eigenschaft nicht konform ist.
 str		{name} holds fewer values than this property.	{name} fasst weniger Werte als diese Eigenschaft.
 str		This property's multiplicity does not lie within {name}'s.	Die Multiplizität dieser Eigenschaft liegt nicht innerhalb der von {name}.

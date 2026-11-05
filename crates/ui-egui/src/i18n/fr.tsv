@@ -637,6 +637,8 @@ str		A property without a name cannot be named here.	Une propriété sans nom ne
 str		{name} is not a property this one can subset.	{name} n’est pas une propriété dont celle-ci peut être un sous-ensemble.
 str		{name} is not a property this one can redefine.	{name} n’est pas une propriété que celle-ci peut redéfinir.
 str		{name} has this property's name; a subset takes another.	{name} porte le nom de cette propriété ; un sous-ensemble en prend un autre.
+str		{name} subsets this property already.	{name} est déjà un sous-ensemble de cette propriété.
+str		The moved ends no longer subset or redefine {names}, so those were dropped.	Les extrémités déplacées ne sont plus un sous-ensemble ni une redéfinition de {names} ; ces indications ont été retirées.
 str		{name} has a type this property's type does not conform to.	{name} a un type auquel le type de cette propriété n’est pas conforme.
 str		{name} holds fewer values than this property.	{name} contient moins de valeurs que cette propriété.
 str		This property's multiplicity does not lie within {name}'s.	La multiplicité de cette propriété ne tient pas dans celle de {name}.

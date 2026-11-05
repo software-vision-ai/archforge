@@ -697,7 +697,11 @@ member and drawing a relationship stay three separate gestures:
   The selects offer one property each; a property of the model that subsets or redefines several
   shows them all, and picking one replaces them. A default that is a literal goes with the literal
   when it is removed, as a property's type does. A long end text is drawn further along its line so
-  it clears the card.
+  it clears the card, and clear of the end's arrowhead, diamond or triangle. For agents, a field
+  `uml.attribute.set` or `uml.association.set-end` is not given keeps its value; clearing is said
+  explicitly. Only the properties a Subsets or Redefines list adds are checked, so a target the
+  model no longer allows never blocks another edit; moving an association's end drops, in the same
+  step, what its ends no longer subset or redefine, and the canvas says which.
 
 ## Not decided yet
 The menu bar's structure; how a colour chosen in Appearance and the key-status colour combine;

@@ -637,6 +637,8 @@ str		A property without a name cannot be named here.	名前のないプロパテ
 str		{name} is not a property this one can subset.	{name} はこのプロパティのサブセット元にできるプロパティではありません。
 str		{name} is not a property this one can redefine.	{name} はこのプロパティが再定義できるプロパティではありません。
 str		{name} has this property's name; a subset takes another.	{name} はこのプロパティと同じ名前です。サブセットには別の名前が必要です。
+str		{name} subsets this property already.	{name} はすでにこのプロパティのサブセットです。
+str		The moved ends no longer subset or redefine {names}, so those were dropped.	移動した端は {names} のサブセットでも再定義でもなくなったため、それらを外しました。
 str		{name} has a type this property's type does not conform to.	{name} の型に、このプロパティの型は適合しません。
 str		{name} holds fewer values than this property.	{name} が持てる値はこのプロパティより少ないです。
 str		This property's multiplicity does not lie within {name}'s.	このプロパティの多重度は {name} の多重度の範囲内にありません。

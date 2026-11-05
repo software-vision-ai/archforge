@@ -208,7 +208,9 @@ pub enum Menu {
     /// An association end's aggregation and its multiplicity's presets.
     EndAggregation(usize),
     EndMultiplicity(usize),
-    /// An association end's Subsets and Redefines (AR-126).
+    /// An association end's default literal (for an enumeration's type), Subsets and Redefines
+    /// (AR-126).
+    EndDefault(usize),
     EndSubsets(usize),
     EndRedefines(usize),
     /// A class's package.

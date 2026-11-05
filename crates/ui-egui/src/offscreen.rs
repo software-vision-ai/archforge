@@ -1390,11 +1390,14 @@ fn sample_modifiers(shell: &mut Shell) -> Result<(), String> {
     )?;
     let (w, _) = archforge_uml::CLASS_SIZE;
     let order_height = crate::uml_ui::members_height(4, 1);
+    let line_height = crate::uml_ui::members_height(1, 0);
+    // OrderLine's middle level with Order's, so the line between them runs straight.
+    let line_y = (120.0 + (order_height - line_height) / 2.0).round();
     for (element, x, y, width, height) in [
-        (&order, 80, 120, w + 80.0, order_height),
-        (&line, 700, 120, w, crate::uml_ui::members_height(1, 0)),
-        (&money, 80, 470, w, crate::uml_ui::members_height(0, 0)),
-        (&status, 420, 470, w, crate::uml_ui::members_height(3, 0)),
+        (&order, 80.0, 120.0, w + 80.0, order_height),
+        (&line, 700.0, line_y, w, line_height),
+        (&money, 80.0, 470.0, w, crate::uml_ui::members_height(0, 0)),
+        (&status, 420.0, 470.0, w, crate::uml_ui::members_height(3, 0)),
     ] {
         run(session, "diagram.place", json!({ "diagram": diagram, "element": element, "x": x, "y": y, "width": width, "height": height }))?;
     }

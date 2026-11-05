@@ -633,8 +633,17 @@ pub(crate) fn reconnect(shell: &mut Shell, element: Uuid, source: bool, to_node:
     }
     let Ok(class) = store.uuid(target) else { return };
     let end = if source { "source" } else { "target" };
-    if let Err(e) = run(shell, "uml.relationship.reconnect", json!({ "relationship": element.to_string(), "end": end, "class": class.to_string() })) {
-        shell.canvas.notice = Some(e);
+    match run(shell, "uml.relationship.reconnect", json!({ "relationship": element.to_string(), "end": end, "class": class.to_string() })) {
+        // What the moved ends no longer subset or redefine went in the same step: said.
+        Ok(out) => {
+            let names: Vec<&str> =
+                out.get("dropped").and_then(|d| d.as_array()).into_iter().flatten().filter_map(|d| d.get("name")?.as_str()).collect();
+            if !names.is_empty() {
+                shell.canvas.notice =
+                    Some(fmt(&tr("The moved ends no longer subset or redefine {names}, so those were dropped."), &[("names", &names.join(", "))]));
+            }
+        }
+        Err(e) => shell.canvas.notice = Some(e),
     }
 }
 
@@ -726,8 +735,8 @@ fn ends_edit(store: &Store, a: Obj, id: Uuid) -> Option<EndsEdit> {
 }
 
 /// Why end `end`'s modifiers as edited cannot be written, in the user's words, with the field it
-/// sits under: a default its type does not read, or a property it subsets or redefines that the
-/// rules refuse; the commands keep the same rules.
+/// sits under: a default its type does not read, or a property it adds to what it subsets or
+/// redefines that the rules refuse; the commands keep the same rules.
 pub(crate) fn end_refusal(store: &Store, end: Obj, m: &EndModifiers) -> Option<(&'static str, String)> {
     let ty = store.get(end, archforge_uml::typed_element::TYPE).ok().and_then(|v| v.as_ref());
     let form = archforge_uml::modifiers::DefaultForm::of(store, ty);
@@ -735,7 +744,8 @@ pub(crate) fn end_refusal(store: &Store, end: Obj, m: &EndModifiers) -> Option<(
         return Some(("default", crate::uml_panel::default_refusal(store, &e)));
     }
     let shape = archforge_uml::modifiers::Shape::of(store, end);
-    crate::uml_panel::target_refusals(store, &shape, &m.subsets, &m.redefines)
+    let had = EndModifiers::of(store, end);
+    crate::uml_panel::target_refusals(store, &shape, (&m.subsets, &had.subsets), (&m.redefines, &had.redefines))
 }
 
 /// `typed` in end `end`'s multiplicity of association `id`, committed and refused, as a sample
@@ -1132,9 +1142,30 @@ fn end_modifiers(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
             _ => y,
         }
     };
+    let Some((end_id, role)) = shell.session.as_ref().and_then(|s| Some((s.doc().uuid(end).ok()?, archforge_core::name_of(s.doc(), end)))) else {
+        return (y, Asked::Nothing);
+    };
+    // The choices, built once per state of the project: Subsets', Redefines' and the literals of
+    // the end's type when it is an enumeration.
+    let targets = crate::uml_panel::take_targets(
+        shell,
+        &format!("end|{end_id}"),
+        |store| Some(archforge_uml::modifiers::Shape::of(store, end)),
+        |store| store.get(end, archforge_uml::typed_element::TYPE).ok().and_then(|v| v.as_ref()),
+    );
     let m = &mut edit.modifiers[i];
     let limit = archforge_uml::modifiers::MAX_DEFAULT;
-    text_field(shell, ui, p, pos2(left, y), width, &format!("{key}.default"), &tr("Default value"), &mut m.default, limit, false, false);
+    let default_id = format!("{key}.default");
+    let default = match &targets.literals {
+        Some(_) => {
+            let shown = if m.default.trim().is_empty() { tr("None") } else { m.default.clone() };
+            Some(select_field(shell, ui, p, pos2(left, y), width, &default_id, &tr("Default value"), &shown, Menu::EndDefault(i)))
+        }
+        None => {
+            text_field(shell, ui, p, pos2(left, y), width, &default_id, &tr("Default value"), &mut m.default, limit, false, false);
+            None
+        }
+    };
     y += 17.0 + FIELD + 10.0;
     y = under(&paint, y, &["default"]);
     check(shell, ui, p, pos2(left, y), &format!("{key}.static"), &tr("Static"), &mut m.is_static);
@@ -1145,8 +1176,6 @@ fn end_modifiers(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
     y += 26.0;
     check(shell, ui, p, pos2(left, y), &format!("{key}.unique"), &tr("Unique"), &mut m.unique);
     y += 16.0 + 16.0;
-    let Some(end_id) = shell.session.as_ref().and_then(|s| s.doc().uuid(end).ok()) else { return (y, Asked::Nothing) };
-    let targets = crate::uml_panel::take_targets(shell, &format!("end|{end_id}"), |store| Some(archforge_uml::modifiers::Shape::of(store, end)));
     let shown = |ids: &[Uuid]| match shell.session.as_ref() {
         Some(s) if !ids.is_empty() => {
             ids.iter().filter_map(|u| s.doc().by_uuid(*u)).map(|o| archforge_core::name_of(s.doc(), o)).collect::<Vec<_>>().join(", ")
@@ -1159,8 +1188,9 @@ fn end_modifiers(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
         select_field(shell, ui, p, pos2(right, y), half, &format!("{key}.redefines"), &tr("Redefines"), &redefines_shown, Menu::EndRedefines(i));
     y += 17.0 + FIELD + 6.0;
     let mut said = 0.0_f32;
+    let offered = crate::uml_panel::offered_subsets(&targets, &role);
     for (empty, x, text) in
-        [(targets.subsets.is_empty(), left, tr("No property to subset")), (targets.redefines.is_empty(), right, tr("No property to redefine"))]
+        [(offered.is_empty(), left, tr("No property to subset")), (targets.redefines.is_empty(), right, tr("No property to redefine"))]
     {
         if empty {
             let g = ux::galley_rows(&paint, &text, types::CAPTION, p.text_muted, Some(half), 2);
@@ -1198,20 +1228,27 @@ fn end_modifiers(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
     y += FIELD + 16.0;
     // The menus over what is under them.
     match shell.panels.menu {
+        Some(Menu::EndDefault(k)) if k == i => {
+            if let (Some(field), Some(names)) = (default, targets.literals.as_ref())
+                && let Some(pick) = crate::uml_panel::literal_menu(shell, ui, p, field, &default_id, names)
+            {
+                m.default = pick;
+            }
+        }
         Some(Menu::EndSubsets(k)) if k == i => {
-            let items: Vec<String> = std::iter::once(tr("None")).chain(targets.subsets.iter().map(|(_, l)| l.clone())).collect();
-            if let Some(pick) = menu(shell, ui, p, subsets, &format!("{key}.subsets"), &items) {
-                m.subsets = pick.checked_sub(1).and_then(|k| targets.subsets.get(k)).map(|(u, _)| vec![*u]).unwrap_or_default();
+            if let Some(pick) = crate::uml_panel::target_menu(shell, ui, p, subsets, &format!("{key}.subsets"), &offered) {
+                m.subsets = pick;
             }
         }
         Some(Menu::EndRedefines(k)) if k == i => {
-            let items: Vec<String> = std::iter::once(tr("None")).chain(targets.redefines.iter().map(|(_, l)| l.clone())).collect();
-            if let Some(pick) = menu(shell, ui, p, redefines, &format!("{key}.redefines"), &items) {
-                m.redefines = pick.checked_sub(1).and_then(|k| targets.redefines.get(k)).map(|(u, _)| vec![*u]).unwrap_or_default();
+            let all: Vec<&crate::uml_panel::Target> = targets.redefines.iter().collect();
+            if let Some(pick) = crate::uml_panel::target_menu(shell, ui, p, redefines, &format!("{key}.redefines"), &all) {
+                m.redefines = pick;
             }
         }
         _ => {}
     }
+    drop(offered);
     crate::uml_panel::keep_targets(shell, targets);
     let edited = edit.modifiers[i] != edit.written_modifiers[i];
     let escape = edited && shell.panels.menu.is_none() && ui.input(|inp| inp.key_pressed(egui::Key::Escape));

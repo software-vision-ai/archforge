@@ -139,6 +139,8 @@ pub struct ParamInfo {
     pub key: String,
     pub kind: &'static str,
     pub default: Option<Value>,
+    /// The key may be left out, with no default: what it names is then kept.
+    pub optional: bool,
     pub range: Option<(f64, f64)>,
     pub choices: Vec<String>,
     pub meaning: String,
@@ -239,6 +241,7 @@ impl<D: Document, V: View<D>> Registry<D, V> {
                             key: d.key.clone(),
                             kind: d.kind_name(),
                             default: d.default.clone(),
+                            optional: d.optional,
                             range: d.range,
                             choices: d.choices.clone(),
                             meaning: d.meaning.clone(),

@@ -637,6 +637,8 @@ str		A property without a name cannot be named here.	没有名称的属性无法
 str		{name} is not a property this one can subset.	{name} 不是此属性可以作为其子集的属性。
 str		{name} is not a property this one can redefine.	{name} 不是此属性可以重定义的属性。
 str		{name} has this property's name; a subset takes another.	{name} 与此属性同名；子集需要另一个名称。
+str		{name} subsets this property already.	{name} 已是此属性的子集。
+str		The moved ends no longer subset or redefine {names}, so those were dropped.	移动后的端不再是 {names} 的子集或重定义，因此已移除。
 str		{name} has a type this property's type does not conform to.	此属性的类型不符合 {name} 的类型。
 str		{name} holds fewer values than this property.	{name} 容纳的值比此属性少。
 str		This property's multiplicity does not lie within {name}'s.	此属性的多重性不在 {name} 的范围内。

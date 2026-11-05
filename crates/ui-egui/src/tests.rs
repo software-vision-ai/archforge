@@ -11582,3 +11582,31 @@ fn an_association_end_s_modifiers_are_written_by_their_apply_and_its_line_says_t
         assert_eq!(line(&h), (Some("/goods".into()), Some("* = none {ordered, subsets lines}".into())));
     }
 }
+
+/// An end moved to another class drops, in the same step, what it no longer subsets, and the
+/// canvas says so in the user's words; a role edit afterwards writes. In light and dark.
+#[test]
+fn a_moved_end_drops_what_it_no_longer_subsets_and_says_so() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, made) = modifiers_sample(theme);
+        let holds = made["holds"].clone();
+        let s = h.state_mut().session.as_mut().unwrap();
+        s.execute("uml.association.set-end", &serde_json::json!({ "association": holds, "end": 1, "subsets": [made["lines"]] })).unwrap();
+        let st = s.doc();
+        let item = st.by_uuid(archforge_mof::Uuid::parse(&made["Item"]).unwrap()).unwrap();
+        let node = archforge_diagram::views_of(st, item).2.first().and_then(|n| st.uuid(*n).ok()).unwrap();
+        crate::uml_relate::reconnect(h.state_mut(), archforge_mof::Uuid::parse(&holds).unwrap(), true, node);
+        h.run();
+        assert_eq!(h.state().canvas.notice.as_deref(), Some("The moved ends no longer subset or redefine lines, so those were dropped."));
+        assert!(
+            painted(&h).iter().any(|t| t == "The moved ends no longer subset or redefine lines, so those were dropped."),
+            "said at the canvas's top"
+        );
+        let st = h.state().session.as_ref().unwrap().doc();
+        let end = archforge_uml::figures::member_ends(st, st.by_uuid(archforge_mof::Uuid::parse(&holds).unwrap()).unwrap()).unwrap()[1];
+        assert!(archforge_uml::modifiers::subsets(st, end).is_empty());
+        let roled =
+            crate::editing::run(h.state_mut(), "uml.association.set-end", serde_json::json!({ "association": holds, "end": 1, "role": "goods" }));
+        assert!(roled.is_ok(), "{roled:?}");
+    }
+}

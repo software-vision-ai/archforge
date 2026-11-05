@@ -1452,7 +1452,7 @@ fn draw_edge(
         let centre = match (d.end_drag.filter(|(id, k, _)| *id == edge_id && *k == i), own) {
             (Some((_, _, centre)), _) => centre,
             (None, Some(l)) => at + vec2(real(store, l, label::DX) as f32, real(store, l, label::DY) as f32) * z,
-            (None, None) => beside(at, towards, g.size(), z),
+            (None, None) => beside(at, towards, g.size(), z, end.mark),
         };
         let rect = Rect::from_center_size(centre, g.size());
         paint.galley(rect.min, g, p.text_secondary);
@@ -1575,21 +1575,36 @@ fn bare_name(paint: &egui::Painter, d: &Drawing<'_>, element: Obj, points: &[Pos
     Some(rect)
 }
 
+/// How far a line's end mark reaches back along the line from its tip, and how far it spreads to
+/// either side, at zoom `z`: a triangle, a diamond or an open arrow; nothing for any other mark.
+fn mark_extent(mark: EndMark, z: f32) -> (f32, f32) {
+    let s = z.max(0.6);
+    match mark {
+        EndMark::Triangle => (12.0 * s, 7.5 * s),
+        EndMark::HollowDiamond | EndMark::FilledDiamond => (20.0 * s, 6.0 * s),
+        EndMark::OpenArrow => (12.0 * s, 6.0 * s),
+        _ => (0.0, 0.0),
+    }
+}
+
 /// Where a cardinality text sits by default: a little along the line from its end, and further
 /// for a text longer than that reach, beside the line rather than on it: under a level line (a
-/// line's name sits above it), right of an upright one.
-fn beside(end: Pos2, towards: Pos2, size: Vec2, z: f32) -> Pos2 {
+/// line's name sits above it), right of an upright one; clear of the end's `mark` (an arrowhead,
+/// a diamond or a triangle), along the line and to its side.
+fn beside(end: Pos2, towards: Pos2, size: Vec2, z: f32, mark: EndMark) -> Pos2 {
     let d = towards - end;
     if d.length() <= f32::EPSILON || !d.is_finite() {
         return end;
     }
     let d = d.normalized();
     let n = if d.x.abs() >= d.y.abs() { vec2(0.0, 1.0) } else { vec2(1.0, 0.0) };
-    // Far enough off the line that the text's box clears it, whichever way the line runs.
-    let reach = n.x.abs() * size.x / 2.0 + n.y.abs() * size.y / 2.0 + 6.0 * z;
+    let (mark_len, mark_half) = mark_extent(mark, z);
+    // Far enough off the line that the text's box clears it, and the mark's wings, whichever way
+    // the line runs.
+    let reach = n.x.abs() * size.x / 2.0 + n.y.abs() * size.y / 2.0 + (6.0 * z).max(mark_half + 4.0 * z);
     // And far enough along it that a long text, such as an end's modifiers (AR-126), clears the
-    // card the line leaves; a short one keeps its usual place.
-    let along = (d.x.abs() * size.x / 2.0 + d.y.abs() * size.y / 2.0 + 16.0 * z).max(30.0 * z);
+    // card the line leaves and the mark at its end; a short one keeps its usual place.
+    let along = (d.x.abs() * size.x / 2.0 + d.y.abs() * size.y / 2.0 + mark_len + 8.0 * z).max(30.0 * z);
     end + d * along + n * reach
 }
 
@@ -2050,6 +2065,25 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     if let (Some(kind), Some((key, chevron))) = (kind, open_at) {
         kind.popover(shell, ui, p, r, chevron, key);
     }
+}
+
+/// A short end text, four characters at zoom 1, sits 30 points along a level or an upright line
+/// from its end, as it always has, where the end has no mark; a long one goes further, clear of the
+/// card and of an arrowhead, beside the line clear of the arrowhead's wings (AR-126).
+#[cfg(test)]
+#[test]
+fn an_end_text_sits_thirty_along_its_line_and_a_long_one_clears_the_mark() {
+    let four = vec2(26.0, 14.0);
+    for (towards, d, n) in [(pos2(200.0, 0.0), vec2(1.0, 0.0), vec2(0.0, 1.0)), (pos2(0.0, 200.0), vec2(0.0, 1.0), vec2(1.0, 0.0))] {
+        let at = beside(Pos2::ZERO, towards, four, 1.0, EndMark::None);
+        assert_eq!((at.to_vec2() - n * (at.to_vec2().dot(n))).length(), 30.0, "{towards:?}: {at:?}");
+        assert!((at.to_vec2().dot(d) - 30.0).abs() < f32::EPSILON);
+    }
+    let long = vec2(120.0, 14.0);
+    let at = beside(Pos2::ZERO, pos2(400.0, 0.0), long, 1.0, EndMark::OpenArrow);
+    let (len, half) = mark_extent(EndMark::OpenArrow, 1.0);
+    assert!(at.x - long.x / 2.0 >= len + 8.0, "its near edge clears the arrowhead: {at:?}");
+    assert!(at.y - long.y / 2.0 >= half + 4.0, "and its wings: {at:?}");
 }
 
 /// Every hover text of the tables, for the catalogue tests.

@@ -816,9 +816,11 @@ fn refusal_under(paint: &egui::Painter, p: &Palette, at: egui::Pos2, width: f32,
 /// The menus the modifiers' selects open, drawn over the card last: the default's literals (for
 /// an enumeration's type) and the Subsets and Redefines choices, each with its select's place.
 pub(crate) struct ModifierMenus {
-    default: Option<(Rect, Vec<String>)>,
+    default: Option<Rect>,
     subsets: (Rect, TargetChoices),
     redefines: Rect,
+    /// The name being typed, which Subsets leaves out of its kept list.
+    name: String,
 }
 
 /// What [`modifiers`] drew: its height, whether Enter was pressed in its field, and its menus.
@@ -838,19 +840,27 @@ fn modifiers(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: egui::Pos2, 
     let row = 17.0 + FIELD + 10.0;
     let mut y = at.y;
     let mut enter = false;
-    // An enumeration's literals, when the type is one: its default is picked among them.
-    let literals: Option<Vec<String>> = shell.session.as_ref().and_then(|s| {
-        let store = s.doc();
-        let (ty, _) = edit_type(store, &edit.ty);
-        let e = ty.filter(|t| store.class_of(*t).ok() == Some(archforge_uml::ENUMERATION))?;
-        Some(archforge_uml::commands::literals(store, e).into_iter().map(|l| name(store, l)).collect())
-    });
+    // The choices, built once per state of the project and shape of the attribute (its name aside,
+    // which Subsets drops after): Subsets', Redefines' and, for an enumeration's type, its literals,
+    // among which its default is picked.
+    let key = format!("attribute|{}|{:?}|{}|{}", edit.class, edit.target, edit.ty, edit.multiplicity.trim());
+    let (class, target, ty, multiplicity) = (edit.class, edit.target, edit.ty.clone(), edit.multiplicity.clone());
+    let ty_for_literals = ty.clone();
+    let targets = take_targets(
+        shell,
+        &key,
+        |store| {
+            let bounds = archforge_uml::members::parse_multiplicity(&multiplicity).ok()?;
+            let edit = MemberEdit { class, target, ty, multiplicity, ..edit_of(None, class, MemberKind::Attribute, target) };
+            edit_shape(store, &edit, bounds)
+        },
+        |store| edit_type(store, &ty_for_literals).0,
+    );
     let default_id = "workspace.properties.member.default";
-    let default = match literals {
-        Some(names) => {
+    let default = match &targets.literals {
+        Some(_) => {
             let shown = if edit.default.trim().is_empty() { tr("None") } else { edit.default.clone() };
-            let field = select_field(shell, ui, p, pos2(at.x, y), width, default_id, &tr("Default value"), &shown, Menu::MemberDefault);
-            Some((field, names))
+            Some(select_field(shell, ui, p, pos2(at.x, y), width, default_id, &tr("Default value"), &shown, Menu::MemberDefault))
         }
         None => {
             let limit = archforge_uml::modifiers::MAX_DEFAULT;
@@ -870,14 +880,7 @@ fn modifiers(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: egui::Pos2, 
     y += 26.0;
     check(shell, ui, p, pos2(at.x, y), "workspace.properties.member.unique", &tr("Unique"), &mut edit.unique);
     y += 16.0 + 16.0;
-    // Subsets and Redefines, their choices built once per state of the project and shape.
-    let key = format!("attribute|{}|{:?}|{}|{}|{}", edit.class, edit.target, edit.ty, edit.multiplicity.trim(), edit.name.trim());
-    let (class, target, ty, multiplicity, named) = (edit.class, edit.target, edit.ty.clone(), edit.multiplicity.clone(), edit.name.clone());
-    let targets = take_targets(shell, &key, |store| {
-        let bounds = archforge_uml::members::parse_multiplicity(&multiplicity).ok()?;
-        let edit = MemberEdit { class, target, ty, multiplicity, name: named, ..edit_of(None, class, MemberKind::Attribute, target) };
-        edit_shape(store, &edit, bounds)
-    });
+    // Subsets and Redefines.
     let (subsets_shown, redefines_shown) = match shell.session.as_ref() {
         Some(s) => (chosen_names(s.doc(), &edit.subsets), chosen_names(s.doc(), &edit.redefines)),
         None => (tr("None"), tr("None")),
@@ -897,9 +900,8 @@ fn modifiers(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: egui::Pos2, 
     );
     y += 17.0 + FIELD + 6.0;
     let mut said = 0.0_f32;
-    for (empty, x, text) in
-        [(targets.subsets.is_empty(), at.x, tr("No property to subset")), (targets.redefines.is_empty(), right, tr("No property to redefine"))]
-    {
+    let no_subsets = offered_subsets(&targets, &edit.name).is_empty();
+    for (empty, x, text) in [(no_subsets, at.x, tr("No property to subset")), (targets.redefines.is_empty(), right, tr("No property to redefine"))] {
         if empty {
             let g = ux::galley_rows(&paint, &text, types::CAPTION, p.text_muted, Some(half), 2);
             said = said.max(g.size().y);
@@ -910,7 +912,8 @@ fn modifiers(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: egui::Pos2, 
         y += said + 6.0;
     }
     y = refusal_under(&paint, p, pos2(at.x, y + 4.0), width, edit, &["subsets", "redefines"]);
-    Drawn { height: y - at.y + 4.0, enter, menus: ModifierMenus { default, subsets: (subsets, targets), redefines } }
+    let name = edit.name.clone();
+    Drawn { height: y - at.y + 4.0, enter, menus: ModifierMenus { default, subsets: (subsets, targets), redefines, name } }
 }
 
 /// The names of the properties `ids` names, joined, or None when it names none.
@@ -924,26 +927,24 @@ fn chosen_names(store: &Store, ids: &[Uuid]) -> String {
 /// The open modifier menu, when one is: a pick sets the default's literal, or the one property
 /// Subsets or Redefines names (None names none); the choices go back to the shell.
 fn modifier_menu_picks(shell: &mut Shell, ui: &egui::Ui, p: &Palette, m: ModifierMenus, edit: &mut MemberEdit) {
-    let ModifierMenus { default, subsets: (subsets_field, targets), redefines: redefines_field } = m;
+    let ModifierMenus { default, subsets: (subsets_field, targets), redefines: redefines_field, name } = m;
     match shell.panels.menu {
         Some(Menu::MemberDefault) => {
-            if let Some((field, names)) = default {
-                let items: Vec<String> = std::iter::once(tr("None")).chain(names.iter().cloned()).collect();
-                if let Some(i) = menu(shell, ui, p, field, "workspace.properties.member.default", &items) {
-                    edit.default = i.checked_sub(1).and_then(|i| names.get(i)).cloned().unwrap_or_default();
-                }
+            if let (Some(field), Some(names)) = (default, targets.literals.as_ref())
+                && let Some(pick) = literal_menu(shell, ui, p, field, "workspace.properties.member.default", names)
+            {
+                edit.default = pick;
             }
         }
         Some(Menu::MemberSubsets) => {
-            let items: Vec<String> = std::iter::once(tr("None")).chain(targets.subsets.iter().map(|(_, l)| l.clone())).collect();
-            if let Some(i) = menu(shell, ui, p, subsets_field, "workspace.properties.member.subsets", &items) {
-                edit.subsets = i.checked_sub(1).and_then(|i| targets.subsets.get(i)).map(|(u, _)| vec![*u]).unwrap_or_default();
+            if let Some(pick) = target_menu(shell, ui, p, subsets_field, "workspace.properties.member.subsets", &offered_subsets(&targets, &name)) {
+                edit.subsets = pick;
             }
         }
         Some(Menu::MemberRedefines) => {
-            let items: Vec<String> = std::iter::once(tr("None")).chain(targets.redefines.iter().map(|(_, l)| l.clone())).collect();
-            if let Some(i) = menu(shell, ui, p, redefines_field, "workspace.properties.member.redefines", &items) {
-                edit.redefines = i.checked_sub(1).and_then(|i| targets.redefines.get(i)).map(|(u, _)| vec![*u]).unwrap_or_default();
+            let offered: Vec<&Target> = targets.redefines.iter().collect();
+            if let Some(pick) = target_menu(shell, ui, p, redefines_field, "workspace.properties.member.redefines", &offered) {
+                edit.redefines = pick;
             }
         }
         _ => {}
@@ -951,23 +952,62 @@ fn modifier_menu_picks(shell: &mut Shell, ui: &egui::Ui, p: &Palette, m: Modifie
     keep_targets(shell, targets);
 }
 
-/// The properties Subsets and Redefines offer for one shape of one property, each with its label
-/// (`name · Class`), in the order of their labels, kept for the state of the project and the
-/// interface language they were built in (AR-126).
+/// A literal select's open menu, None first then `names`: the literal's name picked, or empty for
+/// None.
+pub(crate) fn literal_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Rect, id: &str, names: &[String]) -> Option<String> {
+    let items: Vec<String> = std::iter::once(tr("None")).chain(names.iter().cloned()).collect();
+    let i = menu(shell, ui, p, field, id, &items)?;
+    Some(i.checked_sub(1).and_then(|i| names.get(i)).cloned().unwrap_or_default())
+}
+
+/// A Subsets or Redefines select's open menu, None first then `offered` by their labels: the one
+/// property picked, or none for None.
+pub(crate) fn target_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Rect, id: &str, offered: &[&Target]) -> Option<Vec<Uuid>> {
+    let items: Vec<String> = std::iter::once(tr("None")).chain(offered.iter().map(|t| t.label.clone())).collect();
+    let i = menu(shell, ui, p, field, id, &items)?;
+    Some(i.checked_sub(1).and_then(|i| offered.get(i)).map(|t| vec![t.id]).unwrap_or_default())
+}
+
+/// The properties Subsets offers a property named `name`: the kept list, less a property named
+/// alike whatever the case, which a subset never is.
+pub(crate) fn offered_subsets<'a>(targets: &'a TargetChoices, name: &str) -> Vec<&'a Target> {
+    let named = name.trim().to_lowercase();
+    targets.subsets.iter().filter(|t| t.name.to_lowercase() != named).collect()
+}
+
+/// A property Subsets or Redefines offers: its id, its name and its label (`name · Class`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Target {
+    pub id: Uuid,
+    pub name: String,
+    pub label: String,
+}
+
+/// The properties Subsets and Redefines offer for one shape of one property, in the order of their
+/// labels, Subsets' without the name rule, which [`offered_subsets`] applies to the name being
+/// typed; and the literals of the property's type when it is an enumeration. Kept for the state of
+/// the project and the interface language they were built in (AR-126).
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct TargetChoices {
     pub key: String,
-    pub subsets: Vec<(Uuid, String)>,
-    pub redefines: Vec<(Uuid, String)>,
+    pub subsets: Vec<Target>,
+    pub redefines: Vec<Target>,
+    pub literals: Option<Vec<String>>,
 }
 
 /// The most target lists kept: the attribute editor's and both ends' fit.
 const KEPT_TARGETS: usize = 4;
 
-/// The choices for `what` (the property's shape as text), taken out of the shell for the frame:
-/// the kept ones when the project, its state and the language are the same, else built by
-/// `shape` once and kept from then on. Hand them back with [`keep_targets`].
-pub(crate) fn take_targets(shell: &mut Shell, what: &str, shape: impl FnOnce(&Store) -> Option<archforge_uml::modifiers::Shape>) -> TargetChoices {
+/// The choices for `what` (the property's shape as text, its name aside), taken out of the shell
+/// for the frame: the kept ones when the project, its state and the language are the same, else
+/// built once from `shape` and `enumeration` (the property's type when it is one) and kept from
+/// then on. Hand them back with [`keep_targets`].
+pub(crate) fn take_targets(
+    shell: &mut Shell,
+    what: &str,
+    shape: impl FnOnce(&Store) -> Option<archforge_uml::modifiers::Shape>,
+    enumeration: impl FnOnce(&Store) -> Option<Obj>,
+) -> TargetChoices {
     let Some(session) = shell.session.as_ref() else { return TargetChoices::default() };
     let store = session.doc();
     let project = archforge_uml::commands::model(store).ok().and_then(|m| store.uuid(m).ok());
@@ -975,24 +1015,29 @@ pub(crate) fn take_targets(shell: &mut Shell, what: &str, shape: impl FnOnce(&St
     if let Some(i) = shell.panels.targets.iter().position(|t| t.key == key) {
         return shell.panels.targets.remove(i);
     }
-    let labelled = |objs: Vec<Obj>| -> Vec<(Uuid, String)> {
-        let mut out: Vec<(Uuid, String)> = objs
+    let labelled = |objs: Vec<Obj>| -> Vec<Target> {
+        let mut out: Vec<Target> = objs
             .into_iter()
             .filter_map(|t| {
                 let owner = archforge_uml::modifiers::context_of(store, t).first().map(|c| name(store, *c)).unwrap_or_default();
-                Some((store.uuid(t).ok()?, format!("{} · {owner}", name(store, t))))
+                let named = name(store, t);
+                Some(Target { id: store.uuid(t).ok()?, label: format!("{named} · {owner}"), name: named })
             })
             .collect();
-        out.sort_by_key(|(_, l)| l.to_lowercase());
+        out.sort_by_key(|t| t.label.to_lowercase());
         out
     };
+    let literals = enumeration(store)
+        .filter(|e| store.class_of(*e).ok() == Some(archforge_uml::ENUMERATION))
+        .map(|e| archforge_uml::commands::literals(store, e).into_iter().map(|l| name(store, l)).collect());
     match shape(store) {
         Some(sh) => TargetChoices {
             key,
-            subsets: labelled(archforge_uml::modifiers::subsets_candidates(store, &sh)),
+            subsets: labelled(archforge_uml::modifiers::subsets_candidates_named(store, &sh, false)),
             redefines: labelled(archforge_uml::modifiers::redefines_candidates(store, &sh)),
+            literals,
         },
-        None => TargetChoices { key, ..TargetChoices::default() },
+        None => TargetChoices { key, literals, ..TargetChoices::default() },
     }
 }
 
@@ -1033,7 +1078,6 @@ fn edit_shape(store: &Store, edit: &MemberEdit, bounds: Option<(u64, Option<u64>
         itself: edit.target.and_then(|t| store.by_uuid(t)),
         context: vec![class],
         ty,
-        typed: !edit.ty.is_empty(),
         lower,
         upper,
         composite: false,
@@ -1072,19 +1116,25 @@ pub(crate) fn modifier_refusal(store: &Store, edit: &MemberEdit) -> Option<(&'st
         return Some(("default", default_refusal(store, &e)));
     }
     let shape = edit_shape(store, edit, bounds)?;
-    target_refusals(store, &shape, &edit.subsets, &edit.redefines)
+    let current = edit.target.and_then(|t| store.by_uuid(t));
+    let ids = |ts: Vec<Obj>| -> Vec<Uuid> { ts.into_iter().filter_map(|t| store.uuid(t).ok()).collect() };
+    let had_subsets = current.map(|c| ids(archforge_uml::modifiers::subsets(store, c))).unwrap_or_default();
+    let had_redefines = current.map(|c| ids(archforge_uml::modifiers::redefines(store, c))).unwrap_or_default();
+    target_refusals(store, &shape, (&edit.subsets, &had_subsets), (&edit.redefines, &had_redefines))
 }
 
-/// Why `shape` may not subset one of `subsets` or redefine one of `redefines`, in the user's
-/// words, with the field it sits under; none when the rules allow each.
+/// Why `shape` may not subset one of `subsets` or redefine one of `redefines` (each with what the
+/// property has already), in the user's words, with the field it sits under; none when the rules
+/// allow each. Only what a list adds is checked, as the commands do, so a target the model no
+/// longer allows never blocks another edit.
 pub(crate) fn target_refusals(
     store: &Store,
     shape: &archforge_uml::modifiers::Shape,
-    subsets: &[Uuid],
-    redefines: &[Uuid],
+    subsets: (&[Uuid], &[Uuid]),
+    redefines: (&[Uuid], &[Uuid]),
 ) -> Option<(&'static str, String)> {
-    for (ids, redefining, field) in [(subsets, false, "subsets"), (redefines, true, "redefines")] {
-        for id in ids {
+    for ((ids, had), redefining, field) in [(subsets, false, "subsets"), (redefines, true, "redefines")] {
+        for id in ids.iter().filter(|i| !had.contains(i)) {
             let Some(t) = store.by_uuid(*id).filter(|t| store.is_alive(*t)) else {
                 return Some((field, tr("A property chosen here is gone; choose again.")));
             };
@@ -1131,6 +1181,7 @@ pub(crate) fn target_refusal(name: &str, problem: archforge_uml::modifiers::Targ
         (P::NotAProperty | P::Itself | P::OutOfReach, false) => tr("{name} is not a property this one can subset."),
         (P::NotAProperty | P::Itself | P::OutOfReach, true) => tr("{name} is not a property this one can redefine."),
         (P::SameName, _) => tr("{name} has this property's name; a subset takes another."),
+        (P::Cycle, _) => tr("{name} subsets this property already."),
         (P::Type, _) => tr("{name} has a type this property's type does not conform to."),
         (P::Upper, _) => tr("{name} holds fewer values than this property."),
         (P::Multiplicity, _) => tr("This property's multiplicity does not lie within {name}'s."),

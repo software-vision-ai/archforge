@@ -161,7 +161,9 @@ fn each_modifier_is_set_and_cleared_on_an_attribute_one_undo_step_each() {
             (Some("Integer"), Some("1..*"), Some("private"), Some(true)),
             "kept: {got}"
         );
-        round_trip(&mut s, "uml.attribute.set", with(json!({})));
+        // Cleared explicitly: an empty default, the flags sent as they usually are.
+        let clear = json!({ "default": "", "derived": false, "read_only": false, "ordered": false, "unique": true });
+        round_trip(&mut s, "uml.attribute.set", with(clear));
         assert_eq!(row(&s, &lines), "- lines : Integer [1..*]", "cleared after {extra}");
         let got = read(&mut s, &order, &lines);
         assert_eq!(
@@ -169,6 +171,10 @@ fn each_modifier_is_set_and_cleared_on_an_attribute_one_undo_step_each() {
             (Json::Null, json!(false), json!(false), json!(false), json!(true))
         );
     }
+    // Left out, each is kept: setting one leaves the others as they were.
+    round_trip(&mut s, "uml.attribute.set", json!({ "attribute": lines, "default": "4", "ordered": true }));
+    round_trip(&mut s, "uml.attribute.set", json!({ "attribute": lines, "derived": true }));
+    assert_eq!(row(&s, &lines), "- / lines : Integer [1..*] = 4 {ordered}");
     // Added with them in one step too.
     let total =
         round_trip(&mut s, "uml.attribute.add", json!({ "class": order, "name": "total", "type": "Real", "default": "0.5", "derived": true }));
@@ -194,9 +200,51 @@ fn ordered_and_nonunique_are_said_only_for_a_multi_valued_property() {
     run(
         &mut s,
         "uml.attribute.set",
-        json!({ "attribute": a, "name": "code", "type": "String", "multiplicity": "*", "ordered": true, "unique": false }),
+        json!({ "attribute": a, "name": "code", "type": "String", "multiplicity": "*", "ordered": true, "unique": false, "read_only": false }),
     );
     assert_eq!(row(&s, &a), "+ code : String [*] {ordered, nonunique}");
+}
+
+/// A field `uml.attribute.set` and `uml.association.set-end` are not given keeps what the property
+/// has: an agent renaming an attribute with its name and type alone keeps its default, Derived,
+/// Subsets, multiplicity, visibility and static; an end's role set alone keeps its static and
+/// modifiers. Clearing is said explicitly.
+#[test]
+fn a_rename_without_modifier_fields_keeps_them() {
+    let mut s = session();
+    let (pkg, _, item, order, _) = shop(&mut s);
+    let parts = run(&mut s, "uml.attribute.add", json!({ "class": item, "name": "parts", "type": "Real", "multiplicity": "*" }));
+    let total = run(
+        &mut s,
+        "uml.attribute.add",
+        json!({ "class": order, "name": "total", "type": "Real", "multiplicity": "0..*", "visibility": "private", "static": true, "default": "0", "derived": true, "subsets": [parts] }),
+    );
+    assert_eq!(row(&s, &total), "- / total : Real [*] = 0 {subsets parts}");
+    round_trip(&mut s, "uml.attribute.set", json!({ "attribute": total, "name": "sum", "type": "Real" }));
+    assert_eq!(row(&s, &total), "- / sum : Real [*] = 0 {subsets parts}", "renamed, everything else kept");
+    let got = read(&mut s, &order, &total);
+    assert_eq!(got["static"], json!(true));
+    // Explicit clears.
+    round_trip(&mut s, "uml.attribute.set", json!({ "attribute": total, "default": "", "subsets": [], "derived": false }));
+    assert_eq!(row(&s, &total), "- sum : Real [*]");
+    // An end's role alone keeps its static and its modifiers.
+    let product = run(&mut s, "uml.class.add", json!({ "package": pkg, "name": "Product" }));
+    let a = run(&mut s, "uml.association.add", json!({ "from": order, "to": product }));
+    run(
+        &mut s,
+        "uml.association.set-end",
+        json!({ "association": a, "end": 1, "role": "items", "multiplicity": "*", "static": true, "default": "none", "ordered": true }),
+    );
+    round_trip(&mut s, "uml.association.set-end", json!({ "association": a, "end": 1, "role": "goods" }));
+    let end = archforge_uml::figures::member_ends(s.doc(), obj(&s, &a)).unwrap()[1];
+    assert_eq!(archforge_uml::figures::end_text(s.doc(), end), "* = none {ordered}");
+    assert_eq!(archforge_core::name_of(s.doc(), end), "goods");
+    assert!(s.doc().get(end, archforge_uml::feature::IS_STATIC).unwrap().as_bool().unwrap(), "static kept");
+    // The read's {id, name} objects go back into a set as they are.
+    run(&mut s, "uml.attribute.set", json!({ "attribute": total, "subsets": [parts] }));
+    let back = read(&mut s, &order, &total)["subsets"].clone();
+    round_trip(&mut s, "uml.attribute.set", json!({ "attribute": total, "name": "sum2", "subsets": back }));
+    assert_eq!(row(&s, &total), "- sum2 : Real [*] {subsets parts}");
 }
 
 /// A default reads by its type: every built-in type's form, an enumeration's literal (kept as an
@@ -270,6 +318,8 @@ fn a_type_change_the_default_does_not_fit_is_refused_naming_the_default() {
         "type",
         &["\"3\"", "Status", "Placed, Paid"],
     );
+    // Left out, the kept default is read by the new type too, and refuses it the same way.
+    refused(&mut s, "uml.attribute.set", json!({ "attribute": a, "type": "Boolean" }), "type", &["\"3\"", "Boolean"]);
     assert_eq!(row(&s, &a), "+ size : Integer = 3", "kept");
     // Real takes 3, as a Real.
     round_trip(&mut s, "uml.attribute.set", json!({ "attribute": a, "name": "size", "type": "Real", "default": "3" }));
@@ -325,11 +375,11 @@ fn subsets_and_redefines_on_attributes_take_only_valid_targets() {
     assert_eq!(names(archforge_uml::modifiers::redefines_candidates(st, &shape)), ["parts"]);
     round_trip(&mut s, "uml.attribute.set", base(json!({ "subsets": [all, parts] })));
     assert_eq!(row(&s, &lines), "+ lines : Order [*] {subsets all, subsets parts}");
-    round_trip(&mut s, "uml.attribute.set", base(json!({ "redefines": [parts] })));
+    round_trip(&mut s, "uml.attribute.set", base(json!({ "subsets": [], "redefines": [parts] })));
     assert_eq!(row(&s, &lines), "+ lines : Order [*] {redefines parts}");
     let got = read(&mut s, &order, &lines);
     assert_eq!(got["redefines"][0]["id"], json!(parts));
-    round_trip(&mut s, "uml.attribute.set", base(json!({})));
+    round_trip(&mut s, "uml.attribute.set", base(json!({ "subsets": [], "redefines": [] })));
     assert_eq!(row(&s, &lines), "+ lines : Order [*]");
     // Refusals name the target and why.
     for (key, target, why) in [
@@ -357,15 +407,51 @@ fn subsets_and_redefines_on_attributes_take_only_valid_targets() {
     refused(&mut s, "uml.attribute.set", base(json!({ "subsets": [7] })), "subsets", &["7"]);
     let many: Vec<String> = (0..33).map(|_| all.clone()).collect();
     refused(&mut s, "uml.attribute.set", base(json!({ "subsets": many })), "subsets", &["at most 32"]);
-    // A multiplicity change that would break its own subsets is refused too.
+    // Only what a list adds is checked: a target the model no longer allows never blocks another
+    // edit, resent unchanged or left out; added anew, it is refused, the refusal listing what it
+    // may name instead.
     run(&mut s, "uml.attribute.set", json!({ "attribute": lines, "name": "lines", "type": "String", "multiplicity": "0..1", "subsets": [label] }));
+    round_trip(&mut s, "uml.attribute.set", json!({ "attribute": lines, "multiplicity": "*", "subsets": [label] }));
+    round_trip(&mut s, "uml.attribute.set", json!({ "attribute": lines, "name": "rows" }));
+    run(&mut s, "uml.attribute.set", json!({ "attribute": lines, "subsets": [] }));
+    let e = refused(
+        &mut s,
+        "uml.attribute.set",
+        json!({ "attribute": lines, "subsets": [label] }),
+        "subsets",
+        &[label.as_str(), "allows fewer values", "it may subset: "],
+    );
+    assert!(!e.contains("label (Item)"), "label is not among the accepted: {e}");
+    // Two properties never subset each other.
+    let more = run(&mut s, "uml.attribute.add", json!({ "class": order, "name": "more", "type": item, "multiplicity": "*", "subsets": [all] }));
     refused(
         &mut s,
         "uml.attribute.set",
-        json!({ "attribute": lines, "name": "lines", "type": "String", "multiplicity": "*", "subsets": [label] }),
+        json!({ "attribute": all, "subsets": [more] }),
         "subsets",
-        &[label.as_str(), "allows fewer values"],
+        &[more.as_str(), "subsets this property already"],
     );
+}
+
+/// A refusal of a target lists the properties the attribute may name instead, at most twelve and
+/// how many more.
+#[test]
+fn a_target_refusal_lists_at_most_twelve_choices_and_how_many_more() {
+    let mut s = session();
+    let (_, _, item, order, _) = shop(&mut s);
+    for i in 0..15 {
+        run(&mut s, "uml.attribute.add", json!({ "class": item, "name": format!("p{i:02}"), "type": item, "multiplicity": "*" }));
+    }
+    let short = run(&mut s, "uml.attribute.add", json!({ "class": item, "name": "few", "type": item, "multiplicity": "0..1" }));
+    let lines = run(&mut s, "uml.attribute.add", json!({ "class": order, "name": "lines", "type": order, "multiplicity": "*" }));
+    let e = refused(
+        &mut s,
+        "uml.attribute.set",
+        json!({ "attribute": lines, "subsets": [short] }),
+        "subsets",
+        &["it may subset: p00 (Item), p01 (Item)", "p11 (Item) and 3 more"],
+    );
+    assert!(!e.contains("p12 (Item)"), "{e}");
 }
 
 /// On an association's end Subsets and Redefines take the properties of the class at the other
@@ -416,7 +502,10 @@ fn subsets_and_redefines_on_association_ends_take_the_other_end_s_properties() {
     round_trip(
         &mut s,
         "uml.association.set-end",
-        set(json!({ "redefines": [products], "aggregation": "composite", "static": true, "read_only": true })),
+        set(json!({
+            "redefines": [products], "aggregation": "composite", "static": true, "read_only": true,
+            "subsets": [], "default": "", "derived": false, "ordered": false,
+        })),
     );
     let got = s.execute("uml.relationship.list", &json!({ "class": order })).unwrap().value;
     let e = got["relationships"].as_array().unwrap().iter().find(|r| r["id"] == a).unwrap()["ends"][1].clone();
@@ -426,7 +515,7 @@ fn subsets_and_redefines_on_association_ends_take_the_other_end_s_properties() {
     let sku = run(&mut s, "uml.attribute.add", json!({ "class": product, "name": "sku", "type": "String" }));
     refused(&mut s, "uml.association.set-end", set(json!({ "subsets": [sku] })), "subsets", &[sku.as_str(), "not a property"]);
     // Cleared again, one step.
-    round_trip(&mut s, "uml.association.set-end", set(json!({})));
+    round_trip(&mut s, "uml.association.set-end", set(json!({ "redefines": [], "read_only": false })));
     assert_eq!(archforge_uml::figures::end_text(s.doc(), end), "*");
 }
 
@@ -507,4 +596,37 @@ fn the_sweep_over_modifiers_breaks_nothing() {
     ];
     let calls = sweep_with(&mut s, &ids, |st| format!("{:?}", archforge_mof::rows::snapshot(st, &tables().0, &tables().1).unwrap())).unwrap();
     assert!(calls > 100, "{calls}");
+}
+
+/// An end that subsets a property of the class at the other end loses it, in the same step, when
+/// that end moves to another class, and the reconnection says so; a role edit afterwards still
+/// works (the model never keeps a target that blocks it).
+#[test]
+fn a_reconnection_drops_what_an_end_no_longer_subsets_and_a_role_edit_still_works() {
+    let mut s = session();
+    let (pkg, _, item, order, _) = shop(&mut s);
+    let customer = run(&mut s, "uml.class.add", json!({ "package": pkg, "name": "Customer" }));
+    let lines = run(&mut s, "uml.attribute.add", json!({ "class": order, "name": "lines", "type": item, "multiplicity": "*" }));
+    let a = run(&mut s, "uml.association.add", json!({ "from": order, "to": item }));
+    run(&mut s, "uml.association.set-end", json!({ "association": a, "end": 1, "role": "items", "multiplicity": "*", "subsets": [lines] }));
+    let end = archforge_uml::figures::member_ends(s.doc(), obj(&s, &a)).unwrap()[1];
+    assert_eq!(archforge_uml::figures::end_text(s.doc(), end), "* {subsets lines}");
+    let before = snapshot(&s);
+    let out = s.execute("uml.relationship.reconnect", &json!({ "relationship": a, "end": "source", "class": customer })).unwrap();
+    let dropped = out.value["dropped"].as_array().cloned().unwrap_or_default();
+    assert_eq!(dropped.len(), 1, "{dropped:?}");
+    assert_eq!(
+        (dropped[0]["list"].as_str(), dropped[0]["name"].as_str(), dropped[0]["id"].as_str()),
+        (Some("subsets"), Some("lines"), Some(lines.as_str()))
+    );
+    assert_eq!(archforge_uml::figures::end_text(s.doc(), end), "*", "dropped in the same step");
+    let after = snapshot(&s);
+    s.undo().unwrap();
+    assert_eq!(snapshot(&s), before, "one undo step brings the line and its subsets back");
+    s.redo().unwrap();
+    assert_eq!(snapshot(&s), after);
+    round_trip(&mut s, "uml.association.set-end", json!({ "association": a, "end": 1, "role": "goods" }));
+    // A reconnection that keeps every target drops nothing.
+    let out = s.execute("uml.relationship.reconnect", &json!({ "relationship": a, "end": "source", "class": order })).unwrap();
+    assert_eq!(out.value["dropped"], json!([]));
 }

@@ -420,14 +420,13 @@ pub fn generals_of(store: &Store, c: Obj) -> Vec<Obj> {
 }
 
 /// A property as its subsets and redefines are checked against: the property itself (none while
-/// it is being added), its context, its type (`typed` with no `ty` for a built-in type not made
-/// yet), its bounds, whether it is composite, and its name.
+/// it is being added), its context, its type (none for no type, or for a built-in type not made
+/// yet, which no property has yet either), its bounds, whether it is composite, and its name.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Shape {
     pub itself: Option<Obj>,
     pub context: Vec<Obj>,
     pub ty: Option<Obj>,
-    pub typed: bool,
     pub lower: u64,
     pub upper: Option<u64>,
     pub composite: bool,
@@ -438,12 +437,10 @@ impl Shape {
     /// The shape `p` has in the model.
     pub fn of(store: &Store, p: Obj) -> Shape {
         let (lower, upper) = bounds(store, p);
-        let ty = one(store, p, typed_element::TYPE);
         Shape {
             itself: Some(p),
             context: context_of(store, p),
-            ty,
-            typed: ty.is_some(),
+            ty: one(store, p, typed_element::TYPE),
             lower,
             upper,
             composite: is_composite(store, p),
@@ -484,6 +481,22 @@ impl Shape {
     }
 }
 
+/// The properties of some classifiers, each once, in their order: where a shape's targets must
+/// be, built once per check or listing.
+struct Reach {
+    order: Vec<Obj>,
+    set: std::collections::BTreeSet<Obj>,
+}
+
+impl Reach {
+    /// The properties of `owners`, each classifier's walked once.
+    fn of(store: &Store, owners: &[Obj]) -> Reach {
+        let mut set = std::collections::BTreeSet::new();
+        let order = owners.iter().flat_map(|c| properties_of(store, *c)).filter(|p| set.insert(*p)).collect();
+        Reach { order, set }
+    }
+}
+
 /// Why a property may not be subset or redefined by a shape.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TargetProblem {
@@ -498,6 +511,8 @@ pub enum TargetProblem {
     OutOfReach,
     /// The same name, whatever the case: a subset takes another.
     SameName,
+    /// It subsets the property already: two properties never subset each other.
+    Cycle,
     /// Its type is not one the shape's type conforms to.
     Type,
     /// Its upper bound is below the shape's.
@@ -523,6 +538,7 @@ impl TargetProblem {
                 "is not a property of a classifier this property's classifier specializes, which is what it may redefine"
             }
             (TargetProblem::SameName, _) => "has this property's name, whatever the case; a subset takes another name",
+            (TargetProblem::Cycle, _) => "subsets this property already, and two properties never subset each other",
             (TargetProblem::Type, _) => "has a type this property's type does not conform to; its type must be that type or one that specializes it",
             (TargetProblem::Upper, _) => "allows fewer values than this property; a subset's upper bound is not above the one it subsets",
             (TargetProblem::Multiplicity, _) => "has a multiplicity this property's lower and upper bounds do not both lie within",
@@ -542,17 +558,20 @@ fn basic_problem(store: &Store, shape: &Shape, t: Obj) -> Option<TargetProblem> 
     name_of(store, t).trim().is_empty().then_some(TargetProblem::Unnamed)
 }
 
-/// Why `shape` may not subset `t`, when it may not, checked against `owners` (from
-/// [`Shape::subset_owners`]).
-fn subsets_problem_in(store: &Store, shape: &Shape, t: Obj, owners: &[Obj]) -> Option<TargetProblem> {
+/// Why `shape` may not subset `t`, when it may not, its targets in `reach`. With `named` false the
+/// name rule is left out, for a list a shell filters by the name being typed.
+fn subsets_problem_in(store: &Store, shape: &Shape, t: Obj, reach: &Reach, named: bool) -> Option<TargetProblem> {
     if let Some(p) = basic_problem(store, shape, t) {
         return Some(p);
     }
-    if !owners.iter().any(|c| properties_of(store, *c).contains(&t)) {
+    if !reach.set.contains(&t) {
         return Some(TargetProblem::OutOfReach);
     }
-    if name_of(store, t).to_lowercase() == shape.name.trim().to_lowercase() {
+    if named && name_of(store, t).to_lowercase() == shape.name.trim().to_lowercase() {
         return Some(TargetProblem::SameName);
+    }
+    if shape.itself.is_some_and(|me| subsets(store, t).contains(&me)) {
+        return Some(TargetProblem::Cycle);
     }
     if !shape.conforms(store, t) {
         return Some(TargetProblem::Type);
@@ -566,13 +585,12 @@ fn subsets_problem_in(store: &Store, shape: &Shape, t: Obj, owners: &[Obj]) -> O
     above.then_some(TargetProblem::Upper)
 }
 
-/// Why `shape` may not redefine `t`, when it may not, checked against `owners` (from
-/// [`Shape::redefine_owners`]).
-fn redefines_problem_in(store: &Store, shape: &Shape, t: Obj, owners: &[Obj]) -> Option<TargetProblem> {
+/// Why `shape` may not redefine `t`, when it may not, its targets in `reach`.
+fn redefines_problem_in(store: &Store, shape: &Shape, t: Obj, reach: &Reach) -> Option<TargetProblem> {
     if let Some(p) = basic_problem(store, shape, t) {
         return Some(p);
     }
-    if !owners.iter().any(|c| properties_of(store, *c).contains(&t)) {
+    if !reach.set.contains(&t) {
         return Some(TargetProblem::OutOfReach);
     }
     if !shape.conforms(store, t) {
@@ -592,32 +610,50 @@ fn redefines_problem_in(store: &Store, shape: &Shape, t: Obj, owners: &[Obj]) ->
 
 /// Why `shape` may not subset `t`, when it may not.
 pub fn subsets_problem(store: &Store, shape: &Shape, t: Obj) -> Option<TargetProblem> {
-    subsets_problem_in(store, shape, t, &shape.subset_owners(store))
+    subsets_problem_in(store, shape, t, &Reach::of(store, &shape.subset_owners(store)), true)
 }
 
 /// Why `shape` may not redefine `t`, when it may not.
 pub fn redefines_problem(store: &Store, shape: &Shape, t: Obj) -> Option<TargetProblem> {
-    redefines_problem_in(store, shape, t, &shape.redefine_owners(store))
+    redefines_problem_in(store, shape, t, &Reach::of(store, &shape.redefine_owners(store)))
 }
 
 /// The properties `shape` may subset, each once, in the order of its classifiers, the context
-/// first.
+/// first; each classifier's properties are walked once.
 pub fn subsets_candidates(store: &Store, shape: &Shape) -> Vec<Obj> {
-    let owners = shape.subset_owners(store);
-    let mut out: Vec<Obj> = owners.iter().flat_map(|c| properties_of(store, *c)).collect();
-    let mut seen = std::collections::BTreeSet::new();
-    out.retain(|t| seen.insert(*t) && subsets_problem_in(store, shape, *t, &owners).is_none());
-    out
+    subsets_candidates_named(store, shape, true)
+}
+
+/// [`subsets_candidates`], with the name rule left out when `named` is false: the shell keeps
+/// that list while a name is typed and drops the property named alike itself.
+pub fn subsets_candidates_named(store: &Store, shape: &Shape, named: bool) -> Vec<Obj> {
+    let reach = Reach::of(store, &shape.subset_owners(store));
+    reach.order.iter().copied().filter(|t| subsets_problem_in(store, shape, *t, &reach, named).is_none()).collect()
 }
 
 /// The properties `shape` may redefine, each once, in the order of the classifiers its context
-/// specializes.
+/// specializes; each classifier's properties are walked once.
 pub fn redefines_candidates(store: &Store, shape: &Shape) -> Vec<Obj> {
-    let owners = shape.redefine_owners(store);
-    let mut out: Vec<Obj> = owners.iter().flat_map(|c| properties_of(store, *c)).collect();
-    let mut seen = std::collections::BTreeSet::new();
-    out.retain(|t| seen.insert(*t) && redefines_problem_in(store, shape, *t, &owners).is_none());
-    out
+    let reach = Reach::of(store, &shape.redefine_owners(store));
+    reach.order.iter().copied().filter(|t| redefines_problem_in(store, shape, *t, &reach).is_none()).collect()
+}
+
+/// `targets` as a refusal lists the accepted ones: at most [`LISTED`] as `name (Class)`, then how
+/// many more; "none" when there are none.
+fn listed(store: &Store, targets: &[Obj]) -> String {
+    if targets.is_empty() {
+        return "none".into();
+    }
+    let shown: Vec<String> = targets
+        .iter()
+        .take(LISTED)
+        .map(|t| match context_of(store, *t).first() {
+            Some(c) => format!("{} ({})", name_of(store, *t), name_of(store, *c)),
+            None => name_of(store, *t),
+        })
+        .collect();
+    let more = targets.len().saturating_sub(LISTED);
+    if more > 0 { format!("{} and {more} more", shown.join(", ")) } else { shown.join(", ") }
 }
 
 /// A property's modifiers as a command sets them, read and checked.
@@ -632,17 +668,22 @@ pub struct Modifiers {
     pub redefines: Vec<Obj>,
 }
 
-/// The ids under `key` (an array of strings), at most [`MAX_TARGETS`], each a live element, each
-/// once.
-fn targets(store: &Store, p: &Params, key: &str) -> Result<Vec<Obj>, CommandError> {
-    let items = p.get(key).and_then(Json::as_array).cloned().unwrap_or_default();
+/// The properties under `key`, at most [`MAX_TARGETS`], each a live element named once: each item
+/// an id as text, or an object with its `id`, as the reads give them (`{id, name}`).
+fn targets(store: &Store, items: &[Json], key: &str) -> Result<Vec<Obj>, CommandError> {
     if items.len() > MAX_TARGETS {
         return Err(refuse(key, format!("{} ids; a property names at most {MAX_TARGETS} here", items.len())));
     }
     let mut out = Vec::with_capacity(items.len());
-    for item in &items {
-        let Some(id) = item.as_str() else {
-            return Err(refuse(key, format!("{} is not a property's id; the list holds ids as text", short(&item.to_string()))));
+    for item in items {
+        let Some(id) = item.as_str().or_else(|| item.get("id").and_then(Json::as_str)) else {
+            return Err(refuse(
+                key,
+                format!(
+                    "{} is not a property's id; the list holds ids as text, or objects with an id as the reads give them",
+                    short(&item.to_string())
+                ),
+            ));
         };
         let o = Uuid::parse(id)
             .and_then(|u| store.by_uuid(u))
@@ -656,19 +697,23 @@ fn targets(store: &Store, p: &Params, key: &str) -> Result<Vec<Obj>, CommandErro
     Ok(out)
 }
 
-/// The modifiers the parameters ask of a property shaped `shape`, its type having been `was`
-/// (none for a new property), checked before anything changes: the default read by the shape's
-/// type, and each property it subsets and redefines checked against the rules. A default that
-/// fitted the old type but not a new one refuses the type change, naming the default; the default
-/// is never cleared for it.
-pub fn read(store: &Store, p: &Params, shape: &Shape, was: Option<Option<Obj>>, stored_default: &str) -> Result<Modifiers, CommandError> {
-    let typed = p.str("default").unwrap_or_default();
+/// The modifiers the parameters ask of a property shaped `shape`, checked before anything
+/// changes; `current` is the property as the model has it (none while it is being added), and a
+/// modifier the call leaves out keeps its value there (a new property's the usual: no default,
+/// unique, nothing else). The default is read by the shape's type: a kept or resent default that
+/// fitted the old type but not a new one refuses the type change, naming the default, never
+/// clearing it. Only the properties a list adds to what it subsets or redefines are checked, so a
+/// target the model no longer allows never blocks another edit; a refusal names the target, why,
+/// and the properties it may name instead.
+pub fn read(store: &Store, p: &Params, shape: &Shape, current: Option<Obj>) -> Result<Modifiers, CommandError> {
+    let stored = current.map(|c| default_text(store, c)).unwrap_or_default();
+    let typed = p.str("default").unwrap_or(&stored);
     let form = DefaultForm::of(store, shape.ty);
     let default = match parse_default(store, form, typed) {
         Ok(d) => d,
         Err(e) => {
-            let type_changed = was.is_some_and(|w| w != shape.ty);
-            if type_changed && !stored_default.is_empty() && typed.trim() == stored_default.trim() {
+            let type_changed = current.is_some_and(|c| one(store, c, typed_element::TYPE) != shape.ty);
+            if type_changed && !stored.is_empty() && typed.trim() == stored.trim() {
                 let ty = shape.ty.map(|t| name_of(store, t)).unwrap_or_else(|| "no type".into());
                 return Err(refuse(
                     "type",
@@ -683,26 +728,60 @@ pub fn read(store: &Store, p: &Params, shape: &Shape, was: Option<Option<Obj>>, 
         }
     };
     let id = |o: Obj| uuid_of(store, o).unwrap_or_default();
-    let subsets = targets(store, p, "subsets")?;
-    for t in &subsets {
+    let list_of = |key: &str, kept: Vec<Obj>| -> Result<(Vec<Obj>, Vec<Obj>), CommandError> {
+        match p.get(key).and_then(Json::as_array) {
+            Some(items) => Ok((targets(store, items, key)?, kept)),
+            None => Ok((kept.clone(), kept)),
+        }
+    };
+    let (subsets_wanted, subsets_had) = list_of("subsets", current.map(|c| subsets(store, c)).unwrap_or_default())?;
+    for t in subsets_wanted.iter().filter(|t| !subsets_had.contains(t)) {
         if let Some(problem) = subsets_problem(store, shape, *t) {
-            return Err(refuse("subsets", format!("{} ({}) {}", id(*t), name_of(store, *t), problem.why(false))));
+            let may = listed(store, &subsets_candidates(store, shape));
+            return Err(refuse("subsets", format!("{} ({}) {}; it may subset: {may}", id(*t), name_of(store, *t), problem.why(false))));
         }
     }
-    let redefines = targets(store, p, "redefines")?;
-    for t in &redefines {
+    let (redefines_wanted, redefines_had) = list_of("redefines", current.map(|c| redefines(store, c)).unwrap_or_default())?;
+    for t in redefines_wanted.iter().filter(|t| !redefines_had.contains(t)) {
         if let Some(problem) = redefines_problem(store, shape, *t) {
-            return Err(refuse("redefines", format!("{} ({}) {}", id(*t), name_of(store, *t), problem.why(true))));
+            let may = listed(store, &redefines_candidates(store, shape));
+            return Err(refuse("redefines", format!("{} ({}) {}; it may redefine: {may}", id(*t), name_of(store, *t), problem.why(true))));
         }
     }
+    let (derived, read_only, ordered, unique) = current.map(|c| flags(store, c)).unwrap_or((false, false, false, true));
     Ok(Modifiers {
         default,
-        derived: p.bool("derived").unwrap_or(false),
-        read_only: p.bool("read_only").unwrap_or(false),
-        ordered: p.bool("ordered").unwrap_or(false),
-        unique: p.bool("unique").unwrap_or(true),
-        subsets,
-        redefines,
+        derived: p.bool("derived").unwrap_or(derived),
+        read_only: p.bool("read_only").unwrap_or(read_only),
+        ordered: p.bool("ordered").unwrap_or(ordered),
+        unique: p.bool("unique").unwrap_or(unique),
+        subsets: subsets_wanted,
+        redefines: redefines_wanted,
+    })
+}
+
+/// The default `p` keeps, as [`parse_default`] would give it back; none when it has none.
+fn stored_default(store: &Store, p: Obj) -> Option<DefaultValue> {
+    let v = one(store, p, property::DEFAULT_VALUE)?;
+    let get = |prop| store.get(v, prop).ok();
+    Some(match store.class_of(v).ok()? {
+        c if c == LITERAL_INTEGER => DefaultValue::Integer(match get(literal_integer::VALUE)? {
+            Value::Int(n) => n,
+            _ => return None,
+        }),
+        c if c == LITERAL_REAL => DefaultValue::Real(match get(literal_real::VALUE)? {
+            Value::Real(n) => n,
+            _ => return None,
+        }),
+        c if c == LITERAL_BOOLEAN => DefaultValue::Boolean(get(literal_boolean::VALUE)?.as_bool()?),
+        c if c == LITERAL_UNLIMITED_NATURAL => DefaultValue::Unlimited(match get(literal_unlimited_natural::VALUE)? {
+            Value::Unlimited(n) => n,
+            _ => return None,
+        }),
+        c if c == LITERAL_STRING => DefaultValue::String(get(literal_string::VALUE)?.as_str()?.to_string()),
+        c if c == INSTANCE_VALUE => DefaultValue::Literal(one(store, v, instance_value::INSTANCE)?),
+        c if c == OPAQUE_EXPRESSION => DefaultValue::Opaque(default_text(store, p)),
+        _ => return None,
     })
 }
 
@@ -720,9 +799,12 @@ fn set_list(store: &mut Store, p: Obj, prop: archforge_mof::PropId, want: &[Obj]
     Ok(())
 }
 
-/// Gives `p` the modifiers `m`, replacing the ones it had.
+/// Gives `p` the modifiers `m`, replacing the ones it had; a default the same as the one it has
+/// is left as it is.
 pub fn apply(store: &mut Store, p: Obj, m: &Modifiers) -> Result<(), CommandError> {
-    set_default(store, p, m.default.as_ref())?;
+    if stored_default(store, p) != m.default {
+        set_default(store, p, m.default.as_ref())?;
+    }
     store.set(p, property::IS_DERIVED, Value::Bool(m.derived)).map_err(fail)?;
     store.set(p, structural_feature::IS_READ_ONLY, Value::Bool(m.read_only)).map_err(fail)?;
     store.set(p, multiplicity_element::IS_ORDERED, Value::Bool(m.ordered)).map_err(fail)?;
@@ -731,7 +813,46 @@ pub fn apply(store: &mut Store, p: Obj, m: &Modifiers) -> Result<(), CommandErro
     set_list(store, p, property::REDEFINED_PROPERTY, &m.redefines)
 }
 
-/// The modifiers of `p` as the query commands give them, and as the commands take them back.
+/// Takes from `end`'s Subsets and Redefines the properties the rules no longer allow it, as its
+/// association's ends moved: what a reconnection does in the same step. Gives each dropped one,
+/// with the list it was in (`subsets` or `redefines`).
+pub fn drop_stale(store: &mut Store, end: Obj) -> Result<Vec<(&'static str, Obj)>, CommandError> {
+    let shape = Shape::of(store, end);
+    let subset_reach = Reach::of(store, &shape.subset_owners(store));
+    let redefine_reach = Reach::of(store, &shape.redefine_owners(store));
+    let had_subsets = subsets(store, end);
+    let had_redefines = redefines(store, end);
+    let mut dropped = Vec::new();
+    let keep_subsets: Vec<Obj> = had_subsets
+        .iter()
+        .copied()
+        .filter(|t| {
+            let ok = subsets_problem_in(store, &shape, *t, &subset_reach, true).is_none();
+            if !ok {
+                dropped.push(("subsets", *t));
+            }
+            ok
+        })
+        .collect();
+    let keep_redefines: Vec<Obj> = had_redefines
+        .iter()
+        .copied()
+        .filter(|t| {
+            let ok = redefines_problem_in(store, &shape, *t, &redefine_reach).is_none();
+            if !ok {
+                dropped.push(("redefines", *t));
+            }
+            ok
+        })
+        .collect();
+    set_list(store, end, property::SUBSETTED_PROPERTY, &keep_subsets)?;
+    set_list(store, end, property::REDEFINED_PROPERTY, &keep_redefines)?;
+    Ok(dropped)
+}
+
+/// The modifiers of `p` as the query commands give them; the attribute commands and
+/// `uml.association.set-end` take the same `subsets` and `redefines` (`[{id, name}]`) back, so a
+/// read can be copied into a set.
 pub fn json(store: &Store, p: Obj) -> Json {
     let (derived, read_only, ordered, unique) = flags(store, p);
     let named = |ts: Vec<Obj>| -> Vec<Json> {

@@ -636,6 +636,8 @@ str		A property without a name cannot be named here.	A property without a name c
 str		{name} is not a property this one can subset.	{name} is not a property this one can subset.
 str		{name} is not a property this one can redefine.	{name} is not a property this one can redefine.
 str		{name} has this property's name; a subset takes another.	{name} has this property's name; a subset takes another.
+str		{name} subsets this property already.	{name} subsets this property already.
+str		The moved ends no longer subset or redefine {names}, so those were dropped.	The moved ends no longer subset or redefine {names}, so those were dropped.
 str		{name} has a type this property's type does not conform to.	{name} has a type this property's type does not conform to.
 str		{name} holds fewer values than this property.	{name} holds fewer values than this property.
 str		This property's multiplicity does not lie within {name}'s.	This property's multiplicity does not lie within {name}'s.

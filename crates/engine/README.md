@@ -12,7 +12,7 @@ environment). It knows no notation: a notation crate brings its `Document`, its 
 command areas.
 
 **Binding rules.** The forge command-registry standard: dotted area-and-verb ids, parameters
-documented one line per key (`key: type = default, range or choices; meaning`) and refused centrally
+documented one line per key (`key: type = default, range or choices; meaning`, or `key: type?; meaning` for a key that may be left out, which then reaches the handler as absent, so a set command can keep what it is not given) and refused centrally
 when unknown or out of bounds, enabled predicates with shared reasons, one undo step per command or
 gesture, no step for view-only changes, failures that change nothing. Deviations from the binding:
 handlers get `Ctx` (document and view), not the session; `enabled` gets `Facts` and returns a shared

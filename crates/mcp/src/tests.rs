@@ -42,7 +42,8 @@ fn initialize_answers_the_clients_version_when_spoken_and_the_newest_otherwise()
     assert!(
         said.contains("property modifiers on attributes and association ends")
             && said.contains("subsets or redefines")
-            && said.contains("the association end's command set"),
+            && said.contains("the association end's command set")
+            && said.contains("a field left out keeping its value and clearing said explicitly"),
         "{said}"
     );
     assert_eq!(ask(&fake, json!({ "jsonrpc": "2.0", "id": "p", "method": "ping" }))["result"], json!({}));
