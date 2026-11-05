@@ -9739,6 +9739,33 @@ fn delete_on_an_association_class_line_with_its_card_on_no_diagram_keeps_it_in_t
     }
 }
 
+/// With only an association class's line selected, its card on no diagram, Shift+Delete still asks
+/// to delete it from the model, and the dialog's confirm deletes it with its line. In light and
+/// dark.
+#[test]
+fn shift_delete_on_an_association_class_line_without_its_card_asks_and_deletes_it() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut r = reviews(theme);
+        let (ac, _, card) = r.review();
+        let d = r.diagram.clone();
+        crate::editing::run(r.h.state_mut(), "diagram.unplace", serde_json::json!({ "nodes": [card] })).unwrap();
+        crate::editing::run(r.h.state_mut(), "diagram.connect-all", serde_json::json!({ "diagram": d })).unwrap();
+        r.h.run();
+        let before = r.shown();
+        let at = r.line_middle() + egui::vec2(-60.0, 0.0);
+        click(&mut r.h, at);
+        assert_eq!(r.selection(), [ac.as_str()]);
+        key(&mut r.h, egui::Key::Delete, egui::Modifiers::SHIFT);
+        let asked = r.h.state().explorer.delete.clone().expect("the dialog asks");
+        assert_eq!((asked.ids, asked.name.as_str(), asked.node), (vec![archforge_mof::Uuid::parse(&ac).unwrap()], "Review", None));
+        assert_eq!(r.association_classes(), ["Review"], "nothing goes before the confirm");
+        let at = rect_of(&r.h, "workspace.explorer.delete.confirm").center();
+        click(&mut r.h, at);
+        assert!(r.association_classes().is_empty(), "deleted from the model");
+        assert_eq!(r.shown(), (before.0, before.1 - 1), "with its line");
+    }
+}
+
 /// The delete dialog of a class names every relationship that goes with it, as `element.remove`
 /// takes them: Product's association class Review, and the dependency on Review, which goes with
 /// Review. In light and dark.

@@ -1347,6 +1347,13 @@ pub fn diagrams_showing(store: &Store, element: Obj) -> usize {
 /// Asks before an entity goes from the model, with what goes with it; what its notation keeps
 /// (the package Types while it holds the built-in types) is said at the canvas's top instead.
 fn ask_delete(shell: &mut Shell, node: Uuid, entity: Uuid) {
+    ask_delete_of(shell, Some(node), entity);
+}
+
+/// [`ask_delete`] for an entity selected on the diagram by its card `node`, or with none by a line
+/// alone (an association class drawn without its card): the dialog then offers no removal from
+/// the diagram, as the line's own Delete does that.
+fn ask_delete_of(shell: &mut Shell, node: Option<Uuid>, entity: Uuid) {
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
     let Some(e) = store.by_uuid(entity) else { return };
     // What its notation keeps (UML's package Types with the built-in types) is said, not asked.
@@ -1364,7 +1371,7 @@ fn ask_delete(shell: &mut Shell, node: Uuid, entity: Uuid) {
         keys,
         foreign_keys,
         diagrams,
-        node: Some(node),
+        node,
     });
     shell.canvas.menu = None;
 }
@@ -1905,10 +1912,13 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
         None => Vec::new(),
     };
     if selected.is_empty() {
-        // A line whose element has its card on another diagram only (an association class's,
-        // drawn here with its classes): Delete takes the line from this diagram.
+        // A line whose element has its card on another diagram only, or on none (an association
+        // class's, drawn here with its classes): Delete takes the line from this diagram, and
+        // Shift+Delete asks to delete the element from the model.
         if delete && !shift {
             remove_lines_here(shell, d);
+        } else if delete && let Some(entity) = line_element_here(shell, d, kind) {
+            ask_delete_of(shell, None, entity);
         }
         return;
     }
@@ -1955,6 +1965,18 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
     if let Err(e) = run(shell, "diagram.move", json!({ "nodes": ids, "dx": dx, "dy": dy, "coalesce": "nudge" })) {
         shell.canvas.notice = Some(e);
     }
+}
+
+/// The selected element a line of diagram `d` shows that the diagram's kind deletes from the model
+/// (an association class whose card is not on `d`), when there is one.
+fn line_element_here(shell: &Shell, d: Obj, kind: Option<&'static dyn crate::kinds::DiagramKind>) -> Option<Uuid> {
+    let session = shell.session.as_ref()?;
+    let store = session.doc();
+    let element = session.view().selection.iter().copied().find(|e| {
+        archforge_diagram::views_of(store, *e).1.iter().any(|edge| archforge_diagram::diagram_of(store, *edge) == Some(d))
+            && kind.is_some_and(|k| k.deletes(store, *e))
+    })?;
+    uuid(store, element)
 }
 
 /// Removes from diagram `d` the lines that show the selected elements, as one undo step, the
