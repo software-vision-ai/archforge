@@ -63,7 +63,7 @@ pub struct State {
     /// The key editor, open on a key or on a unique constraint about to be added (slice E4).
     pub key: Option<crate::keys::KeyEdit>,
     /// A description being typed under the heading (slice S2).
-    pub description: Option<NameEdit>,
+    pub description: Option<DescriptionDraft>,
     /// The check and index editors (slice S3).
     pub check: Option<crate::checks::CheckEdit>,
     pub index: Option<crate::indexes::IndexEdit>,
@@ -122,6 +122,18 @@ pub(crate) fn reveal(shell: &mut Shell, ui: &egui::Ui, card: Rect) {
 pub struct NameEdit {
     pub target: Uuid,
     pub text: String,
+}
+
+/// A description being typed under the heading for the element `target`, written through
+/// `element.describe` on Enter, when the keyboard leaves the field, or when the selection moves on
+/// to another element ([`flush_description`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DescriptionDraft {
+    pub target: Uuid,
+    pub text: String,
+    /// Its write was refused: it is kept, for the user to see again on `target` beside the
+    /// refusal, and not written again until its text changes.
+    pub refused: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -936,12 +948,50 @@ pub(crate) fn name_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: 
     }
 }
 
+/// The description of the element `obj` as its notation keeps it, or nothing.
+fn description_now(shell: &Shell, obj: Obj) -> String {
+    shell.session.as_ref().and_then(|s| s.view().of_element(s.doc(), obj).map(|n| n.description(s.doc(), obj))).unwrap_or_default()
+}
+
+/// Writes `text` as the description of `target` through `element.describe` when it differs from
+/// what the element has, and keeps the draft until the write succeeds: done, the draft and the
+/// notice clear; refused, the draft stays, marked refused, and the refusal is the notice.
+fn write_description(shell: &mut Shell, target: Uuid, text: String) {
+    let obj = shell.session.as_ref().and_then(|s| s.doc().by_uuid(target));
+    if obj.is_none_or(|o| text.trim() == description_now(shell, o)) {
+        shell.panels.description = None;
+        return;
+    }
+    match run(shell, "element.describe", json!({ "element": target.to_string(), "text": text.trim() })) {
+        Ok(_) => {
+            shell.panels.description = None;
+            shell.panels.notice = None;
+        }
+        Err(e) => {
+            shell.panels.description = Some(DescriptionDraft { target, text, refused: true });
+            shell.panels.notice = Some(e);
+        }
+    }
+}
+
+/// A description draft left behind when the selection moved on to `subject` (another element, a
+/// diagram or nothing) is written to the element it was typed on, as Enter would, before the
+/// panel shows the new selection: the draft is never lost and never lands on another element. A
+/// draft already refused is not written again until its text changes.
+pub(crate) fn flush_description(shell: &mut Shell, subject: Option<Uuid>) {
+    let Some(d) = shell.panels.description.clone() else { return };
+    if Some(d.target) != subject && !d.refused {
+        write_description(shell, d.target, d.text);
+    }
+}
+
 /// The description under the heading: typed in place, committed through `element.describe` on Enter
-/// or when the keyboard leaves it. It shows what the element's notation keeps: an ER element's
-/// description, a UML element's description Comment (AR-186).
+/// or when the keyboard leaves it, and when the selection moves on ([`flush_description`]). It
+/// shows what the element's notation keeps: an ER element's description, a UML element's
+/// description Comment (AR-186).
 fn description_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: egui::Pos2, width: f32, subject: &Subject) {
     let (Some(id), Some(obj)) = (subject.id, subject.obj) else { return };
-    let current = shell.session.as_ref().and_then(|s| s.view().of_element(s.doc(), obj).map(|n| n.description(s.doc(), obj))).unwrap_or_default();
+    let current = description_now(shell, obj);
     let mut text = match &shell.panels.description {
         Some(d) if d.target == id => d.text.clone(),
         _ => current.clone(),
@@ -960,15 +1010,11 @@ fn description_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: egui
         true,
     );
     if committed {
-        shell.panels.description = None;
-        if text.trim() != current {
-            match run(shell, "element.describe", json!({ "element": id.to_string(), "text": text.trim() })) {
-                Ok(_) => shell.panels.notice = None,
-                Err(e) => shell.panels.notice = Some(e),
-            }
-        }
+        write_description(shell, id, text);
     } else if text != current {
-        shell.panels.description = Some(NameEdit { target: id, text });
+        // The refused mark stays while the text does; a change makes it a draft to write again.
+        let refused = shell.panels.description.as_ref().is_some_and(|d| d.target == id && d.text == text && d.refused);
+        shell.panels.description = Some(DescriptionDraft { target: id, text, refused });
     } else if shell.panels.description.as_ref().is_some_and(|d| d.target == id) {
         shell.panels.description = None;
     }
@@ -1951,6 +1997,8 @@ pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
 pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, panel: Panel, project: &str) {
     let paint = ui.painter().clone();
     let s = subject(shell, project);
+    // A description typed on the element selected before goes to it first.
+    flush_description(shell, s.id);
     match panel {
         Panel::Agent => {
             ux::text(&paint, r.min + vec2(PAD, y), &tr("Coming soon"), types::SECTION, p.text, Some((r.width() - 2.0 * PAD).max(0.0)));

@@ -4552,6 +4552,42 @@ fn the_column_editor_sets_the_size_default_and_generation_and_the_heading_takes_
     assert_eq!(archforge_er::rules::text_of(st, customer_obj, archforge_er::element::DESCRIPTION), "People who buy.");
 }
 
+/// A table's description typed and left by clicking another table's row in Models is kept on the
+/// table it was typed on, and the other table is left as it was. In light and dark.
+#[test]
+fn a_table_description_draft_left_by_clicking_another_table_stays_on_its_own() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, customer) = table_harness();
+        h.state_mut().state.theme = theme;
+        let (order, schema) = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let st = s.doc();
+            let schema = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap();
+            let schema = st.uuid(schema).unwrap();
+            let out = s.execute("er.entity.add", &serde_json::json!({ "schema": schema.to_string(), "name": "Order" })).unwrap();
+            (archforge_mof::Uuid::parse(out.value["id"].as_str().unwrap()).unwrap(), schema)
+        };
+        h.state_mut().explorer.expanded.insert(schema);
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [customer] })).unwrap();
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        h.run();
+        let at = rect_of(&h, "workspace.properties.description").center();
+        click(&mut h, at);
+        h.event(egui::Event::Text("People who buy.".into()));
+        h.run();
+        let at = rect_of(&h, &format!("workspace.explorer.row.{order}")).center();
+        click(&mut h, at);
+        h.run();
+        let s = h.state().session.as_ref().unwrap();
+        let st = s.doc();
+        let (customer, order) = (st.by_uuid(archforge_mof::Uuid::parse(&customer).unwrap()).unwrap(), st.by_uuid(order).unwrap());
+        assert_eq!(s.view().selection, vec![order], "the row selected Order");
+        assert_eq!(archforge_er::rules::text_of(st, customer, archforge_er::element::DESCRIPTION), "People who buy.");
+        assert_eq!(archforge_er::rules::text_of(st, order, archforge_er::element::DESCRIPTION), "", "Order is unchanged");
+        assert!(h.state().panels.description.is_none(), "the draft is spent");
+    }
+}
+
 #[test]
 fn the_check_and_index_editors_write_through_the_engine_and_a_refusal_changes_nothing() {
     use archforge_er::{NullsOrder, SortDirection};
@@ -9233,6 +9269,52 @@ fn a_description_typed_in_properties_stays_on_a_uml_element_after_reselecting_it
         assert_eq!(described(&h, customer), "");
         let st = h.state().session.as_ref().unwrap().doc();
         assert_eq!(archforge_uml::descriptions::description_comment(st, st.by_uuid(customer).unwrap()), None);
+    }
+}
+
+/// A description typed on one element and left by clicking another, on the canvas or in Models,
+/// is kept on the element it was typed on, as one undo step, and the other is left as it was. In
+/// light and dark.
+#[test]
+fn a_description_draft_left_by_clicking_another_element_stays_on_its_own() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        let described = |h: &Harness<'static, Shell>, id: archforge_mof::Uuid| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            archforge_uml::descriptions::description_of(st, st.by_uuid(id).unwrap())
+        };
+        // Customer, then Order on the canvas; Order, then Customer's row in Models.
+        let customer = named(&h, archforge_uml::CLASS, "Customer");
+        let order = named(&h, archforge_uml::CLASS, "Order");
+        let packages: Vec<archforge_mof::Uuid> = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            st.alive().filter(|o| st.class_of(*o).ok() == Some(archforge_uml::PACKAGE)).filter_map(|o| st.uuid(o).ok()).collect()
+        };
+        h.state_mut().explorer.expanded.extend(packages);
+        h.run();
+        for (from, to, text, target) in [
+            (customer, order, "Someone who buys.", format!("workspace.canvas.node.{}", nodes["Order"])),
+            (order, customer, "One purchase.", format!("workspace.explorer.row.{customer}")),
+        ] {
+            h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [from.to_string()] })).unwrap();
+            h.run();
+            let before = described(&h, to);
+            let at = rect_of(&h, "workspace.properties.description").center();
+            click(&mut h, at);
+            h.event(egui::Event::Text(text.into()));
+            h.run();
+            let at = rect_of(&h, &target).center();
+            click(&mut h, at);
+            h.run();
+            let s = h.state().session.as_ref().unwrap();
+            assert_eq!(s.view().selection, vec![s.doc().by_uuid(to).unwrap()], "{target} selected the other element");
+            assert_eq!(described(&h, from), text, "the draft stays on the element it was typed on");
+            assert_eq!(described(&h, to), before, "the other element is unchanged");
+            assert_eq!(s.undo_label(), Some("Describe"));
+            assert!(h.state().panels.description.is_none(), "the draft is spent");
+            assert!(!painted(&h).iter().any(|t| t == text), "the other's field shows its own");
+        }
     }
 }
 

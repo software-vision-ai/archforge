@@ -210,7 +210,8 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
 - Properties shows model data, the same on every diagram; Appearance styles this diagram only;
   Skills is a tab of its own.
 - The panel opens with the selection's name, its kind and a Description field, pinned while the
-  body scrolls. Enter or leaving the field keeps the description, an empty field removes it; a UML
+  body scrolls. Enter, leaving the field or selecting something else keeps the description on the
+  element it was typed on, an empty field removes it; a UML
   element's is a comment it owns (AR-186), recognised by its shape: an owned comment annotating its
   owner alone, so such a comment from a file counts as the description (the first one; setting
   removes any others, clearing removes them all). An association's end takes none. A box's element and its members (a table and its columns, a class and its
