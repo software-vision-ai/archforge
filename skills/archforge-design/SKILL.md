@@ -534,10 +534,14 @@ member and drawing a relationship stay three separate gestures:
 - Property modifiers live in the attribute editor and the association end's editor, never in a tool
   of their own: Default value; Static, Derived, Read only, Ordered and Unique; and Subsets and
   Redefines. Subsets offers the other properties of the same classifier and of its general
-  classifiers; Redefines offers only those of its general classifiers. Both leave out what UML's
-  well-formedness rules refuse (UML 2.5.1, 9.9.17, Property constraints `subsetting_context_conforms`,
-  `subsetting_rules` and `redefined_property_inherited`): a type that does not conform, an upper
-  bound above the target's. On a card a derived attribute starts with `/`, a
+  classifiers whose type the property's type conforms to and whose upper bound is not below the
+  property's (UML 2.5.1, 9.9.17, `subsetting_context_conforms` and `subsetting_rules`). Redefines
+  offers only properties of the general classifiers (`redefined_property_inherited`) with which the
+  property is consistent (`Property::isConsistentWith`): a conforming type, a multiplicity whose
+  lower and upper bounds both lie within the target's, and the same composite aggregation. These are
+  the user's own attributes and ends: each keeps its subsets and redefines in its own Property
+  fields, so an association's end offers both as an attribute does. The generator's drop of
+  subsets on association-owned ends concerns only UML's own metamodel, not these. On a card a derived attribute starts with `/`, a
   default follows `=`, and braces list what differs from the usual (`{readOnly}`, `{ordered}`,
   `{nonunique}`, `{subsets name}`, `{redefines name}`); unique is the usual and is not said. An
   association end follows the same order beside its line: `/` before the role when derived, the
