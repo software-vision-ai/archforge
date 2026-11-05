@@ -530,8 +530,9 @@ member and drawing a relationship stay three separate gestures:
   Redefines, which offer only valid targets. On a card a derived attribute starts with `/`, a
   default follows `=`, and braces list what differs from the usual (`{readOnly}`, `{ordered}`,
   `{nonunique}`, `{subsets name}`, `{redefines name}`); unique is the usual and is not said. An
-  association end shows the same braces beside its role. Static has no mark yet, on a card or an
-  end; its underlining comes with 0.13.0.
+  association end follows the same order beside its line: `/` before the role when derived, the
+  multiplicity, `= default` after it, then the braces, as in `/items 0..* = none {ordered}`. Static
+  has no mark yet, on a card or an end; its underlining comes with 0.13.0.
 
 ## Not decided yet
 The menu bar's structure; how a colour chosen in Appearance and the key-status colour combine;
