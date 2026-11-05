@@ -50,7 +50,8 @@ button.
 ## 4. Draw an association
 
 1. Open the chevron of the **Relationship** tool and choose **Association**. (It also offers
-   directed association, aggregation, composition, generalization and dependency.)
+   directed association, aggregation, composition, generalization and dependency, and below a
+   line, interface realization.)
 2. Press on *Customer* and drag onto *Order*, then let go.
 
 A new association is a plain line: no roles, no multiplicities, navigable to neither end.
@@ -93,6 +94,31 @@ interface, and an interface specializes nothing but an interface. Such a drag is
 canvas's top, saying why, and draws nothing.
 
 <!-- picture: workspace-interface light | An interface, Payable, with its members, the interface that specializes it and the class associated with it -->
+
+## 7. Realize an interface
+
+A class that offers everything an interface names *realizes* it: it implements the interface.
+
+1. Open the chevron of the **Relationship** tool and choose **Interface realization**, below the
+   line in the menu. The tool now shows a dashed line with a hollow triangle at its right, and its
+   tooltip says it runs from the implementing class to its interface.
+2. Press on the class, *Order*, and drag onto the interface, *Payable*, then let go.
+
+The realization is a dashed line in the muted ink, with a hollow triangle at the interface: it is
+neither a generalization (a solid line to its triangle) nor a dependency (a dashed line to an open
+arrow). Drawing it is one step you can undo. Several classes may realize the same interface, and
+a class may realize several interfaces.
+
+Only a class implements an interface. From an interface, the tool draws nothing, and a drop on
+anything but an interface, or a second realization of an interface the class realizes already,
+is refused: the reason shows at the canvas's top and nothing is drawn. Let go on empty canvas and
+a new interface appears there, its name ready to type, with the realization to it, as one step.
+
+Select the line: **Properties** shows its **Implementing class** and its **Realized interface**.
+Drag either end of the selected line onto another class or interface to move it; the same rules
+apply. Delete removes the realization, and removing its class or its interface takes it along.
+
+<!-- picture: workspace-realization light | Order and Invoice each realizing the interface Payable, Order's realization selected with its implementing class and realized interface in Properties -->
 
 ## The result
 

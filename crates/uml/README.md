@@ -50,7 +50,11 @@ operation_text, multiplicity, visibility, member_ends, navigable}` (a class's ca
 members' visibility, type and multiplicity, abstract names slanted; an association's line with its
 name, roles, multiplicities, an arrow at every end it navigates to and a diamond at the whole of
 an aggregation or a composition; a generalization's triangle; a dependency dashed with an open
-arrow), and the card's `WORDS` and `PLURALS` for the shell's catalogue. Where an association's two
+arrow; an interface realization dashed in the muted ink to a hollow triangle at its interface),
+`relations::{specs, relationships_of, realization_problem, RealizationProblem}` (`uml.realization.add`: a class
+realizes an interface, owned by the class, its client and supplier kept in step with its
+implementing classifier and contract; reconnected through `uml.relationship.reconnect` and removed
+through `element.remove`), `RELATIONSHIPS` and `is_relationship`, and the card's `WORDS` and `PLURALS` for the shell's catalogue. Where an association's two
 ends pair a derived end with a stored one, the generator gives neither an opposite: a derived end
 keeps no field to keep in step.
 

@@ -202,9 +202,19 @@ impl DiagramKind for UmlKind {
         true
     }
 
-    /// The classifier tool's tooltip names the kind it places.
+    /// The classifier tool's tooltip names the kind it places; the Relationship tool's says which
+    /// way a realization runs.
     fn tool_hint(&self, shell: &Shell, key: &str) -> Option<String> {
-        (key == crate::uml_classifier::TOOL).then(|| shell.canvas.uml_classifier.word())
+        match key {
+            crate::uml_classifier::TOOL => Some(shell.canvas.uml_classifier.word()),
+            "relationship" => crate::uml_relate::tool_hint(shell),
+            _ => None,
+        }
+    }
+
+    /// A realization starts only at a class: from any other classifier the tool starts no line.
+    fn line_start_problem(&self, shell: &Shell, store: &Store, tool: &'static str, element: Obj) -> Option<String> {
+        (tool == "relationship").then(|| crate::uml_relate::start_problem(shell, store, element)).flatten()
     }
 
     /// The classifier tool's menu of kinds, or the Relationship tool's.
@@ -315,10 +325,9 @@ impl DiagramKind for UmlKind {
             return;
         }
         let notation = archforge_uml::UmlNotation;
-        let lines = [archforge_uml::ASSOCIATION, archforge_uml::GENERALIZATION, archforge_uml::DEPENDENCY];
         let links: Vec<Obj> = store
             .alive()
-            .filter(|l| class(store, *l).is_some_and(|k| lines.contains(&k)))
+            .filter(|l| class(store, *l).is_some_and(archforge_uml::is_relationship))
             .filter(|l| archforge_diagram::Notation::ends(&notation, store, *l).is_some_and(|(a, b)| a == c || b == c))
             .collect();
         let (width, _) = archforge_uml::CLASS_SIZE;
@@ -643,6 +652,12 @@ impl NotationUi for UmlUi {
             c if c == archforge_uml::DEPENDENCY => {
                 words(tr("Dependency · model"), tr("Dependency"), tr("This dependency"), tr("On this dependency · {n}"))
             }
+            c if c == archforge_uml::INTERFACE_REALIZATION => words(
+                tr("Interface realization · model"),
+                tr("Interface realization"),
+                tr("This interface realization"),
+                tr("On this interface realization · {n}"),
+            ),
             _ => match member_of(store, o)?.1 {
                 MemberKind::Attribute => words(tr("Attribute · model"), tr("Attribute"), tr("This attribute"), tr("On this attribute · {n}")),
                 MemberKind::Operation => words(tr("Operation · model"), tr("Operation"), tr("This operation"), tr("On this operation · {n}")),
@@ -661,7 +676,7 @@ impl NotationUi for UmlUi {
         let Some(o) = subject.obj else { return };
         match class(store, o) {
             Some(c) if archforge_uml::is_classifier(c) => return crate::uml_panel::class_body(shell, ui, p, r, y, subject),
-            Some(c) if [archforge_uml::ASSOCIATION, archforge_uml::GENERALIZATION, archforge_uml::DEPENDENCY].contains(&c) => {
+            Some(c) if archforge_uml::is_relationship(c) => {
                 return crate::uml_relate::body(shell, ui, p, r, y, subject);
             }
             _ => {}
@@ -959,7 +974,7 @@ pub(crate) fn open_sample(shell: &mut Shell) -> Result<Uuid, String> {
         .collect();
     let lines: Vec<(String, bool)> = store
         .alive()
-        .filter(|o| matches!(store.class_of(*o).ok(), Some(c) if c == archforge_uml::ASSOCIATION || c == archforge_uml::GENERALIZATION || c == archforge_uml::DEPENDENCY))
+        .filter(|o| store.class_of(*o).is_ok_and(archforge_uml::is_relationship))
         .map(|o| (uuid(o), !name(store, o).is_empty()))
         .collect();
     let pkg_id = uuid(pkg);

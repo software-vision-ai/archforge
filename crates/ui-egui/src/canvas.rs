@@ -1897,7 +1897,12 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
             ux::icon_in(&paint, b, tool.icon, ink);
         }
         let hint = kind.and_then(|k| k.tool_hint(shell, tool.key)).unwrap_or_else(|| tr(tool.hint));
-        if control(shell, ui, &format!("workspace.tools.{}", tool.key), "button", b, true).on_hover_text(hint).clicked() {
+        // Its name for assistive technology is its tooltip: what it makes now, and which way.
+        if control(shell, ui, &format!("workspace.tools.{}", tool.key), "button", b, true)
+            .on_hover_text(hint.as_str())
+            .accessible_name(hint)
+            .clicked()
+        {
             shell.canvas.tool = picked;
         }
         if let Some(chevron) = tool.chevron {

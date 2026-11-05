@@ -1,7 +1,7 @@
 //! Relating classes through the engine: associations of each kind, ends set,
-//! generalizations and dependencies drawn, wrong ends refused with nothing changed, relationships
-//! reconnected with their drawn lines following, and removed with the classes they touch; each one
-//! undo step; the sweep.
+//! generalizations, dependencies and interface realizations drawn, wrong ends refused with nothing
+//! changed, relationships reconnected with their drawn lines following, and removed with the
+//! classes they touch; each one undo step; realizations saved as rows and read back; the sweep.
 
 use archforge_diagram::ProjectView;
 use archforge_engine::testing::sweep_with;
@@ -10,8 +10,11 @@ use archforge_mof::{CompositeSlabs, Store, Uuid, Value};
 use archforge_uml::{ALONE, registry};
 use serde_json::{Value as Json, json};
 type S = Session<Store, ProjectView>;
-fn session() -> S {
-    let mut n: u64 = 0;
+
+/// A store over the core, the diagrams and UML, its ids counted up from `start` so two stores never
+/// share one.
+fn store(start: u64) -> Store {
+    let mut n: u64 = start;
     let ids = Box::new(move || {
         n += 1;
         let mut r = [0u8; 10];
@@ -27,14 +30,21 @@ fn session() -> S {
             .unwrap(),
     )
     .unwrap();
-    let mut st = Store::new(universe, Box::new(slabs), ids);
+    Store::new(universe, Box::new(slabs), ids)
+}
+
+/// A session over a store with the project's Model.
+fn session() -> S {
+    let mut st = store(0);
     st.create(archforge_core::MODEL).unwrap();
     Session::with_view(registry().unwrap(), st, 1, Options::default(), ProjectView::new(ALONE))
 }
+/// Runs `cmd`, which must succeed, and gives the id it made or named.
 fn run(s: &mut S, cmd: &str, p: Json) -> String {
     let out = s.execute(cmd, &p).unwrap_or_else(|e| panic!("{cmd} {p}: {e}"));
     out.value["id"].as_str().unwrap_or_default().to_string()
 }
+/// Runs `cmd`, which must succeed as one undo step: undone the rows are as before, redone as after.
 fn round_trip(s: &mut S, cmd: &str, p: Json) {
     let before = format!("{:?}", archforge_mof::rows::snapshot(s.doc(), &tables().0, &tables().1).unwrap());
     s.execute(cmd, &p).unwrap_or_else(|e| panic!("{cmd} {p}: {e}"));
@@ -44,6 +54,7 @@ fn round_trip(s: &mut S, cmd: &str, p: Json) {
     s.redo().unwrap();
     assert_eq!(format!("{:?}", archforge_mof::rows::snapshot(s.doc(), &tables().0, &tables().1).unwrap()), after, "redo of {cmd}");
 }
+/// The tables and junctions of the core, the diagrams and UML, as a project stores them.
 fn tables() -> (Vec<archforge_mof::schema::Table>, Vec<archforge_mof::schema::Junction>) {
     (
         archforge_core::TABLES.iter().chain(archforge_diagram::TABLES).chain(archforge_uml::TABLES).copied().collect(),
@@ -51,6 +62,7 @@ fn tables() -> (Vec<archforge_mof::schema::Table>, Vec<archforge_mof::schema::Ju
     )
 }
 
+/// The session's model as the rows it would save.
 fn snapshot(s: &S) -> String {
     format!("{:?}", archforge_mof::rows::snapshot(s.doc(), &tables().0, &tables().1).unwrap())
 }
@@ -71,19 +83,23 @@ fn classes(s: &mut S, names: &[&str], shown: usize) -> (String, String, Vec<Stri
     (pkg, d, ids, nodes)
 }
 
+/// The relationships of the classifier `class`, as `uml.relationship.list` gives them.
 fn relationships(s: &mut S, class: &str) -> Vec<Json> {
     s.execute("uml.relationship.list", &json!({ "class": class })).unwrap().value["relationships"].as_array().unwrap().clone()
 }
 
+/// The element with the id `id`.
 fn obj(s: &S, id: &str) -> archforge_mof::Obj {
     s.doc().by_uuid(Uuid::parse(id).unwrap()).unwrap()
 }
 
+/// The marks at the start and the end of the line of the relationship `id`.
 fn marks(s: &S, id: &str) -> [archforge_diagram::figure::EndMark; 2] {
     let line = archforge_uml::figures::line(s.doc(), obj(s, id)).unwrap();
     [line.ends[0].mark, line.ends[1].mark]
 }
 
+/// `cmd` is refused with a message naming `key`, and the model is as it was.
 fn refused(s: &mut S, cmd: &str, p: Json, key: &str) {
     let before = snapshot(s);
     let e = s.execute(cmd, &p).expect_err(&format!("{cmd} {p} is refused"));
@@ -300,4 +316,144 @@ fn the_sweep_finds_no_command_that_breaks_the_store_with_classes_related() {
     .unwrap();
     assert!(calls > 100, "{calls}");
     let _ = Value::Null;
+}
+
+/// A package with classes Order and Invoice and interfaces Payable and Refundable, all four on a
+/// class diagram: the package, the diagram, the classifiers' ids and their nodes, in that order.
+fn realizing(s: &mut S) -> (String, String, Vec<String>, Vec<String>) {
+    let (pkg, d, mut ids, mut nodes) = classes(s, &["Order", "Invoice"], 2);
+    for (i, name) in ["Payable", "Refundable"].into_iter().enumerate() {
+        let interface = run(s, "uml.interface.add", json!({ "package": pkg, "name": name }));
+        nodes.push(run(s, "diagram.place", json!({ "diagram": d, "element": interface, "x": 300 * i, "y": 400 })));
+        ids.push(interface);
+    }
+    (pkg, d, ids, nodes)
+}
+
+/// Whether the element with the id `id` is gone from the model.
+fn gone(s: &S, id: &str) -> bool {
+    s.doc().by_uuid(Uuid::parse(id).unwrap()).is_none_or(|o| !s.doc().is_alive(o))
+}
+
+/// A class realizes an interface in one undo step, owned by the class, and is drawn dashed in the
+/// muted ink to a hollow triangle at the interface; several classes realize one interface; a
+/// realization from anything but a class, to anything but an interface, or a second one from the
+/// same class to the same interface is refused and changes nothing.
+#[test]
+fn a_class_realizes_an_interface_in_one_step_drawn_dashed_to_a_hollow_triangle_and_wrong_ends_are_refused() {
+    use archforge_diagram::figure::EndMark as M;
+    let mut s = session();
+    let (_, _, c, _) = realizing(&mut s);
+    let (order, invoice, payable, refundable) = (&c[0], &c[1], &c[2], &c[3]);
+    round_trip(&mut s, "uml.realization.add", json!({ "class": order, "interface": payable }));
+    let r = relationships(&mut s, order).into_iter().find(|r| r["kind"] == "realization").unwrap();
+    assert_eq!((r["implementing"].as_str(), r["contract"].as_str()), (Some(order.as_str()), Some(payable.as_str())));
+    let id = r["id"].as_str().unwrap().to_string();
+    // Owned by its class, as UML has it, which makes the class its client and the interface its supplier.
+    let st = s.doc();
+    let (o, p, real) = (obj(&s, order), obj(&s, payable), obj(&s, &id));
+    assert_eq!(st.container(real).unwrap().map(|(owner, _)| owner), Some(o));
+    assert_eq!(archforge_uml::figures::ends(st, real), Some((o, p)));
+    assert_eq!(st.list(real, archforge_uml::dependency::CLIENT).unwrap(), vec![Value::Ref(o)]);
+    assert_eq!(st.list(real, archforge_uml::dependency::SUPPLIER).unwrap(), vec![Value::Ref(p)]);
+    // Dashed in the muted ink, a hollow triangle at the interface: neither a generalization nor a dependency.
+    let line = archforge_uml::figures::line(st, real).unwrap();
+    assert_eq!(marks(&s, &id), [M::None, M::Triangle]);
+    assert!(line.dashed && !line.styled, "{line:?}");
+    assert_eq!(relationships(&mut s, payable).len(), 1, "the interface lists it too");
+    // Several classes may realize one interface, and a class several interfaces.
+    let second = run(&mut s, "uml.realization.add", json!({ "class": invoice, "interface": payable }));
+    assert_eq!(s.view().selection, vec![obj(&s, &second)], "the new realization is selected");
+    round_trip(&mut s, "uml.realization.add", json!({ "class": order, "interface": refundable }));
+    assert_eq!(relationships(&mut s, payable).len(), 2);
+    // What would make the model wrong is refused, saying why, and changes nothing.
+    for (p, key, why) in [
+        (json!({ "class": payable, "interface": refundable }), "class", "only a class implements an interface"),
+        (json!({ "class": order, "interface": invoice }), "interface", "a class realizes only an interface"),
+        (json!({ "class": order, "interface": payable }), "interface", "the class realizes that interface already"),
+        (json!({ "class": order, "interface": order }), "interface", "only an interface"),
+        (json!({ "class": "not-an-id", "interface": payable }), "class", "not an id"),
+    ] {
+        let before = snapshot(&s);
+        let e = s.execute("uml.realization.add", &p).expect_err(&format!("{p} is refused")).to_string();
+        assert!(e.contains(key) && e.contains(why), "{p}: {e}");
+        assert_eq!(snapshot(&s), before, "{p} changed nothing");
+    }
+    // A realization has no name to rename.
+    refused(&mut s, "uml.relationship.rename", json!({ "relationship": id, "name": "pays" }), "relationship");
+}
+
+/// A realization's ends reconnect with the rules kept, its line following, and it goes with
+/// `element.remove` alone or with the class or interface at either end, each one undo step.
+#[test]
+fn a_realization_reconnects_with_its_rules_kept_and_goes_alone_or_with_either_end() {
+    let mut s = session();
+    let (_, d, c, nodes) = realizing(&mut s);
+    let (order, invoice, payable, refundable) = (&c[0], &c[1], &c[2], &c[3]);
+    let r = run(&mut s, "uml.realization.add", json!({ "class": order, "interface": payable }));
+    let edge = run(&mut s, "diagram.connect", json!({ "diagram": d, "element": r, "source": nodes[0], "target": nodes[2] }));
+    let end_of = |s: &S, prop| s.doc().get(obj(s, &edge), prop).unwrap().as_ref().unwrap();
+    // The interface end moves to another interface, the line with it.
+    round_trip(&mut s, "uml.relationship.reconnect", json!({ "relationship": r, "end": "target", "class": refundable }));
+    assert_eq!(end_of(&s, archforge_diagram::edge::TARGET), obj(&s, &nodes[3]));
+    assert!(relationships(&mut s, payable).is_empty(), "Payable is no longer realized");
+    assert_eq!(s.doc().list(obj(&s, &r), archforge_uml::dependency::SUPPLIER).unwrap(), vec![Value::Ref(obj(&s, refundable))]);
+    // The class end moves to another class, which then owns it.
+    round_trip(&mut s, "uml.relationship.reconnect", json!({ "relationship": r, "end": "source", "class": invoice }));
+    assert_eq!(end_of(&s, archforge_diagram::edge::SOURCE), obj(&s, &nodes[1]));
+    assert_eq!(s.doc().container(obj(&s, &r)).unwrap().map(|(o, _)| o), Some(obj(&s, invoice)));
+    assert_eq!(s.doc().list(obj(&s, &r), archforge_uml::dependency::CLIENT).unwrap(), vec![Value::Ref(obj(&s, invoice))]);
+    assert!(relationships(&mut s, order).is_empty());
+    // Its rules hold: a class's end only on a class, the interface's only on an interface, once.
+    run(&mut s, "uml.realization.add", json!({ "class": order, "interface": refundable }));
+    refused(&mut s, "uml.relationship.reconnect", json!({ "relationship": r, "end": "source", "class": payable }), "only a class implements");
+    refused(&mut s, "uml.relationship.reconnect", json!({ "relationship": r, "end": "target", "class": order }), "only an interface");
+    refused(&mut s, "uml.relationship.reconnect", json!({ "relationship": r, "end": "source", "class": order }), "already");
+    // Dropped back where it was, it stays as it is.
+    run(&mut s, "uml.relationship.reconnect", json!({ "relationship": r, "end": "target", "class": refundable }));
+    // Removed alone it takes its line; the classifiers stay.
+    let edges = |s: &S| s.doc().list(obj(s, &d), archforge_diagram::diagram::EDGE).unwrap().len();
+    assert_eq!(edges(&s), 1);
+    round_trip(&mut s, "element.remove", json!({ "ids": [r] }));
+    assert!(gone(&s, &r) && edges(&s) == 0);
+    s.undo().unwrap();
+    // The interface removed takes every realization of it along; the class removed takes its own.
+    let other = relationships(&mut s, order)[0]["id"].as_str().unwrap().to_string();
+    round_trip(&mut s, "element.remove", json!({ "ids": [refundable] }));
+    assert!(gone(&s, &r) && gone(&s, &other) && edges(&s) == 0);
+    s.undo().unwrap();
+    round_trip(&mut s, "element.remove", json!({ "ids": [invoice] }));
+    assert!(gone(&s, &r) && !gone(&s, &other), "only Invoice's realization went");
+    assert_eq!(edges(&s), 0);
+}
+
+/// Realizations, with their lines, come back from their rows identical, as a saved project opens.
+#[test]
+fn realizations_come_back_from_their_rows_identical() {
+    let mut s = session();
+    let (_, d, c, nodes) = realizing(&mut s);
+    let r = run(&mut s, "uml.realization.add", json!({ "class": c[0], "interface": c[2] }));
+    run(&mut s, "uml.realization.add", json!({ "class": c[1], "interface": c[2] }));
+    run(&mut s, "diagram.connect", json!({ "diagram": d, "element": r, "source": nodes[0], "target": nodes[2] }));
+    let (tables, junctions) = tables();
+    let saved = archforge_mof::rows::snapshot(s.doc(), &tables, &junctions).unwrap();
+    let mut back = store(1 << 20);
+    archforge_mof::rows::restore(&mut back, &saved, &tables, &junctions).unwrap();
+    assert_eq!(archforge_mof::rows::snapshot(&back, &tables, &junctions).unwrap(), saved, "the rows read back are the rows written");
+    let at = |id: &str| back.by_uuid(Uuid::parse(id).unwrap()).unwrap();
+    assert_eq!(archforge_uml::figures::ends(&back, at(&r)), Some((at(&c[0]), at(&c[2]))));
+    assert_eq!(archforge_uml::relations::relationships_of(&back, at(&c[2])).len(), 2);
+    assert_eq!(archforge_uml::figures::line(&back, at(&r)).map(|l| l.dashed), Some(true));
+}
+
+/// The command sweep, with a realization, its class and its interface among the ids, breaks nothing.
+#[test]
+fn the_sweep_over_realizations_breaks_nothing() {
+    let mut s = session();
+    let (pkg, d, c, nodes) = realizing(&mut s);
+    let r = run(&mut s, "uml.realization.add", json!({ "class": c[0], "interface": c[2] }));
+    run(&mut s, "diagram.connect", json!({ "diagram": d, "element": r, "source": nodes[0], "target": nodes[2] }));
+    let ids = [pkg.as_str(), d.as_str(), c[0].as_str(), c[1].as_str(), c[2].as_str(), c[3].as_str(), r.as_str(), "not-an-id"];
+    let calls = sweep_with(&mut s, &ids, |st| format!("{:?}", archforge_mof::rows::snapshot(st, &tables().0, &tables().1).unwrap())).unwrap();
+    assert!(calls > 100, "{calls}");
 }

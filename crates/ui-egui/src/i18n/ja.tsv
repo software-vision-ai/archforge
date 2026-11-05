@@ -591,10 +591,12 @@ str		This is the top package: zooming out goes no further	ここが最上位の�
 str		Only a package this diagram's package holds goes on it	この図のパッケージに含まれるパッケージだけを置けます
 # クラスの関係
 str		A bound can be at most {max}.	境界は最大 {max} までです。
+str		A class realizes only an interface	クラスが実現できるのはインターフェースだけです
 str		A relationship joins two classes or interfaces	関係は 2 つのクラスまたはインターフェースを結びます
 str		Add association	関連を追加
 str		Add dependency	依存を追加
 str		Add generalization	汎化を追加
+str		Add interface realization	インターフェース実現を追加
 str		Aggregation	集約
 str		Association	関連
 str		Association · model	関連 · モデル
@@ -612,12 +614,19 @@ str		From	始点
 str		General	一般
 str		Generalization	汎化
 str		Generalization · model	汎化 · モデル
+str		Implementing class	実装クラス
+str		Interface realization	インターフェース実現
+str		Interface realization · model	インターフェース実現 · モデル
+str		Interface realization: from the implementing class to its interface	インターフェース実現：実装クラスからそのインターフェースへ
 str		Navigable	ナビゲーション可能
 str		On this association · {n}	この関連に · {n}
 str		On this dependency · {n}	この依存に · {n}
 str		On this generalization · {n}	この汎化に · {n}
+str		On this interface realization · {n}	このインターフェース実現に · {n}
+str		Only a class implements an interface	インターフェースを実装できるのはクラスだけです
 str		Or type a number or range	または数値か範囲を入力
 str		Pick a multiplicity	多重度を選ぶ
+str		Realized interface	実現されるインターフェース
 str		Relationship kinds	関係の種類
 str		Shared	共有
 str		Specific	特化
@@ -625,8 +634,10 @@ str		Supplier	サプライヤー
 str		The lower bound cannot be *.	下限を * にはできません。
 str		The upper bound must be at least {lower}.	上限は {lower} 以上にしてください。
 str		This association	この関連
+str		This class realizes that interface already	このクラスはそのインターフェースをすでに実現しています
 str		This dependency	この依存
 str		This generalization	この汎化
+str		This interface realization	このインターフェース実現
 str		To	終点
 str		Type a whole number, a range such as 2..5, or *.	整数、2..5 のような範囲、または * を入力してください。
 str		{what} removed	{what}を削除しました

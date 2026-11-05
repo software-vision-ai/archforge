@@ -5,15 +5,16 @@
 //! roles and multiplicities, an open arrow at every end it navigates to (owner decision), and a
 //! diamond, which takes the place of an arrow at its end, at the whole of an aggregation (hollow) or a composition (filled); a
 //! generalization as a line to a hollow triangle at the general class; a dependency dashed, with an
-//! open arrow at its supplier. The canvas draws these descriptions.
+//! open arrow at its supplier; an interface realization dashed in the muted ink, with a hollow
+//! triangle at its interface. The canvas draws these descriptions.
 
 use archforge_diagram::figure::{Card, End, EndMark, Line, Row, Text, Tone};
 use archforge_mof::{Obj, Store, Value};
 
 use crate::{
-    ASSOCIATION, AggregationKind, CLASS, DEPENDENCY, GENERALIZATION, INTERFACE, ParameterDirectionKind, VisibilityKind, association,
-    behavioral_feature, class, dependency, generalization, literal_integer, literal_unlimited_natural, multiplicity_element, named_element,
-    operation, parameter, property, typed_element,
+    ASSOCIATION, AggregationKind, CLASS, DEPENDENCY, GENERALIZATION, INTERFACE, INTERFACE_REALIZATION, ParameterDirectionKind, VisibilityKind,
+    association, behavioral_feature, class, dependency, generalization, interface_realization, literal_integer, literal_unlimited_natural,
+    multiplicity_element, named_element, operation, parameter, property, typed_element,
 };
 
 /// The most parameters an operation's row names, and the longest row a card draws: a row is
@@ -196,7 +197,8 @@ fn aggregation(store: &Store, end: Obj) -> AggregationKind {
     }
 }
 
-/// The classes an association, a generalization or a dependency joins, as its line runs.
+/// The classes an association, a generalization, a dependency or an interface realization joins, as
+/// its line runs: a realization from its implementing class to its interface.
 pub fn ends(store: &Store, element: Obj) -> Option<(Obj, Obj)> {
     match store.class_of(element).ok()? {
         c if c == ASSOCIATION => {
@@ -208,11 +210,14 @@ pub fn ends(store: &Store, element: Obj) -> Option<(Obj, Obj)> {
             Some((specific, one(store, element, generalization::GENERAL)?))
         }
         c if c == DEPENDENCY => Some((*list(store, element, dependency::CLIENT).first()?, *list(store, element, dependency::SUPPLIER).first()?)),
+        c if c == INTERFACE_REALIZATION => {
+            Some((one(store, element, interface_realization::IMPLEMENTING_CLASSIFIER)?, one(store, element, interface_realization::CONTRACT)?))
+        }
         _ => None,
     }
 }
 
-/// The line of an association, a generalization or a dependency.
+/// The line of an association, a generalization, a dependency or an interface realization.
 pub fn line(store: &Store, element: Obj) -> Option<Line> {
     match store.class_of(element).ok()? {
         c if c == ASSOCIATION => {
@@ -249,6 +254,16 @@ pub fn line(store: &Store, element: Obj) -> Option<Line> {
         c if c == DEPENDENCY => Some(Line {
             ends: [End::marked(EndMark::None), End::marked(EndMark::OpenArrow)],
             styled: true,
+            dashed: true,
+            status: None,
+            note: None,
+            badge: false,
+            resolvable: false,
+        }),
+        // Thin in the muted ink as a generalization is, but dashed: realizing is not specializing.
+        c if c == INTERFACE_REALIZATION => Some(Line {
+            ends: [End::marked(EndMark::None), End::marked(EndMark::Triangle)],
+            styled: false,
             dashed: true,
             status: None,
             note: None,

@@ -591,10 +591,12 @@ str		This is the top package: zooming out goes no further	Este é o pacote de to
 str		Only a package this diagram's package holds goes on it	Só cabe um pacote que esteja dentro do pacote deste diagrama
 # Relacionar classes
 str		A bound can be at most {max}.	Um limite pode ser no máximo {max}.
+str		A class realizes only an interface	Uma classe só realiza uma interface
 str		A relationship joins two classes or interfaces	Uma relação liga duas classes ou interfaces
 str		Add association	Adicionar associação
 str		Add dependency	Adicionar dependência
 str		Add generalization	Adicionar generalização
+str		Add interface realization	Adicionar realização de interface
 str		Aggregation	Agregação
 str		Association	Associação
 str		Association · model	Associação · modelo
@@ -612,12 +614,19 @@ str		From	De
 str		General	Geral
 str		Generalization	Generalização
 str		Generalization · model	Generalização · modelo
+str		Implementing class	Classe que implementa
+str		Interface realization	Realização de interface
+str		Interface realization · model	Realização de interface · modelo
+str		Interface realization: from the implementing class to its interface	Realização de interface: da classe que implementa para a sua interface
 str		Navigable	Navegável
 str		On this association · {n}	Nesta associação · {n}
 str		On this dependency · {n}	Nesta dependência · {n}
 str		On this generalization · {n}	Nesta generalização · {n}
+str		On this interface realization · {n}	Nesta realização de interface · {n}
+str		Only a class implements an interface	Só uma classe implementa uma interface
 str		Or type a number or range	Ou escreva um número ou um intervalo
 str		Pick a multiplicity	Escolher uma multiplicidade
+str		Realized interface	Interface realizada
 str		Relationship kinds	Tipos de relação
 str		Shared	Partilhada
 str		Specific	Específica
@@ -625,8 +634,10 @@ str		Supplier	Fornecedor
 str		The lower bound cannot be *.	O limite inferior não pode ser *.
 str		The upper bound must be at least {lower}.	O limite superior tem de ser pelo menos {lower}.
 str		This association	Esta associação
+str		This class realizes that interface already	Esta classe já realiza essa interface
 str		This dependency	Esta dependência
 str		This generalization	Esta generalização
+str		This interface realization	Esta realização de interface
 str		To	Para
 str		Type a whole number, a range such as 2..5, or *.	Escreva um número inteiro, um intervalo como 2..5, ou *.
 str		{what} removed	Removido: {what}

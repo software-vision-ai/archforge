@@ -7504,6 +7504,173 @@ fn the_relationship_tool_joins_interfaces_and_refuses_what_would_make_a_class_sp
     assert_eq!(edge_count(&h), before + 4);
 }
 
+/// The sample class model in `theme` with two interfaces, Payable and Refundable, placed in its
+/// empty bottom row and the whole diagram in view: the harness, every card's node by name, and the
+/// interfaces' nodes.
+fn realization_sample(theme: ThemeKind) -> (Harness<'static, Shell>, std::collections::BTreeMap<String, String>, [String; 2]) {
+    let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+    let d = h.state().canvas.active.unwrap().to_string();
+    let s = h.state_mut().session.as_mut().unwrap();
+    let st = s.doc();
+    let commerce =
+        st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::PACKAGE) && archforge_core::name_of(st, *o) == "Commerce").unwrap();
+    let commerce = st.uuid(commerce).unwrap().to_string();
+    let mut place = |name: &str, x: i32| {
+        let id = s.execute("uml.interface.add", &serde_json::json!({ "package": commerce, "name": name })).unwrap().value["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let n =
+            s.execute("diagram.place", &serde_json::json!({ "diagram": d, "element": id, "x": x, "y": 1000, "width": 290, "height": 136 })).unwrap();
+        n.value["id"].as_str().unwrap().to_string()
+    };
+    let interfaces = [place("Payable", 560), place("Refundable", 1040)];
+    h.state_mut().canvas.fit_pending = true;
+    h.run();
+    (h, nodes, interfaces)
+}
+
+/// The Relationship tool draws an interface realization from a class to an interface, dashed to a
+/// hollow triangle, as one step, and says its direction; from anything but a class it starts no
+/// line, and a drop on anything but an interface, or a second realization of the same interface, is
+/// said at the canvas's top and draws nothing; dropped on empty canvas it makes an interface. Its
+/// menu row sits after a separator; in light and dark.
+#[test]
+fn the_relationship_tool_draws_an_interface_realization_from_a_class_to_an_interface_and_refuses_the_rest() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, nodes, [payable, refundable]) = realization_sample(theme);
+        let node = |h: &Harness<'static, Shell>, id: &str| rect_of(h, &format!("workspace.canvas.node.{id}")).center();
+        let before = edge_count(&h);
+        // The menu: Interface realization, apart from the others under a separator.
+        let at = rect_of(&h, "workspace.tools.relationship-kinds").center();
+        click(&mut h, at);
+        let (dependency, realization) = (rect_of(&h, "workspace.relate.dependency"), rect_of(&h, "workspace.relate.realization"));
+        assert!(realization.top() - dependency.bottom() > 8.0, "a separator between {dependency:?} and {realization:?}");
+        {
+            use egui_kittest::kittest::Queryable;
+            assert!(h.query_by_label("Interface realization: from the implementing class to its interface").is_some(), "the row says its direction");
+        }
+        click(&mut h, realization.center());
+        assert_eq!(h.state().canvas.uml_relation, crate::uml_relate::Relate::Realization);
+        // The tool says which way it draws, in its tooltip and its accessible name.
+        let hint = {
+            use crate::kinds::DiagramKind;
+            crate::uml_ui::UmlKind.tool_hint(h.state(), "relationship")
+        };
+        assert_eq!(hint.as_deref(), Some("Interface realization: from the implementing class to its interface"));
+        let relate = |h: &mut Harness<'static, Shell>, from: egui::Pos2, to: egui::Pos2| {
+            h.state_mut().canvas.notice = None;
+            let at = rect_of(h, "workspace.tools.relationship").center();
+            click(h, at);
+            drag(h, from, to);
+        };
+        // From the class OrderLine to the interface Payable: one line, one step, no name label.
+        let (from, to) = (node(&h, &nodes["OrderLine"]), node(&h, &payable));
+        relate(&mut h, from, to);
+        assert_eq!(edge_count(&h), before + 1, "notice {:?}", h.state().canvas.notice);
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add interface realization"));
+        let made = related(&mut h, "OrderLine").into_iter().find(|r| r["kind"] == "realization").expect("the realization");
+        let line = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let r = st.by_uuid(archforge_mof::Uuid::parse(made["id"].as_str().unwrap()).unwrap()).unwrap();
+            let edge = archforge_diagram::views_of(st, r).1[0];
+            assert!(st.list(edge, archforge_diagram::edge::LABEL).unwrap().is_empty(), "a realization's line has no name");
+            archforge_uml::figures::line(st, r).unwrap()
+        };
+        assert_eq!(line.ends.map(|e| e.mark), [archforge_diagram::figure::EndMark::None, archforge_diagram::figure::EndMark::Triangle]);
+        assert!(line.dashed);
+        // Refused, said, and nothing changes: again to Payable, to a class, to a package-less spot of
+        // another kind, and from an interface, which starts no line at all.
+        let revision = h.state().session.as_ref().unwrap().revision();
+        for (from, to, why) in [
+            (nodes["OrderLine"].clone(), payable.clone(), "This class realizes that interface already"),
+            (nodes["OrderLine"].clone(), nodes["Product"].clone(), "A class realizes only an interface"),
+            (payable.clone(), refundable.clone(), "Only a class implements an interface"),
+        ] {
+            let (a, b) = (node(&h, &from), node(&h, &to));
+            relate(&mut h, a, b);
+            assert_eq!(h.state().canvas.notice.as_deref(), Some(why));
+            assert_eq!((edge_count(&h), h.state().session.as_ref().unwrap().revision()), (before + 1, revision), "nothing changed: {why}");
+        }
+        assert!(h.state().canvas.gesture.is_none(), "no line was begun from the interface");
+        // Several classes realize one interface.
+        let (from, to) = (node(&h, &nodes["Order"]), node(&h, &payable));
+        relate(&mut h, from, to);
+        assert_eq!(edge_count(&h), before + 2, "notice {:?}", h.state().canvas.notice);
+        // Dropped on empty canvas: a new interface there, its name open for typing, as one step.
+        let empty = egui::pos2(node(&h, &nodes["Catalog"]).x, node(&h, &payable).y);
+        let from = node(&h, &nodes["Customer"]);
+        relate(&mut h, from, empty);
+        let rename = h.state().canvas.rename.clone().expect("its name is open for typing");
+        assert_eq!(rename.text, "Interface 1", "notice {:?}", h.state().canvas.notice);
+        let new = named(&h, archforge_uml::INTERFACE, "Interface 1").to_string();
+        let realized = related(&mut h, "Customer").into_iter().find(|r| r["kind"] == "realization").expect("Customer realizes it");
+        assert_eq!(realized["contract"].as_str(), Some(new.as_str()));
+        assert_eq!(edge_count(&h), before + 3);
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        h.run();
+        assert_eq!(edge_count(&h), before + 2, "one step: the interface and its line went together");
+    }
+}
+
+/// A selected realization's Properties name its implementing class and its interface, with no
+/// name; its interface end drags onto another interface, and onto a class it is refused and said.
+#[test]
+fn a_realization_shows_its_class_and_interface_in_properties_and_its_ends_reconnect_by_dragging() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, nodes, [payable, refundable]) = realization_sample(theme);
+        let id = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let st = s.doc();
+            let at = |node: &str| {
+                let n = st.by_uuid(archforge_mof::Uuid::parse(node).unwrap()).unwrap();
+                st.uuid(st.get(n, archforge_diagram::node::ELEMENT).unwrap().as_ref().unwrap()).unwrap().to_string()
+            };
+            let (class, interface, d) = (at(&nodes["OrderLine"]), at(&payable), h.state().canvas.active.unwrap().to_string());
+            let s = h.state_mut().session.as_mut().unwrap();
+            let r = s.execute("uml.realization.add", &serde_json::json!({ "class": class, "interface": interface })).unwrap().value["id"]
+                .as_str()
+                .unwrap()
+                .to_string();
+            s.execute("diagram.connect", &serde_json::json!({ "diagram": d, "element": r, "source": nodes["OrderLine"], "target": payable }))
+                .unwrap();
+            s.execute("view.select", &serde_json::json!({ "ids": [r] })).unwrap();
+            r
+        };
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        h.run();
+        let found = ids(&h);
+        for want in ["workspace.properties.relationship.from", "workspace.properties.relationship.to"] {
+            assert!(found.contains(&want.to_string()), "{want} in {found:?}");
+        }
+        assert!(!found.contains(&"workspace.properties.name".to_string()), "a realization has no name to edit");
+        let shown = painted(&h);
+        for label in ["Implementing class", "Realized interface", "OrderLine", "Payable", "Interface realization"] {
+            assert!(shown.iter().any(|t| t == label), "{label} is shown in {shown:?}");
+        }
+        // The interface end dragged onto Refundable: the realization and its line move there.
+        let handle = rect_of(&h, "workspace.canvas.line-end.target").center();
+        let to = rect_of(&h, &format!("workspace.canvas.node.{refundable}")).center();
+        drag(&mut h, handle, to);
+        let now = related(&mut h, "OrderLine").into_iter().find(|r| r["kind"] == "realization").unwrap();
+        let st = h.state().session.as_ref().unwrap().doc();
+        let element = |node: &str| {
+            let n = st.by_uuid(archforge_mof::Uuid::parse(node).unwrap()).unwrap();
+            st.uuid(st.get(n, archforge_diagram::node::ELEMENT).unwrap().as_ref().unwrap()).unwrap().to_string()
+        };
+        assert_eq!(now["contract"].as_str(), Some(element(&refundable).as_str()), "notice {:?}", h.state().canvas.notice);
+        // Onto a class it is refused, said at the canvas's top, and changes nothing.
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [id] })).unwrap();
+        h.run();
+        let revision = h.state().session.as_ref().unwrap().revision();
+        let handle = rect_of(&h, "workspace.canvas.line-end.target").center();
+        let to = rect_of(&h, &format!("workspace.canvas.node.{}", nodes["Product"])).center();
+        drag(&mut h, handle, to);
+        assert_eq!(h.state().canvas.notice.as_deref(), Some("A class realizes only an interface"));
+        assert_eq!(h.state().session.as_ref().unwrap().revision(), revision);
+    }
+}
+
 /// The sample class model in `theme` and a window of `size`, its association "paid by" (Order to
 /// Payment) selected and its Properties shown; its id.
 fn paid_by(theme: ThemeKind, size: egui::Vec2) -> (Harness<'static, Shell>, archforge_mof::Uuid) {

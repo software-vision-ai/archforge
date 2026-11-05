@@ -94,6 +94,13 @@ pub(crate) trait DiagramKind: Sync {
     /// Whether the element a node shows takes part in the kind's gestures: connecting from and to
     /// it, its adorners, renaming it in place, its menu and opening its editor.
     fn takes_part(&self, store: &Store, element: Obj) -> bool;
+    /// Why a line of the tool `tool` starts nowhere at `element`, when it does not: the tool then
+    /// draws nothing and the reason is said at the canvas's top. By default every element that
+    /// takes part starts one.
+    fn line_start_problem(&self, shell: &Shell, store: &Store, tool: &'static str, element: Obj) -> Option<String> {
+        let _ = (shell, store, tool, element);
+        None
+    }
     /// Places a new element at `(x, y)` on diagram `d` with the tool `tool`.
     fn place(&self, shell: &mut Shell, tool: &'static str, d: Obj, x: f64, y: f64);
     /// Connects the elements of two nodes with the tool `tool`.
