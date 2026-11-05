@@ -423,7 +423,9 @@ What is UML's own, beside the shared rules above.
 - A data type (AR-123) is the classifier tool's fourth kind, after Enumeration, its face and menu
   icon a pair of braces (Tool · Data type), placed and named in place as `DataType 1`. It is UML's
   DataType itself, never an enumeration or a primitive type, though the metamodel makes those data
-  types too: each kind is told by its own metaclass, and a skill for every data type reaches neither.
+  types too: each kind is told by its own metaclass. A skill for every data type reaches neither:
+  an element is aimed at by its most specific kind, and a primitive type counts as a kind of its
+  own there though no skill names it yet (AR-124 decides that), so Integer and String stay out.
   Its card is plain, `«dataType»` in its eyebrow kept as written, over attributes and operations
   edited on the card and in Properties as a class's are (draft rows, ⌘↩ and ⇧⌘↩, the adorner, the
   menu's row), any visibility allowed. Properties shows Name, Package and Description, then

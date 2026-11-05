@@ -327,7 +327,9 @@ fn member_move(ctx: &mut C<'_>, p: &Params, key: &str, class_of: archforge_mof::
     let Some((c, (attributes, operations))) = lists else { return Err(refuse(key, "it belongs to no class, interface or data type")) };
     let prop = if first { attributes } else { operations };
     let all = list(ctx.doc, c, prop);
-    let from = all.iter().position(|x| *x == m).ok_or_else(|| refuse(key, "it belongs to no class, interface or data type"))? as u32;
+    let from = all.iter().position(|x| *x == m).ok_or_else(|| refuse(key, "it belongs to no class, interface or data type"))?;
+    let from = u32::try_from(from)
+        .map_err(|_| refuse(key, format!("{} sits at {from}, past the places a move reaches; a place from 0 to {}", text(p, key), u32::MAX)))?;
     let to = place(p, all.len()).min(all.len().saturating_sub(1) as u32);
     ctx.doc.move_item(c, prop, from, to).map_err(fail)?;
     Ok(json!({ "id": uuid_of(ctx.doc, m)? }))

@@ -31,9 +31,11 @@ pub const CLASS_DIAGRAM: &str = "uml.class";
 
 /// The kinds of classifier a class diagram places, each a card with its members: a class, an
 /// interface, an enumeration, whose members are its literals, and a data type, a value without
-/// identity with attributes and operations as a class has. Each is its own metaclass: an
-/// enumeration (and a primitive type) is a DataType in UML's metamodel, but the data type kind is
-/// the DataType metaclass alone.
+/// identity with attributes and operations as a class has. Each is matched by its exact metaclass,
+/// never by conformance: an enumeration and a primitive type are DataTypes in UML's metamodel, but
+/// the data type kind is the DataType metaclass alone. A primitive type is no classifier the
+/// diagram places yet (AR-124), and skills aimed at every data type skip it
+/// ([`UmlNotation`]'s aim-only kinds).
 pub const CLASSIFIERS: [ClassId; 4] = [CLASS, INTERFACE, ENUMERATION, DATA_TYPE];
 
 /// Whether `class` is one of the [`CLASSIFIERS`].
@@ -152,6 +154,13 @@ impl Notation for UmlNotation {
             (OPERATION, "operation"),
             (ASSOCIATION, "association"),
         ]
+    }
+
+    /// A primitive type is a kind of its own when a skill is aimed, though no skill names it yet
+    /// (AR-124 brings it as a kind): a skill for every data type does not reach Integer or String,
+    /// which UML's metamodel makes DataTypes.
+    fn aim_only_kinds(&self) -> &'static [ClassId] {
+        &[PRIMITIVE_TYPE]
     }
 
     /// An association's end is a property but no attribute: its association carries the skill.

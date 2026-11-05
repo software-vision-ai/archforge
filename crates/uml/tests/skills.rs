@@ -178,6 +178,32 @@ fn a_data_type_carries_skills_and_a_package_skill_for_data_types_aims_only_at_th
     assert!(skills(s.doc()).iter().all(|k| archforge_core::skills::name_of(s.doc(), *k) != "Values"), "its skill went with it");
 }
 
+/// A model-level skill for every data type skips the built-in types: Integer is a PrimitiveType,
+/// which UML's metamodel makes a DataType, but a primitive type is a kind of its own when a skill
+/// is aimed, and no skill names it yet (AR-124). A data type still gets the skill.
+#[test]
+fn a_skill_for_every_data_type_skips_the_built_in_primitive_types() {
+    let mut s = session();
+    let m = model(&mut s);
+    let money = run(&mut s, "uml.data-type.add", json!({ "package": m.sales, "name": "Money" }));
+    run(&mut s, "uml.attribute.add", json!({ "class": m.order, "name": "count", "type": "Integer" }));
+    run(&mut s, "skill.add", json!({ "subject": "", "name": "Values", "applies_to": "data type" }));
+    let integer = {
+        let st = s.doc();
+        let t = st
+            .alive()
+            .find(|o| st.class_of(*o).ok() == Some(archforge_uml::PRIMITIVE_TYPE) && archforge_core::name_of(st, *o) == "Integer")
+            .expect("Integer is made in Types when first used");
+        st.uuid(t).unwrap().to_string()
+    };
+    let effective = |s: &mut S, element: &str| {
+        let out = s.execute("skill.effective", &json!({ "element": element })).unwrap().value;
+        out["skills"].as_array().unwrap().iter().map(|k| k["name"].as_str().unwrap().to_string()).collect::<Vec<_>>()
+    };
+    assert_eq!(effective(&mut s, &integer), Vec::<String>::new(), "a primitive type is no data type here");
+    assert_eq!(effective(&mut s, &money), ["Values"], "a data type gets it");
+}
+
 /// An interface carries skills as a class does, and a package skill for interfaces aims at them alone.
 #[test]
 fn an_interface_and_its_members_carry_skills_and_a_package_skill_for_interfaces_aims_only_at_them() {
