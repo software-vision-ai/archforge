@@ -548,12 +548,14 @@ What is UML's own, beside the shared rules above.
 - A selected class-diagram line shows a round handle at each end, on the line a few points clear
   of the end's mark as drawn (arrowhead, triangle or diamond), round a bend near the end too, so
   the mark shows whole; no square is drawn on such a tip. An end without a mark keeps its handle
-  on the end. On a short line each handle stops half a hit box short of the middle, so the two
-  never meet and each takes its own press (AR-191). One dragged onto another class moves that end
-  there, its lines on every diagram following. A realization's class end moves onto
-  another class and its interface end onto another interface, with the same refusals as drawing
-  one: a drop elsewhere, or onto an interface the class realizes already, is said at the canvas's
-  top and changes nothing. Delete removes the line's relationship with a toast and Undo.
+  on the end. On a short line each handle stops half a hit box short of the middle, and where a
+  line bends back so the two would still meet on screen they are placed together, apart, giving
+  up as little of a mark's clearance as they must, so each takes its own press (AR-191). One
+  dragged onto another class moves that end there, its lines on every diagram following. A
+  realization's class end moves onto another class and its interface end onto another interface,
+  with the same refusals as drawing one: a drop elsewhere, or onto an interface the class realizes
+  already, is said at the canvas's top and changes nothing. Delete removes the line's relationship
+  with a toast and Undo.
 - Packages nest as deep as needed. The Models tree shows a package, then the packages it holds,
   then its classes, and under an open class its attributes (with their type) and operations
   (`name()`, with their return type), every level folded until opened; Expand all opens packages

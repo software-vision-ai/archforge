@@ -7784,6 +7784,106 @@ fn a_short_lines_two_end_handles_stay_apart_and_each_takes_its_own_press() {
     }
 }
 
+/// The two end handles of a line bent back on itself are placed together so their hit boxes never
+/// meet on screen: a short U whose ends come back close, a diamond at one and an arrow at the
+/// other, gets two handles apart, falling short of the marks' clearance only as far as it must;
+/// a line whose handles are apart already keeps the places each takes alone (AR-191).
+#[test]
+fn a_bent_lines_two_end_handles_are_placed_together_so_their_hit_boxes_never_meet() {
+    use crate::canvas::{END_HANDLE_HIT, end_handle_at, end_handles_at};
+    use archforge_diagram::figure::EndMark;
+    let hit = |at: egui::Pos2| egui::Rect::from_center_size(at, egui::Vec2::splat(END_HANDLE_HIT));
+    let u = [egui::pos2(0.0, 0.0), egui::pos2(30.0, 0.0), egui::pos2(30.0, 12.0), egui::pos2(0.0, 12.0)];
+    let back: Vec<egui::Pos2> = u.iter().rev().copied().collect();
+    let marks = [EndMark::FilledDiamond, EndMark::OpenArrow];
+    let alone = [end_handle_at(&u, marks[0], 0.5).unwrap(), end_handle_at(&back, marks[1], 0.5).unwrap()];
+    assert!(hit(alone[0]).intersects(hit(alone[1])), "placed alone, their boxes meet: {alone:?}");
+    let [a, b] = end_handles_at(&u, marks, 0.5);
+    let (a, b) = (a.unwrap_or(u[0]), b.unwrap_or(u[3]));
+    assert!(!hit(a).intersects(hit(b)), "placed together, apart: {a:?} {b:?}");
+    // A long straight line keeps the places each end takes alone.
+    let straight = [egui::pos2(0.0, 0.0), egui::pos2(400.0, 0.0)];
+    let backwards = [straight[1], straight[0]];
+    assert_eq!(
+        end_handles_at(&straight, [EndMark::Triangle, EndMark::FilledDiamond], 1.0),
+        [end_handle_at(&straight, EndMark::Triangle, 1.0), end_handle_at(&backwards, EndMark::FilledDiamond, 1.0)]
+    );
+}
+
+/// On the canvas, a composition routed in a short U between two small cards, its ends close at
+/// 50 %, shows its two end handles with hit boxes apart, and each press reconnects its own end; in
+/// light and dark (AR-191).
+#[test]
+fn a_short_u_shaped_lines_end_handles_stay_apart_and_each_takes_its_own_press() {
+    use archforge_diagram::figure::EndMark;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, order, _) = nested_orders(theme);
+        let (orders, d) = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let p = st.uuid(archforge_uml::commands::package_of(st, st.by_uuid(order).unwrap()).unwrap()).unwrap();
+            (p, h.state().canvas.active.unwrap())
+        };
+        let s = h.state_mut().session.as_mut().unwrap();
+        let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
+        let mut add = |name: &str, y: i32| {
+            let c = id(s.execute("uml.class.add", &serde_json::json!({ "package": orders.to_string(), "name": name })).unwrap().value);
+            s.execute("diagram.place", &serde_json::json!({ "diagram": d.to_string(), "element": c, "x": 100, "y": y, "width": 40, "height": 20 }))
+                .unwrap();
+            c
+        };
+        let (whole, part) = (add("Whole", 600), add("Part", 624));
+        let a = id(s.execute("uml.association.add", &serde_json::json!({ "from": whole, "to": part, "kind": "composition" })).unwrap().value);
+        s.execute("uml.association.set-end", &serde_json::json!({ "association": a, "end": 1, "navigable": true })).unwrap();
+        s.execute("diagram.connect-all", &serde_json::json!({ "diagram": d.to_string() })).unwrap();
+        // Out of both cards' right sides and back: a U whose ends are 24 apart, 12 at 50 %.
+        let edge = {
+            let st = s.doc();
+            let a = st.by_uuid(archforge_mof::Uuid::parse(&a).unwrap()).unwrap();
+            st.uuid(archforge_diagram::views_of(st, a).1[0]).unwrap()
+        };
+        let route = serde_json::json!({ "edge": edge.to_string(), "points": [{ "x": 200, "y": 610 }, { "x": 200, "y": 634 }] });
+        s.execute("diagram.route", &route).unwrap();
+        s.execute("view.select", &serde_json::json!({ "ids": [a] })).unwrap();
+        let marks = {
+            let st = s.doc();
+            let line = archforge_uml::figures::line(st, st.by_uuid(archforge_mof::Uuid::parse(&a).unwrap()).unwrap()).unwrap();
+            [line.ends[0].mark, line.ends[1].mark]
+        };
+        assert!(marks.iter().all(|m| *m != EndMark::None), "a mark at both ends: {marks:?}");
+        h.state_mut().canvas.zoom = 0.5;
+        h.run();
+        let (source, target) = (rect_of(&h, "workspace.canvas.line-end.source"), rect_of(&h, "workspace.canvas.line-end.target"));
+        assert!(!source.expand(2.0).intersects(target.expand(2.0)), "{theme:?}: hit boxes {source:?} and {target:?} apart");
+        for (rect, is_source) in [(source, true), (target, false)] {
+            h.event(egui::Event::PointerMoved(rect.center()));
+            h.event(egui::Event::PointerButton {
+                pos: rect.center(),
+                button: egui::PointerButton::Primary,
+                pressed: true,
+                modifiers: egui::Modifiers::NONE,
+            });
+            h.run();
+            h.event(egui::Event::PointerMoved(rect.center() + egui::vec2(40.0, 40.0)));
+            h.run();
+            let moving = matches!(h.state().canvas.gesture, Some(crate::editing::Gesture::Reconnect { source, .. }) if source == is_source);
+            assert!(
+                moving,
+                "{theme:?}: the {} handle takes its own press, {:?}",
+                if is_source { "source" } else { "target" },
+                h.state().canvas.gesture
+            );
+            h.state_mut().canvas.gesture = None;
+            h.event(egui::Event::PointerButton {
+                pos: rect.center(),
+                button: egui::PointerButton::Primary,
+                pressed: false,
+                modifiers: egui::Modifiers::NONE,
+            });
+            h.run();
+        }
+    }
+}
+
 /// The Relationship tool draws the kind its menu chose, refuses a cycle, and makes a class on empty canvas.
 #[test]
 fn the_relationship_tool_draws_the_kind_its_menu_chose_refuses_a_cycle_and_a_drop_on_empty_canvas_makes_a_class() {

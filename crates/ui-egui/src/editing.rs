@@ -1508,18 +1508,18 @@ fn selected_line(
 }
 
 /// A selected line's two end handles, each on the line clear of its end's mark so the mark shows
-/// whole, on the end itself where it has none ([`crate::canvas::end_handle_at`]): each drags onto
-/// another element to move that end there.
+/// whole, on the end itself where it has none, the two kept apart on screen
+/// ([`crate::canvas::end_handles_at`]): each drags onto another element to move that end there.
 fn line_ends(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, view: View, d: Obj) {
     let Some((element, route, marks)) = shell.session.as_ref().and_then(|s| selected_line(s.doc(), s.view(), d, &s.view().selection)) else {
         return;
     };
     let screen: Vec<Pos2> = route.iter().map(|(x, y)| view.to_screen(*x, *y)).collect();
     let (Some(a), Some(b)) = (screen.first().copied(), screen.last().copied()) else { return };
-    let backwards: Vec<Pos2> = screen.iter().rev().copied().collect();
+    // Both handles placed together, so their hit boxes never meet on screen.
+    let [at_source, at_target] = crate::canvas::end_handles_at(&screen, marks, view.zoom);
     let paint = ui.painter().with_clip_rect(r);
-    for (source, points, mark, fixed) in [(true, &screen, marks[0], b), (false, &backwards, marks[1], a)] {
-        let at = crate::canvas::end_handle_at(points, mark, view.zoom).unwrap_or(if source { a } else { b });
+    for (source, at, fixed) in [(true, at_source.unwrap_or(a), b), (false, at_target.unwrap_or(b), a)] {
         let handle = Rect::from_center_size(at, Vec2::splat(12.0));
         if !r.contains(at) {
             continue;

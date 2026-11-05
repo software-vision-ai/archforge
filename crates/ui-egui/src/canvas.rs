@@ -1531,9 +1531,8 @@ fn draw_edge(
         if selected {
             // A square at each end, but where the end's round handle moved past its mark: the
             // handle marks that end, and a square at the tip would sit on the mark.
-            let backwards: Vec<Pos2> = points.iter().rev().copied().collect();
-            let ends = [(points[0], &points, line.ends[0].mark), (points[n - 1], &backwards, line.ends[1].mark)];
-            for (q, _, _) in ends.into_iter().filter(|(_, from, mark)| end_handle_at(from, *mark, z).is_none()) {
+            let moved = end_handles_at(&points, [line.ends[0].mark, line.ends[1].mark], z);
+            for (q, _) in [(points[0], moved[0]), (points[n - 1], moved[1])].into_iter().filter(|(_, at)| at.is_none()) {
                 let h = Rect::from_center_size(q, Vec2::splat(6.0));
                 paint.rect_filled(h, 1.0, p.surface);
                 paint.rect_stroke(h, 1.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
@@ -1635,6 +1634,70 @@ pub(crate) fn end_handle_at(points: &[Pos2], mark: EndMark, z: f32) -> Option<Po
         .map(|d| at_length(points, d))
         .find(|at| outside_by(&outline, *at) >= clear);
     Some(at.unwrap_or_else(|| at_length(points, limit)))
+}
+
+/// The most places along each half of a line the two end handles are tried at together.
+const END_HANDLE_TRIES: usize = 64;
+
+/// Where a selected line's two end handles sit, `points` running from its first end to its
+/// second, `marks` its ends' marks: each as [`end_handle_at`] places it (None, on its end), unless
+/// the two hit boxes would meet on screen, as on a short line bent back on itself. Then the pair
+/// is chosen together, each on its own half of the line, so the boxes stay apart: one that clears
+/// both marks if there is one, else one that keeps both pressable, falling short of the marks'
+/// clearance by as little as it can; the nearest to where they were placed alone. Where no two
+/// places are apart, the pair furthest apart is taken.
+pub(crate) fn end_handles_at(points: &[Pos2], marks: [EndMark; 2], z: f32) -> [Option<Pos2>; 2] {
+    let backwards: Vec<Pos2> = points.iter().rev().copied().collect();
+    let alone = [end_handle_at(points, marks[0], z), end_handle_at(&backwards, marks[1], z)];
+    let (Some(&start), Some(&end)) = (points.first(), points.last()) else { return alone };
+    let placed = [alone[0].unwrap_or(start), alone[1].unwrap_or(end)];
+    let total: f32 = points.windows(2).map(|w| (w[1] - w[0]).length()).sum();
+    if handles_apart(placed[0], placed[1]) || points.len() < 2 || total <= 0.0 || !total.is_finite() {
+        return alone;
+    }
+    // Each end's places on its own half, with how far each falls short of clearing its mark.
+    let half = total / 2.0;
+    let step = half / END_HANDLE_TRIES as f32;
+    let clear = END_HANDLE + END_HANDLE_GAP;
+    let places = |route: &[Pos2], mark: EndMark| -> Vec<(f32, Pos2, f32)> {
+        let outline = route.get(1).map(|next| mark_outline(mark, route[0], *next, z)).unwrap_or_default();
+        (0..=END_HANDLE_TRIES)
+            .map(|i| {
+                let d = i as f32 * step;
+                let at = at_length(route, d);
+                let short = if outline.is_empty() { 0.0 } else { (clear - outside_by(&outline, at)).max(0.0) };
+                (d, at, short)
+            })
+            .collect()
+    };
+    let (first, second) = (places(points, marks[0]), places(&backwards, marks[1]));
+    let mut best: Option<(f32, [(f32, Pos2); 2])> = None;
+    let mut widest: Option<(f32, [(f32, Pos2); 2])> = None;
+    for &(da, a, sa) in &first {
+        for &(db, b, sb) in &second {
+            let gap = (a.x - b.x).abs().max((a.y - b.y).abs());
+            if widest.is_none_or(|(w, _)| gap > w) {
+                widest = Some((gap, [(da, a), (db, b)]));
+            }
+            if handles_apart(a, b) {
+                // Falling short of a mark's clearance weighs far more than moving a handle.
+                let cost = (sa + sb) * 1000.0 + (a - placed[0]).length() + (b - placed[1]).length();
+                if best.is_none_or(|(c, _)| cost < c) {
+                    best = Some((cost, [(da, a), (db, b)]));
+                }
+            }
+        }
+    }
+    match best.or(widest) {
+        Some((_, pair)) => pair.map(|(d, at)| (d > 0.0).then_some(at)),
+        None => alone,
+    }
+}
+
+/// Whether two end handles at `a` and `b` keep their hit boxes apart on screen, with a point
+/// between them.
+fn handles_apart(a: Pos2, b: Pos2) -> bool {
+    (a.x - b.x).abs().max((a.y - b.y).abs()) >= END_HANDLE_HIT + 1.0
 }
 
 /// The point `d` along the polyline `points` from its start; its end when it is shorter.
