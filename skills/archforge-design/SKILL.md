@@ -5,8 +5,8 @@ description: "Use before designing or changing how Archforge looks or behaves: a
 
 # How Archforge looks and behaves
 
-The decisions taken so far about the interface, as rules. `skills/archforge-ui/SKILL.md` says how
-to draw them. A change that departs from one of these is a new decision for the owner: say so in
+The decisions taken so far about the interface, as rules. The archforge-ui skill says how to draw
+them. A change that departs from one of these is a new decision for the owner: say so in
 the change, and update this file in the same change.
 
 Every rule here holds for every notation (ER now, UML and C4 next) unless it sits under "ER
@@ -512,6 +512,77 @@ What is UML's own, beside the shared rules above.
 
 On every line: a role, and a label at the line's middle, sit above a level stretch of the line and
 beside an upright one, never on the line or its mark.
+
+### Structure for 0.12.0 (owner review 2026-11-05)
+
+The design is page 06 of the design file, in light and dark. Placing a classifier, editing a
+member and drawing a relationship stay three separate gestures:
+
+- Placing a classifier. The Class tool becomes the classifier tool: an icon button with a chevron
+  at its right, in Class's place. The chevron opens the kinds, each with its icon and name: Class,
+  Interface, Enumeration, Data type, Primitive type. The current kind is marked; arrow keys move,
+  Enter picks, Escape closes, and picking arms the tool. Its face and tooltip name the kind. A click
+  on the canvas places one in the diagram's package, its name open for typing, and the tool goes
+  back to Select. The kind stays for the next placement while the window lives; a new window starts
+  at Class. Only kinds that work are listed. Models' `+` does not use the tool's kind: it offers
+  each kind that works as a row of its own (Class, Interface, …) in the selected package. In Models
+  every classifier is a row under its package with its kind's icon; an interface's and a data
+  type's attributes and operations sit below it as a class's do, an enumeration's literals below
+  it, and a primitive type has none. Dragging any classifier from Models places it, as a class is
+  placed.
+- Cards. A class keeps `CLASS` in its eyebrow. The other kinds show their UML keyword there instead:
+  `«interface»`, `«enumeration»`, `«dataType»`, `«primitive»`. An interface and a data type have
+  attributes and operations as a class has. An enumeration has one compartment, its literals in
+  their order. A primitive type has no compartment: its card shows the `«primitive»` eyebrow and
+  its name.
+- Literals are members of their enumeration, never boxes of their own. They are added with the `+`
+  of the Literals compartment, or ⌘↩, as a draft row with a name only; Enter writes one and opens
+  the next. A double click on a literal's row on the card edits it in place, as a member typed on
+  the card is (the UML card rule), not in Properties: this replaces, for literals, the shared rule
+  that a double click on a member opens its editor in Properties. Properties lists them under `Literals · n`; an
+  editor there has Name, Remove, Move up, Move down, Cancel and Apply. Names are told apart within
+  their enumeration compared without case, so `Paid` and `paid` clash; a refusal sits under the row
+  and leaves the model as it was.
+- Drawing relationships. The Relationship menu gains, after a separator, Interface realization and
+  Association class.
+  - Interface realization is drawn from the implementing class to its interface: a dashed line in
+    the muted ink, with a hollow triangle at the interface. Only a class or an association class
+    implements, as in UML, where an implementing classifier is behaviored; from an interface, an
+    enumeration, a data type or a primitive type the tool starts no line. Dropped on empty canvas it
+    makes a new interface there, named in place, with the line, as one undo step, as the
+    Relationship tool makes a class. A drop on any other element than an interface, or a second
+    realization from the same class to the same interface, is refused at the canvas's top and draws
+    nothing; several classes may realize one interface.
+  - An association class is drawn between two classes as an association is; dropped on empty
+    canvas it makes a new class there, named in place, as an association does. The line and a card
+    above its middle appear as one element and one undo step, the card's name open for typing and
+    its eyebrow `ASSOCIATION CLASS`. The card moves on its own; a dashed tie joins it to the line's
+    middle. Selecting the line or the card selects the one element, and Properties shows its ends,
+    attributes and operations. Remove from this diagram takes the line and the card away; Delete
+    from the model deletes the element. It is the one class not added with the classifier tool:
+    Models' `+` does not offer it, and it is made only by drawing. In Models it is a row under its
+    package; dragging it onto a diagram places its card, with its line where both classes are
+    shown.
+- Property modifiers live in the attribute editor and the association end's editor, never in a tool
+  of their own: Default value; Static, Derived, Read only, Ordered and Unique; and Subsets and
+  Redefines. Subsets offers the other properties of the property's context and of its general
+  classifiers whose type the property's type conforms to, whose upper bound is not below the
+  property's, and whose name differs from the property's (UML 2.5.1, 9.9.17,
+  `subsetting_context_conforms`, `subsetting_rules` and `subsetted_property_names`). An attribute's
+  context is its classifier; an association end's context is the classifiers at the association's
+  other ends, so an end offers their properties. Redefines
+  offers only properties of the general classifiers (`redefined_property_inherited`) with which the
+  property is consistent (`Property::isConsistentWith`): a conforming type, a multiplicity whose
+  lower and upper bounds both lie within the target's, and composite aggregation wherever the
+  target is composite (a composite property may redefine one that is not). These are
+  the user's own attributes and ends: each keeps its subsets and redefines in its own Property
+  fields, so an association's end offers both as an attribute does. The generator's drop of
+  subsets on association-owned ends concerns only UML's own metamodel, not these. On a card a derived attribute starts with `/`, a
+  default follows `=`, and braces list what differs from the usual (`{readOnly}`, `{ordered}`,
+  `{nonunique}`, `{subsets name}`, `{redefines name}`); unique is the usual and is not said. An
+  association end follows the same order beside its line: `/` before the role when derived, the
+  multiplicity, `= default` after it, then the braces, as in `/items 0..* = none {ordered}`. Static
+  has no mark yet, on a card or an end; its underlining comes with 0.13.0.
 
 ## Not decided yet
 The menu bar's structure; how a colour chosen in Appearance and the key-status colour combine;
