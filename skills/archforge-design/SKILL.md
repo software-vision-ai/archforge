@@ -503,7 +503,8 @@ member and drawing a relationship stay three separate gestures:
 - Cards. A class keeps `CLASS` in its eyebrow. The other kinds show their UML keyword there instead:
   `«interface»`, `«enumeration»`, `«dataType»`, `«primitive»`. An interface and a data type have
   attributes and operations as a class has. An enumeration has one compartment, its literals in
-  their order. A primitive type shows its name only.
+  their order. A primitive type has no compartment: its card shows the `«primitive»` eyebrow and
+  its name.
 - Literals are members of their enumeration, never boxes of their own. They are added with the `+`
   of the Literals compartment, or ⌘↩, as a draft row with a name only; Enter writes one and opens
   the next. A double click edits one in place. Properties lists them under `Literals · n`; an
