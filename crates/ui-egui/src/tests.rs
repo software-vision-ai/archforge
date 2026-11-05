@@ -9167,6 +9167,37 @@ fn primitive_types_are_listed_added_with_the_plus_found_and_dragged_while_the_bu
     }
 }
 
+/// The package Types is not removed from Models while it keeps the built-in types, which Models
+/// does not show: Delete says why under the tree, in the user's words, and nothing changes. Its
+/// rows agree with what it is said to hold: emptied of what the user put there, it holds nothing
+/// to show. In light and dark.
+#[test]
+fn models_says_why_the_package_types_stays_and_counts_only_what_it_shows() {
+    use crate::notation_ui::NotationUi;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        let types = select_named(&mut h, archforge_uml::PACKAGE, "Types");
+        let revision = h.state().session.as_ref().unwrap().revision();
+        crate::explorer::remove_selection(h.state_mut());
+        h.run();
+        let said = "Types keeps the built-in types, so it stays while it holds them";
+        assert_eq!(h.state().explorer.notice.as_deref(), Some(said));
+        assert!(painted(&h).iter().any(|t| t == said), "said under the tree");
+        assert!(h.state().explorer.delete.is_none(), "no dialog is asked");
+        assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "nothing changed");
+        // It holds Date and Money to show; without them, nothing, though the built-in types stay.
+        let st = h.state().session.as_ref().unwrap().doc();
+        assert!(crate::uml_ui::UmlUi.has_children(st, st.by_uuid(types).unwrap()));
+        let own: Vec<String> = ["Date", "Money"].iter().map(|n| named(&h, archforge_uml::PRIMITIVE_TYPE, n).to_string()).collect();
+        h.state_mut().session.as_mut().unwrap().execute("element.remove", &serde_json::json!({ "ids": own })).unwrap();
+        h.run();
+        let st = h.state().session.as_ref().unwrap().doc();
+        let t = st.by_uuid(types).unwrap();
+        assert!(!crate::uml_ui::UmlUi.has_children(st, t), "the built-in types are not shown, so not counted");
+        assert!(!archforge_uml::commands::primitive_types(st, t).is_empty(), "though they are there");
+    }
+}
+
 /// A primitive type of the model's own named Integer is offered beside the built-in Integer, never
 /// in its place: the type menu lists both, each with a muted note saying where it is from
 /// ("built-in", or its package's path), in its accessible name too; each pick types the member by

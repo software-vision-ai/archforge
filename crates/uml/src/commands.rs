@@ -2,7 +2,7 @@
 //! nested as deep as needed, and classes, interfaces, enumerations, data types and primitive types
 //! in a package, added, renamed, moved and listed. A package's classifiers share its names: no two
 //! of them are named alike, whatever the case, so a type picked by its name is never in doubt, and
-//! in a package named Types the built-in types' names are kept for them. A built-in type keeps its
+//! in the package Types the built-in types' names are kept for them. A built-in type keeps its
 //! name and its package. Each
 //! validates what it is given before it changes anything and refuses with a message naming the
 //! key. Ids in parameters are the elements' UUIDs. Removing and describing go through the shared
@@ -326,10 +326,15 @@ fn package_add(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, pkg)? }))
 }
 
-/// `uml.package.rename`: a package renamed, the diagrams still named like it following.
+/// `uml.package.rename`: a package renamed, the diagrams still named like it following. The
+/// package Types keeps its name while it holds built-in types, and a package becomes Types only as
+/// `members::types_problem` allows.
 fn package_rename(ctx: &mut C<'_>, p: &Params) -> R {
     let pkg = id_of(ctx.doc, p, "package", PACKAGE, "a package")?;
     let name = text(p, "name");
+    if let Some(why) = crate::members::types_problem(ctx.doc, pkg, name, package_of(ctx.doc, pkg)) {
+        return Err(refuse("name", why));
+    }
     check_name(ctx.doc, name, &siblings_of(ctx.doc, package_of(ctx.doc, pkg)), Some(pkg))?;
     let old = name_of(ctx.doc, pkg);
     set_name(ctx.doc, pkg, name)?;
@@ -358,7 +363,9 @@ fn detach(store: &mut Store, obj: Obj) -> Result<(), CommandError> {
     Ok(())
 }
 
-/// `uml.package.move`: a package into another, never into itself, its cards leaving its old home's diagrams.
+/// `uml.package.move`: a package into another, never into itself, its cards leaving its old home's
+/// diagrams. The package Types stays under the root while it holds built-in types, and a package
+/// named Types goes there only as `members::types_problem` allows.
 fn package_move(ctx: &mut C<'_>, p: &Params) -> R {
     let pkg = id_of(ctx.doc, p, "package", PACKAGE, "a package")?;
     if Some(pkg) == root_package(ctx.doc) {
@@ -370,6 +377,9 @@ fn package_move(ctx: &mut C<'_>, p: &Params) -> R {
     }
     if to == package_of(ctx.doc, pkg) {
         return Ok(json!({ "id": uuid_of(ctx.doc, pkg)? }));
+    }
+    if let Some(why) = crate::members::types_problem(ctx.doc, pkg, &name_of(ctx.doc, pkg), to) {
+        return Err(refuse("to", why));
     }
     check_name(ctx.doc, &name_of(ctx.doc, pkg), &siblings_of(ctx.doc, to), Some(pkg))?;
     detach(ctx.doc, pkg)?;
@@ -390,7 +400,7 @@ fn package_move(ctx: &mut C<'_>, p: &Params) -> R {
 }
 
 /// The classifier under `key` (of `kind`, `what` naming it) moves into the package under
-/// `package`, its name free among that package's classifiers and, in a package named Types, none
+/// `package`, its name free among that package's classifiers and, in the package Types, none
 /// of the built-in types'. A built-in type stays in Types.
 fn classifier_move(ctx: &mut C<'_>, p: &Params, kind: ClassId, key: &str, what: &str) -> R {
     let c = id_of(ctx.doc, p, key, kind, what)?;
@@ -403,7 +413,7 @@ fn classifier_move(ctx: &mut C<'_>, p: &Params, kind: ClassId, key: &str, what: 
     }
     let name = name_of(ctx.doc, c);
     if let Some(why) = crate::members::reserved_problem(ctx.doc, to, &name) {
-        return Err(refuse("package", why));
+        return Err(refuse("package", format!("{}: {why}", uuid_of(ctx.doc, c)?)));
     }
     check_name(ctx.doc, &name, &classifiers(ctx.doc, to), Some(c))?;
     detach(ctx.doc, c)?;
@@ -413,7 +423,7 @@ fn classifier_move(ctx: &mut C<'_>, p: &Params, kind: ClassId, key: &str, what: 
 }
 
 /// A class, an interface, an enumeration, a data type or a primitive type (`kind`) named `name` in
-/// the package under `package`; in a package named Types, never a built-in type's name.
+/// the package under `package`; in the package Types, never a built-in type's name.
 fn classifier_add(ctx: &mut C<'_>, p: &Params, kind: ClassId) -> R {
     let pkg = id_of(ctx.doc, p, "package", PACKAGE, "a package")?;
     let name = text(p, "name");
@@ -429,7 +439,7 @@ fn classifier_add(ctx: &mut C<'_>, p: &Params, kind: ClassId) -> R {
 }
 
 /// The classifier under `key` renamed, its new name free among its package's classifiers and, in
-/// a package named Types, none of the built-in types'. A built-in type keeps its name.
+/// the package Types, none of the built-in types'. A built-in type keeps its name.
 fn classifier_rename(ctx: &mut C<'_>, p: &Params, kind: ClassId, key: &str, what: &str) -> R {
     let c = id_of(ctx.doc, p, key, kind, what)?;
     if let Some(why) = crate::members::built_in_problem(ctx.doc, c, "renamed") {
@@ -616,10 +626,12 @@ fn classifiers_within(store: &Store, pkg: Obj) -> Vec<Obj> {
     out
 }
 
-/// Why `parent` cannot take what `pkg` holds, when a name would clash there.
+/// Why `parent` cannot take what `pkg` holds, when a name would clash there, a built-in type's name
+/// would land in the package Types, or a package handed up would become a second Types or a Types
+/// holding such a name.
 fn hand_up_problem(store: &Store, pkg: Obj, parent: Obj) -> Option<String> {
     for o in held(store, pkg) {
-        // Classifiers share their package's names, and a package named Types keeps the built-in
+        // Classifiers share their package's names, and the package Types keeps the built-in
         // types'; a package has its own.
         let n = name_of(store, o);
         let siblings = match store.class_of(o).ok() {
@@ -629,7 +641,12 @@ fn hand_up_problem(store: &Store, pkg: Obj, parent: Obj) -> Option<String> {
                 }
                 classifiers(store, parent)
             }
-            Some(c) if c == PACKAGE => subpackages(store, parent),
+            Some(c) if c == PACKAGE => {
+                if let Some(why) = crate::members::types_problem(store, o, &n, Some(parent)) {
+                    return Some(why);
+                }
+                subpackages(store, parent)
+            }
             _ => continue,
         };
         if let Some(s) = siblings.iter().find(|s| !n.is_empty() && name_of(store, **s).to_lowercase() == n.to_lowercase()) {
@@ -672,6 +689,11 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
         }
         if Some(*o) == root_package(store) {
             return Err(refuse("ids", "the model's root package holds the whole model and stays"));
+        }
+        if class == PACKAGE
+            && let Some(why) = crate::members::removal_problem(store, *o)
+        {
+            return Err(refuse("ids", why));
         }
         if class == PACKAGE
             && let Some(parent) = package_of(store, *o)
@@ -755,7 +777,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Move package",
             &["Package"],
             None,
-            "package: string; the package's id\nto: string = \"\"; the id of the package it goes into, or nothing for the model's root package",
+            "package: string; the package's id; the package Types stays directly under the root package while it holds the built-in types\nto: string = \"\"; the id of the package it goes into, or nothing for the model's root package; a package named Types goes directly under the root only while there is no package Types and it holds no classifier with a built-in type's name",
             has_packages,
             package_move
         ),
@@ -764,7 +786,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Move class",
             &["Class"],
             None,
-            "class: string; the class's id\npackage: string; the id of the package it goes into, where its name is free among the package's classifiers (classes, interfaces, enumerations, data types and primitive types)",
+            "class: string; the class's id\npackage: string; the id of the package it goes into, where its name is free among the package's classifiers (classes, interfaces, enumerations, data types and primitive types); in the package Types (directly under the root package) never a built-in type's name (Integer, String, Boolean, Real, UnlimitedNatural)",
             has_packages,
             class_move
         ),
@@ -773,7 +795,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Rename package",
             &["Package"],
             None,
-            "package: string; the package's id\nname: string; the new name",
+            "package: string; the package's id; the package Types keeps its name while it holds the built-in types\nname: string; the new name; a package directly under the root is named Types only while there is no package Types and it holds no classifier with a built-in type's name",
             has_packages,
             package_rename
         ),
@@ -782,7 +804,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Add class",
             &["Class"],
             None,
-            "package: string; the package's id\nname: string; the class's name, free among the package's classifiers (classes, interfaces, enumerations, data types and primitive types)",
+            "package: string; the package's id\nname: string; the class's name, free among the package's classifiers (classes, interfaces, enumerations, data types and primitive types); in the package Types (directly under the root package) never a built-in type's name (Integer, String, Boolean, Real, UnlimitedNatural)",
             has_packages,
             class_add
         ),
@@ -791,7 +813,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Rename class",
             &["Class"],
             None,
-            "class: string; the class's id\nname: string; the new name, free among its package's classifiers (classes, interfaces, enumerations, data types and primitive types)",
+            "class: string; the class's id\nname: string; the new name, free among its package's classifiers (classes, interfaces, enumerations, data types and primitive types); in the package Types (directly under the root package) never a built-in type's name (Integer, String, Boolean, Real, UnlimitedNatural)",
             has_packages,
             class_rename
         ),
@@ -800,7 +822,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Add interface",
             &["Interface"],
             None,
-            "package: string; the package's id\nname: string; the interface's name, free among the package's classifiers (classes, interfaces, enumerations, data types and primitive types)",
+            "package: string; the package's id\nname: string; the interface's name, free among the package's classifiers (classes, interfaces, enumerations, data types and primitive types); in the package Types (directly under the root package) never a built-in type's name (Integer, String, Boolean, Real, UnlimitedNatural)",
             has_packages,
             interface_add
         ),
@@ -809,7 +831,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Rename interface",
             &["Interface"],
             None,
-            "interface: string; the interface's id\nname: string; the new name, free among its package's classifiers (classes, interfaces, enumerations, data types and primitive types)",
+            "interface: string; the interface's id\nname: string; the new name, free among its package's classifiers (classes, interfaces, enumerations, data types and primitive types); in the package Types (directly under the root package) never a built-in type's name (Integer, String, Boolean, Real, UnlimitedNatural)",
             has_packages,
             interface_rename
         ),
@@ -818,7 +840,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Move interface",
             &["Interface"],
             None,
-            "interface: string; the interface's id\npackage: string; the id of the package it goes into, where its name is free among the package's classifiers (classes, interfaces, enumerations, data types and primitive types)",
+            "interface: string; the interface's id\npackage: string; the id of the package it goes into, where its name is free among the package's classifiers (classes, interfaces, enumerations, data types and primitive types); in the package Types (directly under the root package) never a built-in type's name (Integer, String, Boolean, Real, UnlimitedNatural)",
             has_packages,
             interface_move
         ),
@@ -827,7 +849,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Add enumeration",
             &["Enumeration"],
             None,
-            "package: string; the package's id\nname: string; the enumeration's name, free among the package's classifiers (classes, interfaces, enumerations, data types and primitive types)",
+            "package: string; the package's id\nname: string; the enumeration's name, free among the package's classifiers (classes, interfaces, enumerations, data types and primitive types); in the package Types (directly under the root package) never a built-in type's name (Integer, String, Boolean, Real, UnlimitedNatural)",
             has_packages,
             enumeration_add
         ),
@@ -836,7 +858,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Rename enumeration",
             &["Enumeration"],
             None,
-            "enumeration: string; the enumeration's id\nname: string; the new name, free among its package's classifiers (classes, interfaces, enumerations, data types and primitive types)",
+            "enumeration: string; the enumeration's id\nname: string; the new name, free among its package's classifiers (classes, interfaces, enumerations, data types and primitive types); in the package Types (directly under the root package) never a built-in type's name (Integer, String, Boolean, Real, UnlimitedNatural)",
             has_packages,
             enumeration_rename
         ),
@@ -845,7 +867,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Move enumeration",
             &["Enumeration"],
             None,
-            "enumeration: string; the enumeration's id\npackage: string; the id of the package it goes into, where its name is free among the package's classifiers (classes, interfaces, enumerations, data types and primitive types)",
+            "enumeration: string; the enumeration's id\npackage: string; the id of the package it goes into, where its name is free among the package's classifiers (classes, interfaces, enumerations, data types and primitive types); in the package Types (directly under the root package) never a built-in type's name (Integer, String, Boolean, Real, UnlimitedNatural)",
             has_packages,
             enumeration_move
         ),
@@ -854,7 +876,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Add data type",
             &["Data type"],
             None,
-            "package: string; the package's id\nname: string; the data type's name, free among the package's classifiers (classes, interfaces, enumerations, data types and primitive types)",
+            "package: string; the package's id\nname: string; the data type's name, free among the package's classifiers (classes, interfaces, enumerations, data types and primitive types); in the package Types (directly under the root package) never a built-in type's name (Integer, String, Boolean, Real, UnlimitedNatural)",
             has_packages,
             data_type_add
         ),
@@ -863,7 +885,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Rename data type",
             &["Data type"],
             None,
-            "data_type: string; the data type's id\nname: string; the new name, free among its package's classifiers (classes, interfaces, enumerations, data types and primitive types)",
+            "data_type: string; the data type's id\nname: string; the new name, free among its package's classifiers (classes, interfaces, enumerations, data types and primitive types); in the package Types (directly under the root package) never a built-in type's name (Integer, String, Boolean, Real, UnlimitedNatural)",
             has_packages,
             data_type_rename
         ),
@@ -872,7 +894,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Move data type",
             &["Data type"],
             None,
-            "data_type: string; the data type's id\npackage: string; the id of the package it goes into, where its name is free among the package's classifiers (classes, interfaces, enumerations, data types and primitive types)",
+            "data_type: string; the data type's id\npackage: string; the id of the package it goes into, where its name is free among the package's classifiers (classes, interfaces, enumerations, data types and primitive types); in the package Types (directly under the root package) never a built-in type's name (Integer, String, Boolean, Real, UnlimitedNatural)",
             has_packages,
             data_type_move
         ),
@@ -881,7 +903,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Add primitive type",
             &["Primitive type"],
             None,
-            "package: string; the package's id\nname: string; the primitive type's name, free among the package's classifiers (classes, interfaces, enumerations, data types and primitive types); in a package named Types never a built-in type's (Integer, String, Boolean, Real, UnlimitedNatural)",
+            "package: string; the package's id\nname: string; the primitive type's name, free among the package's classifiers (classes, interfaces, enumerations, data types and primitive types); in the package Types (directly under the root package) never a built-in type's name (Integer, String, Boolean, Real, UnlimitedNatural)",
             has_packages,
             primitive_type_add
         ),
@@ -890,7 +912,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Rename primitive type",
             &["Primitive type"],
             None,
-            "primitive_type: string; the primitive type's id, one of the model's own: a built-in type keeps its name\nname: string; the new name, free among its package's classifiers (classes, interfaces, enumerations, data types and primitive types)",
+            "primitive_type: string; the primitive type's id, one of the model's own: a built-in type keeps its name\nname: string; the new name, free among its package's classifiers (classes, interfaces, enumerations, data types and primitive types); in the package Types (directly under the root package) never a built-in type's name (Integer, String, Boolean, Real, UnlimitedNatural)",
             has_packages,
             primitive_type_rename
         ),
@@ -899,7 +921,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Move primitive type",
             &["Primitive type"],
             None,
-            "primitive_type: string; the primitive type's id, one of the model's own: a built-in type stays in Types\npackage: string; the id of the package it goes into, where its name is free among the package's classifiers (classes, interfaces, enumerations, data types and primitive types)",
+            "primitive_type: string; the primitive type's id, one of the model's own: a built-in type stays in Types\npackage: string; the id of the package it goes into, where its name is free among the package's classifiers (classes, interfaces, enumerations, data types and primitive types); in the package Types (directly under the root package) never a built-in type's name (Integer, String, Boolean, Real, UnlimitedNatural)",
             has_packages,
             primitive_type_move
         ),

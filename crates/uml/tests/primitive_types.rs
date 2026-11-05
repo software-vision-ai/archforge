@@ -557,3 +557,154 @@ fn the_sweep_over_primitive_types_breaks_nothing() {
     let calls = sweep_with(&mut s, &ids, picture).unwrap();
     assert!(calls > 100, "{calls}");
 }
+
+/// The package `name` added under `parent` (the root package when empty), by `uml.package.add`.
+fn package(s: &mut S, name: &str, parent: &str) -> String {
+    run(s, "uml.package.add", json!({ "name": name, "parent": parent }))
+}
+
+/// The id of the package Types, as `members::types_package` finds it.
+fn types_id(s: &S) -> Option<String> {
+    let st = s.doc();
+    archforge_uml::members::types_package(st).map(|t| st.uuid(t).unwrap().to_string())
+}
+
+/// There is one package Types, directly under the root package, and renames and moves keep it so:
+/// it keeps its name and its place while it holds built-in types; a package becomes Types only
+/// while there is none and when it holds no classifier with a built-in type's name; a package named
+/// Types elsewhere is ordinary. Each refusal names the ids involved and changes nothing.
+#[test]
+fn the_package_types_stays_one_through_renames_and_moves() {
+    let mut s = session();
+    let lib = package(&mut s, "Lib", "");
+    let own = run(&mut s, "uml.primitive-type.add", json!({ "package": lib, "name": "Integer" }));
+    let order_pkg = package(&mut s, "Sales", "");
+    let order = run(&mut s, "uml.class.add", json!({ "package": order_pkg, "name": "Order" }));
+    // No Types yet: Lib, holding the model's own Integer, does not become it.
+    let e = refused(&mut s, "uml.package.rename", json!({ "package": lib, "name": "Types" }));
+    assert!(e.contains(&lib) && e.contains(&own) && e.contains("a built-in type's name") && e.contains("key: Some(\"name\")"), "{e}");
+    // The first use makes it; then Lib cannot take its name, whatever Lib holds.
+    run(&mut s, "uml.attribute.add", json!({ "class": order, "name": "count", "type": "Integer" }));
+    let types = types_id(&s).expect("made directly under the root package");
+    let integer = built_in(&s, "Integer");
+    run(&mut s, "uml.primitive-type.rename", json!({ "primitive_type": own, "name": "Count" }));
+    let e = refused(&mut s, "uml.package.rename", json!({ "package": lib, "name": "Types" }));
+    assert!(e.contains(&types) && e.contains(&lib) && e.contains("is the package Types already"), "{e}");
+    // Types keeps its name and its place while it holds the built-in Integer.
+    let e = refused(&mut s, "uml.package.rename", json!({ "package": types, "name": "Builtins" }));
+    assert!(e.contains(&types) && e.contains("keeps its name and stays directly under the root package while it holds them"), "{e}");
+    let e = refused(&mut s, "uml.package.move", json!({ "package": types, "to": lib }));
+    assert!(e.contains(&types) && e.contains("key: Some(\"to\")"), "{e}");
+    // So the next Integer is the same one, never a second.
+    run(&mut s, "uml.attribute.add", json!({ "class": order, "name": "lines", "type": "Integer" }));
+    assert_eq!(built_in(&s, "Integer"), integer);
+    assert_eq!(primitives_named(s.doc(), "Integer").len(), 1);
+    // A package named Types elsewhere is ordinary: it takes a type of the model's own named
+    // Integer, which stays the model's own, and a built-in name still means the one in Types.
+    let nested = package(&mut s, "Types", &lib);
+    let nested_integer = run(&mut s, "uml.primitive-type.add", json!({ "package": nested, "name": "Integer" }));
+    assert!(!archforge_uml::members::is_built_in(s.doc(), obj(s.doc(), &nested_integer)));
+    run(&mut s, "uml.attribute.add", json!({ "class": order, "name": "size", "type": "Integer" }));
+    assert_eq!(type_of(&mut s, &order, "size"), json!({ "id": integer, "name": "Integer" }));
+    // Nor does it come up beside Types, by a move or by its parent's removal handing it up.
+    let e = refused(&mut s, "uml.package.move", json!({ "package": nested, "to": "" }));
+    assert!(e.contains(&types) && e.contains(&nested) && e.contains("is the package Types already"), "{e}");
+    let e = refused(&mut s, "element.remove", json!({ "ids": [lib] }));
+    assert!(e.contains(&types) && e.contains("is the package Types already"), "{e}");
+}
+
+/// Without a package Types, a package named Types comes directly under the root only when it holds
+/// no classifier with a built-in type's name, by a move or by a removal handing it up; an empty one
+/// renamed Types is the package Types, where the first built-in type is then made. A Types that
+/// holds no built-in type is an ordinary package to rename.
+#[test]
+fn a_package_becomes_types_only_without_a_built_in_name_in_it() {
+    let mut s = session();
+    let outer = package(&mut s, "Outer", "");
+    let nested = package(&mut s, "Types", &outer);
+    let own = run(&mut s, "uml.class.add", json!({ "package": nested, "name": "string" }));
+    let e = refused(&mut s, "uml.package.move", json!({ "package": nested, "to": "" }));
+    assert!(e.contains(&nested) && e.contains(&own) && e.contains("a built-in type's name"), "{e}");
+    let e = refused(&mut s, "element.remove", json!({ "ids": [outer] }));
+    assert!(e.contains(&nested) && e.contains(&own), "{e}");
+    assert_eq!(types_id(&s), None, "no package Types came of them");
+    // Renamed, the class no longer stands in the way: the move makes it the package Types.
+    run(&mut s, "uml.class.rename", json!({ "class": own, "name": "Text" }));
+    one_step(&mut s, "uml.package.move", json!({ "package": nested, "to": "" }));
+    assert_eq!(types_id(&s).as_deref(), Some(nested.as_str()));
+    // The first built-in type goes there.
+    let sales = package(&mut s, "Sales", "");
+    let order = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Order" }));
+    run(&mut s, "uml.attribute.add", json!({ "class": order, "name": "code", "type": "String" }));
+    let string = built_in(&s, "String");
+    let st = s.doc();
+    assert_eq!(archforge_uml::commands::package_of(st, obj(st, &string)), Some(obj(st, &nested)));
+    // Emptied of built-in types, Types renames as any package, and the next use makes a new one.
+    run(&mut s, "element.remove", json!({ "ids": [string] }));
+    one_step(&mut s, "uml.package.rename", json!({ "package": nested, "name": "Library" }));
+    assert_eq!(types_id(&s), None);
+    // An empty package directly under the root renamed Types becomes it.
+    let empty = package(&mut s, "Spare", "");
+    run(&mut s, "uml.package.rename", json!({ "package": empty, "name": "Types" }));
+    assert_eq!(types_id(&s).as_deref(), Some(empty.as_str()));
+}
+
+/// The package Types is not removed while it holds built-in types, which its removal would hand to
+/// the root as types of the model's own; the refusal names it and changes nothing. Once its
+/// built-in types are removed, it goes as any package.
+#[test]
+fn the_package_types_is_not_removed_while_it_holds_built_in_types() {
+    let mut s = session();
+    let sales = package(&mut s, "Sales", "");
+    let order = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Order" }));
+    run(&mut s, "uml.attribute.add", json!({ "class": order, "name": "count", "type": "Integer" }));
+    let types = types_id(&s).unwrap();
+    let integer = built_in(&s, "Integer");
+    let e = refused(&mut s, "element.remove", json!({ "ids": [types] }));
+    assert!(e.contains(&types) && e.contains("it stays while it holds them") && e.contains("key: Some(\"ids\")"), "{e}");
+    // A built-in type itself may go, its member untyped; then Types goes, as one step.
+    run(&mut s, "element.remove", json!({ "ids": [integer] }));
+    let before = picture(s.doc());
+    s.execute("element.remove", &json!({ "ids": [types] })).unwrap();
+    assert_eq!(types_id(&s), None);
+    s.undo().unwrap();
+    assert_eq!(picture(s.doc()), before);
+}
+
+/// A project from before keeps, in its package Types, a class named Integer or a primitive type
+/// named integer: the first use of the built-in name is refused, naming that element and asking
+/// for it to be renamed, rather than making a second classifier of that name beside it.
+#[test]
+fn a_built_in_type_is_not_made_beside_a_same_named_classifier_an_older_types_holds() {
+    for (class, held) in [(archforge_uml::CLASS, "Integer"), (PRIMITIVE_TYPE, "integer")] {
+        let mut st = store(0);
+        let model = st.create(archforge_core::MODEL).unwrap();
+        st.set(model, archforge_core::named_element::NAME, Value::str("Shop")).unwrap();
+        let named = |st: &mut Store, class, name: &str| {
+            let o = st.create(class).unwrap();
+            st.set(o, archforge_uml::named_element::NAME, Value::str(name)).unwrap();
+            o
+        };
+        let sales = named(&mut st, archforge_uml::PACKAGE, "Sales");
+        let types = named(&mut st, archforge_uml::PACKAGE, "Types");
+        for p in [sales, types] {
+            st.push(model, archforge_core::model::MEMBER, Value::Ref(p)).unwrap();
+        }
+        let order = named(&mut st, archforge_uml::CLASS, "Order");
+        st.push(sales, archforge_uml::package::PACKAGED_ELEMENT, Value::Ref(order)).unwrap();
+        let clash = named(&mut st, class, held);
+        st.push(types, archforge_uml::package::PACKAGED_ELEMENT, Value::Ref(clash)).unwrap();
+        let (order, clash) = (st.uuid(order).unwrap().to_string(), st.uuid(clash).unwrap().to_string());
+        let mut s = session_over(st);
+        let e = refused(&mut s, "uml.attribute.add", json!({ "class": order, "name": "count", "type": "Integer" }));
+        assert!(e.contains(&clash) && e.contains(&format!("named {held}")) && e.contains("rename it to use the built-in type"), "{e}");
+        assert!(e.contains("key: Some(\"type\")"), "{e}");
+        assert_eq!(primitives_named(s.doc(), "Integer").len(), usize::from(held == "Integer" && class == PRIMITIVE_TYPE), "no second one made");
+        // Renamed, the built-in type is made there.
+        let rename = if class == PRIMITIVE_TYPE { "uml.primitive-type.rename" } else { "uml.class.rename" };
+        let key = if class == PRIMITIVE_TYPE { "primitive_type" } else { "class" };
+        run(&mut s, rename, json!({ key: clash, "name": "Count" }));
+        run(&mut s, "uml.attribute.add", json!({ "class": order, "name": "count", "type": "Integer" }));
+        built_in(&s, "Integer");
+    }
+}

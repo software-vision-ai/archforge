@@ -1344,10 +1344,17 @@ pub fn diagrams_showing(store: &Store, element: Obj) -> usize {
     diagrams.len()
 }
 
-/// Asks before an entity goes from the model, with what goes with it.
+/// Asks before an entity goes from the model, with what goes with it; what its notation keeps
+/// (the package Types while it holds the built-in types) is said at the canvas's top instead.
 fn ask_delete(shell: &mut Shell, node: Uuid, entity: Uuid) {
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
     let Some(e) = store.by_uuid(entity) else { return };
+    // What its notation keeps (UML's package Types with the built-in types) is said, not asked.
+    if let Some(why) = crate::notation_ui::of(shell.notation_uis, store, e).and_then(|ui| ui.remove_refusal(store, e)) {
+        shell.canvas.notice = Some(why);
+        shell.canvas.menu = None;
+        return;
+    }
     let (relationships, keys, foreign_keys) = crate::notation_ui::of(shell.notation_uis, store, e).map_or((0, 0, 0), |ui| ui.consequences(store, e));
     let diagrams = diagrams_showing(store, e);
     shell.explorer.delete = Some(crate::explorer::Delete {

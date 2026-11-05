@@ -74,6 +74,12 @@ pub(crate) trait NotationUi: Sync {
         let _ = (store, obj);
         (0, 0, 0)
     }
+    /// Why `obj` cannot be removed, in the user's words, checked before the removal or its dialog
+    /// (UML's package Types while it keeps the built-in types); none lets the command decide.
+    fn remove_refusal(&self, store: &Store, obj: Obj) -> Option<String> {
+        let _ = (store, obj);
+        None
+    }
     /// The element that takes what `obj` holds when `obj` is removed (a nested package's
     /// parent), when it hands its contents up rather than taking them along.
     fn hands_up(&self, store: &Store, obj: Obj) -> Option<Obj> {

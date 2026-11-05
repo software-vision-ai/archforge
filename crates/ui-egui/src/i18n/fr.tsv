@@ -495,6 +495,7 @@ str		On this skill · {n}	Sur cette compétence · {n}
 str		On this element · {n}	Sur cet élément · {n}
 str		Literals carry no skills	Les littéraux ne portent pas de compétences
 str		Built-in types carry no skills	Les types intégrés ne portent pas de compétences
+str		Types keeps the built-in types, so it stays while it holds them	Types garde les types intégrés, il reste donc tant qu’il les contient
 str		Relationships carry no skills	Les relations ne portent pas de compétences
 str		This element carries no skills	Cet élément ne porte pas de compétences
 str		Diagram	Diagramme

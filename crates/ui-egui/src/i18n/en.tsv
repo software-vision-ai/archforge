@@ -494,6 +494,7 @@ str		On this skill · {n}	On this skill · {n}
 str		On this element · {n}	On this element · {n}
 str		Literals carry no skills	Literals carry no skills
 str		Built-in types carry no skills	Built-in types carry no skills
+str		Types keeps the built-in types, so it stays while it holds them	Types keeps the built-in types, so it stays while it holds them
 str		Relationships carry no skills	Relationships carry no skills
 str		This element carries no skills	This element carries no skills
 str		Diagram	Diagram

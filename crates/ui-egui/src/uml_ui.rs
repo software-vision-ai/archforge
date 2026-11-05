@@ -625,6 +625,12 @@ impl NotationUi for UmlUi {
         crate::uml_panel::literal_refusal(store, &edit)
     }
 
+    /// The package Types stays while it keeps the built-in types, which Models does not show: said
+    /// under the tree before anything is asked.
+    fn remove_refusal(&self, store: &Store, obj: Obj) -> Option<String> {
+        archforge_uml::members::removal_problem(store, obj).map(|_| tr("Types keeps the built-in types, so it stays while it holds them"))
+    }
+
     /// The relationships that go with a classifier, or with a package's.
     fn consequences(&self, store: &Store, obj: Obj) -> (usize, usize, usize) {
         let held = match class(store, obj) {
@@ -638,12 +644,12 @@ impl NotationUi for UmlUi {
         (going.len(), 0, 0)
     }
 
-    /// Whether `obj` has rows under it: a package what it holds, a classifier its members (an
-    /// enumeration its literals).
+    /// Whether `obj` has rows under it: a package what it holds (the built-in types in Types, which
+    /// Models does not show, aside), a classifier its members (an enumeration its literals).
     fn has_children(&self, store: &Store, obj: Obj) -> bool {
         match class(store, obj) {
             Some(c) if c == archforge_uml::PACKAGE => {
-                !classifiers(store, obj).is_empty() || !archforge_uml::commands::subpackages(store, obj).is_empty()
+                !shown_classifiers(store, obj).is_empty() || !archforge_uml::commands::subpackages(store, obj).is_empty()
             }
             Some(c) if archforge_uml::is_classifier(c) => has_members(store, obj),
             _ => false,

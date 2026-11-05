@@ -373,6 +373,11 @@ pub fn remove_selection(shell: &mut Shell) {
     }
     let Some(id) = uuid_of(store, obj) else { return };
     let ui = crate::notation_ui::of(shell.notation_uis, store, obj);
+    // What its notation keeps (UML's package Types with the built-in types) is said, not removed.
+    if let Some(why) = ui.and_then(|u| u.remove_refusal(store, obj)) {
+        shell.explorer.notice = Some(why);
+        return;
+    }
     // What it holds moves up to its parent (a nested package): no dialog, the toast says where.
     if let Some(parent) = ui.and_then(|u| u.hands_up(store, obj)) {
         let (name, to) = (name_of(store, obj), name_of(store, parent));

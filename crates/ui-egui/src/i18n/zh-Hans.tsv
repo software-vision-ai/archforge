@@ -495,6 +495,7 @@ str		On this skill · {n}	此技能上 · {n}
 str		On this element · {n}	此元素上 · {n}
 str		Literals carry no skills	字面量不带技能
 str		Built-in types carry no skills	内置类型不带技能
+str		Types keeps the built-in types, so it stays while it holds them	Types 存放内置类型，因此在存放它们期间会保留
 str		Relationships carry no skills	关系不带技能
 str		This element carries no skills	此元素不带技能
 str		Diagram	图

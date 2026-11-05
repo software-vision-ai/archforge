@@ -240,7 +240,8 @@ say you made your own *Integer*, the type menu lists both and tells them apart w
 one you picked; choosing the built-in *Integer* always means the one in *Types*. Typed by name on a
 card, a name several types share is refused until you pick one from the menu. In the package
 *Types*, the built-in names are kept for the built-in types, so you cannot add your own *Integer*
-there.
+there. *Types* itself keeps its name and its place directly under the root package while it holds
+built-in types, and **Delete** on it in **Models** says so rather than removing it.
 
 The **Relationship** tool draws no association to or from a primitive type, and says so. A
 generalization joins a primitive type only to another primitive type: your *Gtin* may specialize

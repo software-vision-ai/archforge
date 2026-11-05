@@ -462,6 +462,16 @@ What is UML's own, beside the shared rules above.
   reaches them). In a package named Types their names, whatever the case, are kept for them, so no
   classifier of the user's own takes one there. A built-in type's name always means the one in
   Types, never a type of the user's own named alike, and is never made twice.
+- The package Types is the one named exactly Types directly under the root package (at the top
+  level in a project without a root yet); a package named Types anywhere else is ordinary. Nothing
+  is stored to mark it. While it holds built-in types it keeps its name and its place and is not
+  removed: Models says "Types keeps the built-in types, so it stays while it holds them" under the
+  tree, and the canvas says it at its top, with no dialog. A package becomes Types (renamed, moved,
+  or handed up by its parent's removal) only while there is no Types and only when it holds no
+  classifier with a built-in type's name. Where an older project's Types holds a classifier named
+  like a built-in type in another case or kind, the built-in type is not made beside it: the
+  member's command is refused, naming that classifier and asking for it to be renamed. Models
+  counts in Types only what it shows, so a Types holding only built-in types has no rows.
 - An attribute reads `+ name : Type [0..1]`, an operation `+ name(param : Type) : Return`; the
   visibility sign only when one is set, the multiplicity only when it is not 1. A bound pair of
   none to many is written `*`.
