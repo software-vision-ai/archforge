@@ -495,8 +495,11 @@ member and drawing a relationship stay three separate gestures:
   on the canvas places one in the diagram's package, its name open for typing, and the tool goes
   back to Select. The kind stays for the next placement while the window lives; a new window starts
   at Class. Only kinds that work are listed. Models' `+` does not use the tool's kind: it offers
-  each kind that works as a row of its own (Class, Interface, …) in the selected package. Dragging
-  any classifier from Models places it, as a class is placed.
+  each kind that works as a row of its own (Class, Interface, …) in the selected package. In Models
+  every classifier is a row under its package with its kind's icon; an interface's and a data
+  type's attributes and operations sit below it as a class's do, an enumeration's literals below
+  it, and a primitive type has none. Dragging any classifier from Models places it, as a class is
+  placed.
 - Cards. A class keeps `CLASS` in its eyebrow. The other kinds show their UML keyword there instead:
   `«interface»`, `«enumeration»`, `«dataType»`, `«primitive»`. An interface and a data type have
   attributes and operations as a class has. An enumeration has one compartment, its literals in
@@ -505,7 +508,8 @@ member and drawing a relationship stay three separate gestures:
   of the Literals compartment, or ⌘↩, as a draft row with a name only; Enter writes one and opens
   the next. A double click edits one in place. Properties lists them under `Literals · n`; an
   editor there has Name, Remove, Move up, Move down, Cancel and Apply. Names are told apart within
-  their enumeration regardless of case; a refusal sits under the row and leaves the model as it was.
+  their enumeration compared without case, so `Paid` and `paid` clash; a refusal sits under the row
+  and leaves the model as it was.
 - Drawing relationships. The Relationship menu gains, after a separator, Interface realization and
   Association class.
   - Interface realization is drawn from the implementing classifier to its interface: a dashed
@@ -526,7 +530,8 @@ member and drawing a relationship stay three separate gestures:
   Redefines, which offer only valid targets. On a card a derived attribute starts with `/`, a
   default follows `=`, and braces list what differs from the usual (`{readOnly}`, `{ordered}`,
   `{nonunique}`, `{subsets name}`, `{redefines name}`); unique is the usual and is not said. An
-  association end shows the same braces beside its role.
+  association end shows the same braces beside its role. Static has no mark yet, on a card or an
+  end; its underlining comes with 0.13.0.
 
 ## Not decided yet
 The menu bar's structure; how a colour chosen in Appearance and the key-status colour combine;
