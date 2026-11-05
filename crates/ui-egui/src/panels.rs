@@ -642,26 +642,52 @@ fn combo_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, r: Re
 /// A menu under `anchor` with `items`; gives the index picked, closing the menu on a pick or a
 /// click elsewhere.
 pub(crate) fn menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, id: &str, items: &[String]) -> Option<usize> {
+    menu_noted(shell, ui, p, anchor, id, items, &[])
+}
+
+/// [`menu`] with a muted note after an item's text where `notes` has one (empty for none), such as
+/// the package that tells two types of one name apart; the note joins the row's accessible name.
+pub(crate) fn menu_noted(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, id: &str, items: &[String], notes: &[String]) -> Option<usize> {
     let full = 8.0 + items.len() as f32 * MENU_ROW;
     // Under the field, else above it; longer than either side has room for, it takes the side with
     // more and its rows scroll.
     let window = ui.ctx().content_rect();
     let (below, above) = (window.bottom() - 8.0 - (anchor.bottom() + 4.0), anchor.top() - 4.0 - (window.top() + 8.0));
+    let width = noted_width(ui, p, items, notes).max(anchor.width()).min((window.width() - 16.0).max(anchor.width()));
+    // As wide as its noted rows need, kept inside the window.
+    let left = anchor.left().min(window.right() - 8.0 - width).max(window.left() + 8.0);
     let r = if full <= below.max(0.0) || (full > above && below >= above) {
-        Rect::from_min_size(pos2(anchor.left(), anchor.bottom() + 4.0), vec2(anchor.width(), full.min(below.max(8.0 + MENU_ROW))))
+        Rect::from_min_size(pos2(left, anchor.bottom() + 4.0), vec2(width, full.min(below.max(8.0 + MENU_ROW))))
     } else {
         let height = full.min(above.max(8.0 + MENU_ROW));
-        Rect::from_min_size(pos2(anchor.left(), anchor.top() - 4.0 - height), vec2(anchor.width(), height))
+        Rect::from_min_size(pos2(left, anchor.top() - 4.0 - height), vec2(width, height))
     };
-    ux::overlay(ui, crate::widgets::egui_id(&format!("{id}.layer")), r, |ui| menu_body(shell, ui, p, anchor, r, id, items))
+    ux::overlay(ui, crate::widgets::egui_id(&format!("{id}.layer")), r, |ui| menu_body(shell, ui, p, anchor, r, id, items, notes))
 }
 
 /// A menu row's height.
 const MENU_ROW: f32 = 30.0;
+/// The most noted rows a menu measures for its width: a note marks a name several types share,
+/// which few do, and the rest fit or are cut as any row is.
+const MAX_NOTED: usize = 64;
+
+/// How wide a menu is to show its noted rows whole, each item, a gap and its muted note inside the
+/// row's insets; nothing without a note. Only the first [`MAX_NOTED`] noted rows are measured.
+fn noted_width(ui: &egui::Ui, p: &Palette, items: &[String], notes: &[String]) -> f32 {
+    let paint = ui.painter();
+    let measure = |t: &str| ux::galley(paint, t, types::SMALL, p.text, None).size().x;
+    items
+        .iter()
+        .zip(notes)
+        .filter(|(_, n)| !n.is_empty())
+        .take(MAX_NOTED)
+        .map(|(item, note)| 8.0 + 10.0 + measure(item) + 6.0 + measure(note) + 10.0)
+        .fold(0.0, f32::max)
+}
 
 /// A type menu's choices kept between frames: whose and which state of it they were built for, in
-/// which interface language (the labels are translated), their labels and the values the commands
-/// take, in the same order.
+/// which interface language (the labels are translated), their labels, the values the commands
+/// take and the muted notes that tell same-named ones apart, in the same order.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct TypeChoices {
     pub project: Option<Uuid>,
@@ -669,9 +695,14 @@ pub struct TypeChoices {
     pub language: &'static str,
     pub labels: Vec<String>,
     pub values: Vec<String>,
+    pub notes: Vec<String>,
 }
 
-fn menu_body(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, r: Rect, id: &str, items: &[String]) -> Option<usize> {
+/// The open menu's frame inside `r`: its rows, those in sight laid out, each with its note muted
+/// after its text where `notes` has one; the wheel and the arrow keys scroll, Enter or a click
+/// picks, Escape or a press elsewhere closes.
+#[allow(clippy::too_many_arguments, reason = "a menu is drawn for its anchor, frame, id, items and notes")]
+fn menu_body(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, r: Rect, id: &str, items: &[String], notes: &[String]) -> Option<usize> {
     let paint = ui.painter();
     ux::shadow(paint, r, 8.0, p.shadow);
     paint.rect_filled(r, 8.0, p.surface);
@@ -719,11 +750,22 @@ fn menu_body(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, r: Rec
         if !rows.intersects(row) {
             continue;
         }
+        let note = notes.get(i).filter(|n| !n.is_empty());
         let resp = control(shell, ui, &format!("{id}.{i}"), "menu-item", row.intersect(rows), true);
+        let resp = match note {
+            Some(n) => resp.accessible_name(fmt(&tr("{name} · {where}"), &[("name", item), ("where", n)])),
+            None => resp,
+        };
         if resp.hovered() || reached == Some(i) {
             paint.rect_filled(row, 5.0, p.page);
         }
-        ux::text(&paint, row.min + vec2(10.0, 7.5), item, types::SMALL, p.text, Some((row.width() - 20.0).max(0.0)));
+        let room = (row.width() - 20.0).max(0.0);
+        let drawn = ux::text(&paint, row.min + vec2(10.0, 7.5), item, types::SMALL, p.text, Some(room));
+        if let Some(n) = note {
+            let left = drawn.right() + 6.0;
+            let rest = (row.left() + 10.0 + room - left).max(0.0);
+            ux::text(&paint, pos2(left, row.top() + 7.5), n, types::SMALL, p.text_muted, Some(rest));
+        }
         if resp.clicked() || (enter && reached == Some(i)) {
             picked = Some(i);
         }
@@ -1744,7 +1786,7 @@ struct SkillRow {
 }
 
 /// What a skill aims at, as Properties says it: every class, every interface, every enumeration,
-/// every data type, its type pattern, or nothing.
+/// every data type, every primitive type, its type pattern, or nothing.
 pub(crate) fn target_word(store: &Store, s: Obj) -> String {
     let applies = string_of(store, s, archforge_core::skill::APPLIES_TO);
     let pattern = string_of(store, s, archforge_core::skill::TYPE_PATTERN);
@@ -1755,6 +1797,7 @@ pub(crate) fn target_word(store: &Store, s: Obj) -> String {
         Some("interface") => tr("every interface"),
         Some("enumeration") => tr("every enumeration"),
         Some("data type") => tr("every data type"),
+        Some("primitive type") => tr("every primitive type"),
         Some("attribute") => tr("every attribute"),
         Some("operation") => tr("every operation"),
         Some("association") => tr("every association"),

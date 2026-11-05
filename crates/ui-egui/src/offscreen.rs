@@ -112,6 +112,10 @@ pub enum Screen {
     /// Properties and open in Models, Price specializing it, and the class Order whose attribute
     /// and operation it types.
     WorkspaceDataType,
+    /// A package of codes: the primitive types Sku and Gtin, Gtin specializing Sku, and the class
+    /// Product whose attributes and operation they type; Sku selected in Properties, the package
+    /// open in Models.
+    WorkspacePrimitiveType,
     /// The same at a working zoom with a literal's draft row open at the end of OrderStatus's
     /// card, "Returned" typed, Properties listing the literals with their pencils.
     WorkspaceLiterals,
@@ -424,6 +428,10 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
     if screen == Screen::WorkspaceDataType {
         shell.adopt_project();
         sample_data_types(&mut shell)?;
+    }
+    if screen == Screen::WorkspacePrimitiveType {
+        shell.adopt_project();
+        sample_primitive_types(&mut shell)?;
     }
     if screen == Screen::WorkspaceRealization {
         shell.adopt_project();
@@ -1159,6 +1167,54 @@ fn sample_data_types(shell: &mut Shell) -> Result<(), String> {
     }
     crate::canvas::open(shell, diagram);
     crate::panels::run(shell, "view.select", json!({ "ids": [money.to_string()] }))?;
+    shell.state.show_panel(crate::state::Panel::Properties);
+    Ok(())
+}
+
+/// A package Catalog on its own class diagram: the primitive types Sku and Gtin, Gtin specializing
+/// Sku, and the class Product whose sku, gtin and price they and a built-in type type, and whose
+/// operation find takes a Sku; Sku selected, the package open in Models, its Properties shown.
+fn sample_primitive_types(shell: &mut Shell) -> Result<(), String> {
+    use serde_json::json;
+    let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
+    let run = |session: &mut archforge_notations::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
+        let out = session.execute(command, &params).map_err(|e| format!("{command}: {e:?}"))?;
+        Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
+    };
+    let package = run(session, "uml.package.add", json!({ "name": "Catalog" }))?;
+    let diagram = run(session, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": package, "name": "Catalog" }))?;
+    let sku = run(session, "uml.primitive-type.add", json!({ "package": package, "name": "Sku" }))?;
+    let gtin = run(session, "uml.primitive-type.add", json!({ "package": package, "name": "Gtin" }))?;
+    run(session, "uml.generalization.add", json!({ "specific": gtin, "general": sku }))?;
+    let product = run(session, "uml.class.add", json!({ "package": package, "name": "Product" }))?;
+    run(session, "uml.attribute.add", json!({ "class": product, "name": "sku", "type": sku }))?;
+    run(session, "uml.attribute.add", json!({ "class": product, "name": "gtin", "type": gtin }))?;
+    run(session, "uml.attribute.add", json!({ "class": product, "name": "price", "type": "Real" }))?;
+    run(
+        session,
+        "uml.operation.add",
+        json!({ "class": product, "name": "find", "parameters": [{ "name": "code", "type": sku }], "returns": product }),
+    )?;
+    let (w, _) = archforge_uml::CLASS_SIZE;
+    let (_, h) = archforge_uml::PRIMITIVE_TYPE_SIZE;
+    let cards = [(&product, 80, 140, crate::uml_ui::members_height(3, 1)), (&sku, 560, 140, h), (&gtin, 560, 340, h)];
+    for (element, x, y, height) in cards {
+        run(session, "diagram.place", json!({ "diagram": diagram, "element": element, "x": x, "y": y, "width": w + 40.0, "height": height }))?;
+    }
+    run(session, "diagram.connect-all", json!({ "diagram": diagram }))?;
+    run(session, "view.select", json!({ "ids": [] }))?;
+    session.mark_saved().map_err(|e| e.to_string())?;
+    let (Some(package), Some(diagram), Some(sku)) =
+        (archforge_mof::Uuid::parse(&package), archforge_mof::Uuid::parse(&diagram), archforge_mof::Uuid::parse(&sku))
+    else {
+        return Err("the sample's ids".into());
+    };
+    shell.explorer.expanded.insert(package);
+    if let Some(root) = shell.session.as_ref().and_then(|s| archforge_uml::commands::root_package(s.doc()).and_then(|r| s.doc().uuid(r).ok())) {
+        shell.explorer.expanded.insert(root);
+    }
+    crate::canvas::open(shell, diagram);
+    crate::panels::run(shell, "view.select", json!({ "ids": [sku.to_string()] }))?;
     shell.state.show_panel(crate::state::Panel::Properties);
     Ok(())
 }

@@ -10,6 +10,7 @@ str		Generate	Generate
 str		An agent connected to Archforge writes it from the model and its skills.	An agent connected to Archforge writes it from the model and its skills.
 str		Nothing selected	Nothing selected
 str		{kind} · {name}	{kind} · {name}
+str		{name} · {where}	{name} · {where}
 str		Output	Output
 str		SQL DDL	SQL DDL
 str		Documentation	Documentation
@@ -194,6 +195,7 @@ str		Collation	Collation
 str		Description	Description
 str		{text} is not a number	{text} is not a number
 str		None	None
+str		built-in	built-in
 str		Identity, always	Identity, always
 str		Identity, by default	Identity, by default
 str		Computed, stored	Computed, stored
@@ -209,6 +211,7 @@ str		every class	every class
 str		every interface	every interface
 str		every enumeration	every enumeration
 str		every data type	every data type
+str		every primitive type	every primitive type
 str		every attribute	every attribute
 str		every operation	every operation
 str		every association	every association
@@ -490,6 +493,8 @@ str		On this column · {n}	On this column · {n}
 str		On this skill · {n}	On this skill · {n}
 str		On this element · {n}	On this element · {n}
 str		Literals carry no skills	Literals carry no skills
+str		Built-in types carry no skills	Built-in types carry no skills
+str		Types keeps the built-in types, so it stays while it holds them	Types keeps the built-in types, so it stays while it holds them
 str		Relationships carry no skills	Relationships carry no skills
 str		This element carries no skills	This element carries no skills
 str		Diagram	Diagram
@@ -533,13 +538,16 @@ str		Add class	Add class
 str		Add interface	Add interface
 str		Add enumeration	Add enumeration
 str		Add data type	Add data type
+str		Add primitive type	Add primitive type
 str		Class	Class
 str		Interface	Interface
 str		«interface»	«interface»
 str		Enumeration	Enumeration
 str		«enumeration»	«enumeration»
 str		Data type	Data type
+str		Primitive type	Primitive type
 str		«dataType»	«dataType»
+str		«primitive»	«primitive»
 str		Classifier	Classifier
 str		Classifier kinds	Classifier kinds
 str		Class diagram	Class diagram
@@ -548,11 +556,13 @@ str		Class · model, in every diagram	Class · model, in every diagram
 str		Interface · model, in every diagram	Interface · model, in every diagram
 str		Enumeration · model, in every diagram	Enumeration · model, in every diagram
 str		Data type · model, in every diagram	Data type · model, in every diagram
+str		Primitive type · model, in every diagram	Primitive type · model, in every diagram
 str		New package	New package
 str		On this class · {n}	On this class · {n}
 str		On this interface · {n}	On this interface · {n}
 str		On this enumeration · {n}	On this enumeration · {n}
 str		On this data type · {n}	On this data type · {n}
+str		On this primitive type · {n}	On this primitive type · {n}
 str		On this package · {n}	On this package · {n}
 str		Package	Package
 str		Package · model	Package · model
@@ -561,6 +571,7 @@ str		This class	This class
 str		This interface	This interface
 str		This enumeration	This enumeration
 str		This data type	This data type
+str		This primitive type	This primitive type
 str		This package	This package
 plural		+ {n} more member	+ {n} more member|+ {n} more members
 plural		+ {n} more literal	+ {n} more literal|+ {n} more literals
@@ -607,6 +618,7 @@ str		Place class	Place class
 str		Place interface	Place interface
 str		Place enumeration	Place enumeration
 str		Place data type	Place data type
+str		Place primitive type	Place primitive type
 str		Add package	Add package
 str		Place package	Place package
 str		Move package	Move package
@@ -623,12 +635,16 @@ str		A class realizes only an interface	A class realizes only an interface
 str		A relationship joins two classes or interfaces	A relationship joins two classes or interfaces
 str		An enumeration is a data type and joins no association	An enumeration is a data type and joins no association
 str		A data type joins no association	A data type joins no association
+str		A primitive type joins no association	A primitive type joins no association
 str		An interface specializes only an interface	An interface specializes only an interface
 str		A class cannot specialize an interface	A class cannot specialize an interface
 str		An enumeration specializes only an enumeration	An enumeration specializes only an enumeration
 str		Only an enumeration specializes an enumeration	Only an enumeration specializes an enumeration
 str		A data type specializes only a data type	A data type specializes only a data type
 str		Only a data type specializes a data type	Only a data type specializes a data type
+str		A primitive type specializes only a primitive type	A primitive type specializes only a primitive type
+str		Only a primitive type specializes a primitive type	Only a primitive type specializes a primitive type
+str		A built-in type specializes nothing	A built-in type specializes nothing
 str		A classifier cannot specialize itself	A classifier cannot specialize itself
 str		This one specializes that one already	This one specializes that one already
 str		That one specializes this one already, which would make a cycle	That one specializes this one already, which would make a cycle
@@ -686,6 +702,7 @@ str		Class · {package}	Class · {package}
 str		«interface» · {package}	«interface» · {package}
 str		«enumeration» · {package}	«enumeration» · {package}
 str		«dataType» · {package}	«dataType» · {package}
+str		«primitive» · {package}	«primitive» · {package}
 str		{name} removed; what it held moved to {parent}	{name} removed; what it held moved to {parent}
 # Unsaved changes on close
 str		Close and lose changes	Close and lose changes

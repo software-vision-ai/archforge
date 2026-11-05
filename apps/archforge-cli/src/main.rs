@@ -337,7 +337,8 @@ mod tests {
                     assert!(ids.contains(&word) || word == "uml.class", "compact {compact}: {word} is not a command");
                 }
             }
-            // Literals are built (AR-122), and data types (AR-123): an agent is told it can make them.
+            // Literals are built (AR-122), data types (AR-123) and primitive types (AR-124): an agent
+            // is told it can make them.
             for promise in [
                 "UML class diagrams",
                 "interfaces",
@@ -345,6 +346,8 @@ mod tests {
                 "enumerations with their literals",
                 "uml.literal.add",
                 "uml.data-type.add",
+                "primitive types, beside the built-in Integer, String, Boolean, Real and UnlimitedNatural",
+                "uml.primitive-type.add",
                 "ER diagrams",
                 "agent access",
                 "undo",

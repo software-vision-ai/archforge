@@ -241,8 +241,9 @@ pub fn type_matches(pattern: &str, type_name: &str) -> bool {
 /// subject), or the element's own kind, with a type pattern its type matches. The element's own
 /// kind is the most specific of the notations' kinds its class conforms to, the aim-only kinds
 /// among them: a UML enumeration and a primitive type are DataTypes in the metamodel, yet a skill
-/// for every data type reaches neither; one for every enumeration reaches an enumeration, and no
-/// skill names primitive types yet.
+/// for every data type reaches neither; one for every enumeration reaches an enumeration, and one
+/// for every primitive type a primitive type. An element its notation says carries no skill (a
+/// built-in type) is aimed at by no kind.
 pub fn aims_at<V: SkillHost>(view: &V, store: &Store, s: Obj, element: Obj) -> bool {
     let applies = string_of(store, s, skill::APPLIES_TO);
     if applies.is_empty() {
@@ -444,7 +445,7 @@ fn skill_of(store: &Store, p: &Params, key: &str) -> Result<Obj, CommandError> {
 }
 
 /// The subject under `key`: empty or the model's id for the whole model, else an element of a
-/// class the notation allows.
+/// class the notation allows; a refusal names the id given and why it carries no skill.
 fn subject_param<V: SkillHost>(view: &V, store: &Store, p: &Params, key: &str) -> Result<Option<Obj>, CommandError> {
     if text(p, key).is_empty() {
         return Ok(None);
@@ -454,7 +455,7 @@ fn subject_param<V: SkillHost>(view: &V, store: &Store, p: &Params, key: &str) -
         return Ok(None);
     }
     match subject_problem(view, store, o) {
-        Some(why) => Err(refuse(key, why)),
+        Some(why) => Err(refuse(key, format!("{}: {why}", text(p, key)))),
         None => Ok(Some(o)),
     }
 }
@@ -736,7 +737,7 @@ pub fn specs<V: SkillHost>() -> Vec<CommandSpec<Store, V>> {
                 "body: string = \"\"; the instructions, Markdown\n",
                 "triggers: array = []; when it applies: modelling, drawing, naming, export; none for always\n",
                 "dialect: string = \"\"; the SQL dialect of an export skill, or empty for every dialect\n",
-                "applies_to: string = \"\"; what it aims at below the subject, a kind of the subject's notation (ER: table, relationship, column; UML: class, interface, enumeration, data type, attribute, operation, association; a diagram takes none), or empty for the subject itself\n",
+                "applies_to: string = \"\"; what it aims at below the subject, a kind of the subject's notation (ER: table, relationship, column; UML: class, interface, enumeration, data type, primitive type, attribute, operation, association; a diagram takes none), or empty for the subject itself\n",
                 "type_pattern: string = \"\"; with applies_to column: an exact type or a category (text, number, date, boolean, binary)"
             ),
             has_model::<V>,
@@ -754,7 +755,7 @@ pub fn specs<V: SkillHost>() -> Vec<CommandSpec<Store, V>> {
                 "body: string; the instructions, Markdown, or empty\n",
                 "triggers: array; when it applies: modelling, drawing, naming, export; none for always\n",
                 "dialect: string; the SQL dialect of an export skill, or empty for every dialect\n",
-                "applies_to: string; what it aims at below the subject, a kind of the subject's notation (ER: table, relationship, column; UML: class, interface, enumeration, data type, attribute, operation, association; a diagram takes none), or empty for the subject itself\n",
+                "applies_to: string; what it aims at below the subject, a kind of the subject's notation (ER: table, relationship, column; UML: class, interface, enumeration, data type, primitive type, attribute, operation, association; a diagram takes none), or empty for the subject itself\n",
                 "type_pattern: string; with applies_to column: an exact type or a category, or empty"
             ),
             has_skills::<V>,

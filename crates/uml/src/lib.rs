@@ -30,13 +30,14 @@ pub fn universe() -> Result<Arc<Universe>, MetaError> {
 pub const CLASS_DIAGRAM: &str = "uml.class";
 
 /// The kinds of classifier a class diagram places, each a card with its members: a class, an
-/// interface, an enumeration, whose members are its literals, and a data type, a value without
-/// identity with attributes and operations as a class has. Each is matched by its exact metaclass,
-/// never by conformance: an enumeration and a primitive type are DataTypes in UML's metamodel, but
-/// the data type kind is the DataType metaclass alone. A primitive type is no classifier the
-/// diagram places yet (AR-124), and skills aimed at every data type skip it
-/// ([`UmlNotation`]'s aim-only kinds).
-pub const CLASSIFIERS: [ClassId; 4] = [CLASS, INTERFACE, ENUMERATION, DATA_TYPE];
+/// interface, an enumeration, whose members are its literals, a data type, a value without
+/// identity with attributes and operations as a class has, and a primitive type, a value with no
+/// members at all (AR-124). Each is matched by its exact metaclass, never by conformance: an
+/// enumeration and a primitive type are DataTypes in UML's metamodel, but the data type kind is the
+/// DataType metaclass alone, and a skill for every data type reaches neither (a primitive type is a
+/// skill kind of its own). The built-in types, Integer, String and the others kept in the package
+/// Types, are primitive types too ([`members::is_built_in`]).
+pub const CLASSIFIERS: [ClassId; 5] = [CLASS, INTERFACE, ENUMERATION, DATA_TYPE, PRIMITIVE_TYPE];
 
 /// Whether `class` is one of the [`CLASSIFIERS`].
 pub fn is_classifier(class: ClassId) -> bool {
@@ -55,12 +56,15 @@ pub fn is_relationship(class: ClassId) -> bool {
 /// A class card's width and height when the user names none: the header, an attribute row, an
 /// operation row and the line between them.
 pub const CLASS_SIZE: (f64, f64) = (240.0, 136.0);
+/// A primitive type's card as it is placed: its header alone, the `«primitive»` eyebrow over its
+/// name, with no compartment under it.
+pub const PRIMITIVE_TYPE_SIZE: (f64, f64) = (240.0, 66.0);
 /// A package's card as it is placed: its name, and a few of what it holds.
 pub const PACKAGE_SIZE: (f64, f64) = (240.0, 148.0);
 
 /// UML in a project's view: class diagrams of a package showing its
 /// classes, interfaces and data types as plain cards with their attributes and operations, its
-/// enumerations with their literals, and the associations,
+/// enumerations with their literals, its primitive types with their name alone, and the associations,
 /// generalizations, dependencies and interface realizations between them as lines (`figures`);
 /// packages and classes removed with what they hold.
 pub struct UmlNotation;
@@ -87,7 +91,8 @@ impl Notation for UmlNotation {
         true
     }
 
-    /// A class diagram shows classes, interfaces, enumerations, data types and packages as cards.
+    /// A class diagram shows classes, interfaces, enumerations, data types, primitive types and
+    /// packages as cards.
     fn shows(&self, _kind: &str, class: ClassId) -> bool {
         is_classifier(class) || class == PACKAGE
     }
@@ -102,8 +107,14 @@ impl Notation for UmlNotation {
         }
     }
 
+    /// A node's size when none is named: a package's card, a primitive type's header alone, and a
+    /// class's card for every other kind.
     fn default_size(&self, class: ClassId) -> (f64, f64) {
-        if class == PACKAGE { PACKAGE_SIZE } else { CLASS_SIZE }
+        match class {
+            c if c == PACKAGE => PACKAGE_SIZE,
+            c if c == PRIMITIVE_TYPE => PRIMITIVE_TYPE_SIZE,
+            _ => CLASS_SIZE,
+        }
     }
 
     /// Associations, generalizations, dependencies and interface realizations.
@@ -121,7 +132,8 @@ impl Notation for UmlNotation {
     }
 
     /// A class, an interface or a data type: its name, a class's slanted when abstract, its
-    /// attributes, then its operations; an enumeration: its name and its literals.
+    /// attributes, then its operations; an enumeration: its name and its literals; a primitive type:
+    /// its name alone.
     fn card(&self, store: &Store, element: Obj, diagram: Obj) -> Option<Card> {
         figures::card(store, element, diagram)
     }
@@ -135,12 +147,13 @@ impl Notation for UmlNotation {
         figures::slot_text(store, element, slot)
     }
 
-    /// A skill sits on a package, a class, an interface, an enumeration, a data type, an attribute
-    /// or an operation; it aims at every class, interface, enumeration, data type, attribute,
-    /// operation or association below its subject (owner decision: an interface carries skills as a
-    /// class does, and an enumeration and a data type as an interface does).
+    /// A skill sits on a package, a class, an interface, an enumeration, a data type, a primitive
+    /// type of the model's own, an attribute or an operation; it aims at every class, interface,
+    /// enumeration, data type, primitive type, attribute, operation or association below its
+    /// subject (owner decision: an interface carries skills as a class does, and an enumeration, a
+    /// data type and a primitive type as an interface does).
     fn skill_subjects(&self) -> &'static [ClassId] {
-        &[PACKAGE, CLASS, INTERFACE, ENUMERATION, DATA_TYPE, PROPERTY, OPERATION]
+        &[PACKAGE, CLASS, INTERFACE, ENUMERATION, DATA_TYPE, PRIMITIVE_TYPE, PROPERTY, OPERATION]
     }
 
     /// The kinds a package skill may aim at, each with the word that names it.
@@ -150,21 +163,21 @@ impl Notation for UmlNotation {
             (INTERFACE, "interface"),
             (ENUMERATION, "enumeration"),
             (DATA_TYPE, "data type"),
+            (PRIMITIVE_TYPE, "primitive type"),
             (PROPERTY, "attribute"),
             (OPERATION, "operation"),
             (ASSOCIATION, "association"),
         ]
     }
 
-    /// A primitive type is a kind of its own when a skill is aimed, though no skill names it yet
-    /// (AR-124 brings it as a kind): a skill for every data type does not reach Integer or String,
-    /// which UML's metamodel makes DataTypes.
-    fn aim_only_kinds(&self) -> &'static [ClassId] {
-        &[PRIMITIVE_TYPE]
-    }
-
-    /// An association's end is a property but no attribute: its association carries the skill.
+    /// An association's end is a property but no attribute: its association carries the skill. A
+    /// built-in type (Integer, String and the others in the package Types) is the same in every
+    /// project and carries none, nor is it aimed at by a skill for every primitive type; a primitive
+    /// type of the model's own does.
     fn skill_problem(&self, store: &Store, element: Obj) -> Option<&'static str> {
+        if members::is_built_in(store, element) {
+            return Some("a built-in type carries no skill; a primitive type of the model's own does");
+        }
         let end = store.class_of(element).ok() == Some(PROPERTY) && store.get(element, property::ASSOCIATION).ok().and_then(|v| v.as_ref()).is_some();
         end.then_some("an association's end carries no skill; its association's classes do")
     }
@@ -188,6 +201,8 @@ pub const WORDS: &[&str] = &[
     "«enumeration» · {package}",
     "«dataType»",
     "«dataType» · {package}",
+    "«primitive»",
+    "«primitive» · {package}",
     "Package",
 ];
 pub const PLURALS: &[&str] = &["+ {n} more member", "+ {n} more literal", "+ {n} more element"];

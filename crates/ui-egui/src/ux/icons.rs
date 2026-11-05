@@ -958,6 +958,22 @@ pub const TOOL_DATA_TYPE: Icon = Icon {
         C([12.0, 10.5], [12.0, 12.0], [11.5, 13.0], [10.0, 13.0]),
     ],
 };
+/// The classifier tool's face while it places a primitive type (the design's Tool · Primitive type):
+/// a plain box with a small ring at its middle, one value and nothing inside it.
+pub const TOOL_PRIMITIVE_TYPE: Icon = Icon {
+    size: [13.0, 13.0],
+    stroke: 1.2,
+    segments: &[
+        L([0.0, 0.0], [13.0, 0.0]),
+        L([13.0, 0.0], [13.0, 13.0]),
+        L([13.0, 13.0], [0.0, 13.0]),
+        L([0.0, 13.0], [0.0, 0.0]),
+        C([4.5, 6.5], [4.5, 7.605], [5.395, 8.5], [6.5, 8.5]),
+        C([6.5, 8.5], [7.605, 8.5], [8.5, 7.605], [8.5, 6.5]),
+        C([8.5, 6.5], [8.5, 5.395], [7.605, 4.5], [6.5, 4.5]),
+        C([6.5, 4.5], [5.395, 4.5], [4.5, 5.395], [4.5, 6.5]),
+    ],
+};
 /// A class's attribute in the Models tree: a small field.
 pub const ATTRIBUTE: Icon = Icon {
     size: [16.0, 16.0],
@@ -1036,6 +1052,22 @@ pub const DATA_TYPE: Icon = Icon {
         C([15.0, 8.0], [13.8, 8.0], [13.0, 8.5], [13.0, 9.5]),
         L([13.0, 9.5], [13.0, 12.0]),
         C([13.0, 12.0], [13.0, 13.5], [12.5, 14.5], [11.0, 14.5]),
+    ],
+};
+/// A UML primitive type in the Models tree and the classifier kinds: the tool's box with its ring,
+/// drawn at the tree's size.
+pub const PRIMITIVE_TYPE: Icon = Icon {
+    size: [16.0, 16.0],
+    stroke: 1.3,
+    segments: &[
+        L([1.5, 1.5], [14.5, 1.5]),
+        L([14.5, 1.5], [14.5, 14.5]),
+        L([14.5, 14.5], [1.5, 14.5]),
+        L([1.5, 14.5], [1.5, 1.5]),
+        C([6.0, 8.0], [6.0, 9.105], [6.895, 10.0], [8.0, 10.0]),
+        C([8.0, 10.0], [9.105, 10.0], [10.0, 9.105], [10.0, 8.0]),
+        C([10.0, 8.0], [10.0, 6.895], [9.105, 6.0], [8.0, 6.0]),
+        C([8.0, 6.0], [6.895, 6.0], [6.0, 6.895], [6.0, 8.0]),
     ],
 };
 /// An enumeration's literal in the Models tree: one row of the enumeration's list.

@@ -11,6 +11,7 @@ str		Generate	Generieren
 str		An agent connected to Archforge writes it from the model and its skills.	Ein mit Archforge verbundener Agent schreibt es aus dem Modell und seinen Skills.
 str		Nothing selected	Nichts ausgewählt
 str		{kind} · {name}	{kind} · {name}
+str		{name} · {where}	{name} · {where}
 str		Output	Ausgabe
 str		SQL DDL	SQL-DDL
 str		Documentation	Dokumentation
@@ -195,6 +196,7 @@ str		Collation	Sortierung
 str		Description	Beschreibung
 str		{text} is not a number	{text} ist keine Zahl
 str		None	Keine
+str		built-in	eingebaut
 str		Identity, always	Identität, immer
 str		Identity, by default	Identität, standardmäßig
 str		Computed, stored	Berechnet, gespeichert
@@ -210,6 +212,7 @@ str		every class	jede Klasse
 str		every interface	jede Schnittstelle
 str		every enumeration	jede Aufzählung
 str		every data type	jeder Datentyp
+str		every primitive type	jeder primitive Typ
 str		every attribute	jedes Attribut
 str		every operation	jede Operation
 str		every association	jede Assoziation
@@ -491,6 +494,8 @@ str		On this column · {n}	Auf dieser Spalte · {n}
 str		On this skill · {n}	Auf diesem Skill · {n}
 str		On this element · {n}	Auf diesem Element · {n}
 str		Literals carry no skills	Literale tragen keine Skills
+str		Built-in types carry no skills	Eingebaute Typen tragen keine Skills
+str		Types keeps the built-in types, so it stays while it holds them	Types enthält die eingebauten Typen und bleibt daher, solange es sie enthält
 str		Relationships carry no skills	Beziehungen tragen keine Skills
 str		This element carries no skills	Dieses Element trägt keine Skills
 str		Diagram	Diagramm
@@ -534,13 +539,16 @@ str		Add class	Klasse hinzufügen
 str		Add interface	Schnittstelle hinzufügen
 str		Add enumeration	Aufzählung hinzufügen
 str		Add data type	Datentyp hinzufügen
+str		Add primitive type	Primitiven Typ hinzufügen
 str		Class	Klasse
 str		Interface	Schnittstelle
 str		«interface»	«interface»
 str		Enumeration	Aufzählung
 str		«enumeration»	«enumeration»
 str		Data type	Datentyp
+str		Primitive type	Primitiver Typ
 str		«dataType»	«dataType»
+str		«primitive»	«primitive»
 str		Classifier	Klassifikator
 str		Classifier kinds	Klassifikatorarten
 str		Class diagram	Klassendiagramm
@@ -549,11 +557,13 @@ str		Class · model, in every diagram	Klasse · Modell, in jedem Diagramm
 str		Interface · model, in every diagram	Schnittstelle · Modell, in jedem Diagramm
 str		Enumeration · model, in every diagram	Aufzählung · Modell, in jedem Diagramm
 str		Data type · model, in every diagram	Datentyp · Modell, in jedem Diagramm
+str		Primitive type · model, in every diagram	Primitiver Typ · Modell, in jedem Diagramm
 str		New package	Neues Paket
 str		On this class · {n}	Auf dieser Klasse · {n}
 str		On this interface · {n}	Auf dieser Schnittstelle · {n}
 str		On this enumeration · {n}	Auf dieser Aufzählung · {n}
 str		On this data type · {n}	Auf diesem Datentyp · {n}
+str		On this primitive type · {n}	Auf diesem primitiven Typ · {n}
 str		On this package · {n}	Auf diesem Paket · {n}
 str		Package	Paket
 str		Package · model	Paket · Modell
@@ -562,6 +572,7 @@ str		This class	Diese Klasse
 str		This interface	Diese Schnittstelle
 str		This enumeration	Diese Aufzählung
 str		This data type	Dieser Datentyp
+str		This primitive type	Dieser primitive Typ
 str		This package	Dieses Paket
 plural		+ {n} more member	+ {n} weiteres Element|+ {n} weitere Elemente
 plural		+ {n} more literal	+ {n} weiteres Literal|+ {n} weitere Literale
@@ -608,6 +619,7 @@ str		Place class	Klasse platzieren
 str		Place interface	Schnittstelle platzieren
 str		Place enumeration	Aufzählung platzieren
 str		Place data type	Datentyp platzieren
+str		Place primitive type	Primitiven Typ platzieren
 str		Add package	Paket hinzufügen
 str		Place package	Paket platzieren
 str		Move package	Paket verschieben
@@ -624,12 +636,16 @@ str		A class realizes only an interface	Eine Klasse realisiert nur eine Schnitts
 str		A relationship joins two classes or interfaces	Eine Beziehung verbindet zwei Klassen oder Schnittstellen
 str		An enumeration is a data type and joins no association	Eine Aufzählung ist ein Datentyp und gehört zu keiner Assoziation
 str		A data type joins no association	Ein Datentyp gehört zu keiner Assoziation
+str		A primitive type joins no association	Ein primitiver Typ gehört zu keiner Assoziation
 str		An interface specializes only an interface	Eine Schnittstelle spezialisiert nur eine Schnittstelle
 str		A class cannot specialize an interface	Eine Klasse kann keine Schnittstelle spezialisieren
 str		An enumeration specializes only an enumeration	Eine Aufzählung spezialisiert nur eine Aufzählung
 str		Only an enumeration specializes an enumeration	Nur eine Aufzählung spezialisiert eine Aufzählung
 str		A data type specializes only a data type	Ein Datentyp spezialisiert nur einen Datentyp
 str		Only a data type specializes a data type	Nur ein Datentyp spezialisiert einen Datentyp
+str		A primitive type specializes only a primitive type	Ein primitiver Typ spezialisiert nur einen primitiven Typ
+str		Only a primitive type specializes a primitive type	Nur ein primitiver Typ spezialisiert einen primitiven Typ
+str		A built-in type specializes nothing	Ein eingebauter Typ spezialisiert nichts
 str		A classifier cannot specialize itself	Ein Klassifikator kann sich nicht selbst spezialisieren
 str		This one specializes that one already	Dieser spezialisiert jenen bereits
 str		That one specializes this one already, which would make a cycle	Jener spezialisiert diesen bereits, das ergäbe einen Zyklus
@@ -687,6 +703,7 @@ str		Class · {package}	Klasse · {package}
 str		«interface» · {package}	«interface» · {package}
 str		«enumeration» · {package}	«enumeration» · {package}
 str		«dataType» · {package}	«dataType» · {package}
+str		«primitive» · {package}	«primitive» · {package}
 str		{name} removed; what it held moved to {parent}	{name} entfernt; der Inhalt wurde nach {parent} verschoben
 # Ungesicherte Änderungen beim Schließen
 str		Close and lose changes	Schließen und Änderungen verwerfen

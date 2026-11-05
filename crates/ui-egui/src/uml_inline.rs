@@ -75,7 +75,8 @@ fn type_text(store: &Store, ty: &str) -> String {
 /// The row's type as the commands take it. The type it holds (the member's, or the one picked
 /// from the menu) is kept while the text still shows its name, so two types of one name in
 /// different packages stay apart; text typed over it names a type: none for empty, a built-in
-/// type or one of the model's; a name no type has, or that several have, is refused, naming it.
+/// type or one of the model's; a name no type has, or that several have (a built-in type's and one
+/// of the model's own among them), is refused, naming it.
 fn resolve(store: &Store, inline: &InlineMember) -> Result<String, String> {
     // A literal has no type.
     if inline.edit.kind == MemberKind::Literal {
@@ -284,7 +285,7 @@ pub(crate) fn row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, view: View)
     let mut picked = false;
     if shell.panels.menu == Some(crate::panels::Menu::InlineType) && !literal {
         let choices = crate::uml_panel::choices_for_menu(shell);
-        let chosen = crate::panels::menu(shell, ui, p, type_rect, TYPE_ID, &choices.labels);
+        let chosen = crate::panels::menu_noted(shell, ui, p, type_rect, TYPE_ID, &choices.labels, &choices.notes);
         let value = chosen.map(|i| choices.values.get(i).cloned().unwrap_or_default());
         crate::uml_panel::keep_choices(shell, choices);
         if let Some(value) = value {
@@ -411,7 +412,8 @@ pub(crate) fn add_buttons(shell: &mut Shell, ui: &egui::Ui, p: &Palette, clip: R
         let card = s.view().of_element(store, c)?.card(store, c, archforge_diagram::diagram_of(store, n)?)?;
         Some((card, store.class_of(c).ok() == Some(archforge_uml::ENUMERATION)))
     });
-    let Some((card, enumeration)) = card else { return };
+    // A card without a compartment (a primitive type's) has no + to add a member.
+    let Some((card, enumeration)) = card.filter(|(card, _)| !card.compartments.is_empty()) else { return };
     let paint = ui.painter().with_clip_rect(clip);
     let adds: &[(MemberKind, &str, &str)] = if enumeration {
         &[(MemberKind::Literal, "enumeration.add-literal", "Add literal")]

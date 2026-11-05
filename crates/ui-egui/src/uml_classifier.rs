@@ -1,5 +1,5 @@
 //! The classifier tool of a class diagram: one tool in Class's place that places the kind its
-//! chevron's menu chose (Class, Interface, Enumeration or Data type; only the kinds that work are listed), its face showing
+//! chevron's menu chose (Class, Interface, Enumeration, Data type or Primitive type; only the kinds that work are listed), its face showing
 //! that kind's icon and its tooltip naming it. The menu marks the current kind; the arrow keys
 //! walk it, Enter picks, Escape closes, and a pick arms the tool. The kind stays for the window's
 //! next placements; a new window starts at Class.
@@ -22,11 +22,14 @@ pub enum Classifier {
     Enumeration,
     /// A data type: a value without identity, with attributes and operations as a class has.
     DataType,
+    /// A primitive type of the model's own: a value with no members, its card its name alone.
+    PrimitiveType,
 }
 
 impl Classifier {
     /// The kinds the menu lists, in its order.
-    pub(crate) const ALL: [Classifier; 4] = [Classifier::Class, Classifier::Interface, Classifier::Enumeration, Classifier::DataType];
+    pub(crate) const ALL: [Classifier; 5] =
+        [Classifier::Class, Classifier::Interface, Classifier::Enumeration, Classifier::DataType, Classifier::PrimitiveType];
 
     /// Its name, in the menu, the tooltip and the Models' `+`.
     pub(crate) fn word(self) -> String {
@@ -35,6 +38,7 @@ impl Classifier {
             Classifier::Interface => tr("Interface"),
             Classifier::Enumeration => tr("Enumeration"),
             Classifier::DataType => tr("Data type"),
+            Classifier::PrimitiveType => tr("Primitive type"),
         }
     }
 
@@ -45,16 +49,19 @@ impl Classifier {
             Classifier::Interface => "interface",
             Classifier::Enumeration => "enumeration",
             Classifier::DataType => "data-type",
+            Classifier::PrimitiveType => "primitive-type",
         }
     }
 
-    /// The stem of a fresh name for one: `Class 1`, `Interface 1`, `Enumeration 1`, `DataType 1`.
+    /// The stem of a fresh name for one: `Class 1`, `Interface 1`, `Enumeration 1`, `DataType 1`,
+    /// `PrimitiveType 1`.
     pub(crate) fn stem(self) -> &'static str {
         match self {
             Classifier::Class => "Class",
             Classifier::Interface => "Interface",
             Classifier::Enumeration => "Enumeration",
             Classifier::DataType => "DataType",
+            Classifier::PrimitiveType => "PrimitiveType",
         }
     }
 
@@ -65,6 +72,7 @@ impl Classifier {
             Classifier::Interface => &icons::TOOL_INTERFACE,
             Classifier::Enumeration => &icons::TOOL_ENUMERATION,
             Classifier::DataType => &icons::TOOL_DATA_TYPE,
+            Classifier::PrimitiveType => &icons::TOOL_PRIMITIVE_TYPE,
         }
     }
 
@@ -75,6 +83,7 @@ impl Classifier {
             Classifier::Interface => &icons::INTERFACE,
             Classifier::Enumeration => &icons::ENUMERATION,
             Classifier::DataType => &icons::DATA_TYPE,
+            Classifier::PrimitiveType => &icons::PRIMITIVE_TYPE,
         }
     }
 
@@ -85,6 +94,7 @@ impl Classifier {
             Classifier::Interface => archforge_uml::INTERFACE,
             Classifier::Enumeration => archforge_uml::ENUMERATION,
             Classifier::DataType => archforge_uml::DATA_TYPE,
+            Classifier::PrimitiveType => archforge_uml::PRIMITIVE_TYPE,
         }
     }
 
@@ -102,6 +112,7 @@ impl Classifier {
             Classifier::Interface => "uml.interface.add",
             Classifier::Enumeration => "uml.enumeration.add",
             Classifier::DataType => "uml.data-type.add",
+            Classifier::PrimitiveType => "uml.primitive-type.add",
         }
     }
 
@@ -112,6 +123,7 @@ impl Classifier {
             Classifier::Interface => ("uml.interface.rename", "interface"),
             Classifier::Enumeration => ("uml.enumeration.rename", "enumeration"),
             Classifier::DataType => ("uml.data-type.rename", "data_type"),
+            Classifier::PrimitiveType => ("uml.primitive-type.rename", "primitive_type"),
         }
     }
 
@@ -122,6 +134,7 @@ impl Classifier {
             Classifier::Interface => ("uml.interface.move", "interface"),
             Classifier::Enumeration => ("uml.enumeration.move", "enumeration"),
             Classifier::DataType => ("uml.data-type.move", "data_type"),
+            Classifier::PrimitiveType => ("uml.primitive-type.move", "primitive_type"),
         }
     }
 
@@ -132,13 +145,26 @@ impl Classifier {
             Classifier::Interface => tr("Add interface"),
             Classifier::Enumeration => tr("Add enumeration"),
             Classifier::DataType => tr("Add data type"),
+            Classifier::PrimitiveType => tr("Add primitive type"),
         }
     }
 
     /// Whether its card takes attributes and operations: a class's, an interface's and a data
-    /// type's do; an enumeration's members are its literals.
+    /// type's do; an enumeration's members are its literals, and a primitive type has none.
     pub(crate) fn takes_members(self) -> bool {
-        self != Classifier::Enumeration
+        !matches!(self, Classifier::Enumeration | Classifier::PrimitiveType)
+    }
+
+    /// Whether it has members of any kind to add: every kind but a primitive type, whose card is
+    /// its name alone (no adorner, compartment `+`, menu row or ⌘↩).
+    pub(crate) fn has_members(self) -> bool {
+        self != Classifier::PrimitiveType
+    }
+
+    /// A placed card's width and height: a primitive type's its header alone, every other kind's
+    /// a class's.
+    pub(crate) fn size(self) -> (f64, f64) {
+        if self == Classifier::PrimitiveType { archforge_uml::PRIMITIVE_TYPE_SIZE } else { archforge_uml::CLASS_SIZE }
     }
 
     /// The undo step that places one dragged from Models.
@@ -148,6 +174,7 @@ impl Classifier {
             Classifier::Interface => tr("Place interface"),
             Classifier::Enumeration => tr("Place enumeration"),
             Classifier::DataType => tr("Place data type"),
+            Classifier::PrimitiveType => tr("Place primitive type"),
         }
     }
 }

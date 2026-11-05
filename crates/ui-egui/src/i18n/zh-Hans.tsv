@@ -11,6 +11,7 @@ str		Generate	生成
 str		An agent connected to Archforge writes it from the model and its skills.	连接到 Archforge 的代理会根据模型及其技能来编写。
 str		Nothing selected	未选择任何内容
 str		{kind} · {name}	{kind} · {name}
+str		{name} · {where}	{name} · {where}
 str		Output	输出
 str		SQL DDL	SQL DDL
 str		Documentation	文档
@@ -195,6 +196,7 @@ str		Collation	排序规则
 str		Description	描述
 str		{text} is not a number	{text} 不是数字
 str		None	无
+str		built-in	内置
 str		Identity, always	标识列，始终
 str		Identity, by default	标识列，默认
 str		Computed, stored	计算列，存储
@@ -210,6 +212,7 @@ str		every class	所有类
 str		every interface	所有接口
 str		every enumeration	所有枚举
 str		every data type	所有数据类型
+str		every primitive type	所有基本类型
 str		every attribute	所有属性
 str		every operation	所有操作
 str		every association	所有关联
@@ -491,6 +494,8 @@ str		On this column · {n}	此列上 · {n}
 str		On this skill · {n}	此技能上 · {n}
 str		On this element · {n}	此元素上 · {n}
 str		Literals carry no skills	字面量不带技能
+str		Built-in types carry no skills	内置类型不带技能
+str		Types keeps the built-in types, so it stays while it holds them	Types 存放内置类型，因此在存放它们期间会保留
 str		Relationships carry no skills	关系不带技能
 str		This element carries no skills	此元素不带技能
 str		Diagram	图
@@ -534,13 +539,16 @@ str		Add class	添加类
 str		Add interface	添加接口
 str		Add enumeration	添加枚举
 str		Add data type	添加数据类型
+str		Add primitive type	添加基本类型
 str		Class	类
 str		Interface	接口
 str		«interface»	«interface»
 str		Enumeration	枚举
 str		«enumeration»	«enumeration»
 str		Data type	数据类型
+str		Primitive type	基本类型
 str		«dataType»	«dataType»
+str		«primitive»	«primitive»
 str		Classifier	分类器
 str		Classifier kinds	分类器类型
 str		Class diagram	类图
@@ -549,11 +557,13 @@ str		Class · model, in every diagram	类 · 模型，在每个图中
 str		Interface · model, in every diagram	接口 · 模型，在每个图中
 str		Enumeration · model, in every diagram	枚举 · 模型，在每个图中
 str		Data type · model, in every diagram	数据类型 · 模型，在每个图中
+str		Primitive type · model, in every diagram	基本类型 · 模型，在每个图中
 str		New package	新包
 str		On this class · {n}	此类上 · {n}
 str		On this interface · {n}	此接口上 · {n}
 str		On this enumeration · {n}	在此枚举上 · {n}
 str		On this data type · {n}	在此数据类型上 · {n}
+str		On this primitive type · {n}	在此基本类型上 · {n}
 str		On this package · {n}	此包上 · {n}
 str		Package	包
 str		Package · model	包 · 模型
@@ -562,6 +572,7 @@ str		This class	此类
 str		This interface	此接口
 str		This enumeration	此枚举
 str		This data type	此数据类型
+str		This primitive type	此基本类型
 str		This package	此包
 plural		+ {n} more member	+ 另 {n} 个成员
 plural		+ {n} more literal	+ 另 {n} 个字面量
@@ -608,6 +619,7 @@ str		Place class	放置类
 str		Place interface	放置接口
 str		Place enumeration	放置枚举
 str		Place data type	放置数据类型
+str		Place primitive type	放置基本类型
 str		Add package	添加包
 str		Place package	放置包
 str		Move package	移动包
@@ -624,12 +636,16 @@ str		A class realizes only an interface	类只能实现接口
 str		A relationship joins two classes or interfaces	关系连接两个类或接口
 str		An enumeration is a data type and joins no association	枚举是数据类型，不参与任何关联
 str		A data type joins no association	数据类型不参与任何关联
+str		A primitive type joins no association	基本类型不参与任何关联
 str		An interface specializes only an interface	接口只能特化接口
 str		A class cannot specialize an interface	类不能特化接口
 str		An enumeration specializes only an enumeration	枚举只能特化枚举
 str		Only an enumeration specializes an enumeration	只有枚举能特化枚举
 str		A data type specializes only a data type	数据类型只能特化数据类型
 str		Only a data type specializes a data type	只有数据类型能特化数据类型
+str		A primitive type specializes only a primitive type	基本类型只能特化基本类型
+str		Only a primitive type specializes a primitive type	只有基本类型能特化基本类型
+str		A built-in type specializes nothing	内置类型不特化任何类型
 str		A classifier cannot specialize itself	分类器不能特化自身
 str		This one specializes that one already	此项已特化该项
 str		That one specializes this one already, which would make a cycle	该项已特化此项，这会形成循环
@@ -687,6 +703,7 @@ str		Class · {package}	类 · {package}
 str		«interface» · {package}	«interface» · {package}
 str		«enumeration» · {package}	«enumeration» · {package}
 str		«dataType» · {package}	«dataType» · {package}
+str		«primitive» · {package}	«primitive» · {package}
 str		{name} removed; what it held moved to {parent}	已移除 {name}；其内容已移至 {parent}
 # 关闭时未保存的更改
 str		Close and lose changes	关闭并丢弃更改

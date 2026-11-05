@@ -11,6 +11,7 @@ str		Generate	Générer
 str		An agent connected to Archforge writes it from the model and its skills.	Un agent connecté à Archforge l’écrit à partir du modèle et de ses compétences.
 str		Nothing selected	Rien de sélectionné
 str		{kind} · {name}	{kind} · {name}
+str		{name} · {where}	{name} · {where}
 str		Output	Sortie
 str		SQL DDL	DDL SQL
 str		Documentation	Documentation
@@ -195,6 +196,7 @@ str		Collation	Collation
 str		Description	Description
 str		{text} is not a number	{text} n’est pas un nombre
 str		None	Aucune
+str		built-in	intégré
 str		Identity, always	Identité, toujours
 str		Identity, by default	Identité, par défaut
 str		Computed, stored	Calculée, stockée
@@ -210,6 +212,7 @@ str		every class	chaque classe
 str		every interface	chaque interface
 str		every enumeration	chaque énumération
 str		every data type	chaque type de données
+str		every primitive type	chaque type primitif
 str		every attribute	chaque attribut
 str		every operation	chaque opération
 str		every association	chaque association
@@ -491,6 +494,8 @@ str		On this column · {n}	Sur cette colonne · {n}
 str		On this skill · {n}	Sur cette compétence · {n}
 str		On this element · {n}	Sur cet élément · {n}
 str		Literals carry no skills	Les littéraux ne portent pas de compétences
+str		Built-in types carry no skills	Les types intégrés ne portent pas de compétences
+str		Types keeps the built-in types, so it stays while it holds them	Types garde les types intégrés, il reste donc tant qu’il les contient
 str		Relationships carry no skills	Les relations ne portent pas de compétences
 str		This element carries no skills	Cet élément ne porte pas de compétences
 str		Diagram	Diagramme
@@ -534,13 +539,16 @@ str		Add class	Ajouter une classe
 str		Add interface	Ajouter une interface
 str		Add enumeration	Ajouter une énumération
 str		Add data type	Ajouter un type de données
+str		Add primitive type	Ajouter un type primitif
 str		Class	Classe
 str		Interface	Interface
 str		«interface»	«interface»
 str		Enumeration	Énumération
 str		«enumeration»	«enumeration»
 str		Data type	Type de données
+str		Primitive type	Type primitif
 str		«dataType»	«dataType»
+str		«primitive»	«primitive»
 str		Classifier	Classificateur
 str		Classifier kinds	Types de classificateur
 str		Class diagram	Diagramme de classes
@@ -549,11 +557,13 @@ str		Class · model, in every diagram	Classe · modèle, dans chaque diagramme
 str		Interface · model, in every diagram	Interface · modèle, dans chaque diagramme
 str		Enumeration · model, in every diagram	Énumération · modèle, dans chaque diagramme
 str		Data type · model, in every diagram	Type de données · modèle, dans chaque diagramme
+str		Primitive type · model, in every diagram	Type primitif · modèle, dans chaque diagramme
 str		New package	Nouveau paquetage
 str		On this class · {n}	Sur cette classe · {n}
 str		On this interface · {n}	Sur cette interface · {n}
 str		On this enumeration · {n}	Sur cette énumération · {n}
 str		On this data type · {n}	Sur ce type de données · {n}
+str		On this primitive type · {n}	Sur ce type primitif · {n}
 str		On this package · {n}	Sur ce paquetage · {n}
 str		Package	Paquetage
 str		Package · model	Paquetage · modèle
@@ -562,6 +572,7 @@ str		This class	Cette classe
 str		This interface	Cette interface
 str		This enumeration	Cette énumération
 str		This data type	Ce type de données
+str		This primitive type	Ce type primitif
 str		This package	Ce paquetage
 plural		+ {n} more member	+ {n} membre de plus|+ {n} membres de plus
 plural		+ {n} more literal	+ {n} littéral de plus|+ {n} littéraux de plus
@@ -608,6 +619,7 @@ str		Place class	Placer la classe
 str		Place interface	Placer l'interface
 str		Place enumeration	Placer l'énumération
 str		Place data type	Placer le type de données
+str		Place primitive type	Placer le type primitif
 str		Add package	Ajouter un paquetage
 str		Place package	Placer le paquetage
 str		Move package	Déplacer le paquetage
@@ -624,12 +636,16 @@ str		A class realizes only an interface	Une classe ne réalise qu’une interfac
 str		A relationship joins two classes or interfaces	Une relation joint deux classes ou interfaces
 str		An enumeration is a data type and joins no association	Une énumération est un type de données et ne participe à aucune association
 str		A data type joins no association	Un type de données ne participe à aucune association
+str		A primitive type joins no association	Un type primitif ne participe à aucune association
 str		An interface specializes only an interface	Une interface ne spécialise qu’une interface
 str		A class cannot specialize an interface	Une classe ne peut pas spécialiser une interface
 str		An enumeration specializes only an enumeration	Une énumération ne spécialise qu’une énumération
 str		Only an enumeration specializes an enumeration	Seule une énumération spécialise une énumération
 str		A data type specializes only a data type	Un type de données ne spécialise qu’un type de données
 str		Only a data type specializes a data type	Seul un type de données spécialise un type de données
+str		A primitive type specializes only a primitive type	Un type primitif ne spécialise qu’un type primitif
+str		Only a primitive type specializes a primitive type	Seul un type primitif spécialise un type primitif
+str		A built-in type specializes nothing	Un type intégré ne spécialise rien
 str		A classifier cannot specialize itself	Un classificateur ne peut pas se spécialiser lui-même
 str		This one specializes that one already	Celui-ci spécialise déjà celui-là
 str		That one specializes this one already, which would make a cycle	Celui-là spécialise déjà celui-ci, ce qui créerait un cycle
@@ -687,6 +703,7 @@ str		Class · {package}	Classe · {package}
 str		«interface» · {package}	«interface» · {package}
 str		«enumeration» · {package}	«enumeration» · {package}
 str		«dataType» · {package}	«dataType» · {package}
+str		«primitive» · {package}	«primitive» · {package}
 str		{name} removed; what it held moved to {parent}	{name} supprimé ; son contenu a été déplacé vers {parent}
 # Modifications non enregistrées à la fermeture
 str		Close and lose changes	Fermer et perdre les modifications

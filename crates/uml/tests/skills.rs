@@ -1,6 +1,7 @@
-//! Skills over UML: packages, classes, interfaces, enumerations, data types, attributes and
-//! operations carry them (owner decision), a relationship does not; a skill aims at every class,
-//! interface, enumeration, data type, attribute, operation or association below
+//! Skills over UML: packages, classes, interfaces, enumerations, data types, primitive types of the
+//! model's own, attributes and operations carry them (owner decision), a relationship and a
+//! built-in type do not; a skill aims at every class, interface, enumeration, data type, primitive
+//! type, attribute, operation or association below
 //! its subject, is inherited down the package tree and replaced by a deeper one of its name; each
 //! skill.add one undo step.
 
@@ -122,7 +123,7 @@ fn a_package_skill_aims_at_the_kind_it_names_below_it() {
     assert_eq!(names(&s, &m.association), ["Associations"]);
     // An ER kind is not one of UML's.
     let e = s.execute("skill.add", &json!({ "subject": m.sales, "name": "Tables", "applies_to": "table" })).unwrap_err().to_string();
-    assert!(e.contains("class, interface, enumeration, data type, attribute, operation, association"), "{e}");
+    assert!(e.contains("class, interface, enumeration, data type, primitive type, attribute, operation, association"), "{e}");
 }
 
 /// An enumeration carries skills as an interface does, and a package skill for enumerations aims
@@ -179,8 +180,8 @@ fn a_data_type_carries_skills_and_a_package_skill_for_data_types_aims_only_at_th
 }
 
 /// A model-level skill for every data type skips the built-in types: Integer is a PrimitiveType,
-/// which UML's metamodel makes a DataType, but a primitive type is a kind of its own when a skill
-/// is aimed, and no skill names it yet (AR-124). A data type still gets the skill.
+/// which UML's metamodel makes a DataType, but a primitive type is a skill kind of its own (AR-124),
+/// the closer one. A data type still gets the skill.
 #[test]
 fn a_skill_for_every_data_type_skips_the_built_in_primitive_types() {
     let mut s = session();
@@ -202,6 +203,66 @@ fn a_skill_for_every_data_type_skips_the_built_in_primitive_types() {
     };
     assert_eq!(effective(&mut s, &integer), Vec::<String>::new(), "a primitive type is no data type here");
     assert_eq!(effective(&mut s, &money), ["Values"], "a data type gets it");
+}
+
+/// The primitive type value of the type named `name` in the package Types, made when first used.
+fn built_in(s: &S, name: &str) -> String {
+    let st = s.doc();
+    let t = st
+        .alive()
+        .find(|o| archforge_uml::members::is_built_in(st, *o) && archforge_core::name_of(st, *o) == name)
+        .unwrap_or_else(|| panic!("{name} is made in Types when first used"));
+    st.uuid(t).unwrap().to_string()
+}
+
+/// A primitive type of the model's own carries skills as a data type does (AR-124), and a skill for
+/// every primitive type aims at those alone: never at a data type, a class or a built-in type; a
+/// skill for every data type does not reach a primitive type, the closer kind.
+#[test]
+fn a_primitive_type_carries_skills_and_a_skill_for_every_primitive_type_aims_only_at_the_model_s_own() {
+    let mut s = session();
+    let m = model(&mut s);
+    let sku = run(&mut s, "uml.primitive-type.add", json!({ "package": m.sales, "name": "Sku" }));
+    let money = run(&mut s, "uml.data-type.add", json!({ "package": m.sales, "name": "Money" }));
+    run(&mut s, "uml.attribute.add", json!({ "class": m.order, "name": "count", "type": "Integer" }));
+    let integer = built_in(&s, "Integer");
+    // Its own skill, one undo step.
+    let before = skills(s.doc()).len();
+    let skill = run(&mut s, "skill.add", json!({ "subject": sku, "name": "Codes", "body": "Upper case." }));
+    assert_eq!(archforge_core::skills::subject_of(s.doc(), obj(&s, &skill)), Some(obj(&s, &sku)));
+    s.undo().unwrap();
+    assert_eq!(skills(s.doc()).len(), before);
+    s.redo().unwrap();
+    // The model's skills for every primitive type and for every data type each reach their kind alone.
+    run(&mut s, "skill.add", json!({ "subject": "", "name": "Primitives", "applies_to": "primitive type" }));
+    run(&mut s, "skill.add", json!({ "subject": "", "name": "Values", "applies_to": "data type" }));
+    let names = |s: &S, e: &str| applying(s, e).into_iter().map(|(n, _, _)| n).collect::<Vec<_>>();
+    assert_eq!(names(&s, &sku), ["Primitives", "Codes"], "a primitive type gets the primitive skill, never the data type one");
+    assert_eq!(names(&s, &money), ["Values"], "a data type gets the data type skill alone");
+    assert_eq!(names(&s, &m.order), Vec::<String>::new(), "a class neither");
+    assert_eq!(names(&s, &integer), Vec::<String>::new(), "a built-in type neither");
+    // Removed, it takes its skill along.
+    run(&mut s, "element.remove", json!({ "ids": [sku] }));
+    assert!(skills(s.doc()).iter().all(|k| archforge_core::skills::name_of(s.doc(), *k) != "Codes"), "its skill went with it");
+}
+
+/// A built-in type carries no skill: skill.add on Integer is refused, naming its id and saying a
+/// primitive type of the model's own does, and nothing changes; the model's own primitive type
+/// beside it takes one.
+#[test]
+fn a_built_in_type_refuses_a_skill_naming_it_and_what_carries_one() {
+    let mut s = session();
+    let m = model(&mut s);
+    run(&mut s, "uml.attribute.add", json!({ "class": m.order, "name": "count", "type": "Integer" }));
+    let integer = built_in(&s, "Integer");
+    let before = skills(s.doc()).len();
+    let e = s.execute("skill.add", &json!({ "subject": integer, "name": "Ints" })).unwrap_err().to_string();
+    assert!(e.contains(&integer) && e.contains("a built-in type carries no skill; a primitive type of the model's own does"), "{e}");
+    assert_eq!(skills(s.doc()).len(), before, "nothing changed");
+    let st = s.doc();
+    assert!(archforge_core::skills::subject_problem(s.view(), st, obj(&s, &integer)).is_some(), "the shell asks the same rule before it offers +");
+    let sku = run(&mut s, "uml.primitive-type.add", json!({ "package": m.sales, "name": "Sku" }));
+    assert!(archforge_core::skills::subject_problem(s.view(), s.doc(), obj(&s, &sku)).is_none(), "a primitive type of the model's own carries one");
 }
 
 /// An interface carries skills as a class does, and a package skill for interfaces aims at them alone.

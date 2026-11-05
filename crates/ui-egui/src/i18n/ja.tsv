@@ -11,6 +11,7 @@ str		Generate	生成
 str		An agent connected to Archforge writes it from the model and its skills.	Archforge に接続したエージェントが、モデルとそのスキルから作成します。
 str		Nothing selected	何も選択されていません
 str		{kind} · {name}	{kind} · {name}
+str		{name} · {where}	{name} · {where}
 str		Output	出力
 str		SQL DDL	SQL DDL
 str		Documentation	ドキュメント
@@ -195,6 +196,7 @@ str		Collation	照合順序
 str		Description	説明
 str		{text} is not a number	{text} は数値ではありません
 str		None	なし
+str		built-in	組み込み
 str		Identity, always	識別列、常に
 str		Identity, by default	識別列、既定で
 str		Computed, stored	計算列、保存
@@ -210,6 +212,7 @@ str		every class	すべてのクラス
 str		every interface	すべてのインターフェース
 str		every enumeration	すべての列挙
 str		every data type	すべてのデータ型
+str		every primitive type	すべてのプリミティブ型
 str		every attribute	すべての属性
 str		every operation	すべての操作
 str		every association	すべての関連
@@ -491,6 +494,8 @@ str		On this column · {n}	この列に · {n}
 str		On this skill · {n}	このスキルに · {n}
 str		On this element · {n}	この要素に · {n}
 str		Literals carry no skills	リテラルはスキルを持ちません
+str		Built-in types carry no skills	組み込み型はスキルを持ちません
+str		Types keeps the built-in types, so it stays while it holds them	Types は組み込み型を保持しているため、保持している間は残ります
 str		Relationships carry no skills	関係はスキルを持ちません
 str		This element carries no skills	この要素はスキルを持ちません
 str		Diagram	図
@@ -534,13 +539,16 @@ str		Add class	クラスを追加
 str		Add interface	インターフェースを追加
 str		Add enumeration	列挙を追加
 str		Add data type	データ型を追加
+str		Add primitive type	プリミティブ型を追加
 str		Class	クラス
 str		Interface	インターフェース
 str		«interface»	«interface»
 str		Enumeration	列挙
 str		«enumeration»	«enumeration»
 str		Data type	データ型
+str		Primitive type	プリミティブ型
 str		«dataType»	«dataType»
+str		«primitive»	«primitive»
 str		Classifier	分類子
 str		Classifier kinds	分類子の種類
 str		Class diagram	クラス図
@@ -549,11 +557,13 @@ str		Class · model, in every diagram	クラス · モデル、すべての図�
 str		Interface · model, in every diagram	インターフェース · モデル、すべての図に
 str		Enumeration · model, in every diagram	列挙 · モデル、すべての図に
 str		Data type · model, in every diagram	データ型 · モデル、すべての図に
+str		Primitive type · model, in every diagram	プリミティブ型 · モデル、すべての図に
 str		New package	新しいパッケージ
 str		On this class · {n}	このクラスに · {n}
 str		On this interface · {n}	このインターフェースに · {n}
 str		On this enumeration · {n}	この列挙に · {n}
 str		On this data type · {n}	このデータ型に · {n}
+str		On this primitive type · {n}	このプリミティブ型に · {n}
 str		On this package · {n}	このパッケージに · {n}
 str		Package	パッケージ
 str		Package · model	パッケージ · モデル
@@ -562,6 +572,7 @@ str		This class	このクラス
 str		This interface	このインターフェース
 str		This enumeration	この列挙
 str		This data type	このデータ型
+str		This primitive type	このプリミティブ型
 str		This package	このパッケージ
 plural		+ {n} more member	+ 他 {n} メンバー
 plural		+ {n} more literal	+ 他 {n} リテラル
@@ -608,6 +619,7 @@ str		Place class	クラスを配置
 str		Place interface	インターフェースを配置
 str		Place enumeration	列挙を配置
 str		Place data type	データ型を配置
+str		Place primitive type	プリミティブ型を配置
 str		Add package	パッケージを追加
 str		Place package	パッケージを配置
 str		Move package	パッケージを移動
@@ -624,12 +636,16 @@ str		A class realizes only an interface	クラスが実現できるのはイン�
 str		A relationship joins two classes or interfaces	関係は 2 つのクラスまたはインターフェースを結びます
 str		An enumeration is a data type and joins no association	列挙はデータ型であり、関連には加わりません
 str		A data type joins no association	データ型は関連には加わりません
+str		A primitive type joins no association	プリミティブ型は関連には加わりません
 str		An interface specializes only an interface	インターフェースはインターフェースだけを特化します
 str		A class cannot specialize an interface	クラスはインターフェースを特化できません
 str		An enumeration specializes only an enumeration	列挙は列挙だけを特化します
 str		Only an enumeration specializes an enumeration	列挙を特化できるのは列挙だけです
 str		A data type specializes only a data type	データ型はデータ型だけを特化します
 str		Only a data type specializes a data type	データ型を特化できるのはデータ型だけです
+str		A primitive type specializes only a primitive type	プリミティブ型はプリミティブ型だけを特化します
+str		Only a primitive type specializes a primitive type	プリミティブ型を特化できるのはプリミティブ型だけです
+str		A built-in type specializes nothing	組み込み型は何も特化しません
 str		A classifier cannot specialize itself	分類子は自分自身を特化できません
 str		This one specializes that one already	これはすでにそれを特化しています
 str		That one specializes this one already, which would make a cycle	それはすでにこれを特化しており、循環になります
@@ -687,6 +703,7 @@ str		Class · {package}	クラス · {package}
 str		«interface» · {package}	«interface» · {package}
 str		«enumeration» · {package}	«enumeration» · {package}
 str		«dataType» · {package}	«dataType» · {package}
+str		«primitive» · {package}	«primitive» · {package}
 str		{name} removed; what it held moved to {parent}	{name} を削除しました。中身は {parent} に移動しました
 # 閉じるときの未保存の変更
 str		Close and lose changes	閉じて変更を破棄

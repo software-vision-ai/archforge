@@ -4,12 +4,15 @@
 //! members are public, as UML has them; a data type keeps its own as a class does, in
 //! DataType's ownedAttribute and ownedOperation; an enumeration takes neither, its members being its
 //! literals, which are added, renamed and moved here (`uml.literal.*`), their names told apart
-//! within their enumeration whatever the case, and removed through `element.remove`. A type is
-//! named by an element's id
-//! (a class of the model, an interface, an enumeration, a data type, or any type it holds) or by a built-in type's name: Integer, String,
-//! Boolean, Real or UnlimitedNatural, which the project keeps in a package named Types, made the
-//! first time one is used (owner decision). A multiplicity is typed (`1`, `0..1`, `*`, `1..*`,
-//! `2..5`) and refused with a reason when it does not read (owner decision).
+//! within their enumeration whatever the case, and removed through `element.remove`; a primitive
+//! type has no members at all. A type is named by an element's id
+//! (a class of the model, an interface, an enumeration, a data type, a primitive type, or any type
+//! it holds) or by a built-in type's name: Integer, String, Boolean, Real or UnlimitedNatural,
+//! which the project keeps as primitive types in the package Types under the root, made the first time one is
+//! used (owner decision). A built-in type's name always names the one in Types, never a type of the
+//! model's own named alike, and in the package Types those names are kept for the built-in
+//! types (AR-124). A multiplicity is typed (`1`, `0..1`, `*`, `1..*`, `2..5`) and refused with a
+//! reason when it does not read (owner decision).
 
 use archforge_diagram::ProjectView;
 use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, always, cmd};
@@ -35,7 +38,128 @@ pub const MAX_PARAMETERS: usize = 64;
 /// The largest bound a multiplicity names.
 pub const MAX_BOUND: u64 = 1_000_000;
 /// Why a command is not available.
-pub const NO_CLASSES: &str = "There is no class, interface, enumeration or data type yet.";
+pub const NO_CLASSES: &str = "There is no class, interface, enumeration, data type or primitive type yet.";
+
+/// The package Types, where the built-in types are kept: the package named exactly [`TYPES`]
+/// directly under the root package, or, in a project without a root package yet, at the model's
+/// top level (the root takes those in when it is made). It is the one place that says which package
+/// it is; no marker is stored. A package named Types anywhere else is an ordinary package.
+pub fn types_package(store: &Store) -> Option<Obj> {
+    let level = match crate::commands::root_package(store) {
+        Some(root) => crate::commands::subpackages(store, root),
+        None => packages(store),
+    };
+    level.into_iter().find(|p| name_of(store, *p) == TYPES)
+}
+
+/// Whether `t` is a built-in type: a primitive type named Integer, String, Boolean, Real or
+/// UnlimitedNatural, exactly, kept in the package Types ([`types_package`]). No primitive type of
+/// the model's own can be one, since those names are kept for the built-in types there
+/// ([`reserved_problem`]) and a package becomes Types only without them ([`types_problem`]).
+pub fn is_built_in(store: &Store, t: Obj) -> bool {
+    // The cheap tests first: most elements are no primitive type of a built-in name.
+    if store.class_of(t).ok() != Some(PRIMITIVE_TYPE) || !BUILT_IN.contains(&name_of(store, t).as_str()) {
+        return false;
+    }
+    let home = store.container(t).ok().flatten().map(|(p, _)| p);
+    home.is_some_and(|p| name_of(store, p) == TYPES && types_package(store) == Some(p))
+}
+
+/// Whether the package `package` holds a built-in type.
+fn holds_built_ins(store: &Store, package: Obj) -> bool {
+    crate::commands::primitive_types(store, package).into_iter().any(|t| is_built_in(store, t))
+}
+
+/// The first classifier `package` holds whose name is a built-in type's, whatever the case.
+fn reserved_held(store: &Store, package: Obj) -> Option<Obj> {
+    crate::commands::classifiers(store, package).into_iter().find(|c| BUILT_IN.iter().any(|b| b.eq_ignore_ascii_case(name_of(store, *c).trim())))
+}
+
+/// Why a classifier named `name` may not sit in `package`, when it may not: in the package Types
+/// ([`types_package`]) the built-in types' names, whatever the case, are kept for them, made there
+/// the first time one is used, so a type of the model's own never stands in for one. The refusal
+/// names the name and what may be done instead.
+pub(crate) fn reserved_problem(store: &Store, package: Obj, name: &str) -> Option<String> {
+    if name_of(store, package) != TYPES || types_package(store) != Some(package) {
+        return None;
+    }
+    let builtin = BUILT_IN.iter().find(|b| b.eq_ignore_ascii_case(name.trim()))?;
+    Some(format!(
+        "{name} is the name of the built-in type {builtin}, kept for it in the package {TYPES}; name it otherwise or put it in another package"
+    ))
+}
+
+/// Why the package `package`, named `name`, may not sit in `parent` (none: the model's top level),
+/// when it may not, so that the package Types stays one and its built-in types stay built-in: the
+/// package Types keeps its name and its place directly under the root while it holds built-in
+/// types; and a package becomes Types there only while there is no package Types, and only when it
+/// holds no classifier with a built-in type's name, which would else turn into a built-in type.
+/// The refusal names the ids involved.
+pub(crate) fn types_problem(store: &Store, package: Obj, name: &str, parent: Option<Obj>) -> Option<String> {
+    let types = types_package(store);
+    let root_level = match crate::commands::root_package(store) {
+        Some(root) => parent == Some(root),
+        None => parent.is_none(),
+    };
+    let id = |o: Obj| uuid_of(store, o).unwrap_or_default();
+    if types == Some(package) && (name != TYPES || !root_level) && holds_built_ins(store, package) {
+        return Some(format!(
+            "{} is the package {TYPES}, which keeps the built-in types ({}); it keeps its name and stays directly under the root package while it holds them",
+            id(package),
+            BUILT_IN.join(", ")
+        ));
+    }
+    if name != TYPES || !root_level || types == Some(package) {
+        return None;
+    }
+    if let Some(t) = types {
+        return Some(format!(
+            "{} is the package {TYPES} already, where the built-in types are kept; {} keeps another name there or goes into another package",
+            id(t),
+            id(package)
+        ));
+    }
+    reserved_held(store, package).map(|c| {
+        format!(
+            "{} holds {} named {}, {}, a built-in type's name; as the package {TYPES} it would be taken for the built-in type, so rename that first",
+            id(package),
+            crate::commands::a_what(store, c),
+            name_of(store, c),
+            id(c)
+        )
+    })
+}
+
+/// Why `element` may not be removed, when it may not: a built-in type stays, since the next use of
+/// its name would make it again under a new id; and a package holding one at any depth (the
+/// package Types) stays, since its removal would take the built-in types along or hand them to
+/// another package as types of the model's own. An empty Types, or one holding only the model's
+/// own types, goes as any package. The refusal names the id and what it keeps.
+pub fn removal_problem(store: &Store, element: Obj) -> Option<String> {
+    let id = uuid_of(store, element).unwrap_or_default();
+    if is_built_in(store, element) {
+        return Some(format!(
+            "{id} is the built-in type {}, kept in the package {TYPES}; it stays, since its next use would make it again under a new id",
+            name_of(store, element)
+        ));
+    }
+    let package = store.class_of(element).ok() == Some(PACKAGE);
+    let held = crate::commands::classifiers_within(store, element);
+    (package && held.into_iter().any(|t| is_built_in(store, t)))
+        .then(|| format!("{id} holds the built-in types ({}), kept in the package {TYPES}; it stays while it holds them", BUILT_IN.join(", ")))
+}
+
+/// Why the built-in type `t` may not be `changed` (renamed, moved), when it is one: it keeps its
+/// name and its package. The refusal names its id and name and what may be changed instead.
+pub(crate) fn built_in_problem(store: &Store, t: Obj, changed: &str) -> Option<String> {
+    is_built_in(store, t).then(|| {
+        let id = uuid_of(store, t).unwrap_or_default();
+        format!(
+            "{id} is the built-in type {}, which is never {changed}: it keeps its name and its package {TYPES}; a primitive type of the model's own is",
+            name_of(store, t)
+        )
+    })
+}
 
 /// The most literals an enumeration holds: ER's enum types hold as many
 /// (`archforge_er::rules::MAX_LITERALS`), one rule across the notations, and the card, Properties
@@ -47,8 +171,8 @@ pub const NO_ENUMERATIONS: &str = "There is no enumeration yet.";
 /// The visibilities, in the metamodel's order, as the commands name them.
 const VISIBILITIES: [&str; 4] = ["public", "private", "protected", "package"];
 
-/// Whether a class, an interface, an enumeration or a data type exists, which the member commands
-/// need.
+/// Whether a class, an interface, an enumeration, a data type or a primitive type exists, which the
+/// member commands need.
 fn has_classes(f: &Facts<'_, Store, ProjectView>) -> Result<(), &'static str> {
     if f.doc.alive().any(|o| f.doc.class_of(o).is_ok_and(crate::is_classifier)) { Ok(()) } else { Err(NO_CLASSES) }
 }
@@ -175,14 +299,22 @@ pub(crate) fn set_multiplicity(store: &mut Store, o: Obj, typed: &str, key: &str
     store.set(o, multiplicity_element::UPPER_VALUE, Value::Ref(u)).map_err(fail)
 }
 
-/// The package that keeps the built-in types, made in the model when there is none.
-fn types_package(store: &mut Store) -> Result<Obj, CommandError> {
-    // Types sits in the model's root package, as every package does; making the root takes in a
-    // Types an older project kept at the top level, so its types are used again.
+/// The package Types ([`types_package`]), made directly under the root package when there is
+/// none. A package of the root named like it in another case would clash, so it is refused, naming
+/// it, rather than made beside it.
+fn ensure_types_package(store: &mut Store) -> Result<Obj, CommandError> {
+    // Making the root takes in a Types an older project kept at the top level, so its types are
+    // used again.
     let root = crate::commands::ensure_root(store)?;
-    let held = crate::commands::subpackages(store, root).into_iter().chain(packages(store)).find(|p| name_of(store, *p) == TYPES);
-    if let Some(p) = held {
+    if let Some(p) = types_package(store) {
         return Ok(p);
+    }
+    if let Some(other) = crate::commands::subpackages(store, root).into_iter().find(|p| name_of(store, *p).eq_ignore_ascii_case(TYPES)) {
+        return Err(CommandError::new(format!(
+            "the root package holds a package named {}, {}, where the package {TYPES} would be made for the built-in types; rename it first",
+            name_of(store, other),
+            uuid_of(store, other)?
+        )));
     }
     let p = store.create(PACKAGE).map_err(fail)?;
     set_name(store, p, TYPES)?;
@@ -191,19 +323,32 @@ fn types_package(store: &mut Store) -> Result<Obj, CommandError> {
 }
 
 /// The type `value` names: empty for none, an element's id, or a built-in type's name, which is
-/// made in the Types package the first time it is used.
+/// made in the package Types the first time it is used. Where Types holds a classifier named like
+/// it in another case or of another kind (from an older project), the built-in type is not made
+/// beside it: the refusal names that one and asks for it to be renamed.
 fn resolve_type(store: &mut Store, key: &str, value: &str) -> Result<Option<Obj>, CommandError> {
     let value = value.trim();
     if value.is_empty() {
         return Ok(None);
     }
     if let Some(builtin) = BUILT_IN.iter().find(|b| b.eq_ignore_ascii_case(value)) {
-        let pkg = types_package(store)?;
+        let pkg = ensure_types_package(store).map_err(|e| refuse(key, e.message))?;
         let held = list(store, pkg, package::PACKAGED_ELEMENT)
             .into_iter()
             .find(|t| store.class_of(*t).ok() == Some(PRIMITIVE_TYPE) && name_of(store, *t) == *builtin);
         if let Some(t) = held {
             return Ok(Some(t));
+        }
+        if let Some(c) = crate::commands::classifiers(store, pkg).into_iter().find(|c| name_of(store, *c).eq_ignore_ascii_case(builtin)) {
+            return Err(refuse(
+                key,
+                format!(
+                    "the package {TYPES} holds {} named {}, {}, where the built-in type {builtin} is kept; rename it to use the built-in type",
+                    crate::commands::a_what(store, c),
+                    name_of(store, c),
+                    uuid_of(store, c)?
+                ),
+            ));
         }
         let t = store.create(PRIMITIVE_TYPE).map_err(fail)?;
         set_name(store, t, builtin)?;
@@ -253,14 +398,14 @@ fn check_name(store: &Store, owner: Obj, name: &str, siblings: &[Obj], except: O
     Ok(())
 }
 
-/// Why `c` takes no `members` (attributes or operations): its id, that an enumeration's members are
-/// its literals, and what keeps them instead.
+/// Why `c` takes no `members` (attributes or operations): its id, what it is (an enumeration,
+/// whose members are its literals, or a primitive type, which has none), and what keeps them
+/// instead.
 fn no_members(store: &Store, c: Obj, members: &str) -> String {
     let id = uuid_of(store, c).unwrap_or_default();
-    format!(
-        "{id} is {} and keeps no {members}, its members being its literals; a class, an interface or a data type does",
-        crate::commands::a_what(store, c)
-    )
+    let because =
+        if store.class_of(c).ok() == Some(PRIMITIVE_TYPE) { "a primitive type having no members" } else { "its members being its literals" };
+    format!("{id} is {} and keeps no {members}, {because}; a class, an interface or a data type does", crate::commands::a_what(store, c))
 }
 
 /// The class, interface or data type that owns `member` in its list of attributes or operations.
@@ -551,9 +696,10 @@ fn flag(store: &Store, o: Obj, prop: archforge_mof::PropId) -> bool {
     store.get(o, prop).ok().and_then(|v| v.as_bool()).unwrap_or(false)
 }
 
-/// A class, an interface, an enumeration or a data type with its members, as an agent reads it:
-/// an enumeration's are its literals, in their order. Its `kind` is a word without spaces
-/// (`class`, `interface`, `enumeration`, `data_type`).
+/// A class, an interface, an enumeration, a data type or a primitive type with its members, as an
+/// agent reads it: an enumeration's are its literals, in their order; a primitive type has none and
+/// says whether it is a built-in type. Its `kind` is a word without spaces (`class`, `interface`,
+/// `enumeration`, `data_type`, `primitive_type`).
 fn class_get(ctx: &mut C<'_>, p: &Params) -> R {
     let store = &*ctx.doc;
     let c = classifier_of(store, p, "class")?;
@@ -590,6 +736,11 @@ fn class_get(ctx: &mut C<'_>, p: &Params) -> R {
         "id": uuid_of(store, c)?, "kind": crate::commands::what(store, c).replace(' ', "_"), "name": name_of(store, c),
         "abstract": is_class && flag(store, c, class::IS_ABSTRACT), "attributes": attrs, "operations": ops,
     });
+    if store.class_of(c).ok() == Some(PRIMITIVE_TYPE)
+        && let Some(fields) = out.as_object_mut()
+    {
+        fields.insert("built_in".to_string(), Json::Bool(is_built_in(store, c)));
+    }
     if store.class_of(c).ok() == Some(crate::ENUMERATION) {
         let literals: Vec<Json> = crate::commands::literals(store, c)
             .into_iter()
@@ -615,7 +766,7 @@ fn type_list(ctx: &mut C<'_>, _: &Params) -> R {
 
 macro_rules! type_line {
     () => {
-        "type: string = \"\"; a type's id, or Integer, String, Boolean, Real or UnlimitedNatural (kept in the package Types), or nothing"
+        "type: string = \"\"; a type's id, or Integer, String, Boolean, Real or UnlimitedNatural, the built-in types kept in the package Types (never a type of the model's own named alike), or nothing"
     };
 }
 macro_rules! multiplicity_line {
@@ -757,9 +908,9 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
         cmd!(
             query "uml.class.get",
             "Get class",
-            &["Class", "Interface", "Enumeration", "Data type"],
+            &["Class", "Interface", "Enumeration", "Data type", "Primitive type"],
             None,
-            "class: string; the class's, interface's, enumeration's or data type's id; an enumeration comes with its literals",
+            "class: string; the class's, interface's, enumeration's, data type's or primitive type's id; an enumeration comes with its literals, and a primitive type has no members",
             has_classes,
             class_get
         ),

@@ -33,6 +33,9 @@ fn initialize_answers_the_clients_version_when_spoken_and_the_newest_otherwise()
     assert_eq!(r["result"]["capabilities"], json!({ "tools": { "listChanged": false }, "resources": { "subscribe": false, "listChanged": false } }));
     let r = ask(&fake, json!({ "jsonrpc": "2.0", "id": 2, "method": "initialize", "params": { "protocolVersion": "1999-01-01" } }));
     assert_eq!(r["result"]["protocolVersion"], "2025-06-18");
+    // The instructions name the primitive types an agent may make, beside the built-in ones (AR-124).
+    let said = r["result"]["instructions"].as_str().unwrap_or_default();
+    assert!(said.contains("primitive types, beside the built-in Integer") && said.contains("uml_primitive_type_add"), "{said}");
     assert_eq!(ask(&fake, json!({ "jsonrpc": "2.0", "id": "p", "method": "ping" }))["result"], json!({}));
     // A notification is never answered.
     assert!(handle(br#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#, &fake, &Catalog::default()).is_none());
@@ -84,6 +87,9 @@ impl Backend for Model {
             "uml.class.get" if p["class"] == "e1" => {
                 json!({ "id": "e1", "kind": "enumeration", "name": "OrderStatus", "literals": [{ "id": "l1", "name": "Placed" }] })
             }
+            "uml.class.get" if p["class"] == "p1" => {
+                json!({ "id": "p1", "kind": "primitive_type", "name": "Sku", "attributes": [], "operations": [], "built_in": false })
+            }
             "uml.class.get" if p["class"] == "d1" => {
                 json!({ "id": "d1", "kind": "data_type", "name": "Money", "attributes": [{ "id": "a1", "name": "amount" }], "operations": [] })
             }
@@ -134,6 +140,9 @@ fn the_model_and_its_skills_read_as_resources_with_the_revision_and_say_what_the
     // A data type, which the class read gives too, as what it is, with its attributes.
     let data_type = content(&read(&model, "archforge://element/d1"));
     assert_eq!((data_type["kind"].as_str(), data_type["data_type"]["attributes"][0]["name"].as_str()), (Some("data_type"), Some("amount")));
+    // A primitive type, which the class read gives too, as what it is, saying it is the model's own.
+    let primitive = content(&read(&model, "archforge://element/p1"));
+    assert_eq!((primitive["kind"].as_str(), primitive["primitive_type"]["built_in"].as_bool()), (Some("primitive_type"), Some(false)));
     // The skills in effect, for every trigger or for one, as skill.effective gives them.
     let effective = content(&read(&model, "archforge://skills/effective/t1/export"));
     assert_eq!((effective["trigger"].as_str(), effective["skills"][0]["name"].as_str()), (Some("export"), Some("DDL")));
@@ -375,7 +384,11 @@ fn the_compact_listing_offers_a_search_and_the_tools_still_answer() {
     .unwrap();
     assert!(huge["result"]["content"][0]["text"].as_str().unwrap().contains("at most"));
     let init = handle(br#"{"jsonrpc":"2.0","id":5,"method":"initialize","params":{}}"#, &fake, &catalog).unwrap();
-    assert!(init["result"]["instructions"].as_str().unwrap().contains("search_tools"));
+    let said = init["result"]["instructions"].as_str().unwrap();
+    assert!(
+        said.contains("search_tools") && said.contains("uml.primitive-type.add") && said.contains("primitive types, beside the built-in"),
+        "{said}"
+    );
     let r = handle(
         json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": { "name": "er_entity_add", "arguments": { "schema": "s" } } })
             .to_string()
