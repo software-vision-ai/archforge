@@ -207,6 +207,7 @@ str		every table	すべてのテーブル
 str		every relationship	すべてのリレーションシップ
 str		every column	すべての列
 str		every class	すべてのクラス
+str		every interface	すべてのインターフェース
 str		every attribute	すべての属性
 str		every operation	すべての操作
 str		every association	すべての関連
@@ -525,17 +526,25 @@ str		Partial	部分
 str		{parent} has no primary key yet, so there is nothing in {child} to point at.	{parent} にはまだ主キーがないため、{child} から参照できるものがありません。
 # クラス図
 str		Add class	クラスを追加
+str		Add interface	インターフェースを追加
 str		Class	クラス
+str		Interface	インターフェース
+str		«interface»	«interface»
+str		Classifier	分類子
+str		Classifier kinds	分類子の種類
 str		Class diagram	クラス図
 str		Class diagrams	クラス図
 str		Class · model, in every diagram	クラス · モデル、すべての図に
+str		Interface · model, in every diagram	インターフェース · モデル、すべての図に
 str		New package	新しいパッケージ
 str		On this class · {n}	このクラスに · {n}
+str		On this interface · {n}	このインターフェースに · {n}
 str		On this package · {n}	このパッケージに · {n}
 str		Package	パッケージ
 str		Package · model	パッケージ · モデル
 str		The diagram is of no package	この図はどのパッケージにも属していません
 str		This class	このクラス
+str		This interface	このインターフェース
 str		This package	このパッケージ
 plural		+ {n} more member	+ 他 {n} メンバー
 plural		+ {n} more element	+ 他 {n} 要素
@@ -569,6 +578,7 @@ str		This attribute	この属性
 str		This operation	この操作
 str		Visibility	可視性
 str		Place class	クラスを配置
+str		Place interface	インターフェースを配置
 str		Add package	パッケージを追加
 str		Place package	パッケージを配置
 str		Move package	パッケージを移動
@@ -581,7 +591,7 @@ str		This is the top package: zooming out goes no further	ここが最上位の�
 str		Only a package this diagram's package holds goes on it	この図のパッケージに含まれるパッケージだけを置けます
 # クラスの関係
 str		A bound can be at most {max}.	境界は最大 {max} までです。
-str		A relationship joins two classes	関係は 2 つのクラスを結びます
+str		A relationship joins two classes or interfaces	関係は 2 つのクラスまたはインターフェースを結びます
 str		Add association	関連を追加
 str		Add dependency	依存を追加
 str		Add generalization	汎化を追加
@@ -622,6 +632,7 @@ str		Type a whole number, a range such as 2..5, or *.	整数、2..5 のような
 str		{what} removed	{what}を削除しました
 # パッケージ
 str		Class · {package}	クラス · {package}
+str		«interface» · {package}	«interface» · {package}
 str		{name} removed; what it held moved to {parent}	{name} を削除しました。中身は {parent} に移動しました
 # 閉じるときの未保存の変更
 str		Close and lose changes	閉じて変更を破棄

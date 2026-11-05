@@ -207,6 +207,7 @@ str		every table	jede Tabelle
 str		every relationship	jede Beziehung
 str		every column	jede Spalte
 str		every class	jede Klasse
+str		every interface	jede Schnittstelle
 str		every attribute	jedes Attribut
 str		every operation	jede Operation
 str		every association	jede Assoziation
@@ -525,17 +526,25 @@ str		Partial	Teilweise
 str		{parent} has no primary key yet, so there is nothing in {child} to point at.	{parent} hat noch keinen Primärschlüssel, also gibt es in {child} nichts, worauf gezeigt werden kann.
 # Klassendiagramme
 str		Add class	Klasse hinzufügen
+str		Add interface	Schnittstelle hinzufügen
 str		Class	Klasse
+str		Interface	Schnittstelle
+str		«interface»	«interface»
+str		Classifier	Klassifikator
+str		Classifier kinds	Klassifikatorarten
 str		Class diagram	Klassendiagramm
 str		Class diagrams	Klassendiagramme
 str		Class · model, in every diagram	Klasse · Modell, in jedem Diagramm
+str		Interface · model, in every diagram	Schnittstelle · Modell, in jedem Diagramm
 str		New package	Neues Paket
 str		On this class · {n}	Auf dieser Klasse · {n}
+str		On this interface · {n}	Auf dieser Schnittstelle · {n}
 str		On this package · {n}	Auf diesem Paket · {n}
 str		Package	Paket
 str		Package · model	Paket · Modell
 str		The diagram is of no package	Das Diagramm gehört zu keinem Paket
 str		This class	Diese Klasse
+str		This interface	Diese Schnittstelle
 str		This package	Dieses Paket
 plural		+ {n} more member	+ {n} weiteres Element|+ {n} weitere Elemente
 plural		+ {n} more element	+ {n} weiteres Element|+ {n} weitere Elemente
@@ -569,6 +578,7 @@ str		This attribute	Dieses Attribut
 str		This operation	Diese Operation
 str		Visibility	Sichtbarkeit
 str		Place class	Klasse platzieren
+str		Place interface	Schnittstelle platzieren
 str		Add package	Paket hinzufügen
 str		Place package	Paket platzieren
 str		Move package	Paket verschieben
@@ -581,7 +591,7 @@ str		This is the top package: zooming out goes no further	Dies ist das oberste P
 str		Only a package this diagram's package holds goes on it	Nur ein Paket, das im Paket dieses Diagramms liegt, kann darauf
 # Klassen in Beziehung setzen
 str		A bound can be at most {max}.	Eine Grenze darf höchstens {max} sein.
-str		A relationship joins two classes	Eine Beziehung verbindet zwei Klassen
+str		A relationship joins two classes or interfaces	Eine Beziehung verbindet zwei Klassen oder Schnittstellen
 str		Add association	Assoziation hinzufügen
 str		Add dependency	Abhängigkeit hinzufügen
 str		Add generalization	Generalisierung hinzufügen
@@ -622,6 +632,7 @@ str		Type a whole number, a range such as 2..5, or *.	Geben Sie eine ganze Zahl,
 str		{what} removed	{what} entfernt
 # Pakete
 str		Class · {package}	Klasse · {package}
+str		«interface» · {package}	«interface» · {package}
 str		{name} removed; what it held moved to {parent}	{name} entfernt; der Inhalt wurde nach {parent} verschoben
 # Ungesicherte Änderungen beim Schließen
 str		Close and lose changes	Schließen und Änderungen verwerfen

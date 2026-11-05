@@ -158,6 +158,7 @@ fn save_close_reopen(h: &mut H) -> archforge_mof::rows::Rows {
     saved
 }
 
+/// A user models a class diagram through the real shell, saves, closes and reopens it unchanged.
 #[test]
 fn a_user_models_a_class_diagram_saves_it_closes_it_and_opens_it_again_as_it_was() {
     let (mut h, host, base) = start("uml");
@@ -175,13 +176,13 @@ fn a_user_models_a_class_diagram_saves_it_closes_it_and_opens_it_again_as_it_was
     click_on(&mut h, "workspace.new-diagram.create");
     assert!(h.state().diagrams.new.is_none());
 
-    // 3. Five classes placed with the Class tool and named in place.
+    // 3. Five classes placed with the classifier tool, at its first kind, Class, and named in place.
     let canvas = rect_of(&h, "workspace.canvas");
     let c = canvas.center();
     for (name, dx, dy) in
         [("Order", -280.0, -170.0), ("Customer", 280.0, -170.0), ("Line", -280.0, 150.0), ("Payment", 280.0, 150.0), ("Card", 0.0, -40.0)]
     {
-        click_on(&mut h, "workspace.tools.class");
+        click_on(&mut h, "workspace.tools.classifier");
         click(&mut h, c + egui::vec2(dx, dy));
         h.state_mut().canvas.rename.as_mut().unwrap_or_else(|| panic!("{name} is named in place")).text = name.into();
         key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);

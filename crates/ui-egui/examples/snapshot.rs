@@ -11,6 +11,7 @@ fn main() {
     }
 }
 
+/// Reads the arguments, renders the screen asked for offscreen and writes it as a PNG.
 fn run() -> Result<(), String> {
     const USAGE: &str = "usage: snapshot <out.png> [light|dark] [width height [scale]] [--screen home|new-project|new-project-failed|new-project-folder|workspace|workspace-schema]";
     let mut args: Vec<String> = std::env::args().skip(1).collect();
@@ -60,6 +61,8 @@ fn run() -> Result<(), String> {
             Some("workspace-multiplicity-presets") => Screen::WorkspaceMultiplicityPresets,
             Some("workspace-multiplicity-refused") => Screen::WorkspaceMultiplicityRefused,
             Some("workspace-relate-kinds") => Screen::WorkspaceRelateKinds,
+            Some("workspace-interface") => Screen::WorkspaceInterface,
+            Some("workspace-classifier-kinds") => Screen::WorkspaceClassifierKinds,
             Some("workspace-close-ask") => Screen::WorkspaceCloseAsk,
             Some("workspace-search") => Screen::WorkspaceSearch,
             Some("workspace-column-selected") => Screen::WorkspaceColumnSelected,
@@ -76,7 +79,7 @@ fn run() -> Result<(), String> {
             Some("workspace-relationship") => Screen::WorkspaceRelationship,
             other => {
                 return Err(format!(
-                    "--screen {other:?} is not home, home-gallery, home-search, home-settings, home-about, home-dolt-missing, new-project, new-project-failed, new-project-folder, workspace, workspace-schema, workspace-table, workspace-skills, workspace-skill-tab, workspace-skill-preview, workspace-skill-link, workspace-skill-new, workspace-diagram-empty, workspace-diagram, workspace-toast, workspace-generate, workspace-chat, workspace-appearance, workspace-appearance-line, workspace-appearance-picker, workspace-entity-new, workspace-cardinality, workspace-relationship, workspace-key-editor, workspace-column-editor, workspace-index-editor, workspace-mapping-table, workspace-schema-types, workspace-subtypes, workspace-schema-objects, workspace-cross-schema, workspace-routing, workspace-search, workspace-column-selected, workspace-class-diagram, workspace-class-diagram-read, workspace-class-sizing, workspace-class-members, workspace-member-editor, workspace-inline-member, workspace-association, workspace-multiplicity-presets, workspace-multiplicity-refused, workspace-relate-kinds or workspace-close-ask; {USAGE}"
+                    "--screen {other:?} is not home, home-gallery, home-search, home-settings, home-about, home-dolt-missing, new-project, new-project-failed, new-project-folder, workspace, workspace-schema, workspace-table, workspace-skills, workspace-skill-tab, workspace-skill-preview, workspace-skill-link, workspace-skill-new, workspace-diagram-empty, workspace-diagram, workspace-toast, workspace-generate, workspace-chat, workspace-appearance, workspace-appearance-line, workspace-appearance-picker, workspace-entity-new, workspace-cardinality, workspace-relationship, workspace-key-editor, workspace-column-editor, workspace-index-editor, workspace-mapping-table, workspace-schema-types, workspace-subtypes, workspace-schema-objects, workspace-cross-schema, workspace-routing, workspace-search, workspace-column-selected, workspace-class-diagram, workspace-class-diagram-read, workspace-class-sizing, workspace-class-members, workspace-member-editor, workspace-inline-member, workspace-association, workspace-multiplicity-presets, workspace-multiplicity-refused, workspace-relate-kinds, workspace-interface, workspace-classifier-kinds or workspace-close-ask; {USAGE}"
                 ));
             }
         };

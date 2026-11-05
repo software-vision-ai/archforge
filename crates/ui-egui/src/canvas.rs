@@ -117,12 +117,20 @@ pub struct State {
     pub gesture: Option<crate::editing::Gesture>,
     pub menu: Option<crate::editing::EntityMenu>,
     pub focused: bool,
-    /// Relationships (slice E2): the ends a new line gets, whether the cardinality popover is
-    /// open, the mapping table offer and the toast with Undo.
+    /// Relationships (slice E2): the ends a new line gets, the chevron whose popover is open (the
+    /// cardinality popover, a menu of kinds), the mapping table offer and the toast with Undo.
     pub relationship: crate::connect::RelKind,
-    pub popover: bool,
+    pub popover: Option<&'static str>,
+    /// The row of the open popover's menu the arrow keys are on, when they have moved.
+    pub(crate) menu_focus: Option<usize>,
+    /// A press closed the classifier's menu of kinds: the canvas ignores that press until the
+    /// button lets go, so it places, selects and drags nothing.
+    pub(crate) dismissing: bool,
     /// What a class diagram's Relationship tool draws.
     pub uml_relation: crate::uml_relate::Relate,
+    /// What a class diagram's classifier tool places: kept while the window lives, a new window
+    /// starting at Class.
+    pub uml_classifier: crate::uml_classifier::Classifier,
     pub mapping: Option<crate::connect::MappingOffer>,
     pub toast: Option<crate::connect::Toast>,
     /// A note's text being typed in place (slice E4).
@@ -157,6 +165,7 @@ pub struct PackageTab {
 }
 
 impl Default for State {
+    /// A canvas with no diagram open: Select, the grid and minimap on, no menu open, Class as the classifier kind.
     fn default() -> Self {
         Self {
             tabs: Vec::new(),
@@ -178,8 +187,11 @@ impl Default for State {
             menu: None,
             focused: false,
             relationship: crate::connect::RelKind::default(),
-            popover: false,
+            popover: None,
+            menu_focus: None,
+            dismissing: false,
             uml_relation: crate::uml_relate::Relate::default(),
+            uml_classifier: crate::uml_classifier::Classifier::default(),
             mapping: None,
             toast: None,
             note_edit: None,
@@ -841,7 +853,7 @@ fn draw_node(
                     }
                 }
             } else if z >= DETAIL_ZOOM {
-                let eyebrow = say(&card.eyebrow).to_uppercase();
+                let eyebrow = eyebrow_case(&say(&card.eyebrow));
                 ux::text(&inner, rect.min + vec2(ENTITY_INSET, 12.0) * z, &eyebrow, types::EYEBROW.scaled(z), p.entity_ink, room);
                 if !renaming {
                     let name = if card.slanted { ux::text_slanted } else { ux::text };
@@ -1224,6 +1236,22 @@ fn draw_rows(inner: &egui::Painter, p: &Palette, card: &archforge_diagram::figur
             ux::text(inner, pos2(x, rect.top() + 11.0 * z), &text, style, p.text_muted, room);
         }
     }
+}
+
+/// An eyebrow as drawn: in capitals, but for a UML keyword between guillemets, which keeps its
+/// case (`«interface» · BILLING`).
+pub(crate) fn eyebrow_case(text: &str) -> String {
+    let mut keyword = false;
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        match c {
+            '«' => keyword = true,
+            '»' => keyword = false,
+            _ => {}
+        }
+        if keyword || c == '»' { out.push(c) } else { out.extend(c.to_uppercase()) }
+    }
+    out
 }
 
 /// A text a notation describes, in the user's language.
@@ -1749,7 +1777,7 @@ const TOOLS: [(&str, &ux::Icon, &str); 4] = [
 ];
 
 /// Where the toolbar's parts sit, from its left, for the tools of the open diagram's kind: Select
-/// and Pan, a divider, the kind's tools (one with a chevron twice as wide, its chevron after it),
+/// and Pan, a divider, the kind's tools (each with a chevron followed by it, a wide one twice as wide),
 /// Note and Link note, a divider, the view group (the status marks where the kind has them, and
 /// the grid), a divider and Arrange.
 struct Layout {
@@ -1763,12 +1791,17 @@ struct Layout {
     width: f32,
 }
 
+/// The toolbar's layout for `kind`'s tools: where each sits and how wide the bar is.
 fn layout(kind: Option<&'static dyn crate::kinds::DiagramKind>) -> Layout {
     let mut x = 86.0;
     let mut kind_tools = Vec::new();
     for t in kind.map(|k| k.tools()).unwrap_or(&[]) {
         kind_tools.push(x);
-        x += if t.chevron.is_some() { 82.0 } else { 34.0 };
+        x += match (t.chevron.is_some(), t.wide) {
+            (true, true) => 82.0,
+            (true, false) => 50.0,
+            (false, _) => 34.0,
+        };
     }
     let mut toggles = Vec::new();
     if kind.is_some_and(|k| k.status_marks()) {
@@ -1803,7 +1836,15 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
         && !kind.is_some_and(|k| k.tools().iter().any(|t| t.key == key))
     {
         shell.canvas.tool = Tool::Select;
-        shell.canvas.popover = false;
+        shell.canvas.popover = None;
+    }
+    // A popover of another kind's chevron, from the diagram shown before, closes: hidden, it
+    // would still hold the keys its menu takes.
+    if let Some(open) = shell.canvas.popover
+        && !kind.is_some_and(|k| k.tools().iter().any(|t| t.chevron.is_some_and(|(key, _)| key == open)))
+    {
+        shell.canvas.popover = None;
+        shell.canvas.menu_focus = None;
     }
     let at = layout(kind);
     let size = vec2(at.width, TOOLBAR_HEIGHT);
@@ -1839,10 +1880,10 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
             shell.canvas.tool = tool;
         }
     }
-    // The kind's own tools; one with a chevron is twice as wide, so what it draws reads.
+    // The kind's own tools; a wide one is twice as wide, so what it draws reads.
     let mut chevrons = Vec::new();
     for (tool, x) in kind.map(|k| k.tools()).unwrap_or(&[]).iter().zip(at.kind_tools.iter().copied()) {
-        let b = if tool.chevron.is_some() { Rect::from_min_size(pos2(t.left() + x, t.top() + 9.0), vec2(64.0, 32.0)) } else { button(x) };
+        let b = if tool.wide { Rect::from_min_size(pos2(t.left() + x, t.top() + 9.0), vec2(64.0, 32.0)) } else { button(x) };
         let picked = match tool.use_ {
             crate::kinds::ToolUse::Place => Tool::Place(tool.key),
             crate::kinds::ToolUse::Connect => Tool::Connect(tool.key),
@@ -1855,27 +1896,33 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
         if !kind.is_some_and(|k| k.tool_face(shell, &paint, p, tool.key, b, ink, active)) {
             ux::icon_in(&paint, b, tool.icon, ink);
         }
-        if control(shell, ui, &format!("workspace.tools.{}", tool.key), "button", b, true).on_hover_text(tr(tool.hint)).clicked() {
+        let hint = kind.and_then(|k| k.tool_hint(shell, tool.key)).unwrap_or_else(|| tr(tool.hint));
+        if control(shell, ui, &format!("workspace.tools.{}", tool.key), "button", b, true).on_hover_text(hint).clicked() {
             shell.canvas.tool = picked;
         }
         if let Some(chevron) = tool.chevron {
-            chevrons.push((chevron, picked, Rect::from_min_size(pos2(t.left() + x + 66.0, t.top() + 9.0), vec2(14.0, 32.0))));
+            let at = t.left() + x + b.width() + 2.0;
+            chevrons.push((chevron, picked, Rect::from_min_size(pos2(at, t.top() + 9.0), vec2(14.0, 32.0))));
         }
     }
     for x in [75.0, at.note + 68.0] {
         paint.rect_filled(divider(x), 0.0, p.border);
     }
-    // A tool's chevron opens the kind's popover.
+    // A tool's chevron opens the kind's popover for it; another chevron's closes.
     let mut open_at = None;
     for ((key, hint), picked, chevron) in chevrons {
-        ux::icon_in(&paint, chevron, &icons::CHEVRON_SMALL, if shell.canvas.popover { p.accent } else { p.text_secondary });
+        let open = shell.canvas.popover == Some(key);
+        ux::icon_in(&paint, chevron, &icons::CHEVRON_SMALL, if open { p.accent } else { p.text_secondary });
         if control(shell, ui, &format!("workspace.tools.{key}"), "button", chevron, true).on_hover_text(tr(hint)).clicked() {
-            shell.canvas.popover = !shell.canvas.popover;
-            if shell.canvas.popover {
+            shell.canvas.popover = if open { None } else { Some(key) };
+            shell.canvas.menu_focus = None;
+            if !open {
                 shell.canvas.tool = picked;
             }
         }
-        open_at = Some(chevron);
+        if shell.canvas.popover == Some(key) {
+            open_at = Some((key, chevron));
+        }
     }
     // The view group: the status marks and the grid.
     let group = Rect::from_min_size(pos2(t.left() + at.group, t.top() + 7.0), vec2(2.0 + 34.0 * at.toggles.len() as f32, 36.0));
@@ -1926,10 +1973,8 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
             Err(e) => shell.canvas.notice = Some(e.to_string()),
         }
     }
-    if shell.canvas.popover
-        && let (Some(kind), Some(chevron)) = (kind, open_at)
-    {
-        kind.popover(shell, ui, p, r, chevron);
+    if let (Some(kind), Some((key, chevron))) = (kind, open_at) {
+        kind.popover(shell, ui, p, r, chevron, key);
     }
 }
 

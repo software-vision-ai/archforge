@@ -282,6 +282,7 @@ fn a_class_skill_named_as_a_project_skill_opens_again_and_one_subject_never_hold
     assert!(e.contains("DuplicateName"), "{e}");
 }
 
+/// A skill aims only at the kinds of its subject's notation and moves only within that notation.
 #[test]
 fn a_skill_aims_only_at_kinds_of_its_subjects_notation_and_moves_only_within_it() {
     let mut s = new_project_session("Shop", ids(0)).unwrap();
@@ -290,7 +291,7 @@ fn a_skill_aims_only_at_kinds_of_its_subjects_notation_and_moves_only_within_it(
     let class = id(&mut s, "uml.class.add", json!({ "package": package, "name": "Order" }));
     let refused = |s: &mut Session, cmd: &str, p: Json| s.execute(cmd, &p).map(|o| o.value.to_string()).unwrap_err().to_string();
     let e = refused(&mut s, "skill.add", json!({ "subject": package, "name": "Tables", "applies_to": "table" }));
-    assert!(e.contains("class, attribute, operation, association") && !e.contains("column"), "{e}");
+    assert!(e.contains("class, interface, attribute, operation, association") && !e.contains("column"), "{e}");
     let e = refused(&mut s, "skill.add", json!({ "subject": schema, "name": "Classes", "applies_to": "class" }));
     assert!(e.contains("table, relationship, column") && !e.contains("operation"), "{e}");
     // The model's skill may aim at any notation's kind.

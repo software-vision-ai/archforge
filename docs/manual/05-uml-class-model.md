@@ -22,7 +22,8 @@ makes a new package inside the root, named like the diagram.
 ## 2. Add classes
 
 1. Choose the **Class** tool in the toolbar at the bottom, then click on the canvas. A class
-   appears with its name ready to type: type *Customer* and press Enter.
+   appears with its name ready to type: type *Customer* and press Enter. (The tool places the kind
+   its chevron chose; a new window starts at **Class**.)
 2. Do the same for *Order*.
 
 A class is a card with its name and two compartments under it: attributes, then operations.
@@ -69,6 +70,29 @@ Select the line. **Properties** shows the association's **Name** and a section f
 The line now shows an open arrow at *Order*, the end it navigates to, with the role and the
 multiplicities beside its ends. **Aggregation** makes the line a shared aggregation (a hollow
 diamond) or a composition (a filled one) at the whole's end.
+
+## 6. Add an interface
+
+An interface names what a class offers, without saying how: its attributes and operations, all
+public.
+
+1. Open the chevron beside the **Class** tool and choose **Interface** (or use the arrow keys and
+   Enter). The tool now shows the interface's lollipop, and its tooltip says *Interface*; it keeps
+   that kind for this window until you choose another.
+2. Click on the canvas, type *Payable* and press Enter. Its card says `«interface»` above its name.
+3. Add its members as for a class: on the card with ⌘↩ and ⇧⌘↩, or in **Properties**.
+
+In **Models**, the **+** of a package offers **Class** and **Interface** each on a row of its own,
+and you can drag an interface from Models onto a diagram as you drag a class. A package's classes
+and interfaces share its names: an interface cannot be named like a class beside it. An interface is
+offered as a type wherever you choose an attribute's or a parameter's type.
+
+The **Relationship** tool draws associations and dependencies to and from interfaces. A
+generalization joins an interface to the interface it specializes; a class never specializes an
+interface, and an interface specializes nothing but an interface. Such a drag is refused at the
+canvas's top, saying why, and draws nothing.
+
+<!-- picture: workspace-interface light | An interface, Payable, with its members, the interface that specializes it and the class associated with it -->
 
 ## The result
 

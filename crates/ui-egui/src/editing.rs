@@ -552,7 +552,13 @@ pub(crate) fn pointer(shell: &mut Shell, ui: &egui::Ui, resp: &egui::Response, v
     let (shift, origin, released) = ui.input(|i| (i.modifiers.shift, i.pointer.press_origin(), i.pointer.primary_released()));
     let pointer = resp.interact_pointer_pos().or_else(|| ui.input(|i| i.pointer.hover_pos()));
     let kind = shell.session.as_ref().and_then(|s| crate::kinds::kind_of(shell, s.doc(), d));
+    // The press that closed a menu of kinds ends with the menu: its release places nothing.
+    let dismissing = shell.canvas.dismissing;
+    if dismissing && (released || !ui.input(|i| i.pointer.any_down())) {
+        shell.canvas.dismissing = false;
+    }
     let action = match shell.session.as_ref() {
+        _ if dismissing => Action::Nothing,
         Some(s) => {
             let selection = s.view().selection.clone();
             decide(shell, resp, view, grid, s.doc(), d, &selection, shift, origin, released)
@@ -1824,22 +1830,31 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
     if ui.memory(|m| m.focused().is_some()) {
         return;
     }
+    // An open menu the keys walk (the classifier's kinds) takes the arrows and Enter itself; the
+    // other popovers leave them to the canvas.
+    let menu = shell.canvas.popover.is_some_and(crate::uml_classifier::takes_keys);
     let (escape, delete, shift, add_column, left, right, up, down) = ui.input(|i| {
         (
             i.key_pressed(egui::Key::Escape),
             i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace),
             i.modifiers.shift,
-            i.modifiers.command && i.key_pressed(egui::Key::Enter),
-            i.key_pressed(egui::Key::ArrowLeft),
-            i.key_pressed(egui::Key::ArrowRight),
-            i.key_pressed(egui::Key::ArrowUp),
-            i.key_pressed(egui::Key::ArrowDown),
+            !menu && i.modifiers.command && i.key_pressed(egui::Key::Enter),
+            !menu && i.key_pressed(egui::Key::ArrowLeft),
+            !menu && i.key_pressed(egui::Key::ArrowRight),
+            !menu && i.key_pressed(egui::Key::ArrowUp),
+            !menu && i.key_pressed(egui::Key::ArrowDown),
         )
     });
+    // Escape in the classifier's menu of kinds closes the menu alone; the armed tool stays.
+    if escape && shell.canvas.popover.is_some_and(crate::uml_classifier::takes_keys) {
+        shell.canvas.popover = None;
+        shell.canvas.menu_focus = None;
+        return;
+    }
     if escape {
         shell.canvas.tool = Tool::Select;
         shell.canvas.gesture = None;
-        shell.canvas.popover = false;
+        shell.canvas.popover = None;
         shell.canvas.mapping = None;
         return;
     }

@@ -43,6 +43,7 @@ pub mod subtypes;
 pub mod support;
 pub mod theme;
 pub mod types;
+mod uml_classifier;
 mod uml_inline;
 mod uml_panel;
 mod uml_relate;
