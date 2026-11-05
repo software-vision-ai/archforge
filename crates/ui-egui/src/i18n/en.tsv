@@ -639,6 +639,8 @@ str		A bound can be at most {max}.	A bound can be at most {max}.
 str		A class realizes only an interface	A class realizes only an interface
 str		A relationship joins two classes or interfaces	A relationship joins two classes or interfaces
 str		An association class does not join itself	An association class does not join itself
+str		This association class has an attribute named {name}; an end's role takes another name.	This association class has an attribute named {name}; an end's role takes another name.
+str		An end of this association class has the role {name}; an attribute takes another name.	An end of this association class has the role {name}; an attribute takes another name.
 str		An enumeration is a data type and joins no association	An enumeration is a data type and joins no association
 str		A data type joins no association	A data type joins no association
 str		A primitive type joins no association	A primitive type joins no association

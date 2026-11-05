@@ -637,17 +637,15 @@ impl NotationUi for UmlUi {
             .map(|_| tr("Types keeps the built-in types, so it stays while it holds them"))
     }
 
-    /// The relationships that go with a classifier, or with a package's.
+    /// The relationships that go with a classifier, or with a package's, counted as `element.remove`
+    /// takes them (`going_with`): an association class going along takes what touches it too.
     fn consequences(&self, store: &Store, obj: Obj) -> (usize, usize, usize) {
         let held = match class(store, obj) {
             Some(c) if archforge_uml::is_classifier(c) => vec![obj],
             Some(c) if c == archforge_uml::PACKAGE => classifiers(store, obj),
             _ => Vec::new(),
         };
-        let mut going: Vec<Obj> = held.into_iter().flat_map(|c| archforge_uml::relations::relationships_of(store, c)).collect();
-        going.sort();
-        going.dedup();
-        (going.len(), 0, 0)
+        (archforge_uml::commands::going_with(store, &held).len(), 0, 0)
     }
 
     /// Whether `obj` has rows under it: a package what it holds (the built-in types in Types, which

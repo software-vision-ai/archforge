@@ -1411,6 +1411,11 @@ fn draw_edge(
     {
         widgets::record_visible(ui, registry, &format!("workspace.canvas.edge.{id}.tie"), "edge", tied);
     }
+    if let Some(named) = bare_name(paint, d, element, &points)
+        && let Ok(id) = store.uuid(e)
+    {
+        widgets::record_visible(ui, registry, &format!("workspace.canvas.edge.{id}.name"), "label", named);
+    }
     for (end, tip, back) in [(&line.ends[0], points[0], points[1]), (&line.ends[1], points[n - 1], points[n - 2])] {
         let (dir, base, _, _) = shape(end.mark, tip, back);
         line_mark(paint, end.mark, tip, back, stroke, z, p.canvas);
@@ -1520,16 +1525,8 @@ fn draw_edge(
 /// moves; it is worked out from what is drawn, never stored. Gives the rectangle from the card's
 /// edge to the line's middle, for the automation tree.
 fn tie(paint: &egui::Painter, d: &Drawing<'_>, element: Obj, points: &[Pos2], selected: bool) -> Option<Rect> {
-    let (p, store, z) = (d.p, d.store, d.view.zoom);
-    if store.class_of(element).ok() != Some(archforge_uml::ASSOCIATION_CLASS) {
-        return None;
-    }
-    let card = store
-        .referrers(element)
-        .into_iter()
-        .find(|(n, prop)| *prop == node::ELEMENT && archforge_diagram::diagram_of(store, *n) == Some(d.diagram))
-        .map(|(n, _)| n);
-    let rect = d.node_rect(card?);
+    let (p, z) = (d.p, d.view.zoom);
+    let rect = d.node_rect(card_here(d, element)?);
     let middle = along(points, 0.5);
     let from = exit_point(rect, middle);
     if !from.is_finite() || !middle.is_finite() || rect.contains(middle) {
@@ -1540,7 +1537,45 @@ fn tie(paint: &egui::Painter, d: &Drawing<'_>, element: Obj, points: &[Pos2], se
     Some(Rect::from_two_pos(from, middle))
 }
 
-/// Where a cardinality text sits by default: a little along the line from its end, beside the/// Where a cardinality text sits by default: a little along the line from its end, beside the
+/// The card of association class `element` on the diagram drawn, when it has one there; none for
+/// anything else.
+fn card_here(d: &Drawing<'_>, element: Obj) -> Option<Obj> {
+    let store = d.store;
+    if store.class_of(element).ok() != Some(archforge_uml::ASSOCIATION_CLASS) {
+        return None;
+    }
+    store
+        .referrers(element)
+        .into_iter()
+        .find(|(n, prop)| *prop == node::ELEMENT && archforge_diagram::diagram_of(store, *n) == Some(d.diagram))
+        .map(|(n, _)| n)
+}
+
+/// An association class's name at its line's middle, where an association's name sits (above a
+/// level stretch, right of an upright one), while its card is not on the diagram drawn: the line
+/// then still reads as the association class it is. Gives where the name was drawn.
+fn bare_name(paint: &egui::Painter, d: &Drawing<'_>, element: Obj, points: &[Pos2]) -> Option<Rect> {
+    let (p, store, z) = (d.p, d.store, d.view.zoom);
+    if store.class_of(element).ok() != Some(archforge_uml::ASSOCIATION_CLASS) || card_here(d, element).is_some() {
+        return None;
+    }
+    let name = archforge_core::name_of(store, element);
+    if name.is_empty() {
+        return None;
+    }
+    let g = ux::galley(paint, &name, types::SMALL.scaled(z), p.text_secondary, None);
+    let upright = {
+        let v = along(points, 0.51) - along(points, 0.49);
+        v.y.abs() > v.x.abs()
+    };
+    let offset = if upright { vec2(8.0 * z, -g.size().y / 2.0) } else { vec2(-g.size().x / 2.0, -g.size().y - 6.0 * z) };
+    let at = along(points, 0.5) + offset;
+    let rect = Rect::from_min_size(at, g.size());
+    paint.galley(at, g, p.text_secondary);
+    Some(rect)
+}
+
+/// Where a cardinality text sits by default: a little along the line from its end, beside the
 /// line rather than on it: under a level line (a line's name sits above it), right of an upright
 /// one.
 fn beside(end: Pos2, towards: Pos2, size: Vec2, z: f32) -> Pos2 {

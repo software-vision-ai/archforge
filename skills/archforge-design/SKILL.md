@@ -516,7 +516,12 @@ What is UML's own, beside the shared rules above.
   tooltip and accessible name say it joins two classes with a card of its own. A click on its line
   or its card selects the one element, both drawn selected. Remove from this diagram, or Delete,
   takes the line and the card away together (`diagram.unplace` takes the edges of the same
-  element on that diagram with its node); Delete from the model asks first. Dragged from Models it
+  element on that diagram with its node); Delete on its line never deletes it from the model, card
+  or no card, and Delete from the model asks first. A line without its card (its classes placed on
+  a diagram after it was drawn, or `connect-all`) and a card without its line (an end class not
+  shown) are both kept states; a line without its card shows the name at its middle, as an
+  association's. Its attributes and its ends' roles share its names: a clash either way is refused
+  under the card's row or in Properties. Dragged from Models it
   places its card, with its line where the diagram shows both its classes. It renames and moves
   as the classifier it is; its name is one of its package's classifiers' names.
 - A new association is a plain line: no roles, no multiplicities, navigable to neither end (owner

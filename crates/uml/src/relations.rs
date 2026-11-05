@@ -564,10 +564,17 @@ fn realization_add(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, r)? }))
 }
 
-/// The association or dependency under `key`.
+/// The association or dependency under `key`; an association class is named as the classifier it
+/// is, and the refusal says so.
 fn named_relationship(store: &Store, p: &Params, key: &str) -> Result<Obj, CommandError> {
+    if let Ok(ac) = id_of(store, p, key, ASSOCIATION_CLASS, "") {
+        return Err(refuse(
+            key,
+            format!("{} is an association class; rename it with uml.association-class.rename, as the classifier it is", uuid_of(store, ac)?),
+        ));
+    }
     let r = id_of(store, p, key, ASSOCIATION, "an association").or_else(|_| id_of(store, p, key, DEPENDENCY, "a dependency"));
-    r.map_err(|_| refuse(key, "it is no association or dependency"))
+    r.map_err(|_| refuse(key, format!("{} is no association or dependency", crate::commands::short(text(p, key)))))
 }
 
 fn relationship_rename(ctx: &mut C<'_>, p: &Params) -> R {
@@ -619,6 +626,18 @@ fn association_set_end(ctx: &mut C<'_>, p: &Params) -> R {
     }
     if !role.is_empty() && name_of(ctx.doc, other).to_lowercase() == role.to_lowercase() {
         return Err(refuse("role", format!("the other end's role is {role} already")));
+    }
+    // An association class's ends' roles and its attributes share its names.
+    if let Some(attribute) = crate::members::attribute_clash(ctx.doc, a, role) {
+        return Err(refuse(
+            "role",
+            format!(
+                "the association class {} has an attribute {} named {}; its ends' roles and its attributes share its names, so the role {role} takes another",
+                uuid_of(ctx.doc, a)?,
+                uuid_of(ctx.doc, attribute)?,
+                name_of(ctx.doc, attribute)
+            ),
+        ));
     }
     let kind = match text(p, "aggregation") {
         "" => 0,
@@ -820,7 +839,7 @@ macro_rules! end_lines {
         concat!(
             "association: string; the association's or association class's id\n",
             "end: integer, 0..1; which end, 0 at the class or interface it was drawn from, 1 at the other\n",
-            "role: string = \"\"; the end's role name, or nothing\n",
+            "role: string = \"\"; the end's role name, or nothing; an association class's end never takes one of its attributes' names\n",
             "multiplicity: string = \"\"; 1, 0..1, *, 1..*, 2..5, or nothing\n",
             "navigable: bool = true; the association navigates to this end; never the whole's end of an aggregation or composition (default false there)\n",
             "aggregation: string = \"none\", none|shared|composite; this end is a part of the other end's class, shared or composed"

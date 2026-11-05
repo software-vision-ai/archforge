@@ -640,6 +640,8 @@ str		A bound can be at most {max}.	Eine Grenze darf höchstens {max} sein.
 str		A class realizes only an interface	Eine Klasse realisiert nur eine Schnittstelle
 str		A relationship joins two classes or interfaces	Eine Beziehung verbindet zwei Klassen oder Schnittstellen
 str		An association class does not join itself	Eine Assoziationsklasse verbindet sich nicht mit sich selbst
+str		This association class has an attribute named {name}; an end's role takes another name.	Diese Assoziationsklasse hat ein Attribut namens {name}; die Rolle eines Endes braucht einen anderen Namen.
+str		An end of this association class has the role {name}; an attribute takes another name.	Ein Ende dieser Assoziationsklasse hat die Rolle {name}; ein Attribut braucht einen anderen Namen.
 str		An enumeration is a data type and joins no association	Eine Aufzählung ist ein Datentyp und gehört zu keiner Assoziation
 str		A data type joins no association	Ein Datentyp gehört zu keiner Assoziation
 str		A primitive type joins no association	Ein primitiver Typ gehört zu keiner Assoziation

@@ -9714,6 +9714,159 @@ fn delete_on_an_association_class_line_without_its_card_takes_the_line_from_that
     }
 }
 
+/// Delete on an association class's line never deletes it from the model, even with its card on no
+/// diagram at all: the line goes from this diagram, and only ⇧⌫ and its dialog delete. In light
+/// and dark.
+#[test]
+fn delete_on_an_association_class_line_with_its_card_on_no_diagram_keeps_it_in_the_model() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut r = reviews(theme);
+        let (ac, _, card) = r.review();
+        // Its card off the diagram, then its line drawn again alone: no card anywhere.
+        let d = r.diagram.clone();
+        crate::editing::run(r.h.state_mut(), "diagram.unplace", serde_json::json!({ "nodes": [card] })).unwrap();
+        crate::editing::run(r.h.state_mut(), "diagram.connect-all", serde_json::json!({ "diagram": d })).unwrap();
+        r.h.run();
+        let before = r.shown();
+        let at = r.line_middle() + egui::vec2(-60.0, 0.0);
+        click(&mut r.h, at);
+        assert_eq!(r.selection(), [ac.as_str()]);
+        key(&mut r.h, egui::Key::Delete, egui::Modifiers::NONE);
+        assert_eq!(r.shown(), (before.0, before.1 - 1), "its line went from the diagram");
+        assert_eq!(r.association_classes(), ["Review"], "the model keeps it");
+        assert!(r.h.state().explorer.delete.is_none() && r.h.state().canvas.toast.is_none(), "nothing was deleted");
+        assert_eq!(r.h.state().session.as_ref().unwrap().undo_label(), Some("Remove from this diagram"));
+    }
+}
+
+/// The delete dialog of a class names every relationship that goes with it, as `element.remove`
+/// takes them: Product's association class Review, and the dependency on Review, which goes with
+/// Review. In light and dark.
+#[test]
+fn the_delete_dialog_counts_what_goes_with_an_association_class_too() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut r = reviews(theme);
+        let (ac, _, _) = r.review();
+        let store = r.ids["Store"].clone();
+        crate::editing::run(r.h.state_mut(), "uml.dependency.add", serde_json::json!({ "client": store, "supplier": ac })).unwrap();
+        r.h.run();
+        let at = r.at("Product");
+        click(&mut r.h, at);
+        key(&mut r.h, egui::Key::Delete, egui::Modifiers::SHIFT);
+        let asked = r.h.state().explorer.delete.clone().expect("the dialog asks");
+        assert_eq!(asked.relationships, 2, "Review and the dependency on it");
+        let at = rect_of(&r.h, "workspace.explorer.delete.confirm").center();
+        click(&mut r.h, at);
+        let st = r.h.state().session.as_ref().unwrap().doc();
+        let gone = st.alive().filter(|o| st.class_of(*o).is_ok_and(archforge_uml::is_relationship)).count();
+        assert_eq!(gone, 0, "both went, as the dialog said");
+    }
+}
+
+/// On a diagram without its card, an association class's line shows its name at its middle, as an
+/// association's name sits; with its card there, the name is on the card alone. In light and dark.
+#[test]
+fn an_association_class_line_without_its_card_shows_its_name_at_its_middle() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut r = reviews(theme);
+        let (_, edge, card) = r.review();
+        let name_id = format!("workspace.canvas.edge.{edge}.name");
+        assert!(!ids(&r.h).contains(&name_id), "with its card, the name is on the card");
+        let d = r.diagram.clone();
+        crate::editing::run(r.h.state_mut(), "diagram.unplace", serde_json::json!({ "nodes": [card] })).unwrap();
+        let edge = crate::editing::run(r.h.state_mut(), "diagram.connect-all", serde_json::json!({ "diagram": d })).unwrap();
+        assert_eq!(edge["added"], 1);
+        r.h.run();
+        let (edge, _) = {
+            let st = r.h.state().session.as_ref().unwrap().doc();
+            let ac = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::ASSOCIATION_CLASS)).unwrap();
+            (st.uuid(archforge_diagram::views_of(st, ac).1[0]).unwrap(), ac)
+        };
+        let shown = rect_of(&r.h, &format!("workspace.canvas.edge.{edge}.name"));
+        let middle = r.line_middle();
+        assert!(shown.bottom() < middle.y && (shown.center().x - middle.x).abs() < 4.0, "{shown:?} above {middle:?}");
+        assert!(painted(&r.h).iter().filter(|t| *t == "Review").count() >= 1);
+    }
+}
+
+/// An attribute typed on an association class's card with one of its ends' roles is refused under
+/// the row in the user's words, and a role typed in Properties with one of its attributes' names
+/// is said at the panel's foot; the model keeps what it had. In light and dark.
+#[test]
+fn an_association_class_s_attributes_and_end_roles_keep_apart_on_the_card_and_in_properties() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut r = reviews(theme);
+        let (ac, _, card) = r.review();
+        crate::editing::run(r.h.state_mut(), "uml.association.set-end", serde_json::json!({ "association": ac, "end": 0, "role": "reviewer" }))
+            .unwrap();
+        let ac_id = archforge_mof::Uuid::parse(&ac).unwrap();
+        let at = rect_of(&r.h, &format!("workspace.canvas.node.{card}")).center();
+        click(&mut r.h, at);
+        let at = rect_of(&r.h, "workspace.canvas.adorn.add-attribute").center();
+        click(&mut r.h, at);
+        r.h.event(egui::Event::Text("reviewer".into()));
+        r.h.run();
+        key(&mut r.h, egui::Key::Enter, egui::Modifiers::NONE);
+        let refused = r.h.state().canvas.inline.as_ref().and_then(|i| i.refused.clone());
+        assert_eq!(refused.as_deref(), Some("An end of this association class has the role reviewer; an attribute takes another name."));
+        assert_eq!(member_rows(&r.h, ac_id, false), ["+ stars : Integer"], "nothing written");
+        key(&mut r.h, egui::Key::Escape, egui::Modifiers::NONE);
+        // In Properties, the other end's role typed as the attribute's name.
+        r.h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        r.h.run();
+        let at = rect_of(&r.h, "workspace.properties.end.1.role").center();
+        click(&mut r.h, at);
+        r.h.event(egui::Event::Text("stars".into()));
+        r.h.run();
+        key(&mut r.h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert_eq!(
+            r.h.state().panels.notice.as_deref(),
+            Some("This association class has an attribute named stars; an end's role takes another name.")
+        );
+        let st = r.h.state().session.as_ref().unwrap().doc();
+        let end = archforge_uml::figures::member_ends(st, st.by_uuid(ac_id).unwrap()).unwrap()[1];
+        assert_eq!(archforge_core::name_of(st, end), "", "the role was not written");
+    }
+}
+
+/// A realization whose implementing class is an association class reconnects its interface end
+/// onto another interface; dropped on a class it is refused in the user's words. In light and dark.
+#[test]
+fn a_realization_from_an_association_class_reconnects_its_interface_end() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut r = reviews(theme);
+        let (ac, _, card) = r.review();
+        let (package, d, rated, rated_node) = (r.package.clone(), r.diagram.clone(), r.ids["Rated"].clone(), r.nodes["Rated"].clone());
+        let s = r.h.state_mut().session.as_mut().unwrap();
+        let mut run = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap_or_default().to_string();
+        let shown = run("uml.interface.add", serde_json::json!({ "package": package, "name": "Shown" }));
+        let shown_node =
+            run("diagram.place", serde_json::json!({ "diagram": d, "element": shown, "x": 1100, "y": 200, "width": 240, "height": 136 }));
+        let realization = run("uml.realization.add", serde_json::json!({ "class": ac, "interface": rated }));
+        run("diagram.connect", serde_json::json!({ "diagram": d, "element": realization, "source": card, "target": rated_node }));
+        run("view.select", serde_json::json!({ "ids": [realization] }));
+        r.h.state_mut().canvas.fit_pending = true;
+        r.h.run();
+        let contract = |r: &Reviews| {
+            let st = r.h.state().session.as_ref().unwrap().doc();
+            let o = st.by_uuid(archforge_mof::Uuid::parse(&realization).unwrap()).unwrap();
+            st.uuid(archforge_uml::figures::ends(st, o).unwrap().1).unwrap().to_string()
+        };
+        // Onto a class: refused in the user's words, nothing changed.
+        let revision = r.h.state().session.as_ref().unwrap().revision();
+        let handle = rect_of(&r.h, "workspace.canvas.line-end.target").center();
+        let to = r.at("Store");
+        drag(&mut r.h, handle, to);
+        assert_eq!(r.h.state().canvas.notice.as_deref(), Some("A class realizes only an interface"));
+        assert_eq!(r.h.state().session.as_ref().unwrap().revision(), revision);
+        // Onto another interface: it moves there.
+        let handle = rect_of(&r.h, "workspace.canvas.line-end.target").center();
+        let to = rect_of(&r.h, &format!("workspace.canvas.node.{shown_node}")).center();
+        drag(&mut r.h, handle, to);
+        assert_eq!(contract(&r), shown, "notice {:?}", r.h.state().canvas.notice);
+    }
+}
+
 /// An association class dragged from Models onto a diagram that shows both its classes places its
 /// card with its line, as one step; dragged again it is said to be there already. In light and dark.
 #[test]

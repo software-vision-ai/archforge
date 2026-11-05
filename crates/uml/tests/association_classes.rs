@@ -303,8 +303,8 @@ fn removal_takes_its_ends_members_and_views_and_a_class_it_joins_takes_it_along(
     assert_eq!(counts(&s), (2, 0));
 }
 
-/// Removing its card from a diagram takes its line from that diagram too: the diagram shows it
-/// whole or not at all. The model is untouched.
+/// Removing its card from a diagram takes its line from that diagram too; the model is untouched.
+/// A line drawn alone afterwards, by `diagram.connect-all`, stays without a card.
 #[test]
 fn unplacing_its_card_takes_its_line_from_the_diagram_too() {
     let mut s = session();
@@ -379,4 +379,44 @@ fn the_sweep_over_association_classes_breaks_nothing() {
     ];
     let calls = sweep_with(&mut s, &ids, |st| format!("{:?}", archforge_mof::rows::snapshot(st, &tables().0, &tables().1).unwrap())).unwrap();
     assert!(calls > 100, "{calls}");
+}
+
+/// Its attributes and its ends' roles share its names, as UML has them: an attribute named as one
+/// of its ends' roles is refused, and a role named as one of its attributes, whatever the case,
+/// each refusal naming both; a plain class's attribute and a plain association's role are free.
+#[test]
+fn its_attributes_and_its_ends_roles_share_its_names() {
+    let mut s = session();
+    let (_, _, c, _) = shop(&mut s);
+    let ac = run(&mut s, "uml.association-class.add", json!({ "from": c[0], "to": c[1], "name": "Review" }));
+    run(&mut s, "uml.association.set-end", json!({ "association": ac, "end": 0, "role": "reviewer" }));
+    let end = ends(&mut s, &ac)[0]["id"].as_str().unwrap().to_string();
+    refused(&mut s, "uml.attribute.add", json!({ "class": ac, "name": "Reviewer" }), &["name", ac.as_str(), end.as_str(), "the role reviewer"]);
+    let stars = run(&mut s, "uml.attribute.add", json!({ "class": ac, "name": "stars" }));
+    refused(&mut s, "uml.attribute.set", json!({ "attribute": stars, "name": "reviewer" }), &["name", end.as_str()]);
+    refused(
+        &mut s,
+        "uml.association.set-end",
+        json!({ "association": ac, "end": 1, "role": "STARS" }),
+        &["role", ac.as_str(), stars.as_str(), "named stars", "the role STARS takes another"],
+    );
+    // Elsewhere the names are free: a plain class's attribute, a plain association's role.
+    run(&mut s, "uml.attribute.add", json!({ "class": c[0], "name": "reviewer" }));
+    let a = run(&mut s, "uml.association.add", json!({ "from": c[0], "to": c[1] }));
+    run(&mut s, "uml.association.set-end", json!({ "association": a, "end": 1, "role": "reviewer" }));
+}
+
+/// `uml.relationship.rename` refuses an association class, naming its id and the command that
+/// renames it, and changes nothing.
+#[test]
+fn renaming_it_as_a_relationship_points_to_its_own_command() {
+    let mut s = session();
+    let (_, _, c, _) = shop(&mut s);
+    let ac = run(&mut s, "uml.association-class.add", json!({ "from": c[0], "to": c[1], "name": "Review" }));
+    refused(
+        &mut s,
+        "uml.relationship.rename",
+        json!({ "relationship": ac, "name": "Rating" }),
+        &["relationship", ac.as_str(), "uml.association-class.rename"],
+    );
 }

@@ -388,7 +388,8 @@ fn visibility(store: &Store, owner: Obj, p: &Params, key: &str) -> Result<Value,
     Ok(v)
 }
 
-/// A member's name: a name, told apart from its owner's other attributes when it is one.
+/// A member's name: a name, told apart from its owner's other attributes when it is one, and, in an
+/// association class, from its ends' roles, which share its names in UML.
 fn check_name(store: &Store, owner: Obj, name: &str, siblings: &[Obj], except: Option<Obj>) -> Result<(), CommandError> {
     if let Some(p) = archforge_core::skills::name_problem(name, crate::commands::MAX_NAME) {
         return Err(refuse("name", format!("the name {p}")));
@@ -396,7 +397,36 @@ fn check_name(store: &Store, owner: Obj, name: &str, siblings: &[Obj], except: O
     if siblings.iter().any(|s| Some(*s) != except && name_of(store, *s).to_lowercase() == name.to_lowercase()) {
         return Err(refuse("name", format!("the {} has an attribute named {name} already", crate::commands::what(store, owner))));
     }
+    if let Some(end) = end_role_clash(store, owner, name) {
+        return Err(refuse(
+            "name",
+            format!(
+                "the association class {} has an end {} with the role {}; its attributes and its ends' roles share its names, so the attribute {name} takes another",
+                uuid_of(store, owner)?,
+                uuid_of(store, end)?,
+                name_of(store, end)
+            ),
+        ));
+    }
     Ok(())
+}
+
+/// The end of association class `owner` whose role is `name`, whatever the case: an attribute of
+/// it may not take that name. None for anything but an association class, and for no name.
+pub fn end_role_clash(store: &Store, owner: Obj, name: &str) -> Option<Obj> {
+    if name.is_empty() || store.class_of(owner).ok() != Some(crate::ASSOCIATION_CLASS) {
+        return None;
+    }
+    crate::figures::member_ends(store, owner)?.into_iter().find(|e| name_of(store, *e).to_lowercase() == name.to_lowercase())
+}
+
+/// The attribute of association class `owner` named `role`, whatever the case: an end of it may not
+/// take that role. None for anything but an association class, and for no role.
+pub fn attribute_clash(store: &Store, owner: Obj, role: &str) -> Option<Obj> {
+    if role.is_empty() || store.class_of(owner).ok() != Some(crate::ASSOCIATION_CLASS) {
+        return None;
+    }
+    attributes(store, owner).into_iter().find(|a| name_of(store, *a).to_lowercase() == role.to_lowercase())
 }
 
 /// Why `c` takes no `members` (attributes or operations): its id, what it is (an enumeration,
@@ -406,10 +436,14 @@ fn no_members(store: &Store, c: Obj, members: &str) -> String {
     let id = uuid_of(store, c).unwrap_or_default();
     let because =
         if store.class_of(c).ok() == Some(PRIMITIVE_TYPE) { "a primitive type having no members" } else { "its members being its literals" };
-    format!("{id} is {} and keeps no {members}, {because}; a class, an interface or a data type does", crate::commands::a_what(store, c))
+    format!(
+        "{id} is {} and keeps no {members}, {because}; a class, an interface, a data type or an association class does",
+        crate::commands::a_what(store, c)
+    )
 }
 
-/// The class, interface or data type that owns `member` in its list of attributes or operations.
+/// The class, interface, data type or association class that owns `member` in its list of
+/// attributes or operations.
 fn owner_of(store: &Store, member: Obj) -> Option<Obj> {
     store.container(member).ok().flatten().map(|(c, _)| c).filter(|c| store.class_of(*c).is_ok_and(crate::is_classifier))
 }
@@ -426,7 +460,8 @@ fn select(ctx: &mut C<'_>, o: Obj) {
     ctx.view.selection = vec![o];
 }
 
-/// `uml.attribute.add`: an attribute of a class, an interface or a data type, its name free among
+/// `uml.attribute.add`: an attribute of a class, an interface, a data type or an association class,
+/// its name free among
 /// its attributes.
 fn attribute_add(ctx: &mut C<'_>, p: &Params) -> R {
     let c = classifier_of(ctx.doc, p, "class")?;
@@ -451,7 +486,7 @@ fn attribute_add(ctx: &mut C<'_>, p: &Params) -> R {
 fn attribute_set(ctx: &mut C<'_>, p: &Params) -> R {
     let a = id_of(ctx.doc, p, "attribute", PROPERTY, "an attribute")?;
     let Some(c) = owner_of(ctx.doc, a).filter(|_| one(ctx.doc, a, property::ASSOCIATION).is_none()) else {
-        return Err(refuse("attribute", "it is not a class's, an interface's or a data type's attribute"));
+        return Err(refuse("attribute", "it is not a class's, an interface's, a data type's or an association class's attribute"));
     };
     let name = text(p, "name");
     check_name(ctx.doc, c, name, &attributes(ctx.doc, c), Some(a))?;
@@ -470,10 +505,12 @@ fn attribute_set(ctx: &mut C<'_>, p: &Params) -> R {
 fn member_move(ctx: &mut C<'_>, p: &Params, key: &str, class_of: archforge_mof::ClassId, first: bool, what: &str) -> R {
     let m = id_of(ctx.doc, p, key, class_of, what)?;
     let lists = owner_of(ctx.doc, m).and_then(|c| Some((c, member_lists(ctx.doc, c)?)));
-    let Some((c, (attributes, operations))) = lists else { return Err(refuse(key, "it belongs to no class, interface or data type")) };
+    let Some((c, (attributes, operations))) = lists else {
+        return Err(refuse(key, "it belongs to no class, interface, data type or association class"));
+    };
     let prop = if first { attributes } else { operations };
     let all = list(ctx.doc, c, prop);
-    let from = all.iter().position(|x| *x == m).ok_or_else(|| refuse(key, "it belongs to no class, interface or data type"))?;
+    let from = all.iter().position(|x| *x == m).ok_or_else(|| refuse(key, "it belongs to no class, interface, data type or association class"))?;
     let from = u32::try_from(from)
         .map_err(|_| refuse(key, format!("{} sits at {from}, past the places a move reaches; a place from 0 to {}", text(p, key), u32::MAX)))?;
     let to = place(p, all.len()).min(all.len().saturating_sub(1) as u32);
@@ -547,7 +584,8 @@ fn set_operation(store: &mut Store, owner: Obj, op: Obj, p: &Params) -> Result<(
     set_signature(store, op, p)
 }
 
-/// `uml.operation.add`: an operation of a class, an interface or a data type, at the place asked for.
+/// `uml.operation.add`: an operation of a class, an interface, a data type or an association class,
+/// at the place asked for.
 fn operation_add(ctx: &mut C<'_>, p: &Params) -> R {
     let c = classifier_of(ctx.doc, p, "class")?;
     let Some((_, owned)) = member_lists(ctx.doc, c) else { return Err(refuse("class", no_members(ctx.doc, c, "operations"))) };
@@ -818,7 +856,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             &["Class"],
             None,
             concat!(
-                "class: string; the class's, interface's or data type's id\nname: string; the attribute's name\n",
+                "class: string; the class's, interface's, data type's or association class's id\nname: string; the attribute's name; in an association class never one of its ends' roles\n",
                 type_line!(),
                 "\n",
                 multiplicity_line!(),
@@ -861,7 +899,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             &["Class"],
             None,
             concat!(
-                "class: string; the class's, interface's or data type's id\n",
+                "class: string; the class's, interface's, data type's or association class's id\n",
                 operation_lines!(),
                 "\nat: integer = -1, -1..1000000; where among the operations, -1 for the end"
             ),

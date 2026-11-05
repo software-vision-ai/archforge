@@ -874,15 +874,28 @@ pub(crate) fn literal_refusal(store: &Store, edit: &MemberEdit) -> Option<String
     Some(fmt(&tr("There is a literal named {name} already."), &[("name", &name(store, clash))]))
 }
 
+/// Why the attribute as edited cannot be written, in the user's words: in an association class its
+/// name is one of its ends' roles, whatever the case, and they share its names; the rule the
+/// commands keep too. None for any other member.
+pub(crate) fn attribute_refusal(store: &Store, edit: &MemberEdit) -> Option<String> {
+    if edit.kind != MemberKind::Attribute {
+        return None;
+    }
+    let class = store.by_uuid(edit.class)?;
+    let end = archforge_uml::members::end_role_clash(store, class, edit.name.trim())?;
+    Some(fmt(&tr("An end of this association class has the role {name}; an attribute takes another name."), &[("name", &name(store, end))]))
+}
+
 /// Runs the member's command and, in the same undo step, grows every card of its class that would
 /// then hide a member, on every diagram, keeping its width (owner decision: a card the user made
 /// shorter stays so until a member of its class is added or edited); an enumeration's grows to
-/// show a literal added the same way. A literal's name that clashes is refused first, in the
-/// user's words, and nothing is run.
+/// show a literal added the same way. A literal's name that clashes, or an association class's
+/// attribute named as one of its ends' roles, is refused first, in the user's words, and nothing is
+/// run.
 pub(crate) fn write_in_sight(shell: &mut Shell, edit: &MemberEdit, cmd: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
     let Some(session) = shell.session.as_mut() else { return Err(tr("The model could not be opened")) };
     let store = session.doc();
-    if let Some(why) = literal_refusal(store, edit) {
+    if let Some(why) = literal_refusal(store, edit).or_else(|| attribute_refusal(store, edit)) {
         return Err(why);
     }
     let more = match (edit.target, edit.kind) {

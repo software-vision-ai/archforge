@@ -640,6 +640,8 @@ str		A bound can be at most {max}.	Une borne vaut au plus {max}.
 str		A class realizes only an interface	Une classe ne réalise qu’une interface
 str		A relationship joins two classes or interfaces	Une relation joint deux classes ou interfaces
 str		An association class does not join itself	Une classe d’association ne se joint pas à elle-même
+str		This association class has an attribute named {name}; an end's role takes another name.	Cette classe d’association a un attribut nommé {name} ; le rôle d’une extrémité prend un autre nom.
+str		An end of this association class has the role {name}; an attribute takes another name.	Une extrémité de cette classe d’association a le rôle {name} ; un attribut prend un autre nom.
 str		An enumeration is a data type and joins no association	Une énumération est un type de données et ne participe à aucune association
 str		A data type joins no association	Un type de données ne participe à aucune association
 str		A primitive type joins no association	Un type primitif ne participe à aucune association

@@ -285,13 +285,18 @@ attribute** button beside the card, or ⌘↩ (⇧⌘↩ for an operation). Drag
 onto another class to move it; the same rules apply.
 
 Its name is one of its package's names, as a class's is: a class and an association class of one
-package cannot share a name. **Remove from this diagram**, or Delete, takes the line and the card
+package cannot share a name. Its attributes and its ends' roles share its own names: an attribute
+named like one of its ends' roles is refused under its row, and a role named like one of its
+attributes is refused in Properties. **Remove from this diagram**, or Delete, takes the line and the card
 away and keeps the association class in the model; **Delete from the model…** (⇧⌫) asks first, then
 deletes it with its ends, attributes and operations. Removing a class at either end takes it along.
 
 In **Models** it is a row under its package, with its attributes and operations below it. The
 **+** of a package does not offer it: an association class is made only by drawing. Drag its row
 onto a diagram to place its card; where the diagram shows both its classes, its line comes with it.
+A diagram may also show its line without its card, when you place its two classes there: the line
+then carries its name at its middle, as an association's name sits, and Delete on that line takes
+it from the diagram, never from the model.
 An association class carries skills as a class does; a package's skill can aim at every association
 class in it, which a skill for every class or for every association does not reach. It may realize
 an interface, as a class does, but nothing specializes it.

@@ -480,7 +480,9 @@ pub fn remove_selected_relationship(shell: &mut Shell) -> bool {
 
 /// Removes the selected line's element of any notation (a class diagram's association,
 /// generalization or dependency) with the lines that show it, as one undo step, and says so in the
-/// toast with Undo; false when no such line is selected.
+/// toast with Undo; false when no such line is selected. An element its notation also draws as a
+/// card (an association class) is never deleted from the model here, card or no card: Delete on
+/// its line takes it from the diagram, and only ⇧⌫ and its dialog delete it.
 pub fn remove_selected_line(shell: &mut Shell) -> bool {
     let Some(session) = shell.session.as_ref() else { return false };
     let store = session.doc();
@@ -488,9 +490,13 @@ pub fn remove_selected_line(shell: &mut Shell) -> bool {
         Some(c) if c == archforge_diagram::EDGE => store.get(o, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref()),
         _ => Some(o),
     });
+    let carded = |e: Obj| {
+        let Ok(class) = store.class_of(e) else { return false };
+        session.view().of_element(store, e).is_some_and(|n| n.kinds().iter().any(|k| n.shows(k, class)))
+    };
     let Some(element) = element.filter(|e| {
         let (_, edges, nodes) = archforge_diagram::views_of(store, *e);
-        !edges.is_empty() && nodes.is_empty()
+        !edges.is_empty() && nodes.is_empty() && !carded(*e)
     }) else {
         return false;
     };

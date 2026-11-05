@@ -640,6 +640,8 @@ str		A bound can be at most {max}.	界限最多为 {max}。
 str		A class realizes only an interface	类只能实现接口
 str		A relationship joins two classes or interfaces	关系连接两个类或接口
 str		An association class does not join itself	关联类不连接自身
+str		This association class has an attribute named {name}; an end's role takes another name.	此关联类已有名为 {name} 的属性；端的角色需使用其他名称。
+str		An end of this association class has the role {name}; an attribute takes another name.	此关联类的一端已有角色 {name}；属性需使用其他名称。
 str		An enumeration is a data type and joins no association	枚举是数据类型，不参与任何关联
 str		A data type joins no association	数据类型不参与任何关联
 str		A primitive type joins no association	基本类型不参与任何关联

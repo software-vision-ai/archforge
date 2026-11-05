@@ -388,9 +388,10 @@ fn diagram_resize<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, n)? }))
 }
 
-/// `diagram.unplace`: the nodes go from their diagram with the edges on them; an element a node
-/// shows that the same diagram also shows as an edge (an association class's card and its line)
-/// leaves the diagram whole, its edge going too. The model is untouched.
+/// `diagram.unplace`: the nodes go from their diagram with the edges on them, and with the edges of
+/// that diagram that show the same element as a node does (an association class's line goes with
+/// its card). An edge alone, its element's node not on the diagram, is left as it is: that is a
+/// state of its own. The model is untouched.
 fn diagram_unplace<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let nodes = list_of(ctx.doc, p, "nodes", &[NODE], "a node")?;
     if nodes.is_empty() {

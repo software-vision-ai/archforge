@@ -587,11 +587,7 @@ pub(crate) fn reconnect(shell: &mut Shell, element: Uuid, source: bool, to_node:
         let moved = class_of_node(store, to_node);
         let (i, c) = if source { (moved, Some(contract)) } else { (Some(implementing), moved) };
         // When the end that stays is wrong already (a project edited by hand), the model says so.
-        let staying_fine = if source {
-            store.class_of(contract).ok() == Some(archforge_uml::INTERFACE)
-        } else {
-            store.class_of(implementing).ok() == Some(archforge_uml::CLASS)
-        };
+        let staying_fine = if source { store.class_of(contract).ok() == Some(archforge_uml::INTERFACE) } else { is_class(store, implementing) };
         if staying_fine
             && moved != Some(if source { implementing } else { contract })
             && let Some(why) = realization_refusal(store, i, c, Some(r))
@@ -907,6 +903,15 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
             agg = k;
         }
         shell.panels.ends = Some(edit.clone());
+        // An association class's end takes no role one of its attributes is named, as they share
+        // its names: said in the user's words, and nothing is written.
+        let clash = shell.session.as_ref().and_then(|s| archforge_uml::members::attribute_clash(s.doc(), a, edit.role[i].trim()));
+        if role && let Some(attribute) = clash {
+            let named = shell.session.as_ref().map(|s| archforge_core::name_of(s.doc(), attribute)).unwrap_or_default();
+            shell.panels.notice =
+                Some(fmt(&tr("This association class has an attribute named {name}; an end's role takes another name."), &[("name", &named)]));
+            return y;
+        }
         if role || write_multiplicity || (!whole && nav != navigable[i]) || agg != aggregations[i] {
             // Only the field written changes: the others go as the model has them, so a
             // multiplicity still being corrected is never sent with a role or an aggregation.
@@ -960,5 +965,6 @@ pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
         "An association class joins only classes",
         "An association class does not join itself",
         "Nothing specializes an association class",
+        "This association class has an attribute named {name}; an end's role takes another name.",
     ])
 }
