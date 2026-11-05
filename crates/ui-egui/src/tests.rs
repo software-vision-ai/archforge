@@ -495,7 +495,7 @@ fn description_on(h: &Harness<'static, Shell>, id: archforge_mof::Uuid) -> Strin
     s.view().of_element(s.doc(), o).map(|n| n.description(s.doc(), o)).unwrap_or_default()
 }
 
-/// Types `text` into the Description field of the element `id`, without Enter.
+/// Types `text` into the Description field of the element `id`, after what it holds, without Enter.
 fn type_description(h: &mut Harness<'static, Shell>, id: archforge_mof::Uuid, text: &str) {
     h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [id.to_string()] })).unwrap();
     h.run();
@@ -503,7 +503,7 @@ fn type_description(h: &mut Harness<'static, Shell>, id: archforge_mof::Uuid, te
     click(h, at);
     h.event(egui::Event::Text(text.into()));
     h.run();
-    assert_eq!(h.state().panels.description.as_ref().map(|d| d.text.as_str()), Some(text), "typed, not yet written");
+    assert!(h.state().panels.description.as_ref().is_some_and(|d| d.text.ends_with(text)), "typed, not yet written");
 }
 
 /// A description being typed, on a UML class or an ER table, is written before Cmd+S saves, so the
@@ -512,8 +512,14 @@ fn type_description(h: &mut Harness<'static, Shell>, id: archforge_mof::Uuid, te
 fn a_description_being_typed_is_saved_by_cmd_s() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, host, class, table) = described_project(theme);
+        let unsaved_shown = |h: &mut Harness<'static, Shell>| {
+            let inspected = crate::control::answer(h.state_mut(), "document.inspect", &serde_json::json!({})).unwrap();
+            painted(h).iter().any(|t| t.starts_with("Unsaved changes")) && !painted(h).iter().any(|t| t == "Saved") && inspected["unsaved"] == true
+        };
         for (id, text) in [(class, "One purchase."), (table, "People who buy.")] {
             type_description(&mut h, id, text);
+            // Typed but not yet written: an unsaved change, on the status bar, the tab and to an agent.
+            assert!(!dirty(&h) && unsaved_shown(&mut h) && h.state().tab_unsaved(0), "a draft being typed is unsaved");
             h.event(egui::Event::Key { key: egui::Key::S, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::COMMAND });
             h.run_steps(2);
             assert_eq!(description_on(&h, id), text, "written before the save");
@@ -523,6 +529,30 @@ fn a_description_being_typed_is_saved_by_cmd_s() {
             h.run_steps(2);
             assert!(!dirty(&h), "the save took the description");
         }
+        // A save already running: Cmd+S waits for it and leaves the draft being typed, which still
+        // shows as unsaved, also once that save is done; Enter then writes it.
+        h.state_mut().session.as_mut().unwrap().execute("er.schema.add", &serde_json::json!({ "name": "crm" })).unwrap();
+        h.run_steps(2);
+        h.state_mut().save();
+        assert!(h.state().is_saving());
+        type_description(&mut h, class, " Or two.");
+        h.event(egui::Event::Key { key: egui::Key::S, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::COMMAND });
+        h.run_steps(2);
+        assert_eq!(host.saves.lock().unwrap().len(), 1, "one save at a time");
+        assert!(h.state().panels.description.is_some(), "the draft waits");
+        // While the save runs the status bar says Saving…; the tab and an agent count the draft.
+        let inspected = crate::control::answer(h.state_mut(), "document.inspect", &serde_json::json!({})).unwrap();
+        assert_eq!(inspected["unsaved"], true, "the waiting draft is unsaved while the save runs");
+        assert!(h.state().tab_unsaved(0) && painted(&h).iter().any(|t| t == "Saving…"));
+        host.saves.lock().unwrap().pop().unwrap().send(Ok(true)).unwrap();
+        h.run_steps(2);
+        assert!(!dirty(&h) && unsaved_shown(&mut h) && h.state().tab_unsaved(0), "and after it is done");
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert_eq!(description_on(&h, class), "One purchase. Or two.");
+        h.state_mut().save();
+        host.saves.lock().unwrap().pop().unwrap().send(Ok(true)).unwrap();
+        h.run_steps(2);
+        assert!(!dirty(&h) && !unsaved_shown(&mut h), "saved, and Saved shows");
         // A draft the model refuses, on a clean project: the save does not start, the refusal
         // shows, the draft stays, and neither the status bar nor an agent's save says Saved.
         h.state_mut().panels.description = Some(crate::panels::DescriptionDraft { target: table, text: "a\u{7}b".into(), refused: false });

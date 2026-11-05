@@ -996,10 +996,15 @@ pub(crate) fn commit_description(shell: &mut Shell) -> bool {
     shell.panels.description.is_some()
 }
 
-/// Whether `panels` keep a description draft whose write was refused: unsaved work a close or a
-/// quit asks about.
+/// Whether `panels` keep a description draft whose write was refused: a save stops on it.
 pub(crate) fn refused_description(panels: &State) -> bool {
     panels.description.as_ref().is_some_and(|d| d.refused)
+}
+
+/// Whether `panels` keep a description draft not yet written, being typed or refused: unsaved work
+/// the status bar, the tab, `document.inspect` and a close or a quit count.
+pub(crate) fn description_pending(panels: &State) -> bool {
+    panels.description.is_some()
 }
 
 /// The description under the heading: typed in place, committed through `element.describe` on Enter

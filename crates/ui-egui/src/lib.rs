@@ -533,16 +533,16 @@ impl Shell {
         }
     }
 
-    /// Whether tab `i`'s project holds changes not yet saved, a description whose write was refused
-    /// among them (AR-186).
+    /// Whether tab `i`'s project holds changes not yet saved, a description typed but not yet
+    /// written, or refused, among them (AR-186).
     pub fn tab_unsaved(&self, i: usize) -> bool {
         if self.active == Some(i) {
-            return self.session.as_ref().is_some_and(|s| s.is_dirty()) || panels::refused_description(&self.panels);
+            return self.session.as_ref().is_some_and(|s| s.is_dirty()) || panels::description_pending(&self.panels);
         }
         self.tabs
             .get(i)
             .and_then(|t| t.parked.as_ref())
-            .is_some_and(|p| p.session.as_ref().is_some_and(|s| s.is_dirty()) || panels::refused_description(&p.panels))
+            .is_some_and(|p| p.session.as_ref().is_some_and(|s| s.is_dirty()) || panels::description_pending(&p.panels))
     }
 
     /// The tab of the project at `path`.

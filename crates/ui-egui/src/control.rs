@@ -113,7 +113,7 @@ fn inspect(shell: &Shell) -> Value {
         "open": true,
         "project": shell.project.as_ref().map(|p| json!({ "name": p.name, "path": p.path.display().to_string() })),
         "revision": session.revision(),
-        "unsaved": session.is_dirty() || crate::panels::refused_description(&shell.panels),
+        "unsaved": session.is_dirty() || crate::panels::description_pending(&shell.panels),
         "saving": shell.is_saving(),
         "save_error": shell.save_error,
         "undo": session.undo_label(),
