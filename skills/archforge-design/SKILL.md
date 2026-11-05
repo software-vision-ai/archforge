@@ -513,12 +513,16 @@ member and drawing a relationship stay three separate gestures:
   and leaves the model as it was.
 - Drawing relationships. The Relationship menu gains, after a separator, Interface realization and
   Association class.
-  - Interface realization is drawn from the implementing classifier to its interface: a dashed
-    line in the muted ink, with a hollow triangle at the interface. A drop on anything but an
-    interface, a drop of an interface on itself, or a second realization from the same classifier to
-    the same interface is refused at the canvas's top and draws nothing; several classifiers may
-    realize one interface.
-  - An association class is drawn between two classes as an association is. The line and a card
+  - Interface realization is drawn from the implementing class to its interface: a dashed line in
+    the muted ink, with a hollow triangle at the interface. Only a class or an association class
+    implements, as in UML, where an implementing classifier is behaviored; from an interface, an
+    enumeration, a data type or a primitive type the tool starts no line. Dropped on empty canvas it
+    makes a new interface there, named in place, with the line, as one undo step, as the
+    Relationship tool makes a class. A drop on any other element than an interface, or a second
+    realization from the same class to the same interface, is refused at the canvas's top and draws
+    nothing; several classes may realize one interface.
+  - An association class is drawn between two classes as an association is; dropped on empty
+    canvas it makes a new class there, named in place, as an association does. The line and a card
     above its middle appear as one element and one undo step, the card's name open for typing and
     its eyebrow `ASSOCIATION CLASS`. The card moves on its own; a dashed tie joins it to the line's
     middle. Selecting the line or the card selects the one element, and Properties shows its ends,
@@ -529,7 +533,11 @@ member and drawing a relationship stay three separate gestures:
     shown.
 - Property modifiers live in the attribute editor and the association end's editor, never in a tool
   of their own: Default value; Static, Derived, Read only, Ordered and Unique; and Subsets and
-  Redefines, which offer only valid targets. On a card a derived attribute starts with `/`, a
+  Redefines. Subsets offers the other properties of the same classifier and of its general
+  classifiers; Redefines offers only those of its general classifiers. Both leave out what UML's
+  well-formedness rules refuse (UML 2.5.1, 9.9.17, Property constraints `subsetting_context_conforms`,
+  `subsetting_rules` and `redefined_property_inherited`): a type that does not conform, an upper
+  bound above the target's. On a card a derived attribute starts with `/`, a
   default follows `=`, and braces list what differs from the usual (`{readOnly}`, `{ordered}`,
   `{nonunique}`, `{subsets name}`, `{redefines name}`); unique is the usual and is not said. An
   association end follows the same order beside its line: `/` before the role when derived, the
