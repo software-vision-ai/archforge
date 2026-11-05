@@ -36,6 +36,7 @@ macro_rules! kept_modifier_lines {
 }
 
 pub mod commands;
+pub mod descriptions;
 pub mod figures;
 mod generated;
 pub mod members;
@@ -232,6 +233,16 @@ impl Notation for UmlNotation {
     /// Removes UML elements with what they hold and what shows them; an enumeration with its literals.
     fn remove(&self, store: &mut Store, objs: &[Obj]) -> Result<usize, archforge_engine::CommandError> {
         commands::remove_elements(store, objs)
+    }
+
+    /// Sets a UML element's description, kept as a Comment the element owns (AR-186).
+    fn describe(&self, store: &mut Store, obj: Obj, text: &str) -> Result<(), archforge_engine::CommandError> {
+        descriptions::describe_element(store, obj, text)
+    }
+
+    /// A UML element's description: its description Comment's body (AR-186).
+    fn description(&self, store: &Store, obj: Obj) -> String {
+        descriptions::description_of(store, obj)
     }
 }
 

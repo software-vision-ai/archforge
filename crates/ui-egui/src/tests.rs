@@ -9168,6 +9168,74 @@ fn primitive_types_are_listed_added_with_the_plus_found_and_dragged_while_the_bu
     }
 }
 
+/// The Description field in Properties describes a UML element (AR-186): typed and committed with
+/// Enter, or by leaving the field, it is kept as a comment the element owns, one undo step, and it
+/// stays when the element is selected again; a package and a member take one too. In light and
+/// dark.
+#[test]
+fn a_description_typed_in_properties_stays_on_a_uml_element_after_reselecting_it() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        let described = |h: &Harness<'static, Shell>, id: archforge_mof::Uuid| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            archforge_uml::descriptions::description_of(st, st.by_uuid(id).unwrap())
+        };
+        let attribute = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let customer = st.by_uuid(named(&h, archforge_uml::CLASS, "Customer")).unwrap();
+            st.uuid(archforge_uml::members::attributes(st, customer)[0]).unwrap()
+        };
+        for (i, (class, name)) in
+            [(archforge_uml::CLASS, "Customer"), (archforge_uml::PACKAGE, "Commerce"), (archforge_uml::PROPERTY, "")].into_iter().enumerate()
+        {
+            let element = if name.is_empty() {
+                h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [attribute.to_string()] })).unwrap();
+                h.run();
+                attribute
+            } else {
+                select_named(&mut h, class, name)
+            };
+            assert!(ids(&h).iter().any(|i| i == "workspace.properties.description"), "{:?}", ids(&h));
+            let text = format!("Described {i}.");
+            let at = rect_of(&h, "workspace.properties.description").center();
+            click(&mut h, at);
+            h.event(egui::Event::Text(text.clone()));
+            h.run();
+            if i == 1 {
+                // Leaving the field commits it too.
+                key(&mut h, egui::Key::Tab, egui::Modifiers::NONE);
+            } else {
+                key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+            }
+            assert_eq!(h.state().panels.notice, None, "no refusal");
+            assert_eq!(described(&h, element), text, "kept on {name:?}");
+            assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Describe"));
+            // Another element selected, then this one again: the field shows its description.
+            select_named(&mut h, archforge_uml::CLASS, "Order");
+            assert!(!painted(&h).contains(&text), "Order shows its own, none");
+            if name.is_empty() {
+                h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [attribute.to_string()] })).unwrap();
+                h.run();
+            } else {
+                select_named(&mut h, class, name);
+            }
+            assert!(painted(&h).contains(&text), "{text} in {:?}", painted(&h));
+            assert_eq!(described(&h, element), text);
+        }
+        // Emptied, the description goes with its comment.
+        let customer = select_named(&mut h, archforge_uml::CLASS, "Customer");
+        let at = rect_of(&h, "workspace.properties.description").center();
+        click(&mut h, at);
+        key(&mut h, egui::Key::A, egui::Modifiers::COMMAND);
+        key(&mut h, egui::Key::Backspace, egui::Modifiers::NONE);
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert_eq!(described(&h, customer), "");
+        let st = h.state().session.as_ref().unwrap().doc();
+        assert_eq!(archforge_uml::descriptions::description_comment(st, st.by_uuid(customer).unwrap()), None);
+    }
+}
+
 /// The package Types is not removed from Models while it keeps the built-in types, which Models
 /// does not show: Delete says why under the tree, in the user's words, and nothing changes. Its
 /// rows agree with what it is said to hold: emptied of what the user put there, it holds nothing

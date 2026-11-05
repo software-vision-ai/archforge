@@ -937,10 +937,11 @@ pub(crate) fn name_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: 
 }
 
 /// The description under the heading: typed in place, committed through `element.describe` on Enter
-/// or when the keyboard leaves it.
+/// or when the keyboard leaves it. It shows what the element's notation keeps: an ER element's
+/// description, a UML element's description Comment (AR-186).
 fn description_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: egui::Pos2, width: f32, subject: &Subject) {
     let (Some(id), Some(obj)) = (subject.id, subject.obj) else { return };
-    let current = shell.session.as_ref().map(|s| archforge_er::rules::text_of(s.doc(), obj, archforge_er::element::DESCRIPTION)).unwrap_or_default();
+    let current = shell.session.as_ref().and_then(|s| s.view().of_element(s.doc(), obj).map(|n| n.description(s.doc(), obj))).unwrap_or_default();
     let mut text = match &shell.panels.description {
         Some(d) if d.target == id => d.text.clone(),
         _ => current.clone(),
@@ -1963,7 +1964,8 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, 
     }
     ux::text(&paint, r.min + vec2(PAD, y), &s.name, types::CARD_TITLE, p.text, Some((r.width() - 2.0 * PAD).max(0.0)));
     ux::text(&paint, r.min + vec2(PAD, y + 26.0), &s.kind, types::CAPTION, p.text_secondary, Some((r.width() - 2.0 * PAD).max(0.0)));
-    // Every element of the model takes a description, the text DDL writes as its comment.
+    // Every element of the model takes a description: an ER element's is the text DDL writes as its
+    // comment, a UML element's a Comment it owns (AR-186).
     let mut body_y = r.top() + y + 51.0;
     if panel == Panel::Properties && s.obj.is_some() && s.class != Some(archforge_diagram::DIAGRAM) {
         description_field(shell, ui, p, pos2(r.left() + PAD, r.top() + y + 49.0), (r.width() - 2.0 * PAD).max(0.0), &s);

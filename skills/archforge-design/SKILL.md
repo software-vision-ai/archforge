@@ -210,7 +210,8 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
 - Properties shows model data, the same on every diagram; Appearance styles this diagram only;
   Skills is a tab of its own.
 - The panel opens with the selection's name, its kind and a Description field, pinned while the
-  body scrolls. A box's element and its members (a table and its columns, a class and its
+  body scrolls. Enter or leaving the field keeps the description, an empty field removes it; a UML
+  element's is a comment it owns (AR-186). A box's element and its members (a table and its columns, a class and its
   attributes) share one page, so moving between them keeps the scroll.
 - Sections are divided by full-width lines, each headed by a regular title with its count
   ("Columns · 3") and an icon action such as +. Fields are filled and borderless with small muted

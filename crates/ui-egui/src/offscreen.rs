@@ -1193,7 +1193,8 @@ fn sample_data_types(shell: &mut Shell) -> Result<(), String> {
 
 /// A package Catalog on its own class diagram: the primitive types Sku and Gtin, Gtin specializing
 /// Sku, and the class Product whose sku, gtin and price they and a built-in type type, and whose
-/// operation find takes a Sku; Sku selected, the package open in Models, its Properties shown.
+/// operation find takes a Sku; Sku described, selected, the package open in Models, its Properties
+/// shown.
 fn sample_primitive_types(shell: &mut Shell) -> Result<(), String> {
     use serde_json::json;
     let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
@@ -1222,6 +1223,8 @@ fn sample_primitive_types(shell: &mut Shell) -> Result<(), String> {
         run(session, "diagram.place", json!({ "diagram": diagram, "element": element, "x": x, "y": y, "width": w + 40.0, "height": height }))?;
     }
     run(session, "diagram.connect-all", json!({ "diagram": diagram }))?;
+    // Sku's description, kept as a comment it owns (AR-186), shows under its name in Properties.
+    run(session, "element.describe", json!({ "element": sku, "text": "The shop's own product code." }))?;
     run(session, "view.select", json!({ "ids": [] }))?;
     session.mark_saved().map_err(|e| e.to_string())?;
     let (Some(package), Some(diagram), Some(sku)) =

@@ -13,7 +13,12 @@ use serde_json::{Value as Json, json};
 type S = Session<Store, ProjectView>;
 
 fn ids() -> Box<dyn FnMut() -> Uuid + Send> {
-    let mut n: u64 = 0;
+    ids_from(0)
+}
+
+/// Ids counted up from `start`, so two stores never share one.
+fn ids_from(start: u64) -> Box<dyn FnMut() -> Uuid + Send> {
+    let mut n = start;
     Box::new(move || {
         n += 1;
         let mut r = [0u8; 10];
@@ -24,6 +29,14 @@ fn ids() -> Box<dyn FnMut() -> Uuid + Send> {
 
 /// A store over the core, the diagrams and UML, with the project's Model.
 fn store() -> Store {
+    let mut st = empty_store(ids());
+    let model = st.create(archforge_core::MODEL).unwrap();
+    st.set(model, archforge_core::named_element::NAME, Value::str("Shop")).unwrap();
+    st
+}
+
+/// A store over the core, the diagrams and UML, holding nothing, whose new ids come from `ids`.
+fn empty_store(ids: Box<dyn FnMut() -> Uuid + Send>) -> Store {
     let universe = archforge_diagram::universe_with(vec![archforge_core::metamodel().unwrap(), archforge_uml::metamodel().unwrap()]).unwrap();
     let slabs = archforge_diagram::with_slabs(
         CompositeSlabs::new()
@@ -33,10 +46,7 @@ fn store() -> Store {
             .unwrap(),
     )
     .unwrap();
-    let mut st = Store::new(universe, Box::new(slabs), ids());
-    let model = st.create(archforge_core::MODEL).unwrap();
-    st.set(model, archforge_core::named_element::NAME, Value::str("Shop")).unwrap();
-    st
+    Store::new(universe, Box::new(slabs), ids)
 }
 
 /// A session over [`store`] with UML's commands.
@@ -244,4 +254,257 @@ fn an_older_model_s_top_level_packages_go_into_the_root_and_one_named_after_the_
     st.set(shop, archforge_uml::named_element::NAME, Value::str("Shop")).unwrap();
     st.push(model, archforge_core::model::MEMBER, Value::Ref(shop)).unwrap();
     assert_eq!(archforge_uml::commands::ensure_root(&mut st).unwrap(), shop);
+}
+
+/// The description of the element `id`, as Properties and the reads give it.
+fn description(s: &S, id: &str) -> String {
+    archforge_uml::descriptions::description_of(s.doc(), obj(s.doc(), id))
+}
+
+/// How many Comments the model holds.
+fn comments(st: &Store) -> usize {
+    st.alive().filter(|o| st.class_of(*o).ok() == Some(archforge_uml::COMMENT)).count()
+}
+
+/// `element.describe` of `id` with `text` as one undo step: undone the model is as it was, redone
+/// as the command made it.
+fn describe_one_step(s: &mut S, id: &str, text: &str) {
+    let before = picture(s.doc());
+    run(s, "element.describe", json!({ "element": id, "text": text }));
+    let after = picture(s.doc());
+    assert_ne!(before, after, "describing {id} with {text:?} changed the model");
+    s.undo().unwrap();
+    assert_eq!(picture(s.doc()), before, "undo of describing {id} with {text:?}");
+    s.redo().unwrap();
+    assert_eq!(picture(s.doc()), after, "redo of describing {id} with {text:?}");
+}
+
+/// A package with a class, an interface, an enumeration with a literal, a data type, a primitive
+/// type, an attribute, an operation, an association, a generalization, a dependency, a realization
+/// and an association class: (package, every element's id).
+fn described_sample(s: &mut S) -> (String, Vec<String>) {
+    let pkg = run(s, "uml.package.add", json!({ "name": "sales" }));
+    let order = run(s, "uml.class.add", json!({ "package": pkg, "name": "Order" }));
+    let party = run(s, "uml.class.add", json!({ "package": pkg, "name": "Party" }));
+    let priced = run(s, "uml.interface.add", json!({ "package": pkg, "name": "Priced" }));
+    let status = run(s, "uml.enumeration.add", json!({ "package": pkg, "name": "Status" }));
+    let open = run(s, "uml.literal.add", json!({ "enumeration": status, "name": "open" }));
+    let money = run(s, "uml.data-type.add", json!({ "package": pkg, "name": "Money" }));
+    let sku = run(s, "uml.primitive-type.add", json!({ "package": pkg, "name": "Sku" }));
+    let total = run(s, "uml.attribute.add", json!({ "class": order, "name": "total" }));
+    let pay = run(s, "uml.operation.add", json!({ "class": order, "name": "pay" }));
+    let places = run(s, "uml.association.add", json!({ "from": party, "to": order }));
+    let customer = run(s, "uml.class.add", json!({ "package": pkg, "name": "Customer" }));
+    let is_a = run(s, "uml.generalization.add", json!({ "specific": customer, "general": party }));
+    let uses = run(s, "uml.dependency.add", json!({ "client": order, "supplier": money }));
+    let realizes = run(s, "uml.realization.add", json!({ "class": order, "interface": priced }));
+    let line = run(s, "uml.association-class.add", json!({ "from": order, "to": party, "name": "Line" }));
+    (pkg.clone(), vec![pkg, order, priced, status, open, money, sku, total, pay, places, is_a, uses, realizes, line])
+}
+
+/// Every element Properties describes takes a description kept as a Comment it owns (AR-186):
+/// described, changed and cleared, each one undo step that undoes and redoes; one Comment per
+/// element, gone when cleared; the reads give it back.
+#[test]
+fn a_uml_element_is_described_changed_and_cleared_as_its_own_comment_each_one_undo_step() {
+    let mut s = session();
+    let (pkg, all) = described_sample(&mut s);
+    for id in &all {
+        describe_one_step(&mut s, id, "What it is.");
+        assert_eq!(description(&s, id), "What it is.", "{id}");
+        let st = s.doc();
+        let o = obj(st, id);
+        let c = archforge_uml::descriptions::description_comment(st, o).expect("a description comment");
+        assert_eq!(st.container(c).unwrap(), Some((o, archforge_uml::element::OWNED_COMMENT)), "the element owns it");
+        assert_eq!(st.get(c, archforge_uml::comment::BODY).unwrap(), Value::str("What it is."), "its body is the description");
+        describe_one_step(&mut s, id, "What it is,\nin two lines.");
+        assert_eq!(description(&s, id), "What it is,\nin two lines.");
+        assert_eq!(st_comments_of(&s, id), 1, "changed in place, never a second comment");
+    }
+    assert_eq!(comments(s.doc()), all.len());
+    // The reads give the descriptions back, for the agents.
+    let order = &all[1];
+    let class = s.execute("uml.class.get", &json!({ "class": order })).unwrap().value;
+    assert_eq!(class["description"], "What it is,\nin two lines.");
+    assert_eq!(class["attributes"][0]["description"], "What it is,\nin two lines.");
+    assert_eq!(class["operations"][0]["description"], "What it is,\nin two lines.");
+    let status = s.execute("uml.class.get", &json!({ "class": all[3] })).unwrap().value;
+    assert_eq!(status["literals"][0]["description"], "What it is,\nin two lines.");
+    let packages = s.execute("uml.package.list", &json!({})).unwrap().value;
+    let listed = packages["packages"].as_array().unwrap().iter().find(|p| p["id"] == pkg.as_str()).unwrap().clone();
+    assert_eq!(listed["description"], "What it is,\nin two lines.");
+    let relations = s.execute("uml.relationship.list", &json!({ "class": order })).unwrap().value;
+    assert!(relations["relationships"].as_array().unwrap().iter().all(|r| r["description"] == "What it is,\nin two lines."), "{relations}");
+    // Cleared: the comment goes, as one undo step; clearing again changes nothing.
+    for id in &all {
+        describe_one_step(&mut s, id, "");
+        assert_eq!(description(&s, id), "");
+        assert_eq!(st_comments_of(&s, id), 0);
+    }
+    assert_eq!(comments(s.doc()), 0);
+    let before = picture(s.doc());
+    run(&mut s, "element.describe", json!({ "element": all[1], "text": "" }));
+    assert_eq!(picture(s.doc()), before);
+}
+
+/// How many Comments the element `id` owns.
+fn st_comments_of(s: &S, id: &str) -> usize {
+    s.doc().list(obj(s.doc(), id), archforge_uml::element::OWNED_COMMENT).unwrap().len()
+}
+
+/// A description that is no description, and an element that takes none, are refused naming the
+/// value and what is accepted, and change nothing.
+#[test]
+fn a_description_that_does_not_fit_is_refused_naming_the_value_and_the_accepted_form() {
+    let mut s = session();
+    let (_, all) = described_sample(&mut s);
+    let order = all[1].clone();
+    run(&mut s, "element.describe", json!({ "element": order, "text": "Kept." }));
+    let long = "x".repeat(archforge_uml::descriptions::MAX_DESCRIPTION + 1);
+    for (text, says) in [(" padded ", "space"), ("a\u{7}b", "control"), (long.as_str(), "longer than 4096")] {
+        let e = refused_key(&mut s, "element.describe", json!({ "element": order, "text": text }));
+        assert!(e.contains("text") && e.contains(says) && e.contains("up to 4096 characters"), "{e}");
+    }
+    let at_most = "y".repeat(archforge_uml::descriptions::MAX_DESCRIPTION);
+    run(&mut s, "element.describe", json!({ "element": order, "text": at_most }));
+    // A comment, and a parameter, take none; the refusal names the id and the kinds that do.
+    let c = archforge_uml::descriptions::description_comment(s.doc(), obj(s.doc(), &order)).unwrap();
+    let comment = s.doc().uuid(c).unwrap().to_string();
+    let e = refused_key(&mut s, "element.describe", json!({ "element": comment, "text": "About a comment" }));
+    assert!(e.contains(&comment) && e.contains("takes no description") && e.contains("a package, a class"), "{e}");
+}
+
+/// The storage's tables and junctions: the core's, the diagrams' and UML's.
+fn tables() -> (Vec<archforge_mof::schema::Table>, Vec<archforge_mof::schema::Junction>) {
+    let tables = archforge_core::TABLES.iter().chain(archforge_diagram::TABLES).chain(archforge_uml::TABLES).copied().collect();
+    let junctions = archforge_core::JUNCTIONS.iter().chain(archforge_diagram::JUNCTIONS).chain(archforge_uml::JUNCTIONS).copied().collect();
+    (tables, junctions)
+}
+
+/// `st` saved as rows and read back into a new store, as a project is saved and reopened.
+fn copy(st: &Store) -> Store {
+    let (tables, junctions) = tables();
+    let saved = archforge_mof::rows::snapshot(st, &tables, &junctions).unwrap();
+    let mut back = empty_store(ids_from(1_000_000));
+    archforge_mof::rows::restore(&mut back, &saved, &tables, &junctions).unwrap();
+    assert_eq!(archforge_mof::rows::snapshot(&back, &tables, &junctions).unwrap(), saved, "the rows read back are the rows written");
+    back
+}
+
+/// Saved as rows and read back, the descriptions are there, identical.
+#[test]
+fn descriptions_are_saved_and_read_back() {
+    let mut s = session();
+    let (_, all) = described_sample(&mut s);
+    for (i, id) in all.iter().enumerate() {
+        run(&mut s, "element.describe", json!({ "element": id, "text": format!("Element {i}.") }));
+    }
+    let back = copy(s.doc());
+    for (i, id) in all.iter().enumerate() {
+        let o = back.by_uuid(Uuid::parse(id).unwrap()).unwrap();
+        assert_eq!(archforge_uml::descriptions::description_of(&back, o), format!("Element {i}."), "{id}");
+    }
+}
+
+/// Removing an element takes its description Comment along, and what it holds takes theirs; a
+/// nested package's description goes with it while its class, handed up, keeps its own. Undo
+/// brings them back.
+#[test]
+fn removing_an_element_takes_its_description_along() {
+    let mut s = session();
+    let (pkg, all) = described_sample(&mut s);
+    let inner = run(&mut s, "uml.package.add", json!({ "name": "inner", "parent": pkg }));
+    let kept = run(&mut s, "uml.class.add", json!({ "package": inner, "name": "Kept" }));
+    for id in all.iter().chain([&inner, &kept]) {
+        run(&mut s, "element.describe", json!({ "element": id, "text": "Described." }));
+    }
+    let (order, total) = (all[1].clone(), all[7].clone());
+    let before = picture(s.doc());
+    let held = comments(s.doc());
+    // The attribute alone: its comment goes, the class keeps its own.
+    run(&mut s, "element.remove", json!({ "ids": [total] }));
+    assert_eq!(comments(s.doc()), held - 1);
+    assert_eq!(description(&s, &order), "Described.");
+    // The class: its comment, its operation's and those of the relationships that went with it.
+    run(&mut s, "element.remove", json!({ "ids": [order] }));
+    let st = s.doc();
+    let orphans = st.alive().filter(|o| st.class_of(*o).ok() == Some(archforge_uml::COMMENT)).filter(|c| st.container(*c).unwrap().is_none()).count();
+    assert_eq!(orphans, 0, "no comment is left without its element");
+    // A nested package: its comment goes, what it hands up keeps its own; twice, the package
+    // inner within sales, then sales within the root.
+    for (package, held) in [(&inner, &kept), (&pkg, &all[2])] {
+        let had = comments(s.doc());
+        run(&mut s, "element.remove", json!({ "ids": [package] }));
+        assert_eq!(comments(s.doc()), had - 1, "the package's own comment went");
+        assert_eq!(description(&s, held), "Described.", "what it handed up kept its description");
+        let st = s.doc();
+        assert!(
+            st.alive().filter(|o| st.class_of(*o).ok() == Some(archforge_uml::COMMENT)).all(|c| {
+                st.container(c).unwrap().is_some_and(|(owner, _)| archforge_uml::descriptions::description_comment(st, owner) == Some(c))
+            })
+        );
+    }
+    for _ in 0..4 {
+        s.undo().unwrap();
+    }
+    assert_eq!(picture(s.doc()), before, "undone, every description is back");
+}
+
+/// A note on a diagram is the diagram's own node, never a Comment, so it is never taken for a
+/// description; and a Comment an element owns that is about something else, or about nothing, is
+/// never its description: describing makes its own beside it, changing and clearing leave it be.
+#[test]
+fn a_note_or_another_comment_is_never_taken_for_the_description() {
+    let mut s = session();
+    let (pkg, all) = described_sample(&mut s);
+    let (order, party) = (all[1].clone(), obj(s.doc(), &all[3]));
+    let d = run(&mut s, "diagram.add", json!({ "kind": CLASS_DIAGRAM, "element": pkg }));
+    run(&mut s, "diagram.place", json!({ "diagram": d, "element": order, "x": 0, "y": 0 }));
+    run(&mut s, "diagram.note", json!({ "diagram": d, "text": "Ships in May." }));
+    assert_eq!(comments(s.doc()), 0, "a note is no comment");
+    assert_eq!(description(&s, &order), "", "nor a description");
+    // Two other comments the class owns, ahead of any description: one about another element,
+    // one about nothing.
+    let mut st = copy(s.doc());
+    let o = obj(&st, &order);
+    let about_other = st.create(archforge_uml::COMMENT).unwrap();
+    st.set(about_other, archforge_uml::comment::BODY, Value::str("See Status.")).unwrap();
+    st.push(o, archforge_uml::element::OWNED_COMMENT, Value::Ref(about_other)).unwrap();
+    st.push(about_other, archforge_uml::comment::ANNOTATED_ELEMENT, Value::Ref(party)).unwrap();
+    let loose = st.create(archforge_uml::COMMENT).unwrap();
+    st.set(loose, archforge_uml::comment::BODY, Value::str("A loose remark.")).unwrap();
+    st.push(o, archforge_uml::element::OWNED_COMMENT, Value::Ref(loose)).unwrap();
+    let mut s = Session::with_view(registry().unwrap(), st, 1_000, Options::default(), ProjectView::new(ALONE));
+    assert_eq!(description(&s, &order), "", "neither is the description");
+    run(&mut s, "element.describe", json!({ "element": order, "text": "One purchase." }));
+    run(&mut s, "element.describe", json!({ "element": order, "text": "One purchase by a party." }));
+    assert_eq!(description(&s, &order), "One purchase by a party.");
+    let st = s.doc();
+    let o = obj(st, &order);
+    assert_eq!(st.list(o, archforge_uml::element::OWNED_COMMENT).unwrap().len(), 3);
+    for (c, body) in [(about_other, "See Status."), (loose, "A loose remark.")] {
+        assert_eq!(st.get(c, archforge_uml::comment::BODY).unwrap(), Value::str(body), "left be");
+    }
+    run(&mut s, "element.describe", json!({ "element": order, "text": "" }));
+    let st = s.doc();
+    assert_eq!(description(&s, &order), "");
+    assert!(st.is_alive(about_other) && st.is_alive(loose), "clearing takes the description alone");
+    assert_eq!(st.list(obj(st, &order), archforge_uml::element::OWNED_COMMENT).unwrap().len(), 2);
+}
+
+/// The command sweep, with described elements and a description comment among the ids, breaks
+/// nothing.
+#[test]
+fn the_sweep_over_descriptions_breaks_nothing() {
+    let mut s = session();
+    let (pkg, all) = described_sample(&mut s);
+    for id in &all {
+        run(&mut s, "element.describe", json!({ "element": id, "text": "Described." }));
+    }
+    let st = s.doc();
+    let comment = st.uuid(archforge_uml::descriptions::description_comment(st, obj(st, &all[1])).unwrap()).unwrap().to_string();
+    let mut ids: Vec<&str> = vec![pkg.as_str(), all[1].as_str(), all[7].as_str(), all[4].as_str(), all[9].as_str(), comment.as_str(), "not-an-id"];
+    ids.dedup();
+    let calls = sweep_with(&mut s, &ids, picture).unwrap();
+    assert!(calls > 100, "{calls}");
 }
