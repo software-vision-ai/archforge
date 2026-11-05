@@ -293,7 +293,7 @@ pub(crate) fn row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, view: View)
     let mut picked = false;
     if shell.panels.menu == Some(crate::panels::Menu::InlineType) && !literal {
         let choices = crate::uml_panel::choices_for_menu(shell);
-        let chosen = crate::panels::menu_noted(shell, ui, p, type_rect, TYPE_ID, &choices.labels, &choices.notes);
+        let chosen = crate::panels::menu_noted(shell, ui, p, type_rect, TYPE_ID, &choices.labels, &choices.notes, &choices.note_parts);
         let value = chosen.map(|i| choices.values.get(i).cloned().unwrap_or_default());
         crate::uml_panel::keep_choices(shell, choices);
         if let Some(value) = value {

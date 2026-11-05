@@ -367,9 +367,12 @@ What is UML's own, beside the shared rules above.
   a package hands its contents up, in the end into the root. A project opened without one gets it,
   its top-level packages moved in, as one undoable step.
 - Properties' Package and Parent package selects show a package by its path from the root,
-  `Commerce platform › Orders`. Too long for the field, the path's front folds into `…`
-  (`… › Orders`) so the package's own name shows; a name too long alone is cut at its end, as any
-  name is. The whole path is the select's tooltip and accessible name (AR-191).
+  `Commerce platform › Orders`, every ancestor named however deep. Too long for the field, the
+  path's front folds into `…` (`… › Orders`) so the package's own name shows; a name too long alone
+  is cut at its end, as any name is. The whole path is the select's tooltip and accessible name.
+  Their menus are as wide as the longest path needs inside the window, and a row still too long
+  folds from its front the same way, the whole path its tooltip; so does a type menu's note that
+  tells same-named types apart by their package (AR-191).
 - A package on a class diagram (AR-95, owner decisions 2026-11-04) is a tabbed card. Its tab
   (AR-113) holds the name in 12 px SemiBold, 22 px high with 12 px padding, never narrower than
   56 px nor wider than the card (a longer name ends in "…", the tab's hover shows it whole); it

@@ -6618,27 +6618,67 @@ fn a_package_select_cuts_a_long_path_from_its_front_so_the_package_name_shows() 
     assert_eq!(cut(&["Commerce", "Orders › EU"], 8), ("Orders › EU".to_string(), true), "never folded inside a name");
 }
 
+/// The index of `package` among every package, as Properties' Package menu lists them.
+fn st_index(st: &archforge_mof::Store, package: archforge_mof::Obj) -> usize {
+    archforge_uml::commands::all_packages(st).iter().position(|p| *p == package).unwrap()
+}
+
 /// A package's path names every ancestor up to the root, however deep (here 40 packages, past
-/// any fixed cap), and a walk that comes back on itself, as a damaged file's could, ends with each
-/// element named once (AR-191).
+/// any fixed cap and wider than the window): the Package field and its menu's row fold it from the
+/// front, its last packages showing, and say it whole on hover. A walk that comes back on itself,
+/// as a damaged file's could, ends with each element named once (AR-191).
 #[test]
 fn a_package_path_names_every_ancestor_and_a_cycle_ends() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
     let mut parent: Option<String> = None;
     for i in 1..=40 {
-        let mut params = serde_json::json!({ "name": format!("P{i}") });
+        let mut params = serde_json::json!({ "name": format!("Package {i}") });
         if let Some(p) = &parent {
             params["parent"] = serde_json::json!(p);
         }
         let out = h.state_mut().session.as_mut().unwrap().execute("uml.package.add", &params).unwrap();
         parent = out.value["id"].as_str().map(String::from);
     }
+    let deepest_id = parent.unwrap();
     let st = h.state().session.as_ref().unwrap().doc();
-    let deepest = st.by_uuid(archforge_mof::Uuid::parse(&parent.unwrap()).unwrap()).unwrap();
+    let deepest = st.by_uuid(archforge_mof::Uuid::parse(&deepest_id).unwrap()).unwrap();
     let parts = crate::uml_panel::package_parts(st, deepest);
     let root = archforge_core::name_of(st, archforge_uml::commands::root_package(st).unwrap());
     assert_eq!(parts.len(), 41, "the root and all 40: {parts:?}");
-    assert_eq!((parts[0].as_str(), parts[1].as_str(), parts[40].as_str()), (root.as_str(), "P1", "P40"));
+    assert_eq!((parts[0].as_str(), parts[1].as_str(), parts[40].as_str()), (root.as_str(), "Package 1", "Package 40"));
+    let whole = parts.join(" › ");
+    let row_of = st_index(st, deepest);
+    // A class in the deepest package: Properties' Package field and its menu's row both fold the
+    // path from its front, the last packages showing, and say it whole on hover.
+    let class =
+        h.state_mut().session.as_mut().unwrap().execute("uml.class.add", &serde_json::json!({ "package": deepest_id, "name": "Deep" })).unwrap();
+    let class = class.value["id"].as_str().unwrap().to_string();
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [class] })).unwrap();
+    h.state_mut().state.show_panel(crate::state::Panel::Properties);
+    h.run();
+    let field = rect_of(&h, "workspace.properties.class.package");
+    let shown: Vec<String> = text_boxes(&h).into_iter().filter(|(_, r)| field.contains(r.center())).map(|(t, _)| t).collect();
+    let [shown] = shown.as_slice() else { panic!("one text in the field: {shown:?}") };
+    assert!(shown.ends_with("Package 40") && !shown.starts_with(root.as_str()), "the field keeps the package's own name: {shown:?}");
+    click(&mut h, field.center());
+    assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::ClassPackage));
+    for _ in 0..=row_of {
+        key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+    }
+    let row = rect_of(&h, &format!("workspace.properties.class.package.{row_of}"));
+    // The row's text, over what the window shows under the menu.
+    let drawn: Vec<String> = text_boxes(&h).into_iter().filter(|(t, r)| row.contains(r.center()) && t.contains("Package")).map(|(t, _)| t).collect();
+    let [drawn] = drawn.as_slice() else { panic!("one path in the row: {drawn:?}") };
+    assert!(
+        drawn.starts_with("… › ") && drawn.ends_with(" › Package 38 › Package 39 › Package 40") && !drawn.contains(root.as_str()),
+        "the row's end shows: {drawn:?}"
+    );
+    assert!(!drawn.ends_with('…'), "never cut at its end: {drawn:?}");
+    h.event(egui::Event::PointerMoved(row.center()));
+    for _ in 0..90 {
+        h.step();
+    }
+    assert!(painted(&h).contains(&whole), "the row's tooltip says the whole path");
     // A cycle, which the model refuses to make but a damaged file could hold, and a loop on itself.
     let name = |n: u32| n.to_string();
     assert_eq!(crate::uml_panel::path_parts(0_u32, |n| Some((n + 1) % 3), name), ["2", "1", "0"]);

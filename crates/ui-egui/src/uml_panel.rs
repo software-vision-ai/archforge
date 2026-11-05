@@ -248,9 +248,9 @@ pub(crate) fn class_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
         Some(s) => {
             let store = s.doc();
             let here = archforge_uml::commands::package_of(store, class).map(|p| package_parts(store, p)).unwrap_or_default();
-            let choices: Vec<(Uuid, String)> = archforge_uml::commands::all_packages(store)
+            let choices: Vec<(Uuid, Vec<String>)> = archforge_uml::commands::all_packages(store)
                 .into_iter()
-                .filter_map(|p| Some((store.uuid(p).ok()?, package_path(store, p))))
+                .filter_map(|p| Some((store.uuid(p).ok()?, package_parts(store, p))))
                 .collect();
             (here, choices)
         }
@@ -291,8 +291,8 @@ pub(crate) fn class_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
     }
     // The package menu last, over the sections.
     if shell.panels.menu == Some(Menu::ClassPackage) {
-        let items: Vec<String> = choices.iter().map(|(_, n)| n.clone()).collect();
-        if let Some(i) = menu(shell, ui, p, field, package_id, &items)
+        let paths: Vec<Vec<String>> = choices.iter().map(|(_, n)| n.clone()).collect();
+        if let Some(i) = crate::panels::menu_paths(shell, ui, p, field, package_id, &paths)
             && let Some((to, _)) = choices.get(i)
         {
             let (cmd, key) = kind.move_command();
@@ -317,10 +317,10 @@ pub(crate) fn package_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r:
         Some(s) => {
             let store = s.doc();
             let here = archforge_uml::commands::package_of(store, package).map(|p| package_parts(store, p)).unwrap_or_default();
-            let choices: Vec<(Uuid, String)> = archforge_uml::commands::all_packages(store)
+            let choices: Vec<(Uuid, Vec<String>)> = archforge_uml::commands::all_packages(store)
                 .into_iter()
                 .filter(|o| !archforge_uml::commands::is_within(store, *o, package))
-                .filter_map(|o| Some((store.uuid(o).ok()?, package_path(store, o))))
+                .filter_map(|o| Some((store.uuid(o).ok()?, package_parts(store, o))))
                 .collect();
             (here, choices)
         }
@@ -339,8 +339,8 @@ pub(crate) fn package_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r:
         Menu::PackageParent,
     );
     if shell.panels.menu == Some(Menu::PackageParent) {
-        let items: Vec<String> = choices.iter().map(|(_, n)| n.clone()).collect();
-        if let Some(i) = menu(shell, ui, p, field, parent_id, &items)
+        let paths: Vec<Vec<String>> = choices.iter().map(|(_, n)| n.clone()).collect();
+        if let Some(i) = crate::panels::menu_paths(shell, ui, p, field, parent_id, &paths)
             && let Some((to, _)) = choices.get(i)
         {
             // Shown on a diagram, it goes onto its new home's diagram too, as a canvas drop takes it.
@@ -352,17 +352,13 @@ pub(crate) fn package_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r:
     }
 }
 
-/// A package's path below the root package, `sales › orders`, or the root's name for the root:
+/// A package's path below the root package by its names, `sales › orders`, or the root's name for
+/// the root:
 /// short enough for a note, and still telling packages apart, since every one sits under the root.
-fn path_below_root(store: &Store, package: Obj) -> String {
+fn path_below_root(store: &Store, package: Obj) -> Vec<String> {
     let root = archforge_uml::commands::root_package(store);
     let parent = |p: Obj| archforge_uml::commands::package_of(store, p).filter(|up| Some(*up) != root);
-    path_parts(package, parent, |p| name(store, p)).join(crate::panels::PATH_SEP)
-}
-
-/// A package as the menus name it: its path from the top, `sales › orders`.
-fn package_path(store: &Store, package: Obj) -> String {
-    package_parts(store, package).join(crate::panels::PATH_SEP)
+    path_parts(package, parent, |p| name(store, p))
 }
 
 /// The names on a package's path from the top, its own last: each name one part, whatever it
@@ -489,8 +485,9 @@ pub(crate) fn type_choices(store: &Store) -> Vec<(String, String)> {
 /// The muted note after each of `choices` (from [`type_choices`]) in a type menu, empty for most:
 /// where several choices share a name, whatever the case, each says where it is from, "built-in"
 /// for a built-in type and its package's path below the root package (every package's top) for
-/// one of the model's own, so the entries are told apart.
-pub(crate) fn type_notes(store: &Store, choices: &[(String, String)]) -> Vec<String> {
+/// one of the model's own, so the entries are told apart. Each is given by its parts, the path's
+/// names, so a long one folds from its front.
+pub(crate) fn type_notes(store: &Store, choices: &[(String, String)]) -> Vec<Vec<String>> {
     let mut counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     for (label, value) in choices {
         if !value.is_empty() {
@@ -501,11 +498,11 @@ pub(crate) fn type_notes(store: &Store, choices: &[(String, String)]) -> Vec<Str
         .iter()
         .map(|(label, value)| {
             if value.is_empty() || counts.get(&label.to_lowercase()).copied().unwrap_or(0) < 2 {
-                return String::new();
+                return Vec::new();
             }
             match Uuid::parse(value).and_then(|u| store.by_uuid(u)) {
                 Some(t) => archforge_uml::commands::package_of(store, t).map(|p| path_below_root(store, p)).unwrap_or_default(),
-                None => tr("built-in"),
+                None => vec![tr("built-in")],
             }
         })
         .collect()
@@ -543,9 +540,10 @@ pub(crate) fn choices_for_menu(shell: &mut Shell) -> crate::panels::TypeChoices 
         Some(kept) if kept.project == project && kept.revision == revision && kept.language == language => kept,
         _ => {
             let choices = type_choices(store);
-            let notes = type_notes(store, &choices);
+            let note_parts = type_notes(store, &choices);
+            let notes = note_parts.iter().map(|parts| parts.join(crate::panels::PATH_SEP)).collect();
             let (labels, values) = choices.into_iter().unzip();
-            crate::panels::TypeChoices { project, revision, language, labels, values, notes }
+            crate::panels::TypeChoices { project, revision, language, labels, values, notes, note_parts }
         }
     }
 }
@@ -561,7 +559,7 @@ fn type_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Rect, id: &st
         return;
     }
     let choices = choices_for_menu(shell);
-    if let Some(i) = crate::panels::menu_noted(shell, ui, p, field, id, &choices.labels, &choices.notes) {
+    if let Some(i) = crate::panels::menu_noted(shell, ui, p, field, id, &choices.labels, &choices.notes, &choices.note_parts) {
         *ty = choices.values.get(i).cloned().unwrap_or_default();
     }
     keep_choices(shell, choices);
