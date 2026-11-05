@@ -9766,6 +9766,60 @@ fn shift_delete_on_an_association_class_line_without_its_card_asks_and_deletes_i
     }
 }
 
+/// An association class with its card on one diagram and its line alone on another: deleting it
+/// from the first, the dialog says it disappears from both diagrams, each once. On the second, its
+/// line selected as a line (an agent's `view.select` takes an edge's id) is taken off by Delete and
+/// asked about by Shift+Delete, as the association class it shows. In light and dark.
+#[test]
+fn the_delete_dialog_counts_a_diagram_with_an_association_class_s_line_alone_and_a_selected_edge_resolves() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut r = reviews(theme);
+        let (ac, _, card) = r.review();
+        let (package, customer, product) = (r.package.clone(), r.ids["Customer"].clone(), r.ids["Product"].clone());
+        let s = r.h.state_mut().session.as_mut().unwrap();
+        let mut run = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap_or_default().to_string();
+        let d2 = run("diagram.add", serde_json::json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": package, "name": "Reviews 2" }));
+        for (class, x) in [(&customer, 80), (&product, 760)] {
+            run("diagram.place", serde_json::json!({ "diagram": d2, "element": class, "x": x, "y": 520, "width": 240, "height": 136 }));
+        }
+        run("diagram.connect-all", serde_json::json!({ "diagram": d2 }));
+        r.h.run();
+        // On the first diagram, the card selected: Shift+Delete names both diagrams.
+        let at = rect_of(&r.h, &format!("workspace.canvas.node.{card}")).center();
+        click(&mut r.h, at);
+        key(&mut r.h, egui::Key::Delete, egui::Modifiers::SHIFT);
+        let asked = r.h.state().explorer.delete.clone().expect("the dialog asks");
+        assert_eq!(asked.diagrams, 2, "the card's diagram and the line's, each once");
+        let at = rect_of(&r.h, "workspace.explorer.delete.cancel").center();
+        click(&mut r.h, at);
+        // On the second, the line's edge selected by its own id.
+        crate::canvas::open(r.h.state_mut(), archforge_mof::Uuid::parse(&d2).unwrap());
+        r.h.run();
+        let edge = {
+            let st = r.h.state().session.as_ref().unwrap().doc();
+            let d2 = st.by_uuid(archforge_mof::Uuid::parse(&d2).unwrap()).unwrap();
+            st.uuid(st.list(d2, archforge_diagram::diagram::EDGE).unwrap()[0].as_ref().unwrap()).unwrap().to_string()
+        };
+        let select = |r: &mut Reviews| {
+            crate::editing::run(r.h.state_mut(), "view.select", serde_json::json!({ "ids": [edge] })).unwrap();
+            r.h.state_mut().canvas.focused = true;
+            r.h.run();
+        };
+        select(&mut r);
+        key(&mut r.h, egui::Key::Delete, egui::Modifiers::SHIFT);
+        let asked = r.h.state().explorer.delete.clone().expect("the dialog asks for the association class");
+        assert_eq!((asked.ids, asked.diagrams), (vec![archforge_mof::Uuid::parse(&ac).unwrap()], 2));
+        let at = rect_of(&r.h, "workspace.explorer.delete.cancel").center();
+        click(&mut r.h, at);
+        select(&mut r);
+        key(&mut r.h, egui::Key::Delete, egui::Modifiers::NONE);
+        let st = r.h.state().session.as_ref().unwrap().doc();
+        let d2 = st.by_uuid(archforge_mof::Uuid::parse(&d2).unwrap()).unwrap();
+        assert!(st.list(d2, archforge_diagram::diagram::EDGE).unwrap().is_empty(), "the line went from this diagram");
+        assert_eq!(r.association_classes(), ["Review"], "the model keeps it");
+    }
+}
+
 /// The delete dialog of a class names every relationship that goes with it, as `element.remove`
 /// takes them: Product's association class Review, and the dependency on Review, which goes with
 /// Review. In light and dark.

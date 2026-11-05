@@ -1337,10 +1337,11 @@ fn unplace(shell: &mut Shell, nodes: Vec<Uuid>) {
     }
 }
 
-/// How many diagrams show `element` as a node.
+/// How many diagrams show `element`, as a node or as a line (an association class drawn by its
+/// line alone), each diagram once.
 pub fn diagrams_showing(store: &Store, element: Obj) -> usize {
-    let (_, _, nodes) = archforge_diagram::views_of(store, element);
-    let diagrams: std::collections::BTreeSet<Obj> = nodes.iter().filter_map(|n| archforge_diagram::diagram_of(store, *n)).collect();
+    let (_, edges, nodes) = archforge_diagram::views_of(store, element);
+    let diagrams: std::collections::BTreeSet<Obj> = nodes.iter().chain(&edges).filter_map(|v| archforge_diagram::diagram_of(store, *v)).collect();
     diagrams.len()
 }
 
@@ -1967,12 +1968,30 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
     }
 }
 
+/// The elements of `selection`: an element as it is, and a line selected as a line (`view.select`
+/// takes any id, an agent's an edge's too) as the element it shows; a note link, which shows none,
+/// is left out. Each once, in the selection's order.
+fn selected_elements(store: &Store, selection: &[Obj]) -> Vec<Obj> {
+    let mut out: Vec<Obj> = Vec::new();
+    for o in selection {
+        let e = if store.class_of(*o).ok() == Some(archforge_diagram::EDGE) {
+            store.get(*o, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref())
+        } else {
+            Some(*o)
+        };
+        if let Some(e) = e.filter(|e| !out.contains(e)) {
+            out.push(e);
+        }
+    }
+    out
+}
+
 /// The selected element a line of diagram `d` shows that the diagram's kind deletes from the model
 /// (an association class whose card is not on `d`), when there is one.
 fn line_element_here(shell: &Shell, d: Obj, kind: Option<&'static dyn crate::kinds::DiagramKind>) -> Option<Uuid> {
     let session = shell.session.as_ref()?;
     let store = session.doc();
-    let element = session.view().selection.iter().copied().find(|e| {
+    let element = selected_elements(store, &session.view().selection).into_iter().find(|e| {
         archforge_diagram::views_of(store, *e).1.iter().any(|edge| archforge_diagram::diagram_of(store, *edge) == Some(d))
             && kind.is_some_and(|k| k.deletes(store, *e))
     })?;
@@ -1984,11 +2003,9 @@ fn line_element_here(shell: &Shell, d: Obj, kind: Option<&'static dyn crate::kin
 fn remove_lines_here(shell: &mut Shell, d: Obj) {
     let Some(session) = shell.session.as_ref() else { return };
     let store = session.doc();
-    let edges: Vec<String> = session
-        .view()
-        .selection
-        .iter()
-        .flat_map(|e| archforge_diagram::views_of(store, *e).1)
+    let edges: Vec<String> = selected_elements(store, &session.view().selection)
+        .into_iter()
+        .flat_map(|e| archforge_diagram::views_of(store, e).1)
         .filter(|e| archforge_diagram::diagram_of(store, *e) == Some(d))
         .filter_map(|e| uuid(store, e).map(|u| u.to_string()))
         .collect();
