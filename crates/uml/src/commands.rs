@@ -599,7 +599,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Move class",
             &["Class"],
             None,
-            "class: string; the class's id\npackage: string; the id of the package it goes into",
+            "class: string; the class's id\npackage: string; the id of the package it goes into, where its name is free among the classes and interfaces",
             has_packages,
             class_move
         ),
@@ -617,7 +617,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Add class",
             &["Class"],
             None,
-            "package: string; the package's id\nname: string; the class's name",
+            "package: string; the package's id\nname: string; the class's name, free among the package's classes and interfaces",
             has_packages,
             class_add
         ),
@@ -626,7 +626,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Rename class",
             &["Class"],
             None,
-            "class: string; the class's id\nname: string; the new name",
+            "class: string; the class's id\nname: string; the new name, free among its package's classes and interfaces",
             has_packages,
             class_rename
         ),
@@ -644,7 +644,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Rename interface",
             &["Interface"],
             None,
-            "interface: string; the interface's id\nname: string; the new name",
+            "interface: string; the interface's id\nname: string; the new name, free among its package's classes and interfaces",
             has_packages,
             interface_rename
         ),
@@ -653,7 +653,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Move interface",
             &["Interface"],
             None,
-            "interface: string; the interface's id\npackage: string; the id of the package it goes into",
+            "interface: string; the interface's id\npackage: string; the id of the package it goes into, where its name is free among the classes and interfaces",
             has_packages,
             interface_move
         ),

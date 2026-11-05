@@ -207,6 +207,7 @@ str		every table	所有表
 str		every relationship	所有关系
 str		every column	所有列
 str		every class	所有类
+str		every interface	所有接口
 str		every attribute	所有属性
 str		every operation	所有操作
 str		every association	所有关联
@@ -590,7 +591,7 @@ str		This is the top package: zooming out goes no further	这是最上层的包�
 str		Only a package this diagram's package holds goes on it	只能放入此图所属包中的包
 # 关联类
 str		A bound can be at most {max}.	界限最多为 {max}。
-str		A relationship joins two classes	关系连接两个类
+str		A relationship joins two classes or interfaces	关系连接两个类或接口
 str		Add association	添加关联
 str		Add dependency	添加依赖
 str		Add generalization	添加泛化

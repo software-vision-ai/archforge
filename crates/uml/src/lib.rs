@@ -117,14 +117,15 @@ impl Notation for UmlNotation {
         figures::slot_text(store, element, slot)
     }
 
-    /// A skill sits on a package, a class, an attribute or an operation; it aims at every class,
-    /// attribute, operation or association below its subject (owner decision).
+    /// A skill sits on a package, a class, an interface, an attribute or an operation; it aims at
+    /// every class, interface, attribute, operation or association below its subject (owner
+    /// decision: an interface carries skills as a class does).
     fn skill_subjects(&self) -> &'static [ClassId] {
-        &[PACKAGE, CLASS, PROPERTY, OPERATION]
+        &[PACKAGE, CLASS, INTERFACE, PROPERTY, OPERATION]
     }
 
     fn skill_kinds(&self) -> &'static [(ClassId, &'static str)] {
-        &[(CLASS, "class"), (PROPERTY, "attribute"), (OPERATION, "operation"), (ASSOCIATION, "association")]
+        &[(CLASS, "class"), (INTERFACE, "interface"), (PROPERTY, "attribute"), (OPERATION, "operation"), (ASSOCIATION, "association")]
     }
 
     /// An association's end is a property but no attribute: its association carries the skill.

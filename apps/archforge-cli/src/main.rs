@@ -334,10 +334,10 @@ mod tests {
                     assert!(ids.contains(&word) || word == "uml.class", "compact {compact}: {word} is not a command");
                 }
             }
-            for promise in ["UML class diagrams", "ER diagrams", "agent access", "undo"] {
+            for promise in ["UML class diagrams", "interfaces", "ER diagrams", "agent access", "undo"] {
                 assert!(text.contains(promise), "compact {compact}: says nothing of {promise}");
             }
-            for future in ["interface", "enum", "C4"] {
+            for future in ["enum", "C4"] {
                 assert!(!text.contains(future), "compact {compact}: advertises {future}");
             }
             scopes.push(text.split(". ").take(2).collect::<Vec<_>>().join(". "));

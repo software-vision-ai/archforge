@@ -1,5 +1,6 @@
-//! Skills over UML: packages, classes, attributes and operations carry them (owner decision), a
-//! relationship does not; a skill aims at every class, attribute, operation or association below
+//! Skills over UML: packages, classes, interfaces, attributes and operations carry them (owner
+//! decision), a relationship does not; a skill aims at every class, interface, attribute, operation
+//! or association below
 //! its subject, is inherited down the package tree and replaced by a deeper one of its name; each
 //! skill.add one undo step.
 
@@ -115,7 +116,34 @@ fn a_package_skill_aims_at_the_kind_it_names_below_it() {
     assert_eq!(names(&s, &m.association), ["Associations"]);
     // An ER kind is not one of UML's.
     let e = s.execute("skill.add", &json!({ "subject": m.sales, "name": "Tables", "applies_to": "table" })).unwrap_err().to_string();
-    assert!(e.contains("class, attribute, operation, association"), "{e}");
+    assert!(e.contains("class, interface, attribute, operation, association"), "{e}");
+}
+
+#[test]
+fn an_interface_and_its_members_carry_skills_and_a_package_skill_for_interfaces_aims_only_at_them() {
+    let mut s = session();
+    let m = model(&mut s);
+    let payable = run(&mut s, "uml.interface.add", json!({ "package": m.sales, "name": "Payable" }));
+    let due = run(&mut s, "uml.attribute.add", json!({ "class": payable, "name": "due", "type": "Real" }));
+    let pay = run(&mut s, "uml.operation.add", json!({ "class": payable, "name": "pay" }));
+    // The interface takes a skill of its own, as one undo step, and it goes with the interface.
+    let before = skills(s.doc()).len();
+    let skill = run(&mut s, "skill.add", json!({ "subject": payable, "name": "Contracts", "body": "Name them for a capability." }));
+    assert_eq!(archforge_core::skills::subject_of(s.doc(), obj(&s, &skill)), Some(obj(&s, &payable)));
+    s.undo().unwrap();
+    assert_eq!(skills(s.doc()).len(), before);
+    s.redo().unwrap();
+    // A package skill for interfaces aims at them alone; one for attributes aims at an
+    // interface's attributes too, and the interface's own skill reaches its members.
+    run(&mut s, "skill.add", json!({ "subject": m.sales, "name": "Interfaces", "applies_to": "interface" }));
+    run(&mut s, "skill.add", json!({ "subject": m.sales, "name": "Attributes", "applies_to": "attribute" }));
+    let names = |s: &S, e: &str| applying(s, e).into_iter().map(|(n, _, _)| n).collect::<Vec<_>>();
+    assert_eq!(names(&s, &payable), ["Interfaces", "Contracts"]);
+    assert_eq!(names(&s, &m.order), Vec::<String>::new(), "a class is no interface");
+    assert_eq!(names(&s, &due), ["Attributes", "Contracts"]);
+    assert_eq!(names(&s, &pay), ["Contracts"]);
+    run(&mut s, "element.remove", json!({ "ids": [payable] }));
+    assert!(skills(s.doc()).iter().all(|k| archforge_core::skills::name_of(s.doc(), *k) != "Contracts"), "its skill went with it");
 }
 
 #[test]

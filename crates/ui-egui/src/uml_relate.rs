@@ -168,7 +168,7 @@ pub(crate) fn connect(shell: &mut Shell, d: Obj, from_node: Uuid, to_node: Uuid)
     let Some(session) = shell.session.as_mut() else { return };
     let store = session.doc();
     let (Some(from), Some(to)) = (class_of_node(store, from_node), class_of_node(store, to_node)) else {
-        shell.canvas.notice = Some(tr("A relationship joins two classes"));
+        shell.canvas.notice = Some(tr("A relationship joins two classes or interfaces"));
         return;
     };
     let (Ok(from), Ok(to), Ok(diagram)) = (store.uuid(from), store.uuid(to), store.uuid(d)) else { return };
@@ -199,7 +199,8 @@ pub(crate) fn connect(shell: &mut Shell, d: Obj, from_node: Uuid, to_node: Uuid)
 }
 
 /// The chosen kind dropped on empty canvas at `(x, y)`: a new class there, related to the node's,
-/// as one undo step; its name opens for typing.
+/// as one undo step; its name opens for typing. A generalization dragged out of an interface makes
+/// an interface, the only kind an interface specializes.
 pub(crate) fn connect_to_new(shell: &mut Shell, d: Obj, from_node: Uuid, x: f64, y: f64) {
     shell.canvas.notice = None;
     let kind = shell.canvas.uml_relation;
@@ -210,20 +211,24 @@ pub(crate) fn connect_to_new(shell: &mut Shell, d: Obj, from_node: Uuid, x: f64,
         return;
     };
     let Some(from) = class_of_node(store, from_node) else {
-        shell.canvas.notice = Some(tr("A relationship joins two classes"));
+        shell.canvas.notice = Some(tr("A relationship joins two classes or interfaces"));
         return;
     };
     let (Ok(package_id), Ok(diagram), Ok(from_id)) = (store.uuid(package), store.uuid(d), store.uuid(from)) else { return };
+    let made = match crate::uml_classifier::Classifier::of(store, from) {
+        Some(crate::uml_classifier::Classifier::Interface) if kind == Relate::Generalization => crate::uml_classifier::Classifier::Interface,
+        _ => crate::uml_classifier::Classifier::Class,
+    };
     let names = archforge_uml::commands::classifiers(store, package).into_iter().map(|c| archforge_core::name_of(store, c));
-    let Some(name) = crate::explorer::fresh_name("Class", names, false) else {
+    let Some(name) = crate::explorer::fresh_name(made.stem(), names, false) else {
         shell.canvas.notice = Some(tr("No free name is left"));
         return;
     };
     let (w, h) = archforge_uml::CLASS_SIZE;
     let (px, py) = ((x - w / 2.0).round(), (y - h / 2.0).round());
     let name_for_batch = name.clone();
-    let out = session.batch(&tr("Add class"), |b| {
-        let c = b.execute("uml.class.add", &json!({ "package": package_id.to_string(), "name": name_for_batch }))?;
+    let out = session.batch(&made.add_step(), |b| {
+        let c = b.execute(made.add_command(), &json!({ "package": package_id.to_string(), "name": name_for_batch }))?;
         let class = c.get("id").and_then(|i| i.as_str()).and_then(Uuid::parse).unwrap_or(from_id);
         let n = b.execute(
             "diagram.place",
@@ -262,7 +267,7 @@ pub(crate) fn reconnect(shell: &mut Shell, element: Uuid, source: bool, to_node:
     shell.canvas.notice = None;
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
     let Some(target) = class_of_node(store, to_node) else {
-        shell.canvas.notice = Some(tr("A relationship joins two classes"));
+        shell.canvas.notice = Some(tr("A relationship joins two classes or interfaces"));
         return;
     };
     let now = store.by_uuid(element).and_then(|e| archforge_uml::figures::ends(store, e)).map(|(a, b)| if source { a } else { b });

@@ -397,7 +397,7 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
         if screen == Screen::WorkspaceClassifierKinds {
             shell.canvas.uml_classifier = crate::uml_classifier::Classifier::Interface;
             shell.canvas.tool = crate::canvas::Tool::Place(crate::uml_classifier::TOOL);
-            shell.canvas.popover = Some("classifier-kinds");
+            shell.canvas.popover = Some(crate::uml_classifier::KINDS);
         }
     }
     if screen == Screen::WorkspaceInlineMember {

@@ -1731,6 +1731,7 @@ pub(crate) fn target_word(store: &Store, s: Obj) -> String {
         Some("table") => tr("every table"),
         Some("relationship") => tr("every relationship"),
         Some("class") => tr("every class"),
+        Some("interface") => tr("every interface"),
         Some("attribute") => tr("every attribute"),
         Some("operation") => tr("every operation"),
         Some("association") => tr("every association"),

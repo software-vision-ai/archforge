@@ -207,6 +207,7 @@ str		every table	すべてのテーブル
 str		every relationship	すべてのリレーションシップ
 str		every column	すべての列
 str		every class	すべてのクラス
+str		every interface	すべてのインターフェース
 str		every attribute	すべての属性
 str		every operation	すべての操作
 str		every association	すべての関連
@@ -590,7 +591,7 @@ str		This is the top package: zooming out goes no further	ここが最上位の�
 str		Only a package this diagram's package holds goes on it	この図のパッケージに含まれるパッケージだけを置けます
 # クラスの関係
 str		A bound can be at most {max}.	境界は最大 {max} までです。
-str		A relationship joins two classes	関係は 2 つのクラスを結びます
+str		A relationship joins two classes or interfaces	関係は 2 つのクラスまたはインターフェースを結びます
 str		Add association	関連を追加
 str		Add dependency	依存を追加
 str		Add generalization	汎化を追加

@@ -1824,8 +1824,9 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
     if ui.memory(|m| m.focused().is_some()) {
         return;
     }
-    // An open toolbar popover takes the arrows and Enter itself: its menu of kinds walks with them.
-    let menu = shell.canvas.popover.is_some();
+    // An open menu the keys walk (the classifier's kinds) takes the arrows and Enter itself; the
+    // other popovers leave them to the canvas.
+    let menu = shell.canvas.popover.is_some_and(crate::uml_classifier::takes_keys);
     let (escape, delete, shift, add_column, left, right, up, down) = ui.input(|i| {
         (
             i.key_pressed(egui::Key::Escape),

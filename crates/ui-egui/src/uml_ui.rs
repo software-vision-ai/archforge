@@ -39,7 +39,7 @@ const TOOLS: &[KindTool] = &[
         icon: &icons::TOOL_CLASS,
         hint: "Class",
         use_: ToolUse::Place,
-        chevron: Some(("classifier-kinds", "Classifier kinds")),
+        chevron: Some((crate::uml_classifier::KINDS, "Classifier kinds")),
         wide: false,
     },
     KindTool { key: "package", icon: &icons::PACKAGE, hint: "Package", use_: ToolUse::Place, chevron: None, wide: false },
@@ -207,7 +207,7 @@ impl DiagramKind for UmlKind {
     }
 
     fn popover(&self, shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, chevron: Rect, key: &str) {
-        if key == "classifier-kinds" {
+        if key == crate::uml_classifier::KINDS {
             crate::uml_classifier::popover(shell, ui, p, r, chevron);
         } else {
             crate::uml_relate::popover(shell, ui, p, r, chevron);

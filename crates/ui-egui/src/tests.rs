@@ -7221,6 +7221,52 @@ fn the_classifier_tool_places_the_kind_its_menu_chose_walked_by_the_keys_and_a_n
 }
 
 #[test]
+fn a_menu_left_open_on_a_class_diagram_closes_on_an_er_tab_and_the_arrows_nudge_there() {
+    let (mut h, customer, er_diagram) = diagram_harness();
+    let uml = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
+        let pkg = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Billing" })).unwrap().value);
+        let d = id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": pkg, "name": "Billing" })).unwrap().value);
+        let invoice = id(s.execute("uml.class.add", &serde_json::json!({ "package": pkg, "name": "Invoice" })).unwrap().value);
+        s.execute("diagram.place", &serde_json::json!({ "diagram": d, "element": invoice, "x": 100, "y": 100 })).unwrap();
+        archforge_mof::Uuid::parse(&d).unwrap()
+    };
+    crate::canvas::open(h.state_mut(), uml);
+    h.run();
+    let node_at = |h: &Harness<'static, Shell>| {
+        let id = node_ids(h).into_iter().next().expect("a node");
+        (id.clone(), rect_of(h, &id))
+    };
+    // With the Relationship menu open, the arrows still nudge the selected card, as before.
+    let (invoice, was) = node_at(&h);
+    click(&mut h, was.center());
+    let at = rect_of(&h, "workspace.tools.relationship-kinds").center();
+    click(&mut h, at);
+    assert_eq!(h.state().canvas.popover, Some("relationship-kinds"));
+    key(&mut h, egui::Key::ArrowRight, egui::Modifiers::NONE);
+    assert!(rect_of(&h, &invoice).left() > was.left(), "the card moved");
+    assert_eq!(h.state().canvas.popover, Some("relationship-kinds"));
+    // The ER tab: the class diagram's menu closes, though ER's tool has the same key.
+    crate::canvas::open(h.state_mut(), archforge_mof::Uuid::parse(&er_diagram).unwrap());
+    h.run();
+    assert_eq!((h.state().canvas.popover, h.state().canvas.menu_focus), (None, None));
+    let node = node_ids(&h)
+        .into_iter()
+        .find(|n| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let o = st.by_uuid(archforge_mof::Uuid::parse(n.trim_start_matches("workspace.canvas.node.")).unwrap()).unwrap();
+            st.get(o, archforge_diagram::node::ELEMENT).unwrap().as_ref().and_then(|e| st.uuid(e).ok()).map(|u| u.to_string())
+                == Some(customer.clone())
+        })
+        .expect("Customer's node");
+    let was = rect_of(&h, &node);
+    click(&mut h, was.center());
+    key(&mut h, egui::Key::ArrowRight, egui::Modifiers::NONE);
+    assert!(rect_of(&h, &node).left() > was.left(), "the arrows nudge on the ER canvas");
+}
+
+#[test]
 fn interfaces_are_listed_under_their_package_added_with_the_plus_found_and_dragged_onto_the_diagram() {
     use crate::notation_ui::NotationUi;
     let (mut h, nodes) = related_sample();
@@ -7322,17 +7368,15 @@ fn an_interface_takes_members_on_its_card_and_in_properties_and_is_offered_as_a_
     click(&mut h, at);
     assert!(h.state().panels.member.is_none(), "{:?}", h.state().panels.member);
     assert_eq!(member_rows(&h, payable, true), ["+ pay() : Boolean"]);
-    // A private member is refused under the editor, and nothing changes.
+    // Its members are public: the editor's Visibility offers Public alone.
     let at = rect_of(&h, "workspace.properties.attributes.add").center();
     click(&mut h, at);
-    h.event(egui::Event::Text("secret".into()));
-    h.run();
-    h.state_mut().panels.member.as_mut().unwrap().visibility = 1;
-    let at = rect_of(&h, "workspace.properties.member.apply").center();
+    let at = rect_of(&h, "workspace.properties.member.visibility").center();
     click(&mut h, at);
-    let refused = h.state().panels.member.as_ref().and_then(|e| e.refused.clone()).expect("refused");
-    assert!(refused.contains("public"), "{refused}");
-    assert_eq!(member_rows(&h, payable, false), ["+ due : Real"]);
+    let offered: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.member.visibility.")).collect();
+    assert_eq!(offered, ["workspace.properties.member.visibility.0"]);
+    let at = rect_of(&h, "workspace.properties.member.cancel").center();
+    click(&mut h, at);
     // It is offered as a type: Customer's new attribute takes it.
     assert!(
         crate::uml_panel::type_choices(h.state().session.as_ref().unwrap().doc()).iter().any(|(l, id)| l == "Payable" && *id == payable.to_string())
@@ -7408,6 +7452,23 @@ fn the_relationship_tool_joins_interfaces_and_refuses_what_would_make_a_class_sp
     let (from, to) = (node(&h, &nodes["OrderLine"]), node(&h, &payable));
     relate(&mut h, crate::uml_relate::Relate::Association, from, to);
     assert_eq!(edge_count(&h), before + 3, "notice {:?}", h.state().canvas.notice);
+    // A generalization dragged out of an interface onto empty canvas makes its new supertype an
+    // interface, named in place, as one step.
+    let empty = egui::pos2(node(&h, &nodes["Catalog"]).x, node(&h, &payable).y);
+    let from = node(&h, &payable);
+    relate(&mut h, crate::uml_relate::Relate::Generalization, from, empty);
+    let rename = h.state().canvas.rename.clone().expect("its name is open for typing");
+    assert_eq!(rename.text, "Interface 1", "notice {:?}", h.state().canvas.notice);
+    assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add interface"));
+    let made = named(&h, archforge_uml::INTERFACE, "Interface 1");
+    let related = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let id = made.to_string();
+        s.execute("uml.relationship.list", &serde_json::json!({ "class": id })).unwrap().value["relationships"].clone()
+    };
+    assert_eq!(related[0]["kind"], "generalization", "{related}");
+    assert_eq!(related[0]["general"], made.to_string());
+    assert_eq!(edge_count(&h), before + 4);
 }
 
 /// The sample class model in `theme` and a window of `size`, its association "paid by" (Order to

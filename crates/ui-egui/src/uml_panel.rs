@@ -481,9 +481,18 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     // Visibility narrow, the name wide.
     let narrow = 112.0_f32.min(inner / 2.0);
     let wide = (inner - narrow - 8.0).max(0.0);
-    let words: Vec<String> = VISIBILITIES.iter().map(|v| visibility_word(v)).collect();
+    // An interface's members are public: its menu offers Public alone.
+    let public_only = shell
+        .session
+        .as_ref()
+        .and_then(|s| s.doc().by_uuid(edit.class).and_then(|c| Classifier::of(s.doc(), c)))
+        .is_some_and(|k| k == Classifier::Interface);
+    let offered = if public_only { &VISIBILITIES[..1] } else { &VISIBILITIES[..] };
+    let words: Vec<String> = offered.iter().map(|v| visibility_word(v)).collect();
+    edit.visibility = edit.visibility.min(words.len().saturating_sub(1));
     let vis_id = "workspace.properties.member.visibility";
-    let vis = select_field(shell, ui, p, at(0.0, cy), narrow, vis_id, &tr("Visibility"), &words[edit.visibility.min(3)], Menu::MemberVisibility);
+    let shown = words.get(edit.visibility).cloned().unwrap_or_default();
+    let vis = select_field(shell, ui, p, at(0.0, cy), narrow, vis_id, &tr("Visibility"), &shown, Menu::MemberVisibility);
     let name_id = "workspace.properties.member.name";
     enter |=
         text_field(shell, ui, p, at(narrow + 8.0, cy), wide, name_id, &tr("Name"), &mut edit.name, archforge_uml::commands::MAX_NAME, take, false);

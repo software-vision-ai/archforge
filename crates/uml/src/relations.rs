@@ -440,7 +440,7 @@ macro_rules! end_lines {
     () => {
         concat!(
             "association: string; the association's id\n",
-            "end: integer, 0..1; which end, 0 at the class it was drawn from, 1 at the other\n",
+            "end: integer, 0..1; which end, 0 at the class or interface it was drawn from, 1 at the other\n",
             "role: string = \"\"; the end's role name, or nothing\n",
             "multiplicity: string = \"\"; 1, 0..1, *, 1..*, 2..5, or nothing\n",
             "navigable: bool = true; the association navigates to this end; never the whole's end of an aggregation or composition (default false there)\n",
@@ -458,8 +458,8 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             &["Association"],
             None,
             concat!(
-                "from: string; the id of the class it is drawn from, the whole of an aggregation or composition\n",
-                "to: string; the id of the class it is drawn to, the part of an aggregation or composition\n",
+                "from: string; the id of the class or interface it is drawn from, the whole of an aggregation or composition\n",
+                "to: string; the id of the class or interface it is drawn to, the part of an aggregation or composition\n",
                 "kind: string = \"association\", association|directed|aggregation|composition; directed navigates only to the second class\n",
                 "name: string = \"\"; the association's name, or nothing"
             ),
@@ -472,7 +472,10 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Add generalization",
             &["Generalization"],
             None,
-            "specific: string; the id of the class that specializes\ngeneral: string; the id of the class it specializes",
+            concat!(
+                "specific: string; the id of the class or interface that specializes\n",
+                "general: string; the id of the class or interface it specializes: an interface specializes only an interface, and a class never specializes one"
+            ),
             has_classes,
             generalization_add
         ),
@@ -481,7 +484,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Add dependency",
             &["Dependency"],
             None,
-            "client: string; the id of the class that depends\nsupplier: string; the id of the class it depends on\nname: string = \"\"; the dependency's name, or nothing",
+            "client: string; the id of the class or interface that depends\nsupplier: string; the id of the class or interface it depends on\nname: string = \"\"; the dependency's name, or nothing",
             has_classes,
             dependency_add
         ),
@@ -501,12 +504,12 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             None,
             concat!(
                 "relationship: string; the association's, generalization's or dependency's id\n",
-                "end: string, source|target; the end to move: the class it was drawn from (the specific class, the client) or to\n",
-                "class: string; the id of the class the end moves to"
+                "end: string, source|target; the end to move: the class or interface it was drawn from (the specific one, the client) or to\n",
+                "class: string; the id of the class or interface the end moves to; a generalization's end keeps its rules: an interface specializes only an interface, a class never one"
             ),
             has_classes,
             relationship_reconnect
         ),
-        cmd!(query "uml.relationship.list", "List relationships", &["Association", "Generalization", "Dependency"], None, "class: string; the class's id", has_classes, relationship_list),
+        cmd!(query "uml.relationship.list", "List relationships", &["Association", "Generalization", "Dependency"], None, "class: string; the class's or interface's id", has_classes, relationship_list),
     ]
 }

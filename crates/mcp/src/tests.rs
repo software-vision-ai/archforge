@@ -78,6 +78,8 @@ impl Backend for Model {
                 json!({ "id": "s1", "name": "shop", "entities": [{ "id": "t1", "attributes": [{ "name": "id" }] }] })
             }
             "er.entity.get" if p["entity"] == "t1" => json!({ "id": "t1", "name": "customer", "attributes": [{ "name": "id" }] }),
+            "uml.class.get" if p["class"] == "c1" => json!({ "id": "c1", "kind": "class", "name": "Order" }),
+            "uml.class.get" if p["class"] == "i1" => json!({ "id": "i1", "kind": "interface", "name": "Payable" }),
             "skill.list" => json!({ "skills": [{ "id": "k1", "name": "DDL" }] }),
             "skill.effective" if p["element"] == "s1" || p["element"] == "t1" => {
                 json!({ "skills": [{ "id": "k1", "name": "DDL", "origin": null, "overridden_by": null, "trigger": p["trigger"] }] })
@@ -114,6 +116,10 @@ fn the_model_and_its_skills_read_as_resources_with_the_revision_and_say_what_the
     assert_eq!((schema["kind"].as_str(), schema["revision"].as_i64()), (Some("schema"), Some(7)));
     assert_eq!(schema["schema"]["entities"][0]["attributes"][0]["name"], "id");
     assert_eq!(content(&read(&model, "archforge://element/t1"))["kind"], "table");
+    // A class and an interface, which the class read gives both, each as what it is.
+    assert_eq!(content(&read(&model, "archforge://element/c1"))["kind"], "class");
+    let interface = content(&read(&model, "archforge://element/i1"));
+    assert_eq!((interface["kind"].as_str(), interface["interface"]["name"].as_str()), (Some("interface"), Some("Payable")));
     // The skills in effect, for every trigger or for one, as skill.effective gives them.
     let effective = content(&read(&model, "archforge://skills/effective/t1/export"));
     assert_eq!((effective["trigger"].as_str(), effective["skills"][0]["name"].as_str()), (Some("export"), Some("DDL")));

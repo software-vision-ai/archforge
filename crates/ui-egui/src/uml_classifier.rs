@@ -199,5 +199,13 @@ pub(crate) fn popover(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, an
     }
 }
 
+/// Whether the popover of the chevron `key` is a menu the arrow keys and Enter walk.
+pub(crate) fn takes_keys(key: &str) -> bool {
+    key == KINDS
+}
+
+/// The classifier tool's chevron key.
+pub(crate) const KINDS: &str = "classifier-kinds";
+
 /// The classifier tool's automation key.
 pub(crate) const TOOL: &str = "classifier";

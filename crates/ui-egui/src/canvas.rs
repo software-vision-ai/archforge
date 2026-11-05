@@ -1233,7 +1233,6 @@ fn draw_rows(inner: &egui::Painter, p: &Palette, card: &archforge_diagram::figur
     }
 }
 
-/// A text a notation describes, in the user's language.
 /// An eyebrow as drawn: in capitals, but for a UML keyword between guillemets, which keeps its
 /// case (`«interface» · BILLING`).
 pub(crate) fn eyebrow_case(text: &str) -> String {
@@ -1250,6 +1249,7 @@ pub(crate) fn eyebrow_case(text: &str) -> String {
     out
 }
 
+/// A text a notation describes, in the user's language.
 fn say(t: &archforge_diagram::figure::Text) -> String {
     match t {
         archforge_diagram::figure::Text::Said(template, args) => {
@@ -1831,6 +1831,14 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     {
         shell.canvas.tool = Tool::Select;
         shell.canvas.popover = None;
+    }
+    // A popover of another kind's chevron, from the diagram shown before, closes: hidden, it
+    // would still hold the keys its menu takes.
+    if let Some(open) = shell.canvas.popover
+        && !kind.is_some_and(|k| k.tools().iter().any(|t| t.chevron.is_some_and(|(key, _)| key == open)))
+    {
+        shell.canvas.popover = None;
+        shell.canvas.menu_focus = None;
     }
     let at = layout(kind);
     let size = vec2(at.width, TOOLBAR_HEIGHT);

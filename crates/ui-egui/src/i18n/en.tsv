@@ -206,6 +206,7 @@ str		every table	every table
 str		every relationship	every relationship
 str		every column	every column
 str		every class	every class
+str		every interface	every interface
 str		every attribute	every attribute
 str		every operation	every operation
 str		every association	every association
@@ -589,7 +590,7 @@ str		This is the top package: zooming out goes no further	This is the top packag
 str		Only a package this diagram's package holds goes on it	Only a package this diagram's package holds goes on it
 # Relating classes
 str		A bound can be at most {max}.	A bound can be at most {max}.
-str		A relationship joins two classes	A relationship joins two classes
+str		A relationship joins two classes or interfaces	A relationship joins two classes or interfaces
 str		Add association	Add association
 str		Add dependency	Add dependency
 str		Add generalization	Add generalization
