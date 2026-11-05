@@ -683,6 +683,21 @@ member and drawing a relationship stay three separate gestures:
   association end follows the same order beside its line: `/` before the role when derived, the
   multiplicity, `= default` after it, then the braces, as in `/items 0..* = none {ordered}`. Static
   has no mark yet, on a card or an end; its underlining comes with 0.13.0.
+  As built (AR-126): the attribute editor keeps the design's layout under Type and Multiplicity
+  (Default value; Static and Derived, Read only and Ordered, Unique; Subsets and Redefines side by
+  side, a muted line under a select with nothing to offer), and one Apply writes it all. An
+  enumeration-typed attribute picks its default from a select of its literals. The card writes a
+  derived attribute as the design frame does, `+ / total : Money = 0`; several braces share one pair,
+  comma-separated (`{readOnly, ordered, subsets parts}`); a String's default shows in double
+  quotes. An end's modifiers sit under a Modifiers disclosure in its section, closed by default
+  with a summary beside it, with their own Cancel and Apply, since the end's other fields are
+  written as they change; its role and multiplicity stay where they were beside the line, the role
+  taking the `/` and the multiplicity the default and the braces. A refusal sits under its field in
+  the user's words; a type the kept default does not fit is refused under Type, naming the default.
+  The selects offer one property each; a property of the model that subsets or redefines several
+  shows them all, and picking one replaces them. A default that is a literal goes with the literal
+  when it is removed, as a property's type does. A long end text is drawn further along its line so
+  it clears the card.
 
 ## Not decided yet
 The menu bar's structure; how a colour chosen in Appearance and the key-status colour combine;

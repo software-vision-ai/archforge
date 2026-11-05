@@ -615,6 +615,32 @@ str		Public	Öffentlich
 str		Remove parameter	Parameter entfernen
 str		Return type	Rückgabetyp
 str		Static	Statisch
+str		Modifiers	Modifikatoren
+str		Default value	Standardwert
+str		Derived	Abgeleitet
+str		Read only	Schreibgeschützt
+str		Ordered	Geordnet
+str		Subsets	Teilmenge von
+str		Redefines	Redefiniert
+str		No property to subset	Keine Eigenschaft für eine Teilmenge
+str		No property to redefine	Keine Eigenschaft zum Redefinieren
+str		The default value {value} does not fit {type}; change or clear it first.	Der Standardwert {value} passt nicht zu {type}; ändern oder leeren Sie ihn zuerst.
+str		A property chosen here is gone; choose again.	Eine hier gewählte Eigenschaft gibt es nicht mehr; wählen Sie erneut.
+str		A default value is at most {n} characters.	Ein Standardwert hat höchstens {n} Zeichen.
+str		{value} is not a whole number, which an Integer's default is, such as 42.	{value} ist keine ganze Zahl, wie sie der Standardwert eines Integer ist, etwa 42.
+str		{value} is not a number, which a Real's default is, such as 2.5.	{value} ist keine Zahl, wie sie der Standardwert eines Real ist, etwa 2.5.
+str		{value} is neither true nor false, which a Boolean's default is.	{value} ist weder true noch false, was der Standardwert eines Boolean ist.
+str		{value} is neither a whole number of 0 or more nor *, which an UnlimitedNatural's default is.	{value} ist weder eine ganze Zahl ab 0 noch *, was der Standardwert eines UnlimitedNatural ist.
+str		{value} is not a literal of {enumeration}.	{value} ist kein Literal von {enumeration}.
+str		{value} cannot be read as a default.	{value} lässt sich nicht als Standardwert lesen.
+str		A property without a name cannot be named here.	Eine Eigenschaft ohne Namen kann hier nicht genannt werden.
+str		{name} is not a property this one can subset.	{name} ist keine Eigenschaft, deren Teilmenge diese sein kann.
+str		{name} is not a property this one can redefine.	{name} ist keine Eigenschaft, die diese redefinieren kann.
+str		{name} has this property's name; a subset takes another.	{name} hat den Namen dieser Eigenschaft; eine Teilmenge braucht einen anderen.
+str		{name} has a type this property's type does not conform to.	{name} hat einen Typ, zu dem der Typ dieser Eigenschaft nicht konform ist.
+str		{name} holds fewer values than this property.	{name} fasst weniger Werte als diese Eigenschaft.
+str		This property's multiplicity does not lie within {name}'s.	Die Multiplizität dieser Eigenschaft liegt nicht innerhalb der von {name}.
+str		{name} is composite; only a composite end redefines it.	{name} ist eine Komposition; nur ein Kompositionsende redefiniert sie.
 str		This attribute	Dieses Attribut
 str		This literal	Dieses Literal
 str		This operation	Diese Operation

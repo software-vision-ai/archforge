@@ -615,6 +615,32 @@ str		Public	公共
 str		Remove parameter	移除参数
 str		Return type	返回类型
 str		Static	静态
+str		Modifiers	修饰符
+str		Default value	默认值
+str		Derived	派生
+str		Read only	只读
+str		Ordered	有序
+str		Subsets	子集
+str		Redefines	重定义
+str		No property to subset	没有可作为子集来源的属性
+str		No property to redefine	没有可重定义的属性
+str		The default value {value} does not fit {type}; change or clear it first.	默认值 {value} 不符合 {type}；请先修改或清除它。
+str		A property chosen here is gone; choose again.	此处选择的属性已不存在；请重新选择。
+str		A default value is at most {n} characters.	默认值最多 {n} 个字符。
+str		{value} is not a whole number, which an Integer's default is, such as 42.	{value} 不是整数；Integer 的默认值是整数，例如 42。
+str		{value} is not a number, which a Real's default is, such as 2.5.	{value} 不是数字；Real 的默认值是数字，例如 2.5。
+str		{value} is neither true nor false, which a Boolean's default is.	{value} 既不是 true 也不是 false；Boolean 的默认值是二者之一。
+str		{value} is neither a whole number of 0 or more nor *, which an UnlimitedNatural's default is.	{value} 既不是 0 或更大的整数也不是 *；UnlimitedNatural 的默认值是二者之一。
+str		{value} is not a literal of {enumeration}.	{value} 不是 {enumeration} 的字面量。
+str		{value} cannot be read as a default.	{value} 无法读作默认值。
+str		A property without a name cannot be named here.	没有名称的属性无法在此指定。
+str		{name} is not a property this one can subset.	{name} 不是此属性可以作为其子集的属性。
+str		{name} is not a property this one can redefine.	{name} 不是此属性可以重定义的属性。
+str		{name} has this property's name; a subset takes another.	{name} 与此属性同名；子集需要另一个名称。
+str		{name} has a type this property's type does not conform to.	此属性的类型不符合 {name} 的类型。
+str		{name} holds fewer values than this property.	{name} 容纳的值比此属性少。
+str		This property's multiplicity does not lie within {name}'s.	此属性的多重性不在 {name} 的范围内。
+str		{name} is composite; only a composite end redefines it.	{name} 是组合；只有组合端可以重定义它。
 str		This attribute	此属性
 str		This literal	此字面量
 str		This operation	此操作

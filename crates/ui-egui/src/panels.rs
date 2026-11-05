@@ -44,6 +44,9 @@ pub struct State {
     /// revision), each label with the value the commands take: the model is walked for them once
     /// per change, not on every frame the menu is open.
     pub type_choices: Option<TypeChoices>,
+    /// The properties a property's Subsets and Redefines offer, each list built once for one state
+    /// of the project and one shape of the property being edited, not on every frame (AR-126).
+    pub targets: Vec<crate::uml_panel::TargetChoices>,
     /// The item of an editable select's open menu the arrow keys have reached.
     pub highlight: Option<usize>,
     /// The Appearance panel's colour picker, while it is open.
@@ -195,11 +198,19 @@ pub enum Menu {
     MemberVisibility,
     MemberType,
     ParamType(usize),
+    /// An attribute editor's default literal (for an enumeration's type), Subsets and Redefines
+    /// (AR-126).
+    MemberDefault,
+    MemberSubsets,
+    MemberRedefines,
     /// The type menu of a member typed in place on its class's card.
     InlineType,
     /// An association end's aggregation and its multiplicity's presets.
     EndAggregation(usize),
     EndMultiplicity(usize),
+    /// An association end's Subsets and Redefines (AR-126).
+    EndSubsets(usize),
+    EndRedefines(usize),
     /// A class's package.
     ClassPackage,
     /// The package a package sits in (AR-102).
@@ -418,7 +429,8 @@ pub(crate) fn select_field(
     paint.rect_filled(field, 6.0, p.field);
     ux::text_mid(paint, field.left() + 8.0, field.center().y, value, types::SMALL, p.text, Some((width - 36.0).max(0.0)));
     ux::icon_mid(paint, pos2(field.right() - 14.0, field.center().y), &icons::CHEVRON_DOWN, p.text_secondary);
-    if control(shell, ui, id, "select", field, true).clicked() {
+    // Its label and what it shows, for assistive technology.
+    if control(shell, ui, id, "select", field, true).accessible_name(format!("{label}: {value}")).clicked() {
         shell.panels.menu = if shell.panels.menu == Some(menu) { None } else { Some(menu) };
     }
     field
@@ -789,7 +801,7 @@ pub(crate) fn check(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: egui::Pos
     }
     let g = ux::text(paint, at + vec2(24.0, -1.0), label, types::SMALL, p.text, None);
     let hit = Rect::from_min_max(b.min, pos2(g.right(), b.bottom()));
-    if control(shell, ui, id, "check", hit, true).clicked() {
+    if control(shell, ui, id, "check", hit, true).accessible_name(label).clicked() {
         *on = !*on;
     }
     g.right() + 20.0

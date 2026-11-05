@@ -303,6 +303,53 @@ an interface, as a class does, but nothing specializes it.
 
 <!-- picture: workspace-association-class light | Customer and Product joined by the association class Review, its card with its attributes above the line's middle and tied to it; Review selected with its ends, attributes and operations in Properties -->
 
+## 12. Give a property its modifiers
+
+An attribute, and an association's end, can say more than its name, type and multiplicity: a
+**default value**, whether it is **Static**, **Derived**, **Read only**, **Ordered** or **Unique**,
+and which other property it **Subsets** or **Redefines**. These live in the attribute's editor and
+in the end's section, never in a tool of their own.
+
+Open an attribute's editor in Properties with its pencil or a double click on its row. Under
+**Type** and **Multiplicity** come:
+
+- **Default value**: typed as text and read by the attribute's type. An *Integer* takes a whole
+  number, a *Real* a number such as 2.5, a *Boolean* true or false, an *UnlimitedNatural* a whole
+  number of 0 or more or `*`, and a *String* any text. An attribute typed by an enumeration picks
+  its default among the enumeration's literals; if the literal is later renamed the default
+  follows it, and if it is removed the default goes with it. Any other type, or none, takes the
+  text as written.
+- **Static**, **Derived**, **Read only**, **Ordered** and **Unique**. Ordered and Unique say
+  something only when the attribute holds more than one value (its multiplicity's upper bound is
+  above 1); they can be set either way, and the card shows them only then. Unique is on unless you
+  turn it off.
+- **Subsets** and **Redefines**, which list only the properties the attribute may name. Subsets
+  offers the other properties of the attribute's class and of the classes it specializes, of a type
+  the attribute's type is or specializes, allowing at least as many values, and named otherwise.
+  Redefines offers only properties of the classes its class specializes, whose multiplicity holds
+  the attribute's, and that are composite only if the attribute is too. When there is none, a muted
+  line under the select says so.
+
+**Apply** writes everything as one step you can undo; **Cancel** or Escape leaves the model as it
+was. A value that does not fit is refused under its field and the editor stays open: a default its
+type cannot read, or a new type that the kept default does not fit, named under **Type**, so the
+default is never dropped without you choosing so. Change or clear the default first, then the type.
+
+The card says the modifiers as UML writes them: `/` before a derived attribute's name, `=` and the
+default after its multiplicity, then in braces what differs from the usual: `{readOnly}`,
+`{ordered}`, `{nonunique}`, `{subsets name}` and `{redefines name}`. Unique is the usual and is not
+said. A String's default shows in double quotes. Static has no mark on the card yet.
+
+An association's end has the same modifiers under **Modifiers** in its section of Properties;
+closed, the line beside it sums them up. Open it to edit them, then use its own **Apply** and
+**Cancel**; the role, multiplicity, navigability and aggregation above it are written as before,
+and keep the modifiers. An end's Subsets and Redefines offer the properties of the class at the
+other end of the association, and of the classes it specializes. Beside the line the end reads in
+the same order: `/` before a derived end's role, then its multiplicity, `= default` and the braces,
+as in `/items` with `* = none {ordered}`.
+
+<!-- picture: workspace-modifiers light | The class Order on its card with id {readOnly}, a derived total defaulting to 0, status defaulting to Placed and ordered lines, its end at OrderLine reading /items with * = none {ordered}; Order selected with the attribute editor open on total, showing Default value, the flags, and Subsets and Redefines -->
+
 ## The result
 
 The root package holds two classes and an interface. *Customer* has an attribute and an

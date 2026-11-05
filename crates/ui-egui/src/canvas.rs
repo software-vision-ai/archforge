@@ -1575,9 +1575,9 @@ fn bare_name(paint: &egui::Painter, d: &Drawing<'_>, element: Obj, points: &[Pos
     Some(rect)
 }
 
-/// Where a cardinality text sits by default: a little along the line from its end, beside the
-/// line rather than on it: under a level line (a line's name sits above it), right of an upright
-/// one.
+/// Where a cardinality text sits by default: a little along the line from its end, and further
+/// for a text longer than that reach, beside the line rather than on it: under a level line (a
+/// line's name sits above it), right of an upright one.
 fn beside(end: Pos2, towards: Pos2, size: Vec2, z: f32) -> Pos2 {
     let d = towards - end;
     if d.length() <= f32::EPSILON || !d.is_finite() {
@@ -1587,7 +1587,10 @@ fn beside(end: Pos2, towards: Pos2, size: Vec2, z: f32) -> Pos2 {
     let n = if d.x.abs() >= d.y.abs() { vec2(0.0, 1.0) } else { vec2(1.0, 0.0) };
     // Far enough off the line that the text's box clears it, whichever way the line runs.
     let reach = n.x.abs() * size.x / 2.0 + n.y.abs() * size.y / 2.0 + 6.0 * z;
-    end + d * 30.0 * z + n * reach
+    // And far enough along it that a long text, such as an end's modifiers (AR-126), clears the
+    // card the line leaves; a short one keeps its usual place.
+    let along = (d.x.abs() * size.x / 2.0 + d.y.abs() * size.y / 2.0 + 16.0 * z).max(30.0 * z);
+    end + d * along + n * reach
 }
 
 /// A soft band under a line's whole route, so the line under the pointer stands out.

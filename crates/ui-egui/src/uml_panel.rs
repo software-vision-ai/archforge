@@ -2,7 +2,10 @@
 //! Attributes and Operations sections, each row read as the class's card shows it. `+` opens the
 //! editor for a new member, the row's edit button or a double click opens the editor in its place,
 //! as a table's columns do. The attribute editor takes the visibility, the name, the type (none, a
-//! built-in type or one of the model's), the multiplicity as typed, and Static; the operation
+//! built-in type or one of the model's), the multiplicity as typed, Static, and the modifiers
+//! (AR-126): the default value (a select of the literals for an enumeration's type), Derived, Read
+//! only, Ordered and Unique, and Subsets and Redefines, which list only the properties the rules
+//! allow, built once per state of the project; a refusal sits under its field; the operation
 //! editor the visibility, the name, the return type, Static, Abstract and its parameters, each a
 //! name, a type and a multiplicity. Apply is one command (`uml.attribute.add`/`set`,
 //! `uml.operation.add`/`set`); the arrows move the member up or down and the bin removes it. A
@@ -63,7 +66,19 @@ pub struct MemberEdit {
     pub is_static: bool,
     pub is_abstract: bool,
     pub params: Vec<ParamEdit>,
+    /// An attribute's modifiers (AR-126): its default as typed, its flags, and the ids of the
+    /// properties it subsets and redefines.
+    pub default: String,
+    pub derived: bool,
+    pub read_only: bool,
+    pub ordered: bool,
+    pub unique: bool,
+    pub subsets: Vec<Uuid>,
+    pub redefines: Vec<Uuid>,
     pub refused: Option<String>,
+    /// The field the refusal sits under (`type`, `multiplicity`, `default`, `subsets`,
+    /// `redefines`), or none for the card's foot.
+    pub refused_at: Option<&'static str>,
     /// True until the editor has been shown once: the name field takes the keyboard then.
     pub opened: bool,
 }
@@ -146,7 +161,15 @@ pub(crate) fn edit_of(store: Option<&Store>, class: Uuid, kind: MemberKind, targ
         is_static: false,
         is_abstract: false,
         params: Vec::new(),
+        default: String::new(),
+        derived: false,
+        read_only: false,
+        ordered: false,
+        unique: true,
+        subsets: Vec::new(),
+        redefines: Vec::new(),
         refused: None,
+        refused_at: None,
         opened: true,
     };
     if let (Some(t), Some(store)) = (target, store)
@@ -166,6 +189,11 @@ pub(crate) fn edit_of(store: Option<&Store>, class: Uuid, kind: MemberKind, targ
             MemberKind::Attribute => {
                 edit.ty = type_value(store, o);
                 edit.multiplicity = archforge_uml::figures::multiplicity(store, o);
+                edit.default = archforge_uml::modifiers::default_text(store, o);
+                (edit.derived, edit.read_only, edit.ordered, edit.unique) = archforge_uml::modifiers::flags(store, o);
+                let ids = |ts: Vec<Obj>| ts.into_iter().filter_map(|t| store.uuid(t).ok()).collect();
+                edit.subsets = ids(archforge_uml::modifiers::subsets(store, o));
+                edit.redefines = ids(archforge_uml::modifiers::redefines(store, o));
             }
             MemberKind::Literal => {}
             MemberKind::Operation => {
@@ -608,6 +636,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     cy += row;
     // Type selects, whose menus open over what is under them, drawn last.
     let mut menus: Vec<(Rect, String, Menu)> = Vec::new();
+    let mut modifier_menus: Option<ModifierMenus> = None;
     let type_id = "workspace.properties.member.type";
     match edit.kind {
         MemberKind::Literal => {}
@@ -620,8 +649,11 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
             enter |=
                 text_field(shell, ui, p, at(half + 8.0, cy), half, m_id, &tr("Multiplicity"), &mut edit.multiplicity, MAX_MULTIPLICITY, false, false);
             cy += row;
-            check(shell, ui, p, at(0.0, cy), "workspace.properties.member.static", &tr("Static"), &mut edit.is_static);
-            cy += 16.0 + 16.0;
+            cy = refusal_under(&paint, p, at(0.0, cy), inner, &edit, &["type", "multiplicity"]) - y;
+            let drawn = modifiers(shell, ui, p, at(0.0, cy), inner, &mut edit);
+            enter |= drawn.enter;
+            modifier_menus = Some(drawn.menus);
+            cy += drawn.height;
         }
         MemberKind::Operation => {
             let value = shell.session.as_ref().map(|s| type_label(s.doc(), &edit.ty)).unwrap_or_default();
@@ -720,7 +752,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
         "Apply",
     );
     cy += FIELD + 12.0;
-    if let Some(why) = &edit.refused {
+    if let Some(why) = edit.refused.as_ref().filter(|_| edit.refused_at.is_none()) {
         let g = ux::text(&paint, at(0.0, cy - 4.0), why, types::CAPTION, p.amber, Some(inner));
         cy += g.height() + 8.0;
     }
@@ -744,6 +776,9 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
             type_menu(shell, ui, p, field, &id, ty, which);
         }
     }
+    if let Some(m) = modifier_menus {
+        modifier_menu_picks(shell, ui, p, m, &mut edit);
+    }
     shell.panels.member = Some(edit.clone());
     if cancel || (shell.panels.menu.is_none() && ui.input(|i| i.key_pressed(egui::Key::Escape))) {
         shell.panels.member = None;
@@ -764,10 +799,351 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     card.bottom() + 8.0
 }
 
-/// Shows why the editor's command was refused, or clears it.
+/// The refusal of `edit` when it sits under one of `fields`, wrapped under the field at `at`;
+/// gives the y under it.
+fn refusal_under(paint: &egui::Painter, p: &Palette, at: egui::Pos2, width: f32, edit: &MemberEdit, fields: &[&str]) -> f32 {
+    match (&edit.refused, edit.refused_at) {
+        (Some(why), Some(field)) if fields.contains(&field) => {
+            let said = ux::galley_rows(paint, why, types::CAPTION, p.amber, Some(width), 4);
+            let height = said.size().y;
+            paint.galley(at - vec2(0.0, 4.0), said, p.amber);
+            at.y + height + 6.0
+        }
+        _ => at.y,
+    }
+}
+
+/// The menus the modifiers' selects open, drawn over the card last: the default's literals (for
+/// an enumeration's type) and the Subsets and Redefines choices, each with its select's place.
+pub(crate) struct ModifierMenus {
+    default: Option<(Rect, Vec<String>)>,
+    subsets: (Rect, TargetChoices),
+    redefines: Rect,
+}
+
+/// What [`modifiers`] drew: its height, whether Enter was pressed in its field, and its menus.
+struct Drawn {
+    height: f32,
+    enter: bool,
+    menus: ModifierMenus,
+}
+
+/// The attribute editor's modifiers under its type, at `at`, `width` wide (AR-126): Default value,
+/// a text field or, for an enumeration's type, a select of its literals; Static, Derived, Read
+/// only, Ordered and Unique; Subsets and Redefines, which list only the properties the rules
+/// allow, with a muted line under each that has none. A refusal sits under its field.
+fn modifiers(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: egui::Pos2, width: f32, edit: &mut MemberEdit) -> Drawn {
+    let paint = ui.painter().clone();
+    let half = ((width - 8.0) / 2.0).max(0.0);
+    let row = 17.0 + FIELD + 10.0;
+    let mut y = at.y;
+    let mut enter = false;
+    // An enumeration's literals, when the type is one: its default is picked among them.
+    let literals: Option<Vec<String>> = shell.session.as_ref().and_then(|s| {
+        let store = s.doc();
+        let (ty, _) = edit_type(store, &edit.ty);
+        let e = ty.filter(|t| store.class_of(*t).ok() == Some(archforge_uml::ENUMERATION))?;
+        Some(archforge_uml::commands::literals(store, e).into_iter().map(|l| name(store, l)).collect())
+    });
+    let default_id = "workspace.properties.member.default";
+    let default = match literals {
+        Some(names) => {
+            let shown = if edit.default.trim().is_empty() { tr("None") } else { edit.default.clone() };
+            let field = select_field(shell, ui, p, pos2(at.x, y), width, default_id, &tr("Default value"), &shown, Menu::MemberDefault);
+            Some((field, names))
+        }
+        None => {
+            let limit = archforge_uml::modifiers::MAX_DEFAULT;
+            enter |= text_field(shell, ui, p, pos2(at.x, y), width, default_id, &tr("Default value"), &mut edit.default, limit, false, false);
+            None
+        }
+    };
+    y += row;
+    y = refusal_under(&paint, p, pos2(at.x, y), width, edit, &["default"]);
+    // The flags in two columns, Static first as before.
+    let right = at.x + half + 8.0;
+    check(shell, ui, p, pos2(at.x, y), "workspace.properties.member.static", &tr("Static"), &mut edit.is_static);
+    check(shell, ui, p, pos2(right, y), "workspace.properties.member.derived", &tr("Derived"), &mut edit.derived);
+    y += 26.0;
+    check(shell, ui, p, pos2(at.x, y), "workspace.properties.member.read-only", &tr("Read only"), &mut edit.read_only);
+    check(shell, ui, p, pos2(right, y), "workspace.properties.member.ordered", &tr("Ordered"), &mut edit.ordered);
+    y += 26.0;
+    check(shell, ui, p, pos2(at.x, y), "workspace.properties.member.unique", &tr("Unique"), &mut edit.unique);
+    y += 16.0 + 16.0;
+    // Subsets and Redefines, their choices built once per state of the project and shape.
+    let key = format!("attribute|{}|{:?}|{}|{}|{}", edit.class, edit.target, edit.ty, edit.multiplicity.trim(), edit.name.trim());
+    let (class, target, ty, multiplicity, named) = (edit.class, edit.target, edit.ty.clone(), edit.multiplicity.clone(), edit.name.clone());
+    let targets = take_targets(shell, &key, |store| {
+        let bounds = archforge_uml::members::parse_multiplicity(&multiplicity).ok()?;
+        let edit = MemberEdit { class, target, ty, multiplicity, name: named, ..edit_of(None, class, MemberKind::Attribute, target) };
+        edit_shape(store, &edit, bounds)
+    });
+    let (subsets_shown, redefines_shown) = match shell.session.as_ref() {
+        Some(s) => (chosen_names(s.doc(), &edit.subsets), chosen_names(s.doc(), &edit.redefines)),
+        None => (tr("None"), tr("None")),
+    };
+    let subsets =
+        select_field(shell, ui, p, pos2(at.x, y), half, "workspace.properties.member.subsets", &tr("Subsets"), &subsets_shown, Menu::MemberSubsets);
+    let redefines = select_field(
+        shell,
+        ui,
+        p,
+        pos2(right, y),
+        half,
+        "workspace.properties.member.redefines",
+        &tr("Redefines"),
+        &redefines_shown,
+        Menu::MemberRedefines,
+    );
+    y += 17.0 + FIELD + 6.0;
+    let mut said = 0.0_f32;
+    for (empty, x, text) in
+        [(targets.subsets.is_empty(), at.x, tr("No property to subset")), (targets.redefines.is_empty(), right, tr("No property to redefine"))]
+    {
+        if empty {
+            let g = ux::galley_rows(&paint, &text, types::CAPTION, p.text_muted, Some(half), 2);
+            said = said.max(g.size().y);
+            paint.galley(pos2(x, y), g, p.text_muted);
+        }
+    }
+    if said > 0.0 {
+        y += said + 6.0;
+    }
+    y = refusal_under(&paint, p, pos2(at.x, y + 4.0), width, edit, &["subsets", "redefines"]);
+    Drawn { height: y - at.y + 4.0, enter, menus: ModifierMenus { default, subsets: (subsets, targets), redefines } }
+}
+
+/// The names of the properties `ids` names, joined, or None when it names none.
+fn chosen_names(store: &Store, ids: &[Uuid]) -> String {
+    if ids.is_empty() {
+        return tr("None");
+    }
+    ids.iter().filter_map(|u| store.by_uuid(*u)).map(|o| name(store, o)).collect::<Vec<_>>().join(", ")
+}
+
+/// The open modifier menu, when one is: a pick sets the default's literal, or the one property
+/// Subsets or Redefines names (None names none); the choices go back to the shell.
+fn modifier_menu_picks(shell: &mut Shell, ui: &egui::Ui, p: &Palette, m: ModifierMenus, edit: &mut MemberEdit) {
+    let ModifierMenus { default, subsets: (subsets_field, targets), redefines: redefines_field } = m;
+    match shell.panels.menu {
+        Some(Menu::MemberDefault) => {
+            if let Some((field, names)) = default {
+                let items: Vec<String> = std::iter::once(tr("None")).chain(names.iter().cloned()).collect();
+                if let Some(i) = menu(shell, ui, p, field, "workspace.properties.member.default", &items) {
+                    edit.default = i.checked_sub(1).and_then(|i| names.get(i)).cloned().unwrap_or_default();
+                }
+            }
+        }
+        Some(Menu::MemberSubsets) => {
+            let items: Vec<String> = std::iter::once(tr("None")).chain(targets.subsets.iter().map(|(_, l)| l.clone())).collect();
+            if let Some(i) = menu(shell, ui, p, subsets_field, "workspace.properties.member.subsets", &items) {
+                edit.subsets = i.checked_sub(1).and_then(|i| targets.subsets.get(i)).map(|(u, _)| vec![*u]).unwrap_or_default();
+            }
+        }
+        Some(Menu::MemberRedefines) => {
+            let items: Vec<String> = std::iter::once(tr("None")).chain(targets.redefines.iter().map(|(_, l)| l.clone())).collect();
+            if let Some(i) = menu(shell, ui, p, redefines_field, "workspace.properties.member.redefines", &items) {
+                edit.redefines = i.checked_sub(1).and_then(|i| targets.redefines.get(i)).map(|(u, _)| vec![*u]).unwrap_or_default();
+            }
+        }
+        _ => {}
+    }
+    keep_targets(shell, targets);
+}
+
+/// The properties Subsets and Redefines offer for one shape of one property, each with its label
+/// (`name · Class`), in the order of their labels, kept for the state of the project and the
+/// interface language they were built in (AR-126).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct TargetChoices {
+    pub key: String,
+    pub subsets: Vec<(Uuid, String)>,
+    pub redefines: Vec<(Uuid, String)>,
+}
+
+/// The most target lists kept: the attribute editor's and both ends' fit.
+const KEPT_TARGETS: usize = 4;
+
+/// The choices for `what` (the property's shape as text), taken out of the shell for the frame:
+/// the kept ones when the project, its state and the language are the same, else built by
+/// `shape` once and kept from then on. Hand them back with [`keep_targets`].
+pub(crate) fn take_targets(shell: &mut Shell, what: &str, shape: impl FnOnce(&Store) -> Option<archforge_uml::modifiers::Shape>) -> TargetChoices {
+    let Some(session) = shell.session.as_ref() else { return TargetChoices::default() };
+    let store = session.doc();
+    let project = archforge_uml::commands::model(store).ok().and_then(|m| store.uuid(m).ok());
+    let key = format!("{project:?}|{}|{}|{what}", session.revision(), crate::i18n::language());
+    if let Some(i) = shell.panels.targets.iter().position(|t| t.key == key) {
+        return shell.panels.targets.remove(i);
+    }
+    let labelled = |objs: Vec<Obj>| -> Vec<(Uuid, String)> {
+        let mut out: Vec<(Uuid, String)> = objs
+            .into_iter()
+            .filter_map(|t| {
+                let owner = archforge_uml::modifiers::context_of(store, t).first().map(|c| name(store, *c)).unwrap_or_default();
+                Some((store.uuid(t).ok()?, format!("{} · {owner}", name(store, t))))
+            })
+            .collect();
+        out.sort_by_key(|(_, l)| l.to_lowercase());
+        out
+    };
+    match shape(store) {
+        Some(sh) => TargetChoices {
+            key,
+            subsets: labelled(archforge_uml::modifiers::subsets_candidates(store, &sh)),
+            redefines: labelled(archforge_uml::modifiers::redefines_candidates(store, &sh)),
+        },
+        None => TargetChoices { key, ..TargetChoices::default() },
+    }
+}
+
+/// Hands target choices back to the shell for the next frame, the oldest dropped past
+/// [`KEPT_TARGETS`].
+pub(crate) fn keep_targets(shell: &mut Shell, targets: TargetChoices) {
+    shell.panels.targets.push(targets);
+    if shell.panels.targets.len() > KEPT_TARGETS {
+        shell.panels.targets.remove(0);
+    }
+}
+
+/// The type an editor's type value names, without making it, with the form its default reads in:
+/// a built-in type by its name (none while it is not made yet), any other by its id.
+pub(crate) fn edit_type(store: &Store, ty: &str) -> (Option<Obj>, archforge_uml::modifiers::DefaultForm) {
+    use archforge_uml::modifiers::DefaultForm;
+    if ty.is_empty() {
+        return (None, DefaultForm::Opaque);
+    }
+    if let Some(form) = DefaultForm::built_in(ty) {
+        let made = archforge_uml::members::types_package(store)
+            .and_then(|p| archforge_uml::commands::primitive_types(store, p).into_iter().find(|t| built_in(store, *t) && name(store, *t) == ty));
+        return (made, form);
+    }
+    match Uuid::parse(ty).and_then(|u| store.by_uuid(u)) {
+        Some(t) => (Some(t), DefaultForm::of(store, Some(t))),
+        None => (None, DefaultForm::Opaque),
+    }
+}
+
+/// The shape of the attribute as edited, with its typed `bounds` (none: one), as Subsets and
+/// Redefines check it.
+fn edit_shape(store: &Store, edit: &MemberEdit, bounds: Option<(u64, Option<u64>)>) -> Option<archforge_uml::modifiers::Shape> {
+    let class = store.by_uuid(edit.class)?;
+    let (ty, _) = edit_type(store, &edit.ty);
+    let (lower, upper) = bounds.unwrap_or((1, Some(1)));
+    Some(archforge_uml::modifiers::Shape {
+        itself: edit.target.and_then(|t| store.by_uuid(t)),
+        context: vec![class],
+        ty,
+        typed: !edit.ty.is_empty(),
+        lower,
+        upper,
+        composite: false,
+        name: edit.name.trim().to_string(),
+    })
+}
+
+/// Why the attribute as edited cannot be written, in the user's words, with the field it sits
+/// under: a multiplicity that does not read; a default its type does not read (a type change the
+/// kept default does not fit said under the type, naming the default); a property it subsets or
+/// redefines that the rules refuse, named with why. The commands keep the same rules. None for any
+/// other member.
+pub(crate) fn modifier_refusal(store: &Store, edit: &MemberEdit) -> Option<(&'static str, String)> {
+    if edit.kind != MemberKind::Attribute {
+        return None;
+    }
+    let bounds = match archforge_uml::members::parse_multiplicity(&edit.multiplicity) {
+        Ok(b) => b,
+        Err(e) => return Some(("multiplicity", crate::uml_relate::multiplicity_problem(&e))),
+    };
+    let (_, form) = edit_type(store, &edit.ty);
+    if let Err(e) = archforge_uml::modifiers::parse_default(store, form, &edit.default) {
+        let was = edit.target.and_then(|t| store.by_uuid(t)).map(|o| (type_value(store, o), archforge_uml::modifiers::default_text(store, o)));
+        if let Some((was_ty, was_default)) = was
+            && was_ty != edit.ty
+            && !was_default.trim().is_empty()
+            && was_default.trim() == edit.default.trim()
+        {
+            let ty = type_label(store, &edit.ty);
+            let said = fmt(
+                &tr("The default value {value} does not fit {type}; change or clear it first."),
+                &[("value", edit.default.trim()), ("type", &ty)],
+            );
+            return Some(("type", said));
+        }
+        return Some(("default", default_refusal(store, &e)));
+    }
+    let shape = edit_shape(store, edit, bounds)?;
+    target_refusals(store, &shape, &edit.subsets, &edit.redefines)
+}
+
+/// Why `shape` may not subset one of `subsets` or redefine one of `redefines`, in the user's
+/// words, with the field it sits under; none when the rules allow each.
+pub(crate) fn target_refusals(
+    store: &Store,
+    shape: &archforge_uml::modifiers::Shape,
+    subsets: &[Uuid],
+    redefines: &[Uuid],
+) -> Option<(&'static str, String)> {
+    for (ids, redefining, field) in [(subsets, false, "subsets"), (redefines, true, "redefines")] {
+        for id in ids {
+            let Some(t) = store.by_uuid(*id).filter(|t| store.is_alive(*t)) else {
+                return Some((field, tr("A property chosen here is gone; choose again.")));
+            };
+            let problem = if redefining {
+                archforge_uml::modifiers::redefines_problem(store, shape, t)
+            } else {
+                archforge_uml::modifiers::subsets_problem(store, shape, t)
+            };
+            if let Some(problem) = problem {
+                return Some((field, target_refusal(&name(store, t), problem, redefining)));
+            }
+        }
+    }
+    None
+}
+
+/// Why a default does not read, in the user's words: the value and the form its type takes.
+pub(crate) fn default_refusal(store: &Store, e: &archforge_uml::modifiers::DefaultError) -> String {
+    use archforge_uml::modifiers::{DefaultError, DefaultForm};
+    let (value, form) = match e {
+        DefaultError::TooLong => {
+            return fmt(&tr("A default value is at most {n} characters."), &[("n", &archforge_uml::modifiers::MAX_DEFAULT.to_string())]);
+        }
+        DefaultError::Malformed(value, form) => (value.as_str(), *form),
+    };
+    let said = match form {
+        DefaultForm::Integer => tr("{value} is not a whole number, which an Integer's default is, such as 42."),
+        DefaultForm::Real => tr("{value} is not a number, which a Real's default is, such as 2.5."),
+        DefaultForm::Boolean => tr("{value} is neither true nor false, which a Boolean's default is."),
+        DefaultForm::UnlimitedNatural => tr("{value} is neither a whole number of 0 or more nor *, which an UnlimitedNatural's default is."),
+        DefaultForm::Enumeration(en) => {
+            return fmt(&tr("{value} is not a literal of {enumeration}."), &[("value", value), ("enumeration", &name(store, en))]);
+        }
+        DefaultForm::String | DefaultForm::Opaque => tr("{value} cannot be read as a default."),
+    };
+    fmt(&said, &[("value", value)])
+}
+
+/// Why `name` cannot be subset (or, `redefining`, redefined), in the user's words.
+pub(crate) fn target_refusal(name: &str, problem: archforge_uml::modifiers::TargetProblem, redefining: bool) -> String {
+    use archforge_uml::modifiers::TargetProblem as P;
+    let said = match (problem, redefining) {
+        (P::Unnamed, _) => return tr("A property without a name cannot be named here."),
+        (P::NotAProperty | P::Itself | P::OutOfReach, false) => tr("{name} is not a property this one can subset."),
+        (P::NotAProperty | P::Itself | P::OutOfReach, true) => tr("{name} is not a property this one can redefine."),
+        (P::SameName, _) => tr("{name} has this property's name; a subset takes another."),
+        (P::Type, _) => tr("{name} has a type this property's type does not conform to."),
+        (P::Upper, _) => tr("{name} holds fewer values than this property."),
+        (P::Multiplicity, _) => tr("This property's multiplicity does not lie within {name}'s."),
+        (P::Composite, _) => tr("{name} is composite; only a composite end redefines it."),
+    };
+    fmt(&said, &[("name", name)])
+}
+
+/// Shows why the editor's command was refused, at the card's foot, or clears it.
 fn refuse(shell: &mut Shell, why: Option<String>) {
     if let Some(e) = shell.panels.member.as_mut() {
         e.refused = why;
+        e.refused_at = None;
     }
 }
 
@@ -807,8 +1183,16 @@ fn move_member(shell: &mut Shell, edit: &MemberEdit, up: bool) {
     }
 }
 
-/// Writes the member through its command.
+/// Writes the member through its command; a modifier, a type or a multiplicity the rules refuse is
+/// said under its field in the user's words, and nothing is written.
 fn commit(shell: &mut Shell, edit: &MemberEdit) {
+    if let Some((field, why)) = shell.session.as_ref().and_then(|s| modifier_refusal(s.doc(), edit)) {
+        refuse(shell, Some(why));
+        if let Some(e) = shell.panels.member.as_mut() {
+            e.refused_at = Some(field);
+        }
+        return;
+    }
     let (cmd, params) = command_of(edit);
     match write_in_sight(shell, edit, cmd, params) {
         Ok(_) => {
@@ -831,6 +1215,9 @@ pub(crate) fn command_of(edit: &MemberEdit) -> (&'static str, serde_json::Value)
             json!({
                 "name": edit.name.trim(), "visibility": visibility, "type": edit.ty,
                 "multiplicity": edit.multiplicity.trim(), "static": edit.is_static,
+                "default": edit.default, "derived": edit.derived, "read_only": edit.read_only, "ordered": edit.ordered, "unique": edit.unique,
+                "subsets": edit.subsets.iter().map(Uuid::to_string).collect::<Vec<_>>(),
+                "redefines": edit.redefines.iter().map(Uuid::to_string).collect::<Vec<_>>(),
             }),
             "attribute",
         ),
@@ -889,13 +1276,15 @@ pub(crate) fn attribute_refusal(store: &Store, edit: &MemberEdit) -> Option<Stri
 /// Runs the member's command and, in the same undo step, grows every card of its class that would
 /// then hide a member, on every diagram, keeping its width (owner decision: a card the user made
 /// shorter stays so until a member of its class is added or edited); an enumeration's grows to
-/// show a literal added the same way. A literal's name that clashes, or an association class's
-/// attribute named as one of its ends' roles, is refused first, in the user's words, and nothing is
-/// run.
+/// show a literal added the same way. A literal's name that clashes, an association class's
+/// attribute named as one of its ends' roles, or a modifier the rules refuse (AR-126), is refused
+/// first, in the user's words, and nothing is run.
 pub(crate) fn write_in_sight(shell: &mut Shell, edit: &MemberEdit, cmd: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
     let Some(session) = shell.session.as_mut() else { return Err(tr("The model could not be opened")) };
     let store = session.doc();
-    if let Some(why) = literal_refusal(store, edit).or_else(|| attribute_refusal(store, edit)) {
+    if let Some(why) =
+        literal_refusal(store, edit).or_else(|| attribute_refusal(store, edit)).or_else(|| modifier_refusal(store, edit).map(|(_, w)| w))
+    {
         return Err(why);
     }
     let more = match (edit.target, edit.kind) {

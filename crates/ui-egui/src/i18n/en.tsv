@@ -614,6 +614,32 @@ str		Public	Public
 str		Remove parameter	Remove parameter
 str		Return type	Return type
 str		Static	Static
+str		Modifiers	Modifiers
+str		Default value	Default value
+str		Derived	Derived
+str		Read only	Read only
+str		Ordered	Ordered
+str		Subsets	Subsets
+str		Redefines	Redefines
+str		No property to subset	No property to subset
+str		No property to redefine	No property to redefine
+str		The default value {value} does not fit {type}; change or clear it first.	The default value {value} does not fit {type}; change or clear it first.
+str		A property chosen here is gone; choose again.	A property chosen here is gone; choose again.
+str		A default value is at most {n} characters.	A default value is at most {n} characters.
+str		{value} is not a whole number, which an Integer's default is, such as 42.	{value} is not a whole number, which an Integer's default is, such as 42.
+str		{value} is not a number, which a Real's default is, such as 2.5.	{value} is not a number, which a Real's default is, such as 2.5.
+str		{value} is neither true nor false, which a Boolean's default is.	{value} is neither true nor false, which a Boolean's default is.
+str		{value} is neither a whole number of 0 or more nor *, which an UnlimitedNatural's default is.	{value} is neither a whole number of 0 or more nor *, which an UnlimitedNatural's default is.
+str		{value} is not a literal of {enumeration}.	{value} is not a literal of {enumeration}.
+str		{value} cannot be read as a default.	{value} cannot be read as a default.
+str		A property without a name cannot be named here.	A property without a name cannot be named here.
+str		{name} is not a property this one can subset.	{name} is not a property this one can subset.
+str		{name} is not a property this one can redefine.	{name} is not a property this one can redefine.
+str		{name} has this property's name; a subset takes another.	{name} has this property's name; a subset takes another.
+str		{name} has a type this property's type does not conform to.	{name} has a type this property's type does not conform to.
+str		{name} holds fewer values than this property.	{name} holds fewer values than this property.
+str		This property's multiplicity does not lie within {name}'s.	This property's multiplicity does not lie within {name}'s.
+str		{name} is composite; only a composite end redefines it.	{name} is composite; only a composite end redefines it.
 str		This attribute	This attribute
 str		This literal	This literal
 str		This operation	This operation
