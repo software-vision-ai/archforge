@@ -538,7 +538,8 @@ member and drawing a relationship stay three separate gestures:
   property's (UML 2.5.1, 9.9.17, `subsetting_context_conforms` and `subsetting_rules`). Redefines
   offers only properties of the general classifiers (`redefined_property_inherited`) with which the
   property is consistent (`Property::isConsistentWith`): a conforming type, a multiplicity whose
-  lower and upper bounds both lie within the target's, and the same composite aggregation. These are
+  lower and upper bounds both lie within the target's, and composite aggregation wherever the
+  target is composite (a composite property may redefine one that is not). These are
   the user's own attributes and ends: each keeps its subsets and redefines in its own Property
   fields, so an association's end offers both as an attribute does. The generator's drop of
   subsets on association-owned ends concerns only UML's own metamodel, not these. On a card a derived attribute starts with `/`, a
