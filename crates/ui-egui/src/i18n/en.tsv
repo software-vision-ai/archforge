@@ -573,6 +573,7 @@ str		Literal · model	Literal · model
 str		Attributes · {n}	Attributes · {n}
 str		Literals · {n}	Literals · {n}
 str		No literals yet	No literals yet
+str		Literals are removed with their enumeration	Literals are removed with their enumeration
 str		Move down	Move down
 str		Move up	Move up
 str		Multiplicity	Multiplicity
@@ -611,6 +612,13 @@ str		A bound can be at most {max}.	A bound can be at most {max}.
 str		A class realizes only an interface	A class realizes only an interface
 str		A relationship joins two classes or interfaces	A relationship joins two classes or interfaces
 str		An enumeration is a data type and joins no association	An enumeration is a data type and joins no association
+str		An interface specializes only an interface	An interface specializes only an interface
+str		A class cannot specialize an interface	A class cannot specialize an interface
+str		An enumeration specializes only an enumeration	An enumeration specializes only an enumeration
+str		Only an enumeration specializes an enumeration	Only an enumeration specializes an enumeration
+str		A classifier cannot specialize itself	A classifier cannot specialize itself
+str		This one specializes that one already	This one specializes that one already
+str		That one specializes this one already, which would make a cycle	That one specializes this one already, which would make a cycle
 str		Add association	Add association
 str		Add dependency	Add dependency
 str		Add generalization	Add generalization

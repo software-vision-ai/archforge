@@ -574,6 +574,7 @@ str		Literal · model	リテラル · モデル
 str		Attributes · {n}	属性 · {n}
 str		Literals · {n}	リテラル · {n}
 str		No literals yet	リテラルはまだありません
+str		Literals are removed with their enumeration	リテラルは列挙とともに削除されます
 str		Move down	下へ移動
 str		Move up	上へ移動
 str		Multiplicity	多重度
@@ -612,6 +613,13 @@ str		A bound can be at most {max}.	境界は最大 {max} までです。
 str		A class realizes only an interface	クラスが実現できるのはインターフェースだけです
 str		A relationship joins two classes or interfaces	関係は 2 つのクラスまたはインターフェースを結びます
 str		An enumeration is a data type and joins no association	列挙はデータ型であり、関連には加わりません
+str		An interface specializes only an interface	インターフェースはインターフェースだけを特化します
+str		A class cannot specialize an interface	クラスはインターフェースを特化できません
+str		An enumeration specializes only an enumeration	列挙は列挙だけを特化します
+str		Only an enumeration specializes an enumeration	列挙を特化できるのは列挙だけです
+str		A classifier cannot specialize itself	分類子は自分自身を特化できません
+str		This one specializes that one already	これはすでにそれを特化しています
+str		That one specializes this one already, which would make a cycle	それはすでにこれを特化しており、循環になります
 str		Add association	関連を追加
 str		Add dependency	依存を追加
 str		Add generalization	汎化を追加

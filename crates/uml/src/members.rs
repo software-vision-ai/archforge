@@ -232,10 +232,11 @@ fn check_name(store: &Store, owner: Obj, name: &str, siblings: &[Obj], except: O
     Ok(())
 }
 
-/// Why `c` takes no `members` (attributes or operations): an enumeration's members are its
-/// literals.
+/// Why `c` takes no `members` (attributes or operations): its id, that an enumeration's members are
+/// its literals, and what keeps them instead.
 fn no_members(store: &Store, c: Obj, members: &str) -> String {
-    format!("{} keeps no {members}; its members are its literals", crate::commands::a_what(store, c))
+    let id = uuid_of(store, c).unwrap_or_default();
+    format!("{id} is {} and keeps no {members}, its members being its literals; a class or an interface does", crate::commands::a_what(store, c))
 }
 
 /// The class or interface that owns `member` in its list of attributes or operations.
@@ -459,7 +460,9 @@ fn class_get(ctx: &mut C<'_>, p: &Params) -> R {
             .into_iter()
             .map(|l| json!({ "id": uuid_of(store, l).unwrap_or_default(), "name": name_of(store, l) }))
             .collect();
-        out["literals"] = Json::Array(literals);
+        if let Some(fields) = out.as_object_mut() {
+            fields.insert("literals".to_string(), Json::Array(literals));
+        }
     }
     Ok(out)
 }

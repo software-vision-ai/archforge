@@ -60,18 +60,28 @@ fn session() -> S {
     session_over(st)
 }
 
-/// The session's model with literals named `names` put straight in the store at the end of the
-/// enumeration `enumeration`, as a saved project holds them: read back from its rows into a new
-/// session, ids counted from `start`.
+/// The session's model with literals named `names`, in that order, put straight in the store as
+/// the enumeration `enumeration`'s, as a saved project holds them: read back from its rows into a
+/// new session, ids counted from `start`. The first literal is made last and put in front, so the
+/// literals' order is not the order of their ids, and a round trip that kept only ids' order shows.
 fn with_literals(s: &S, enumeration: &str, names: &[&str], start: u64) -> S {
     let (tables, junctions) = tables();
     let mut st = store(start);
     rows::restore(&mut st, &rows::snapshot(s.doc(), &tables, &junctions).unwrap(), &tables, &junctions).unwrap();
     let e = obj(&st, enumeration);
-    for name in names {
+    let held = archforge_uml::commands::literals(&st, e).len();
+    let literal = |st: &mut Store, name: &str| {
         let l = st.create(ENUMERATION_LITERAL).unwrap();
         st.set(l, archforge_uml::named_element::NAME, Value::str(name)).unwrap();
+        l
+    };
+    for name in names.iter().skip(1) {
+        let l = literal(&mut st, name);
         st.push(e, archforge_uml::enumeration::OWNED_LITERAL, Value::Ref(l)).unwrap();
+    }
+    if let Some(first) = names.first() {
+        let l = literal(&mut st, first);
+        st.insert(e, archforge_uml::enumeration::OWNED_LITERAL, u32::try_from(held).unwrap(), Value::Ref(l)).unwrap();
     }
     session_over(st)
 }
@@ -222,11 +232,11 @@ fn an_enumeration_draws_its_literals_in_one_compartment_and_takes_no_attributes_
     assert!(!empty.slanted);
     // An enumeration's members are its literals: no attribute, no operation.
     for (cmd, p, why) in [
-        ("uml.attribute.add", json!({ "class": status, "name": "code" }), "an enumeration keeps no attributes"),
-        ("uml.operation.add", json!({ "class": status, "name": "next" }), "an enumeration keeps no operations"),
+        ("uml.attribute.add", json!({ "class": status, "name": "code" }), "is an enumeration and keeps no attributes"),
+        ("uml.operation.add", json!({ "class": status, "name": "next" }), "is an enumeration and keeps no operations"),
     ] {
         let e = refused(&mut s, cmd, p.clone());
-        assert!(e.contains(why), "{p}: {e}");
+        assert!(e.contains(why) && e.contains(&status) && e.contains("a class or an interface does"), "{p}: {e}");
     }
     // Its literals, in their order, one row each.
     let mut s = with_literals(&s, &status, &["Placed", "Paid", "Shipped"], 1 << 20);
@@ -281,6 +291,12 @@ fn an_enumeration_types_attributes_parameters_and_returns_and_they_keep_it_throu
     let d = run(&mut s, "diagram.add", json!({ "kind": CLASS_DIAGRAM, "element": sales }));
     run(&mut s, "diagram.place", json!({ "diagram": d, "element": order, "x": 0, "y": 0 }));
     assert_eq!(rows_of(&card(&s, &order, &d)), [vec!["+ status : State"], vec!["+ advance(to : State) : State"]]);
+    // Removed, it leaves them untyped, as one step; undone, they are typed by it again.
+    s.execute("element.remove", &json!({ "ids": [status] })).unwrap();
+    assert_eq!(typed(&mut s), (Json::Null, Json::Null, Json::Null), "untyped once it is gone");
+    assert_eq!(rows_of(&card(&s, &order, &d)), [vec!["+ status"], vec!["+ advance(to)"]]);
+    s.undo().unwrap();
+    assert_eq!(typed(&mut s), (want("State"), want("State"), want("State")), "undo types them again");
 }
 
 /// An enumeration specializes only an enumeration and is specialized only by one; no association
@@ -299,21 +315,56 @@ fn an_enumeration_specializes_only_enumerations_joins_no_association_and_realize
     let g = one_step(&mut s, "uml.generalization.add", json!({ "specific": closing, "general": status }));
     // A dependency may touch it.
     one_step(&mut s, "uml.dependency.add", json!({ "client": order, "supplier": status }));
-    for (cmd, p, why) in [
-        ("uml.generalization.add", json!({ "specific": status, "general": order }), "an enumeration specializes only an enumeration"),
-        ("uml.generalization.add", json!({ "specific": status, "general": payable }), "an enumeration specializes only an enumeration"),
-        ("uml.generalization.add", json!({ "specific": order, "general": status }), "only an enumeration specializes an enumeration"),
-        ("uml.generalization.add", json!({ "specific": payable, "general": status }), "only an enumeration specializes an enumeration"),
-        ("uml.generalization.add", json!({ "specific": status, "general": status }), "an enumeration cannot specialize itself"),
-        ("uml.generalization.add", json!({ "specific": closing, "general": status }), "specializes that enumeration already"),
-        ("uml.generalization.add", json!({ "specific": status, "general": closing }), "cycle"),
-        ("uml.association.add", json!({ "from": order, "to": status }), "an enumeration is a data type and joins no association"),
-        ("uml.association.add", json!({ "from": status, "to": order, "kind": "composition" }), "joins no association"),
-        ("uml.realization.add", json!({ "class": status, "interface": payable }), "only a class implements an interface"),
-        ("uml.realization.add", json!({ "class": order, "interface": status }), "a class realizes only an interface"),
+    // Each refusal names the offending id, under the key of the end that breaks the rule, and what
+    // is accepted instead.
+    let no_association = "is an enumeration, a data type, and joins no association; an association joins classes and interfaces";
+    for (cmd, p, key, id, why) in [
+        (
+            "uml.generalization.add",
+            json!({ "specific": status, "general": order }),
+            "general",
+            &order,
+            "is a class; an enumeration specializes only an enumeration",
+        ),
+        (
+            "uml.generalization.add",
+            json!({ "specific": status, "general": payable }),
+            "general",
+            &payable,
+            "is an interface; an enumeration specializes only an enumeration",
+        ),
+        (
+            "uml.generalization.add",
+            json!({ "specific": order, "general": status }),
+            "specific",
+            &order,
+            "is a class; only an enumeration specializes an enumeration",
+        ),
+        (
+            "uml.generalization.add",
+            json!({ "specific": payable, "general": status }),
+            "specific",
+            &payable,
+            "is an interface; only an enumeration specializes an enumeration",
+        ),
+        (
+            "uml.generalization.add",
+            json!({ "specific": status, "general": status }),
+            "general",
+            &status,
+            "an enumeration cannot specialize itself; it specializes another enumeration",
+        ),
+        ("uml.generalization.add", json!({ "specific": closing, "general": status }), "general", &status, "specializes that enumeration already"),
+        ("uml.generalization.add", json!({ "specific": status, "general": closing }), "general", &closing, "cycle"),
+        ("uml.association.add", json!({ "from": order, "to": status }), "to", &status, no_association),
+        ("uml.association.add", json!({ "from": status, "to": order, "kind": "composition" }), "from", &status, no_association),
+        ("uml.realization.add", json!({ "class": status, "interface": payable }), "class", &status, "only a class implements an interface"),
+        ("uml.realization.add", json!({ "class": order, "interface": status }), "interface", &status, "a class realizes only an interface"),
     ] {
         let e = refused(&mut s, cmd, p.clone());
-        assert!(e.contains(why), "{cmd} {p}: {e}");
+        let realization = cmd == "uml.realization.add";
+        assert!(e.contains(why) && (realization || e.contains(id.as_str())), "{cmd} {p}: {e}");
+        assert!(e.contains(&format!("key: Some(\"{key}\")")), "{cmd} {p} refused under {key}: {e}");
     }
     // A reconnected end keeps the same rules: an association's end never moves onto one.
     let a = run(&mut s, "uml.association.add", json!({ "from": order, "to": invoice }));

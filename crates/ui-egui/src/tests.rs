@@ -7470,8 +7470,8 @@ fn the_relationship_tool_joins_interfaces_and_refuses_what_would_make_a_class_sp
     // An interface never specializes a class, nor a class an interface: said, nothing drawn.
     let revision = h.state().session.as_ref().unwrap().revision();
     for (from, to, why) in [
-        (payable.clone(), nodes["Order"].clone(), "an interface specializes only an interface"),
-        (nodes["OrderLine"].clone(), payable.clone(), "a class cannot specialize an interface"),
+        (payable.clone(), nodes["Order"].clone(), "An interface specializes only an interface"),
+        (nodes["OrderLine"].clone(), payable.clone(), "A class cannot specialize an interface"),
     ] {
         let (a, b) = (node(&h, &from), node(&h, &to));
         relate(&mut h, crate::uml_relate::Relate::Generalization, a, b);
@@ -7779,6 +7779,7 @@ fn enumerations_are_listed_with_their_literals_read_only_added_with_the_plus_fou
     let revision = h.state().session.as_ref().unwrap().revision();
     crate::explorer::remove_selection(h.state_mut());
     h.run();
+    assert_eq!(h.state().explorer.notice.as_deref(), Some("Literals are removed with their enumeration"), "Delete says why it leaves it");
     let st = h.state().session.as_ref().unwrap().doc();
     assert!(st.by_uuid(placed).is_some_and(|l| st.is_alive(l)), "the literal stays");
     assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "nothing changed");
@@ -7822,6 +7823,38 @@ fn enumerations_are_listed_with_their_literals_read_only_added_with_the_plus_fou
     assert_eq!(archforge_uml::commands::package_of(st, e), st.by_uuid(billing), "{:?}", h.state().explorer.notice);
     assert_eq!(archforge_uml::commands::literals(st, e).len(), 2);
     assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Move enumeration"));
+}
+
+/// A second click and F2 on a class's, an interface's and a package's row in Models each open its
+/// name for typing: Models opens a rename wherever the notation renames the row.
+#[test]
+fn a_second_click_and_f2_open_the_name_of_a_class_an_interface_and_a_package_in_models() {
+    let (mut h, _) = related_sample();
+    let commerce = named(&h, archforge_uml::PACKAGE, "Commerce");
+    let payable = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let out = s.execute("uml.interface.add", &serde_json::json!({ "package": commerce.to_string(), "name": "Payable" })).unwrap();
+        archforge_mof::Uuid::parse(out.value["id"].as_str().unwrap()).unwrap()
+    };
+    let order = named(&h, archforge_uml::CLASS, "Order");
+    for (id, name) in [(order, "Order"), (payable, "Payable"), (commerce, "Commerce")] {
+        // Selected, a click on its row opens its name.
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [id.to_string()] })).unwrap();
+        h.state_mut().explorer.focused = true;
+        h.run();
+        let row = rect_of(&h, &format!("workspace.explorer.row.{id}")).center();
+        click(&mut h, row);
+        let rename = h.state().explorer.rename.clone().unwrap_or_else(|| panic!("a second click opens {name}'s name"));
+        assert_eq!((rename.target, rename.text.as_str()), (id, name));
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert!(h.state().explorer.rename.is_none(), "Escape closes it");
+        // F2 opens it too.
+        h.state_mut().explorer.focused = true;
+        key(&mut h, egui::Key::F2, egui::Modifiers::NONE);
+        let rename = h.state().explorer.rename.clone().unwrap_or_else(|| panic!("F2 opens {name}'s name"));
+        assert_eq!((rename.target, rename.text.as_str()), (id, name));
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    }
 }
 
 /// An enumeration in Properties: its kind line, name and package, and its literals read-only, with
@@ -8010,14 +8043,15 @@ fn the_relationship_tool_joins_no_association_to_an_enumeration_and_specializes_
             (Relate::Association, nodes["OrderLine"].clone(), status.clone(), NO_ASSOCIATION),
             (Relate::Composition, nodes["Order"].clone(), status.clone(), NO_ASSOCIATION),
             (Relate::Directed, status.clone(), nodes["OrderLine"].clone(), NO_ASSOCIATION),
-            (Relate::Generalization, nodes["OrderLine"].clone(), status.clone(), "only an enumeration specializes an enumeration"),
-            (Relate::Generalization, status.clone(), nodes["Order"].clone(), "an enumeration specializes only an enumeration"),
+            (Relate::Generalization, nodes["OrderLine"].clone(), status.clone(), "Only an enumeration specializes an enumeration"),
+            (Relate::Generalization, status.clone(), nodes["Order"].clone(), "An enumeration specializes only an enumeration"),
             (Relate::Realization, status.clone(), closing.clone(), "Only a class implements an interface"),
         ] {
             let (a, b) = (node(&h, &from), node(&h, &to));
             relate(&mut h, kind, a, b);
+            // Said in the user's words, as the catalogue has them, not as the engine words it.
             let notice = h.state().canvas.notice.clone().expect("the refusal is said");
-            assert!(notice.contains(why), "{kind:?}: {notice}");
+            assert_eq!(notice, why, "{kind:?}");
             assert_eq!((edge_count(&h), h.state().session.as_ref().unwrap().revision()), (before + 2, revision), "nothing changed: {why}");
         }
         assert!(h.state().canvas.gesture.is_none(), "no line was begun from the enumeration");
@@ -8070,6 +8104,24 @@ fn the_relationship_tool_joins_no_association_to_an_enumeration_and_specializes_
         let to = node(&h, &status);
         drag(&mut h, handle, to);
         assert_eq!(h.state().canvas.notice.as_deref(), Some(NO_ASSOCIATION), "{line}");
+        assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "nothing changed");
+        // A generalization's end dragged onto a class is refused in the user's words too.
+        let generalization = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let s = st.by_uuid(archforge_mof::Uuid::parse(&closing).unwrap()).unwrap();
+            let closing_element = st.get(s, archforge_diagram::node::ELEMENT).unwrap().as_ref().unwrap();
+            let g = archforge_uml::relations::relationships_of(st, closing_element)
+                .into_iter()
+                .find(|r| st.class_of(*r).ok() == Some(archforge_uml::GENERALIZATION))
+                .unwrap();
+            st.uuid(g).unwrap().to_string()
+        };
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [generalization] })).unwrap();
+        h.run();
+        let handle = rect_of(&h, "workspace.canvas.line-end.target").center();
+        let to = node(&h, &nodes["Order"]);
+        drag(&mut h, handle, to);
+        assert_eq!(h.state().canvas.notice.as_deref(), Some("An enumeration specializes only an enumeration"));
         assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "nothing changed");
     }
 }

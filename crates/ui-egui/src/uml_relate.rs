@@ -236,6 +236,22 @@ fn realization_refusal(store: &Store, implementing: Option<Obj>, contract: Optio
     })
 }
 
+/// Why a generalization from `specific` to `general` is refused, in the user's words, when it is:
+/// the model's rules (`generalization_problem`) said as the canvas says them. `except` is the
+/// generalization being reconnected.
+fn generalization_refusal(store: &Store, specific: Obj, general: Obj, except: Option<Obj>) -> Option<String> {
+    use archforge_uml::relations::GeneralizationProblem as P;
+    Some(match archforge_uml::relations::generalization_problem(store, specific, general, except)? {
+        P::NotAnInterface => tr("An interface specializes only an interface"),
+        P::ClassOfInterface => tr("A class cannot specialize an interface"),
+        P::NotAnEnumeration => tr("An enumeration specializes only an enumeration"),
+        P::NoEnumeration => tr("Only an enumeration specializes an enumeration"),
+        P::Itself => tr("A classifier cannot specialize itself"),
+        P::Again => tr("This one specializes that one already"),
+        P::Cycle => tr("That one specializes this one already, which would make a cycle"),
+    })
+}
+
 /// Why `kind` starts no line at `element`, when it does not: a realization starts only at a class,
 /// and no association at an enumeration.
 fn kind_start_problem(kind: Relate, store: &Store, element: Obj) -> Option<String> {
@@ -264,7 +280,9 @@ pub(crate) fn tool_hint(shell: &Shell) -> Option<String> {
 }
 
 /// Draws the chosen kind between the classes of two nodes, its line on diagram `d` with its name
-/// at the middle, as one undo step; selects it. A refusal is said at the canvas's top.
+/// at the middle, as one undo step; selects it. A refusal is said at the canvas's top, in the
+/// user's words where the shell knows the rule (a realization's, a generalization's, an
+/// association's at an enumeration).
 pub(crate) fn connect(shell: &mut Shell, d: Obj, from_node: Uuid, to_node: Uuid) {
     shell.canvas.notice = None;
     let kind = shell.canvas.uml_relation;
@@ -281,8 +299,12 @@ pub(crate) fn connect(shell: &mut Shell, d: Obj, from_node: Uuid, to_node: Uuid)
         shell.canvas.notice = Some(tr("A relationship joins two classes or interfaces"));
         return;
     };
-    // An association to or from an enumeration draws nothing either.
-    if let Some(why) = association_refusal(kind, store, from).or_else(|| association_refusal(kind, store, to)) {
+    // An association to or from an enumeration draws nothing either, nor a generalization the
+    // classifier rules refuse.
+    let refusal = association_refusal(kind, store, from)
+        .or_else(|| association_refusal(kind, store, to))
+        .or_else(|| (kind == Relate::Generalization).then(|| generalization_refusal(store, from, to, None)).flatten());
+    if let Some(why) = refusal {
         shell.canvas.notice = Some(why);
         return;
     }
@@ -384,8 +406,8 @@ pub(crate) fn connect_to_new(shell: &mut Shell, d: Obj, from_node: Uuid, x: f64,
 }
 
 /// Moves the source or target end of `element` to the class of `to_node`; dropped back on its own
-/// class it changes nothing, and a refusal is said at the canvas's top: a realization's, and an
-/// association's moved onto an enumeration, in the user's words.
+/// class it changes nothing, and a refusal is said at the canvas's top: a realization's, a
+/// generalization's, and an association's moved onto an enumeration, in the user's words.
 pub(crate) fn reconnect(shell: &mut Shell, element: Uuid, source: bool, to_node: Uuid) {
     shell.canvas.notice = None;
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
@@ -419,9 +441,18 @@ pub(crate) fn reconnect(shell: &mut Shell, element: Uuid, source: bool, to_node:
         shell.canvas.notice = Some(why);
         return;
     }
-    let now = store.by_uuid(element).and_then(|e| archforge_uml::figures::ends(store, e)).map(|(a, b)| if source { a } else { b });
+    let ends = line.and_then(|e| archforge_uml::figures::ends(store, e));
+    let now = ends.map(|(a, b)| if source { a } else { b });
     if now == Some(target) {
         return;
+    }
+    // A generalization's moved end keeps the classifier rules, said in the user's words.
+    if let (Some(r), Some((specific, general))) = (line.filter(|l| store.class_of(*l).ok() == Some(archforge_uml::GENERALIZATION)), ends) {
+        let (s, g) = if source { (target, general) } else { (specific, target) };
+        if let Some(why) = generalization_refusal(store, s, g, Some(r)) {
+            shell.canvas.notice = Some(why);
+            return;
+        }
     }
     let Ok(class) = store.uuid(target) else { return };
     let end = if source { "source" } else { "target" };

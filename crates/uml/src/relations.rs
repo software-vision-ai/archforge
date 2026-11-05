@@ -161,9 +161,13 @@ fn set_navigable(store: &mut Store, a: Obj, end: Obj, navigable: bool) -> Result
 }
 
 /// Why an association may not have an end at `c`, when it may not: an enumeration is a data type,
-/// and an association joins classifiers whose instances it links.
-pub fn association_end_problem(store: &Store, c: Obj) -> Option<&'static str> {
-    (store.class_of(c).ok() == Some(ENUMERATION)).then_some("an enumeration is a data type and joins no association")
+/// and an association joins classes and interfaces, whose instances it links. The refusal names
+/// `c`'s id and what an end may be.
+pub fn association_end_problem(store: &Store, c: Obj) -> Option<String> {
+    (store.class_of(c).ok() == Some(ENUMERATION)).then(|| {
+        let id = uuid_of(store, c).unwrap_or_default();
+        format!("{id} is an enumeration, a data type, and joins no association; an association joins classes and interfaces")
+    })
 }
 
 /// `uml.association.add`: an association of the kind asked for between two classifiers, owning
@@ -211,67 +215,96 @@ fn association_add(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, a)?, "ends": [uuid_of(ctx.doc, ends[0])?, uuid_of(ctx.doc, ends[1])?] }))
 }
 
-/// Why `specific` may not specialize `general`, when it may not: an interface specializes only an
-/// interface, and a class never specializes one; an enumeration specializes only an enumeration,
-/// and only an enumeration specializes one.
-pub fn generalization_problem(store: &Store, specific: Obj, general: Obj, except: Option<Obj>) -> Option<&'static str> {
-    let enumeration = |o: Obj| store.class_of(o).ok() == Some(ENUMERATION);
-    match (enumeration(specific), enumeration(general)) {
-        (true, false) => return Some("an enumeration specializes only an enumeration"),
-        (false, true) => return Some("only an enumeration specializes an enumeration"),
-        (true, true) => return enumeration_generalization_problem(store, specific, general, except),
-        _ => {}
-    }
-    let interface = |o: Obj| store.class_of(o).ok() == Some(INTERFACE);
-    match (interface(specific), interface(general)) {
-        (true, false) => return Some("an interface specializes only an interface"),
-        (false, true) => return Some("a class cannot specialize an interface"),
-        _ => {}
-    }
-    if specific == general {
-        return Some(if interface(specific) { "an interface cannot specialize itself" } else { "a class cannot specialize itself" });
-    }
-    if list(store, specific, classifier::GENERALIZATION)
-        .into_iter()
-        .any(|g| Some(g) != except && one(store, g, generalization::GENERAL) == Some(general))
-    {
-        return Some(if interface(specific) {
-            "the interface specializes that interface already"
-        } else {
-            "the class specializes that class already"
-        });
-    }
-    if specializes(store, general, specific) {
-        return Some(if interface(specific) {
-            "that interface specializes this one already, which would make a cycle"
-        } else {
-            "that class specializes this one already, which would make a cycle"
-        });
-    }
-    None
+/// Why a generalization from `specific` to `general` is refused: a rule between the two kinds, or
+/// one between the two classifiers themselves.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GeneralizationProblem {
+    /// An interface specializes only an interface, and the general one is none.
+    NotAnInterface,
+    /// A class specializes no interface: the specific one is a class.
+    ClassOfInterface,
+    /// An enumeration specializes only an enumeration, and the general one is none.
+    NotAnEnumeration,
+    /// Only an enumeration specializes an enumeration, and the specific one is none.
+    NoEnumeration,
+    /// A classifier specializes another, never itself.
+    Itself,
+    /// The specific classifier specializes the general one already.
+    Again,
+    /// The general classifier specializes the specific one already: a cycle.
+    Cycle,
 }
 
-/// Why enumeration `specific` may not specialize enumeration `general`: itself, twice, or round a
-/// cycle.
-fn enumeration_generalization_problem(store: &Store, specific: Obj, general: Obj, except: Option<Obj>) -> Option<&'static str> {
+impl GeneralizationProblem {
+    /// The parameter of `uml.generalization.add` a refusal names: the end that breaks the rule.
+    pub fn key(self) -> &'static str {
+        match self {
+            GeneralizationProblem::ClassOfInterface | GeneralizationProblem::NoEnumeration => "specific",
+            _ => "general",
+        }
+    }
+
+    /// Why, as a refusal says it: the offending classifier's id and what is accepted instead.
+    pub fn why(self, store: &Store, specific: Obj, general: Obj) -> String {
+        let id = |o: Obj| uuid_of(store, o).unwrap_or_default();
+        let (s, g) = (id(specific), id(general));
+        let (kind, a_kind) = (what(store, specific), a_what(store, specific));
+        match self {
+            GeneralizationProblem::NotAnInterface => {
+                format!("{g} is {}; an interface specializes only an interface", a_what(store, general))
+            }
+            GeneralizationProblem::ClassOfInterface => {
+                format!("{s} is a class, and a class cannot specialize an interface; it specializes a class")
+            }
+            GeneralizationProblem::NotAnEnumeration => {
+                format!("{g} is {}; an enumeration specializes only an enumeration", a_what(store, general))
+            }
+            GeneralizationProblem::NoEnumeration => {
+                format!("{s} is {a_kind}; only an enumeration specializes an enumeration")
+            }
+            GeneralizationProblem::Itself => format!("{s}: {a_kind} cannot specialize itself; it specializes another {kind}"),
+            GeneralizationProblem::Again => format!("{s}: the {kind} specializes that {kind} already, {g}; one generalization joins two"),
+            GeneralizationProblem::Cycle => {
+                format!("{g}: that {kind} specializes this one already, which would make a cycle; {s} specializes only what is not below it")
+            }
+        }
+    }
+}
+
+/// Why `specific` may not specialize `general`, when it may not: an interface specializes only an
+/// interface, and a class never specializes one; an enumeration specializes only an enumeration,
+/// and only an enumeration specializes one; no classifier specializes itself, another twice, or
+/// round a cycle. `except` is a generalization being reconnected, which never clashes with itself.
+pub fn generalization_problem(store: &Store, specific: Obj, general: Obj, except: Option<Obj>) -> Option<GeneralizationProblem> {
+    let is = |o: Obj, k| store.class_of(o).ok() == Some(k);
+    match (is(specific, ENUMERATION), is(general, ENUMERATION)) {
+        (true, false) => return Some(GeneralizationProblem::NotAnEnumeration),
+        (false, true) => return Some(GeneralizationProblem::NoEnumeration),
+        _ => {}
+    }
+    match (is(specific, INTERFACE), is(general, INTERFACE)) {
+        (true, false) => return Some(GeneralizationProblem::NotAnInterface),
+        (false, true) => return Some(GeneralizationProblem::ClassOfInterface),
+        _ => {}
+    }
     if specific == general {
-        return Some("an enumeration cannot specialize itself");
+        return Some(GeneralizationProblem::Itself);
     }
     if list(store, specific, classifier::GENERALIZATION)
         .into_iter()
         .any(|g| Some(g) != except && one(store, g, generalization::GENERAL) == Some(general))
     {
-        return Some("the enumeration specializes that enumeration already");
+        return Some(GeneralizationProblem::Again);
     }
-    specializes(store, general, specific).then_some("that enumeration specializes this one already, which would make a cycle")
+    specializes(store, general, specific).then_some(GeneralizationProblem::Cycle)
 }
 
 /// `uml.generalization.add`: `specific` specializes `general`, unless the classifier rules refuse it.
 fn generalization_add(ctx: &mut C<'_>, p: &Params) -> R {
     let specific = classifier_of(ctx.doc, p, "specific")?;
     let general = classifier_of(ctx.doc, p, "general")?;
-    if let Some(why) = generalization_problem(ctx.doc, specific, general, None) {
-        return Err(refuse("general", why));
+    if let Some(problem) = generalization_problem(ctx.doc, specific, general, None) {
+        return Err(refuse(problem.key(), problem.why(ctx.doc, specific, general)));
     }
     let g = ctx.doc.create(GENERALIZATION).map_err(fail)?;
     ctx.doc.set(g, generalization::GENERAL, Value::Ref(general)).map_err(fail)?;
@@ -527,8 +560,8 @@ fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
     } else if class == GENERALIZATION {
         let (specific, general) = crate::figures::ends(ctx.doc, r).ok_or_else(|| refuse(key, "the generalization joins no two classifiers"))?;
         let (s, g) = if source { (c, general) } else { (specific, c) };
-        if let Some(why) = generalization_problem(ctx.doc, s, g, Some(r)) {
-            return Err(refuse("class", why));
+        if let Some(problem) = generalization_problem(ctx.doc, s, g, Some(r)) {
+            return Err(refuse("class", problem.why(ctx.doc, s, g)));
         }
         if source && s != specific {
             ctx.doc.remove_value(specific, classifier::GENERALIZATION, &Value::Ref(r)).map_err(fail)?;
@@ -689,7 +722,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             None,
             concat!(
                 "relationship: string; the association's, generalization's, dependency's or interface realization's id\n",
-                "end: string, source|target; the end to move: the class or interface it was drawn from (the specific one, the client, the implementing class) or to\n",
+                "end: string, source|target; the end to move: the class, interface or enumeration it was drawn from (the specific one, the client, the implementing class) or to\n",
                 "class: string; the id of the class, interface or enumeration the end moves to; an association's end never moves to an enumeration; a generalization's end keeps its rules: an interface specializes only an interface, a class never one, an enumeration only an enumeration; a realization's source is a class and its target an interface, the class realizing it once"
             ),
             has_classes,

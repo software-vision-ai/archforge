@@ -574,6 +574,7 @@ str		Literal · model	字面量 · 模型
 str		Attributes · {n}	属性 · {n}
 str		Literals · {n}	字面量 · {n}
 str		No literals yet	尚无字面量
+str		Literals are removed with their enumeration	字面量随其枚举一起删除
 str		Move down	下移
 str		Move up	上移
 str		Multiplicity	多重性
@@ -612,6 +613,13 @@ str		A bound can be at most {max}.	界限最多为 {max}。
 str		A class realizes only an interface	类只能实现接口
 str		A relationship joins two classes or interfaces	关系连接两个类或接口
 str		An enumeration is a data type and joins no association	枚举是数据类型，不参与任何关联
+str		An interface specializes only an interface	接口只能特化接口
+str		A class cannot specialize an interface	类不能特化接口
+str		An enumeration specializes only an enumeration	枚举只能特化枚举
+str		Only an enumeration specializes an enumeration	只有枚举能特化枚举
+str		A classifier cannot specialize itself	分类器不能特化自身
+str		This one specializes that one already	此项已特化该项
+str		That one specializes this one already, which would make a cycle	该项已特化此项，这会形成循环
 str		Add association	添加关联
 str		Add dependency	添加依赖
 str		Add generalization	添加泛化

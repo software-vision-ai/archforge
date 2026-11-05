@@ -366,8 +366,9 @@ pub fn remove_selection(shell: &mut Shell) {
     }
     let Some(id) = uuid_of(store, obj) else { return };
     let ui = crate::notation_ui::of(shell.notation_uis, store, obj);
-    // A row shown read-only stays.
-    if ui.is_some_and(|u| !u.removes(store, obj)) {
+    // A row shown read-only stays, and Models says why.
+    if let Some(why) = ui.and_then(|u| u.kept(store, obj)) {
+        shell.explorer.notice = Some(why);
         return;
     }
     // What it holds moves up to its parent (a nested package): no dialog, the toast says where.

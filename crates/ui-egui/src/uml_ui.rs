@@ -708,9 +708,10 @@ impl NotationUi for UmlUi {
         }
     }
 
-    /// A literal is read-only here: removing it comes with its own story, so Delete leaves it.
-    fn removes(&self, store: &Store, o: Obj) -> bool {
-        literal_of(store, o).is_none()
+    /// A literal is read-only here: removing one on its own comes with its own story, so Delete
+    /// leaves it and says that it goes with its enumeration.
+    fn kept(&self, store: &Store, o: Obj) -> Option<String> {
+        literal_of(store, o).map(|_| tr("Literals are removed with their enumeration"))
     }
 
     /// How Properties names `o`: its kind line, its word, This …, and On this … · {n}.

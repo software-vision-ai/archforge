@@ -574,6 +574,7 @@ str		Literal · model	Literal · Modell
 str		Attributes · {n}	Attribute · {n}
 str		Literals · {n}	Literale · {n}
 str		No literals yet	Noch keine Literale
+str		Literals are removed with their enumeration	Literale werden mit ihrer Aufzählung entfernt
 str		Move down	Nach unten
 str		Move up	Nach oben
 str		Multiplicity	Multiplizität
@@ -612,6 +613,13 @@ str		A bound can be at most {max}.	Eine Grenze darf höchstens {max} sein.
 str		A class realizes only an interface	Eine Klasse realisiert nur eine Schnittstelle
 str		A relationship joins two classes or interfaces	Eine Beziehung verbindet zwei Klassen oder Schnittstellen
 str		An enumeration is a data type and joins no association	Eine Aufzählung ist ein Datentyp und gehört zu keiner Assoziation
+str		An interface specializes only an interface	Eine Schnittstelle spezialisiert nur eine Schnittstelle
+str		A class cannot specialize an interface	Eine Klasse kann keine Schnittstelle spezialisieren
+str		An enumeration specializes only an enumeration	Eine Aufzählung spezialisiert nur eine Aufzählung
+str		Only an enumeration specializes an enumeration	Nur eine Aufzählung spezialisiert eine Aufzählung
+str		A classifier cannot specialize itself	Ein Klassifikator kann sich nicht selbst spezialisieren
+str		This one specializes that one already	Dieser spezialisiert jenen bereits
+str		That one specializes this one already, which would make a cycle	Jener spezialisiert diesen bereits, das ergäbe einen Zyklus
 str		Add association	Assoziation hinzufügen
 str		Add dependency	Abhängigkeit hinzufügen
 str		Add generalization	Generalisierung hinzufügen
