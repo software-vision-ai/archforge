@@ -4,8 +4,8 @@
 //! rows its notation puts under them (ER's schemas, their skills and tables, a table's skills and
 //! columns; `notation_ui`). A click selects through `view.select`, the `+` adds what the
 //! selection's notation offers and opens the name for typing in place, Enter or F2 renames, Delete removes through `element.remove` after a dialog when other
-//! things go with it. The filter narrows the rows to the names that contain it. Every change goes
-//! through the engine, so undo and redo cover it.
+//! things go with it or a diagram shows it. The filter narrows the rows to the names that contain
+//! it. Every change goes through the engine, so undo and redo cover it.
 //!
 //! The geometry is the design's: rows 34 px apart from y 119, a level 13 px deeper than its
 //! parent, the chevron at x 13, the icon at x 31 and the name at x 53 of the first level, the
@@ -143,8 +143,10 @@ pub struct Delete {
     pub relationships: usize,
     pub keys: usize,
     pub foreign_keys: usize,
-    /// The diagrams it disappears from, and the node the canvas asked from, when it did.
+    /// The diagrams it disappears from: those that show it as a card or a line, each once
+    /// ([`crate::editing::diagrams_showing`]), not the diagrams that belong to it.
     pub diagrams: usize,
+    /// The node the canvas asked from, when it did.
     pub node: Option<Uuid>,
 }
 
@@ -361,7 +363,9 @@ fn renames(shell: &Shell, obj: Obj) -> bool {
     })
 }
 
-/// Removes the selection: at once when nothing else goes with it, else after the dialog.
+/// Removes the selection: at once when nothing else goes with it and no diagram shows it, else
+/// after the dialog, which counts the diagrams that show it as the canvas's Delete from the model
+/// does ([`crate::editing::diagrams_showing`]).
 pub fn remove_selection(shell: &mut Shell) {
     shell.explorer.notice = None;
     let Some(obj) = selected(shell) else { return };
@@ -398,15 +402,15 @@ pub fn remove_selection(shell: &mut Shell) {
     }
     let (relationships, keys, foreign_keys) = ui.map(|u| u.consequences(store, obj)).unwrap_or_default();
     let has_children = ui.is_some_and(|u| u.has_children(store, obj));
-    if relationships + keys + foreign_keys == 0 && !has_children {
+    // The diagrams that show it, counted as the canvas counts them (AR-187).
+    let diagrams = crate::editing::diagrams_showing(store, obj);
+    if [relationships, keys, foreign_keys, diagrams].iter().all(|n| *n == 0) && !has_children {
         if let Err(e) = run(shell, "element.remove", json!({ "ids": [id.to_string()] })) {
             shell.explorer.notice = Some(e);
         }
         return;
     }
-    let (diagrams, _, _) = archforge_diagram::views_of(store, obj);
-    shell.explorer.delete =
-        Some(Delete { ids: vec![id], name: name_of(store, obj), relationships, keys, foreign_keys, diagrams: diagrams.len(), node: None });
+    shell.explorer.delete = Some(Delete { ids: vec![id], name: name_of(store, obj), relationships, keys, foreign_keys, diagrams, node: None });
 }
 
 /// Drops what the store no longer has, so a rename or a dialog never points at a gone element.

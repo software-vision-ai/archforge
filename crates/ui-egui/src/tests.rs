@@ -9821,6 +9821,101 @@ fn the_delete_dialog_counts_a_diagram_with_an_association_class_s_line_alone_and
     }
 }
 
+/// The open Delete from the model dialog: the diagrams it says the element disappears from, and
+/// whether it says so in those words. Cancelled after, so nothing changes.
+fn asked_diagrams(h: &mut Harness<'static, Shell>) -> (usize, Vec<String>) {
+    h.run();
+    let asked = h.state().explorer.delete.clone().expect("the dialog asks");
+    let said = painted(h).into_iter().filter(|t| t.starts_with("It disappears from")).collect();
+    let at = rect_of(h, "workspace.explorer.delete.cancel").center();
+    click(h, at);
+    assert!(h.state().explorer.delete.is_none());
+    (asked.diagrams, said)
+}
+
+/// A class shown on two diagrams: Delete from the model says it disappears from both, asked from
+/// Models and from the canvas alike (AR-187). In light and dark.
+#[test]
+fn deleting_a_class_shown_on_two_diagrams_says_two_from_models_and_from_the_canvas() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        let first = h.state().canvas.active.unwrap();
+        let customer = named(&h, archforge_uml::CLASS, "Customer");
+        let package = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let d = st.by_uuid(first).unwrap();
+            st.uuid(st.get(d, archforge_diagram::diagram::ELEMENT).unwrap().as_ref().unwrap()).unwrap().to_string()
+        };
+        let s = h.state_mut().session.as_mut().unwrap();
+        let second = s
+            .execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": package, "name": "Customers" }))
+            .unwrap()
+            .value["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let place = serde_json::json!({ "diagram": second, "element": customer.to_string(), "x": 80, "y": 80, "width": 240, "height": 136 });
+        s.execute("diagram.place", &place).unwrap();
+        h.run();
+        let two = vec!["It disappears from 2 diagrams.".to_string()];
+        // From Models, the class selected.
+        select_named(&mut h, archforge_uml::CLASS, "Customer");
+        crate::explorer::remove_selection(h.state_mut());
+        assert_eq!(asked_diagrams(&mut h), (2, two.clone()), "from Models");
+        // From the canvas, its card selected on the first diagram.
+        crate::canvas::open(h.state_mut(), first);
+        h.run();
+        let at = rect_of(&h, &format!("workspace.canvas.node.{}", nodes["Customer"])).center();
+        click(&mut h, at);
+        key(&mut h, egui::Key::Delete, egui::Modifiers::SHIFT);
+        assert_eq!(asked_diagrams(&mut h), (2, two), "from the canvas");
+        named(&h, archforge_uml::CLASS, "Customer");
+    }
+}
+
+/// An ER table shown on two diagrams: deleted from Models, the dialog says it disappears from both
+/// (AR-187). A bare table shown there is asked about too, one shown nowhere goes at once, and the
+/// schema the two diagrams belong to, shown on neither, disappears from none. In light and dark.
+#[test]
+fn deleting_a_table_shown_on_two_diagrams_from_models_says_two() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let mut id = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap_or_default().to_string();
+            let schema = id("er.schema.add", serde_json::json!({ "name": "Shop" }));
+            let customer = id("er.entity.add", serde_json::json!({ "schema": schema, "name": "Customer" }));
+            id("er.attribute.add", serde_json::json!({ "entity": customer, "name": "customer_id", "type": "BIGINT", "primary_key": true }));
+            let bare = id("er.entity.add", serde_json::json!({ "schema": schema, "name": "Bare" }));
+            id("er.entity.add", serde_json::json!({ "schema": schema, "name": "Unplaced" }));
+            for name in ["Shop schema", "Customers"] {
+                let d = id("diagram.add", serde_json::json!({ "kind": "er", "element": schema, "name": name }));
+                for (table, x) in [(&customer, 100), (&bare, 500)] {
+                    id("diagram.place", serde_json::json!({ "diagram": d, "element": table, "x": x, "y": 100, "width": 240, "height": 166 }));
+                }
+            }
+        }
+        h.run();
+        let two = vec!["It disappears from 2 diagrams.".to_string()];
+        select_named(&mut h, archforge_er::ENTITY, "Customer");
+        crate::explorer::remove_selection(h.state_mut());
+        assert_eq!(asked_diagrams(&mut h), (2, two.clone()), "a table with a column");
+        select_named(&mut h, archforge_er::ENTITY, "Bare");
+        crate::explorer::remove_selection(h.state_mut());
+        assert_eq!(asked_diagrams(&mut h), (2, two), "a table with nothing else going");
+        // The schema's own diagrams go with it, but it is shown on neither.
+        select_named(&mut h, archforge_er::SCHEMA, "Shop");
+        crate::explorer::remove_selection(h.state_mut());
+        assert_eq!(asked_diagrams(&mut h), (0, Vec::new()), "the schema");
+        select_named(&mut h, archforge_er::ENTITY, "Unplaced");
+        crate::explorer::remove_selection(h.state_mut());
+        assert!(h.state().explorer.delete.is_none(), "no dialog: nothing goes and no diagram shows it");
+        assert!(schema_names(&h) == ["Shop"]);
+        let st = h.state().session.as_ref().unwrap().doc();
+        assert!(!st.alive().any(|o| archforge_core::name_of(st, o) == "Unplaced"), "removed at once");
+    }
+}
+
 /// A selected association class's line shows its end handles though it has a card too: its end
 /// dragged onto another class moves there, and onto an interface it is refused in the user's words.
 /// In light and dark.
