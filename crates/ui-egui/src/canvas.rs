@@ -1322,24 +1322,40 @@ fn mark_shape(mark: EndMark, tip: Pos2, back: Pos2, z: f32) -> (Vec2, Pos2, Vec2
     (dir, tip - dir * len, vec2(-dir.y, dir.x) * half, len)
 }
 
-/// Draws a line's triangle, diamond or open arrow at `tip`, coming from `back`, a hollow one filled
-/// with `bg`.
-#[allow(clippy::too_many_arguments, reason = "a mark is drawn at its end, in its stroke and over what it is drawn on")]
-pub(crate) fn line_mark(paint: &egui::Painter, mark: EndMark, tip: Pos2, back: Pos2, stroke: Stroke, z: f32, bg: egui::Color32) {
+/// The corners of a line's mark as it is drawn at `tip`, coming from `back`: a triangle's tip and
+/// base corners, a diamond's four corners, an open arrow's tip and the ends of its two strokes;
+/// none for any other mark.
+pub(crate) fn mark_outline(mark: EndMark, tip: Pos2, back: Pos2, z: f32) -> Vec<Pos2> {
     let (dir, base, side, len) = mark_shape(mark, tip, back, z);
     match mark {
-        EndMark::Triangle => {
-            paint.add(egui::Shape::convex_polygon(vec![tip, base + side, base - side], bg, stroke));
-        }
+        EndMark::Triangle => vec![tip, base + side, base - side],
         EndMark::HollowDiamond | EndMark::FilledDiamond => {
             let middle = tip - dir * (len / 2.0);
-            let fill = if mark == EndMark::FilledDiamond { stroke.color } else { bg };
-            paint.add(egui::Shape::convex_polygon(vec![tip, middle + side, base, middle - side], fill, stroke));
+            vec![tip, middle + side, base, middle - side]
         }
         EndMark::OpenArrow => {
             let back = tip - dir * 12.0 * z.max(0.6);
-            paint.line_segment([tip, back + side], stroke);
-            paint.line_segment([tip, back - side], stroke);
+            vec![tip, back + side, back - side]
+        }
+        _ => Vec::new(),
+    }
+}
+
+/// Draws a line's triangle, diamond or open arrow at `tip`, coming from `back`, a hollow one filled
+/// with `bg`, at its [`mark_outline`].
+#[allow(clippy::too_many_arguments, reason = "a mark is drawn at its end, in its stroke and over what it is drawn on")]
+pub(crate) fn line_mark(paint: &egui::Painter, mark: EndMark, tip: Pos2, back: Pos2, stroke: Stroke, z: f32, bg: egui::Color32) {
+    let outline = mark_outline(mark, tip, back, z);
+    match (mark, outline.as_slice()) {
+        (EndMark::Triangle | EndMark::HollowDiamond, [_, ..]) => {
+            paint.add(egui::Shape::convex_polygon(outline, bg, stroke));
+        }
+        (EndMark::FilledDiamond, [_, ..]) => {
+            paint.add(egui::Shape::convex_polygon(outline, stroke.color, stroke));
+        }
+        (EndMark::OpenArrow, [tip, left, right]) => {
+            paint.line_segment([*tip, *left], stroke);
+            paint.line_segment([*tip, *right], stroke);
         }
         _ => {}
     }
@@ -1513,7 +1529,11 @@ fn draw_edge(
             paint.galley(at + offset, g, p.text_secondary);
         }
         if selected {
-            for q in [points[0], points[n - 1]] {
+            // A square at each end, but where the end's round handle moved past its mark: the
+            // handle marks that end, and a square at the tip would sit on the mark.
+            let backwards: Vec<Pos2> = points.iter().rev().copied().collect();
+            let ends = [(points[0], &points, line.ends[0].mark), (points[n - 1], &backwards, line.ends[1].mark)];
+            for (q, _, _) in ends.into_iter().filter(|(_, from, mark)| end_handle_at(from, *mark, z).is_none()) {
                 let h = Rect::from_center_size(q, Vec2::splat(6.0));
                 paint.rect_filled(h, 1.0, p.surface);
                 paint.rect_stroke(h, 1.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
@@ -1583,21 +1603,64 @@ fn bare_name(paint: &egui::Painter, d: &Drawing<'_>, element: Obj, points: &[Pos
 pub(crate) const END_HANDLE: f32 = 5.0;
 const END_HANDLE_GAP: f32 = 3.0;
 
-/// Where a selected line's end handle sits, `points` running from that end along the line: past
-/// the end's mark (an arrowhead, a triangle, a diamond) by a few points, so the mark shows whole
-/// beside it at every zoom; on the end itself when it has none. It never passes the line's middle,
-/// so the two ends' handles stay apart on a short line.
-pub(crate) fn end_handle_at(points: &[Pos2], mark: EndMark, z: f32) -> Pos2 {
-    let reach = mark_extent(mark, z).0;
-    let Some(&end) = points.first() else { return Pos2::ZERO };
-    if reach <= 0.0 {
-        return end;
-    }
+/// A selected line's end handle's hit box across, which two handles must not share.
+pub(crate) const END_HANDLE_HIT: f32 = 16.0;
+/// The step a handle's place is looked for in along the line, and the most steps taken.
+const END_HANDLE_STEP: f32 = 0.5;
+const END_HANDLE_STEPS: usize = 4096;
+
+/// Where a selected line's end handle sits when its end's mark (an arrowhead, a triangle, a
+/// diamond) would hide under it, `points` running from that end along the line: the first place
+/// along the line a few points clear of the mark as drawn ([`mark_outline`]), measured from the
+/// mark itself, so a bend close to the end never brings the handle onto it. It goes no further
+/// than half a hit box short of the line's middle, so the two ends' handles stay apart and both
+/// take a press on a short line. None, the handle on the end itself, for an end without such a
+/// mark or a line of no length.
+pub(crate) fn end_handle_at(points: &[Pos2], mark: EndMark, z: f32) -> Option<Pos2> {
+    let (&tip, &next) = (points.first()?, points.get(1)?);
+    let outline = mark_outline(mark, tip, next, z);
     let total: f32 = points.windows(2).map(|w| (w[1] - w[0]).length()).sum();
-    if total <= 0.0 {
-        return end;
+    if outline.is_empty() || total <= 0.0 || !total.is_finite() {
+        return None;
     }
-    along(points, ((reach + END_HANDLE_GAP + END_HANDLE) / total).min(0.5))
+    let limit = (total / 2.0 - END_HANDLE_HIT / 2.0).max(0.0);
+    let clear = END_HANDLE + END_HANDLE_GAP;
+    (0..END_HANDLE_STEPS)
+        .map(|i| (i as f32 * END_HANDLE_STEP).min(limit))
+        .map(|d| at_length(points, d))
+        .find(|at| outside_by(&outline, *at) >= clear)
+        .or_else(|| Some(at_length(points, limit)))
+}
+
+/// The point `d` along the polyline `points` from its start; its end when it is shorter.
+fn at_length(points: &[Pos2], d: f32) -> Pos2 {
+    let mut left = d.max(0.0);
+    for w in points.windows(2) {
+        let len = (w[1] - w[0]).length();
+        if left <= len {
+            return w[0] + (w[1] - w[0]) * if len > 0.0 { left / len } else { 0.0 };
+        }
+        left -= len;
+    }
+    points.last().copied().unwrap_or(Pos2::ZERO)
+}
+
+/// How far `at` is outside the convex `outline`: its distance to the nearest edge, none inside.
+fn outside_by(outline: &[Pos2], at: Pos2) -> f32 {
+    let n = outline.len();
+    let edges = || (0..n).filter_map(|i| Some((*outline.get(i)?, *outline.get((i + 1) % n)?)));
+    let cross = |(a, b): (Pos2, Pos2)| (b - a).x * (at - a).y - (b - a).y * (at - a).x;
+    let inside = n >= 3 && (edges().all(|e| cross(e) >= 0.0) || edges().all(|e| cross(e) <= 0.0));
+    if inside {
+        return 0.0;
+    }
+    edges()
+        .map(|(a, b)| {
+            let ab = b - a;
+            let t = if ab.length_sq() > 0.0 { ((at - a).dot(ab) / ab.length_sq()).clamp(0.0, 1.0) } else { 0.0 };
+            (at - (a + ab * t)).length()
+        })
+        .fold(f32::INFINITY, f32::min)
 }
 
 /// How far a line's end mark reaches back along the line from its tip, and how far it spreads to

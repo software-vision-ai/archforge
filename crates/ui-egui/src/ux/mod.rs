@@ -466,31 +466,42 @@ pub fn text_mid(painter: &egui::Painter, x: f32, y: f32, text: &str, ty: Type, c
     rect
 }
 
-/// `path`, its parts joined by `sep`, as it fits where `fits` says: whole; else its first parts
+/// A path of `parts` joined by `sep`, as it fits where `fits` says: whole; else its first parts
 /// folded into `…` (`… › Orders`), so the last part, the one it names, stays; else that last part
-/// alone, for the caller to cut at its end as any name is (`Commerce pl…`). Gives the text and
+/// alone, for the caller to cut at its end as any name is (`Commerce pl…`). The parts are given,
+/// never found by splitting the text, so a name holding `sep` stays one part. Gives the text and
 /// whether it was cut.
-pub fn cut_front(path: &str, sep: &str, fits: impl Fn(&str) -> bool) -> (String, bool) {
-    if fits(path) {
-        return (path.to_owned(), false);
+pub fn cut_front<S: AsRef<str>>(parts: &[S], sep: &str, fits: impl Fn(&str) -> bool) -> (String, bool) {
+    let joined = |from: usize| parts.iter().skip(from).map(AsRef::as_ref).collect::<Vec<&str>>().join(sep);
+    let whole = joined(0);
+    if fits(&whole) {
+        return (whole, false);
     }
-    let parts: Vec<&str> = if sep.is_empty() { vec![path] } else { path.split(sep).collect() };
     for k in 1..parts.len() {
-        let folded = format!("…{sep}{}", parts.iter().skip(k).copied().collect::<Vec<_>>().join(sep));
+        let folded = format!("…{sep}{}", joined(k));
         if fits(&folded) {
             return (folded, true);
         }
     }
-    (parts.last().copied().unwrap_or_default().to_owned(), true)
+    (parts.last().map(|p| p.as_ref().to_owned()).unwrap_or_default(), true)
 }
 
-/// Draws `path` as [`text_mid`] does, cut from its front when it is wider than `width`
-/// ([`cut_front`]), so its last part shows, that part cut at its end when it alone is wider; gives
-/// the box it took and whether it was cut.
-#[allow(clippy::too_many_arguments, reason = "a path is drawn as text_mid draws, with its parts' separator")]
-pub fn text_mid_front(painter: &egui::Painter, x: f32, y: f32, path: &str, sep: &str, ty: Type, color: Color32, width: f32) -> (Rect, bool) {
+/// Draws the path of `parts` joined by `sep` as [`text_mid`] does, cut from its front when it is
+/// wider than `width` ([`cut_front`]), so its last part shows, that part cut at its end when it
+/// alone is wider; gives the box it took and whether it was cut.
+#[allow(clippy::too_many_arguments, reason = "a path is drawn as text_mid draws, from its parts and their separator")]
+pub fn text_mid_front<S: AsRef<str>>(
+    painter: &egui::Painter,
+    x: f32,
+    y: f32,
+    parts: &[S],
+    sep: &str,
+    ty: Type,
+    color: Color32,
+    width: f32,
+) -> (Rect, bool) {
     let fits = |t: &str| galley(painter, t, ty, color, None).size().x <= width;
-    let (shown, cut) = cut_front(path, sep, fits);
+    let (shown, cut) = cut_front(parts, sep, fits);
     (text_mid(painter, x, y, &shown, ty, color, Some(width.max(0.0))), cut)
 }
 

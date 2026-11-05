@@ -6592,15 +6592,30 @@ fn a_package_select_cuts_a_long_path_from_its_front_so_the_package_name_shows() 
             h.step();
         }
         assert!(painted(&h).contains(&path), "{theme:?}: the tooltip says {path:?} in {:?}", painted(&h));
+        // A package whose own name holds the separator is one part: the fold never splits it.
+        let orders = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            st.uuid(archforge_uml::commands::package_of(st, st.by_uuid(order).unwrap()).unwrap()).unwrap()
+        };
+        let renamed = serde_json::json!({ "package": orders.to_string(), "name": "Orders › EU" });
+        h.state_mut().session.as_mut().unwrap().execute("uml.package.rename", &renamed).unwrap();
+        h.event(egui::Event::PointerMoved(egui::pos2(5.0, 5.0)));
+        h.run();
+        let shown: Vec<String> = text_boxes(&h).into_iter().filter(|(_, r)| field.contains(r.center())).map(|(t, _)| t).collect();
+        assert_eq!(shown, ["Orders › EU"], "{theme:?}: the name kept whole, never folded at its own › into `… › EU`");
     }
     // The cut keeps the last part: whole, else its front parts folded, else the last part alone,
-    // which the field cuts at its end as it cuts any name.
+    // which the field cuts at its end as it cuts any name. The parts are given, so a name holding
+    // the separator stays one part.
     let fits = |room: usize| move |t: &str| t.chars().count() <= room;
-    assert_eq!(crate::ux::cut_front("Commerce › Orders", " › ", fits(40)), ("Commerce › Orders".to_string(), false));
-    assert_eq!(crate::ux::cut_front("Commerce › Fulfilment › Orders", " › ", fits(23)), ("… › Fulfilment › Orders".to_string(), true));
-    assert_eq!(crate::ux::cut_front("Commerce › Fulfilment › Orders", " › ", fits(12)), ("… › Orders".to_string(), true));
-    assert_eq!(crate::ux::cut_front("Commerce › Orders", " › ", fits(4)), ("Orders".to_string(), true));
-    assert_eq!(crate::ux::cut_front("Commerce platform", " › ", fits(4)), ("Commerce platform".to_string(), true));
+    let cut = |parts: &[&str], room: usize| crate::ux::cut_front(parts, " › ", fits(room));
+    assert_eq!(cut(&["Commerce", "Orders"], 40), ("Commerce › Orders".to_string(), false));
+    assert_eq!(cut(&["Commerce", "Fulfilment", "Orders"], 23), ("… › Fulfilment › Orders".to_string(), true));
+    assert_eq!(cut(&["Commerce", "Fulfilment", "Orders"], 12), ("… › Orders".to_string(), true));
+    assert_eq!(cut(&["Commerce", "Orders"], 4), ("Orders".to_string(), true));
+    assert_eq!(cut(&["Commerce platform"], 4), ("Commerce platform".to_string(), true));
+    assert_eq!(cut(&["Commerce", "Orders › EU"], 15), ("… › Orders › EU".to_string(), true), "one part, though it holds the separator");
+    assert_eq!(cut(&["Commerce", "Orders › EU"], 8), ("Orders › EU".to_string(), true), "never folded inside a name");
 }
 
 /// Every compartment of a class's card is padded as the card is (AR-191): the last attribute's
@@ -6644,18 +6659,20 @@ fn a_class_cards_compartments_are_padded_so_no_row_sits_on_a_dividing_line() {
     assert!(texts.iter().any(|t| t == "+ 2 more members") && texts.iter().any(|t| t == "+ number : Integer"), "{texts:?}");
 }
 
-/// A literal's draft row is spaced as an attribute's (AR-191): each ring takes its row's pitch,
-/// clear of the row over it, the typed text on the line the row's text takes, and its ⋯ on the
-/// surface in the same ink; in light and dark.
+/// A literal's draft row is spaced as an attribute's and an operation's (AR-191): each ring takes
+/// its row's pitch, clear of the row over it, the typed text on the line the row's text takes, and
+/// its ⋯ on the surface in the same ink; in light and dark.
 #[test]
 fn a_literal_draft_row_is_spaced_as_an_attribute_draft_row_and_clear_of_the_row_over_it() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, order, status) = nested_orders(theme);
         let p = crate::ux::palette(theme == ThemeKind::Dark);
         let mut rings = Vec::new();
-        for (class, kind, over) in
-            [(status, crate::uml_panel::MemberKind::Literal, "Shipped"), (order, crate::uml_panel::MemberKind::Attribute, "+ total : Money")]
-        {
+        for (class, kind, over) in [
+            (status, crate::uml_panel::MemberKind::Literal, "Shipped"),
+            (order, crate::uml_panel::MemberKind::Attribute, "+ total : Money"),
+            (order, crate::uml_panel::MemberKind::Operation, "+ pay() : Boolean"),
+        ] {
             assert!(crate::uml_inline::open(h.state_mut(), class, kind, None), "{kind:?}'s draft opens");
             h.state_mut().canvas.inline.as_mut().unwrap().edit.name = "Returned".into();
             h.run();
@@ -6682,6 +6699,7 @@ fn a_literal_draft_row_is_spaced_as_an_attribute_draft_row_and_clear_of_the_row_
             assert!(h.state().canvas.inline.is_none());
         }
         assert_eq!(rings[0], rings[1], "{theme:?}: a literal's draft is spaced as an attribute's");
+        assert_eq!(rings[0], rings[2], "{theme:?}: a literal's draft is spaced as an operation's");
         assert_eq!(crate::uml_inline::details_ink(p), p.text_secondary, "one ⋯ ink for every member's row");
     }
 }
@@ -7499,7 +7517,8 @@ fn the_relationship_menu_ticks_its_current_kind_as_the_classifier_menu_does() {
 
 /// A selected line's end handles sit on the line just past its ends' marks, so a generalization's
 /// triangle, a realization's, a navigable end's arrowhead and a composition's diamond show whole;
-/// an end without a mark keeps its handle on the card's border (AR-191).
+/// an end without a mark keeps its handle, and its small square, on the card's border; past a mark
+/// no square is drawn on the tip (AR-191).
 #[test]
 fn a_selected_lines_end_handles_sit_past_its_end_marks() {
     use archforge_diagram::figure::EndMark;
@@ -7522,7 +7541,7 @@ fn a_selected_lines_end_handles_sit_past_its_end_marks() {
     let (lines, nodes) = {
         let st = h.state().session.as_ref().unwrap().doc();
         let dg = st.by_uuid(d).unwrap();
-        let lines: Vec<(archforge_mof::Uuid, [EndMark; 2])> = st
+        let lines: Vec<(archforge_mof::Uuid, [EndMark; 2], bool)> = st
             .list(dg, archforge_diagram::diagram::EDGE)
             .unwrap()
             .iter()
@@ -7530,7 +7549,7 @@ fn a_selected_lines_end_handles_sit_past_its_end_marks() {
             .filter_map(|e| {
                 let a = st.get(e, archforge_diagram::edge::ELEMENT).ok()?.as_ref()?;
                 let line = archforge_uml::figures::line(st, a)?;
-                Some((st.uuid(a).ok()?, [line.ends[0].mark, line.ends[1].mark]))
+                Some((st.uuid(a).ok()?, [line.ends[0].mark, line.ends[1].mark], line.styled))
             })
             .collect();
         let nodes: Vec<String> = st
@@ -7542,20 +7561,35 @@ fn a_selected_lines_end_handles_sit_past_its_end_marks() {
             .collect();
         (lines, nodes)
     };
-    let marks: Vec<EndMark> = lines.iter().flat_map(|(_, m)| *m).collect();
+    let marks: Vec<EndMark> = lines.iter().flat_map(|(_, m, _)| *m).collect();
     for kind in [EndMark::Triangle, EndMark::OpenArrow, EndMark::FilledDiamond, EndMark::None] {
         assert!(marks.contains(&kind), "the sample has an end with {kind:?}");
     }
     // At zooms that show the whole sample, the marks at their full size and at their least.
     let mut checked = std::collections::BTreeSet::new();
+    let mut squared = 0;
     for zoom in [0.6, 0.5] {
         h.state_mut().canvas.zoom = zoom;
         h.state_mut().canvas.pan = egui::Vec2::ZERO;
         h.state_mut().canvas.fit_pending = false;
-        for (line, ends) in &lines {
+        for (line, ends, styled) in &lines {
             h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [line.to_string()] })).unwrap();
             h.run();
             let cards: Vec<egui::Rect> = nodes.iter().map(|n| rect_of(&h, &format!("workspace.canvas.node.{n}"))).collect();
+            // The small square at a selected relationship line's end (a thin generalization or
+            // realization draws none) shows only where the round handle stayed on the end: past a
+            // mark the handle marks the end, and a square would sit on the mark.
+            let accent = crate::ux::palette(false).accent;
+            let squares = rect_shapes(&h)
+                .iter()
+                .filter(|(r, _, stroke)| *stroke == accent && (r.width() - 6.0).abs() < 0.01 && (r.height() - 6.0).abs() < 0.01)
+                .count();
+            let unmoved = ends
+                .iter()
+                .filter(|m| !matches!(m, EndMark::Triangle | EndMark::OpenArrow | EndMark::HollowDiamond | EndMark::FilledDiamond))
+                .count();
+            assert_eq!(squares, if *styled { unmoved } else { 0 }, "{line} at {zoom}: {ends:?}");
+            squared += squares;
             for (end, mark) in ["source", "target"].into_iter().zip(ends) {
                 let id = format!("workspace.canvas.line-end.{end}");
                 if !ids(&h).contains(&id) {
@@ -7581,6 +7615,105 @@ fn a_selected_lines_end_handles_sit_past_its_end_marks() {
         }
     }
     assert_eq!(checked.len(), 5, "every kind of end was looked at: {checked:?}");
+    assert!(squared > 0, "an end without a mark keeps its square");
+}
+
+/// An end handle is placed by its mark as drawn (AR-191): on a long straight line a few points past
+/// the triangle's base, the arrow's strokes and the diamond's far corner, as before; where the line
+/// bends close to the end it stays as clear of the mark; on a short line the two ends' handles stay
+/// a hit box apart, never meeting in the middle; an end without such a mark keeps its handle.
+#[test]
+fn an_end_handle_is_placed_by_its_marks_drawn_outline_and_two_never_meet() {
+    use crate::canvas::{END_HANDLE, END_HANDLE_HIT, end_handle_at, mark_outline};
+    use archforge_diagram::figure::EndMark;
+    // How far `at` is from the mark drawn at the route's start: from its nearest corner or edge.
+    let clear_of = |route: &[egui::Pos2], mark: EndMark, at: egui::Pos2| {
+        let outline = mark_outline(mark, route[0], route[1], 1.0);
+        (0..outline.len())
+            .map(|i| {
+                let (a, b) = (outline[i], outline[(i + 1) % outline.len()]);
+                let t = ((at - a).dot(b - a) / (b - a).length_sq()).clamp(0.0, 1.0);
+                (at - (a + (b - a) * t)).length()
+            })
+            .fold(f32::INFINITY, f32::min)
+    };
+    let straight = [egui::pos2(0.0, 0.0), egui::pos2(400.0, 0.0)];
+    for (mark, reach) in [(EndMark::Triangle, 12.0), (EndMark::OpenArrow, 12.0), (EndMark::FilledDiamond, 20.0), (EndMark::HollowDiamond, 20.0)] {
+        let at = end_handle_at(&straight, mark, 1.0).expect("moved past its mark");
+        assert!((at.x - (reach + 8.0)).abs() <= 0.5 && at.y == 0.0, "{mark:?}: {at:?}");
+        assert!(clear_of(&straight, mark, at) >= END_HANDLE + 2.5, "{mark:?}");
+    }
+    for mark in [EndMark::None, EndMark::ExactlyOne, EndMark::ZeroOrMore] {
+        assert_eq!(end_handle_at(&straight, mark, 1.0), None, "{mark:?} keeps its handle at the end");
+    }
+    // A bend 13 points from the end, inside the triangle's reach: the handle turns the corner and
+    // goes on until it is as clear of the triangle's base corner as on a straight line.
+    let bent = [egui::pos2(0.0, 0.0), egui::pos2(13.0, 0.0), egui::pos2(13.0, 300.0)];
+    for mark in [EndMark::Triangle, EndMark::FilledDiamond, EndMark::OpenArrow] {
+        let at = end_handle_at(&bent, mark, 1.0).unwrap();
+        assert!(clear_of(&bent, mark, at) >= END_HANDLE + 2.5, "{mark:?} at {at:?} is clear of its mark");
+        assert!(at.x == 13.0 && at.y > 0.0, "{mark:?}: on the line past the bend, {at:?}");
+    }
+    // A short line: each handle stops half a hit box short of the middle, so they never meet and
+    // both take a press; a long one is placed as before.
+    for length in [10.0, 30.0, 40.0, 60.0] {
+        let line = [egui::pos2(0.0, 0.0), egui::pos2(length, 0.0)];
+        let back = [line[1], line[0]];
+        let (a, b) = (end_handle_at(&line, EndMark::Triangle, 1.0).unwrap(), end_handle_at(&back, EndMark::FilledDiamond, 1.0).unwrap());
+        let apart = (b - a).length();
+        assert!(apart >= END_HANDLE_HIT.min(length) - 0.01, "{length}: the handles {apart} apart");
+        assert!(a.x <= b.x, "{length}: each on its own half");
+    }
+}
+
+/// On a short line between two cards the two end handles keep a hit box apart and each takes its
+/// own press, in light and dark (AR-191).
+#[test]
+fn a_short_lines_two_end_handles_stay_apart_and_each_takes_its_own_press() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, order, _) = nested_orders(theme);
+        let (orders, d) = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let p = st.uuid(archforge_uml::commands::package_of(st, st.by_uuid(order).unwrap()).unwrap()).unwrap();
+            (p, h.state().canvas.active.unwrap())
+        };
+        // Refund, 24 points right of Order, specializes it: the line runs between their borders.
+        let s = h.state_mut().session.as_mut().unwrap();
+        let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
+        let refund = id(s.execute("uml.class.add", &serde_json::json!({ "package": orders.to_string(), "name": "Refund" })).unwrap().value);
+        let place = serde_json::json!({ "diagram": d.to_string(), "element": refund, "x": 384, "y": 80, "width": 80, "height": crate::uml_ui::members_height(2, 1) });
+        s.execute("diagram.place", &place).unwrap();
+        let g = id(s.execute("uml.generalization.add", &serde_json::json!({ "specific": refund, "general": order.to_string() })).unwrap().value);
+        s.execute("diagram.connect-all", &serde_json::json!({ "diagram": d.to_string() })).unwrap();
+        s.execute("view.select", &serde_json::json!({ "ids": [g] })).unwrap();
+        h.run();
+        let (source, target) = (rect_of(&h, "workspace.canvas.line-end.source"), rect_of(&h, "workspace.canvas.line-end.target"));
+        assert!(!source.expand(2.0).intersects(target.expand(2.0)), "{theme:?}: {source:?} and {target:?} apart");
+        // Each takes its own press: a drag from either starts moving that end.
+        for (rect, is_source) in [(source, true), (target, false)] {
+            h.event(egui::Event::PointerMoved(rect.center()));
+            h.event(egui::Event::PointerButton {
+                pos: rect.center(),
+                button: egui::PointerButton::Primary,
+                pressed: true,
+                modifiers: egui::Modifiers::NONE,
+            });
+            h.run();
+            h.event(egui::Event::PointerMoved(rect.center() + egui::vec2(0.0, 40.0)));
+            h.run();
+            let moving = matches!(h.state().canvas.gesture, Some(crate::editing::Gesture::Reconnect { source, .. }) if source == is_source);
+            assert!(moving, "{theme:?}: the {} handle takes its press, {:?}", if is_source { "source" } else { "target" }, h.state().canvas.gesture);
+            // Let go with the gesture dropped, so the line stays as it is for the other end.
+            h.state_mut().canvas.gesture = None;
+            h.event(egui::Event::PointerButton {
+                pos: rect.center(),
+                button: egui::PointerButton::Primary,
+                pressed: false,
+                modifiers: egui::Modifiers::NONE,
+            });
+            h.run();
+        }
+    }
 }
 
 /// The Relationship tool draws the kind its menu chose, refuses a cycle, and makes a class on empty canvas.

@@ -1507,8 +1507,9 @@ fn selected_line(
     Some((uuid(store, *element)?, route, [line.ends[0].mark, line.ends[1].mark]))
 }
 
-/// A selected line's two end handles, each on the line just past its end's mark so the mark shows
-/// whole: each drags onto another element to move that end there.
+/// A selected line's two end handles, each on the line clear of its end's mark so the mark shows
+/// whole, on the end itself where it has none ([`crate::canvas::end_handle_at`]): each drags onto
+/// another element to move that end there.
 fn line_ends(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, view: View, d: Obj) {
     let Some((element, route, marks)) = shell.session.as_ref().and_then(|s| selected_line(s.doc(), s.view(), d, &s.view().selection)) else {
         return;
@@ -1518,7 +1519,7 @@ fn line_ends(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, view: View,
     let backwards: Vec<Pos2> = screen.iter().rev().copied().collect();
     let paint = ui.painter().with_clip_rect(r);
     for (source, points, mark, fixed) in [(true, &screen, marks[0], b), (false, &backwards, marks[1], a)] {
-        let at = crate::canvas::end_handle_at(points, mark, view.zoom);
+        let at = crate::canvas::end_handle_at(points, mark, view.zoom).unwrap_or(if source { a } else { b });
         let handle = Rect::from_center_size(at, Vec2::splat(12.0));
         if !r.contains(at) {
             continue;

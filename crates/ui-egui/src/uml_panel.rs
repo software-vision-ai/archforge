@@ -247,14 +247,14 @@ pub(crate) fn class_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
     let (here, choices) = match shell.session.as_ref() {
         Some(s) => {
             let store = s.doc();
-            let here = archforge_uml::commands::package_of(store, class).map(|p| package_path(store, p)).unwrap_or_default();
+            let here = archforge_uml::commands::package_of(store, class).map(|p| package_parts(store, p)).unwrap_or_default();
             let choices: Vec<(Uuid, String)> = archforge_uml::commands::all_packages(store)
                 .into_iter()
                 .filter_map(|p| Some((store.uuid(p).ok()?, package_path(store, p))))
                 .collect();
             (here, choices)
         }
-        None => (String::new(), Vec::new()),
+        None => (Vec::new(), Vec::new()),
     };
     let package_id = "workspace.properties.class.package";
     let field = crate::panels::path_select_field(
@@ -316,7 +316,7 @@ pub(crate) fn package_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r:
     let (here, choices) = match shell.session.as_ref() {
         Some(s) => {
             let store = s.doc();
-            let here = archforge_uml::commands::package_of(store, package).map(|p| package_path(store, p)).unwrap_or_default();
+            let here = archforge_uml::commands::package_of(store, package).map(|p| package_parts(store, p)).unwrap_or_default();
             let choices: Vec<(Uuid, String)> = archforge_uml::commands::all_packages(store)
                 .into_iter()
                 .filter(|o| !archforge_uml::commands::is_within(store, *o, package))
@@ -324,7 +324,7 @@ pub(crate) fn package_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r:
                 .collect();
             (here, choices)
         }
-        None => (String::new(), Vec::new()),
+        None => (Vec::new(), Vec::new()),
     };
     let parent_id = "workspace.properties.package.parent";
     let field = crate::panels::path_select_field(
@@ -368,6 +368,12 @@ fn path_below_root(store: &Store, package: Obj) -> String {
 
 /// A package as the menus name it: its path from the top, `sales › orders`.
 fn package_path(store: &Store, package: Obj) -> String {
+    package_parts(store, package).join(crate::panels::PATH_SEP)
+}
+
+/// The names on a package's path from the top, its own last: each name one part, whatever it
+/// holds.
+pub(crate) fn package_parts(store: &Store, package: Obj) -> Vec<String> {
     let mut names = Vec::new();
     let mut at = Some(package);
     while let Some(p) = at.filter(|_| names.len() < 32) {
@@ -375,7 +381,7 @@ fn package_path(store: &Store, package: Obj) -> String {
         at = archforge_uml::commands::package_of(store, p);
     }
     names.reverse();
-    names.join(crate::panels::PATH_SEP)
+    names
 }
 
 /// The Attributes, Operations or Literals section with its rows and the editor; gives the y under
