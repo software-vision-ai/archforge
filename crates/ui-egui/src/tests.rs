@@ -523,6 +523,21 @@ fn a_description_being_typed_is_saved_by_cmd_s() {
             h.run_steps(2);
             assert!(!dirty(&h), "the save took the description");
         }
+        // A draft the model refuses, on a clean project: the save does not start, the refusal
+        // shows, the draft stays, and neither the status bar nor an agent's save says Saved.
+        h.state_mut().panels.description = Some(crate::panels::DescriptionDraft { target: table, text: "a\u{7}b".into(), refused: false });
+        h.event(egui::Event::Key { key: egui::Key::S, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::COMMAND });
+        h.run_steps(2);
+        assert!(!h.state().is_saving(), "the save did not start");
+        assert!(host.saves.lock().unwrap().is_empty(), "the host was not asked");
+        assert!(h.state().panels.notice.as_deref().is_some_and(|n| n.contains("control")), "{:?}", h.state().panels.notice);
+        assert!(h.state().panels.description.as_ref().is_some_and(|d| d.refused && d.text == "a\u{7}b"), "the draft stays");
+        assert!(painted(&h).iter().any(|t| t.starts_with("Unsaved changes")), "not Saved: {:?}", painted(&h));
+        assert!(!painted(&h).iter().any(|t| t == "Saved"));
+        let refused = crate::control::answer(h.state_mut(), "app.save", &serde_json::json!({})).unwrap_err();
+        assert!(refused.contains("description") && refused.contains("control"), "{refused}");
+        assert!(host.saves.lock().unwrap().is_empty());
+        assert_eq!(crate::control::answer(h.state_mut(), "document.inspect", &serde_json::json!({})).unwrap()["unsaved"], true);
     }
 }
 
@@ -548,18 +563,15 @@ fn closing_with_a_description_being_typed_keeps_it_or_asks() {
         assert!(h.state().panels.notice.as_deref().is_some_and(|n| n.contains("control")), "{:?}", h.state().panels.notice);
         assert!(matches!(h.state().ask, Some(crate::close_ask::Ask::Unsaved { .. })), "{:?}", h.state().ask);
         assert!(h.state().tab_unsaved(0));
-        // Save from the question: the save runs, and the project, still holding the refused
-        // draft, is asked about again rather than closed away.
+        // Save from the question: the refused draft stops the save, and the project stays open,
+        // its tab saying why, rather than being closed away.
         h.state_mut().ask = None;
         h.state_mut().save_and_close(0);
         h.run_steps(2);
-        if let Some(save) = host.saves.lock().unwrap().pop() {
-            save.send(Ok(true)).unwrap();
-        }
-        h.run_steps(2);
+        assert!(host.saves.lock().unwrap().is_empty(), "no save started");
         assert_eq!(h.state().tabs.len(), 1, "not closed away");
         assert!(h.state().tabs[0].closing.is_none());
-        assert!(matches!(h.state().ask, Some(crate::close_ask::Ask::Unsaved { .. })), "asked again: {:?}", h.state().ask);
+        assert!(h.state().tabs[0].close_error.as_deref().is_some_and(|e| e.contains("control")), "{:?}", h.state().tabs[0].close_error);
         assert!(h.state().panels.description.is_some(), "the draft is still there");
     }
 }

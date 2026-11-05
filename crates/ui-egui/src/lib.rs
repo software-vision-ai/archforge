@@ -975,14 +975,18 @@ impl Shell {
     }
 
     /// Save: the host writes what waits and commits it, a skill's text and a description being
-    /// typed included; a description refused stays in its field with the refusal, unsaved.
+    /// typed included. A description whose write is refused stops the save before the host is
+    /// asked: it stays in its field with the refusal, and the project stays unsaved.
     pub fn save(&mut self) {
         if self.saving.is_some() || self.session.is_none() {
             return;
         }
         skill_tab::sync(self, 0.0, true, None);
-        panels::commit_description(self);
+        let refused = panels::commit_description(self);
         self.write_changes();
+        if refused {
+            return;
+        }
         // A state that could not be written cannot be saved: its error stays on the status bar.
         let current = self.session.as_ref().map(|s| s.revision());
         if current.is_some() && self.refused == current {
