@@ -22,6 +22,20 @@ use crate::{
 /// built every frame, so neither grows with what the model holds.
 const MAX_PARAMETERS: usize = 8;
 const MAX_ROW: usize = 200;
+/// The most rows a card lists, across its compartments: a card is at most
+/// [`archforge_diagram::rules::MAX_SIZE`] tall, which holds no more than this many rows, so the
+/// rows built every frame never grow with the model. The rest are counted in `hidden`, which the
+/// canvas says in the card's `+ n more` row.
+pub const MAX_CARD_ROWS: usize = 500;
+
+/// The rows of `items` a card lists, made by `row`, at most `room` of them: `room` and `hidden`
+/// are counted down and up by what is left out.
+fn capped(items: Vec<Obj>, room: &mut usize, hidden: &mut usize, row: impl Fn(Obj) -> Row) -> Vec<Row> {
+    let shown = items.len().min(*room);
+    *hidden = hidden.saturating_add(items.len().saturating_sub(shown));
+    *room = room.saturating_sub(shown);
+    items.into_iter().take(shown).map(row).collect()
+}
 
 fn name(store: &Store, o: Obj) -> String {
     archforge_core::name_of(store, o)
@@ -154,22 +168,19 @@ pub fn card(store: &Store, c: Obj, diagram: Obj) -> Option<Card> {
         (None, true) => Text::said("«interface»"),
     };
     let row = |text, slanted| Row { mark: None, text, linked: false, slanted };
-    let attributes = crate::members::attributes(store, c)
-        .into_iter()
-        // An association's end a class owns draws as the line's role, not as a row: the members'
-        // attributes leave it out.
-        .map(|a| row(attribute_text(store, a), false))
-        .collect();
-    let operations = crate::members::operations(store, c)
-        .into_iter()
-        .map(|op| row(operation_text(store, op), flag(store, op, behavioral_feature::IS_ABSTRACT)))
-        .collect();
+    let (mut room, mut hidden) = (MAX_CARD_ROWS, 0);
+    // An association's end a class owns draws as the line's role, not as a row: the members'
+    // attributes leave it out.
+    let attributes = capped(crate::members::attributes(store, c), &mut room, &mut hidden, |a| row(attribute_text(store, a), false));
+    let operations = capped(crate::members::operations(store, c), &mut room, &mut hidden, |op| {
+        row(operation_text(store, op), flag(store, op, behavioral_feature::IS_ABSTRACT))
+    });
     Some(Card {
         eyebrow,
         name: name(store, c),
         compartments: vec![attributes, operations],
         more: ("+ {n} more member", "+ {n} more members"),
-        hidden: 0,
+        hidden,
         elsewhere: elsewhere.is_some(),
         tone: Tone::Plain,
         slanted: !interface && flag(store, c, class::IS_ABSTRACT),
@@ -184,23 +195,26 @@ fn elsewhere(store: &Store, c: Obj, diagram: Obj) -> Option<Obj> {
 
 /// An enumeration's card on `diagram`: the keyword «enumeration» in its eyebrow, its package beside
 /// it when it is an outsider, its name, and one compartment of its literals in their order, empty
-/// when it has none.
+/// when it has none; past [`MAX_CARD_ROWS`] the rest are counted, not listed.
 fn enumeration_card(store: &Store, e: Obj, diagram: Obj) -> Card {
     let elsewhere = elsewhere(store, e, diagram);
     let eyebrow = match elsewhere {
         Some(p) => Text::Said("«enumeration» · {package}", vec![("package", name(store, p))]),
         None => Text::said("«enumeration»"),
     };
-    let literals = crate::commands::literals(store, e)
-        .into_iter()
-        .map(|l| Row { mark: None, text: cut(name(store, l)), linked: false, slanted: false })
-        .collect();
+    let (mut room, mut hidden) = (MAX_CARD_ROWS, 0);
+    let literals = capped(crate::commands::literals(store, e), &mut room, &mut hidden, |l| Row {
+        mark: None,
+        text: cut(name(store, l)),
+        linked: false,
+        slanted: false,
+    });
     Card {
         eyebrow,
         name: name(store, e),
         compartments: vec![literals],
         more: ("+ {n} more literal", "+ {n} more literals"),
-        hidden: 0,
+        hidden,
         elsewhere: elsewhere.is_some(),
         tone: Tone::Plain,
         slanted: false,

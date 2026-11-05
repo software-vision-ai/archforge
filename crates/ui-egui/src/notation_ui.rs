@@ -63,6 +63,12 @@ pub(crate) trait NotationUi: Sync {
     fn add(&self, shell: &mut Shell, key: &str, selection: Option<Obj>) -> Option<Result<Added, String>>;
     /// The command that renames an element of `class` in place, and its key for the element.
     fn rename(&self, store: &Store, obj: Obj) -> Option<(&'static str, &'static str)>;
+    /// Why `obj` cannot be renamed `name`, in the user's words, checked before the rename command
+    /// runs (a UML literal's name another literal has); none lets the command decide.
+    fn rename_refusal(&self, store: &Store, obj: Obj, name: &str) -> Option<String> {
+        let _ = (store, obj, name);
+        None
+    }
     /// What goes with `obj` when it is removed: relationships, keys and foreign keys.
     fn consequences(&self, store: &Store, obj: Obj) -> (usize, usize, usize) {
         let _ = (store, obj);
@@ -84,13 +90,6 @@ pub(crate) trait NotationUi: Sync {
     /// runs (a class moved into a package); none when the drop means nothing there.
     fn drop_on(&self, store: &Store, dragged: Obj, target: Obj) -> Option<(&'static str, serde_json::Value)> {
         let _ = (store, dragged, target);
-        None
-    }
-    /// Why Delete leaves `obj` in Models, in the user's words, when it does: by default Delete
-    /// removes every element; one shown read-only (a UML literal, for now) stays, and Models says
-    /// where it goes instead.
-    fn kept(&self, store: &Store, obj: Obj) -> Option<String> {
-        let _ = (store, obj);
         None
     }
     /// Why `obj`, which the model says carries no skill, carries none, in the user's words for the

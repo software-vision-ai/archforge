@@ -160,7 +160,8 @@ impl DiagramKind for ErKind {
         shell.state.show_panel(crate::state::Panel::Properties);
     }
 
-    fn adorner(&self) -> Option<(&'static str, &'static str)> {
+    /// A table's second adorner adds a column.
+    fn adorner(&self, _store: &Store, _element: Obj) -> Option<(&'static str, &'static str)> {
         Some(("add-column", "Add column"))
     }
 

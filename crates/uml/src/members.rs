@@ -2,7 +2,9 @@
 //! multiplicity, static) and operations (visibility, name, parameters, return type, static,
 //! abstract), added, changed, moved and listed; a class made abstract or not. An interface's
 //! members are public, as UML has them; an enumeration takes neither, its members being its
-//! literals. A type is named by an element's id
+//! literals, which are added, renamed and moved here (`uml.literal.*`), their names told apart
+//! within their enumeration whatever the case, and removed through `element.remove`. A type is
+//! named by an element's id
 //! (a class of the model, an interface, an enumeration, or any type it holds) or by a built-in type's name: Integer, String,
 //! Boolean, Real or UnlimitedNatural, which the project keeps in a package named Types, made the
 //! first time one is used (owner decision). A multiplicity is typed (`1`, `0..1`, `*`, `1..*`,
@@ -15,8 +17,9 @@ use serde_json::{Value as Json, json};
 
 use crate::commands::{classifier_of, fail, id_of, name_of, packages, refuse, set_name, short, text, uuid_of};
 use crate::{
-    CLASS, INTERFACE, OPERATION, PACKAGE, PARAMETER, PRIMITIVE_TYPE, PROPERTY, TYPE, behavioral_feature, class, feature, interface, literal_integer,
-    literal_unlimited_natural, multiplicity_element, named_element, operation, package, parameter, property, typed_element,
+    CLASS, ENUMERATION, ENUMERATION_LITERAL, INTERFACE, OPERATION, PACKAGE, PARAMETER, PRIMITIVE_TYPE, PROPERTY, TYPE, behavioral_feature, class,
+    enumeration, feature, interface, literal_integer, literal_unlimited_natural, multiplicity_element, named_element, operation, package, parameter,
+    property, typed_element,
 };
 
 type C<'a> = Ctx<'a, Store, ProjectView>;
@@ -33,12 +36,24 @@ pub const MAX_BOUND: u64 = 1_000_000;
 /// Why a command is not available.
 pub const NO_CLASSES: &str = "There is no class, interface or enumeration yet.";
 
+/// The most literals an enumeration holds: ER's enum types hold as many
+/// (`archforge_er::rules::MAX_LITERALS`), one rule across the notations, and the card, Properties
+/// and Models stay small enough to build every frame.
+pub const MAX_LITERALS: usize = 256;
+/// Why a command for literals is not available.
+pub const NO_ENUMERATIONS: &str = "There is no enumeration yet.";
+
 /// The visibilities, in the metamodel's order, as the commands name them.
 const VISIBILITIES: [&str; 4] = ["public", "private", "protected", "package"];
 
 /// Whether a class or an interface exists, which the member commands need.
 fn has_classes(f: &Facts<'_, Store, ProjectView>) -> Result<(), &'static str> {
     if f.doc.alive().any(|o| f.doc.class_of(o).is_ok_and(crate::is_classifier)) { Ok(()) } else { Err(NO_CLASSES) }
+}
+
+/// Whether an enumeration, whose literals the literal commands change, exists.
+fn has_enumerations(f: &Facts<'_, Store, ProjectView>) -> Result<(), &'static str> {
+    if f.doc.alive().any(|o| f.doc.class_of(o).ok() == Some(ENUMERATION)) { Ok(()) } else { Err(NO_ENUMERATIONS) }
 }
 
 /// Whether a class, which `uml.class.set` changes, exists.
@@ -394,6 +409,113 @@ fn operation_set(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, op)? }))
 }
 
+/// The enumeration that owns `literal` in its list of literals.
+pub fn literal_owner(store: &Store, literal: Obj) -> Option<Obj> {
+    store.container(literal).ok().flatten().map(|(e, _)| e).filter(|e| store.class_of(*e).ok() == Some(ENUMERATION))
+}
+
+/// The literal of `enumeration`, other than `except`, that a literal named `name` would clash
+/// with: literals are told apart within their enumeration whatever the case, so `Paid` and `paid`
+/// clash. The commands and the shell ask this one rule.
+pub fn literal_clash(store: &Store, enumeration: Obj, name: &str, except: Option<Obj>) -> Option<Obj> {
+    let wanted = name.to_lowercase();
+    crate::commands::literals(store, enumeration).into_iter().find(|l| Some(*l) != except && name_of(store, *l).to_lowercase() == wanted)
+}
+
+/// A literal's name in `enumeration`: a name, none of its other literals' whatever the case. A
+/// clash names the name typed, the literal that has it and what is accepted instead.
+fn check_literal_name(store: &Store, enumeration: Obj, name: &str, except: Option<Obj>) -> Result<(), CommandError> {
+    if let Some(p) = archforge_core::skills::name_problem(name, crate::commands::MAX_NAME) {
+        return Err(refuse("name", format!("the name {p}")));
+    }
+    if let Some(l) = literal_clash(store, enumeration, name, except) {
+        let owner = name_of(store, enumeration);
+        return Err(refuse(
+            "name",
+            format!(
+                "there is a literal named {} already in {owner}, and {:?} matches it whatever the case; choose a name none of {owner}'s other literals has",
+                name_of(store, l),
+                short(name)
+            ),
+        ));
+    }
+    Ok(())
+}
+
+/// The literal under `key` with the enumeration that owns it.
+fn literal_of(store: &Store, p: &Params, key: &str) -> Result<(Obj, Obj), CommandError> {
+    let l = id_of(store, p, key, ENUMERATION_LITERAL, "a literal")?;
+    let e = literal_owner(store, l)
+        .ok_or_else(|| refuse(key, format!("{} belongs to no enumeration; a literal is one of an enumeration's", text(p, key))))?;
+    Ok((l, e))
+}
+
+/// `uml.literal.add`: a literal of an enumeration, its name free among its literals whatever the
+/// case, at the place `at` asks for (from 0 to the count of literals) or, at -1, at the end. A place
+/// past the end is refused, not taken as the end; an enumeration that holds [`MAX_LITERALS`]
+/// already takes no more.
+fn literal_add(ctx: &mut C<'_>, p: &Params) -> R {
+    let e = id_of(ctx.doc, p, "enumeration", ENUMERATION, "an enumeration")?;
+    let count = list(ctx.doc, e, enumeration::OWNED_LITERAL).len();
+    if count >= MAX_LITERALS {
+        return Err(refuse(
+            "enumeration",
+            format!(
+                "{} holds {count} literals already, and an enumeration holds at most {MAX_LITERALS}; remove one before adding another",
+                text(p, "enumeration")
+            ),
+        ));
+    }
+    let name = text(p, "name");
+    check_literal_name(ctx.doc, e, name, None)?;
+    let at = match p.integer("at").unwrap_or(-1) {
+        -1 => count,
+        at => usize::try_from(at)
+            .ok()
+            .filter(|i| *i <= count)
+            .ok_or_else(|| refuse("at", format!("{at} is past the end of {} literals; a place from 0 to {count}, or -1 for the end", count)))?,
+    };
+    let at = u32::try_from(at).map_err(|_| refuse("at", format!("{at} is too far; a place from 0 to {count}, or -1 for the end")))?;
+    let l = ctx.doc.create(ENUMERATION_LITERAL).map_err(fail)?;
+    set_name(ctx.doc, l, name)?;
+    ctx.doc.insert(e, enumeration::OWNED_LITERAL, at, Value::Ref(l)).map_err(fail)?;
+    select(ctx, l);
+    Ok(json!({ "id": uuid_of(ctx.doc, l)? }))
+}
+
+/// `uml.literal.rename`: a literal renamed, its new name free among its enumeration's other
+/// literals whatever the case; it keeps its place and its identity.
+fn literal_rename(ctx: &mut C<'_>, p: &Params) -> R {
+    let (l, e) = literal_of(ctx.doc, p, "literal")?;
+    let name = text(p, "name");
+    check_literal_name(ctx.doc, e, name, Some(l))?;
+    set_name(ctx.doc, l, name)?;
+    Ok(json!({ "id": uuid_of(ctx.doc, l)? }))
+}
+
+/// `uml.literal.move`: a literal to the place `at` among its enumeration's literals, from 0 to
+/// their count less one; a place past the last is refused, not taken as the last.
+fn literal_move(ctx: &mut C<'_>, p: &Params) -> R {
+    let (l, e) = literal_of(ctx.doc, p, "literal")?;
+    let all = list(ctx.doc, e, enumeration::OWNED_LITERAL);
+    let last = all.len().saturating_sub(1);
+    let from = all
+        .iter()
+        .position(|x| *x == l)
+        .ok_or_else(|| refuse("literal", format!("{} is not among its enumeration's literals", text(p, "literal"))))?;
+    let at = p.integer("at").unwrap_or(-1);
+    let to = usize::try_from(at)
+        .ok()
+        .filter(|i| *i <= last)
+        .ok_or_else(|| refuse("at", format!("{at} is past the last literal; a place from 0 to {last}")))?;
+    let (Ok(from), Ok(to)) = (u32::try_from(from), u32::try_from(to)) else {
+        return Err(refuse("at", format!("{at} is too far; a place from 0 to {last}")));
+    };
+    ctx.doc.move_item(e, enumeration::OWNED_LITERAL, from, to).map_err(fail)?;
+    Ok(json!({ "id": uuid_of(ctx.doc, l)? }))
+}
+
+/// `uml.class.set`: a class made abstract or not.
 fn class_set(ctx: &mut C<'_>, p: &Params) -> R {
     let c = id_of(ctx.doc, p, "class", CLASS, "a class")?;
     ctx.doc.set(c, class::IS_ABSTRACT, Value::Bool(p.bool("abstract").unwrap_or(false))).map_err(fail)?;
@@ -591,6 +713,33 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "operation: string; the operation's id\nat: integer, 0..1000000; its new place among the class's operations",
             has_classes,
             operation_move
+        ),
+        cmd!(
+            "uml.literal.add",
+            "Add literal",
+            &["Enumeration"],
+            None,
+            "enumeration: string; the enumeration's id\nname: string; the literal's name, free among the enumeration's literals whatever the case; an enumeration holds at most 256 literals\nat: integer = -1, -1..1000000; where among the literals, from 0 to their count, -1 for the end",
+            has_enumerations,
+            literal_add
+        ),
+        cmd!(
+            "uml.literal.rename",
+            "Rename literal",
+            &["Enumeration"],
+            None,
+            "literal: string; the literal's id\nname: string; the new name, free among its enumeration's other literals whatever the case",
+            has_enumerations,
+            literal_rename
+        ),
+        cmd!(
+            "uml.literal.move",
+            "Move literal",
+            &["Enumeration"],
+            None,
+            "literal: string; the literal's id\nat: integer, 0..1000000; its new place among the enumeration's literals, from 0 to their count less one",
+            has_enumerations,
+            literal_move
         ),
         cmd!(
             query "uml.class.get",

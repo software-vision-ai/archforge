@@ -43,14 +43,19 @@ redefines `isAbstract`), the redefining property is the class's: `class::IS_ABST
 interfaces, enumerations, literals, classifiers, package_of, remove_elements, MAX_NAME}` (`uml.enumeration.{add,
 rename, move, list}`: an enumeration in a package, its name shared with the classes and interfaces
 there, removed with its literals through `element.remove`), `members::{specs, attributes, operations, parameters,
-parse_multiplicity, MultiplicityError, BUILT_IN, TYPES, MAX_PARAMETERS, MAX_BOUND}` (`uml.class.{set, get}`,
-`uml.attribute.{add, set, move}`, `uml.operation.{add, set, move}`, `uml.type.list`; a type is an
+parse_multiplicity, MultiplicityError, literal_owner, literal_clash, MAX_LITERALS, BUILT_IN, TYPES, MAX_PARAMETERS, MAX_BOUND,
+NO_ENUMERATIONS}` (`uml.class.{set, get}`, `uml.attribute.{add, set, move}`, `uml.operation.{add, set, move}`,
+`uml.literal.{add, rename, move}`: an enumeration's literals at a place asked for or the end, their
+names told apart within their enumeration whatever the case, at most `MAX_LITERALS` (256, as ER's
+enum types) in one, a place past the end refused, removed
+through `element.remove`; `uml.type.list`; a type is an
 element's id or a built-in type's name, Integer, String, Boolean, Real or UnlimitedNatural, made in
 the package Types the first time it is used; a multiplicity is typed, `0`, `1`, `0..1`, `*`, `1..*`,
 `2..5`, and one that does not read is a `MultiplicityError` naming why; members are removed through `element.remove`), `figures::{card, line, ends, text_slots, slot_text, attribute_text,
-operation_text, multiplicity, visibility, member_ends, navigable}` (a class's card with its
+operation_text, multiplicity, visibility, member_ends, navigable, MAX_CARD_ROWS}` (a class's card with its
 members' visibility, type and multiplicity, abstract names slanted; an enumeration's with
-`«enumeration»` and one compartment of its literals; an association's line with its
+`«enumeration»` and one compartment of its literals; at most `MAX_CARD_ROWS` rows a card, the rest
+counted in its `hidden`; an association's line with its
 name, roles, multiplicities, an arrow at every end it navigates to and a diamond at the whole of
 an aggregation or a composition; a generalization's triangle; a dependency dashed with an open
 arrow; an interface realization dashed in the muted ink to a hollow triangle at its interface),

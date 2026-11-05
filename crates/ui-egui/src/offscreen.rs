@@ -108,6 +108,9 @@ pub enum Screen {
     /// A package of enumerations: OrderStatus with its four literals, selected in Properties and
     /// open in Models, Priority with none, and the class Order whose attributes they type.
     WorkspaceEnumeration,
+    /// The same at a working zoom with a literal's draft row open at the end of OrderStatus's
+    /// card, "Returned" typed, Properties listing the literals with their pencils.
+    WorkspaceLiterals,
     /// The same with the classifier tool's kinds menu open, Interface the current kind.
     WorkspaceClassifierKinds,
     /// Two classes, Order and Invoice, each realizing the interface Payable: Order's realization
@@ -407,9 +410,12 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
             shell.canvas.popover = Some(crate::uml_classifier::KINDS);
         }
     }
-    if screen == Screen::WorkspaceEnumeration {
+    if matches!(screen, Screen::WorkspaceEnumeration | Screen::WorkspaceLiterals) {
         shell.adopt_project();
         sample_enumerations(&mut shell)?;
+        if screen == Screen::WorkspaceLiterals {
+            literal_draft(&mut shell)?;
+        }
     }
     if screen == Screen::WorkspaceRealization {
         shell.adopt_project();
@@ -1092,6 +1098,30 @@ fn sample_enumerations(shell: &mut Shell) -> Result<(), String> {
     crate::canvas::open(shell, diagram);
     crate::panels::run(shell, "view.select", json!({ "ids": [status.to_string()] }))?;
     shell.state.show_panel(crate::state::Panel::Properties);
+    Ok(())
+}
+
+/// OrderStatus's card at a working zoom near the canvas's top left, with a literal's draft row
+/// open at its end and "Returned" typed in it.
+fn literal_draft(shell: &mut Shell) -> Result<(), String> {
+    let (status, bounds) = {
+        let store = shell.session.as_ref().ok_or("no project is open")?.doc();
+        let e = store
+            .alive()
+            .find(|o| store.class_of(*o).ok() == Some(archforge_uml::ENUMERATION) && archforge_core::name_of(store, *o) == "OrderStatus")
+            .ok_or("the sample has no OrderStatus")?;
+        let n = archforge_diagram::views_of(store, e).2.into_iter().next().ok_or("OrderStatus is on no diagram")?;
+        (store.uuid(e).map_err(|e| e.to_string())?, archforge_diagram::grid::bounds_of(store, n))
+    };
+    shell.canvas.fit_pending = false;
+    shell.canvas.zoom = 1.25;
+    shell.canvas.pan = egui::vec2(160.0 - bounds.x as f32 * 1.25, 120.0 - bounds.y as f32 * 1.25);
+    if !crate::uml_inline::open(shell, status, crate::uml_panel::MemberKind::Literal, None) {
+        return Err("OrderStatus's card cannot hold a row".into());
+    }
+    if let Some(inline) = shell.canvas.inline.as_mut() {
+        inline.edit.name = "Returned".into();
+    }
     Ok(())
 }
 

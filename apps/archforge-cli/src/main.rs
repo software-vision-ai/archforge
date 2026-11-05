@@ -336,13 +336,14 @@ mod tests {
                     assert!(ids.contains(&word) || word == "uml.class", "compact {compact}: {word} is not a command");
                 }
             }
-            for promise in ["UML class diagrams", "interfaces", "enumerations", "ER diagrams", "agent access", "undo"] {
-                assert!(text.contains(promise), "compact {compact}: says nothing of {promise}");
+            // Literals are built (AR-122): an agent is told it can edit them.
+            for promise in
+                ["UML class diagrams", "interfaces", "enumerations with their literals", "uml.literal.add", "ER diagrams", "agent access", "undo"]
+            {
+                let promise = if compact { promise.to_string() } else { promise.replace("uml.literal.add", "uml_literal_add") };
+                assert!(text.contains(&promise), "compact {compact}: says nothing of {promise}");
             }
-            // Literals are edited with their own story: no agent is promised them yet.
-            for future in ["literal", "C4"] {
-                assert!(!text.contains(future), "compact {compact}: advertises {future}");
-            }
+            assert!(!text.contains("C4"), "compact {compact}: advertises C4");
             scopes.push(text.split(". ").take(2).collect::<Vec<_>>().join(". "));
         }
         assert_eq!(scopes[0], scopes[1], "both modes describe the same scope and the same access");

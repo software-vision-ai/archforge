@@ -136,17 +136,12 @@ pub(crate) trait DiagramKind: Sync {
     fn drop(&self, shell: &mut Shell, d: Obj, element: Uuid, at: (f64, f64)) {
         let _ = (shell, d, element, at);
     }
-    /// The second adorner of a selected element, beside Connect: its key and hover text; it opens
-    /// the editor's new row.
-    fn adorner(&self) -> Option<(&'static str, &'static str)> {
-        None
-    }
-    /// Whether a selected element's card takes new rows: its second adorner, its menu's row for
-    /// it, ⌘↩ and its card's own controls. By default every element that takes part does; a UML
-    /// enumeration, whose literals come with their own story, does not.
-    fn takes_rows(&self, store: &Store, element: Obj) -> bool {
+    /// The second adorner of the selected `element`, beside Connect: its key and hover text; it
+    /// opens the editor's new row, as its menu's row and ⌘↩ do (a class's attribute, an
+    /// enumeration's literal). None: the card takes no new row from the canvas.
+    fn adorner(&self, store: &Store, element: Obj) -> Option<(&'static str, &'static str)> {
         let _ = (store, element);
-        true
+        None
     }
     /// The other new row a selected element takes, with Shift added to the adorner's keys (a
     /// class's operation, beside its attribute); none by default.

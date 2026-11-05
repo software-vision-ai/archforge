@@ -218,13 +218,15 @@ pub fn classifiers(store: &Store, package: Obj) -> Vec<Obj> {
         .collect()
 }
 
-/// What an element is, as a refusal names it: a class, an interface, an enumeration, a package.
+/// What an element is, as a refusal names it: a class, an interface, an enumeration, a package, a
+/// literal.
 pub(crate) fn what(store: &Store, o: Obj) -> &'static str {
     match store.class_of(o).ok() {
         Some(c) if c == CLASS => "class",
         Some(c) if c == INTERFACE => "interface",
         Some(c) if c == ENUMERATION => "enumeration",
         Some(c) if c == PACKAGE => "package",
+        Some(c) if c == crate::ENUMERATION_LITERAL => "literal",
         _ => "element",
     }
 }
@@ -534,7 +536,7 @@ fn hand_up_problem(store: &Store, pkg: Obj, parent: Obj) -> Option<String> {
 }
 
 /// Removes UML elements (packages, classes, interfaces, enumerations, attributes, operations,
-/// primitive types, associations, generalizations, dependencies and interface realizations), each
+/// literals, primitive types, associations, generalizations, dependencies and interface realizations), each
 /// with what it holds (an enumeration its literals) and the diagrams, nodes and lines that show them
 /// (`element.remove`, through [`crate::UmlNotation`]). A nested package hands what it holds, and its
 /// diagrams, up to its parent first (owner decision); a top-level package takes them along. A
@@ -549,6 +551,7 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
         ENUMERATION,
         crate::PROPERTY,
         crate::OPERATION,
+        crate::ENUMERATION_LITERAL,
         crate::PRIMITIVE_TYPE,
         crate::ASSOCIATION,
         crate::GENERALIZATION,

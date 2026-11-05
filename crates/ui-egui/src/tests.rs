@@ -7686,10 +7686,11 @@ fn node_of(h: &Harness<'static, Shell>, element: archforge_mof::Uuid) -> String 
 }
 
 /// The classifier tool places an enumeration named in place, as one step, its kind kept and its
-/// face and tooltip naming it; the card says «enumeration» and takes no attribute or operation from
-/// the canvas: no `+`, no menu row, no ⌘↩ draft; in light and dark.
+/// face and tooltip naming it; the card says «enumeration» and takes literals, not attributes or
+/// operations, from the canvas: its `+`, its adorner, its menu's row and ⌘↩ open a literal's draft,
+/// ⇧⌘↩ nothing; in light and dark.
 #[test]
-fn the_classifier_tool_places_an_enumeration_named_in_place_whose_card_takes_no_rows_of_its_own() {
+fn the_classifier_tool_places_an_enumeration_named_in_place_whose_card_takes_literals() {
     use crate::uml_classifier::Classifier;
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
@@ -7717,36 +7718,340 @@ fn the_classifier_tool_places_an_enumeration_named_in_place_whose_card_takes_no_
         assert_eq!(home.as_deref(), Some("Commerce"), "in the diagram's package");
         assert!(painted(&h).iter().any(|t| t == "«enumeration»"), "its eyebrow is its keyword, as written");
         assert_eq!(h.state().canvas.uml_classifier, Classifier::Enumeration, "the kind stays for the window");
-        // Selected, its card offers Connect but no new row: no adorner, no compartment +.
+        // Selected, its card offers Connect and a literal: the adorner and its compartment's +,
+        // no attribute or operation. (Selected by the model: a click where it was placed would
+        // count as the placing click's second.)
         let node = node_of(&h, status);
         let at = rect_of(&h, &format!("workspace.canvas.node.{node}")).center();
-        click(&mut h, at);
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [status.to_string()] })).unwrap();
+        h.run();
         let found = ids(&h);
-        assert!(found.iter().any(|i| i == "workspace.canvas.adorn.connect"), "{found:?}");
+        for id in ["workspace.canvas.adorn.connect", "workspace.canvas.adorn.add-literal", "workspace.canvas.enumeration.add-literal"] {
+            assert!(found.iter().any(|i| i == id), "{id} in {found:?}");
+        }
         for none in ["workspace.canvas.adorn.add-attribute", "workspace.canvas.class.add-attribute", "workspace.canvas.class.add-operation"] {
             assert!(!found.iter().any(|i| i == none), "{none} on an enumeration's card");
         }
-        // ⌘↩ and ⇧⌘↩ open no draft on it.
-        for modifiers in [egui::Modifiers::COMMAND, egui::Modifiers::COMMAND | egui::Modifiers::SHIFT] {
-            key(&mut h, egui::Key::Enter, modifiers);
-            assert!(h.state().canvas.inline.is_none() && h.state().panels.member.is_none(), "no draft row");
-        }
-        // Its menu has no row for a new member; a class's still has one.
+        // ⇧⌘↩ opens nothing on it; ⌘↩ a literal's draft.
+        h.state_mut().canvas.focused = true;
+        key(&mut h, egui::Key::Enter, egui::Modifiers::COMMAND | egui::Modifiers::SHIFT);
+        assert!(h.state().canvas.inline.is_none() && h.state().panels.member.is_none(), "no operation's draft");
+        key(&mut h, egui::Key::Enter, egui::Modifiers::COMMAND);
+        let inline = h.state().canvas.inline.clone().expect("a literal's draft");
+        assert_eq!((inline.edit.kind, inline.edit.target), (crate::uml_panel::MemberKind::Literal, None));
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert!(h.state().canvas.inline.is_none());
+        // Its menu's row adds a literal; a class's adds an attribute.
         right_click(&mut h, at);
-        let found = ids(&h);
-        assert!(found.iter().any(|i| i == "workspace.canvas.menu.delete"), "{found:?}");
-        assert!(!found.iter().any(|i| i == "workspace.canvas.menu.add-row"), "no working row for a new member");
+        assert!(painted(&h).iter().any(|t| t == "Add literal"), "the menu names the literal");
+        let row = rect_of(&h, "workspace.canvas.menu.add-row").center();
+        click(&mut h, row);
+        assert_eq!(h.state().canvas.inline.as_ref().map(|i| i.edit.kind), Some(crate::uml_panel::MemberKind::Literal));
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
         let at = rect_of(&h, &format!("workspace.canvas.node.{}", nodes["Order"])).center();
         right_click(&mut h, at);
-        assert!(ids(&h).iter().any(|i| i == "workspace.canvas.menu.add-row"), "a class's menu keeps its row");
+        assert!(painted(&h).iter().any(|t| t == "Add attribute"), "a class's menu keeps its row");
     }
 }
 
-/// Models lists enumerations under their package with their literals below them, read-only; `+`
-/// adds one, the search finds it, and it drags onto a diagram or into another package.
+/// The names of the enumeration `enumeration`'s literals, in their order.
+fn literal_names(h: &Harness<'static, Shell>, enumeration: archforge_mof::Uuid) -> Vec<String> {
+    let st = h.state().session.as_ref().unwrap().doc();
+    archforge_uml::commands::literals(st, st.by_uuid(enumeration).unwrap()).into_iter().map(|l| archforge_core::name_of(st, l)).collect()
+}
+
+/// The id of the literal of `enumeration` named `name`.
+fn literal_named(h: &Harness<'static, Shell>, enumeration: archforge_mof::Uuid, name: &str) -> archforge_mof::Uuid {
+    let st = h.state().session.as_ref().unwrap().doc();
+    let l = archforge_uml::commands::literals(st, st.by_uuid(enumeration).unwrap()).into_iter().find(|l| archforge_core::name_of(st, *l) == name);
+    st.uuid(l.expect(name)).unwrap()
+}
+
+/// [`enumeration_sample`] with OrderStatus holding `literals` and selected: the harness, every
+/// card's node by name, OrderStatus and its node.
+fn literal_sample(
+    theme: ThemeKind,
+    literals: &[&str],
+) -> (Harness<'static, Shell>, std::collections::BTreeMap<String, String>, archforge_mof::Uuid, String) {
+    let (mut h, nodes, [status_node, _]) = enumeration_sample(theme);
+    let status = named(&h, archforge_uml::ENUMERATION, "OrderStatus");
+    if !literals.is_empty() {
+        crate::uml_ui::put_literals(h.state_mut(), status, literals).unwrap();
+    }
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [status.to_string()] })).unwrap();
+    h.run();
+    assert!(h.state().canvas.zoom >= crate::canvas::DETAIL_ZOOM, "the cards show their rows");
+    (h, nodes, status, status_node)
+}
+
+/// The middle of row `i` of the card of node `node`, as drawn.
+fn card_row(h: &Harness<'static, Shell>, node: &str, i: usize) -> egui::Pos2 {
+    let card = rect_of(h, &format!("workspace.canvas.node.{node}"));
+    let z = h.state().canvas.zoom;
+    let y = crate::canvas::ENTITY_FIRST_ROW + i as f32 * crate::canvas::ENTITY_ROW + crate::canvas::ENTITY_ROW / 2.0;
+    egui::pos2(card.left() + 60.0 * z, card.top() + y * z)
+}
+
+/// An enumeration's literals are typed on its card: its compartment's `+` and its adorner open a
+/// name-only draft row at the end; Enter writes one, one undo step, and opens the next; Escape
+/// drops the draft; a click away writes a draft with a name and drops an empty one; a name another
+/// literal has, whatever the case, is refused under the row, the text kept and the model
+/// untouched; a double click on a literal's row edits it in place. In light and dark.
 #[test]
-fn enumerations_are_listed_with_their_literals_read_only_added_with_the_plus_found_and_dragged_onto_the_diagram() {
+fn an_enumeration_takes_literals_typed_on_its_card_each_one_undo_step() {
+    use crate::uml_panel::MemberKind;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, nodes, status, node) = literal_sample(theme, &[]);
+        let revision = |h: &Harness<'static, Shell>| h.state().session.as_ref().unwrap().revision();
+        // The compartment's + opens a draft row: a name, no type.
+        let at = rect_of(&h, "workspace.canvas.enumeration.add-literal").center();
+        click(&mut h, at);
+        let inline = h.state().canvas.inline.clone().expect("a draft row");
+        assert_eq!((inline.edit.kind, inline.edit.target, inline.edit.class), (MemberKind::Literal, None, status));
+        let found = ids(&h);
+        assert!(found.iter().any(|i| i == "workspace.canvas.member.name") && found.iter().any(|i| i == "workspace.canvas.member.details"));
+        assert!(!found.iter().any(|i| i.starts_with("workspace.canvas.member.type")), "a literal has no type: {found:?}");
+        // Enter writes it as one undo step and opens the next draft.
+        h.event(egui::Event::Text("Placed".into()));
+        h.run();
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert_eq!(literal_names(&h, status), ["Placed"]);
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add literal"), "one undo step");
+        assert!(h.state().canvas.inline.as_ref().is_some_and(|i| i.edit.name.is_empty() && i.edit.target.is_none()), "the next draft");
+        h.event(egui::Event::Text("Paid".into()));
+        h.run();
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert_eq!(literal_names(&h, status), ["Placed", "Paid"]);
+        let written = revision(&h);
+        // A name another literal has, whatever the case: refused under the row, the text kept.
+        h.event(egui::Event::Text("placed".into()));
+        h.run();
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        let refused = h.state().canvas.inline.as_ref().and_then(|i| i.refused.clone()).expect("refused");
+        assert_eq!(refused, "There is a literal named Placed already.");
+        assert!(painted(&h).contains(&refused), "said under the row");
+        assert_eq!(h.state().canvas.inline.as_ref().unwrap().edit.name, "placed", "the text stays");
+        assert_eq!((literal_names(&h, status).len(), revision(&h)), (2, written), "nothing written");
+        // Escape drops only the draft; undo takes back the literal written, redo brings it again.
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert!(h.state().canvas.inline.is_none());
+        assert_eq!(literal_names(&h, status), ["Placed", "Paid"]);
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        assert_eq!(literal_names(&h, status), ["Placed"]);
+        h.state_mut().session.as_mut().unwrap().redo().unwrap();
+        h.run();
+        assert!(painted(&h).iter().any(|t| t == "Paid"), "the card shows it");
+        // The adorner opens a draft; a click away writes one with a name.
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [status.to_string()] })).unwrap();
+        h.run();
+        let at = rect_of(&h, "workspace.canvas.adorn.add-literal").center();
+        click(&mut h, at);
+        assert_eq!(h.state().canvas.inline.as_ref().map(|i| i.edit.kind), Some(MemberKind::Literal));
+        h.event(egui::Event::Text("Shipped".into()));
+        h.run();
+        let away = empty_spot(&h, &nodes);
+        click(&mut h, away);
+        assert!(h.state().canvas.inline.is_none());
+        assert_eq!(literal_names(&h, status), ["Placed", "Paid", "Shipped"]);
+        // An empty one only goes.
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [status.to_string()] })).unwrap();
+        h.run();
+        let written = revision(&h);
+        let at = rect_of(&h, "workspace.canvas.enumeration.add-literal").center();
+        click(&mut h, at);
+        assert!(h.state().canvas.inline.is_some());
+        let away = empty_spot(&h, &nodes);
+        click(&mut h, away);
+        assert!(h.state().canvas.inline.is_none());
+        assert_eq!((literal_names(&h, status).len(), revision(&h)), (3, written), "nothing written");
+        // The card grew to show every literal: no "more" row.
+        assert!(!painted(&h).iter().any(|t| t.contains("more literal")), "{:?}", painted(&h));
+        // A double click on a literal's row edits it in place: the same literal, renamed.
+        let paid = literal_named(&h, status, "Paid");
+        let at = card_row(&h, &node, 1);
+        double_click(&mut h, at);
+        let inline = h.state().canvas.inline.clone().expect("the row opens in place");
+        assert_eq!((inline.edit.kind, inline.edit.target, inline.edit.name.as_str()), (MemberKind::Literal, Some(paid), "Paid"));
+        h.state_mut().canvas.inline.as_mut().unwrap().edit.name = "SHIPPED".into();
+        h.run();
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert_eq!(h.state().canvas.inline.as_ref().and_then(|i| i.refused.clone()).as_deref(), Some("There is a literal named Shipped already."));
+        h.state_mut().canvas.inline.as_mut().unwrap().edit.name = "Settled".into();
+        h.run();
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert!(h.state().canvas.inline.is_none(), "an edited row closes when written");
+        assert_eq!(literal_names(&h, status), ["Placed", "Settled", "Shipped"]);
+        assert_eq!(literal_named(&h, status, "Settled"), paid, "it keeps its identity");
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Rename literal"));
+    }
+}
+
+/// An enumeration that holds the most literals it may takes no more: Properties' editor says so in
+/// the user's words and writes nothing; the cap is ER's enum types' too. In light and dark.
+#[test]
+fn an_enumeration_at_its_literal_cap_says_so_and_takes_no_more() {
+    assert_eq!(archforge_uml::members::MAX_LITERALS, archforge_er::rules::MAX_LITERALS, "one rule across the notations");
+    let names: Vec<String> = (0..archforge_uml::members::MAX_LITERALS).map(|i| format!("C{i}")).collect();
+    let names: Vec<&str> = names.iter().map(String::as_str).collect();
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _, status, _) = literal_sample(theme, &names);
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        h.run();
+        let revision = h.state().session.as_ref().unwrap().revision();
+        let at = rect_of(&h, "workspace.properties.literals.add").center();
+        click(&mut h, at);
+        h.event(egui::Event::Text("More".into()));
+        h.run();
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        let refused = h.state().panels.member.as_ref().and_then(|e| e.refused.clone()).expect("refused");
+        assert_eq!(refused, "An enumeration holds at most 256 literals.");
+        assert_eq!((literal_names(&h, status).len(), h.state().session.as_ref().unwrap().revision()), (256, revision), "nothing written");
+    }
+}
+
+/// A card that leaves members out (past `MAX_CARD_ROWS`) takes a new member in Properties' editor,
+/// not as a draft row in the middle of its rows.
+#[test]
+fn a_card_that_lists_only_some_of_its_members_adds_one_in_properties() {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    crate::uml_ui::open_sample(h.state_mut()).unwrap();
+    let catalog = named(&h, archforge_uml::CLASS, "Catalog");
+    {
+        let s = h.state_mut().session.as_mut().unwrap();
+        s.batch("Add attribute", |b| {
+            for i in 0..archforge_uml::figures::MAX_CARD_ROWS {
+                b.execute("uml.attribute.add", &serde_json::json!({ "class": catalog.to_string(), "name": format!("a{i}") }))?;
+            }
+            Ok(())
+        })
+        .unwrap();
+        s.execute("view.select", &serde_json::json!({ "ids": [catalog.to_string()] })).unwrap();
+    }
+    h.state_mut().canvas.zoom = 1.0;
+    h.state_mut().canvas.focused = true;
+    h.run();
+    key(&mut h, egui::Key::Enter, egui::Modifiers::COMMAND);
+    assert!(h.state().canvas.inline.is_none(), "no draft row among the rows");
+    assert!(h.state().panels.member.as_ref().is_some_and(|e| e.class == catalog && e.target.is_none()), "Properties' editor instead");
+}
+
+/// Properties lists an enumeration's literals under `Literals · n`, each with its pencil: `+` and
+/// the pencil open the literal editor (Name; Remove, Move up and Move down on the left, Cancel and
+/// Apply on the right), Apply or Enter writes one undo step and grows the card to show a literal
+/// added, Cancel or Escape discards, a clashing name is refused in the editor and changes nothing.
+/// In light and dark.
+#[test]
+fn an_enumeration_s_literals_are_added_edited_moved_and_removed_in_properties() {
+    use crate::uml_panel::MemberKind;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _, status, node) = literal_sample(theme, &["Placed", "Paid", "Shipped"]);
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        h.run();
+        assert!(painted(&h).iter().any(|t| t == "Literals · 3"));
+        let found = ids(&h);
+        for name in ["Placed", "Paid", "Shipped"] {
+            let id = format!("workspace.properties.literal.{}.edit", literal_named(&h, status, name));
+            assert!(found.contains(&id), "{id}");
+        }
+        // + opens the editor: its name alone, the name taking the keys; Enter writes it.
+        let at = rect_of(&h, "workspace.properties.literals.add").center();
+        click(&mut h, at);
+        let edit = h.state().panels.member.clone().expect("the editor");
+        assert_eq!((edit.kind, edit.target), (MemberKind::Literal, None));
+        let found = ids(&h);
+        assert!(found.iter().any(|i| i == "workspace.properties.member.name"));
+        for none in ["workspace.properties.member.visibility", "workspace.properties.member.type", "workspace.properties.member.remove"] {
+            assert!(!found.iter().any(|i| i == none), "{none} in a new literal's editor");
+        }
+        h.event(egui::Event::Text("Cancelled".into()));
+        h.run();
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert!(h.state().panels.member.is_none(), "{:?}", h.state().panels.member);
+        assert_eq!(literal_names(&h, status), ["Placed", "Paid", "Shipped", "Cancelled"]);
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add literal"), "one undo step");
+        // Its card grew to show it, in the same step.
+        let st = h.state().session.as_ref().unwrap().doc();
+        let height = archforge_diagram::grid::bounds_of(st, st.by_uuid(archforge_mof::Uuid::parse(&node).unwrap()).unwrap()).height;
+        assert!(height >= crate::uml_ui::literals_height(4), "{height}");
+        assert!(painted(&h).iter().any(|t| t == "Cancelled") && painted(&h).iter().any(|t| t == "Literals · 4"));
+        // The pencil opens the editor in the row's place; a name another has is refused, nothing written.
+        let paid = literal_named(&h, status, "Paid");
+        let at = rect_of(&h, &format!("workspace.properties.literal.{paid}.edit")).center();
+        click(&mut h, at);
+        assert_eq!(h.state().panels.member.as_ref().map(|e| (e.target, e.name.clone())), Some((Some(paid), "Paid".to_string())));
+        let found = ids(&h);
+        for id in ["remove", "up", "down", "cancel", "apply"] {
+            assert!(found.iter().any(|i| *i == format!("workspace.properties.member.{id}")), "{id}");
+        }
+        // Remove and the moves on the left, Cancel and Apply on the right.
+        let (remove, cancel, apply) = (
+            rect_of(&h, "workspace.properties.member.remove"),
+            rect_of(&h, "workspace.properties.member.cancel"),
+            rect_of(&h, "workspace.properties.member.apply"),
+        );
+        assert!(
+            remove.right() < rect_of(&h, "workspace.properties.member.down").left() + 1.0
+                && rect_of(&h, "workspace.properties.member.down").right() < cancel.left()
+        );
+        assert!(cancel.right() < apply.left() && (remove.top() - apply.top()).abs() < 1.0);
+        let revision = h.state().session.as_ref().unwrap().revision();
+        h.state_mut().panels.member.as_mut().unwrap().name = "shipped".into();
+        let at = rect_of(&h, "workspace.properties.member.apply").center();
+        click(&mut h, at);
+        let refused = h.state().panels.member.as_ref().and_then(|e| e.refused.clone()).expect("refused");
+        assert_eq!(refused, "There is a literal named Shipped already.");
+        assert!(painted(&h).contains(&refused), "said in the editor");
+        assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "nothing written");
+        // Apply renames it: the same literal, one undo step.
+        h.state_mut().panels.member.as_mut().unwrap().name = "Settled".into();
+        let at = rect_of(&h, "workspace.properties.member.apply").center();
+        click(&mut h, at);
+        assert_eq!(literal_names(&h, status), ["Placed", "Settled", "Shipped", "Cancelled"]);
+        assert_eq!(literal_named(&h, status, "Settled"), paid);
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Rename literal"));
+        // Move up and Move down, each one step, the editor staying open on it.
+        let shipped = literal_named(&h, status, "Shipped");
+        let at = rect_of(&h, &format!("workspace.properties.literal.{shipped}.edit")).center();
+        click(&mut h, at);
+        let at = rect_of(&h, "workspace.properties.member.up").center();
+        click(&mut h, at);
+        assert_eq!(literal_names(&h, status), ["Placed", "Shipped", "Settled", "Cancelled"]);
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Move literal"));
+        let at = rect_of(&h, "workspace.properties.member.down").center();
+        click(&mut h, at);
+        let at = rect_of(&h, "workspace.properties.member.down").center();
+        click(&mut h, at);
+        assert_eq!(literal_names(&h, status), ["Placed", "Settled", "Cancelled", "Shipped"]);
+        assert_eq!(literal_named(&h, status, "Shipped"), shipped, "it keeps its identity");
+        // Cancel and Escape discard what was typed.
+        h.state_mut().panels.member.as_mut().unwrap().name = "Lost".into();
+        let at = rect_of(&h, "workspace.properties.member.cancel").center();
+        click(&mut h, at);
+        assert!(h.state().panels.member.is_none());
+        let at = rect_of(&h, &format!("workspace.properties.literal.{shipped}.edit")).center();
+        click(&mut h, at);
+        h.state_mut().panels.member.as_mut().unwrap().name = "Lost".into();
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert!(h.state().panels.member.is_none());
+        assert_eq!(literal_names(&h, status), ["Placed", "Settled", "Cancelled", "Shipped"]);
+        // Remove takes it away, one step; undo brings it back in its place.
+        let at = rect_of(&h, &format!("workspace.properties.literal.{shipped}.edit")).center();
+        click(&mut h, at);
+        let at = rect_of(&h, "workspace.properties.member.remove").center();
+        click(&mut h, at);
+        assert_eq!(literal_names(&h, status), ["Placed", "Settled", "Cancelled"]);
+        assert!(painted(&h).iter().any(|t| t == "Literals · 3"));
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        assert_eq!(literal_names(&h, status), ["Placed", "Settled", "Cancelled", "Shipped"]);
+    }
+}
+
+/// Models lists enumerations under their package with their literals below them; a literal row
+/// renames in place and Delete removes it, each one undo step, and `+` on a selected enumeration
+/// adds a literal named in place; `+` adds an enumeration, the search finds it, and it drags onto a
+/// diagram or into another package.
+#[test]
+fn enumerations_are_listed_with_their_literals_edited_in_place_added_with_the_plus_found_and_dragged_onto_the_diagram() {
     use crate::notation_ui::NotationUi;
     let (mut h, nodes) = related_sample();
     let commerce = select_named(&mut h, archforge_uml::PACKAGE, "Commerce");
@@ -7769,20 +8074,59 @@ fn enumerations_are_listed_with_their_literals_read_only_added_with_the_plus_fou
     assert_eq!((rows[at].kind, rows[at].depth, rows[at].expandable), ("enumeration", 1, true), "{:?}", tree_labels(&h));
     let literals: Vec<(&str, &str, u8)> = rows[at + 1..at + 3].iter().map(|r| (r.label.as_str(), r.kind, r.depth)).collect();
     assert_eq!(literals, [("Placed", "literal", 2), ("Paid", "literal", 2)]);
-    // A literal row is read-only: a second click opens no name, Delete leaves it.
+    // A literal row renames in place with a second click: the same literal, one undo step; a name
+    // another literal has, whatever the case, is refused under the tree and changes nothing.
     let placed = rows[at + 1].id;
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [placed.to_string()] })).unwrap();
+    h.state_mut().explorer.focused = true;
+    h.run();
     let row = rect_of(&h, &format!("workspace.explorer.row.{placed}")).center();
     click(&mut h, row);
+    let rename = h.state().explorer.rename.clone().expect("a second click opens the literal's name");
+    assert_eq!((rename.target, rename.text.as_str()), (placed, "Placed"));
+    h.state_mut().explorer.rename.as_mut().unwrap().text = "PAID".into();
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    let refused = h.state().explorer.rename.as_ref().and_then(|r| r.refused.clone()).expect("refused");
+    assert_eq!(refused, "There is a literal named Paid already.", "said as the card and Properties say it");
+    assert_eq!(literal_names(&h, status), ["Placed", "Paid"], "nothing changed");
+    // F2 opens it again, with its name as it is.
+    h.state_mut().explorer.rename = None;
+    h.state_mut().explorer.focused = true;
+    key(&mut h, egui::Key::F2, egui::Modifiers::NONE);
+    assert_eq!(h.state().explorer.rename.as_ref().map(|r| (r.target, r.text.as_str())), Some((placed, "Placed")));
+    h.state_mut().explorer.rename.as_mut().unwrap().text = "Ordered".into();
     h.run();
-    click(&mut h, row);
-    assert!(h.state().explorer.rename.is_none(), "no rename of a literal yet");
-    let revision = h.state().session.as_ref().unwrap().revision();
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    assert!(h.state().explorer.rename.is_none(), "{:?}", h.state().explorer.rename);
+    assert_eq!(literal_names(&h, status), ["Ordered", "Paid"]);
+    assert_eq!(literal_named(&h, status, "Ordered"), placed, "the same literal");
+    assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Rename literal"));
+    // + on a selected literal (or its enumeration) offers a literal first and adds one at its
+    // enumeration's end, named in place.
+    let st = h.state().session.as_ref().unwrap().doc();
+    let offers: Vec<&str> = crate::uml_ui::UmlUi.offers(st, st.by_uuid(placed)).into_iter().map(|o| o.key).collect();
+    assert_eq!(offers, ["literal", "class", "interface", "enumeration", "package"]);
+    crate::explorer::add(h.state_mut(), "literal");
+    let rename = h.state().explorer.rename.clone().expect("the new literal's name is open");
+    assert_eq!(rename.text, "Literal 1");
+    h.state_mut().explorer.rename.as_mut().unwrap().text = "Shipped".into();
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    assert_eq!(literal_names(&h, status), ["Ordered", "Paid", "Shipped"]);
+    // Delete removes a literal, one undo step, and no notice keeps it.
+    let shipped = literal_named(&h, status, "Shipped");
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [shipped.to_string()] })).unwrap();
     crate::explorer::remove_selection(h.state_mut());
     h.run();
-    assert_eq!(h.state().explorer.notice.as_deref(), Some("Literals are removed with their enumeration"), "Delete says why it leaves it");
-    let st = h.state().session.as_ref().unwrap().doc();
-    assert!(st.by_uuid(placed).is_some_and(|l| st.is_alive(l)), "the literal stays");
-    assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "nothing changed");
+    assert_eq!(h.state().explorer.notice, None);
+    assert_eq!(literal_names(&h, status), ["Ordered", "Paid"]);
+    h.state_mut().session.as_mut().unwrap().undo().unwrap();
+    assert_eq!(literal_names(&h, status), ["Ordered", "Paid", "Shipped"]);
+    h.state_mut().session.as_mut().unwrap().undo().unwrap();
+    assert_eq!(literal_names(&h, status), ["Ordered", "Paid", "Literal 1"], "the name typed was a step of its own");
+    h.state_mut().session.as_mut().unwrap().undo().unwrap();
+    assert_eq!(literal_names(&h, status), ["Ordered", "Paid"], "and the add one too");
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [placed.to_string()] })).unwrap();
+    h.run();
     // Selected, it shows its enumeration's panel.
     h.state_mut().state.show_panel(crate::state::Panel::Properties);
     h.run();
@@ -7857,10 +8201,10 @@ fn a_second_click_and_f2_open_the_name_of_a_class_an_interface_and_a_package_in_
     }
 }
 
-/// An enumeration in Properties: its kind line, name and package, and its literals read-only, with
-/// no `+` and no attribute or operation; with none, it says so. It is offered as a type.
+/// An enumeration in Properties: its kind line, name and package, and its literals with their `+`,
+/// no attribute or operation; with none, it says so. It is offered as a type.
 #[test]
-fn an_enumeration_in_properties_shows_its_literals_read_only_and_is_offered_as_a_type() {
+fn an_enumeration_in_properties_shows_its_literals_and_is_offered_as_a_type() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
         let d = h.state().canvas.active.unwrap().to_string();
@@ -7888,7 +8232,7 @@ fn an_enumeration_in_properties_shows_its_literals_read_only_and_is_offered_as_a
         for none in ["workspace.properties.class.abstract", "workspace.properties.attributes.add", "workspace.properties.operations.add"] {
             assert!(!found.iter().any(|i| i == none), "{none} for an enumeration");
         }
-        assert!(!found.iter().any(|i| i.starts_with("workspace.properties.literals")), "no + for literals yet: {found:?}");
+        assert!(found.iter().any(|i| i == "workspace.properties.literals.add"), "a + for literals: {found:?}");
         // With literals: each a row in their order; a click selects it and the panel stays.
         crate::uml_ui::put_literals(h.state_mut(), priority, &["Low", "Normal", "High"]).unwrap();
         h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [priority.to_string()] })).unwrap();

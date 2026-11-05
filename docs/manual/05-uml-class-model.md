@@ -131,11 +131,41 @@ is *Placed*, *Paid*, *Shipped* or *Cancelled*.
    its name and has one compartment, for its literals; while it has none, the compartment is
    empty.
 
-An enumeration has no attributes or operations of its own: its card has no **+**, its menu offers
-no new member, and ⌘↩ adds none. Select it to see it in **Properties**: under its **Name** and
-**Package**, **Literals** lists its literals in their order, or says it has none yet. In **Models**
-an enumeration is a row under its package with its literals below it. Adding, renaming,
-reordering and removing literals comes in a later version; for now they are shown, not edited.
+An enumeration has no attributes or operations of its own: its members are its literals. Select
+it to see it in **Properties**: under its **Name** and **Package**, **Literals** lists its
+literals in their order, or says it has none yet. In **Models** an enumeration is a row under its
+package with its literals below it.
+
+### Add and edit literals
+
+1. Select *OrderStatus* on the canvas. Its literals' compartment shows a **+** at its right.
+2. Click **+**, the **Add literal** button beside the card, or press ⌘↩ (Ctrl Enter). A
+   row opens at the end of the compartment, ringed in blue, for the literal's name.
+3. Type *Placed* and press Enter. The literal is written, and a new row opens under it: type
+   *Paid*, Enter, *Shipped*, Enter, and so on. Press Escape to close the last, empty row. Clicking
+   elsewhere writes a row that has a name and drops an empty one.
+
+Each literal is one step you can undo. The card grows to show every literal you add; a card you
+made shorter by hand says how many it cannot show, as `+ 2 more literals`. An enumeration holds at
+most 256 literals, as an ER enum type does; past that, a new one is refused and the reason says
+so.
+
+Double-click a literal's row on the card to rename it in place. Two literals of one enumeration
+cannot share a name, whatever the case: typing *paid* beside *Paid* says "There is a literal named
+Paid already." under the row, keeps what you typed, and changes nothing until you choose another
+name. The row's **⋯** takes it to Properties.
+
+In **Properties**, **Literals** has a **+** and a pencil on each row. The pencil, or a double click
+on the row, opens the literal's editor: its **Name**, the bin to remove it and the arrows to move it
+up or down on the left, **Cancel** and **Apply** on the right. **Apply** or Enter writes the
+change as one step; **Cancel** or Escape leaves it as it was. A literal keeps its identity when you
+rename or move it, so what refers to it is not lost, and the order you give is the order saved.
+
+In **Models**, click a selected literal's row again, or press F2, to rename it; Delete removes it.
+With an enumeration or one of its literals selected, **+** offers **Literal** first, which adds one
+at the end, its name open for typing. Literals carry no skills.
+
+<!-- picture: workspace-literals light | OrderStatus's card at a working zoom with a literal's draft row open at its end, Returned typed, and its literals listed with their pencils in Properties -->
 
 In **Models**, the **+** of a package offers **Enumeration** beside **Class** and **Interface**,
 and you can drag an enumeration onto a diagram or onto another package's row as you drag a class.

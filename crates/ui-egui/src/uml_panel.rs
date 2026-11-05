@@ -6,7 +6,11 @@
 //! editor the visibility, the name, the return type, Static, Abstract and its parameters, each a
 //! name, a type and a multiplicity. Apply is one command (`uml.attribute.add`/`set`,
 //! `uml.operation.add`/`set`); the arrows move the member up or down and the bin removes it. A
-//! selected member shows its class's panel, its row marked.
+//! selected member shows its class's panel, its row marked. An enumeration's panel lists its
+//! literals under `Literals · n` in the same pattern (AR-122): `+`, the pencil or a double click
+//! open the literal editor, which holds its Name (`uml.literal.add`/`rename`, `uml.literal.move`);
+//! a name another literal of the enumeration has, whatever the case, is refused in the user's
+//! words before anything is written.
 
 use archforge_mof::{Obj, PropId, Store, TypeRef, Uuid, Value};
 use archforge_uml::members::{BUILT_IN, TYPES, attributes, operations, parameters};
@@ -28,11 +32,13 @@ const VISIBILITIES: [&str; 4] = ["public", "private", "protected", "package"];
 /// The longest multiplicity typed.
 const MAX_MULTIPLICITY: usize = 24;
 
-/// Which kind of member an editor edits.
+/// Which kind of member an editor edits: a class's or an interface's attribute or operation, or an
+/// enumeration's literal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MemberKind {
     Attribute,
     Operation,
+    Literal,
 }
 
 /// A parameter as the operation editor holds it.
@@ -44,8 +50,8 @@ pub struct ParamEdit {
     pub multiplicity: String,
 }
 
-/// An attribute or operation being edited: the member, or none for one about to be added to
-/// `class`.
+/// An attribute, an operation or a literal being edited: the member, or none for one about to be
+/// added to `class` (an enumeration, for a literal).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MemberEdit {
     pub kind: MemberKind,
@@ -151,6 +157,10 @@ pub(crate) fn edit_of(store: Option<&Store>, class: Uuid, kind: MemberKind, targ
         && let Some(o) = store.by_uuid(t)
     {
         edit.name = name(store, o);
+        // A literal is its name alone.
+        if kind == MemberKind::Literal {
+            return edit;
+        }
         edit.visibility = match store.get(o, archforge_uml::named_element::VISIBILITY) {
             Ok(Value::Enum(i)) => (i as usize).min(VISIBILITIES.len() - 1),
             _ => 0,
@@ -161,6 +171,7 @@ pub(crate) fn edit_of(store: Option<&Store>, class: Uuid, kind: MemberKind, targ
                 edit.ty = type_value(store, o);
                 edit.multiplicity = archforge_uml::figures::multiplicity(store, o);
             }
+            MemberKind::Literal => {}
             MemberKind::Operation => {
                 edit.is_abstract = flag(store, o, archforge_uml::behavioral_feature::IS_ABSTRACT);
                 let (params, ret) = parameters(store, o);
@@ -179,8 +190,8 @@ pub(crate) fn edit_of(store: Option<&Store>, class: Uuid, kind: MemberKind, targ
     edit
 }
 
-/// The class or interface a member belongs to, with the member's kind: an attribute that is no
-/// association's end, or an operation.
+/// The classifier a member belongs to, with the member's kind: an attribute that is no
+/// association's end, an operation, or an enumeration's literal.
 pub(crate) fn member_of(store: &Store, o: Obj) -> Option<(Obj, MemberKind)> {
     let (c, _) = store.container(o).ok()??;
     if !archforge_uml::is_classifier(store.class_of(c).ok()?) {
@@ -189,12 +200,13 @@ pub(crate) fn member_of(store: &Store, o: Obj) -> Option<(Obj, MemberKind)> {
     match store.class_of(o).ok()? {
         k if k == archforge_uml::PROPERTY && one(store, o, archforge_uml::property::ASSOCIATION).is_none() => Some((c, MemberKind::Attribute)),
         k if k == archforge_uml::OPERATION => Some((c, MemberKind::Operation)),
+        k if k == archforge_uml::ENUMERATION_LITERAL && store.class_of(c).ok() == Some(archforge_uml::ENUMERATION) => Some((c, MemberKind::Literal)),
         _ => None,
     }
 }
 
 /// A classifier's panel: its name and package, then a class's Abstract, a class's or an
-/// interface's attributes and operations, or an enumeration's literals, read-only.
+/// interface's attributes and operations, or an enumeration's literals, each with its editor.
 pub(crate) fn class_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, subject: &Subject) {
     let (Some(class), Some(class_id)) = (subject.obj, subject.id) else { return };
     let kind = shell.session.as_ref().and_then(|s| Classifier::of(s.doc(), class)).unwrap_or_default();
@@ -219,7 +231,7 @@ pub(crate) fn class_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
     let field = select_field(shell, ui, p, pos2(r.left() + PAD + half + 8.0, y), half, package_id, &tr("Package"), &here, Menu::ClassPackage);
     let mut y = y + 17.0 + FIELD + 12.0;
     if kind == Classifier::Enumeration {
-        literals_section(shell, ui, p, r, y, class);
+        members_section(shell, ui, p, r, y, class, class_id, MemberKind::Literal);
     }
     // An interface is abstract by what it is: it has no Abstract of its own.
     if kind == Classifier::Class {
@@ -313,44 +325,8 @@ fn package_path(store: &Store, package: Obj) -> String {
     names.join(" › ")
 }
 
-/// An enumeration's Literals section: its literals in their order, each selecting itself with a
-/// click, and no `+` or editor, since editing them comes with their own story; with none, it says
-/// so. Gives the y under it.
-fn literals_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, enumeration: Obj) -> f32 {
-    let paint = ui.painter().clone();
-    let width = (r.width() - 2.0 * PAD).max(0.0);
-    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return y };
-    let rows: Vec<(Uuid, String)> =
-        archforge_uml::commands::literals(store, enumeration).into_iter().filter_map(|l| Some((store.uuid(l).ok()?, name(store, l)))).collect();
-    let title = fmt(&tr("Literals · {n}"), &[("n", &rows.len().to_string())]);
-    let Some(next) = section(shell, ui, p, r, y, &title, None) else { return y + 50.0 };
-    let mut y = next - 6.0;
-    if rows.is_empty() {
-        ux::text(&paint, pos2(r.left() + PAD + 10.0, y + 9.0), &tr("No literals yet"), types::UI, p.text_muted, Some(width));
-        return y + ROW + 10.0;
-    }
-    let chosen = crate::panels::selected_id(shell);
-    for (id, text) in &rows {
-        let row = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width, ROW));
-        // Its name for assistive technology and its tooltip: the literal's name, whole.
-        let resp = control(shell, ui, &format!("workspace.properties.literal.{id}"), "row", row, true)
-            .on_hover_text(text.as_str())
-            .accessible_name(text.as_str());
-        if Some(*id) == chosen {
-            paint.rect_filled(row, 6.0, p.accent_tint);
-        } else if resp.contains_pointer() {
-            paint.rect_filled(row, 6.0, p.page);
-        }
-        ux::text(&paint, pos2(row.left() + 10.0, row.top() + 9.0), text, types::UI, p.text, Some((width - 20.0).max(0.0)));
-        if resp.clicked() {
-            crate::panels::select_element(shell, *id);
-        }
-        y += ROW;
-    }
-    y + 10.0
-}
-
-/// The Attributes or Operations section with its rows and the editor; gives the y under it.
+/// The Attributes, Operations or Literals section with its rows and the editor; gives the y under
+/// it. An enumeration without literals says so under its title.
 #[allow(clippy::too_many_arguments, reason = "a section is drawn into the panel for its class and kind")]
 fn members_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, class: Obj, class_id: Uuid, kind: MemberKind) -> f32 {
     let paint = ui.painter().clone();
@@ -371,10 +347,14 @@ fn members_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, m
                 ))
             })
             .collect(),
+        MemberKind::Literal => {
+            archforge_uml::commands::literals(store, class).into_iter().filter_map(|l| Some((store.uuid(l).ok()?, name(store, l), false))).collect()
+        }
     };
     let (title, add, hint, row_id) = match kind {
         MemberKind::Attribute => (tr("Attributes · {n}"), "workspace.properties.attributes.add", "Add attribute", "workspace.properties.attribute"),
         MemberKind::Operation => (tr("Operations · {n}"), "workspace.properties.operations.add", "Add operation", "workspace.properties.operation"),
+        MemberKind::Literal => (tr("Literals · {n}"), "workspace.properties.literals.add", "Add literal", "workspace.properties.literal"),
     };
     let title = fmt(&title, &[("n", &rows.len().to_string())]);
     let Some(next) = section(shell, ui, p, r, y, &title, Some((add, hint))) else {
@@ -384,6 +364,10 @@ fn members_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, m
     y = next - 6.0;
     let editing = |shell: &Shell| shell.panels.member.as_ref().filter(|e| e.kind == kind && e.class == class_id).map(|e| e.target);
     let chosen = crate::panels::selected_id(shell);
+    if rows.is_empty() && kind == MemberKind::Literal && editing(shell) != Some(None) {
+        ux::text(&paint, pos2(r.left() + PAD + 10.0, y + 9.0), &tr("No literals yet"), types::UI, p.text_muted, Some(width));
+        y += ROW;
+    }
     for (id, text, slanted) in &rows {
         if editing(shell) == Some(Some(*id)) {
             y = editor(shell, ui, p, r, y);
@@ -391,7 +375,9 @@ fn members_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, m
         }
         let row = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width, ROW));
         let key = format!("{row_id}.{id}");
-        let resp = control(shell, ui, &key, "row", row, true);
+        // Its name for assistive technology, and a literal's on hover too: the row's text, whole.
+        let resp = control(shell, ui, &key, "row", row, true).accessible_name(text.as_str());
+        let resp = if kind == MemberKind::Literal { resp.on_hover_text(text.as_str()) } else { resp };
         if Some(*id) == chosen {
             paint.rect_filled(row, 6.0, p.accent_tint);
         } else if resp.contains_pointer() {
@@ -520,6 +506,8 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     let take = std::mem::take(&mut edit.opened);
     let mut cy = 12.0;
     let mut enter = false;
+    // A literal's editor holds its name alone, as wide as the card.
+    let literal = edit.kind == MemberKind::Literal;
     // Visibility narrow, the name wide.
     let narrow = 112.0_f32.min(inner / 2.0);
     let wide = (inner - narrow - 8.0).max(0.0);
@@ -534,15 +522,20 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     edit.visibility = edit.visibility.min(words.len().saturating_sub(1));
     let vis_id = "workspace.properties.member.visibility";
     let shown = words.get(edit.visibility).cloned().unwrap_or_default();
-    let vis = select_field(shell, ui, p, at(0.0, cy), narrow, vis_id, &tr("Visibility"), &shown, Menu::MemberVisibility);
+    let vis = if literal {
+        Rect::NOTHING
+    } else {
+        select_field(shell, ui, p, at(0.0, cy), narrow, vis_id, &tr("Visibility"), &shown, Menu::MemberVisibility)
+    };
     let name_id = "workspace.properties.member.name";
-    enter |=
-        text_field(shell, ui, p, at(narrow + 8.0, cy), wide, name_id, &tr("Name"), &mut edit.name, archforge_uml::commands::MAX_NAME, take, false);
+    let (name_x, name_w) = if literal { (0.0, inner) } else { (narrow + 8.0, wide) };
+    enter |= text_field(shell, ui, p, at(name_x, cy), name_w, name_id, &tr("Name"), &mut edit.name, archforge_uml::commands::MAX_NAME, take, false);
     cy += row;
     // Type selects, whose menus open over what is under them, drawn last.
     let mut menus: Vec<(Rect, String, Menu)> = Vec::new();
     let type_id = "workspace.properties.member.type";
     match edit.kind {
+        MemberKind::Literal => {}
         MemberKind::Attribute => {
             let half = ((inner - 8.0) / 2.0).max(0.0);
             let value = shell.session.as_ref().map(|s| type_label(s.doc(), &edit.ty)).unwrap_or_default();
@@ -662,6 +655,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     crate::panels::reveal(shell, ui, card);
     // The menus last, over the card.
     if shell.panels.menu == Some(Menu::MemberVisibility)
+        && !literal
         && let Some(i) = menu(shell, ui, p, vis, vis_id, &words)
     {
         edit.visibility = i;
@@ -710,16 +704,16 @@ fn reselect(shell: &mut Shell, class: Uuid) {
 }
 
 /// Moves the member above its neighbour before it, or below the one after it, among the class's
-/// attributes or operations.
+/// attributes or operations, or the enumeration's literals.
 fn move_member(shell: &mut Shell, edit: &MemberEdit, up: bool) {
     let Some(target) = edit.target else { return };
     let at = shell.session.as_ref().and_then(|s| {
         let store = s.doc();
         let (c, o) = (store.by_uuid(edit.class)?, store.by_uuid(target)?);
-        let (owned_attributes, owned_operations) = archforge_uml::members::member_lists(store, c)?;
         let (list, prop) = match edit.kind {
-            MemberKind::Attribute => (attributes(store, c), owned_attributes),
-            MemberKind::Operation => (operations(store, c), owned_operations),
+            MemberKind::Attribute => (attributes(store, c), archforge_uml::members::member_lists(store, c)?.0),
+            MemberKind::Operation => (operations(store, c), archforge_uml::members::member_lists(store, c)?.1),
+            MemberKind::Literal => (archforge_uml::commands::literals(store, c), archforge_uml::enumeration::OWNED_LITERAL),
         };
         let i = list.iter().position(|x| *x == o)?;
         let neighbour = if up { list.get(i.checked_sub(1)?) } else { list.get(i + 1) }?;
@@ -730,6 +724,7 @@ fn move_member(shell: &mut Shell, edit: &MemberEdit, up: bool) {
     let (cmd, key) = match edit.kind {
         MemberKind::Attribute => ("uml.attribute.move", "attribute"),
         MemberKind::Operation => ("uml.operation.move", "operation"),
+        MemberKind::Literal => ("uml.literal.move", "literal"),
     };
     match run(shell, cmd, json!({ key: target.to_string(), "at": at })) {
         Ok(_) => refuse(shell, None),
@@ -750,16 +745,19 @@ fn commit(shell: &mut Shell, edit: &MemberEdit) {
     }
 }
 
-/// The command that writes the member as edited, with its parameters.
+/// The command that writes the member as edited, with its parameters: the member's id under its
+/// key when it is edited, else its classifier's under `class` (an enumeration's under
+/// `enumeration`).
 pub(crate) fn command_of(edit: &MemberEdit) -> (&'static str, serde_json::Value) {
     let visibility = VISIBILITIES[edit.visibility.min(VISIBILITIES.len() - 1)];
-    let (cmd, mut params) = match edit.kind {
+    let (cmd, mut params, key) = match edit.kind {
         MemberKind::Attribute => (
             if edit.target.is_some() { "uml.attribute.set" } else { "uml.attribute.add" },
             json!({
                 "name": edit.name.trim(), "visibility": visibility, "type": edit.ty,
                 "multiplicity": edit.multiplicity.trim(), "static": edit.is_static,
             }),
+            "attribute",
         ),
         MemberKind::Operation => (
             if edit.target.is_some() { "uml.operation.set" } else { "uml.operation.add" },
@@ -767,24 +765,53 @@ pub(crate) fn command_of(edit: &MemberEdit) -> (&'static str, serde_json::Value)
                 "name": edit.name.trim(), "visibility": visibility, "returns": edit.ty, "static": edit.is_static, "abstract": edit.is_abstract,
                 "parameters": edit.params.iter().map(|p| json!({ "name": p.name.trim(), "type": p.ty, "multiplicity": p.multiplicity.trim() })).collect::<Vec<_>>(),
             }),
+            "operation",
         ),
+        MemberKind::Literal => {
+            (if edit.target.is_some() { "uml.literal.rename" } else { "uml.literal.add" }, json!({ "name": edit.name.trim() }), "literal")
+        }
     };
-    match (edit.target, edit.kind) {
-        (Some(t), MemberKind::Attribute) => params["attribute"] = json!(t.to_string()),
-        (Some(t), MemberKind::Operation) => params["operation"] = json!(t.to_string()),
-        (None, _) => params["class"] = json!(edit.class.to_string()),
+    let (key, id) = match (edit.target, edit.kind) {
+        (Some(t), _) => (key, t.to_string()),
+        (None, MemberKind::Literal) => ("enumeration", edit.class.to_string()),
+        (None, _) => ("class", edit.class.to_string()),
+    };
+    if let Some(fields) = params.as_object_mut() {
+        fields.insert(key.to_string(), json!(id));
     }
     (cmd, params)
 }
 
+/// Why the literal as edited cannot be written, in the user's words: a new one in an enumeration
+/// that holds the most literals it may, or a name another literal of its enumeration has, whatever
+/// the case; the rules the commands keep too. None for any other member.
+pub(crate) fn literal_refusal(store: &Store, edit: &MemberEdit) -> Option<String> {
+    if edit.kind != MemberKind::Literal {
+        return None;
+    }
+    let enumeration = store.by_uuid(edit.class)?;
+    let max = archforge_uml::members::MAX_LITERALS;
+    if edit.target.is_none() && archforge_uml::commands::literals(store, enumeration).len() >= max {
+        return Some(fmt(&tr("An enumeration holds at most {n} literals."), &[("n", &max.to_string())]));
+    }
+    let except = edit.target.and_then(|t| store.by_uuid(t));
+    let clash = archforge_uml::members::literal_clash(store, enumeration, edit.name.trim(), except)?;
+    Some(fmt(&tr("There is a literal named {name} already."), &[("name", &name(store, clash))]))
+}
+
 /// Runs the member's command and, in the same undo step, grows every card of its class that would
 /// then hide a member, on every diagram, keeping its width (owner decision: a card the user made
-/// shorter stays so until a member of its class is added or edited).
+/// shorter stays so until a member of its class is added or edited); an enumeration's grows to
+/// show a literal added the same way. A literal's name that clashes is refused first, in the
+/// user's words, and nothing is run.
 pub(crate) fn write_in_sight(shell: &mut Shell, edit: &MemberEdit, cmd: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
     let Some(session) = shell.session.as_mut() else { return Err(tr("The model could not be opened")) };
     let store = session.doc();
+    if let Some(why) = literal_refusal(store, edit) {
+        return Err(why);
+    }
     let more = match (edit.target, edit.kind) {
-        (None, MemberKind::Attribute) => (1, 0),
+        (None, MemberKind::Attribute | MemberKind::Literal) => (1, 0),
         (None, MemberKind::Operation) => (0, 1),
         (Some(_), _) => (0, 0),
     };
@@ -797,6 +824,8 @@ pub(crate) fn write_in_sight(shell: &mut Shell, edit: &MemberEdit, cmd: &str, pa
         "uml.attribute.add" => "Add attribute",
         "uml.attribute.set" => "Set attribute",
         "uml.operation.add" => "Add operation",
+        "uml.literal.add" => "Add literal",
+        "uml.literal.rename" => "Rename literal",
         _ => "Set operation",
     };
     session
@@ -821,5 +850,5 @@ pub(crate) fn retain_valid(edit: &mut Option<MemberEdit>, store: &Store) {
 /// The hover texts given by key and the visibilities' words, for the catalogue tests.
 #[cfg(test)]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
-    ["Add attribute", "Add operation", "Remove", "Remove parameter", "Move up", "Move down", "Cancel", "Apply"].into_iter()
+    ["Add attribute", "Add operation", "Add literal", "Remove", "Remove parameter", "Move up", "Move down", "Cancel", "Apply"].into_iter()
 }

@@ -7,7 +7,10 @@
 //! as the multiplicity field writes on leaving it. A refusal stays under the row with the text
 //! as typed, the model untouched. The row's ⋯ takes it to Properties' editor for the rest
 //! (visibility, multiplicity, static, abstract, parameters). A selected class shows a + at the
-//! right of each compartment; ⌘↩ adds an attribute, ⇧⌘↩ an operation. Below the zoom at which a
+//! right of each compartment; ⌘↩ adds an attribute, ⇧⌘↩ an operation. An enumeration's literal
+//! is typed the same way (AR-122): a name-only row, the + of its Literals compartment, its adorner
+//! and ⌘↩ opening a new one at the end, a double click one in place; a name another literal of
+//! the enumeration has, whatever the case, is refused under the row. Below the zoom at which a
 //! card shows its rows, or without the class's card on the open diagram, Properties' editor opens
 //! instead.
 
@@ -49,9 +52,11 @@ const TYPE_ID: &str = "workspace.canvas.member.type";
 const ROW_HEIGHT: f32 = ENTITY_ROW + 4.0;
 const BUTTON: f32 = 18.0;
 
+/// The compartment of its card a member of `kind` is listed in: an enumeration's literals are its
+/// one compartment.
 fn compartment(kind: MemberKind) -> usize {
     match kind {
-        MemberKind::Attribute => 0,
+        MemberKind::Attribute | MemberKind::Literal => 0,
         MemberKind::Operation => 1,
     }
 }
@@ -72,6 +77,10 @@ fn type_text(store: &Store, ty: &str) -> String {
 /// different packages stay apart; text typed over it names a type: none for empty, a built-in
 /// type or one of the model's; a name no type has, or that several have, is refused, naming it.
 fn resolve(store: &Store, inline: &InlineMember) -> Result<String, String> {
+    // A literal has no type.
+    if inline.edit.kind == MemberKind::Literal {
+        return Ok(String::new());
+    }
     let text = inline.ty.trim();
     if text == type_text(store, &inline.edit.ty) {
         return Ok(inline.edit.ty.clone());
@@ -87,15 +96,22 @@ fn resolve(store: &Store, inline: &InlineMember) -> Result<String, String> {
 }
 
 /// Opens a row on `class`'s card on the open diagram: a new member of `kind`, or `target`. Gives
-/// false when the card cannot hold one (no card of the class on the diagram, or the diagram drawn
-/// below the zoom at which cards show their rows); the caller opens Properties' editor then.
+/// false when the card cannot hold one (no card of the class on the diagram, the diagram drawn
+/// below the zoom at which cards show their rows, or, for a new member, a card that lists only
+/// some of its rows, whose end is not the members' end); the caller opens Properties' editor then.
 pub(crate) fn open(shell: &mut Shell, class: Uuid, kind: MemberKind, target: Option<Uuid>) -> bool {
     if shell.canvas.zoom < DETAIL_ZOOM {
         return false;
     }
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return false };
     let Some(c) = store.by_uuid(class) else { return false };
-    if card_node(shell, store, c).is_none() {
+    let Some(n) = card_node(shell, store, c) else { return false };
+    // A card that leaves rows out has its draft's place among them, not at the members' end.
+    let capped = || {
+        let card = shell.session.as_ref().and_then(|s| s.view().of_element(store, c)?.card(store, c, archforge_diagram::diagram_of(store, n)?));
+        card.is_some_and(|card| card.hidden > 0)
+    };
+    if target.is_none() && capped() {
         return false;
     }
     let edit = crate::uml_panel::edit_of(Some(store), class, kind, target);
@@ -123,6 +139,7 @@ pub(crate) fn draft(shell: &Shell, store: &Store) -> Option<(Obj, usize, Option<
             match inline.edit.kind {
                 MemberKind::Attribute => Some(attributes.iter().position(|a| *a == o)?),
                 MemberKind::Operation => Some(attributes.len() + archforge_uml::members::operations(store, c).iter().position(|op| *op == o)?),
+                MemberKind::Literal => Some(archforge_uml::commands::literals(store, c).iter().position(|l| *l == o)?),
             }
         }
     };
@@ -156,7 +173,8 @@ fn row_place(shell: &Shell, store: &Store, view: View, c: Obj) -> Option<(Rect, 
 }
 
 /// The row over its card, when one is typed: its fields, the type menu, the details button, the
-/// refusal under it, and the keys.
+/// refusal under it, and the keys. A literal's row holds its name alone, from where a row's text
+/// starts to the details button.
 pub(crate) fn row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, view: View) {
     let Some(mut inline) = shell.canvas.inline.clone() else { return };
     let place = shell.session.as_ref().and_then(|s| {
@@ -182,10 +200,11 @@ pub(crate) fn row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, view: View)
     let left = card.left() + crate::canvas::ENTITY_TEXT * z;
     let usable = (details.left() - 4.0 * z - left).max(0.0);
     let operation = inline.edit.kind == MemberKind::Operation;
+    let literal = inline.edit.kind == MemberKind::Literal;
     let suffix = if operation { "()" } else { "" };
     let suffix_w = if operation { ux::galley(&paint, suffix, font, p.text_muted, None).size().x } else { 0.0 };
     let type_w = (usable * 0.45).max(0.0);
-    let name_w = (usable - type_w - suffix_w - 14.0 * z).max(0.0);
+    let name_w = if literal { usable } else { (usable - type_w - suffix_w - 14.0 * z).max(0.0) };
     let name_rect = Rect::from_min_size(pos2(left, inner_top), vec2(name_w, field_h));
     let colon_x = name_rect.right() + suffix_w + 3.0 * z;
     let type_rect = Rect::from_min_size(pos2(colon_x + 10.0 * z, inner_top), vec2((details.left() - 4.0 * z - colon_x - 10.0 * z).max(0.0), field_h));
@@ -193,13 +212,17 @@ pub(crate) fn row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, view: View)
     if operation {
         ux::text(&paint, pos2(name_rect.right(), inner_top), suffix, font, p.text_muted, None);
     }
-    ux::text(&paint, pos2(colon_x, inner_top), ":", font, p.text_muted, None);
-    paint.rect_filled(type_rect, 3.0 * z, p.surface);
+    if !literal {
+        ux::text(&paint, pos2(colon_x, inner_top), ":", font, p.text_muted, None);
+        paint.rect_filled(type_rect, 3.0 * z, p.surface);
+    }
     // Tab moves between the two fields, the keys taken before the fields see them.
     let (name_eid, type_eid) = (widgets::egui_id(NAME_ID), widgets::egui_id(TYPE_ID));
     let focused = ui.memory(|m| m.focused());
     let mut switched = false;
-    if focused == Some(name_eid) && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Tab)) {
+    if literal {
+        // One field: Tab stays in it.
+    } else if focused == Some(name_eid) && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Tab)) {
         inline.field = InlineField::Type;
         inline.focus = true;
         switched = true;
@@ -211,7 +234,9 @@ pub(crate) fn row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, view: View)
         switched = true;
     }
     widgets::record_visible(ui, &mut shell.registry, NAME_ID, "field", name_rect);
-    widgets::record_visible(ui, &mut shell.registry, TYPE_ID, "field", type_rect);
+    if !literal {
+        widgets::record_visible(ui, &mut shell.registry, TYPE_ID, "field", type_rect);
+    }
     let field = |ui: &mut egui::Ui, text: &mut String, id: egui::Id, rect: Rect, hint: String, limit: usize| {
         let edit = egui::TextEdit::singleline(text)
             .id(id)
@@ -231,18 +256,20 @@ pub(crate) fn row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, view: View)
     let type_hint = if operation { tr("Return type") } else { tr("Type") };
     let name_resp = field(ui, &mut inline.edit.name, name_eid, name_rect, tr("Name"), archforge_uml::commands::MAX_NAME);
     let type_text_rect = Rect::from_min_max(pos2(type_rect.left() + 4.0 * z, type_rect.top()), pos2(chevron.left(), type_rect.bottom()));
-    let type_resp = field(ui, &mut inline.ty, type_eid, type_text_rect, type_hint, archforge_uml::commands::MAX_NAME);
+    let type_resp = (!literal).then(|| field(ui, &mut inline.ty, type_eid, type_text_rect, type_hint, archforge_uml::commands::MAX_NAME));
     if inline.focus {
-        match inline.field {
-            InlineField::Name => name_resp.request_focus(),
-            InlineField::Type => type_resp.request_focus(),
+        match (inline.field, &type_resp) {
+            (InlineField::Type, Some(t)) => t.request_focus(),
+            _ => name_resp.request_focus(),
         }
         inline.focus = false;
     }
-    ux::icon_in(&paint, chevron.shrink(3.0 * z), &icons::CHEVRON_SMALL, p.text_secondary);
-    let menu_open = shell.panels.menu == Some(crate::panels::Menu::InlineType);
-    if control(shell, ui, "workspace.canvas.member.type.menu", "button", chevron, true).on_hover_text(type_hint_of(operation)).clicked() {
-        shell.panels.menu = if menu_open { None } else { Some(crate::panels::Menu::InlineType) };
+    if !literal {
+        ux::icon_in(&paint, chevron.shrink(3.0 * z), &icons::CHEVRON_SMALL, p.text_secondary);
+        let menu_open = shell.panels.menu == Some(crate::panels::Menu::InlineType);
+        if control(shell, ui, "workspace.canvas.member.type.menu", "button", chevron, true).on_hover_text(type_hint_of(operation)).clicked() {
+            shell.panels.menu = if menu_open { None } else { Some(crate::panels::Menu::InlineType) };
+        }
     }
     ux::icon_in(&paint, details.shrink(2.0 * z), &icons::MORE, p.text_secondary);
     let to_details =
@@ -255,7 +282,7 @@ pub(crate) fn row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, view: View)
     }
     // The type menu, under the type field: a pick sets the type and gives the field the keyboard.
     let mut picked = false;
-    if shell.panels.menu == Some(crate::panels::Menu::InlineType) {
+    if shell.panels.menu == Some(crate::panels::Menu::InlineType) && !literal {
         let choices = shell.session.as_ref().map(|s| crate::uml_panel::type_choices(s.doc())).unwrap_or_default();
         let labels: Vec<String> = choices.iter().map(|(label, _)| label.clone()).collect();
         if let Some(i) = crate::panels::menu(shell, ui, p, type_rect, TYPE_ID, &labels) {
@@ -275,8 +302,8 @@ pub(crate) fn row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, view: View)
     // A press elsewhere is a click away whether or not a field had the keyboard: the chevron takes
     // it from them, and the menu's closing on that press gives it back to neither.
     let pressed_away = pressed.is_some() && !pressed_on_row && !picked;
-    let has_focus = name_resp.has_focus() || type_resp.has_focus();
-    let lost = name_resp.lost_focus() || type_resp.lost_focus();
+    let has_focus = name_resp.has_focus() || type_resp.as_ref().is_some_and(|t| t.has_focus());
+    let lost = name_resp.lost_focus() || type_resp.as_ref().is_some_and(|t| t.lost_focus());
     let (enter, escape) = ui.input(|i| (i.key_pressed(egui::Key::Enter), i.key_pressed(egui::Key::Escape)));
     shell.canvas.inline = Some(inline);
     if to_details {
@@ -368,7 +395,8 @@ fn to_properties(shell: &mut Shell) {
     shell.state.show_panel(crate::state::Panel::Properties);
 }
 
-/// The + at the right of each compartment of a selected class's card, which opens a new row there.
+/// The + at the right of each compartment of a selected class's card, which opens a new row there;
+/// an enumeration's one + is its Literals compartment's, shown while it has none too.
 pub(crate) fn add_buttons(shell: &mut Shell, ui: &egui::Ui, p: &Palette, clip: Rect, rect: Rect, class: Uuid) {
     let z = shell.canvas.zoom;
     // While a row is typed on the card, its own keys add the next.
@@ -380,12 +408,20 @@ pub(crate) fn add_buttons(shell: &mut Shell, ui: &egui::Ui, p: &Palette, clip: R
         let c = store.by_uuid(class)?;
         let n = card_node(shell, store, c)?;
         let card = s.view().of_element(store, c)?.card(store, c, archforge_diagram::diagram_of(store, n)?)?;
-        Some(card)
+        Some((card, store.class_of(c).ok() == Some(archforge_uml::ENUMERATION)))
     });
-    let Some(card) = card else { return };
+    let Some((card, enumeration)) = card else { return };
     let paint = ui.painter().with_clip_rect(clip);
-    for (kind, key, hint) in [(MemberKind::Attribute, "add-attribute", "Add attribute"), (MemberKind::Operation, "add-operation", "Add operation")] {
-        let Some(top) = crate::canvas::compartment_top(&card, compartment(kind)) else { continue };
+    let adds: &[(MemberKind, &str, &str)] = if enumeration {
+        &[(MemberKind::Literal, "enumeration.add-literal", "Add literal")]
+    } else {
+        &[(MemberKind::Attribute, "class.add-attribute", "Add attribute"), (MemberKind::Operation, "class.add-operation", "Add operation")]
+    };
+    for &(kind, key, hint) in adds {
+        // A card of one compartment with no row yet (an enumeration without literals) has its
+        // first row's place under the header.
+        let first = (card.compartments.len() == 1).then_some(crate::canvas::ENTITY_FIRST_ROW);
+        let Some(top) = crate::canvas::compartment_top(&card, compartment(kind)).or(first) else { continue };
         // A compartment past the card's foot (a card made short) takes its member from the keys.
         if (top + ENTITY_ROW) * z > rect.height() + z {
             continue;
@@ -399,7 +435,7 @@ pub(crate) fn add_buttons(shell: &mut Shell, ui: &egui::Ui, p: &Palette, clip: R
         if !clip.intersects(b) {
             continue;
         }
-        let resp = control(shell, ui, &format!("workspace.canvas.class.{key}"), "button", b, true).on_hover_text(tr(hint));
+        let resp = control(shell, ui, &format!("workspace.canvas.{key}"), "button", b, true).on_hover_text(tr(hint)).accessible_name(tr(hint));
         if resp.hovered() {
             paint.rect_filled(b, 4.0, p.field);
         }

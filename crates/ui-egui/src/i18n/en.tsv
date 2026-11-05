@@ -562,8 +562,11 @@ plural		+ {n} more element	+ {n} more element|+ {n} more elements
 str		Abstract	Abstract
 str		Add attribute	Add attribute
 str		Add operation	Add operation
+str		Add literal	Add literal
 str		More details in Properties	More details in Properties
 str		There is no type named {name}.	There is no type named {name}.
+str		There is a literal named {name} already.	There is a literal named {name} already.
+str		An enumeration holds at most {n} literals.	An enumeration holds at most {n} literals.
 str		Several types are named {name}; pick one from the menu.	Several types are named {name}; pick one from the menu.
 str		Add parameter	Add parameter
 str		Attribute	Attribute
@@ -573,7 +576,6 @@ str		Literal · model	Literal · model
 str		Attributes · {n}	Attributes · {n}
 str		Literals · {n}	Literals · {n}
 str		No literals yet	No literals yet
-str		Literals are removed with their enumeration	Literals are removed with their enumeration
 str		Move down	Move down
 str		Move up	Move up
 str		Multiplicity	Multiplicity

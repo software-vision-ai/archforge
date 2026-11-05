@@ -392,12 +392,28 @@ What is UML's own, beside the shared rules above.
 - An enumeration (AR-121) is the classifier tool's third kind, after Interface, its face and menu
   icon a short list (Tool · Enumeration), placed and named in place as `Enumeration 1`. Its card is
   plain, `«enumeration»` in its eyebrow kept as written, and has one compartment: its literals in
-  their order, bare names, one empty row while it has none. It takes no attribute or operation: no
-  compartment `+`, no add adorner, no menu row for a member, and ⌘↩ adds nothing. Properties shows
-  Name and Package, then `Literals · n` as read-only rows a click selects, or "No literals yet";
-  Models lists it under its package with its literals below it, read-only (no rename, Delete leaves
-  them), and its `+` offers Enumeration beside Class and Interface. Editing literals comes with
-  AR-122, so nothing offers it before.
+  their order, bare names, one empty row while it has none. It takes no attribute or operation, and
+  ⇧⌘↩ adds nothing to it. Properties shows Name and Package, then `Literals · n`, or "No literals
+  yet"; Models lists it under its package with its literals below it, and its `+` offers
+  Enumeration beside Class and Interface.
+- Literals are edited (AR-122) as a class's members are. A selected enumeration's card shows a `+`
+  at the right of its Literals compartment, even while it has none; it, the second adorner (Add
+  literal), the menu's Add literal and ⌘↩ open a draft row at the end, ringed in the accent, with
+  the name alone and its ⋯ to Properties. Enter writes the literal as one undo step and opens the
+  next draft; Escape drops the draft; a click away writes a draft with a name and drops an empty
+  one. A double click on a literal's row edits it in place there. Names are told apart within their
+  enumeration whatever the case (`Paid` and `paid` clash): "There is a literal named Paid already."
+  sits under the row, the text kept and the model untouched. Properties' `Literals · n` has a `+`
+  and a pencil per row (a double click opens it too); the literal editor holds Name, then Remove,
+  Move up and Move down at its foot on the left, Cancel and Apply on the right; Apply or Enter
+  writes one undo step, Cancel or Escape leaves. A literal applied grows every card of its
+  enumeration that would hide it, in the same step. In Models a literal's row renames in place (a
+  second click, F2) and Delete removes it; `+` on a selected enumeration or literal offers Literal
+  first, added at the end and named in place (`Literal 1`); a clashing name there is refused in
+  the same words. An enumeration holds at most 256 literals, as an ER enum type does ("An
+  enumeration holds at most 256 literals."). A card lists at most 500 rows and counts the rest in
+  its `+ n more` row; on such a card a new member opens in Properties' editor, not as a draft row.
+  Literals carry no skills.
 - An enumeration is a data type: no association of any kind starts or ends at one, nor does an
   association's end move onto one; the tool says "An enumeration is a data type and joins no
   association" at the canvas's top and draws nothing. An enumeration specializes only an
