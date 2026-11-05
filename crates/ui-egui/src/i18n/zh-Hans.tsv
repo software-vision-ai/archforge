@@ -609,6 +609,7 @@ str		Dependency · model	依赖 · 模型
 str		Directed association	有向关联
 str		Drag a line end onto another class.	将线的一端拖到另一个类上。
 str		Drag onto another class to move this end	拖到另一个类上以移动此端
+str		Drag the class end onto another class, the interface end onto another interface.	将类一端拖到另一个类上，将接口一端拖到另一个接口上。
 str		End at {class}	{class} 端
 str		From	从
 str		General	一般

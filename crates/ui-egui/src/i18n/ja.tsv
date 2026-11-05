@@ -609,6 +609,7 @@ str		Dependency · model	依存 · モデル
 str		Directed association	有向関連
 str		Drag a line end onto another class.	線の端を別のクラスへドラッグします。
 str		Drag onto another class to move this end	別のクラスへドラッグしてこの端を移動
+str		Drag the class end onto another class, the interface end onto another interface.	クラス側の端を別のクラスへ、インターフェース側の端を別のインターフェースへドラッグします。
 str		End at {class}	{class} 側の端
 str		From	始点
 str		General	一般

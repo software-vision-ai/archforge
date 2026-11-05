@@ -609,6 +609,7 @@ str		Dependency · model	Dependência · modelo
 str		Directed association	Associação dirigida
 str		Drag a line end onto another class.	Arraste uma ponta da linha para outra classe.
 str		Drag onto another class to move this end	Arraste para outra classe para mover esta ponta
+str		Drag the class end onto another class, the interface end onto another interface.	Arraste a ponta da classe para outra classe e a ponta da interface para outra interface.
 str		End at {class}	Ponta em {class}
 str		From	De
 str		General	Geral

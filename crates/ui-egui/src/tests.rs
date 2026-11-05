@@ -7645,7 +7645,14 @@ fn a_realization_shows_its_class_and_interface_in_properties_and_its_ends_reconn
         }
         assert!(!found.contains(&"workspace.properties.name".to_string()), "a realization has no name to edit");
         let shown = painted(&h);
-        for label in ["Implementing class", "Realized interface", "OrderLine", "Payable", "Interface realization"] {
+        for label in [
+            "Implementing class",
+            "Realized interface",
+            "OrderLine",
+            "Payable",
+            "Interface realization",
+            "Drag the class end onto another class, the interface end onto another interface.",
+        ] {
             assert!(shown.iter().any(|t| t == label), "{label} is shown in {shown:?}");
         }
         // The interface end dragged onto Refundable: the realization and its line move there.

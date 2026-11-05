@@ -608,6 +608,7 @@ str		Dependency · model	Dependency · model
 str		Directed association	Directed association
 str		Drag a line end onto another class.	Drag a line end onto another class.
 str		Drag onto another class to move this end	Drag onto another class to move this end
+str		Drag the class end onto another class, the interface end onto another interface.	Drag the class end onto another class, the interface end onto another interface.
 str		End at {class}	End at {class}
 str		From	From
 str		General	General

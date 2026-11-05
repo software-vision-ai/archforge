@@ -609,6 +609,7 @@ str		Dependency · model	Abhängigkeit · Modell
 str		Directed association	Gerichtete Assoziation
 str		Drag a line end onto another class.	Ziehen Sie ein Linienende auf eine andere Klasse.
 str		Drag onto another class to move this end	Auf eine andere Klasse ziehen, um dieses Ende zu verschieben
+str		Drag the class end onto another class, the interface end onto another interface.	Ziehen Sie das Klassenende auf eine andere Klasse, das Schnittstellenende auf eine andere Schnittstelle.
 str		End at {class}	Ende bei {class}
 str		From	Von
 str		General	Allgemein

@@ -496,8 +496,17 @@ pub(crate) fn body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, m
         control(shell, ui, &format!("workspace.properties.relationship.{}", ["from", "to"][i]), "field", field, false);
     }
     y += 17.0 + FIELD + 8.0;
-    ux::text(&paint, pos2(r.left() + PAD, y), &tr("Drag a line end onto another class."), types::CAPTION, p.text_muted, Some(width));
-    y += 28.0;
+    // A realization's ends each move onto their own kind.
+    let hint = if class == Some(archforge_uml::INTERFACE_REALIZATION) {
+        tr("Drag the class end onto another class, the interface end onto another interface.")
+    } else {
+        tr("Drag a line end onto another class.")
+    };
+    // Wrapped, so the realization's longer hint reads whole in a narrow panel.
+    let said = ux::galley_rows(&paint, &hint, types::CAPTION, p.text_muted, Some(width), 3);
+    let height = said.size().y;
+    paint.galley(pos2(r.left() + PAD, y), said, p.text_muted);
+    y += (height + 12.0).max(28.0);
     if class == Some(archforge_uml::ASSOCIATION) {
         ends_sections(shell, ui, p, r, y, o, id);
     }

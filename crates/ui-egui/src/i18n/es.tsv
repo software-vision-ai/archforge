@@ -609,6 +609,7 @@ str		Dependency · model	Dependencia · modelo
 str		Directed association	Asociación dirigida
 str		Drag a line end onto another class.	Arrastre un extremo de la línea a otra clase.
 str		Drag onto another class to move this end	Arrastre a otra clase para mover este extremo
+str		Drag the class end onto another class, the interface end onto another interface.	Arrastre el extremo de la clase a otra clase y el extremo de la interfaz a otra interfaz.
 str		End at {class}	Extremo en {class}
 str		From	Desde
 str		General	General

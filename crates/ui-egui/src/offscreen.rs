@@ -407,6 +407,9 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
     if screen == Screen::WorkspaceRealization {
         shell.adopt_project();
         sample_realizations(&mut shell)?;
+        // The Relationship tool armed after the line was selected, as a click on it leaves the
+        // selection: the toolbar shows Interface realization active beside its Properties.
+        shell.canvas.tool = crate::canvas::Tool::Connect("relationship");
         shell.canvas.uml_relation = crate::uml_relate::Relate::Realization;
     }
     if screen == Screen::WorkspaceInlineMember {

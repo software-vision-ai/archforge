@@ -609,6 +609,7 @@ str		Dependency · model	Dépendance · modèle
 str		Directed association	Association orientée
 str		Drag a line end onto another class.	Faites glisser une extrémité de la ligne sur une autre classe.
 str		Drag onto another class to move this end	Faire glisser sur une autre classe pour déplacer cette extrémité
+str		Drag the class end onto another class, the interface end onto another interface.	Faites glisser l’extrémité de la classe sur une autre classe, et celle de l’interface sur une autre interface.
 str		End at {class}	Extrémité sur {class}
 str		From	De
 str		General	Générale
