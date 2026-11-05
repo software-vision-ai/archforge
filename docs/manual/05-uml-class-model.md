@@ -120,6 +120,36 @@ apply. Delete removes the realization, and removing its class or its interface t
 
 <!-- picture: workspace-realization light | Order and Invoice each realizing the interface Payable, Order's realization selected with its implementing class and realized interface in Properties -->
 
+## 8. Add an enumeration
+
+An enumeration is a type whose values are a fixed list of names, its *literals*: an order's status
+is *Placed*, *Paid*, *Shipped* or *Cancelled*.
+
+1. Open the chevron beside the classifier tool and choose **Enumeration**, below **Interface**. The
+   tool now shows a short list, and its tooltip says *Enumeration*.
+2. Click on the canvas, type *OrderStatus* and press Enter. Its card says `«enumeration»` above
+   its name and has one compartment, for its literals; while it has none, the compartment is
+   empty.
+
+An enumeration has no attributes or operations of its own: its card has no **+**, its menu offers
+no new member, and ⌘↩ adds none. Select it to see it in **Properties**: under its **Name** and
+**Package**, **Literals** lists its literals in their order, or says it has none yet. In **Models**
+an enumeration is a row under its package with its literals below it. Adding, renaming,
+reordering and removing literals comes in a later version; for now they are shown, not edited.
+
+In **Models**, the **+** of a package offers **Enumeration** beside **Class** and **Interface**,
+and you can drag an enumeration onto a diagram or onto another package's row as you drag a class.
+It shares its package's names with the classes and interfaces there. An enumeration is offered as a
+type wherever you choose an attribute's, a parameter's or a return type, and what it types keeps it
+when you rename it or move it to another package.
+
+An enumeration is a data type, not something whose instances you link: the **Relationship** tool
+draws no association to or from one, and says so at the canvas's top. A generalization joins an
+enumeration only to another enumeration, and a dependency may lead to one. Dragged out of an
+enumeration onto empty canvas, a generalization makes a new enumeration there.
+
+<!-- picture: workspace-enumeration light | The enumeration OrderStatus with its four literals, selected with its literals in Properties and under it in Models, an enumeration Priority with none yet, and the class Order whose attributes they type -->
+
 ## The result
 
 The root package holds two classes and an interface. *Customer* has an attribute and an

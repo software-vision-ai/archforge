@@ -1724,7 +1724,8 @@ struct SkillRow {
     own: bool,
 }
 
-/// What a skill aims at, as Properties says it: every class, every interface, its type pattern, or nothing.
+/// What a skill aims at, as Properties says it: every class, every interface, every enumeration,
+/// its type pattern, or nothing.
 pub(crate) fn target_word(store: &Store, s: Obj) -> String {
     let applies = string_of(store, s, archforge_core::skill::APPLIES_TO);
     let pattern = string_of(store, s, archforge_core::skill::TYPE_PATTERN);
@@ -1733,6 +1734,7 @@ pub(crate) fn target_word(store: &Store, s: Obj) -> String {
         Some("relationship") => tr("every relationship"),
         Some("class") => tr("every class"),
         Some("interface") => tr("every interface"),
+        Some("enumeration") => tr("every enumeration"),
         Some("attribute") => tr("every attribute"),
         Some("operation") => tr("every operation"),
         Some("association") => tr("every association"),
@@ -1742,6 +1744,7 @@ pub(crate) fn target_word(store: &Store, s: Obj) -> String {
     }
 }
 
+/// The selection's own skills and those it inherits, each as its row says it.
 fn skill_rows(store: &Store, subject: &Subject) -> (Vec<SkillRow>, Vec<SkillRow>) {
     let this = subject.this.clone();
     let subject = subject.obj;
@@ -1780,7 +1783,18 @@ fn skill_rows(store: &Store, subject: &Subject) -> (Vec<SkillRow>, Vec<SkillRow>
     (own, inherited)
 }
 
-/// Draws the Skills panel's body under the header, from `y`.
+/// Why the selection carries no skill, in the user's words, when it carries none: asked of the
+/// model's own rule, so the panel offers to add a skill only where `skill.add` takes one.
+fn no_skills(shell: &Shell, subject: &Subject) -> Option<String> {
+    let (s, o) = (shell.session.as_ref()?, subject.obj?);
+    let store = s.doc();
+    archforge_core::skills::subject_problem(s.view(), store, o)?;
+    let said = crate::notation_ui::of(shell.notation_uis, store, o).and_then(|ui| ui.no_skills(store, o));
+    Some(said.unwrap_or_else(|| tr("This element carries no skills")))
+}
+
+/// Draws the Skills panel's body under the header, from `y`: the selection's own skills with `+`
+/// to add one where it carries skills, else a line saying it carries none, then those it inherits.
 fn skills(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, subject: &Subject) {
     let paint = ui.painter().clone();
     let width = r.width() - 2.0 * PAD;
@@ -1788,12 +1802,18 @@ fn skills(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32
         Some(s) => skill_rows(s.doc(), subject),
         None => return,
     };
+    let none = no_skills(shell, subject);
     let title = fmt(&subject.on_this, &[("n", &own.len().to_string())]);
-    let Some(next) = section(shell, ui, p, r, y, &title, Some(("workspace.skills.add", "Add skill"))) else {
+    let add = none.is_none().then_some(("workspace.skills.add", "Add skill"));
+    let Some(next) = section(shell, ui, p, r, y, &title, add) else {
         crate::skill_tab::create(shell, subject.id);
         return;
     };
     y = next - 6.0;
+    if let Some(why) = none {
+        ux::text(&paint, pos2(r.left() + PAD + 8.0, y + 7.0), &why, types::SMALL, p.text_muted, Some((width - 8.0).max(0.0)));
+        y += 30.0;
+    }
     for row in &own {
         y = skill_row(shell, ui, &paint, p, r, y, row, width);
     }

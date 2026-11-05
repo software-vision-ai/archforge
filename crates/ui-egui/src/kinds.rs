@@ -141,6 +141,13 @@ pub(crate) trait DiagramKind: Sync {
     fn adorner(&self) -> Option<(&'static str, &'static str)> {
         None
     }
+    /// Whether a selected element's card takes new rows: its second adorner, its menu's row for
+    /// it, ⌘↩ and its card's own controls. By default every element that takes part does; a UML
+    /// enumeration, whose literals come with their own story, does not.
+    fn takes_rows(&self, store: &Store, element: Obj) -> bool {
+        let _ = (store, element);
+        true
+    }
     /// The other new row a selected element takes, with Shift added to the adorner's keys (a
     /// class's operation, beside its attribute); none by default.
     fn open_second(&self, shell: &mut Shell, element: Uuid) {

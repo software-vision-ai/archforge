@@ -7302,10 +7302,10 @@ fn interfaces_are_listed_under_their_package_added_with_the_plus_found_and_dragg
     use crate::notation_ui::NotationUi;
     let (mut h, nodes) = related_sample();
     let commerce = select_named(&mut h, archforge_uml::PACKAGE, "Commerce");
-    // Models' + offers a class, an interface and a package in the selected package.
+    // Models' + offers each classifier kind and a package in the selected package.
     let st = h.state().session.as_ref().unwrap().doc();
     let offers: Vec<&str> = crate::uml_ui::UmlUi.offers(st, st.by_uuid(commerce)).into_iter().map(|o| o.key).collect();
-    assert_eq!(offers, ["class", "interface", "package"]);
+    assert_eq!(offers, ["class", "interface", "enumeration", "package"]);
     crate::explorer::add(h.state_mut(), "interface");
     let rename = h.state().explorer.rename.clone().expect("named in place");
     assert_eq!(rename.text, "Interface 1");
@@ -7470,8 +7470,8 @@ fn the_relationship_tool_joins_interfaces_and_refuses_what_would_make_a_class_sp
     // An interface never specializes a class, nor a class an interface: said, nothing drawn.
     let revision = h.state().session.as_ref().unwrap().revision();
     for (from, to, why) in [
-        (payable.clone(), nodes["Order"].clone(), "an interface specializes only an interface"),
-        (nodes["OrderLine"].clone(), payable.clone(), "a class cannot specialize an interface"),
+        (payable.clone(), nodes["Order"].clone(), "An interface specializes only an interface"),
+        (nodes["OrderLine"].clone(), payable.clone(), "A class cannot specialize an interface"),
     ] {
         let (a, b) = (node(&h, &from), node(&h, &to));
         relate(&mut h, crate::uml_relate::Relate::Generalization, a, b);
@@ -7675,6 +7675,454 @@ fn a_realization_shows_its_class_and_interface_in_properties_and_its_ends_reconn
         drag(&mut h, handle, to);
         assert_eq!(h.state().canvas.notice.as_deref(), Some("A class realizes only an interface"));
         assert_eq!(h.state().session.as_ref().unwrap().revision(), revision);
+    }
+}
+
+/// The node that shows `element` on the open diagram.
+fn node_of(h: &Harness<'static, Shell>, element: archforge_mof::Uuid) -> String {
+    let st = h.state().session.as_ref().unwrap().doc();
+    let n = archforge_diagram::views_of(st, st.by_uuid(element).unwrap()).2[0];
+    st.uuid(n).unwrap().to_string()
+}
+
+/// The classifier tool places an enumeration named in place, as one step, its kind kept and its
+/// face and tooltip naming it; the card says «enumeration» and takes no attribute or operation from
+/// the canvas: no `+`, no menu row, no ⌘↩ draft; in light and dark.
+#[test]
+fn the_classifier_tool_places_an_enumeration_named_in_place_whose_card_takes_no_rows_of_its_own() {
+    use crate::uml_classifier::Classifier;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        // The menu lists Enumeration after Interface; a click picks it and arms the tool.
+        let at = rect_of(&h, "workspace.tools.classifier-kinds").center();
+        click(&mut h, at);
+        let (interface, enumeration) = (rect_of(&h, "workspace.classifier.interface"), rect_of(&h, "workspace.classifier.enumeration"));
+        assert!(enumeration.top() >= interface.bottom(), "Enumeration under Interface");
+        click(&mut h, enumeration.center());
+        assert_eq!((h.state().canvas.popover, h.state().canvas.uml_classifier), (None, Classifier::Enumeration));
+        assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Place(crate::uml_classifier::TOOL));
+        assert_eq!(classifier_hint(&h), "Enumeration", "the tooltip and accessible name name the kind");
+        assert_eq!(*Classifier::Enumeration.tool_icon(), crate::ux::icons::TOOL_ENUMERATION, "the face shows the kind's icon");
+        // A click places one in the diagram's package, named in place, as one undo step.
+        let at = empty_spot(&h, &nodes);
+        click(&mut h, at);
+        let rename = h.state().canvas.rename.clone().expect("its name is open for typing");
+        assert_eq!(rename.text, "Enumeration 1");
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add enumeration"));
+        h.state_mut().canvas.rename.as_mut().unwrap().text = "OrderStatus".into();
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        let status = named(&h, archforge_uml::ENUMERATION, "OrderStatus");
+        let st = h.state().session.as_ref().unwrap().doc();
+        let home = archforge_uml::commands::package_of(st, st.by_uuid(status).unwrap()).map(|p| archforge_core::name_of(st, p));
+        assert_eq!(home.as_deref(), Some("Commerce"), "in the diagram's package");
+        assert!(painted(&h).iter().any(|t| t == "«enumeration»"), "its eyebrow is its keyword, as written");
+        assert_eq!(h.state().canvas.uml_classifier, Classifier::Enumeration, "the kind stays for the window");
+        // Selected, its card offers Connect but no new row: no adorner, no compartment +.
+        let node = node_of(&h, status);
+        let at = rect_of(&h, &format!("workspace.canvas.node.{node}")).center();
+        click(&mut h, at);
+        let found = ids(&h);
+        assert!(found.iter().any(|i| i == "workspace.canvas.adorn.connect"), "{found:?}");
+        for none in ["workspace.canvas.adorn.add-attribute", "workspace.canvas.class.add-attribute", "workspace.canvas.class.add-operation"] {
+            assert!(!found.iter().any(|i| i == none), "{none} on an enumeration's card");
+        }
+        // ⌘↩ and ⇧⌘↩ open no draft on it.
+        for modifiers in [egui::Modifiers::COMMAND, egui::Modifiers::COMMAND | egui::Modifiers::SHIFT] {
+            key(&mut h, egui::Key::Enter, modifiers);
+            assert!(h.state().canvas.inline.is_none() && h.state().panels.member.is_none(), "no draft row");
+        }
+        // Its menu has no row for a new member; a class's still has one.
+        right_click(&mut h, at);
+        let found = ids(&h);
+        assert!(found.iter().any(|i| i == "workspace.canvas.menu.delete"), "{found:?}");
+        assert!(!found.iter().any(|i| i == "workspace.canvas.menu.add-row"), "no working row for a new member");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        let at = rect_of(&h, &format!("workspace.canvas.node.{}", nodes["Order"])).center();
+        right_click(&mut h, at);
+        assert!(ids(&h).iter().any(|i| i == "workspace.canvas.menu.add-row"), "a class's menu keeps its row");
+    }
+}
+
+/// Models lists enumerations under their package with their literals below them, read-only; `+`
+/// adds one, the search finds it, and it drags onto a diagram or into another package.
+#[test]
+fn enumerations_are_listed_with_their_literals_read_only_added_with_the_plus_found_and_dragged_onto_the_diagram() {
+    use crate::notation_ui::NotationUi;
+    let (mut h, nodes) = related_sample();
+    let commerce = select_named(&mut h, archforge_uml::PACKAGE, "Commerce");
+    let st = h.state().session.as_ref().unwrap().doc();
+    let offers: Vec<&str> = crate::uml_ui::UmlUi.offers(st, st.by_uuid(commerce)).into_iter().map(|o| o.key).collect();
+    assert_eq!(offers, ["class", "interface", "enumeration", "package"]);
+    crate::explorer::add(h.state_mut(), "enumeration");
+    let rename = h.state().explorer.rename.clone().expect("named in place");
+    assert_eq!(rename.text, "Enumeration 1");
+    h.state_mut().explorer.rename.as_mut().unwrap().text = "OrderStatus".into();
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    h.run();
+    let status = named(&h, archforge_uml::ENUMERATION, "OrderStatus");
+    crate::uml_ui::put_literals(h.state_mut(), status, &["Placed", "Paid"]).unwrap();
+    h.state_mut().explorer.expanded.insert(status);
+    h.run();
+    // Its row under Commerce, its literals below it, in their order.
+    let rows = crate::explorer::rows(h.state().notation_uis, h.state().session.as_ref().unwrap().doc(), &h.state().explorer);
+    let at = rows.iter().position(|r| r.label == "OrderStatus").expect("listed under Commerce");
+    assert_eq!((rows[at].kind, rows[at].depth, rows[at].expandable), ("enumeration", 1, true), "{:?}", tree_labels(&h));
+    let literals: Vec<(&str, &str, u8)> = rows[at + 1..at + 3].iter().map(|r| (r.label.as_str(), r.kind, r.depth)).collect();
+    assert_eq!(literals, [("Placed", "literal", 2), ("Paid", "literal", 2)]);
+    // A literal row is read-only: a second click opens no name, Delete leaves it.
+    let placed = rows[at + 1].id;
+    let row = rect_of(&h, &format!("workspace.explorer.row.{placed}")).center();
+    click(&mut h, row);
+    h.run();
+    click(&mut h, row);
+    assert!(h.state().explorer.rename.is_none(), "no rename of a literal yet");
+    let revision = h.state().session.as_ref().unwrap().revision();
+    crate::explorer::remove_selection(h.state_mut());
+    h.run();
+    assert_eq!(h.state().explorer.notice.as_deref(), Some("Literals are removed with their enumeration"), "Delete says why it leaves it");
+    let st = h.state().session.as_ref().unwrap().doc();
+    assert!(st.by_uuid(placed).is_some_and(|l| st.is_alive(l)), "the literal stays");
+    assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "nothing changed");
+    // Selected, it shows its enumeration's panel.
+    h.state_mut().state.show_panel(crate::state::Panel::Properties);
+    h.run();
+    let texts = painted(&h);
+    for want in ["Literal · model", "Literals · 2", "Enumeration"] {
+        assert!(texts.iter().any(|t| t == want), "{want} in {texts:?}");
+    }
+    // The search finds it as an enumeration of Commerce.
+    let index = crate::project_search::index(h.state().kinds, h.state().notation_uis, h.state().session.as_ref().unwrap().doc());
+    let hit = crate::project_search::hits(&index, "orderstatus").1.into_iter().find(|e| e.label == "OrderStatus").map(|e| e.detail.clone());
+    assert_eq!(hit.as_deref(), Some("Enumeration · Commerce"));
+    // Dragged from Models onto the diagram: its card, as one undo step; a second drag says so.
+    let nodes_now = |h: &Harness<'static, Shell>| {
+        let st = h.state().session.as_ref().unwrap().doc();
+        st.list(st.by_uuid(h.state().canvas.active.unwrap()).unwrap(), archforge_diagram::diagram::NODE).unwrap().len()
+    };
+    let before = nodes_now(&h);
+    let from = rect_of(&h, &format!("workspace.explorer.row.{status}")).center();
+    let to = empty_spot(&h, &nodes);
+    drag(&mut h, from, to);
+    assert_eq!(nodes_now(&h), before + 1, "notice {:?}", h.state().canvas.notice);
+    assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Place enumeration"));
+    let from = rect_of(&h, &format!("workspace.explorer.row.{status}")).center();
+    drag(&mut h, from, to);
+    assert_eq!(h.state().canvas.notice.as_deref(), Some("Already on this diagram"));
+    // Dragged onto another package's row, it moves there with its literals.
+    let billing = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let out = s.execute("uml.package.add", &serde_json::json!({ "name": "Billing", "parent": commerce.to_string() })).unwrap();
+        archforge_mof::Uuid::parse(out.value["id"].as_str().unwrap()).unwrap()
+    };
+    h.run();
+    let from = rect_of(&h, &format!("workspace.explorer.row.{status}")).center();
+    let to = rect_of(&h, &format!("workspace.explorer.row.{billing}")).center();
+    drag(&mut h, from, to);
+    let st = h.state().session.as_ref().unwrap().doc();
+    let e = st.by_uuid(status).unwrap();
+    assert_eq!(archforge_uml::commands::package_of(st, e), st.by_uuid(billing), "{:?}", h.state().explorer.notice);
+    assert_eq!(archforge_uml::commands::literals(st, e).len(), 2);
+    assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Move enumeration"));
+}
+
+/// A second click and F2 on a class's, an interface's and a package's row in Models each open its
+/// name for typing: Models opens a rename wherever the notation renames the row.
+#[test]
+fn a_second_click_and_f2_open_the_name_of_a_class_an_interface_and_a_package_in_models() {
+    let (mut h, _) = related_sample();
+    let commerce = named(&h, archforge_uml::PACKAGE, "Commerce");
+    let payable = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let out = s.execute("uml.interface.add", &serde_json::json!({ "package": commerce.to_string(), "name": "Payable" })).unwrap();
+        archforge_mof::Uuid::parse(out.value["id"].as_str().unwrap()).unwrap()
+    };
+    let order = named(&h, archforge_uml::CLASS, "Order");
+    for (id, name) in [(order, "Order"), (payable, "Payable"), (commerce, "Commerce")] {
+        // Selected, a click on its row opens its name.
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [id.to_string()] })).unwrap();
+        h.state_mut().explorer.focused = true;
+        h.run();
+        let row = rect_of(&h, &format!("workspace.explorer.row.{id}")).center();
+        click(&mut h, row);
+        let rename = h.state().explorer.rename.clone().unwrap_or_else(|| panic!("a second click opens {name}'s name"));
+        assert_eq!((rename.target, rename.text.as_str()), (id, name));
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert!(h.state().explorer.rename.is_none(), "Escape closes it");
+        // F2 opens it too.
+        h.state_mut().explorer.focused = true;
+        key(&mut h, egui::Key::F2, egui::Modifiers::NONE);
+        let rename = h.state().explorer.rename.clone().unwrap_or_else(|| panic!("F2 opens {name}'s name"));
+        assert_eq!((rename.target, rename.text.as_str()), (id, name));
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    }
+}
+
+/// An enumeration in Properties: its kind line, name and package, and its literals read-only, with
+/// no `+` and no attribute or operation; with none, it says so. It is offered as a type.
+#[test]
+fn an_enumeration_in_properties_shows_its_literals_read_only_and_is_offered_as_a_type() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        let d = h.state().canvas.active.unwrap().to_string();
+        let priority = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let st = s.doc();
+            let commerce =
+                st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::PACKAGE) && archforge_core::name_of(st, *o) == "Commerce").unwrap();
+            let commerce = st.uuid(commerce).unwrap().to_string();
+            let out = s.execute("uml.enumeration.add", &serde_json::json!({ "package": commerce, "name": "Priority" })).unwrap();
+            let id = out.value["id"].as_str().unwrap().to_string();
+            s.execute("diagram.place", &serde_json::json!({ "diagram": d, "element": id, "x": 560, "y": 1000, "width": 290, "height": 136 }))
+                .unwrap();
+            s.execute("view.select", &serde_json::json!({ "ids": [id] })).unwrap();
+            archforge_mof::Uuid::parse(&id).unwrap()
+        };
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        h.run();
+        let texts = painted(&h);
+        for want in ["Enumeration · model, in every diagram", "Enumeration", "Literals · 0", "No literals yet"] {
+            assert!(texts.iter().any(|t| t == want), "{want} in {texts:?}");
+        }
+        let found = ids(&h);
+        assert!(found.iter().any(|i| i == "workspace.properties.class.package"), "its package");
+        for none in ["workspace.properties.class.abstract", "workspace.properties.attributes.add", "workspace.properties.operations.add"] {
+            assert!(!found.iter().any(|i| i == none), "{none} for an enumeration");
+        }
+        assert!(!found.iter().any(|i| i.starts_with("workspace.properties.literals")), "no + for literals yet: {found:?}");
+        // With literals: each a row in their order; a click selects it and the panel stays.
+        crate::uml_ui::put_literals(h.state_mut(), priority, &["Low", "Normal", "High"]).unwrap();
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [priority.to_string()] })).unwrap();
+        h.run();
+        let literals = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            archforge_uml::commands::literals(st, st.by_uuid(priority).unwrap()).into_iter().map(|l| st.uuid(l).unwrap()).collect::<Vec<_>>()
+        };
+        let tops: Vec<f32> = literals.iter().map(|l| rect_of(&h, &format!("workspace.properties.literal.{l}")).top()).collect();
+        assert!(tops.windows(2).all(|w| w[0] < w[1]), "in their order: {tops:?}");
+        assert!(painted(&h).iter().any(|t| t == "Literals · 3"));
+        let at = rect_of(&h, &format!("workspace.properties.literal.{}", literals[2])).center();
+        click(&mut h, at);
+        assert_eq!(h.state().session.as_ref().unwrap().view().selection.len(), 1);
+        let st = h.state().session.as_ref().unwrap().doc();
+        assert_eq!(st.uuid(h.state().session.as_ref().unwrap().view().selection[0]).ok(), Some(literals[2]));
+        assert!(painted(&h).iter().any(|t| t == "Literals · 3"), "its enumeration's panel stays");
+        // It is offered as a type: Customer's new attribute takes it.
+        assert!(
+            crate::uml_panel::type_choices(h.state().session.as_ref().unwrap().doc())
+                .iter()
+                .any(|(l, id)| l == "Priority" && *id == priority.to_string())
+        );
+        let customer = select_named(&mut h, archforge_uml::CLASS, "Customer");
+        let at = rect_of(&h, "workspace.properties.attributes.add").center();
+        click(&mut h, at);
+        h.event(egui::Event::Text("priority".into()));
+        h.run();
+        pick_type(&mut h, "workspace.properties.member.type", "Priority");
+        let at = rect_of(&h, "workspace.properties.member.apply").center();
+        click(&mut h, at);
+        assert!(member_rows(&h, customer, false).iter().any(|r| r == "+ priority : Priority"), "{:?}", member_rows(&h, customer, false));
+    }
+}
+
+/// The Skills panel offers `+` only where the model lets the selection carry a skill: a literal and
+/// an association say in a muted line that they carry none, and a class keeps its `+`; the panel
+/// and `skill.add` ask the same rule. In light and dark.
+#[test]
+fn the_skills_panel_offers_add_skill_only_where_the_selection_carries_skills() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        let priority = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let st = s.doc();
+            let commerce =
+                st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::PACKAGE) && archforge_core::name_of(st, *o) == "Commerce").unwrap();
+            let commerce = st.uuid(commerce).unwrap().to_string();
+            let out = s.execute("uml.enumeration.add", &serde_json::json!({ "package": commerce, "name": "Priority" })).unwrap();
+            archforge_mof::Uuid::parse(out.value["id"].as_str().unwrap()).unwrap()
+        };
+        crate::uml_ui::put_literals(h.state_mut(), priority, &["Low"]).unwrap();
+        h.state_mut().state.show_panel(crate::state::Panel::Skills);
+        h.run();
+        let low = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            st.uuid(archforge_uml::commands::literals(st, st.by_uuid(priority).unwrap())[0]).unwrap()
+        };
+        let paid_by = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let a = st
+                .alive()
+                .find(|o| st.class_of(*o).ok() == Some(archforge_uml::ASSOCIATION) && archforge_core::name_of(st, *o) == "paid by")
+                .unwrap();
+            st.uuid(a).unwrap()
+        };
+        let customer = named(&h, archforge_uml::CLASS, "Customer");
+        for (selected, title, line) in [
+            (low, "On this literal · 0", Some("Literals carry no skills")),
+            (paid_by, "On this association · 0", Some("Relationships carry no skills")),
+            (customer, "On this class · 0", None),
+        ] {
+            h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [selected.to_string()] })).unwrap();
+            h.run();
+            let texts = painted(&h);
+            assert!(texts.iter().any(|t| t == title), "{title} in {texts:?}");
+            let offered = ids(&h).iter().any(|i| i == "workspace.skills.add");
+            assert_eq!(offered, line.is_none(), "{title}: + only where a skill can sit");
+            for said in ["Literals carry no skills", "Relationships carry no skills"] {
+                assert_eq!(texts.iter().any(|t| t == said), line == Some(said), "{title}: {said}");
+            }
+            // The panel and the engine ask the same rule.
+            let s = h.state().session.as_ref().unwrap();
+            let o = s.doc().by_uuid(selected).unwrap();
+            assert_eq!(archforge_core::skills::subject_problem(s.view(), s.doc(), o).is_none(), offered);
+            let s = h.state_mut().session.as_mut().unwrap();
+            let added = s.execute("skill.add", &serde_json::json!({ "subject": selected.to_string(), "name": "Probe" }));
+            assert_eq!(added.is_ok(), offered, "{title}: skill.add agrees with the panel");
+            if added.is_ok() {
+                s.undo().unwrap();
+            }
+        }
+    }
+}
+
+/// The sample class model in `theme` with two enumerations, OrderStatus and ClosingStatus, placed in
+/// its empty bottom row and the whole diagram in view: the harness, every card's node by name, and
+/// the enumerations' nodes.
+fn enumeration_sample(theme: ThemeKind) -> (Harness<'static, Shell>, std::collections::BTreeMap<String, String>, [String; 2]) {
+    let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+    let d = h.state().canvas.active.unwrap().to_string();
+    let s = h.state_mut().session.as_mut().unwrap();
+    let st = s.doc();
+    let commerce =
+        st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::PACKAGE) && archforge_core::name_of(st, *o) == "Commerce").unwrap();
+    let commerce = st.uuid(commerce).unwrap().to_string();
+    let mut place = |name: &str, x: i32| {
+        let id = s.execute("uml.enumeration.add", &serde_json::json!({ "package": commerce, "name": name })).unwrap().value["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let n =
+            s.execute("diagram.place", &serde_json::json!({ "diagram": d, "element": id, "x": x, "y": 1000, "width": 290, "height": 136 })).unwrap();
+        n.value["id"].as_str().unwrap().to_string()
+    };
+    let enumerations = [place("OrderStatus", 560), place("ClosingStatus", 1040)];
+    h.state_mut().canvas.fit_pending = true;
+    h.run();
+    (h, nodes, enumerations)
+}
+
+/// The Relationship tool joins no association to or from an enumeration, saying so at the canvas's
+/// top; an enumeration specializes only an enumeration, the refusals said too, and a generalization
+/// dragged out of one onto empty canvas makes an enumeration; a dependency may touch it; an
+/// association's end dragged onto one is refused; in light and dark.
+#[test]
+fn the_relationship_tool_joins_no_association_to_an_enumeration_and_specializes_one_only_by_an_enumeration() {
+    use crate::uml_relate::Relate;
+    const NO_ASSOCIATION: &str = "An enumeration is a data type and joins no association";
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, nodes, [status, closing]) = enumeration_sample(theme);
+        let node = |h: &Harness<'static, Shell>, id: &str| rect_of(h, &format!("workspace.canvas.node.{id}")).center();
+        let relate = |h: &mut Harness<'static, Shell>, kind: Relate, from: egui::Pos2, to: egui::Pos2| {
+            h.state_mut().canvas.uml_relation = kind;
+            h.state_mut().canvas.notice = None;
+            let at = rect_of(h, "workspace.tools.relationship").center();
+            click(h, at);
+            drag(h, from, to);
+        };
+        let before = edge_count(&h);
+        // An enumeration specializes an enumeration, and a class depends on one: a line each.
+        let (from, to) = (node(&h, &closing), node(&h, &status));
+        relate(&mut h, Relate::Generalization, from, to);
+        assert_eq!(edge_count(&h), before + 1, "notice {:?}", h.state().canvas.notice);
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add generalization"));
+        let (from, to) = (node(&h, &nodes["OrderLine"]), node(&h, &status));
+        relate(&mut h, Relate::Dependency, from, to);
+        assert_eq!(edge_count(&h), before + 2, "notice {:?}", h.state().canvas.notice);
+        // Refused, said, and nothing changes.
+        let revision = h.state().session.as_ref().unwrap().revision();
+        for (kind, from, to, why) in [
+            (Relate::Association, nodes["OrderLine"].clone(), status.clone(), NO_ASSOCIATION),
+            (Relate::Composition, nodes["Order"].clone(), status.clone(), NO_ASSOCIATION),
+            (Relate::Directed, status.clone(), nodes["OrderLine"].clone(), NO_ASSOCIATION),
+            (Relate::Generalization, nodes["OrderLine"].clone(), status.clone(), "Only an enumeration specializes an enumeration"),
+            (Relate::Generalization, status.clone(), nodes["Order"].clone(), "An enumeration specializes only an enumeration"),
+            (Relate::Realization, status.clone(), closing.clone(), "Only a class implements an interface"),
+        ] {
+            let (a, b) = (node(&h, &from), node(&h, &to));
+            relate(&mut h, kind, a, b);
+            // Said in the user's words, as the catalogue has them, not as the engine words it.
+            let notice = h.state().canvas.notice.clone().expect("the refusal is said");
+            assert_eq!(notice, why, "{kind:?}");
+            assert_eq!((edge_count(&h), h.state().session.as_ref().unwrap().revision()), (before + 2, revision), "nothing changed: {why}");
+        }
+        assert!(h.state().canvas.gesture.is_none(), "no line was begun from the enumeration");
+        // An association dragged out of an enumeration onto empty canvas is refused before it starts.
+        let empty = egui::pos2(node(&h, &nodes["Catalog"]).x, node(&h, &status).y);
+        let from = node(&h, &status);
+        relate(&mut h, Relate::Association, from, empty);
+        assert_eq!(h.state().canvas.notice.as_deref(), Some(NO_ASSOCIATION));
+        assert_eq!(h.state().session.as_ref().unwrap().revision(), revision);
+        // A generalization dragged out of one onto empty canvas makes an enumeration there, as one step.
+        relate(&mut h, Relate::Generalization, from, empty);
+        let rename = h.state().canvas.rename.clone().expect("its name is open for typing");
+        assert_eq!(rename.text, "Enumeration 1", "notice {:?}", h.state().canvas.notice);
+        let made = named(&h, archforge_uml::ENUMERATION, "Enumeration 1");
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add enumeration"));
+        assert_eq!(edge_count(&h), before + 3);
+        let general = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let s = st.by_uuid(made).unwrap();
+            archforge_uml::relations::relationships_of(st, s)
+                .into_iter()
+                .filter_map(|r| archforge_uml::figures::ends(st, r))
+                .any(|(specific, general)| general == s && st.uuid(specific).ok().is_some_and(|u| node_of(&h, u) == status))
+        };
+        assert!(general, "OrderStatus specializes the new enumeration");
+        h.state_mut().canvas.rename = None;
+        // An association's end dragged onto an enumeration is refused and said.
+        let line = {
+            let d = h.state().canvas.active.unwrap().to_string();
+            let s = h.state_mut().session.as_mut().unwrap();
+            let st = s.doc();
+            let element = |node: &str| {
+                let n = st.by_uuid(archforge_mof::Uuid::parse(node).unwrap()).unwrap();
+                st.uuid(st.get(n, archforge_diagram::node::ELEMENT).unwrap().as_ref().unwrap()).unwrap().to_string()
+            };
+            let (from, to) = (element(&nodes["OrderLine"]), element(&nodes["Product"]));
+            let a =
+                s.execute("uml.association.add", &serde_json::json!({ "from": from, "to": to })).unwrap().value["id"].as_str().unwrap().to_string();
+            s.execute(
+                "diagram.connect",
+                &serde_json::json!({ "diagram": d, "element": a, "source": nodes["OrderLine"], "target": nodes["Product"] }),
+            )
+            .unwrap();
+            s.execute("view.select", &serde_json::json!({ "ids": [a] })).unwrap();
+            a
+        };
+        h.run();
+        let revision = h.state().session.as_ref().unwrap().revision();
+        let handle = rect_of(&h, "workspace.canvas.line-end.target").center();
+        let to = node(&h, &status);
+        drag(&mut h, handle, to);
+        assert_eq!(h.state().canvas.notice.as_deref(), Some(NO_ASSOCIATION), "{line}");
+        assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "nothing changed");
+        // A generalization's end dragged onto a class is refused in the user's words too.
+        let generalization = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let s = st.by_uuid(archforge_mof::Uuid::parse(&closing).unwrap()).unwrap();
+            let closing_element = st.get(s, archforge_diagram::node::ELEMENT).unwrap().as_ref().unwrap();
+            let g = archforge_uml::relations::relationships_of(st, closing_element)
+                .into_iter()
+                .find(|r| st.class_of(*r).ok() == Some(archforge_uml::GENERALIZATION))
+                .unwrap();
+            st.uuid(g).unwrap().to_string()
+        };
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [generalization] })).unwrap();
+        h.run();
+        let handle = rect_of(&h, "workspace.canvas.line-end.target").center();
+        let to = node(&h, &nodes["Order"]);
+        drag(&mut h, handle, to);
+        assert_eq!(h.state().canvas.notice.as_deref(), Some("An enumeration specializes only an enumeration"));
+        assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "nothing changed");
     }
 }
 

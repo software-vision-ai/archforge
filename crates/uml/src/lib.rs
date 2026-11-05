@@ -29,9 +29,9 @@ pub fn universe() -> Result<Arc<Universe>, MetaError> {
 /// The class diagram kind: a diagram of a package that shows its classes as cards.
 pub const CLASS_DIAGRAM: &str = "uml.class";
 
-/// The kinds of classifier a class diagram places, each a card with its members: a class and an
-/// interface.
-pub const CLASSIFIERS: [ClassId; 2] = [CLASS, INTERFACE];
+/// The kinds of classifier a class diagram places, each a card with its members: a class, an
+/// interface, and an enumeration, whose members are its literals.
+pub const CLASSIFIERS: [ClassId; 3] = [CLASS, INTERFACE, ENUMERATION];
 
 /// Whether `class` is one of the [`CLASSIFIERS`].
 pub fn is_classifier(class: ClassId) -> bool {
@@ -54,7 +54,8 @@ pub const CLASS_SIZE: (f64, f64) = (240.0, 136.0);
 pub const PACKAGE_SIZE: (f64, f64) = (240.0, 148.0);
 
 /// UML in a project's view: class diagrams of a package showing its
-/// classes and interfaces as plain cards with their attributes and operations, and the associations,
+/// classes and interfaces as plain cards with their attributes and operations, its enumerations with
+/// their literals, and the associations,
 /// generalizations, dependencies and interface realizations between them as lines (`figures`);
 /// packages and classes removed with what they hold.
 pub struct UmlNotation;
@@ -81,7 +82,7 @@ impl Notation for UmlNotation {
         true
     }
 
-    /// A class diagram shows classes, interfaces and packages as cards.
+    /// A class diagram shows classes, interfaces, enumerations and packages as cards.
     fn shows(&self, _kind: &str, class: ClassId) -> bool {
         is_classifier(class) || class == PACKAGE
     }
@@ -109,12 +110,13 @@ impl Notation for UmlNotation {
         figures::ends(store, element)
     }
 
+    /// The texts a line of `class` places along it.
     fn text_slots(&self, class: ClassId) -> &'static [&'static str] {
         figures::text_slots(class)
     }
 
     /// A class or an interface: its name, a class's slanted when abstract, its attributes, then its
-    /// operations.
+    /// operations; an enumeration: its name and its literals.
     fn card(&self, store: &Store, element: Obj, diagram: Obj) -> Option<Card> {
         figures::card(store, element, diagram)
     }
@@ -123,20 +125,29 @@ impl Notation for UmlNotation {
         figures::line(store, element)
     }
 
+    /// The text of a line's slot `slot`: its name, an end's role or multiplicity.
     fn slot_text(&self, store: &Store, element: Obj, slot: &str) -> String {
         figures::slot_text(store, element, slot)
     }
 
-    /// A skill sits on a package, a class, an interface, an attribute or an operation; it aims at
-    /// every class, interface, attribute, operation or association below its subject (owner
-    /// decision: an interface carries skills as a class does).
+    /// A skill sits on a package, a class, an interface, an enumeration, an attribute or an
+    /// operation; it aims at every class, interface, enumeration, attribute, operation or
+    /// association below its subject (owner decision: an interface carries skills as a class does,
+    /// and an enumeration as an interface does).
     fn skill_subjects(&self) -> &'static [ClassId] {
-        &[PACKAGE, CLASS, INTERFACE, PROPERTY, OPERATION]
+        &[PACKAGE, CLASS, INTERFACE, ENUMERATION, PROPERTY, OPERATION]
     }
 
     /// The kinds a package skill may aim at, each with the word that names it.
     fn skill_kinds(&self) -> &'static [(ClassId, &'static str)] {
-        &[(CLASS, "class"), (INTERFACE, "interface"), (PROPERTY, "attribute"), (OPERATION, "operation"), (ASSOCIATION, "association")]
+        &[
+            (CLASS, "class"),
+            (INTERFACE, "interface"),
+            (ENUMERATION, "enumeration"),
+            (PROPERTY, "attribute"),
+            (OPERATION, "operation"),
+            (ASSOCIATION, "association"),
+        ]
     }
 
     /// An association's end is a property but no attribute: its association carries the skill.
@@ -145,6 +156,7 @@ impl Notation for UmlNotation {
         end.then_some("an association's end carries no skill; its association's classes do")
     }
 
+    /// Removes UML elements with what they hold and what shows them; an enumeration with its literals.
     fn remove(&self, store: &mut Store, objs: &[Obj]) -> Result<usize, archforge_engine::CommandError> {
         commands::remove_elements(store, objs)
     }
@@ -154,8 +166,9 @@ impl Notation for UmlNotation {
 pub static ALONE: &[&dyn Notation] = &[&UmlNotation];
 
 /// The words UML's figures say, for the shell's catalogue: the texts, and the plural.
-pub const WORDS: &[&str] = &["Class", "Class · {package}", "«interface»", "«interface» · {package}", "Package"];
-pub const PLURALS: &[&str] = &["+ {n} more member", "+ {n} more element"];
+pub const WORDS: &[&str] =
+    &["Class", "Class · {package}", "«interface»", "«interface» · {package}", "«enumeration»", "«enumeration» · {package}", "Package"];
+pub const PLURALS: &[&str] = &["+ {n} more member", "+ {n} more literal", "+ {n} more element"];
 
 /// The command registry of UML alone: the edit area, the shared element commands, UML's, the
 /// diagrams' and the skills'.

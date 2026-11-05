@@ -346,6 +346,14 @@ fn commit_rename(shell: &mut Shell) {
     }
 }
 
+/// Whether the notation of `obj` renames it in place, so its row opens its name for typing.
+fn renames(shell: &Shell, obj: Obj) -> bool {
+    shell.session.as_ref().is_some_and(|s| {
+        let store = s.doc();
+        crate::notation_ui::of(shell.notation_uis, store, obj).is_some_and(|ui| ui.rename(store, obj).is_some())
+    })
+}
+
 /// Removes the selection: at once when nothing else goes with it, else after the dialog.
 pub fn remove_selection(shell: &mut Shell) {
     shell.explorer.notice = None;
@@ -358,6 +366,11 @@ pub fn remove_selection(shell: &mut Shell) {
     }
     let Some(id) = uuid_of(store, obj) else { return };
     let ui = crate::notation_ui::of(shell.notation_uis, store, obj);
+    // A row shown read-only stays, and Models says why.
+    if let Some(why) = ui.and_then(|u| u.kept(store, obj)) {
+        shell.explorer.notice = Some(why);
+        return;
+    }
     // What it holds moves up to its parent (a nested package): no dialog, the toast says where.
     if let Some(parent) = ui.and_then(|u| u.hands_up(store, obj)) {
         let (name, to) = (name_of(store, obj), name_of(store, parent));
@@ -687,8 +700,11 @@ fn tree_row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, column: Rect, y: 
             commit_rename(shell);
         }
         if is_selected && !resp.double_clicked() {
-            // A second click on the selected row opens its name, as the design's inline edit.
-            shell.explorer.rename = Some(Rename::new(row.id, row.label.clone(), false));
+            // A second click on the selected row opens its name, as the design's inline edit,
+            // when its notation renames it.
+            if renames(shell, row.obj) {
+                shell.explorer.rename = Some(Rename::new(row.id, row.label.clone(), false));
+            }
         } else {
             select(shell, Some(row.id));
         }
@@ -780,7 +796,7 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, rows: &[Row], selected_obj: Option
             }
         } else if right && row.expandable {
             shell.explorer.expanded.insert(row.id);
-        } else if rename && row.kind != "skill" {
+        } else if rename && row.kind != "skill" && renames(shell, row.obj) {
             shell.explorer.rename = Some(Rename::new(row.id, row.label.clone(), false));
         } else if delete {
             remove_selection(shell);

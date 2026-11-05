@@ -291,7 +291,7 @@ fn a_skill_aims_only_at_kinds_of_its_subjects_notation_and_moves_only_within_it(
     let class = id(&mut s, "uml.class.add", json!({ "package": package, "name": "Order" }));
     let refused = |s: &mut Session, cmd: &str, p: Json| s.execute(cmd, &p).map(|o| o.value.to_string()).unwrap_err().to_string();
     let e = refused(&mut s, "skill.add", json!({ "subject": package, "name": "Tables", "applies_to": "table" }));
-    assert!(e.contains("class, interface, attribute, operation, association") && !e.contains("column"), "{e}");
+    assert!(e.contains("class, interface, enumeration, attribute, operation, association") && !e.contains("column"), "{e}");
     let e = refused(&mut s, "skill.add", json!({ "subject": schema, "name": "Classes", "applies_to": "class" }));
     assert!(e.contains("table, relationship, column") && !e.contains("operation"), "{e}");
     // The model's skill may aim at any notation's kind.

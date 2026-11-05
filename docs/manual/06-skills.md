@@ -7,9 +7,9 @@ apply to the element it works on.
 ## Where skills live
 
 A skill sits on the whole project or on one element: a schema, a table, a package, a class, an
-interface. A skill on a container applies to everything inside it, and a skill on an element
-overrides one of the same name further out: a schema's *Naming* skill wins over the project's
-*Naming* skill for that schema's tables.
+interface, an enumeration. A skill on a container applies to everything inside it, and a skill on
+an element overrides one of the same name further out: a schema's *Naming* skill wins over the
+project's *Naming* skill for that schema's tables.
 
 ## Writing a skill
 
@@ -25,7 +25,9 @@ eye switch between writing and a preview. The text is kept a moment after you st
 each keep is one undo step.
 
 **Skills** in the right panel lists the skills that apply to the selection, with where each comes
-from; choose one to open it, or hover over one of the element's own skills to remove it.
+from; choose one to open it, or hover over one of the element's own skills to remove it. Its **+**
+adds a skill to the selection where one can sit; a relationship or an enumeration's literal
+carries none, and the panel says so instead.
 
 <!-- picture: workspace-skills light | The Skills panel lists the skills on the selection and those it inherits -->
 

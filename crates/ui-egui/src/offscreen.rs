@@ -105,6 +105,9 @@ pub enum Screen {
     /// A package of interfaces: Payable with its members, selected in Properties, Refundable
     /// specializing it, and Invoice associated with it.
     WorkspaceInterface,
+    /// A package of enumerations: OrderStatus with its four literals, selected in Properties and
+    /// open in Models, Priority with none, and the class Order whose attributes they type.
+    WorkspaceEnumeration,
     /// The same with the classifier tool's kinds menu open, Interface the current kind.
     WorkspaceClassifierKinds,
     /// Two classes, Order and Invoice, each realizing the interface Payable: Order's realization
@@ -403,6 +406,10 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
             shell.canvas.tool = crate::canvas::Tool::Place(crate::uml_classifier::TOOL);
             shell.canvas.popover = Some(crate::uml_classifier::KINDS);
         }
+    }
+    if screen == Screen::WorkspaceEnumeration {
+        shell.adopt_project();
+        sample_enumerations(&mut shell)?;
     }
     if screen == Screen::WorkspaceRealization {
         shell.adopt_project();
@@ -1040,6 +1047,50 @@ fn sample_interfaces(shell: &mut Shell) -> Result<(), String> {
     }
     crate::canvas::open(shell, diagram);
     crate::panels::run(shell, "view.select", json!({ "ids": [payable] }))?;
+    shell.state.show_panel(crate::state::Panel::Properties);
+    Ok(())
+}
+
+/// A package Orders on its own class diagram: the enumeration OrderStatus with the literals Placed,
+/// Paid, Shipped and Cancelled, the enumeration Priority with none yet, and the class Order whose
+/// attributes they type; OrderStatus selected, open in Models, its Properties shown.
+fn sample_enumerations(shell: &mut Shell) -> Result<(), String> {
+    use serde_json::json;
+    let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
+    let run = |session: &mut archforge_notations::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
+        let out = session.execute(command, &params).map_err(|e| format!("{command}: {e:?}"))?;
+        Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
+    };
+    let package = run(session, "uml.package.add", json!({ "name": "Orders" }))?;
+    let diagram = run(session, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": package, "name": "Orders" }))?;
+    let status = run(session, "uml.enumeration.add", json!({ "package": package, "name": "OrderStatus" }))?;
+    let priority = run(session, "uml.enumeration.add", json!({ "package": package, "name": "Priority" }))?;
+    let order = run(session, "uml.class.add", json!({ "package": package, "name": "Order" }))?;
+    run(session, "uml.attribute.add", json!({ "class": order, "name": "number", "type": "Integer" }))?;
+    run(session, "uml.attribute.add", json!({ "class": order, "name": "status", "type": status }))?;
+    run(session, "uml.attribute.add", json!({ "class": order, "name": "priority", "type": priority, "multiplicity": "0..1" }))?;
+    run(session, "uml.operation.add", json!({ "class": order, "name": "advance", "parameters": [{ "name": "to", "type": status }] }))?;
+    let (w, _) = archforge_uml::CLASS_SIZE;
+    let cards = [
+        (&order, 80, 140, crate::uml_ui::members_height(3, 1)),
+        (&status, 560, 140, crate::uml_ui::literals_height(4)),
+        (&priority, 560, 400, crate::uml_ui::literals_height(0)),
+    ];
+    for (element, x, y, height) in cards {
+        run(session, "diagram.place", json!({ "diagram": diagram, "element": element, "x": x, "y": y, "width": w + 40.0, "height": height }))?;
+    }
+    let (Some(package), Some(diagram), Some(status)) =
+        (archforge_mof::Uuid::parse(&package), archforge_mof::Uuid::parse(&diagram), archforge_mof::Uuid::parse(&status))
+    else {
+        return Err("the sample's ids".into());
+    };
+    crate::uml_ui::put_literals(shell, status, &["Placed", "Paid", "Shipped", "Cancelled"])?;
+    shell.explorer.expanded.extend([package, status]);
+    if let Some(root) = shell.session.as_ref().and_then(|s| archforge_uml::commands::root_package(s.doc()).and_then(|r| s.doc().uuid(r).ok())) {
+        shell.explorer.expanded.insert(root);
+    }
+    crate::canvas::open(shell, diagram);
+    crate::panels::run(shell, "view.select", json!({ "ids": [status.to_string()] }))?;
     shell.state.show_panel(crate::state::Panel::Properties);
     Ok(())
 }

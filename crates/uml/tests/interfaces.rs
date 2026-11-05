@@ -242,6 +242,11 @@ fn interfaces_associate_with_anything_and_specialize_only_interfaces_a_refusal_s
         let e = refused(&mut s, "uml.generalization.add", p.clone());
         assert!(e.contains(why), "{p}: {e}");
     }
+    // A refusal between kinds names the class that breaks the rule, under its own key.
+    for (p, key) in [(json!({ "specific": order, "general": payable }), "specific"), (json!({ "specific": payable, "general": order }), "general")] {
+        let e = refused(&mut s, "uml.generalization.add", p.clone());
+        assert!(e.contains(order.as_str()) && e.contains(&format!("key: Some(\"{key}\")")), "{p}: {e}");
+    }
     // A reconnected end keeps the same rules.
     let e = refused(&mut s, "uml.relationship.reconnect", json!({ "relationship": g, "end": "target", "class": invoice }));
     assert!(e.contains("an interface specializes only an interface"), "{e}");

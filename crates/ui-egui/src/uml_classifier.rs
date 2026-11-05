@@ -1,5 +1,5 @@
 //! The classifier tool of a class diagram: one tool in Class's place that places the kind its
-//! chevron's menu chose (Class or Interface; only the kinds that work are listed), its face showing
+//! chevron's menu chose (Class, Interface or Enumeration; only the kinds that work are listed), its face showing
 //! that kind's icon and its tooltip naming it. The menu marks the current kind; the arrow keys
 //! walk it, Enter picks, Escape closes, and a pick arms the tool. The kind stays for the window's
 //! next placements; a new window starts at Class.
@@ -18,17 +18,20 @@ pub enum Classifier {
     #[default]
     Class,
     Interface,
+    /// An enumeration, whose members are its literals.
+    Enumeration,
 }
 
 impl Classifier {
     /// The kinds the menu lists, in its order.
-    pub(crate) const ALL: [Classifier; 2] = [Classifier::Class, Classifier::Interface];
+    pub(crate) const ALL: [Classifier; 3] = [Classifier::Class, Classifier::Interface, Classifier::Enumeration];
 
     /// Its name, in the menu, the tooltip and the Models' `+`.
     pub(crate) fn word(self) -> String {
         match self {
             Classifier::Class => tr("Class"),
             Classifier::Interface => tr("Interface"),
+            Classifier::Enumeration => tr("Enumeration"),
         }
     }
 
@@ -37,14 +40,16 @@ impl Classifier {
         match self {
             Classifier::Class => "class",
             Classifier::Interface => "interface",
+            Classifier::Enumeration => "enumeration",
         }
     }
 
-    /// The stem of a fresh name for one: `Class 1`, `Interface 1`.
+    /// The stem of a fresh name for one: `Class 1`, `Interface 1`, `Enumeration 1`.
     pub(crate) fn stem(self) -> &'static str {
         match self {
             Classifier::Class => "Class",
             Classifier::Interface => "Interface",
+            Classifier::Enumeration => "Enumeration",
         }
     }
 
@@ -53,6 +58,7 @@ impl Classifier {
         match self {
             Classifier::Class => &icons::TOOL_CLASS,
             Classifier::Interface => &icons::TOOL_INTERFACE,
+            Classifier::Enumeration => &icons::TOOL_ENUMERATION,
         }
     }
 
@@ -61,6 +67,7 @@ impl Classifier {
         match self {
             Classifier::Class => &icons::CLASS,
             Classifier::Interface => &icons::INTERFACE,
+            Classifier::Enumeration => &icons::ENUMERATION,
         }
     }
 
@@ -69,6 +76,7 @@ impl Classifier {
         match self {
             Classifier::Class => archforge_uml::CLASS,
             Classifier::Interface => archforge_uml::INTERFACE,
+            Classifier::Enumeration => archforge_uml::ENUMERATION,
         }
     }
 
@@ -83,6 +91,7 @@ impl Classifier {
         match self {
             Classifier::Class => "uml.class.add",
             Classifier::Interface => "uml.interface.add",
+            Classifier::Enumeration => "uml.enumeration.add",
         }
     }
 
@@ -91,6 +100,7 @@ impl Classifier {
         match self {
             Classifier::Class => ("uml.class.rename", "class"),
             Classifier::Interface => ("uml.interface.rename", "interface"),
+            Classifier::Enumeration => ("uml.enumeration.rename", "enumeration"),
         }
     }
 
@@ -99,6 +109,7 @@ impl Classifier {
         match self {
             Classifier::Class => ("uml.class.move", "class"),
             Classifier::Interface => ("uml.interface.move", "interface"),
+            Classifier::Enumeration => ("uml.enumeration.move", "enumeration"),
         }
     }
 
@@ -107,7 +118,13 @@ impl Classifier {
         match self {
             Classifier::Class => tr("Add class"),
             Classifier::Interface => tr("Add interface"),
+            Classifier::Enumeration => tr("Add enumeration"),
         }
+    }
+
+    /// Whether its card takes attributes and operations: an enumeration's members are its literals.
+    pub(crate) fn takes_members(self) -> bool {
+        self != Classifier::Enumeration
     }
 
     /// The undo step that places one dragged from Models.
@@ -115,6 +132,7 @@ impl Classifier {
         match self {
             Classifier::Class => tr("Place class"),
             Classifier::Interface => tr("Place interface"),
+            Classifier::Enumeration => tr("Place enumeration"),
         }
     }
 }
@@ -161,7 +179,8 @@ pub(crate) fn popover(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, an
     let mut picked = enter.then(|| kinds.get(focus).copied()).flatten();
     for (i, kind) in kinds.iter().enumerate() {
         let row = Rect::from_min_size(m.min + vec2(8.0, 40.0 + i as f32 * 36.0), vec2(size.x - 16.0, 34.0));
-        let resp = control(shell, ui, &format!("workspace.classifier.{}", kind.key()), "menu-item", row, true);
+        // Its name for assistive technology is the kind's.
+        let resp = control(shell, ui, &format!("workspace.classifier.{}", kind.key()), "menu-item", row, true).accessible_name(kind.word());
         let on = *kind == chosen;
         let keyed = shell.canvas.menu_focus == Some(i);
         if on {

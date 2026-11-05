@@ -271,6 +271,10 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
 - The Skills panel lists the skills: a click on a row opens the skill's tab; the bin that shows on
   a hovered row of the element's own skills removes it without opening it (undo brings it back);
   + makes a skill on the selected element and opens its tab with the name selected, ready to type.
+  The + shows only where the model lets the selection carry a skill (the shell asks the same
+  rule `skill.add` does); elsewhere a muted line under the section's title says so in the
+  selection's words: "Relationships carry no skills", "Literals carry no skills", else "This
+  element carries no skills" (AR-121).
 - A new skill's text starts from a template shaped as an agent's skill, in the interface's
   language: a header between `---` lines with `name` (the name as a slug) and a `description`
   that says when to read it, the name as the `#` title, a line on what it is for, then Rules and
@@ -385,6 +389,21 @@ What is UML's own, beside the shared rules above.
 - A class is a plain card: the surface's white with the plain border, its eyebrow CLASS, its name,
   then two compartments under dividing lines, attributes and operations, each shown even when
   empty. An abstract class's name, and an abstract operation, are slanted.
+- An enumeration (AR-121) is the classifier tool's third kind, after Interface, its face and menu
+  icon a short list (Tool · Enumeration), placed and named in place as `Enumeration 1`. Its card is
+  plain, `«enumeration»` in its eyebrow kept as written, and has one compartment: its literals in
+  their order, bare names, one empty row while it has none. It takes no attribute or operation: no
+  compartment `+`, no add adorner, no menu row for a member, and ⌘↩ adds nothing. Properties shows
+  Name and Package, then `Literals · n` as read-only rows a click selects, or "No literals yet";
+  Models lists it under its package with its literals below it, read-only (no rename, Delete leaves
+  them), and its `+` offers Enumeration beside Class and Interface. Editing literals comes with
+  AR-122, so nothing offers it before.
+- An enumeration is a data type: no association of any kind starts or ends at one, nor does an
+  association's end move onto one; the tool says "An enumeration is a data type and joins no
+  association" at the canvas's top and draws nothing. An enumeration specializes only an
+  enumeration and only an enumeration specializes one; a generalization dragged out of one onto
+  empty canvas makes an enumeration. A dependency may touch it; no realization starts or ends at
+  one.
 - An attribute reads `+ name : Type [0..1]`, an operation `+ name(param : Type) : Return`; the
   visibility sign only when one is set, the multiplicity only when it is not 1. A bound pair of
   none to many is written `*`.

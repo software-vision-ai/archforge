@@ -208,6 +208,7 @@ str		every relationship	todas las relaciones
 str		every column	todas las columnas
 str		every class	todas las clases
 str		every interface	todas las interfaces
+str		every enumeration	todas las enumeraciones
 str		every attribute	todos los atributos
 str		every operation	todas las operaciones
 str		every association	todas las asociaciones
@@ -488,6 +489,9 @@ str		On this table · {n}	En esta tabla · {n}
 str		On this column · {n}	En esta columna · {n}
 str		On this skill · {n}	En esta habilidad · {n}
 str		On this element · {n}	En este elemento · {n}
+str		Literals carry no skills	Los literales no llevan habilidades
+str		Relationships carry no skills	Las relaciones no llevan habilidades
+str		This element carries no skills	Este elemento no lleva habilidades
 str		Diagram	Diagrama
 str		Diagram · of {schema}	Diagrama · de {schema}
 str		This diagram	Este diagrama
@@ -527,26 +531,33 @@ str		{parent} has no primary key yet, so there is nothing in {child} to point at
 # Diagramas de clases
 str		Add class	Añadir clase
 str		Add interface	Añadir interfaz
+str		Add enumeration	Añadir enumeración
 str		Class	Clase
 str		Interface	Interfaz
 str		«interface»	«interface»
+str		Enumeration	Enumeración
+str		«enumeration»	«enumeration»
 str		Classifier	Clasificador
 str		Classifier kinds	Tipos de clasificador
 str		Class diagram	Diagrama de clases
 str		Class diagrams	Diagramas de clases
 str		Class · model, in every diagram	Clase · modelo, en cada diagrama
 str		Interface · model, in every diagram	Interfaz · modelo, en cada diagrama
+str		Enumeration · model, in every diagram	Enumeración · modelo, en cada diagrama
 str		New package	Nuevo paquete
 str		On this class · {n}	En esta clase · {n}
 str		On this interface · {n}	En esta interfaz · {n}
+str		On this enumeration · {n}	En esta enumeración · {n}
 str		On this package · {n}	En este paquete · {n}
 str		Package	Paquete
 str		Package · model	Paquete · modelo
 str		The diagram is of no package	El diagrama no es de ningún paquete
 str		This class	Esta clase
 str		This interface	Esta interfaz
+str		This enumeration	Esta enumeración
 str		This package	Este paquete
 plural		+ {n} more member	+ {n} miembro más|+ {n} miembros más
+plural		+ {n} more literal	+ {n} literal más|+ {n} literales más
 plural		+ {n} more element	+ {n} elemento más|+ {n} elementos más
 # Miembros de clase en Propiedades
 str		Abstract	Abstracta
@@ -557,12 +568,18 @@ str		There is no type named {name}.	No hay ningún tipo llamado {name}.
 str		Several types are named {name}; pick one from the menu.	Hay varios tipos llamados {name}; elige uno del menú.
 str		Add parameter	Añadir parámetro
 str		Attribute	Atributo
+str		Literal	Literal
 str		Attribute · model	Atributo · modelo
+str		Literal · model	Literal · modelo
 str		Attributes · {n}	Atributos · {n}
+str		Literals · {n}	Literales · {n}
+str		No literals yet	Aún no hay literales
+str		Literals are removed with their enumeration	Los literales se eliminan con su enumeración
 str		Move down	Bajar
 str		Move up	Subir
 str		Multiplicity	Multiplicidad
 str		On this attribute · {n}	En este atributo · {n}
+str		On this literal · {n}	En este literal · {n}
 str		On this operation · {n}	En esta operación · {n}
 str		Operation	Operación
 str		Operation · model	Operación · modelo
@@ -575,10 +592,12 @@ str		Remove parameter	Quitar parámetro
 str		Return type	Tipo de retorno
 str		Static	Estático
 str		This attribute	Este atributo
+str		This literal	Este literal
 str		This operation	Esta operación
 str		Visibility	Visibilidad
 str		Place class	Colocar clase
 str		Place interface	Colocar interfaz
+str		Place enumeration	Colocar enumeración
 str		Add package	Añadir paquete
 str		Place package	Colocar paquete
 str		Move package	Mover paquete
@@ -593,6 +612,14 @@ str		Only a package this diagram's package holds goes on it	Solo cabe un paquete
 str		A bound can be at most {max}.	Un límite puede ser como máximo {max}.
 str		A class realizes only an interface	Una clase solo realiza una interfaz
 str		A relationship joins two classes or interfaces	Una relación une dos clases o interfaces
+str		An enumeration is a data type and joins no association	Una enumeración es un tipo de datos y no forma parte de ninguna asociación
+str		An interface specializes only an interface	Una interfaz solo especializa una interfaz
+str		A class cannot specialize an interface	Una clase no puede especializar una interfaz
+str		An enumeration specializes only an enumeration	Una enumeración solo especializa una enumeración
+str		Only an enumeration specializes an enumeration	Solo una enumeración especializa una enumeración
+str		A classifier cannot specialize itself	Un clasificador no puede especializarse a sí mismo
+str		This one specializes that one already	Este ya especializa a aquel
+str		That one specializes this one already, which would make a cycle	Aquel ya especializa a este, lo que crearía un ciclo
 str		Add association	Añadir asociación
 str		Add dependency	Añadir dependencia
 str		Add generalization	Añadir generalización
@@ -645,6 +672,7 @@ str		{what} removed	Eliminado: {what}
 # Paquetes
 str		Class · {package}	Clase · {package}
 str		«interface» · {package}	«interface» · {package}
+str		«enumeration» · {package}	«enumeration» · {package}
 str		{name} removed; what it held moved to {parent}	{name} eliminado; su contenido se movió a {parent}
 # Cambios sin guardar al cerrar
 str		Close and lose changes	Cerrar y perder los cambios

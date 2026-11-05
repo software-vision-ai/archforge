@@ -1,4 +1,4 @@
-//! Relating classes and interfaces: associations, generalizations,
+//! Relating classes, interfaces and enumerations: associations, generalizations,
 //! dependencies and interface realizations drawn between them, an association's ends set (role, multiplicity, navigability, aggregation),
 //! any of them reconnected to another class, and the relationships that touch a class listed so
 //! removing the class can say them and take them along.
@@ -10,7 +10,10 @@
 //! part's end, the line drawn from the whole to the part, and the diamond shows at the whole.
 //!
 //! What would make the model wrong is refused with a reason before anything changes: an interface
-//! that specializes anything but an interface, a class that specializes an interface, a classifier
+//! that specializes anything but an interface, a class that specializes an interface, an
+//! enumeration that specializes anything but an enumeration or is specialized by anything else, an
+//! association to or from an enumeration (a data type, whose values are no instances to link), a
+//! classifier
 //! that specializes itself, directly or round a cycle, the same generalization twice, a class depending
 //! on itself, both ends of an association aggregating, a composition whose whole's end allows more
 //! than one, two ends of one association with the same role, and an interface realization from
@@ -24,8 +27,8 @@ use serde_json::{Value as Json, json};
 
 use crate::commands::{a_what, classifier_of, fail, id_of, name_of, package_of, refuse, set_name, text, uuid_of, what};
 use crate::{
-    ASSOCIATION, CLASS, DEPENDENCY, GENERALIZATION, INTERFACE, INTERFACE_REALIZATION, PROPERTY, association, behaviored_classifier, classifier,
-    dependency, generalization, interface_realization, package, property, typed_element,
+    ASSOCIATION, CLASS, DEPENDENCY, ENUMERATION, GENERALIZATION, INTERFACE, INTERFACE_REALIZATION, PROPERTY, association, behaviored_classifier,
+    classifier, dependency, generalization, interface_realization, package, property, typed_element,
 };
 
 type C<'a> = Ctx<'a, Store, ProjectView>;
@@ -38,7 +41,7 @@ const AGGREGATIONS: [&str; 3] = ["none", "shared", "composite"];
 /// Why a command is not available.
 pub const NO_CLASSES: &str = crate::members::NO_CLASSES;
 
-/// Whether a class or an interface exists, which relating needs.
+/// Whether a class, an interface or an enumeration exists, which relating needs.
 fn has_classes(f: &Facts<'_, Store, ProjectView>) -> Result<(), &'static str> {
     if f.doc.alive().any(|o| f.doc.class_of(o).is_ok_and(crate::is_classifier)) { Ok(()) } else { Err(NO_CLASSES) }
 }
@@ -119,7 +122,7 @@ pub fn relationships_of(store: &Store, c: Obj) -> Vec<Obj> {
     out
 }
 
-/// The class or interface under `key`, which must sit in a package.
+/// The class, interface or enumeration under `key`, which must sit in a package.
 fn class_in_package(store: &Store, p: &Params, key: &str) -> Result<(Obj, Obj), CommandError> {
     let c = classifier_of(store, p, key)?;
     let pkg = package_of(store, c).ok_or_else(|| refuse(key, format!("the {} is in no package", what(store, c))))?;
@@ -157,10 +160,26 @@ fn set_navigable(store: &mut Store, a: Obj, end: Obj, navigable: bool) -> Result
     Ok(())
 }
 
-/// `uml.association.add`: an association of the kind asked for between two classifiers, owning both ends.
+/// Why an association may not have an end at `c`, when it may not: an enumeration is a data type,
+/// and an association joins classes and interfaces, whose instances it links. The refusal names
+/// `c`'s id and what an end may be.
+pub fn association_end_problem(store: &Store, c: Obj) -> Option<String> {
+    (store.class_of(c).ok() == Some(ENUMERATION)).then(|| {
+        let id = uuid_of(store, c).unwrap_or_default();
+        format!("{id} is an enumeration, a data type, and joins no association; an association joins classes and interfaces")
+    })
+}
+
+/// `uml.association.add`: an association of the kind asked for between two classifiers, owning
+/// both ends; never to or from an enumeration.
 fn association_add(ctx: &mut C<'_>, p: &Params) -> R {
     let (from, pkg) = class_in_package(ctx.doc, p, "from")?;
     let to = classifier_of(ctx.doc, p, "to")?;
+    for (key, c) in [("from", from), ("to", to)] {
+        if let Some(why) = association_end_problem(ctx.doc, c) {
+            return Err(refuse(key, why));
+        }
+    }
     let kind = match text(p, "kind") {
         "" => "association",
         k if ASSOCIATION_KINDS.contains(&k) => k,
@@ -196,44 +215,96 @@ fn association_add(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, a)?, "ends": [uuid_of(ctx.doc, ends[0])?, uuid_of(ctx.doc, ends[1])?] }))
 }
 
+/// Why a generalization from `specific` to `general` is refused: a rule between the two kinds, or
+/// one between the two classifiers themselves.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GeneralizationProblem {
+    /// An interface specializes only an interface, and the general one is none.
+    NotAnInterface,
+    /// A class specializes no interface: the specific one is a class.
+    ClassOfInterface,
+    /// An enumeration specializes only an enumeration, and the general one is none.
+    NotAnEnumeration,
+    /// Only an enumeration specializes an enumeration, and the specific one is none.
+    NoEnumeration,
+    /// A classifier specializes another, never itself.
+    Itself,
+    /// The specific classifier specializes the general one already.
+    Again,
+    /// The general classifier specializes the specific one already: a cycle.
+    Cycle,
+}
+
+impl GeneralizationProblem {
+    /// The parameter of `uml.generalization.add` a refusal names: the end that breaks the rule.
+    pub fn key(self) -> &'static str {
+        match self {
+            GeneralizationProblem::ClassOfInterface | GeneralizationProblem::NoEnumeration => "specific",
+            _ => "general",
+        }
+    }
+
+    /// Why, as a refusal says it: the offending classifier's id and what is accepted instead.
+    pub fn why(self, store: &Store, specific: Obj, general: Obj) -> String {
+        let id = |o: Obj| uuid_of(store, o).unwrap_or_default();
+        let (s, g) = (id(specific), id(general));
+        let (kind, a_kind) = (what(store, specific), a_what(store, specific));
+        match self {
+            GeneralizationProblem::NotAnInterface => {
+                format!("{g} is {}; an interface specializes only an interface", a_what(store, general))
+            }
+            GeneralizationProblem::ClassOfInterface => {
+                format!("{s} is a class, and a class cannot specialize an interface; it specializes a class")
+            }
+            GeneralizationProblem::NotAnEnumeration => {
+                format!("{g} is {}; an enumeration specializes only an enumeration", a_what(store, general))
+            }
+            GeneralizationProblem::NoEnumeration => {
+                format!("{s} is {a_kind}; only an enumeration specializes an enumeration")
+            }
+            GeneralizationProblem::Itself => format!("{s}: {a_kind} cannot specialize itself; it specializes another {kind}"),
+            GeneralizationProblem::Again => format!("{s}: the {kind} specializes that {kind} already, {g}; one generalization joins two"),
+            GeneralizationProblem::Cycle => {
+                format!("{g}: that {kind} specializes this one already, which would make a cycle; {s} specializes only what is not below it")
+            }
+        }
+    }
+}
+
 /// Why `specific` may not specialize `general`, when it may not: an interface specializes only an
-/// interface, and a class never specializes one.
-pub fn generalization_problem(store: &Store, specific: Obj, general: Obj, except: Option<Obj>) -> Option<&'static str> {
-    let interface = |o: Obj| store.class_of(o).ok() == Some(INTERFACE);
-    match (interface(specific), interface(general)) {
-        (true, false) => return Some("an interface specializes only an interface"),
-        (false, true) => return Some("a class cannot specialize an interface"),
+/// interface, and a class never specializes one; an enumeration specializes only an enumeration,
+/// and only an enumeration specializes one; no classifier specializes itself, another twice, or
+/// round a cycle. `except` is a generalization being reconnected, which never clashes with itself.
+pub fn generalization_problem(store: &Store, specific: Obj, general: Obj, except: Option<Obj>) -> Option<GeneralizationProblem> {
+    let is = |o: Obj, k| store.class_of(o).ok() == Some(k);
+    match (is(specific, ENUMERATION), is(general, ENUMERATION)) {
+        (true, false) => return Some(GeneralizationProblem::NotAnEnumeration),
+        (false, true) => return Some(GeneralizationProblem::NoEnumeration),
+        _ => {}
+    }
+    match (is(specific, INTERFACE), is(general, INTERFACE)) {
+        (true, false) => return Some(GeneralizationProblem::NotAnInterface),
+        (false, true) => return Some(GeneralizationProblem::ClassOfInterface),
         _ => {}
     }
     if specific == general {
-        return Some(if interface(specific) { "an interface cannot specialize itself" } else { "a class cannot specialize itself" });
+        return Some(GeneralizationProblem::Itself);
     }
     if list(store, specific, classifier::GENERALIZATION)
         .into_iter()
         .any(|g| Some(g) != except && one(store, g, generalization::GENERAL) == Some(general))
     {
-        return Some(if interface(specific) {
-            "the interface specializes that interface already"
-        } else {
-            "the class specializes that class already"
-        });
+        return Some(GeneralizationProblem::Again);
     }
-    if specializes(store, general, specific) {
-        return Some(if interface(specific) {
-            "that interface specializes this one already, which would make a cycle"
-        } else {
-            "that class specializes this one already, which would make a cycle"
-        });
-    }
-    None
+    specializes(store, general, specific).then_some(GeneralizationProblem::Cycle)
 }
 
 /// `uml.generalization.add`: `specific` specializes `general`, unless the classifier rules refuse it.
 fn generalization_add(ctx: &mut C<'_>, p: &Params) -> R {
     let specific = classifier_of(ctx.doc, p, "specific")?;
     let general = classifier_of(ctx.doc, p, "general")?;
-    if let Some(why) = generalization_problem(ctx.doc, specific, general, None) {
-        return Err(refuse("general", why));
+    if let Some(problem) = generalization_problem(ctx.doc, specific, general, None) {
+        return Err(refuse(problem.key(), problem.why(ctx.doc, specific, general)));
     }
     let g = ctx.doc.create(GENERALIZATION).map_err(fail)?;
     ctx.doc.set(g, generalization::GENERAL, Value::Ref(general)).map_err(fail)?;
@@ -479,6 +550,9 @@ fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
     let c = classifier_of(ctx.doc, p, "class")?;
     let class = ctx.doc.class_of(r).map_err(fail)?;
     if class == ASSOCIATION {
+        if let Some(why) = association_end_problem(ctx.doc, c) {
+            return Err(refuse("class", why));
+        }
         let ends = ends_of(ctx.doc, r, key)?;
         let end = ends[if source { 0 } else { 1 }];
         own_end(ctx.doc, r, end)?;
@@ -486,8 +560,8 @@ fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
     } else if class == GENERALIZATION {
         let (specific, general) = crate::figures::ends(ctx.doc, r).ok_or_else(|| refuse(key, "the generalization joins no two classifiers"))?;
         let (s, g) = if source { (c, general) } else { (specific, c) };
-        if let Some(why) = generalization_problem(ctx.doc, s, g, Some(r)) {
-            return Err(refuse("class", why));
+        if let Some(problem) = generalization_problem(ctx.doc, s, g, Some(r)) {
+            return Err(refuse("class", problem.why(ctx.doc, s, g)));
         }
         if source && s != specific {
             ctx.doc.remove_value(specific, classifier::GENERALIZATION, &Value::Ref(r)).map_err(fail)?;
@@ -561,7 +635,7 @@ fn describe(store: &Store, r: Obj) -> Json {
     }
 }
 
-/// `uml.relationship.list`: the relationships that touch a class or an interface.
+/// `uml.relationship.list`: the relationships that touch a class, an interface or an enumeration.
 fn relationship_list(ctx: &mut C<'_>, p: &Params) -> R {
     let store = &*ctx.doc;
     let c = classifier_of(store, p, "class")?;
@@ -590,8 +664,8 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             &["Association"],
             None,
             concat!(
-                "from: string; the id of the class or interface it is drawn from, the whole of an aggregation or composition\n",
-                "to: string; the id of the class or interface it is drawn to, the part of an aggregation or composition\n",
+                "from: string; the id of the class or interface it is drawn from, the whole of an aggregation or composition; never an enumeration\n",
+                "to: string; the id of the class or interface it is drawn to, the part of an aggregation or composition; never an enumeration\n",
                 "kind: string = \"association\", association|directed|aggregation|composition; directed navigates only to the second class\n",
                 "name: string = \"\"; the association's name, or nothing"
             ),
@@ -605,8 +679,8 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             &["Generalization"],
             None,
             concat!(
-                "specific: string; the id of the class or interface that specializes\n",
-                "general: string; the id of the class or interface it specializes: an interface specializes only an interface, and a class never specializes one"
+                "specific: string; the id of the class, interface or enumeration that specializes\n",
+                "general: string; the id of the class, interface or enumeration it specializes: an interface specializes only an interface, a class never specializes one, and an enumeration specializes only an enumeration and is specialized only by one"
             ),
             has_classes,
             generalization_add
@@ -616,7 +690,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Add dependency",
             &["Dependency"],
             None,
-            "client: string; the id of the class or interface that depends\nsupplier: string; the id of the class or interface it depends on\nname: string = \"\"; the dependency's name, or nothing",
+            "client: string; the id of the class, interface or enumeration that depends\nsupplier: string; the id of the class, interface or enumeration it depends on\nname: string = \"\"; the dependency's name, or nothing",
             has_classes,
             dependency_add
         ),
@@ -648,12 +722,12 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             None,
             concat!(
                 "relationship: string; the association's, generalization's, dependency's or interface realization's id\n",
-                "end: string, source|target; the end to move: the class or interface it was drawn from (the specific one, the client, the implementing class) or to\n",
-                "class: string; the id of the class or interface the end moves to; a generalization's end keeps its rules: an interface specializes only an interface, a class never one; a realization's source is a class and its target an interface, the class realizing it once"
+                "end: string, source|target; the end to move: the class, interface or enumeration it was drawn from (the specific one, the client, the implementing class) or to\n",
+                "class: string; the id of the class, interface or enumeration the end moves to; an association's end never moves to an enumeration; a generalization's end keeps its rules: an interface specializes only an interface, a class never one, an enumeration only an enumeration; a realization's source is a class and its target an interface, the class realizing it once"
             ),
             has_classes,
             relationship_reconnect
         ),
-        cmd!(query "uml.relationship.list", "List relationships", &["Association", "Generalization", "Dependency", "Interface realization"], None, "class: string; the class's or interface's id", has_classes, relationship_list),
+        cmd!(query "uml.relationship.list", "List relationships", &["Association", "Generalization", "Dependency", "Interface realization"], None, "class: string; the class's, interface's or enumeration's id", has_classes, relationship_list),
     ]
 }

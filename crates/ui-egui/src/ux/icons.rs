@@ -924,6 +924,20 @@ pub const TOOL_INTERFACE: Icon = Icon {
         L([1.5, 13.0], [8.5, 13.0]),
     ],
 };
+/// The classifier tool's face while it places an enumeration (the design's Tool · Enumeration): a
+/// list of three rows, each a short mark before a longer line.
+pub const TOOL_ENUMERATION: Icon = Icon {
+    size: [14.0, 10.0],
+    stroke: 1.2,
+    segments: &[
+        L([0.0, 0.0], [2.0, 0.0]),
+        L([5.0, 0.0], [14.0, 0.0]),
+        L([0.0, 5.0], [2.0, 5.0]),
+        L([5.0, 5.0], [14.0, 5.0]),
+        L([0.0, 10.0], [2.0, 10.0]),
+        L([5.0, 10.0], [14.0, 10.0]),
+    ],
+};
 /// A class's attribute in the Models tree: a small field.
 pub const ATTRIBUTE: Icon = Icon {
     size: [16.0, 16.0],
@@ -970,6 +984,22 @@ pub const INTERFACE: Icon = Icon {
         L([4.0, 14.0], [12.0, 14.0]),
     ],
 };
+/// A UML enumeration in the Models tree and the classifier kinds: the tool's list of three rows,
+/// drawn at the tree's size.
+pub const ENUMERATION: Icon = Icon {
+    size: [16.0, 16.0],
+    stroke: 1.3,
+    segments: &[
+        L([2.0, 4.0], [4.0, 4.0]),
+        L([6.5, 4.0], [14.0, 4.0]),
+        L([2.0, 8.0], [4.0, 8.0]),
+        L([6.5, 8.0], [14.0, 8.0]),
+        L([2.0, 12.0], [4.0, 12.0]),
+        L([6.5, 12.0], [14.0, 12.0]),
+    ],
+};
+/// An enumeration's literal in the Models tree: one row of the enumeration's list.
+pub const LITERAL: Icon = Icon { size: [16.0, 16.0], stroke: 1.3, segments: &[L([3.0, 8.0], [5.0, 8.0]), L([7.5, 8.0], [13.0, 8.0])] };
 /// A UML package: a box with its tab at the top left.
 pub const PACKAGE: Icon = Icon {
     size: [16.0, 16.0],

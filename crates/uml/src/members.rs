@@ -1,8 +1,9 @@
 //! A class's or an interface's members: attributes (visibility, name, type,
 //! multiplicity, static) and operations (visibility, name, parameters, return type, static,
 //! abstract), added, changed, moved and listed; a class made abstract or not. An interface's
-//! members are public, as UML has them. A type is named by an element's id
-//! (a class of the model, or any type it holds) or by a built-in type's name: Integer, String,
+//! members are public, as UML has them; an enumeration takes neither, its members being its
+//! literals. A type is named by an element's id
+//! (a class of the model, an interface, an enumeration, or any type it holds) or by a built-in type's name: Integer, String,
 //! Boolean, Real or UnlimitedNatural, which the project keeps in a package named Types, made the
 //! first time one is used (owner decision). A multiplicity is typed (`1`, `0..1`, `*`, `1..*`,
 //! `2..5`) and refused with a reason when it does not read (owner decision).
@@ -30,7 +31,7 @@ pub const MAX_PARAMETERS: usize = 64;
 /// The largest bound a multiplicity names.
 pub const MAX_BOUND: u64 = 1_000_000;
 /// Why a command is not available.
-pub const NO_CLASSES: &str = "There is no class or interface yet.";
+pub const NO_CLASSES: &str = "There is no class, interface or enumeration yet.";
 
 /// The visibilities, in the metamodel's order, as the commands name them.
 const VISIBILITIES: [&str; 4] = ["public", "private", "protected", "package"];
@@ -231,6 +232,13 @@ fn check_name(store: &Store, owner: Obj, name: &str, siblings: &[Obj], except: O
     Ok(())
 }
 
+/// Why `c` takes no `members` (attributes or operations): its id, that an enumeration's members are
+/// its literals, and what keeps them instead.
+fn no_members(store: &Store, c: Obj, members: &str) -> String {
+    let id = uuid_of(store, c).unwrap_or_default();
+    format!("{id} is {} and keeps no {members}, its members being its literals; a class or an interface does", crate::commands::a_what(store, c))
+}
+
 /// The class or interface that owns `member` in its list of attributes or operations.
 fn owner_of(store: &Store, member: Obj) -> Option<Obj> {
     store.container(member).ok().flatten().map(|(c, _)| c).filter(|c| store.class_of(*c).is_ok_and(crate::is_classifier))
@@ -251,7 +259,7 @@ fn select(ctx: &mut C<'_>, o: Obj) {
 /// `uml.attribute.add`: an attribute of a class or an interface, its name free among its attributes.
 fn attribute_add(ctx: &mut C<'_>, p: &Params) -> R {
     let c = classifier_of(ctx.doc, p, "class")?;
-    let Some((owned, _)) = member_lists(ctx.doc, c) else { return Err(refuse("class", "it keeps no attributes")) };
+    let Some((owned, _)) = member_lists(ctx.doc, c) else { return Err(refuse("class", no_members(ctx.doc, c, "attributes"))) };
     let name = text(p, "name");
     check_name(ctx.doc, c, name, &attributes(ctx.doc, c), None)?;
     let vis = visibility(ctx.doc, c, p, "visibility")?;
@@ -369,7 +377,7 @@ fn set_operation(store: &mut Store, owner: Obj, op: Obj, p: &Params) -> Result<(
 /// `uml.operation.add`: an operation of a class or an interface, at the place asked for.
 fn operation_add(ctx: &mut C<'_>, p: &Params) -> R {
     let c = classifier_of(ctx.doc, p, "class")?;
-    let Some((_, owned)) = member_lists(ctx.doc, c) else { return Err(refuse("class", "it keeps no operations")) };
+    let Some((_, owned)) = member_lists(ctx.doc, c) else { return Err(refuse("class", no_members(ctx.doc, c, "operations"))) };
     let op = ctx.doc.create(OPERATION).map_err(fail)?;
     set_operation(ctx.doc, c, op, p)?;
     let at = place(p, list(ctx.doc, c, owned).len());
@@ -409,7 +417,8 @@ fn flag(store: &Store, o: Obj, prop: archforge_mof::PropId) -> bool {
     store.get(o, prop).ok().and_then(|v| v.as_bool()).unwrap_or(false)
 }
 
-/// A class or an interface with its members, as an agent reads it.
+/// A class, an interface or an enumeration with its members, as an agent reads it: an
+/// enumeration's are its literals, in their order.
 fn class_get(ctx: &mut C<'_>, p: &Params) -> R {
     let store = &*ctx.doc;
     let c = classifier_of(store, p, "class")?;
@@ -442,10 +451,20 @@ fn class_get(ctx: &mut C<'_>, p: &Params) -> R {
         })
         .collect();
     let is_class = store.class_of(c).ok() == Some(CLASS);
-    Ok(json!({
+    let mut out = json!({
         "id": uuid_of(store, c)?, "kind": crate::commands::what(store, c), "name": name_of(store, c),
         "abstract": is_class && flag(store, c, class::IS_ABSTRACT), "attributes": attrs, "operations": ops,
-    }))
+    });
+    if store.class_of(c).ok() == Some(crate::ENUMERATION) {
+        let literals: Vec<Json> = crate::commands::literals(store, c)
+            .into_iter()
+            .map(|l| json!({ "id": uuid_of(store, l).unwrap_or_default(), "name": name_of(store, l) }))
+            .collect();
+        if let Some(fields) = out.as_object_mut() {
+            fields.insert("literals".to_string(), Json::Array(literals));
+        }
+    }
+    Ok(out)
 }
 
 /// The types a member may have: the built-in ones (made when first used) and the model's own.
@@ -573,7 +592,15 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             has_classes,
             operation_move
         ),
-        cmd!(query "uml.class.get", "Get class", &["Class", "Interface"], None, "class: string; the class's or interface's id", has_classes, class_get),
+        cmd!(
+            query "uml.class.get",
+            "Get class",
+            &["Class", "Interface", "Enumeration"],
+            None,
+            "class: string; the class's, interface's or enumeration's id; an enumeration comes with its literals",
+            has_classes,
+            class_get
+        ),
         cmd!(query "uml.type.list", "List types", &["Class"], None, "", always, type_list),
     ]
 }
