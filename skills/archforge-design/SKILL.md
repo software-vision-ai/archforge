@@ -483,6 +483,47 @@ What is UML's own, beside the shared rules above.
 On every line: a role, and a label at the line's middle, sit above a level stretch of the line and
 beside an upright one, never on the line or its mark.
 
+### Structure for 0.12.0 (owner review 2026-11-05)
+
+The design is page 06 of the design file, in light and dark. Placing a classifier, editing a
+member and drawing a relationship stay three separate gestures:
+
+- Placing a classifier. The Class tool becomes the classifier tool: an icon button with a chevron
+  at its right, in Class's place. The chevron opens the kinds, each with its icon and name: Class,
+  Interface, Enumeration, Data type, Primitive type. The current kind is marked; arrow keys move,
+  Enter picks, Escape closes, and picking arms the tool. Its face and tooltip name the kind. A click
+  on the canvas places one in the diagram's package, its name open for typing, and the tool goes
+  back to Select. The kind stays for the next placement while the window lives; a new window starts
+  at Class. Only kinds that work are listed. Models' `+` and dragging from Models work for every
+  kind as they do for a class.
+- Cards. A class keeps `CLASS` in its eyebrow. The other kinds show their UML keyword there instead:
+  `«interface»`, `«enumeration»`, `«dataType»`, `«primitive»`. An interface and a data type have
+  attributes and operations as a class has. An enumeration has one compartment, its literals in
+  their order. A primitive type shows its name only.
+- Literals are members of their enumeration, never boxes of their own. They are added with the `+`
+  of the Literals compartment, or ⌘↩, as a draft row with a name only; Enter writes one and opens
+  the next. A double click edits one in place. Properties lists them under `Literals · n`; an
+  editor there has Name, Remove, Move up, Move down, Cancel and Apply. Names are told apart within
+  their enumeration, whatever the case; a refusal sits under the row and leaves the model as it was.
+- Drawing relationships. The Relationship menu gains, after a separator, Interface realization and
+  Association class.
+  - Interface realization is drawn from the implementing classifier to its interface: a dashed
+    line in the muted ink, with a hollow triangle at the interface. A drop on anything but an
+    interface, or a second realization of the same interface, is refused at the canvas's top and
+    draws nothing.
+  - An association class is drawn between two classes as an association is. The line and a card
+    above its middle appear as one element and one undo step, the card's name open for typing and
+    its eyebrow `ASSOCIATION CLASS`. The card moves on its own; a dashed tie joins it to the line's
+    middle. Selecting the line or the card selects the one element, and Properties shows its ends,
+    attributes and operations. Remove from this diagram takes the line and the card away; Delete
+    from the model deletes the element.
+- Property modifiers live in the attribute editor and the association end's editor, never in a tool
+  of their own: Default value; Static, Derived, Read only, Ordered and Unique; and Subsets and
+  Redefines, which offer only valid targets. On a card a derived attribute starts with `/`, a
+  default follows `=`, and braces list what differs from the usual (`{readOnly}`, `{ordered}`,
+  `{nonunique}`, `{subsets name}`, `{redefines name}`); unique is the usual and is not said. An
+  association end shows the same braces beside its role.
+
 ## Not decided yet
 The menu bar's structure; how a colour chosen in Appearance and the key-status colour combine;
 packages; closing a project whose changes cannot be written; whether resolving a relationship
