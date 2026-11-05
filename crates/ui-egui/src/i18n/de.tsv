@@ -213,6 +213,7 @@ str		every interface	jede Schnittstelle
 str		every enumeration	jede Aufzählung
 str		every data type	jeder Datentyp
 str		every primitive type	jeder primitive Typ
+str		every association class	jede Assoziationsklasse
 str		every attribute	jedes Attribut
 str		every operation	jede Operation
 str		every association	jede Assoziation
@@ -540,6 +541,7 @@ str		Add interface	Schnittstelle hinzufügen
 str		Add enumeration	Aufzählung hinzufügen
 str		Add data type	Datentyp hinzufügen
 str		Add primitive type	Primitiven Typ hinzufügen
+str		Add association class	Assoziationsklasse hinzufügen
 str		Class	Klasse
 str		Interface	Schnittstelle
 str		«interface»	«interface»
@@ -549,6 +551,7 @@ str		Data type	Datentyp
 str		Primitive type	Primitiver Typ
 str		«dataType»	«dataType»
 str		«primitive»	«primitive»
+str		Association class	Assoziationsklasse
 str		Classifier	Klassifikator
 str		Classifier kinds	Klassifikatorarten
 str		Class diagram	Klassendiagramm
@@ -558,6 +561,7 @@ str		Interface · model, in every diagram	Schnittstelle · Modell, in jedem Diag
 str		Enumeration · model, in every diagram	Aufzählung · Modell, in jedem Diagramm
 str		Data type · model, in every diagram	Datentyp · Modell, in jedem Diagramm
 str		Primitive type · model, in every diagram	Primitiver Typ · Modell, in jedem Diagramm
+str		Association class · model, in every diagram	Assoziationsklasse · Modell, in jedem Diagramm
 str		New package	Neues Paket
 str		On this class · {n}	Auf dieser Klasse · {n}
 str		On this interface · {n}	Auf dieser Schnittstelle · {n}
@@ -620,6 +624,7 @@ str		Place interface	Schnittstelle platzieren
 str		Place enumeration	Aufzählung platzieren
 str		Place data type	Datentyp platzieren
 str		Place primitive type	Primitiven Typ platzieren
+str		Place association class	Assoziationsklasse platzieren
 str		Add package	Paket hinzufügen
 str		Place package	Paket platzieren
 str		Move package	Paket verschieben
@@ -634,9 +639,11 @@ str		Only a package this diagram's package holds goes on it	Nur ein Paket, das i
 str		A bound can be at most {max}.	Eine Grenze darf höchstens {max} sein.
 str		A class realizes only an interface	Eine Klasse realisiert nur eine Schnittstelle
 str		A relationship joins two classes or interfaces	Eine Beziehung verbindet zwei Klassen oder Schnittstellen
+str		An association class does not join itself	Eine Assoziationsklasse verbindet sich nicht mit sich selbst
 str		An enumeration is a data type and joins no association	Eine Aufzählung ist ein Datentyp und gehört zu keiner Assoziation
 str		A data type joins no association	Ein Datentyp gehört zu keiner Assoziation
 str		A primitive type joins no association	Ein primitiver Typ gehört zu keiner Assoziation
+str		An association class joins only classes	Eine Assoziationsklasse verbindet nur Klassen
 str		An interface specializes only an interface	Eine Schnittstelle spezialisiert nur eine Schnittstelle
 str		A class cannot specialize an interface	Eine Klasse kann keine Schnittstelle spezialisieren
 str		An enumeration specializes only an enumeration	Eine Aufzählung spezialisiert nur eine Aufzählung
@@ -646,6 +653,7 @@ str		Only a data type specializes a data type	Nur ein Datentyp spezialisiert ein
 str		A primitive type specializes only a primitive type	Ein primitiver Typ spezialisiert nur einen primitiven Typ
 str		Only a primitive type specializes a primitive type	Nur ein primitiver Typ spezialisiert einen primitiven Typ
 str		A built-in type specializes nothing	Ein eingebauter Typ spezialisiert nichts
+str		Nothing specializes an association class	Nichts spezialisiert eine Assoziationsklasse
 str		A classifier cannot specialize itself	Ein Klassifikator kann sich nicht selbst spezialisieren
 str		This one specializes that one already	Dieser spezialisiert jenen bereits
 str		That one specializes this one already, which would make a cycle	Jener spezialisiert diesen bereits, das ergäbe einen Zyklus
@@ -675,8 +683,10 @@ str		Implementing class	Implementierende Klasse
 str		Interface realization	Schnittstellenrealisierung
 str		Interface realization · model	Schnittstellenrealisierung · Modell
 str		Interface realization: from the implementing class to its interface	Schnittstellenrealisierung: von der implementierenden Klasse zu ihrer Schnittstelle
+str		Association class: between two classes, with a card of its own	Assoziationsklasse: zwischen zwei Klassen, mit einer eigenen Karte
 str		Navigable	Navigierbar
 str		On this association · {n}	An dieser Assoziation · {n}
+str		On this association class · {n}	Auf dieser Assoziationsklasse · {n}
 str		On this dependency · {n}	An dieser Abhängigkeit · {n}
 str		On this generalization · {n}	An dieser Generalisierung · {n}
 str		On this interface realization · {n}	An dieser Schnittstellenrealisierung · {n}
@@ -691,6 +701,7 @@ str		Supplier	Lieferant
 str		The lower bound cannot be *.	Die Untergrenze darf nicht * sein.
 str		The upper bound must be at least {lower}.	Die Obergrenze muss mindestens {lower} sein.
 str		This association	Diese Assoziation
+str		This association class	Diese Assoziationsklasse
 str		This class realizes that interface already	Diese Klasse realisiert diese Schnittstelle bereits
 str		This dependency	Diese Abhängigkeit
 str		This generalization	Diese Generalisierung
@@ -704,6 +715,7 @@ str		«interface» · {package}	«interface» · {package}
 str		«enumeration» · {package}	«enumeration» · {package}
 str		«dataType» · {package}	«dataType» · {package}
 str		«primitive» · {package}	«primitive» · {package}
+str		Association class · {package}	Assoziationsklasse · {package}
 str		{name} removed; what it held moved to {parent}	{name} entfernt; der Inhalt wurde nach {parent} verschoben
 # Ungesicherte Änderungen beim Schließen
 str		Close and lose changes	Schließen und Änderungen verwerfen

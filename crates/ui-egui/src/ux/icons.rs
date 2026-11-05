@@ -1070,6 +1070,22 @@ pub const PRIMITIVE_TYPE: Icon = Icon {
         C([8.0, 6.0], [6.895, 6.0], [6.0, 6.895], [6.0, 8.0]),
     ],
 };
+/// A UML association class in the Models tree and the search: a small class box over the middle of
+/// a line, joined to it by a short tie, as the Relationship menu's row draws it.
+pub const ASSOCIATION_CLASS: Icon = Icon {
+    size: [16.0, 16.0],
+    stroke: 1.3,
+    segments: &[
+        L([4.0, 1.5], [12.0, 1.5]),
+        L([12.0, 1.5], [12.0, 7.0]),
+        L([12.0, 7.0], [4.0, 7.0]),
+        L([4.0, 7.0], [4.0, 1.5]),
+        L([4.0, 4.25], [12.0, 4.25]),
+        L([8.0, 8.5], [8.0, 9.5]),
+        L([8.0, 11.0], [8.0, 12.0]),
+        L([1.0, 13.5], [15.0, 13.5]),
+    ],
+};
 /// An enumeration's literal in the Models tree: one row of the enumeration's list.
 pub const LITERAL: Icon = Icon { size: [16.0, 16.0], stroke: 1.3, segments: &[L([3.0, 8.0], [5.0, 8.0]), L([7.5, 8.0], [13.0, 8.0])] };
 /// A UML package: a box with its tab at the top left.

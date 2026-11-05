@@ -213,6 +213,7 @@ str		every interface	すべてのインターフェース
 str		every enumeration	すべての列挙
 str		every data type	すべてのデータ型
 str		every primitive type	すべてのプリミティブ型
+str		every association class	すべての関連クラス
 str		every attribute	すべての属性
 str		every operation	すべての操作
 str		every association	すべての関連
@@ -540,6 +541,7 @@ str		Add interface	インターフェースを追加
 str		Add enumeration	列挙を追加
 str		Add data type	データ型を追加
 str		Add primitive type	プリミティブ型を追加
+str		Add association class	関連クラスを追加
 str		Class	クラス
 str		Interface	インターフェース
 str		«interface»	«interface»
@@ -549,6 +551,7 @@ str		Data type	データ型
 str		Primitive type	プリミティブ型
 str		«dataType»	«dataType»
 str		«primitive»	«primitive»
+str		Association class	関連クラス
 str		Classifier	分類子
 str		Classifier kinds	分類子の種類
 str		Class diagram	クラス図
@@ -558,6 +561,7 @@ str		Interface · model, in every diagram	インターフェース · モデル�
 str		Enumeration · model, in every diagram	列挙 · モデル、すべての図に
 str		Data type · model, in every diagram	データ型 · モデル、すべての図に
 str		Primitive type · model, in every diagram	プリミティブ型 · モデル、すべての図に
+str		Association class · model, in every diagram	関連クラス · モデル、すべての図に
 str		New package	新しいパッケージ
 str		On this class · {n}	このクラスに · {n}
 str		On this interface · {n}	このインターフェースに · {n}
@@ -620,6 +624,7 @@ str		Place interface	インターフェースを配置
 str		Place enumeration	列挙を配置
 str		Place data type	データ型を配置
 str		Place primitive type	プリミティブ型を配置
+str		Place association class	関連クラスを配置
 str		Add package	パッケージを追加
 str		Place package	パッケージを配置
 str		Move package	パッケージを移動
@@ -634,9 +639,11 @@ str		Only a package this diagram's package holds goes on it	この図のパッ�
 str		A bound can be at most {max}.	境界は最大 {max} までです。
 str		A class realizes only an interface	クラスが実現できるのはインターフェースだけです
 str		A relationship joins two classes or interfaces	関係は 2 つのクラスまたはインターフェースを結びます
+str		An association class does not join itself	関連クラスは自分自身を結びません
 str		An enumeration is a data type and joins no association	列挙はデータ型であり、関連には加わりません
 str		A data type joins no association	データ型は関連には加わりません
 str		A primitive type joins no association	プリミティブ型は関連には加わりません
+str		An association class joins only classes	関連クラスはクラスどうしだけを結びます
 str		An interface specializes only an interface	インターフェースはインターフェースだけを特化します
 str		A class cannot specialize an interface	クラスはインターフェースを特化できません
 str		An enumeration specializes only an enumeration	列挙は列挙だけを特化します
@@ -646,6 +653,7 @@ str		Only a data type specializes a data type	データ型を特化できるの�
 str		A primitive type specializes only a primitive type	プリミティブ型はプリミティブ型だけを特化します
 str		Only a primitive type specializes a primitive type	プリミティブ型を特化できるのはプリミティブ型だけです
 str		A built-in type specializes nothing	組み込み型は何も特化しません
+str		Nothing specializes an association class	関連クラスを特化するものはありません
 str		A classifier cannot specialize itself	分類子は自分自身を特化できません
 str		This one specializes that one already	これはすでにそれを特化しています
 str		That one specializes this one already, which would make a cycle	それはすでにこれを特化しており、循環になります
@@ -675,8 +683,10 @@ str		Implementing class	実装クラス
 str		Interface realization	インターフェース実現
 str		Interface realization · model	インターフェース実現 · モデル
 str		Interface realization: from the implementing class to its interface	インターフェース実現：実装クラスからそのインターフェースへ
+str		Association class: between two classes, with a card of its own	関連クラス：2 つのクラスの間に、専用のカードを持つ
 str		Navigable	ナビゲーション可能
 str		On this association · {n}	この関連に · {n}
+str		On this association class · {n}	この関連クラスに · {n}
 str		On this dependency · {n}	この依存に · {n}
 str		On this generalization · {n}	この汎化に · {n}
 str		On this interface realization · {n}	このインターフェース実現に · {n}
@@ -691,6 +701,7 @@ str		Supplier	サプライヤー
 str		The lower bound cannot be *.	下限を * にはできません。
 str		The upper bound must be at least {lower}.	上限は {lower} 以上にしてください。
 str		This association	この関連
+str		This association class	この関連クラス
 str		This class realizes that interface already	このクラスはそのインターフェースをすでに実現しています
 str		This dependency	この依存
 str		This generalization	この汎化
@@ -704,6 +715,7 @@ str		«interface» · {package}	«interface» · {package}
 str		«enumeration» · {package}	«enumeration» · {package}
 str		«dataType» · {package}	«dataType» · {package}
 str		«primitive» · {package}	«primitive» · {package}
+str		Association class · {package}	関連クラス · {package}
 str		{name} removed; what it held moved to {parent}	{name} を削除しました。中身は {parent} に移動しました
 # 閉じるときの未保存の変更
 str		Close and lose changes	閉じて変更を破棄

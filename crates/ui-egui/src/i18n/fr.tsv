@@ -213,6 +213,7 @@ str		every interface	chaque interface
 str		every enumeration	chaque énumération
 str		every data type	chaque type de données
 str		every primitive type	chaque type primitif
+str		every association class	chaque classe d’association
 str		every attribute	chaque attribut
 str		every operation	chaque opération
 str		every association	chaque association
@@ -540,6 +541,7 @@ str		Add interface	Ajouter une interface
 str		Add enumeration	Ajouter une énumération
 str		Add data type	Ajouter un type de données
 str		Add primitive type	Ajouter un type primitif
+str		Add association class	Ajouter une classe d’association
 str		Class	Classe
 str		Interface	Interface
 str		«interface»	«interface»
@@ -549,6 +551,7 @@ str		Data type	Type de données
 str		Primitive type	Type primitif
 str		«dataType»	«dataType»
 str		«primitive»	«primitive»
+str		Association class	Classe d’association
 str		Classifier	Classificateur
 str		Classifier kinds	Types de classificateur
 str		Class diagram	Diagramme de classes
@@ -558,6 +561,7 @@ str		Interface · model, in every diagram	Interface · modèle, dans chaque diag
 str		Enumeration · model, in every diagram	Énumération · modèle, dans chaque diagramme
 str		Data type · model, in every diagram	Type de données · modèle, dans chaque diagramme
 str		Primitive type · model, in every diagram	Type primitif · modèle, dans chaque diagramme
+str		Association class · model, in every diagram	Classe d’association · modèle, dans chaque diagramme
 str		New package	Nouveau paquetage
 str		On this class · {n}	Sur cette classe · {n}
 str		On this interface · {n}	Sur cette interface · {n}
@@ -620,6 +624,7 @@ str		Place interface	Placer l'interface
 str		Place enumeration	Placer l'énumération
 str		Place data type	Placer le type de données
 str		Place primitive type	Placer le type primitif
+str		Place association class	Placer la classe d’association
 str		Add package	Ajouter un paquetage
 str		Place package	Placer le paquetage
 str		Move package	Déplacer le paquetage
@@ -634,9 +639,11 @@ str		Only a package this diagram's package holds goes on it	Seul un paquetage co
 str		A bound can be at most {max}.	Une borne vaut au plus {max}.
 str		A class realizes only an interface	Une classe ne réalise qu’une interface
 str		A relationship joins two classes or interfaces	Une relation joint deux classes ou interfaces
+str		An association class does not join itself	Une classe d’association ne se joint pas à elle-même
 str		An enumeration is a data type and joins no association	Une énumération est un type de données et ne participe à aucune association
 str		A data type joins no association	Un type de données ne participe à aucune association
 str		A primitive type joins no association	Un type primitif ne participe à aucune association
+str		An association class joins only classes	Une classe d’association ne joint que des classes
 str		An interface specializes only an interface	Une interface ne spécialise qu’une interface
 str		A class cannot specialize an interface	Une classe ne peut pas spécialiser une interface
 str		An enumeration specializes only an enumeration	Une énumération ne spécialise qu’une énumération
@@ -646,6 +653,7 @@ str		Only a data type specializes a data type	Seul un type de données spéciali
 str		A primitive type specializes only a primitive type	Un type primitif ne spécialise qu’un type primitif
 str		Only a primitive type specializes a primitive type	Seul un type primitif spécialise un type primitif
 str		A built-in type specializes nothing	Un type intégré ne spécialise rien
+str		Nothing specializes an association class	Rien ne spécialise une classe d’association
 str		A classifier cannot specialize itself	Un classificateur ne peut pas se spécialiser lui-même
 str		This one specializes that one already	Celui-ci spécialise déjà celui-là
 str		That one specializes this one already, which would make a cycle	Celui-là spécialise déjà celui-ci, ce qui créerait un cycle
@@ -675,8 +683,10 @@ str		Implementing class	Classe qui implémente
 str		Interface realization	Réalisation d’interface
 str		Interface realization · model	Réalisation d’interface · modèle
 str		Interface realization: from the implementing class to its interface	Réalisation d’interface : de la classe qui implémente à son interface
+str		Association class: between two classes, with a card of its own	Classe d’association : entre deux classes, avec sa propre carte
 str		Navigable	Navigable
 str		On this association · {n}	Sur cette association · {n}
+str		On this association class · {n}	Sur cette classe d’association · {n}
 str		On this dependency · {n}	Sur cette dépendance · {n}
 str		On this generalization · {n}	Sur cette généralisation · {n}
 str		On this interface realization · {n}	Sur cette réalisation d’interface · {n}
@@ -691,6 +701,7 @@ str		Supplier	Fournisseur
 str		The lower bound cannot be *.	La borne inférieure ne peut pas être *.
 str		The upper bound must be at least {lower}.	La borne supérieure doit valoir au moins {lower}.
 str		This association	Cette association
+str		This association class	Cette classe d’association
 str		This class realizes that interface already	Cette classe réalise déjà cette interface
 str		This dependency	Cette dépendance
 str		This generalization	Cette généralisation
@@ -704,6 +715,7 @@ str		«interface» · {package}	«interface» · {package}
 str		«enumeration» · {package}	«enumeration» · {package}
 str		«dataType» · {package}	«dataType» · {package}
 str		«primitive» · {package}	«primitive» · {package}
+str		Association class · {package}	Classe d’association · {package}
 str		{name} removed; what it held moved to {parent}	{name} supprimé ; son contenu a été déplacé vers {parent}
 # Modifications non enregistrées à la fermeture
 str		Close and lose changes	Fermer et perdre les modifications

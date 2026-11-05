@@ -125,6 +125,10 @@ pub enum Screen {
     /// selected with its class and interface in Properties, and the Relationship tool showing
     /// Interface realization.
     WorkspaceRealization,
+    /// Two classes, Customer and Product, joined by the association class Review, its card with
+    /// two attributes above its line's middle and tied to it: Review selected, its ends, attributes
+    /// and operations in Properties, and the Relationship tool showing Association class.
+    WorkspaceAssociationClass,
     /// The sample class model edited, unsaved, and its close asking Save, Don't save or Cancel
     ///.
     WorkspaceCloseAsk,
@@ -440,6 +444,13 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
         // selection: the toolbar shows Interface realization active beside its Properties.
         shell.canvas.tool = crate::canvas::Tool::Connect("relationship");
         shell.canvas.uml_relation = crate::uml_relate::Relate::Realization;
+    }
+    if screen == Screen::WorkspaceAssociationClass {
+        shell.adopt_project();
+        sample_association_class(&mut shell)?;
+        // The Relationship tool armed after the element was selected, as the realization's screen.
+        shell.canvas.tool = crate::canvas::Tool::Connect("relationship");
+        shell.canvas.uml_relation = crate::uml_relate::Relate::AssociationClass;
     }
     if screen == Screen::WorkspaceInlineMember {
         shell.adopt_project();
@@ -1289,6 +1300,48 @@ fn sample_realizations(shell: &mut Shell) -> Result<(), String> {
     }
     crate::canvas::open(shell, diagram);
     crate::panels::run(shell, "view.select", json!({ "ids": [realized] }))?;
+    shell.state.show_panel(crate::state::Panel::Properties);
+    Ok(())
+}
+
+/// A package Reviews: the classes Customer and Product side by side, the association class Review
+/// between them with its attributes stars and text and its operation publish, its card above its
+/// line's middle; Review selected, its Properties shown and the package open in Models.
+fn sample_association_class(shell: &mut Shell) -> Result<(), String> {
+    use serde_json::json;
+    let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
+    let run = |session: &mut archforge_notations::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
+        let out = session.execute(command, &params).map_err(|e| format!("{command}: {e:?}"))?;
+        Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
+    };
+    let package = run(session, "uml.package.add", json!({ "name": "Reviews" }))?;
+    let diagram = run(session, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": package, "name": "Reviews" }))?;
+    let customer = run(session, "uml.class.add", json!({ "package": package, "name": "Customer" }))?;
+    run(session, "uml.attribute.add", json!({ "class": customer, "name": "name", "type": "String" }))?;
+    let product = run(session, "uml.class.add", json!({ "package": package, "name": "Product" }))?;
+    run(session, "uml.attribute.add", json!({ "class": product, "name": "sku", "type": "String" }))?;
+    let review = run(session, "uml.association-class.add", json!({ "from": customer, "to": product, "name": "Review" }))?;
+    run(session, "uml.attribute.add", json!({ "class": review, "name": "stars", "type": "Integer" }))?;
+    run(session, "uml.attribute.add", json!({ "class": review, "name": "text", "type": "String" }))?;
+    run(session, "uml.operation.add", json!({ "class": review, "name": "publish" }))?;
+    run(session, "uml.association.set-end", json!({ "association": review, "end": 0, "multiplicity": "*", "navigable": false }))?;
+    run(session, "uml.association.set-end", json!({ "association": review, "end": 1, "multiplicity": "*", "navigable": false }))?;
+    let (w, _) = archforge_uml::CLASS_SIZE;
+    let low = crate::uml_ui::members_height(1, 0);
+    for (element, x, y, height) in [(&customer, 80, 420, low), (&product, 640, 420, low), (&review, 360, 120, crate::uml_ui::members_height(2, 1))] {
+        run(session, "diagram.place", json!({ "diagram": diagram, "element": element, "x": x, "y": y, "width": w, "height": height }))?;
+    }
+    run(session, "diagram.connect-all", json!({ "diagram": diagram }))?;
+    session.mark_saved().map_err(|e| format!("mark_saved: {e:?}"))?;
+    let (Some(package), Some(diagram)) = (archforge_mof::Uuid::parse(&package), archforge_mof::Uuid::parse(&diagram)) else {
+        return Err("the sample's ids".into());
+    };
+    shell.explorer.expanded.insert(package);
+    if let Some(root) = shell.session.as_ref().and_then(|s| archforge_uml::commands::root_package(s.doc()).and_then(|r| s.doc().uuid(r).ok())) {
+        shell.explorer.expanded.insert(root);
+    }
+    crate::canvas::open(shell, diagram);
+    crate::panels::run(shell, "view.select", json!({ "ids": [review] }))?;
     shell.state.show_panel(crate::state::Panel::Properties);
     Ok(())
 }

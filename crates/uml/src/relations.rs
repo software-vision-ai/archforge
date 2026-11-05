@@ -21,6 +21,15 @@
 //! than one, two ends of one association with the same role, and an interface realization from
 //! anything but a class, to anything but an interface, or from a class to an interface it realizes
 //! already. A realization is owned by its implementing class, as UML has it.
+//!
+//! An association class (AR-125) is one element, UML's AssociationClass: a class and an
+//! association at once. It is made between two classes as a plain association is, owning both its
+//! ends, and its ends are set and reconnected as an association's are; it has attributes and
+//! operations as a class has (`members`), and it is named among its package's classifiers. Its ends
+//! are classes only: an interface, an enumeration, a data type or a primitive type is refused, and
+//! so is the association class itself. As the class it is, it implements interfaces and takes
+//! part in other relationships; nothing specializes it, since a plain class may not specialize an
+//! association class in UML and another association class would bind its ends to these.
 
 use archforge_diagram::ProjectView;
 use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, cmd};
@@ -29,8 +38,8 @@ use serde_json::{Value as Json, json};
 
 use crate::commands::{a_what, classifier_of, fail, id_of, name_of, package_of, refuse, set_name, text, uuid_of, what};
 use crate::{
-    ASSOCIATION, CLASS, DATA_TYPE, DEPENDENCY, ENUMERATION, GENERALIZATION, INTERFACE, INTERFACE_REALIZATION, PRIMITIVE_TYPE, PROPERTY, association,
-    behaviored_classifier, classifier, dependency, generalization, interface_realization, package, property, typed_element,
+    ASSOCIATION, ASSOCIATION_CLASS, CLASS, DATA_TYPE, DEPENDENCY, ENUMERATION, GENERALIZATION, INTERFACE, INTERFACE_REALIZATION, PRIMITIVE_TYPE,
+    PROPERTY, association, behaviored_classifier, classifier, dependency, generalization, interface_realization, package, property, typed_element,
 };
 
 type C<'a> = Ctx<'a, Store, ProjectView>;
@@ -93,15 +102,21 @@ fn upper(store: &Store, end: Obj) -> Option<u64> {
     }
 }
 
-/// The relationships that touch class `c`: the associations with an end typed by it, the
-/// generalizations to and from it, the dependencies it is a client or supplier of, and the
-/// interface realizations it implements or is the contract of; each once.
+/// The relationships that touch class `c`: the associations and association classes with an end
+/// typed by it, the generalizations to and from it, the dependencies it is a client or supplier of,
+/// and the interface realizations it implements or is the contract of; each once. An association
+/// class's own ends are not among an association class's relationships: they touch its classes.
 pub fn relationships_of(store: &Store, c: Obj) -> Vec<Obj> {
     let mut out = Vec::new();
     for (src, prop) in store.referrers(c) {
         let r = if prop == typed_element::TYPE && store.class_of(src).ok() == Some(PROPERTY) {
             // Its association, or the association that owns it.
-            let owner = store.container(src).ok().flatten().map(|(o, _)| o).filter(|o| store.class_of(*o).ok() == Some(ASSOCIATION));
+            let owner = store
+                .container(src)
+                .ok()
+                .flatten()
+                .filter(|(o, p)| *p == association::OWNED_END && store.class_of(*o).is_ok_and(crate::is_association))
+                .map(|(o, _)| o);
             one(store, src, property::ASSOCIATION).or(owner)
         } else if [
             generalization::GENERAL,
@@ -223,6 +238,60 @@ fn association_add(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, a)?, "ends": [uuid_of(ctx.doc, ends[0])?, uuid_of(ctx.doc, ends[1])?] }))
 }
 
+/// Why association class `ac` (none while it is being made) may not have an end at `c`, when it
+/// may not: its ends are classes, plain or association classes, never an interface, an
+/// enumeration, a data type or a primitive type, and never the association class itself. The
+/// refusal names `c`'s id, what it is and what an end may be.
+pub fn association_class_end_problem(store: &Store, c: Obj, ac: Option<Obj>) -> Option<String> {
+    let id = uuid_of(store, c).unwrap_or_default();
+    if Some(c) == ac {
+        return Some(format!("{id} is the association class itself; its ends are other classes"));
+    }
+    match store.class_of(c).ok() {
+        Some(k) if k == CLASS || k == ASSOCIATION_CLASS => None,
+        _ => Some(format!("{id} is {}; an association class joins only classes (a class or an association class)", a_what(store, c))),
+    }
+}
+
+/// `uml.association-class.add`: one association class between two classes, in the first class's
+/// package, owning both its ends as an association does: no roles, no multiplicities, navigable to
+/// neither end. Its name, when it has one, is free among the package's classifiers.
+fn association_class_add(ctx: &mut C<'_>, p: &Params) -> R {
+    let (from, pkg) = class_in_package(ctx.doc, p, "from")?;
+    let to = classifier_of(ctx.doc, p, "to")?;
+    for (key, c) in [("from", from), ("to", to)] {
+        if let Some(why) = association_class_end_problem(ctx.doc, c, None) {
+            return Err(refuse(key, why));
+        }
+    }
+    let name = text(p, "name");
+    if !name.is_empty() {
+        if let Some(why) = crate::members::reserved_problem(ctx.doc, pkg, name) {
+            return Err(refuse("name", why));
+        }
+        crate::commands::check_name(ctx.doc, name, &crate::commands::classifiers(ctx.doc, pkg), None)?;
+    }
+    let a = ctx.doc.create(ASSOCIATION_CLASS).map_err(fail)?;
+    set_name(ctx.doc, a, name)?;
+    ctx.doc.push(pkg, package::PACKAGED_ELEMENT, Value::Ref(a)).map_err(fail)?;
+    let mut ends = Vec::new();
+    for ty in [from, to] {
+        let end = ctx.doc.create(PROPERTY).map_err(fail)?;
+        ctx.doc.set(end, typed_element::TYPE, Value::Ref(ty)).map_err(fail)?;
+        // A member end first, which tells the end its association, then owned by it.
+        ctx.doc.push(a, association::MEMBER_END, Value::Ref(end)).map_err(fail)?;
+        if !ctx.doc.list(a, association::OWNED_END).map_err(fail)?.contains(&Value::Ref(end)) {
+            ctx.doc.push(a, association::OWNED_END, Value::Ref(end)).map_err(fail)?;
+        }
+        ends.push(end);
+    }
+    for end in &ends {
+        set_navigable(ctx.doc, a, *end, false)?;
+    }
+    ctx.view.selection = vec![a];
+    Ok(json!({ "id": uuid_of(ctx.doc, a)?, "ends": [uuid_of(ctx.doc, ends[0])?, uuid_of(ctx.doc, ends[1])?] }))
+}
+
 /// Why a generalization from `specific` to `general` is refused: a rule between the two kinds, or
 /// one between the two classifiers themselves.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -245,6 +314,9 @@ pub enum GeneralizationProblem {
     NoPrimitiveType,
     /// A built-in type is never changed, so it specializes nothing: the specific one is one.
     BuiltIn,
+    /// Nothing specializes an association class: the general one is one. A plain class may not in
+    /// UML (`maySpecializeType`), and another association class would bind its ends to these.
+    AssociationClass,
     /// A classifier specializes another, never itself.
     Itself,
     /// The specific classifier specializes the general one already.
@@ -276,7 +348,10 @@ impl GeneralizationProblem {
                 format!("{g} is {}; an interface specializes only an interface", a_what(store, general))
             }
             GeneralizationProblem::ClassOfInterface => {
-                format!("{s} is a class; a class cannot specialize an interface, only a class")
+                format!("{s} is {a_kind}; a class cannot specialize an interface, only a class")
+            }
+            GeneralizationProblem::AssociationClass => {
+                format!("{g} is an association class, which nothing specializes; {s} specializes a class instead")
             }
             GeneralizationProblem::NotAnEnumeration => {
                 format!("{g} is {}; an enumeration specializes only an enumeration", a_what(store, general))
@@ -312,7 +387,8 @@ impl GeneralizationProblem {
 }
 
 /// Why `specific` may not specialize `general`, when it may not: an interface specializes only an
-/// interface, and a class never specializes one; an enumeration specializes only an enumeration,
+/// interface, and a class never specializes one; nothing specializes an association class; an
+/// enumeration specializes only an enumeration,
 /// and only an enumeration specializes one; a data type likewise only a data type, and a primitive
 /// type only a primitive type; a built-in type specializes nothing, though one of the model's own
 /// may specialize it; no classifier specializes itself, another twice, or round a cycle. `except`
@@ -347,6 +423,9 @@ pub fn generalization_problem(store: &Store, specific: Obj, general: Obj, except
         (true, false) => return Some(GeneralizationProblem::NotAnInterface),
         (false, true) => return Some(GeneralizationProblem::ClassOfInterface),
         _ => {}
+    }
+    if is(general, ASSOCIATION_CLASS) {
+        return Some(GeneralizationProblem::AssociationClass);
     }
     if specific == general {
         return Some(GeneralizationProblem::Itself);
@@ -392,11 +471,13 @@ fn dependency_add(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, d)? }))
 }
 
-/// Why a classifier may not realize another: what a realization from anything but a class, to
-/// anything but an interface, or a second one between the same two would be refused for.
+/// Why a classifier may not realize another: what a realization from anything but a class (an
+/// association class is one), to anything but an interface, or a second one between the same two
+/// would be refused for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RealizationProblem {
-    /// Only a class implements: UML's implementing classifier is behaviored.
+    /// Only a class implements, an association class among them: UML's implementing classifier is
+    /// behaviored.
     NotAClass,
     /// Only an interface is a contract.
     NotAnInterface,
@@ -430,11 +511,11 @@ impl RealizationProblem {
     }
 }
 
-/// Why `implementing` may not realize `contract`, when it may not: only a class implements, only an
-/// interface is a contract, and a class realizes an interface once. `except` is a realization being
-/// reconnected, which never clashes with itself.
+/// Why `implementing` may not realize `contract`, when it may not: only a class implements (an
+/// association class is a class), only an interface is a contract, and a class realizes an
+/// interface once. `except` is a realization being reconnected, which never clashes with itself.
 pub fn realization_problem(store: &Store, implementing: Obj, contract: Obj, except: Option<Obj>) -> Option<RealizationProblem> {
-    if store.class_of(implementing).ok() != Some(CLASS) {
+    if !store.class_of(implementing).is_ok_and(|k| k == CLASS || k == ASSOCIATION_CLASS) {
         return Some(RealizationProblem::NotAClass);
     }
     if store.class_of(contract).ok() != Some(INTERFACE) {
@@ -515,8 +596,17 @@ fn own_end(store: &mut Store, a: Obj, end: Obj) -> Result<(), CommandError> {
     Ok(())
 }
 
+/// The association or association class under `key`: what has ends to set.
+fn association_of(store: &Store, p: &Params, key: &str) -> Result<Obj, CommandError> {
+    id_of(store, p, key, ASSOCIATION, "")
+        .or_else(|_| id_of(store, p, key, ASSOCIATION_CLASS, ""))
+        .map_err(|_| refuse(key, format!("{} is no association or association class", crate::commands::short(text(p, key)))))
+}
+
+/// `uml.association.set-end`: one end of an association or an association class set: its role,
+/// multiplicity, navigability and aggregation, with the rules between the two ends kept.
 fn association_set_end(ctx: &mut C<'_>, p: &Params) -> R {
-    let a = id_of(ctx.doc, p, "association", ASSOCIATION, "an association")?;
+    let a = association_of(ctx.doc, p, "association")?;
     let ends = ends_of(ctx.doc, a, "association")?;
     let i = match p.integer("end") {
         Some(i @ 0..=1) => i as usize,
@@ -608,7 +698,10 @@ fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
     let key = "relationship";
     let id = text(p, key);
     let r = crate::RELATIONSHIPS.into_iter().find_map(|k| id_of(ctx.doc, p, key, k, "").ok()).ok_or_else(|| {
-        refuse(key, format!("{} is no association, generalization, dependency or interface realization", crate::commands::short(id)))
+        refuse(
+            key,
+            format!("{} is no association, generalization, dependency, interface realization or association class", crate::commands::short(id)),
+        )
     })?;
     let source = match text(p, "end") {
         "source" => true,
@@ -617,8 +710,9 @@ fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
     };
     let c = classifier_of(ctx.doc, p, "class")?;
     let class = ctx.doc.class_of(r).map_err(fail)?;
-    if class == ASSOCIATION {
-        if let Some(why) = association_end_problem(ctx.doc, c) {
+    if crate::is_association(class) {
+        let why = if class == ASSOCIATION_CLASS { association_class_end_problem(ctx.doc, c, Some(r)) } else { association_end_problem(ctx.doc, c) };
+        if let Some(why) = why {
             return Err(refuse("class", why));
         }
         let ends = ends_of(ctx.doc, r, key)?;
@@ -673,29 +767,39 @@ fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, r)? }))
 }
 
+/// An association's or an association class's two ends as the query commands give them: each with
+/// its class, role, multiplicity, navigability and aggregation.
+pub(crate) fn ends_json(store: &Store, r: Obj) -> Json {
+    let id = |o: Obj| uuid_of(store, o).unwrap_or_default();
+    let ends: Vec<Json> = crate::figures::member_ends(store, r)
+        .map(|ends| {
+            ends.iter()
+                .map(|e| {
+                    json!({
+                        "id": id(*e),
+                        "class": one(store, *e, typed_element::TYPE).map_or(Json::Null, |t| json!(id(t))),
+                        "role": name_of(store, *e),
+                        "multiplicity": crate::figures::multiplicity(store, *e),
+                        "navigable": crate::figures::navigable(store, r, *e),
+                        "aggregation": AGGREGATIONS[aggregation(store, *e)],
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    Json::Array(ends)
+}
+
 /// A relationship as the query commands give it.
 fn describe(store: &Store, r: Obj) -> Json {
     let id = |o: Obj| uuid_of(store, o).unwrap_or_default();
     let (from, to) = crate::figures::ends(store, r).map_or((Json::Null, Json::Null), |(a, b)| (json!(id(a)), json!(id(b))));
     match store.class_of(r).ok() {
         Some(c) if c == ASSOCIATION => {
-            let ends: Vec<Json> = crate::figures::member_ends(store, r)
-                .map(|ends| {
-                    ends.iter()
-                        .map(|e| {
-                            json!({
-                                "id": id(*e),
-                                "class": one(store, *e, typed_element::TYPE).map_or(Json::Null, |t| json!(id(t))),
-                                "role": name_of(store, *e),
-                                "multiplicity": crate::figures::multiplicity(store, *e),
-                                "navigable": crate::figures::navigable(store, r, *e),
-                                "aggregation": AGGREGATIONS[aggregation(store, *e)],
-                            })
-                        })
-                        .collect()
-                })
-                .unwrap_or_default();
-            json!({ "id": id(r), "kind": "association", "name": name_of(store, r), "from": from, "to": to, "ends": ends })
+            json!({ "id": id(r), "kind": "association", "name": name_of(store, r), "from": from, "to": to, "ends": ends_json(store, r) })
+        }
+        Some(c) if c == ASSOCIATION_CLASS => {
+            json!({ "id": id(r), "kind": "association_class", "name": name_of(store, r), "from": from, "to": to, "ends": ends_json(store, r) })
         }
         Some(c) if c == GENERALIZATION => json!({ "id": id(r), "kind": "generalization", "specific": from, "general": to }),
         Some(c) if c == INTERFACE_REALIZATION => json!({ "id": id(r), "kind": "realization", "implementing": from, "contract": to }),
@@ -714,7 +818,7 @@ fn relationship_list(ctx: &mut C<'_>, p: &Params) -> R {
 macro_rules! end_lines {
     () => {
         concat!(
-            "association: string; the association's id\n",
+            "association: string; the association's or association class's id\n",
             "end: integer, 0..1; which end, 0 at the class or interface it was drawn from, 1 at the other\n",
             "role: string = \"\"; the end's role name, or nothing\n",
             "multiplicity: string = \"\"; 1, 0..1, *, 1..*, 2..5, or nothing\n",
@@ -741,7 +845,28 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             has_classes,
             association_add
         ),
-        cmd!("uml.association.set-end", "Set association end", &["Association"], None, end_lines!(), has_classes, association_set_end),
+        cmd!(
+            "uml.association.set-end",
+            "Set association end",
+            &["Association", "Association class"],
+            None,
+            end_lines!(),
+            has_classes,
+            association_set_end
+        ),
+        cmd!(
+            "uml.association-class.add",
+            "Add association class",
+            &["Association class"],
+            None,
+            concat!(
+                "from: string; the id of the class it is drawn from, in whose package it goes; a class or an association class, never an interface, an enumeration, a data type or a primitive type\n",
+                "to: string; the id of the class it is drawn to; a class or an association class, never an interface, an enumeration, a data type or a primitive type\n",
+                "name: string = \"\"; its name, free among the package's classifiers (classes, interfaces, enumerations, data types, primitive types and association classes), or nothing; its ends have no roles or multiplicities and navigate to neither class until set with uml.association.set-end, and its attributes and operations are added as a class's"
+            ),
+            has_classes,
+            association_class_add
+        ),
         cmd!(
             "uml.generalization.add",
             "Add generalization",
@@ -787,16 +912,16 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
         cmd!(
             "uml.relationship.reconnect",
             "Reconnect relationship",
-            &["Association", "Generalization", "Dependency", "Interface realization"],
+            &["Association", "Generalization", "Dependency", "Interface realization", "Association class"],
             None,
             concat!(
-                "relationship: string; the association's, generalization's, dependency's or interface realization's id\n",
+                "relationship: string; the association's, generalization's, dependency's, interface realization's or association class's id\n",
                 "end: string, source|target; the end to move: the classifier it was drawn from (the specific one, the client, the implementing class) or to\n",
-                "class: string; the id of the class, interface, enumeration, data type or primitive type the end moves to; an association's end never moves to an enumeration, a data type or a primitive type; a generalization's end keeps its rules: an interface specializes only an interface, a class never one, an enumeration only an enumeration, a data type only a data type, a primitive type only a primitive type, a built-in type nothing; a realization's source is a class and its target an interface, the class realizing it once"
+                "class: string; the id of the class, interface, enumeration, data type or primitive type the end moves to; an association's end never moves to an enumeration, a data type or a primitive type; a generalization's end keeps its rules: an interface specializes only an interface, a class never one, an enumeration only an enumeration, a data type only a data type, a primitive type only a primitive type, a built-in type nothing; a realization's source is a class and its target an interface, the class realizing it once; an association class's ends move only onto a class or another association class"
             ),
             has_classes,
             relationship_reconnect
         ),
-        cmd!(query "uml.relationship.list", "List relationships", &["Association", "Generalization", "Dependency", "Interface realization"], None, "class: string; the class's, interface's, enumeration's, data type's or primitive type's id", has_classes, relationship_list),
+        cmd!(query "uml.relationship.list", "List relationships", &["Association", "Generalization", "Dependency", "Interface realization", "Association class"], None, "class: string; the class's, interface's, enumeration's, data type's, primitive type's or association class's id", has_classes, relationship_list),
     ]
 }

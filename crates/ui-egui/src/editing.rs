@@ -1905,6 +1905,11 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
         None => Vec::new(),
     };
     if selected.is_empty() {
+        // A line whose element has its card on another diagram only (an association class's,
+        // drawn here with its classes): Delete takes the line from this diagram.
+        if delete && !shift {
+            remove_lines_here(shell, d);
+        }
         return;
     }
     // The kind's new row, as its adorner opens it (ER's add column).
@@ -1949,6 +1954,34 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
     let ids: Vec<String> = selected.iter().map(|(n, _)| n.to_string()).collect();
     if let Err(e) = run(shell, "diagram.move", json!({ "nodes": ids, "dx": dx, "dy": dy, "coalesce": "nudge" })) {
         shell.canvas.notice = Some(e);
+    }
+}
+
+/// Removes from diagram `d` the lines that show the selected elements, as one undo step, the
+/// model untouched: what Delete does to a line whose element's card is not on this diagram.
+fn remove_lines_here(shell: &mut Shell, d: Obj) {
+    let Some(session) = shell.session.as_ref() else { return };
+    let store = session.doc();
+    let edges: Vec<String> = session
+        .view()
+        .selection
+        .iter()
+        .flat_map(|e| archforge_diagram::views_of(store, *e).1)
+        .filter(|e| archforge_diagram::diagram_of(store, *e) == Some(d))
+        .filter_map(|e| uuid(store, e).map(|u| u.to_string()))
+        .collect();
+    if edges.is_empty() {
+        return;
+    }
+    let Some(session) = shell.session.as_mut() else { return };
+    let out = session.batch(&tr("Remove from this diagram"), |b| {
+        for edge in &edges {
+            b.execute("diagram.disconnect", &json!({ "edge": edge }))?;
+        }
+        Ok(())
+    });
+    if let Err(e) = out {
+        shell.canvas.notice = Some(e.to_string());
     }
 }
 

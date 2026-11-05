@@ -370,7 +370,8 @@ impl DiagramKind for UmlKind {
     }
 
     /// A classifier from the tree (a primitive type a header's height), with its lines to the classifiers the
-    /// diagram shows; one already there is said so and left.
+    /// diagram shows; one already there is said so and left. An association class's card comes
+    /// with its own line too, where the diagram shows both its classes.
     fn drop(&self, shell: &mut Shell, d: Obj, element: Uuid, at: (f64, f64)) {
         shell.canvas.notice = None;
         let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
@@ -387,7 +388,9 @@ impl DiagramKind for UmlKind {
         let links: Vec<Obj> = store
             .alive()
             .filter(|l| class(store, *l).is_some_and(archforge_uml::is_relationship))
-            .filter(|l| archforge_diagram::Notation::ends(&notation, store, *l).is_some_and(|(a, b)| a == c || b == c))
+            .filter(|l| *l == c || archforge_diagram::Notation::ends(&notation, store, *l).is_some_and(|(a, b)| a == c || b == c))
+            // A line the diagram draws already (an association class's, its card not yet placed) stays as it is.
+            .filter(|l| archforge_diagram::views_of(store, *l).1.iter().all(|e| archforge_diagram::diagram_of(store, *e) != Some(d)))
             .collect();
         let (width, _) = kind.size();
         crate::editing::place_with_lines(shell, d, c, at, (width, content_height(store, c)), &links, &notation, &kind.place_step());
@@ -757,6 +760,8 @@ impl NotationUi for UmlUi {
         }
         match class(store, o)? {
             c if c == archforge_uml::ENUMERATION_LITERAL => Some(tr("Literals carry no skills")),
+            // An association class carries skills as the class it is.
+            c if c == archforge_uml::ASSOCIATION_CLASS => None,
             c if archforge_uml::is_relationship(c) => Some(tr("Relationships carry no skills")),
             _ => None,
         }
@@ -786,6 +791,12 @@ impl NotationUi for UmlUi {
             c if c == archforge_uml::ASSOCIATION => {
                 words(tr("Association · model"), tr("Association"), tr("This association"), tr("On this association · {n}"))
             }
+            c if c == archforge_uml::ASSOCIATION_CLASS => words(
+                tr("Association class · model, in every diagram"),
+                tr("Association class"),
+                tr("This association class"),
+                tr("On this association class · {n}"),
+            ),
             c if c == archforge_uml::GENERALIZATION => {
                 words(tr("Generalization · model"), tr("Generalization"), tr("This generalization"), tr("On this generalization · {n}"))
             }

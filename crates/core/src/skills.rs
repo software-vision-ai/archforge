@@ -737,7 +737,7 @@ pub fn specs<V: SkillHost>() -> Vec<CommandSpec<Store, V>> {
                 "body: string = \"\"; the instructions, Markdown\n",
                 "triggers: array = []; when it applies: modelling, drawing, naming, export; none for always\n",
                 "dialect: string = \"\"; the SQL dialect of an export skill, or empty for every dialect\n",
-                "applies_to: string = \"\"; what it aims at below the subject, a kind of the subject's notation (ER: table, relationship, column; UML: class, interface, enumeration, data type, primitive type, attribute, operation, association; a diagram takes none), or empty for the subject itself\n",
+                "applies_to: string = \"\"; what it aims at below the subject, a kind of the subject's notation (ER: table, relationship, column; UML: class, interface, enumeration, data type, primitive type, association class, attribute, operation, association; a diagram takes none), or empty for the subject itself\n",
                 "type_pattern: string = \"\"; with applies_to column: an exact type or a category (text, number, date, boolean, binary)"
             ),
             has_model::<V>,
@@ -755,7 +755,7 @@ pub fn specs<V: SkillHost>() -> Vec<CommandSpec<Store, V>> {
                 "body: string; the instructions, Markdown, or empty\n",
                 "triggers: array; when it applies: modelling, drawing, naming, export; none for always\n",
                 "dialect: string; the SQL dialect of an export skill, or empty for every dialect\n",
-                "applies_to: string; what it aims at below the subject, a kind of the subject's notation (ER: table, relationship, column; UML: class, interface, enumeration, data type, primitive type, attribute, operation, association; a diagram takes none), or empty for the subject itself\n",
+                "applies_to: string; what it aims at below the subject, a kind of the subject's notation (ER: table, relationship, column; UML: class, interface, enumeration, data type, primitive type, association class, attribute, operation, association; a diagram takes none), or empty for the subject itself\n",
                 "type_pattern: string; with applies_to column: an exact type or a category, or empty"
             ),
             has_skills::<V>,

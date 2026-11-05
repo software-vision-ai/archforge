@@ -187,12 +187,13 @@ fn has_class(f: &Facts<'_, Store, ProjectView>) -> Result<(), &'static str> {
     if f.doc.alive().any(|o| f.doc.class_of(o).ok() == Some(CLASS)) { Ok(()) } else { Err("There is no class yet.") }
 }
 
-/// The lists a class, an interface or a data type keeps its attributes and its operations in; an
-/// enumeration, though a DataType in UML's metamodel, keeps none here: its members are its
-/// literals.
+/// The lists a class, an interface, a data type or an association class keeps its attributes and
+/// its operations in; an association class keeps them as the class it is, its ends apart in the
+/// association's own list; an enumeration, though a DataType in UML's metamodel, keeps none here:
+/// its members are its literals.
 pub fn member_lists(store: &Store, c: Obj) -> Option<(archforge_mof::PropId, archforge_mof::PropId)> {
     match store.class_of(c).ok()? {
-        k if k == CLASS => Some((class::OWNED_ATTRIBUTE, class::OWNED_OPERATION)),
+        k if k == CLASS || k == crate::ASSOCIATION_CLASS => Some((class::OWNED_ATTRIBUTE, class::OWNED_OPERATION)),
         k if k == INTERFACE => Some((interface::OWNED_ATTRIBUTE, interface::OWNED_OPERATION)),
         k if k == DATA_TYPE => Some((data_type::OWNED_ATTRIBUTE, data_type::OWNED_OPERATION)),
         _ => None,
@@ -696,10 +697,12 @@ fn flag(store: &Store, o: Obj, prop: archforge_mof::PropId) -> bool {
     store.get(o, prop).ok().and_then(|v| v.as_bool()).unwrap_or(false)
 }
 
-/// A class, an interface, an enumeration, a data type or a primitive type with its members, as an
-/// agent reads it: an enumeration's are its literals, in their order; a primitive type has none and
-/// says whether it is a built-in type. Its `kind` is a word without spaces (`class`, `interface`,
-/// `enumeration`, `data_type`, `primitive_type`).
+/// A class, an interface, an enumeration, a data type, a primitive type or an association class
+/// with its members, as an agent reads it: an enumeration's are its literals, in their order; a
+/// primitive type has none and says whether it is a built-in type; an association class has its
+/// two ends besides, as `uml.relationship.list` gives an association's. Its `kind` is a word
+/// without spaces (`class`, `interface`, `enumeration`, `data_type`, `primitive_type`,
+/// `association_class`).
 fn class_get(ctx: &mut C<'_>, p: &Params) -> R {
     let store = &*ctx.doc;
     let c = classifier_of(store, p, "class")?;
@@ -740,6 +743,11 @@ fn class_get(ctx: &mut C<'_>, p: &Params) -> R {
         && let Some(fields) = out.as_object_mut()
     {
         fields.insert("built_in".to_string(), Json::Bool(is_built_in(store, c)));
+    }
+    if store.class_of(c).ok() == Some(crate::ASSOCIATION_CLASS)
+        && let Some(fields) = out.as_object_mut()
+    {
+        fields.insert("ends".to_string(), crate::relations::ends_json(store, c));
     }
     if store.class_of(c).ok() == Some(crate::ENUMERATION) {
         let literals: Vec<Json> = crate::commands::literals(store, c)
@@ -908,9 +916,9 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
         cmd!(
             query "uml.class.get",
             "Get class",
-            &["Class", "Interface", "Enumeration", "Data type", "Primitive type"],
+            &["Class", "Interface", "Enumeration", "Data type", "Primitive type", "Association class"],
             None,
-            "class: string; the class's, interface's, enumeration's, data type's or primitive type's id; an enumeration comes with its literals, and a primitive type has no members",
+            "class: string; the class's, interface's, enumeration's, data type's, primitive type's or association class's id; an enumeration comes with its literals, a primitive type has no members, and an association class comes with its two ends",
             has_classes,
             class_get
         ),

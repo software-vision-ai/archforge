@@ -388,15 +388,30 @@ fn diagram_resize<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, n)? }))
 }
 
+/// `diagram.unplace`: the nodes go from their diagram with the edges on them; an element a node
+/// shows that the same diagram also shows as an edge (an association class's card and its line)
+/// leaves the diagram whole, its edge going too. The model is untouched.
 fn diagram_unplace<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let nodes = list_of(ctx.doc, p, "nodes", &[NODE], "a node")?;
     if nodes.is_empty() {
         return Err(refuse("nodes", "nothing to remove"));
     }
+    // The edges that show what the nodes show, on the nodes' own diagrams.
+    let mut lines: Vec<Obj> = Vec::new();
+    for n in &nodes {
+        if let (Some(e), Some(d)) = (element_of(ctx.doc, *n, node::ELEMENT), diagram_of(ctx.doc, *n)) {
+            lines.extend(edges_showing(ctx.doc, d, e));
+        }
+    }
     let gone = ctx
         .doc
         .transaction(|st| {
             let mut gone = 0;
+            for e in &lines {
+                if st.is_alive(*e) {
+                    gone += crate::destroy_edge_with_links(st, *e)?;
+                }
+            }
             for n in &nodes {
                 if st.is_alive(*n) {
                     gone += crate::destroy_node_with_edges(st, *n)?;
@@ -957,7 +972,7 @@ pub fn specs<V: DiagramView>() -> Vec<CommandSpec<Store, V>> {
             "Remove from diagram",
             &["Diagram"],
             None,
-            "nodes: array; the ids of the nodes removed, with the edges on them",
+            "nodes: array; the ids of the nodes removed, with the edges on them and the edges of their diagram that show the same element (an association class's line with its card)",
             has_diagrams::<V>,
             diagram_unplace::<V>
         ),

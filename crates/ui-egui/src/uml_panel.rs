@@ -207,6 +207,10 @@ pub(crate) fn member_of(store: &Store, o: Obj) -> Option<(Obj, MemberKind)> {
 pub(crate) fn class_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, subject: &Subject) {
     let (Some(class), Some(class_id)) = (subject.obj, subject.id) else { return };
     let kind = shell.session.as_ref().and_then(|s| Classifier::of(s.doc(), class)).unwrap_or_default();
+    // An association class's panel is its line's with its members under its ends.
+    if kind == Classifier::AssociationClass {
+        return crate::uml_relate::body(shell, ui, p, r, y, subject);
+    }
     let width = r.width() - 2.0 * PAD;
     let half = ((width - 8.0) / 2.0).max(0.0);
     let (rename, key) = kind.rename_command();
@@ -339,7 +343,16 @@ fn package_path(store: &Store, package: Obj) -> String {
 /// The Attributes, Operations or Literals section with its rows and the editor; gives the y under
 /// it. An enumeration without literals says so under its title.
 #[allow(clippy::too_many_arguments, reason = "a section is drawn into the panel for its class and kind")]
-fn members_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, class: Obj, class_id: Uuid, kind: MemberKind) -> f32 {
+pub(crate) fn members_section(
+    shell: &mut Shell,
+    ui: &mut egui::Ui,
+    p: &Palette,
+    r: Rect,
+    mut y: f32,
+    class: Obj,
+    class_id: Uuid,
+    kind: MemberKind,
+) -> f32 {
     let paint = ui.painter().clone();
     let width = (r.width() - 2.0 * PAD).max(0.0);
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return y };

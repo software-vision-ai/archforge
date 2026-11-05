@@ -8,15 +8,18 @@
 //! diamond, which takes the place of an arrow at its end, at the whole of an aggregation (hollow) or a composition (filled); a
 //! generalization as a line to a hollow triangle at the general class; a dependency dashed, with an
 //! open arrow at its supplier; an interface realization dashed in the muted ink, with a hollow
-//! triangle at its interface. The canvas draws these descriptions.
+//! triangle at its interface; an association class as an association's line and a class's card,
+//! its eyebrow Association class (AR-125), which the canvas ties to the line's middle. The canvas
+//! draws these descriptions.
 
 use archforge_diagram::figure::{Card, End, EndMark, Line, Row, Text, Tone};
 use archforge_mof::{Obj, Store, Value};
 
 use crate::{
-    ASSOCIATION, AggregationKind, CLASS, DATA_TYPE, DEPENDENCY, ENUMERATION, GENERALIZATION, INTERFACE, INTERFACE_REALIZATION, PRIMITIVE_TYPE,
-    ParameterDirectionKind, VisibilityKind, association, behavioral_feature, class, dependency, generalization, interface_realization,
-    literal_integer, literal_unlimited_natural, multiplicity_element, named_element, operation, parameter, property, typed_element,
+    ASSOCIATION, ASSOCIATION_CLASS, AggregationKind, CLASS, DATA_TYPE, DEPENDENCY, ENUMERATION, GENERALIZATION, INTERFACE, INTERFACE_REALIZATION,
+    PRIMITIVE_TYPE, ParameterDirectionKind, VisibilityKind, association, behavioral_feature, class, dependency, generalization,
+    interface_realization, literal_integer, literal_unlimited_natural, multiplicity_element, named_element, operation, parameter, property,
+    typed_element,
 };
 
 /// The most parameters an operation's row names, and the longest row a card draws: a row is
@@ -149,11 +152,12 @@ pub fn operation_text(store: &Store, op: Obj) -> String {
     cut(text)
 }
 
-/// A class's, an interface's or a data type's card on `diagram`: its name, a class's slanted when
-/// it is abstract, its attributes and its operations; one of another package than the diagram's is
-/// drawn as an outsider, its package named in the eyebrow. A class's eyebrow says Class, an
-/// interface's and a data type's their keyword («interface», «dataType»); an enumeration's card is
-/// its own, a primitive type's too, and a package's.
+/// A class's, an interface's, a data type's or an association class's card on `diagram`: its name,
+/// a class's slanted when it is abstract, its attributes and its operations; one of another package
+/// than the diagram's is drawn as an outsider, its package named in the eyebrow. A class's eyebrow
+/// says Class, an association class's Association class, an interface's and a data type's their
+/// keyword («interface», «dataType»); an enumeration's card is its own, a primitive type's too, and
+/// a package's.
 pub fn card(store: &Store, c: Obj, diagram: Obj) -> Option<Card> {
     // The eyebrow alone, and with the outsider's package beside it.
     let (here, away, is_class) = match store.class_of(c).ok()? {
@@ -163,6 +167,7 @@ pub fn card(store: &Store, c: Obj, diagram: Obj) -> Option<Card> {
         k if k == CLASS => ("Class", "Class · {package}", true),
         k if k == INTERFACE => ("«interface»", "«interface» · {package}", false),
         k if k == DATA_TYPE => ("«dataType»", "«dataType» · {package}", false),
+        k if k == ASSOCIATION_CLASS => ("Association class", "Association class · {package}", false),
         _ => return None,
     };
     let elsewhere = elsewhere(store, c, diagram);
@@ -253,9 +258,14 @@ pub fn member_ends(store: &Store, a: Obj) -> Option<[Obj; 2]> {
 }
 
 /// Whether the association navigates to its end `end`: a class or an interface owns the end, or the
-/// association lists it as navigable.
+/// association lists it as navigable. An association class is a class too, but the ends it owns as
+/// an association are not its attributes: only an end in another list of a classifier's counts.
 pub fn navigable(store: &Store, a: Obj, end: Obj) -> bool {
-    let owned_by_class = store.container(end).ok().flatten().is_some_and(|(c, _)| store.class_of(c).is_ok_and(crate::is_classifier));
+    let owned_by_class = store
+        .container(end)
+        .ok()
+        .flatten()
+        .is_some_and(|(c, prop)| prop != association::OWNED_END && store.class_of(c).is_ok_and(crate::is_classifier));
     owned_by_class || list(store, a, association::NAVIGABLE_OWNED_END).contains(&end)
 }
 
@@ -266,11 +276,12 @@ fn aggregation(store: &Store, end: Obj) -> AggregationKind {
     }
 }
 
-/// The classes an association, a generalization, a dependency or an interface realization joins, as
-/// its line runs: a realization from its implementing class to its interface.
+/// The classes an association, an association class, a generalization, a dependency or an
+/// interface realization joins, as its line runs: a realization from its implementing class to its
+/// interface.
 pub fn ends(store: &Store, element: Obj) -> Option<(Obj, Obj)> {
     match store.class_of(element).ok()? {
-        c if c == ASSOCIATION => {
+        c if crate::is_association(c) => {
             let [a, b] = member_ends(store, element)?;
             Some((one(store, a, typed_element::TYPE)?, one(store, b, typed_element::TYPE)?))
         }
@@ -286,10 +297,11 @@ pub fn ends(store: &Store, element: Obj) -> Option<(Obj, Obj)> {
     }
 }
 
-/// The line of an association, a generalization, a dependency or an interface realization.
+/// The line of an association, an association class (an association's line: its card is drawn
+/// apart), a generalization, a dependency or an interface realization.
 pub fn line(store: &Store, element: Obj) -> Option<Line> {
     match store.class_of(element).ok()? {
-        c if c == ASSOCIATION => {
+        c if crate::is_association(c) => {
             let ends = member_ends(store, element)?;
             let end = |i: usize| {
                 let (here, there) = (ends[i], ends[1 - i]);
@@ -343,10 +355,13 @@ pub fn line(store: &Store, element: Obj) -> Option<Line> {
     }
 }
 
-/// The text slots a label of an association or a dependency may show.
+/// The text slots a label of an association or a dependency may show; an association class's line
+/// its ends' alone, its name being on its card.
 pub fn text_slots(class: archforge_mof::ClassId) -> &'static [&'static str] {
     if class == ASSOCIATION {
         &["name", "from_end", "to_end", "from_role", "to_role"]
+    } else if class == ASSOCIATION_CLASS {
+        &["from_end", "to_end", "from_role", "to_role"]
     } else if class == DEPENDENCY {
         &["name"]
     } else {
@@ -354,15 +369,16 @@ pub fn text_slots(class: archforge_mof::ClassId) -> &'static [&'static str] {
     }
 }
 
-/// The text of an association's or a dependency's slot a label shows.
+/// The text of an association's, an association class's or a dependency's slot a label shows.
 pub fn slot_text(store: &Store, element: Obj, slot: &str) -> String {
     let end = |i: usize| member_ends(store, element).map(|e| e[i]);
-    match (store.class_of(element).ok(), slot) {
-        (_, "name") => name(store, element),
-        (Some(c), "from_end") if c == ASSOCIATION => end(0).map(|e| multiplicity(store, e)).unwrap_or_default(),
-        (Some(c), "to_end") if c == ASSOCIATION => end(1).map(|e| multiplicity(store, e)).unwrap_or_default(),
-        (Some(c), "from_role") if c == ASSOCIATION => end(0).map(|e| name(store, e)).unwrap_or_default(),
-        (Some(c), "to_role") if c == ASSOCIATION => end(1).map(|e| name(store, e)).unwrap_or_default(),
+    let ends = store.class_of(element).is_ok_and(crate::is_association);
+    match slot {
+        "name" => name(store, element),
+        "from_end" if ends => end(0).map(|e| multiplicity(store, e)).unwrap_or_default(),
+        "to_end" if ends => end(1).map(|e| multiplicity(store, e)).unwrap_or_default(),
+        "from_role" if ends => end(0).map(|e| name(store, e)).unwrap_or_default(),
+        "to_role" if ends => end(1).map(|e| name(store, e)).unwrap_or_default(),
         _ => String::new(),
     }
 }

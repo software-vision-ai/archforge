@@ -1406,6 +1406,11 @@ fn draw_edge(
         drawn[n - 1] = shape(line.ends[1].mark, points[n - 1], points[n - 2]).1;
     }
     crate::connect::line(paint, &drawn, stroke, !line.dashed, z);
+    if let Some(tied) = tie(paint, d, element, &points, selected)
+        && let Ok(id) = store.uuid(e)
+    {
+        widgets::record_visible(ui, registry, &format!("workspace.canvas.edge.{id}.tie"), "edge", tied);
+    }
     for (end, tip, back) in [(&line.ends[0], points[0], points[1]), (&line.ends[1], points[n - 1], points[n - 2])] {
         let (dir, base, _, _) = shape(end.mark, tip, back);
         line_mark(paint, end.mark, tip, back, stroke, z, p.canvas);
@@ -1509,7 +1514,33 @@ fn draw_edge(
     badge
 }
 
-/// Where a cardinality text sits by default: a little along the line from its end, beside the
+/// An association class's tie (AR-125): when the diagram shows its card too, a dashed line in the
+/// muted ink from the card's edge to the middle of its line `points`, the accent while it is
+/// selected. Drawn with the line, under the cards, so it follows the line and the card as either
+/// moves; it is worked out from what is drawn, never stored. Gives the rectangle from the card's
+/// edge to the line's middle, for the automation tree.
+fn tie(paint: &egui::Painter, d: &Drawing<'_>, element: Obj, points: &[Pos2], selected: bool) -> Option<Rect> {
+    let (p, store, z) = (d.p, d.store, d.view.zoom);
+    if store.class_of(element).ok() != Some(archforge_uml::ASSOCIATION_CLASS) {
+        return None;
+    }
+    let card = store
+        .referrers(element)
+        .into_iter()
+        .find(|(n, prop)| *prop == node::ELEMENT && archforge_diagram::diagram_of(store, *n) == Some(d.diagram))
+        .map(|(n, _)| n);
+    let rect = d.node_rect(card?);
+    let middle = along(points, 0.5);
+    let from = exit_point(rect, middle);
+    if !from.is_finite() || !middle.is_finite() || rect.contains(middle) {
+        return None;
+    }
+    let stroke = Stroke::new((1.2 * z).clamp(1.0, 2.5), if selected { p.accent } else { p.text_muted });
+    paint.extend(egui::Shape::dashed_line(&[from, middle], stroke, 5.0 * z.max(0.5), 4.0 * z.max(0.5)));
+    Some(Rect::from_two_pos(from, middle))
+}
+
+/// Where a cardinality text sits by default: a little along the line from its end, beside the/// Where a cardinality text sits by default: a little along the line from its end, beside the
 /// line rather than on it: under a level line (a line's name sits above it), right of an upright
 /// one.
 fn beside(end: Pos2, towards: Pos2, size: Vec2, z: f32) -> Pos2 {

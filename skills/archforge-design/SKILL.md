@@ -488,11 +488,16 @@ What is UML's own, beside the shared rules above.
 - A dependency is dashed, with an open arrow at its supplier.
 - An interface realization is dashed in the muted ink, with a hollow triangle at its interface: it
   is neither a generalization (solid) nor a dependency (an open arrow).
+- An association class (AR-125) is one element, a line and a card: the line an association's, the
+  card a class's with `ASSOCIATION CLASS` in its eyebrow, above the line's middle, joined to it by a
+  dashed tie in the muted ink (the accent while selected). The tie is worked out from what is drawn,
+  never stored, so it follows the card and the line as either moves.
 - The class diagram's toolbar is Class, Relationship with its chevron, Note and Link note. A
   class is added only with the Class tool, never by a click in Select.
 - The Relationship tool's face is a sample of the kind it draws; its chevron opens a menu of
   Association, Directed association, Aggregation, Composition, Generalization and Dependency, then
-  after a separator Interface realization, each a row with its sample line, and a pick closes it.
+  after a separator Interface realization and Association class (its sample a small card over the
+  line's middle), each a row with its sample line, and a pick closes it.
   A line is drawn from the whole to the part, from the specific class to the general one, from the
   client to the supplier, from the implementing class to its interface; dropped on empty canvas it
   makes a new class there, named in place, and for a realization a new interface. A refusal (a
@@ -501,7 +506,19 @@ What is UML's own, beside the shared rules above.
   says so at the canvas's top. A drop on anything but an interface, or a second realization from
   the same class to the same interface, is refused there and draws nothing; several classes may
   realize one interface. Its tooltip and accessible name say it runs from the implementing class to
-  its interface.
+  its interface. An association class implements as the class it is.
+- Association class: drawn between two classes (an association class is one) as an association is,
+  its line and its card above the line's middle made as one element and one undo step, the card's
+  name (a fresh `AssociationClass n`) open for typing. Dropped on empty canvas it makes a new class
+  there, named in place, with the line to it and the card. From or to an interface, an
+  enumeration, a data type or a primitive type it is refused at the canvas's top ("An association
+  class joins only classes") and draws nothing; nothing specializes an association class. Its
+  tooltip and accessible name say it joins two classes with a card of its own. A click on its line
+  or its card selects the one element, both drawn selected. Remove from this diagram, or Delete,
+  takes the line and the card away together (`diagram.unplace` takes the edges of the same
+  element on that diagram with its node); Delete from the model asks first. Dragged from Models it
+  places its card, with its line where the diagram shows both its classes. It renames and moves
+  as the classifier it is; its name is one of its package's classifiers' names.
 - A new association is a plain line: no roles, no multiplicities, navigable to neither end (owner
   decision); a directed one navigates to its second class; an association owns both its ends, so drawing lines never changes a class's
   attributes (owner decision).
@@ -532,7 +549,9 @@ What is UML's own, beside the shared rules above.
   another class.", then a section per end, "End at {class}": Role (written on Enter or leaving the
   field) and Multiplicity, Navigable and Aggregation (None, Shared, Composite; written when
   changed). A dependency shows Name, Client and Supplier; a generalization Specific and General; an
-  interface realization Implementing class and Realized interface, with no name.
+  interface realization Implementing class and Realized interface, with no name. An association
+  class shows an association's Name, From and To and its ends' sections, then Attributes · n and
+  Operations · n with a class's editors; its members are typed on its card as a class's are.
 - An end's Multiplicity is an editable select (owner, 2026-11-02): its text takes typing, its
   chevron (or Alt+Down) opens `0..1`, `1`, `0..*`, `1..*` and `*` with the current one ticked, the
   hint "Or type a number or range" and Clear. A preset writes on its pick; typing writes on Enter
