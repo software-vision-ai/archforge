@@ -8788,6 +8788,52 @@ fn a_data_type_in_properties_takes_attributes_and_operations_and_is_offered_as_a
     }
 }
 
+/// Every type can be chosen from a type menu however many the model holds: the menu once listed
+/// sixteen of the model's types and dropped the rest. Now it lays out only the rows in sight, and the
+/// arrow keys reach a type far down the list, which Enter picks. In light and dark.
+#[test]
+fn a_type_far_down_the_type_menu_can_be_chosen_and_only_the_rows_in_sight_are_laid_out() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        // Forty data types in Commerce, named so that the last sorts after every other type.
+        {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let st = s.doc();
+            let commerce =
+                st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::PACKAGE) && archforge_core::name_of(st, *o) == "Commerce").unwrap();
+            let commerce = st.uuid(commerce).unwrap().to_string();
+            for i in 0..40 {
+                s.execute("uml.data-type.add", &serde_json::json!({ "package": commerce, "name": format!("Zone{i:02}") })).unwrap();
+            }
+        }
+        let customer = select_named(&mut h, archforge_uml::CLASS, "Customer");
+        let at = rect_of(&h, "workspace.properties.attributes.add").center();
+        click(&mut h, at);
+        h.event(egui::Event::Text("zone".into()));
+        h.run();
+        let choices = crate::uml_panel::type_choices(h.state().session.as_ref().unwrap().doc());
+        let wanted = choices.iter().position(|(l, _)| l == "Zone39").expect("every type is offered");
+        assert!(wanted > 16 + archforge_uml::members::BUILT_IN.len(), "far past the sixteen the menu once listed: {wanted}");
+        let at = rect_of(&h, "workspace.properties.member.type").center();
+        click(&mut h, at);
+        let laid = |h: &Harness<'static, Shell>| {
+            ids(h).into_iter().filter(|i| i.strip_prefix("workspace.properties.member.type.").is_some_and(|n| n.parse::<usize>().is_ok())).count()
+        };
+        let shown = laid(&h);
+        assert!(shown > 0 && shown < choices.len(), "only the rows in sight: {shown} of {}", choices.len());
+        // The arrows walk down to it, the menu scrolling with them, and Enter picks it.
+        for _ in 0..=wanted {
+            key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+        }
+        assert!(ids(&h).iter().any(|i| *i == format!("workspace.properties.member.type.{wanted}")), "scrolled into sight");
+        assert!(laid(&h) <= shown + 1, "still only the rows in sight");
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        let at = rect_of(&h, "workspace.properties.member.apply").center();
+        click(&mut h, at);
+        assert!(member_rows(&h, customer, false).iter().any(|r| r == "+ zone : Zone39"), "{:?}", member_rows(&h, customer, false));
+    }
+}
+
 /// The Relationship tool joins no association to or from a data type, saying so in its own words
 /// beside the enumeration's; a data type specializes only a data type, the refusals said too, and a
 /// generalization dragged out of one onto empty canvas makes a data type; a dependency may touch

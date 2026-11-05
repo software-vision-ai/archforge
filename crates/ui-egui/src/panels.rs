@@ -40,6 +40,10 @@ pub struct State {
     pub menu_scroll: Option<(String, f32)>,
     /// The row of the open menu the arrow keys have reached, by the menu's id: Enter picks it.
     pub menu_reached: Option<(String, usize)>,
+    /// A type menu's choices as built for one state of one project (its model root and its
+    /// revision), each label with the value the commands take: the model is walked for them once
+    /// per change, not on every frame the menu is open.
+    pub type_choices: Option<TypeChoices>,
     /// The item of an editable select's open menu the arrow keys have reached.
     pub highlight: Option<usize>,
     /// The Appearance panel's colour picker, while it is open.
@@ -655,6 +659,16 @@ pub(crate) fn menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, 
 /// A menu row's height.
 const MENU_ROW: f32 = 30.0;
 
+/// A type menu's choices kept between frames: whose and which state of it they were built for,
+/// their labels and the values the commands take, in the same order.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct TypeChoices {
+    pub project: Option<Uuid>,
+    pub revision: u64,
+    pub labels: Vec<String>,
+    pub values: Vec<String>,
+}
+
 fn menu_body(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, r: Rect, id: &str, items: &[String]) -> Option<usize> {
     let paint = ui.painter();
     ux::shadow(paint, r, 8.0, p.shadow);
@@ -695,7 +709,10 @@ fn menu_body(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, r: Rec
     let rows = r.shrink2(vec2(0.0, 4.0));
     let paint = paint.with_clip_rect(rows);
     let mut picked = None;
-    for (i, item) in items.iter().enumerate() {
+    // Only the rows in sight are laid out, however many the menu holds.
+    let first = ((offset / MENU_ROW).floor().max(0.0) as usize).min(items.len());
+    let in_sight = ((r.height() / MENU_ROW).ceil().max(0.0) as usize).saturating_add(1);
+    for (i, item) in items.iter().enumerate().skip(first).take(in_sight) {
         let row = Rect::from_min_size(pos2(r.left() + 4.0, r.top() + 4.0 + i as f32 * MENU_ROW - offset), vec2(r.width() - 8.0, MENU_ROW));
         if !rows.intersects(row) {
             continue;

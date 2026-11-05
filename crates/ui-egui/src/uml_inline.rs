@@ -283,11 +283,12 @@ pub(crate) fn row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, view: View)
     // The type menu, under the type field: a pick sets the type and gives the field the keyboard.
     let mut picked = false;
     if shell.panels.menu == Some(crate::panels::Menu::InlineType) && !literal {
-        let choices = shell.session.as_ref().map(|s| crate::uml_panel::type_choices(s.doc())).unwrap_or_default();
-        let labels: Vec<String> = choices.iter().map(|(label, _)| label.clone()).collect();
-        if let Some(i) = crate::panels::menu(shell, ui, p, type_rect, TYPE_ID, &labels) {
+        let choices = crate::uml_panel::choices_for_menu(shell);
+        let chosen = crate::panels::menu(shell, ui, p, type_rect, TYPE_ID, &choices.labels);
+        let value = chosen.map(|i| choices.values.get(i).cloned().unwrap_or_default());
+        crate::uml_panel::keep_choices(shell, choices);
+        if let Some(value) = value {
             // The pick is kept by what it is, its name shown.
-            let value = choices.get(i).map(|(_, v)| v.clone()).unwrap_or_default();
             inline.ty = shell.session.as_ref().map(|s| type_text(s.doc(), &value)).unwrap_or_default();
             inline.edit.ty = value;
             inline.field = InlineField::Type;

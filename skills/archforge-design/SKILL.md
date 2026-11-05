@@ -522,8 +522,9 @@ What is UML's own, beside the shared rules above.
   multiplicity (narrow, `1` as its hint). Remove and Move up and down sit at the editor's foot on
   the left, Cancel and Apply on the right.
 - A type menu offers None, the built-in types (Integer, String, Boolean, Real, UnlimitedNatural)
-  the model has no type of the same name for, then the model's own types by name. A built-in type
-  is made in the package Types the first time it is used (owner decision).
+  the model has no type of the same name for, then the model's own types by name, every one of
+  them: the menu scrolls, the arrow keys reach any row, and only the rows in sight are laid out
+  (AR-123). A built-in type is made in the package Types the first time it is used (owner decision).
 - A selected class's second adorner is Add attribute. A class dragged from Models lands sized to
   show its members, with its lines to the classes the diagram shows, as one undo step.
 - Members are typed on the card (a proposal for the owner to confirm): a selected class
