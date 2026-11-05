@@ -618,7 +618,7 @@ fn held(store: &Store, pkg: Obj) -> Vec<Obj> {
 }
 
 /// Every classifier inside a package, at any depth.
-fn classifiers_within(store: &Store, pkg: Obj) -> Vec<Obj> {
+pub(crate) fn classifiers_within(store: &Store, pkg: Obj) -> Vec<Obj> {
     let mut out = classifiers(store, pkg);
     for sub in subpackages(store, pkg) {
         out.extend(classifiers_within(store, sub));
@@ -690,9 +690,8 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
         if Some(*o) == root_package(store) {
             return Err(refuse("ids", "the model's root package holds the whole model and stays"));
         }
-        if class == PACKAGE
-            && let Some(why) = crate::members::removal_problem(store, *o)
-        {
+        // A built-in type, and a package holding one, stay.
+        if let Some(why) = crate::members::removal_problem(store, *o) {
             return Err(refuse("ids", why));
         }
         if class == PACKAGE

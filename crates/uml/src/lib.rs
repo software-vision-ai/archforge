@@ -107,8 +107,14 @@ impl Notation for UmlNotation {
         }
     }
 
+    /// A node's size when none is named: a package's card, a primitive type's header alone, and a
+    /// class's card for every other kind.
     fn default_size(&self, class: ClassId) -> (f64, f64) {
-        if class == PACKAGE { PACKAGE_SIZE } else { CLASS_SIZE }
+        match class {
+            c if c == PACKAGE => PACKAGE_SIZE,
+            c if c == PRIMITIVE_TYPE => PRIMITIVE_TYPE_SIZE,
+            _ => CLASS_SIZE,
+        }
     }
 
     /// Associations, generalizations, dependencies and interface realizations.

@@ -130,17 +130,23 @@ pub(crate) fn types_problem(store: &Store, package: Obj, name: &str, parent: Opt
     })
 }
 
-/// Why the package `package` may not be removed, when it may not: the package Types goes only once
-/// it holds no built-in type, which its removal would hand to another package as a type of the
-/// model's own. The refusal names its id and what it keeps.
-pub fn removal_problem(store: &Store, package: Obj) -> Option<String> {
-    (types_package(store) == Some(package) && holds_built_ins(store, package)).then(|| {
-        format!(
-            "{} is the package {TYPES}, which keeps the built-in types ({}); it stays while it holds them, though a built-in type may be removed from it",
-            uuid_of(store, package).unwrap_or_default(),
-            BUILT_IN.join(", ")
-        )
-    })
+/// Why `element` may not be removed, when it may not: a built-in type stays, since the next use of
+/// its name would make it again under a new id; and a package holding one at any depth (the
+/// package Types) stays, since its removal would take the built-in types along or hand them to
+/// another package as types of the model's own. An empty Types, or one holding only the model's
+/// own types, goes as any package. The refusal names the id and what it keeps.
+pub fn removal_problem(store: &Store, element: Obj) -> Option<String> {
+    let id = uuid_of(store, element).unwrap_or_default();
+    if is_built_in(store, element) {
+        return Some(format!(
+            "{id} is the built-in type {}, kept in the package {TYPES}; it stays, since its next use would make it again under a new id",
+            name_of(store, element)
+        ));
+    }
+    let package = store.class_of(element).ok() == Some(PACKAGE);
+    let held = crate::commands::classifiers_within(store, element);
+    (package && held.into_iter().any(|t| is_built_in(store, t)))
+        .then(|| format!("{id} holds the built-in types ({}), kept in the package {TYPES}; it stays while it holds them", BUILT_IN.join(", ")))
 }
 
 /// Why the built-in type `t` may not be `changed` (renamed, moved), when it is one: it keeps its

@@ -457,7 +457,8 @@ What is UML's own, beside the shared rules above.
 - The built-in types (Integer, String, Boolean, Real, UnlimitedNatural) are primitive types made in
   the package Types the first time one is used (owner decision), and they stay as they were (AR-124
   decisions, the design being silent): they stay out of Models and the search, so Types shows only
-  what the user put there; they are never renamed or moved, specialize nothing, and carry no skill
+  what the user put there; they are never renamed, moved or removed (the next use would make one
+  again under a new id), specialize nothing, and carry no skill
   (the Skills panel says "Built-in types carry no skills"; a package-wide skill with no kind still
   reaches them). In a package named Types their names, whatever the case, are kept for them, so no
   classifier of the user's own takes one there. A built-in type's name always means the one in
@@ -465,7 +466,8 @@ What is UML's own, beside the shared rules above.
 - The package Types is the one named exactly Types directly under the root package (at the top
   level in a project without a root yet); a package named Types anywhere else is ordinary. Nothing
   is stored to mark it. While it holds built-in types it keeps its name and its place and is not
-  removed: Models says "Types keeps the built-in types, so it stays while it holds them" under the
+  removed, nor is any package holding one; an empty Types, or one with only the user's own types,
+  goes as any package: Models says "Types keeps the built-in types, so it stays while it holds them" under the
   tree, and the canvas says it at its top, with no dialog. A package becomes Types (renamed, moved,
   or handed up by its parent's removal) only while there is no Types and only when it holds no
   classifier with a built-in type's name. Where an older project's Types holds a classifier named

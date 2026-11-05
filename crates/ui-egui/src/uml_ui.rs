@@ -628,7 +628,10 @@ impl NotationUi for UmlUi {
     /// The package Types stays while it keeps the built-in types, which Models does not show: said
     /// under the tree before anything is asked.
     fn remove_refusal(&self, store: &Store, obj: Obj) -> Option<String> {
-        archforge_uml::members::removal_problem(store, obj).map(|_| tr("Types keeps the built-in types, so it stays while it holds them"))
+        let package = class(store, obj) == Some(archforge_uml::PACKAGE);
+        archforge_uml::members::removal_problem(store, obj)
+            .filter(|_| package)
+            .map(|_| tr("Types keeps the built-in types, so it stays while it holds them"))
     }
 
     /// The relationships that go with a classifier, or with a package's.

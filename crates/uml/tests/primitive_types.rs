@@ -230,6 +230,11 @@ fn a_primitive_type_draws_its_name_alone_and_takes_no_member() {
     let sku = run(&mut s, "uml.primitive-type.add", json!({ "package": pkg, "name": "Sku" }));
     let d = run(&mut s, "diagram.add", json!({ "kind": CLASS_DIAGRAM, "element": pkg }));
     run(&mut s, "diagram.place", json!({ "diagram": d, "element": sku, "x": 0, "y": 0 }));
+    // Placed with no size named, its node is a header's height, as the shell places one.
+    let st = s.doc();
+    let node = st.alive().find(|n| st.class_of(*n).ok() == Some(archforge_diagram::NODE)).unwrap();
+    let b = archforge_diagram::grid::bounds_of(st, node);
+    assert_eq!((b.width, b.height), archforge_uml::PRIMITIVE_TYPE_SIZE);
     let drawn = card(&s, &sku, &d);
     assert_eq!(drawn.eyebrow, archforge_diagram::figure::Text::said("«primitive»"));
     assert_eq!((drawn.name.as_str(), rows_of(&drawn)), ("Sku", Vec::<Vec<String>>::new()), "no compartment at all");
@@ -615,11 +620,17 @@ fn the_package_types_stays_one_through_renames_and_moves() {
 
 /// Without a package Types, a package named Types comes directly under the root only when it holds
 /// no classifier with a built-in type's name, by a move or by a removal handing it up; an empty one
-/// renamed Types is the package Types, where the first built-in type is then made. A Types that
-/// holds no built-in type is an ordinary package to rename.
+/// renamed Types is the package Types. A Types that holds no built-in type is an ordinary package to
+/// rename; once the first built-in type is made there, it keeps its name.
 #[test]
 fn a_package_becomes_types_only_without_a_built_in_name_in_it() {
     let mut s = session();
+    // An empty package directly under the root renamed Types becomes it, and renames back freely.
+    let spare = package(&mut s, "Spare", "");
+    one_step(&mut s, "uml.package.rename", json!({ "package": spare, "name": "Types" }));
+    assert_eq!(types_id(&s).as_deref(), Some(spare.as_str()));
+    one_step(&mut s, "uml.package.rename", json!({ "package": spare, "name": "Spare" }));
+    assert_eq!(types_id(&s), None);
     let outer = package(&mut s, "Outer", "");
     let nested = package(&mut s, "Types", &outer);
     let own = run(&mut s, "uml.class.add", json!({ "package": nested, "name": "string" }));
@@ -639,21 +650,17 @@ fn a_package_becomes_types_only_without_a_built_in_name_in_it() {
     let string = built_in(&s, "String");
     let st = s.doc();
     assert_eq!(archforge_uml::commands::package_of(st, obj(st, &string)), Some(obj(st, &nested)));
-    // Emptied of built-in types, Types renames as any package, and the next use makes a new one.
-    run(&mut s, "element.remove", json!({ "ids": [string] }));
-    one_step(&mut s, "uml.package.rename", json!({ "package": nested, "name": "Library" }));
-    assert_eq!(types_id(&s), None);
-    // An empty package directly under the root renamed Types becomes it.
-    let empty = package(&mut s, "Spare", "");
-    run(&mut s, "uml.package.rename", json!({ "package": empty, "name": "Types" }));
-    assert_eq!(types_id(&s).as_deref(), Some(empty.as_str()));
+    // Holding it, Types keeps its name.
+    let e = refused(&mut s, "uml.package.rename", json!({ "package": nested, "name": "Library" }));
+    assert!(e.contains(&nested) && e.contains("keeps its name"), "{e}");
 }
 
-/// The package Types is not removed while it holds built-in types, which its removal would hand to
-/// the root as types of the model's own; the refusal names it and changes nothing. Once its
-/// built-in types are removed, it goes as any package.
+/// A built-in type is not removed, since its next use would make it again under a new id, nor is a
+/// package holding one (the package Types), whose removal would hand them to the root as types of
+/// the model's own; each refusal names the id and changes nothing. An empty Types, or one holding
+/// only the model's own types, goes as any package, one undo step.
 #[test]
-fn the_package_types_is_not_removed_while_it_holds_built_in_types() {
+fn a_built_in_type_and_the_package_types_holding_one_are_not_removed() {
     let mut s = session();
     let sales = package(&mut s, "Sales", "");
     let order = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Order" }));
@@ -662,13 +669,20 @@ fn the_package_types_is_not_removed_while_it_holds_built_in_types() {
     let integer = built_in(&s, "Integer");
     let e = refused(&mut s, "element.remove", json!({ "ids": [types] }));
     assert!(e.contains(&types) && e.contains("it stays while it holds them") && e.contains("key: Some(\"ids\")"), "{e}");
-    // A built-in type itself may go, its member untyped; then Types goes, as one step.
-    run(&mut s, "element.remove", json!({ "ids": [integer] }));
-    let before = picture(s.doc());
-    s.execute("element.remove", &json!({ "ids": [types] })).unwrap();
+    let e = refused(&mut s, "element.remove", json!({ "ids": [integer] }));
+    assert!(e.contains(&integer) && e.contains("is the built-in type Integer") && e.contains("make it again under a new id"), "{e}");
+    let e = refused(&mut s, "element.remove", json!({ "ids": [order, integer] }));
+    assert!(e.contains(&integer), "{e}");
+    assert_eq!(type_of(&mut s, &order, "count"), json!({ "id": integer, "name": "Integer" }), "still typed by it");
+    // An empty Types, and one holding only the model's own types, goes as any package.
+    let mut s = session();
+    let types = package(&mut s, "Types", "");
+    assert_eq!(types_id(&s).as_deref(), Some(types.as_str()));
+    one_step(&mut s, "element.remove", json!({ "ids": [types] }));
+    let types = package(&mut s, "Types", "");
+    run(&mut s, "uml.primitive-type.add", json!({ "package": types, "name": "Sku" }));
+    one_step(&mut s, "element.remove", json!({ "ids": [types] }));
     assert_eq!(types_id(&s), None);
-    s.undo().unwrap();
-    assert_eq!(picture(s.doc()), before);
 }
 
 /// A project from before keeps, in its package Types, a class named Integer or a primitive type
