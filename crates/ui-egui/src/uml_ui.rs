@@ -1,8 +1,9 @@
 //! What UML brings to the shell: the class diagram's tools and gestures (the
-//! classifier tool places a class, an interface or an enumeration named in place, its card renames
-//! in place), and its packages, classes, interfaces and enumerations in the Models tree, the search
-//! and Properties. An enumeration's literals are typed on its card and edited in Properties and
-//! Models, as a class's members are (AR-122).
+//! classifier tool places a class, an interface, an enumeration or a data type named in place, its
+//! card renames in place), and its packages, classes, interfaces, enumerations and data types in
+//! the Models tree, the search and Properties. An enumeration's literals are typed on its card and
+//! edited in Properties and Models, as a class's members are (AR-122); a data type's attributes and
+//! operations as a class's (AR-123).
 
 use archforge_mof::{Obj, Store, Uuid};
 use archforge_uml::commands::{classifiers, package_of, packages};
@@ -28,7 +29,7 @@ fn name(store: &Store, o: Obj) -> String {
     archforge_core::name_of(store, o)
 }
 
-/// Whether `o` is a class, an interface or an enumeration.
+/// Whether `o` is a class, an interface, an enumeration or a data type.
 fn classifier(store: &Store, o: Obj) -> bool {
     class(store, o).is_some_and(archforge_uml::is_classifier)
 }
@@ -164,12 +165,13 @@ impl DiagramKind for UmlKind {
         made.map(|v| v.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
     }
 
-    /// A class, an interface or an enumeration takes part in the class diagram's gestures.
+    /// A class, an interface, an enumeration or a data type takes part in the class diagram's
+    /// gestures.
     fn takes_part(&self, store: &Store, element: Obj) -> bool {
         classifier(store, element)
     }
 
-    /// A class, an interface or an enumeration, as the classifier tool's kind says, in the diagram's
+    /// A class, an interface, an enumeration or a data type, as the classifier tool's kind says, in the diagram's
     /// package, its card centred under the click, as one undo step; then its name is open for typing.
     fn place(&self, shell: &mut Shell, tool: &'static str, d: Obj, x: f64, y: f64) {
         if tool == "package" {
@@ -266,7 +268,7 @@ impl DiagramKind for UmlKind {
         crate::uml_relate::reconnect(shell, element, source, to_node);
     }
 
-    /// Renames a card's element in place: a package, a class, an interface or an enumeration,
+    /// Renames a card's element in place: a package, a class, an interface, an enumeration or a data type,
     /// through its own command.
     fn rename(&self, shell: &mut Shell, element: Uuid, name: &str) -> Result<(), String> {
         let store = shell.session.as_ref().map(|s| s.doc());
@@ -278,7 +280,7 @@ impl DiagramKind for UmlKind {
         crate::editing::run(shell, cmd, json!({ key: element.to_string(), "name": name })).map(|_| ())
     }
 
-    /// A class, an interface, an enumeration, or a package on the diagram, goes from the model with
+    /// A class, an interface, an enumeration, a data type, or a package on the diagram, goes from the model with
     /// ⇧⌫ (AR-95).
     fn deletes(&self, store: &Store, element: Obj) -> bool {
         classifier(store, element) || class(store, element) == Some(archforge_uml::PACKAGE)
@@ -347,7 +349,7 @@ impl DiagramKind for UmlKind {
         true
     }
 
-    /// A class, an interface or an enumeration from the tree, with its lines to the classifiers the
+    /// A class, an interface, an enumeration or a data type from the tree, with its lines to the classifiers the
     /// diagram shows; one already there is said so and left.
     fn drop(&self, shell: &mut Shell, d: Obj, element: Uuid, at: (f64, f64)) {
         shell.canvas.notice = None;
@@ -447,7 +449,7 @@ fn drop_package(shell: &mut Shell, d: Obj, element: Uuid, at: (f64, f64)) {
     }
 }
 
-/// How tall a class's or an interface's card is to show its members: its attributes, the dividing line and its
+/// How tall a class's, an interface's or a data type's card is to show its members: its attributes, the dividing line and its
 /// operations, an empty compartment a row; an enumeration's its literals; never less than a new
 /// class nor more than a node may be.
 fn content_height(store: &Store, c: Obj) -> f64 {
@@ -507,14 +509,14 @@ impl NotationUi for UmlUi {
         class(store, member) == Some(archforge_uml::PACKAGE)
     }
 
-    /// A package with the packages it holds, its classes, interfaces and enumerations, and each
+    /// A package with the packages it holds, its classes, interfaces, enumerations and data types, and each
     /// one's attributes and operations or literals, every level folded until opened.
     fn tree(&self, store: &Store, package: Obj, t: &Tree<'_>) -> Vec<Row> {
         package_rows(store, package, 0, t)
     }
 
     /// What Models' `+` offers at the selection: a literal first at an enumeration or one of its
-    /// literals, then a class, an interface, an enumeration and a package in its package, else a
+    /// literals, then a class, an interface, an enumeration, a data type and a package in its package, else a
     /// package.
     fn offers(&self, store: &Store, selection: Option<Obj>) -> Vec<Offer> {
         let offer = |key, word: String| Offer { key, word };
@@ -600,7 +602,7 @@ impl NotationUi for UmlUi {
         crate::uml_panel::literal_refusal(store, &edit)
     }
 
-    /// The relationships that go with a class, an interface or an enumeration, or with a package's.
+    /// The relationships that go with a class, an interface, an enumeration or a data type, or with a package's.
     fn consequences(&self, store: &Store, obj: Obj) -> (usize, usize, usize) {
         let held = match class(store, obj) {
             Some(c) if archforge_uml::is_classifier(c) => vec![obj],
@@ -651,7 +653,7 @@ impl NotationUi for UmlUi {
         if class(store, obj) == Some(archforge_uml::PACKAGE) { package_of(store, obj) } else { None }
     }
 
-    /// A class, an interface or an enumeration dragged onto a package, or onto a classifier of
+    /// A class, an interface, an enumeration or a data type dragged onto a package, or onto a classifier of
     /// another package, moves there; a package dragged onto another package moves into it.
     fn drop_on(&self, store: &Store, dragged: Obj, target: Obj) -> Option<(&'static str, serde_json::Value)> {
         let to = match class(store, target)? {
@@ -736,6 +738,9 @@ impl NotationUi for UmlUi {
             c if c == archforge_uml::ENUMERATION => {
                 words(tr("Enumeration · model, in every diagram"), tr("Enumeration"), tr("This enumeration"), tr("On this enumeration · {n}"))
             }
+            c if c == archforge_uml::DATA_TYPE => {
+                words(tr("Data type · model, in every diagram"), tr("Data type"), tr("This data type"), tr("On this data type · {n}"))
+            }
             c if c == archforge_uml::ASSOCIATION => {
                 words(tr("Association · model"), tr("Association"), tr("This association"), tr("On this association · {n}"))
             }
@@ -811,7 +816,8 @@ fn chain(store: &Store, package: Obj) -> Vec<Obj> {
     out
 }
 
-/// Whether a class or an interface has an attribute or an operation, or an enumeration a literal.
+/// Whether a class, an interface or a data type has an attribute or an operation, or an
+/// enumeration a literal.
 fn has_members(store: &Store, c: Obj) -> bool {
     !archforge_uml::members::attributes(store, c).is_empty()
         || !archforge_uml::members::operations(store, c).is_empty()
@@ -819,7 +825,7 @@ fn has_members(store: &Store, c: Obj) -> bool {
 }
 
 /// A package's rows at `depth`: the package, then, when open, its skills, the packages it holds,
-/// its classes, interfaces and enumerations, in its order, and their members. A row whose name holds the filter shows with the rows above it.
+/// its classes, interfaces, enumerations and data types, in its order, and their members. A row whose name holds the filter shows with the rows above it.
 fn package_rows(store: &Store, package: Obj, depth: u8, t: &Tree<'_>) -> Vec<Row> {
     let mut under = t.skill_rows(package, depth.saturating_add(1));
     for sub in archforge_uml::commands::subpackages(store, package) {

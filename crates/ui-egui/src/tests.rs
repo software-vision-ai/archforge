@@ -7305,7 +7305,7 @@ fn interfaces_are_listed_under_their_package_added_with_the_plus_found_and_dragg
     // Models' + offers each classifier kind and a package in the selected package.
     let st = h.state().session.as_ref().unwrap().doc();
     let offers: Vec<&str> = crate::uml_ui::UmlUi.offers(st, st.by_uuid(commerce)).into_iter().map(|o| o.key).collect();
-    assert_eq!(offers, ["class", "interface", "enumeration", "package"]);
+    assert_eq!(offers, ["class", "interface", "enumeration", "data-type", "package"]);
     crate::explorer::add(h.state_mut(), "interface");
     let rename = h.state().explorer.rename.clone().expect("named in place");
     assert_eq!(rename.text, "Interface 1");
@@ -8057,7 +8057,7 @@ fn enumerations_are_listed_with_their_literals_edited_in_place_added_with_the_pl
     let commerce = select_named(&mut h, archforge_uml::PACKAGE, "Commerce");
     let st = h.state().session.as_ref().unwrap().doc();
     let offers: Vec<&str> = crate::uml_ui::UmlUi.offers(st, st.by_uuid(commerce)).into_iter().map(|o| o.key).collect();
-    assert_eq!(offers, ["class", "interface", "enumeration", "package"]);
+    assert_eq!(offers, ["class", "interface", "enumeration", "data-type", "package"]);
     crate::explorer::add(h.state_mut(), "enumeration");
     let rename = h.state().explorer.rename.clone().expect("named in place");
     assert_eq!(rename.text, "Enumeration 1");
@@ -8105,7 +8105,7 @@ fn enumerations_are_listed_with_their_literals_edited_in_place_added_with_the_pl
     // enumeration's end, named in place.
     let st = h.state().session.as_ref().unwrap().doc();
     let offers: Vec<&str> = crate::uml_ui::UmlUi.offers(st, st.by_uuid(placed)).into_iter().map(|o| o.key).collect();
-    assert_eq!(offers, ["literal", "class", "interface", "enumeration", "package"]);
+    assert_eq!(offers, ["literal", "class", "interface", "enumeration", "data-type", "package"]);
     crate::explorer::add(h.state_mut(), "literal");
     let rename = h.state().explorer.rename.clone().expect("the new literal's name is open");
     assert_eq!(rename.text, "Literal 1");
@@ -8466,6 +8466,498 @@ fn the_relationship_tool_joins_no_association_to_an_enumeration_and_specializes_
         let to = node(&h, &nodes["Order"]);
         drag(&mut h, handle, to);
         assert_eq!(h.state().canvas.notice.as_deref(), Some("An enumeration specializes only an enumeration"));
+        assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "nothing changed");
+    }
+}
+
+/// The sample class model in `theme` with two data types, Amount and Price, placed in its empty
+/// bottom row and the whole diagram in view: the harness, every card's node by name, the data
+/// types' ids and their nodes.
+fn data_type_sample(
+    theme: ThemeKind,
+) -> (Harness<'static, Shell>, std::collections::BTreeMap<String, String>, [archforge_mof::Uuid; 2], [String; 2]) {
+    let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+    let d = h.state().canvas.active.unwrap().to_string();
+    let s = h.state_mut().session.as_mut().unwrap();
+    let st = s.doc();
+    let commerce =
+        st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::PACKAGE) && archforge_core::name_of(st, *o) == "Commerce").unwrap();
+    let commerce = st.uuid(commerce).unwrap().to_string();
+    let mut place = |name: &str, x: i32| {
+        let id = s.execute("uml.data-type.add", &serde_json::json!({ "package": commerce, "name": name })).unwrap().value["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let n =
+            s.execute("diagram.place", &serde_json::json!({ "diagram": d, "element": id, "x": x, "y": 1000, "width": 290, "height": 136 })).unwrap();
+        (archforge_mof::Uuid::parse(&id).unwrap(), n.value["id"].as_str().unwrap().to_string())
+    };
+    // Not Money: the sample keeps a primitive type of that name in Commerce.
+    let (money, money_node) = place("Amount", 560);
+    let (price, price_node) = place("Price", 1040);
+    h.state_mut().canvas.fit_pending = true;
+    h.run();
+    (h, nodes, [money, price], [money_node, price_node])
+}
+
+/// The classifier tool places a data type named in place, as one step, its kind kept and its face,
+/// tooltip and accessible name naming it; the card says «dataType» and takes attributes and
+/// operations from the canvas as a class's does: its compartments' `+`, its adorner, its menu's
+/// row, ⌘↩ and ⇧⌘↩ open a draft row, and Enter writes one, one undo step; in light and dark.
+#[test]
+fn the_classifier_tool_places_a_data_type_named_in_place_whose_card_takes_attributes_and_operations() {
+    use crate::uml_classifier::Classifier;
+    use crate::uml_panel::MemberKind;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        // The menu lists Data type after Enumeration, named for assistive technology; the arrows
+        // walk to it and Enter picks it, arming the tool.
+        let at = rect_of(&h, "workspace.tools.classifier-kinds").center();
+        click(&mut h, at);
+        let (enumeration, data_type) = (rect_of(&h, "workspace.classifier.enumeration"), rect_of(&h, "workspace.classifier.data-type"));
+        assert!(data_type.top() >= enumeration.bottom(), "Data type under Enumeration");
+        {
+            use egui_kittest::kittest::Queryable;
+            assert!(h.query_by_label("Data type").is_some(), "the row's accessible name");
+        }
+        for _ in 0..3 {
+            key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+        }
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert_eq!((h.state().canvas.popover, h.state().canvas.uml_classifier), (None, Classifier::DataType));
+        assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Place(crate::uml_classifier::TOOL));
+        assert_eq!(classifier_hint(&h), "Data type", "the tooltip and accessible name name the kind");
+        assert_eq!(*Classifier::DataType.tool_icon(), crate::ux::icons::TOOL_DATA_TYPE, "the face shows the kind's icon");
+        // A click places one in the diagram's package, named in place, as one undo step.
+        let at = empty_spot(&h, &nodes);
+        click(&mut h, at);
+        let rename = h.state().canvas.rename.clone().expect("its name is open for typing");
+        assert_eq!(rename.text, "DataType 1");
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add data type"));
+        h.state_mut().canvas.rename.as_mut().unwrap().text = "Money".into();
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        let money = named(&h, archforge_uml::DATA_TYPE, "Money");
+        let st = h.state().session.as_ref().unwrap().doc();
+        assert_eq!(st.class_of(st.by_uuid(money).unwrap()).ok(), Some(archforge_uml::DATA_TYPE), "a DataType, not a renamed class");
+        let home = archforge_uml::commands::package_of(st, st.by_uuid(money).unwrap()).map(|p| archforge_core::name_of(st, p));
+        assert_eq!(home.as_deref(), Some("Commerce"), "in the diagram's package");
+        assert!(painted(&h).iter().any(|t| t == "«dataType»"), "its eyebrow is its keyword, as written");
+        assert_eq!(h.state().canvas.uml_classifier, Classifier::DataType, "the kind stays for the window");
+        // Selected, its card offers an attribute and an operation, as a class's does, and no literal.
+        let node = node_of(&h, money);
+        let at = rect_of(&h, &format!("workspace.canvas.node.{node}")).center();
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [money.to_string()] })).unwrap();
+        h.run();
+        let found = ids(&h);
+        for id in [
+            "workspace.canvas.adorn.connect",
+            "workspace.canvas.adorn.add-attribute",
+            "workspace.canvas.class.add-attribute",
+            "workspace.canvas.class.add-operation",
+        ] {
+            assert!(found.iter().any(|i| i == id), "{id} in {found:?}");
+        }
+        for none in ["workspace.canvas.adorn.add-literal", "workspace.canvas.enumeration.add-literal"] {
+            assert!(!found.iter().any(|i| i == none), "{none} on a data type's card");
+        }
+        // The attributes' + opens a draft row; Enter writes it as one step and opens the next.
+        let at_plus = rect_of(&h, "workspace.canvas.class.add-attribute").center();
+        click(&mut h, at_plus);
+        let inline = h.state().canvas.inline.clone().expect("a draft row");
+        assert_eq!((inline.edit.kind, inline.edit.target, inline.edit.class), (MemberKind::Attribute, None, money));
+        h.event(egui::Event::Text("amount".into()));
+        h.run();
+        key(&mut h, egui::Key::Tab, egui::Modifiers::NONE);
+        h.event(egui::Event::Text("Real".into()));
+        h.run();
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert!(h.state().canvas.inline.is_some(), "the next draft opens");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert_eq!(member_rows(&h, money, false), ["+ amount : Real"]);
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add attribute"));
+        assert!(painted(&h).iter().any(|t| t == "+ amount : Real"), "the card shows it");
+        // ⇧⌘↩ opens an operation's draft, ⌘↩ an attribute's; the adorner and the menu's row an attribute's.
+        h.state_mut().canvas.focused = true;
+        key(&mut h, egui::Key::Enter, egui::Modifiers::COMMAND | egui::Modifiers::SHIFT);
+        assert_eq!(h.state().canvas.inline.as_ref().map(|i| (i.edit.kind, i.edit.class)), Some((MemberKind::Operation, money)));
+        h.event(egui::Event::Text("add".into()));
+        h.run();
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert_eq!(member_rows(&h, money, true), ["+ add()"]);
+        h.state_mut().canvas.focused = true;
+        key(&mut h, egui::Key::Enter, egui::Modifiers::COMMAND);
+        assert_eq!(h.state().canvas.inline.as_ref().map(|i| i.edit.kind), Some(MemberKind::Attribute));
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        let adorner = rect_of(&h, "workspace.canvas.adorn.add-attribute").center();
+        click(&mut h, adorner);
+        assert_eq!(h.state().canvas.inline.as_ref().map(|i| i.edit.kind), Some(MemberKind::Attribute));
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        right_click(&mut h, at);
+        assert!(painted(&h).iter().any(|t| t == "Add attribute"), "the menu names the attribute");
+        let row = rect_of(&h, "workspace.canvas.menu.add-row").center();
+        click(&mut h, row);
+        assert_eq!(h.state().canvas.inline.as_ref().map(|i| i.edit.kind), Some(MemberKind::Attribute));
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        // Each written member is one step: undone, the card is as it was.
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        h.run();
+        assert_eq!(member_rows(&h, money, true), Vec::<String>::new());
+        assert_eq!(member_rows(&h, money, false), ["+ amount : Real"]);
+    }
+}
+
+/// Models lists data types under their package with their attributes and operations below them;
+/// `+` adds one, named in place, the search finds it, and it drags onto a diagram or into another
+/// package; in light and dark.
+#[test]
+fn data_types_are_listed_with_their_members_added_with_the_plus_found_and_dragged_onto_the_diagram() {
+    use crate::notation_ui::NotationUi;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        let commerce = select_named(&mut h, archforge_uml::PACKAGE, "Commerce");
+        let st = h.state().session.as_ref().unwrap().doc();
+        let offers: Vec<&str> = crate::uml_ui::UmlUi.offers(st, st.by_uuid(commerce)).into_iter().map(|o| o.key).collect();
+        assert_eq!(offers, ["class", "interface", "enumeration", "data-type", "package"]);
+        crate::explorer::add(h.state_mut(), "data-type");
+        let rename = h.state().explorer.rename.clone().expect("named in place");
+        assert_eq!(rename.text, "DataType 1");
+        h.state_mut().explorer.rename.as_mut().unwrap().text = "Money".into();
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        h.run();
+        let money = named(&h, archforge_uml::DATA_TYPE, "Money");
+        {
+            let s = h.state_mut().session.as_mut().unwrap();
+            s.execute("uml.attribute.add", &serde_json::json!({ "class": money.to_string(), "name": "amount", "type": "Real" })).unwrap();
+            s.execute("uml.operation.add", &serde_json::json!({ "class": money.to_string(), "name": "add", "returns": money.to_string() })).unwrap();
+        }
+        h.state_mut().explorer.expanded.insert(money);
+        h.run();
+        // Its row under Commerce with the data type's icon, its members below it.
+        let rows = crate::explorer::rows(h.state().notation_uis, h.state().session.as_ref().unwrap().doc(), &h.state().explorer);
+        let at = rows.iter().position(|r| r.label == "Money").expect("listed under Commerce");
+        assert_eq!((rows[at].kind, rows[at].depth, rows[at].expandable), ("data-type", 2, true), "{:?}", tree_labels(&h));
+        assert_eq!(*rows[at].icon, crate::ux::icons::DATA_TYPE);
+        let members: Vec<(&str, &str, u8, Option<&str>)> =
+            rows[at + 1..at + 3].iter().map(|r| (r.label.as_str(), r.kind, r.depth, r.detail.as_deref())).collect();
+        assert_eq!(members, [("amount", "attribute", 3, Some("Real")), ("add()", "operation", 3, Some("Money"))]);
+        // Its name opens with F2 and renames it in place, one undo step.
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [money.to_string()] })).unwrap();
+        h.state_mut().explorer.focused = true;
+        h.run();
+        key(&mut h, egui::Key::F2, egui::Modifiers::NONE);
+        assert_eq!(h.state().explorer.rename.as_ref().map(|r| (r.target, r.text.as_str())), Some((money, "Money")));
+        h.state_mut().explorer.rename.as_mut().unwrap().text = "Amount".into();
+        h.run();
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Rename data type"));
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        h.run();
+        // The search finds it as a data type of Commerce.
+        let index = crate::project_search::index(h.state().kinds, h.state().notation_uis, h.state().session.as_ref().unwrap().doc());
+        let hit = crate::project_search::hits(&index, "money").1.into_iter().find(|e| e.label == "Money").map(|e| e.detail.clone());
+        assert_eq!(hit.as_deref(), Some("Data type · Commerce"));
+        // Dragged from Models onto the diagram: its card, as one undo step; a second drag says so.
+        let nodes_now = |h: &Harness<'static, Shell>| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            st.list(st.by_uuid(h.state().canvas.active.unwrap()).unwrap(), archforge_diagram::diagram::NODE).unwrap().len()
+        };
+        let before = nodes_now(&h);
+        let from = rect_of(&h, &format!("workspace.explorer.row.{money}")).center();
+        let to = empty_spot(&h, &nodes);
+        drag(&mut h, from, to);
+        assert_eq!(nodes_now(&h), before + 1, "notice {:?}", h.state().canvas.notice);
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Place data type"));
+        let from = rect_of(&h, &format!("workspace.explorer.row.{money}")).center();
+        drag(&mut h, from, to);
+        assert_eq!(h.state().canvas.notice.as_deref(), Some("Already on this diagram"));
+        // Dragged onto another package's row, it moves there with its members.
+        let billing = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let out = s.execute("uml.package.add", &serde_json::json!({ "name": "Billing", "parent": commerce.to_string() })).unwrap();
+            archforge_mof::Uuid::parse(out.value["id"].as_str().unwrap()).unwrap()
+        };
+        h.run();
+        let from = rect_of(&h, &format!("workspace.explorer.row.{money}")).center();
+        let to = rect_of(&h, &format!("workspace.explorer.row.{billing}")).center();
+        drag(&mut h, from, to);
+        let st = h.state().session.as_ref().unwrap().doc();
+        let t = st.by_uuid(money).unwrap();
+        assert_eq!(archforge_uml::commands::package_of(st, t), st.by_uuid(billing), "{:?}", h.state().explorer.notice);
+        assert_eq!(archforge_uml::members::attributes(st, t).len(), 1);
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Move data type"));
+    }
+}
+
+/// A data type in Properties: its kind line, name, package and description, no Abstract, and its
+/// Attributes and Operations with their `+` and editors, any visibility offered. It is offered as
+/// a type once, beside the built-in types and the model's own. Its Skills name every data type. In
+/// light and dark.
+#[test]
+fn a_data_type_in_properties_takes_attributes_and_operations_and_is_offered_as_a_type_once() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _, [money, _], _) = data_type_sample(theme);
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [money.to_string()] })).unwrap();
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        h.run();
+        let texts = painted(&h);
+        for want in ["Data type · model, in every diagram", "Data type", "Attributes · 0", "Operations · 0"] {
+            assert!(texts.iter().any(|t| t == want), "{want} in {texts:?}");
+        }
+        let found = ids(&h);
+        for id in [
+            "workspace.properties.name",
+            "workspace.properties.description",
+            "workspace.properties.class.package",
+            "workspace.properties.attributes.add",
+            "workspace.properties.operations.add",
+        ] {
+            assert!(found.iter().any(|i| i == id), "{id} in {found:?}");
+        }
+        for none in ["workspace.properties.class.abstract", "workspace.properties.literals.add"] {
+            assert!(!found.iter().any(|i| i == none), "{none} for a data type");
+        }
+        // An attribute through the editor, typed by a built-in type: one step; any visibility.
+        let at = rect_of(&h, "workspace.properties.attributes.add").center();
+        click(&mut h, at);
+        h.event(egui::Event::Text("amount".into()));
+        h.run();
+        pick_type(&mut h, "workspace.properties.member.type", "Real");
+        let at = rect_of(&h, "workspace.properties.member.visibility").center();
+        click(&mut h, at);
+        let offered: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.member.visibility.")).collect();
+        assert_eq!(offered.len(), 4, "every visibility, as a class's member has: {offered:?}");
+        let at = rect_of(&h, "workspace.properties.member.visibility.1").center();
+        click(&mut h, at);
+        let at = rect_of(&h, "workspace.properties.member.apply").center();
+        click(&mut h, at);
+        assert!(h.state().panels.member.is_none(), "{:?}", h.state().panels.member);
+        assert_eq!(member_rows(&h, money, false), ["- amount : Real"]);
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add attribute"));
+        // An operation returning the data type itself.
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [money.to_string()] })).unwrap();
+        h.run();
+        let at = rect_of(&h, "workspace.properties.operations.add").center();
+        click(&mut h, at);
+        h.event(egui::Event::Text("negate".into()));
+        h.run();
+        pick_type(&mut h, "workspace.properties.member.type", "Amount");
+        let at = rect_of(&h, "workspace.properties.member.apply").center();
+        click(&mut h, at);
+        assert_eq!(member_rows(&h, money, true), ["+ negate() : Amount"]);
+        let texts = painted(&h);
+        for want in ["Attributes · 1", "Operations · 1"] {
+            assert!(texts.iter().any(|t| t == want), "{want} in {texts:?}");
+        }
+        // Offered as a type once, beside the built-in types, each once too: no type is listed twice.
+        let choices = crate::uml_panel::type_choices(h.state().session.as_ref().unwrap().doc());
+        assert_eq!(choices.iter().filter(|(l, id)| *id == money.to_string() && l == "Amount").count(), 1, "{choices:?}");
+        let mut values: Vec<&str> = choices.iter().map(|(_, v)| v.as_str()).collect();
+        let all = values.len();
+        values.sort_unstable();
+        values.dedup();
+        assert_eq!(values.len(), all, "no type is listed twice: {choices:?}");
+        for built_in in archforge_uml::members::BUILT_IN {
+            assert_eq!(choices.iter().filter(|(l, _)| l == built_in).count(), 1, "{built_in} once: {choices:?}");
+        }
+        // Customer's new attribute takes it.
+        let customer = select_named(&mut h, archforge_uml::CLASS, "Customer");
+        let at = rect_of(&h, "workspace.properties.attributes.add").center();
+        click(&mut h, at);
+        h.event(egui::Event::Text("balance".into()));
+        h.run();
+        pick_type(&mut h, "workspace.properties.member.type", "Amount");
+        let at = rect_of(&h, "workspace.properties.member.apply").center();
+        click(&mut h, at);
+        assert!(member_rows(&h, customer, false).iter().any(|r| r == "+ balance : Amount"), "{:?}", member_rows(&h, customer, false));
+        // A package skill for every data type is said so, and the data type carries its own.
+        let commerce = named(&h, archforge_uml::PACKAGE, "Commerce");
+        let skill = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let out =
+                s.execute("skill.add", &serde_json::json!({ "subject": commerce.to_string(), "name": "Values", "applies_to": "data type" })).unwrap();
+            archforge_mof::Uuid::parse(out.value["id"].as_str().unwrap()).unwrap()
+        };
+        let st = h.state().session.as_ref().unwrap().doc();
+        assert_eq!(crate::panels::target_word(st, st.by_uuid(skill).unwrap()), "every data type");
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [money.to_string()] })).unwrap();
+        h.state_mut().state.show_panel(crate::state::Panel::Skills);
+        h.run();
+        assert!(painted(&h).iter().any(|t| t == "On this data type · 0"));
+        assert!(ids(&h).iter().any(|i| i == "workspace.skills.add"), "a data type carries skills");
+    }
+}
+
+/// Every type can be chosen from a type menu however many the model holds: the menu once listed
+/// sixteen of the model's types and dropped the rest. Now it lays out only the rows in sight, and the
+/// arrow keys reach a type far down the list, which Enter picks. In light and dark.
+#[test]
+fn a_type_far_down_the_type_menu_can_be_chosen_and_only_the_rows_in_sight_are_laid_out() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        // Forty data types in Commerce, named so that the last sorts after every other type.
+        {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let st = s.doc();
+            let commerce =
+                st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::PACKAGE) && archforge_core::name_of(st, *o) == "Commerce").unwrap();
+            let commerce = st.uuid(commerce).unwrap().to_string();
+            for i in 0..40 {
+                s.execute("uml.data-type.add", &serde_json::json!({ "package": commerce, "name": format!("Zone{i:02}") })).unwrap();
+            }
+        }
+        let customer = select_named(&mut h, archforge_uml::CLASS, "Customer");
+        let at = rect_of(&h, "workspace.properties.attributes.add").center();
+        click(&mut h, at);
+        h.event(egui::Event::Text("zone".into()));
+        h.run();
+        let choices = crate::uml_panel::type_choices(h.state().session.as_ref().unwrap().doc());
+        let wanted = choices.iter().position(|(l, _)| l == "Zone39").expect("every type is offered");
+        assert!(wanted > 16 + archforge_uml::members::BUILT_IN.len(), "far past the sixteen the menu once listed: {wanted}");
+        let at = rect_of(&h, "workspace.properties.member.type").center();
+        click(&mut h, at);
+        let laid = |h: &Harness<'static, Shell>| {
+            ids(h).into_iter().filter(|i| i.strip_prefix("workspace.properties.member.type.").is_some_and(|n| n.parse::<usize>().is_ok())).count()
+        };
+        let shown = laid(&h);
+        assert!(shown > 0 && shown < choices.len(), "only the rows in sight: {shown} of {}", choices.len());
+        // The arrows walk down to it, the menu scrolling with them, and Enter picks it.
+        for _ in 0..=wanted {
+            key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+        }
+        assert!(ids(&h).iter().any(|i| *i == format!("workspace.properties.member.type.{wanted}")), "scrolled into sight");
+        assert!(laid(&h) <= shown + 1, "still only the rows in sight");
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        let at = rect_of(&h, "workspace.properties.member.apply").center();
+        click(&mut h, at);
+        assert!(member_rows(&h, customer, false).iter().any(|r| r == "+ zone : Zone39"), "{:?}", member_rows(&h, customer, false));
+    }
+}
+
+/// A type menu's labels follow the interface language: switched while the model stays as it is,
+/// the kept choices are built again, so None reads in the new language; with nothing changed, the
+/// kept choices are reused. In light and dark.
+#[test]
+fn a_type_menu_s_labels_follow_the_interface_language_and_are_reused_while_nothing_changes() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        select_named(&mut h, archforge_uml::CLASS, "Customer");
+        let at = rect_of(&h, "workspace.properties.attributes.add").center();
+        click(&mut h, at);
+        let at = rect_of(&h, "workspace.properties.member.type").center();
+        click(&mut h, at);
+        let kept = |h: &Harness<'static, Shell>| h.state().panels.type_choices.clone().expect("the open menu keeps its choices");
+        let english = kept(&h);
+        assert_eq!((english.language, english.labels.first().map(String::as_str)), ("en", Some("None")));
+        assert!(painted(&h).iter().any(|t| t == "None"), "the menu shows None");
+        // Nothing changed: the next frame reuses them as they are.
+        h.run();
+        assert_eq!(kept(&h), english, "reused while nothing changed");
+        // The language switched, as Appearance switches it, the model unchanged: built again, in German.
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let german = kept(&h);
+        assert_eq!((german.language, german.revision), ("de", english.revision), "the same state, another language");
+        assert_eq!(german.labels.first().map(String::as_str), Some("Keine"));
+        assert_eq!(german.values, english.values, "the same types");
+        assert!(painted(&h).iter().any(|t| t == "Keine"), "the menu shows None in German");
+        h.state_mut().state.language = "en".into();
+        h.run();
+        crate::i18n::set_language("en");
+    }
+}
+
+/// The Relationship tool joins no association to or from a data type, saying so in its own words
+/// beside the enumeration's; a data type specializes only a data type, the refusals said too, and a
+/// generalization dragged out of one onto empty canvas makes a data type; a dependency may touch
+/// it; no realization starts at one; an association's end dragged onto one is refused; in light
+/// and dark.
+#[test]
+fn the_relationship_tool_joins_no_association_to_a_data_type_and_specializes_one_only_by_a_data_type() {
+    use crate::uml_relate::Relate;
+    const NO_ASSOCIATION: &str = "A data type joins no association";
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, nodes, [money, _], [money_node, price_node]) = data_type_sample(theme);
+        let node = |h: &Harness<'static, Shell>, id: &str| rect_of(h, &format!("workspace.canvas.node.{id}")).center();
+        let relate = |h: &mut Harness<'static, Shell>, kind: Relate, from: egui::Pos2, to: egui::Pos2| {
+            h.state_mut().canvas.uml_relation = kind;
+            h.state_mut().canvas.notice = None;
+            let at = rect_of(h, "workspace.tools.relationship").center();
+            click(h, at);
+            drag(h, from, to);
+        };
+        let before = edge_count(&h);
+        // A data type specializes a data type, and a class depends on one: a line each.
+        let (from, to) = (node(&h, &price_node), node(&h, &money_node));
+        relate(&mut h, Relate::Generalization, from, to);
+        assert_eq!(edge_count(&h), before + 1, "notice {:?}", h.state().canvas.notice);
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add generalization"));
+        let (from, to) = (node(&h, &nodes["OrderLine"]), node(&h, &money_node));
+        relate(&mut h, Relate::Dependency, from, to);
+        assert_eq!(edge_count(&h), before + 2, "notice {:?}", h.state().canvas.notice);
+        // Refused, said in the user's words, and nothing changes.
+        let revision = h.state().session.as_ref().unwrap().revision();
+        for (kind, from, to, why) in [
+            (Relate::Association, nodes["OrderLine"].clone(), money_node.clone(), NO_ASSOCIATION),
+            (Relate::Aggregation, nodes["Order"].clone(), money_node.clone(), NO_ASSOCIATION),
+            (Relate::Directed, money_node.clone(), nodes["OrderLine"].clone(), NO_ASSOCIATION),
+            (Relate::Generalization, nodes["OrderLine"].clone(), money_node.clone(), "Only a data type specializes a data type"),
+            (Relate::Generalization, money_node.clone(), nodes["Order"].clone(), "A data type specializes only a data type"),
+            (Relate::Realization, money_node.clone(), price_node.clone(), "Only a class implements an interface"),
+        ] {
+            let (a, b) = (node(&h, &from), node(&h, &to));
+            relate(&mut h, kind, a, b);
+            let notice = h.state().canvas.notice.clone().expect("the refusal is said");
+            assert_eq!(notice, why, "{kind:?}");
+            assert_eq!((edge_count(&h), h.state().session.as_ref().unwrap().revision()), (before + 2, revision), "nothing changed: {why}");
+        }
+        assert!(h.state().canvas.gesture.is_none(), "no line was begun from the data type");
+        // A generalization dragged out of one onto empty canvas makes a data type there, as one step.
+        let empty = egui::pos2(node(&h, &nodes["Catalog"]).x, node(&h, &money_node).y);
+        let from = node(&h, &money_node);
+        relate(&mut h, Relate::Association, from, empty);
+        assert_eq!(h.state().canvas.notice.as_deref(), Some(NO_ASSOCIATION), "refused before it starts");
+        relate(&mut h, Relate::Generalization, from, empty);
+        let rename = h.state().canvas.rename.clone().expect("its name is open for typing");
+        assert_eq!(rename.text, "DataType 1", "notice {:?}", h.state().canvas.notice);
+        let made = named(&h, archforge_uml::DATA_TYPE, "DataType 1");
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add data type"));
+        assert_eq!(edge_count(&h), before + 3);
+        let general = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let g = st.by_uuid(made).unwrap();
+            archforge_uml::relations::relationships_of(st, g)
+                .into_iter()
+                .filter_map(|r| archforge_uml::figures::ends(st, r))
+                .any(|(specific, general)| general == g && st.uuid(specific).ok() == Some(money))
+        };
+        assert!(general, "Money specializes the new data type");
+        h.state_mut().canvas.rename = None;
+        // An association's end dragged onto a data type is refused and said.
+        {
+            let d = h.state().canvas.active.unwrap().to_string();
+            let s = h.state_mut().session.as_mut().unwrap();
+            let st = s.doc();
+            let element = |node: &str| {
+                let n = st.by_uuid(archforge_mof::Uuid::parse(node).unwrap()).unwrap();
+                st.uuid(st.get(n, archforge_diagram::node::ELEMENT).unwrap().as_ref().unwrap()).unwrap().to_string()
+            };
+            let (from, to) = (element(&nodes["OrderLine"]), element(&nodes["Product"]));
+            let a =
+                s.execute("uml.association.add", &serde_json::json!({ "from": from, "to": to })).unwrap().value["id"].as_str().unwrap().to_string();
+            s.execute(
+                "diagram.connect",
+                &serde_json::json!({ "diagram": d, "element": a, "source": nodes["OrderLine"], "target": nodes["Product"] }),
+            )
+            .unwrap();
+            s.execute("view.select", &serde_json::json!({ "ids": [a] })).unwrap();
+        }
+        h.run();
+        let revision = h.state().session.as_ref().unwrap().revision();
+        let handle = rect_of(&h, "workspace.canvas.line-end.target").center();
+        let to = node(&h, &money_node);
+        drag(&mut h, handle, to);
+        assert_eq!(h.state().canvas.notice.as_deref(), Some(NO_ASSOCIATION));
         assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "nothing changed");
     }
 }

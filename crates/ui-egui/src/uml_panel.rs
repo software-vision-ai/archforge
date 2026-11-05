@@ -25,14 +25,12 @@ use crate::uml_classifier::Classifier;
 use crate::ux::{self, Palette, icons, types};
 use crate::widgets;
 
-/// The most of the model's own types the type menu lists, so it fits the window.
-const MAX_TYPES: usize = 16;
 /// The visibilities, in the metamodel's order, as the commands name them.
 const VISIBILITIES: [&str; 4] = ["public", "private", "protected", "package"];
 /// The longest multiplicity typed.
 const MAX_MULTIPLICITY: usize = 24;
 
-/// Which kind of member an editor edits: a class's or an interface's attribute or operation, or an
+/// Which kind of member an editor edits: a class's, an interface's or a data type's attribute or operation, or an
 /// enumeration's literal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MemberKind {
@@ -109,8 +107,9 @@ pub(crate) fn type_label(store: &Store, ty: &str) -> String {
     }
 }
 
-/// The model's own named types, by name, at most [`MAX_TYPES`], as the type menu offers them.
-/// An association is a classifier but types nothing.
+/// The model's own named types, by name, as the type menu offers them: every one, so each can be
+/// chosen; the menu scrolls and lays out only the rows in sight, and [`choices_for_menu`] builds
+/// this once per change. An association is a classifier but types nothing.
 fn model_types(store: &Store) -> Vec<(String, String)> {
     let universe = store.universe();
     let mut out: Vec<(String, String)> = store
@@ -125,7 +124,6 @@ fn model_types(store: &Store) -> Vec<(String, String)> {
         .filter(|(_, n)| !n.is_empty())
         .collect();
     out.sort_by_key(|a| a.1.to_lowercase());
-    out.truncate(MAX_TYPES);
     out
 }
 
@@ -205,8 +203,8 @@ pub(crate) fn member_of(store: &Store, o: Obj) -> Option<(Obj, MemberKind)> {
     }
 }
 
-/// A classifier's panel: its name and package, then a class's Abstract, a class's or an
-/// interface's attributes and operations, or an enumeration's literals, each with its editor.
+/// A classifier's panel: its name and package, then a class's Abstract, a class's, an interface's
+/// or a data type's attributes and operations, or an enumeration's literals, each with its editor.
 pub(crate) fn class_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, subject: &Subject) {
     let (Some(class), Some(class_id)) = (subject.obj, subject.id) else { return };
     let kind = shell.session.as_ref().and_then(|s| Classifier::of(s.doc(), class)).unwrap_or_default();
@@ -434,16 +432,39 @@ pub(crate) fn types_named(store: &Store, name: &str) -> Vec<String> {
     builtin.into_iter().chain(own).collect()
 }
 
+/// The open type menu's choices, built by [`type_choices`] only when the project, its state or the
+/// interface language changed since they were last built; taken out of the shell for the frame, to be handed back
+/// with [`keep_choices`].
+pub(crate) fn choices_for_menu(shell: &mut Shell) -> crate::panels::TypeChoices {
+    let Some(session) = shell.session.as_ref() else { return crate::panels::TypeChoices::default() };
+    let store = session.doc();
+    let project = archforge_uml::commands::model(store).ok().and_then(|m| store.uuid(m).ok());
+    let revision = session.revision();
+    let language = crate::i18n::language();
+    match shell.panels.type_choices.take() {
+        Some(kept) if kept.project == project && kept.revision == revision && kept.language == language => kept,
+        _ => {
+            let (labels, values) = type_choices(store).into_iter().unzip();
+            crate::panels::TypeChoices { project, revision, language, labels, values }
+        }
+    }
+}
+
+/// Hands the type menu's choices back to the shell for the next frame.
+pub(crate) fn keep_choices(shell: &mut Shell, choices: crate::panels::TypeChoices) {
+    shell.panels.type_choices = Some(choices);
+}
+
 /// The menu of a type select, when it is open; sets `ty` to the type picked.
 fn type_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Rect, id: &str, ty: &mut String, which: Menu) {
     if shell.panels.menu != Some(which) {
         return;
     }
-    let choices = shell.session.as_ref().map(|s| type_choices(s.doc())).unwrap_or_default();
-    let items: Vec<String> = choices.iter().map(|(label, _)| label.clone()).collect();
-    if let Some(i) = menu(shell, ui, p, field, id, &items) {
-        *ty = choices.get(i).map(|(_, v)| v.clone()).unwrap_or_default();
+    let choices = choices_for_menu(shell);
+    if let Some(i) = menu(shell, ui, p, field, id, &choices.labels) {
+        *ty = choices.values.get(i).cloned().unwrap_or_default();
     }
+    keep_choices(shell, choices);
 }
 
 /// A filled field without a label, as a parameter's row has, its label the hint while it is empty;

@@ -209,6 +209,7 @@ str		every column	chaque colonne
 str		every class	chaque classe
 str		every interface	chaque interface
 str		every enumeration	chaque énumération
+str		every data type	chaque type de données
 str		every attribute	chaque attribut
 str		every operation	chaque opération
 str		every association	chaque association
@@ -532,11 +533,14 @@ str		{parent} has no primary key yet, so there is nothing in {child} to point at
 str		Add class	Ajouter une classe
 str		Add interface	Ajouter une interface
 str		Add enumeration	Ajouter une énumération
+str		Add data type	Ajouter un type de données
 str		Class	Classe
 str		Interface	Interface
 str		«interface»	«interface»
 str		Enumeration	Énumération
 str		«enumeration»	«enumeration»
+str		Data type	Type de données
+str		«dataType»	«dataType»
 str		Classifier	Classificateur
 str		Classifier kinds	Types de classificateur
 str		Class diagram	Diagramme de classes
@@ -544,10 +548,12 @@ str		Class diagrams	Diagrammes de classes
 str		Class · model, in every diagram	Classe · modèle, dans chaque diagramme
 str		Interface · model, in every diagram	Interface · modèle, dans chaque diagramme
 str		Enumeration · model, in every diagram	Énumération · modèle, dans chaque diagramme
+str		Data type · model, in every diagram	Type de données · modèle, dans chaque diagramme
 str		New package	Nouveau paquetage
 str		On this class · {n}	Sur cette classe · {n}
 str		On this interface · {n}	Sur cette interface · {n}
 str		On this enumeration · {n}	Sur cette énumération · {n}
+str		On this data type · {n}	Sur ce type de données · {n}
 str		On this package · {n}	Sur ce paquetage · {n}
 str		Package	Paquetage
 str		Package · model	Paquetage · modèle
@@ -555,6 +561,7 @@ str		The diagram is of no package	Le diagramme n’est d’aucun paquetage
 str		This class	Cette classe
 str		This interface	Cette interface
 str		This enumeration	Cette énumération
+str		This data type	Ce type de données
 str		This package	Ce paquetage
 plural		+ {n} more member	+ {n} membre de plus|+ {n} membres de plus
 plural		+ {n} more literal	+ {n} littéral de plus|+ {n} littéraux de plus
@@ -600,6 +607,7 @@ str		Visibility	Visibilité
 str		Place class	Placer la classe
 str		Place interface	Placer l'interface
 str		Place enumeration	Placer l'énumération
+str		Place data type	Placer le type de données
 str		Add package	Ajouter un paquetage
 str		Place package	Placer le paquetage
 str		Move package	Déplacer le paquetage
@@ -615,10 +623,13 @@ str		A bound can be at most {max}.	Une borne vaut au plus {max}.
 str		A class realizes only an interface	Une classe ne réalise qu’une interface
 str		A relationship joins two classes or interfaces	Une relation joint deux classes ou interfaces
 str		An enumeration is a data type and joins no association	Une énumération est un type de données et ne participe à aucune association
+str		A data type joins no association	Un type de données ne participe à aucune association
 str		An interface specializes only an interface	Une interface ne spécialise qu’une interface
 str		A class cannot specialize an interface	Une classe ne peut pas spécialiser une interface
 str		An enumeration specializes only an enumeration	Une énumération ne spécialise qu’une énumération
 str		Only an enumeration specializes an enumeration	Seule une énumération spécialise une énumération
+str		A data type specializes only a data type	Un type de données ne spécialise qu’un type de données
+str		Only a data type specializes a data type	Seul un type de données spécialise un type de données
 str		A classifier cannot specialize itself	Un classificateur ne peut pas se spécialiser lui-même
 str		This one specializes that one already	Celui-ci spécialise déjà celui-là
 str		That one specializes this one already, which would make a cycle	Celui-là spécialise déjà celui-ci, ce qui créerait un cycle
@@ -675,6 +686,7 @@ str		{what} removed	Supprimé : {what}
 str		Class · {package}	Classe · {package}
 str		«interface» · {package}	«interface» · {package}
 str		«enumeration» · {package}	«enumeration» · {package}
+str		«dataType» · {package}	«dataType» · {package}
 str		{name} removed; what it held moved to {parent}	{name} supprimé ; son contenu a été déplacé vers {parent}
 # Modifications non enregistrées à la fermeture
 str		Close and lose changes	Fermer et perdre les modifications

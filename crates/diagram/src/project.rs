@@ -93,6 +93,12 @@ pub trait Notation: Send + Sync + 'static {
     fn skill_kinds(&self) -> &'static [(ClassId, &'static str)] {
         &[]
     }
+    /// Classes that are kinds of their own when a skill is aimed, though no skill may name them
+    /// yet: an element of one is not reached by a skill for a broader kind it conforms to (a UML
+    /// primitive type by a skill for every data type).
+    fn aim_only_kinds(&self) -> &'static [ClassId] {
+        &[]
+    }
     /// The class whose elements have a type a skill's pattern can match, and the property holding it.
     fn typed_class(&self) -> Option<(ClassId, PropId)> {
         None
@@ -248,8 +254,14 @@ impl SkillHost for ProjectView {
         self.notations.iter().flat_map(|n| n.skill_subjects().iter().copied()).chain([crate::DIAGRAM]).collect()
     }
 
+    /// Every notation's kinds a skill may name.
     fn skill_kinds(&self) -> Vec<(ClassId, &'static str)> {
         self.notations.iter().flat_map(|n| n.skill_kinds().iter().copied()).collect()
+    }
+
+    /// Every notation's kinds that count when a skill is aimed but that no skill names.
+    fn aim_only_kinds(&self) -> Vec<ClassId> {
+        self.notations.iter().flat_map(|n| n.aim_only_kinds().iter().copied()).collect()
     }
 
     fn typed_classes(&self) -> Vec<(ClassId, PropId)> {

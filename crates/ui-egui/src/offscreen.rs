@@ -108,6 +108,10 @@ pub enum Screen {
     /// A package of enumerations: OrderStatus with its four literals, selected in Properties and
     /// open in Models, Priority with none, and the class Order whose attributes they type.
     WorkspaceEnumeration,
+    /// A package of values: the data type Money with its attributes and operation, selected in
+    /// Properties and open in Models, Price specializing it, and the class Order whose attribute
+    /// and operation it types.
+    WorkspaceDataType,
     /// The same at a working zoom with a literal's draft row open at the end of OrderStatus's
     /// card, "Returned" typed, Properties listing the literals with their pencils.
     WorkspaceLiterals,
@@ -416,6 +420,10 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
         if screen == Screen::WorkspaceLiterals {
             literal_draft(&mut shell)?;
         }
+    }
+    if screen == Screen::WorkspaceDataType {
+        shell.adopt_project();
+        sample_data_types(&mut shell)?;
     }
     if screen == Screen::WorkspaceRealization {
         shell.adopt_project();
@@ -1097,6 +1105,60 @@ fn sample_enumerations(shell: &mut Shell) -> Result<(), String> {
     }
     crate::canvas::open(shell, diagram);
     crate::panels::run(shell, "view.select", json!({ "ids": [status.to_string()] }))?;
+    shell.state.show_panel(crate::state::Panel::Properties);
+    Ok(())
+}
+
+/// A package Payments on its own class diagram: the data type Money with the attributes amount and
+/// currency and the operation add, Price specializing it with a tax rate, and the class Order whose
+/// total and refund it types; Money selected, open in Models, its Properties shown.
+fn sample_data_types(shell: &mut Shell) -> Result<(), String> {
+    use serde_json::json;
+    let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
+    let run = |session: &mut archforge_notations::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
+        let out = session.execute(command, &params).map_err(|e| format!("{command}: {e:?}"))?;
+        Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
+    };
+    let package = run(session, "uml.package.add", json!({ "name": "Payments" }))?;
+    let diagram = run(session, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": package, "name": "Payments" }))?;
+    let money = run(session, "uml.data-type.add", json!({ "package": package, "name": "Money" }))?;
+    run(session, "uml.attribute.add", json!({ "class": money, "name": "amount", "type": "Real" }))?;
+    run(session, "uml.attribute.add", json!({ "class": money, "name": "currency", "type": "String" }))?;
+    run(
+        session,
+        "uml.operation.add",
+        json!({ "class": money, "name": "add", "parameters": [{ "name": "other", "type": money }], "returns": money }),
+    )?;
+    let price = run(session, "uml.data-type.add", json!({ "package": package, "name": "Price" }))?;
+    run(session, "uml.attribute.add", json!({ "class": price, "name": "taxRate", "type": "Real" }))?;
+    run(session, "uml.generalization.add", json!({ "specific": price, "general": money }))?;
+    let order = run(session, "uml.class.add", json!({ "package": package, "name": "Order" }))?;
+    run(session, "uml.attribute.add", json!({ "class": order, "name": "number", "type": "Integer" }))?;
+    run(session, "uml.attribute.add", json!({ "class": order, "name": "total", "type": money }))?;
+    run(session, "uml.operation.add", json!({ "class": order, "name": "refund", "parameters": [{ "name": "amount", "type": money }] }))?;
+    let (w, _) = archforge_uml::CLASS_SIZE;
+    let cards = [
+        (&order, 80, 140, crate::uml_ui::members_height(2, 1)),
+        (&money, 560, 140, crate::uml_ui::members_height(2, 1)),
+        (&price, 560, 400, crate::uml_ui::members_height(1, 0)),
+    ];
+    for (element, x, y, height) in cards {
+        run(session, "diagram.place", json!({ "diagram": diagram, "element": element, "x": x, "y": y, "width": w + 40.0, "height": height }))?;
+    }
+    run(session, "diagram.connect-all", json!({ "diagram": diagram }))?;
+    run(session, "view.select", json!({ "ids": [] }))?;
+    session.mark_saved().map_err(|e| e.to_string())?;
+    let (Some(package), Some(diagram), Some(money)) =
+        (archforge_mof::Uuid::parse(&package), archforge_mof::Uuid::parse(&diagram), archforge_mof::Uuid::parse(&money))
+    else {
+        return Err("the sample's ids".into());
+    };
+    shell.explorer.expanded.extend([package, money]);
+    if let Some(root) = shell.session.as_ref().and_then(|s| archforge_uml::commands::root_package(s.doc()).and_then(|r| s.doc().uuid(r).ok())) {
+        shell.explorer.expanded.insert(root);
+    }
+    crate::canvas::open(shell, diagram);
+    crate::panels::run(shell, "view.select", json!({ "ids": [money.to_string()] }))?;
     shell.state.show_panel(crate::state::Panel::Properties);
     Ok(())
 }

@@ -420,6 +420,26 @@ What is UML's own, beside the shared rules above.
   enumeration and only an enumeration specializes one; a generalization dragged out of one onto
   empty canvas makes an enumeration. A dependency may touch it; no realization starts or ends at
   one.
+- A data type (AR-123) is the classifier tool's fourth kind, after Enumeration, its face and menu
+  icon a pair of braces (Tool · Data type), placed and named in place as `DataType 1`. It is UML's
+  DataType itself, never an enumeration or a primitive type, though the metamodel makes those data
+  types too: each kind is told by its own metaclass. A skill for every data type reaches neither:
+  an element is aimed at by its most specific kind, and a primitive type counts as a kind of its
+  own there though no skill names it yet (AR-124 decides that), so Integer and String stay out.
+  Its card is plain, `«dataType»` in its eyebrow kept as written, over attributes and operations
+  edited on the card and in Properties as a class's are (draft rows, ⌘↩ and ⇧⌘↩, the adorner, the
+  menu's row), any visibility allowed. Properties shows Name, Package and Description, then
+  `Attributes · n` and `Operations · n`, with no Abstract; Models lists it under its package with
+  its members below, its `+` offers Data type after Enumeration, and it drags onto a diagram or a
+  package. It is offered once in every type menu and shares its package's names with the classes,
+  interfaces and enumerations there.
+- A data type joins no association, as an enumeration does not: the tool says "A data type joins no
+  association" at the canvas's top (an enumeration keeps its own "An enumeration is a data type and
+  joins no association"). A data type specializes only a data type and only a data type specializes
+  one ("A data type specializes only a data type", "Only a data type specializes a data type"); a
+  generalization dragged out of one onto empty canvas makes a data type. Between a data type and an
+  enumeration the enumeration's rule is said. No realization starts at one, since only a class
+  implements; a dependency may touch it. It carries skills, aimed at as "every data type".
 - An attribute reads `+ name : Type [0..1]`, an operation `+ name(param : Type) : Return`; the
   visibility sign only when one is set, the multiplicity only when it is not 1. A bound pair of
   none to many is written `*`.
@@ -502,8 +522,9 @@ What is UML's own, beside the shared rules above.
   multiplicity (narrow, `1` as its hint). Remove and Move up and down sit at the editor's foot on
   the left, Cancel and Apply on the right.
 - A type menu offers None, the built-in types (Integer, String, Boolean, Real, UnlimitedNatural)
-  the model has no type of the same name for, then the model's own types by name. A built-in type
-  is made in the package Types the first time it is used (owner decision).
+  the model has no type of the same name for, then the model's own types by name, every one of
+  them: the menu scrolls, the arrow keys reach any row, and only the rows in sight are laid out
+  (AR-123). A built-in type is made in the package Types the first time it is used (owner decision).
 - A selected class's second adorner is Add attribute. A class dragged from Models lands sized to
   show its members, with its lines to the classes the diagram shows, as one undo step.
 - Members are typed on the card (a proposal for the owner to confirm): a selected class
