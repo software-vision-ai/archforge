@@ -1338,7 +1338,9 @@ fn unplace(shell: &mut Shell, nodes: Vec<Uuid>) {
 }
 
 /// How many diagrams show `element`, as a node or as a line (an association class drawn by its
-/// line alone), each diagram once.
+/// line alone), each diagram once: the count the Delete from the model dialog gives, from the
+/// canvas and from Models alike. A diagram that belongs to `element` (a package's own) counts only
+/// when it shows `element` too.
 pub fn diagrams_showing(store: &Store, element: Obj) -> usize {
     let (_, edges, nodes) = archforge_diagram::views_of(store, element);
     let diagrams: std::collections::BTreeSet<Obj> = nodes.iter().chain(&edges).filter_map(|v| archforge_diagram::diagram_of(store, *v)).collect();
