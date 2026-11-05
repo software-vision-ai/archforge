@@ -494,8 +494,9 @@ member and drawing a relationship stay three separate gestures:
   Enter picks, Escape closes, and picking arms the tool. Its face and tooltip name the kind. A click
   on the canvas places one in the diagram's package, its name open for typing, and the tool goes
   back to Select. The kind stays for the next placement while the window lives; a new window starts
-  at Class. Only kinds that work are listed. Models' `+` and dragging from Models work for every
-  kind as they do for a class.
+  at Class. Only kinds that work are listed. Models' `+` does not use the tool's kind: it offers
+  each kind that works as a row of its own (Class, Interface, …) in the selected package. Dragging
+  any classifier from Models places it, as a class is placed.
 - Cards. A class keeps `CLASS` in its eyebrow. The other kinds show their UML keyword there instead:
   `«interface»`, `«enumeration»`, `«dataType»`, `«primitive»`. An interface and a data type have
   attributes and operations as a class has. An enumeration has one compartment, its literals in
@@ -504,19 +505,22 @@ member and drawing a relationship stay three separate gestures:
   of the Literals compartment, or ⌘↩, as a draft row with a name only; Enter writes one and opens
   the next. A double click edits one in place. Properties lists them under `Literals · n`; an
   editor there has Name, Remove, Move up, Move down, Cancel and Apply. Names are told apart within
-  their enumeration, whatever the case; a refusal sits under the row and leaves the model as it was.
+  their enumeration regardless of case; a refusal sits under the row and leaves the model as it was.
 - Drawing relationships. The Relationship menu gains, after a separator, Interface realization and
   Association class.
   - Interface realization is drawn from the implementing classifier to its interface: a dashed
     line in the muted ink, with a hollow triangle at the interface. A drop on anything but an
-    interface, or a second realization of the same interface, is refused at the canvas's top and
-    draws nothing.
+    interface, or a second realization from the same classifier to the same interface, is refused at
+    the canvas's top and draws nothing; several classifiers may realize one interface.
   - An association class is drawn between two classes as an association is. The line and a card
     above its middle appear as one element and one undo step, the card's name open for typing and
     its eyebrow `ASSOCIATION CLASS`. The card moves on its own; a dashed tie joins it to the line's
     middle. Selecting the line or the card selects the one element, and Properties shows its ends,
     attributes and operations. Remove from this diagram takes the line and the card away; Delete
-    from the model deletes the element.
+    from the model deletes the element. It is the one class not added with the classifier tool:
+    Models' `+` does not offer it, and it is made only by drawing. In Models it is a row under its
+    package; dragging it onto a diagram places its card, with its line where both classes are
+    shown.
 - Property modifiers live in the attribute editor and the association end's editor, never in a tool
   of their own: Default value; Static, Derived, Read only, Ordered and Unique; and Subsets and
   Redefines, which offer only valid targets. On a card a derived attribute starts with `/`, a
