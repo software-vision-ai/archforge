@@ -206,6 +206,7 @@ impl DiagramKind for UmlKind {
         (key == crate::uml_classifier::TOOL).then(|| shell.canvas.uml_classifier.word())
     }
 
+    /// The classifier tool's menu of kinds, or the Relationship tool's.
     fn popover(&self, shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, chevron: Rect, key: &str) {
         if key == crate::uml_classifier::KINDS {
             crate::uml_classifier::popover(shell, ui, p, r, chevron);

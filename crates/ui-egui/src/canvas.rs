@@ -123,6 +123,9 @@ pub struct State {
     pub popover: Option<&'static str>,
     /// The row of the open popover's menu the arrow keys are on, when they have moved.
     pub(crate) menu_focus: Option<usize>,
+    /// A press closed the classifier's menu of kinds: the canvas ignores that press until the
+    /// button lets go, so it places, selects and drags nothing.
+    pub(crate) dismissing: bool,
     /// What a class diagram's Relationship tool draws.
     pub uml_relation: crate::uml_relate::Relate,
     /// What a class diagram's classifier tool places: kept while the window lives, a new window
@@ -185,6 +188,7 @@ impl Default for State {
             relationship: crate::connect::RelKind::default(),
             popover: None,
             menu_focus: None,
+            dismissing: false,
             uml_relation: crate::uml_relate::Relate::default(),
             uml_classifier: crate::uml_classifier::Classifier::default(),
             mapping: None,

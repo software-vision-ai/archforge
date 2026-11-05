@@ -32,7 +32,7 @@ impl Classifier {
         }
     }
 
-    /// Its automation key, and the stem of a fresh name (`Class 1`, `Interface 1`).
+    /// Its automation key.
     pub(crate) fn key(self) -> &'static str {
         match self {
             Classifier::Class => "class",
@@ -40,6 +40,7 @@ impl Classifier {
         }
     }
 
+    /// The stem of a fresh name for one: `Class 1`, `Interface 1`.
     pub(crate) fn stem(self) -> &'static str {
         match self {
             Classifier::Class => "Class",
@@ -55,6 +56,7 @@ impl Classifier {
         }
     }
 
+    /// Its icon in the menu of kinds, in Models and in the search.
     pub(crate) fn icon(self) -> &'static Icon {
         match self {
             Classifier::Class => &icons::CLASS,
@@ -84,6 +86,7 @@ impl Classifier {
         }
     }
 
+    /// The command that renames one, with the key that names it.
     pub(crate) fn rename_command(self) -> (&'static str, &'static str) {
         match self {
             Classifier::Class => ("uml.class.rename", "class"),
@@ -91,6 +94,7 @@ impl Classifier {
         }
     }
 
+    /// The command that moves one into another package, with the key that names it.
     pub(crate) fn move_command(self) -> (&'static str, &'static str) {
         match self {
             Classifier::Class => ("uml.class.move", "class"),
@@ -106,6 +110,7 @@ impl Classifier {
         }
     }
 
+    /// The undo step that places one dragged from Models.
     pub(crate) fn place_step(self) -> String {
         match self {
             Classifier::Class => tr("Place class"),
@@ -196,6 +201,11 @@ pub(crate) fn popover(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, an
     if outside || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
         shell.canvas.popover = None;
         shell.canvas.menu_focus = None;
+    }
+    // The press that closed the menu only closes it: the canvas takes nothing from it, so the
+    // armed tool places nothing where the press lets go.
+    if outside {
+        shell.canvas.dismissing = true;
     }
 }
 

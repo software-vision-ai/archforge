@@ -117,6 +117,7 @@ impl DiagramKind for ErKind {
         true
     }
 
+    /// The cardinality popover, ER's one chevron.
     fn popover(&self, shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, chevron: Rect, _key: &str) {
         crate::connect::popover(shell, ui, p, r, chevron);
     }

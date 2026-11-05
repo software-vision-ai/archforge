@@ -119,6 +119,7 @@ fn a_package_skill_aims_at_the_kind_it_names_below_it() {
     assert!(e.contains("class, interface, attribute, operation, association"), "{e}");
 }
 
+/// An interface carries skills as a class does, and a package skill for interfaces aims at them alone.
 #[test]
 fn an_interface_and_its_members_carry_skills_and_a_package_skill_for_interfaces_aims_only_at_them() {
     let mut s = session();

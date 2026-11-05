@@ -393,26 +393,32 @@ fn classifier_rename(ctx: &mut C<'_>, p: &Params, kind: ClassId, key: &str, what
     Ok(json!({ "id": uuid_of(ctx.doc, c)? }))
 }
 
+/// `uml.class.move`: a class into another package.
 fn class_move(ctx: &mut C<'_>, p: &Params) -> R {
     classifier_move(ctx, p, CLASS, "class", "a class")
 }
 
+/// `uml.class.add`: a class in a package.
 fn class_add(ctx: &mut C<'_>, p: &Params) -> R {
     classifier_add(ctx, p, CLASS)
 }
 
+/// `uml.class.rename`: a class renamed.
 fn class_rename(ctx: &mut C<'_>, p: &Params) -> R {
     classifier_rename(ctx, p, CLASS, "class", "a class")
 }
 
+/// `uml.interface.move`: an interface into another package.
 fn interface_move(ctx: &mut C<'_>, p: &Params) -> R {
     classifier_move(ctx, p, INTERFACE, "interface", "an interface")
 }
 
+/// `uml.interface.add`: an interface in a package.
 fn interface_add(ctx: &mut C<'_>, p: &Params) -> R {
     classifier_add(ctx, p, INTERFACE)
 }
 
+/// `uml.interface.rename`: an interface renamed.
 fn interface_rename(ctx: &mut C<'_>, p: &Params) -> R {
     classifier_rename(ctx, p, INTERFACE, "interface", "an interface")
 }
@@ -440,6 +446,7 @@ fn class_list(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "classes": items }))
 }
 
+/// `uml.interface.list`: a package's interfaces, in its order.
 fn interface_list(ctx: &mut C<'_>, p: &Params) -> R {
     let pkg = id_of(ctx.doc, p, "package", PACKAGE, "a package")?;
     let store = &*ctx.doc;

@@ -14,6 +14,7 @@ use serde_json::{Value as Json, json};
 
 type S = Session<Store, ProjectView>;
 
+/// Ids counted up from `start`, so two stores never share one.
 fn ids(start: u64) -> Box<dyn FnMut() -> Uuid + Send> {
     let mut n = start;
     Box::new(move || {
@@ -24,6 +25,7 @@ fn ids(start: u64) -> Box<dyn FnMut() -> Uuid + Send> {
     })
 }
 
+/// A store over the core, the diagrams and UML.
 fn store(start: u64) -> Store {
     let universe = archforge_diagram::universe_with(vec![archforge_core::metamodel().unwrap(), archforge_uml::metamodel().unwrap()]).unwrap();
     let slabs = archforge_diagram::with_slabs(
@@ -37,6 +39,7 @@ fn store(start: u64) -> Store {
     Store::new(universe, Box::new(slabs), ids(start))
 }
 
+/// A session over a store with the project's Model, named Shop.
 fn session() -> S {
     let mut st = store(0);
     let model = st.create(archforge_core::MODEL).unwrap();
@@ -44,6 +47,7 @@ fn session() -> S {
     Session::with_view(registry().unwrap(), st, 1, Options::default(), ProjectView::new(ALONE))
 }
 
+/// Runs `cmd`, which must succeed, and gives the id it made or named.
 fn run(s: &mut S, cmd: &str, p: Json) -> String {
     let out = s.execute(cmd, &p).unwrap_or_else(|e| panic!("{cmd} {p}: {e}"));
     out.value["id"].as_str().unwrap_or_default().to_string()
@@ -57,6 +61,7 @@ fn refused(s: &mut S, cmd: &str, p: Json) -> String {
     format!("{e:?}")
 }
 
+/// The element with the id `id`.
 fn obj(st: &Store, id: &str) -> Obj {
     st.by_uuid(Uuid::parse(id).unwrap()).unwrap()
 }
@@ -91,6 +96,7 @@ fn one_step(s: &mut S, cmd: &str, p: Json) -> String {
     id
 }
 
+/// Interfaces are added, renamed, moved and removed, each one undo step, named apart from their package's classes.
 #[test]
 fn an_interface_is_added_renamed_moved_and_removed_each_one_step_its_name_free_among_classes_and_interfaces() {
     let mut s = session();
@@ -148,6 +154,7 @@ fn an_interface_is_added_renamed_moved_and_removed_each_one_step_its_name_free_a
     assert_eq!(picture(s.doc()), before);
 }
 
+/// An interface's members are public, go through the member commands and show on its card; it is a type.
 #[test]
 fn an_interface_takes_public_attributes_and_operations_through_the_member_commands_and_shows_them_on_its_card() {
     let mut s = session();
@@ -207,6 +214,7 @@ fn an_interface_takes_public_attributes_and_operations_through_the_member_comman
     assert_eq!(got["attributes"][0]["type"]["name"], "Payable");
 }
 
+/// Associations join interfaces; generalization follows the classifier rules, refusals change nothing.
 #[test]
 fn interfaces_associate_with_anything_and_specialize_only_interfaces_a_refusal_saying_why_and_changing_nothing() {
     let mut s = session();
@@ -250,6 +258,7 @@ fn interfaces_associate_with_anything_and_specialize_only_interfaces_a_refusal_s
     assert_eq!(picture(s.doc()), before);
 }
 
+/// Interfaces with their members, relationships and card come back from their rows.
 #[test]
 fn interfaces_with_members_and_relationships_come_back_from_their_rows_identical() {
     let mut s = session();
@@ -280,6 +289,7 @@ fn interfaces_with_members_and_relationships_come_back_from_their_rows_identical
     assert_eq!(card.compartments.iter().map(Vec::len).collect::<Vec<_>>(), [1, 2]);
 }
 
+/// The command sweep, with an interface and its attribute among the ids, breaks nothing.
 #[test]
 fn the_sweep_over_interfaces_breaks_nothing() {
     let mut s = session();

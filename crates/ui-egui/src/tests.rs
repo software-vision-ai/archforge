@@ -7141,6 +7141,7 @@ fn empty_spot(h: &Harness<'static, Shell>, nodes: &std::collections::BTreeMap<St
     egui::pos2(x, y)
 }
 
+/// The classifier tool's menu, its keys, the kind it places and keeps, in both appearances.
 #[test]
 fn the_classifier_tool_places_the_kind_its_menu_chose_walked_by_the_keys_and_a_new_window_starts_at_class() {
     use crate::uml_classifier::Classifier;
@@ -7191,11 +7192,36 @@ fn the_classifier_tool_places_the_kind_its_menu_chose_walked_by_the_keys_and_a_n
         assert_eq!(h.state().session.as_ref().unwrap().revision(), before, "the rename, then the placing, each one step");
         h.state_mut().session.as_mut().unwrap().redo().unwrap();
         h.run();
-        // The kind stays for the window; Escape closes the menu and keeps it.
+        // The kind stays for the window; Escape closes the menu alone, the tool staying armed.
         let at = rect_of(&h, "workspace.tools.classifier-kinds").center();
         click(&mut h, at);
+        assert!(h.state().canvas.focused, "the canvas has the keys");
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
         assert_eq!((h.state().canvas.popover, h.state().canvas.uml_classifier), (None, Classifier::Interface));
+        assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Place(crate::uml_classifier::TOOL), "Escape keeps the armed tool");
+        // A press on the canvas outside the open menu closes it and places nothing; the next one
+        // places with the tool still armed.
+        let interfaces = |h: &Harness<'static, Shell>| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            st.alive().filter(|o| st.class_of(*o).ok() == Some(archforge_uml::INTERFACE)).count()
+        };
+        let free = {
+            let above = rect_of(&h, &format!("workspace.canvas.node.{}", nodes["OrderLine"])).center();
+            let below = empty_spot(&h, &nodes);
+            egui::pos2(above.x, (above.y + below.y) / 2.0)
+        };
+        let before = interfaces(&h);
+        let at = rect_of(&h, "workspace.tools.classifier-kinds").center();
+        click(&mut h, at);
+        click(&mut h, free);
+        assert_eq!(h.state().canvas.popover, None, "the press closed the menu");
+        assert_eq!(interfaces(&h), before, "and placed nothing");
+        assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Place(crate::uml_classifier::TOOL));
+        click(&mut h, free);
+        assert_eq!(interfaces(&h), before + 1, "the next press places one");
+        h.state_mut().canvas.rename = None;
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        h.run();
         // Up and Enter go back to Class; a click on a kind picks it too.
         let at = rect_of(&h, "workspace.tools.classifier-kinds").center();
         click(&mut h, at);
@@ -7220,6 +7246,7 @@ fn the_classifier_tool_places_the_kind_its_menu_chose_walked_by_the_keys_and_a_n
     }
 }
 
+/// A class diagram's menu closes on an ER tab, so the arrows nudge there.
 #[test]
 fn a_menu_left_open_on_a_class_diagram_closes_on_an_er_tab_and_the_arrows_nudge_there() {
     let (mut h, customer, er_diagram) = diagram_harness();
@@ -7266,6 +7293,7 @@ fn a_menu_left_open_on_a_class_diagram_closes_on_an_er_tab_and_the_arrows_nudge_
     assert!(rect_of(&h, &node).left() > was.left(), "the arrows nudge on the ER canvas");
 }
 
+/// Models lists interfaces, adds them with `+`, finds them and drags them onto a diagram or a package.
 #[test]
 fn interfaces_are_listed_under_their_package_added_with_the_plus_found_and_dragged_onto_the_diagram() {
     use crate::notation_ui::NotationUi;
@@ -7322,6 +7350,7 @@ fn interfaces_are_listed_under_their_package_added_with_the_plus_found_and_dragg
     assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Move interface"));
 }
 
+/// An interface takes members on its card and in Properties, all public, and is offered as a type.
 #[test]
 fn an_interface_takes_members_on_its_card_and_in_properties_and_is_offered_as_a_type() {
     let (mut h, _) = related_sample();
@@ -7392,6 +7421,7 @@ fn an_interface_takes_members_on_its_card_and_in_properties_and_is_offered_as_a_
     assert!(member_rows(&h, customer, false).iter().any(|r| r == "+ wallet : Payable"), "{:?}", member_rows(&h, customer, false));
 }
 
+/// The Relationship tool joins interfaces and refuses what would make a class specialize an interface.
 #[test]
 fn the_relationship_tool_joins_interfaces_and_refuses_what_would_make_a_class_specialize_an_interface() {
     let (mut h, nodes) = related_sample();

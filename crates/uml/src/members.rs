@@ -39,6 +39,7 @@ fn has_classes(f: &Facts<'_, Store, ProjectView>) -> Result<(), &'static str> {
     if f.doc.alive().any(|o| f.doc.class_of(o).is_ok_and(crate::is_classifier)) { Ok(()) } else { Err(NO_CLASSES) }
 }
 
+/// Whether a class, which `uml.class.set` changes, exists.
 fn has_class(f: &Facts<'_, Store, ProjectView>) -> Result<(), &'static str> {
     if f.doc.alive().any(|o| f.doc.class_of(o).ok() == Some(CLASS)) { Ok(()) } else { Err("There is no class yet.") }
 }
