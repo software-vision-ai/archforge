@@ -148,12 +148,13 @@ neither direction. Each end also has **Aggregation** and **Modifiers**; leave th
 <!-- picture: workspace-guide-association light | The association places selected between Customer and Order: an open arrow at Order with the role orders and *, 1 at Customer; Properties shows its name and both ends -->
 
 The line now has an open arrow at *Order*, the end you can navigate to. (While the line is
-selected, its end handles cover the arrow; click on empty canvas to see it.) *places* sits at its
-middle, *orders* and `*` at *Order*'s end, and `1` at *Customer*'s end. Read it as: one customer
+selected, each end's handle sits on the line just past the end's mark, so the arrow shows whole.)
+*places* sits at its middle, *orders* and `*` at *Order*'s end, and `1` at *Customer*'s end. Read it as: one customer
 places any number of orders, and from a customer you can find their orders.
 
-The **Multiplicity** menu also accepts a number or a range you type, such as `1..5`. `0..*` means
-the same as `*`, so Archforge shows it as `*`.
+The **Multiplicity** menu offers `0..1`, `1`, `*` and `1..*`, and also accepts a number or a range
+you type, such as `1..5`. `0..*` means the same as `*`, so the menu offers it once, as `*`; typed,
+it is shown as `*` too.
 
 The menu's other kinds of line, for later:
 
@@ -298,8 +299,8 @@ add members to them in the same ways. All of an interface's members are public.
 
 <!-- picture: workspace-guide-realization light | Order's realization of Payable selected, a dashed line from Order up to Payable; Properties shows its implementing class Order and realized interface Payable -->
 
-A dashed line joins them, with a hollow triangle at *Payable* (hidden under the end handle while
-the line is selected). It is selected, and **Properties** shows its **Implementing class**,
+A dashed line joins them, with a hollow triangle at *Payable*, the end handle just past it while
+the line is selected. It is selected, and **Properties** shows its **Implementing class**,
 *Order*, and its **Realized interface**, *Payable*. A realization has no name, so the top of
 **Properties** shows only its kind. It differs from a generalization (a solid line to a triangle)
 and from a dependency (a dashed line to an open arrow).

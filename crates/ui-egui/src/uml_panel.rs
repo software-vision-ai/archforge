@@ -257,7 +257,17 @@ pub(crate) fn class_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
         None => (String::new(), Vec::new()),
     };
     let package_id = "workspace.properties.class.package";
-    let field = select_field(shell, ui, p, pos2(r.left() + PAD + half + 8.0, y), half, package_id, &tr("Package"), &here, Menu::ClassPackage);
+    let field = crate::panels::path_select_field(
+        shell,
+        ui,
+        p,
+        pos2(r.left() + PAD + half + 8.0, y),
+        half,
+        package_id,
+        &tr("Package"),
+        &here,
+        Menu::ClassPackage,
+    );
     let mut y = y + 17.0 + FIELD + 12.0;
     if kind == Classifier::Enumeration {
         members_section(shell, ui, p, r, y, class, class_id, MemberKind::Literal);
@@ -317,7 +327,7 @@ pub(crate) fn package_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r:
         None => (String::new(), Vec::new()),
     };
     let parent_id = "workspace.properties.package.parent";
-    let field = select_field(
+    let field = crate::panels::path_select_field(
         shell,
         ui,
         p,
@@ -353,7 +363,7 @@ fn path_below_root(store: &Store, package: Obj) -> String {
         at = archforge_uml::commands::package_of(store, p);
     }
     names.reverse();
-    names.join(" › ")
+    names.join(crate::panels::PATH_SEP)
 }
 
 /// A package as the menus name it: its path from the top, `sales › orders`.
@@ -365,7 +375,7 @@ fn package_path(store: &Store, package: Obj) -> String {
         at = archforge_uml::commands::package_of(store, p);
     }
     names.reverse();
-    names.join(" › ")
+    names.join(crate::panels::PATH_SEP)
 }
 
 /// The Attributes, Operations or Literals section with its rows and the editor; gives the y under

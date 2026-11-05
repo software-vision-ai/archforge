@@ -48,6 +48,12 @@ const TOOLBAR_GAP: f32 = 14.0;
 pub(crate) const ENTITY_HEADER: f32 = 66.0;
 pub(crate) const ENTITY_FIRST_ROW: f32 = 77.0;
 pub(crate) const ENTITY_ROW: f32 = 20.0;
+/// The pitches between the last row of a card's compartment and the first of the next: the
+/// compartment's foot, as far as a card's last row is from its foot, and the next one's head.
+pub(crate) const COMPARTMENT_GAP: f32 = 1.0;
+/// How far a compartment's first row is under the line over it: as far as a card's first row is
+/// under its header's line.
+const COMPARTMENT_TOP: f32 = ENTITY_FIRST_ROW - ENTITY_HEADER;
 const ENTITY_INSET: f32 = 18.0;
 pub(crate) const ENTITY_TEXT: f32 = 42.0;
 /// How strongly a table of another schema shows: the design's 60 %.
@@ -1082,7 +1088,7 @@ fn mini_card(paint: &egui::Painter, p: &Palette, c: &MiniCard, s: f32) {
     let mut y = r.top() + ENTITY_FIRST_ROW * s;
     for (i, rows) in c.rows.iter().enumerate() {
         if i > 0 {
-            y += 0.5 * ENTITY_ROW * s;
+            y += COMPARTMENT_GAP * ENTITY_ROW * s;
         }
         for _ in 0..*rows {
             bar(y + 4.0 * s, 0.45, 5.0 * s, p.border);
@@ -1092,40 +1098,25 @@ fn mini_card(paint: &egui::Painter, p: &Palette, c: &MiniCard, s: f32) {
 }
 
 /// The row of `card` at `y` units below its top, counted across its compartments as
-/// [`draw_rows`] lays them out; none on a dividing line or past the last row.
+/// [`draw_rows`] lays them out: a row takes its pitch from a little over its top; none on a
+/// compartment's padding or past the last row.
 pub(crate) fn row_at(card: &archforge_diagram::figure::Card, y: f32) -> Option<usize> {
-    let mut slot = 0.0_f32;
-    let mut index = 0;
-    for (c, rows) in card.compartments.iter().enumerate() {
-        if c > 0 {
-            slot += 0.5;
-        }
-        if rows.is_empty() && card.compartments.len() > 1 {
-            slot += 1.0;
-        }
-        for _ in rows {
-            let top = ENTITY_FIRST_ROW - 4.0 + slot * ENTITY_ROW;
-            if (top..top + ENTITY_ROW).contains(&y) {
-                return Some(index);
-            }
-            index += 1;
-            slot += 1.0;
-        }
-    }
-    None
+    slots(card).into_iter().filter(|(_, s, _)| matches!(s, Slot::Row(_))).position(|(top, _, _)| (top - 4.0..top - 4.0 + ENTITY_ROW).contains(&y))
 }
 
 /// A card's places under its header, each with its top in units below the card's and the
-/// compartment it is in: a row a pitch apart, half a pitch and a dividing line between
-/// compartments, an empty compartment of several still a row.
+/// compartment it is in: a row a pitch apart, an empty compartment of several still a row. Each
+/// compartment is padded as the card's first and last are: its rows start as far under its
+/// dividing line as the first row under the header's, and end as far over the next line as the
+/// last row over the card's foot, so a pitch and a dividing line part two compartments.
 fn slots(card: &archforge_diagram::figure::Card) -> Vec<(f32, Slot<'_>, usize)> {
     let mut out = Vec::new();
     // Where the next row sits, in pitches below the first.
     let mut at = 0.0_f32;
     for (c, rows) in card.compartments.iter().enumerate() {
         if c > 0 {
-            out.push((ENTITY_FIRST_ROW + at * ENTITY_ROW - 4.0, Slot::Line, c));
-            at += 0.5;
+            at += COMPARTMENT_GAP;
+            out.push((ENTITY_FIRST_ROW + at * ENTITY_ROW - COMPARTMENT_TOP, Slot::Line, c));
         }
         if rows.is_empty() && card.compartments.len() > 1 {
             out.push((ENTITY_FIRST_ROW + at * ENTITY_ROW, Slot::Empty, c));
@@ -1586,6 +1577,27 @@ fn bare_name(paint: &egui::Painter, d: &Drawing<'_>, element: Obj, points: &[Pos
     let rect = Rect::from_min_size(at, g.size());
     paint.galley(at, g, p.text_secondary);
     Some(rect)
+}
+
+/// The radius of a selected line's end handle, and the room between it and the end's mark.
+pub(crate) const END_HANDLE: f32 = 5.0;
+const END_HANDLE_GAP: f32 = 3.0;
+
+/// Where a selected line's end handle sits, `points` running from that end along the line: past
+/// the end's mark (an arrowhead, a triangle, a diamond) by a few points, so the mark shows whole
+/// beside it at every zoom; on the end itself when it has none. It never passes the line's middle,
+/// so the two ends' handles stay apart on a short line.
+pub(crate) fn end_handle_at(points: &[Pos2], mark: EndMark, z: f32) -> Pos2 {
+    let reach = mark_extent(mark, z).0;
+    let Some(&end) = points.first() else { return Pos2::ZERO };
+    if reach <= 0.0 {
+        return end;
+    }
+    let total: f32 = points.windows(2).map(|w| (w[1] - w[0]).length()).sum();
+    if total <= 0.0 {
+        return end;
+    }
+    along(points, ((reach + END_HANDLE_GAP + END_HANDLE) / total).min(0.5))
 }
 
 /// How far a line's end mark reaches back along the line from its tip, and how far it spreads to

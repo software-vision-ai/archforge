@@ -366,6 +366,10 @@ What is UML's own, beside the shared rules above.
   root while it is still to be made, and Create makes it). It cannot be moved or removed; removing
   a package hands its contents up, in the end into the root. A project opened without one gets it,
   its top-level packages moved in, as one undoable step.
+- Properties' Package and Parent package selects show a package by its path from the root,
+  `Commerce platform › Orders`. Too long for the field, the path's front folds into `…`
+  (`… › Orders`) so the package's own name shows; a name too long alone is cut at its end, as any
+  name is. The whole path is the select's tooltip and accessible name (AR-191).
 - A package on a class diagram (AR-95, owner decisions 2026-11-04) is a tabbed card. Its tab
   (AR-113) holds the name in 12 px SemiBold, 22 px high with 12 px padding, never narrower than
   56 px nor wider than the card (a longer name ends in "…", the tab's hover shows it whole); it
@@ -392,7 +396,9 @@ What is UML's own, beside the shared rules above.
   Into itself or a package it holds is refused with the reason; Models rings such a row in amber.
 - A class is a plain card: the surface's white with the plain border, its eyebrow CLASS, its name,
   then two compartments under dividing lines, attributes and operations, each shown even when
-  empty. An abstract class's name, and an abstract operation, are slanted.
+  empty. Every compartment is padded as the card is: its first row as far under its line as under
+  the header's, its last as far over the next line as over the card's foot (AR-191), so a new
+  class is 240 × 146. An abstract class's name, and an abstract operation, are slanted.
 - An enumeration (AR-121) is the classifier tool's third kind, after Interface, its face and menu
   icon a short list (Tool · Enumeration), placed and named in place as `Enumeration 1`. Its card is
   plain, `«enumeration»` in its eyebrow kept as written, and has one compartment: its literals in
@@ -501,7 +507,8 @@ What is UML's own, beside the shared rules above.
 - The Relationship tool's face is a sample of the kind it draws; its chevron opens a menu of
   Association, Directed association, Aggregation, Composition, Generalization and Dependency, then
   after a separator Interface realization and Association class (its sample a small card over the
-  line's middle), each a row with its sample line, and a pick closes it.
+  line's middle), each a row with its sample line, the current kind tinted and ticked at the
+  row's right as the classifier tool's menu ticks its own (AR-191), and a pick closes it.
   A line is drawn from the whole to the part, from the specific class to the general one, from the
   client to the supplier, from the implementing class to its interface; dropped on empty canvas it
   makes a new class there, named in place, and for a realization a new interface. A refusal (a
@@ -535,8 +542,9 @@ What is UML's own, beside the shared rules above.
   and Delete from the model…, which asks first, naming the relationships and diagrams that go with
   it, as a table's does. Delete removes the selected cards from the diagram; Shift+Delete asks to
   delete from the model.
-- A selected class-diagram line shows a round handle at each end; one dragged onto another class
-  moves that end there, its lines on every diagram following. A realization's class end moves onto
+- A selected class-diagram line shows a round handle at each end, on the line a few points past
+  the end's mark (arrowhead, triangle or diamond) so the mark shows whole, at the end itself where
+  it has none (AR-191); one dragged onto another class moves that end there, its lines on every diagram following. A realization's class end moves onto
   another class and its interface end onto another interface, with the same refusals as drawing
   one: a drop elsewhere, or onto an interface the class realizes already, is said at the canvas's
   top and changes nothing. Delete removes the line's relationship with a toast and Undo.
@@ -562,10 +570,11 @@ What is UML's own, beside the shared rules above.
   class shows an association's Name, From and To and its ends' sections, then Attributes · n and
   Operations · n with a class's editors; its members are typed on its card as a class's are.
 - An end's Multiplicity is an editable select (owner, 2026-11-02): its text takes typing, its
-  chevron (or Alt+Down) opens `0..1`, `1`, `0..*`, `1..*` and `*` with the current one ticked, the
-  hint "Or type a number or range" and Clear. A preset writes on its pick; typing writes on Enter
-  or leaving the field; empty text or Clear takes the multiplicity away, and an empty field shows a
-  muted dash that is never a value. While the menu is open the arrows move, Enter picks and Escape
+  chevron (or Alt+Down) opens `0..1`, `1`, `*` and `1..*` with the current one ticked, the hint
+  "Or type a number or range" and Clear. None to many is offered once, as `*`, the way it is
+  written (AR-191); `0..*` typed still reads as it and shows as `*`. A preset writes on its pick;
+  typing writes on Enter or leaving the field; empty text or Clear takes the multiplicity away, and
+  an empty field shows a muted dash that is never a value. While the menu is open the arrows move, Enter picks and Escape
   closes it; with it closed, Escape brings back the value written. Text that does not read stays in
   the field, ringed in the danger colour with the reason under it, and the model keeps its value.
 - A multiplicity reads as a whole number (`0`, `2`), a range `lower..upper` with lower up to upper,

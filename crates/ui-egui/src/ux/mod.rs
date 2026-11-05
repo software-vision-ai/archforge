@@ -466,6 +466,34 @@ pub fn text_mid(painter: &egui::Painter, x: f32, y: f32, text: &str, ty: Type, c
     rect
 }
 
+/// `path`, its parts joined by `sep`, as it fits where `fits` says: whole; else its first parts
+/// folded into `…` (`… › Orders`), so the last part, the one it names, stays; else that last part
+/// alone, for the caller to cut at its end as any name is (`Commerce pl…`). Gives the text and
+/// whether it was cut.
+pub fn cut_front(path: &str, sep: &str, fits: impl Fn(&str) -> bool) -> (String, bool) {
+    if fits(path) {
+        return (path.to_owned(), false);
+    }
+    let parts: Vec<&str> = if sep.is_empty() { vec![path] } else { path.split(sep).collect() };
+    for k in 1..parts.len() {
+        let folded = format!("…{sep}{}", parts.iter().skip(k).copied().collect::<Vec<_>>().join(sep));
+        if fits(&folded) {
+            return (folded, true);
+        }
+    }
+    (parts.last().copied().unwrap_or_default().to_owned(), true)
+}
+
+/// Draws `path` as [`text_mid`] does, cut from its front when it is wider than `width`
+/// ([`cut_front`]), so its last part shows, that part cut at its end when it alone is wider; gives
+/// the box it took and whether it was cut.
+#[allow(clippy::too_many_arguments, reason = "a path is drawn as text_mid draws, with its parts' separator")]
+pub fn text_mid_front(painter: &egui::Painter, x: f32, y: f32, path: &str, sep: &str, ty: Type, color: Color32, width: f32) -> (Rect, bool) {
+    let fits = |t: &str| galley(painter, t, ty, color, None).size().x <= width;
+    let (shown, cut) = cut_front(path, sep, fits);
+    (text_mid(painter, x, y, &shown, ty, color, Some(width.max(0.0))), cut)
+}
+
 /// Draws `icon` centred in a coloured tile: its longer side half the tile's, the interface's
 /// stroke weight.
 pub fn icon_in_tile(painter: &egui::Painter, tile: Rect, icon: &Icon, color: Color32) {

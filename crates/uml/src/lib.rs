@@ -96,7 +96,7 @@ pub fn is_relationship(class: ClassId) -> bool {
 
 /// A class card's width and height when the user names none: the header, an attribute row, an
 /// operation row and the line between them.
-pub const CLASS_SIZE: (f64, f64) = (240.0, 136.0);
+pub const CLASS_SIZE: (f64, f64) = (240.0, 146.0);
 /// A primitive type's card as it is placed: its header alone, the `«primitive»` eyebrow over its
 /// name, with no compartment under it.
 pub const PRIMITIVE_TYPE_SIZE: (f64, f64) = (240.0, 66.0);

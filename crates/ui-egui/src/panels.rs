@@ -450,6 +450,37 @@ pub(crate) fn select_field(
     field
 }
 
+/// [`select_field`] for a package's path (`Commerce platform › Orders`): too long for the field,
+/// it is cut from its front, so the package's own name shows (`… › Orders`); the whole path is its
+/// tooltip.
+pub(crate) fn path_select_field(
+    shell: &mut Shell,
+    ui: &egui::Ui,
+    p: &Palette,
+    at: egui::Pos2,
+    width: f32,
+    id: &str,
+    label: &str,
+    path: &str,
+    menu: Menu,
+) -> Rect {
+    let paint = ui.painter();
+    ux::text(paint, at, label, types::CAPTION, p.text_secondary, Some(width.max(0.0)));
+    let field = Rect::from_min_size(at + vec2(0.0, 17.0), vec2(width.max(0.0), FIELD));
+    paint.rect_filled(field, 6.0, p.field);
+    ux::text_mid_front(paint, field.left() + 8.0, field.center().y, path, PATH_SEP, types::SMALL, p.text, (width - 36.0).max(0.0));
+    ux::icon_mid(paint, pos2(field.right() - 14.0, field.center().y), &icons::CHEVRON_DOWN, p.text_secondary);
+    let resp = control(shell, ui, id, "select", field, true).accessible_name(format!("{label}: {path}"));
+    let resp = if path.is_empty() { resp } else { resp.on_hover_text(path) };
+    if resp.clicked() {
+        shell.panels.menu = if shell.panels.menu == Some(menu) { None } else { Some(menu) };
+    }
+    field
+}
+
+/// What joins a package's path: `Commerce platform › Orders`.
+pub(crate) const PATH_SEP: &str = " › ";
+
 /// An editable select: what it shows and offers.
 pub(crate) struct Combo<'a> {
     pub id: &'a str,
