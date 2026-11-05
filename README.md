@@ -1,5 +1,7 @@
 # Archforge
 
+[![Reviewed by CodeRabbit](https://img.shields.io/coderabbit/prs/github/software-vision-ai/archforge?style=flat-square&label=Reviewed%20by%20CodeRabbit&logo=coderabbit)](https://coderabbit.link/dejan-who)
+
 Archforge is a free software modelling tool for macOS, Windows and Linux. You describe a software
 system as a model and draw it on diagrams. Today that means UML class diagrams for the system's
 classes, where Archforge's development started, and ER diagrams for its databases, one more aspect
