@@ -9821,6 +9821,37 @@ fn the_delete_dialog_counts_a_diagram_with_an_association_class_s_line_alone_and
     }
 }
 
+/// An association class shown only by its line, with no card, on two diagrams: deleted from
+/// Models, the dialog says it disappears from both, each once (AR-187). In light and dark.
+#[test]
+fn deleting_an_association_class_shown_by_its_line_alone_on_two_diagrams_from_models_says_two() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut r = reviews(theme);
+        let (ac, _, card) = r.review();
+        let (package, customer, product) = (r.package.clone(), r.ids["Customer"].clone(), r.ids["Product"].clone());
+        let s = r.h.state_mut().session.as_mut().unwrap();
+        let mut run = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap_or_default().to_string();
+        // Its card off the first diagram, which takes its line too; the line drawn again alone.
+        run("diagram.unplace", serde_json::json!({ "nodes": [card] }));
+        run("diagram.connect-all", serde_json::json!({ "diagram": r.diagram }));
+        let d2 = run("diagram.add", serde_json::json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": package, "name": "Reviews 2" }));
+        for (class, x) in [(&customer, 80), (&product, 760)] {
+            run("diagram.place", serde_json::json!({ "diagram": d2, "element": class, "x": x, "y": 520, "width": 240, "height": 136 }));
+        }
+        run("diagram.connect-all", serde_json::json!({ "diagram": d2 }));
+        r.h.run();
+        {
+            let st = r.h.state().session.as_ref().unwrap().doc();
+            let (_, edges, nodes) = archforge_diagram::views_of(st, st.by_uuid(archforge_mof::Uuid::parse(&ac).unwrap()).unwrap());
+            assert_eq!((edges.len(), nodes.len()), (2, 0), "a line on each diagram and no card");
+        }
+        select_named(&mut r.h, archforge_uml::ASSOCIATION_CLASS, "Review");
+        crate::explorer::remove_selection(r.h.state_mut());
+        assert_eq!(asked_diagrams(&mut r.h), (2, vec!["It disappears from 2 diagrams.".to_string()]));
+        assert_eq!(r.association_classes(), ["Review"], "cancelled, the model keeps it");
+    }
+}
+
 /// The open Delete from the model dialog: the diagrams it says the element disappears from, and
 /// whether it says so in those words. Cancelled after, so nothing changes.
 fn asked_diagrams(h: &mut Harness<'static, Shell>) -> (usize, Vec<String>) {
