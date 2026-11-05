@@ -1625,11 +1625,16 @@ pub(crate) fn end_handle_at(points: &[Pos2], mark: EndMark, z: f32) -> Option<Po
     }
     let limit = (total / 2.0 - END_HANDLE_HIT / 2.0).max(0.0);
     let clear = END_HANDLE + END_HANDLE_GAP;
-    (0..END_HANDLE_STEPS)
-        .map(|i| (i as f32 * END_HANDLE_STEP).min(limit))
+    // The steps short of `limit`, at most END_HANDLE_STEPS of them, then `limit` itself once, so
+    // the farthest place is looked at too and none is looked at twice.
+    let steps = (limit / END_HANDLE_STEP).ceil().clamp(0.0, END_HANDLE_STEPS as f32) as usize;
+    let at = (0..steps)
+        .map(|i| i as f32 * END_HANDLE_STEP)
+        .filter(|d| *d < limit)
+        .chain(std::iter::once(limit))
         .map(|d| at_length(points, d))
-        .find(|at| outside_by(&outline, *at) >= clear)
-        .or_else(|| Some(at_length(points, limit)))
+        .find(|at| outside_by(&outline, *at) >= clear);
+    Some(at.unwrap_or_else(|| at_length(points, limit)))
 }
 
 /// The point `d` along the polyline `points` from its start; its end when it is shorter.

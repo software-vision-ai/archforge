@@ -6618,6 +6618,34 @@ fn a_package_select_cuts_a_long_path_from_its_front_so_the_package_name_shows() 
     assert_eq!(cut(&["Commerce", "Orders › EU"], 8), ("Orders › EU".to_string(), true), "never folded inside a name");
 }
 
+/// A package's path names every ancestor up to the root, however deep (here 40 packages, past
+/// any fixed cap), and a walk that comes back on itself, as a damaged file's could, ends with each
+/// element named once (AR-191).
+#[test]
+fn a_package_path_names_every_ancestor_and_a_cycle_ends() {
+    let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    let mut parent: Option<String> = None;
+    for i in 1..=40 {
+        let mut params = serde_json::json!({ "name": format!("P{i}") });
+        if let Some(p) = &parent {
+            params["parent"] = serde_json::json!(p);
+        }
+        let out = h.state_mut().session.as_mut().unwrap().execute("uml.package.add", &params).unwrap();
+        parent = out.value["id"].as_str().map(String::from);
+    }
+    let st = h.state().session.as_ref().unwrap().doc();
+    let deepest = st.by_uuid(archforge_mof::Uuid::parse(&parent.unwrap()).unwrap()).unwrap();
+    let parts = crate::uml_panel::package_parts(st, deepest);
+    let root = archforge_core::name_of(st, archforge_uml::commands::root_package(st).unwrap());
+    assert_eq!(parts.len(), 41, "the root and all 40: {parts:?}");
+    assert_eq!((parts[0].as_str(), parts[1].as_str(), parts[40].as_str()), (root.as_str(), "P1", "P40"));
+    // A cycle, which the model refuses to make but a damaged file could hold, and a loop on itself.
+    let name = |n: u32| n.to_string();
+    assert_eq!(crate::uml_panel::path_parts(0_u32, |n| Some((n + 1) % 3), name), ["2", "1", "0"]);
+    assert_eq!(crate::uml_panel::path_parts(7_u32, Some, name), ["7"]);
+    assert_eq!(crate::uml_panel::path_parts(5_u32, |n| n.checked_sub(1), name), ["0", "1", "2", "3", "4", "5"]);
+}
+
 /// Every compartment of a class's card is padded as the card is (AR-191): the last attribute's
 /// text ends as far over the dividing line as the last operation's over the card's foot, and the
 /// first operation starts as far under that line as the first attribute under the header's; a new

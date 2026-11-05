@@ -356,14 +356,8 @@ pub(crate) fn package_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r:
 /// short enough for a note, and still telling packages apart, since every one sits under the root.
 fn path_below_root(store: &Store, package: Obj) -> String {
     let root = archforge_uml::commands::root_package(store);
-    let mut names = Vec::new();
-    let mut at = Some(package);
-    while let Some(p) = at.filter(|p| names.len() < 32 && (Some(*p) != root || names.is_empty())) {
-        names.push(name(store, p));
-        at = archforge_uml::commands::package_of(store, p);
-    }
-    names.reverse();
-    names.join(crate::panels::PATH_SEP)
+    let parent = |p: Obj| archforge_uml::commands::package_of(store, p).filter(|up| Some(*up) != root);
+    path_parts(package, parent, |p| name(store, p)).join(crate::panels::PATH_SEP)
 }
 
 /// A package as the menus name it: its path from the top, `sales › orders`.
@@ -372,13 +366,21 @@ fn package_path(store: &Store, package: Obj) -> String {
 }
 
 /// The names on a package's path from the top, its own last: each name one part, whatever it
-/// holds.
+/// holds, every ancestor up to the root however deep it sits.
 pub(crate) fn package_parts(store: &Store, package: Obj) -> Vec<String> {
+    path_parts(package, |p| archforge_uml::commands::package_of(store, p), |p| name(store, p))
+}
+
+/// The names of `start` and of every ancestor `parent` leads to, from the top down. A walk that
+/// comes back to where it has been (a cycle a damaged file could hold) stops there, so it ends
+/// after at most one step per element the model holds, however deep the path is.
+pub(crate) fn path_parts<T: Copy + Eq + std::hash::Hash>(start: T, parent: impl Fn(T) -> Option<T>, name: impl Fn(T) -> String) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
     let mut names = Vec::new();
-    let mut at = Some(package);
-    while let Some(p) = at.filter(|_| names.len() < 32) {
-        names.push(name(store, p));
-        at = archforge_uml::commands::package_of(store, p);
+    let mut at = Some(start);
+    while let Some(p) = at.filter(|p| seen.insert(*p)) {
+        names.push(name(p));
+        at = parent(p);
     }
     names.reverse();
     names
