@@ -40,9 +40,12 @@ redefines `isAbstract`), the redefining property is the class's: `class::IS_ABST
 **Public API.** `metamodel()`, `universe()`, the constants, the structs and enums, `UmlSlabs`,
 `TABLES`, `JUNCTIONS`, `INDEX`, `URI`, `VERSION`, `CONTENT_HASH`; `UmlNotation`, `ALONE`,
 `CLASS_DIAGRAM`, `CLASS_SIZE`, `CLASSIFIERS` and `is_classifier`, `registry`, `commands::{specs, packages, classes,
-interfaces, enumerations, literals, classifiers, package_of, remove_elements, MAX_NAME}` (`uml.enumeration.{add,
+interfaces, enumerations, data_types, literals, classifiers, package_of, remove_elements, MAX_NAME}` (`uml.enumeration.{add,
 rename, move, list}`: an enumeration in a package, its name shared with the classes and interfaces
-there, removed with its literals through `element.remove`), `members::{specs, attributes, operations, parameters,
+there, removed with its literals through `element.remove`; `uml.data-type.{add, rename, move,
+list}` (AR-123): a DataType in a package, the DataType metaclass alone, never an enumeration or a
+primitive type, its name shared with the package's other classifiers, its attributes and operations
+kept in DataType's own lists by the member commands, removed with them through `element.remove`), `members::{specs, attributes, operations, parameters,
 parse_multiplicity, MultiplicityError, literal_owner, literal_clash, MAX_LITERALS, BUILT_IN, TYPES, MAX_PARAMETERS, MAX_BOUND,
 NO_ENUMERATIONS}` (`uml.class.{set, get}`, `uml.attribute.{add, set, move}`, `uml.operation.{add, set, move}`,
 `uml.literal.{add, rename, move}`: an enumeration's literals at a place asked for or the end, their
@@ -53,14 +56,16 @@ element's id or a built-in type's name, Integer, String, Boolean, Real or Unlimi
 the package Types the first time it is used; a multiplicity is typed, `0`, `1`, `0..1`, `*`, `1..*`,
 `2..5`, and one that does not read is a `MultiplicityError` naming why; members are removed through `element.remove`), `figures::{card, line, ends, text_slots, slot_text, attribute_text,
 operation_text, multiplicity, visibility, member_ends, navigable, MAX_CARD_ROWS}` (a class's card with its
-members' visibility, type and multiplicity, abstract names slanted; an enumeration's with
+members' visibility, type and multiplicity, abstract names slanted; an interface's and a data
+type's the same under `«interface»` and `«dataType»`; an enumeration's with
 `«enumeration»` and one compartment of its literals; at most `MAX_CARD_ROWS` rows a card, the rest
 counted in its `hidden`; an association's line with its
 name, roles, multiplicities, an arrow at every end it navigates to and a diamond at the whole of
 an aggregation or a composition; a generalization's triangle; a dependency dashed with an open
 arrow; an interface realization dashed in the muted ink to a hollow triangle at its interface),
-`relations::{specs, relationships_of, generalization_problem, association_end_problem, realization_problem, RealizationProblem}`
-(an enumeration specializes only an enumeration and joins no association; `uml.realization.add`: a class
+`relations::{specs, relationships_of, generalization_problem, GeneralizationProblem, association_end_problem, realization_problem, RealizationProblem}`
+(an enumeration specializes only an enumeration and a data type only a data type, each specialized
+only by its own kind, and neither joins an association; `uml.realization.add`: a class
 realizes an interface, owned by the class, its client and supplier kept in step with its
 implementing classifier and contract; reconnected through `uml.relationship.reconnect` and removed
 through `element.remove`), `RELATIONSHIPS` and `is_relationship`, and the card's `WORDS` and `PLURALS` for the shell's catalogue. Where an association's two

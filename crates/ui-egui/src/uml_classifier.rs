@@ -1,5 +1,5 @@
 //! The classifier tool of a class diagram: one tool in Class's place that places the kind its
-//! chevron's menu chose (Class, Interface or Enumeration; only the kinds that work are listed), its face showing
+//! chevron's menu chose (Class, Interface, Enumeration or Data type; only the kinds that work are listed), its face showing
 //! that kind's icon and its tooltip naming it. The menu marks the current kind; the arrow keys
 //! walk it, Enter picks, Escape closes, and a pick arms the tool. The kind stays for the window's
 //! next placements; a new window starts at Class.
@@ -20,11 +20,13 @@ pub enum Classifier {
     Interface,
     /// An enumeration, whose members are its literals.
     Enumeration,
+    /// A data type: a value without identity, with attributes and operations as a class has.
+    DataType,
 }
 
 impl Classifier {
     /// The kinds the menu lists, in its order.
-    pub(crate) const ALL: [Classifier; 3] = [Classifier::Class, Classifier::Interface, Classifier::Enumeration];
+    pub(crate) const ALL: [Classifier; 4] = [Classifier::Class, Classifier::Interface, Classifier::Enumeration, Classifier::DataType];
 
     /// Its name, in the menu, the tooltip and the Models' `+`.
     pub(crate) fn word(self) -> String {
@@ -32,6 +34,7 @@ impl Classifier {
             Classifier::Class => tr("Class"),
             Classifier::Interface => tr("Interface"),
             Classifier::Enumeration => tr("Enumeration"),
+            Classifier::DataType => tr("Data type"),
         }
     }
 
@@ -41,15 +44,17 @@ impl Classifier {
             Classifier::Class => "class",
             Classifier::Interface => "interface",
             Classifier::Enumeration => "enumeration",
+            Classifier::DataType => "data-type",
         }
     }
 
-    /// The stem of a fresh name for one: `Class 1`, `Interface 1`, `Enumeration 1`.
+    /// The stem of a fresh name for one: `Class 1`, `Interface 1`, `Enumeration 1`, `DataType 1`.
     pub(crate) fn stem(self) -> &'static str {
         match self {
             Classifier::Class => "Class",
             Classifier::Interface => "Interface",
             Classifier::Enumeration => "Enumeration",
+            Classifier::DataType => "DataType",
         }
     }
 
@@ -59,6 +64,7 @@ impl Classifier {
             Classifier::Class => &icons::TOOL_CLASS,
             Classifier::Interface => &icons::TOOL_INTERFACE,
             Classifier::Enumeration => &icons::TOOL_ENUMERATION,
+            Classifier::DataType => &icons::TOOL_DATA_TYPE,
         }
     }
 
@@ -68,6 +74,7 @@ impl Classifier {
             Classifier::Class => &icons::CLASS,
             Classifier::Interface => &icons::INTERFACE,
             Classifier::Enumeration => &icons::ENUMERATION,
+            Classifier::DataType => &icons::DATA_TYPE,
         }
     }
 
@@ -77,10 +84,12 @@ impl Classifier {
             Classifier::Class => archforge_uml::CLASS,
             Classifier::Interface => archforge_uml::INTERFACE,
             Classifier::Enumeration => archforge_uml::ENUMERATION,
+            Classifier::DataType => archforge_uml::DATA_TYPE,
         }
     }
 
-    /// The kind of `o`, when it is a classifier the tool places.
+    /// The kind of `o`, when it is a classifier the tool places: by its own metaclass, so an
+    /// enumeration is never taken for a data type.
     pub(crate) fn of(store: &Store, o: Obj) -> Option<Classifier> {
         let c = store.class_of(o).ok()?;
         Classifier::ALL.into_iter().find(|k| k.metaclass() == c)
@@ -92,6 +101,7 @@ impl Classifier {
             Classifier::Class => "uml.class.add",
             Classifier::Interface => "uml.interface.add",
             Classifier::Enumeration => "uml.enumeration.add",
+            Classifier::DataType => "uml.data-type.add",
         }
     }
 
@@ -101,6 +111,7 @@ impl Classifier {
             Classifier::Class => ("uml.class.rename", "class"),
             Classifier::Interface => ("uml.interface.rename", "interface"),
             Classifier::Enumeration => ("uml.enumeration.rename", "enumeration"),
+            Classifier::DataType => ("uml.data-type.rename", "data_type"),
         }
     }
 
@@ -110,6 +121,7 @@ impl Classifier {
             Classifier::Class => ("uml.class.move", "class"),
             Classifier::Interface => ("uml.interface.move", "interface"),
             Classifier::Enumeration => ("uml.enumeration.move", "enumeration"),
+            Classifier::DataType => ("uml.data-type.move", "data_type"),
         }
     }
 
@@ -119,10 +131,12 @@ impl Classifier {
             Classifier::Class => tr("Add class"),
             Classifier::Interface => tr("Add interface"),
             Classifier::Enumeration => tr("Add enumeration"),
+            Classifier::DataType => tr("Add data type"),
         }
     }
 
-    /// Whether its card takes attributes and operations: an enumeration's members are its literals.
+    /// Whether its card takes attributes and operations: a class's, an interface's and a data
+    /// type's do; an enumeration's members are its literals.
     pub(crate) fn takes_members(self) -> bool {
         self != Classifier::Enumeration
     }
@@ -133,6 +147,7 @@ impl Classifier {
             Classifier::Class => tr("Place class"),
             Classifier::Interface => tr("Place interface"),
             Classifier::Enumeration => tr("Place enumeration"),
+            Classifier::DataType => tr("Place data type"),
         }
     }
 }

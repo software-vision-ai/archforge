@@ -32,7 +32,7 @@ const VISIBILITIES: [&str; 4] = ["public", "private", "protected", "package"];
 /// The longest multiplicity typed.
 const MAX_MULTIPLICITY: usize = 24;
 
-/// Which kind of member an editor edits: a class's or an interface's attribute or operation, or an
+/// Which kind of member an editor edits: a class's, an interface's or a data type's attribute or operation, or an
 /// enumeration's literal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MemberKind {
@@ -205,8 +205,8 @@ pub(crate) fn member_of(store: &Store, o: Obj) -> Option<(Obj, MemberKind)> {
     }
 }
 
-/// A classifier's panel: its name and package, then a class's Abstract, a class's or an
-/// interface's attributes and operations, or an enumeration's literals, each with its editor.
+/// A classifier's panel: its name and package, then a class's Abstract, a class's, an interface's
+/// or a data type's attributes and operations, or an enumeration's literals, each with its editor.
 pub(crate) fn class_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, subject: &Subject) {
     let (Some(class), Some(class_id)) = (subject.obj, subject.id) else { return };
     let kind = shell.session.as_ref().and_then(|s| Classifier::of(s.doc(), class)).unwrap_or_default();

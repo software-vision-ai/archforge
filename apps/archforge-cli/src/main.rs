@@ -328,7 +328,8 @@ mod tests {
             )
             .unwrap();
             let text = init["result"]["instructions"].as_str().unwrap().to_string();
-            for word in text.split(|c: char| !(c.is_ascii_lowercase() || c == '_' || c == '.')).map(|w| w.trim_matches('.')) {
+            // A command id may hold a hyphen (`uml.data-type.add`), so a word runs through one.
+            for word in text.split(|c: char| !(c.is_ascii_lowercase() || c == '_' || c == '.' || c == '-')).map(|w| w.trim_matches('.')) {
                 if word.contains('_') {
                     assert!(tools.contains(&word), "compact {compact}: {word} is not a listed tool");
                 } else if word.contains('.') {
@@ -336,11 +337,20 @@ mod tests {
                     assert!(ids.contains(&word) || word == "uml.class", "compact {compact}: {word} is not a command");
                 }
             }
-            // Literals are built (AR-122): an agent is told it can edit them.
-            for promise in
-                ["UML class diagrams", "interfaces", "enumerations with their literals", "uml.literal.add", "ER diagrams", "agent access", "undo"]
-            {
-                let promise = if compact { promise.to_string() } else { promise.replace("uml.literal.add", "uml_literal_add") };
+            // Literals are built (AR-122), and data types (AR-123): an agent is told it can make them.
+            for promise in [
+                "UML class diagrams",
+                "interfaces",
+                "data types with their attributes and operations",
+                "enumerations with their literals",
+                "uml.literal.add",
+                "uml.data-type.add",
+                "ER diagrams",
+                "agent access",
+                "undo",
+            ] {
+                // A command's id in the compact mode, its tool's name in the other.
+                let promise = if compact || !promise.starts_with("uml.") { promise.to_string() } else { archforge_mcp::tool_name(promise) };
                 assert!(text.contains(&promise), "compact {compact}: says nothing of {promise}");
             }
             assert!(!text.contains("C4"), "compact {compact}: advertises C4");

@@ -48,7 +48,7 @@ tools and `search_tools` in place of one tool per command. To try agent access b
   `save_project`, which saves as ⌘S does.
 - **Read the model and the skills**: `skill_list` and `skill_effective` as tools, and as MCP
   resources `archforge://project` (the open project, its revision, the selection), `archforge://skills`,
-  `archforge://element/{id}` (a schema with its tables, a table, a class, an interface, an enumeration with its literals or a diagram) and
+  `archforge://element/{id}` (a schema with its tables, a table, a class, an interface, an enumeration with its literals, a data type or a diagram) and
   `archforge://skills/effective/{id}` (the skills that apply to an element, optionally for one
   trigger: modelling, drawing, naming or export).
 

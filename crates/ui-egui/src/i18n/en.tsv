@@ -208,6 +208,7 @@ str		every column	every column
 str		every class	every class
 str		every interface	every interface
 str		every enumeration	every enumeration
+str		every data type	every data type
 str		every attribute	every attribute
 str		every operation	every operation
 str		every association	every association
@@ -531,11 +532,14 @@ str		{parent} has no primary key yet, so there is nothing in {child} to point at
 str		Add class	Add class
 str		Add interface	Add interface
 str		Add enumeration	Add enumeration
+str		Add data type	Add data type
 str		Class	Class
 str		Interface	Interface
 str		«interface»	«interface»
 str		Enumeration	Enumeration
 str		«enumeration»	«enumeration»
+str		Data type	Data type
+str		«dataType»	«dataType»
 str		Classifier	Classifier
 str		Classifier kinds	Classifier kinds
 str		Class diagram	Class diagram
@@ -543,10 +547,12 @@ str		Class diagrams	Class diagrams
 str		Class · model, in every diagram	Class · model, in every diagram
 str		Interface · model, in every diagram	Interface · model, in every diagram
 str		Enumeration · model, in every diagram	Enumeration · model, in every diagram
+str		Data type · model, in every diagram	Data type · model, in every diagram
 str		New package	New package
 str		On this class · {n}	On this class · {n}
 str		On this interface · {n}	On this interface · {n}
 str		On this enumeration · {n}	On this enumeration · {n}
+str		On this data type · {n}	On this data type · {n}
 str		On this package · {n}	On this package · {n}
 str		Package	Package
 str		Package · model	Package · model
@@ -554,6 +560,7 @@ str		The diagram is of no package	The diagram is of no package
 str		This class	This class
 str		This interface	This interface
 str		This enumeration	This enumeration
+str		This data type	This data type
 str		This package	This package
 plural		+ {n} more member	+ {n} more member|+ {n} more members
 plural		+ {n} more literal	+ {n} more literal|+ {n} more literals
@@ -599,6 +606,7 @@ str		Visibility	Visibility
 str		Place class	Place class
 str		Place interface	Place interface
 str		Place enumeration	Place enumeration
+str		Place data type	Place data type
 str		Add package	Add package
 str		Place package	Place package
 str		Move package	Move package
@@ -614,10 +622,13 @@ str		A bound can be at most {max}.	A bound can be at most {max}.
 str		A class realizes only an interface	A class realizes only an interface
 str		A relationship joins two classes or interfaces	A relationship joins two classes or interfaces
 str		An enumeration is a data type and joins no association	An enumeration is a data type and joins no association
+str		A data type joins no association	A data type joins no association
 str		An interface specializes only an interface	An interface specializes only an interface
 str		A class cannot specialize an interface	A class cannot specialize an interface
 str		An enumeration specializes only an enumeration	An enumeration specializes only an enumeration
 str		Only an enumeration specializes an enumeration	Only an enumeration specializes an enumeration
+str		A data type specializes only a data type	A data type specializes only a data type
+str		Only a data type specializes a data type	Only a data type specializes a data type
 str		A classifier cannot specialize itself	A classifier cannot specialize itself
 str		This one specializes that one already	This one specializes that one already
 str		That one specializes this one already, which would make a cycle	That one specializes this one already, which would make a cycle
@@ -674,6 +685,7 @@ str		{what} removed	{what} removed
 str		Class · {package}	Class · {package}
 str		«interface» · {package}	«interface» · {package}
 str		«enumeration» · {package}	«enumeration» · {package}
+str		«dataType» · {package}	«dataType» · {package}
 str		{name} removed; what it held moved to {parent}	{name} removed; what it held moved to {parent}
 # Unsaved changes on close
 str		Close and lose changes	Close and lose changes

@@ -232,7 +232,10 @@ pub fn type_matches(pattern: &str, type_name: &str) -> bool {
 }
 
 /// Whether a skill aims at `element`: it names no kind (it applies to everything below its
-/// subject), or a kind the element's class conforms to, with a type pattern its type matches.
+/// subject), or the element's own kind, with a type pattern its type matches. The element's own
+/// kind is the most specific of the notations' kinds its class conforms to: a UML enumeration is a
+/// DataType in the metamodel, yet a skill for every data type does not reach it, one for every
+/// enumeration does.
 pub fn aims_at<V: SkillHost>(view: &V, store: &Store, s: Obj, element: Obj) -> bool {
     let applies = string_of(store, s, skill::APPLIES_TO);
     if applies.is_empty() {
@@ -240,7 +243,16 @@ pub fn aims_at<V: SkillHost>(view: &V, store: &Store, s: Obj, element: Obj) -> b
     }
     let Some((kind, _)) = kind_by_key(view, store, &applies) else { return false };
     let Ok(class) = store.class_of(element) else { return false };
-    if !store.universe().conforms(class, TypeRef::Class(kind)) || view.skill_problem(store, element).is_some() {
+    let universe = store.universe();
+    if !universe.conforms(class, TypeRef::Class(kind)) || view.skill_problem(store, element).is_some() {
+        return false;
+    }
+    // A kind between the element's class and the skill's is closer: the element is of that one.
+    let closer = view
+        .skill_kinds()
+        .into_iter()
+        .any(|(k, _)| k != kind && universe.conforms(class, TypeRef::Class(k)) && universe.conforms(k, TypeRef::Class(kind)));
+    if closer {
         return false;
     }
     let pattern = string_of(store, s, skill::TYPE_PATTERN);
@@ -719,7 +731,7 @@ pub fn specs<V: SkillHost>() -> Vec<CommandSpec<Store, V>> {
                 "body: string = \"\"; the instructions, Markdown\n",
                 "triggers: array = []; when it applies: modelling, drawing, naming, export; none for always\n",
                 "dialect: string = \"\"; the SQL dialect of an export skill, or empty for every dialect\n",
-                "applies_to: string = \"\"; what it aims at below the subject, a kind of the subject's notation (ER: table, relationship, column; UML: class, attribute, operation, association; a diagram takes none), or empty for the subject itself\n",
+                "applies_to: string = \"\"; what it aims at below the subject, a kind of the subject's notation (ER: table, relationship, column; UML: class, interface, enumeration, data type, attribute, operation, association; a diagram takes none), or empty for the subject itself\n",
                 "type_pattern: string = \"\"; with applies_to column: an exact type or a category (text, number, date, boolean, binary)"
             ),
             has_model::<V>,
@@ -737,7 +749,7 @@ pub fn specs<V: SkillHost>() -> Vec<CommandSpec<Store, V>> {
                 "body: string; the instructions, Markdown, or empty\n",
                 "triggers: array; when it applies: modelling, drawing, naming, export; none for always\n",
                 "dialect: string; the SQL dialect of an export skill, or empty for every dialect\n",
-                "applies_to: string; what it aims at below the subject, a kind of the subject's notation (ER: table, relationship, column; UML: class, attribute, operation, association; a diagram takes none), or empty for the subject itself\n",
+                "applies_to: string; what it aims at below the subject, a kind of the subject's notation (ER: table, relationship, column; UML: class, interface, enumeration, data type, attribute, operation, association; a diagram takes none), or empty for the subject itself\n",
                 "type_pattern: string; with applies_to column: an exact type or a category, or empty"
             ),
             has_skills::<V>,

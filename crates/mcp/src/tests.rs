@@ -84,6 +84,9 @@ impl Backend for Model {
             "uml.class.get" if p["class"] == "e1" => {
                 json!({ "id": "e1", "kind": "enumeration", "name": "OrderStatus", "literals": [{ "id": "l1", "name": "Placed" }] })
             }
+            "uml.class.get" if p["class"] == "d1" => {
+                json!({ "id": "d1", "kind": "data_type", "name": "Money", "attributes": [{ "id": "a1", "name": "amount" }], "operations": [] })
+            }
             "skill.list" => json!({ "skills": [{ "id": "k1", "name": "DDL" }] }),
             "skill.effective" if p["element"] == "s1" || p["element"] == "t1" => {
                 json!({ "skills": [{ "id": "k1", "name": "DDL", "origin": null, "overridden_by": null, "trigger": p["trigger"] }] })
@@ -128,6 +131,9 @@ fn the_model_and_its_skills_read_as_resources_with_the_revision_and_say_what_the
     // An enumeration, which the class read gives too, as what it is, with its literals.
     let enumeration = content(&read(&model, "archforge://element/e1"));
     assert_eq!((enumeration["kind"].as_str(), enumeration["enumeration"]["literals"][0]["name"].as_str()), (Some("enumeration"), Some("Placed")));
+    // A data type, which the class read gives too, as what it is, with its attributes.
+    let data_type = content(&read(&model, "archforge://element/d1"));
+    assert_eq!((data_type["kind"].as_str(), data_type["data_type"]["attributes"][0]["name"].as_str()), (Some("data_type"), Some("amount")));
     // The skills in effect, for every trigger or for one, as skill.effective gives them.
     let effective = content(&read(&model, "archforge://skills/effective/t1/export"));
     assert_eq!((effective["trigger"].as_str(), effective["skills"][0]["name"].as_str()), (Some("export"), Some("DDL")));

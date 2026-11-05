@@ -180,6 +180,40 @@ enumeration onto empty canvas, a generalization makes a new enumeration there.
 
 <!-- picture: workspace-enumeration light | The enumeration OrderStatus with its four literals, selected with its literals in Properties and under it in Models, an enumeration Priority with none yet, and the class Order whose attributes they type -->
 
+## 9. Add a data type
+
+A data type is a value without an identity of its own, such as an amount of *Money*: two amounts
+of 5 euros are the same value, wherever they appear. A data type has attributes and operations, as
+a class has.
+
+1. Open the chevron beside the classifier tool and choose **Data type**, below **Enumeration**. The
+   tool now shows a pair of braces, and its tooltip says *Data type*.
+2. Click on the canvas, type *Money* and press Enter. Its card says `«dataType»` above its name and
+   has two compartments, attributes and operations, as a class's card has.
+
+Add its members as you add a class's: the **+** at the right of each compartment, the adorner
+beside the selected card, its menu's **Add attribute**, or ⌘↩ for an attribute and ⇧⌘↩ for an
+operation open a row on the card to type into; Enter writes it as one step. Select the data type to
+see it in **Properties**: its **Name**, **Package** and **Description**, then **Attributes** and
+**Operations**, each with a **+** and an editor, as a class's. A data type has no **Abstract**.
+
+In **Models** a data type is a row under its package, with its attributes and operations below it.
+The **+** of a package offers **Data type** after **Enumeration**, and you can drag a data type
+onto a diagram or onto another package's row. It shares its package's names with the classes,
+interfaces and enumerations there. A data type is offered as a type wherever you choose an
+attribute's, a parameter's or a return type, once, beside the built-in types; what it types keeps
+it when you rename it or move it to another package, and loses it, until you undo, when you delete
+it.
+
+A data type's values are not linked as instances are: the **Relationship** tool draws no
+association to or from one, and says so at the canvas's top. A generalization joins a data type
+only to another data type, and no interface realization starts at one, since only a class
+implements an interface. A dependency may lead to or from one. Dragged out of a data type onto
+empty canvas, a generalization makes a new data type there. A data type carries skills, and a
+package's skill can aim at every data type in it.
+
+<!-- picture: workspace-data-type light | The data type Money with its attributes and operation, selected with its members in Properties and under it in Models, the data type Price specializing it, and the class Order whose total and refund it types -->
+
 ## The result
 
 The root package holds two classes and an interface. *Customer* has an attribute and an

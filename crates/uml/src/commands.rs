@@ -1,7 +1,8 @@
 //! UML's commands over the store: packages in the project's Model,
-//! nested as deep as needed, and classes, interfaces and enumerations in a package, added, renamed,
-//! moved and listed. A package's classes, interfaces and enumerations share its names: no two of
-//! them are named alike, whatever the case, so a type picked by its name is never in doubt. Each
+//! nested as deep as needed, and classes, interfaces, enumerations and data types in a package,
+//! added, renamed, moved and listed. A package's classes, interfaces, enumerations and data types
+//! share its names: no two of them are named alike, whatever the case, so a type picked by its name
+//! is never in doubt. Each
 //! validates what it is given before it changes anything and refuses with a message naming the
 //! key. Ids in parameters are the elements' UUIDs. Removing and describing go through the shared
 //! `element.remove` and `element.describe`; a nested package removed hands what it holds up to its
@@ -12,7 +13,7 @@ use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, always, cm
 use archforge_mof::{ClassId, Invalid, Obj, Store, Uuid, Value};
 use serde_json::{Value as Json, json};
 
-use crate::{CLASS, ENUMERATION, INTERFACE, PACKAGE, enumeration, named_element, package};
+use crate::{CLASS, DATA_TYPE, ENUMERATION, INTERFACE, PACKAGE, enumeration, named_element, package};
 
 type C<'a> = Ctx<'a, Store, ProjectView>;
 type R = Result<Json, CommandError>;
@@ -74,11 +75,11 @@ pub(crate) fn a_what(store: &Store, o: Obj) -> String {
     format!("{article} {what}")
 }
 
-/// The class, interface or enumeration the id under `key` names.
+/// The class, interface, enumeration or data type the id under `key` names.
 pub(crate) fn classifier_of(store: &Store, p: &Params, key: &str) -> Result<Obj, CommandError> {
     let obj = element_of(store, p, key)?;
     if !store.class_of(obj).is_ok_and(crate::is_classifier) {
-        return Err(refuse(key, format!("{} is not a class, an interface or an enumeration", text(p, key))));
+        return Err(refuse(key, format!("{} is not a class, an interface, an enumeration or a data type", text(p, key))));
     }
     Ok(obj)
 }
@@ -202,12 +203,18 @@ pub fn enumerations(store: &Store, package: Obj) -> Vec<Obj> {
     members(store, package, package::PACKAGED_ELEMENT, ENUMERATION)
 }
 
+/// The data types of a package, in its order: the DataType metaclass alone, neither its
+/// enumerations nor its primitive types, which UML makes data types too.
+pub fn data_types(store: &Store, package: Obj) -> Vec<Obj> {
+    members(store, package, package::PACKAGED_ELEMENT, DATA_TYPE)
+}
+
 /// An enumeration's literals, in their order.
 pub fn literals(store: &Store, enumeration: Obj) -> Vec<Obj> {
     members(store, enumeration, enumeration::OWNED_LITERAL, crate::ENUMERATION_LITERAL)
 }
 
-/// The classifiers of a package, its classes, interfaces and enumerations, in its order.
+/// The classifiers of a package, its classes, interfaces, enumerations and data types, in its order.
 pub fn classifiers(store: &Store, package: Obj) -> Vec<Obj> {
     store
         .list(package, package::PACKAGED_ELEMENT)
@@ -218,13 +225,14 @@ pub fn classifiers(store: &Store, package: Obj) -> Vec<Obj> {
         .collect()
 }
 
-/// What an element is, as a refusal names it: a class, an interface, an enumeration, a package, a
-/// literal.
+/// What an element is, as a refusal names it: a class, an interface, an enumeration, a data type, a
+/// package, a literal.
 pub(crate) fn what(store: &Store, o: Obj) -> &'static str {
     match store.class_of(o).ok() {
         Some(c) if c == CLASS => "class",
         Some(c) if c == INTERFACE => "interface",
         Some(c) if c == ENUMERATION => "enumeration",
+        Some(c) if c == DATA_TYPE => "data type",
         Some(c) if c == PACKAGE => "package",
         Some(c) if c == crate::ENUMERATION_LITERAL => "literal",
         _ => "element",
@@ -236,7 +244,7 @@ pub fn package_of(store: &Store, class: Obj) -> Option<Obj> {
     store.container(class).ok().flatten().map(|(c, _)| c).filter(|c| store.class_of(*c).ok() == Some(PACKAGE))
 }
 
-/// A name a package, class, interface or enumeration may have, distinct, whatever the case, from its siblings'
+/// A name a package, class, interface, enumeration or data type may have, distinct, whatever the case, from its siblings'
 /// (a namespace tells its members apart by name); a refusal names what has it already.
 fn check_name(store: &Store, name: &str, siblings: &[Obj], except: Option<Obj>) -> Result<(), CommandError> {
     if let Some(p) = archforge_core::skills::name_problem(name, MAX_NAME) {
@@ -372,7 +380,7 @@ fn package_move(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, pkg)? }))
 }
 
-/// The class, interface or enumeration under `key` (of `kind`, `what` naming it) moves into the package under
+/// The class, interface, enumeration or data type under `key` (of `kind`, `what` naming it) moves into the package under
 /// `package`, its name free among that package's classifiers.
 fn classifier_move(ctx: &mut C<'_>, p: &Params, kind: ClassId, key: &str, what: &str) -> R {
     let c = id_of(ctx.doc, p, key, kind, what)?;
@@ -387,7 +395,7 @@ fn classifier_move(ctx: &mut C<'_>, p: &Params, kind: ClassId, key: &str, what: 
     Ok(json!({ "id": uuid_of(ctx.doc, c)? }))
 }
 
-/// A class, an interface or an enumeration (`kind`) named `name` in the package under `package`.
+/// A class, an interface, an enumeration or a data type (`kind`) named `name` in the package under `package`.
 fn classifier_add(ctx: &mut C<'_>, p: &Params, kind: ClassId) -> R {
     let pkg = id_of(ctx.doc, p, "package", PACKAGE, "a package")?;
     let name = text(p, "name");
@@ -399,7 +407,7 @@ fn classifier_add(ctx: &mut C<'_>, p: &Params, kind: ClassId) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, c)? }))
 }
 
-/// The class, interface or enumeration under `key` renamed, its new name free among its package's classifiers.
+/// The class, interface, enumeration or data type under `key` renamed, its new name free among its package's classifiers.
 fn classifier_rename(ctx: &mut C<'_>, p: &Params, kind: ClassId, key: &str, what: &str) -> R {
     let c = id_of(ctx.doc, p, key, kind, what)?;
     let name = text(p, "name");
@@ -454,8 +462,23 @@ fn enumeration_rename(ctx: &mut C<'_>, p: &Params) -> R {
     classifier_rename(ctx, p, ENUMERATION, "enumeration", "an enumeration")
 }
 
-/// `uml.package.list`: every package with its parent and how many classes, interfaces and
-/// enumerations it holds.
+/// `uml.data-type.move`: a data type into another package; what it types keeps it.
+fn data_type_move(ctx: &mut C<'_>, p: &Params) -> R {
+    classifier_move(ctx, p, DATA_TYPE, "data_type", "a data type")
+}
+
+/// `uml.data-type.add`: a data type in a package, with no attributes or operations yet.
+fn data_type_add(ctx: &mut C<'_>, p: &Params) -> R {
+    classifier_add(ctx, p, DATA_TYPE)
+}
+
+/// `uml.data-type.rename`: a data type renamed; what it types keeps it.
+fn data_type_rename(ctx: &mut C<'_>, p: &Params) -> R {
+    classifier_rename(ctx, p, DATA_TYPE, "data_type", "a data type")
+}
+
+/// `uml.package.list`: every package with its parent and how many classes, interfaces,
+/// enumerations and data types it holds.
 fn package_list(ctx: &mut C<'_>, _: &Params) -> R {
     let store = &*ctx.doc;
     let items: Vec<Json> = all_packages(store)
@@ -465,7 +488,7 @@ fn package_list(ctx: &mut C<'_>, _: &Params) -> R {
             json!({
                 "id": uuid_of(store, pkg).unwrap_or_default(), "name": name_of(store, pkg), "parent": parent,
                 "classes": classes(store, pkg).len(), "interfaces": interfaces(store, pkg).len(),
-                "enumerations": enumerations(store, pkg).len(),
+                "enumerations": enumerations(store, pkg).len(), "data_types": data_types(store, pkg).len(),
             })
         })
         .collect();
@@ -504,12 +527,29 @@ fn enumeration_list(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "enumerations": items }))
 }
 
+/// `uml.data-type.list`: a package's data types, in its order, each with how many attributes and
+/// operations it has; `uml.class.get` reads one with its members.
+fn data_type_list(ctx: &mut C<'_>, p: &Params) -> R {
+    let pkg = id_of(ctx.doc, p, "package", PACKAGE, "a package")?;
+    let store = &*ctx.doc;
+    let items: Vec<Json> = data_types(store, pkg)
+        .into_iter()
+        .map(|t| {
+            json!({
+                "id": uuid_of(store, t).unwrap_or_default(), "name": name_of(store, t),
+                "attributes": crate::members::attributes(store, t).len(), "operations": crate::members::operations(store, t).len(),
+            })
+        })
+        .collect();
+    Ok(json!({ "data_types": items }))
+}
+
 /// What a nested package hands up to its parent when it is removed: everything it holds.
 fn held(store: &Store, pkg: Obj) -> Vec<Obj> {
     store.list(pkg, package::PACKAGED_ELEMENT).unwrap_or_default().iter().filter_map(Value::as_ref).filter(|o| store.is_alive(*o)).collect()
 }
 
-/// Every class, interface and enumeration inside a package, at any depth.
+/// Every class, interface, enumeration and data type inside a package, at any depth.
 fn classifiers_within(store: &Store, pkg: Obj) -> Vec<Obj> {
     let mut out = classifiers(store, pkg);
     for sub in subpackages(store, pkg) {
@@ -521,7 +561,8 @@ fn classifiers_within(store: &Store, pkg: Obj) -> Vec<Obj> {
 /// Why `parent` cannot take what `pkg` holds, when a name would clash there.
 fn hand_up_problem(store: &Store, pkg: Obj, parent: Obj) -> Option<String> {
     for o in held(store, pkg) {
-        // Classes, interfaces and enumerations share their package's names; a package has its own.
+        // Classes, interfaces, enumerations and data types share their package's names; a package
+        // has its own.
         let siblings = match store.class_of(o).ok() {
             Some(c) if crate::is_classifier(c) => classifiers(store, parent),
             Some(c) if c == PACKAGE => subpackages(store, parent),
@@ -535,13 +576,14 @@ fn hand_up_problem(store: &Store, pkg: Obj, parent: Obj) -> Option<String> {
     None
 }
 
-/// Removes UML elements (packages, classes, interfaces, enumerations, attributes, operations,
-/// literals, primitive types, associations, generalizations, dependencies and interface realizations), each
-/// with what it holds (an enumeration its literals) and the diagrams, nodes and lines that show them
-/// (`element.remove`, through [`crate::UmlNotation`]). A nested package hands what it holds, and its
-/// diagrams, up to its parent first (owner decision); a top-level package takes them along. A
-/// class, an interface or an enumeration takes the relationships that touch it along, and a
-/// member's type that goes is dropped from what had it.
+/// Removes UML elements (packages, classes, interfaces, enumerations, data types, attributes,
+/// operations, literals, primitive types, associations, generalizations, dependencies and interface
+/// realizations), each with what it holds (an enumeration its literals, a data type its attributes
+/// and operations) and the diagrams, nodes and lines that show them (`element.remove`, through
+/// [`crate::UmlNotation`]). A nested package hands what it holds, and its diagrams, up to its parent
+/// first (owner decision); a top-level package takes them along. A class, an interface, an
+/// enumeration or a data type takes the relationships that touch it along, and a member's type that
+/// goes is dropped from what had it.
 pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, CommandError> {
     // Every id is checked before anything goes, so a refusal leaves the store as it was.
     let removable = [
@@ -549,6 +591,7 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
         CLASS,
         INTERFACE,
         ENUMERATION,
+        DATA_TYPE,
         crate::PROPERTY,
         crate::OPERATION,
         crate::ENUMERATION_LITERAL,
@@ -594,7 +637,7 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
             })
             .map_err(fail)?;
     }
-    // The relationships of every class, interface and enumeration that goes, a top-level package's among them,
+    // The relationships of every classifier that goes, a top-level package's among them,
     // go first: a generalization requires its general classifier.
     let mut all: Vec<Obj> = Vec::new();
     for o in objs.iter().filter(|o| store.is_alive(**o)) {
@@ -659,7 +702,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Move class",
             &["Class"],
             None,
-            "class: string; the class's id\npackage: string; the id of the package it goes into, where its name is free among the classes, interfaces and enumerations",
+            "class: string; the class's id\npackage: string; the id of the package it goes into, where its name is free among the classes, interfaces, enumerations and data types",
             has_packages,
             class_move
         ),
@@ -677,7 +720,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Add class",
             &["Class"],
             None,
-            "package: string; the package's id\nname: string; the class's name, free among the package's classes, interfaces and enumerations",
+            "package: string; the package's id\nname: string; the class's name, free among the package's classes, interfaces, enumerations and data types",
             has_packages,
             class_add
         ),
@@ -686,7 +729,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Rename class",
             &["Class"],
             None,
-            "class: string; the class's id\nname: string; the new name, free among its package's classes, interfaces and enumerations",
+            "class: string; the class's id\nname: string; the new name, free among its package's classes, interfaces, enumerations and data types",
             has_packages,
             class_rename
         ),
@@ -695,7 +738,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Add interface",
             &["Interface"],
             None,
-            "package: string; the package's id\nname: string; the interface's name, free among the package's classes, interfaces and enumerations",
+            "package: string; the package's id\nname: string; the interface's name, free among the package's classes, interfaces, enumerations and data types",
             has_packages,
             interface_add
         ),
@@ -704,7 +747,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Rename interface",
             &["Interface"],
             None,
-            "interface: string; the interface's id\nname: string; the new name, free among its package's classes, interfaces and enumerations",
+            "interface: string; the interface's id\nname: string; the new name, free among its package's classes, interfaces, enumerations and data types",
             has_packages,
             interface_rename
         ),
@@ -713,7 +756,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Move interface",
             &["Interface"],
             None,
-            "interface: string; the interface's id\npackage: string; the id of the package it goes into, where its name is free among the classes, interfaces and enumerations",
+            "interface: string; the interface's id\npackage: string; the id of the package it goes into, where its name is free among the classes, interfaces, enumerations and data types",
             has_packages,
             interface_move
         ),
@@ -722,7 +765,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Add enumeration",
             &["Enumeration"],
             None,
-            "package: string; the package's id\nname: string; the enumeration's name, free among the package's classes, interfaces and enumerations",
+            "package: string; the package's id\nname: string; the enumeration's name, free among the package's classes, interfaces, enumerations and data types",
             has_packages,
             enumeration_add
         ),
@@ -731,7 +774,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Rename enumeration",
             &["Enumeration"],
             None,
-            "enumeration: string; the enumeration's id\nname: string; the new name, free among its package's classes, interfaces and enumerations",
+            "enumeration: string; the enumeration's id\nname: string; the new name, free among its package's classes, interfaces, enumerations and data types",
             has_packages,
             enumeration_rename
         ),
@@ -740,9 +783,36 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Move enumeration",
             &["Enumeration"],
             None,
-            "enumeration: string; the enumeration's id\npackage: string; the id of the package it goes into, where its name is free among the classes, interfaces and enumerations",
+            "enumeration: string; the enumeration's id\npackage: string; the id of the package it goes into, where its name is free among the classes, interfaces, enumerations and data types",
             has_packages,
             enumeration_move
+        ),
+        cmd!(
+            "uml.data-type.add",
+            "Add data type",
+            &["Data type"],
+            None,
+            "package: string; the package's id\nname: string; the data type's name, free among the package's classes, interfaces, enumerations and data types",
+            has_packages,
+            data_type_add
+        ),
+        cmd!(
+            "uml.data-type.rename",
+            "Rename data type",
+            &["Data type"],
+            None,
+            "data_type: string; the data type's id\nname: string; the new name, free among its package's classes, interfaces, enumerations and data types",
+            has_packages,
+            data_type_rename
+        ),
+        cmd!(
+            "uml.data-type.move",
+            "Move data type",
+            &["Data type"],
+            None,
+            "data_type: string; the data type's id\npackage: string; the id of the package it goes into, where its name is free among the classes, interfaces, enumerations and data types",
+            has_packages,
+            data_type_move
         ),
         cmd!(query "uml.package.list", "List packages", &["Package"], None, "", always, package_list),
         cmd!(query "uml.class.list", "List classes", &["Class"], None, "package: string; the package's id", has_packages, class_list),
@@ -756,5 +826,6 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             has_packages,
             enumeration_list
         ),
+        cmd!(query "uml.data-type.list", "List data types", &["Data type"], None, "package: string; the package's id", has_packages, data_type_list),
     ]
 }

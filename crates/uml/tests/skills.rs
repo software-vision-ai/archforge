@@ -1,6 +1,6 @@
-//! Skills over UML: packages, classes, interfaces, enumerations, attributes and operations carry
-//! them (owner decision), a relationship does not; a skill aims at every class, interface,
-//! enumeration, attribute, operation or association below
+//! Skills over UML: packages, classes, interfaces, enumerations, data types, attributes and
+//! operations carry them (owner decision), a relationship does not; a skill aims at every class,
+//! interface, enumeration, data type, attribute, operation or association below
 //! its subject, is inherited down the package tree and replaced by a deeper one of its name; each
 //! skill.add one undo step.
 
@@ -122,7 +122,7 @@ fn a_package_skill_aims_at_the_kind_it_names_below_it() {
     assert_eq!(names(&s, &m.association), ["Associations"]);
     // An ER kind is not one of UML's.
     let e = s.execute("skill.add", &json!({ "subject": m.sales, "name": "Tables", "applies_to": "table" })).unwrap_err().to_string();
-    assert!(e.contains("class, interface, enumeration, attribute, operation, association"), "{e}");
+    assert!(e.contains("class, interface, enumeration, data type, attribute, operation, association"), "{e}");
 }
 
 /// An enumeration carries skills as an interface does, and a package skill for enumerations aims
@@ -148,6 +148,34 @@ fn an_enumeration_carries_skills_and_a_package_skill_for_enumerations_aims_only_
     assert_eq!(names(&s, &payable), Vec::<String>::new(), "nor is an interface");
     run(&mut s, "element.remove", json!({ "ids": [status] }));
     assert!(skills(s.doc()).iter().all(|k| archforge_core::skills::name_of(s.doc(), *k) != "States"), "its skill went with it");
+}
+
+/// A data type carries skills as an interface and an enumeration do, and a package skill for every
+/// data type aims at data types alone: not at an enumeration, which UML makes a data type too, nor
+/// at a class.
+#[test]
+fn a_data_type_carries_skills_and_a_package_skill_for_data_types_aims_only_at_them() {
+    let mut s = session();
+    let m = model(&mut s);
+    let money = run(&mut s, "uml.data-type.add", json!({ "package": m.sales, "name": "Money" }));
+    let amount = run(&mut s, "uml.attribute.add", json!({ "class": money, "name": "amount", "type": "Real" }));
+    let status = run(&mut s, "uml.enumeration.add", json!({ "package": m.sales, "name": "OrderStatus" }));
+    // The data type takes a skill of its own, as one undo step, which reaches its attributes.
+    let before = skills(s.doc()).len();
+    let skill = run(&mut s, "skill.add", json!({ "subject": money, "name": "Values", "body": "Keep them immutable." }));
+    assert_eq!(archforge_core::skills::subject_of(s.doc(), obj(&s, &skill)), Some(obj(&s, &money)));
+    s.undo().unwrap();
+    assert_eq!(skills(s.doc()).len(), before);
+    s.redo().unwrap();
+    // A package skill for every data type aims at them alone.
+    run(&mut s, "skill.add", json!({ "subject": m.sales, "name": "Data types", "applies_to": "data type" }));
+    let names = |s: &S, e: &str| applying(s, e).into_iter().map(|(n, _, _)| n).collect::<Vec<_>>();
+    assert_eq!(names(&s, &money), ["Data types", "Values"]);
+    assert_eq!(names(&s, &amount), ["Values"], "its own skill reaches its members");
+    assert_eq!(names(&s, &status), Vec::<String>::new(), "an enumeration is no data type here");
+    assert_eq!(names(&s, &m.order), Vec::<String>::new(), "nor is a class");
+    run(&mut s, "element.remove", json!({ "ids": [money] }));
+    assert!(skills(s.doc()).iter().all(|k| archforge_core::skills::name_of(s.doc(), *k) != "Values"), "its skill went with it");
 }
 
 /// An interface carries skills as a class does, and a package skill for interfaces aims at them alone.

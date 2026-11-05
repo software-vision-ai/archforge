@@ -30,8 +30,11 @@ pub fn universe() -> Result<Arc<Universe>, MetaError> {
 pub const CLASS_DIAGRAM: &str = "uml.class";
 
 /// The kinds of classifier a class diagram places, each a card with its members: a class, an
-/// interface, and an enumeration, whose members are its literals.
-pub const CLASSIFIERS: [ClassId; 3] = [CLASS, INTERFACE, ENUMERATION];
+/// interface, an enumeration, whose members are its literals, and a data type, a value without
+/// identity with attributes and operations as a class has. Each is its own metaclass: an
+/// enumeration (and a primitive type) is a DataType in UML's metamodel, but the data type kind is
+/// the DataType metaclass alone.
+pub const CLASSIFIERS: [ClassId; 4] = [CLASS, INTERFACE, ENUMERATION, DATA_TYPE];
 
 /// Whether `class` is one of the [`CLASSIFIERS`].
 pub fn is_classifier(class: ClassId) -> bool {
@@ -54,8 +57,8 @@ pub const CLASS_SIZE: (f64, f64) = (240.0, 136.0);
 pub const PACKAGE_SIZE: (f64, f64) = (240.0, 148.0);
 
 /// UML in a project's view: class diagrams of a package showing its
-/// classes and interfaces as plain cards with their attributes and operations, its enumerations with
-/// their literals, and the associations,
+/// classes, interfaces and data types as plain cards with their attributes and operations, its
+/// enumerations with their literals, and the associations,
 /// generalizations, dependencies and interface realizations between them as lines (`figures`);
 /// packages and classes removed with what they hold.
 pub struct UmlNotation;
@@ -82,7 +85,7 @@ impl Notation for UmlNotation {
         true
     }
 
-    /// A class diagram shows classes, interfaces, enumerations and packages as cards.
+    /// A class diagram shows classes, interfaces, enumerations, data types and packages as cards.
     fn shows(&self, _kind: &str, class: ClassId) -> bool {
         is_classifier(class) || class == PACKAGE
     }
@@ -115,8 +118,8 @@ impl Notation for UmlNotation {
         figures::text_slots(class)
     }
 
-    /// A class or an interface: its name, a class's slanted when abstract, its attributes, then its
-    /// operations; an enumeration: its name and its literals.
+    /// A class, an interface or a data type: its name, a class's slanted when abstract, its
+    /// attributes, then its operations; an enumeration: its name and its literals.
     fn card(&self, store: &Store, element: Obj, diagram: Obj) -> Option<Card> {
         figures::card(store, element, diagram)
     }
@@ -130,12 +133,12 @@ impl Notation for UmlNotation {
         figures::slot_text(store, element, slot)
     }
 
-    /// A skill sits on a package, a class, an interface, an enumeration, an attribute or an
-    /// operation; it aims at every class, interface, enumeration, attribute, operation or
-    /// association below its subject (owner decision: an interface carries skills as a class does,
-    /// and an enumeration as an interface does).
+    /// A skill sits on a package, a class, an interface, an enumeration, a data type, an attribute
+    /// or an operation; it aims at every class, interface, enumeration, data type, attribute,
+    /// operation or association below its subject (owner decision: an interface carries skills as a
+    /// class does, and an enumeration and a data type as an interface does).
     fn skill_subjects(&self) -> &'static [ClassId] {
-        &[PACKAGE, CLASS, INTERFACE, ENUMERATION, PROPERTY, OPERATION]
+        &[PACKAGE, CLASS, INTERFACE, ENUMERATION, DATA_TYPE, PROPERTY, OPERATION]
     }
 
     /// The kinds a package skill may aim at, each with the word that names it.
@@ -144,6 +147,7 @@ impl Notation for UmlNotation {
             (CLASS, "class"),
             (INTERFACE, "interface"),
             (ENUMERATION, "enumeration"),
+            (DATA_TYPE, "data type"),
             (PROPERTY, "attribute"),
             (OPERATION, "operation"),
             (ASSOCIATION, "association"),
@@ -166,8 +170,17 @@ impl Notation for UmlNotation {
 pub static ALONE: &[&dyn Notation] = &[&UmlNotation];
 
 /// The words UML's figures say, for the shell's catalogue: the texts, and the plural.
-pub const WORDS: &[&str] =
-    &["Class", "Class · {package}", "«interface»", "«interface» · {package}", "«enumeration»", "«enumeration» · {package}", "Package"];
+pub const WORDS: &[&str] = &[
+    "Class",
+    "Class · {package}",
+    "«interface»",
+    "«interface» · {package}",
+    "«enumeration»",
+    "«enumeration» · {package}",
+    "«dataType»",
+    "«dataType» · {package}",
+    "Package",
+];
 pub const PLURALS: &[&str] = &["+ {n} more member", "+ {n} more literal", "+ {n} more element"];
 
 /// The command registry of UML alone: the edit area, the shared element commands, UML's, the

@@ -1,6 +1,6 @@
-//! What a class diagram draws: a class or an interface as a plain card, an interface's eyebrow its
-//! keyword «interface»; an enumeration as a plain card with the keyword «enumeration» and one
-//! compartment of its literals, in their order; a class's or an interface's attributes
+//! What a class diagram draws: a class, an interface or a data type as a plain card, an
+//! interface's eyebrow its keyword «interface» and a data type's «dataType»; an enumeration as a plain card with the keyword «enumeration» and one
+//! compartment of its literals, in their order; a class's, an interface's or a data type's attributes
 //! (visibility, name, type, multiplicity) and its operations (visibility, name, parameters, return
 //! type), its name slanted when it is abstract; an association as a line with its name, its ends'
 //! roles and multiplicities, an open arrow at every end it navigates to (owner decision), and a
@@ -13,9 +13,9 @@ use archforge_diagram::figure::{Card, End, EndMark, Line, Row, Text, Tone};
 use archforge_mof::{Obj, Store, Value};
 
 use crate::{
-    ASSOCIATION, AggregationKind, CLASS, DEPENDENCY, ENUMERATION, GENERALIZATION, INTERFACE, INTERFACE_REALIZATION, ParameterDirectionKind,
-    VisibilityKind, association, behavioral_feature, class, dependency, generalization, interface_realization, literal_integer,
-    literal_unlimited_natural, multiplicity_element, named_element, operation, parameter, property, typed_element,
+    ASSOCIATION, AggregationKind, CLASS, DATA_TYPE, DEPENDENCY, ENUMERATION, GENERALIZATION, INTERFACE, INTERFACE_REALIZATION,
+    ParameterDirectionKind, VisibilityKind, association, behavioral_feature, class, dependency, generalization, interface_realization,
+    literal_integer, literal_unlimited_natural, multiplicity_element, named_element, operation, parameter, property, typed_element,
 };
 
 /// The most parameters an operation's row names, and the longest row a card draws: a row is
@@ -148,24 +148,25 @@ pub fn operation_text(store: &Store, op: Obj) -> String {
     cut(text)
 }
 
-/// A class's or an interface's card on `diagram`: its name, a class's slanted when it is abstract,
-/// its attributes and its operations; one of another package than the diagram's is drawn as an
-/// outsider, its package named in the eyebrow. A class's eyebrow says Class, an interface's its
-/// keyword; an enumeration's card is its own, and a package's too.
+/// A class's, an interface's or a data type's card on `diagram`: its name, a class's slanted when
+/// it is abstract, its attributes and its operations; one of another package than the diagram's is
+/// drawn as an outsider, its package named in the eyebrow. A class's eyebrow says Class, an
+/// interface's and a data type's their keyword («interface», «dataType»); an enumeration's card is
+/// its own, and a package's too.
 pub fn card(store: &Store, c: Obj, diagram: Obj) -> Option<Card> {
-    let interface = match store.class_of(c).ok()? {
+    // The eyebrow alone, and with the outsider's package beside it.
+    let (here, away, is_class) = match store.class_of(c).ok()? {
         k if k == crate::PACKAGE => return Some(package_card(store, c)),
         k if k == ENUMERATION => return Some(enumeration_card(store, c, diagram)),
-        k if k == CLASS => false,
-        k if k == INTERFACE => true,
+        k if k == CLASS => ("Class", "Class · {package}", true),
+        k if k == INTERFACE => ("«interface»", "«interface» · {package}", false),
+        k if k == DATA_TYPE => ("«dataType»", "«dataType» · {package}", false),
         _ => return None,
     };
     let elsewhere = elsewhere(store, c, diagram);
-    let eyebrow = match (elsewhere, interface) {
-        (Some(p), false) => Text::Said("Class · {package}", vec![("package", name(store, p))]),
-        (Some(p), true) => Text::Said("«interface» · {package}", vec![("package", name(store, p))]),
-        (None, false) => Text::said("Class"),
-        (None, true) => Text::said("«interface»"),
+    let eyebrow = match elsewhere {
+        Some(p) => Text::Said(away, vec![("package", name(store, p))]),
+        None => Text::said(here),
     };
     let row = |text, slanted| Row { mark: None, text, linked: false, slanted };
     let (mut room, mut hidden) = (MAX_CARD_ROWS, 0);
@@ -183,7 +184,7 @@ pub fn card(store: &Store, c: Obj, diagram: Obj) -> Option<Card> {
         hidden,
         elsewhere: elsewhere.is_some(),
         tone: Tone::Plain,
-        slanted: !interface && flag(store, c, class::IS_ABSTRACT),
+        slanted: is_class && flag(store, c, class::IS_ABSTRACT),
     })
 }
 

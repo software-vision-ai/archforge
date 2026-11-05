@@ -209,6 +209,7 @@ str		every column	所有列
 str		every class	所有类
 str		every interface	所有接口
 str		every enumeration	所有枚举
+str		every data type	所有数据类型
 str		every attribute	所有属性
 str		every operation	所有操作
 str		every association	所有关联
@@ -532,11 +533,14 @@ str		{parent} has no primary key yet, so there is nothing in {child} to point at
 str		Add class	添加类
 str		Add interface	添加接口
 str		Add enumeration	添加枚举
+str		Add data type	添加数据类型
 str		Class	类
 str		Interface	接口
 str		«interface»	«interface»
 str		Enumeration	枚举
 str		«enumeration»	«enumeration»
+str		Data type	数据类型
+str		«dataType»	«dataType»
 str		Classifier	分类器
 str		Classifier kinds	分类器类型
 str		Class diagram	类图
@@ -544,10 +548,12 @@ str		Class diagrams	类图
 str		Class · model, in every diagram	类 · 模型，在每个图中
 str		Interface · model, in every diagram	接口 · 模型，在每个图中
 str		Enumeration · model, in every diagram	枚举 · 模型，在每个图中
+str		Data type · model, in every diagram	数据类型 · 模型，在每个图中
 str		New package	新包
 str		On this class · {n}	此类上 · {n}
 str		On this interface · {n}	此接口上 · {n}
 str		On this enumeration · {n}	在此枚举上 · {n}
+str		On this data type · {n}	在此数据类型上 · {n}
 str		On this package · {n}	此包上 · {n}
 str		Package	包
 str		Package · model	包 · 模型
@@ -555,6 +561,7 @@ str		The diagram is of no package	该图不属于任何包
 str		This class	此类
 str		This interface	此接口
 str		This enumeration	此枚举
+str		This data type	此数据类型
 str		This package	此包
 plural		+ {n} more member	+ 另 {n} 个成员
 plural		+ {n} more literal	+ 另 {n} 个字面量
@@ -600,6 +607,7 @@ str		Visibility	可见性
 str		Place class	放置类
 str		Place interface	放置接口
 str		Place enumeration	放置枚举
+str		Place data type	放置数据类型
 str		Add package	添加包
 str		Place package	放置包
 str		Move package	移动包
@@ -615,10 +623,13 @@ str		A bound can be at most {max}.	界限最多为 {max}。
 str		A class realizes only an interface	类只能实现接口
 str		A relationship joins two classes or interfaces	关系连接两个类或接口
 str		An enumeration is a data type and joins no association	枚举是数据类型，不参与任何关联
+str		A data type joins no association	数据类型不参与任何关联
 str		An interface specializes only an interface	接口只能特化接口
 str		A class cannot specialize an interface	类不能特化接口
 str		An enumeration specializes only an enumeration	枚举只能特化枚举
 str		Only an enumeration specializes an enumeration	只有枚举能特化枚举
+str		A data type specializes only a data type	数据类型只能特化数据类型
+str		Only a data type specializes a data type	只有数据类型能特化数据类型
 str		A classifier cannot specialize itself	分类器不能特化自身
 str		This one specializes that one already	此项已特化该项
 str		That one specializes this one already, which would make a cycle	该项已特化此项，这会形成循环
@@ -675,6 +686,7 @@ str		{what} removed	已移除{what}
 str		Class · {package}	类 · {package}
 str		«interface» · {package}	«interface» · {package}
 str		«enumeration» · {package}	«enumeration» · {package}
+str		«dataType» · {package}	«dataType» · {package}
 str		{name} removed; what it held moved to {parent}	已移除 {name}；其内容已移至 {parent}
 # 关闭时未保存的更改
 str		Close and lose changes	关闭并丢弃更改

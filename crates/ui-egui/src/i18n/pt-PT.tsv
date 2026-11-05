@@ -209,6 +209,7 @@ str		every column	todas as colunas
 str		every class	todas as classes
 str		every interface	todas as interfaces
 str		every enumeration	todas as enumerações
+str		every data type	todos os tipos de dados
 str		every attribute	todos os atributos
 str		every operation	todas as operações
 str		every association	todas as associações
@@ -532,11 +533,14 @@ str		{parent} has no primary key yet, so there is nothing in {child} to point at
 str		Add class	Adicionar classe
 str		Add interface	Adicionar interface
 str		Add enumeration	Adicionar enumeração
+str		Add data type	Adicionar tipo de dados
 str		Class	Classe
 str		Interface	Interface
 str		«interface»	«interface»
 str		Enumeration	Enumeração
 str		«enumeration»	«enumeration»
+str		Data type	Tipo de dados
+str		«dataType»	«dataType»
 str		Classifier	Classificador
 str		Classifier kinds	Tipos de classificador
 str		Class diagram	Diagrama de classes
@@ -544,10 +548,12 @@ str		Class diagrams	Diagramas de classes
 str		Class · model, in every diagram	Classe · modelo, em cada diagrama
 str		Interface · model, in every diagram	Interface · modelo, em cada diagrama
 str		Enumeration · model, in every diagram	Enumeração · modelo, em cada diagrama
+str		Data type · model, in every diagram	Tipo de dados · modelo, em cada diagrama
 str		New package	Novo pacote
 str		On this class · {n}	Nesta classe · {n}
 str		On this interface · {n}	Nesta interface · {n}
 str		On this enumeration · {n}	Nesta enumeração · {n}
+str		On this data type · {n}	Neste tipo de dados · {n}
 str		On this package · {n}	Neste pacote · {n}
 str		Package	Pacote
 str		Package · model	Pacote · modelo
@@ -555,6 +561,7 @@ str		The diagram is of no package	O diagrama não é de nenhum pacote
 str		This class	Esta classe
 str		This interface	Esta interface
 str		This enumeration	Esta enumeração
+str		This data type	Este tipo de dados
 str		This package	Este pacote
 plural		+ {n} more member	+ {n} membro mais|+ {n} membros mais
 plural		+ {n} more literal	+ {n} literal mais|+ {n} literais mais
@@ -600,6 +607,7 @@ str		Visibility	Visibilidade
 str		Place class	Colocar classe
 str		Place interface	Colocar interface
 str		Place enumeration	Colocar enumeração
+str		Place data type	Colocar tipo de dados
 str		Add package	Adicionar pacote
 str		Place package	Colocar pacote
 str		Move package	Mover pacote
@@ -615,10 +623,13 @@ str		A bound can be at most {max}.	Um limite pode ser no máximo {max}.
 str		A class realizes only an interface	Uma classe só realiza uma interface
 str		A relationship joins two classes or interfaces	Uma relação liga duas classes ou interfaces
 str		An enumeration is a data type and joins no association	Uma enumeração é um tipo de dados e não faz parte de nenhuma associação
+str		A data type joins no association	Um tipo de dados não faz parte de nenhuma associação
 str		An interface specializes only an interface	Uma interface só especializa uma interface
 str		A class cannot specialize an interface	Uma classe não pode especializar uma interface
 str		An enumeration specializes only an enumeration	Uma enumeração só especializa uma enumeração
 str		Only an enumeration specializes an enumeration	Só uma enumeração especializa uma enumeração
+str		A data type specializes only a data type	Um tipo de dados só especializa um tipo de dados
+str		Only a data type specializes a data type	Só um tipo de dados especializa um tipo de dados
 str		A classifier cannot specialize itself	Um classificador não se pode especializar a si próprio
 str		This one specializes that one already	Este já especializa aquele
 str		That one specializes this one already, which would make a cycle	Aquele já especializa este, o que criaria um ciclo
@@ -675,6 +686,7 @@ str		{what} removed	Removido: {what}
 str		Class · {package}	Classe · {package}
 str		«interface» · {package}	«interface» · {package}
 str		«enumeration» · {package}	«enumeration» · {package}
+str		«dataType» · {package}	«dataType» · {package}
 str		{name} removed; what it held moved to {parent}	{name} removido; o conteúdo foi movido para {parent}
 # Alterações por guardar ao fechar
 str		Close and lose changes	Fechar e perder as alterações
