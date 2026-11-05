@@ -985,6 +985,23 @@ pub(crate) fn flush_description(shell: &mut Shell, subject: Option<Uuid>) {
     }
 }
 
+/// Writes the description being typed, on whichever element, as Enter would, before a save, a close
+/// or a quit takes stock of what the project holds; a draft refused before is tried again, so its
+/// refusal shows. Gives whether a draft is left: one whose write was refused, kept with the
+/// refusal as the notice, which the project counts as unsaved work.
+pub(crate) fn commit_description(shell: &mut Shell) -> bool {
+    if let Some(d) = shell.panels.description.clone() {
+        write_description(shell, d.target, d.text);
+    }
+    shell.panels.description.is_some()
+}
+
+/// Whether `panels` keep a description draft whose write was refused: unsaved work a close or a
+/// quit asks about.
+pub(crate) fn refused_description(panels: &State) -> bool {
+    panels.description.as_ref().is_some_and(|d| d.refused)
+}
+
 /// The description under the heading: typed in place, committed through `element.describe` on Enter
 /// or when the keyboard leaves it, and when the selection moves on ([`flush_description`]). It
 /// shows what the element's notation keeps: an ER element's description, a UML element's

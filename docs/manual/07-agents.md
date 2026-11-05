@@ -53,7 +53,9 @@ tools and `search_tools` in place of one tool per command. To try agent access b
   class, each with its attributes, operations and description) and
   `archforge://skills/effective/{id}` (the skills that apply to an element, optionally for one
   trigger: modelling, drawing, naming or export). Other elements are read through the tools:
-  packages with `uml.package.list`, relationships with `uml.relationship.list`.
+  packages with `uml_package_list` and a class's relationships with `uml_relationship_list`, or,
+  with `--compact`, `execute_command` given the command ids `uml.package.list` and
+  `uml.relationship.list`.
 
 Ask it in your own words, for example: *"Add a table Invoice to the Shop schema with an id
 primary key and a foreign key to Order."* The table appears on screen as the agent adds it.
