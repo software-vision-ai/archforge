@@ -144,20 +144,20 @@ pub(crate) fn popover(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, an
         );
         if resp.clicked() {
             shell.canvas.uml_relation = *kind;
-            shell.canvas.popover = false;
+            shell.canvas.popover = None;
         }
     }
     let outside = ui.input(|i| i.pointer.any_pressed() && !i.pointer.interact_pos().is_some_and(|pos| m.contains(pos) || anchor.contains(pos)));
     if outside || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-        shell.canvas.popover = false;
+        shell.canvas.popover = None;
     }
 }
 
-/// The class a node shows.
+/// The class or interface a node shows.
 fn class_of_node(store: &Store, node: Uuid) -> Option<Obj> {
     let n = store.by_uuid(node)?;
     let c = store.get(n, archforge_diagram::node::ELEMENT).ok()?.as_ref()?;
-    (store.class_of(c).ok() == Some(archforge_uml::CLASS)).then_some(c)
+    store.class_of(c).is_ok_and(archforge_uml::is_classifier).then_some(c)
 }
 
 /// Draws the chosen kind between the classes of two nodes, its line on diagram `d` with its name
@@ -214,7 +214,7 @@ pub(crate) fn connect_to_new(shell: &mut Shell, d: Obj, from_node: Uuid, x: f64,
         return;
     };
     let (Ok(package_id), Ok(diagram), Ok(from_id)) = (store.uuid(package), store.uuid(d), store.uuid(from)) else { return };
-    let names = archforge_uml::commands::classes(store, package).into_iter().map(|c| archforge_core::name_of(store, c));
+    let names = archforge_uml::commands::classifiers(store, package).into_iter().map(|c| archforge_core::name_of(store, c));
     let Some(name) = crate::explorer::fresh_name("Class", names, false) else {
         shell.canvas.notice = Some(tr("No free name is left"));
         return;

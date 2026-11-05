@@ -910,6 +910,20 @@ pub const TOOL_CLASS: Icon = Icon {
         L([0.0, 7.25], [14.0, 7.25]),
     ],
 };
+/// The classifier tool's face while it places an interface: a lollipop, a ring on a stem that
+/// stands on a short foot.
+pub const TOOL_INTERFACE: Icon = Icon {
+    size: [10.0, 14.0],
+    stroke: 1.1,
+    segments: &[
+        C([5.0, 0.5], [6.657, 0.5], [8.0, 1.843], [8.0, 3.5]),
+        C([8.0, 3.5], [8.0, 5.157], [6.657, 6.5], [5.0, 6.5]),
+        C([5.0, 6.5], [3.343, 6.5], [2.0, 5.157], [2.0, 3.5]),
+        C([2.0, 3.5], [2.0, 1.843], [3.343, 0.5], [5.0, 0.5]),
+        L([5.0, 6.5], [5.0, 13.0]),
+        L([1.5, 13.0], [8.5, 13.0]),
+    ],
+};
 /// A class's attribute in the Models tree: a small field.
 pub const ATTRIBUTE: Icon = Icon {
     size: [16.0, 16.0],
@@ -940,6 +954,20 @@ pub const CLASS: Icon = Icon {
         L([1.0, 14.0], [1.0, 2.0]),
         L([1.0, 6.0], [15.0, 6.0]),
         L([1.0, 10.0], [15.0, 10.0]),
+    ],
+};
+/// A UML interface in the Models tree and the classifier kinds: the lollipop, a ring on a stem
+/// that stands on a short foot.
+pub const INTERFACE: Icon = Icon {
+    size: [16.0, 16.0],
+    stroke: 1.3,
+    segments: &[
+        C([8.0, 1.5], [9.933, 1.5], [11.5, 3.067], [11.5, 5.0]),
+        C([11.5, 5.0], [11.5, 6.933], [9.933, 8.5], [8.0, 8.5]),
+        C([8.0, 8.5], [6.067, 8.5], [4.5, 6.933], [4.5, 5.0]),
+        C([4.5, 5.0], [4.5, 3.067], [6.067, 1.5], [8.0, 1.5]),
+        L([8.0, 8.5], [8.0, 14.0]),
+        L([4.0, 14.0], [12.0, 14.0]),
     ],
 };
 /// A UML package: a box with its tab at the top left.

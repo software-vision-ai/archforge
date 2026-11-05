@@ -224,7 +224,7 @@ pub(crate) fn popover(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, an
     shell.canvas.relationship = next;
     let outside = ui.input(|i| i.pointer.any_pressed() && !i.pointer.interact_pos().is_some_and(|pos| m.contains(pos) || anchor.contains(pos)));
     if outside || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-        shell.canvas.popover = false;
+        shell.canvas.popover = None;
     }
 }
 

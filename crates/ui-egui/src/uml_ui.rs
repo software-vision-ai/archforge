@@ -1,9 +1,9 @@
 //! What UML brings to the shell: the class diagram's tools and gestures (the
-//! Class tool places a class named in place, its card renames in place), and its packages and
-//! classes in the Models tree, the search and Properties.
+//! classifier tool places a class or an interface named in place, its card renames in place), and
+//! its packages, classes and interfaces in the Models tree, the search and Properties.
 
 use archforge_mof::{Obj, Store, Uuid};
-use archforge_uml::commands::{classes, package_of, packages};
+use archforge_uml::commands::{classifiers, package_of, packages};
 use egui::Rect;
 use serde_json::json;
 
@@ -13,6 +13,7 @@ use crate::i18n::tr;
 use crate::kinds::{DiagramKind, KindTool, ToolUse};
 use crate::notation_ui::{Added, Entry, NotationUi, Offer, Words};
 use crate::panels::Subject;
+use crate::uml_classifier::Classifier;
 use crate::uml_panel::{MemberKind, member_of};
 use crate::ux::{Palette, icons};
 
@@ -24,18 +25,31 @@ fn name(store: &Store, o: Obj) -> String {
     archforge_core::name_of(store, o)
 }
 
+/// Whether `o` is a class or an interface.
+fn classifier(store: &Store, o: Obj) -> bool {
+    class(store, o).is_some_and(archforge_uml::is_classifier)
+}
+
 /// The class diagram in the shell.
 pub(crate) struct UmlKind;
 
 const TOOLS: &[KindTool] = &[
-    KindTool { key: "class", icon: &icons::TOOL_CLASS, hint: "Class", use_: ToolUse::Place, chevron: None },
-    KindTool { key: "package", icon: &icons::PACKAGE, hint: "Package", use_: ToolUse::Place, chevron: None },
+    KindTool {
+        key: crate::uml_classifier::TOOL,
+        icon: &icons::TOOL_CLASS,
+        hint: "Class",
+        use_: ToolUse::Place,
+        chevron: Some(("classifier-kinds", "Classifier kinds")),
+        wide: false,
+    },
+    KindTool { key: "package", icon: &icons::PACKAGE, hint: "Package", use_: ToolUse::Place, chevron: None, wide: false },
     KindTool {
         key: "relationship",
         icon: &icons::TOOL_RELATIONSHIP,
         hint: "Relationship",
         use_: ToolUse::Connect,
         chevron: Some(("relationship-kinds", "Relationship kinds")),
+        wide: true,
     },
 ];
 
@@ -128,11 +142,11 @@ impl DiagramKind for UmlKind {
     }
 
     fn takes_part(&self, store: &Store, element: Obj) -> bool {
-        class(store, element) == Some(archforge_uml::CLASS)
+        classifier(store, element)
     }
 
-    /// A class in the diagram's package, its card centred under the click, as one undo step; then
-    /// its name is open for typing.
+    /// A class or an interface, as the classifier tool's kind says, in the diagram's package, its
+    /// card centred under the click, as one undo step; then its name is open for typing.
     fn place(&self, shell: &mut Shell, tool: &'static str, d: Obj, x: f64, y: f64) {
         if tool == "package" {
             place_package(shell, d, x, y);
@@ -149,15 +163,16 @@ impl DiagramKind for UmlKind {
             shell.canvas.notice = Some(tr("The diagram is of no package"));
             return;
         };
-        let Some(name) = fresh_name("Class", classes(store, package).into_iter().map(|c| name(store, c)), false) else {
+        let kind = shell.canvas.uml_classifier;
+        let Some(name) = fresh_name(kind.stem(), classifiers(store, package).into_iter().map(|c| name(store, c)), false) else {
             shell.canvas.notice = Some(tr("No free name is left"));
             return;
         };
         let (w, h) = archforge_uml::CLASS_SIZE;
         let (px, py) = ((x - w / 2.0).round(), (y - h / 2.0).round());
         let name_for_batch = name.clone();
-        let out = session.batch(&tr("Add class"), |b| {
-            let c = b.execute("uml.class.add", &json!({ "package": package_id.to_string(), "name": name_for_batch }))?;
+        let out = session.batch(&kind.add_step(), |b| {
+            let c = b.execute(kind.add_command(), &json!({ "package": package_id.to_string(), "name": name_for_batch }))?;
             let class = c.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string();
             b.execute("diagram.place", &json!({ "diagram": diagram_id.to_string(), "element": class, "x": px, "y": py, "width": w, "height": h }))?;
             Ok(())
@@ -176,17 +191,27 @@ impl DiagramKind for UmlKind {
         }
     }
 
-    /// The Relationship tool shows the kind it draws.
+    /// The classifier tool shows the kind it places, the Relationship tool the kind it draws.
     fn tool_face(&self, shell: &Shell, paint: &egui::Painter, p: &Palette, key: &str, b: Rect, ink: egui::Color32, active: bool) -> bool {
-        if key != "relationship" {
-            return false;
+        match key {
+            crate::uml_classifier::TOOL => crate::uml_classifier::tool_face(shell, paint, b, ink),
+            "relationship" => crate::uml_relate::tool_face(shell, paint, p, b, ink, active),
+            _ => return false,
         }
-        crate::uml_relate::tool_face(shell, paint, p, b, ink, active);
         true
     }
 
-    fn popover(&self, shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, chevron: Rect) {
-        crate::uml_relate::popover(shell, ui, p, r, chevron);
+    /// The classifier tool's tooltip names the kind it places.
+    fn tool_hint(&self, shell: &Shell, key: &str) -> Option<String> {
+        (key == crate::uml_classifier::TOOL).then(|| shell.canvas.uml_classifier.word())
+    }
+
+    fn popover(&self, shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, chevron: Rect, key: &str) {
+        if key == "classifier-kinds" {
+            crate::uml_classifier::popover(shell, ui, p, r, chevron);
+        } else {
+            crate::uml_relate::popover(shell, ui, p, r, chevron);
+        }
     }
 
     fn connect(&self, shell: &mut Shell, _tool: &'static str, d: Obj, from_node: Uuid, to_node: Uuid) {
@@ -206,20 +231,18 @@ impl DiagramKind for UmlKind {
     }
 
     fn rename(&self, shell: &mut Shell, element: Uuid, name: &str) -> Result<(), String> {
-        let package = shell
-            .session
-            .as_ref()
-            .map(|s| s.doc())
-            .is_some_and(|st| st.by_uuid(element).is_some_and(|o| class(st, o) == Some(archforge_uml::PACKAGE)));
-        if package {
-            return crate::editing::run(shell, "uml.package.rename", json!({ "package": element.to_string(), "name": name })).map(|_| ());
-        }
-        crate::editing::run(shell, "uml.class.rename", json!({ "class": element.to_string(), "name": name })).map(|_| ())
+        let store = shell.session.as_ref().map(|s| s.doc());
+        let (cmd, key) = match store.and_then(|st| st.by_uuid(element).map(|o| (st, o))) {
+            Some((st, o)) if class(st, o) == Some(archforge_uml::PACKAGE) => ("uml.package.rename", "package"),
+            Some((st, o)) => Classifier::of(st, o).unwrap_or_default().rename_command(),
+            None => Classifier::Class.rename_command(),
+        };
+        crate::editing::run(shell, cmd, json!({ key: element.to_string(), "name": name })).map(|_| ())
     }
 
-    /// A class, or a package on the diagram, goes from the model with ⇧⌫ (AR-95).
+    /// A class, an interface, or a package on the diagram, goes from the model with ⇧⌫ (AR-95).
     fn deletes(&self, store: &Store, element: Obj) -> bool {
-        matches!(class(store, element), Some(c) if c == archforge_uml::CLASS || c == archforge_uml::PACKAGE)
+        classifier(store, element) || class(store, element) == Some(archforge_uml::PACKAGE)
     }
 
     /// A package on a class diagram renames in place with a double click, as a class does.
@@ -274,8 +297,8 @@ impl DiagramKind for UmlKind {
         true
     }
 
-    /// A class from the tree, with its lines to the classes the diagram shows; one already there is
-    /// said so and left.
+    /// A class or an interface from the tree, with its lines to the classifiers the diagram shows;
+    /// one already there is said so and left.
     fn drop(&self, shell: &mut Shell, d: Obj, element: Uuid, at: (f64, f64)) {
         shell.canvas.notice = None;
         let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
@@ -283,7 +306,7 @@ impl DiagramKind for UmlKind {
             drop_package(shell, d, element, at);
             return;
         }
-        let Some(c) = store.by_uuid(element).filter(|c| class(store, *c) == Some(archforge_uml::CLASS)) else { return };
+        let Some((c, kind)) = store.by_uuid(element).and_then(|c| Some((c, Classifier::of(store, c)?))) else { return };
         if crate::editing::on_diagram(store, d, c) {
             shell.canvas.notice = Some(tr("Already on this diagram"));
             return;
@@ -296,7 +319,7 @@ impl DiagramKind for UmlKind {
             .filter(|l| archforge_diagram::Notation::ends(&notation, store, *l).is_some_and(|(a, b)| a == c || b == c))
             .collect();
         let (width, _) = archforge_uml::CLASS_SIZE;
-        crate::editing::place_with_lines(shell, d, c, at, (width, content_height(store, c)), &links, &notation, &tr("Place class"));
+        crate::editing::place_with_lines(shell, d, c, at, (width, content_height(store, c)), &links, &notation, &kind.place_step());
     }
 }
 
@@ -375,7 +398,7 @@ fn drop_package(shell: &mut Shell, d: Obj, element: Uuid, at: (f64, f64)) {
     }
 }
 
-/// How tall a class's card is to show its members: its attributes, the dividing line and its
+/// How tall a class's or an interface's card is to show its members: its attributes, the dividing line and its
 /// operations, an empty compartment a row; never less than a new class nor more than a node may be.
 fn content_height(store: &Store, c: Obj) -> f64 {
     members_height(archforge_uml::members::attributes(store, c).len(), archforge_uml::members::operations(store, c).len())
@@ -418,17 +441,22 @@ impl NotationUi for UmlUi {
         class(store, member) == Some(archforge_uml::PACKAGE)
     }
 
-    /// A package with the packages it holds, its classes, and each class's attributes and
-    /// operations, every level folded until opened.
+    /// A package with the packages it holds, its classes and interfaces, and each one's attributes
+    /// and operations, every level folded until opened.
     fn tree(&self, store: &Store, package: Obj, t: &Tree<'_>) -> Vec<Row> {
         package_rows(store, package, 0, t)
     }
 
     fn offers(&self, store: &Store, selection: Option<Obj>) -> Vec<Offer> {
         let offer = |key, word: String| Offer { key, word };
-        // A class or a package goes into the selected package, or the package of what is selected.
+        // A class, an interface or a package goes into the selected package, or the package of
+        // what is selected.
         match selection.and_then(|o| home_of(store, o)) {
-            Some(_) => vec![offer("class", tr("Class")), offer("package", tr("Package"))],
+            Some(_) => {
+                let mut out: Vec<Offer> = Classifier::ALL.iter().map(|k| offer(k.key(), k.word())).collect();
+                out.push(offer("package", tr("Package")));
+                out
+            }
             None => vec![offer("package", tr("Package"))],
         }
     }
@@ -453,14 +481,16 @@ impl NotationUi for UmlUi {
                 let parent = home.and_then(|h| store.uuid(h).ok()).map(|u| u.to_string()).unwrap_or_default();
                 crate::explorer::run(shell, "uml.package.add", json!({ "name": name, "parent": parent }))
             }
-            "class" => {
+            key => {
+                let kind = Classifier::ALL.into_iter().find(|k| k.key() == key)?;
                 let package = home?;
-                let Some(name) = fresh_name("Class", classes(store, package).into_iter().map(|c| name(store, c)), false) else { return no_name() };
+                let Some(name) = fresh_name(kind.stem(), classifiers(store, package).into_iter().map(|c| name(store, c)), false) else {
+                    return no_name();
+                };
                 let package_id = store.uuid(package).ok()?;
                 parents.push(package_id);
-                crate::explorer::run(shell, "uml.class.add", json!({ "package": package_id.to_string(), "name": name }))
+                crate::explorer::run(shell, kind.add_command(), json!({ "package": package_id.to_string(), "name": name }))
             }
-            _ => return None,
         };
         match out {
             Ok(out) => out.get("id").and_then(|v| v.as_str()).and_then(Uuid::parse).map(|id| Ok(Added { id, parents })),
@@ -471,16 +501,15 @@ impl NotationUi for UmlUi {
     fn rename(&self, store: &Store, obj: Obj) -> Option<(&'static str, &'static str)> {
         match class(store, obj)? {
             c if c == archforge_uml::PACKAGE => Some(("uml.package.rename", "package")),
-            c if c == archforge_uml::CLASS => Some(("uml.class.rename", "class")),
-            _ => None,
+            _ => Classifier::of(store, obj).map(Classifier::rename_command),
         }
     }
 
-    /// The relationships that go with a class, or with a package's classes.
+    /// The relationships that go with a class or an interface, or with a package's.
     fn consequences(&self, store: &Store, obj: Obj) -> (usize, usize, usize) {
         let held = match class(store, obj) {
-            Some(c) if c == archforge_uml::CLASS => vec![obj],
-            Some(c) if c == archforge_uml::PACKAGE => classes(store, obj),
+            Some(c) if archforge_uml::is_classifier(c) => vec![obj],
+            Some(c) if c == archforge_uml::PACKAGE => classifiers(store, obj),
             _ => Vec::new(),
         };
         let mut going: Vec<Obj> = held.into_iter().flat_map(|c| archforge_uml::relations::relationships_of(store, c)).collect();
@@ -491,16 +520,18 @@ impl NotationUi for UmlUi {
 
     fn has_children(&self, store: &Store, obj: Obj) -> bool {
         match class(store, obj) {
-            Some(c) if c == archforge_uml::PACKAGE => !classes(store, obj).is_empty() || !archforge_uml::commands::subpackages(store, obj).is_empty(),
-            Some(c) if c == archforge_uml::CLASS => has_members(store, obj),
+            Some(c) if c == archforge_uml::PACKAGE => {
+                !classifiers(store, obj).is_empty() || !archforge_uml::commands::subpackages(store, obj).is_empty()
+            }
+            Some(c) if archforge_uml::is_classifier(c) => has_members(store, obj),
             _ => false,
         }
     }
 
-    /// The package and every package and class with members under it.
+    /// The package and every package, class and interface with members under it.
     fn foldable(&self, store: &Store, package: Obj) -> Vec<Obj> {
         let mut out = vec![package];
-        out.extend(classes(store, package).into_iter().filter(|c| has_members(store, *c)));
+        out.extend(classifiers(store, package).into_iter().filter(|c| has_members(store, *c)));
         for sub in archforge_uml::commands::subpackages(store, package) {
             out.extend(self.foldable(store, sub));
         }
@@ -523,18 +554,19 @@ impl NotationUi for UmlUi {
         if class(store, obj) == Some(archforge_uml::PACKAGE) { package_of(store, obj) } else { None }
     }
 
-    /// A class dragged onto a package, or onto a class of another package, moves there; a
-    /// package dragged onto another package moves into it.
+    /// A class or an interface dragged onto a package, or onto a classifier of another package,
+    /// moves there; a package dragged onto another package moves into it.
     fn drop_on(&self, store: &Store, dragged: Obj, target: Obj) -> Option<(&'static str, serde_json::Value)> {
         let to = match class(store, target)? {
             c if c == archforge_uml::PACKAGE => target,
-            c if c == archforge_uml::CLASS => package_of(store, target)?,
+            c if archforge_uml::is_classifier(c) => package_of(store, target)?,
             _ => return None,
         };
         let id = |o: Obj| store.uuid(o).ok().map(|u| u.to_string());
         match class(store, dragged)? {
-            c if c == archforge_uml::CLASS && package_of(store, dragged) != Some(to) => {
-                Some(("uml.class.move", json!({ "class": id(dragged)?, "package": id(to)? })))
+            c if archforge_uml::is_classifier(c) && package_of(store, dragged) != Some(to) => {
+                let (cmd, key) = Classifier::of(store, dragged)?.move_command();
+                Some((cmd, json!({ key: id(dragged)?, "package": id(to)? })))
             }
             // Into itself or a package it holds too: the engine refuses it and says why (AR-102).
             c if c == archforge_uml::PACKAGE && package_of(store, dragged) != Some(to) => {
@@ -548,7 +580,7 @@ impl NotationUi for UmlUi {
     fn drop_refused(&self, store: &Store, dragged: Obj, target: Obj) -> bool {
         let to = match class(store, target) {
             Some(c) if c == archforge_uml::PACKAGE => target,
-            Some(c) if c == archforge_uml::CLASS => match package_of(store, target) {
+            Some(c) if archforge_uml::is_classifier(c) => match package_of(store, target) {
                 Some(p) => p,
                 None => return false,
             },
@@ -564,10 +596,11 @@ impl NotationUi for UmlUi {
                 let detail = if at.is_empty() { tr("Package") } else { format!("{} · {at}", tr("Package")) };
                 Some(Entry { icon: &icons::PACKAGE, order: 1, label: name(store, o), detail })
             }
-            c if c == archforge_uml::CLASS => {
+            c if archforge_uml::is_classifier(c) => {
+                let kind = Classifier::of(store, o)?;
                 let at = package_of(store, o).map(|p| name(store, p)).unwrap_or_default();
-                let detail = if at.is_empty() { tr("Class") } else { format!("{} · {at}", tr("Class")) };
-                Some(Entry { icon: &icons::CLASS, order: 2, label: name(store, o), detail })
+                let detail = if at.is_empty() { kind.word() } else { format!("{} · {at}", kind.word()) };
+                Some(Entry { icon: kind.icon(), order: 2, label: name(store, o), detail })
             }
             _ => None,
         }
@@ -587,6 +620,9 @@ impl NotationUi for UmlUi {
         Some(match class(store, o)? {
             c if c == archforge_uml::PACKAGE => words(tr("Package · model"), tr("Package"), tr("This package"), tr("On this package · {n}")),
             c if c == archforge_uml::CLASS => words(tr("Class · model, in every diagram"), tr("Class"), tr("This class"), tr("On this class · {n}")),
+            c if c == archforge_uml::INTERFACE => {
+                words(tr("Interface · model, in every diagram"), tr("Interface"), tr("This interface"), tr("On this interface · {n}"))
+            }
             c if c == archforge_uml::ASSOCIATION => {
                 words(tr("Association · model"), tr("Association"), tr("This association"), tr("On this association · {n}"))
             }
@@ -603,17 +639,17 @@ impl NotationUi for UmlUi {
         })
     }
 
-    /// A member's panel is its class's.
+    /// A member's panel is its class's or its interface's.
     fn heading(&self, store: &Store, o: Obj) -> Option<String> {
-        member_of(store, o).map(|_| tr("Class"))
+        member_of(store, o).and_then(|(c, _)| Classifier::of(store, c)).map(Classifier::word)
     }
 
-    /// A package's name; a class's panel, which a member's selection shows too.
+    /// A package's name; a class's or an interface's panel, which a member's selection shows too.
     fn body(&self, shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, subject: &Subject) {
         let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
         let Some(o) = subject.obj else { return };
         match class(store, o) {
-            Some(c) if c == archforge_uml::CLASS => return crate::uml_panel::class_body(shell, ui, p, r, y, subject),
+            Some(c) if archforge_uml::is_classifier(c) => return crate::uml_panel::class_body(shell, ui, p, r, y, subject),
             Some(c) if [archforge_uml::ASSOCIATION, archforge_uml::GENERALIZATION, archforge_uml::DEPENDENCY].contains(&c) => {
                 return crate::uml_relate::body(shell, ui, p, r, y, subject);
             }
@@ -621,8 +657,8 @@ impl NotationUi for UmlUi {
         }
         if let Some((c, _)) = member_of(store, o) {
             let Some(words) = self.words(store, c) else { return };
-            let Ok(id) = store.uuid(c) else { return };
-            let of = Subject::of(c, id, archforge_uml::CLASS, words);
+            let (Ok(id), Ok(metaclass)) = (store.uuid(c), store.class_of(c)) else { return };
+            let of = Subject::of(c, id, metaclass, words);
             return crate::uml_panel::class_body(shell, ui, p, r, y, &of);
         }
         if class(store, o) == Some(archforge_uml::PACKAGE) && archforge_uml::commands::root_package(store) != Some(o) {
@@ -634,11 +670,12 @@ impl NotationUi for UmlUi {
     }
 }
 
-/// The package an element belongs in: a package itself, a class's, or a member's class's.
+/// The package an element belongs in: a package itself, a class's or an interface's, or a member's
+/// owner's.
 fn home_of(store: &Store, o: Obj) -> Option<Obj> {
     match class(store, o)? {
         c if c == archforge_uml::PACKAGE => Some(o),
-        c if c == archforge_uml::CLASS => package_of(store, o),
+        c if archforge_uml::is_classifier(c) => package_of(store, o),
         _ => member_of(store, o).and_then(|(c, _)| package_of(store, c)),
     }
 }
@@ -659,17 +696,18 @@ fn has_members(store: &Store, c: Obj) -> bool {
 }
 
 /// A package's rows at `depth`: the package, then, when open, its skills, the packages it holds,
-/// its classes and their members. A row whose name holds the filter shows with the rows above it.
+/// its classes and interfaces, in its order, and their members. A row whose name holds the filter shows with the rows above it.
 fn package_rows(store: &Store, package: Obj, depth: u8, t: &Tree<'_>) -> Vec<Row> {
     let mut under = t.skill_rows(package, depth.saturating_add(1));
     for sub in archforge_uml::commands::subpackages(store, package) {
         under.extend(package_rows(store, sub, depth.saturating_add(1), t));
     }
-    for c in classes(store, package) {
+    for c in classifiers(store, package) {
         under.extend(class_rows(store, c, depth.saturating_add(1), t));
     }
     let label = name(store, package);
-    let empty = t.skills(package).is_empty() && archforge_uml::commands::subpackages(store, package).is_empty() && classes(store, package).is_empty();
+    let empty =
+        t.skills(package).is_empty() && archforge_uml::commands::subpackages(store, package).is_empty() && classifiers(store, package).is_empty();
     if !t.matches(&label) && under.is_empty() {
         return Vec::new();
     }
@@ -686,8 +724,8 @@ fn package_rows(store: &Store, package: Obj, depth: u8, t: &Tree<'_>) -> Vec<Row
     out
 }
 
-/// A class's rows: the class, draggable onto a diagram or a package, then, when open, its skills,
-/// its attributes and operations, each with its type.
+/// A class's or an interface's rows: itself, draggable onto a diagram or a package, then, when
+/// open, its skills, its attributes and operations, each with its type.
 fn class_rows(store: &Store, c: Obj, depth: u8, t: &Tree<'_>) -> Vec<Row> {
     let mut members = t.skill_rows(c, depth.saturating_add(1));
     for a in archforge_uml::members::attributes(store, c) {
@@ -712,8 +750,9 @@ fn class_rows(store: &Store, c: Obj, depth: u8, t: &Tree<'_>) -> Vec<Row> {
     }
     let expandable = if t.filtering() { !members.is_empty() } else { !t.skills(c).is_empty() || has_members(store, c) };
     let expanded = expandable && t.open(c);
+    let kind = Classifier::of(store, c).unwrap_or_default();
     let mut out: Vec<Row> =
-        t.row(c, depth, "class", &icons::CLASS, label).map(|row| Row { expandable, expanded, draggable: true, ..row }).into_iter().collect();
+        t.row(c, depth, kind.key(), kind.icon(), label).map(|row| Row { expandable, expanded, draggable: true, ..row }).into_iter().collect();
     if expanded {
         out.extend(members);
     }
@@ -886,7 +925,7 @@ pub(crate) fn open_sample(shell: &mut Shell) -> Result<Uuid, String> {
     let store = session.doc();
     let pkg = store.by_uuid(pkg_uuid).ok_or("the sample's package")?;
     let uuid = |o: Obj| store.uuid(o).map(|u| u.to_string()).unwrap_or_default();
-    let by_name = |n: &str| classes(store, pkg).into_iter().find(|c| name(store, *c) == n);
+    let by_name = |n: &str| classifiers(store, pkg).into_iter().find(|c| name(store, *c) == n);
     let layout = [
         ("Customer", 80, 80),
         ("Order", 560, 80),

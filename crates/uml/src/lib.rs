@@ -29,6 +29,15 @@ pub fn universe() -> Result<Arc<Universe>, MetaError> {
 /// The class diagram kind: a diagram of a package that shows its classes as cards.
 pub const CLASS_DIAGRAM: &str = "uml.class";
 
+/// The kinds of classifier a class diagram places, each a card with its members: a class and an
+/// interface.
+pub const CLASSIFIERS: [ClassId; 2] = [CLASS, INTERFACE];
+
+/// Whether `class` is one of the [`CLASSIFIERS`].
+pub fn is_classifier(class: ClassId) -> bool {
+    CLASSIFIERS.contains(&class)
+}
+
 /// A class card's width and height when the user names none: the header, an attribute row, an
 /// operation row and the line between them.
 pub const CLASS_SIZE: (f64, f64) = (240.0, 136.0);
@@ -36,7 +45,7 @@ pub const CLASS_SIZE: (f64, f64) = (240.0, 136.0);
 pub const PACKAGE_SIZE: (f64, f64) = (240.0, 148.0);
 
 /// UML in a project's view: class diagrams of a package showing its
-/// classes as plain cards with their attributes and operations, and the associations,
+/// classes and interfaces as plain cards with their attributes and operations, and the associations,
 /// generalizations and dependencies between them as lines (`figures`); packages and classes removed
 /// with what they hold.
 pub struct UmlNotation;
@@ -64,7 +73,7 @@ impl Notation for UmlNotation {
     }
 
     fn shows(&self, _kind: &str, class: ClassId) -> bool {
-        class == CLASS || class == PACKAGE
+        is_classifier(class) || class == PACKAGE
     }
 
     /// A package's diagram shows its own classes and, as outsiders, classes of other packages; and
@@ -94,7 +103,8 @@ impl Notation for UmlNotation {
         figures::text_slots(class)
     }
 
-    /// A class: its name, slanted when abstract, its attributes, then its operations.
+    /// A class or an interface: its name, a class's slanted when abstract, its attributes, then its
+    /// operations.
     fn card(&self, store: &Store, element: Obj, diagram: Obj) -> Option<Card> {
         figures::card(store, element, diagram)
     }
@@ -132,7 +142,7 @@ impl Notation for UmlNotation {
 pub static ALONE: &[&dyn Notation] = &[&UmlNotation];
 
 /// The words UML's figures say, for the shell's catalogue: the texts, and the plural.
-pub const WORDS: &[&str] = &["Class", "Class · {package}", "Package"];
+pub const WORDS: &[&str] = &["Class", "Class · {package}", "«interface»", "«interface» · {package}", "Package"];
 pub const PLURALS: &[&str] = &["+ {n} more member", "+ {n} more element"];
 
 /// The command registry of UML alone: the edit area, the shared element commands, UML's, the

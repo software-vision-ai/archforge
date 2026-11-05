@@ -1,6 +1,7 @@
-//! A class's members: attributes (visibility, name, type, multiplicity,
-//! static) and operations (visibility, name, parameters, return type, static, abstract), added,
-//! changed, moved and listed; a class made abstract or not. A type is named by an element's id
+//! A class's or an interface's members: attributes (visibility, name, type,
+//! multiplicity, static) and operations (visibility, name, parameters, return type, static,
+//! abstract), added, changed, moved and listed; a class made abstract or not. An interface's
+//! members are public, as UML has them. A type is named by an element's id
 //! (a class of the model, or any type it holds) or by a built-in type's name: Integer, String,
 //! Boolean, Real or UnlimitedNatural, which the project keeps in a package named Types, made the
 //! first time one is used (owner decision). A multiplicity is typed (`1`, `0..1`, `*`, `1..*`,
@@ -11,9 +12,9 @@ use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, always, cm
 use archforge_mof::{Obj, Store, TypeRef, Uuid, Value};
 use serde_json::{Value as Json, json};
 
-use crate::commands::{fail, id_of, name_of, packages, refuse, set_name, short, text, uuid_of};
+use crate::commands::{classifier_of, fail, id_of, name_of, packages, refuse, set_name, short, text, uuid_of};
 use crate::{
-    CLASS, OPERATION, PACKAGE, PARAMETER, PRIMITIVE_TYPE, PROPERTY, TYPE, behavioral_feature, class, feature, literal_integer,
+    CLASS, INTERFACE, OPERATION, PACKAGE, PARAMETER, PRIMITIVE_TYPE, PROPERTY, TYPE, behavioral_feature, class, feature, interface, literal_integer,
     literal_unlimited_natural, multiplicity_element, named_element, operation, package, parameter, property, typed_element,
 };
 
@@ -29,13 +30,26 @@ pub const MAX_PARAMETERS: usize = 64;
 /// The largest bound a multiplicity names.
 pub const MAX_BOUND: u64 = 1_000_000;
 /// Why a command is not available.
-pub const NO_CLASSES: &str = "There is no class yet.";
+pub const NO_CLASSES: &str = "There is no class or interface yet.";
 
 /// The visibilities, in the metamodel's order, as the commands name them.
 const VISIBILITIES: [&str; 4] = ["public", "private", "protected", "package"];
 
 fn has_classes(f: &Facts<'_, Store, ProjectView>) -> Result<(), &'static str> {
-    if f.doc.alive().any(|o| f.doc.class_of(o).ok() == Some(CLASS)) { Ok(()) } else { Err(NO_CLASSES) }
+    if f.doc.alive().any(|o| f.doc.class_of(o).is_ok_and(crate::is_classifier)) { Ok(()) } else { Err(NO_CLASSES) }
+}
+
+fn has_class(f: &Facts<'_, Store, ProjectView>) -> Result<(), &'static str> {
+    if f.doc.alive().any(|o| f.doc.class_of(o).ok() == Some(CLASS)) { Ok(()) } else { Err("There is no class yet.") }
+}
+
+/// The lists a class or an interface keeps its attributes and its operations in.
+pub fn member_lists(store: &Store, c: Obj) -> Option<(archforge_mof::PropId, archforge_mof::PropId)> {
+    match store.class_of(c).ok()? {
+        k if k == CLASS => Some((class::OWNED_ATTRIBUTE, class::OWNED_OPERATION)),
+        k if k == INTERFACE => Some((interface::OWNED_ATTRIBUTE, interface::OWNED_OPERATION)),
+        _ => None,
+    }
 }
 
 fn list(store: &Store, o: Obj, prop: archforge_mof::PropId) -> Vec<Obj> {
@@ -46,14 +60,15 @@ fn one(store: &Store, o: Obj, prop: archforge_mof::PropId) -> Option<Obj> {
     store.get(o, prop).ok().and_then(|v| v.as_ref()).filter(|x| store.is_alive(*x))
 }
 
-/// A class's attributes: the properties it owns that are no association's end.
+/// A class's or an interface's attributes: the properties it owns that are no association's end.
 pub fn attributes(store: &Store, c: Obj) -> Vec<Obj> {
-    list(store, c, class::OWNED_ATTRIBUTE).into_iter().filter(|a| one(store, *a, property::ASSOCIATION).is_none()).collect()
+    let Some((attributes, _)) = member_lists(store, c) else { return Vec::new() };
+    list(store, c, attributes).into_iter().filter(|a| one(store, *a, property::ASSOCIATION).is_none()).collect()
 }
 
-/// A class's operations.
+/// A class's or an interface's operations.
 pub fn operations(store: &Store, c: Obj) -> Vec<Obj> {
-    list(store, c, class::OWNED_OPERATION)
+    member_lists(store, c).map(|(_, operations)| list(store, c, operations)).unwrap_or_default()
 }
 
 /// An operation's parameters, the return one apart: (the ones it takes, its return parameter).
@@ -186,27 +201,37 @@ fn set_type(store: &mut Store, o: Obj, ty: Option<Obj>) -> Result<(), CommandErr
     store.set(o, typed_element::TYPE, ty.map_or(Value::Null, Value::Ref)).map_err(fail)
 }
 
-/// The visibility under `key`, public when none is named: every member has one.
-fn visibility(p: &Params, key: &str) -> Result<Value, CommandError> {
-    match text(p, key) {
-        "" => Ok(Value::Enum(0)),
+/// The visibility under `key`, public when none is named: every member has one. An interface's
+/// (`owner`'s) members are all public.
+fn visibility(store: &Store, owner: Obj, p: &Params, key: &str) -> Result<Value, CommandError> {
+    let v = match text(p, key) {
+        "" => Value::Enum(0),
         v => VISIBILITIES
             .iter()
             .position(|w| *w == v)
             .map(|i| Value::Enum(i as u32))
-            .ok_or_else(|| refuse(key, format!("{v:?} is not one of {}", VISIBILITIES.join(", ")))),
+            .ok_or_else(|| refuse(key, format!("{v:?} is not one of {}", VISIBILITIES.join(", "))))?,
+    };
+    if v != Value::Enum(0) && store.class_of(owner).ok() == Some(INTERFACE) {
+        return Err(refuse(key, "an interface's members are public"));
     }
+    Ok(v)
 }
 
-/// A member's name: a name, told apart from the class's other attributes when it is one.
-fn check_name(store: &Store, name: &str, siblings: &[Obj], except: Option<Obj>) -> Result<(), CommandError> {
+/// A member's name: a name, told apart from its owner's other attributes when it is one.
+fn check_name(store: &Store, owner: Obj, name: &str, siblings: &[Obj], except: Option<Obj>) -> Result<(), CommandError> {
     if let Some(p) = archforge_core::skills::name_problem(name, crate::commands::MAX_NAME) {
         return Err(refuse("name", format!("the name {p}")));
     }
     if siblings.iter().any(|s| Some(*s) != except && name_of(store, *s).to_lowercase() == name.to_lowercase()) {
-        return Err(refuse("name", format!("the class has an attribute named {name} already")));
+        return Err(refuse("name", format!("the {} has an attribute named {name} already", crate::commands::what(store, owner))));
     }
     Ok(())
+}
+
+/// The class or interface that owns `member` in its list of attributes or operations.
+fn owner_of(store: &Store, member: Obj) -> Option<Obj> {
+    store.container(member).ok().flatten().map(|(c, _)| c).filter(|c| store.class_of(*c).is_ok_and(crate::is_classifier))
 }
 
 /// Where in the list `at` puts a member: -1 or past the end for the end.
@@ -222,10 +247,11 @@ fn select(ctx: &mut C<'_>, o: Obj) {
 }
 
 fn attribute_add(ctx: &mut C<'_>, p: &Params) -> R {
-    let c = id_of(ctx.doc, p, "class", CLASS, "a class")?;
+    let c = classifier_of(ctx.doc, p, "class")?;
+    let Some((owned, _)) = member_lists(ctx.doc, c) else { return Err(refuse("class", "it keeps no attributes")) };
     let name = text(p, "name");
-    check_name(ctx.doc, name, &attributes(ctx.doc, c), None)?;
-    let vis = visibility(p, "visibility")?;
+    check_name(ctx.doc, c, name, &attributes(ctx.doc, c), None)?;
+    let vis = visibility(ctx.doc, c, p, "visibility")?;
     let a = ctx.doc.create(PROPERTY).map_err(fail)?;
     set_name(ctx.doc, a, name)?;
     ctx.doc.set(a, named_element::VISIBILITY, vis).map_err(fail)?;
@@ -233,21 +259,20 @@ fn attribute_add(ctx: &mut C<'_>, p: &Params) -> R {
     let ty = resolve_type(ctx.doc, "type", text(p, "type"))?;
     set_type(ctx.doc, a, ty)?;
     set_multiplicity(ctx.doc, a, text(p, "multiplicity"), "multiplicity")?;
-    let at = place(p, list(ctx.doc, c, class::OWNED_ATTRIBUTE).len());
-    ctx.doc.insert(c, class::OWNED_ATTRIBUTE, at, Value::Ref(a)).map_err(fail)?;
+    let at = place(p, list(ctx.doc, c, owned).len());
+    ctx.doc.insert(c, owned, at, Value::Ref(a)).map_err(fail)?;
     select(ctx, a);
     Ok(json!({ "id": uuid_of(ctx.doc, a)? }))
 }
 
 fn attribute_set(ctx: &mut C<'_>, p: &Params) -> R {
     let a = id_of(ctx.doc, p, "attribute", PROPERTY, "an attribute")?;
-    let c = ctx.doc.container(a).map_err(fail)?.map(|(c, _)| c).filter(|c| ctx.doc.class_of(*c).ok() == Some(CLASS));
-    let Some(c) = c.filter(|_| one(ctx.doc, a, property::ASSOCIATION).is_none()) else {
-        return Err(refuse("attribute", "it is not a class's attribute"));
+    let Some(c) = owner_of(ctx.doc, a).filter(|_| one(ctx.doc, a, property::ASSOCIATION).is_none()) else {
+        return Err(refuse("attribute", "it is not a class's or an interface's attribute"));
     };
     let name = text(p, "name");
-    check_name(ctx.doc, name, &attributes(ctx.doc, c), Some(a))?;
-    let vis = visibility(p, "visibility")?;
+    check_name(ctx.doc, c, name, &attributes(ctx.doc, c), Some(a))?;
+    let vis = visibility(ctx.doc, c, p, "visibility")?;
     set_name(ctx.doc, a, name)?;
     ctx.doc.set(a, named_element::VISIBILITY, vis).map_err(fail)?;
     ctx.doc.set(a, feature::IS_STATIC, Value::Bool(p.bool("static").unwrap_or(false))).map_err(fail)?;
@@ -257,23 +282,26 @@ fn attribute_set(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, a)? }))
 }
 
-/// Moves a member to `at` within its class's list of members of its kind.
-fn member_move(ctx: &mut C<'_>, p: &Params, key: &str, class_of: archforge_mof::ClassId, prop: archforge_mof::PropId, what: &str) -> R {
+/// Moves a member to `at` within its owner's list of members of its kind, attributes (`first`) or
+/// operations.
+fn member_move(ctx: &mut C<'_>, p: &Params, key: &str, class_of: archforge_mof::ClassId, first: bool, what: &str) -> R {
     let m = id_of(ctx.doc, p, key, class_of, what)?;
-    let Some((c, _)) = ctx.doc.container(m).map_err(fail)? else { return Err(refuse(key, "it belongs to no class")) };
+    let lists = owner_of(ctx.doc, m).and_then(|c| Some((c, member_lists(ctx.doc, c)?)));
+    let Some((c, (attributes, operations))) = lists else { return Err(refuse(key, "it belongs to no class or interface")) };
+    let prop = if first { attributes } else { operations };
     let all = list(ctx.doc, c, prop);
-    let from = all.iter().position(|x| *x == m).ok_or_else(|| refuse(key, "it belongs to no class"))? as u32;
+    let from = all.iter().position(|x| *x == m).ok_or_else(|| refuse(key, "it belongs to no class or interface"))? as u32;
     let to = place(p, all.len()).min(all.len().saturating_sub(1) as u32);
     ctx.doc.move_item(c, prop, from, to).map_err(fail)?;
     Ok(json!({ "id": uuid_of(ctx.doc, m)? }))
 }
 
 fn attribute_move(ctx: &mut C<'_>, p: &Params) -> R {
-    member_move(ctx, p, "attribute", PROPERTY, class::OWNED_ATTRIBUTE, "an attribute")
+    member_move(ctx, p, "attribute", PROPERTY, true, "an attribute")
 }
 
 fn operation_move(ctx: &mut C<'_>, p: &Params) -> R {
-    member_move(ctx, p, "operation", OPERATION, class::OWNED_OPERATION, "an operation")
+    member_move(ctx, p, "operation", OPERATION, false, "an operation")
 }
 
 /// Gives an operation the parameters under `parameters` and the return type under `returns`,
@@ -318,12 +346,13 @@ fn set_signature(store: &mut Store, op: Obj, p: &Params) -> Result<(), CommandEr
     Ok(())
 }
 
-fn set_operation(store: &mut Store, op: Obj, p: &Params) -> Result<(), CommandError> {
+/// Gives operation `op` of `owner` what the parameters say.
+fn set_operation(store: &mut Store, owner: Obj, op: Obj, p: &Params) -> Result<(), CommandError> {
     let name = text(p, "name");
     if let Some(problem) = archforge_core::skills::name_problem(name, crate::commands::MAX_NAME) {
         return Err(refuse("name", format!("the name {problem}")));
     }
-    let vis = visibility(p, "visibility")?;
+    let vis = visibility(store, owner, p, "visibility")?;
     set_name(store, op, name)?;
     store.set(op, named_element::VISIBILITY, vis).map_err(fail)?;
     store.set(op, feature::IS_STATIC, Value::Bool(p.bool("static").unwrap_or(false))).map_err(fail)?;
@@ -332,18 +361,20 @@ fn set_operation(store: &mut Store, op: Obj, p: &Params) -> Result<(), CommandEr
 }
 
 fn operation_add(ctx: &mut C<'_>, p: &Params) -> R {
-    let c = id_of(ctx.doc, p, "class", CLASS, "a class")?;
+    let c = classifier_of(ctx.doc, p, "class")?;
+    let Some((_, owned)) = member_lists(ctx.doc, c) else { return Err(refuse("class", "it keeps no operations")) };
     let op = ctx.doc.create(OPERATION).map_err(fail)?;
-    set_operation(ctx.doc, op, p)?;
-    let at = place(p, list(ctx.doc, c, class::OWNED_OPERATION).len());
-    ctx.doc.insert(c, class::OWNED_OPERATION, at, Value::Ref(op)).map_err(fail)?;
+    set_operation(ctx.doc, c, op, p)?;
+    let at = place(p, list(ctx.doc, c, owned).len());
+    ctx.doc.insert(c, owned, at, Value::Ref(op)).map_err(fail)?;
     select(ctx, op);
     Ok(json!({ "id": uuid_of(ctx.doc, op)? }))
 }
 
 fn operation_set(ctx: &mut C<'_>, p: &Params) -> R {
     let op = id_of(ctx.doc, p, "operation", OPERATION, "an operation")?;
-    set_operation(ctx.doc, op, p)?;
+    let owner = owner_of(ctx.doc, op).unwrap_or(op);
+    set_operation(ctx.doc, owner, op, p)?;
     Ok(json!({ "id": uuid_of(ctx.doc, op)? }))
 }
 
@@ -368,10 +399,10 @@ fn flag(store: &Store, o: Obj, prop: archforge_mof::PropId) -> bool {
     store.get(o, prop).ok().and_then(|v| v.as_bool()).unwrap_or(false)
 }
 
-/// A class with its members, as an agent reads it.
+/// A class or an interface with its members, as an agent reads it.
 fn class_get(ctx: &mut C<'_>, p: &Params) -> R {
     let store = &*ctx.doc;
-    let c = id_of(store, p, "class", CLASS, "a class")?;
+    let c = classifier_of(store, p, "class")?;
     let attrs: Vec<Json> = attributes(store, c)
         .into_iter()
         .map(|a| {
@@ -400,9 +431,11 @@ fn class_get(ctx: &mut C<'_>, p: &Params) -> R {
             })
         })
         .collect();
-    Ok(
-        json!({ "id": uuid_of(store, c)?, "name": name_of(store, c), "abstract": flag(store, c, class::IS_ABSTRACT), "attributes": attrs, "operations": ops }),
-    )
+    let is_class = store.class_of(c).ok() == Some(CLASS);
+    Ok(json!({
+        "id": uuid_of(store, c)?, "kind": crate::commands::what(store, c), "name": name_of(store, c),
+        "abstract": is_class && flag(store, c, class::IS_ABSTRACT), "attributes": attrs, "operations": ops,
+    }))
 }
 
 /// The types a member may have: the built-in ones (made when first used) and the model's own.
@@ -428,7 +461,7 @@ macro_rules! multiplicity_line {
 }
 macro_rules! visibility_line {
     () => {
-        "visibility: string = \"public\", public|private|protected|package; the visibility"
+        "visibility: string = \"public\", public|private|protected|package; the visibility, public for an interface's member"
     };
 }
 macro_rules! operation_lines {
@@ -453,7 +486,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             &["Class"],
             None,
             "class: string; the class's id\nabstract: bool = false; has no instances of its own",
-            has_classes,
+            has_class,
             class_set
         ),
         cmd!(
@@ -462,7 +495,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             &["Class"],
             None,
             concat!(
-                "class: string; the class's id\nname: string; the attribute's name\n",
+                "class: string; the class's or interface's id\nname: string; the attribute's name\n",
                 type_line!(),
                 "\n",
                 multiplicity_line!(),
@@ -505,7 +538,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             &["Class"],
             None,
             concat!(
-                "class: string; the class's id\n",
+                "class: string; the class's or interface's id\n",
                 operation_lines!(),
                 "\nat: integer = -1, -1..1000000; where among the operations, -1 for the end"
             ),
@@ -530,7 +563,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             has_classes,
             operation_move
         ),
-        cmd!(query "uml.class.get", "Get class", &["Class"], None, "class: string; the class's id", has_classes, class_get),
+        cmd!(query "uml.class.get", "Get class", &["Class", "Interface"], None, "class: string; the class's or interface's id", has_classes, class_get),
         cmd!(query "uml.type.list", "List types", &["Class"], None, "", always, type_list),
     ]
 }

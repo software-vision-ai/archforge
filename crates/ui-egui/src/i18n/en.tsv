@@ -524,17 +524,25 @@ str		Partial	Partial
 str		{parent} has no primary key yet, so there is nothing in {child} to point at.	{parent} has no primary key yet, so there is nothing in {child} to point at.
 # Class diagrams
 str		Add class	Add class
+str		Add interface	Add interface
 str		Class	Class
+str		Interface	Interface
+str		«interface»	«interface»
+str		Classifier	Classifier
+str		Classifier kinds	Classifier kinds
 str		Class diagram	Class diagram
 str		Class diagrams	Class diagrams
 str		Class · model, in every diagram	Class · model, in every diagram
+str		Interface · model, in every diagram	Interface · model, in every diagram
 str		New package	New package
 str		On this class · {n}	On this class · {n}
+str		On this interface · {n}	On this interface · {n}
 str		On this package · {n}	On this package · {n}
 str		Package	Package
 str		Package · model	Package · model
 str		The diagram is of no package	The diagram is of no package
 str		This class	This class
+str		This interface	This interface
 str		This package	This package
 plural		+ {n} more member	+ {n} more member|+ {n} more members
 plural		+ {n} more element	+ {n} more element|+ {n} more elements
@@ -568,6 +576,7 @@ str		This attribute	This attribute
 str		This operation	This operation
 str		Visibility	Visibility
 str		Place class	Place class
+str		Place interface	Place interface
 str		Add package	Add package
 str		Place package	Place package
 str		Move package	Move package
@@ -621,6 +630,7 @@ str		Type a whole number, a range such as 2..5, or *.	Type a whole number, a ran
 str		{what} removed	{what} removed
 # Packages
 str		Class · {package}	Class · {package}
+str		«interface» · {package}	«interface» · {package}
 str		{name} removed; what it held moved to {parent}	{name} removed; what it held moved to {parent}
 # Unsaved changes on close
 str		Close and lose changes	Close and lose changes

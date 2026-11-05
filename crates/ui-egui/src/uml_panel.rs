@@ -17,6 +17,7 @@ use crate::Shell;
 use crate::home::control;
 use crate::i18n::{fmt, tr};
 use crate::panels::{FIELD, Menu, PAD, ROW, Subject, check, field_inner, icon_button, menu, run, section, select_field, text_field};
+use crate::uml_classifier::Classifier;
 use crate::ux::{self, Palette, icons, types};
 use crate::widgets;
 
@@ -178,11 +179,11 @@ pub(crate) fn edit_of(store: Option<&Store>, class: Uuid, kind: MemberKind, targ
     edit
 }
 
-/// The class a member belongs to, with the member's kind: an attribute that is no association's
-/// end, or an operation.
+/// The class or interface a member belongs to, with the member's kind: an attribute that is no
+/// association's end, or an operation.
 pub(crate) fn member_of(store: &Store, o: Obj) -> Option<(Obj, MemberKind)> {
     let (c, _) = store.container(o).ok()??;
-    if store.class_of(c).ok()? != archforge_uml::CLASS {
+    if !archforge_uml::is_classifier(store.class_of(c).ok()?) {
         return None;
     }
     match store.class_of(o).ok()? {
@@ -192,12 +193,15 @@ pub(crate) fn member_of(store: &Store, o: Obj) -> Option<(Obj, MemberKind)> {
     }
 }
 
-/// A class's panel: its name, Abstract, its attributes and its operations.
+/// A class's or an interface's panel: its name and package, a class's Abstract, its attributes and
+/// its operations.
 pub(crate) fn class_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, subject: &Subject) {
     let (Some(class), Some(class_id)) = (subject.obj, subject.id) else { return };
+    let kind = shell.session.as_ref().and_then(|s| Classifier::of(s.doc(), class)).unwrap_or_default();
     let width = r.width() - 2.0 * PAD;
     let half = ((width - 8.0) / 2.0).max(0.0);
-    crate::panels::name_field(shell, ui, p, pos2(r.left() + PAD, y), half, subject, "uml.class.rename", "class");
+    let (rename, key) = kind.rename_command();
+    crate::panels::name_field(shell, ui, p, pos2(r.left() + PAD, y), half, subject, rename, key);
     // Its package: a pick moves it there.
     let (here, choices) = match shell.session.as_ref() {
         Some(s) => {
@@ -214,14 +218,17 @@ pub(crate) fn class_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
     let package_id = "workspace.properties.class.package";
     let field = select_field(shell, ui, p, pos2(r.left() + PAD + half + 8.0, y), half, package_id, &tr("Package"), &here, Menu::ClassPackage);
     let mut y = y + 17.0 + FIELD + 12.0;
-    let was = shell.session.as_ref().is_some_and(|s| flag(s.doc(), class, archforge_uml::class::IS_ABSTRACT));
-    let mut is_abstract = was;
-    check(shell, ui, p, pos2(r.left() + PAD, y), "workspace.properties.class.abstract", &tr("Abstract"), &mut is_abstract);
-    y += 16.0 + 16.0;
-    if is_abstract != was {
-        match run(shell, "uml.class.set", json!({ "class": class_id.to_string(), "abstract": is_abstract })) {
-            Ok(_) => shell.panels.notice = None,
-            Err(e) => shell.panels.notice = Some(e),
+    // An interface is abstract by what it is: it has no Abstract of its own.
+    if kind == Classifier::Class {
+        let was = shell.session.as_ref().is_some_and(|s| flag(s.doc(), class, archforge_uml::class::IS_ABSTRACT));
+        let mut is_abstract = was;
+        check(shell, ui, p, pos2(r.left() + PAD, y), "workspace.properties.class.abstract", &tr("Abstract"), &mut is_abstract);
+        y += 16.0 + 16.0;
+        if is_abstract != was {
+            match run(shell, "uml.class.set", json!({ "class": class_id.to_string(), "abstract": is_abstract })) {
+                Ok(_) => shell.panels.notice = None,
+                Err(e) => shell.panels.notice = Some(e),
+            }
         }
     }
     let y = members_section(shell, ui, p, r, y, class, class_id, MemberKind::Attribute);
@@ -232,7 +239,8 @@ pub(crate) fn class_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
         if let Some(i) = menu(shell, ui, p, field, package_id, &items)
             && let Some((to, _)) = choices.get(i)
         {
-            match run(shell, "uml.class.move", json!({ "class": class_id.to_string(), "package": to.to_string() })) {
+            let (cmd, key) = kind.move_command();
+            match run(shell, cmd, json!({ key: class_id.to_string(), "package": to.to_string() })) {
                 Ok(_) => shell.panels.notice = None,
                 Err(e) => shell.panels.notice = Some(e),
             }
@@ -657,9 +665,10 @@ fn move_member(shell: &mut Shell, edit: &MemberEdit, up: bool) {
     let at = shell.session.as_ref().and_then(|s| {
         let store = s.doc();
         let (c, o) = (store.by_uuid(edit.class)?, store.by_uuid(target)?);
+        let (owned_attributes, owned_operations) = archforge_uml::members::member_lists(store, c)?;
         let (list, prop) = match edit.kind {
-            MemberKind::Attribute => (attributes(store, c), archforge_uml::class::OWNED_ATTRIBUTE),
-            MemberKind::Operation => (operations(store, c), archforge_uml::class::OWNED_OPERATION),
+            MemberKind::Attribute => (attributes(store, c), owned_attributes),
+            MemberKind::Operation => (operations(store, c), owned_operations),
         };
         let i = list.iter().position(|x| *x == o)?;
         let neighbour = if up { list.get(i.checked_sub(1)?) } else { list.get(i + 1) }?;

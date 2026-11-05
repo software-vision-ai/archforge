@@ -525,17 +525,25 @@ str		Partial	Partielle
 str		{parent} has no primary key yet, so there is nothing in {child} to point at.	{parent} n’a pas encore de clé primaire ; il n’y a donc rien dans {child} vers quoi pointer.
 # Diagrammes de classes
 str		Add class	Ajouter une classe
+str		Add interface	Ajouter une interface
 str		Class	Classe
+str		Interface	Interface
+str		«interface»	«interface»
+str		Classifier	Classificateur
+str		Classifier kinds	Types de classificateur
 str		Class diagram	Diagramme de classes
 str		Class diagrams	Diagrammes de classes
 str		Class · model, in every diagram	Classe · modèle, dans chaque diagramme
+str		Interface · model, in every diagram	Interface · modèle, dans chaque diagramme
 str		New package	Nouveau paquetage
 str		On this class · {n}	Sur cette classe · {n}
+str		On this interface · {n}	Sur cette interface · {n}
 str		On this package · {n}	Sur ce paquetage · {n}
 str		Package	Paquetage
 str		Package · model	Paquetage · modèle
 str		The diagram is of no package	Le diagramme n’est d’aucun paquetage
 str		This class	Cette classe
+str		This interface	Cette interface
 str		This package	Ce paquetage
 plural		+ {n} more member	+ {n} membre de plus|+ {n} membres de plus
 plural		+ {n} more element	+ {n} élément de plus|+ {n} éléments de plus
@@ -569,6 +577,7 @@ str		This attribute	Cet attribut
 str		This operation	Cette opération
 str		Visibility	Visibilité
 str		Place class	Placer la classe
+str		Place interface	Placer l'interface
 str		Add package	Ajouter un paquetage
 str		Place package	Placer le paquetage
 str		Move package	Déplacer le paquetage
@@ -622,6 +631,7 @@ str		Type a whole number, a range such as 2..5, or *.	Saisissez un nombre entier
 str		{what} removed	Supprimé : {what}
 # Paquetages
 str		Class · {package}	Classe · {package}
+str		«interface» · {package}	«interface» · {package}
 str		{name} removed; what it held moved to {parent}	{name} supprimé ; son contenu a été déplacé vers {parent}
 # Modifications non enregistrées à la fermeture
 str		Close and lose changes	Fermer et perdre les modifications

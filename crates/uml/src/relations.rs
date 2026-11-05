@@ -1,5 +1,5 @@
-//! Relating classes: associations, generalizations and dependencies drawn
-//! between classes, an association's ends set (role, multiplicity, navigability, aggregation),
+//! Relating classes and interfaces: associations, generalizations and
+//! dependencies drawn between them, an association's ends set (role, multiplicity, navigability, aggregation),
 //! any of them reconnected to another class, and the relationships that touch a class listed so
 //! removing the class can say them and take them along.
 //!
@@ -9,8 +9,9 @@
 //! decision); a directed one is navigable to its second class only. Aggregation and composition sit on the
 //! part's end, the line drawn from the whole to the part, and the diamond shows at the whole.
 //!
-//! What would make the model wrong is refused with a reason before anything changes: a class that
-//! specializes itself, directly or round a cycle, the same generalization twice, a class depending
+//! What would make the model wrong is refused with a reason before anything changes: an interface
+//! that specializes anything but an interface, a class that specializes an interface, a classifier
+//! that specializes itself, directly or round a cycle, the same generalization twice, a class depending
 //! on itself, both ends of an association aggregating, a composition whose whole's end allows more
 //! than one, and two ends of one association with the same role.
 
@@ -19,9 +20,10 @@ use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, cmd};
 use archforge_mof::{Obj, Store, Value};
 use serde_json::{Value as Json, json};
 
-use crate::commands::{fail, id_of, name_of, package_of, refuse, set_name, text, uuid_of};
+use crate::commands::{a_what, classifier_of, fail, id_of, name_of, package_of, refuse, set_name, text, uuid_of, what};
 use crate::{
-    ASSOCIATION, CLASS, DEPENDENCY, GENERALIZATION, PROPERTY, association, classifier, dependency, generalization, package, property, typed_element,
+    ASSOCIATION, DEPENDENCY, GENERALIZATION, INTERFACE, PROPERTY, association, classifier, dependency, generalization, package, property,
+    typed_element,
 };
 
 type C<'a> = Ctx<'a, Store, ProjectView>;
@@ -32,10 +34,10 @@ pub const ASSOCIATION_KINDS: [&str; 4] = ["association", "directed", "aggregatio
 /// An end's aggregation, in the metamodel's order, as the commands name it.
 const AGGREGATIONS: [&str; 3] = ["none", "shared", "composite"];
 /// Why a command is not available.
-pub const NO_CLASSES: &str = "There is no class yet.";
+pub const NO_CLASSES: &str = crate::members::NO_CLASSES;
 
 fn has_classes(f: &Facts<'_, Store, ProjectView>) -> Result<(), &'static str> {
-    if f.doc.alive().any(|o| f.doc.class_of(o).ok() == Some(CLASS)) { Ok(()) } else { Err(NO_CLASSES) }
+    if f.doc.alive().any(|o| f.doc.class_of(o).is_ok_and(crate::is_classifier)) { Ok(()) } else { Err(NO_CLASSES) }
 }
 
 fn list(store: &Store, o: Obj, prop: archforge_mof::PropId) -> Vec<Obj> {
@@ -104,10 +106,10 @@ pub fn relationships_of(store: &Store, c: Obj) -> Vec<Obj> {
     out
 }
 
-/// The class under `key`, which must sit in a package.
+/// The class or interface under `key`, which must sit in a package.
 fn class_in_package(store: &Store, p: &Params, key: &str) -> Result<(Obj, Obj), CommandError> {
-    let c = id_of(store, p, key, CLASS, "a class")?;
-    let pkg = package_of(store, c).ok_or_else(|| refuse(key, "the class is in no package"))?;
+    let c = classifier_of(store, p, key)?;
+    let pkg = package_of(store, c).ok_or_else(|| refuse(key, format!("the {} is in no package", what(store, c))))?;
     Ok((c, pkg))
 }
 
@@ -144,7 +146,7 @@ fn set_navigable(store: &mut Store, a: Obj, end: Obj, navigable: bool) -> Result
 
 fn association_add(ctx: &mut C<'_>, p: &Params) -> R {
     let (from, pkg) = class_in_package(ctx.doc, p, "from")?;
-    let to = id_of(ctx.doc, p, "to", CLASS, "a class")?;
+    let to = classifier_of(ctx.doc, p, "to")?;
     let kind = match text(p, "kind") {
         "" => "association",
         k if ASSOCIATION_KINDS.contains(&k) => k,
@@ -180,26 +182,41 @@ fn association_add(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, a)?, "ends": [uuid_of(ctx.doc, ends[0])?, uuid_of(ctx.doc, ends[1])?] }))
 }
 
-/// Why `specific` may not specialize `general`, when it may not.
-fn generalization_problem(store: &Store, specific: Obj, general: Obj, except: Option<Obj>) -> Option<&'static str> {
+/// Why `specific` may not specialize `general`, when it may not: an interface specializes only an
+/// interface, and a class never specializes one.
+pub fn generalization_problem(store: &Store, specific: Obj, general: Obj, except: Option<Obj>) -> Option<&'static str> {
+    let interface = |o: Obj| store.class_of(o).ok() == Some(INTERFACE);
+    match (interface(specific), interface(general)) {
+        (true, false) => return Some("an interface specializes only an interface"),
+        (false, true) => return Some("a class cannot specialize an interface"),
+        _ => {}
+    }
     if specific == general {
-        return Some("a class cannot specialize itself");
+        return Some(if interface(specific) { "an interface cannot specialize itself" } else { "a class cannot specialize itself" });
     }
     if list(store, specific, classifier::GENERALIZATION)
         .into_iter()
         .any(|g| Some(g) != except && one(store, g, generalization::GENERAL) == Some(general))
     {
-        return Some("the class specializes that class already");
+        return Some(if interface(specific) {
+            "the interface specializes that interface already"
+        } else {
+            "the class specializes that class already"
+        });
     }
     if specializes(store, general, specific) {
-        return Some("that class specializes this one already, which would make a cycle");
+        return Some(if interface(specific) {
+            "that interface specializes this one already, which would make a cycle"
+        } else {
+            "that class specializes this one already, which would make a cycle"
+        });
     }
     None
 }
 
 fn generalization_add(ctx: &mut C<'_>, p: &Params) -> R {
-    let specific = id_of(ctx.doc, p, "specific", CLASS, "a class")?;
-    let general = id_of(ctx.doc, p, "general", CLASS, "a class")?;
+    let specific = classifier_of(ctx.doc, p, "specific")?;
+    let general = classifier_of(ctx.doc, p, "general")?;
     if let Some(why) = generalization_problem(ctx.doc, specific, general, None) {
         return Err(refuse("general", why));
     }
@@ -212,9 +229,9 @@ fn generalization_add(ctx: &mut C<'_>, p: &Params) -> R {
 
 fn dependency_add(ctx: &mut C<'_>, p: &Params) -> R {
     let (client, pkg) = class_in_package(ctx.doc, p, "client")?;
-    let supplier = id_of(ctx.doc, p, "supplier", CLASS, "a class")?;
+    let supplier = classifier_of(ctx.doc, p, "supplier")?;
     if client == supplier {
-        return Err(refuse("supplier", "a class cannot depend on itself"));
+        return Err(refuse("supplier", format!("{} cannot depend on itself", a_what(ctx.doc, client))));
     }
     let name = text(p, "name");
     check_name(name)?;
@@ -351,7 +368,7 @@ fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
         "target" => false,
         e => return Err(refuse("end", format!("{e:?} is not source or target"))),
     };
-    let c = id_of(ctx.doc, p, "class", CLASS, "a class")?;
+    let c = classifier_of(ctx.doc, p, "class")?;
     let class = ctx.doc.class_of(r).map_err(fail)?;
     if class == ASSOCIATION {
         let ends = ends_of(ctx.doc, r, key)?;
@@ -359,7 +376,7 @@ fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
         own_end(ctx.doc, r, end)?;
         ctx.doc.set(end, typed_element::TYPE, Value::Ref(c)).map_err(fail)?;
     } else if class == GENERALIZATION {
-        let (specific, general) = crate::figures::ends(ctx.doc, r).ok_or_else(|| refuse(key, "the generalization joins no two classes"))?;
+        let (specific, general) = crate::figures::ends(ctx.doc, r).ok_or_else(|| refuse(key, "the generalization joins no two classifiers"))?;
         let (s, g) = if source { (c, general) } else { (specific, c) };
         if let Some(why) = generalization_problem(ctx.doc, s, g, Some(r)) {
             return Err(refuse("class", why));
@@ -370,10 +387,10 @@ fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
         }
         ctx.doc.set(r, generalization::GENERAL, Value::Ref(g)).map_err(fail)?;
     } else {
-        let (client, supplier) = crate::figures::ends(ctx.doc, r).ok_or_else(|| refuse(key, "the dependency joins no two classes"))?;
+        let (client, supplier) = crate::figures::ends(ctx.doc, r).ok_or_else(|| refuse(key, "the dependency joins no two classifiers"))?;
         let (cl, su) = if source { (c, supplier) } else { (client, c) };
         if cl == su {
-            return Err(refuse("class", "a class cannot depend on itself"));
+            return Err(refuse("class", format!("{} cannot depend on itself", a_what(ctx.doc, cl))));
         }
         let (prop, old) = if source { (dependency::CLIENT, client) } else { (dependency::SUPPLIER, supplier) };
         ctx.doc.remove_value(r, prop, &Value::Ref(old)).map_err(fail)?;
@@ -415,7 +432,7 @@ fn describe(store: &Store, r: Obj) -> Json {
 
 fn relationship_list(ctx: &mut C<'_>, p: &Params) -> R {
     let store = &*ctx.doc;
-    let c = id_of(store, p, "class", CLASS, "a class")?;
+    let c = classifier_of(store, p, "class")?;
     Ok(json!({ "relationships": relationships_of(store, c).into_iter().map(|r| describe(store, r)).collect::<Vec<_>>() }))
 }
 

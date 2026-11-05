@@ -102,6 +102,11 @@ pub enum Screen {
     WorkspaceMultiplicityRefused,
     /// The sample class model with the Relationship tool active and its kinds' menu open.
     WorkspaceRelateKinds,
+    /// A package of interfaces: Payable with its members, selected in Properties, Refundable
+    /// specializing it, and Invoice associated with it.
+    WorkspaceInterface,
+    /// The same with the classifier tool's kinds menu open, Interface the current kind.
+    WorkspaceClassifierKinds,
     /// The sample class model edited, unsaved, and its close asking Save, Don't save or Cancel
     ///.
     WorkspaceCloseAsk,
@@ -383,7 +388,16 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
         } else {
             shell.canvas.tool = crate::canvas::Tool::Connect("relationship");
             shell.canvas.uml_relation = crate::uml_relate::Relate::Composition;
-            shell.canvas.popover = true;
+            shell.canvas.popover = Some("relationship-kinds");
+        }
+    }
+    if matches!(screen, Screen::WorkspaceInterface | Screen::WorkspaceClassifierKinds) {
+        shell.adopt_project();
+        sample_interfaces(&mut shell)?;
+        if screen == Screen::WorkspaceClassifierKinds {
+            shell.canvas.uml_classifier = crate::uml_classifier::Classifier::Interface;
+            shell.canvas.tool = crate::canvas::Tool::Place(crate::uml_classifier::TOOL);
+            shell.canvas.popover = Some("classifier-kinds");
         }
     }
     if screen == Screen::WorkspaceInlineMember {
@@ -498,7 +512,7 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
         }
         if screen == Screen::WorkspaceCardinality {
             shell.canvas.tool = crate::canvas::Tool::Connect("relationship");
-            shell.canvas.popover = true;
+            shell.canvas.popover = Some("relationship-types");
         }
     }
     let mut harness = egui_kittest::Harness::builder().with_size(egui::vec2(width, height)).with_pixels_per_point(scale).build_ui_state(
@@ -958,6 +972,63 @@ fn sample_class_sizing(shell: &mut Shell) -> Result<(), String> {
         shell.explorer.expanded.insert(root);
     }
     crate::canvas::open(shell, diagram);
+    Ok(())
+}
+
+/// A package Payments on its own class diagram: the interface Payable with an attribute and two
+/// operations, Refundable specializing it, and the class Invoice with a directed association
+/// "settles" to it; Payable selected, its Properties shown.
+fn sample_interfaces(shell: &mut Shell) -> Result<(), String> {
+    use serde_json::json;
+    let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
+    let run = |session: &mut archforge_notations::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
+        let out = session.execute(command, &params).map_err(|e| format!("{command}: {e:?}"))?;
+        Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
+    };
+    let package = run(session, "uml.package.add", json!({ "name": "Payments" }))?;
+    let diagram = run(session, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": package, "name": "Payments" }))?;
+    let payable = run(session, "uml.interface.add", json!({ "package": package, "name": "Payable" }))?;
+    run(session, "uml.attribute.add", json!({ "class": payable, "name": "amount", "type": "Real" }))?;
+    run(
+        session,
+        "uml.operation.add",
+        json!({ "class": payable, "name": "pay", "parameters": [{ "name": "amount", "type": "Real" }], "returns": "Boolean" }),
+    )?;
+    run(session, "uml.operation.add", json!({ "class": payable, "name": "refund", "returns": "Boolean" }))?;
+    let refundable = run(session, "uml.interface.add", json!({ "package": package, "name": "Refundable" }))?;
+    run(
+        session,
+        "uml.operation.add",
+        json!({ "class": refundable, "name": "refundTo", "parameters": [{ "name": "account", "type": "String" }], "returns": "Boolean" }),
+    )?;
+    let invoice = run(session, "uml.class.add", json!({ "package": package, "name": "Invoice" }))?;
+    run(session, "uml.attribute.add", json!({ "class": invoice, "name": "number", "type": "Integer" }))?;
+    run(session, "uml.attribute.add", json!({ "class": invoice, "name": "total", "type": "Real" }))?;
+    run(session, "uml.generalization.add", json!({ "specific": refundable, "general": payable }))?;
+    let settles = run(session, "uml.association.add", json!({ "from": invoice, "to": payable, "kind": "directed", "name": "settles" }))?;
+    let (w, _) = archforge_uml::CLASS_SIZE;
+    for (element, x, y, attributes, operations) in [(&invoice, 80, 140, 2, 0), (&payable, 520, 140, 1, 2), (&refundable, 520, 440, 0, 1)] {
+        let height = crate::uml_ui::members_height(attributes, operations);
+        run(session, "diagram.place", json!({ "diagram": diagram, "element": element, "x": x, "y": y, "width": w + 80.0, "height": height }))?;
+    }
+    run(session, "diagram.connect-all", json!({ "diagram": diagram }))?;
+    let edge = {
+        let store = session.doc();
+        let line = archforge_mof::Uuid::parse(&settles).and_then(|u| store.by_uuid(u)).ok_or("the association")?;
+        archforge_diagram::views_of(store, line).1.first().and_then(|e| store.uuid(*e).ok()).ok_or("the association's line")?
+    };
+    run(session, "diagram.label", json!({ "edge": edge.to_string(), "kind": "name", "at": "middle" }))?;
+    session.mark_saved().map_err(|e| format!("mark_saved: {e:?}"))?;
+    let (Some(package), Some(diagram)) = (archforge_mof::Uuid::parse(&package), archforge_mof::Uuid::parse(&diagram)) else {
+        return Err("the sample's ids".into());
+    };
+    shell.explorer.expanded.insert(package);
+    if let Some(root) = shell.session.as_ref().and_then(|s| archforge_uml::commands::root_package(s.doc()).and_then(|r| s.doc().uuid(r).ok())) {
+        shell.explorer.expanded.insert(root);
+    }
+    crate::canvas::open(shell, diagram);
+    crate::panels::run(shell, "view.select", json!({ "ids": [payable] }))?;
+    shell.state.show_panel(crate::state::Panel::Properties);
     Ok(())
 }
 

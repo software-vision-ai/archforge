@@ -525,17 +525,25 @@ str		Partial	部分
 str		{parent} has no primary key yet, so there is nothing in {child} to point at.	{parent} 还没有主键，因此 {child} 中没有可指向的内容。
 # 类图
 str		Add class	添加类
+str		Add interface	添加接口
 str		Class	类
+str		Interface	接口
+str		«interface»	«interface»
+str		Classifier	分类器
+str		Classifier kinds	分类器类型
 str		Class diagram	类图
 str		Class diagrams	类图
 str		Class · model, in every diagram	类 · 模型，在每个图中
+str		Interface · model, in every diagram	接口 · 模型，在每个图中
 str		New package	新包
 str		On this class · {n}	此类上 · {n}
+str		On this interface · {n}	此接口上 · {n}
 str		On this package · {n}	此包上 · {n}
 str		Package	包
 str		Package · model	包 · 模型
 str		The diagram is of no package	该图不属于任何包
 str		This class	此类
+str		This interface	此接口
 str		This package	此包
 plural		+ {n} more member	+ 另 {n} 个成员
 plural		+ {n} more element	+ 另 {n} 个元素
@@ -569,6 +577,7 @@ str		This attribute	此属性
 str		This operation	此操作
 str		Visibility	可见性
 str		Place class	放置类
+str		Place interface	放置接口
 str		Add package	添加包
 str		Place package	放置包
 str		Move package	移动包
@@ -622,6 +631,7 @@ str		Type a whole number, a range such as 2..5, or *.	请输入整数、范围�
 str		{what} removed	已移除{what}
 # 包
 str		Class · {package}	类 · {package}
+str		«interface» · {package}	«interface» · {package}
 str		{name} removed; what it held moved to {parent}	已移除 {name}；其内容已移至 {parent}
 # 关闭时未保存的更改
 str		Close and lose changes	关闭并丢弃更改

@@ -525,17 +525,25 @@ str		Partial	Parcial
 str		{parent} has no primary key yet, so there is nothing in {child} to point at.	{parent} ainda não tem chave primária, por isso não há nada em {child} para apontar.
 # Diagramas de classes
 str		Add class	Adicionar classe
+str		Add interface	Adicionar interface
 str		Class	Classe
+str		Interface	Interface
+str		«interface»	«interface»
+str		Classifier	Classificador
+str		Classifier kinds	Tipos de classificador
 str		Class diagram	Diagrama de classes
 str		Class diagrams	Diagramas de classes
 str		Class · model, in every diagram	Classe · modelo, em cada diagrama
+str		Interface · model, in every diagram	Interface · modelo, em cada diagrama
 str		New package	Novo pacote
 str		On this class · {n}	Nesta classe · {n}
+str		On this interface · {n}	Nesta interface · {n}
 str		On this package · {n}	Neste pacote · {n}
 str		Package	Pacote
 str		Package · model	Pacote · modelo
 str		The diagram is of no package	O diagrama não é de nenhum pacote
 str		This class	Esta classe
+str		This interface	Esta interface
 str		This package	Este pacote
 plural		+ {n} more member	+ {n} membro mais|+ {n} membros mais
 plural		+ {n} more element	+ {n} elemento mais|+ {n} elementos mais
@@ -569,6 +577,7 @@ str		This attribute	Este atributo
 str		This operation	Esta operação
 str		Visibility	Visibilidade
 str		Place class	Colocar classe
+str		Place interface	Colocar interface
 str		Add package	Adicionar pacote
 str		Place package	Colocar pacote
 str		Move package	Mover pacote
@@ -622,6 +631,7 @@ str		Type a whole number, a range such as 2..5, or *.	Escreva um número inteiro
 str		{what} removed	Removido: {what}
 # Pacotes
 str		Class · {package}	Classe · {package}
+str		«interface» · {package}	«interface» · {package}
 str		{name} removed; what it held moved to {parent}	{name} removido; o conteúdo foi movido para {parent}
 # Alterações por guardar ao fechar
 str		Close and lose changes	Fechar e perder as alterações

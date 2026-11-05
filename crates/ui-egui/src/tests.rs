@@ -4155,7 +4155,7 @@ fn the_cardinality_popover_sets_the_ends_and_a_many_to_many_line_offers_its_mapp
     let order_node = nodes.iter().find(|n| **n != customer_node).unwrap().clone();
     let at = rect_of(&h, "workspace.tools.relationship-types").center();
     click(&mut h, at);
-    assert!(h.state().canvas.popover && h.state().canvas.tool == crate::canvas::Tool::Connect("relationship"));
+    assert!(h.state().canvas.popover.is_some() && h.state().canvas.tool == crate::canvas::Tool::Connect("relationship"));
     assert!(ids(&h).iter().any(|i| i == "workspace.cardinality.preset.3"), "{:?}", ids(&h));
     let at = rect_of(&h, "workspace.cardinality.preset.3").center();
     click(&mut h, at);
@@ -4169,7 +4169,7 @@ fn the_cardinality_popover_sets_the_ends_and_a_many_to_many_line_offers_its_mapp
     let at = rect_of(&h, "workspace.cardinality.preset.3").center();
     click(&mut h, at);
     key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
-    assert!(!h.state().canvas.popover, "Escape closes the popover");
+    assert!(h.state().canvas.popover.is_none(), "Escape closes the popover");
     // The pick stays: the connect adorner of the selected Customer draws a many-to-many line.
     h.state_mut().canvas.tool = crate::canvas::Tool::Select;
     let at = rect_of(&h, &customer_node).center();
@@ -5684,13 +5684,21 @@ static SKETCH_CALLS: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::
 struct SketchKind;
 
 static SKETCH_TOOLS: &[crate::kinds::KindTool] = &[
-    crate::kinds::KindTool { key: "class", icon: &crate::ux::icons::TOOL_ENTITY, hint: "Entity", use_: crate::kinds::ToolUse::Place, chevron: None },
+    crate::kinds::KindTool {
+        key: "class",
+        icon: &crate::ux::icons::TOOL_ENTITY,
+        hint: "Entity",
+        use_: crate::kinds::ToolUse::Place,
+        chevron: None,
+        wide: false,
+    },
     crate::kinds::KindTool {
         key: "inherit",
         icon: &crate::ux::icons::TOOL_RELATIONSHIP,
         hint: "Relationship",
         use_: crate::kinds::ToolUse::Connect,
         chevron: None,
+        wide: false,
     },
 ];
 
@@ -5995,7 +6003,7 @@ fn a_new_project_makes_a_class_diagram_in_three_steps_and_its_class_tool_places_
     // Its toolbar: Class, Relationship with its kinds, Note and Link note; ER's tools and its key
     // status are not there.
     let found = ids(&h);
-    for tool in ["select", "pan", "class", "relationship", "relationship-kinds", "note", "link", "grid", "arrange"] {
+    for tool in ["select", "pan", "classifier", "classifier-kinds", "relationship", "relationship-kinds", "note", "link", "grid", "arrange"] {
         assert!(found.iter().any(|i| *i == format!("workspace.tools.{tool}")), "{tool}");
     }
     for er in ["entity", "relationship-types", "key-status"] {
@@ -6005,7 +6013,7 @@ fn a_new_project_makes_a_class_diagram_in_three_steps_and_its_class_tool_places_
     let canvas = rect_of(&h, "workspace.canvas");
     click(&mut h, canvas.center());
     assert!(class_diagram_shown(&h).1.is_empty(), "Select adds nothing");
-    let at = rect_of(&h, "workspace.tools.class").center();
+    let at = rect_of(&h, "workspace.tools.classifier").center();
     click(&mut h, at);
     click(&mut h, canvas.center());
     assert_eq!(class_diagram_shown(&h).1, ["Class 1"]);
@@ -7075,7 +7083,7 @@ fn the_relationship_tool_draws_the_kind_its_menu_chose_refuses_a_cycle_and_a_dro
     let at = rect_of(&h, "workspace.relate.composition").center();
     click(&mut h, at);
     assert_eq!(h.state().canvas.uml_relation, crate::uml_relate::Relate::Composition);
-    assert!(!h.state().canvas.popover, "a pick closes the menu");
+    assert!(h.state().canvas.popover.is_none(), "a pick closes the menu");
     // Drawn from the whole, Catalog, to the part, Customer: one step, the line on the diagram.
     let at = rect_of(&h, "workspace.tools.relationship").center();
     click(&mut h, at);
@@ -7111,6 +7119,295 @@ fn the_relationship_tool_draws_the_kind_its_menu_chose_refuses_a_cycle_and_a_dro
     assert_eq!(rename.text, "Class 1");
     assert!(related(&mut h, "Class 1").iter().any(|r| r["kind"] == "dependency"));
     assert_eq!(edge_count(&h), before + 2);
+}
+
+/// The classifier tool's hover text, as the class diagram gives it.
+fn classifier_hint(h: &Harness<'static, Shell>) -> String {
+    use crate::kinds::DiagramKind;
+    crate::uml_ui::UmlKind.tool_hint(h.state(), crate::uml_classifier::TOOL).expect("the classifier tool names its kind")
+}
+
+/// The id of the live element of `class` named `name`.
+fn named(h: &Harness<'static, Shell>, class: archforge_mof::ClassId, name: &str) -> archforge_mof::Uuid {
+    let st = h.state().session.as_ref().unwrap().doc();
+    let o = st.alive().find(|o| st.class_of(*o).ok() == Some(class) && archforge_core::name_of(st, *o) == name).expect(name);
+    st.uuid(o).unwrap()
+}
+
+/// A point of the sample class diagram no card or line covers: under OrderLine, beside Catalog.
+fn empty_spot(h: &Harness<'static, Shell>, nodes: &std::collections::BTreeMap<String, String>) -> egui::Pos2 {
+    let x = rect_of(h, &format!("workspace.canvas.node.{}", nodes["OrderLine"])).center().x;
+    let y = rect_of(h, &format!("workspace.canvas.node.{}", nodes["Catalog"])).center().y;
+    egui::pos2(x, y)
+}
+
+#[test]
+fn the_classifier_tool_places_the_kind_its_menu_chose_walked_by_the_keys_and_a_new_window_starts_at_class() {
+    use crate::uml_classifier::Classifier;
+    assert_eq!(crate::canvas::State::default().uml_classifier, Classifier::Class, "a new window starts at Class");
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        let found = ids(&h);
+        for id in ["workspace.tools.classifier", "workspace.tools.classifier-kinds", "workspace.tools.package", "workspace.tools.relationship"] {
+            assert!(found.iter().any(|i| i == id), "{id}");
+        }
+        assert_eq!(classifier_hint(&h), "Class", "the tooltip names the kind");
+        // The chevron opens the kinds, the current one marked, and arms the tool.
+        let at = rect_of(&h, "workspace.tools.classifier-kinds").center();
+        click(&mut h, at);
+        assert_eq!(h.state().canvas.popover, Some("classifier-kinds"));
+        assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Place(crate::uml_classifier::TOOL));
+        let found = ids(&h);
+        for kind in ["class", "interface"] {
+            assert!(found.iter().any(|i| *i == format!("workspace.classifier.{kind}")), "{kind} in {found:?}");
+        }
+        assert!(!found.iter().any(|i| i.starts_with("workspace.relate.")), "the Relationship menu stays shut");
+        // The arrows walk the kinds and Enter picks one: the menu closes, the tool stays armed.
+        key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+        assert_eq!(h.state().canvas.menu_focus, Some(1));
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert_eq!(h.state().canvas.uml_classifier, Classifier::Interface);
+        assert_eq!(h.state().canvas.popover, None, "a pick closes the menu");
+        assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Place(crate::uml_classifier::TOOL), "and arms the tool");
+        assert_eq!(classifier_hint(&h), "Interface");
+        // A click on the canvas places an interface named in place, as one undo step, and hands
+        // back to Select.
+        let before = h.state().session.as_ref().unwrap().revision();
+        let at = empty_spot(&h, &nodes);
+        click(&mut h, at);
+        assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Select, "the tool hands back to Select");
+        let rename = h.state().canvas.rename.clone().expect("its name is open for typing");
+        assert_eq!(rename.text, "Interface 1");
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add interface"));
+        h.state_mut().canvas.rename.as_mut().unwrap().text = "Payable".into();
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        let payable = named(&h, archforge_uml::INTERFACE, "Payable");
+        let st = h.state().session.as_ref().unwrap().doc();
+        let home = archforge_uml::commands::package_of(st, st.by_uuid(payable).unwrap()).map(|p| archforge_core::name_of(st, p));
+        assert_eq!(home.as_deref(), Some("Commerce"), "in the diagram's package");
+        assert!(painted(&h).iter().any(|t| t == "«interface»"), "its eyebrow is its keyword, as written");
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        assert_eq!(h.state().session.as_ref().unwrap().revision(), before, "the rename, then the placing, each one step");
+        h.state_mut().session.as_mut().unwrap().redo().unwrap();
+        h.run();
+        // The kind stays for the window; Escape closes the menu and keeps it.
+        let at = rect_of(&h, "workspace.tools.classifier-kinds").center();
+        click(&mut h, at);
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert_eq!((h.state().canvas.popover, h.state().canvas.uml_classifier), (None, Classifier::Interface));
+        // Up and Enter go back to Class; a click on a kind picks it too.
+        let at = rect_of(&h, "workspace.tools.classifier-kinds").center();
+        click(&mut h, at);
+        key(&mut h, egui::Key::ArrowUp, egui::Modifiers::NONE);
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert_eq!(h.state().canvas.uml_classifier, Classifier::Class);
+        let at = rect_of(&h, "workspace.tools.classifier-kinds").center();
+        click(&mut h, at);
+        let at = rect_of(&h, "workspace.classifier.interface").center();
+        click(&mut h, at);
+        assert_eq!((h.state().canvas.popover, h.state().canvas.uml_classifier), (None, Classifier::Interface));
+        // The arrows while the menu is open move no card.
+        let order = nodes["Order"].clone();
+        let at = rect_of(&h, &format!("workspace.canvas.node.{order}")).center();
+        h.state_mut().canvas.tool = crate::canvas::Tool::Select;
+        click(&mut h, at);
+        let was = rect_of(&h, &format!("workspace.canvas.node.{order}"));
+        let at = rect_of(&h, "workspace.tools.classifier-kinds").center();
+        click(&mut h, at);
+        key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+        assert_eq!(rect_of(&h, &format!("workspace.canvas.node.{order}")), was, "the menu took the key");
+    }
+}
+
+#[test]
+fn interfaces_are_listed_under_their_package_added_with_the_plus_found_and_dragged_onto_the_diagram() {
+    use crate::notation_ui::NotationUi;
+    let (mut h, nodes) = related_sample();
+    let commerce = select_named(&mut h, archforge_uml::PACKAGE, "Commerce");
+    // Models' + offers a class, an interface and a package in the selected package.
+    let st = h.state().session.as_ref().unwrap().doc();
+    let offers: Vec<&str> = crate::uml_ui::UmlUi.offers(st, st.by_uuid(commerce)).into_iter().map(|o| o.key).collect();
+    assert_eq!(offers, ["class", "interface", "package"]);
+    crate::explorer::add(h.state_mut(), "interface");
+    let rename = h.state().explorer.rename.clone().expect("named in place");
+    assert_eq!(rename.text, "Interface 1");
+    h.state_mut().explorer.rename.as_mut().unwrap().text = "Payable".into();
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    h.run();
+    let payable = named(&h, archforge_uml::INTERFACE, "Payable");
+    let rows = crate::explorer::rows(h.state().notation_uis, h.state().session.as_ref().unwrap().doc(), &h.state().explorer);
+    let row = rows.iter().find(|r| r.label == "Payable").expect("listed under Commerce");
+    assert_eq!((row.kind, row.depth), ("interface", 1), "{:?}", tree_labels(&h));
+    // A name a class of the package has is refused, in place.
+    let refused =
+        crate::explorer::run(h.state_mut(), "uml.interface.rename", serde_json::json!({ "interface": payable.to_string(), "name": "order" }));
+    assert!(refused.is_err_and(|e| e.contains("class named order")));
+    // The search finds it as an interface of Commerce.
+    let index = crate::project_search::index(h.state().kinds, h.state().notation_uis, h.state().session.as_ref().unwrap().doc());
+    let hit = crate::project_search::hits(&index, "payable").1.into_iter().find(|e| e.label == "Payable").map(|e| e.detail.clone());
+    assert_eq!(hit.as_deref(), Some("Interface · Commerce"));
+    // Dragged from Models onto the diagram: its card, as one undo step; a second drag says so.
+    let nodes_now = |h: &Harness<'static, Shell>| {
+        let st = h.state().session.as_ref().unwrap().doc();
+        st.list(st.by_uuid(h.state().canvas.active.unwrap()).unwrap(), archforge_diagram::diagram::NODE).unwrap().len()
+    };
+    let before = nodes_now(&h);
+    let from = rect_of(&h, &format!("workspace.explorer.row.{payable}")).center();
+    let to = empty_spot(&h, &nodes);
+    drag(&mut h, from, to);
+    assert_eq!(nodes_now(&h), before + 1, "notice {:?}", h.state().canvas.notice);
+    assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Place interface"));
+    let from = rect_of(&h, &format!("workspace.explorer.row.{payable}")).center();
+    drag(&mut h, from, to);
+    assert_eq!(h.state().canvas.notice.as_deref(), Some("Already on this diagram"));
+    // Dragged onto another package's row, it moves there.
+    let billing = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let out = s.execute("uml.package.add", &serde_json::json!({ "name": "Billing", "parent": commerce.to_string() })).unwrap();
+        archforge_mof::Uuid::parse(out.value["id"].as_str().unwrap()).unwrap()
+    };
+    h.run();
+    let from = rect_of(&h, &format!("workspace.explorer.row.{payable}")).center();
+    let to = rect_of(&h, &format!("workspace.explorer.row.{billing}")).center();
+    drag(&mut h, from, to);
+    let st = h.state().session.as_ref().unwrap().doc();
+    assert_eq!(archforge_uml::commands::package_of(st, st.by_uuid(payable).unwrap()), st.by_uuid(billing), "{:?}", h.state().explorer.notice);
+    assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Move interface"));
+}
+
+#[test]
+fn an_interface_takes_members_on_its_card_and_in_properties_and_is_offered_as_a_type() {
+    let (mut h, _) = related_sample();
+    let d = h.state().canvas.active.unwrap().to_string();
+    let payable = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let st = s.doc();
+        let commerce =
+            st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::PACKAGE) && archforge_core::name_of(st, *o) == "Commerce").unwrap();
+        let commerce = st.uuid(commerce).unwrap().to_string();
+        let out = s.execute("uml.interface.add", &serde_json::json!({ "package": commerce, "name": "Payable" })).unwrap();
+        let id = out.value["id"].as_str().unwrap().to_string();
+        s.execute("diagram.place", &serde_json::json!({ "diagram": d, "element": id, "x": 560, "y": 700, "width": 290, "height": 136 })).unwrap();
+        s.execute("view.select", &serde_json::json!({ "ids": [id] })).unwrap();
+        archforge_mof::Uuid::parse(&id).unwrap()
+    };
+    h.state_mut().state.show_panel(crate::state::Panel::Properties);
+    h.run();
+    let texts = painted(&h);
+    assert!(texts.iter().any(|t| t == "Interface · model, in every diagram"), "{texts:?}");
+    assert!(!ids(&h).iter().any(|i| i == "workspace.properties.class.abstract"), "an interface has no Abstract");
+    // On its card: the attributes' + opens a draft row; Enter writes it as one step.
+    let at = rect_of(&h, "workspace.canvas.class.add-attribute").center();
+    click(&mut h, at);
+    h.event(egui::Event::Text("due".into()));
+    h.run();
+    key(&mut h, egui::Key::Tab, egui::Modifiers::NONE);
+    h.event(egui::Event::Text("Real".into()));
+    h.run();
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    assert_eq!(member_rows(&h, payable, false), ["+ due : Real"]);
+    assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add attribute"));
+    assert!(painted(&h).iter().any(|t| t == "+ due : Real"), "the card shows it");
+    // In Properties: an operation with its return type.
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [payable.to_string()] })).unwrap();
+    h.run();
+    let at = rect_of(&h, "workspace.properties.operations.add").center();
+    click(&mut h, at);
+    h.event(egui::Event::Text("pay".into()));
+    h.run();
+    pick_type(&mut h, "workspace.properties.member.type", "Boolean");
+    let at = rect_of(&h, "workspace.properties.member.apply").center();
+    click(&mut h, at);
+    assert!(h.state().panels.member.is_none(), "{:?}", h.state().panels.member);
+    assert_eq!(member_rows(&h, payable, true), ["+ pay() : Boolean"]);
+    // A private member is refused under the editor, and nothing changes.
+    let at = rect_of(&h, "workspace.properties.attributes.add").center();
+    click(&mut h, at);
+    h.event(egui::Event::Text("secret".into()));
+    h.run();
+    h.state_mut().panels.member.as_mut().unwrap().visibility = 1;
+    let at = rect_of(&h, "workspace.properties.member.apply").center();
+    click(&mut h, at);
+    let refused = h.state().panels.member.as_ref().and_then(|e| e.refused.clone()).expect("refused");
+    assert!(refused.contains("public"), "{refused}");
+    assert_eq!(member_rows(&h, payable, false), ["+ due : Real"]);
+    // It is offered as a type: Customer's new attribute takes it.
+    assert!(
+        crate::uml_panel::type_choices(h.state().session.as_ref().unwrap().doc()).iter().any(|(l, id)| l == "Payable" && *id == payable.to_string())
+    );
+    let customer = select_named(&mut h, archforge_uml::CLASS, "Customer");
+    let at = rect_of(&h, "workspace.properties.attributes.add").center();
+    click(&mut h, at);
+    h.event(egui::Event::Text("wallet".into()));
+    h.run();
+    pick_type(&mut h, "workspace.properties.member.type", "Payable");
+    let at = rect_of(&h, "workspace.properties.member.apply").center();
+    click(&mut h, at);
+    assert!(member_rows(&h, customer, false).iter().any(|r| r == "+ wallet : Payable"), "{:?}", member_rows(&h, customer, false));
+}
+
+#[test]
+fn the_relationship_tool_joins_interfaces_and_refuses_what_would_make_a_class_specialize_an_interface() {
+    let (mut h, nodes) = related_sample();
+    // Two interfaces on the diagram, under OrderLine and right of it.
+    let d = h.state().canvas.active.unwrap().to_string();
+    let placed: Vec<String> = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let st = s.doc();
+        let commerce =
+            st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::PACKAGE) && archforge_core::name_of(st, *o) == "Commerce").unwrap();
+        let commerce = st.uuid(commerce).unwrap().to_string();
+        [("Payable", 560, 1000), ("Refundable", 1040, 1000)]
+            .into_iter()
+            .map(|(name, x, y)| {
+                let id = s.execute("uml.interface.add", &serde_json::json!({ "package": commerce, "name": name })).unwrap().value["id"]
+                    .as_str()
+                    .unwrap()
+                    .to_string();
+                let n = s
+                    .execute("diagram.place", &serde_json::json!({ "diagram": d, "element": id, "x": x, "y": y, "width": 290, "height": 136 }))
+                    .unwrap();
+                n.value["id"].as_str().unwrap().to_string()
+            })
+            .collect()
+    };
+    h.state_mut().canvas.fit_pending = true;
+    h.run();
+    let node = |h: &Harness<'static, Shell>, id: &str| rect_of(h, &format!("workspace.canvas.node.{id}")).center();
+    let (payable, refundable) = (placed[0].clone(), placed[1].clone());
+    let before = edge_count(&h);
+    let relate = |h: &mut Harness<'static, Shell>, kind: crate::uml_relate::Relate, from: egui::Pos2, to: egui::Pos2| {
+        h.state_mut().canvas.uml_relation = kind;
+        h.state_mut().canvas.notice = None;
+        let at = rect_of(h, "workspace.tools.relationship").center();
+        click(h, at);
+        drag(h, from, to);
+    };
+    // An interface specializes an interface: one line, one step.
+    let (from, to) = (node(&h, &refundable), node(&h, &payable));
+    relate(&mut h, crate::uml_relate::Relate::Generalization, from, to);
+    assert_eq!(edge_count(&h), before + 1, "notice {:?}", h.state().canvas.notice);
+    assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add generalization"));
+    // An interface never specializes a class, nor a class an interface: said, nothing drawn.
+    let revision = h.state().session.as_ref().unwrap().revision();
+    for (from, to, why) in [
+        (payable.clone(), nodes["Order"].clone(), "an interface specializes only an interface"),
+        (nodes["OrderLine"].clone(), payable.clone(), "a class cannot specialize an interface"),
+    ] {
+        let (a, b) = (node(&h, &from), node(&h, &to));
+        relate(&mut h, crate::uml_relate::Relate::Generalization, a, b);
+        let notice = h.state().canvas.notice.clone().expect("the refusal is said");
+        assert!(notice.contains(why), "{notice}");
+        assert_eq!((edge_count(&h), h.state().session.as_ref().unwrap().revision()), (before + 1, revision), "nothing changed");
+    }
+    // An association between two interfaces, and one from a class to an interface.
+    let (from, to) = (node(&h, &payable), node(&h, &refundable));
+    relate(&mut h, crate::uml_relate::Relate::Directed, from, to);
+    let (from, to) = (node(&h, &nodes["OrderLine"]), node(&h, &payable));
+    relate(&mut h, crate::uml_relate::Relate::Association, from, to);
+    assert_eq!(edge_count(&h), before + 3, "notice {:?}", h.state().canvas.notice);
 }
 
 /// The sample class model in `theme` and a window of `size`, its association "paid by" (Order to

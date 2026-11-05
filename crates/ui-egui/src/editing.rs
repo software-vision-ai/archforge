@@ -1824,22 +1824,24 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
     if ui.memory(|m| m.focused().is_some()) {
         return;
     }
+    // An open toolbar popover takes the arrows and Enter itself: its menu of kinds walks with them.
+    let menu = shell.canvas.popover.is_some();
     let (escape, delete, shift, add_column, left, right, up, down) = ui.input(|i| {
         (
             i.key_pressed(egui::Key::Escape),
             i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace),
             i.modifiers.shift,
-            i.modifiers.command && i.key_pressed(egui::Key::Enter),
-            i.key_pressed(egui::Key::ArrowLeft),
-            i.key_pressed(egui::Key::ArrowRight),
-            i.key_pressed(egui::Key::ArrowUp),
-            i.key_pressed(egui::Key::ArrowDown),
+            !menu && i.modifiers.command && i.key_pressed(egui::Key::Enter),
+            !menu && i.key_pressed(egui::Key::ArrowLeft),
+            !menu && i.key_pressed(egui::Key::ArrowRight),
+            !menu && i.key_pressed(egui::Key::ArrowUp),
+            !menu && i.key_pressed(egui::Key::ArrowDown),
         )
     });
     if escape {
         shell.canvas.tool = Tool::Select;
         shell.canvas.gesture = None;
-        shell.canvas.popover = false;
+        shell.canvas.popover = None;
         shell.canvas.mapping = None;
         return;
     }

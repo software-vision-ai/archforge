@@ -29,9 +29,11 @@ pub(crate) struct KindTool {
     /// Its hover text, in the catalogue.
     pub(crate) hint: &'static str,
     pub(crate) use_: ToolUse,
-    /// A chevron beside it that opens the kind's popover, with its key and hover text; the tool is
-    /// twice as wide then, so what it draws reads.
+    /// A chevron beside it that opens the kind's popover, with its key and hover text.
     pub(crate) chevron: Option<(&'static str, &'static str)>,
+    /// Twice as wide, so a face that draws what the tool makes reads (a relationship's line); an
+    /// icon's face is as wide as any tool's.
+    pub(crate) wide: bool,
 }
 
 /// What a diagram kind does with the canvas's tools and gestures.
@@ -80,9 +82,14 @@ pub(crate) trait DiagramKind: Sync {
         let _ = (shell, paint, p, key, b, ink, active);
         false
     }
-    /// The popover a tool's chevron opens, drawn while it is open.
-    fn popover(&self, shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, chevron: Rect) {
-        let _ = (shell, ui, p, r, chevron);
+    /// A tool's hover text when it names what the tool makes now; none takes its `hint`.
+    fn tool_hint(&self, shell: &Shell, key: &str) -> Option<String> {
+        let _ = (shell, key);
+        None
+    }
+    /// The popover the chevron `key` opens, drawn while it is open.
+    fn popover(&self, shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, chevron: Rect, key: &str) {
+        let _ = (shell, ui, p, r, chevron, key);
     }
     /// Whether the element a node shows takes part in the kind's gestures: connecting from and to
     /// it, its adorners, renaming it in place, its menu and opening its editor.

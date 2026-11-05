@@ -1,5 +1,7 @@
 //! UML's commands over the store: packages in the project's Model,
-//! nested as deep as needed, and classes in a package, added, renamed, moved and listed. Each
+//! nested as deep as needed, and classes and interfaces in a package, added, renamed, moved and
+//! listed. A package's classes and interfaces share its names: no two of them are named alike,
+//! whatever the case, so a type picked by its name is never in doubt. Each
 //! validates what it is given before it changes anything and refuses with a message naming the
 //! key. Ids in parameters are the elements' UUIDs. Removing and describing go through the shared
 //! `element.remove` and `element.describe`; a nested package removed hands what it holds up to its
@@ -10,7 +12,7 @@ use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, always, cm
 use archforge_mof::{ClassId, Invalid, Obj, Store, Uuid, Value};
 use serde_json::{Value as Json, json};
 
-use crate::{CLASS, PACKAGE, named_element, package};
+use crate::{CLASS, INTERFACE, PACKAGE, named_element, package};
 
 type C<'a> = Ctx<'a, Store, ProjectView>;
 type R = Result<Json, CommandError>;
@@ -49,13 +51,34 @@ pub(crate) fn has_packages(f: &Facts<'_, Store, ProjectView>) -> Result<(), &'st
     if f.doc.alive().any(|o| f.doc.class_of(o).ok() == Some(PACKAGE)) { Ok(()) } else { Err(NO_PACKAGES) }
 }
 
-/// The element the id under `key` names, of `class` (`what` names it in a refusal).
-pub(crate) fn id_of(store: &Store, p: &Params, key: &str, class: ClassId, what: &str) -> Result<Obj, CommandError> {
+/// The live element the id under `key` names, of whatever class.
+fn element_of(store: &Store, p: &Params, key: &str) -> Result<Obj, CommandError> {
     let id = text(p, key);
     let Some(uuid) = Uuid::parse(id) else { return Err(refuse(key, format!("{:?} is not an id", short(id)))) };
-    let obj = store.by_uuid(uuid).filter(|o| store.is_alive(*o)).ok_or_else(|| refuse(key, format!("there is no element {}", short(id))))?;
+    store.by_uuid(uuid).filter(|o| store.is_alive(*o)).ok_or_else(|| refuse(key, format!("there is no element {}", short(id))))
+}
+
+/// The element the id under `key` names, of `class` (`what` names it in a refusal).
+pub(crate) fn id_of(store: &Store, p: &Params, key: &str, class: ClassId, what: &str) -> Result<Obj, CommandError> {
+    let obj = element_of(store, p, key)?;
     if store.class_of(obj).ok() != Some(class) {
-        return Err(refuse(key, format!("{id} is not {what}")));
+        return Err(refuse(key, format!("{} is not {what}", text(p, key))));
+    }
+    Ok(obj)
+}
+
+/// What an element is, with its article: a class, an interface.
+pub(crate) fn a_what(store: &Store, o: Obj) -> String {
+    let what = what(store, o);
+    let article = if what.starts_with(['a', 'e', 'i', 'o', 'u']) { "an" } else { "a" };
+    format!("{article} {what}")
+}
+
+/// The class or interface the id under `key` names.
+pub(crate) fn classifier_of(store: &Store, p: &Params, key: &str) -> Result<Obj, CommandError> {
+    let obj = element_of(store, p, key)?;
+    if !store.class_of(obj).is_ok_and(crate::is_classifier) {
+        return Err(refuse(key, format!("{} is not a class or an interface", text(p, key))));
     }
     Ok(obj)
 }
@@ -169,19 +192,45 @@ pub fn classes(store: &Store, package: Obj) -> Vec<Obj> {
     members(store, package, package::PACKAGED_ELEMENT, CLASS)
 }
 
+/// The interfaces of a package, in its order.
+pub fn interfaces(store: &Store, package: Obj) -> Vec<Obj> {
+    members(store, package, package::PACKAGED_ELEMENT, INTERFACE)
+}
+
+/// The classifiers of a package, its classes and interfaces, in its order.
+pub fn classifiers(store: &Store, package: Obj) -> Vec<Obj> {
+    store
+        .list(package, package::PACKAGED_ELEMENT)
+        .unwrap_or_default()
+        .iter()
+        .filter_map(Value::as_ref)
+        .filter(|o| store.is_alive(*o) && store.class_of(*o).is_ok_and(crate::is_classifier))
+        .collect()
+}
+
+/// What an element is, as a refusal names it: a class, an interface, a package.
+pub(crate) fn what(store: &Store, o: Obj) -> &'static str {
+    match store.class_of(o).ok() {
+        Some(c) if c == CLASS => "class",
+        Some(c) if c == INTERFACE => "interface",
+        Some(c) if c == PACKAGE => "package",
+        _ => "element",
+    }
+}
+
 /// The package an element (a class, or a nested package) sits in.
 pub fn package_of(store: &Store, class: Obj) -> Option<Obj> {
     store.container(class).ok().flatten().map(|(c, _)| c).filter(|c| store.class_of(*c).ok() == Some(PACKAGE))
 }
 
-/// A name a package or class may have, distinct, whatever the case, from its siblings' (a
-/// namespace tells its members apart by name).
-fn check_name(store: &Store, name: &str, siblings: &[Obj], except: Option<Obj>, what: &str) -> Result<(), CommandError> {
+/// A name a package, class or interface may have, distinct, whatever the case, from its siblings'
+/// (a namespace tells its members apart by name); a refusal names what has it already.
+fn check_name(store: &Store, name: &str, siblings: &[Obj], except: Option<Obj>) -> Result<(), CommandError> {
     if let Some(p) = archforge_core::skills::name_problem(name, MAX_NAME) {
         return Err(refuse("name", format!("the name {p}")));
     }
-    if siblings.iter().any(|s| Some(*s) != except && name_of(store, *s).to_lowercase() == name.to_lowercase()) {
-        return Err(refuse("name", format!("there is a {what} named {name} already")));
+    if let Some(s) = siblings.iter().find(|s| Some(**s) != except && name_of(store, **s).to_lowercase() == name.to_lowercase()) {
+        return Err(refuse("name", format!("there is {} named {name} already", a_what(store, *s))));
     }
     Ok(())
 }
@@ -238,7 +287,7 @@ fn place_package(store: &mut Store, pkg: Obj, parent: Option<Obj>) -> Result<(),
 fn package_add(ctx: &mut C<'_>, p: &Params) -> R {
     let parent = parent_param(ctx.doc, p, "parent")?;
     let name = text(p, "name");
-    check_name(ctx.doc, name, &siblings_of(ctx.doc, parent), None, "package")?;
+    check_name(ctx.doc, name, &siblings_of(ctx.doc, parent), None)?;
     let pkg = ctx.doc.create(PACKAGE).map_err(fail)?;
     set_name(ctx.doc, pkg, name)?;
     place_package(ctx.doc, pkg, parent)?;
@@ -249,7 +298,7 @@ fn package_add(ctx: &mut C<'_>, p: &Params) -> R {
 fn package_rename(ctx: &mut C<'_>, p: &Params) -> R {
     let pkg = id_of(ctx.doc, p, "package", PACKAGE, "a package")?;
     let name = text(p, "name");
-    check_name(ctx.doc, name, &siblings_of(ctx.doc, package_of(ctx.doc, pkg)), Some(pkg), "package")?;
+    check_name(ctx.doc, name, &siblings_of(ctx.doc, package_of(ctx.doc, pkg)), Some(pkg))?;
     let old = name_of(ctx.doc, pkg);
     set_name(ctx.doc, pkg, name)?;
     // Its class diagrams still named like it follow the new name (AR-95: a package's own diagram).
@@ -289,7 +338,7 @@ fn package_move(ctx: &mut C<'_>, p: &Params) -> R {
     if to == package_of(ctx.doc, pkg) {
         return Ok(json!({ "id": uuid_of(ctx.doc, pkg)? }));
     }
-    check_name(ctx.doc, &name_of(ctx.doc, pkg), &siblings_of(ctx.doc, to), Some(pkg), "package")?;
+    check_name(ctx.doc, &name_of(ctx.doc, pkg), &siblings_of(ctx.doc, to), Some(pkg))?;
     detach(ctx.doc, pkg)?;
     place_package(ctx.doc, pkg, to)?;
     // Its cards go from the diagrams of a package that no longer holds it (AR-102): a class
@@ -307,37 +356,65 @@ fn package_move(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, pkg)? }))
 }
 
-fn class_move(ctx: &mut C<'_>, p: &Params) -> R {
-    let c = id_of(ctx.doc, p, "class", CLASS, "a class")?;
+/// The class or interface under `key` (of `kind`, `what` naming it) moves into the package under
+/// `package`, its name free among that package's classifiers.
+fn classifier_move(ctx: &mut C<'_>, p: &Params, kind: ClassId, key: &str, what: &str) -> R {
+    let c = id_of(ctx.doc, p, key, kind, what)?;
     let to = id_of(ctx.doc, p, "package", PACKAGE, "a package")?;
     if package_of(ctx.doc, c) == Some(to) {
         return Ok(json!({ "id": uuid_of(ctx.doc, c)? }));
     }
-    check_name(ctx.doc, &name_of(ctx.doc, c), &classes(ctx.doc, to), Some(c), "class")?;
+    check_name(ctx.doc, &name_of(ctx.doc, c), &classifiers(ctx.doc, to), Some(c))?;
     detach(ctx.doc, c)?;
     ctx.doc.push(to, package::PACKAGED_ELEMENT, Value::Ref(c)).map_err(fail)?;
     ctx.view.selection = vec![c];
     Ok(json!({ "id": uuid_of(ctx.doc, c)? }))
 }
 
-fn class_add(ctx: &mut C<'_>, p: &Params) -> R {
+/// A class or an interface (`kind`) named `name` in the package under `package`.
+fn classifier_add(ctx: &mut C<'_>, p: &Params, kind: ClassId) -> R {
     let pkg = id_of(ctx.doc, p, "package", PACKAGE, "a package")?;
     let name = text(p, "name");
-    check_name(ctx.doc, name, &classes(ctx.doc, pkg), None, "class")?;
-    let c = ctx.doc.create(CLASS).map_err(fail)?;
+    check_name(ctx.doc, name, &classifiers(ctx.doc, pkg), None)?;
+    let c = ctx.doc.create(kind).map_err(fail)?;
     set_name(ctx.doc, c, name)?;
     ctx.doc.push(pkg, package::PACKAGED_ELEMENT, Value::Ref(c)).map_err(fail)?;
     ctx.view.selection = vec![c];
     Ok(json!({ "id": uuid_of(ctx.doc, c)? }))
 }
 
-fn class_rename(ctx: &mut C<'_>, p: &Params) -> R {
-    let c = id_of(ctx.doc, p, "class", CLASS, "a class")?;
+/// The class or interface under `key` renamed, its new name free among its package's classifiers.
+fn classifier_rename(ctx: &mut C<'_>, p: &Params, kind: ClassId, key: &str, what: &str) -> R {
+    let c = id_of(ctx.doc, p, key, kind, what)?;
     let name = text(p, "name");
-    let siblings = package_of(ctx.doc, c).map(|pkg| classes(ctx.doc, pkg)).unwrap_or_default();
-    check_name(ctx.doc, name, &siblings, Some(c), "class")?;
+    let siblings = package_of(ctx.doc, c).map(|pkg| classifiers(ctx.doc, pkg)).unwrap_or_default();
+    check_name(ctx.doc, name, &siblings, Some(c))?;
     set_name(ctx.doc, c, name)?;
     Ok(json!({ "id": uuid_of(ctx.doc, c)? }))
+}
+
+fn class_move(ctx: &mut C<'_>, p: &Params) -> R {
+    classifier_move(ctx, p, CLASS, "class", "a class")
+}
+
+fn class_add(ctx: &mut C<'_>, p: &Params) -> R {
+    classifier_add(ctx, p, CLASS)
+}
+
+fn class_rename(ctx: &mut C<'_>, p: &Params) -> R {
+    classifier_rename(ctx, p, CLASS, "class", "a class")
+}
+
+fn interface_move(ctx: &mut C<'_>, p: &Params) -> R {
+    classifier_move(ctx, p, INTERFACE, "interface", "an interface")
+}
+
+fn interface_add(ctx: &mut C<'_>, p: &Params) -> R {
+    classifier_add(ctx, p, INTERFACE)
+}
+
+fn interface_rename(ctx: &mut C<'_>, p: &Params) -> R {
+    classifier_rename(ctx, p, INTERFACE, "interface", "an interface")
 }
 
 fn package_list(ctx: &mut C<'_>, _: &Params) -> R {
@@ -346,7 +423,10 @@ fn package_list(ctx: &mut C<'_>, _: &Params) -> R {
         .into_iter()
         .map(|pkg| {
             let parent = package_of(store, pkg).and_then(|p| uuid_of(store, p).ok());
-            json!({ "id": uuid_of(store, pkg).unwrap_or_default(), "name": name_of(store, pkg), "parent": parent, "classes": classes(store, pkg).len() })
+            json!({
+                "id": uuid_of(store, pkg).unwrap_or_default(), "name": name_of(store, pkg), "parent": parent,
+                "classes": classes(store, pkg).len(), "interfaces": interfaces(store, pkg).len(),
+            })
         })
         .collect();
     Ok(json!({ "packages": items }))
@@ -360,16 +440,24 @@ fn class_list(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "classes": items }))
 }
 
+fn interface_list(ctx: &mut C<'_>, p: &Params) -> R {
+    let pkg = id_of(ctx.doc, p, "package", PACKAGE, "a package")?;
+    let store = &*ctx.doc;
+    let items: Vec<Json> =
+        interfaces(store, pkg).into_iter().map(|c| json!({ "id": uuid_of(store, c).unwrap_or_default(), "name": name_of(store, c) })).collect();
+    Ok(json!({ "interfaces": items }))
+}
+
 /// What a nested package hands up to its parent when it is removed: everything it holds.
 fn held(store: &Store, pkg: Obj) -> Vec<Obj> {
     store.list(pkg, package::PACKAGED_ELEMENT).unwrap_or_default().iter().filter_map(Value::as_ref).filter(|o| store.is_alive(*o)).collect()
 }
 
-/// Every class inside a package, at any depth.
-fn classes_within(store: &Store, pkg: Obj) -> Vec<Obj> {
-    let mut out = classes(store, pkg);
+/// Every class and interface inside a package, at any depth.
+fn classifiers_within(store: &Store, pkg: Obj) -> Vec<Obj> {
+    let mut out = classifiers(store, pkg);
     for sub in subpackages(store, pkg) {
-        out.extend(classes_within(store, sub));
+        out.extend(classifiers_within(store, sub));
     }
     out
 }
@@ -377,31 +465,39 @@ fn classes_within(store: &Store, pkg: Obj) -> Vec<Obj> {
 /// Why `parent` cannot take what `pkg` holds, when a name would clash there.
 fn hand_up_problem(store: &Store, pkg: Obj, parent: Obj) -> Option<String> {
     for o in held(store, pkg) {
-        let (class, what) = match store.class_of(o).ok() {
-            Some(c) if c == CLASS => (CLASS, "class"),
-            Some(c) if c == PACKAGE => (PACKAGE, "package"),
+        // A class and an interface share their package's names; a package has its own.
+        let siblings = match store.class_of(o).ok() {
+            Some(c) if crate::is_classifier(c) => classifiers(store, parent),
+            Some(c) if c == PACKAGE => subpackages(store, parent),
             _ => continue,
         };
         let n = name_of(store, o);
-        if !n.is_empty()
-            && members(store, parent, package::PACKAGED_ELEMENT, class).iter().any(|s| name_of(store, *s).to_lowercase() == n.to_lowercase())
-        {
-            return Some(format!("{} has a {what} named {n} already", name_of(store, parent)));
+        if let Some(s) = siblings.iter().find(|s| !n.is_empty() && name_of(store, **s).to_lowercase() == n.to_lowercase()) {
+            return Some(format!("{} has {} named {n} already", name_of(store, parent), a_what(store, *s)));
         }
     }
     None
 }
 
-/// Removes UML elements (packages, classes, attributes, operations, primitive types,
+/// Removes UML elements (packages, classes, interfaces, attributes, operations, primitive types,
 /// associations, generalizations and dependencies), each with what it holds and the diagrams,
 /// nodes and lines that show them (`element.remove`, through [`crate::UmlNotation`]). A nested
 /// package hands what it holds, and its diagrams, up to its parent first (owner decision);
-/// a top-level package takes them along. A class takes the relationships that touch it along, and
+/// a top-level package takes them along. A class or an interface takes the relationships that touch it along, and
 /// a member's type that goes is dropped from what had it.
 pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, CommandError> {
     // Every id is checked before anything goes, so a refusal leaves the store as it was.
-    let removable =
-        [PACKAGE, CLASS, crate::PROPERTY, crate::OPERATION, crate::PRIMITIVE_TYPE, crate::ASSOCIATION, crate::GENERALIZATION, crate::DEPENDENCY];
+    let removable = [
+        PACKAGE,
+        CLASS,
+        INTERFACE,
+        crate::PROPERTY,
+        crate::OPERATION,
+        crate::PRIMITIVE_TYPE,
+        crate::ASSOCIATION,
+        crate::GENERALIZATION,
+        crate::DEPENDENCY,
+    ];
     for o in objs.iter().filter(|o| store.is_alive(**o)) {
         let class = store.class_of(*o).map_err(fail)?;
         // An association's end goes with its association.
@@ -438,13 +534,13 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
             })
             .map_err(fail)?;
     }
-    // The relationships of every class that goes, a top-level package's classes among them, go
-    // first: a generalization requires its general class.
+    // The relationships of every class and interface that goes, a top-level package's among them,
+    // go first: a generalization requires its general classifier.
     let mut all: Vec<Obj> = Vec::new();
     for o in objs.iter().filter(|o| store.is_alive(**o)) {
         let classes = match store.class_of(*o).ok() {
-            Some(c) if c == CLASS => vec![*o],
-            Some(c) if c == PACKAGE => classes_within(store, *o),
+            Some(c) if crate::is_classifier(c) => vec![*o],
+            Some(c) if c == PACKAGE => classifiers_within(store, *o),
             _ => Vec::new(),
         };
         for c in classes {
@@ -534,7 +630,35 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             has_packages,
             class_rename
         ),
+        cmd!(
+            "uml.interface.add",
+            "Add interface",
+            &["Interface"],
+            None,
+            "package: string; the package's id\nname: string; the interface's name, free among the package's classes and interfaces",
+            has_packages,
+            interface_add
+        ),
+        cmd!(
+            "uml.interface.rename",
+            "Rename interface",
+            &["Interface"],
+            None,
+            "interface: string; the interface's id\nname: string; the new name",
+            has_packages,
+            interface_rename
+        ),
+        cmd!(
+            "uml.interface.move",
+            "Move interface",
+            &["Interface"],
+            None,
+            "interface: string; the interface's id\npackage: string; the id of the package it goes into",
+            has_packages,
+            interface_move
+        ),
         cmd!(query "uml.package.list", "List packages", &["Package"], None, "", always, package_list),
         cmd!(query "uml.class.list", "List classes", &["Class"], None, "package: string; the package's id", has_packages, class_list),
+        cmd!(query "uml.interface.list", "List interfaces", &["Interface"], None, "package: string; the package's id", has_packages, interface_list),
     ]
 }

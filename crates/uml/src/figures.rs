@@ -1,4 +1,5 @@
-//! What a class diagram draws: a class as a plain card with its attributes
+//! What a class diagram draws: a class or an interface as a plain card, an interface's eyebrow its
+//! keyword «interface», with its attributes
 //! (visibility, name, type, multiplicity) and its operations (visibility, name, parameters, return
 //! type), its name slanted when it is abstract; an association as a line with its name, its ends'
 //! roles and multiplicities, an open arrow at every end it navigates to (owner decision), and a
@@ -10,9 +11,9 @@ use archforge_diagram::figure::{Card, End, EndMark, Line, Row, Text, Tone};
 use archforge_mof::{Obj, Store, Value};
 
 use crate::{
-    ASSOCIATION, AggregationKind, CLASS, DEPENDENCY, GENERALIZATION, ParameterDirectionKind, VisibilityKind, association, behavioral_feature, class,
-    dependency, generalization, literal_integer, literal_unlimited_natural, multiplicity_element, named_element, operation, parameter, property,
-    typed_element,
+    ASSOCIATION, AggregationKind, CLASS, DEPENDENCY, GENERALIZATION, INTERFACE, ParameterDirectionKind, VisibilityKind, association,
+    behavioral_feature, class, dependency, generalization, literal_integer, literal_unlimited_natural, multiplicity_element, named_element,
+    operation, parameter, property, typed_element,
 };
 
 /// The most parameters an operation's row names, and the longest row a card draws: a row is
@@ -131,29 +132,33 @@ pub fn operation_text(store: &Store, op: Obj) -> String {
     cut(text)
 }
 
-/// A class's card on `diagram`: its name, slanted when it is abstract, its attributes and its
-/// operations; a class of another package than the diagram's is drawn as an outsider, its package
-/// named in the eyebrow.
+/// A class's or an interface's card on `diagram`: its name, a class's slanted when it is abstract,
+/// its attributes and its operations; one of another package than the diagram's is drawn as an
+/// outsider, its package named in the eyebrow. A class's eyebrow says Class, an interface's its
+/// keyword.
 pub fn card(store: &Store, c: Obj, diagram: Obj) -> Option<Card> {
-    match store.class_of(c).ok()? {
+    let interface = match store.class_of(c).ok()? {
         k if k == crate::PACKAGE => return Some(package_card(store, c)),
-        k if k != CLASS => return None,
-        _ => {}
-    }
+        k if k == CLASS => false,
+        k if k == INTERFACE => true,
+        _ => return None,
+    };
     let here = store.get(diagram, archforge_diagram::diagram::ELEMENT).ok().and_then(|v| v.as_ref()).filter(|o| store.is_alive(*o));
     let elsewhere = crate::commands::package_of(store, c).filter(|p| here.is_some_and(|h| h != *p));
-    let eyebrow = match elsewhere {
-        Some(p) => Text::Said("Class · {package}", vec![("package", name(store, p))]),
-        None => Text::said("Class"),
+    let eyebrow = match (elsewhere, interface) {
+        (Some(p), false) => Text::Said("Class · {package}", vec![("package", name(store, p))]),
+        (Some(p), true) => Text::Said("«interface» · {package}", vec![("package", name(store, p))]),
+        (None, false) => Text::said("Class"),
+        (None, true) => Text::said("«interface»"),
     };
     let row = |text, slanted| Row { mark: None, text, linked: false, slanted };
-    let attributes = list(store, c, class::OWNED_ATTRIBUTE)
+    let attributes = crate::members::attributes(store, c)
         .into_iter()
-        // An association's end a class owns draws as the line's role, not as a row.
-        .filter(|a| one(store, *a, property::ASSOCIATION).is_none())
+        // An association's end a class owns draws as the line's role, not as a row: the members'
+        // attributes leave it out.
         .map(|a| row(attribute_text(store, a), false))
         .collect();
-    let operations = list(store, c, class::OWNED_OPERATION)
+    let operations = crate::members::operations(store, c)
         .into_iter()
         .map(|op| row(operation_text(store, op), flag(store, op, behavioral_feature::IS_ABSTRACT)))
         .collect();
@@ -165,7 +170,7 @@ pub fn card(store: &Store, c: Obj, diagram: Obj) -> Option<Card> {
         hidden: 0,
         elsewhere: elsewhere.is_some(),
         tone: Tone::Plain,
-        slanted: flag(store, c, class::IS_ABSTRACT),
+        slanted: !interface && flag(store, c, class::IS_ABSTRACT),
     })
 }
 
@@ -177,10 +182,10 @@ pub fn member_ends(store: &Store, a: Obj) -> Option<[Obj; 2]> {
     }
 }
 
-/// Whether the association navigates to its end `end`: a class owns the end, or the association
-/// lists it as navigable.
+/// Whether the association navigates to its end `end`: a class or an interface owns the end, or the
+/// association lists it as navigable.
 pub fn navigable(store: &Store, a: Obj, end: Obj) -> bool {
-    let owned_by_class = store.container(end).ok().flatten().is_some_and(|(c, _)| store.class_of(c).ok() == Some(CLASS));
+    let owned_by_class = store.container(end).ok().flatten().is_some_and(|(c, _)| store.class_of(c).is_ok_and(crate::is_classifier));
     owned_by_class || list(store, a, association::NAVIGABLE_OWNED_END).contains(&end)
 }
 

@@ -16,13 +16,14 @@ use crate::ux::{Palette, icons};
 pub(crate) struct ErKind;
 
 const TOOLS: &[KindTool] = &[
-    KindTool { key: "entity", icon: &icons::TOOL_ENTITY, hint: "Entity", use_: ToolUse::Place, chevron: None },
+    KindTool { key: "entity", icon: &icons::TOOL_ENTITY, hint: "Entity", use_: ToolUse::Place, chevron: None, wide: false },
     KindTool {
         key: "relationship",
         icon: &icons::TOOL_RELATIONSHIP,
         hint: "Relationship",
         use_: ToolUse::Connect,
         chevron: Some(("relationship-types", "Relationship types")),
+        wide: true,
     },
 ];
 
@@ -116,7 +117,7 @@ impl DiagramKind for ErKind {
         true
     }
 
-    fn popover(&self, shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, chevron: Rect) {
+    fn popover(&self, shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, chevron: Rect, _key: &str) {
         crate::connect::popover(shell, ui, p, r, chevron);
     }
 
