@@ -384,9 +384,10 @@ icon on the right rail to fold it, and any icon there to open it again. In **Mod
 row's arrow to see its attributes, operations or literals.
 
 Since you began editing, the status bar at the bottom has said *Unsaved changes · ⌘S saves*.
-Your work is not at risk: Archforge writes every change to the project a moment after you make
-it, so nothing is lost if it closes unexpectedly. Saving is a separate step that keeps a version
-of the project as it is now. Press ⌘S (Ctrl S): the status bar then says *Saved* (see
+Archforge writes each change to the project on its own, a moment after you stop editing, so what
+it has written is kept even if Archforge closes unexpectedly. If a write fails, the status bar
+says *Changes could not be written to the project* instead. Saving is a separate step that keeps
+a version of the project as it is now. Press ⌘S (Ctrl S): the status bar then says *Saved* (see
 [Getting started](02-getting-started.md#saving)).
 
 ## Which element do I need?
