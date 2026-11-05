@@ -615,6 +615,34 @@ str		Public	パブリック
 str		Remove parameter	パラメーターを削除
 str		Return type	戻り値の型
 str		Static	静的
+str		Modifiers	修飾子
+str		Default value	既定値
+str		Derived	派生
+str		Read only	読み取り専用
+str		Ordered	順序付き
+str		Subsets	サブセット
+str		Redefines	再定義
+str		No property to subset	サブセットにできるプロパティはありません
+str		No property to redefine	再定義できるプロパティはありません
+str		The default value {value} does not fit {type}; change or clear it first.	既定値 {value} は {type} に合いません。先に変更するか消去してください。
+str		A property chosen here is gone; choose again.	ここで選んだプロパティはもうありません。選び直してください。
+str		A default value is at most {n} characters.	既定値は {n} 文字までです。
+str		{value} is not a whole number, which an Integer's default is, such as 42.	{value} は整数ではありません（Integer の既定値は 42 のような整数です）。
+str		{value} is not a number, which a Real's default is, such as 2.5.	{value} は数値ではありません（Real の既定値は 2.5 のような数値です）。
+str		{value} is neither true nor false, which a Boolean's default is.	{value} は true でも false でもありません（Boolean の既定値はそのどちらかです）。
+str		{value} is neither a whole number of 0 or more nor *, which an UnlimitedNatural's default is.	{value} は 0 以上の整数でも * でもありません（UnlimitedNatural の既定値はそのどちらかです）。
+str		{value} is not a literal of {enumeration}.	{value} は {enumeration} のリテラルではありません。
+str		{value} cannot be read as a default.	{value} は既定値として読み取れません。
+str		A property without a name cannot be named here.	名前のないプロパティはここで指定できません。
+str		{name} is not a property this one can subset.	{name} はこのプロパティのサブセット元にできるプロパティではありません。
+str		{name} is not a property this one can redefine.	{name} はこのプロパティが再定義できるプロパティではありません。
+str		{name} has this property's name; a subset takes another.	{name} はこのプロパティと同じ名前です。サブセットには別の名前が必要です。
+str		{name} subsets this property already.	{name} はすでにこのプロパティのサブセットです。
+str		The moved ends no longer subset or redefine {names}, so those were dropped.	移動した端は {names} のサブセットでも再定義でもなくなったため、それらを外しました。
+str		{name} has a type this property's type does not conform to.	{name} の型に、このプロパティの型は適合しません。
+str		{name} holds fewer values than this property.	{name} が持てる値はこのプロパティより少ないです。
+str		This property's multiplicity does not lie within {name}'s.	このプロパティの多重度は {name} の多重度の範囲内にありません。
+str		{name} is composite; only a composite end redefines it.	{name} はコンポジションです。再定義できるのはコンポジションの端だけです。
 str		This attribute	この属性
 str		This literal	このリテラル
 str		This operation	この操作

@@ -633,8 +633,17 @@ pub(crate) fn reconnect(shell: &mut Shell, element: Uuid, source: bool, to_node:
     }
     let Ok(class) = store.uuid(target) else { return };
     let end = if source { "source" } else { "target" };
-    if let Err(e) = run(shell, "uml.relationship.reconnect", json!({ "relationship": element.to_string(), "end": end, "class": class.to_string() })) {
-        shell.canvas.notice = Some(e);
+    match run(shell, "uml.relationship.reconnect", json!({ "relationship": element.to_string(), "end": end, "class": class.to_string() })) {
+        // What the moved ends no longer subset or redefine went in the same step: said.
+        Ok(out) => {
+            let names: Vec<&str> =
+                out.get("dropped").and_then(|d| d.as_array()).into_iter().flatten().filter_map(|d| d.get("name")?.as_str()).collect();
+            if !names.is_empty() {
+                shell.canvas.notice =
+                    Some(fmt(&tr("The moved ends no longer subset or redefine {names}, so those were dropped."), &[("names", &names.join(", "))]));
+            }
+        }
+        Err(e) => shell.canvas.notice = Some(e),
     }
 }
 
@@ -650,13 +659,93 @@ pub struct EndsEdit {
     pub written: [String; 2],
     /// Why an end's typed multiplicity was refused, shown under its field until it changes.
     pub refused: [Option<String>; 2],
+    /// Each end's static and modifiers as edited, and as the model last had them (AR-126): Apply
+    /// writes the edited ones, Cancel and Escape bring the model's back.
+    pub modifiers: [EndModifiers; 2],
+    pub written_modifiers: [EndModifiers; 2],
+    /// Why an end's modifiers were refused, with the field it sits under.
+    pub modifier_refused: [Option<(&'static str, String)>; 2],
+    /// Whether each end's Modifiers are open: closed, a line sums them up.
+    pub modifiers_open: [bool; 2],
 }
 
+/// An association end's static and modifiers as its editor holds them (AR-126).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EndModifiers {
+    pub is_static: bool,
+    pub default: String,
+    pub derived: bool,
+    pub read_only: bool,
+    pub ordered: bool,
+    pub unique: bool,
+    pub subsets: Vec<Uuid>,
+    pub redefines: Vec<Uuid>,
+}
+
+impl EndModifiers {
+    /// The modifiers end `e` has in the model.
+    pub(crate) fn of(store: &Store, e: Obj) -> EndModifiers {
+        let (derived, read_only, ordered, unique) = archforge_uml::modifiers::flags(store, e);
+        let ids = |ts: Vec<Obj>| ts.into_iter().filter_map(|t| store.uuid(t).ok()).collect();
+        EndModifiers {
+            is_static: store.get(e, archforge_uml::feature::IS_STATIC).ok().and_then(|v| v.as_bool()).unwrap_or(false),
+            default: archforge_uml::modifiers::default_text(store, e),
+            derived,
+            read_only,
+            ordered,
+            unique,
+            subsets: ids(archforge_uml::modifiers::subsets(store, e)),
+            redefines: ids(archforge_uml::modifiers::redefines(store, e)),
+        }
+    }
+
+    /// Puts these modifiers into `uml.association.set-end`'s parameters `params`.
+    pub(crate) fn put_into(&self, params: &mut serde_json::Value) {
+        if let Some(fields) = params.as_object_mut() {
+            fields.insert("static".into(), json!(self.is_static));
+            fields.insert("default".into(), json!(self.default));
+            fields.insert("derived".into(), json!(self.derived));
+            fields.insert("read_only".into(), json!(self.read_only));
+            fields.insert("ordered".into(), json!(self.ordered));
+            fields.insert("unique".into(), json!(self.unique));
+            fields.insert("subsets".into(), json!(self.subsets.iter().map(Uuid::to_string).collect::<Vec<_>>()));
+            fields.insert("redefines".into(), json!(self.redefines.iter().map(Uuid::to_string).collect::<Vec<_>>()));
+        }
+    }
+}
+
+/// The ends' editor of association `a`, whose id is `id`, as the model has it.
 fn ends_edit(store: &Store, a: Obj, id: Uuid) -> Option<EndsEdit> {
     let ends = archforge_uml::figures::member_ends(store, a)?;
     let role = ends.map(|e| archforge_core::name_of(store, e));
     let multiplicity = ends.map(|e| archforge_uml::figures::multiplicity(store, e));
-    Some(EndsEdit { association: id, written_role: role.clone(), written: multiplicity.clone(), role, multiplicity, refused: [None, None] })
+    let modifiers = ends.map(|e| EndModifiers::of(store, e));
+    Some(EndsEdit {
+        association: id,
+        written_role: role.clone(),
+        written: multiplicity.clone(),
+        role,
+        multiplicity,
+        refused: [None, None],
+        written_modifiers: modifiers.clone(),
+        modifiers,
+        modifier_refused: [None, None],
+        modifiers_open: [false, false],
+    })
+}
+
+/// Why end `end`'s modifiers as edited cannot be written, in the user's words, with the field it
+/// sits under: a default its type does not read, or a property it adds to what it subsets or
+/// redefines that the rules refuse; the commands keep the same rules.
+pub(crate) fn end_refusal(store: &Store, end: Obj, m: &EndModifiers) -> Option<(&'static str, String)> {
+    let ty = store.get(end, archforge_uml::typed_element::TYPE).ok().and_then(|v| v.as_ref());
+    let form = archforge_uml::modifiers::DefaultForm::of(store, ty);
+    if let Err(e) = archforge_uml::modifiers::parse_default(store, form, &m.default) {
+        return Some(("default", crate::uml_panel::default_refusal(store, &e)));
+    }
+    let shape = archforge_uml::modifiers::Shape::of(store, end);
+    let had = EndModifiers::of(store, end);
+    crate::uml_panel::target_refusals(store, &shape, Some(&shape), (&m.subsets, &had.subsets), (&m.redefines, &had.redefines))
 }
 
 /// `typed` in end `end`'s multiplicity of association `id`, committed and refused, as a sample
@@ -677,7 +766,7 @@ pub(crate) fn refuse_typed(shell: &mut Shell, id: Uuid, end: usize, typed: &str)
 pub(crate) const MULTIPLICITIES: [&str; 5] = ["0..1", "1", "0..*", "1..*", "*"];
 
 /// Why a typed multiplicity does not read, in the user's language.
-fn multiplicity_problem(e: &archforge_uml::members::MultiplicityError) -> String {
+pub(crate) fn multiplicity_problem(e: &archforge_uml::members::MultiplicityError) -> String {
     use archforge_uml::members::MultiplicityError as E;
     match e {
         E::Malformed(_) => tr("Type a whole number, a range such as 2..5, or *."),
@@ -762,8 +851,10 @@ pub(crate) fn body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, m
 
 /// An association's or an association class's two ends, each its own section: role, written when
 /// typed; the multiplicity, an editable select of the common ones, written when picked or typed;
-/// Navigable and the aggregation, written when changed. A multiplicity that does not read stays in
-/// its field, with why under it, and the model keeps the one it had. Gives the y under the ends.
+/// Navigable and the aggregation, written when changed, the end's modifiers sent as the model has
+/// them; then the end's Modifiers (AR-126), written by their own Apply. A multiplicity that does
+/// not read stays in its field, with why under it, and the model keeps the one it had. Gives the y
+/// under the ends.
 #[allow(clippy::too_many_arguments, reason = "the ends are drawn into the panel for their association")]
 fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, a: Obj, id: Uuid) -> f32 {
     let width = (r.width() - 2.0 * PAD).max(0.0);
@@ -779,6 +870,7 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
     let aggregations = ends.map(|e| aggregation(store, e));
     let roles = ends.map(|e| archforge_core::name_of(store, e));
     let written = ends.map(|e| archforge_uml::figures::multiplicity(store, e));
+    let modifiers = ends.map(|e| EndModifiers::of(store, e));
     let Some(mut edit) = shell.panels.ends.clone() else { return y };
     // A change the model took elsewhere (an undo, a redo, another view) reaches the fields.
     for i in 0..2 {
@@ -790,6 +882,11 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
             edit.multiplicity[i] = written[i].clone();
             edit.written[i] = written[i].clone();
             edit.refused[i] = None;
+        }
+        if edit.written_modifiers[i] != modifiers[i] {
+            edit.modifiers[i] = modifiers[i].clone();
+            edit.written_modifiers[i] = modifiers[i].clone();
+            edit.modifier_refused[i] = None;
         }
     }
     let words = aggregation_words();
@@ -902,7 +999,45 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
         {
             agg = k;
         }
+        // Its static and modifiers, under a disclosure that sums them up while closed, written
+        // together by their own Apply (AR-126).
+        let open = edit.modifiers_open[i];
+        let more = Rect::from_min_size(pos2(r.left() + PAD, y - 6.0), vec2(width, 24.0));
+        ux::icon_in(
+            &ui.painter().clone(),
+            Rect::from_min_size(more.min + vec2(0.0, 4.0), egui::Vec2::splat(16.0)),
+            if open { &crate::ux::icons::CHEVRON_DOWN } else { &crate::ux::icons::CHEVRON_RIGHT },
+            p.text_secondary,
+        );
+        let title = tr("Modifiers");
+        let g = ux::text(&ui.painter().clone(), more.min + vec2(22.0, 2.0), &title, types::UI, p.text, Some((width - 22.0).max(0.0)));
+        let summary = shell.session.as_ref().map(|s| modifiers_summary(s.doc(), ends[i])).unwrap_or_default();
+        if !open {
+            let x = g.right() + 10.0;
+            ux::text(&ui.painter().clone(), pos2(x, more.top() + 3.0), &summary, types::SMALL, p.text_muted, Some((more.right() - x).max(0.0)));
+        }
+        let name = if open { title.clone() } else { format!("{title}: {summary}") };
+        if control(shell, ui, &format!("{key}.modifiers"), "disclosure", more, true).accessible_name(name).clicked() {
+            edit.modifiers_open[i] = !open;
+        }
+        y += 28.0;
+        let (next, asked) = if open { end_modifiers(shell, ui, p, r, y, &mut edit, ends[i], i) } else { (y, Asked::Nothing) };
+        y = next;
         shell.panels.ends = Some(edit.clone());
+        match asked {
+            Asked::Nothing => {}
+            Asked::Cancel => {
+                if let Some(e) = shell.panels.ends.as_mut() {
+                    e.modifiers[i] = e.written_modifiers[i].clone();
+                    e.modifier_refused[i] = None;
+                }
+                return y;
+            }
+            Asked::Apply => {
+                apply_end_modifiers(shell, id, ends[i], i, &roles[i], &written[i], navigable[i] && !whole, aggregations[i]);
+                return y;
+            }
+        }
         // An association class's end takes no role one of its attributes is named, as they share
         // its names: said in the user's words, and nothing is written.
         let clash = shell.session.as_ref().and_then(|s| archforge_uml::members::attribute_clash(s.doc(), a, edit.role[i].trim()));
@@ -923,6 +1058,9 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
                 "navigable": nav,
                 "aggregation": AGGREGATIONS[agg],
             });
+            // The modifiers go as the model has them: only Apply writes the edited ones.
+            let mut params = params;
+            modifiers[i].put_into(&mut params);
             match run(shell, "uml.association.set-end", params) {
                 Ok(_) => {
                     shell.panels.notice = None;
@@ -951,6 +1089,216 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
         }
     }
     y
+}
+
+/// End `end`'s static and modifiers summed up for its closed Modifiers: Static and Derived, then
+/// what its line says after the multiplicity (`= none {ordered}`), or None when it has none.
+fn modifiers_summary(store: &Store, end: Obj) -> String {
+    let mut parts = Vec::new();
+    if store.get(end, archforge_uml::feature::IS_STATIC).ok().and_then(|v| v.as_bool()).unwrap_or(false) {
+        parts.push(tr("Static"));
+    }
+    if archforge_uml::modifiers::is_derived(store, end) {
+        parts.push(tr("Derived"));
+    }
+    let said = archforge_uml::modifiers::suffix(store, end);
+    if !said.trim().is_empty() {
+        parts.push(said.trim().to_string());
+    }
+    if parts.is_empty() { tr("None") } else { parts.join(" · ") }
+}
+
+/// What an end's modifiers block asks of the frame: nothing, to bring the model's back, or to
+/// write the edited ones.
+enum Asked {
+    Nothing,
+    Cancel,
+    Apply,
+}
+
+/// End `i`'s (`end`'s) static and modifiers in its section at `y` (AR-126): Default value; Static,
+/// Derived, Read only, Ordered and Unique; Subsets and Redefines, which list only the properties
+/// the rules allow for the end as the model has it, built once per state of the project, a muted
+/// line under each that has none; then Cancel and Apply. A refusal sits under its field. Gives the
+/// y under it and what was asked; Escape, with no menu open and something edited, brings the
+/// model's back as Cancel does.
+#[allow(clippy::too_many_arguments, reason = "the block is drawn into the end's section of the panel")]
+fn end_modifiers(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, edit: &mut EndsEdit, end: Obj, i: usize) -> (f32, Asked) {
+    let paint = ui.painter().clone();
+    let width = (r.width() - 2.0 * PAD).max(0.0);
+    let half = ((width - 8.0) / 2.0).max(0.0);
+    let left = r.left() + PAD;
+    let right = left + half + 8.0;
+    let key = format!("workspace.properties.end.{i}");
+    let refused = edit.modifier_refused[i].clone();
+    let under = |paint: &egui::Painter, y: f32, fields: &[&str]| -> f32 {
+        match &refused {
+            Some((field, why)) if fields.contains(field) => {
+                let said = ux::galley_rows(paint, why, types::CAPTION, p.danger, Some(width), 4);
+                let height = said.size().y;
+                paint.galley(pos2(left, y - 4.0), said, p.danger);
+                y + height + 6.0
+            }
+            _ => y,
+        }
+    };
+    let Some((end_id, role)) = shell.session.as_ref().and_then(|s| Some((s.doc().uuid(end).ok()?, archforge_core::name_of(s.doc(), end)))) else {
+        return (y, Asked::Nothing);
+    };
+    // The choices, built once per state of the project: Subsets', Redefines' and the literals of
+    // the end's type when it is an enumeration.
+    let targets = crate::uml_panel::take_targets(
+        shell,
+        &format!("end|{end_id}"),
+        |store| Some(archforge_uml::modifiers::Shape::of(store, end)),
+        |store| store.get(end, archforge_uml::typed_element::TYPE).ok().and_then(|v| v.as_ref()),
+    );
+    let m = &mut edit.modifiers[i];
+    let limit = archforge_uml::modifiers::MAX_DEFAULT;
+    let default_id = format!("{key}.default");
+    // Enter in the Default field applies, as in the attribute editor.
+    let mut enter = false;
+    let default = match &targets.literals {
+        Some(_) => {
+            let shown = if m.default.trim().is_empty() { tr("None") } else { m.default.clone() };
+            Some(select_field(shell, ui, p, pos2(left, y), width, &default_id, &tr("Default value"), &shown, Menu::EndDefault(i)))
+        }
+        None => {
+            enter = text_field(shell, ui, p, pos2(left, y), width, &default_id, &tr("Default value"), &mut m.default, limit, false, false);
+            None
+        }
+    };
+    y += 17.0 + FIELD + 10.0;
+    y = under(&paint, y, &["default"]);
+    check(shell, ui, p, pos2(left, y), &format!("{key}.static"), &tr("Static"), &mut m.is_static);
+    check(shell, ui, p, pos2(right, y), &format!("{key}.derived"), &tr("Derived"), &mut m.derived);
+    y += 26.0;
+    check(shell, ui, p, pos2(left, y), &format!("{key}.read-only"), &tr("Read only"), &mut m.read_only);
+    check(shell, ui, p, pos2(right, y), &format!("{key}.ordered"), &tr("Ordered"), &mut m.ordered);
+    y += 26.0;
+    check(shell, ui, p, pos2(left, y), &format!("{key}.unique"), &tr("Unique"), &mut m.unique);
+    y += 16.0 + 16.0;
+    let shown = |ids: &[Uuid]| match shell.session.as_ref() {
+        Some(s) if !ids.is_empty() => {
+            ids.iter().filter_map(|u| s.doc().by_uuid(*u)).map(|o| archforge_core::name_of(s.doc(), o)).collect::<Vec<_>>().join(", ")
+        }
+        _ => tr("None"),
+    };
+    let (subsets_shown, redefines_shown) = (shown(&m.subsets), shown(&m.redefines));
+    let subsets = select_field(shell, ui, p, pos2(left, y), half, &format!("{key}.subsets"), &tr("Subsets"), &subsets_shown, Menu::EndSubsets(i));
+    let redefines =
+        select_field(shell, ui, p, pos2(right, y), half, &format!("{key}.redefines"), &tr("Redefines"), &redefines_shown, Menu::EndRedefines(i));
+    y += 17.0 + FIELD + 6.0;
+    let mut said = 0.0_f32;
+    let offered = crate::uml_panel::offered_subsets(&targets, &role);
+    for (empty, x, text) in
+        [(offered.is_empty(), left, tr("No property to subset")), (targets.redefines.is_empty(), right, tr("No property to redefine"))]
+    {
+        if empty {
+            let g = ux::galley_rows(&paint, &text, types::CAPTION, p.text_muted, Some(half), 2);
+            said = said.max(g.size().y);
+            paint.galley(pos2(x, y), g, p.text_muted);
+        }
+    }
+    if said > 0.0 {
+        y += said + 6.0;
+    }
+    y = under(&paint, y + 4.0, &["subsets", "redefines"]);
+    // Cancel and Apply at the right, as an editor's are.
+    let cancel = crate::panels::icon_button(
+        shell,
+        ui,
+        p,
+        pos2(left + width - 2.0 * FIELD - 8.0, y),
+        &format!("{key}.cancel"),
+        &crate::ux::icons::CLOSE,
+        p.text_secondary,
+        None,
+        "Cancel",
+    );
+    let apply = crate::panels::icon_button(
+        shell,
+        ui,
+        p,
+        pos2(left + width - FIELD, y),
+        &format!("{key}.apply"),
+        &crate::ux::icons::TICK,
+        p.on_accent,
+        Some(p.accent_fill),
+        "Apply",
+    );
+    y += FIELD + 16.0;
+    // The menus over what is under them.
+    match shell.panels.menu {
+        Some(Menu::EndDefault(k)) if k == i => {
+            if let (Some(field), Some(names)) = (default, targets.literals.as_ref())
+                && let Some(pick) = crate::uml_panel::literal_menu(shell, ui, p, field, &default_id, names)
+            {
+                m.default = pick;
+            }
+        }
+        Some(Menu::EndSubsets(k)) if k == i => {
+            if let Some(pick) = crate::uml_panel::target_menu(shell, ui, p, subsets, &format!("{key}.subsets"), &offered) {
+                m.subsets = pick;
+            }
+        }
+        Some(Menu::EndRedefines(k)) if k == i => {
+            let all: Vec<&crate::uml_panel::Target> = targets.redefines.iter().collect();
+            if let Some(pick) = crate::uml_panel::target_menu(shell, ui, p, redefines, &format!("{key}.redefines"), &all) {
+                m.redefines = pick;
+            }
+        }
+        _ => {}
+    }
+    drop(offered);
+    crate::uml_panel::keep_targets(shell, targets);
+    let edited = edit.modifiers[i] != edit.written_modifiers[i];
+    let escape = edited && shell.panels.menu.is_none() && ui.input(|inp| inp.key_pressed(egui::Key::Escape));
+    let asked = if cancel || escape {
+        Asked::Cancel
+    } else if apply || enter {
+        Asked::Apply
+    } else {
+        Asked::Nothing
+    };
+    (y, asked)
+}
+
+/// Writes end `i`'s (`end`'s) modifiers as edited, with its role, multiplicity, navigability and
+/// aggregation as the model has them, as one undo step, then closes the end's Modifiers; a refusal
+/// sits under its field in the user's words, the edit kept and the Modifiers open, and nothing is
+/// written.
+#[allow(clippy::too_many_arguments, reason = "the end's other fields go as the model has them")]
+fn apply_end_modifiers(shell: &mut Shell, id: Uuid, end: Obj, i: usize, role: &str, multiplicity: &str, navigable: bool, aggregation: usize) {
+    let Some(m) = shell.panels.ends.as_ref().filter(|e| e.association == id).map(|e| e.modifiers[i].clone()) else { return };
+    if let Some(why) = shell.session.as_ref().and_then(|s| end_refusal(s.doc(), end, &m)) {
+        if let Some(e) = shell.panels.ends.as_mut() {
+            e.modifier_refused[i] = Some(why);
+        }
+        return;
+    }
+    let mut params = json!({
+        "association": id.to_string(),
+        "end": i,
+        "role": role,
+        "multiplicity": multiplicity,
+        "navigable": navigable,
+        "aggregation": AGGREGATIONS[aggregation.min(AGGREGATIONS.len() - 1)],
+    });
+    m.put_into(&mut params);
+    match run(shell, "uml.association.set-end", params) {
+        // Written, the end's Modifiers close, their summary saying what they are now.
+        Ok(_) => {
+            shell.panels.notice = None;
+            if let Some(e) = shell.panels.ends.as_mut() {
+                e.modifier_refused[i] = None;
+                e.modifiers_open[i] = false;
+            }
+        }
+        // Anything the shell did not foresee is said at the panel's foot, as for the end's other
+        // fields.
+        Err(e) => shell.panels.notice = Some(e),
+    }
 }
 
 /// Every word the kinds' menu and the panels say through `tr` at run time, for the catalogue.

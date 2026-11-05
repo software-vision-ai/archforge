@@ -4,10 +4,42 @@
 //! `generated/` is what the XMI gives, checked by the gate.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
+/// The parameter lines `uml.attribute.add` takes for a new attribute's modifiers.
+macro_rules! modifier_lines {
+    () => {
+        concat!(
+            "default: string = \"\"; the default value as typed, read by the type: an Integer's a whole number, a Real's a number, a Boolean's true or false, an UnlimitedNatural's a whole number of 0 or more or *, a String's any text, an enumeration's one of its literals' names; any other type's, or no type's, an expression's text; nothing for none\n",
+            "derived: bool = false; its value is worked out from others, written / before its name\n",
+            "read_only: bool = false; it is not changed once set, written {readOnly}\n",
+            "ordered: bool = false; its values have an order, written {ordered} when it holds more than one\n",
+            "unique: bool = true; its values are all different; written {nonunique} when false and it holds more than one\n",
+            "subsets: array = []; the properties it subsets, each an id or an {id, name} object as the reads give them: of its classifier (an end's: the class at the other end) or one that classifier specializes, named otherwise, whose type its type conforms to, whose upper bound is not below its own, and not subsetting it already; at most 32\n",
+            "redefines: array = []; the properties it redefines, each an id or an {id, name} object as the reads give them: of a classifier its classifier specializes, whose type its type conforms to, whose bounds hold its own, and not composite unless it is; at most 32"
+        )
+    };
+}
+
+/// The parameter lines `uml.attribute.set` and `uml.association.set-end` take for the modifiers:
+/// each may be left out, which keeps what the property has; clearing is said explicitly.
+macro_rules! kept_modifier_lines {
+    () => {
+        concat!(
+            "default: string?; the default value as typed, read by the type: an Integer's a whole number, a Real's a number, a Boolean's true or false, an UnlimitedNatural's a whole number of 0 or more or *, a String's any text, an enumeration's one of its literals' names; any other type's, or no type's, an expression's text; \"\" clears it; left out, the default is kept (and read again by a new type, which it must fit)\n",
+            "derived: bool?; its value is worked out from others, written / before its name; left out, kept\n",
+            "read_only: bool?; it is not changed once set, written {readOnly}; left out, kept\n",
+            "ordered: bool?; its values have an order, written {ordered} when it holds more than one; left out, kept\n",
+            "unique: bool?; its values are all different; written {nonunique} when false and it holds more than one; left out, kept\n",
+            "subsets: array?; the properties it subsets, each an id or an {id, name} object as the reads give them: of its classifier (an end's: the class at the other end) or one that classifier specializes, named otherwise, whose type its type conforms to, whose upper bound is not below its own, and not subsetting it already; at most 32; [] clears them; left out, kept; only properties not there before are checked\n",
+            "redefines: array?; the properties it redefines, each an id or an {id, name} object as the reads give them: of a classifier its classifier specializes, whose type its type conforms to, whose bounds hold its own, and not composite unless it is; at most 32; [] clears them; left out, kept; only properties not there before are checked"
+        )
+    };
+}
+
 pub mod commands;
 pub mod figures;
 mod generated;
 pub mod members;
+pub mod modifiers;
 pub mod relations;
 
 use std::sync::Arc;

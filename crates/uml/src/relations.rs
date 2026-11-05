@@ -66,13 +66,14 @@ fn one(store: &Store, o: Obj, prop: archforge_mof::PropId) -> Option<Obj> {
     store.get(o, prop).ok().and_then(|v| v.as_ref()).filter(|x| store.is_alive(*x))
 }
 
-/// The classes `c` specializes, directly.
-fn generals(store: &Store, c: Obj) -> Vec<Obj> {
+/// The classifiers `c` specializes, directly.
+pub fn generals(store: &Store, c: Obj) -> Vec<Obj> {
     list(store, c, classifier::GENERALIZATION).into_iter().filter_map(|g| one(store, g, generalization::GENERAL)).collect()
 }
 
-/// Whether `from` is `to` or specializes it, directly or through other classes.
-fn specializes(store: &Store, from: Obj, to: Obj) -> bool {
+/// Whether `from` is `to` or specializes it, directly or through other classifiers; a seen-set
+/// bounds the walk.
+pub fn specializes(store: &Store, from: Obj, to: Obj) -> bool {
     let mut seen = std::collections::BTreeSet::new();
     let mut stack = vec![from];
     while let Some(c) = stack.pop() {
@@ -611,7 +612,9 @@ fn association_of(store: &Store, p: &Params, key: &str) -> Result<Obj, CommandEr
 }
 
 /// `uml.association.set-end`: one end of an association or an association class set: its role,
-/// multiplicity, navigability and aggregation, with the rules between the two ends kept.
+/// multiplicity, navigability and aggregation, with the rules between the two ends kept, and its
+/// static and modifiers (AR-126), its context the class at the other end. A field the call leaves
+/// out keeps what the end has; clearing is said explicitly.
 fn association_set_end(ctx: &mut C<'_>, p: &Params) -> R {
     let a = association_of(ctx.doc, p, "association")?;
     let ends = ends_of(ctx.doc, a, "association")?;
@@ -620,7 +623,9 @@ fn association_set_end(ctx: &mut C<'_>, p: &Params) -> R {
         _ => return Err(refuse("end", "the end is 0 or 1")),
     };
     let (end, other) = (ends[i], ends[1 - i]);
-    let role = text(p, "role");
+    // A field left out keeps what the end has.
+    let kept_role = name_of(ctx.doc, end);
+    let role = p.str("role").unwrap_or(&kept_role);
     if let Some(problem) = (!role.is_empty()).then(|| archforge_core::skills::name_problem(role, crate::commands::MAX_NAME)).flatten() {
         return Err(refuse("role", format!("the role {problem}")));
     }
@@ -639,9 +644,9 @@ fn association_set_end(ctx: &mut C<'_>, p: &Params) -> R {
             ),
         ));
     }
-    let kind = match text(p, "aggregation") {
-        "" => 0,
-        k => AGGREGATIONS
+    let kind = match p.str("aggregation") {
+        None => aggregation(ctx.doc, end),
+        Some(k) => AGGREGATIONS
             .iter()
             .position(|w| *w == k)
             .ok_or_else(|| refuse("aggregation", format!("{k:?} is not one of {}", AGGREGATIONS.join(", "))))?,
@@ -649,8 +654,11 @@ fn association_set_end(ctx: &mut C<'_>, p: &Params) -> R {
     if kind != 0 && aggregation(ctx.doc, other) != 0 {
         return Err(refuse("aggregation", "the other end aggregates already: only the part's end can"));
     }
-    let typed = text(p, "multiplicity");
-    let bounds = crate::members::parse_multiplicity(typed).map_err(|why| refuse("multiplicity", format!("the multiplicity {why}")))?;
+    // Left out, the multiplicity is the stored one as it is, never read again.
+    let bounds = match p.str("multiplicity") {
+        Some(typed) => crate::members::parse_multiplicity(typed).map_err(|why| refuse("multiplicity", format!("the multiplicity {why}")))?,
+        None => Some(crate::modifiers::bounds(ctx.doc, end)),
+    };
     // A part belongs to at most one whole: the whole's end allows one at most.
     if kind == 2 && upper(ctx.doc, other).is_none_or(|u| u > 1) {
         return Err(refuse("aggregation", "a composition's whole end allows one at most; set the other end's multiplicity to 1 or 0..1 first"));
@@ -658,15 +666,35 @@ fn association_set_end(ctx: &mut C<'_>, p: &Params) -> R {
     if aggregation(ctx.doc, other) == 2 && bounds.is_some_and(|(_, u)| u.is_none_or(|u| u > 1)) {
         return Err(refuse("multiplicity", "this end is a composition's whole, which allows one at most"));
     }
-    // The whole's end, where the diamond sits, is never navigable (owner decision).
+    // The whole's end, where the diamond sits, is never navigable (owner decision); left out, an
+    // end keeps whether it is.
     let whole = aggregation(ctx.doc, other) != 0;
-    let navigable = p.bool("navigable").unwrap_or(!whole);
+    let navigable = p.bool("navigable").unwrap_or(!whole && crate::figures::navigable(ctx.doc, a, end));
     if whole && navigable {
         return Err(refuse("navigable", "the whole's end of an aggregation or composition is not navigable"));
     }
+    // Its modifiers, checked against the end as it will be: its role, bounds and aggregation.
+    let (lower, upper) = bounds.unwrap_or((1, Some(1)));
+    let shape = crate::modifiers::Shape {
+        itself: Some(end),
+        context: one(ctx.doc, other, typed_element::TYPE).into_iter().collect(),
+        ty: one(ctx.doc, end, typed_element::TYPE),
+        lower,
+        upper,
+        composite: kind == 2,
+        name: role.to_string(),
+    };
+    let modifiers = crate::modifiers::read(ctx.doc, p, &shape, Some(end))?;
+    let role = role.to_string();
     own_end(ctx.doc, a, end)?;
-    set_name(ctx.doc, end, role)?;
-    crate::members::set_multiplicity(ctx.doc, end, typed, "multiplicity")?;
+    set_name(ctx.doc, end, &role)?;
+    if let Some(typed) = p.str("multiplicity") {
+        crate::members::set_multiplicity(ctx.doc, end, typed, "multiplicity")?;
+    }
+    if let Some(on) = p.bool("static") {
+        ctx.doc.set(end, crate::feature::IS_STATIC, Value::Bool(on)).map_err(fail)?;
+    }
+    crate::modifiers::apply(ctx.doc, end, &modifiers)?;
     set_navigable(ctx.doc, a, end, navigable)?;
     ctx.doc.set(end, property::AGGREGATION, Value::Enum(kind as u32)).map_err(fail)?;
     // This end aggregating makes the other end the whole's: it stops being navigable.
@@ -712,7 +740,9 @@ fn wrong_end(store: &Store, which: &str, end: Obj, needs: &str) -> String {
     format!("the realization's existing {which} end {id} is of kind {is}; it must be {needs}")
 }
 
-/// `uml.relationship.reconnect`: one end of a relationship moved to another classifier, its rules kept and its lines following.
+/// `uml.relationship.reconnect`: one end of a relationship moved to another classifier, its rules kept and its lines following;
+/// an association's ends drop, in the same step, what they subset or redefine that the rules no
+/// longer allow, each listed under `dropped` (AR-126).
 fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
     let key = "relationship";
     let id = text(p, key);
@@ -729,6 +759,7 @@ fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
     };
     let c = classifier_of(ctx.doc, p, "class")?;
     let class = ctx.doc.class_of(r).map_err(fail)?;
+    let mut dropped: Vec<Json> = Vec::new();
     if crate::is_association(class) {
         let why = if class == ASSOCIATION_CLASS { association_class_end_problem(ctx.doc, c, Some(r)) } else { association_end_problem(ctx.doc, c) };
         if let Some(why) = why {
@@ -738,6 +769,13 @@ fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
         let end = ends[if source { 0 } else { 1 }];
         own_end(ctx.doc, r, end)?;
         ctx.doc.set(end, typed_element::TYPE, Value::Ref(c)).map_err(fail)?;
+        // Moved, an end's type and the other end's context changed: what either subsets or
+        // redefines that the rules no longer allow goes, in the same step, and is said.
+        for e in ends {
+            for (list, t) in crate::modifiers::drop_stale(ctx.doc, e)? {
+                dropped.push(json!({ "end": uuid_of(ctx.doc, e)?, "list": list, "id": uuid_of(ctx.doc, t)?, "name": name_of(ctx.doc, t) }));
+            }
+        }
     } else if class == GENERALIZATION {
         let (specific, general) = crate::figures::ends(ctx.doc, r).ok_or_else(|| refuse(key, "the generalization joins no two classifiers"))?;
         let (s, g) = if source { (c, general) } else { (specific, c) };
@@ -783,25 +821,28 @@ fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
     }
     follow_ends(ctx.doc, r)?;
     ctx.view.selection = vec![r];
-    Ok(json!({ "id": uuid_of(ctx.doc, r)? }))
+    Ok(json!({ "id": uuid_of(ctx.doc, r)?, "dropped": dropped }))
 }
 
 /// An association's or an association class's two ends as the query commands give them: each with
-/// its class, role, multiplicity, navigability and aggregation.
+/// its class, role, multiplicity, navigability, aggregation, static and modifiers.
 pub(crate) fn ends_json(store: &Store, r: Obj) -> Json {
     let id = |o: Obj| uuid_of(store, o).unwrap_or_default();
     let ends: Vec<Json> = crate::figures::member_ends(store, r)
         .map(|ends| {
             ends.iter()
                 .map(|e| {
-                    json!({
+                    let mut end = json!({
                         "id": id(*e),
                         "class": one(store, *e, typed_element::TYPE).map_or(Json::Null, |t| json!(id(t))),
                         "role": name_of(store, *e),
                         "multiplicity": crate::figures::multiplicity(store, *e),
                         "navigable": crate::figures::navigable(store, r, *e),
                         "aggregation": AGGREGATIONS[aggregation(store, *e)],
-                    })
+                        "static": store.get(*e, crate::feature::IS_STATIC).ok().and_then(|v| v.as_bool()).unwrap_or(false),
+                    });
+                    crate::modifiers::merge_into(store, *e, &mut end);
+                    end
                 })
                 .collect()
         })
@@ -838,11 +879,13 @@ macro_rules! end_lines {
     () => {
         concat!(
             "association: string; the association's or association class's id\n",
-            "end: integer, 0..1; which end, 0 at the class or interface it was drawn from, 1 at the other\n",
-            "role: string = \"\"; the end's role name, or nothing; an association class's end never takes one of its attributes' names\n",
-            "multiplicity: string = \"\"; 1, 0..1, *, 1..*, 2..5, or nothing\n",
-            "navigable: bool = true; the association navigates to this end; never the whole's end of an aggregation or composition (default false there)\n",
-            "aggregation: string = \"none\", none|shared|composite; this end is a part of the other end's class, shared or composed"
+            "end: integer, 0..1; which end, 0 at the class or interface it was drawn from, 1 at the other; every other field left out keeps what the end has, and clearing is said explicitly\n",
+            "role: string?; the end's role name, \"\" for none; an association class's end never takes one of its attributes' names; left out, kept\n",
+            "multiplicity: string?; 1, 0..1, *, 1..*, 2..5, \"\" for none; left out, kept\n",
+            "navigable: bool?; the association navigates to this end; never the whole's end of an aggregation or composition; left out, kept\n",
+            "aggregation: string?, none|shared|composite; this end is a part of the other end's class, shared or composed; left out, kept\n",
+            "static: bool?; belongs to the class, not its instances; left out, kept\n",
+            kept_modifier_lines!()
         )
     };
 }
@@ -936,7 +979,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             concat!(
                 "relationship: string; the association's, generalization's, dependency's, interface realization's or association class's id\n",
                 "end: string, source|target; the end to move: the classifier it was drawn from (the specific one, the client, the implementing class) or to\n",
-                "class: string; the id of the class, interface, enumeration, data type or primitive type the end moves to; an association's end never moves to an enumeration, a data type or a primitive type; a generalization's end keeps its rules: an interface specializes only an interface, a class never one, an enumeration only an enumeration, a data type only a data type, a primitive type only a primitive type, a built-in type nothing; a realization's source is a class and its target an interface, the class realizing it once; an association class's ends move only onto a class or another association class"
+                "class: string; the id of the class, interface, enumeration, data type or primitive type the end moves to; an association's end never moves to an enumeration, a data type or a primitive type; a generalization's end keeps its rules: an interface specializes only an interface, a class never one, an enumeration only an enumeration, a data type only a data type, a primitive type only a primitive type, a built-in type nothing; a realization's source is a class and its target an interface, the class realizing it once; an association class's ends move only onto a class or another association class; a moved association's ends drop what they subset or redefine that the rules no longer allow, listed under dropped in the result"
             ),
             has_classes,
             relationship_reconnect

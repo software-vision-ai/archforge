@@ -38,6 +38,14 @@ fn initialize_answers_the_clients_version_when_spoken_and_the_newest_otherwise()
     assert!(said.contains("primitive types, beside the built-in Integer") && said.contains("uml_primitive_type_add"), "{said}");
     // And the association classes it may draw between two classes (AR-125).
     assert!(said.contains("association classes, an association between two classes") && said.contains("uml_association_class_add"), "{said}");
+    // And the modifiers of attributes and association ends, with the commands that set them (AR-126).
+    assert!(
+        said.contains("property modifiers on attributes and association ends")
+            && said.contains("subsets or redefines")
+            && said.contains("the association end's command set")
+            && said.contains("a field left out keeping its value and clearing said explicitly"),
+        "{said}"
+    );
     assert_eq!(ask(&fake, json!({ "jsonrpc": "2.0", "id": "p", "method": "ping" }))["result"], json!({}));
     // A notification is never answered.
     assert!(handle(br#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#, &fake, &Catalog::default()).is_none());
@@ -84,7 +92,9 @@ impl Backend for Model {
                 json!({ "id": "s1", "name": "shop", "entities": [{ "id": "t1", "attributes": [{ "name": "id" }] }] })
             }
             "er.entity.get" if p["entity"] == "t1" => json!({ "id": "t1", "name": "customer", "attributes": [{ "name": "id" }] }),
-            "uml.class.get" if p["class"] == "c1" => json!({ "id": "c1", "kind": "class", "name": "Order" }),
+            "uml.class.get" if p["class"] == "c1" => json!({ "id": "c1", "kind": "class", "name": "Order", "attributes": [
+                { "id": "a2", "name": "total", "default": "0", "derived": true, "read_only": false, "ordered": false, "unique": true, "subsets": [], "redefines": [] }
+            ] }),
             "uml.class.get" if p["class"] == "i1" => json!({ "id": "i1", "kind": "interface", "name": "Payable" }),
             "uml.class.get" if p["class"] == "e1" => {
                 json!({ "id": "e1", "kind": "enumeration", "name": "OrderStatus", "literals": [{ "id": "l1", "name": "Placed" }] })
@@ -136,7 +146,13 @@ fn the_model_and_its_skills_read_as_resources_with_the_revision_and_say_what_the
     assert_eq!(schema["schema"]["entities"][0]["attributes"][0]["name"], "id");
     assert_eq!(content(&read(&model, "archforge://element/t1"))["kind"], "table");
     // A class and an interface, which the class read gives both, each as what it is.
-    assert_eq!(content(&read(&model, "archforge://element/c1"))["kind"], "class");
+    let class = content(&read(&model, "archforge://element/c1"));
+    assert_eq!(class["kind"], "class");
+    // Its attributes with their modifiers, as the class read gives them (AR-126).
+    let total = &class["class"]["attributes"][0];
+    assert_eq!((total["default"].as_str(), total["derived"].as_bool(), total["unique"].as_bool()), (Some("0"), Some(true), Some(true)));
+    let templates = ask(&model, json!({ "jsonrpc": "2.0", "id": 3, "method": "resources/templates/list" }));
+    assert!(templates["result"]["resourceTemplates"][0]["description"].as_str().unwrap().contains("modifiers (default, derived, read_only"));
     let interface = content(&read(&model, "archforge://element/i1"));
     assert_eq!((interface["kind"].as_str(), interface["interface"]["name"].as_str()), (Some("interface"), Some("Payable")));
     // An enumeration, which the class read gives too, as what it is, with its literals.
@@ -397,7 +413,8 @@ fn the_compact_listing_offers_a_search_and_the_tools_still_answer() {
         said.contains("search_tools")
             && said.contains("uml.primitive-type.add")
             && said.contains("primitive types, beside the built-in")
-            && said.contains("uml.association-class.add"),
+            && said.contains("uml.association-class.add")
+            && said.contains("property modifiers on attributes and association ends"),
         "{said}"
     );
     let r = handle(

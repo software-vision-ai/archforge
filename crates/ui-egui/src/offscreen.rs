@@ -129,6 +129,11 @@ pub enum Screen {
     /// two attributes above its line's middle and tied to it: Review selected, its ends, attributes
     /// and operations in Properties, and the Relationship tool showing Association class.
     WorkspaceAssociationClass,
+    /// The class Order with its attributes' modifiers on its card (`{readOnly}`, a derived total
+    /// with its default, a status defaulting to a literal, ordered lines) and its association to
+    /// OrderLine whose end says `/items 0..* = none {ordered}`; Order selected with the attribute
+    /// editor open on total, its modifiers in Properties (AR-126).
+    WorkspaceModifiers,
     /// The sample class model edited, unsaved, and its close asking Save, Don't save or Cancel
     ///.
     WorkspaceCloseAsk,
@@ -451,6 +456,10 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
         // The Relationship tool armed after the element was selected, as the realization's screen.
         shell.canvas.tool = crate::canvas::Tool::Connect("relationship");
         shell.canvas.uml_relation = crate::uml_relate::Relate::AssociationClass;
+    }
+    if screen == Screen::WorkspaceModifiers {
+        shell.adopt_project();
+        sample_modifiers(&mut shell)?;
     }
     if screen == Screen::WorkspaceInlineMember {
         shell.adopt_project();
@@ -1343,6 +1352,73 @@ fn sample_association_class(shell: &mut Shell) -> Result<(), String> {
     crate::canvas::open(shell, diagram);
     crate::panels::run(shell, "view.select", json!({ "ids": [review] }))?;
     shell.state.show_panel(crate::state::Panel::Properties);
+    Ok(())
+}
+
+/// A package Orders: the class Order with `id : Integer {readOnly}`, a derived `total : Money = 0`,
+/// `status : OrderStatus = Placed` and `lines : OrderLine [1..*] {ordered}`; the data type Money,
+/// the enumeration OrderStatus and the class OrderLine, Order associated with it, its end at
+/// OrderLine `/items 0..* = none {ordered}`. Order selected, the attribute editor open on total in
+/// Properties, the package open in Models (AR-126).
+fn sample_modifiers(shell: &mut Shell) -> Result<(), String> {
+    use serde_json::json;
+    let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
+    let run = |session: &mut archforge_notations::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
+        let out = session.execute(command, &params).map_err(|e| format!("{command}: {e:?}"))?;
+        Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
+    };
+    let package = run(session, "uml.package.add", json!({ "name": "Orders" }))?;
+    let diagram = run(session, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": package, "name": "Orders" }))?;
+    let money = run(session, "uml.data-type.add", json!({ "package": package, "name": "Money" }))?;
+    let status = run(session, "uml.enumeration.add", json!({ "package": package, "name": "OrderStatus" }))?;
+    for l in ["Placed", "Paid", "Shipped"] {
+        run(session, "uml.literal.add", json!({ "enumeration": status, "name": l }))?;
+    }
+    let line = run(session, "uml.class.add", json!({ "package": package, "name": "OrderLine" }))?;
+    run(session, "uml.attribute.add", json!({ "class": line, "name": "quantity", "type": "Integer", "default": "1" }))?;
+    let order = run(session, "uml.class.add", json!({ "package": package, "name": "Order" }))?;
+    run(session, "uml.attribute.add", json!({ "class": order, "name": "id", "type": "Integer", "read_only": true }))?;
+    let total = run(session, "uml.attribute.add", json!({ "class": order, "name": "total", "type": money, "default": "0", "derived": true }))?;
+    run(session, "uml.attribute.add", json!({ "class": order, "name": "status", "type": status, "default": "Placed" }))?;
+    run(session, "uml.attribute.add", json!({ "class": order, "name": "lines", "type": line, "multiplicity": "1..*", "ordered": true }))?;
+    run(session, "uml.operation.add", json!({ "class": order, "name": "place" }))?;
+    let holds = run(session, "uml.association.add", json!({ "from": order, "to": line, "kind": "directed" }))?;
+    run(
+        session,
+        "uml.association.set-end",
+        json!({ "association": holds, "end": 1, "role": "items", "multiplicity": "0..*", "derived": true, "default": "none", "ordered": true }),
+    )?;
+    let (w, _) = archforge_uml::CLASS_SIZE;
+    let order_height = crate::uml_ui::members_height(4, 1);
+    let line_height = crate::uml_ui::members_height(1, 0);
+    // OrderLine's middle level with Order's, so the line between them runs straight.
+    let line_y = (120.0 + (order_height - line_height) / 2.0).round();
+    for (element, x, y, width, height) in [
+        (&order, 80.0, 120.0, w + 80.0, order_height),
+        (&line, 700.0, line_y, w, line_height),
+        (&money, 80.0, 470.0, w, crate::uml_ui::members_height(0, 0)),
+        (&status, 420.0, 470.0, w, crate::uml_ui::members_height(3, 0)),
+    ] {
+        run(session, "diagram.place", json!({ "diagram": diagram, "element": element, "x": x, "y": y, "width": width, "height": height }))?;
+    }
+    run(session, "diagram.connect-all", json!({ "diagram": diagram }))?;
+    session.mark_saved().map_err(|e| format!("mark_saved: {e:?}"))?;
+    let (Some(package), Some(diagram), Some(order), Some(total)) = (
+        archforge_mof::Uuid::parse(&package),
+        archforge_mof::Uuid::parse(&diagram),
+        archforge_mof::Uuid::parse(&order),
+        archforge_mof::Uuid::parse(&total),
+    ) else {
+        return Err("the sample's ids".into());
+    };
+    shell.explorer.expanded.insert(package);
+    if let Some(root) = shell.session.as_ref().and_then(|s| archforge_uml::commands::root_package(s.doc()).and_then(|r| s.doc().uuid(r).ok())) {
+        shell.explorer.expanded.insert(root);
+    }
+    crate::canvas::open(shell, diagram);
+    crate::panels::run(shell, "view.select", json!({ "ids": [order.to_string()] }))?;
+    shell.state.show_panel(crate::state::Panel::Properties);
+    crate::uml_panel::open(shell, order, crate::uml_panel::MemberKind::Attribute, Some(total));
     Ok(())
 }
 

@@ -1442,18 +1442,31 @@ fn draw_edge(
     // The ends' marks.
     end_glyph(paint, p, points[0], points[1], line.ends[0].mark, stroke, z, false);
     end_glyph(paint, p, points[n - 1], points[n - 2], line.ends[1].mark, stroke, z, false);
-    // The ends' texts: beside the line near its end, or where the user put them.
-    for (i, (end, at, towards)) in [(&line.ends[0], points[0], points[1]), (&line.ends[1], points[n - 1], points[n - 2])].into_iter().enumerate() {
-        let Some(text) = end.text.as_deref() else { continue };
+    // The ends' texts: beside the line near its end, or where the user put them; two placed by
+    // default keep clear of each other.
+    let sides = [(&line.ends[0], points[0], points[1]), (&line.ends[1], points[n - 1], points[n - 2])];
+    let galleys = sides.map(|(end, _, _)| end.text.as_deref().map(|t| ux::galley(paint, t, types::SMALL.scaled(z), p.text_secondary, None)));
+    let placed_by_user = |i: u8, end: &archforge_diagram::figure::End| {
+        store.uuid(e).ok().is_some_and(|edge_id| d.end_drag.is_some_and(|(id, k, _)| id == edge_id && k == i))
+            || refs(store, e, edge::LABEL).into_iter().any(|l| string(store, l, label::KIND) == end.slot)
+    };
+    let pair = match (&galleys[0], &galleys[1]) {
+        (Some(a), Some(b)) if !placed_by_user(0, sides[0].0) && !placed_by_user(1, sides[1].0) => {
+            Some(beside_pair([(sides[0].1, sides[0].2, a.size(), sides[0].0.mark), (sides[1].1, sides[1].2, b.size(), sides[1].0.mark)], z))
+        }
+        _ => None,
+    };
+    for (i, ((end, at, towards), g)) in sides.into_iter().zip(galleys).enumerate() {
+        let Some(g) = g else { continue };
         let Ok(edge_id) = store.uuid(e) else { continue };
-        let i = i as u8;
+        let k = i as u8;
         let own = refs(store, e, edge::LABEL).into_iter().find(|l| string(store, *l, label::KIND) == end.slot);
-        let g = ux::galley(paint, text, types::SMALL.scaled(z), p.text_secondary, None);
-        let centre = match (d.end_drag.filter(|(id, k, _)| *id == edge_id && *k == i), own) {
+        let centre = match (d.end_drag.filter(|(id, j, _)| *id == edge_id && *j == k), own) {
             (Some((_, _, centre)), _) => centre,
             (None, Some(l)) => at + vec2(real(store, l, label::DX) as f32, real(store, l, label::DY) as f32) * z,
-            (None, None) => beside(at, towards, g.size(), z),
+            (None, None) => pair.map_or_else(|| beside(at, towards, g.size(), z, end.mark), |c| c[i]),
         };
+        let i = k;
         let rect = Rect::from_center_size(centre, g.size());
         paint.galley(rect.min, g, p.text_secondary);
         d.ends.borrow_mut().push(EndText { edge: edge_id, end: i, rect: rect.expand(3.0), anchor: at });
@@ -1575,19 +1588,82 @@ fn bare_name(paint: &egui::Painter, d: &Drawing<'_>, element: Obj, points: &[Pos
     Some(rect)
 }
 
-/// Where a cardinality text sits by default: a little along the line from its end, beside the
-/// line rather than on it: under a level line (a line's name sits above it), right of an upright
-/// one.
-fn beside(end: Pos2, towards: Pos2, size: Vec2, z: f32) -> Pos2 {
+/// How far a line's end mark reaches back along the line from its tip, and how far it spreads to
+/// either side, at zoom `z`: a triangle, a diamond or an open arrow; nothing for any other mark.
+fn mark_extent(mark: EndMark, z: f32) -> (f32, f32) {
+    let s = z.max(0.6);
+    match mark {
+        EndMark::Triangle => (12.0 * s, 7.5 * s),
+        EndMark::HollowDiamond | EndMark::FilledDiamond => (20.0 * s, 6.0 * s),
+        EndMark::OpenArrow => (12.0 * s, 6.0 * s),
+        _ => (0.0, 0.0),
+    }
+}
+
+/// Where a cardinality text sits by default: a little along the line from its end, and further
+/// for a text longer than that reach, beside the line rather than on it: under a level line (a
+/// line's name sits above it), right of an upright one, off a slanted one along its true normal;
+/// clear of the end's `mark` (an arrowhead, a diamond or a triangle), along the line and to its
+/// side.
+fn beside(end: Pos2, towards: Pos2, size: Vec2, z: f32, mark: EndMark) -> Pos2 {
+    match beside_parts(end, towards, size, z, mark) {
+        Some((d, n, along, reach)) => end + d * along + n * reach,
+        None => end,
+    }
+}
+
+/// [`beside`]'s parts: the line's direction from the end, the unit normal the text sits on, how
+/// far along and how far off the line its centre goes. None for an end with no direction.
+fn beside_parts(end: Pos2, towards: Pos2, size: Vec2, z: f32, mark: EndMark) -> Option<(Vec2, Vec2, f32, f32)> {
     let d = towards - end;
     if d.length() <= f32::EPSILON || !d.is_finite() {
-        return end;
+        return None;
     }
     let d = d.normalized();
-    let n = if d.x.abs() >= d.y.abs() { vec2(0.0, 1.0) } else { vec2(1.0, 0.0) };
-    // Far enough off the line that the text's box clears it, whichever way the line runs.
-    let reach = n.x.abs() * size.x / 2.0 + n.y.abs() * size.y / 2.0 + 6.0 * z;
-    end + d * 30.0 * z + n * reach
+    // The true normal, on the side a level line's text has (below) or an upright one's (right).
+    let normal = vec2(-d.y, d.x);
+    let n = if d.x.abs() >= d.y.abs() {
+        if normal.y >= 0.0 { normal } else { -normal }
+    } else if normal.x >= 0.0 {
+        normal
+    } else {
+        -normal
+    };
+    let (mark_len, mark_half) = mark_extent(mark, z);
+    // Far enough off the line that the text's box, projected on the normal, clears it, and the
+    // mark's wings, whichever way the line runs.
+    let reach = n.x.abs() * size.x / 2.0 + n.y.abs() * size.y / 2.0 + (6.0 * z).max(mark_half + 4.0 * z);
+    // And far enough along it that a long text, such as an end's modifiers (AR-126), clears the
+    // card the line leaves and the mark at its end; a short one keeps its usual place.
+    let along = (d.x.abs() * size.x / 2.0 + d.y.abs() * size.y / 2.0 + mark_len + 8.0 * z).max(30.0 * z);
+    Some((d, n, along, reach))
+}
+
+/// The default centres of a line's two end texts, `ends` each its end, the point the line leaves
+/// it towards, the text's size and the end's mark, as [`beside`] places them; when the two would
+/// overlap (a short line, a long text, a diamond's reach), each keeps to its own half of the span
+/// between the ends, and if they still meet the second goes to the other side of the line.
+fn beside_pair(ends: [(Pos2, Pos2, Vec2, EndMark); 2], z: f32) -> [Pos2; 2] {
+    let centres = ends.map(|(end, towards, size, mark)| beside(end, towards, size, z, mark));
+    let rect = |c: Pos2, size: Vec2| Rect::from_center_size(c, size).expand(2.0 * z);
+    let meet = |c: [Pos2; 2]| rect(c[0], ends[0].2).intersects(rect(c[1], ends[1].2));
+    if !meet(centres) {
+        return centres;
+    }
+    let span = (ends[1].0 - ends[0].0).length();
+    let capped = ends.map(|(end, towards, size, mark)| match beside_parts(end, towards, size, z, mark) {
+        Some((d, n, along, reach)) => {
+            let half = d.x.abs() * size.x / 2.0 + d.y.abs() * size.y / 2.0;
+            let room = (span / 2.0 - half - 4.0 * z).max(half);
+            (end + d * along.min(room) + n * reach, end + d * along.min(room) - n * reach)
+        }
+        None => (end, end),
+    });
+    let first = [capped[0].0, capped[1].0];
+    if !meet(first) {
+        return first;
+    }
+    [capped[0].0, capped[1].1]
 }
 
 /// A soft band under a line's whole route, so the line under the pointer stands out.
@@ -2047,6 +2123,64 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     if let (Some(kind), Some((key, chevron))) = (kind, open_at) {
         kind.popover(shell, ui, p, r, chevron, key);
     }
+}
+
+/// A short end text, four characters at zoom 1, sits 30 points along a level or an upright line
+/// from its end, as it always has, where the end has no mark; a long one goes further, clear of the
+/// card and of an arrowhead, beside the line clear of the arrowhead's wings (AR-126).
+#[cfg(test)]
+#[test]
+fn an_end_text_sits_thirty_along_its_line_and_a_long_one_clears_the_mark() {
+    let four = vec2(26.0, 14.0);
+    for (towards, d, n) in [(pos2(200.0, 0.0), vec2(1.0, 0.0), vec2(0.0, 1.0)), (pos2(0.0, 200.0), vec2(0.0, 1.0), vec2(1.0, 0.0))] {
+        let at = beside(Pos2::ZERO, towards, four, 1.0, EndMark::None);
+        assert_eq!((at.to_vec2() - n * (at.to_vec2().dot(n))).length(), 30.0, "{towards:?}: {at:?}");
+        assert!((at.to_vec2().dot(d) - 30.0).abs() < f32::EPSILON);
+    }
+    let long = vec2(120.0, 14.0);
+    let at = beside(Pos2::ZERO, pos2(400.0, 0.0), long, 1.0, EndMark::OpenArrow);
+    let (len, half) = mark_extent(EndMark::OpenArrow, 1.0);
+    assert!(at.x - long.x / 2.0 >= len + 8.0, "its near edge clears the arrowhead: {at:?}");
+    assert!(at.y - long.y / 2.0 >= half + 4.0, "and its wings: {at:?}");
+}
+
+/// On a straight slanted route, direction (0.8, 0.6), an end text sits off the line along its true
+/// normal: no corner of its box crosses the route, short or long, with or without a mark.
+#[cfg(test)]
+#[test]
+fn an_end_text_on_a_slanted_line_keeps_its_box_off_the_route() {
+    let towards = pos2(400.0, 300.0);
+    let normal = vec2(-0.6, 0.8);
+    for (size, mark) in [(vec2(26.0, 14.0), EndMark::None), (vec2(140.0, 14.0), EndMark::OpenArrow), (vec2(80.0, 14.0), EndMark::FilledDiamond)] {
+        for z in [0.5, 1.0, 2.0] {
+            let c = beside(Pos2::ZERO, towards, size * z, z, mark);
+            let r = Rect::from_center_size(c, size * z);
+            let sides: Vec<f32> = [r.left_top(), r.right_top(), r.left_bottom(), r.right_bottom()].iter().map(|p| p.to_vec2().dot(normal)).collect();
+            assert!(sides.iter().all(|s| *s > 0.0) || sides.iter().all(|s| *s < 0.0), "{size:?} {mark:?} at {z}: {r:?} crosses the route");
+        }
+    }
+}
+
+/// A short line's two end texts never overlap, a diamond at one end included: each keeps to its
+/// half of the line, or the second goes to the other side; texts that clear each other keep their
+/// usual places.
+#[cfg(test)]
+#[test]
+fn a_short_line_s_two_end_texts_keep_clear_of_each_other() {
+    let gap = |c: [Pos2; 2], a: Vec2, b: Vec2| !Rect::from_center_size(c[0], a).intersects(Rect::from_center_size(c[1], b));
+    for (len, a, b, marks) in [
+        (110.0, vec2(70.0, 14.0), vec2(70.0, 14.0), [EndMark::FilledDiamond, EndMark::None]),
+        (110.0, vec2(70.0, 14.0), vec2(70.0, 14.0), [EndMark::None, EndMark::HollowDiamond]),
+        (60.0, vec2(90.0, 14.0), vec2(90.0, 14.0), [EndMark::FilledDiamond, EndMark::OpenArrow]),
+    ] {
+        let c = beside_pair([(Pos2::ZERO, pos2(len, 0.0), a, marks[0]), (pos2(len, 0.0), Pos2::ZERO, b, marks[1])], 1.0);
+        assert!(gap(c, a, b), "{len} {marks:?}: {c:?}");
+    }
+    // Far apart, each stays where it alone would be.
+    let far =
+        [(Pos2::ZERO, pos2(600.0, 0.0), vec2(40.0, 14.0), EndMark::FilledDiamond), (pos2(600.0, 0.0), Pos2::ZERO, vec2(40.0, 14.0), EndMark::None)];
+    let c = beside_pair(far, 1.0);
+    assert_eq!(c, far.map(|(e, t, s, m)| beside(e, t, s, 1.0, m)));
 }
 
 /// Every hover text of the tables, for the catalogue tests.

@@ -615,6 +615,34 @@ str		Public	Pública
 str		Remove parameter	Remover parâmetro
 str		Return type	Tipo de retorno
 str		Static	Estático
+str		Modifiers	Modificadores
+str		Default value	Valor predefinido
+str		Derived	Derivado
+str		Read only	Só de leitura
+str		Ordered	Ordenado
+str		Subsets	Subconjunto de
+str		Redefines	Redefine
+str		No property to subset	Nenhuma propriedade de que ser subconjunto
+str		No property to redefine	Nenhuma propriedade a redefinir
+str		The default value {value} does not fit {type}; change or clear it first.	O valor predefinido {value} não se ajusta a {type}; altere-o ou limpe-o primeiro.
+str		A property chosen here is gone; choose again.	Uma propriedade escolhida aqui já não existe; escolha de novo.
+str		A default value is at most {n} characters.	Um valor predefinido tem no máximo {n} caracteres.
+str		{value} is not a whole number, which an Integer's default is, such as 42.	{value} não é um número inteiro, que é o que o valor predefinido de um Integer é, como 42.
+str		{value} is not a number, which a Real's default is, such as 2.5.	{value} não é um número, que é o que o valor predefinido de um Real é, como 2.5.
+str		{value} is neither true nor false, which a Boolean's default is.	{value} não é true nem false, que é o que o valor predefinido de um Boolean é.
+str		{value} is neither a whole number of 0 or more nor *, which an UnlimitedNatural's default is.	{value} não é um número inteiro de 0 ou mais nem *, que é o que o valor predefinido de um UnlimitedNatural é.
+str		{value} is not a literal of {enumeration}.	{value} não é um literal de {enumeration}.
+str		{value} cannot be read as a default.	{value} não pode ser lido como valor predefinido.
+str		A property without a name cannot be named here.	Uma propriedade sem nome não pode ser indicada aqui.
+str		{name} is not a property this one can subset.	{name} não é uma propriedade de que esta possa ser subconjunto.
+str		{name} is not a property this one can redefine.	{name} não é uma propriedade que esta possa redefinir.
+str		{name} has this property's name; a subset takes another.	{name} tem o nome desta propriedade; um subconjunto leva outro.
+str		{name} subsets this property already.	{name} já é um subconjunto desta propriedade.
+str		The moved ends no longer subset or redefine {names}, so those were dropped.	As extremidades movidas já não são subconjunto nem redefinição de {names}, por isso foram retiradas.
+str		{name} has a type this property's type does not conform to.	{name} tem um tipo ao qual o tipo desta propriedade não se conforma.
+str		{name} holds fewer values than this property.	{name} admite menos valores do que esta propriedade.
+str		This property's multiplicity does not lie within {name}'s.	A multiplicidade desta propriedade não cabe na de {name}.
+str		{name} is composite; only a composite end redefines it.	{name} é composta; só uma extremidade composta a redefine.
 str		This attribute	Este atributo
 str		This literal	Este literal
 str		This operation	Esta operação

@@ -1,5 +1,6 @@
 //! Parameters: their documentation, one line per key (`key: type = default, range or choices;
-//! meaning`), and the validation every call passes before its handler runs.
+//! meaning`, or `key: type?; meaning` for a key that may be left out, which then stays out of what
+//! the handler receives), and the validation every call passes before its handler runs.
 
 use serde_json::{Map, Value};
 
@@ -45,8 +46,11 @@ impl Kind {
 pub struct ParamDoc {
     pub key: String,
     pub kind: Kind,
-    /// None makes the key required.
+    /// None makes the key required, unless it is optional.
     pub default: Option<Value>,
+    /// The key may be left out (`type?`): it has no default, and a call without it, or with null,
+    /// hands the handler no value for it, so the handler can tell "left out" from any value.
+    pub optional: bool,
     /// An inclusive range, for numbers and integers.
     pub range: Option<(f64, f64)>,
     /// The accepted values, for strings.
@@ -87,6 +91,10 @@ pub fn parse_params(doc: &str) -> Result<Vec<ParamDoc>, String> {
             Some(i) => (&rest[..i], &rest[i..]),
             None => (rest, ""),
         };
+        let (kind_text, optional) = match kind_text.trim().strip_suffix('?') {
+            Some(k) => (k, true),
+            None => (kind_text.trim(), false),
+        };
         let kind = match kind_text.trim() {
             "number" => Kind::Number,
             "integer" => Kind::Integer,
@@ -103,7 +111,7 @@ pub fn parse_params(doc: &str) -> Result<Vec<ParamDoc>, String> {
             },
             None => (None, after.strip_prefix(',')),
         };
-        let mut p = ParamDoc { key: key.to_string(), kind, default: None, range: None, choices: Vec::new(), meaning: meaning.to_string() };
+        let mut p = ParamDoc { key: key.to_string(), kind, default: None, optional, range: None, choices: Vec::new(), meaning: meaning.to_string() };
         if let Some(limit) = limit_text.map(str::trim).filter(|l| !l.is_empty()) {
             match kind {
                 Kind::Number | Kind::Integer => {
@@ -119,6 +127,9 @@ pub fn parse_params(doc: &str) -> Result<Vec<ParamDoc>, String> {
             }
         }
         if let Some(d) = default_text {
+            if optional {
+                return Err(at("an optional key (`type?`) takes no default"));
+            }
             let value: Value = serde_json::from_str(d.trim()).map_err(|_| at("the default is not a JSON value"))?;
             check(&p, &value).map_err(|e| at(&format!("the default does not fit: {e}")))?;
             p.default = Some(value);
@@ -148,7 +159,7 @@ fn split_outside_quotes(s: &str) -> Option<(&str, &str)> {
 }
 
 /// The normalised parameters a handler receives: every documented key with a value of its type,
-/// defaults filled in; a required key is always there.
+/// defaults filled in; a required key is always there, an optional one only when the call gave it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Params {
     map: Map<String, Value>,
@@ -216,6 +227,8 @@ pub fn validate(docs: &[ParamDoc], params: &Value, undoable: bool) -> Result<Par
     let mut map = Map::new();
     for d in docs {
         let value = match given.get(&d.key) {
+            // An optional key left out stays out.
+            None | Some(Value::Null) if d.optional => continue,
             None | Some(Value::Null) => match &d.default {
                 Some(v) => v.clone(),
                 None => return Err(EngineError::MissingKey { key: d.key.clone() }),
@@ -366,6 +379,20 @@ mod tests {
         assert!(matches!(refused(json!({"name": "A", "index": 1001}), true), EngineError::OutOfRange { .. }));
         assert!(matches!(refused(json!({"name": "A", "kind": "some"}), true), EngineError::NotAChoice { .. }));
         assert!(matches!(refused(json!({"name": "x".repeat(MAX_STRING + 1)}), true), EngineError::TooLong { .. }));
+    }
+
+    /// An optional key (`type?`) has no default: left out or null it stays out of the handler's
+    /// parameters, given it is checked as any key; it takes no default of its own.
+    #[test]
+    fn an_optional_key_left_out_stays_out_and_given_is_checked() {
+        let docs = parse_params("name: string; a name\nflag: bool?; kept when left out").unwrap();
+        assert!(docs[1].optional && docs[1].default.is_none());
+        let out = validate(&docs, &json!({ "name": "A" }), true).unwrap();
+        assert_eq!((out.get("flag"), out.bool("flag")), (None, None));
+        assert_eq!(validate(&docs, &json!({ "name": "A", "flag": null }), true).unwrap().get("flag"), None);
+        assert_eq!(validate(&docs, &json!({ "name": "A", "flag": false }), true).unwrap().bool("flag"), Some(false));
+        assert!(matches!(validate(&docs, &json!({ "name": "A", "flag": 3 }), true), Err(EngineError::WrongType { .. })));
+        assert!(parse_params("flag: bool? = true; x").is_err(), "an optional key takes no default");
     }
 
     #[test]

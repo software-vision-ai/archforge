@@ -460,43 +460,89 @@ fn select(ctx: &mut C<'_>, o: Obj) {
     ctx.view.selection = vec![o];
 }
 
+/// The modifiers the parameters ask of attribute `a` (none while it is being added) of `c`, named
+/// `name`, typed `ty`, with the bounds `bounds` (none: one): read and checked against the
+/// attribute's shape; a modifier left out keeps what `a` has.
+fn attribute_modifiers(
+    store: &Store,
+    p: &Params,
+    c: Obj,
+    a: Option<Obj>,
+    name: &str,
+    ty: Option<Obj>,
+    bounds: Option<(u64, Option<u64>)>,
+) -> Result<crate::modifiers::Modifiers, CommandError> {
+    let (lower, upper) = bounds.unwrap_or((1, Some(1)));
+    let shape = crate::modifiers::Shape { itself: a, context: vec![c], ty, lower, upper, composite: false, name: name.to_string() };
+    crate::modifiers::read(store, p, &shape, a)
+}
+
+/// The bounds typed under `multiplicity`, refused when they do not read.
+fn typed_bounds(p: &Params) -> Result<Option<(u64, Option<u64>)>, CommandError> {
+    parse_multiplicity(text(p, "multiplicity")).map_err(|why| refuse("multiplicity", format!("the multiplicity {why}")))
+}
+
 /// `uml.attribute.add`: an attribute of a class, an interface, a data type or an association class,
-/// its name free among
-/// its attributes.
+/// its name free among its attributes, with its modifiers (AR-126).
 fn attribute_add(ctx: &mut C<'_>, p: &Params) -> R {
     let c = classifier_of(ctx.doc, p, "class")?;
     let Some((owned, _)) = member_lists(ctx.doc, c) else { return Err(refuse("class", no_members(ctx.doc, c, "attributes"))) };
     let name = text(p, "name");
     check_name(ctx.doc, c, name, &attributes(ctx.doc, c), None)?;
     let vis = visibility(ctx.doc, c, p, "visibility")?;
+    let ty = resolve_type(ctx.doc, "type", text(p, "type"))?;
+    let modifiers = attribute_modifiers(ctx.doc, p, c, None, name, ty, typed_bounds(p)?)?;
     let a = ctx.doc.create(PROPERTY).map_err(fail)?;
     set_name(ctx.doc, a, name)?;
     ctx.doc.set(a, named_element::VISIBILITY, vis).map_err(fail)?;
     ctx.doc.set(a, feature::IS_STATIC, Value::Bool(p.bool("static").unwrap_or(false))).map_err(fail)?;
-    let ty = resolve_type(ctx.doc, "type", text(p, "type"))?;
     set_type(ctx.doc, a, ty)?;
     set_multiplicity(ctx.doc, a, text(p, "multiplicity"), "multiplicity")?;
     let at = place(p, list(ctx.doc, c, owned).len());
     ctx.doc.insert(c, owned, at, Value::Ref(a)).map_err(fail)?;
+    crate::modifiers::apply(ctx.doc, a, &modifiers)?;
     select(ctx, a);
     Ok(json!({ "id": uuid_of(ctx.doc, a)? }))
 }
 
-/// `uml.attribute.set`: an attribute's name, visibility, type, multiplicity and static changed.
+/// `uml.attribute.set`: an attribute's name, visibility, type, multiplicity, static and modifiers
+/// changed, everything checked before anything changes. A field the call leaves out keeps what the
+/// attribute has, so a rename alone keeps its type, multiplicity and modifiers; clearing is said
+/// explicitly (an empty type, multiplicity or default, an empty list). A type its default does not
+/// fit is refused, naming the default, which is never cleared for it.
 fn attribute_set(ctx: &mut C<'_>, p: &Params) -> R {
     let a = id_of(ctx.doc, p, "attribute", PROPERTY, "an attribute")?;
     let Some(c) = owner_of(ctx.doc, a).filter(|_| one(ctx.doc, a, property::ASSOCIATION).is_none()) else {
         return Err(refuse("attribute", "it is not a class's, an interface's, a data type's or an association class's attribute"));
     };
-    let name = text(p, "name");
-    check_name(ctx.doc, c, name, &attributes(ctx.doc, c), Some(a))?;
-    let vis = visibility(ctx.doc, c, p, "visibility")?;
-    set_name(ctx.doc, a, name)?;
+    let name = match p.str("name") {
+        Some(n) => n.to_string(),
+        None => name_of(ctx.doc, a),
+    };
+    check_name(ctx.doc, c, &name, &attributes(ctx.doc, c), Some(a))?;
+    let vis = match p.str("visibility") {
+        Some(_) => visibility(ctx.doc, c, p, "visibility")?,
+        None => ctx.doc.get(a, named_element::VISIBILITY).map_err(fail)?,
+    };
+    let ty = match p.str("type") {
+        Some(t) => resolve_type(ctx.doc, "type", t)?,
+        None => one(ctx.doc, a, typed_element::TYPE),
+    };
+    let bounds = match p.str("multiplicity") {
+        Some(_) => typed_bounds(p)?,
+        None => Some(crate::modifiers::bounds(ctx.doc, a)),
+    };
+    let modifiers = attribute_modifiers(ctx.doc, p, c, Some(a), &name, ty, bounds)?;
+    set_name(ctx.doc, a, &name)?;
     ctx.doc.set(a, named_element::VISIBILITY, vis).map_err(fail)?;
-    ctx.doc.set(a, feature::IS_STATIC, Value::Bool(p.bool("static").unwrap_or(false))).map_err(fail)?;
-    let ty = resolve_type(ctx.doc, "type", text(p, "type"))?;
+    if let Some(on) = p.bool("static") {
+        ctx.doc.set(a, feature::IS_STATIC, Value::Bool(on)).map_err(fail)?;
+    }
     set_type(ctx.doc, a, ty)?;
-    set_multiplicity(ctx.doc, a, text(p, "multiplicity"), "multiplicity")?;
+    if p.str("multiplicity").is_some() {
+        set_multiplicity(ctx.doc, a, text(p, "multiplicity"), "multiplicity")?;
+    }
+    crate::modifiers::apply(ctx.doc, a, &modifiers)?;
     Ok(json!({ "id": uuid_of(ctx.doc, a)? }))
 }
 
@@ -747,14 +793,16 @@ fn class_get(ctx: &mut C<'_>, p: &Params) -> R {
     let attrs: Vec<Json> = attributes(store, c)
         .into_iter()
         .map(|a| {
-            json!({
+            let mut row = json!({
                 "id": uuid_of(store, a).unwrap_or_default(),
                 "name": name_of(store, a),
                 "visibility": visibility_word(store, a),
                 "type": type_ref(store, a),
                 "multiplicity": crate::figures::multiplicity(store, a),
                 "static": flag(store, a, feature::IS_STATIC),
-            })
+            });
+            crate::modifiers::merge_into(store, a, &mut row);
+            row
         })
         .collect();
     let ops: Vec<Json> = operations(store, c)
@@ -862,7 +910,8 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
                 multiplicity_line!(),
                 "\n",
                 visibility_line!(),
-                "\nstatic: bool = false; belongs to the class, not its instances\nat: integer = -1, -1..1000000; where among the attributes, -1 for the end"
+                "\nstatic: bool = false; belongs to the class, not its instances\nat: integer = -1, -1..1000000; where among the attributes, -1 for the end\n",
+                modifier_lines!()
             ),
             has_classes,
             attribute_add
@@ -873,13 +922,13 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             &["Class"],
             None,
             concat!(
-                "attribute: string; the attribute's id\nname: string; the attribute's name\n",
-                type_line!(),
-                "\n",
-                multiplicity_line!(),
-                "\n",
-                visibility_line!(),
-                "\nstatic: bool = false; belongs to the class, not its instances"
+                "attribute: string; the attribute's id; every other field left out keeps what the attribute has, and clearing is said explicitly\n",
+                "name: string?; the attribute's name; left out, kept\n",
+                "type: string?; a type's id, or Integer, String, Boolean, Real or UnlimitedNatural, the built-in types kept in the package Types (never a type of the model's own named alike); \"\" for none; left out, kept\n",
+                "multiplicity: string?; 1, 0..1, *, 1..*, 2..5; \"\" for none; left out, kept\n",
+                "visibility: string?, public|private|protected|package; the visibility, public for an interface's member; left out, kept\n",
+                "static: bool?; belongs to the class, not its instances; left out, kept\n",
+                kept_modifier_lines!()
             ),
             has_classes,
             attribute_set

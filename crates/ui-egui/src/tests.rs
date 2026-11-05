@@ -6248,7 +6248,8 @@ fn a_class_takes_attributes_in_properties_typed_checked_moved_and_removed_each_o
     let at = rect_of(&h, "workspace.properties.member.apply").center();
     click(&mut h, at);
     let refused = h.state().panels.member.as_ref().and_then(|e| e.refused.clone()).expect("refused");
-    assert!(refused.contains("multiplicity"), "{refused}");
+    assert_eq!(refused, "The upper bound must be at least 3.", "said in the user's words");
+    assert_eq!(h.state().panels.member.as_ref().and_then(|e| e.refused_at), Some("multiplicity"), "under its field");
     assert_eq!(member_rows(&h, customer, false)[2], "+ rating : Real [0..1]", "nothing changed");
     // Private and static, applied.
     h.state_mut().panels.member.as_mut().unwrap().multiplicity = "1..*".into();
@@ -11299,5 +11300,328 @@ fn the_activity_rail_puts_diagrams_above_models_in_its_look_and_its_keyboard_ord
         let ids = ids(&h);
         let at = |id: &str| ids.iter().position(|i| i == id).unwrap();
         assert!(at("workspace.explorers.diagrams") < at("workspace.explorers.models"), "{theme:?}: {ids:?}");
+    }
+}
+
+/// A package Shop open on its diagram in `theme` (AR-126): the classes Item and Order, Order
+/// specializing Item; the enumeration Status with Placed and Paid; Item's `parts : Item [*]`,
+/// Order's `lines : Item [*]` and `status : Status`; an association from Order to Item whose
+/// second end is `items [*]`. Order is selected with Properties showing it. Gives the harness and
+/// the ids by name: Item, Order, Status, parts, lines, status and the association, `holds`.
+fn modifiers_sample(theme: ThemeKind) -> (Harness<'static, Shell>, std::collections::BTreeMap<&'static str, String>) {
+    let mut h = workspace_harness(theme, egui::vec2(1600.0, 1400.0));
+    let mut ids = std::collections::BTreeMap::new();
+    {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let mut run = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap_or_default().to_string();
+        let pkg = run("uml.package.add", serde_json::json!({ "name": "Shop" }));
+        let d = run("diagram.add", serde_json::json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": pkg, "name": "Shop" }));
+        let item = run("uml.class.add", serde_json::json!({ "package": pkg, "name": "Item" }));
+        let order = run("uml.class.add", serde_json::json!({ "package": pkg, "name": "Order" }));
+        run("uml.generalization.add", serde_json::json!({ "specific": order, "general": item }));
+        let status = run("uml.enumeration.add", serde_json::json!({ "package": pkg, "name": "Status" }));
+        for l in ["Placed", "Paid"] {
+            run("uml.literal.add", serde_json::json!({ "enumeration": status, "name": l }));
+        }
+        let parts = run("uml.attribute.add", serde_json::json!({ "class": item, "name": "parts", "type": item, "multiplicity": "*" }));
+        let lines = run("uml.attribute.add", serde_json::json!({ "class": order, "name": "lines", "type": item, "multiplicity": "*" }));
+        let st = run("uml.attribute.add", serde_json::json!({ "class": order, "name": "status", "type": status }));
+        let holds = run("uml.association.add", serde_json::json!({ "from": order, "to": item }));
+        run("uml.association.set-end", serde_json::json!({ "association": holds, "end": 1, "role": "items", "multiplicity": "*" }));
+        for (element, x, y) in [(&item, 80, 80), (&order, 80, 420), (&status, 520, 80)] {
+            run("diagram.place", serde_json::json!({ "diagram": d, "element": element, "x": x, "y": y, "width": 260, "height": 160 }));
+        }
+        run("diagram.connect-all", serde_json::json!({ "diagram": d }));
+        for (k, v) in [
+            ("Item", item),
+            ("Order", order.clone()),
+            ("Status", status),
+            ("parts", parts),
+            ("lines", lines),
+            ("status", st),
+            ("holds", holds),
+            ("diagram", d),
+        ] {
+            ids.insert(k, v);
+        }
+    }
+    crate::canvas::open(h.state_mut(), archforge_mof::Uuid::parse(&ids["diagram"]).unwrap());
+    h.run();
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [ids["Order"]] })).unwrap();
+    h.state_mut().state.show_panel(crate::state::Panel::Properties);
+    h.run();
+    (h, ids)
+}
+
+/// The attribute `id`'s card row, as its class's card and Properties list it.
+fn attribute_row(h: &Harness<'static, Shell>, id: &str) -> String {
+    let st = h.state().session.as_ref().unwrap().doc();
+    archforge_uml::figures::attribute_text(st, st.by_uuid(archforge_mof::Uuid::parse(id).unwrap()).unwrap())
+}
+
+/// Opens the attribute editor on the attribute `id` of the selected class.
+fn edit_attribute(h: &mut Harness<'static, Shell>, id: &str) {
+    // The row's pencil shows while the pointer is over the row.
+    let row = rect_of(h, &format!("workspace.properties.attribute.{id}")).left_center() + egui::vec2(20.0, 0.0);
+    h.event(egui::Event::PointerMoved(row));
+    h.run();
+    let at = rect_of(h, &format!("workspace.properties.attribute.{id}.edit")).center();
+    click(h, at);
+    assert_eq!(h.state().panels.member.as_ref().and_then(|e| e.target).map(|t| t.to_string()).as_deref(), Some(id));
+}
+
+/// The attribute editor shows the modifiers in the design's layout: Default value, Static, Derived,
+/// Read only, Ordered and Unique, Subsets and Redefines listing only the valid properties; one
+/// Apply writes them all as one undo step and the card says them; Cancel and Escape leave the
+/// model untouched. In light and dark.
+#[test]
+fn the_attribute_editor_writes_its_modifiers_in_one_apply_and_cancel_or_escape_leaves_the_model() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, made) = modifiers_sample(theme);
+        let lines = made["lines"].clone();
+        edit_attribute(&mut h, &lines);
+        let found = ids(&h);
+        for id in [
+            "workspace.properties.member.default",
+            "workspace.properties.member.static",
+            "workspace.properties.member.derived",
+            "workspace.properties.member.read-only",
+            "workspace.properties.member.ordered",
+            "workspace.properties.member.unique",
+            "workspace.properties.member.subsets",
+            "workspace.properties.member.redefines",
+        ] {
+            assert!(found.iter().any(|i| i == id), "{theme:?}: {id} in {found:?}");
+        }
+        let shown = painted(&h);
+        for label in ["Default value", "Derived", "Read only", "Ordered", "Unique", "Subsets", "Redefines"] {
+            assert!(shown.iter().any(|t| t == label), "{label} in {shown:?}");
+        }
+        // The choices are built once for this state of the project and kept while frames go by.
+        let kept = h.state().panels.targets.clone();
+        assert_eq!(kept.len(), 1, "one list for the open editor");
+        for _ in 0..3 {
+            h.step();
+        }
+        assert_eq!(h.state().panels.targets, kept, "the same list, not built again every frame");
+        // Subsets lists Item's parts, which Order specializes, and nothing else.
+        let at = rect_of(&h, "workspace.properties.member.subsets").center();
+        click(&mut h, at);
+        let offered: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.member.subsets.")).collect();
+        assert_eq!(offered.len(), 3, "None, Order's end items and Item's parts: {offered:?}");
+        let shown = painted(&h);
+        assert!(shown.iter().any(|t| t == "items · Order") && shown.iter().any(|t| t == "parts · Item"), "{shown:?}");
+        let at = rect_of(&h, "workspace.properties.member.subsets.2").center();
+        click(&mut h, at);
+        // A default, Derived and Ordered.
+        type_into(&mut h, "workspace.properties.member.default", "none");
+        for check in ["derived", "ordered"] {
+            let at = rect_of(&h, &format!("workspace.properties.member.{check}")).center();
+            click(&mut h, at);
+        }
+        let before = attribute_row(&h, &lines);
+        assert_eq!(before, "+ lines : Item [*]", "nothing is written before Apply");
+        let at = rect_of(&h, "workspace.properties.member.apply").center();
+        click(&mut h, at);
+        assert!(h.state().panels.member.is_none(), "{:?}", h.state().panels.member);
+        assert_eq!(attribute_row(&h, &lines), "+ / lines : Item [*] = none {ordered, subsets parts}");
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Set attribute"));
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        assert_eq!(attribute_row(&h, &lines), before, "one undo step takes it all back");
+        h.state_mut().session.as_mut().unwrap().redo().unwrap();
+        h.run();
+        assert!(painted(&h).iter().any(|t| t == "+ / lines : Item [*] = none {ordered, subsets parts}"), "the card and the row say it");
+        // Cancel, then Escape: edits made and dropped, the model as it was.
+        let written = attribute_row(&h, &lines);
+        for way in ["cancel", "escape"] {
+            edit_attribute(&mut h, &lines);
+            let at = rect_of(&h, "workspace.properties.member.read-only").center();
+            click(&mut h, at);
+            assert!(h.state().panels.member.as_ref().is_some_and(|e| e.read_only));
+            if way == "cancel" {
+                let at = rect_of(&h, "workspace.properties.member.cancel").center();
+                click(&mut h, at);
+            } else {
+                key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+            }
+            assert!(h.state().panels.member.is_none(), "{way} closes the editor");
+            assert_eq!(attribute_row(&h, &lines), written, "{way} leaves the model");
+        }
+    }
+}
+
+/// An enumeration-typed attribute picks its default among its literals; a default its type does
+/// not read is refused under the field in the user's words, the editor kept open and nothing
+/// written; a type the kept default does not fit is refused under the type, naming it; a property
+/// with nothing to subset says so in a muted line. In light and dark.
+#[test]
+fn a_modifier_refusal_sits_under_its_field_and_an_enumeration_s_default_is_a_literal() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, made) = modifiers_sample(theme);
+        let status = made["status"].clone();
+        edit_attribute(&mut h, &status);
+        // Status's literals, in a select.
+        let at = rect_of(&h, "workspace.properties.member.default").center();
+        click(&mut h, at);
+        let offered: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.member.default.")).collect();
+        assert_eq!(offered.len(), 3, "None, Placed and Paid: {offered:?}");
+        let at = rect_of(&h, "workspace.properties.member.default.2").center();
+        click(&mut h, at);
+        // Nothing to subset or redefine for an attribute typed by an enumeration here.
+        let shown = painted(&h);
+        assert!(shown.iter().any(|t| t == "No property to subset") && shown.iter().any(|t| t == "No property to redefine"), "{shown:?}");
+        let at = rect_of(&h, "workspace.properties.member.apply").center();
+        click(&mut h, at);
+        assert_eq!(attribute_row(&h, &status), "+ status : Status = Paid");
+        // A type the default does not fit: refused under the type, naming the default.
+        edit_attribute(&mut h, &status);
+        pick_type(&mut h, "workspace.properties.member.type", "Integer");
+        let at = rect_of(&h, "workspace.properties.member.apply").center();
+        click(&mut h, at);
+        let edit = h.state().panels.member.clone().expect("the editor stays open");
+        assert_eq!(edit.refused_at, Some("type"));
+        assert_eq!(edit.refused.as_deref(), Some("The default value Paid does not fit Integer; change or clear it first."));
+        assert!(painted(&h).iter().any(|t| t.contains("does not fit Integer")), "said under the field");
+        assert_eq!(attribute_row(&h, &status), "+ status : Status = Paid", "nothing written");
+        // A default that does not read: refused under the default.
+        h.state_mut().panels.member.as_mut().unwrap().default = "many".into();
+        h.run();
+        let at = rect_of(&h, "workspace.properties.member.apply").center();
+        click(&mut h, at);
+        let edit = h.state().panels.member.clone().expect("the editor stays open");
+        assert_eq!(edit.refused_at, Some("default"));
+        assert_eq!(edit.refused.as_deref(), Some("many is not a whole number, which an Integer's default is, such as 42."));
+        assert_eq!(attribute_row(&h, &status), "+ status : Status = Paid", "nothing written");
+        // Corrected, it is written.
+        h.state_mut().panels.member.as_mut().unwrap().default = "7".into();
+        h.run();
+        let at = rect_of(&h, "workspace.properties.member.apply").center();
+        click(&mut h, at);
+        assert!(h.state().panels.member.is_none());
+        assert_eq!(attribute_row(&h, &status), "+ status : Integer = 7");
+    }
+}
+
+/// An association's end shows its Modifiers summed up under a disclosure; opened, they are
+/// written by their own Apply as one undo step, the line saying them beside the end; Cancel and
+/// Escape bring the model's back; a refusal sits under its field in the user's words. Its role
+/// written at once keeps the modifiers. In light and dark.
+#[test]
+fn an_association_end_s_modifiers_are_written_by_their_apply_and_its_line_says_them() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, made) = modifiers_sample(theme);
+        let holds = made["holds"].clone();
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [holds] })).unwrap();
+        h.run();
+        assert!(painted(&h).iter().any(|t| t == "Modifiers"), "{:?}", painted(&h));
+        let at = rect_of(&h, "workspace.properties.end.1.modifiers").center();
+        click(&mut h, at);
+        for id in ["default", "static", "derived", "read-only", "ordered", "unique", "subsets", "redefines", "cancel", "apply"] {
+            assert!(ids(&h).iter().any(|i| *i == format!("workspace.properties.end.1.{id}")), "{theme:?}: {id}");
+        }
+        // Order's lines is offered to subset: the end's context is Order.
+        let at = rect_of(&h, "workspace.properties.end.1.subsets").center();
+        click(&mut h, at);
+        assert!(painted(&h).iter().any(|t| t == "lines · Order"), "{:?}", painted(&h));
+        let lines_row = ids(&h).into_iter().find(|i| i == "workspace.properties.end.1.subsets.1").expect("lines");
+        let at = rect_of(&h, &lines_row).center();
+        click(&mut h, at);
+        type_into(&mut h, "workspace.properties.end.1.default", "none");
+        for check in ["derived", "ordered"] {
+            let at = rect_of(&h, &format!("workspace.properties.end.1.{check}")).center();
+            click(&mut h, at);
+        }
+        let line = |h: &Harness<'static, Shell>| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let l = archforge_uml::figures::line(st, st.by_uuid(archforge_mof::Uuid::parse(&holds).unwrap()).unwrap()).unwrap();
+            (l.ends[1].role.clone(), l.ends[1].text.clone())
+        };
+        assert_eq!(line(&h), (Some("items".into()), Some("*".into())), "nothing before Apply");
+        let at = rect_of(&h, "workspace.properties.end.1.apply").center();
+        click(&mut h, at);
+        assert_eq!(line(&h), (Some("/items".into()), Some("* = none {ordered, subsets lines}".into())));
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Set association end"));
+        assert!(h.state().panels.ends.as_ref().is_some_and(|e| !e.modifiers_open[1]), "written, the Modifiers close");
+        assert!(!ids(&h).iter().any(|i| i == "workspace.properties.end.1.apply"));
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        assert_eq!(line(&h), (Some("items".into()), Some("*".into())), "one step");
+        h.state_mut().session.as_mut().unwrap().redo().unwrap();
+        h.run();
+        let shown = painted(&h);
+        assert!(shown.iter().any(|t| t == "/items") && shown.iter().any(|t| t == "* = none {ordered, subsets lines}"), "the line says it: {shown:?}");
+        let at = rect_of(&h, "workspace.properties.end.1.modifiers").center();
+        click(&mut h, at);
+        // Cancel and Escape bring the model's back.
+        for way in ["cancel", "escape"] {
+            let at = rect_of(&h, "workspace.properties.end.1.read-only").center();
+            click(&mut h, at);
+            assert!(h.state().panels.ends.as_ref().is_some_and(|e| e.modifiers[1].read_only));
+            if way == "cancel" {
+                let at = rect_of(&h, "workspace.properties.end.1.cancel").center();
+                click(&mut h, at);
+            } else {
+                key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+            }
+            assert!(h.state().panels.ends.as_ref().is_some_and(|e| !e.modifiers[1].read_only), "{way}");
+            assert_eq!(line(&h).1.as_deref(), Some("* = none {ordered, subsets lines}"), "{way} leaves the model");
+        }
+        // A property the rules refuse, said under Redefines: Item's parts is no general's for Order's end.
+        let parts = archforge_mof::Uuid::parse(&made["lines"]).unwrap();
+        h.state_mut().panels.ends.as_mut().unwrap().modifiers[1].redefines = vec![parts];
+        h.run();
+        let at = rect_of(&h, "workspace.properties.end.1.apply").center();
+        click(&mut h, at);
+        let refused = h.state().panels.ends.as_ref().and_then(|e| e.modifier_refused[1].clone());
+        assert_eq!(refused, Some(("redefines", "lines is not a property this one can redefine.".to_string())));
+        assert!(painted(&h).iter().any(|t| t == "lines is not a property this one can redefine."), "under its field");
+        assert_eq!(line(&h).1.as_deref(), Some("* = none {ordered, subsets lines}"), "nothing written");
+        assert!(h.state().panels.ends.as_ref().is_some_and(|e| e.modifiers_open[1]), "refused, the Modifiers stay open");
+        // Enter in the Default field applies, as Apply does, and closes the Modifiers.
+        h.state_mut().panels.ends.as_mut().unwrap().modifiers[1].redefines.clear();
+        let at = rect_of(&h, "workspace.properties.end.1.default").center();
+        click(&mut h, at);
+        key(&mut h, egui::Key::A, egui::Modifiers::COMMAND);
+        h.event(egui::Event::Text("few".into()));
+        h.run();
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert_eq!(line(&h).1.as_deref(), Some("* = few {ordered, subsets lines}"), "Enter applied");
+        assert!(h.state().panels.ends.as_ref().is_some_and(|e| !e.modifiers_open[1] && e.modifier_refused[1].is_none()));
+        // The role written at once keeps the modifiers.
+        h.state_mut().panels.ends.as_mut().unwrap().modifiers[1].redefines.clear();
+        let at = rect_of(&h, "workspace.properties.end.1.role").center();
+        click(&mut h, at);
+        key(&mut h, egui::Key::A, egui::Modifiers::COMMAND);
+        h.event(egui::Event::Text("goods".into()));
+        h.run();
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert_eq!(line(&h), (Some("/goods".into()), Some("* = few {ordered, subsets lines}".into())));
+    }
+}
+
+/// An end moved to another class drops, in the same step, what it no longer subsets, and the
+/// canvas says so in the user's words; a role edit afterwards writes. In light and dark.
+#[test]
+fn a_moved_end_drops_what_it_no_longer_subsets_and_says_so() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, made) = modifiers_sample(theme);
+        let holds = made["holds"].clone();
+        let s = h.state_mut().session.as_mut().unwrap();
+        s.execute("uml.association.set-end", &serde_json::json!({ "association": holds, "end": 1, "subsets": [made["lines"]] })).unwrap();
+        let st = s.doc();
+        let item = st.by_uuid(archforge_mof::Uuid::parse(&made["Item"]).unwrap()).unwrap();
+        let node = archforge_diagram::views_of(st, item).2.first().and_then(|n| st.uuid(*n).ok()).unwrap();
+        crate::uml_relate::reconnect(h.state_mut(), archforge_mof::Uuid::parse(&holds).unwrap(), true, node);
+        h.run();
+        assert_eq!(h.state().canvas.notice.as_deref(), Some("The moved ends no longer subset or redefine lines, so those were dropped."));
+        assert!(
+            painted(&h).iter().any(|t| t == "The moved ends no longer subset or redefine lines, so those were dropped."),
+            "said at the canvas's top"
+        );
+        let st = h.state().session.as_ref().unwrap().doc();
+        let end = archforge_uml::figures::member_ends(st, st.by_uuid(archforge_mof::Uuid::parse(&holds).unwrap()).unwrap()).unwrap()[1];
+        assert!(archforge_uml::modifiers::subsets(st, end).is_empty());
+        let roled =
+            crate::editing::run(h.state_mut(), "uml.association.set-end", serde_json::json!({ "association": holds, "end": 1, "role": "goods" }));
+        assert!(roled.is_ok(), "{roled:?}");
     }
 }

@@ -110,9 +110,14 @@ fn type_name(store: &Store, o: Obj) -> Option<String> {
     one(store, o, typed_element::TYPE).map(|t| name(store, t)).filter(|n| !n.is_empty())
 }
 
-/// An attribute as a class's card lists it: `+ total : Money [0..1]`.
+/// An attribute as a class's card lists it: `+ total : Money [0..1]`; a derived one with `/ `
+/// before its name, then its default after `=` and what differs from the usual in braces (AR-126,
+/// as the design writes it: `+ / total : Money = 0`, `+ lines : OrderLine [1..*] {ordered}`).
 pub fn attribute_text(store: &Store, a: Obj) -> String {
     let mut text = visibility(store, a).map(|v| format!("{v} ")).unwrap_or_default();
+    if crate::modifiers::is_derived(store, a) {
+        text.push_str("/ ");
+    }
     text.push_str(&name(store, a));
     if let Some(ty) = type_name(store, a) {
         text.push_str(&format!(" : {ty}"));
@@ -121,7 +126,22 @@ pub fn attribute_text(store: &Store, a: Obj) -> String {
     if !m.is_empty() && m != "1" {
         text.push_str(&format!(" [{m}]"));
     }
+    text.push_str(&crate::modifiers::suffix(store, a));
     cut(text)
+}
+
+/// An association end's role as its line writes it: `/` before it when the end is derived; empty
+/// when it has neither.
+pub fn end_role(store: &Store, end: Obj) -> String {
+    let role = name(store, end);
+    if crate::modifiers::is_derived(store, end) { cut(format!("/{role}")) } else { role }
+}
+
+/// What an association end's line writes beside its end after the role: its multiplicity, then
+/// `= default` and the braces, as in `0..* = none {ordered}` (AR-126); empty when it has none.
+pub fn end_text(store: &Store, end: Obj) -> String {
+    let text = format!("{}{}", multiplicity(store, end), crate::modifiers::suffix(store, end));
+    cut(text.trim_start().to_string())
 }
 
 /// An operation as a class's card lists it: `+ total(currency : Currency) : Money`.
@@ -312,8 +332,8 @@ pub fn line(store: &Store, element: Obj) -> Option<Line> {
                     AggregationKind::NoneKind if navigable(store, element, here) => EndMark::OpenArrow,
                     AggregationKind::NoneKind => EndMark::None,
                 };
-                let m = multiplicity(store, here);
-                let role = name(store, here);
+                let m = end_text(store, here);
+                let role = end_role(store, here);
                 End {
                     mark,
                     text: (!m.is_empty()).then_some(m),
@@ -369,16 +389,17 @@ pub fn text_slots(class: archforge_mof::ClassId) -> &'static [&'static str] {
     }
 }
 
-/// The text of an association's, an association class's or a dependency's slot a label shows.
+/// The text of an association's, an association class's or a dependency's slot a label shows: an
+/// end's role and its text after it, as [`end_role`] and [`end_text`] write them.
 pub fn slot_text(store: &Store, element: Obj, slot: &str) -> String {
     let end = |i: usize| member_ends(store, element).map(|e| e[i]);
     let ends = store.class_of(element).is_ok_and(crate::is_association);
     match slot {
         "name" => name(store, element),
-        "from_end" if ends => end(0).map(|e| multiplicity(store, e)).unwrap_or_default(),
-        "to_end" if ends => end(1).map(|e| multiplicity(store, e)).unwrap_or_default(),
-        "from_role" if ends => end(0).map(|e| name(store, e)).unwrap_or_default(),
-        "to_role" if ends => end(1).map(|e| name(store, e)).unwrap_or_default(),
+        "from_end" if ends => end(0).map(|e| end_text(store, e)).unwrap_or_default(),
+        "to_end" if ends => end(1).map(|e| end_text(store, e)).unwrap_or_default(),
+        "from_role" if ends => end(0).map(|e| end_role(store, e)).unwrap_or_default(),
+        "to_role" if ends => end(1).map(|e| end_role(store, e)).unwrap_or_default(),
         _ => String::new(),
     }
 }
