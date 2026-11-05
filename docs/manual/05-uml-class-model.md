@@ -160,7 +160,8 @@ The menu's other kinds of line, for later:
 - **Directed association**: an association drawn already navigable towards its second end.
 - **Aggregation** and **Composition**: an association between a whole and its parts, drawn with
   a hollow or a filled diamond at the whole. In a composition the parts belong to that one whole.
-  An end's **Aggregation** in **Properties** changes an association into either.
+  To change an association into either, set **Aggregation** to **Shared** or **Composite** on the
+  part's end in **Properties**; the diamond then shows at the other end, the whole's.
 - **Generalization**: one class is a more specific kind of another, as a card payment is a kind
   of payment. It is drawn as a solid line with a hollow triangle at the general class.
 - **Dependency**: one element uses another, drawn as a dashed line with an open arrow.
@@ -213,8 +214,9 @@ The card shows the four literals in order. **Properties** lists them under **Lit
 3. Type *status*, press Tab, type *OrderStatus*, and press Enter.
 4. Press Escape.
 
-*Order*'s card now reads `+ status : OrderStatus`. Every type you make is offered wherever you
-choose a type: an attribute's, a parameter's or an operation's return type.
+*Order*'s card now reads `+ status : OrderStatus`. Every class, interface, enumeration, data type
+and primitive type you make is offered wherever you choose a type: an attribute's, a parameter's
+or an operation's return type.
 
 ### Change the literals
 
@@ -381,8 +383,10 @@ The picture has **Properties** folded away, so the whole diagram fits: click the
 icon on the right rail to fold it, and any icon there to open it again. In **Models**, open a
 row's arrow to see its attributes, operations or literals.
 
-The status bar says *Saved* all along, because Archforge writes every change as you go. Press ⌘S
-(Ctrl S) to also keep a version of the project as it is now (see
+Since you began editing, the status bar at the bottom has said *Unsaved changes · ⌘S saves*.
+Your work is not at risk: Archforge writes every change to the project a moment after you make
+it, so nothing is lost if it closes unexpectedly. Saving is a separate step that keeps a version
+of the project as it is now. Press ⌘S (Ctrl S): the status bar then says *Saved* (see
 [Getting started](02-getting-started.md#saving)).
 
 ## Which element do I need?
@@ -491,9 +495,10 @@ the rules, to look up when you need them.
 
 A few words first. A *property* is an attribute or an association's end: both have a name, a
 type and a multiplicity. A class *specializes* another when a generalization runs from it to the
-other. A *composite* end is the whole's end of a composition. A multiplicity's *upper bound* is
-its largest number: 5 in `1..5`, and no limit in `*`. On a card, an attribute's multiplicity
-stands in brackets after its type, as in `lines : OrderLine [1..*]`.
+other. A *composite* end is a part's end whose **Aggregation** is **Composite**; the filled
+diamond is drawn at the other end, the whole's. A multiplicity's *upper bound* is its largest
+number: 5 in `1..5`, and no limit in `*`. On a card, an attribute's multiplicity stands in
+brackets after its type, as in `phones : String [1..*]`.
 
 An attribute's modifiers are in its editor in **Properties**, under **Type** and
 **Multiplicity**:
@@ -544,8 +549,9 @@ the class at the other end of the association, and of the classes that class spe
 the line, the end reads in the same order: `/` before a derived end's role, then its
 multiplicity, `= default` and the braces, as in `/items` with `* = none {ordered}`.
 
-The picture shows a separate, fuller example in a package *Orders*: a derived *total*, an ordered
-list of *lines*, and an association end with modifiers.
+The picture shows a separate, fuller example in a package *Orders*, where *OrderLine* is a plain
+class rather than the walkthrough's association class: a derived *total*, an ordered list of
+*lines*, and an association end with modifiers.
 
 <!-- picture: workspace-modifiers light | The class Order on its card with id {readOnly}, a derived total defaulting to 0, status defaulting to Placed and ordered lines, its end at OrderLine reading /items with * = none {ordered}; Order selected with the attribute editor open on total, showing Default value, the flags, and Subsets and Redefines -->
 
@@ -579,8 +585,11 @@ generalization a new element of the kind it started from.
   type, a primitive type and an association class in the same package need different names.
 - An association class's attributes and its ends' roles share its own names. A clash is refused
   under the attribute's row, or in **Properties** for a role.
-- An element you made is offered once wherever you choose a type. What it types keeps it when you
-  rename it or move it to another package, and loses it when you delete it, until you undo.
+- Every class, interface, enumeration, data type and primitive type you made is offered once
+  wherever you choose a type. Associations, association classes included, are not types: the type
+  menu does not list them, and a type typed on a card does not find them. What a type types keeps
+  it when you rename it or move it to another package, and loses it when you delete it, until you
+  undo.
 - If one of your types has the same name as a built-in type (say you made your own *Integer*),
   the type menu lists both with a muted note: *built-in* beside the built-in one, the package
   beside yours. Typed by name on a card, a name that several types share is refused until you pick

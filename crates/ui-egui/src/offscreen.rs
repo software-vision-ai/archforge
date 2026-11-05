@@ -1479,7 +1479,8 @@ fn guide_step(screen: Screen) -> Option<u8> {
 
 /// The user manual's class-model guide as it stands after `step` (see [`guide_step`]): one
 /// diagram, Commerce, of the root package, built up as the chapter builds it, with the screen's
-/// selection, open menu or draft row, and the view on the cards the step is about.
+/// selection, open menu or draft row, and the view on the cards the step is about. Nothing is
+/// saved yet, so the status bar shows unsaved changes, as the reader's own window does.
 fn sample_guide(shell: &mut Shell, step: u8) -> Result<(), String> {
     use serde_json::json;
     let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
@@ -1619,7 +1620,7 @@ fn sample_guide(shell: &mut Shell, step: u8) -> Result<(), String> {
         about.clear();
     }
     run(session, "view.select", json!({ "ids": [] }))?;
-    session.mark_saved().map_err(|e| format!("mark_saved: {e:?}"))?;
+    // Left unsaved, as the reader's project is while they work: the status bar says so.
     let id = |s: &str| archforge_mof::Uuid::parse(s).ok_or_else(|| "the sample's ids".to_string());
     let (root, diagram, order) = (id(&root)?, id(&diagram)?, id(&order)?);
     let mut view = vec![order];
