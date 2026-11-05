@@ -1,377 +1,418 @@
 # A first UML class model
 
-This chapter builds a small class model: a class *Customer* that places many *Order*s. It can live
-in the same project as the ER model of the previous chapter, or in a new one.
+Archforge models a software system. A model has several aspects: the previous chapter drew one,
+the system's database. This chapter draws another, the classes of its code, on a UML class
+diagram. A class diagram shows the things the software keeps track of, what each one knows and
+does, and how they are connected.
 
-Every UML model has one **root package**, named after the project, that holds everything without
-another home: the classes and packages you add without choosing a package, and the first class
-diagram. You don't need to set it up. Archforge makes it with your first class diagram (or your
-first package), and you can rename it like any package.
+You build one small example from start to end: a shop's customers, the orders they place, an
+order's status and its total in money. Each step adds one kind of element. It says what the
+element is for, with an everyday example first and its UML name second, where you make it, where
+you change it, and what you see afterwards.
+
+Use the project you made in [Getting started](02-getting-started.md). The tables of the
+[previous chapter](04-er-model.md) can stay: the class model sits beside them in the same project.
+
+## The tools you will use
+
+You make and change a class model in four places. Each step below says which one to use.
+
+- **The classifier tool** sits in the toolbar at the bottom of a class diagram, after **Select**
+  (the arrow) and **Pan** (the hand). It places a new card on the canvas. Its small chevron opens
+  the kinds menu: **Class**, **Interface**, **Enumeration**, **Data type** and **Primitive type**.
+  UML calls all of these *classifiers*. The tool shows the icon of the kind it places (for a
+  class, a small card with lines across it), and its tooltip names that kind. Archforge keeps the
+  kind you choose until you choose another; when you start Archforge again, it is **Class**.
+- **The Relationship tool** sits after the **Package** tool (the folder), and shows the line it
+  draws. It draws a line from one card to another. Its chevron opens a menu of kinds of line.
+- **Models**, in the left column, lists the model as a tree: its packages, the cards in them, and
+  their members, whether or not a diagram shows them. Lines are not listed there; select them on
+  a diagram. Its **+** adds an element next to the selected one, with its name ready to type.
+- **Properties**, in the right column, shows the selected element: its name, its package, and
+  sections such as **Attributes**, **Operations** or **Literals**. Each row there has a pencil
+  that opens its editor (see [The workspace](03-workspace.md#properties-and-appearance)).
+
+A selected card shows two small square buttons beside it. The one at its top right is
+**Connect**: drag from it onto another card to draw the Relationship tool's current kind of line.
+The one at its bottom right adds a member, such as an attribute.
+
+After it places a card or draws a line, a tool hands back to **Select**.
+
+Keys are written for macOS, with Windows and Linux in brackets: ⌘↩ (Ctrl Enter) means the
+Command key and Return on a Mac, and the Control key and Enter elsewhere.
 
 ## 1. Make a class diagram
 
-1. Choose the **+** at the start of the centre's tab strip.
-2. In the **New diagram** dialog choose the **Class diagram** card and **Continue**. On the second
-   step, **Package** shows your project's name: the root package, made when you choose **Create**.
-   Name the diagram *Commerce* and choose **Create**.
+1. Choose the **+** at the start of the centre's tab strip. The **New diagram** dialog opens on
+   its first step, a card for each kind of diagram.
+2. Choose the **Class diagram** card, then **Continue**. The second step asks for a **Name** and
+   a **Package**.
+3. In **Name**, type *Commerce*.
+4. Leave **Package** as it is. It shows your project's name: this is the *root package*.
+5. Choose **Create**.
+
+An empty diagram opens in a tab named *Commerce*. The path bar at the canvas's top left shows the
+package the diagram belongs to: your project's name. In **Models**, the top row has the same
+name. That row is the root package: every class model has exactly one, and it holds everything
+that you don't put in a package of your own. Archforge makes it with your first class diagram, so
+you never set it up. **Properties** calls it *Model · the project's root*.
+
+What you make in this chapter is part of the *model*: it exists once, whichever diagrams show it.
+That is why **Properties** describes a class as *Class · model, in every diagram*: a change there
+shows on every diagram that has the class.
+
+## 2. Add the classes Customer and Order
+
+A *class* describes one kind of thing your software keeps track of, such as a customer or an
+order. Each real customer of your shop is one *instance* of the class *Customer*.
+
+1. Choose the classifier tool. Its tooltip says **Class**. (If it shows another kind, open its
+   chevron and choose **Class**.)
+2. Click on the canvas, towards the left. A card appears with its name ready to type.
+3. Type *Customer* and press Enter.
+4. Choose the classifier tool again and click to the right of *Customer*.
+5. Type *Order* and press Enter.
+
+Each class is a card with *CLASS* above its name and two empty compartments under it: the upper
+one for attributes, the lower one for operations. **Models** lists *Customer* and *Order* under
+the root package. (The other kinds you make later show a UML keyword in « » above their name
+instead, such as `«enumeration»`.)
+
+To rename a class, double-click its name on the card, or change **Name** in **Properties**.
+
+## 3. Say what a class knows and does: attributes and operations
+
+An *attribute* is a fact that every instance holds, such as an order's number. An *operation* is
+something an instance can do, such as paying.
+
+1. Select *Customer*.
+2. Press ⌘↩ (Ctrl Enter). A draft row opens in the attributes compartment, ringed in blue. (A
+   selected card also shows a **+** at the right of each compartment, and the **Add attribute**
+   button at its bottom right; either does the same.)
+3. Type the name *name*.
+4. Press Tab to move to the type.
+5. Type *String*.
+6. Press Enter. The row reads `+ name : String`, and a new draft row opens under it.
+7. Press Escape to close the empty draft.
+8. Select *Order* and add the attribute *number* of type *Integer* in the same way.
+
+<!-- picture: workspace-guide-classes light | Order selected with a draft row open on its card: the name number, then the type Integer; Customer beside it with its attribute name : String -->
+
+9. With *Order* still selected, press ⇧⌘↩ (Ctrl Shift Enter). A draft row opens in the
+   operations compartment.
+10. Type *pay*, press Tab, type the return type *Boolean*, and press Enter.
+11. Press Escape.
+
+*Order*'s card now reads `+ number : Integer` and `+ pay() : Boolean`. The `+` means the member
+is public: other classes can use it.
+
+*String*, *Integer*, *Boolean*, *Real* and *UnlimitedNatural* are built-in types. Archforge keeps
+them in a package named *Types*, which it made the first time you used one. You see *Types* in
+**Models**, but not the types inside it.
+
+Select a class to edit it in **Properties**. It shows a **Description**, the **Name** and
+**Package**, and **Abstract** (tick it for a class that has no instances of its own, only more
+specific classes). Then come **Attributes** and **Operations**, each with a **+** and a pencil on
+every row. The pencil opens the member's editor. There you set what the card row cannot hold, such
+as the visibility (who may use the member) and an operation's parameters. Apply the change with
+the check at the editor's foot, or Enter; cancel it with the cross, or Escape. The red bin
+removes the member. On a draft row, the **⋯** at its right opens the same editor.
+
+## 4. Connect Customer and Order: an association
 
-The root package is the top row of **Models**, with what it holds below it. Once it exists, the
-**Package** field of a later class diagram offers it and every other package, and **New package**
-makes a new package inside the root, named like the diagram.
+A customer places orders. An *association* says that instances of two classes are linked like
+this. Its ends say how many instances take part (the *multiplicity*) and which way you can follow
+the link (*navigability*).
+
+1. Open the chevron beside the **Relationship** tool. The menu lists the kinds of line, the
+   current one highlighted.
+2. Choose **Association**.
+
+<!-- picture: workspace-guide-relate-kinds light | The Relationship tool's menu open over Customer and Order: Association highlighted, then the other kinds of line, and Interface realization and Association class below a line -->
+
+3. Press on *Customer*, drag onto *Order*, and let go.
+
+A plain line joins the two cards. It is selected, and **Properties** shows it: its **Name**, its
+two classes under **From** and **To**, and a section for each end, **End at Customer** and
+**End at Order**. A new association has no roles and no multiplicities, and can be followed in
+neither direction. Each end also has **Aggregation** and **Modifiers**; leave them as they are.
+
+4. In **Name**, type *places* and press Enter.
+5. Under **End at Order**, type *orders* in **Role** and press Enter. A role is the name an end
+   has as seen from the other class: a customer's *orders*.
+6. Under **End at Order**, open **Multiplicity** and choose `*`. A star means any number,
+   including none.
+7. Under **End at Order**, tick **Navigable**.
+8. Under **End at Customer**, open **Multiplicity** and choose `1`.
 
-## 2. Add classes
+<!-- picture: workspace-guide-association light | The association places selected between Customer and Order: an open arrow at Order with the role orders and *, 1 at Customer; Properties shows its name and both ends -->
 
-1. Choose the **Class** tool in the toolbar at the bottom, then click on the canvas. A class
-   appears with its name ready to type: type *Customer* and press Enter. (The tool places the kind
-   its chevron chose; a new window starts at **Class**.)
-2. Do the same for *Order*.
+The line now has an open arrow at *Order*, the end you can navigate to. (While the line is
+selected, its end handles cover the arrow; click on empty canvas to see it.) *places* sits at its
+middle, *orders* and `*` at *Order*'s end, and `1` at *Customer*'s end. Read it as: one customer
+places any number of orders, and from a customer you can find their orders.
 
-A class is a card with its name and two compartments under it: attributes, then operations.
+The **Multiplicity** menu also accepts a number or a range you type, such as `1..5`. `0..*` means
+the same as `*`, so Archforge shows it as `*`.
 
-## 3. Type attributes and operations on the card
+The menu's other kinds of line, for later:
 
-1. Select *Customer* and press ⌘↩ (Ctrl Enter), or choose the **+** at the right of its attributes
-   compartment. A draft row opens on the card, ringed in blue.
-2. Type the name *email*, press Tab, and type the type *String*. Press Enter: the attribute is
-   added as `email : String`, and a new draft opens for the next one. Press Escape to stop.
-3. Press ⇧⌘↩ (Ctrl Shift Enter) for an operation: type *placeOrder*, Tab, its return type *Order*,
-   and Enter.
+- **Directed association**: an association drawn already navigable towards its second end.
+- **Aggregation** and **Composition**: an association between a whole and its parts, drawn with
+  a hollow or a filled diamond at the whole. In a composition the parts belong to that one whole.
+  An end's **Aggregation** in **Properties** changes an association into either.
+- **Generalization**: one class is a more specific kind of another, as a card payment is a kind
+  of payment. It is drawn as a solid line with a hollow triangle at the general class.
+- **Dependency**: one element uses another, drawn as a dashed line with an open arrow.
+- **Interface realization** and **Association class**: steps 9 and 10.
 
-<!-- picture: workspace-inline-member light | Typing an attribute on the card: its name, then its type -->
+## 5. Give an order a status: an enumeration
 
-Built-in types (*Integer*, *String*, *Boolean*, *Real*, *UnlimitedNatural*) are made in a package
-*Types* the first time you use one; section 10 says how they sit beside primitive types of your
-own. For visibility, multiplicity, *static*, *abstract* and an
-operation's parameters, use the row's **⋯**, which opens the member's editor in **Properties**.
-**Properties** of a class lists its **Attributes** and **Operations**, each row with its edit
-button.
+An order is always *Placed*, *Paid*, *Shipped* or *Cancelled*, and nothing else. A type whose
+values come from a fixed list of names is an *enumeration*. The names in the list are its
+*literals*.
 
-<!-- picture: workspace-class-members light | A class's attributes and operations in Properties -->
+### Make the enumeration
 
-## 4. Draw an association
+1. Open the chevron beside the classifier tool. The kinds menu opens, with **Class**, the current
+   kind, ticked.
 
-1. Open the chevron of the **Relationship** tool and choose **Association**. (It also offers
-   directed association, aggregation, composition, generalization and dependency, and below a
-   line, interface realization.)
-2. Press on *Customer* and drag onto *Order*, then let go.
+<!-- picture: workspace-guide-classifier-kinds light | The classifier tool's kinds menu open: Class ticked, Enumeration highlighted below Interface, then Data type and Primitive type -->
 
-A new association is a plain line: no roles, no multiplicities, navigable to neither end.
+2. Choose **Enumeration**. (You can also move with the arrow keys and press Enter.) The tool now
+   shows a short list, and its tooltip says **Enumeration**.
+3. Click on the canvas below *Order*.
+4. Type *OrderStatus* and press Enter.
 
-## 5. Set multiplicity and navigability
+The card says `«enumeration»` above its name. It has one compartment, for its literals, which is
+empty for now. An enumeration has no attributes or operations: its literals are its members.
 
-Select the line. **Properties** shows the association's **Name** and a section for each end,
-*End at Customer* and *End at Order*:
+### Add the literals inside the enumeration
 
-1. Name the association *places*.
-2. Under *End at Order*, type the role *orders*, choose the multiplicity `0..*` from the
-   **Multiplicity** menu (or type a number or range, such as `1..5`), and tick **Navigable**.
-3. Under *End at Customer*, choose the multiplicity `1`.
+You add an enumeration's values on its own card, or in its own **Literals** section.
 
-<!-- picture: workspace-association light | An association's ends in Properties: role, multiplicity, navigable and aggregation -->
+1. Select *OrderStatus*.
+2. Press ⌘↩ (Ctrl Enter). A draft row opens at the end of its compartment. (The **+** at the
+   right of the compartment, and the **Add literal** button at the card's bottom right, do the
+   same.)
+3. Type *Placed* and press Enter. The literal is added, and a new draft row opens under it.
+4. Type *Paid* and press Enter.
+5. Type *Shipped* and press Enter.
+6. Type *Cancelled* and press Enter.
+7. Press Escape to close the empty draft.
 
-The line now shows an open arrow at *Order*, the end it navigates to, with the role and the
-multiplicities beside its ends. **Aggregation** makes the line a shared aggregation (a hollow
-diamond) or a composition (a filled one) at the whole's end.
+<!-- picture: workspace-guide-literals light | OrderStatus selected below Order, with Placed, Paid and Shipped on its card and a draft row with Cancelled typed at its end; Properties lists its literals, each with a pencil -->
 
-Drag an end of the selected line onto another class or interface to move it. An end that subsets
-or redefines a property it can no longer reach from there (section 12) loses that Subsets or
-Redefines entry in the same step, which you can undo, and the canvas names what was dropped.
+The card shows the four literals in order. **Properties** lists them under **Literals · 4**, and
+**Models** shows them under *OrderStatus*.
 
-## 6. Add an interface
+### Use the enumeration as a type
 
-An interface names what a class offers, without saying how: its attributes and operations, all
-public.
+1. Select *Order*.
+2. Press ⌘↩.
+3. Type *status*, press Tab, type *OrderStatus*, and press Enter.
+4. Press Escape.
 
-1. Open the chevron beside the **Class** tool and choose **Interface** (or use the arrow keys and
-   Enter). The tool now shows the interface's lollipop, and its tooltip says *Interface*; it keeps
-   that kind for this window until you choose another.
-2. Click on the canvas, type *Payable* and press Enter. Its card says `«interface»` above its name.
-3. Add its members as for a class: on the card with ⌘↩ and ⇧⌘↩, or in **Properties**.
+*Order*'s card now reads `+ status : OrderStatus`. Every type you make is offered wherever you
+choose a type: an attribute's, a parameter's or an operation's return type.
 
-In **Models**, the **+** of a package offers **Class** and **Interface** each on a row of its own,
-and you can drag an interface from Models onto a diagram as you drag a class. A package's classes
-and interfaces share its names: an interface cannot be named like a class beside it. An interface is
-offered as a type wherever you choose an attribute's or a parameter's type.
+### Change the literals
 
-The **Relationship** tool draws associations and dependencies to and from interfaces. A
-generalization joins an interface to the interface it specializes; a class never specializes an
-interface, and an interface specializes nothing but an interface. Such a drag is refused at the
-canvas's top, saying why, and draws nothing.
+- **Rename**: double-click a literal on the card and type the new name. Two literals of one
+  enumeration cannot share a name, whatever the case: typing *paid* beside *Paid* says "There is
+  a literal named Paid already." under the row and changes nothing.
+- **Edit, move or remove**: in **Properties**, choose a literal's pencil, or double-click its
+  row. Its editor holds its **Name**, the bin that removes it, and arrows that move it up or
+  down. Apply with the check or Enter; cancel with the cross or Escape.
+- **In Models**: with *OrderStatus* or one of its literals selected, **+** offers **Literal**
+  first. Click a selected literal's row again, or press F2, to rename it; Delete removes it.
 
-<!-- picture: workspace-interface light | An interface, Payable, with its members, the interface that specializes it and the class associated with it -->
+A literal stays the same literal when you rename or move it, so whatever refers to it keeps
+working.
 
-## 7. Realize an interface
+## 6. Hold an amount of money: a data type
 
-A class that offers everything an interface names *realizes* it: it implements the interface.
+An order's total is an amount of money, such as 5 euros. Two amounts of 5 euros are the same
+value, wherever they appear. An order is different: it stays the same order when its status
+changes. A value without an identity of its own is a *data type*. Like a class, it can have
+attributes and operations.
 
-1. Open the chevron of the **Relationship** tool and choose **Interface realization**, below the
-   line in the menu. The tool now shows a dashed line with a hollow triangle at its right, and its
-   tooltip says it runs from the implementing class to its interface.
-2. Press on the class, *Order*, and drag onto the interface, *Payable*, then let go.
+1. Open the classifier tool's chevron and choose **Data type**. The tool now shows a pair of
+   braces.
+2. Click on the canvas to the right of *OrderStatus*, type *Money*, and press Enter.
+3. With *Money* selected, press ⌘↩, type *amount*, press Tab, type *Real*, and press Enter.
+4. Type *currency*, press Tab, type *String*, and press Enter.
+5. Press Escape.
+6. Select *Order*, press ⌘↩, and add *total* of type *Money*. Press Escape.
 
-The realization is a dashed line in the muted ink, with a hollow triangle at the interface: it is
-neither a generalization (a solid line to its triangle) nor a dependency (a dashed line to an open
-arrow). Drawing it is one step you can undo. Several classes may realize the same interface, and
-a class may realize several interfaces.
-
-Only a class implements an interface. From an interface, the tool draws nothing, and a drop on
-anything but an interface, or a second realization of an interface the class realizes already,
-is refused: the reason shows at the canvas's top and nothing is drawn. Let go on empty canvas and
-a new interface appears there, its name ready to type, with the realization to it, as one step.
-
-Select the line: **Properties** shows its **Implementing class** and its **Realized interface**.
-Drag either end of the selected line onto another class or interface to move it; the same rules
-apply. Delete removes the realization, and removing its class or its interface takes it along.
-
-<!-- picture: workspace-realization light | Order and Invoice each realizing the interface Payable, Order's realization selected with its implementing class and realized interface in Properties -->
-
-## 8. Add an enumeration
-
-An enumeration is a type whose values are a fixed list of names, its *literals*: an order's status
-is *Placed*, *Paid*, *Shipped* or *Cancelled*.
-
-1. Open the chevron beside the classifier tool and choose **Enumeration**, below **Interface**. The
-   tool now shows a short list, and its tooltip says *Enumeration*.
-2. Click on the canvas, type *OrderStatus* and press Enter. Its card says `«enumeration»` above
-   its name and has one compartment, for its literals; while it has none, the compartment is
-   empty.
-
-An enumeration has no attributes or operations of its own: its members are its literals. Select
-it to see it in **Properties**: under its **Name** and **Package**, **Literals** lists its
-literals in their order, or says it has none yet. In **Models** an enumeration is a row under its
-package with its literals below it.
-
-### Add and edit literals
-
-1. Select *OrderStatus* on the canvas. Its literals' compartment shows a **+** at its right.
-2. Click **+**, the **Add literal** button beside the card, or press ⌘↩ (Ctrl Enter). A
-   row opens at the end of the compartment, ringed in blue, for the literal's name.
-3. Type *Placed* and press Enter. The literal is written, and a new row opens under it: type
-   *Paid*, Enter, *Shipped*, Enter, and so on. Press Escape to close the last, empty row. Clicking
-   elsewhere writes a row that has a name and drops an empty one.
-
-Each literal is one step you can undo. The card grows to show every literal you add; a card you
-made shorter by hand says how many it cannot show, as `+ 2 more literals`. An enumeration holds at
-most 256 literals, as an ER enum type does; past that, a new one is refused and the reason says
-so.
-
-Double-click a literal's row on the card to rename it in place. Two literals of one enumeration
-cannot share a name, whatever the case: typing *paid* beside *Paid* says "There is a literal named
-Paid already." under the row, keeps what you typed, and changes nothing until you choose another
-name. The row's **⋯** takes it to Properties.
-
-In **Properties**, **Literals** has a **+** and a pencil on each row. The pencil, or a double click
-on the row, opens the literal's editor: its **Name**, the bin to remove it and the arrows to move it
-up or down on the left, **Cancel** and **Apply** on the right. **Apply** or Enter writes the
-change as one step; **Cancel** or Escape leaves it as it was. A literal keeps its identity when you
-rename or move it, so what refers to it is not lost, and the order you give is the order saved.
-
-In **Models**, click a selected literal's row again, or press F2, to rename it; Delete removes it.
-With an enumeration or one of its literals selected, **+** offers **Literal** first, which adds one
-at the end, its name open for typing. Literals carry no skills.
-
-<!-- picture: workspace-literals light | OrderStatus's card at a working zoom with a literal's draft row open at its end, Returned typed, and its literals listed with their pencils in Properties -->
-
-In **Models**, the **+** of a package offers **Enumeration** beside **Class** and **Interface**,
-and you can drag an enumeration onto a diagram or onto another package's row as you drag a class.
-It shares its package's names with the classes and interfaces there. An enumeration is offered as a
-type wherever you choose an attribute's, a parameter's or a return type, and what it types keeps it
-when you rename it or move it to another package.
-
-An enumeration is a data type, not something whose instances you link: the **Relationship** tool
-draws no association to or from one, and says so at the canvas's top. A generalization joins an
-enumeration only to another enumeration, and a dependency may lead to one. Dragged out of an
-enumeration onto empty canvas, a generalization makes a new enumeration there.
-
-<!-- picture: workspace-enumeration light | The enumeration OrderStatus with its four literals, selected with its literals in Properties and under it in Models, an enumeration Priority with none yet, and the class Order whose attributes they type -->
-
-## 9. Add a data type
-
-A data type is a value without an identity of its own, such as an amount of *Money*: two amounts
-of 5 euros are the same value, wherever they appear. A data type has attributes and operations, as
-a class has.
-
-1. Open the chevron beside the classifier tool and choose **Data type**, below **Enumeration**. The
-   tool now shows a pair of braces, and its tooltip says *Data type*.
-2. Click on the canvas, type *Money* and press Enter. Its card says `«dataType»` above its name and
-   has two compartments, attributes and operations, as a class's card has.
-
-Add its members as you add a class's: the **+** at the right of each compartment, the adorner
-beside the selected card, its menu's **Add attribute**, or ⌘↩ for an attribute and ⇧⌘↩ for an
-operation open a row on the card to type into; Enter writes it as one step. Select the data type to
-see it in **Properties**: its **Name**, **Package** and **Description**, then **Attributes** and
-**Operations**, each with a **+** and an editor, as a class's. A data type has no **Abstract**.
-
-In **Models** a data type is a row under its package, with its attributes and operations below it.
-The **+** of a package offers **Data type** after **Enumeration**, and you can drag a data type
-onto a diagram or onto another package's row. It shares its package's names with the classes,
-interfaces and enumerations there. A data type is offered as a type wherever you choose an
-attribute's, a parameter's or a return type, once, beside the built-in types; what it types keeps
-it when you rename it or move it to another package, and loses it, until you undo, when you delete
-it.
-
-A data type's values are not linked as instances are: the **Relationship** tool draws no
-association to or from one, and says so at the canvas's top. A generalization joins a data type
-only to another data type, and no interface realization starts at one, since only a class
-implements an interface. A dependency may lead to or from one. Dragged out of a data type onto
-empty canvas, a generalization makes a new data type there. A data type carries skills, and a
-package's skill can aim at every data type in it.
-
-<!-- picture: workspace-data-type light | The data type Money with its attributes and operation, selected with its members in Properties and under it in Models, the data type Price specializing it, and the class Order whose total and refund it types -->
-
-## 10. Add a primitive type
-
-A primitive type is a plain value of your own, such as a *Sku* or a postcode, with nothing inside
-it: no attributes, no operations. The built-in types *Integer*, *String*, *Boolean*, *Real* and
-*UnlimitedNatural* are primitive types too, but you never make those: they are made for you in the
-package *Types* the first time you use one, and they stay as they are.
-
-1. Open the chevron beside the classifier tool and choose **Primitive type**, below **Data type**.
-   The tool now shows a small box with a ring inside, and its tooltip says *Primitive type*.
-2. Click on the canvas, type *Sku* and press Enter. Its card says `«primitive»` above its name and
-   has no compartment under it: there is nothing to add, so it has no **+**, no add button beside
-   it when selected, no **Add attribute** in its menu, and ⌘↩ opens no row.
-
-Select it to see it in **Properties**: its **Name**, **Package** and **Description**, and nothing
-more. In **Models** it is a row under its package, with nothing below it; the **+** of a package
-offers **Primitive type** after **Data type**, and you can drag one onto a diagram or onto another
-package's row. It shares its package's names with the other classifiers there. The built-in types
-do not appear in **Models** or the search, as before.
-
-A primitive type is offered wherever you choose a type, once. When it has the name of another type,
-say you made your own *Integer*, the type menu lists both and tells them apart with a muted note:
-*built-in* beside the built-in one, the package beside yours. Each pick types the member with the
-one you picked; choosing the built-in *Integer* always means the one in *Types*. Typed by name on a
-card, a name several types share is refused until you pick one from the menu. In the package
-*Types*, the built-in names are kept for the built-in types, so you cannot add your own *Integer*
-there. *Types* itself keeps its name and its place directly under the root package while it holds
-built-in types, and **Delete** on it in **Models** says so rather than removing it.
-
-The **Relationship** tool draws no association to or from a primitive type, and says so. A
-generalization joins a primitive type only to another primitive type: your *Gtin* may specialize
-your *Sku*. Dragged out of a primitive type onto empty canvas, a generalization makes a new
-primitive type there. No interface realization starts at one; a dependency may lead to or from one.
-Your own primitive types carry skills, and a package's skill can aim at every primitive type in it;
-a skill for every data type does not reach them. The built-in types carry no skills.
-
-<!-- picture: workspace-primitive-type light | The primitive types Sku and Gtin on the Catalog diagram, Gtin specializing Sku, Sku selected with its name, package and description in Properties and listed in Models, and the class Product whose attributes and operation they type -->
-
-## 11. Add an association class
-
-Sometimes the link between two classes has facts of its own: a *Review* that a *Customer* writes
-about a *Product* has its stars and its text, which belong neither to the customer nor to the
-product. An *association class* is that link: an association between the two classes that is a
-class too, with attributes and operations of its own.
-
-1. Open the chevron of the **Relationship** tool and choose **Association class**, the last row,
-   below **Interface realization**. The tool now shows a line with a small card above its middle,
-   and its tooltip says it joins two classes with a card of its own.
-2. Press on *Customer*, drag onto *Product*, then let go.
-
-The line appears between the two classes, and a card above the line's middle, its eyebrow
-`ASSOCIATION CLASS` and its name open for typing: type *Review* and press Enter. A dashed tie in
-the muted ink joins the card to the line's middle. The line, the card and the tie are one element,
-drawn as one step you can undo. A new association class has no roles and no multiplicities and
-navigates to neither class, as a new association does. Let go on empty canvas instead, and a new
-class appears there, its name ready to type, with the association class to it.
-
-Only classes are at its ends. From or to an interface, an enumeration, a data type or a primitive
-type, the tool draws nothing, and the reason shows at the canvas's top.
-
-The card moves on its own: drag it anywhere, and the tie follows. Move a class at either end and
-the line moves, and the tie with it. Click the line or the card to select the association class;
-both show selected. **Properties** shows its **Name** and **Description**, its two classes, read
-only, then a section for each end, **End at Customer** and **End at Product**, with **Role**,
-**Multiplicity**, **Navigable** and **Aggregation** as an association's ends have, and then
-**Attributes** and **Operations** with their editors, as a class has. Its attributes and operations
-are typed on its card as on a class's: select it and use the **+** of a compartment, the **Add
-attribute** button beside the card, or ⌘↩ (⇧⌘↩ for an operation). Drag an end of the selected line
-onto another class to move it; the same rules apply, and an end's Subsets or Redefines entries it
-can no longer keep go in the same step, named at the canvas's top.
-
-Its name is one of its package's names, as a class's is: a class and an association class of one
-package cannot share a name. Its attributes and its ends' roles share its own names: an attribute
-named like one of its ends' roles is refused under its row, and a role named like one of its
-attributes is refused in Properties. **Remove from this diagram**, or Delete, takes the line and the card
-away and keeps the association class in the model; **Delete from the model…** (⇧⌫) asks first, then
-deletes it with its ends, attributes and operations. Removing a class at either end takes it along.
-
-In **Models** it is a row under its package, with its attributes and operations below it. The
-**+** of a package does not offer it: an association class is made only by drawing. Drag its row
-onto a diagram to place its card; where the diagram shows both its classes, its line comes with it.
-A diagram may also show its line without its card, when you place its two classes there: the line
-then carries its name at its middle, as an association's name sits, and Delete on that line takes
-it from the diagram, never from the model.
-An association class carries skills as a class does; a package's skill can aim at every association
-class in it, which a skill for every class or for every association does not reach. It may realize
-an interface, as a class does, but nothing specializes it.
-
-<!-- picture: workspace-association-class light | Customer and Product joined by the association class Review, its card with its attributes above the line's middle and tied to it; Review selected with its ends, attributes and operations in Properties -->
-
-## 12. Give a property its modifiers
-
-An attribute, and an association's end, can say more than its name, type and multiplicity: a
-**default value**, whether it is **Static**, **Derived**, **Read only**, **Ordered** or **Unique**,
-and which other property it **Subsets** or **Redefines**. These live in the attribute's editor and
-in the end's section, never in a tool of their own.
-
-Open an attribute's editor in Properties with its pencil or a double click on its row. Under
-**Type** and **Multiplicity** come:
-
-- **Default value**: typed as text and read by the attribute's type. An *Integer* takes a whole
-  number, a *Real* a number such as 2.5, a *Boolean* true or false, an *UnlimitedNatural* a whole
-  number of 0 or more or `*`, and a *String* any text. An attribute typed by an enumeration picks
-  its default among the enumeration's literals; if the literal is later renamed the default
-  follows it, and if it is removed the default goes with it. Any other type, or none, takes the
-  text as written.
-- **Static**, **Derived**, **Read only**, **Ordered** and **Unique**. Ordered and Unique say
-  something only when the attribute holds more than one value (its multiplicity's upper bound is
-  above 1); they can be set either way, and the card shows them only then. Unique is on unless you
-  turn it off.
-- **Subsets** and **Redefines**, which list only the properties the attribute may name. Subsets
-  offers the other properties of the attribute's class and of the classes it specializes, of a type
-  the attribute's type is or specializes, allowing at least as many values, and named otherwise.
-  Redefines offers only properties of the classes its class specializes, whose multiplicity holds
-  the attribute's, and that are composite only if the attribute is too. When there is none, a muted
-  line under the select says so.
-
-**Apply** writes everything as one step you can undo; **Cancel** or Escape leaves the model as it
-was. A value that does not fit is refused under its field and the editor stays open: a default its
-type cannot read, or a new type that the kept default does not fit, named under **Type**, so the
-default is never dropped without you choosing so. Change or clear the default first, then the type.
-
-The card says the modifiers as UML writes them: `/` before a derived attribute's name, `=` and the
-default after its multiplicity, then in braces what differs from the usual: `{readOnly}`,
-`{ordered}`, `{nonunique}`, `{subsets name}` and `{redefines name}`. Unique is the usual and is not
-said. A String's default shows in double quotes. Static has no mark on the card yet.
-
-An association's end has the same modifiers under **Modifiers** in its section of Properties;
-closed, the line beside it sums them up. Open it to edit them, then use its own **Apply** and
-**Cancel**; the role, multiplicity, navigability and aggregation above it are written as before,
-and keep the modifiers. An end's Subsets and Redefines offer the properties of the class at the
-other end of the association, and of the classes it specializes. Beside the line the end reads in
-the same order: `/` before a derived end's role, then its multiplicity, `= default` and the braces,
-as in `/items` with `* = none {ordered}`.
-
-<!-- picture: workspace-modifiers light | The class Order on its card with id {readOnly}, a derived total defaulting to 0, status defaulting to Placed and ordered lines, its end at OrderLine reading /items with * = none {ordered}; Order selected with the attribute editor open on total, showing Default value, the flags, and Subsets and Redefines -->
+<!-- picture: workspace-guide-data-type light | The data type Money selected, its attributes amount and currency on its card and in Properties; Order's total typed Money, and OrderStatus beside it -->
+
+The card says `«dataType»` above its name and has two compartments, as a class has.
+**Properties** shows its **Description**, **Name** and **Package**, then **Attributes** and
+**Operations**. A data type has no **Abstract**.
+
+## 7. Name a plain value: a primitive type
+
+An email address is text, but not just any text. A *primitive type* gives a plain, single value
+its own name. It has nothing inside it: no attributes and no operations. The built-in types, such
+as *String* and *Integer*, are primitive types too; this one is your own.
+
+1. Open the classifier tool's chevron and choose **Primitive type**. The tool now shows a small
+   box with a ring inside.
+2. Click on the canvas below *Customer*, type *Email*, and press Enter.
+3. Select *Customer*, press ⌘↩, and add *email* of type *Email*. Press Escape.
+
+<!-- picture: workspace-guide-primitive-type light | The primitive type Email selected below Customer, its card its name alone; Customer's email typed Email; Properties shows Email's name, package and description -->
+
+The card says `«primitive»` above its name and has no compartment. Since there is nothing to add,
+a selected primitive type shows no **+** and no **Add attribute** button, and ⌘↩ does nothing.
+**Properties** shows its **Description**, **Name** and **Package**, and nothing more.
+
+## 8. Promise an operation: an interface
+
+Orders can be paid, and later other things might be too, such as invoices. An *interface* is a
+promise: it names what a class offers, without saying how. The interface *Payable* promises the
+operation *pay*.
+
+1. Open the classifier tool's chevron and choose **Interface**. The tool now shows a small circle
+   on a stem.
+2. Click on the canvas above *Order*, type *Payable*, and press Enter.
+3. With *Payable* selected, press ⇧⌘↩ (Ctrl Shift Enter), type *pay*, press Tab, type
+   *Boolean*, and press Enter.
+4. Press Escape.
+
+The card says `«interface»` above its name. It has the same two compartments as a class, and you
+add members to them in the same ways. All of an interface's members are public.
+
+## 9. Keep the promise: interface realization
+
+*Order* already has the operation *pay* that *Payable* names. To say that *Order* keeps
+*Payable*'s promise, draw an *interface realization* from the class to the interface.
+
+1. Open the chevron beside the **Relationship** tool and choose **Interface realization**, below
+   the line in the menu. The tooltip now says it runs from the implementing class to its
+   interface.
+2. Press on *Order*, drag onto *Payable*, and let go.
+
+<!-- picture: workspace-guide-realization light | Order's realization of Payable selected, a dashed line from Order up to Payable; Properties shows its implementing class Order and realized interface Payable -->
+
+A dashed line joins them, with a hollow triangle at *Payable* (hidden under the end handle while
+the line is selected). It is selected, and **Properties** shows its **Implementing class**,
+*Order*, and its **Realized interface**, *Payable*. A realization has no name, so the top of
+**Properties** shows only its kind. It differs from a generalization (a solid line to a triangle)
+and from a dependency (a dashed line to an open arrow).
+
+Only a class, or an association class (step 10), realizes an interface. A class can realize
+several interfaces, and several classes can realize one interface. If you let go on empty canvas
+instead, a new interface appears there with its name ready to type, already realized.
+
+## 10. Give a link facts of its own: an association class
+
+An order holds products, and for each product it holds a quantity. The quantity belongs neither
+to the order nor to the product: it belongs to the link between them. An *association class* is
+such a link: an association that is also a class, with attributes of its own.
+
+First add the class *Product*:
+
+1. Open the classifier tool's chevron and choose **Class**.
+2. Click on the canvas to the right of *Order*, type *Product*, and press Enter.
+3. With *Product* selected, press ⌘↩ and add *name* of type *String*. Press Escape.
+
+Then draw the association class:
+
+4. Open the chevron beside the **Relationship** tool and choose **Association class**, the last
+   row.
+5. Press on *Order*, drag onto *Product*, and let go. A line joins them, and a card appears above
+   the line's middle with its name ready to type.
+6. Type *OrderLine* and press Enter.
+7. With *OrderLine* selected, press ⌘↩ and add *quantity* of type *Integer*. Press Escape.
+8. In **Properties**, under **End at Order**, choose the **Multiplicity** `*`.
+9. Under **End at Product**, choose the **Multiplicity** `*`.
+
+<!-- picture: workspace-guide-association-class light | OrderLine selected: its card with quantity : Integer above the line between Order and Product, tied to the line's middle by a dashed line; Properties shows its name, its classes Order and Product, and its ends -->
+
+The card says *ASSOCIATION CLASS* above its name, and a dashed tie joins it to the middle of the
+line. The line, the card and the tie are one element: click either the line or the card to select
+it. **Properties** shows its **Description** and **Name**, its two classes (**From** and **To**,
+which you cannot change here), a section for each end as an association has, and then
+**Attributes** and **Operations** as a class has.
+
+Read it as: an order holds any number of products, a product can be in any number of orders, and
+for each order and product an *OrderLine* says how many.
+
+You can drag the card anywhere; the tie follows. An association class joins only classes. It is
+made only by drawing, so the **+** of **Models** does not offer it.
+
+## 11. Fix a value or set a starting value: property modifiers
+
+An attribute can say more than its name and type. An order's number never changes once it is
+given: it is *read only*. A new order starts as *Placed*: that is its status's *default value*.
+These extra facts are *property modifiers*.
+
+1. Select *Order*.
+2. In **Properties**, under **Attributes**, choose the pencil on *number*. Its editor opens.
+3. Tick **Read only**.
+4. Choose the check at the editor's foot, or press Enter.
+5. Choose the pencil on *status*.
+6. Open **Default value** and choose *Placed*. The menu lists *OrderStatus*'s literals.
+7. Choose the check, or press Enter.
+
+<!-- picture: workspace-guide-modifiers light | Order selected, its card reading number : Integer {readOnly} and status : OrderStatus = Placed; Properties shows the attribute editor on status, its Default value Placed, the flags, Subsets and Redefines -->
+
+*Order*'s card now reads `+ number : Integer {readOnly}` and `+ status : OrderStatus = Placed`.
+**Unique** is ticked in the editor because it is on unless you turn it off; it matters only for
+an attribute that holds several values. The editor holds more modifiers: **Static**,
+**Derived**, **Ordered**, **Unique**, **Subsets** and **Redefines**.
+[Property modifiers](#property-modifiers) in the reference explains each one.
 
 ## The result
 
-The root package holds two classes and an interface. *Customer* has an attribute and an
-operation, and a navigable association *places* leads to many *Order*s. *Order* realizes the
-interface *Payable*, a dashed line with a hollow triangle at *Payable*. In Models, open the root
-package (your project's name), then a class or the interface, to see its attributes and
-operations.
+Your model now has three classes, an enumeration, a data type, a primitive type, an interface, an
+association and an association class, all in the root package:
 
-<!-- picture: workspace-class-diagram light | A class diagram of a small commerce model -->
+- *Customer* places any number of *Order*s, and has an *email* of the type *Email*.
+- *Order* has a read-only *number*, a *status* that starts as *Placed*, and a *total* in *Money*.
+  It realizes *Payable*.
+- *OrderLine* links an order to its products and holds each product's *quantity*.
 
-Drag a class's row onto another package's row in Models to move it there; a class of another
-package on a diagram is drawn dimmed, its package named above its name. Removing a package hands
-what it holds up to the package around it, in the end the root package, which itself stays.
-A project made before the root package existed gets one when it opens: its top-level packages move
-into it, as one step you can undo.
+<!-- picture: workspace-guide-result light | The finished Commerce diagram: Customer, Order and Product in a row, Payable and OrderLine above, Email, OrderStatus and Money below; every element listed in Models -->
 
-## Packages on a diagram, and the diagram inside each
+The picture has **Properties** folded away, so the whole diagram fits: click the open column's
+icon on the right rail to fold it, and any icon there to open it again. In **Models**, open a
+row's arrow to see its attributes, operations or literals.
+
+The status bar says *Saved* all along, because Archforge writes every change as you go. Press ⌘S
+(Ctrl S) to also keep a version of the project as it is now (see
+[Getting started](02-getting-started.md#saving)).
+
+## Which element do I need?
+
+| You want to describe | Use | Example |
+|---|---|---|
+| A thing your software keeps track of, which stays itself while its facts change | Class | *Order*, *Customer* |
+| A promise of operations that several classes can keep | Interface | *Payable* |
+| A value chosen from a fixed list of names | Enumeration | *OrderStatus* |
+| A value made of parts, with no identity of its own | Data type | *Money* |
+| A single plain value with a name of its own | Primitive type | *Email* |
+
+Between two classes:
+
+- Use an **association** when the link itself has no facts: a customer *places* orders.
+- Use an **association class** when the link has facts of its own: the *quantity* of a product in
+  an order.
+
+If you are unsure between a class and a data type, ask: are two with equal facts the same thing?
+Two amounts of 5 euros are the same value, so *Money* is a data type. Two customers with the same
+name are still two customers, so *Customer* is a class.
+
+## Organise the model in packages
+
+So far everything sits in the root package. A *package* groups elements, like a folder. A large
+model is easier to read when each area of the system has its own package, such as *Sales* and
+*Billing*. The pictures in this part show a separate example project, whose root diagram holds
+*Customer* and the packages *Sales* and *Billing*.
+
+### Packages on a diagram, and the diagram inside each
 
 A package can sit on a class diagram beside classes, drawn as a card with a tab, like a folder.
 The tab holds the package's name and is as wide as the name needs, up to the card's width; a
@@ -389,8 +430,8 @@ click it to rename the package there. The tab grows as you type.
   Both are one step you can undo. A package dragged from Models onto the diagram of the package
   that holds it lands there too, and gets its diagram if it has none yet.
 - **Go in.** Select the package and choose **Open** on its card, or press ⌘↓ (Ctrl+↓). Or zoom in
-  on it, with a pinch, the scroll wheel with ⌘ (Ctrl), the zoom buttons, or + while the canvas has
-  the keyboard. Once the package covers most of the view, its diagram opens. However you go in,
+  on it, with a pinch, the scroll wheel with ⌘ (Ctrl), the zoom buttons, or the + key after
+  clicking on empty canvas. Once the package covers most of the view, its diagram opens. However you go in,
   the package's diagram opens at 100 %, what it shows centred. A double click still renames the
   package, as it does a class.
 - **Come back by zooming out.** A package's diagram stays open while you zoom out, down to the
@@ -402,15 +443,21 @@ click it to rename the package there. The tab grows as you type.
   parent; it comes back as you left it.
 
 One gesture moves one level: after a switch, keep zooming and you stay where you landed. Pause,
-then zoom again to go on.
-Renaming a package renames its diagram too, as long as the diagram still carries the package's
-name.
+then zoom again to go on. Renaming a package renames its diagram too, as long as the diagram
+still carries the package's name.
 
 <!-- picture: workspace-packages light | A class diagram of the root package: Customer and two packages, Sales selected with its Open and its own diagram in small, Billing's diagram empty -->
 
 <!-- picture: workspace-inside-package dark | Inside Sales: its classes, its own package Payments, and the path bar back to the root -->
 
 <!-- picture: workspace-package-top light | The root's diagram zoomed out to 10 %: the note under the path bar says there is no package above -->
+
+### Move an element into a package
+
+Drag a classifier's row in **Models** onto a package's row to move it there. A classifier of
+another package on a diagram is drawn dimmed, its package named above its name. Removing a
+package hands what it holds up to the package around it, in the end the root package, which
+itself stays.
 
 ### Move a package
 
@@ -419,18 +466,162 @@ lead there:
 
 - **On a diagram**, drag its card onto another package's card. While you hold it there, that
   card is ringed and a label says what the drop does (*Move Sales into Billing*). Let go, and the
-  package leaves this diagram for the diagram of its new home, and a toast offers **Undo**.
+  package leaves this diagram for the diagram of its new home, and a message at the bottom of the
+  canvas offers **Undo**.
 - **Up the path bar**: drag a card onto one of the packages named in the path bar, such as your
   project's root, to move it up there.
 - **In Models**, drag its row onto another package's row, or onto a class there.
-- **From the keyboard**, select it, and in **Properties** choose its **Parent package**. The menu
+- **In Properties**, select it and choose its **Parent package**. The menu
   lists every package it may go into, never itself nor one it holds.
 
 A package can't go into itself or into a package it holds. In Models, such a row is ringed in
-amber while you hold the package over it, and the drop is refused with the reason. Let go anywhere
-else and the package only moves on the diagram; the model is not changed. Each move is one step
+amber while you hold the package over it, and the drop is refused with the reason. A card you
+drag on a diagram and let go anywhere but on a package only changes its place on the diagram; the
+model is not changed. Each move is one step
 you can undo, and the project keeps it once saved.
 
 <!-- picture: workspace-package-parent light | Properties for the package Sales: its Parent package menu lists the root and Billing -->
+
+## Reference
+
+The walkthrough above shows the usual way to do each thing. This part collects the other ways and
+the rules, to look up when you need them.
+
+### Property modifiers
+
+A few words first. A *property* is an attribute or an association's end: both have a name, a
+type and a multiplicity. A class *specializes* another when a generalization runs from it to the
+other. A *composite* end is the whole's end of a composition. A multiplicity's *upper bound* is
+its largest number: 5 in `1..5`, and no limit in `*`. On a card, an attribute's multiplicity
+stands in brackets after its type, as in `lines : OrderLine [1..*]`.
+
+An attribute's modifiers are in its editor in **Properties**, under **Type** and
+**Multiplicity**:
+
+- **Default value** is typed as text and read by the attribute's type:
+  - an *Integer* takes a whole number, such as 42;
+  - a *Real* takes a number, such as 2.5;
+  - a *Boolean* takes true or false;
+  - an *UnlimitedNatural* takes a whole number of 0 or more, or `*`;
+  - a *String* takes any text;
+  - an enumeration offers its literals to choose from. If the literal is renamed later, the
+    default follows it; if the literal is removed, the default goes with it;
+  - any other type, or no type, takes the text as written.
+- **Static**: the attribute belongs to the class as a whole, not to each instance. The card does
+  not mark it yet.
+- **Derived**: the value is worked out from other values, such as a total from the lines.
+- **Read only**: the value cannot change once set.
+- **Ordered** and **Unique** matter only when the attribute holds more than one value, that is,
+  when its multiplicity's upper bound is above 1. You can set them either way, but the card shows
+  them only then. **Unique** is on unless you turn it off.
+- **Subsets** names another property whose values include all of this one's values. It offers
+  only the properties this attribute may name: other properties of its class, and of the classes
+  its class specializes, whose type this attribute's type is or specializes, which allow at least
+  as many values, and which have another name.
+- **Redefines** names a property of a class its class specializes that this one replaces. It
+  offers only properties of those classes whose multiplicity holds this attribute's, and that are
+  composite only if this attribute is too.
+- When **Subsets** or **Redefines** has nothing to offer, a muted line under it says so.
+
+The check (or Enter) writes every change in the editor as one step you can undo; the cross (or
+Escape) leaves the model as it was. A value that does not fit is refused under its field, and the
+editor stays open. This includes a new **Type** that the kept default does not fit: the reason
+shows under **Type**, so a default is never dropped without you choosing so. Change or clear the
+default first, then the type.
+
+The card writes modifiers the UML way:
+
+- `/` before the name of a derived attribute;
+- `=` and the default after the multiplicity; a String's default is in double quotes;
+- in braces, what differs from the usual: `{readOnly}`, `{ordered}`, `{nonunique}`,
+  `{subsets name}` and `{redefines name}`. Unique is the usual, so it is not written.
+
+An association's end has the same modifiers, under **Modifiers** in its section of
+**Properties**. Closed, the line beside **Modifiers** sums them up. Open it to edit them, then use
+its own check and cross. The role, multiplicity, navigability and aggregation above it are written
+as before, and keep the modifiers. An end's **Subsets** and **Redefines** offer the properties of
+the class at the other end of the association, and of the classes that class specializes. Beside
+the line, the end reads in the same order: `/` before a derived end's role, then its
+multiplicity, `= default` and the braces, as in `/items` with `* = none {ordered}`.
+
+The picture shows a separate, fuller example in a package *Orders*: a derived *total*, an ordered
+list of *lines*, and an association end with modifiers.
+
+<!-- picture: workspace-modifiers light | The class Order on its card with id {readOnly}, a derived total defaulting to 0, status defaulting to Placed and ordered lines, its end at OrderLine reading /items with * = none {ordered}; Order selected with the attribute editor open on total, showing Default value, the flags, and Subsets and Redefines -->
+
+### Moving a line's end
+
+Select a line, then drag one of its ends onto another card to move that end. The same rules apply
+as when you draw the line. When you move an end of an association or an association class, any
+**Subsets** or **Redefines** entry that can no longer reach its property from there is dropped in
+the same step. The canvas names what was dropped, and you can undo it. For an interface
+realization, drag the class end onto another class, or the interface end onto another interface.
+
+### What each line can join
+
+When a line is not allowed, nothing is drawn and the reason shows at the top of the canvas.
+
+| Line | Can join |
+|---|---|
+| Association, directed association, aggregation, composition | Classes and interfaces. Never an enumeration, a data type or a primitive type. |
+| Generalization | Two elements of the same kind: a class with a class, an interface with an interface, an enumeration with an enumeration, a data type with a data type, a primitive type with a primitive type. A class never specializes an interface. Nothing specializes an association class. |
+| Dependency | Any two classifiers, including enumerations, data types and primitive types. |
+| Interface realization | From a class (or an association class) to an interface, once per pair. |
+| Association class | Two classes, never the same class at both ends. |
+
+When you let go on empty canvas, the line makes a new card there, its name ready to type: a new
+interface for an interface realization, a new class for an association class, and for a
+generalization a new element of the kind it started from.
+
+### Names, types and packages
+
+- All classifiers of one package share its names: a class, an interface, an enumeration, a data
+  type, a primitive type and an association class in the same package need different names.
+- An association class's attributes and its ends' roles share its own names. A clash is refused
+  under the attribute's row, or in **Properties** for a role.
+- An element you made is offered once wherever you choose a type. What it types keeps it when you
+  rename it or move it to another package, and loses it when you delete it, until you undo.
+- If one of your types has the same name as a built-in type (say you made your own *Integer*),
+  the type menu lists both with a muted note: *built-in* beside the built-in one, the package
+  beside yours. Typed by name on a card, a name that several types share is refused until you pick
+  one from the menu.
+- In the package *Types*, the built-in names are kept for the built-in types. *Types* keeps its
+  name and its place directly under the root package while it holds built-in types, and
+  **Delete** on it in **Models** says so instead of removing it. The built-in types do not appear
+  in **Models** or in the search.
+- A project made before the root package existed gets one when it opens: its top-level packages
+  move into it, as one step you can undo.
+- **Models**' **+**, with a package or an element in it selected, offers **Class**, **Interface**,
+  **Enumeration**, **Data type**, **Primitive type** and **Package**, and **Literal** first at an
+  enumeration. Drag a row from **Models** onto a diagram to show it there, or onto another
+  package's row to move it.
+
+### Cards
+
+A card grows to show every member you add. A card you made shorter by hand says how many rows it
+cannot show, such as `+ 2 more literals`. An enumeration holds at most 256 literals; past that, a
+new one is refused and the reason says so.
+
+### Removing and deleting
+
+As everywhere in Archforge (see [The workspace](03-workspace.md#removing-from-a-diagram-versus-deleting-from-the-model)),
+**Remove from this diagram**, or Delete, takes a card or a line off the diagram and keeps it in
+the model; **Delete from the model…** (⇧⌫) asks first, then deletes it everywhere.
+
+- Deleting a class or an interface takes its interface realizations with it.
+- Deleting an association class takes its ends, attributes and operations with it. Removing a
+  class at either end takes the association class along.
+- An association class's row in **Models** can be dragged onto a diagram to place its card; where
+  the diagram shows both its classes, its line comes too. A diagram may also show the line
+  without the card: the line then carries the name at its middle, and Delete on it takes it only
+  from the diagram.
+
+### Skills on class elements
+
+Classes, interfaces, enumerations, data types, your own primitive types and association classes
+carry skills (see [Skills](06-skills.md)). Literals and the built-in types carry none. A package's
+skill can aim at every element of one kind in it, such as every data type; a skill for every data
+type does not reach primitive types, and a skill for every class or every association does not
+reach association classes.
 
 Next: [Skills](06-skills.md).

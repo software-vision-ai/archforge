@@ -8,7 +8,7 @@ apply to the element it works on.
 
 A skill sits on the whole project or on one element: a schema, a table, a package, a class, an
 interface, an enumeration, a data type, a primitive type of your own (the built-in types carry
-none). A skill on a container applies to everything inside it, and
+none), an association class. A skill on a container applies to everything inside it, and
 a skill on an element overrides one of the same name further out: a schema's *Naming* skill wins
 over the project's *Naming* skill for that schema's tables.
 

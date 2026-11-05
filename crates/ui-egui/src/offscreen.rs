@@ -134,6 +134,38 @@ pub enum Screen {
     /// OrderLine whose end says `/items 0..* = none {ordered}`; Order selected with the attribute
     /// editor open on total, its modifiers in Properties (AR-126).
     WorkspaceModifiers,
+    /// The user manual's class-model guide, first step: the root package's diagram Commerce with
+    /// Customer (its name typed) and Order, a draft row open on Order's card with `number :
+    /// Integer` typed.
+    GuideClasses,
+    /// The guide with Order's number and pay() typed, the Relationship tool active and its kinds'
+    /// menu open, Association ticked.
+    GuideRelateKinds,
+    /// The guide with the association places drawn from Customer to Order, its ends set, selected
+    /// with both ends in Properties.
+    GuideAssociation,
+    /// The guide after the association, the classifier tool's kinds menu open: Class ticked, the
+    /// keys on Enumeration.
+    GuideClassifierKinds,
+    /// The guide with the enumeration OrderStatus beside Order: three literals, a draft row at its
+    /// end with "Cancelled" typed, its literals in Properties.
+    GuideLiterals,
+    /// The guide with the data type Money, which types Order's total, selected; Order's status
+    /// typed by OrderStatus.
+    GuideDataType,
+    /// The guide with the primitive type Email, which types Customer's email, selected.
+    GuidePrimitiveType,
+    /// The guide with the interface Payable and Order's realization of it, the realization
+    /// selected.
+    GuideRealization,
+    /// The guide with the class Product and the association class OrderLine between Order and
+    /// Product, OrderLine selected.
+    GuideAssociationClass,
+    /// The guide with Order's number read only and its status defaulting to Placed, Order
+    /// selected and the attribute editor open on status.
+    GuideModifiers,
+    /// The guide's finished model: the whole diagram, nothing selected, Properties folded away.
+    GuideResult,
     /// The sample class model edited, unsaved, and its close asking Save, Don't save or Cancel
     ///.
     WorkspaceCloseAsk,
@@ -460,6 +492,10 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
     if screen == Screen::WorkspaceModifiers {
         shell.adopt_project();
         sample_modifiers(&mut shell)?;
+    }
+    if let Some(step) = guide_step(screen) {
+        shell.adopt_project();
+        sample_guide(&mut shell, step)?;
     }
     if screen == Screen::WorkspaceInlineMember {
         shell.adopt_project();
@@ -1419,6 +1455,261 @@ fn sample_modifiers(shell: &mut Shell) -> Result<(), String> {
     crate::panels::run(shell, "view.select", json!({ "ids": [order.to_string()] }))?;
     shell.state.show_panel(crate::state::Panel::Properties);
     crate::uml_panel::open(shell, order, crate::uml_panel::MemberKind::Attribute, Some(total));
+    Ok(())
+}
+
+/// How far the user manual's class-model guide has come in `screen`, from 1 (the first classes)
+/// to 11 (the finished model); none for a screen that is not the guide's.
+fn guide_step(screen: Screen) -> Option<u8> {
+    Some(match screen {
+        Screen::GuideClasses => 1,
+        Screen::GuideRelateKinds => 2,
+        Screen::GuideAssociation => 3,
+        Screen::GuideClassifierKinds => 4,
+        Screen::GuideLiterals => 5,
+        Screen::GuideDataType => 6,
+        Screen::GuidePrimitiveType => 7,
+        Screen::GuideRealization => 8,
+        Screen::GuideAssociationClass => 9,
+        Screen::GuideModifiers => 10,
+        Screen::GuideResult => 11,
+        _ => return None,
+    })
+}
+
+/// The user manual's class-model guide as it stands after `step` (see [`guide_step`]): one
+/// diagram, Commerce, of the root package, built up as the chapter builds it, with the screen's
+/// selection, open menu or draft row, and the view on the cards the step is about.
+fn sample_guide(shell: &mut Shell, step: u8) -> Result<(), String> {
+    use serde_json::json;
+    let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
+    let run = |session: &mut archforge_notations::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
+        let out = session.execute(command, &params).map_err(|e| format!("{command}: {e:?}"))?;
+        Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
+    };
+    let root = run(session, "uml.model.root", json!({}))?;
+    let diagram = run(session, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": root, "name": "Commerce" }))?;
+    let customer = run(session, "uml.class.add", json!({ "package": root, "name": "Customer" }))?;
+    run(session, "uml.attribute.add", json!({ "class": customer, "name": "name", "type": "String" }))?;
+    let order = run(session, "uml.class.add", json!({ "package": root, "name": "Order" }))?;
+    // What each step selects, and every card with its place, width and height.
+    let mut selected = None;
+    let mut cards: Vec<(String, f64, f64, f64, f64)> = Vec::new();
+    let (w, _) = archforge_uml::CLASS_SIZE;
+    let mut order_rows = (0, 0);
+    let mut customer_rows = 1;
+    let mut status = String::new();
+    let mut status_literals = 0;
+    let mut places = String::new();
+    // The cards the step is about, besides Order.
+    let mut about = vec![customer.clone()];
+    if step >= 2 {
+        run(session, "uml.attribute.add", json!({ "class": order, "name": "number", "type": "Integer", "read_only": step >= 10 }))?;
+        run(session, "uml.operation.add", json!({ "class": order, "name": "pay", "returns": "Boolean" }))?;
+        order_rows = (1, 1);
+    }
+    if step >= 3 {
+        places = run(session, "uml.association.add", json!({ "from": customer, "to": order, "name": "places" }))?;
+        run(session, "uml.association.set-end", json!({ "association": places, "end": 0, "multiplicity": "1" }))?;
+        run(
+            session,
+            "uml.association.set-end",
+            json!({ "association": places, "end": 1, "role": "orders", "multiplicity": "*", "navigable": true }),
+        )?;
+        if step == 3 {
+            selected = Some(places.clone());
+        }
+    }
+    if step >= 5 {
+        status = run(session, "uml.enumeration.add", json!({ "package": root, "name": "OrderStatus" }))?;
+        let literals: &[&str] = if step == 5 { &["Placed", "Paid", "Shipped"] } else { &["Placed", "Paid", "Shipped", "Cancelled"] };
+        for l in literals {
+            run(session, "uml.literal.add", json!({ "enumeration": status, "name": l }))?;
+        }
+        status_literals = literals.len();
+    }
+    if step >= 6 {
+        let default = if step >= 10 { json!("Placed") } else { serde_json::Value::Null };
+        let mut params = json!({ "class": order, "name": "status", "type": status });
+        if !default.is_null()
+            && let Some(p) = params.as_object_mut()
+        {
+            p.insert("default".into(), default);
+        }
+        run(session, "uml.attribute.add", params)?;
+        let money = run(session, "uml.data-type.add", json!({ "package": root, "name": "Money" }))?;
+        run(session, "uml.attribute.add", json!({ "class": money, "name": "amount", "type": "Real" }))?;
+        run(session, "uml.attribute.add", json!({ "class": money, "name": "currency", "type": "String" }))?;
+        run(session, "uml.attribute.add", json!({ "class": order, "name": "total", "type": money }))?;
+        order_rows = (3, 1);
+        cards.push((money.clone(), 720.0, 500.0, w, crate::uml_ui::members_height(2, 0)));
+        if step == 6 {
+            selected = Some(money.clone());
+            about = vec![money.clone()];
+        }
+    }
+    if step >= 7 {
+        let email = run(session, "uml.primitive-type.add", json!({ "package": root, "name": "Email" }))?;
+        run(session, "uml.attribute.add", json!({ "class": customer, "name": "email", "type": email }))?;
+        customer_rows = 2;
+        cards.push((email.clone(), 0.0, 500.0, w, archforge_uml::PRIMITIVE_TYPE_SIZE.1));
+        if step == 7 {
+            selected = Some(email.clone());
+            about = vec![customer.clone(), email];
+        }
+    }
+    if step >= 8 {
+        let payable = run(session, "uml.interface.add", json!({ "package": root, "name": "Payable" }))?;
+        run(session, "uml.operation.add", json!({ "class": payable, "name": "pay", "returns": "Boolean" }))?;
+        let realized = run(session, "uml.realization.add", json!({ "class": order, "interface": payable }))?;
+        cards.push((payable.clone(), 510.0, -20.0, w, crate::uml_ui::members_height(0, 1)));
+        if step == 8 {
+            selected = Some(realized);
+            about = vec![payable];
+        }
+    }
+    if step >= 9 {
+        let product = run(session, "uml.class.add", json!({ "package": root, "name": "Product" }))?;
+        run(session, "uml.attribute.add", json!({ "class": product, "name": "name", "type": "String" }))?;
+        let line = run(session, "uml.association-class.add", json!({ "from": order, "to": product, "name": "OrderLine" }))?;
+        run(session, "uml.attribute.add", json!({ "class": line, "name": "quantity", "type": "Integer" }))?;
+        for end in [0, 1] {
+            run(session, "uml.association.set-end", json!({ "association": line, "end": end, "multiplicity": "*" }))?;
+        }
+        // Product's middle level with Order's, so the line between them runs straight.
+        let (order_height, product_height) = (crate::uml_ui::members_height(3, 1), crate::uml_ui::members_height(1, 0));
+        cards.push((product.clone(), 1040.0, (220.0 + (order_height - product_height) / 2.0).round(), w, product_height));
+        cards.push((line.clone(), 790.0, -20.0, w, crate::uml_ui::members_height(1, 0)));
+        if step == 9 {
+            selected = Some(line.clone());
+            about = vec![product, line];
+        }
+    }
+    if step >= 5 {
+        // The draft row of step 5 needs a slot below the literals there are.
+        let slots = if step == 5 { status_literals + 1 } else { status_literals };
+        cards.push((status.clone(), 420.0, 500.0, w, crate::uml_ui::literals_height(slots)));
+        if step == 5 {
+            selected = Some(status.clone());
+            about = vec![status.clone()];
+        }
+    }
+    // Step 1's draft row needs a slot on Order's card.
+    let order_height = crate::uml_ui::members_height(order_rows.0.max(1), order_rows.1);
+    // Customer's middle level with Order's, so the association between them runs straight.
+    let customer_height = crate::uml_ui::members_height(customer_rows, 0);
+    cards.push((customer.clone(), 0.0, (220.0 + (order_height - customer_height) / 2.0).round(), w, customer_height));
+    cards.push((order.clone(), 480.0, 220.0, w + 60.0, order_height));
+    for (element, x, y, width, height) in &cards {
+        run(session, "diagram.place", json!({ "diagram": diagram, "element": element, "x": x, "y": y, "width": width, "height": height }))?;
+    }
+    run(session, "diagram.connect-all", json!({ "diagram": diagram }))?;
+    // The association's name at its line's middle, where drawing it puts it.
+    if let Some(p) = archforge_mof::Uuid::parse(&places) {
+        let store = session.doc();
+        let edge = store.by_uuid(p).and_then(|l| archforge_diagram::views_of(store, l).1.first().copied()).and_then(|e| store.uuid(e).ok());
+        if let Some(edge) = edge {
+            run(session, "diagram.label", json!({ "edge": edge.to_string(), "kind": "name", "at": "middle" }))?;
+        }
+    }
+    if matches!(step, 1 | 10) {
+        selected = Some(order.clone());
+    }
+    if step == 10 {
+        about.clear();
+    }
+    run(session, "view.select", json!({ "ids": [] }))?;
+    session.mark_saved().map_err(|e| format!("mark_saved: {e:?}"))?;
+    let id = |s: &str| archforge_mof::Uuid::parse(s).ok_or_else(|| "the sample's ids".to_string());
+    let (root, diagram, order) = (id(&root)?, id(&diagram)?, id(&order)?);
+    let mut view = vec![order];
+    for e in &about {
+        view.push(id(e)?);
+    }
+    shell.explorer.expanded.insert(root);
+    crate::canvas::open(shell, diagram);
+    crate::panels::run(shell, "view.select", json!({ "ids": selected.into_iter().collect::<Vec<_>>() }))?;
+    shell.state.show_panel(crate::state::Panel::Properties);
+    // The view: Order and the cards the step is about, at a zoom that reads; the finished model
+    // whole.
+    let zoom = match step {
+        1..=4 | 7 => 0.8,
+        5 => 0.9,
+        6 | 8 | 9 => 0.8,
+        _ => 1.1,
+    };
+    match step {
+        1 => {
+            if !crate::uml_inline::open(shell, order, crate::uml_panel::MemberKind::Attribute, None) {
+                return Err("Order's card cannot hold a row".into());
+            }
+            if let Some(inline) = shell.canvas.inline.as_mut() {
+                inline.edit.name = "number".into();
+                inline.ty = "Integer".into();
+            }
+        }
+        2 => {
+            shell.canvas.tool = crate::canvas::Tool::Connect("relationship");
+            shell.canvas.uml_relation = crate::uml_relate::Relate::Association;
+            shell.canvas.popover = Some("relationship-kinds");
+        }
+        4 => {
+            shell.canvas.tool = crate::canvas::Tool::Place(crate::uml_classifier::TOOL);
+            shell.canvas.uml_classifier = crate::uml_classifier::Classifier::Class;
+            shell.canvas.popover = Some(crate::uml_classifier::KINDS);
+            shell.canvas.menu_focus = Some(2);
+        }
+        5 => {
+            if !crate::uml_inline::open(shell, id(&status)?, crate::uml_panel::MemberKind::Literal, None) {
+                return Err("OrderStatus's card cannot hold a row".into());
+            }
+            if let Some(inline) = shell.canvas.inline.as_mut() {
+                inline.edit.name = "Cancelled".into();
+            }
+        }
+        10 => {
+            let status_attribute = {
+                let store = shell.session.as_ref().ok_or("no project is open")?.doc();
+                let o = store.by_uuid(order).ok_or("Order is gone")?;
+                archforge_uml::members::attributes(store, o)
+                    .into_iter()
+                    .find(|a| archforge_core::name_of(store, *a) == "status")
+                    .and_then(|a| store.uuid(a).ok())
+                    .ok_or("Order has no status")?
+            };
+            crate::uml_panel::open(shell, order, crate::uml_panel::MemberKind::Attribute, Some(status_attribute));
+        }
+        11 => shell.state.panel_collapsed = true,
+        _ => {}
+    }
+    if step == 11 {
+        shell.canvas.fit_pending = true;
+    } else {
+        guide_view(shell, &view, zoom)?;
+    }
+    Ok(())
+}
+
+/// Zooms the open diagram to `zoom` with the cards of `elements` centred in the part of the canvas
+/// a 1440 by 900 window leaves free beside Models and Properties, above the toolbar and the
+/// minimap.
+fn guide_view(shell: &mut Shell, elements: &[archforge_mof::Uuid], zoom: f32) -> Result<(), String> {
+    let store = shell.session.as_ref().ok_or("no project is open")?.doc();
+    let mut bounds: Option<egui::Rect> = None;
+    for e in elements {
+        let o = store.by_uuid(*e).ok_or("an element of the guide is gone")?;
+        let n = archforge_diagram::views_of(store, o).2.into_iter().next().ok_or("an element of the guide is on no diagram")?;
+        let b = archforge_diagram::grid::bounds_of(store, n);
+        let r = egui::Rect::from_min_size(egui::pos2(b.x as f32, b.y as f32), egui::vec2(b.width as f32, b.height as f32));
+        bounds = Some(bounds.map_or(r, |all| all.union(r)));
+    }
+    let b = bounds.ok_or("the guide's view has no cards")?;
+    // The free canvas's middle: 700 points wide, its top clear of the path bar, its foot of the
+    // toolbar.
+    let middle = egui::vec2(350.0, 330.0);
+    shell.canvas.fit_pending = false;
+    shell.canvas.zoom = zoom;
+    shell.canvas.pan = middle - b.center().to_vec2() * zoom;
     Ok(())
 }
 

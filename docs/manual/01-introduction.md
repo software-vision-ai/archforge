@@ -11,9 +11,11 @@ are the two kinds of diagram Archforge has today; what is planned is listed belo
 
 ## What it does today
 
-- **UML class diagrams** for a system's structure: packages with classes, their attributes and
-  operations, and associations, aggregations, compositions, generalizations and dependencies,
-  with roles, multiplicities and navigability.
+- **UML class diagrams** for a system's structure: packages with classes, interfaces,
+  enumerations, data types and primitive types; attributes and operations, with default values
+  and other property modifiers; and associations, association classes, aggregations,
+  compositions, generalizations, dependencies and interface realizations, with roles,
+  multiplicities and navigability.
 - **ER diagrams** for a system's relational databases: schemas with tables, columns, primary and
   foreign keys, relationships with their cardinality, and checks, indexes, domains, enum types,
   subtypes, sequences and views.
