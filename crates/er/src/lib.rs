@@ -124,6 +124,11 @@ impl Notation for ErNotation {
     fn describe(&self, store: &mut Store, obj: Obj, text: &str) -> Result<(), archforge_engine::CommandError> {
         commands::describe_element(store, obj, text)
     }
+
+    /// An ER element's description, the text DDL writes as its comment.
+    fn description(&self, store: &Store, obj: Obj) -> String {
+        rules::text_of(store, obj, element::DESCRIPTION)
+    }
 }
 
 /// A session over a store of ER, the selection, the commands.

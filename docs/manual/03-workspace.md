@@ -68,6 +68,11 @@ every diagram. Each row has an edit button (a pencil) at its right end; it opens
 which changes nothing until you apply it with the check at its foot (or Enter). The cross (or
 Escape) cancels, and the red bin removes the row.
 
+Type a description in the **Description** field and press Enter, or leave the field, to keep it;
+empty the field to remove it. Each change is one undo step. In a UML model the description is
+kept as a comment the element owns: it goes with the element when you remove it, and an agent
+reading the element reads it too.
+
 **Appearance** styles the selection on the open diagram only: fill, border and text colours, the
 border width, and for lines their colour, width and routing (straight, right-angled or curved).
 

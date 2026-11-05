@@ -465,6 +465,147 @@ fn every_edit_is_handed_to_the_host_and_save_marks_only_what_it_wrote_saved() {
     assert!(dirty(&h));
 }
 
+/// A saved project with a UML class and an ER table, the class selected in Properties, in
+/// `theme`: (harness, host, class, table).
+fn described_project(theme: ThemeKind) -> (Harness<'static, Shell>, std::sync::Arc<SavingHost>, archforge_mof::Uuid, archforge_mof::Uuid) {
+    let (mut h, host) = saving_harness(Some(commerce()), None);
+    h.state_mut().state.theme = theme;
+    let (class, table) = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+        let pkg = id(s.execute("uml.package.add", &serde_json::json!({ "name": "sales" })).unwrap().value);
+        let class = id(s.execute("uml.class.add", &serde_json::json!({ "package": pkg.to_string(), "name": "Order" })).unwrap().value);
+        let schema = id(s.execute("er.schema.add", &serde_json::json!({ "name": "shop" })).unwrap().value);
+        let table = id(s.execute("er.entity.add", &serde_json::json!({ "schema": schema.to_string(), "name": "customer" })).unwrap().value);
+        (class, table)
+    };
+    h.run_steps(2);
+    h.state_mut().save();
+    host.saves.lock().unwrap().pop().unwrap().send(Ok(true)).unwrap();
+    h.run_steps(2);
+    assert!(!dirty(&h), "saved before the description is typed");
+    h.state_mut().state.show_panel(crate::state::Panel::Properties);
+    (h, host, class, table)
+}
+
+/// The description an element of either notation has, as Properties shows it.
+fn description_on(h: &Harness<'static, Shell>, id: archforge_mof::Uuid) -> String {
+    let s = h.state().session.as_ref().unwrap();
+    let o = s.doc().by_uuid(id).unwrap();
+    s.view().of_element(s.doc(), o).map(|n| n.description(s.doc(), o)).unwrap_or_default()
+}
+
+/// Types `text` into the Description field of the element `id`, after what it holds, without Enter.
+fn type_description(h: &mut Harness<'static, Shell>, id: archforge_mof::Uuid, text: &str) {
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [id.to_string()] })).unwrap();
+    h.run();
+    let at = rect_of(h, "workspace.properties.description").center();
+    click(h, at);
+    h.event(egui::Event::Text(text.into()));
+    h.run();
+    assert!(h.state().panels.description.as_ref().is_some_and(|d| d.text.ends_with(text)), "typed, not yet written");
+}
+
+/// A description being typed, on a UML class or an ER table, is written before Cmd+S saves, so the
+/// save takes it. In light and dark.
+#[test]
+fn a_description_being_typed_is_saved_by_cmd_s() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, host, class, table) = described_project(theme);
+        let unsaved_shown = |h: &mut Harness<'static, Shell>| {
+            let inspected = crate::control::answer(h.state_mut(), "document.inspect", &serde_json::json!({})).unwrap();
+            painted(h).iter().any(|t| t.starts_with("Unsaved changes")) && !painted(h).iter().any(|t| t == "Saved") && inspected["unsaved"] == true
+        };
+        for (id, text) in [(class, "One purchase."), (table, "People who buy.")] {
+            type_description(&mut h, id, text);
+            // Typed but not yet written: an unsaved change, on the status bar, the tab and to an agent.
+            assert!(!dirty(&h) && unsaved_shown(&mut h) && h.state().tab_unsaved(0), "a draft being typed is unsaved");
+            h.event(egui::Event::Key { key: egui::Key::S, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::COMMAND });
+            h.run_steps(2);
+            assert_eq!(description_on(&h, id), text, "written before the save");
+            assert!(h.state().panels.description.is_none(), "the draft is spent");
+            assert!(h.state().is_saving(), "the save started");
+            host.saves.lock().unwrap().pop().unwrap().send(Ok(true)).unwrap();
+            h.run_steps(2);
+            assert!(!dirty(&h), "the save took the description");
+        }
+        // A save already running: Cmd+S waits for it and leaves the draft being typed, which still
+        // shows as unsaved, also once that save is done; Enter then writes it.
+        h.state_mut().session.as_mut().unwrap().execute("er.schema.add", &serde_json::json!({ "name": "crm" })).unwrap();
+        h.run_steps(2);
+        h.state_mut().save();
+        assert!(h.state().is_saving());
+        type_description(&mut h, class, " Or two.");
+        h.event(egui::Event::Key { key: egui::Key::S, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::COMMAND });
+        h.run_steps(2);
+        assert_eq!(host.saves.lock().unwrap().len(), 1, "one save at a time");
+        assert!(h.state().panels.description.is_some(), "the draft waits");
+        // While the save runs the status bar says Saving…; the tab and an agent count the draft.
+        let inspected = crate::control::answer(h.state_mut(), "document.inspect", &serde_json::json!({})).unwrap();
+        assert_eq!(inspected["unsaved"], true, "the waiting draft is unsaved while the save runs");
+        assert!(h.state().tab_unsaved(0) && painted(&h).iter().any(|t| t == "Saving…"));
+        host.saves.lock().unwrap().pop().unwrap().send(Ok(true)).unwrap();
+        h.run_steps(2);
+        assert!(!dirty(&h) && unsaved_shown(&mut h) && h.state().tab_unsaved(0), "and after it is done");
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert_eq!(description_on(&h, class), "One purchase. Or two.");
+        h.state_mut().save();
+        host.saves.lock().unwrap().pop().unwrap().send(Ok(true)).unwrap();
+        h.run_steps(2);
+        assert!(!dirty(&h) && !unsaved_shown(&mut h), "saved, and Saved shows");
+        // A draft the model refuses, on a clean project: the save does not start, the refusal
+        // shows, the draft stays, and neither the status bar nor an agent's save says Saved.
+        h.state_mut().panels.description = Some(crate::panels::DescriptionDraft { target: table, text: "a\u{7}b".into(), refused: false });
+        h.event(egui::Event::Key { key: egui::Key::S, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::COMMAND });
+        h.run_steps(2);
+        assert!(!h.state().is_saving(), "the save did not start");
+        assert!(host.saves.lock().unwrap().is_empty(), "the host was not asked");
+        assert!(h.state().panels.notice.as_deref().is_some_and(|n| n.contains("control")), "{:?}", h.state().panels.notice);
+        assert!(h.state().panels.description.as_ref().is_some_and(|d| d.refused && d.text == "a\u{7}b"), "the draft stays");
+        assert!(painted(&h).iter().any(|t| t.starts_with("Unsaved changes")), "not Saved: {:?}", painted(&h));
+        assert!(!painted(&h).iter().any(|t| t == "Saved"));
+        let refused = crate::control::answer(h.state_mut(), "app.save", &serde_json::json!({})).unwrap_err();
+        assert!(refused.contains("description") && refused.contains("control"), "{refused}");
+        assert!(host.saves.lock().unwrap().is_empty());
+        assert_eq!(crate::control::answer(h.state_mut(), "document.inspect", &serde_json::json!({})).unwrap()["unsaved"], true);
+    }
+}
+
+/// A description being typed is written before closing takes stock, so the close asks about it;
+/// one whose write is refused is kept, its refusal shown, and the close asks rather than closing
+/// it away, and Save then keeps the project open, saying why. In light and dark.
+#[test]
+fn closing_with_a_description_being_typed_keeps_it_or_asks() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, host, class, table) = described_project(theme);
+        type_description(&mut h, class, "One purchase.");
+        h.state_mut().close_project();
+        assert_eq!(description_on(&h, class), "One purchase.", "written before the close");
+        assert!(matches!(h.state().ask, Some(crate::close_ask::Ask::Unsaved { .. })), "{:?}", h.state().ask);
+        h.state_mut().ask = None;
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        h.run_steps(2);
+        assert!(!dirty(&h));
+        // A draft the store refuses: kept, its refusal the notice, and the clean project asks.
+        h.state_mut().panels.description = Some(crate::panels::DescriptionDraft { target: table, text: "a\u{7}b".into(), refused: false });
+        h.state_mut().close_project();
+        assert!(h.state().panels.description.as_ref().is_some_and(|d| d.refused), "kept");
+        assert!(h.state().panels.notice.as_deref().is_some_and(|n| n.contains("control")), "{:?}", h.state().panels.notice);
+        assert!(matches!(h.state().ask, Some(crate::close_ask::Ask::Unsaved { .. })), "{:?}", h.state().ask);
+        assert!(h.state().tab_unsaved(0));
+        // Save from the question: the refused draft stops the save, and the project stays open,
+        // its tab saying why, rather than being closed away.
+        h.state_mut().ask = None;
+        h.state_mut().save_and_close(0);
+        h.run_steps(2);
+        assert!(host.saves.lock().unwrap().is_empty(), "no save started");
+        assert_eq!(h.state().tabs.len(), 1, "not closed away");
+        assert!(h.state().tabs[0].closing.is_none());
+        assert!(h.state().tabs[0].close_error.as_deref().is_some_and(|e| e.contains("control")), "{:?}", h.state().tabs[0].close_error);
+        assert!(h.state().panels.description.is_some(), "the draft is still there");
+    }
+}
+
 #[test]
 fn an_agents_save_is_followed_by_its_ticket_whichever_tab_is_shown() {
     use crate::control::answer;
@@ -4550,6 +4691,42 @@ fn the_column_editor_sets_the_size_default_and_generation_and_the_heading_takes_
     let st = h.state().session.as_ref().unwrap().doc();
     let customer_obj = st.by_uuid(archforge_mof::Uuid::parse(&customer).unwrap()).unwrap();
     assert_eq!(archforge_er::rules::text_of(st, customer_obj, archforge_er::element::DESCRIPTION), "People who buy.");
+}
+
+/// A table's description typed and left by clicking another table's row in Models is kept on the
+/// table it was typed on, and the other table is left as it was. In light and dark.
+#[test]
+fn a_table_description_draft_left_by_clicking_another_table_stays_on_its_own() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, customer) = table_harness();
+        h.state_mut().state.theme = theme;
+        let (order, schema) = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let st = s.doc();
+            let schema = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap();
+            let schema = st.uuid(schema).unwrap();
+            let out = s.execute("er.entity.add", &serde_json::json!({ "schema": schema.to_string(), "name": "Order" })).unwrap();
+            (archforge_mof::Uuid::parse(out.value["id"].as_str().unwrap()).unwrap(), schema)
+        };
+        h.state_mut().explorer.expanded.insert(schema);
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [customer] })).unwrap();
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        h.run();
+        let at = rect_of(&h, "workspace.properties.description").center();
+        click(&mut h, at);
+        h.event(egui::Event::Text("People who buy.".into()));
+        h.run();
+        let at = rect_of(&h, &format!("workspace.explorer.row.{order}")).center();
+        click(&mut h, at);
+        h.run();
+        let s = h.state().session.as_ref().unwrap();
+        let st = s.doc();
+        let (customer, order) = (st.by_uuid(archforge_mof::Uuid::parse(&customer).unwrap()).unwrap(), st.by_uuid(order).unwrap());
+        assert_eq!(s.view().selection, vec![order], "the row selected Order");
+        assert_eq!(archforge_er::rules::text_of(st, customer, archforge_er::element::DESCRIPTION), "People who buy.");
+        assert_eq!(archforge_er::rules::text_of(st, order, archforge_er::element::DESCRIPTION), "", "Order is unchanged");
+        assert!(h.state().panels.description.is_none(), "the draft is spent");
+    }
 }
 
 #[test]
@@ -9165,6 +9342,120 @@ fn primitive_types_are_listed_added_with_the_plus_found_and_dragged_while_the_bu
         h.run();
         assert!(painted(&h).iter().any(|t| t == "Built-in types carry no skills"), "{:?}", painted(&h));
         assert!(!ids(&h).iter().any(|i| i == "workspace.skills.add"), "no + on a built-in type");
+    }
+}
+
+/// The Description field in Properties describes a UML element (AR-186): typed and committed with
+/// Enter, or by leaving the field, it is kept as a comment the element owns, one undo step, and it
+/// stays when the element is selected again; a package and a member take one too. In light and
+/// dark.
+#[test]
+fn a_description_typed_in_properties_stays_on_a_uml_element_after_reselecting_it() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        let described = |h: &Harness<'static, Shell>, id: archforge_mof::Uuid| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            archforge_uml::descriptions::description_of(st, st.by_uuid(id).unwrap())
+        };
+        let attribute = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let customer = st.by_uuid(named(&h, archforge_uml::CLASS, "Customer")).unwrap();
+            st.uuid(archforge_uml::members::attributes(st, customer)[0]).unwrap()
+        };
+        for (i, (class, name)) in
+            [(archforge_uml::CLASS, "Customer"), (archforge_uml::PACKAGE, "Commerce"), (archforge_uml::PROPERTY, "")].into_iter().enumerate()
+        {
+            let element = if name.is_empty() {
+                h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [attribute.to_string()] })).unwrap();
+                h.run();
+                attribute
+            } else {
+                select_named(&mut h, class, name)
+            };
+            assert!(ids(&h).iter().any(|i| i == "workspace.properties.description"), "{:?}", ids(&h));
+            let text = format!("Described {i}.");
+            let at = rect_of(&h, "workspace.properties.description").center();
+            click(&mut h, at);
+            h.event(egui::Event::Text(text.clone()));
+            h.run();
+            if i == 1 {
+                // Leaving the field commits it too.
+                key(&mut h, egui::Key::Tab, egui::Modifiers::NONE);
+            } else {
+                key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+            }
+            assert_eq!(h.state().panels.notice, None, "no refusal");
+            assert_eq!(described(&h, element), text, "kept on {name:?}");
+            assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Describe"));
+            // Another element selected, then this one again: the field shows its description.
+            select_named(&mut h, archforge_uml::CLASS, "Order");
+            assert!(!painted(&h).contains(&text), "Order shows its own, none");
+            if name.is_empty() {
+                h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [attribute.to_string()] })).unwrap();
+                h.run();
+            } else {
+                select_named(&mut h, class, name);
+            }
+            assert!(painted(&h).contains(&text), "{text} in {:?}", painted(&h));
+            assert_eq!(described(&h, element), text);
+        }
+        // Emptied, the description goes with its comment.
+        let customer = select_named(&mut h, archforge_uml::CLASS, "Customer");
+        let at = rect_of(&h, "workspace.properties.description").center();
+        click(&mut h, at);
+        key(&mut h, egui::Key::A, egui::Modifiers::COMMAND);
+        key(&mut h, egui::Key::Backspace, egui::Modifiers::NONE);
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert_eq!(described(&h, customer), "");
+        let st = h.state().session.as_ref().unwrap().doc();
+        assert_eq!(archforge_uml::descriptions::description_comment(st, st.by_uuid(customer).unwrap()), None);
+    }
+}
+
+/// A description typed on one element and left by clicking another, on the canvas or in Models,
+/// is kept on the element it was typed on, as one undo step, and the other is left as it was. In
+/// light and dark.
+#[test]
+fn a_description_draft_left_by_clicking_another_element_stays_on_its_own() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        let described = |h: &Harness<'static, Shell>, id: archforge_mof::Uuid| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            archforge_uml::descriptions::description_of(st, st.by_uuid(id).unwrap())
+        };
+        // Customer, then Order on the canvas; Order, then Customer's row in Models.
+        let customer = named(&h, archforge_uml::CLASS, "Customer");
+        let order = named(&h, archforge_uml::CLASS, "Order");
+        let packages: Vec<archforge_mof::Uuid> = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            st.alive().filter(|o| st.class_of(*o).ok() == Some(archforge_uml::PACKAGE)).filter_map(|o| st.uuid(o).ok()).collect()
+        };
+        h.state_mut().explorer.expanded.extend(packages);
+        h.run();
+        for (from, to, text, target) in [
+            (customer, order, "Someone who buys.", format!("workspace.canvas.node.{}", nodes["Order"])),
+            (order, customer, "One purchase.", format!("workspace.explorer.row.{customer}")),
+        ] {
+            h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [from.to_string()] })).unwrap();
+            h.run();
+            let before = described(&h, to);
+            let at = rect_of(&h, "workspace.properties.description").center();
+            click(&mut h, at);
+            h.event(egui::Event::Text(text.into()));
+            h.run();
+            let at = rect_of(&h, &target).center();
+            click(&mut h, at);
+            h.run();
+            let s = h.state().session.as_ref().unwrap();
+            assert_eq!(s.view().selection, vec![s.doc().by_uuid(to).unwrap()], "{target} selected the other element");
+            assert_eq!(described(&h, from), text, "the draft stays on the element it was typed on");
+            assert_eq!(described(&h, to), before, "the other element is unchanged");
+            assert_eq!(s.undo_label(), Some("Describe"));
+            assert!(h.state().panels.description.is_none(), "the draft is spent");
+            assert!(!painted(&h).iter().any(|t| t == text), "the other's field shows its own");
+        }
     }
 }
 

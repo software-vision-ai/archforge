@@ -120,6 +120,12 @@ pub trait Notation: Send + Sync + 'static {
         let _ = (store, obj, text);
         Err(CommandError::about("element", format!("{} elements cannot be described yet", self.name())))
     }
+    /// The description of `obj`, an element of its metamodel, as [`Notation::describe`] set it;
+    /// nothing when it has none or the notation keeps none.
+    fn description(&self, store: &Store, obj: Obj) -> String {
+        let _ = (store, obj);
+        String::new()
+    }
 }
 
 /// The view of a project: the selection and the open diagram, which undo never touches, and the
@@ -365,6 +371,7 @@ fn element_remove(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "removed": gone }))
 }
 
+/// `element.describe`: sets an element's description through its notation, or clears it.
 fn element_describe(ctx: &mut C<'_>, p: &Params) -> R {
     let id = p.str("element").unwrap_or_default();
     let uuid = Uuid::parse(id).ok_or_else(|| refuse("element", format!("{:?} is not an id", short(id))))?;
@@ -384,7 +391,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Describe",
             &["Edit"],
             None,
-            "element: string; the element's id\ntext: string = \"\"; its description, or nothing",
+            "element: string; the id of an ER element, or of a UML package, classifier, attribute, operation, literal or relationship\ntext: string = \"\"; its description, or nothing to clear it",
             has_elements,
             element_describe
         ),

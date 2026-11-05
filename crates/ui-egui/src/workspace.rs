@@ -476,7 +476,11 @@ fn status_bar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
             let why = shell.close_error().unwrap_or_default().to_string();
             (p.danger, crate::i18n::fmt(&tr("The project could not be closed: {why}"), &[("why", &why)]))
         }
-        Some(s) if s.is_dirty() => (p.amber, crate::i18n::fmt(&tr("Unsaved changes · {chord} saves"), &[("chord", chord)])),
+        // A description typed in Properties and not yet written, or refused, is unsaved work too:
+        // never Saved while it waits.
+        Some(s) if s.is_dirty() || crate::panels::description_pending(&shell.panels) => {
+            (p.amber, crate::i18n::fmt(&tr("Unsaved changes · {chord} saves"), &[("chord", chord)]))
+        }
         Some(_) => (p.green, tr("Saved")),
     };
     paint.circle_filled(pos2(r.left() + 24.0, r.center().y), 3.0, dot);

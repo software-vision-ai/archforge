@@ -20,6 +20,7 @@ use archforge_mof::{Obj, Store, TypeRef, Uuid, Value};
 use serde_json::{Value as Json, json};
 
 use crate::commands::{classifier_of, fail, id_of, name_of, packages, refuse, set_name, short, text, uuid_of};
+use crate::descriptions::description_of;
 use crate::{
     CLASS, DATA_TYPE, ENUMERATION, ENUMERATION_LITERAL, INTERFACE, OPERATION, PACKAGE, PARAMETER, PRIMITIVE_TYPE, PROPERTY, TYPE, behavioral_feature,
     class, data_type, enumeration, feature, interface, literal_integer, literal_unlimited_natural, multiplicity_element, named_element, operation,
@@ -786,7 +787,8 @@ fn flag(store: &Store, o: Obj, prop: archforge_mof::PropId) -> bool {
 /// primitive type has none and says whether it is a built-in type; an association class has its
 /// two ends besides, as `uml.relationship.list` gives an association's. Its `kind` is a word
 /// without spaces (`class`, `interface`, `enumeration`, `data_type`, `primitive_type`,
-/// `association_class`).
+/// `association_class`). It, each attribute, operation and literal give their description, or
+/// nothing (AR-186).
 fn class_get(ctx: &mut C<'_>, p: &Params) -> R {
     let store = &*ctx.doc;
     let c = classifier_of(store, p, "class")?;
@@ -800,6 +802,7 @@ fn class_get(ctx: &mut C<'_>, p: &Params) -> R {
                 "type": type_ref(store, a),
                 "multiplicity": crate::figures::multiplicity(store, a),
                 "static": flag(store, a, feature::IS_STATIC),
+                "description": description_of(store, a),
             });
             crate::modifiers::merge_into(store, a, &mut row);
             row
@@ -817,13 +820,14 @@ fn class_get(ctx: &mut C<'_>, p: &Params) -> R {
                 "abstract": flag(store, op, behavioral_feature::IS_ABSTRACT),
                 "parameters": params.into_iter().map(|p| json!({ "name": name_of(store, p), "type": type_ref(store, p), "multiplicity": crate::figures::multiplicity(store, p) })).collect::<Vec<_>>(),
                 "returns": ret.map_or(Json::Null, |r| type_ref(store, r)),
+                "description": description_of(store, op),
             })
         })
         .collect();
     let is_class = store.class_of(c).ok() == Some(CLASS);
     let mut out = json!({
         "id": uuid_of(store, c)?, "kind": crate::commands::what(store, c).replace(' ', "_"), "name": name_of(store, c),
-        "abstract": is_class && flag(store, c, class::IS_ABSTRACT), "attributes": attrs, "operations": ops,
+        "abstract": is_class && flag(store, c, class::IS_ABSTRACT), "description": description_of(store, c), "attributes": attrs, "operations": ops,
     });
     if store.class_of(c).ok() == Some(PRIMITIVE_TYPE)
         && let Some(fields) = out.as_object_mut()
@@ -838,7 +842,7 @@ fn class_get(ctx: &mut C<'_>, p: &Params) -> R {
     if store.class_of(c).ok() == Some(crate::ENUMERATION) {
         let literals: Vec<Json> = crate::commands::literals(store, c)
             .into_iter()
-            .map(|l| json!({ "id": uuid_of(store, l).unwrap_or_default(), "name": name_of(store, l) }))
+            .map(|l| json!({ "id": uuid_of(store, l).unwrap_or_default(), "name": name_of(store, l), "description": description_of(store, l) }))
             .collect();
         if let Some(fields) = out.as_object_mut() {
             fields.insert("literals".to_string(), Json::Array(literals));

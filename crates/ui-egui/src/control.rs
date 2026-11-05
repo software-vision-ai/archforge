@@ -113,7 +113,7 @@ fn inspect(shell: &Shell) -> Value {
         "open": true,
         "project": shell.project.as_ref().map(|p| json!({ "name": p.name, "path": p.path.display().to_string() })),
         "revision": session.revision(),
-        "unsaved": session.is_dirty(),
+        "unsaved": session.is_dirty() || crate::panels::description_pending(&shell.panels),
         "saving": shell.is_saving(),
         "save_error": shell.save_error,
         "undo": session.undo_label(),
@@ -125,7 +125,8 @@ fn inspect(shell: &Shell) -> Value {
 }
 
 /// Saves the open project as the Save button does: its changes are written, then the host makes a
-/// version. Answers the save's ticket for `app.saved`, or why none could start.
+/// version. Answers the save's ticket for `app.saved`, or why none could start, a description
+/// being typed that the model refused among the reasons (AR-186).
 fn save(shell: &mut Shell) -> Result<Value, String> {
     if shell.session.is_none() {
         return Err("no project is open in Archforge; open one first".into());
@@ -138,6 +139,11 @@ fn save(shell: &mut Shell) -> Result<Value, String> {
         let revision = shell.session.as_ref().map(|s| s.revision());
         shell.save();
         if !shell.is_saving() {
+            // A description being typed that the model refused stops the save: never reported saved.
+            if crate::panels::refused_description(&shell.panels) {
+                let why = shell.panels.notice.clone().unwrap_or_default();
+                return Err(format!("the description being typed in Properties was refused, so nothing was saved: {why}"));
+            }
             if revision.is_some() && shell.refused == revision {
                 return Err(shell.save_error.clone().unwrap_or_else(|| "the model could not be written, so it cannot be saved".into()));
             }

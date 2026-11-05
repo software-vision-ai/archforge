@@ -497,7 +497,10 @@ fn literals_are_added_renamed_moved_and_removed_each_one_step_their_names_apart_
     assert_eq!(picture(s.doc()), after, "redo of the removal");
     // uml.class.get gives them in their order.
     let got = s.execute("uml.class.get", &json!({ "class": status })).unwrap().value;
-    assert_eq!(got["literals"], json!([{ "id": placed, "name": "Placed" }, { "id": shipped, "name": "Shipped" }]));
+    assert_eq!(
+        got["literals"],
+        json!([{ "id": placed, "name": "Placed", "description": "" }, { "id": shipped, "name": "Shipped", "description": "" }])
+    );
 }
 
 /// Literals added and moved through the commands keep their order through a save and a reopen.

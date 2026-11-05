@@ -7,7 +7,8 @@
 //! name and its package. Each
 //! validates what it is given before it changes anything and refuses with a message naming the
 //! key. Ids in parameters are the elements' UUIDs. Removing and describing go through the shared
-//! `element.remove` and `element.describe`; a nested package removed hands what it holds up to its
+//! `element.remove` and `element.describe` (a description is a Comment the element owns,
+//! `descriptions`); a nested package removed hands what it holds up to its
 //! parent (owner decision, for every notation).
 
 use archforge_diagram::ProjectView;
@@ -564,8 +565,8 @@ fn association_class_move(ctx: &mut C<'_>, p: &Params) -> R {
     classifier_move(ctx, p, ASSOCIATION_CLASS, "association_class", "an association class")
 }
 
-/// `uml.package.list`: every package with its parent and how many classes, interfaces,
-/// enumerations, data types, primitive types and association classes it holds.
+/// `uml.package.list`: every package with its parent, its description (AR-186) and how many
+/// classes, interfaces, enumerations, data types, primitive types and association classes it holds.
 fn package_list(ctx: &mut C<'_>, _: &Params) -> R {
     let store = &*ctx.doc;
     let items: Vec<Json> = all_packages(store)
@@ -574,6 +575,7 @@ fn package_list(ctx: &mut C<'_>, _: &Params) -> R {
             let parent = package_of(store, pkg).and_then(|p| uuid_of(store, p).ok());
             json!({
                 "id": uuid_of(store, pkg).unwrap_or_default(), "name": name_of(store, pkg), "parent": parent,
+                "description": crate::descriptions::description_of(store, pkg),
                 "classes": classes(store, pkg).len(), "interfaces": interfaces(store, pkg).len(),
                 "enumerations": enumerations(store, pkg).len(), "data_types": data_types(store, pkg).len(),
                 "primitive_types": primitive_types(store, pkg).len(), "association_classes": association_classes(store, pkg).len(),

@@ -850,11 +850,11 @@ pub(crate) fn ends_json(store: &Store, r: Obj) -> Json {
     Json::Array(ends)
 }
 
-/// A relationship as the query commands give it.
+/// A relationship as the query commands give it, with its description or nothing (AR-186).
 fn describe(store: &Store, r: Obj) -> Json {
     let id = |o: Obj| uuid_of(store, o).unwrap_or_default();
     let (from, to) = crate::figures::ends(store, r).map_or((Json::Null, Json::Null), |(a, b)| (json!(id(a)), json!(id(b))));
-    match store.class_of(r).ok() {
+    let mut out = match store.class_of(r).ok() {
         Some(c) if c == ASSOCIATION => {
             json!({ "id": id(r), "kind": "association", "name": name_of(store, r), "from": from, "to": to, "ends": ends_json(store, r) })
         }
@@ -864,7 +864,11 @@ fn describe(store: &Store, r: Obj) -> Json {
         Some(c) if c == GENERALIZATION => json!({ "id": id(r), "kind": "generalization", "specific": from, "general": to }),
         Some(c) if c == INTERFACE_REALIZATION => json!({ "id": id(r), "kind": "realization", "implementing": from, "contract": to }),
         _ => json!({ "id": id(r), "kind": "dependency", "name": name_of(store, r), "client": from, "supplier": to }),
+    };
+    if let Some(fields) = out.as_object_mut() {
+        fields.insert("description".to_string(), Json::String(crate::descriptions::description_of(store, r)));
     }
+    out
 }
 
 /// `uml.relationship.list`: the relationships that touch a class, an interface, an enumeration, a

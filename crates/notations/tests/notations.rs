@@ -189,6 +189,32 @@ impl Notation for Stubborn {
 
 static STUBBORN: &[&dyn Notation] = &[&archforge_er::ErNotation, &Stubborn];
 
+/// Both notations hold a description to one limit, and each reads back through the project's view
+/// what describing set, ER's as its own column and UML's as a comment, undone and redone alike.
+#[test]
+fn descriptions_read_back_through_each_notation_under_one_limit() {
+    let limit = archforge_uml::descriptions::MAX_DESCRIPTION;
+    assert_eq!(limit, archforge_er::rules::MAX_TEXT, "one limit across the notations");
+    let mut s = new_project_session("Shop", ids(0)).unwrap();
+    let schema = id(&mut s, "er.schema.add", json!({ "name": "shop" }));
+    let table = id(&mut s, "er.entity.add", json!({ "schema": schema, "name": "customer" }));
+    let pkg = id(&mut s, "uml.package.add", json!({ "name": "sales" }));
+    let class = id(&mut s, "uml.class.add", json!({ "package": pkg, "name": "Order" }));
+    for (element, text) in [(&table, "Someone who buys."), (&class, "One purchase.")] {
+        let o = s.doc().by_uuid(Uuid::parse(element).unwrap()).unwrap();
+        let n = s.view().of_element(s.doc(), o).unwrap();
+        id(&mut s, "element.describe", json!({ "element": element, "text": text }));
+        assert_eq!(n.description(s.doc(), o), text, "{}", n.name());
+        s.undo().unwrap();
+        assert_eq!(n.description(s.doc(), o), "", "{}", n.name());
+        s.redo().unwrap();
+        assert_eq!(n.description(s.doc(), o), text, "{}", n.name());
+        // The limit is the same in both: at it, accepted; past it, refused.
+        id(&mut s, "element.describe", json!({ "element": element, "text": "x".repeat(limit) }));
+        assert!(s.execute("element.describe", &json!({ "element": element, "text": "x".repeat(limit + 1) })).is_err(), "{}", n.name());
+    }
+}
+
 #[test]
 fn a_removal_one_notation_refuses_changes_nothing_in_any() {
     let mut s = new_project_session("Shop", ids(0)).unwrap();

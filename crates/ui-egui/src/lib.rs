@@ -514,10 +514,14 @@ impl Shell {
     }
 
     /// Closes tab `i`'s project, asking first when it holds unsaved changes (Save, Don't save,
-    /// Cancel) or when its changes could not be written (Close without writing, confirmed).
+    /// Cancel) or when its changes could not be written (Close without writing, confirmed). A
+    /// description being typed is written first; one refused counts as unsaved.
     pub fn close_tab(&mut self, i: usize) {
         if i >= self.tabs.len() || self.tabs[i].closing.is_some() {
             return;
+        }
+        if self.active == Some(i) {
+            panels::commit_description(self);
         }
         let path = self.tabs[i].path.clone();
         if let Some(why) = self.tabs[i].close_error.clone() {
@@ -529,12 +533,16 @@ impl Shell {
         }
     }
 
-    /// Whether tab `i`'s project holds changes not yet saved.
+    /// Whether tab `i`'s project holds changes not yet saved, a description typed but not yet
+    /// written, or refused, among them (AR-186).
     pub fn tab_unsaved(&self, i: usize) -> bool {
         if self.active == Some(i) {
-            return self.session.as_ref().is_some_and(|s| s.is_dirty());
+            return self.session.as_ref().is_some_and(|s| s.is_dirty()) || panels::description_pending(&self.panels);
         }
-        self.tabs.get(i).and_then(|t| t.parked.as_ref()).and_then(|p| p.session.as_ref()).is_some_and(|s| s.is_dirty())
+        self.tabs
+            .get(i)
+            .and_then(|t| t.parked.as_ref())
+            .is_some_and(|p| p.session.as_ref().is_some_and(|s| s.is_dirty()) || panels::description_pending(&p.panels))
     }
 
     /// The tab of the project at `path`.
@@ -595,7 +603,11 @@ impl Shell {
     }
 
     /// Quitting: asks about each project with unsaved changes in turn, then lets the window close.
+    /// The description being typed is written first; one refused counts as unsaved.
     fn start_quit(&mut self, ctx: &egui::Context) {
+        if self.active.is_some() {
+            panels::commit_description(self);
+        }
         let unsaved: Vec<std::path::PathBuf> = (0..self.tabs.len()).filter(|i| self.tab_unsaved(*i)).map(|i| self.tabs[i].path.clone()).collect();
         if unsaved.is_empty() {
             self.quit_confirmed = true;
@@ -659,6 +671,13 @@ impl Shell {
             if let Some((skill, _)) = skill_tab::unkept(&self.canvas).first().copied() {
                 canvas::open(self, skill);
                 self.tabs[i].close_error = Some(skill_tab::unkept_reason());
+                return;
+            }
+            // So does the description being typed; one refused keeps the project open, its
+            // refusal shown in Properties and on the tab.
+            if panels::commit_description(self) {
+                self.tabs[i].close_error = self.panels.notice.clone();
+                self.quitting = None;
                 return;
             }
             self.write_changes();
@@ -745,12 +764,14 @@ impl Shell {
         }
     }
 
-    /// Parks the project shown in its tab, its last changes handed to the host first; Home shows.
+    /// Parks the project shown in its tab, its last changes handed to the host first, the
+    /// description being typed among them; Home shows.
     fn park(&mut self) {
         if self.active.is_none() {
             return;
         }
         skill_tab::sync(self, 0.0, true, None);
+        panels::commit_description(self);
         self.write_changes();
         self.stash();
     }
@@ -953,13 +974,19 @@ impl Shell {
         }
     }
 
-    /// Save: the host writes what waits and commits it, a skill's text being typed included.
+    /// Save: the host writes what waits and commits it, a skill's text and a description being
+    /// typed included. A description whose write is refused stops the save before the host is
+    /// asked: it stays in its field with the refusal, and the project stays unsaved.
     pub fn save(&mut self) {
         if self.saving.is_some() || self.session.is_none() {
             return;
         }
         skill_tab::sync(self, 0.0, true, None);
+        let refused = panels::commit_description(self);
         self.write_changes();
+        if refused {
+            return;
+        }
         // A state that could not be written cannot be saved: its error stays on the status bar.
         let current = self.session.as_ref().map(|s| s.revision());
         if current.is_some() && self.refused == current {
