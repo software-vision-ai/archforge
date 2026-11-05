@@ -5,8 +5,8 @@ description: "Use before designing or changing how Archforge looks or behaves: a
 
 # How Archforge looks and behaves
 
-The decisions taken so far about the interface, as rules. `skills/archforge-ui/SKILL.md` says how
-to draw them. A change that departs from one of these is a new decision for the owner: say so in
+The decisions taken so far about the interface, as rules. The archforge-ui skill says how to draw
+them. A change that departs from one of these is a new decision for the owner: say so in
 the change, and update this file in the same change.
 
 Every rule here holds for every notation (ER now, UML and C4 next) unless it sits under "ER
