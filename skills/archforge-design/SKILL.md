@@ -507,7 +507,9 @@ member and drawing a relationship stay three separate gestures:
   its name.
 - Literals are members of their enumeration, never boxes of their own. They are added with the `+`
   of the Literals compartment, or ⌘↩, as a draft row with a name only; Enter writes one and opens
-  the next. A double click edits one in place. Properties lists them under `Literals · n`; an
+  the next. A double click on a literal's row on the card edits it in place, as a member typed on
+  the card is (the UML card rule), not in Properties: this replaces, for literals, the shared rule
+  that a double click on a member opens its editor in Properties. Properties lists them under `Literals · n`; an
   editor there has Name, Remove, Move up, Move down, Cancel and Apply. Names are told apart within
   their enumeration compared without case, so `Paid` and `paid` clash; a refusal sits under the row
   and leaves the model as it was.
@@ -533,9 +535,12 @@ member and drawing a relationship stay three separate gestures:
     shown.
 - Property modifiers live in the attribute editor and the association end's editor, never in a tool
   of their own: Default value; Static, Derived, Read only, Ordered and Unique; and Subsets and
-  Redefines. Subsets offers the other properties of the same classifier and of its general
-  classifiers whose type the property's type conforms to and whose upper bound is not below the
-  property's (UML 2.5.1, 9.9.17, `subsetting_context_conforms` and `subsetting_rules`). Redefines
+  Redefines. Subsets offers the other properties of the property's context and of its general
+  classifiers whose type the property's type conforms to, whose upper bound is not below the
+  property's, and whose name differs from the property's (UML 2.5.1, 9.9.17,
+  `subsetting_context_conforms`, `subsetting_rules` and `subsetted_property_names`). An attribute's
+  context is its classifier; an association end's context is the classifiers at the association's
+  other ends, so an end offers their properties. Redefines
   offers only properties of the general classifiers (`redefined_property_inherited`) with which the
   property is consistent (`Property::isConsistentWith`): a conforming type, a multiplicity whose
   lower and upper bounds both lie within the target's, and composite aggregation wherever the
