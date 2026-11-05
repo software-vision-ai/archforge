@@ -39,7 +39,8 @@ const USAGE: &str = "usage: cargo xtask <verb>
   resize <in> <out> <size> [--grid]  scale a square PNG down, on the icon grid with --grid
   shot [light|dark] [--size WxH] [--max-edge N]  a screenshot and a small copy under plan/shots
   screens [--gallery <dir>]  every screen in both appearances, with a contact sheet each, under
-                     plan/screens; or the README's gallery alone, into <dir>
+                     plan/screens; or the README's gallery and the wiki's guide screens alone,
+                     into <dir>
   manual             the user manual with its pictures, rendered from the interface, under plan/manual
   stats              tests and lines per crate";
 

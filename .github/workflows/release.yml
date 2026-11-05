@@ -13,8 +13,8 @@
 # already is refused: bump it first. A pull request that touches packaging or this file, and a run
 # started by hand, build every package as a dry run: the packages stay workflow artefacts and
 # nothing is released. Every package reports its version, commit and date. The README's
-# screenshots (`cargo xtask screens --gallery`) are rendered here and attached to every release. Nothing is signed yet;
-# the scripts' signing steps wait for their secrets.
+# screenshots and the wiki's guide screens (`cargo xtask screens --gallery`) are rendered here and
+# attached to every release. Nothing is signed yet; the scripts' signing steps wait for their secrets.
 name: Release
 
 on:
@@ -233,8 +233,9 @@ jobs:
   screenshots:
     name: Screenshots
     needs: version
-    # The README's gallery, rendered from this commit and attached to the release: the README shows
-    # the latest release's. Mesa's software Vulkan driver stands in for a GPU.
+    # The README's gallery and the wiki's guide screens, rendered from this commit and attached to
+    # the release: the README and the wiki show the latest release's. Mesa's software Vulkan driver
+    # stands in for a GPU.
     runs-on: ubuntu-22.04
     timeout-minutes: 60
     steps:
