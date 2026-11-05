@@ -8834,6 +8834,39 @@ fn a_type_far_down_the_type_menu_can_be_chosen_and_only_the_rows_in_sight_are_la
     }
 }
 
+/// A type menu's labels follow the interface language: switched while the model stays as it is,
+/// the kept choices are built again, so None reads in the new language; with nothing changed, the
+/// kept choices are reused. In light and dark.
+#[test]
+fn a_type_menu_s_labels_follow_the_interface_language_and_are_reused_while_nothing_changes() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        select_named(&mut h, archforge_uml::CLASS, "Customer");
+        let at = rect_of(&h, "workspace.properties.attributes.add").center();
+        click(&mut h, at);
+        let at = rect_of(&h, "workspace.properties.member.type").center();
+        click(&mut h, at);
+        let kept = |h: &Harness<'static, Shell>| h.state().panels.type_choices.clone().expect("the open menu keeps its choices");
+        let english = kept(&h);
+        assert_eq!((english.language, english.labels.first().map(String::as_str)), ("en", Some("None")));
+        assert!(painted(&h).iter().any(|t| t == "None"), "the menu shows None");
+        // Nothing changed: the next frame reuses them as they are.
+        h.run();
+        assert_eq!(kept(&h), english, "reused while nothing changed");
+        // The language switched, as Appearance switches it, the model unchanged: built again, in German.
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let german = kept(&h);
+        assert_eq!((german.language, german.revision), ("de", english.revision), "the same state, another language");
+        assert_eq!(german.labels.first().map(String::as_str), Some("Keine"));
+        assert_eq!(german.values, english.values, "the same types");
+        assert!(painted(&h).iter().any(|t| t == "Keine"), "the menu shows None in German");
+        h.state_mut().state.language = "en".into();
+        h.run();
+        crate::i18n::set_language("en");
+    }
+}
+
 /// The Relationship tool joins no association to or from a data type, saying so in its own words
 /// beside the enumeration's; a data type specializes only a data type, the refusals said too, and a
 /// generalization dragged out of one onto empty canvas makes a data type; a dependency may touch

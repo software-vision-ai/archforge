@@ -432,19 +432,20 @@ pub(crate) fn types_named(store: &Store, name: &str) -> Vec<String> {
     builtin.into_iter().chain(own).collect()
 }
 
-/// The open type menu's choices, built by [`type_choices`] only when the project or its state
-/// changed since they were last built; taken out of the shell for the frame, to be handed back
+/// The open type menu's choices, built by [`type_choices`] only when the project, its state or the
+/// interface language changed since they were last built; taken out of the shell for the frame, to be handed back
 /// with [`keep_choices`].
 pub(crate) fn choices_for_menu(shell: &mut Shell) -> crate::panels::TypeChoices {
     let Some(session) = shell.session.as_ref() else { return crate::panels::TypeChoices::default() };
     let store = session.doc();
     let project = archforge_uml::commands::model(store).ok().and_then(|m| store.uuid(m).ok());
     let revision = session.revision();
+    let language = crate::i18n::language();
     match shell.panels.type_choices.take() {
-        Some(kept) if kept.project == project && kept.revision == revision => kept,
+        Some(kept) if kept.project == project && kept.revision == revision && kept.language == language => kept,
         _ => {
             let (labels, values) = type_choices(store).into_iter().unzip();
-            crate::panels::TypeChoices { project, revision, labels, values }
+            crate::panels::TypeChoices { project, revision, language, labels, values }
         }
     }
 }

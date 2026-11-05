@@ -659,12 +659,14 @@ pub(crate) fn menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, 
 /// A menu row's height.
 const MENU_ROW: f32 = 30.0;
 
-/// A type menu's choices kept between frames: whose and which state of it they were built for,
-/// their labels and the values the commands take, in the same order.
+/// A type menu's choices kept between frames: whose and which state of it they were built for, in
+/// which interface language (the labels are translated), their labels and the values the commands
+/// take, in the same order.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct TypeChoices {
     pub project: Option<Uuid>,
     pub revision: u64,
+    pub language: &'static str,
     pub labels: Vec<String>,
     pub values: Vec<String>,
 }
