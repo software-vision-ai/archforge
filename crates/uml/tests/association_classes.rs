@@ -321,6 +321,24 @@ fn unplacing_its_card_takes_its_line_from_the_diagram_too() {
     assert_eq!(edges(&s), 1);
 }
 
+/// A card nested in another (placed with a parent, as `diagram.place` allows) takes its line along
+/// when the card it sits in is removed from the diagram; the model is untouched.
+#[test]
+fn unplacing_a_card_takes_the_line_of_an_association_class_card_nested_in_it() {
+    let mut s = session();
+    let (pkg, d, c, nodes) = shop(&mut s);
+    let ac = run(&mut s, "uml.association-class.add", json!({ "from": c[0], "to": c[1], "name": "Review" }));
+    run(&mut s, "diagram.connect", json!({ "diagram": d, "element": ac, "source": nodes[0], "target": nodes[1] }));
+    let inner = run(&mut s, "uml.package.add", json!({ "name": "Inner", "parent": pkg }));
+    let holder = run(&mut s, "diagram.place", json!({ "diagram": d, "element": inner, "x": 200, "y": -400, "width": 600, "height": 400 }));
+    run(&mut s, "diagram.place", json!({ "diagram": d, "element": ac, "x": 240, "y": -340, "parent": holder }));
+    let edges = |s: &S| s.doc().list(obj(s, &d), archforge_diagram::diagram::EDGE).unwrap().len();
+    assert_eq!(edges(&s), 1);
+    round_trip(&mut s, "diagram.unplace", json!({ "nodes": [holder] }));
+    assert_eq!(edges(&s), 0, "the nested card's line went with it");
+    assert!(!gone(&s, &ac), "the model keeps it");
+}
+
 /// Association classes, their ends, members, cards and lines come back from their rows identical,
 /// as a saved project opens.
 #[test]
