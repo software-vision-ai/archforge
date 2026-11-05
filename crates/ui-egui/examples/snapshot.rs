@@ -11,6 +11,7 @@ fn main() {
     }
 }
 
+/// Reads the arguments, renders the screen asked for offscreen and writes it as a PNG.
 fn run() -> Result<(), String> {
     const USAGE: &str = "usage: snapshot <out.png> [light|dark] [width height [scale]] [--screen home|new-project|new-project-failed|new-project-folder|workspace|workspace-schema]";
     let mut args: Vec<String> = std::env::args().skip(1).collect();

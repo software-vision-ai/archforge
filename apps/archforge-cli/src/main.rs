@@ -193,6 +193,7 @@ mod tests {
         a.iter().map(|s| s.to_string()).collect()
     }
 
+    /// Every verb and flag parses as documented, and anything else is a usage error.
     #[test]
     fn arguments_are_parsed_by_hand_and_anything_unknown_is_a_usage_error() {
         assert_eq!(parse(&args(&["--help"])), Ok(Verb::Help));
@@ -310,6 +311,7 @@ mod tests {
         assert_eq!(rec.0.borrow().len(), driven);
     }
 
+    /// The MCP instructions name only real tools and commands, promise what is built, and say the same scope in both modes.
     #[test]
     fn the_onboarding_names_only_what_the_table_has_and_both_modes_say_the_same_scope() {
         let all = infos().unwrap();

@@ -35,6 +35,7 @@ pub const NO_CLASSES: &str = "There is no class or interface yet.";
 /// The visibilities, in the metamodel's order, as the commands name them.
 const VISIBILITIES: [&str; 4] = ["public", "private", "protected", "package"];
 
+/// Whether a class or an interface exists, which the member commands need.
 fn has_classes(f: &Facts<'_, Store, ProjectView>) -> Result<(), &'static str> {
     if f.doc.alive().any(|o| f.doc.class_of(o).is_ok_and(crate::is_classifier)) { Ok(()) } else { Err(NO_CLASSES) }
 }
@@ -247,6 +248,7 @@ fn select(ctx: &mut C<'_>, o: Obj) {
     ctx.view.selection = vec![o];
 }
 
+/// `uml.attribute.add`: an attribute of a class or an interface, its name free among its attributes.
 fn attribute_add(ctx: &mut C<'_>, p: &Params) -> R {
     let c = classifier_of(ctx.doc, p, "class")?;
     let Some((owned, _)) = member_lists(ctx.doc, c) else { return Err(refuse("class", "it keeps no attributes")) };
@@ -266,6 +268,7 @@ fn attribute_add(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, a)? }))
 }
 
+/// `uml.attribute.set`: an attribute's name, visibility, type, multiplicity and static changed.
 fn attribute_set(ctx: &mut C<'_>, p: &Params) -> R {
     let a = id_of(ctx.doc, p, "attribute", PROPERTY, "an attribute")?;
     let Some(c) = owner_of(ctx.doc, a).filter(|_| one(ctx.doc, a, property::ASSOCIATION).is_none()) else {
@@ -297,10 +300,12 @@ fn member_move(ctx: &mut C<'_>, p: &Params, key: &str, class_of: archforge_mof::
     Ok(json!({ "id": uuid_of(ctx.doc, m)? }))
 }
 
+/// `uml.attribute.move`: an attribute to another place among its owner's attributes.
 fn attribute_move(ctx: &mut C<'_>, p: &Params) -> R {
     member_move(ctx, p, "attribute", PROPERTY, true, "an attribute")
 }
 
+/// `uml.operation.move`: an operation to another place among its owner's operations.
 fn operation_move(ctx: &mut C<'_>, p: &Params) -> R {
     member_move(ctx, p, "operation", OPERATION, false, "an operation")
 }
@@ -361,6 +366,7 @@ fn set_operation(store: &mut Store, owner: Obj, op: Obj, p: &Params) -> Result<(
     set_signature(store, op, p)
 }
 
+/// `uml.operation.add`: an operation of a class or an interface, at the place asked for.
 fn operation_add(ctx: &mut C<'_>, p: &Params) -> R {
     let c = classifier_of(ctx.doc, p, "class")?;
     let Some((_, owned)) = member_lists(ctx.doc, c) else { return Err(refuse("class", "it keeps no operations")) };
@@ -372,6 +378,7 @@ fn operation_add(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, op)? }))
 }
 
+/// `uml.operation.set`: an operation's name, visibility, flags and signature changed.
 fn operation_set(ctx: &mut C<'_>, p: &Params) -> R {
     let op = id_of(ctx.doc, p, "operation", OPERATION, "an operation")?;
     let owner = owner_of(ctx.doc, op).unwrap_or(op);
@@ -389,6 +396,7 @@ fn type_ref(store: &Store, o: Obj) -> Json {
     one(store, o, typed_element::TYPE).map_or(Json::Null, |t| json!({ "id": uuid_of(store, t).unwrap_or_default(), "name": name_of(store, t) }))
 }
 
+/// A member's visibility as the commands name it, public when it has none.
 fn visibility_word(store: &Store, o: Obj) -> &'static str {
     match store.get(o, named_element::VISIBILITY) {
         Ok(Value::Enum(i)) => VISIBILITIES.get(i as usize).copied().unwrap_or("public"),
@@ -396,6 +404,7 @@ fn visibility_word(store: &Store, o: Obj) -> &'static str {
     }
 }
 
+/// The boolean `prop` of `o`, false when unset.
 fn flag(store: &Store, o: Obj, prop: archforge_mof::PropId) -> bool {
     store.get(o, prop).ok().and_then(|v| v.as_bool()).unwrap_or(false)
 }

@@ -165,6 +165,7 @@ pub struct PackageTab {
 }
 
 impl Default for State {
+    /// A canvas with no diagram open: Select, the grid and minimap on, no menu open, Class as the classifier kind.
     fn default() -> Self {
         Self {
             tabs: Vec::new(),
@@ -1790,6 +1791,7 @@ struct Layout {
     width: f32,
 }
 
+/// The toolbar's layout for `kind`'s tools: where each sits and how wide the bar is.
 fn layout(kind: Option<&'static dyn crate::kinds::DiagramKind>) -> Layout {
     let mut x = 86.0;
     let mut kind_tools = Vec::new();

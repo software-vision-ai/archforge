@@ -284,6 +284,7 @@ fn place_package(store: &mut Store, pkg: Obj, parent: Option<Obj>) -> Result<(),
     Ok(())
 }
 
+/// `uml.package.add`: a package in its parent, or in the root package, its name free there.
 fn package_add(ctx: &mut C<'_>, p: &Params) -> R {
     let parent = parent_param(ctx.doc, p, "parent")?;
     let name = text(p, "name");
@@ -295,6 +296,7 @@ fn package_add(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, pkg)? }))
 }
 
+/// `uml.package.rename`: a package renamed, the diagrams still named like it following.
 fn package_rename(ctx: &mut C<'_>, p: &Params) -> R {
     let pkg = id_of(ctx.doc, p, "package", PACKAGE, "a package")?;
     let name = text(p, "name");
@@ -326,6 +328,7 @@ fn detach(store: &mut Store, obj: Obj) -> Result<(), CommandError> {
     Ok(())
 }
 
+/// `uml.package.move`: a package into another, never into itself, its cards leaving its old home's diagrams.
 fn package_move(ctx: &mut C<'_>, p: &Params) -> R {
     let pkg = id_of(ctx.doc, p, "package", PACKAGE, "a package")?;
     if Some(pkg) == root_package(ctx.doc) {
@@ -423,6 +426,7 @@ fn interface_rename(ctx: &mut C<'_>, p: &Params) -> R {
     classifier_rename(ctx, p, INTERFACE, "interface", "an interface")
 }
 
+/// `uml.package.list`: every package with its parent and how many classes and interfaces it holds.
 fn package_list(ctx: &mut C<'_>, _: &Params) -> R {
     let store = &*ctx.doc;
     let items: Vec<Json> = all_packages(store)
@@ -438,6 +442,7 @@ fn package_list(ctx: &mut C<'_>, _: &Params) -> R {
     Ok(json!({ "packages": items }))
 }
 
+/// `uml.class.list`: a package's classes, in its order.
 fn class_list(ctx: &mut C<'_>, p: &Params) -> R {
     let pkg = id_of(ctx.doc, p, "package", PACKAGE, "a package")?;
     let store = &*ctx.doc;

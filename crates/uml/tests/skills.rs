@@ -102,6 +102,7 @@ fn a_relationship_carries_no_skill_and_the_refusal_names_what_does() {
     assert_eq!(skills(s.doc()).len(), before, "nothing changed");
 }
 
+/// A package skill aims at the kind it names below it, and an ER kind is refused.
 #[test]
 fn a_package_skill_aims_at_the_kind_it_names_below_it() {
     let mut s = session();

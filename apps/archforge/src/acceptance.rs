@@ -158,6 +158,7 @@ fn save_close_reopen(h: &mut H) -> archforge_mof::rows::Rows {
     saved
 }
 
+/// A user models a class diagram through the real shell, saves, closes and reopens it unchanged.
 #[test]
 fn a_user_models_a_class_diagram_saves_it_closes_it_and_opens_it_again_as_it_was() {
     let (mut h, host, base) = start("uml");

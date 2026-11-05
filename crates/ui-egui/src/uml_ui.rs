@@ -141,6 +141,7 @@ impl DiagramKind for UmlKind {
         made.map(|v| v.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
     }
 
+    /// A class or an interface takes part in the class diagram's gestures.
     fn takes_part(&self, store: &Store, element: Obj) -> bool {
         classifier(store, element)
     }
@@ -231,6 +232,7 @@ impl DiagramKind for UmlKind {
         crate::uml_relate::reconnect(shell, element, source, to_node);
     }
 
+    /// Renames a card's element in place: a package, a class or an interface, through its own command.
     fn rename(&self, shell: &mut Shell, element: Uuid, name: &str) -> Result<(), String> {
         let store = shell.session.as_ref().map(|s| s.doc());
         let (cmd, key) = match store.and_then(|st| st.by_uuid(element).map(|o| (st, o))) {
@@ -438,6 +440,7 @@ impl NotationUi for UmlUi {
         archforge_uml::INDEX
     }
 
+    /// A package is the top of its rows in Models.
     fn is_top(&self, store: &Store, member: Obj) -> bool {
         class(store, member) == Some(archforge_uml::PACKAGE)
     }
@@ -448,6 +451,7 @@ impl NotationUi for UmlUi {
         package_rows(store, package, 0, t)
     }
 
+    /// What Models' `+` offers at the selection: a class, an interface and a package in its package, else a package.
     fn offers(&self, store: &Store, selection: Option<Obj>) -> Vec<Offer> {
         let offer = |key, word: String| Offer { key, word };
         // A class, an interface or a package goes into the selected package, or the package of
@@ -462,6 +466,7 @@ impl NotationUi for UmlUi {
         }
     }
 
+    /// Adds what the offer `key` names at the selection, with a fresh name free among its siblings.
     fn add(&self, shell: &mut Shell, key: &str, sel: Option<Obj>) -> Option<Result<Added, String>> {
         let store = shell.session.as_ref()?.doc();
         let no_name = || Some(Err(tr("No free name is left")));
@@ -499,6 +504,7 @@ impl NotationUi for UmlUi {
         }
     }
 
+    /// The command that renames `obj`, and the key that names it.
     fn rename(&self, store: &Store, obj: Obj) -> Option<(&'static str, &'static str)> {
         match class(store, obj)? {
             c if c == archforge_uml::PACKAGE => Some(("uml.package.rename", "package")),
@@ -519,6 +525,7 @@ impl NotationUi for UmlUi {
         (going.len(), 0, 0)
     }
 
+    /// Whether `obj` has rows under it: a package what it holds, a class or an interface its members.
     fn has_children(&self, store: &Store, obj: Obj) -> bool {
         match class(store, obj) {
             Some(c) if c == archforge_uml::PACKAGE => {
@@ -590,6 +597,7 @@ impl NotationUi for UmlUi {
         class(store, dragged) == Some(archforge_uml::PACKAGE) && archforge_uml::commands::is_within(store, to, dragged)
     }
 
+    /// A package, class or interface as the search lists it: its icon, its name and its kind with its package.
     fn entry(&self, store: &Store, o: Obj) -> Option<Entry> {
         match class(store, o)? {
             c if c == archforge_uml::PACKAGE => {
@@ -612,10 +620,12 @@ impl NotationUi for UmlUi {
         Some(member_of(store, o).map_or(o, |(c, _)| c))
     }
 
+    /// A member's problems show on its class or interface.
     fn problem_holder(&self, store: &Store, o: Obj) -> Obj {
         member_of(store, o).map_or(o, |(c, _)| c)
     }
 
+    /// How Properties names `o`: its kind line, its word, This …, and On this … · {n}.
     fn words(&self, store: &Store, o: Obj) -> Option<Words> {
         let words = |kind: String, word: String, this: String, on_this: String| Words { kind, word, this, on_this, name: name(store, o) };
         Some(match class(store, o)? {
@@ -692,6 +702,7 @@ fn chain(store: &Store, package: Obj) -> Vec<Obj> {
     out
 }
 
+/// Whether a class or an interface has an attribute or an operation.
 fn has_members(store: &Store, c: Obj) -> bool {
     !archforge_uml::members::attributes(store, c).is_empty() || !archforge_uml::members::operations(store, c).is_empty()
 }

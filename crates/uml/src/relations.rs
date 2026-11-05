@@ -36,6 +36,7 @@ const AGGREGATIONS: [&str; 3] = ["none", "shared", "composite"];
 /// Why a command is not available.
 pub const NO_CLASSES: &str = crate::members::NO_CLASSES;
 
+/// Whether a class or an interface exists, which relating needs.
 fn has_classes(f: &Facts<'_, Store, ProjectView>) -> Result<(), &'static str> {
     if f.doc.alive().any(|o| f.doc.class_of(o).is_ok_and(crate::is_classifier)) { Ok(()) } else { Err(NO_CLASSES) }
 }
@@ -144,6 +145,7 @@ fn set_navigable(store: &mut Store, a: Obj, end: Obj, navigable: bool) -> Result
     Ok(())
 }
 
+/// `uml.association.add`: an association of the kind asked for between two classifiers, owning both ends.
 fn association_add(ctx: &mut C<'_>, p: &Params) -> R {
     let (from, pkg) = class_in_package(ctx.doc, p, "from")?;
     let to = classifier_of(ctx.doc, p, "to")?;
@@ -214,6 +216,7 @@ pub fn generalization_problem(store: &Store, specific: Obj, general: Obj, except
     None
 }
 
+/// `uml.generalization.add`: `specific` specializes `general`, unless the classifier rules refuse it.
 fn generalization_add(ctx: &mut C<'_>, p: &Params) -> R {
     let specific = classifier_of(ctx.doc, p, "specific")?;
     let general = classifier_of(ctx.doc, p, "general")?;
@@ -227,6 +230,7 @@ fn generalization_add(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, g)? }))
 }
 
+/// `uml.dependency.add`: a client depends on a supplier, never on itself.
 fn dependency_add(ctx: &mut C<'_>, p: &Params) -> R {
     let (client, pkg) = class_in_package(ctx.doc, p, "client")?;
     let supplier = classifier_of(ctx.doc, p, "supplier")?;
@@ -356,6 +360,7 @@ fn follow_ends(store: &mut Store, element: Obj) -> Result<(), CommandError> {
     Ok(())
 }
 
+/// `uml.relationship.reconnect`: one end of a relationship moved to another classifier, its rules kept and its lines following.
 fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
     let key = "relationship";
     let id = text(p, key);
@@ -430,6 +435,7 @@ fn describe(store: &Store, r: Obj) -> Json {
     }
 }
 
+/// `uml.relationship.list`: the relationships that touch a class or an interface.
 fn relationship_list(ctx: &mut C<'_>, p: &Params) -> R {
     let store = &*ctx.doc;
     let c = classifier_of(store, p, "class")?;

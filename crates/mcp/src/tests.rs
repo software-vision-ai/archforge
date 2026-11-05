@@ -57,6 +57,7 @@ impl Model {
 }
 
 impl Backend for Model {
+    /// Answers the reads the tests make from a fixed small model, recording every call.
     fn call(&self, method: &str, params: Value) -> Result<Value, CallError> {
         self.calls.borrow_mut().push((method.to_string(), params.clone()));
         let refused = |why: &str| Err(CallError::Refused(why.to_string()));
@@ -101,6 +102,7 @@ fn content(r: &Value) -> Value {
     serde_json::from_str(r["result"]["contents"][0]["text"].as_str().unwrap()).unwrap()
 }
 
+/// The project, the skills and elements read as resources with the revision; what cannot be read is said.
 #[test]
 fn the_model_and_its_skills_read_as_resources_with_the_revision_and_say_what_they_cannot_read() {
     let model = Model::open();

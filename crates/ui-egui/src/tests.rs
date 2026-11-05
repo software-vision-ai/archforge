@@ -4147,6 +4147,7 @@ fn the_relationship_tool_draws_a_line_with_its_foreign_key_as_one_step_and_delet
     assert!(!ids(&h).iter().any(|i| i == "workspace.toast.undo"));
 }
 
+/// ER's cardinality popover sets a new line's ends, and a many-to-many line offers its mapping table.
 #[test]
 fn the_cardinality_popover_sets_the_ends_and_a_many_to_many_line_offers_its_mapping_table() {
     let (mut h, _customer, _order) = two_tables_harness();
@@ -5974,6 +5975,7 @@ fn class_diagram_shown(h: &Harness<'static, Shell>) -> (String, Vec<String>) {
     (kind, classes)
 }
 
+/// A class diagram is made in three steps, and its classifier tool places a class named in place.
 #[test]
 fn a_new_project_makes_a_class_diagram_in_three_steps_and_its_class_tool_places_a_class_named_in_place() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
@@ -7072,6 +7074,7 @@ fn edge_count(h: &Harness<'static, Shell>) -> usize {
     st.list(st.by_uuid(h.state().canvas.active.unwrap()).unwrap(), archforge_diagram::diagram::EDGE).unwrap().len()
 }
 
+/// The Relationship tool draws the kind its menu chose, refuses a cycle, and makes a class on empty canvas.
 #[test]
 fn the_relationship_tool_draws_the_kind_its_menu_chose_refuses_a_cycle_and_a_drop_on_empty_canvas_makes_a_class() {
     let (mut h, nodes) = related_sample();

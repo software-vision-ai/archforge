@@ -72,6 +72,7 @@ impl Notation for UmlNotation {
         true
     }
 
+    /// A class diagram shows classes, interfaces and packages as cards.
     fn shows(&self, _kind: &str, class: ClassId) -> bool {
         is_classifier(class) || class == PACKAGE
     }
@@ -124,6 +125,7 @@ impl Notation for UmlNotation {
         &[PACKAGE, CLASS, INTERFACE, PROPERTY, OPERATION]
     }
 
+    /// The kinds a package skill may aim at, each with the word that names it.
     fn skill_kinds(&self) -> &'static [(ClassId, &'static str)] {
         &[(CLASS, "class"), (INTERFACE, "interface"), (PROPERTY, "attribute"), (OPERATION, "operation"), (ASSOCIATION, "association")]
     }
