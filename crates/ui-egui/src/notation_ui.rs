@@ -86,6 +86,12 @@ pub(crate) trait NotationUi: Sync {
         let _ = (store, dragged, target);
         None
     }
+    /// Whether Delete removes `obj` from Models: by default every element does; one shown
+    /// read-only (a UML literal, for now) stays.
+    fn removes(&self, store: &Store, obj: Obj) -> bool {
+        let _ = (store, obj);
+        true
+    }
     /// Whether `obj` holds elements that go with it.
     fn has_children(&self, store: &Store, obj: Obj) -> bool {
         let _ = (store, obj);

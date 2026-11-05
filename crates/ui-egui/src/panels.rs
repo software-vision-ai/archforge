@@ -1724,7 +1724,8 @@ struct SkillRow {
     own: bool,
 }
 
-/// What a skill aims at, as Properties says it: every class, every interface, its type pattern, or nothing.
+/// What a skill aims at, as Properties says it: every class, every interface, every enumeration,
+/// its type pattern, or nothing.
 pub(crate) fn target_word(store: &Store, s: Obj) -> String {
     let applies = string_of(store, s, archforge_core::skill::APPLIES_TO);
     let pattern = string_of(store, s, archforge_core::skill::TYPE_PATTERN);
@@ -1733,6 +1734,7 @@ pub(crate) fn target_word(store: &Store, s: Obj) -> String {
         Some("relationship") => tr("every relationship"),
         Some("class") => tr("every class"),
         Some("interface") => tr("every interface"),
+        Some("enumeration") => tr("every enumeration"),
         Some("attribute") => tr("every attribute"),
         Some("operation") => tr("every operation"),
         Some("association") => tr("every association"),

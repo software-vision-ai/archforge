@@ -1,6 +1,6 @@
-//! Skills over UML: packages, classes, interfaces, attributes and operations carry them (owner
-//! decision), a relationship does not; a skill aims at every class, interface, attribute, operation
-//! or association below
+//! Skills over UML: packages, classes, interfaces, enumerations, attributes and operations carry
+//! them (owner decision), a relationship does not; a skill aims at every class, interface,
+//! enumeration, attribute, operation or association below
 //! its subject, is inherited down the package tree and replaced by a deeper one of its name; each
 //! skill.add one undo step.
 
@@ -122,7 +122,32 @@ fn a_package_skill_aims_at_the_kind_it_names_below_it() {
     assert_eq!(names(&s, &m.association), ["Associations"]);
     // An ER kind is not one of UML's.
     let e = s.execute("skill.add", &json!({ "subject": m.sales, "name": "Tables", "applies_to": "table" })).unwrap_err().to_string();
-    assert!(e.contains("class, interface, attribute, operation, association"), "{e}");
+    assert!(e.contains("class, interface, enumeration, attribute, operation, association"), "{e}");
+}
+
+/// An enumeration carries skills as an interface does, and a package skill for enumerations aims
+/// at them alone.
+#[test]
+fn an_enumeration_carries_skills_and_a_package_skill_for_enumerations_aims_only_at_them() {
+    let mut s = session();
+    let m = model(&mut s);
+    let status = run(&mut s, "uml.enumeration.add", json!({ "package": m.sales, "name": "OrderStatus" }));
+    let payable = run(&mut s, "uml.interface.add", json!({ "package": m.sales, "name": "Payable" }));
+    // The enumeration takes a skill of its own, as one undo step, and it goes with it.
+    let before = skills(s.doc()).len();
+    let skill = run(&mut s, "skill.add", json!({ "subject": status, "name": "States", "body": "Name them as past participles." }));
+    assert_eq!(archforge_core::skills::subject_of(s.doc(), obj(&s, &skill)), Some(obj(&s, &status)));
+    s.undo().unwrap();
+    assert_eq!(skills(s.doc()).len(), before);
+    s.redo().unwrap();
+    // A package skill for enumerations aims at them alone.
+    run(&mut s, "skill.add", json!({ "subject": m.sales, "name": "Enumerations", "applies_to": "enumeration" }));
+    let names = |s: &S, e: &str| applying(s, e).into_iter().map(|(n, _, _)| n).collect::<Vec<_>>();
+    assert_eq!(names(&s, &status), ["Enumerations", "States"]);
+    assert_eq!(names(&s, &m.order), Vec::<String>::new(), "a class is no enumeration");
+    assert_eq!(names(&s, &payable), Vec::<String>::new(), "nor is an interface");
+    run(&mut s, "element.remove", json!({ "ids": [status] }));
+    assert!(skills(s.doc()).iter().all(|k| archforge_core::skills::name_of(s.doc(), *k) != "States"), "its skill went with it");
 }
 
 /// An interface carries skills as a class does, and a package skill for interfaces aims at them alone.

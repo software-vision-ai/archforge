@@ -4,8 +4,10 @@
 //! from the whole to the part, from the specific class to the general one, from the client to the
 //! supplier, from the implementing class to its interface; dropped on empty canvas it makes a new
 //! class there, or for a realization a new interface, named in place. A realization starts only at
-//! a class and ends only at an interface it does not realize yet; anything else is said at the
-//! canvas's top and draws nothing. A selected line's ends drag onto another class to reconnect it.
+//! a class and ends only at an interface it does not realize yet; an association of any kind
+//! neither starts nor ends at an enumeration, a data type; anything else is said at the canvas's
+//! top and draws nothing. A generalization dragged out of an enumeration onto empty canvas makes an
+//! enumeration, the only kind one specializes. A selected line's ends drag onto another class to reconnect it.
 //! Properties shows an association's name and both its ends (role, multiplicity, navigable,
 //! aggregation), a dependency's name and its classes, a generalization's classes, a realization's
 //! implementing class and interface.
@@ -75,6 +77,11 @@ impl Relate {
     /// realization have none.
     fn named(self) -> bool {
         !matches!(self, Relate::Generalization | Relate::Realization)
+    }
+
+    /// Whether it draws an association, of any kind.
+    fn associates(self) -> bool {
+        matches!(self, Relate::Association | Relate::Directed | Relate::Aggregation | Relate::Composition)
     }
 
     /// Its automation key.
@@ -229,9 +236,20 @@ fn realization_refusal(store: &Store, implementing: Option<Obj>, contract: Optio
     })
 }
 
-/// Why `kind` starts no line at `element`, when it does not: a realization starts only at a class.
+/// Why `kind` starts no line at `element`, when it does not: a realization starts only at a class,
+/// and no association at an enumeration.
 fn kind_start_problem(kind: Relate, store: &Store, element: Obj) -> Option<String> {
-    (kind == Relate::Realization && store.class_of(element).ok() != Some(archforge_uml::CLASS)).then(|| tr("Only a class implements an interface"))
+    if kind == Relate::Realization && store.class_of(element).ok() != Some(archforge_uml::CLASS) {
+        return Some(tr("Only a class implements an interface"));
+    }
+    association_refusal(kind, store, element)
+}
+
+/// Why an association of `kind` has no end at `element`, when it has none: an enumeration is a
+/// data type and joins no association.
+fn association_refusal(kind: Relate, store: &Store, element: Obj) -> Option<String> {
+    (kind.associates() && archforge_uml::relations::association_end_problem(store, element).is_some())
+        .then(|| tr("An enumeration is a data type and joins no association"))
 }
 
 /// Why the chosen kind starts no line at `element`, when it does not.
@@ -263,6 +281,11 @@ pub(crate) fn connect(shell: &mut Shell, d: Obj, from_node: Uuid, to_node: Uuid)
         shell.canvas.notice = Some(tr("A relationship joins two classes or interfaces"));
         return;
     };
+    // An association to or from an enumeration draws nothing either.
+    if let Some(why) = association_refusal(kind, store, from).or_else(|| association_refusal(kind, store, to)) {
+        shell.canvas.notice = Some(why);
+        return;
+    }
     let (Ok(from), Ok(to), Ok(diagram)) = (store.uuid(from), store.uuid(to), store.uuid(d)) else { return };
     let (cmd, params, label) = kind.command(from, to);
     let out = session.batch(&tr(label), |b| {
@@ -292,8 +315,8 @@ pub(crate) fn connect(shell: &mut Shell, d: Obj, from_node: Uuid, to_node: Uuid)
 
 /// The chosen kind dropped on empty canvas at `(x, y)`: a new class there, related to the node's,
 /// as one undo step; its name opens for typing. A generalization dragged out of an interface makes
-/// an interface, the only kind an interface specializes, and a realization an interface, the only
-/// kind a class realizes.
+/// an interface, the only kind an interface specializes, one out of an enumeration an enumeration,
+/// and a realization an interface, the only kind a class realizes.
 pub(crate) fn connect_to_new(shell: &mut Shell, d: Obj, from_node: Uuid, x: f64, y: f64) {
     shell.canvas.notice = None;
     let kind = shell.canvas.uml_relation;
@@ -315,6 +338,7 @@ pub(crate) fn connect_to_new(shell: &mut Shell, d: Obj, from_node: Uuid, x: f64,
     let made = match crate::uml_classifier::Classifier::of(store, from) {
         _ if kind == Relate::Realization => crate::uml_classifier::Classifier::Interface,
         Some(crate::uml_classifier::Classifier::Interface) if kind == Relate::Generalization => crate::uml_classifier::Classifier::Interface,
+        Some(crate::uml_classifier::Classifier::Enumeration) if kind == Relate::Generalization => crate::uml_classifier::Classifier::Enumeration,
         _ => crate::uml_classifier::Classifier::Class,
     };
     let names = archforge_uml::commands::classifiers(store, package).into_iter().map(|c| archforge_core::name_of(store, c));
@@ -360,8 +384,8 @@ pub(crate) fn connect_to_new(shell: &mut Shell, d: Obj, from_node: Uuid, x: f64,
 }
 
 /// Moves the source or target end of `element` to the class of `to_node`; dropped back on its own
-/// class it changes nothing, and a refusal is said at the canvas's top: a realization's in the
-/// user's words.
+/// class it changes nothing, and a refusal is said at the canvas's top: a realization's, and an
+/// association's moved onto an enumeration, in the user's words.
 pub(crate) fn reconnect(shell: &mut Shell, element: Uuid, source: bool, to_node: Uuid) {
     shell.canvas.notice = None;
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
@@ -389,6 +413,12 @@ pub(crate) fn reconnect(shell: &mut Shell, element: Uuid, source: bool, to_node:
         shell.canvas.notice = Some(tr("A relationship joins two classes or interfaces"));
         return;
     };
+    if line.is_some_and(|l| store.class_of(l).ok() == Some(archforge_uml::ASSOCIATION))
+        && let Some(why) = association_refusal(Relate::Association, store, target)
+    {
+        shell.canvas.notice = Some(why);
+        return;
+    }
     let now = store.by_uuid(element).and_then(|e| archforge_uml::figures::ends(store, e)).map(|(a, b)| if source { a } else { b });
     if now == Some(target) {
         return;

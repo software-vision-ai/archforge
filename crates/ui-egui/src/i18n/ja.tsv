@@ -208,6 +208,7 @@ str		every relationship	すべてのリレーションシップ
 str		every column	すべての列
 str		every class	すべてのクラス
 str		every interface	すべてのインターフェース
+str		every enumeration	すべての列挙
 str		every attribute	すべての属性
 str		every operation	すべての操作
 str		every association	すべての関連
@@ -527,26 +528,33 @@ str		{parent} has no primary key yet, so there is nothing in {child} to point at
 # クラス図
 str		Add class	クラスを追加
 str		Add interface	インターフェースを追加
+str		Add enumeration	列挙を追加
 str		Class	クラス
 str		Interface	インターフェース
 str		«interface»	«interface»
+str		Enumeration	列挙
+str		«enumeration»	«enumeration»
 str		Classifier	分類子
 str		Classifier kinds	分類子の種類
 str		Class diagram	クラス図
 str		Class diagrams	クラス図
 str		Class · model, in every diagram	クラス · モデル、すべての図に
 str		Interface · model, in every diagram	インターフェース · モデル、すべての図に
+str		Enumeration · model, in every diagram	列挙 · モデル、すべての図に
 str		New package	新しいパッケージ
 str		On this class · {n}	このクラスに · {n}
 str		On this interface · {n}	このインターフェースに · {n}
+str		On this enumeration · {n}	この列挙に · {n}
 str		On this package · {n}	このパッケージに · {n}
 str		Package	パッケージ
 str		Package · model	パッケージ · モデル
 str		The diagram is of no package	この図はどのパッケージにも属していません
 str		This class	このクラス
 str		This interface	このインターフェース
+str		This enumeration	この列挙
 str		This package	このパッケージ
 plural		+ {n} more member	+ 他 {n} メンバー
+plural		+ {n} more literal	+ 他 {n} リテラル
 plural		+ {n} more element	+ 他 {n} 要素
 # プロパティのクラスメンバー
 str		Abstract	抽象
@@ -557,12 +565,17 @@ str		There is no type named {name}.	{name} という名前の型はありませ�
 str		Several types are named {name}; pick one from the menu.	{name} という名前の型が複数あります。メニューから 1 つ選んでください。
 str		Add parameter	パラメーターを追加
 str		Attribute	属性
+str		Literal	リテラル
 str		Attribute · model	属性 · モデル
+str		Literal · model	リテラル · モデル
 str		Attributes · {n}	属性 · {n}
+str		Literals · {n}	リテラル · {n}
+str		No literals yet	リテラルはまだありません
 str		Move down	下へ移動
 str		Move up	上へ移動
 str		Multiplicity	多重度
 str		On this attribute · {n}	この属性に · {n}
+str		On this literal · {n}	このリテラルに · {n}
 str		On this operation · {n}	この操作に · {n}
 str		Operation	操作
 str		Operation · model	操作 · モデル
@@ -575,10 +588,12 @@ str		Remove parameter	パラメーターを削除
 str		Return type	戻り値の型
 str		Static	静的
 str		This attribute	この属性
+str		This literal	このリテラル
 str		This operation	この操作
 str		Visibility	可視性
 str		Place class	クラスを配置
 str		Place interface	インターフェースを配置
+str		Place enumeration	列挙を配置
 str		Add package	パッケージを追加
 str		Place package	パッケージを配置
 str		Move package	パッケージを移動
@@ -593,6 +608,7 @@ str		Only a package this diagram's package holds goes on it	この図のパッ�
 str		A bound can be at most {max}.	境界は最大 {max} までです。
 str		A class realizes only an interface	クラスが実現できるのはインターフェースだけです
 str		A relationship joins two classes or interfaces	関係は 2 つのクラスまたはインターフェースを結びます
+str		An enumeration is a data type and joins no association	列挙はデータ型であり、関連には加わりません
 str		Add association	関連を追加
 str		Add dependency	依存を追加
 str		Add generalization	汎化を追加
@@ -645,6 +661,7 @@ str		{what} removed	{what}を削除しました
 # パッケージ
 str		Class · {package}	クラス · {package}
 str		«interface» · {package}	«interface» · {package}
+str		«enumeration» · {package}	«enumeration» · {package}
 str		{name} removed; what it held moved to {parent}	{name} を削除しました。中身は {parent} に移動しました
 # 閉じるときの未保存の変更
 str		Close and lose changes	閉じて変更を破棄

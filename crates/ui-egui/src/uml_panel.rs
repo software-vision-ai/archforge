@@ -193,8 +193,8 @@ pub(crate) fn member_of(store: &Store, o: Obj) -> Option<(Obj, MemberKind)> {
     }
 }
 
-/// A class's or an interface's panel: its name and package, a class's Abstract, its attributes and
-/// its operations.
+/// A classifier's panel: its name and package, then a class's Abstract, a class's or an
+/// interface's attributes and operations, or an enumeration's literals, read-only.
 pub(crate) fn class_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, subject: &Subject) {
     let (Some(class), Some(class_id)) = (subject.obj, subject.id) else { return };
     let kind = shell.session.as_ref().and_then(|s| Classifier::of(s.doc(), class)).unwrap_or_default();
@@ -218,6 +218,9 @@ pub(crate) fn class_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
     let package_id = "workspace.properties.class.package";
     let field = select_field(shell, ui, p, pos2(r.left() + PAD + half + 8.0, y), half, package_id, &tr("Package"), &here, Menu::ClassPackage);
     let mut y = y + 17.0 + FIELD + 12.0;
+    if kind == Classifier::Enumeration {
+        literals_section(shell, ui, p, r, y, class);
+    }
     // An interface is abstract by what it is: it has no Abstract of its own.
     if kind == Classifier::Class {
         let was = shell.session.as_ref().is_some_and(|s| flag(s.doc(), class, archforge_uml::class::IS_ABSTRACT));
@@ -231,8 +234,10 @@ pub(crate) fn class_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
             }
         }
     }
-    let y = members_section(shell, ui, p, r, y, class, class_id, MemberKind::Attribute);
-    members_section(shell, ui, p, r, y + 4.0, class, class_id, MemberKind::Operation);
+    if kind.takes_members() {
+        let y = members_section(shell, ui, p, r, y, class, class_id, MemberKind::Attribute);
+        members_section(shell, ui, p, r, y + 4.0, class, class_id, MemberKind::Operation);
+    }
     // The package menu last, over the sections.
     if shell.panels.menu == Some(Menu::ClassPackage) {
         let items: Vec<String> = choices.iter().map(|(_, n)| n.clone()).collect();
@@ -306,6 +311,43 @@ fn package_path(store: &Store, package: Obj) -> String {
     }
     names.reverse();
     names.join(" › ")
+}
+
+/// An enumeration's Literals section: its literals in their order, each selecting itself with a
+/// click, and no `+` or editor, since editing them comes with their own story; with none, it says
+/// so. Gives the y under it.
+fn literals_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, enumeration: Obj) -> f32 {
+    let paint = ui.painter().clone();
+    let width = (r.width() - 2.0 * PAD).max(0.0);
+    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return y };
+    let rows: Vec<(Uuid, String)> =
+        archforge_uml::commands::literals(store, enumeration).into_iter().filter_map(|l| Some((store.uuid(l).ok()?, name(store, l)))).collect();
+    let title = fmt(&tr("Literals · {n}"), &[("n", &rows.len().to_string())]);
+    let Some(next) = section(shell, ui, p, r, y, &title, None) else { return y + 50.0 };
+    let mut y = next - 6.0;
+    if rows.is_empty() {
+        ux::text(&paint, pos2(r.left() + PAD + 10.0, y + 9.0), &tr("No literals yet"), types::UI, p.text_muted, Some(width));
+        return y + ROW + 10.0;
+    }
+    let chosen = crate::panels::selected_id(shell);
+    for (id, text) in &rows {
+        let row = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width, ROW));
+        // Its name for assistive technology and its tooltip: the literal's name, whole.
+        let resp = control(shell, ui, &format!("workspace.properties.literal.{id}"), "row", row, true)
+            .on_hover_text(text.as_str())
+            .accessible_name(text.as_str());
+        if Some(*id) == chosen {
+            paint.rect_filled(row, 6.0, p.accent_tint);
+        } else if resp.contains_pointer() {
+            paint.rect_filled(row, 6.0, p.page);
+        }
+        ux::text(&paint, pos2(row.left() + 10.0, row.top() + 9.0), text, types::UI, p.text, Some((width - 20.0).max(0.0)));
+        if resp.clicked() {
+            crate::panels::select_element(shell, *id);
+        }
+        y += ROW;
+    }
+    y + 10.0
 }
 
 /// The Attributes or Operations section with its rows and the editor; gives the y under it.

@@ -81,6 +81,9 @@ impl Backend for Model {
             "er.entity.get" if p["entity"] == "t1" => json!({ "id": "t1", "name": "customer", "attributes": [{ "name": "id" }] }),
             "uml.class.get" if p["class"] == "c1" => json!({ "id": "c1", "kind": "class", "name": "Order" }),
             "uml.class.get" if p["class"] == "i1" => json!({ "id": "i1", "kind": "interface", "name": "Payable" }),
+            "uml.class.get" if p["class"] == "e1" => {
+                json!({ "id": "e1", "kind": "enumeration", "name": "OrderStatus", "literals": [{ "id": "l1", "name": "Placed" }] })
+            }
             "skill.list" => json!({ "skills": [{ "id": "k1", "name": "DDL" }] }),
             "skill.effective" if p["element"] == "s1" || p["element"] == "t1" => {
                 json!({ "skills": [{ "id": "k1", "name": "DDL", "origin": null, "overridden_by": null, "trigger": p["trigger"] }] })
@@ -122,6 +125,9 @@ fn the_model_and_its_skills_read_as_resources_with_the_revision_and_say_what_the
     assert_eq!(content(&read(&model, "archforge://element/c1"))["kind"], "class");
     let interface = content(&read(&model, "archforge://element/i1"));
     assert_eq!((interface["kind"].as_str(), interface["interface"]["name"].as_str()), (Some("interface"), Some("Payable")));
+    // An enumeration, which the class read gives too, as what it is, with its literals.
+    let enumeration = content(&read(&model, "archforge://element/e1"));
+    assert_eq!((enumeration["kind"].as_str(), enumeration["enumeration"]["literals"][0]["name"].as_str()), (Some("enumeration"), Some("Placed")));
     // The skills in effect, for every trigger or for one, as skill.effective gives them.
     let effective = content(&read(&model, "archforge://skills/effective/t1/export"));
     assert_eq!((effective["trigger"].as_str(), effective["skills"][0]["name"].as_str()), (Some("export"), Some("DDL")));

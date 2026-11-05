@@ -6,7 +6,7 @@
 //! - `archforge://project`: the open project, its revision, what is selected and shown.
 //! - `archforge://skills`: every skill, where it sits and when it applies.
 //! - `archforge://element/{id}`: a schema (with its tables, keys and relationships), a table, a
-//!   class, an interface or a diagram.
+//!   class, an interface, an enumeration (with its literals) or a diagram.
 //! - `archforge://skills/effective/{id}` and `archforge://skills/effective/{id}/{trigger}`: the
 //!   skills in effect on an element or a diagram, outermost first, with where each comes from and
 //!   what overrides it, as `skill.effective` gives them.
@@ -49,7 +49,7 @@ pub(crate) fn templates() -> Value {
             "uriTemplate": "archforge://element/{id}",
             "name": "element",
             "title": "An element",
-            "description": "A schema with its tables, a table, a class, an interface or a diagram, by id. Packages and other elements are read through the tools.",
+            "description": "A schema with its tables, a table, a class, an interface, an enumeration with its literals or a diagram, by id. Packages and other elements are read through the tools.",
             "mimeType": JSON_TYPE,
         },
         {
@@ -103,9 +103,10 @@ fn element(backend: &dyn Backend, id: &str) -> Result<Value, Failure> {
         ("diagram", "diagram.get", "diagram"),
     ] {
         if let Ok(found) = query(backend, command, json!({ key: id })) {
-            // The class read gives an interface too, and says which it is.
+            // The class read gives an interface and an enumeration too, and says which it is.
             let kind = match found.get("kind").and_then(Value::as_str) {
                 Some("interface") if kind == "class" => "interface",
+                Some("enumeration") if kind == "class" => "enumeration",
                 _ => kind,
             };
             return Ok(json!({ "kind": kind, kind: found }));
@@ -113,7 +114,9 @@ fn element(backend: &dyn Backend, id: &str) -> Result<Value, Failure> {
     }
     Err((
         NOT_FOUND,
-        format!("no schema, table, class, interface or diagram has the id {id:?}; packages and other elements are read through the tools"),
+        format!(
+            "no schema, table, class, interface, enumeration or diagram has the id {id:?}; packages and other elements are read through the tools"
+        ),
     ))
 }
 

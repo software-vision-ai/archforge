@@ -7,9 +7,9 @@ apply to the element it works on.
 ## Where skills live
 
 A skill sits on the whole project or on one element: a schema, a table, a package, a class, an
-interface. A skill on a container applies to everything inside it, and a skill on an element
-overrides one of the same name further out: a schema's *Naming* skill wins over the project's
-*Naming* skill for that schema's tables.
+interface, an enumeration. A skill on a container applies to everything inside it, and a skill on
+an element overrides one of the same name further out: a schema's *Naming* skill wins over the
+project's *Naming* skill for that schema's tables.
 
 ## Writing a skill
 

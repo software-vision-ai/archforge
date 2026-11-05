@@ -208,6 +208,7 @@ str		every relationship	所有关系
 str		every column	所有列
 str		every class	所有类
 str		every interface	所有接口
+str		every enumeration	所有枚举
 str		every attribute	所有属性
 str		every operation	所有操作
 str		every association	所有关联
@@ -527,26 +528,33 @@ str		{parent} has no primary key yet, so there is nothing in {child} to point at
 # 类图
 str		Add class	添加类
 str		Add interface	添加接口
+str		Add enumeration	添加枚举
 str		Class	类
 str		Interface	接口
 str		«interface»	«interface»
+str		Enumeration	枚举
+str		«enumeration»	«enumeration»
 str		Classifier	分类器
 str		Classifier kinds	分类器类型
 str		Class diagram	类图
 str		Class diagrams	类图
 str		Class · model, in every diagram	类 · 模型，在每个图中
 str		Interface · model, in every diagram	接口 · 模型，在每个图中
+str		Enumeration · model, in every diagram	枚举 · 模型，在每个图中
 str		New package	新包
 str		On this class · {n}	此类上 · {n}
 str		On this interface · {n}	此接口上 · {n}
+str		On this enumeration · {n}	在此枚举上 · {n}
 str		On this package · {n}	此包上 · {n}
 str		Package	包
 str		Package · model	包 · 模型
 str		The diagram is of no package	该图不属于任何包
 str		This class	此类
 str		This interface	此接口
+str		This enumeration	此枚举
 str		This package	此包
 plural		+ {n} more member	+ 另 {n} 个成员
+plural		+ {n} more literal	+ 另 {n} 个字面量
 plural		+ {n} more element	+ 另 {n} 个元素
 # 属性面板中的类成员
 str		Abstract	抽象
@@ -557,12 +565,17 @@ str		There is no type named {name}.	没有名为 {name} 的类型。
 str		Several types are named {name}; pick one from the menu.	有多个名为 {name} 的类型；请从菜单中选择一个。
 str		Add parameter	添加参数
 str		Attribute	属性
+str		Literal	字面量
 str		Attribute · model	属性 · 模型
+str		Literal · model	字面量 · 模型
 str		Attributes · {n}	属性 · {n}
+str		Literals · {n}	字面量 · {n}
+str		No literals yet	尚无字面量
 str		Move down	下移
 str		Move up	上移
 str		Multiplicity	多重性
 str		On this attribute · {n}	在此属性上 · {n}
+str		On this literal · {n}	在此字面量上 · {n}
 str		On this operation · {n}	在此操作上 · {n}
 str		Operation	操作
 str		Operation · model	操作 · 模型
@@ -575,10 +588,12 @@ str		Remove parameter	移除参数
 str		Return type	返回类型
 str		Static	静态
 str		This attribute	此属性
+str		This literal	此字面量
 str		This operation	此操作
 str		Visibility	可见性
 str		Place class	放置类
 str		Place interface	放置接口
+str		Place enumeration	放置枚举
 str		Add package	添加包
 str		Place package	放置包
 str		Move package	移动包
@@ -593,6 +608,7 @@ str		Only a package this diagram's package holds goes on it	只能放入此图�
 str		A bound can be at most {max}.	界限最多为 {max}。
 str		A class realizes only an interface	类只能实现接口
 str		A relationship joins two classes or interfaces	关系连接两个类或接口
+str		An enumeration is a data type and joins no association	枚举是数据类型，不参与任何关联
 str		Add association	添加关联
 str		Add dependency	添加依赖
 str		Add generalization	添加泛化
@@ -645,6 +661,7 @@ str		{what} removed	已移除{what}
 # 包
 str		Class · {package}	类 · {package}
 str		«interface» · {package}	«interface» · {package}
+str		«enumeration» · {package}	«enumeration» · {package}
 str		{name} removed; what it held moved to {parent}	已移除 {name}；其内容已移至 {parent}
 # 关闭时未保存的更改
 str		Close and lose changes	关闭并丢弃更改
