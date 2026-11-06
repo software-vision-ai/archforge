@@ -25,6 +25,7 @@ archforge-project = { path = "crates/project" }
 archforge-control = { path = "crates/control" }
 archforge-mcp = { path = "crates/mcp" }
 archforge-secrets = { path = "crates/secrets" }
+archforge-agents = { path = "crates/agents" }
 
 # External crates.
 egui = { version = "0.37", features = ["default_fonts", "monochrome_emoji_fonts"] }
