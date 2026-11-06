@@ -583,6 +583,12 @@ plural		+ {n} more literal	+ {n} littéral de plus|+ {n} littéraux de plus
 plural		+ {n} more element	+ {n} élément de plus|+ {n} éléments de plus
 # Membres de classe dans Propriétés
 str		Abstract	Abstraite
+str		No subclasses (final)	Aucune sous-classe (final)
+str		Nothing may specialise {name}. Shown as {final} after its name.	Rien ne peut spécialiser {name}. Affiché {final} après son nom.
+plural		{name} has {n} subclass: {subclasses}.	{name} a {n} sous-classe : {subclasses}.|{name} a {n} sous-classes : {subclasses}.
+plural		Remove that generalization before making it final.	Retirez cette généralisation avant de le rendre final.|Retirez ces généralisations avant de le rendre final.
+str		{names} and {last}	{names} et {last}
+plural		Select the generalization	Sélectionner la généralisation|Sélectionner les {n} généralisations
 str		Add attribute	Ajouter un attribut
 str		Add operation	Ajouter une opération
 str		Add literal	Ajouter un littéral
@@ -687,6 +693,7 @@ str		Nothing specializes an association class	Rien ne spécialise une classe d�
 str		A classifier cannot specialize itself	Un classificateur ne peut pas se spécialiser lui-même
 str		This one specializes that one already	Celui-ci spécialise déjà celui-là
 str		That one specializes this one already, which would make a cycle	Celui-là spécialise déjà celui-ci, ce qui créerait un cycle
+str		{name} is final: nothing may specialise it. Clear "No subclasses" in its Properties first.	{name} est final : rien ne peut le spécialiser. Décochez d’abord « Aucune sous-classe » dans ses Propriétés.
 str		Add association	Ajouter une association
 str		Add dependency	Ajouter une dépendance
 str		Add generalization	Ajouter une généralisation

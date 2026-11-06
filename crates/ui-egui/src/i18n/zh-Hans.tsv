@@ -583,6 +583,12 @@ plural		+ {n} more literal	+ 另 {n} 个字面量
 plural		+ {n} more element	+ 另 {n} 个元素
 # 属性面板中的类成员
 str		Abstract	抽象
+str		No subclasses (final)	无子类 (final)
+str		Nothing may specialise {name}. Shown as {final} after its name.	任何类型都不能特化 {name}。在名称后显示为 {final}。
+plural		{name} has {n} subclass: {subclasses}.	{name} 有 {n} 个子类：{subclasses}。
+plural		Remove that generalization before making it final.	设为 final 前，请先移除这些泛化。
+str		{names} and {last}	{names} 和 {last}
+plural		Select the generalization	选择 {n} 个泛化
 str		Add attribute	添加属性
 str		Add operation	添加操作
 str		Add literal	添加字面量
@@ -687,6 +693,7 @@ str		Nothing specializes an association class	任何类型都不能特化关联�
 str		A classifier cannot specialize itself	分类器不能特化自身
 str		This one specializes that one already	此项已特化该项
 str		That one specializes this one already, which would make a cycle	该项已特化此项，这会形成循环
+str		{name} is final: nothing may specialise it. Clear "No subclasses" in its Properties first.	{name} 是 final：任何类型都不能特化它。请先在其属性中取消勾选“无子类”。
 str		Add association	添加关联
 str		Add dependency	添加依赖
 str		Add generalization	添加泛化

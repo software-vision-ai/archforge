@@ -5687,6 +5687,7 @@ impl archforge_diagram::Notation for Sketch {
             elsewhere: false,
             tone: archforge_diagram::figure::Tone::Tinted,
             slanted: false,
+            braces: None,
         })
     }
     fn line(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<archforge_diagram::figure::Line> {
@@ -6479,6 +6480,17 @@ fn a_class_takes_operations_with_parameters_and_turns_abstract_in_properties() {
     type_into(&mut h, "workspace.properties.member.parameter.1.multiplicity", "0..*");
     let at = rect_of(&h, "workspace.properties.member.abstract").center();
     click(&mut h, at);
+    // The editor grew with its parameters past the body's foot: the body scrolls to its Apply.
+    let body = h.state().panels.body.unwrap();
+    h.event(egui::Event::PointerMoved(body.center()));
+    h.event(egui::Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Point,
+        delta: egui::vec2(0.0, -400.0),
+        modifiers: egui::Modifiers::NONE,
+        phase: egui::TouchPhase::Move,
+        source: egui::MouseWheelSource::Wheel,
+    });
+    h.run_steps(30);
     let at = rect_of(&h, "workspace.properties.member.apply").center();
     click(&mut h, at);
     assert!(h.state().panels.member.is_none(), "{:?}", h.state().panels.member);
@@ -8320,6 +8332,108 @@ fn an_interface_takes_members_on_its_card_and_in_properties_and_is_offered_as_a_
     let at = rect_of(&h, "workspace.properties.member.apply").center();
     click(&mut h, at);
     assert!(member_rows(&h, customer, false).iter().any(|r| r == "+ wallet : Payable"), "{:?}", member_rows(&h, customer, false));
+}
+
+/// No subclasses (final) in a classifier's Properties (AR-137), in light and dark: described by its
+/// explanation, ticked it makes the classifier final in one undo step and its card says `{final}`;
+/// the Relationship tool then refuses a generalization to it, and a generalization's general end
+/// dragged onto it, at the canvas's top, changing nothing; ticked on a classifier with subclasses
+/// it stays clear and Properties names them, with a button that selects their generalizations.
+#[test]
+fn no_subclasses_makes_a_classifier_final_and_specialising_it_is_refused() {
+    use crate::uml_panel::FINAL_ID;
+    use egui_kittest::kittest::{NodeT, Queryable};
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        let class = |h: &Harness<'static, Shell>, name: &str| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(st, *o) == name).unwrap()
+        };
+        let select = |h: &mut Harness<'static, Shell>, id: String| {
+            h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [id] })).unwrap();
+            h.state_mut().state.show_panel(crate::state::Panel::Properties);
+            h.run();
+        };
+        let is_final = |h: &Harness<'static, Shell>, name: &str| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            archforge_uml::relations::is_final(st, class(h, name))
+        };
+        let pricing = class(&h, "PricingService");
+        let pricing_id = h.state().session.as_ref().unwrap().doc().uuid(pricing).unwrap().to_string();
+        select(&mut h, pricing_id.clone());
+        // Its accessible name and the explanation that describes it.
+        let node = h.get_by_label("No subclasses (final)").accesskit_node().data().clone();
+        assert_eq!(node.description(), Some("Nothing may specialise PricingService. Shown as {final} after its name."));
+        assert_eq!(node.toggled(), Some(egui::accesskit::Toggled::False));
+        assert!(painted(&h).iter().any(|t| t == "Nothing may specialise PricingService. Shown as {final} after its name."));
+        // Ticked: final in one step, `{final}` after its name on its card.
+        let at = rect_of(&h, FINAL_ID).center();
+        click(&mut h, at);
+        assert!(is_final(&h, "PricingService"));
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Set classifier"));
+        h.run();
+        assert!(painted(&h).iter().any(|t| t == "{final}"), "the card says {{final}}");
+        assert_eq!(h.get_by_label("No subclasses (final)").accesskit_node().data().toggled(), Some(egui::accesskit::Toggled::True));
+        // A generalization drawn from OrderLine to it is refused at the canvas's top.
+        let refusal = "PricingService is final: nothing may specialise it. Clear \"No subclasses\" in its Properties first.";
+        let revision = h.state().session.as_ref().unwrap().revision();
+        let edges = edge_count(&h);
+        h.state_mut().canvas.uml_relation = crate::uml_relate::Relate::Generalization;
+        let at = rect_of(&h, "workspace.tools.relationship").center();
+        click(&mut h, at);
+        let from = rect_of(&h, &format!("workspace.canvas.node.{}", nodes["OrderLine"])).center();
+        let to = rect_of(&h, &format!("workspace.canvas.node.{}", nodes["PricingService"])).center();
+        drag(&mut h, from, to);
+        assert_eq!(h.state().canvas.notice.as_deref(), Some(refusal));
+        assert_eq!((edge_count(&h), h.state().session.as_ref().unwrap().revision()), (edges, revision), "nothing drawn");
+        // CardPayment's generalization: its general end dragged onto it is refused the same way.
+        let generalization = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let (g, _) = archforge_uml::relations::specializations(st, class(&h, "Payment"))[0];
+            st.uuid(g).unwrap().to_string()
+        };
+        h.state_mut().canvas.notice = None;
+        select(&mut h, generalization.clone());
+        let handle = rect_of(&h, "workspace.canvas.line-end.target").center();
+        drag(&mut h, handle, to);
+        assert_eq!(h.state().canvas.notice.as_deref(), Some(refusal));
+        assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "nothing moved");
+        // Payment has a subclass: ticked, the box stays clear, nothing is written, and the
+        // refusal names CardPayment; its button selects the generalization.
+        let payment = h.state().session.as_ref().unwrap().doc().uuid(class(&h, "Payment")).unwrap().to_string();
+        select(&mut h, payment);
+        let at = rect_of(&h, FINAL_ID).center();
+        click(&mut h, at);
+        h.run();
+        assert!(!is_final(&h, "Payment"));
+        assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "nothing entered the model or its history");
+        let said = "Payment has 1 subclass: CardPayment. Remove that generalization before making it final.";
+        assert!(painted(&h).iter().any(|t| t == said), "{:?}", painted(&h));
+        assert!(ids(&h).contains(&format!("{FINAL_ID}.refusal")));
+        let node = h.get_by_label("No subclasses (final)").accesskit_node().data().clone();
+        assert!(node.description().is_some_and(|d| d.ends_with(said)), "{:?}", node.description());
+        let at = rect_of(&h, &format!("{FINAL_ID}.select")).center();
+        click(&mut h, at);
+        let st = h.state().session.as_ref().unwrap().doc();
+        let selected: Vec<String> = h.state().session.as_ref().unwrap().view().selection.iter().map(|o| st.uuid(*o).unwrap().to_string()).collect();
+        assert_eq!(selected, [generalization]);
+        // Cleared on PricingService: one step, undone and redone; a generalization to it is drawn.
+        select(&mut h, pricing_id.clone());
+        let at = rect_of(&h, FINAL_ID).center();
+        click(&mut h, at);
+        assert!(!is_final(&h, "PricingService"));
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        assert!(is_final(&h, "PricingService"));
+        h.state_mut().session.as_mut().unwrap().redo().unwrap();
+        assert!(!is_final(&h, "PricingService"));
+        h.run();
+        assert!(!painted(&h).iter().any(|t| t == "{final}"));
+        h.state_mut().canvas.notice = None;
+        let at = rect_of(&h, "workspace.tools.relationship").center();
+        click(&mut h, at);
+        drag(&mut h, from, to);
+        assert_eq!(edge_count(&h), edges + 1, "notice {:?}", h.state().canvas.notice);
+    }
 }
 
 /// The Relationship tool joins interfaces and refuses what would make a class specialize an interface.

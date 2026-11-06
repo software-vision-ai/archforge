@@ -272,8 +272,8 @@ fn realization_refusal(store: &Store, implementing: Option<Obj>, contract: Optio
 }
 
 /// Why a generalization from `specific` to `general` is refused, in the user's words, when it is:
-/// the model's rules (`generalization_problem`) said as the canvas says them. `except` is the
-/// generalization being reconnected.
+/// the model's rules (`generalization_problem`) said as the canvas says them, a final general
+/// classifier by its name (AR-137). `except` is the generalization being reconnected.
 fn generalization_refusal(store: &Store, specific: Obj, general: Obj, except: Option<Obj>) -> Option<String> {
     use archforge_uml::relations::GeneralizationProblem as P;
     Some(match archforge_uml::relations::generalization_problem(store, specific, general, except)? {
@@ -288,6 +288,10 @@ fn generalization_refusal(store: &Store, specific: Obj, general: Obj, except: Op
         P::BuiltIn => tr("A built-in type specializes nothing"),
         P::AssociationClass => tr("Nothing specializes an association class"),
         P::Itself => tr("A classifier cannot specialize itself"),
+        P::Final => fmt(
+            &tr("{name} is final: nothing may specialise it. Clear \"No subclasses\" in its Properties first."),
+            &[("name", &archforge_core::name_of(store, general))],
+        ),
         P::Again => tr("This one specializes that one already"),
         P::Cycle => tr("That one specializes this one already, which would make a cycle"),
     })

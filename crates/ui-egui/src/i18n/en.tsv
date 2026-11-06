@@ -582,6 +582,12 @@ plural		+ {n} more literal	+ {n} more literal|+ {n} more literals
 plural		+ {n} more element	+ {n} more element|+ {n} more elements
 # Class members in Properties
 str		Abstract	Abstract
+str		No subclasses (final)	No subclasses (final)
+str		Nothing may specialise {name}. Shown as {final} after its name.	Nothing may specialise {name}. Shown as {final} after its name.
+plural		{name} has {n} subclass: {subclasses}.	{name} has {n} subclass: {subclasses}.|{name} has {n} subclasses: {subclasses}.
+plural		Remove that generalization before making it final.	Remove that generalization before making it final.|Remove those generalizations before making it final.
+str		{names} and {last}	{names} and {last}
+plural		Select the generalization	Select the generalization|Select the {n} generalizations
 str		Add attribute	Add attribute
 str		Add operation	Add operation
 str		Add literal	Add literal
@@ -686,6 +692,7 @@ str		Nothing specializes an association class	Nothing specializes an association
 str		A classifier cannot specialize itself	A classifier cannot specialize itself
 str		This one specializes that one already	This one specializes that one already
 str		That one specializes this one already, which would make a cycle	That one specializes this one already, which would make a cycle
+str		{name} is final: nothing may specialise it. Clear "No subclasses" in its Properties first.	{name} is final: nothing may specialise it. Clear "No subclasses" in its Properties first.
 str		Add association	Add association
 str		Add dependency	Add dependency
 str		Add generalization	Add generalization

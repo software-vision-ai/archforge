@@ -22,7 +22,7 @@ use serde_json::json;
 
 use crate::Shell;
 use crate::home::control;
-use crate::i18n::{fmt, tr};
+use crate::i18n::{fmt, tr, trn};
 use crate::panels::{FIELD, Menu, PAD, ROW, Subject, check, field_inner, icon_button, menu, run, section, select_field, text_field};
 use crate::uml_classifier::Classifier;
 use crate::ux::{self, Palette, icons, types};
@@ -229,9 +229,10 @@ pub(crate) fn member_of(store: &Store, o: Obj) -> Option<(Obj, MemberKind)> {
     }
 }
 
-/// A classifier's panel: its name and package, then a class's Abstract, a class's, an interface's
-/// or a data type's attributes and operations, or an enumeration's literals, each with its editor;
-/// a primitive type has none, so its name, package and description stand alone.
+/// A classifier's panel: its name and package, then a class's Abstract, No subclasses (final) for
+/// every kind but a built-in type (AR-137), then a class's, an interface's or a data type's
+/// attributes and operations, or an enumeration's literals, each with its editor; a primitive type
+/// has none.
 pub(crate) fn class_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, subject: &Subject) {
     let (Some(class), Some(class_id)) = (subject.obj, subject.id) else { return };
     let kind = shell.session.as_ref().and_then(|s| Classifier::of(s.doc(), class)).unwrap_or_default();
@@ -269,9 +270,6 @@ pub(crate) fn class_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
         Menu::ClassPackage,
     );
     let mut y = y + 17.0 + FIELD + 12.0;
-    if kind == Classifier::Enumeration {
-        members_section(shell, ui, p, r, y, class, class_id, MemberKind::Literal);
-    }
     // An interface is abstract by what it is: it has no Abstract of its own.
     if kind == Classifier::Class {
         let was = shell.session.as_ref().is_some_and(|s| flag(s.doc(), class, archforge_uml::class::IS_ABSTRACT));
@@ -284,6 +282,10 @@ pub(crate) fn class_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
                 Err(e) => shell.panels.notice = Some(e),
             }
         }
+    }
+    y = final_check(shell, ui, p, r, y, class, class_id);
+    if kind == Classifier::Enumeration {
+        members_section(shell, ui, p, r, y, class, class_id, MemberKind::Literal);
     }
     if kind.takes_members() {
         let y = members_section(shell, ui, p, r, y, class, class_id, MemberKind::Attribute);
@@ -302,6 +304,109 @@ pub(crate) fn class_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
             }
         }
     }
+}
+
+/// The id of No subclasses (final), the design's own (AR-137).
+pub(crate) const FINAL_ID: &str = "workspace.properties.classifier.isFinalSpecialization";
+
+/// No subclasses (final) at `y` with its explanation under it (AR-137): ticked, nothing may
+/// specialize the classifier and its card says `{final}` after its name (`uml.classifier.set`, one
+/// undo step). Ticked while something specializes it, the box stays clear, nothing is written, and a
+/// refusal under it names those classifiers, with a button that selects their generalizations so
+/// they can be removed. Left out for a built-in type, which is never changed. Gives the y under it.
+fn final_check(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, class: Obj, class_id: Uuid) -> f32 {
+    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return y };
+    if archforge_uml::members::is_built_in(store, class) {
+        return y;
+    }
+    let own = name(store, class);
+    let was = archforge_uml::relations::is_final(store, class);
+    let below: Vec<(Uuid, String)> = archforge_uml::relations::specializations(store, class)
+        .into_iter()
+        .filter_map(|(g, s)| Some((store.uuid(g).ok()?, name(store, s))))
+        .collect();
+    let width = (r.width() - 2.0 * PAD).max(0.0);
+    let left = r.left() + PAD;
+    let explained = fmt(&tr("Nothing may specialise {name}. Shown as {final} after its name."), &[("name", &own)]);
+    let refused = (shell.panels.final_refused == Some(class_id) && !was && !below.is_empty()).then(|| final_refusal(&own, &below));
+    let mut on = was;
+    check(shell, ui, p, pos2(left, y), FINAL_ID, &tr("No subclasses (final)"), &mut on);
+    // Its explanation describes it, and a refusal joins it; its state is said as a check box's.
+    let described = match &refused {
+        Some(why) => format!("{explained} {why}"),
+        None => explained.clone(),
+    };
+    ui.ctx().accesskit_node_builder(crate::widgets::egui_id(FINAL_ID), |node| {
+        node.set_role(egui::accesskit::Role::CheckBox);
+        node.set_toggled(if was { egui::accesskit::Toggled::True } else { egui::accesskit::Toggled::False });
+        node.set_description(described);
+        if refused.is_some() {
+            node.set_invalid(egui::accesskit::Invalid::True);
+        }
+    });
+    let paint = ui.painter().clone();
+    let said = ux::galley_rows(&paint, &explained, types::CAPTION, p.text_muted, Some((width - 24.0).max(0.0)), 3);
+    let tall = said.size().y;
+    paint.galley(pos2(left + 24.0, y + 22.0), said, p.text_muted);
+    y += 22.0 + tall + 12.0;
+    if on != was {
+        if on && !below.is_empty() {
+            // Refused before anything is written: the box stays clear and the history untouched.
+            shell.panels.final_refused = Some(class_id);
+            ui.ctx().request_repaint();
+        } else {
+            match run(shell, "uml.classifier.set", json!({ "classifier": class_id.to_string(), "final": on })) {
+                Ok(_) => {
+                    shell.panels.notice = None;
+                    shell.panels.final_refused = None;
+                }
+                Err(e) => shell.panels.notice = Some(e),
+            }
+        }
+    }
+    if let Some(why) = refused {
+        // The refusal on the danger tint, its warning mark at its top left.
+        let text = ux::galley_rows(&paint, &why, types::SMALL, p.text, Some((width - 42.0).max(0.0)), 8);
+        let card = Rect::from_min_size(pos2(left, y), vec2(width, text.size().y + 20.0));
+        paint.rect_filled(card, 6.0, p.danger_tint);
+        ux::icon_in(&paint, Rect::from_min_size(pos2(left + 10.0, y + 11.5), vec2(14.0, 14.0)), &icons::WARNING, p.danger);
+        paint.galley(pos2(left + 32.0, y + 10.0), text, p.text);
+        crate::widgets::record_visible(ui, &mut shell.registry, &format!("{FINAL_ID}.refusal"), "text", card);
+        y = card.bottom() + 12.0;
+        // A button that selects their generalizations, for Delete to remove them.
+        let n = u64::try_from(below.len()).unwrap_or(u64::MAX);
+        let label = trn("Select the generalization", "Select the {n} generalizations", n);
+        let g = ux::galley(&paint, &label, types::UI, p.text, None);
+        let b = Rect::from_min_size(pos2(left, y), vec2((g.size().x + 24.0).min(width), FIELD));
+        paint.rect_stroke(b, 6.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
+        paint.galley(pos2(b.left() + 12.0, b.center().y - g.size().y / 2.0), g, p.text);
+        if control(shell, ui, &format!("{FINAL_ID}.select"), "button", b, true).accessible_name(label).clicked() {
+            let ids: Vec<String> = below.iter().map(|(g, _)| g.to_string()).collect();
+            shell.panels.final_refused = None;
+            if let Err(e) = run(shell, "view.select", json!({ "ids": ids })) {
+                shell.panels.notice = Some(e);
+            }
+        }
+        y = b.bottom() + 12.0;
+    }
+    y
+}
+
+/// Why `name` may not be made final while the classifiers `below` specialize it, in the user's
+/// words: each named, the generalizations to be removed first.
+pub(crate) fn final_refusal(name: &str, below: &[(Uuid, String)]) -> String {
+    let names: Vec<&str> = below.iter().map(|(_, n)| n.as_str()).collect();
+    let listed = match names.split_last() {
+        Some((last, rest)) if !rest.is_empty() => fmt(&tr("{names} and {last}"), &[("names", &rest.join(", ")), ("last", last)]),
+        _ => names.join(", "),
+    };
+    let n = u64::try_from(below.len()).unwrap_or(u64::MAX);
+    let has = fmt(
+        &trn("{name} has {n} subclass: {subclasses}.", "{name} has {n} subclasses: {subclasses}.", n),
+        &[("name", name), ("subclasses", &listed)],
+    );
+    let remove = trn("Remove that generalization before making it final.", "Remove those generalizations before making it final.", n);
+    format!("{has} {remove}")
 }
 
 /// A package's panel: its name, and the package it sits in, a pick moving it there with what it

@@ -164,6 +164,8 @@ pub struct Palette {
     pub field: Color32,
     /// A destructive button.
     pub danger: Color32,
+    /// The danger colour's tint: behind a refusal said in a panel.
+    pub danger_tint: Color32,
     /// An entity node on the canvas: its fill, its edge, its eyebrow and key badges, its header line.
     pub entity: Color32,
     pub entity_edge: Color32,
@@ -206,6 +208,7 @@ pub const LIGHT: Palette = Palette {
     canvas: rgb(0xFBFCFE),
     field: rgb(0xF2F4F7),
     danger: rgb(0xC0392B),
+    danger_tint: rgb(0xFBEDEB),
     entity: rgb(0xFFF7EE),
     entity_edge: rgb(0xF0B37A),
     entity_ink: rgb(0xC25E0A),
@@ -242,6 +245,7 @@ pub const DARK: Palette = Palette {
     canvas: rgb(0x151B23),
     field: rgb(0x232C38),
     danger: rgb(0xD9534F),
+    danger_tint: rgb(0x3A1F1E),
     entity: rgb(0x2A2119),
     entity_edge: rgb(0x7A5A2E),
     entity_ink: rgb(0xE8A05A),

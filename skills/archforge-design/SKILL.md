@@ -601,6 +601,16 @@ What is UML's own, beside the shared rules above.
   Abstract, then its parameters, each on two lines: its name with its ✕, then its type and its
   multiplicity (narrow, `1` as its hint). Remove and Move up and down sit at the editor's foot on
   the left, Cancel and Apply on the right.
+- No subclasses (final) (AR-137, design page 08, frames G1 and G3) sits in a classifier's
+  Properties after Abstract, for every kind but a built-in type (an association class needs none:
+  nothing specializes one), its explanation under it ("Nothing may specialise Payment. Shown as
+  {final} after its name."), which also describes it; No redefinition (leaf) is to follow it. Ticked,
+  the card shows `{final}` after the name in the small secondary style, and a generalization drawn
+  to it, or a general end dragged onto it, is refused at the canvas's top ("PricingService is final:
+  nothing may specialise it. Clear "No subclasses" in its Properties first."). Ticked while
+  something specializes it, the box stays clear, nothing is written, and a refusal on the danger
+  tint under it names those classifiers, with Select the n generalizations under it. Agents use
+  `uml.classifier.set`.
 - A type menu offers None, every built-in type (Integer, String, Boolean, Real, UnlimitedNatural),
   then the model's own types by name, every one of them: the menu scrolls, the arrow keys reach any
   row, and only the rows in sight are laid out (AR-123). A built-in type is made in the package

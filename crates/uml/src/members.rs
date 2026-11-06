@@ -788,7 +788,7 @@ fn flag(store: &Store, o: Obj, prop: archforge_mof::PropId) -> bool {
 /// two ends besides, as `uml.relationship.list` gives an association's. Its `kind` is a word
 /// without spaces (`class`, `interface`, `enumeration`, `data_type`, `primitive_type`,
 /// `association_class`). It, each attribute, operation and literal give their description, or
-/// nothing (AR-186).
+/// nothing (AR-186); it says whether it is final, so nothing may specialize it (AR-137).
 fn class_get(ctx: &mut C<'_>, p: &Params) -> R {
     let store = &*ctx.doc;
     let c = classifier_of(store, p, "class")?;
@@ -827,7 +827,8 @@ fn class_get(ctx: &mut C<'_>, p: &Params) -> R {
     let is_class = store.class_of(c).ok() == Some(CLASS);
     let mut out = json!({
         "id": uuid_of(store, c)?, "kind": crate::commands::what(store, c).replace(' ', "_"), "name": name_of(store, c),
-        "abstract": is_class && flag(store, c, class::IS_ABSTRACT), "description": description_of(store, c), "attributes": attrs, "operations": ops,
+        "abstract": is_class && flag(store, c, class::IS_ABSTRACT), "final": crate::relations::is_final(store, c),
+        "description": description_of(store, c), "attributes": attrs, "operations": ops,
     });
     if store.class_of(c).ok() == Some(PRIMITIVE_TYPE)
         && let Some(fields) = out.as_object_mut()
