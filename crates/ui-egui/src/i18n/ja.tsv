@@ -583,6 +583,12 @@ plural		+ {n} more literal	+ 他 {n} リテラル
 plural		+ {n} more element	+ 他 {n} 要素
 # プロパティのクラスメンバー
 str		Abstract	抽象
+str		No subclasses (final)	サブクラスなし (final)
+str		Nothing may specialise {name}. Shown as {final} after its name.	{name} を特化することはできません。名前の後に {final} と表示されます。
+plural		{name} has {n} subclass: {subclasses}.	{name} には {n} 個のサブクラスがあります: {subclasses}。
+plural		Remove that generalization before making it final.	final にする前に、それらの汎化を削除してください。
+str		{names} and {last}	{names} と {last}
+plural		Select the generalization	{n} 個の汎化を選択
 str		Add attribute	属性を追加
 str		Add operation	操作を追加
 str		Add literal	リテラルを追加
@@ -687,6 +693,7 @@ str		Nothing specializes an association class	関連クラスを特化するも�
 str		A classifier cannot specialize itself	分類子は自分自身を特化できません
 str		This one specializes that one already	これはすでにそれを特化しています
 str		That one specializes this one already, which would make a cycle	それはすでにこれを特化しており、循環になります
+str		{name} is final: nothing may specialise it. Clear "No subclasses" in its Properties first.	{name} は final です。特化することはできません。先にプロパティで「サブクラスなし」をオフにしてください。
 str		Add association	関連を追加
 str		Add dependency	依存を追加
 str		Add generalization	汎化を追加

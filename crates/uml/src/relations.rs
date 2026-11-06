@@ -16,11 +16,17 @@
 //! primitive type likewise, a built-in type that would specialize anything, an
 //! association to or from an enumeration, a data type or a primitive type (whose values are no
 //! instances to link), a classifier
-//! that specializes itself, directly or round a cycle, the same generalization twice, a class depending
+//! that specializes itself, directly or round a cycle, a classifier that specializes a final one (UML's
+//! `isFinalSpecialization`, set with `uml.classifier.set`), the same generalization twice, a class depending
 //! on itself, both ends of an association aggregating, a composition whose whole's end allows more
 //! than one, two ends of one association with the same role, and an interface realization from
 //! anything but a class, to anything but an interface, or from a class to an interface it realizes
 //! already. A realization is owned by its implementing class, as UML has it.
+//!
+//! A classifier of any kind may be made final (AR-137): nothing may specialize it then, so a new
+//! generalization to it, or one whose general end moves onto it, is refused; it is made final only
+//! while nothing specializes it, the refusal naming the classifiers that do. Clearing it changes
+//! nothing else. It is UML's `isFinalSpecialization`, apart from a leaf element's `isLeaf`.
 //!
 //! An association class (AR-125) is one element, UML's AssociationClass: a class and an
 //! association at once. It is made between two classes as a plain association is, owning both its
@@ -85,6 +91,62 @@ pub fn specializes(store: &Store, from: Obj, to: Obj) -> bool {
         }
     }
     false
+}
+
+/// Whether nothing may specialize the classifier `c`: UML's `isFinalSpecialization` (AR-137).
+pub fn is_final(store: &Store, c: Obj) -> bool {
+    store.get(c, classifier::IS_FINAL_SPECIALIZATION).ok().and_then(|v| v.as_bool()).unwrap_or(false)
+}
+
+/// The generalizations that specialize the classifier `c` directly, each with its specific
+/// classifier, in the order they were made.
+pub fn specializations(store: &Store, c: Obj) -> Vec<(Obj, Obj)> {
+    let mut out: Vec<(Obj, Obj)> = store
+        .referrers(c)
+        .into_iter()
+        .filter(|(g, prop)| *prop == generalization::GENERAL && store.is_alive(*g) && store.class_of(*g).ok() == Some(GENERALIZATION))
+        .filter_map(|(g, _)| {
+            let specific = store.container(g).ok().flatten().filter(|(_, p)| *p == classifier::GENERALIZATION).map(|(o, _)| o)?;
+            store.is_alive(specific).then_some((g, specific))
+        })
+        .collect();
+    out.sort();
+    out.dedup();
+    out
+}
+
+/// Why the classifier `c` may not be made final, when it may not: a built-in type is never changed,
+/// and a classifier something specializes already would break the rule at once; the refusal names
+/// those classifiers and asks for their generalizations to go first.
+pub fn final_problem(store: &Store, c: Obj) -> Option<String> {
+    let id = uuid_of(store, c).unwrap_or_default();
+    if crate::members::is_built_in(store, c) {
+        return Some(format!(
+            "{id} is the built-in type {}, which is never made final; a primitive type of the model's own may specialize it",
+            name_of(store, c)
+        ));
+    }
+    let below = specializations(store, c);
+    if below.is_empty() {
+        return None;
+    }
+    let names: Vec<String> = below.iter().map(|(_, s)| format!("{} ({})", name_of(store, *s), uuid_of(store, *s).unwrap_or_default())).collect();
+    Some(format!("{id} is specialized by {}; remove those generalizations (element.remove) before making it final", names.join(", ")))
+}
+
+/// `uml.classifier.set`: a classifier of any kind made final or not (AR-137); a field left out
+/// keeps its value. Made final only while nothing specializes it; cleared, it changes nothing else.
+fn classifier_set(ctx: &mut C<'_>, p: &Params) -> R {
+    let c = classifier_of(ctx.doc, p, "classifier")?;
+    if let Some(on) = p.bool("final") {
+        if on && let Some(why) = final_problem(ctx.doc, c) {
+            return Err(refuse("final", why));
+        }
+        if on != is_final(ctx.doc, c) {
+            ctx.doc.set(c, classifier::IS_FINAL_SPECIALIZATION, Value::Bool(on)).map_err(fail)?;
+        }
+    }
+    Ok(json!({ "id": uuid_of(ctx.doc, c)?, "final": is_final(ctx.doc, c) }))
 }
 
 /// The aggregation of an association's end, as an index into [`AGGREGATIONS`].
@@ -320,6 +382,8 @@ pub enum GeneralizationProblem {
     AssociationClass,
     /// A classifier specializes another, never itself.
     Itself,
+    /// The general classifier is final (`isFinalSpecialization`): nothing may specialize it.
+    Final,
     /// The specific classifier specializes the general one already.
     Again,
     /// The general classifier specializes the specific one already: a cycle.
@@ -379,6 +443,9 @@ impl GeneralizationProblem {
                 )
             }
             GeneralizationProblem::Itself => format!("{s}: {a_kind} cannot specialize itself; it specializes another {kind}"),
+            GeneralizationProblem::Final => {
+                format!("{g} is final (isFinalSpecialization), so nothing may specialize it; clear final with uml.classifier.set first")
+            }
             GeneralizationProblem::Again => format!("{s}: the {kind} specializes that {kind} already, {g}; one generalization joins two"),
             GeneralizationProblem::Cycle => {
                 format!("{g}: that {kind} specializes this one already, which would make a cycle; {s} specializes only what is not below it")
@@ -392,8 +459,8 @@ impl GeneralizationProblem {
 /// enumeration specializes only an enumeration,
 /// and only an enumeration specializes one; a data type likewise only a data type, and a primitive
 /// type only a primitive type; a built-in type specializes nothing, though one of the model's own
-/// may specialize it; no classifier specializes itself, another twice, or round a cycle. `except`
-/// is a generalization being reconnected, which never clashes with itself.
+/// may specialize it; no classifier specializes itself, a final one, another twice, or round a
+/// cycle. `except` is a generalization being reconnected, which never clashes with itself.
 ///
 /// The kinds are checked in a fixed order, each by its own metaclass (an enumeration and a
 /// primitive type are DataTypes in UML's metamodel, but only the DataType metaclass is a data type
@@ -430,6 +497,9 @@ pub fn generalization_problem(store: &Store, specific: Obj, general: Obj, except
     }
     if specific == general {
         return Some(GeneralizationProblem::Itself);
+    }
+    if is_final(store, general) {
+        return Some(GeneralizationProblem::Final);
     }
     if list(store, specific, classifier::GENERALIZATION)
         .into_iter()
@@ -940,10 +1010,22 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             None,
             concat!(
                 "specific: string; the id of the class, interface, enumeration, data type or primitive type that specializes; never a built-in type\n",
-                "general: string; the id of the class, interface, enumeration, data type or primitive type it specializes: an interface specializes only an interface, a class never specializes one, an enumeration specializes only an enumeration and is specialized only by one, and a data type and a primitive type likewise only their own kind"
+                "general: string; the id of the class, interface, enumeration, data type or primitive type it specializes: an interface specializes only an interface, a class never specializes one, an enumeration specializes only an enumeration and is specialized only by one, and a data type and a primitive type likewise only their own kind; never a final one"
             ),
             has_classes,
             generalization_add
+        ),
+        cmd!(
+            "uml.classifier.set",
+            "Set classifier",
+            &["Class", "Interface", "Enumeration", "Data type", "Primitive type", "Association class"],
+            None,
+            concat!(
+                "classifier: string; the id of the class, interface, enumeration, data type, primitive type or association class; every field left out keeps its value\n",
+                "final: bool?; nothing may specialize it (UML's isFinalSpecialization, not the leaf setting): made final only while no generalization specializes it and never for a built-in type; cleared, other classifiers may specialize it again; left out, kept"
+            ),
+            has_classes,
+            classifier_set
         ),
         cmd!(
             "uml.dependency.add",
@@ -983,7 +1065,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             concat!(
                 "relationship: string; the association's, generalization's, dependency's, interface realization's or association class's id\n",
                 "end: string, source|target; the end to move: the classifier it was drawn from (the specific one, the client, the implementing class) or to\n",
-                "class: string; the id of the class, interface, enumeration, data type or primitive type the end moves to; an association's end never moves to an enumeration, a data type or a primitive type; a generalization's end keeps its rules: an interface specializes only an interface, a class never one, an enumeration only an enumeration, a data type only a data type, a primitive type only a primitive type, a built-in type nothing; a realization's source is a class and its target an interface, the class realizing it once; an association class's ends move only onto a class or another association class; a moved association's ends drop what they subset or redefine that the rules no longer allow, listed under dropped in the result"
+                "class: string; the id of the class, interface, enumeration, data type or primitive type the end moves to; an association's end never moves to an enumeration, a data type or a primitive type; a generalization's end keeps its rules: an interface specializes only an interface, a class never one, an enumeration only an enumeration, a data type only a data type, a primitive type only a primitive type, a built-in type nothing, and the general end never moves onto a final classifier; a realization's source is a class and its target an interface, the class realizing it once; an association class's ends move only onto a class or another association class; a moved association's ends drop what they subset or redefine that the rules no longer allow, listed under dropped in the result"
             ),
             has_classes,
             relationship_reconnect

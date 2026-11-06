@@ -863,7 +863,15 @@ fn draw_node(
                 ux::text(&inner, rect.min + vec2(ENTITY_INSET, 12.0) * z, &eyebrow, types::EYEBROW.scaled(z), p.entity_ink, room);
                 if !renaming {
                     let name = if card.slanted { ux::text_slanted } else { ux::text };
-                    name(&inner, rect.min + vec2(ENTITY_INSET, 30.0) * z, &card.name, types::SECTION.scaled(z), p.text, room);
+                    // Braces after the name (`{final}`) in the smaller keyword style, on its
+                    // baseline; the name gives up room so they always show.
+                    let braces = card.braces.as_deref().map(|b| ux::galley(&inner, b, types::SMALL.scaled(z), p.text_secondary, None));
+                    let gap = 5.0 * z;
+                    let room = room.map(|w| (w - braces.as_ref().map_or(0.0, |b| b.size().x + gap)).max(0.0));
+                    let at = name(&inner, rect.min + vec2(ENTITY_INSET, 30.0) * z, &card.name, types::SECTION.scaled(z), p.text, room);
+                    if let Some(b) = braces {
+                        inner.galley(pos2(at.right() + gap, at.top() + 9.0 * z), b, p.text_secondary);
+                    }
                 }
                 let line_y = rect.top() + ENTITY_HEADER * z;
                 if line_y < rect.bottom() {

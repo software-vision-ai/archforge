@@ -53,6 +53,9 @@ pub struct State {
     pub picker: Option<crate::appearance::Picker>,
     /// The last refusal of a change, shown at the panel's foot until the next change.
     pub notice: Option<String>,
+    /// The classifier No subclasses (final) was refused on, while something specializes it: the
+    /// refusal shows under the check box, naming those classifiers (AR-137).
+    pub final_refused: Option<Uuid>,
     /// The selection the open editors belong to: selecting anything else closes them.
     pub editors_for: Option<Uuid>,
     /// A relationship's Properties (slice E3): a role being typed, whether More is open, and the
@@ -1342,6 +1345,7 @@ fn close_editors(shell: &mut Shell) {
     if panels.member.as_ref().is_some_and(|e| !e.opened) {
         panels.member = None;
     }
+    panels.final_refused = None;
 }
 
 /// Opens the column editor on `target`, or on a column to add to `entity`.

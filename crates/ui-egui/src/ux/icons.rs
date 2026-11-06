@@ -362,6 +362,19 @@ pub const ISSUE: Icon = Icon {
     ],
 };
 
+/// A warning: a triangle with an exclamation mark, before a refusal said in a panel.
+pub const WARNING: Icon = Icon {
+    size: [14.0, 14.0],
+    stroke: 1.3,
+    segments: &[
+        L([7.0, 1.5], [13.0, 12.5]),
+        L([13.0, 12.5], [1.0, 12.5]),
+        L([1.0, 12.5], [7.0, 1.5]),
+        L([7.0, 5.5], [7.0, 8.6]),
+        L([7.0, 10.3], [7.0, 10.8]),
+    ],
+};
+
 /// A conversation: a speech bubble.
 pub const BUBBLE: Icon = Icon {
     size: [16.0, 16.0],

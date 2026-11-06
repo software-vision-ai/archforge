@@ -4,7 +4,8 @@
 //! compartment of its literals, in their order; a class's, an interface's or a data type's attributes
 //! (visibility, name, type, multiplicity) and its operations (visibility, name, parameters, return
 //! type), its name slanted when it is abstract, an abstract operation slanted and a static member
-//! underlined; an association as a line with its name, its ends'
+//! underlined, and any classifier's name followed by `{final}` when nothing may specialize it
+//! (AR-137); an association as a line with its name, its ends'
 //! roles and multiplicities, an open arrow at every end it navigates to (owner decision), and a
 //! diamond, which takes the place of an arrow at its end, at the whole of an aggregation (hollow) or a composition (filled); a
 //! generalization as a line to a hollow triangle at the general class; a dependency dashed, with an
@@ -180,7 +181,8 @@ pub fn operation_text(store: &Store, op: Obj) -> String {
 }
 
 /// A class's, an interface's, a data type's or an association class's card on `diagram`: its name,
-/// a class's slanted when it is abstract, its attributes and its operations; one of another package
+/// a class's slanted when it is abstract, `{final}` after it when nothing may specialize it, its
+/// attributes and its operations; one of another package
 /// than the diagram's is drawn as an outsider, its package named in the eyebrow. A class's eyebrow
 /// says Class, an association class's Association class, an interface's and a data type's their
 /// keyword («interface», «dataType»); an enumeration's card is its own, a primitive type's too, and
@@ -220,7 +222,14 @@ pub fn card(store: &Store, c: Obj, diagram: Obj) -> Option<Card> {
         elsewhere: elsewhere.is_some(),
         tone: Tone::Plain,
         slanted: is_class && flag(store, c, class::IS_ABSTRACT),
+        braces: braces(store, c),
     })
+}
+
+/// What a classifier's name row says in braces after its name: `{final}` when nothing may
+/// specialize it (AR-137); None when it says nothing.
+fn braces(store: &Store, c: Obj) -> Option<String> {
+    crate::relations::is_final(store, c).then(|| "{final}".to_string())
 }
 
 /// The package of `c` when it is another than `diagram`'s: `c` is drawn there as an outsider.
@@ -246,6 +255,7 @@ fn primitive_type_card(store: &Store, t: Obj, diagram: Obj) -> Card {
         elsewhere: elsewhere.is_some(),
         tone: Tone::Plain,
         slanted: false,
+        braces: braces(store, t),
     }
 }
 
@@ -275,6 +285,7 @@ fn enumeration_card(store: &Store, e: Obj, diagram: Obj) -> Card {
         elsewhere: elsewhere.is_some(),
         tone: Tone::Plain,
         slanted: false,
+        braces: braces(store, e),
     }
 }
 
@@ -425,5 +436,6 @@ fn package_card(store: &Store, p: Obj) -> Card {
         elsewhere: false,
         tone: Tone::Tabbed,
         slanted: false,
+        braces: None,
     }
 }

@@ -111,9 +111,10 @@ them in a package named *Types*, which it made the first time you used one. You 
 **Models**, but not the types inside it.
 
 Select a class to edit it in **Properties**. It shows a **Description**, the **Name** and
-**Package**, and **Abstract** (tick it for a class that has no instances of its own, only more
-specific classes). Then come **Attributes** and **Operations**, each with a **+** and a pencil on
-every row. The pencil opens the member's editor. There you set what the card row cannot hold, such
+**Package**, **Abstract** (tick it for a class that has no instances of its own, only more
+specific classes) and **No subclasses (final)** (see
+[Forbidding subclasses: final](#forbidding-subclasses-final)). Then come **Attributes** and
+**Operations**, each with a **+** and a pencil on every row. The pencil opens the member's editor. There you set what the card row cannot hold, such
 as the visibility (who may use the member) and an operation's parameters. Apply the change with
 the check at the editor's foot, or Enter; cancel it with the cross, or Escape. The red bin
 removes the member. On a draft row, the **⋯** at its right opens the same editor.
@@ -578,7 +579,7 @@ When a line is not allowed, nothing is drawn and the reason shows at the top of 
 | Line | Can join |
 |---|---|
 | Association, directed association, aggregation, composition | Classes and interfaces. Never an enumeration, a data type or a primitive type. |
-| Generalization | Two elements of the same kind: a class with a class, an interface with an interface, an enumeration with an enumeration, a data type with a data type, a primitive type with a primitive type. A class never specializes an interface. Nothing specializes an association class. |
+| Generalization | Two elements of the same kind: a class with a class, an interface with an interface, an enumeration with an enumeration, a data type with a data type, a primitive type with a primitive type. A class never specializes an interface. Nothing specializes an association class, nor an element marked **No subclasses (final)**. |
 | Dependency | Any two classifiers, including enumerations, data types and primitive types. |
 | Interface realization | From a class (or an association class) to an interface, once per pair. |
 | Association class | Two classes, never the same class at both ends. |
@@ -612,6 +613,27 @@ generalization a new element of the kind it started from.
   **Enumeration**, **Data type**, **Primitive type** and **Package**, and **Literal** first at an
   enumeration. Drag a row from **Models** onto a diagram to show it there, or onto another
   package's row to move it.
+
+### Forbidding subclasses: final
+
+Tick **No subclasses (final)** in the **Properties** of a class, an interface, an enumeration, a
+data type or a primitive type of your own when nothing may be a more specific kind of it. Its card
+then shows `{final}` after its name, on every diagram. It is a separate setting from **Abstract**,
+and from a later **No redefinition (leaf)**: it only stops other elements from specializing this
+one, and the element itself may still specialize another.
+
+While it is ticked, a generalization drawn to the element is refused, and so is dragging the
+general end of an existing generalization onto it: the line is not drawn and the top of the
+canvas says *PricingService is final: nothing may specialise it. Clear "No subclasses" in its
+Properties first.*
+
+You can only tick it while nothing specializes the element yet. Otherwise the box stays clear,
+nothing changes, and **Properties** names the elements that specialize it, with a button that
+selects their generalizations. Delete those generalizations from the model, then tick the box
+again. Clearing the box later allows new generalizations again and changes nothing else. Each
+change is one step you can undo, and the project keeps it once saved.
+
+<!-- picture: workspace-final light | PricingService with {final} after its name on its card; Payment selected, No subclasses refused in its Properties: it names its subclass CardPayment and offers to select the generalization -->
 
 ### Cards
 

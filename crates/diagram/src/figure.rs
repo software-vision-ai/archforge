@@ -37,6 +37,9 @@ pub struct Card {
     pub tone: Tone,
     /// Its name slanted: an abstract class.
     pub slanted: bool,
+    /// What its name row says in braces after the name, as notation, never translated: `{final}`
+    /// for a classifier nothing may specialize. None for nothing.
+    pub braces: Option<String>,
 }
 
 /// The colours a card is drawn in.

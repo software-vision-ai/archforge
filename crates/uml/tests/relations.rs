@@ -478,3 +478,94 @@ fn the_sweep_over_realizations_breaks_nothing() {
     let calls = sweep_with(&mut s, &ids, |st| format!("{:?}", archforge_mof::rows::snapshot(st, &tables().0, &tables().1).unwrap())).unwrap();
     assert!(calls > 100, "{calls}");
 }
+
+/// Whether the classifier `id` is final, as `uml.class.get` says it.
+fn is_final(s: &mut S, id: &str) -> bool {
+    s.execute("uml.class.get", &json!({ "class": id })).unwrap().value["final"].as_bool().unwrap()
+}
+
+/// A classifier of every kind is made final and cleared again, each one undo step, its card saying
+/// `{final}` after its name while it is; it comes back from its rows final, as a saved project
+/// opens; clearing changes nothing else; a built-in type is never made final (AR-137).
+#[test]
+fn a_classifier_of_every_kind_is_made_final_and_cleared_in_one_step_and_comes_back_final() {
+    let mut s = session();
+    let (pkg, d, c, _) = classes(&mut s, &["Pricing", "Order"], 0);
+    let mut all = vec![c[0].clone()];
+    for (cmd, name) in
+        [("uml.interface.add", "Priced"), ("uml.enumeration.add", "Tier"), ("uml.data-type.add", "Money"), ("uml.primitive-type.add", "Sku")]
+    {
+        all.push(run(&mut s, cmd, json!({ "package": pkg, "name": name })));
+    }
+    all.push(run(&mut s, "uml.association-class.add", json!({ "from": c[0], "to": c[1], "name": "Quote" })));
+    run(&mut s, "uml.class.set", json!({ "class": c[0], "abstract": true }));
+    for id in &all {
+        let node = run(&mut s, "diagram.place", json!({ "diagram": d, "element": id, "x": 0, "y": 0 }));
+        let card = |s: &S| archforge_uml::figures::card(s.doc(), obj(s, id), obj(s, &d)).unwrap();
+        assert_eq!(card(&s).braces, None, "{id} is not final yet");
+        let before = snapshot(&s);
+        round_trip(&mut s, "uml.classifier.set", json!({ "classifier": id, "final": true }));
+        assert!(is_final(&mut s, id), "{id}");
+        assert_eq!(card(&s).braces.as_deref(), Some("{final}"), "{id}: its card says so after its name");
+        // A field left out keeps the value.
+        run(&mut s, "uml.classifier.set", json!({ "classifier": id }));
+        assert!(is_final(&mut s, id));
+        round_trip(&mut s, "uml.classifier.set", json!({ "classifier": id, "final": false }));
+        assert!(!is_final(&mut s, id));
+        assert_eq!(snapshot(&s), before, "{id}: cleared, every other value and every id is as it was");
+        run(&mut s, "uml.classifier.set", json!({ "classifier": id, "final": true }));
+        let _ = node;
+    }
+    // Final is its own setting: abstract and the rest stay.
+    assert_eq!(s.execute("uml.class.get", &json!({ "class": c[0] })).unwrap().value["abstract"], true);
+    // Saved and opened again, each is still final.
+    let (tables, junctions) = tables();
+    let saved = archforge_mof::rows::snapshot(s.doc(), &tables, &junctions).unwrap();
+    let mut back = store(1 << 20);
+    archforge_mof::rows::restore(&mut back, &saved, &tables, &junctions).unwrap();
+    assert_eq!(archforge_mof::rows::snapshot(&back, &tables, &junctions).unwrap(), saved);
+    for id in &all {
+        assert!(archforge_uml::relations::is_final(&back, back.by_uuid(Uuid::parse(id).unwrap()).unwrap()), "{id} reopened final");
+    }
+    // A built-in type is never made final; anything else than a classifier is no classifier.
+    run(&mut s, "uml.attribute.add", json!({ "class": c[1], "name": "count", "type": "Integer" }));
+    let integer = s.execute("uml.class.get", &json!({ "class": c[1] })).unwrap().value["attributes"][0]["type"]["id"].as_str().unwrap().to_string();
+    refused(&mut s, "uml.classifier.set", json!({ "classifier": integer, "final": true }), "built-in type Integer");
+    refused(&mut s, "uml.classifier.set", json!({ "classifier": pkg, "final": true }), "classifier");
+}
+
+/// Nothing specializes a final classifier: a new generalization to it is refused, and so is moving
+/// a generalization's general end onto it; it is made final only while nothing specializes it, the
+/// refusal naming what does; cleared, it may be specialized again. Every refusal changes nothing.
+#[test]
+fn nothing_specializes_a_final_classifier_and_one_with_subclasses_is_not_made_final() {
+    let mut s = session();
+    let (_, _, c, _) = classes(&mut s, &["Payment", "CardPayment", "WalletPayment", "PricingService", "DiscountService", "Service"], 0);
+    let card = run(&mut s, "uml.generalization.add", json!({ "specific": c[1], "general": c[0] }));
+    run(&mut s, "uml.generalization.add", json!({ "specific": c[2], "general": c[0] }));
+    // Payment has subclasses: refused, naming them, nothing written.
+    let before = snapshot(&s);
+    let e = s.execute("uml.classifier.set", &json!({ "classifier": c[0], "final": true })).unwrap_err().to_string();
+    assert!(e.contains("final") && e.contains("CardPayment") && e.contains("WalletPayment"), "{e}");
+    assert_eq!(snapshot(&s), before);
+    assert!(!is_final(&mut s, &c[0]));
+    // PricingService made final: a new generalization to it is refused, from any classifier.
+    run(&mut s, "uml.classifier.set", json!({ "classifier": c[3], "final": true }));
+    refused(&mut s, "uml.generalization.add", json!({ "specific": c[4], "general": c[3] }), "is final");
+    let why = archforge_uml::relations::generalization_problem(s.doc(), obj(&s, &c[4]), obj(&s, &c[3]), None);
+    assert_eq!(why, Some(archforge_uml::relations::GeneralizationProblem::Final));
+    // A final classifier itself specializes freely.
+    round_trip(&mut s, "uml.generalization.add", json!({ "specific": c[3], "general": c[5] }));
+    // Moving a generalization's general end onto it is refused; its specific end moves elsewhere.
+    refused(&mut s, "uml.relationship.reconnect", json!({ "relationship": card, "end": "target", "class": c[3] }), "is final");
+    round_trip(&mut s, "uml.relationship.reconnect", json!({ "relationship": card, "end": "source", "class": c[4] }));
+    // Cleared, it takes the generalization; its id and name stay.
+    round_trip(&mut s, "uml.classifier.set", json!({ "classifier": c[3], "final": false }));
+    run(&mut s, "uml.relationship.reconnect", json!({ "relationship": card, "end": "target", "class": c[3] }));
+    let moved = relationships(&mut s, &c[3]).into_iter().find(|r| r["id"] == card.as_str()).unwrap();
+    assert_eq!(moved["general"].as_str(), Some(c[3].as_str()));
+    assert_eq!(s.execute("uml.class.get", &json!({ "class": c[3] })).unwrap().value["name"], "PricingService");
+    // Its subclasses listed in the order they were made, each with its generalization.
+    let below = archforge_uml::relations::specializations(s.doc(), obj(&s, &c[0]));
+    assert_eq!(below.iter().map(|(_, sub)| archforge_core::name_of(s.doc(), *sub)).collect::<Vec<_>>(), ["WalletPayment"]);
+}

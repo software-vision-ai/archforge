@@ -134,6 +134,10 @@ pub enum Screen {
     /// OrderLine whose end says `/items 0..* = none {ordered}`; Order selected with the attribute
     /// editor open on total, its modifiers in Properties (AR-126).
     WorkspaceModifiers,
+    /// The sample class model with PricingService final, `{final}` after its name on its card, and
+    /// Payment selected after No subclasses was refused on it: Properties names its subclass
+    /// CardPayment and offers to select the generalization (AR-137).
+    WorkspaceFinal,
     /// The user manual's class-model guide, first step: the root package's diagram Commerce with
     /// Customer (its name typed) and Order, a draft row open on Order's card with `number :
     /// Integer` typed.
@@ -492,6 +496,11 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
     if screen == Screen::WorkspaceModifiers {
         shell.adopt_project();
         sample_modifiers(&mut shell)?;
+    }
+    if screen == Screen::WorkspaceFinal {
+        shell.adopt_project();
+        crate::uml_ui::open_sample(&mut shell)?;
+        sample_final(&mut shell)?;
     }
     if let Some(step) = guide_step(screen) {
         shell.adopt_project();
@@ -911,6 +920,31 @@ fn sample_class_members(shell: &mut Shell, editor: bool) -> Result<(), String> {
     if editor && let Some(op) = op {
         crate::uml_panel::open(shell, class, crate::uml_panel::MemberKind::Operation, Some(op));
     }
+    Ok(())
+}
+
+/// In the sample class model, PricingService made final and Payment selected with No subclasses
+/// refused on it, as a click on it leaves Properties (AR-137).
+fn sample_final(shell: &mut Shell) -> Result<(), String> {
+    let id = |shell: &Shell, name: &str| -> Result<archforge_mof::Uuid, String> {
+        let store = shell.session.as_ref().ok_or("no project is open")?.doc();
+        let c = store
+            .alive()
+            .find(|o| store.class_of(*o).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(store, *o) == name)
+            .ok_or("the sample has no such class")?;
+        store.uuid(c).map_err(|e| e.to_string())
+    };
+    let pricing = id(shell, "PricingService")?;
+    let payment = id(shell, "Payment")?;
+    crate::panels::run(shell, "uml.classifier.set", serde_json::json!({ "classifier": pricing.to_string(), "final": true }))?;
+    crate::panels::run(shell, "view.select", serde_json::json!({ "ids": [payment.to_string()] }))?;
+    shell.state.show_panel(crate::state::Panel::Properties);
+    shell.panels.editors_for = Some(payment);
+    shell.panels.final_refused = Some(payment);
+    // At full size, PricingService over Payment and CardPayment, so its `{final}` reads.
+    shell.canvas.fit_pending = false;
+    shell.canvas.zoom = 1.0;
+    shell.canvas.pan = egui::vec2(260.0 - 1040.0, 60.0 - 80.0);
     Ok(())
 }
 
