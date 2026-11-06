@@ -305,7 +305,6 @@ str		Grid	グリッド
 str		Arrange diagram	ダイアグラムを整列
 str		Move cardinality	多重度を移動
 str		Settings	設定
-str		How Archforge knows you.	Archforge があなたを識別する方法です。
 str		About Archforge	Archforge について
 str		About Archforge…	Archforge について…
 str		Free and open source modelling of software systems.	ソフトウェアシステムのための、無料のオープンソース モデリング。
@@ -319,7 +318,120 @@ str		Opens in your browser	ブラウザーで開きます
 str		Not set up yet	まだ設定されていません
 str		Payment happens on the provider’s page in your browser; Archforge never sees it, and your project stays open here.	支払いはブラウザーで開く提供元のページで行われ、その内容を Archforge が見ることはありません。プロジェクトはここで開いたままです。
 str		Your name	あなたの名前
-str		The bar shows your initials. Without a name they are JD, for John Doe.	バーにはあなたのイニシャルが表示されます。名前がない場合は John Doe の JD です。
+str		The program's default	プログラムの既定
+str		The look stopped without an answer	検索が応答なしで止まりました
+str		The secure store stopped without an answer	セキュアストアが応答なしで止まりました
+str		The test stopped without an answer	テストが応答なしで止まりました
+str		The sign-in stopped without an answer	サインインが応答なしで止まりました
+str		The sign-out stopped without an answer	サインアウトが応答なしで止まりました
+str		Profile	プロフィール
+str		AI Agents	AI エージェント
+str		Your name shows as initials in the bar's avatar. Archforge never reads it from the computer's account.	名前はバーのアバターにイニシャルで表示されます。 Archforge がコンピューターのアカウントから読み取ることはありません。
+str		the macOS Keychain	macOS キーチェーン
+str		the Secret Service	Secret Service
+str		the system's secure store	システムのセキュアストア
+str		just now	たった今
+plural		{n} minute ago	{n} 分前
+plural		{n} hour ago	{n} 時間前
+str		The provider refused the key ({detail}).	プロバイダーがキーを拒否しました（{detail}）。
+str		There is no key or sign-in to use.	使えるキーもサインインもありません。
+str		{agent} ready	{agent} 準備完了
+str		{agent} not found	{agent} が見つかりません
+str		{agent} too old	{agent} が古すぎます
+str		{agent} can't be used	{agent} は使えません
+str		{agent} sign-in could not be read	{agent} のサインインを読み取れません
+str		The sign-in gave a code that is not letters, digits and hyphens.	サインインが英字・数字・ハイフン以外を含むコードを返しました。
+str		{agent} has no key	{agent} にキーがありません
+str		{agent} key refused	{agent} のキーが拒否されました
+str		{agent} not signed in	{agent} 未サインイン
+str		{agent} sign-in expired	{agent} のサインインが期限切れ
+str		{agent} sign-in not available yet	{agent} のサインインはまだ使えません
+str		{agent} not looked for yet	{agent} はまだ探していません
+str		Chat talks to an agent program installed on this computer. Archforge finds the program and keeps your keys in the system's secure store. Opening this page sends nothing.	チャットはこのコンピューターにインストールされたエージェントプログラムと話します。 Archforge はプログラムを見つけ、キーをシステムのセキュアストアに保管します。このページを開いても何も送信しません。
+str		Default agent	既定のエージェント
+str		Let Chat use the model	チャットにモデルの使用を許可
+str		Off until you turn it on. While a conversation holds this access, Chat reads the project's model and the status bar says so. Changes still wait for Allow changes in each conversation.	オンにするまではオフです。会話がこのアクセスを持つ間、チャットはプロジェクトのモデルを読み、ステータスバーにそう表示されます。変更は会話ごとに「変更を許可」を待ちます。
+str		Checking…	確認中…
+str		Check connection	接続を確認
+str		Sending…	送信中…
+str		Send test message	テストメッセージを送信
+str		Free, runs on this computer: finds the program, its version and your key or sign-in. Sends nothing.	無料で、このコンピューター上で動きます。プログラム、そのバージョン、キーまたはサインインを確認します。何も送信しません。
+str		Set up {agent} first: it is the default agent.	先に {agent} を設定してください。既定のエージェントです。
+str		Sends one short message to the default agent's provider. It uses a little of your plan or API credit.	既定のエージェントのプロバイダーに短いメッセージを 1 通送ります。プランや API クレジットを少し使います。
+str		Sending a test message…	テストメッセージを送信中…
+str		Checked {when}	確認済み {when}
+str		{agent} answered the test message {when}	{agent} がテストメッセージに応答しました（{when}）
+str		The test message to {agent} failed: {why}	{agent} へのテストメッセージが失敗しました: {why}
+str		Chat talks to an agent program installed on this computer.	チャットはこのコンピューターにインストールされたエージェントプログラムと話します。
+str		Not available on this system yet	このシステムではまだ使えません
+str		AI Agents work on macOS and Linux for now. On Windows, Chat and these settings stay off; everything else in Archforge works as usual.	AI エージェントは今のところ macOS と Linux で動きます。 Windows では チャットとこの設定はオフのままで、Archforge のほかの機能はいつも通り使えます。
+str		This build of Archforge has no agent programs to talk to.	この Archforge のビルドには話せるエージェントプログラムがありません。
+str		Archforge keeps API keys only in the system's secure store, and this session has none running (a Secret Service such as GNOME Keyring or KWallet). Start one and restart Archforge to save keys; Archforge never keeps them anywhere else.	Archforge は API キーをシステムのセキュアストアにだけ保管しますが、このセッションでは動いていません（GNOME Keyring や KWallet などの Secret Service）。キーを保存するには、セキュアストアを起動して Archforge を再起動してください。 Archforge がほかの場所に保管することはありません。
+str		No secure store on this system	このシステムにはセキュアストアがありません
+str		Looking…	検索中…
+str		Not looked for yet	まだ探していません
+str		Sign-in expired	サインインが期限切れ
+str		Found · {what}	検出 · {what}
+str		Not yet tested with this version · {what}	このバージョンでは未テスト · {what}
+str		Too old · {what}	古すぎます · {what}
+str		Can't be used	使えません
+str		Not found	見つかりません
+str		API key	API キー
+str		Sign-in	サインイン
+str		Sign in first	先にサインインしてください
+str		Save a key first	先にキーを保存してください
+str		{agent} model	{agent} のモデル
+str		Archforge found {program} {version}, older than {floor}, the oldest version it works with. Update it, then choose Look again.	Archforge は {program} {version} を見つけましたが、対応する最も古いバージョン {floor} より古いものです。更新してから「もう一度探す」を選んでください。
+str		Archforge found the {program} program but can't use it: {why}	Archforge は {program} プログラムを見つけましたが、使えません: {why}
+str		Archforge has not looked for the {program} program yet.	Archforge はまだ {program} プログラムを探していません。
+str		Archforge looked for the {program} program on this computer and didn't find it. Chat runs {agent} through that program, so install it first.	Archforge はこのコンピューターで {program} プログラムを探しましたが、見つかりませんでした。チャットはこのプログラムを通じて {agent} を使うので、先にインストールしてください。
+str		1. In a terminal, update it:	1. ターミナルで更新します:
+str		1. In a terminal, install it:	1. ターミナルでインストールします:
+str		Copy the command	コマンドをコピー
+str		2. Come back and choose Look again. Archforge checks your PATH and the usual install folders, and sends nothing.	2. 戻って「もう一度探す」を選びます。 Archforge は PATH と通常のインストールフォルダーを確認し、何も送信しません。
+str		Installation guide	インストールガイド
+str		Paste an API key	API キーを貼り付け
+str		Can't be saved: there is no secure store to keep it in.	保存できません。保管するセキュアストアがありません。
+str		Save key	キーを保存
+str		API key saved, ending in {last4}	API キー保存済み、末尾 {last4}
+str		Replace	置き換え
+str		The provider refused this key when the test message was sent ({detail}). Replace it with a valid key, or remove it.	テストメッセージの送信時にプロバイダーがこのキーを拒否しました（{detail}）。有効なキーに置き換えるか、削除してください。
+str		Kept in {store}. Archforge never shows it again; Replace pastes a new one.	{store} に保管されています。 Archforge が再び表示することはありません。「置き換え」で新しいキーを貼り付けます。
+str		{agent} API key	{agent} の API キー
+str		Paste a key first.	先にキーを貼り付けてください。
+str		A key is one word, without spaces.	キーは空白のない 1 語です。
+str		That is longer than any API key.	どの API キーよりも長すぎます。
+str		Saved in {store}, never in the project. Create a key in your Anthropic account.	{store} に保存され、プロジェクトには保存されません。 Anthropic アカウントでキーを作成してください。
+str		Saved in {store}, never in the project. Create a key in your OpenAI account.	{store} に保存され、プロジェクトには保存されません。 OpenAI アカウントでキーを作成してください。
+str		The secure store refused: {why}	セキュアストアが拒否しました: {why}
+str		The secure store could not be read: {why}	セキュアストアを読み取れませんでした: {why}
+str		Sign in with ChatGPT	ChatGPT でサインイン
+str		Waiting for you to finish in the browser…	ブラウザーでの完了を待っています…
+str		The codex program keeps this sign-in itself.	このサインインは codex プログラム自身が保持します。
+str		Reading the sign-in…	サインインを読み取り中…
+str		Not checked yet	まだ確認していません
+str		Not signed in	サインインしていません
+str		Sign in…	サインイン…
+str		Signed in as {email} · {plan}	{email} としてサインイン中 · {plan}
+str		Signed in as {email}	{email} としてサインイン中
+str		Sign out	サインアウト
+str		The ChatGPT sign-in for {email} has expired.	{email} の ChatGPT サインインの期限が切れました。
+str		Sign in again…	再度サインイン…
+str		Signing in with ChatGPT is not available in this version yet.	このバージョンでは ChatGPT でのサインインはまだ使えません。
+str		The sign-in could not be read: {why}	サインインを読み取れませんでした: {why}
+str		The codex program keeps its ChatGPT sign-in in its own files, so this works without the secure store. An API key for Codex would need it.	codex プログラムは ChatGPT のサインインを自分のファイルに保持するため、セキュアストアがなくても使えます。 Codex の API キーには必要です。
+str		Sign in opens your browser; the codex program keeps the sign-in itself.	サインインするとブラウザーが開きます。サインインは codex プログラム自身が保持します。
+str		The codex program keeps the sign-in itself.	サインインは codex プログラム自身が保持します。
+str		No browser on this computer? Sign in with a device code.	このコンピューターにブラウザーがありませんか？デバイスコードでサインインします。
+str		Sign in with a device code	デバイスコードでサインイン
+str		On any device with a browser, open the sign-in page and enter this code.	ブラウザーのある端末でサインインページを開き、このコードを入力してください。
+plural		It runs out in {n} minute.	{n} 分で期限が切れます。
+str		Copy the code	コードをコピー
+str		Open sign-in page	サインインページを開く
+str		Not an address Archforge opens	Archforge が開くアドレスではありません
+str		The code comes from the codex program, which keeps the sign-in itself. Archforge only shows it.	コードは codex プログラムから届き、サインインはそのプログラム自身が保持します。 Archforge は表示するだけです。
+str		API key saved · ends in {last4}	API キー保存済み · 末尾 {last4}
+str		Kept in {store}, never in the project, and handed to codex only when Chat runs it.	{store} に保管され、プロジェクトには保存されず、チャットが codex を実行するときだけ渡されます。
 str		Done	完了
 str		Add table	テーブルを追加
 str		Place table	テーブルを配置

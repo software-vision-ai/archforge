@@ -166,6 +166,8 @@ pub struct Palette {
     pub danger: Color32,
     /// The danger colour's tint: behind a refusal said in a panel.
     pub danger_tint: Color32,
+    /// A switch's track while it is off.
+    pub control_off: Color32,
     /// An entity node on the canvas: its fill, its edge, its eyebrow and key badges, its header line.
     pub entity: Color32,
     pub entity_edge: Color32,
@@ -209,6 +211,7 @@ pub const LIGHT: Palette = Palette {
     field: rgb(0xF2F4F7),
     danger: rgb(0xC0392B),
     danger_tint: rgb(0xFBEDEB),
+    control_off: rgb(0xD5DCE6),
     entity: rgb(0xFFF7EE),
     entity_edge: rgb(0xF0B37A),
     entity_ink: rgb(0xC25E0A),
@@ -246,6 +249,7 @@ pub const DARK: Palette = Palette {
     field: rgb(0x232C38),
     danger: rgb(0xD9534F),
     danger_tint: rgb(0x3A1F1E),
+    control_off: rgb(0x3A4554),
     entity: rgb(0x2A2119),
     entity_edge: rgb(0x7A5A2E),
     entity_ink: rgb(0xE8A05A),
@@ -489,6 +493,22 @@ pub fn shadow(painter: &egui::Painter, rect: Rect, radius: f32, color: Color32) 
     let shape = egui::epaint::Shadow { offset: [0, 4], blur: 16, spread: 0, color: color.gamma_multiply(0.7) }
         .as_shape(rect, egui::CornerRadius::same(radius.round().clamp(0.0, 255.0) as u8));
     painter.add(shape);
+}
+
+/// Draws `text` in the monospace face at `size`, starting at `x` and centred on the line `y`: a
+/// command to type or a code to enter, set apart from the interface's words. Cut at `width`.
+pub fn code_mid(painter: &egui::Painter, x: f32, y: f32, text: &str, size: f32, color: Color32, width: Option<f32>) -> Rect {
+    let mut job = egui::text::LayoutJob::single_section(
+        text.to_owned(),
+        egui::TextFormat { font_id: FontId::new(size, FontFamily::Monospace), color, valign: egui::Align::Center, ..Default::default() },
+    );
+    job.wrap =
+        egui::text::TextWrapping { max_width: width.unwrap_or(f32::INFINITY), max_rows: 1, break_anywhere: true, overflow_character: Some('…') };
+    let g = painter.layout_job(job);
+    let at = Pos2::new(x, y - g.size().y / 2.0);
+    let rect = Rect::from_min_size(at, g.size());
+    painter.galley(at, g, color);
+    rect
 }
 
 /// Draws `text` starting at `x`, centred on the line `y`, as every row centres its content.

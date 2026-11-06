@@ -304,7 +304,6 @@ str		Grid	Grid
 str		Arrange diagram	Arrange diagram
 str		Move cardinality	Move cardinality
 str		Settings	Settings
-str		How Archforge knows you.	How Archforge knows you.
 str		About Archforge	About Archforge
 str		About Archforge…	About Archforge…
 str		Free and open source modelling of software systems.	Free and open source modelling of software systems.
@@ -318,7 +317,120 @@ str		Opens in your browser	Opens in your browser
 str		Not set up yet	Not set up yet
 str		Payment happens on the provider’s page in your browser; Archforge never sees it, and your project stays open here.	Payment happens on the provider’s page in your browser; Archforge never sees it, and your project stays open here.
 str		Your name	Your name
-str		The bar shows your initials. Without a name they are JD, for John Doe.	The bar shows your initials. Without a name they are JD, for John Doe.
+str		The program's default	The program's default
+str		The look stopped without an answer	The look stopped without an answer
+str		The secure store stopped without an answer	The secure store stopped without an answer
+str		The test stopped without an answer	The test stopped without an answer
+str		The sign-in stopped without an answer	The sign-in stopped without an answer
+str		The sign-out stopped without an answer	The sign-out stopped without an answer
+str		Profile	Profile
+str		AI Agents	AI Agents
+str		Your name shows as initials in the bar's avatar. Archforge never reads it from the computer's account.	Your name shows as initials in the bar's avatar. Archforge never reads it from the computer's account.
+str		the macOS Keychain	the macOS Keychain
+str		the Secret Service	the Secret Service
+str		the system's secure store	the system's secure store
+str		just now	just now
+plural		{n} minute ago	{n} minute ago|{n} minutes ago
+plural		{n} hour ago	{n} hour ago|{n} hours ago
+str		The provider refused the key ({detail}).	The provider refused the key ({detail}).
+str		There is no key or sign-in to use.	There is no key or sign-in to use.
+str		{agent} ready	{agent} ready
+str		{agent} not found	{agent} not found
+str		{agent} too old	{agent} too old
+str		{agent} can't be used	{agent} can't be used
+str		{agent} sign-in could not be read	{agent} sign-in could not be read
+str		The sign-in gave a code that is not letters, digits and hyphens.	The sign-in gave a code that is not letters, digits and hyphens.
+str		{agent} has no key	{agent} has no key
+str		{agent} key refused	{agent} key refused
+str		{agent} not signed in	{agent} not signed in
+str		{agent} sign-in expired	{agent} sign-in expired
+str		{agent} sign-in not available yet	{agent} sign-in not available yet
+str		{agent} not looked for yet	{agent} not looked for yet
+str		Chat talks to an agent program installed on this computer. Archforge finds the program and keeps your keys in the system's secure store. Opening this page sends nothing.	Chat talks to an agent program installed on this computer. Archforge finds the program and keeps your keys in the system's secure store. Opening this page sends nothing.
+str		Default agent	Default agent
+str		Let Chat use the model	Let Chat use the model
+str		Off until you turn it on. While a conversation holds this access, Chat reads the project's model and the status bar says so. Changes still wait for Allow changes in each conversation.	Off until you turn it on. While a conversation holds this access, Chat reads the project's model and the status bar says so. Changes still wait for Allow changes in each conversation.
+str		Checking…	Checking…
+str		Check connection	Check connection
+str		Sending…	Sending…
+str		Send test message	Send test message
+str		Free, runs on this computer: finds the program, its version and your key or sign-in. Sends nothing.	Free, runs on this computer: finds the program, its version and your key or sign-in. Sends nothing.
+str		Set up {agent} first: it is the default agent.	Set up {agent} first: it is the default agent.
+str		Sends one short message to the default agent's provider. It uses a little of your plan or API credit.	Sends one short message to the default agent's provider. It uses a little of your plan or API credit.
+str		Sending a test message…	Sending a test message…
+str		Checked {when}	Checked {when}
+str		{agent} answered the test message {when}	{agent} answered the test message {when}
+str		The test message to {agent} failed: {why}	The test message to {agent} failed: {why}
+str		Chat talks to an agent program installed on this computer.	Chat talks to an agent program installed on this computer.
+str		Not available on this system yet	Not available on this system yet
+str		AI Agents work on macOS and Linux for now. On Windows, Chat and these settings stay off; everything else in Archforge works as usual.	AI Agents work on macOS and Linux for now. On Windows, Chat and these settings stay off; everything else in Archforge works as usual.
+str		This build of Archforge has no agent programs to talk to.	This build of Archforge has no agent programs to talk to.
+str		Archforge keeps API keys only in the system's secure store, and this session has none running (a Secret Service such as GNOME Keyring or KWallet). Start one and restart Archforge to save keys; Archforge never keeps them anywhere else.	Archforge keeps API keys only in the system's secure store, and this session has none running (a Secret Service such as GNOME Keyring or KWallet). Start one and restart Archforge to save keys; Archforge never keeps them anywhere else.
+str		No secure store on this system	No secure store on this system
+str		Looking…	Looking…
+str		Not looked for yet	Not looked for yet
+str		Sign-in expired	Sign-in expired
+str		Found · {what}	Found · {what}
+str		Not yet tested with this version · {what}	Not yet tested with this version · {what}
+str		Too old · {what}	Too old · {what}
+str		Can't be used	Can't be used
+str		Not found	Not found
+str		API key	API key
+str		Sign-in	Sign-in
+str		Sign in first	Sign in first
+str		Save a key first	Save a key first
+str		{agent} model	{agent} model
+str		Archforge found {program} {version}, older than {floor}, the oldest version it works with. Update it, then choose Look again.	Archforge found {program} {version}, older than {floor}, the oldest version it works with. Update it, then choose Look again.
+str		Archforge found the {program} program but can't use it: {why}	Archforge found the {program} program but can't use it: {why}
+str		Archforge has not looked for the {program} program yet.	Archforge has not looked for the {program} program yet.
+str		Archforge looked for the {program} program on this computer and didn't find it. Chat runs {agent} through that program, so install it first.	Archforge looked for the {program} program on this computer and didn't find it. Chat runs {agent} through that program, so install it first.
+str		1. In a terminal, update it:	1. In a terminal, update it:
+str		1. In a terminal, install it:	1. In a terminal, install it:
+str		Copy the command	Copy the command
+str		2. Come back and choose Look again. Archforge checks your PATH and the usual install folders, and sends nothing.	2. Come back and choose Look again. Archforge checks your PATH and the usual install folders, and sends nothing.
+str		Installation guide	Installation guide
+str		Paste an API key	Paste an API key
+str		Can't be saved: there is no secure store to keep it in.	Can't be saved: there is no secure store to keep it in.
+str		Save key	Save key
+str		API key saved, ending in {last4}	API key saved, ending in {last4}
+str		Replace	Replace
+str		The provider refused this key when the test message was sent ({detail}). Replace it with a valid key, or remove it.	The provider refused this key when the test message was sent ({detail}). Replace it with a valid key, or remove it.
+str		Kept in {store}. Archforge never shows it again; Replace pastes a new one.	Kept in {store}. Archforge never shows it again; Replace pastes a new one.
+str		{agent} API key	{agent} API key
+str		Paste a key first.	Paste a key first.
+str		A key is one word, without spaces.	A key is one word, without spaces.
+str		That is longer than any API key.	That is longer than any API key.
+str		Saved in {store}, never in the project. Create a key in your Anthropic account.	Saved in {store}, never in the project. Create a key in your Anthropic account.
+str		Saved in {store}, never in the project. Create a key in your OpenAI account.	Saved in {store}, never in the project. Create a key in your OpenAI account.
+str		The secure store refused: {why}	The secure store refused: {why}
+str		The secure store could not be read: {why}	The secure store could not be read: {why}
+str		Sign in with ChatGPT	Sign in with ChatGPT
+str		Waiting for you to finish in the browser…	Waiting for you to finish in the browser…
+str		The codex program keeps this sign-in itself.	The codex program keeps this sign-in itself.
+str		Reading the sign-in…	Reading the sign-in…
+str		Not checked yet	Not checked yet
+str		Not signed in	Not signed in
+str		Sign in…	Sign in…
+str		Signed in as {email} · {plan}	Signed in as {email} · {plan}
+str		Signed in as {email}	Signed in as {email}
+str		Sign out	Sign out
+str		The ChatGPT sign-in for {email} has expired.	The ChatGPT sign-in for {email} has expired.
+str		Sign in again…	Sign in again…
+str		Signing in with ChatGPT is not available in this version yet.	Signing in with ChatGPT is not available in this version yet.
+str		The sign-in could not be read: {why}	The sign-in could not be read: {why}
+str		The codex program keeps its ChatGPT sign-in in its own files, so this works without the secure store. An API key for Codex would need it.	The codex program keeps its ChatGPT sign-in in its own files, so this works without the secure store. An API key for Codex would need it.
+str		Sign in opens your browser; the codex program keeps the sign-in itself.	Sign in opens your browser; the codex program keeps the sign-in itself.
+str		The codex program keeps the sign-in itself.	The codex program keeps the sign-in itself.
+str		No browser on this computer? Sign in with a device code.	No browser on this computer? Sign in with a device code.
+str		Sign in with a device code	Sign in with a device code
+str		On any device with a browser, open the sign-in page and enter this code.	On any device with a browser, open the sign-in page and enter this code.
+plural		It runs out in {n} minute.	It runs out in {n} minute.|It runs out in {n} minutes.
+str		Copy the code	Copy the code
+str		Open sign-in page	Open sign-in page
+str		Not an address Archforge opens	Not an address Archforge opens
+str		The code comes from the codex program, which keeps the sign-in itself. Archforge only shows it.	The code comes from the codex program, which keeps the sign-in itself. Archforge only shows it.
+str		API key saved · ends in {last4}	API key saved · ends in {last4}
+str		Kept in {store}, never in the project, and handed to codex only when Chat runs it.	Kept in {store}, never in the project, and handed to codex only when Chat runs it.
 str		Done	Done
 str		Add table	Add table
 str		Place table	Place table

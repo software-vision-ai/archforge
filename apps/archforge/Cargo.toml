@@ -14,11 +14,13 @@ name = "archforge"
 path = "src/main.rs"
 
 [dependencies]
+archforge-agents.workspace = true
 archforge-control.workspace = true
 archforge-dolt.workspace = true
 archforge-notations.workspace = true
 archforge-mof.workspace = true
 archforge-project.workspace = true
+archforge-secrets.workspace = true
 archforge-ui-egui.workspace = true
 getrandom.workspace = true
 eframe.workspace = true

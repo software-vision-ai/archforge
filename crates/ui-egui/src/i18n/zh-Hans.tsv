@@ -305,7 +305,6 @@ str		Grid	网格
 str		Arrange diagram	整理图
 str		Move cardinality	移动基数
 str		Settings	设置
-str		How Archforge knows you.	Archforge 如何认识你。
 str		About Archforge	关于 Archforge
 str		About Archforge…	关于 Archforge…
 str		Free and open source modelling of software systems.	免费开源的软件系统建模工具。
@@ -319,7 +318,120 @@ str		Opens in your browser	在浏览器中打开
 str		Not set up yet	尚未设置
 str		Payment happens on the provider’s page in your browser; Archforge never sees it, and your project stays open here.	付款在浏览器中的服务商页面上完成；Archforge 永远看不到付款信息，您的项目会在这里保持打开。
 str		Your name	你的名字
-str		The bar shows your initials. Without a name they are JD, for John Doe.	栏中显示你的姓名首字母。没有名字时为 JD，即 John Doe。
+str		The program's default	程序默认
+str		The look stopped without an answer	查找未作答便已停止
+str		The secure store stopped without an answer	安全存储未作答便已停止
+str		The test stopped without an answer	测试未作答便已停止
+str		The sign-in stopped without an answer	登录未作答便已停止
+str		The sign-out stopped without an answer	退出登录未作答便已停止
+str		Profile	个人资料
+str		AI Agents	AI 智能体
+str		Your name shows as initials in the bar's avatar. Archforge never reads it from the computer's account.	您的姓名以首字母显示在栏上的头像中。 Archforge 从不从计算机账户读取它。
+str		the macOS Keychain	macOS 钥匙串
+str		the Secret Service	Secret Service
+str		the system's secure store	系统的安全存储
+str		just now	刚刚
+plural		{n} minute ago	{n} 分钟前
+plural		{n} hour ago	{n} 小时前
+str		The provider refused the key ({detail}).	提供方拒绝了此密钥（{detail}）。
+str		There is no key or sign-in to use.	没有可用的密钥或登录。
+str		{agent} ready	{agent} 已就绪
+str		{agent} not found	未找到 {agent}
+str		{agent} too old	{agent} 版本过旧
+str		{agent} can't be used	{agent} 无法使用
+str		{agent} sign-in could not be read	无法读取 {agent} 登录
+str		The sign-in gave a code that is not letters, digits and hyphens.	登录给出的代码不只包含字母、数字和连字符。
+str		{agent} has no key	{agent} 没有密钥
+str		{agent} key refused	{agent} 密钥被拒绝
+str		{agent} not signed in	{agent} 未登录
+str		{agent} sign-in expired	{agent} 登录已过期
+str		{agent} sign-in not available yet	{agent} 登录暂不可用
+str		{agent} not looked for yet	尚未查找 {agent}
+str		Chat talks to an agent program installed on this computer. Archforge finds the program and keeps your keys in the system's secure store. Opening this page sends nothing.	聊天与安装在这台计算机上的智能体程序对话。 Archforge 会找到该程序，并把您的密钥保存在系统的安全存储中。打开此页面不会发送任何内容。
+str		Default agent	默认智能体
+str		Let Chat use the model	允许聊天使用模型
+str		Off until you turn it on. While a conversation holds this access, Chat reads the project's model and the status bar says so. Changes still wait for Allow changes in each conversation.	在您打开之前保持关闭。对话拥有此访问权限期间，聊天会读取项目的模型，状态栏也会显示。更改仍需在每个对话中“允许更改”。
+str		Checking…	正在检查…
+str		Check connection	检查连接
+str		Sending…	正在发送…
+str		Send test message	发送测试消息
+str		Free, runs on this computer: finds the program, its version and your key or sign-in. Sends nothing.	免费，在这台计算机上运行：查找程序、其版本以及您的密钥或登录。不发送任何内容。
+str		Set up {agent} first: it is the default agent.	请先设置 {agent}：它是默认智能体。
+str		Sends one short message to the default agent's provider. It uses a little of your plan or API credit.	向默认智能体的提供方发送一条简短消息。会消耗少量套餐或 API 额度。
+str		Sending a test message…	正在发送测试消息…
+str		Checked {when}	已检查 {when}
+str		{agent} answered the test message {when}	{agent} 已回复测试消息（{when}）
+str		The test message to {agent} failed: {why}	发给 {agent} 的测试消息失败：{why}
+str		Chat talks to an agent program installed on this computer.	聊天与安装在这台计算机上的智能体程序对话。
+str		Not available on this system yet	此系统暂不可用
+str		AI Agents work on macOS and Linux for now. On Windows, Chat and these settings stay off; everything else in Archforge works as usual.	AI 智能体目前在 macOS 和 Linux 上可用。在 Windows 上，聊天和这些设置保持关闭；Archforge 的其他功能照常可用。
+str		This build of Archforge has no agent programs to talk to.	此版本的 Archforge 没有可对话的智能体程序。
+str		Archforge keeps API keys only in the system's secure store, and this session has none running (a Secret Service such as GNOME Keyring or KWallet). Start one and restart Archforge to save keys; Archforge never keeps them anywhere else.	Archforge 只把 API 密钥保存在系统的安全存储中，而此会话没有运行任何安全存储（例如 GNOME Keyring 或 KWallet 这样的 Secret Service）。请启动一个并重新启动 Archforge 以保存密钥；Archforge 从不把密钥保存在别处。
+str		No secure store on this system	此系统没有安全存储
+str		Looking…	正在查找…
+str		Not looked for yet	尚未查找
+str		Sign-in expired	登录已过期
+str		Found · {what}	已找到 · {what}
+str		Not yet tested with this version · {what}	尚未用此版本测试 · {what}
+str		Too old · {what}	版本过旧 · {what}
+str		Can't be used	无法使用
+str		Not found	未找到
+str		API key	API 密钥
+str		Sign-in	登录
+str		Sign in first	请先登录
+str		Save a key first	请先保存密钥
+str		{agent} model	{agent} 模型
+str		Archforge found {program} {version}, older than {floor}, the oldest version it works with. Update it, then choose Look again.	Archforge 找到了 {program} {version}，早于它支持的最旧版本 {floor}。请更新后选择“重新查找”。
+str		Archforge found the {program} program but can't use it: {why}	Archforge 找到了 {program} 程序，但无法使用：{why}
+str		Archforge has not looked for the {program} program yet.	Archforge 尚未查找 {program} 程序。
+str		Archforge looked for the {program} program on this computer and didn't find it. Chat runs {agent} through that program, so install it first.	Archforge 在这台计算机上查找了 {program} 程序，但没有找到。聊天通过该程序运行 {agent}，请先安装它。
+str		1. In a terminal, update it:	1. 在终端中更新它：
+str		1. In a terminal, install it:	1. 在终端中安装它：
+str		Copy the command	复制命令
+str		2. Come back and choose Look again. Archforge checks your PATH and the usual install folders, and sends nothing.	2. 回来后选择“重新查找”。 Archforge 会检查您的 PATH 和常用的安装文件夹，不发送任何内容。
+str		Installation guide	安装指南
+str		Paste an API key	粘贴 API 密钥
+str		Can't be saved: there is no secure store to keep it in.	无法保存：没有可保存它的安全存储。
+str		Save key	保存密钥
+str		API key saved, ending in {last4}	API 密钥已保存，末尾为 {last4}
+str		Replace	替换
+str		The provider refused this key when the test message was sent ({detail}). Replace it with a valid key, or remove it.	发送测试消息时，提供方拒绝了此密钥（{detail}）。请替换为有效密钥，或将其移除。
+str		Kept in {store}. Archforge never shows it again; Replace pastes a new one.	保存在{store}中。 Archforge 不会再显示它；“替换”可粘贴新密钥。
+str		{agent} API key	{agent} API 密钥
+str		Paste a key first.	请先粘贴密钥。
+str		A key is one word, without spaces.	密钥是一个不含空格的词。
+str		That is longer than any API key.	这比任何 API 密钥都长。
+str		Saved in {store}, never in the project. Create a key in your Anthropic account.	保存在{store}中，从不保存在项目里。请在您的 Anthropic 账户中创建密钥。
+str		Saved in {store}, never in the project. Create a key in your OpenAI account.	保存在{store}中，从不保存在项目里。请在您的 OpenAI 账户中创建密钥。
+str		The secure store refused: {why}	安全存储拒绝了：{why}
+str		The secure store could not be read: {why}	无法读取安全存储：{why}
+str		Sign in with ChatGPT	使用 ChatGPT 登录
+str		Waiting for you to finish in the browser…	正在等待您在浏览器中完成…
+str		The codex program keeps this sign-in itself.	此登录由 codex 程序自行保存。
+str		Reading the sign-in…	正在读取登录…
+str		Not checked yet	尚未检查
+str		Not signed in	未登录
+str		Sign in…	登录…
+str		Signed in as {email} · {plan}	已登录为 {email} · {plan}
+str		Signed in as {email}	已登录为 {email}
+str		Sign out	退出登录
+str		The ChatGPT sign-in for {email} has expired.	{email} 的 ChatGPT 登录已过期。
+str		Sign in again…	重新登录…
+str		Signing in with ChatGPT is not available in this version yet.	此版本暂不支持使用 ChatGPT 登录。
+str		The sign-in could not be read: {why}	无法读取登录：{why}
+str		The codex program keeps its ChatGPT sign-in in its own files, so this works without the secure store. An API key for Codex would need it.	codex 程序把 ChatGPT 登录保存在自己的文件中，因此无需安全存储也能使用。 Codex 的 API 密钥则需要安全存储。
+str		Sign in opens your browser; the codex program keeps the sign-in itself.	登录会打开您的浏览器；登录由 codex 程序自行保存。
+str		The codex program keeps the sign-in itself.	登录由 codex 程序自行保存。
+str		No browser on this computer? Sign in with a device code.	这台计算机没有浏览器？使用设备代码登录。
+str		Sign in with a device code	使用设备代码登录
+str		On any device with a browser, open the sign-in page and enter this code.	在任意带浏览器的设备上打开登录页面并输入此代码。
+plural		It runs out in {n} minute.	它将在 {n} 分钟后失效。
+str		Copy the code	复制代码
+str		Open sign-in page	打开登录页面
+str		Not an address Archforge opens	Archforge 不会打开此地址
+str		The code comes from the codex program, which keeps the sign-in itself. Archforge only shows it.	代码来自 codex 程序，登录由该程序自行保存。 Archforge 只负责显示。
+str		API key saved · ends in {last4}	API 密钥已保存 · 末尾为 {last4}
+str		Kept in {store}, never in the project, and handed to codex only when Chat runs it.	保存在{store}中，从不保存在项目里，只在聊天运行 codex 时交给它。
 str		Done	完成
 str		Add table	添加表
 str		Place table	放置表

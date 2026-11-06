@@ -16,6 +16,24 @@ pub enum Screen {
     HomeSettings,
     /// Home with About Archforge open, its support destinations not set up yet.
     HomeAbout,
+    /// Settings → AI Agents with both programs found and nothing set up yet (A2).
+    SettingsAgentsEmpty,
+    /// The same with Claude's program missing, its install steps shown, and Codex on an API key
+    /// (A3), checked.
+    SettingsAgentsMissing,
+    /// The same ready: Claude's key saved, Codex signed in with ChatGPT, Chat allowed the model,
+    /// checked (A4).
+    SettingsAgentsReady,
+    /// The same with Claude's key refused by its provider and Codex's sign-in expired, checked
+    /// (A5).
+    SettingsAgentsRefused,
+    /// The same with Codex signing in with a device code (A6).
+    SettingsAgentsDeviceCode,
+    /// The same on a system without a secure store: no key can be saved, Codex's ChatGPT sign-in
+    /// still works (A7).
+    SettingsAgentsNoStore,
+    /// The same on a system agents do not run on yet (A8).
+    SettingsAgentsNotAvailable,
     /// Home when no Dolt Archforge can use is found: the notice with Install Dolt and Look again.
     HomeDoltMissing,
     /// The New project dialog over Home, a name typed and the usual folder.
@@ -252,6 +270,7 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
     if screen == Screen::HomeAbout {
         crate::support::open(&mut shell);
     }
+    sample_agents(&mut shell, screen);
     if screen == Screen::HomeDoltMissing {
         shell.dolt_missing = Some("ARCHFORGE_DOLT is not set and no dolt is on the PATH".into());
     }
@@ -262,6 +281,13 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
             | Screen::HomeSearch
             | Screen::HomeSettings
             | Screen::HomeAbout
+            | Screen::SettingsAgentsEmpty
+            | Screen::SettingsAgentsMissing
+            | Screen::SettingsAgentsReady
+            | Screen::SettingsAgentsRefused
+            | Screen::SettingsAgentsDeviceCode
+            | Screen::SettingsAgentsNoStore
+            | Screen::SettingsAgentsNotAvailable
             | Screen::HomeDoltMissing
             | Screen::NewProject
             | Screen::NewProjectFailed
@@ -660,6 +686,87 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
     let image = harness.render()?;
     let (w, h) = (image.width(), image.height());
     Ok((w, h, image.into_raw()))
+}
+
+/// Settings → AI Agents over Home, in the state `screen` shows, from the fake agents host: what
+/// its look finds, Codex's account, and what Check connection or a sign-in says.
+fn sample_agents(shell: &mut Shell, screen: Screen) {
+    use crate::ai_agents::{AccountError, CodexAccount, CodexSignIn, Key, LoginEvent, LoginWay, Look, Program, Provider, Store, System, fake};
+    if !matches!(
+        screen,
+        Screen::SettingsAgentsEmpty
+            | Screen::SettingsAgentsMissing
+            | Screen::SettingsAgentsReady
+            | Screen::SettingsAgentsRefused
+            | Screen::SettingsAgentsDeviceCode
+            | Screen::SettingsAgentsNoStore
+            | Screen::SettingsAgentsNotAvailable
+    ) {
+        return;
+    }
+    let saved = |last4: &str| Key::Saved { last4: last4.into() };
+    let signed_in = CodexAccount::SignedIn { email: "you@example.com".into(), plan: Some("ChatGPT Plus".into()) };
+    let mut look = Look {
+        store: if cfg!(target_os = "linux") { Store::SecretService } else { Store::MacKeychain },
+        claude: fake::found(Provider::Claude),
+        codex: fake::found(Provider::Codex),
+        claude_key: Key::Absent,
+        codex_key: Key::Absent,
+    };
+    let mut account = CodexAccount::NotSignedIn;
+    match screen {
+        Screen::SettingsAgentsMissing => {
+            look.claude = Program::Missing;
+            look.codex_key = saved("9c1E");
+            shell.state.agents.default_agent = Provider::Codex;
+            shell.state.agents.codex_sign_in = CodexSignIn::ApiKey;
+            shell.state.agents.chat_uses_model = true;
+        }
+        Screen::SettingsAgentsReady | Screen::SettingsAgentsRefused | Screen::SettingsAgentsDeviceCode => {
+            look.claude_key = saved("4F2a");
+            shell.state.agents.claude_model = "sonnet".into();
+            shell.state.agents.chat_uses_model = true;
+            account = match screen {
+                Screen::SettingsAgentsReady => signed_in.clone(),
+                Screen::SettingsAgentsRefused => CodexAccount::Expired { email: "you@example.com".into() },
+                _ => CodexAccount::NotSignedIn,
+            };
+        }
+        Screen::SettingsAgentsNoStore => {
+            look.store = Store::Missing { why: "no Secret Service answers on the session bus".into() };
+            account = signed_in.clone();
+            shell.state.agents.claude_model = "sonnet".into();
+            shell.state.agents.chat_uses_model = true;
+        }
+        _ => {}
+    }
+    let host = std::sync::Arc::new(fake::Fake {
+        system: if screen == Screen::SettingsAgentsNotAvailable { System::NotYet } else { System::Supported },
+        look: std::sync::Mutex::new(look.clone()),
+        account: std::sync::Mutex::new(Ok(account.clone())),
+        login: std::sync::Mutex::new(vec![LoginEvent::DeviceCode {
+            code: "WXYZ-4821".into(),
+            url: "https://auth.openai.com/codex/device".into(),
+            minutes: 15,
+        }]),
+        test: std::sync::Mutex::new(Err(AccountError::KeyRefused { detail: "401, invalid key".into() })),
+        ..fake::Fake::default()
+    });
+    shell.services.agents = Some(host.clone());
+    shell.services.agent_accounts = Some(host);
+    // What the look at start found, as its answer leaves it.
+    shell.agents.set_look(look);
+    shell.agents.codex = Some(Ok(account));
+    if screen == Screen::SettingsAgentsRefused {
+        shell.agents.refused = [Some("401, invalid key".into()), None];
+    }
+    if matches!(screen, Screen::SettingsAgentsMissing | Screen::SettingsAgentsReady | Screen::SettingsAgentsRefused | Screen::SettingsAgentsNoStore) {
+        crate::ai_agents::check_connection(shell);
+    }
+    if screen == Screen::SettingsAgentsDeviceCode {
+        crate::ai_agents::sign_in(shell, LoginWay::DeviceCode);
+    }
+    crate::settings::open_at(shell, crate::settings::Section::Agents);
 }
 
 /// A schema "Shop" with a table "Customer" of three columns, the table selected; with `skills`,

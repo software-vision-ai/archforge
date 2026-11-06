@@ -8,6 +8,7 @@
 
 #[cfg(test)]
 mod acceptance;
+mod agents;
 mod app_dirs;
 mod app_icon;
 mod build_info;
@@ -239,7 +240,7 @@ fn run() -> i32 {
             Box::new(move |cc| {
                 let stored = cell.borrow_mut().take().ok_or("the application was already started")?;
                 let projects = std::sync::Arc::new(projects::Projects::new(&settings, build_info::version_line()));
-                let mut shell = Shell::new(services::native(projects.clone()));
+                let mut shell = Shell::new(services::native(projects.clone(), &settings));
                 prefs::apply(&stored, &mut shell);
                 if let Some(rx) = requests.borrow_mut().take() {
                     shell.attach_control(rx);
