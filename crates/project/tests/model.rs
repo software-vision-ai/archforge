@@ -436,6 +436,48 @@ fn a_domain_with_two_checks_named_alike_is_refused_and_one_named_apart_opens_aga
     assert_eq!(rows_of(back.doc(), &schema), rows_of(s.doc(), &schema), "the checks named apart come back");
 }
 
+/// A template's parameters (AR-130), with their kinds, constraint, default and order, and a member
+/// typed by one, are saved in the project's existing tables and come back as written after the
+/// project is closed and opened again: no table or column is added for them, and the signature's
+/// parameter list is read back once, not twice.
+#[test]
+fn template_parameters_are_saved_and_opened_again() {
+    let env = Env::new("templates");
+    let schema = schema();
+    let project = Project::create(&env.dolt, &env.opts(), &env.base.join("Projects"), "Shop", "test", &timestamp(1_761_670_800)).unwrap();
+    project.prepare_model(&schema).unwrap();
+    let mut s = archforge_notations::new_project_session("Shop", ids(0)).unwrap();
+    let sales = run(&mut s, "uml.package.add", json!({ "name": "sales" }));
+    let entity = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Entity" }));
+    let repo = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Repository" }));
+    let t = run(&mut s, "uml.template-parameter.add", json!({ "classifier": repo, "name": "T", "constraint": entity, "default": entity }));
+    run(&mut s, "uml.template-parameter.add", json!({ "classifier": repo, "name": "Key", "kind": "data-type", "default": "Integer", "at": 0 }));
+    let element = s.execute("uml.template-parameter.list", &json!({ "classifier": repo })).unwrap().value["parameters"][1]["element"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    run(&mut s, "uml.attribute.add", json!({ "class": repo, "name": "items", "type": element, "multiplicity": "*" }));
+    let written = rows_of(s.doc(), &schema);
+    project.write_model(&schema, &written).unwrap();
+    project.commit("Templates").unwrap();
+    let path = project.path().to_path_buf();
+    project.close().unwrap();
+    let again = Project::open(&env.dolt, &env.opts(), &path).unwrap();
+    again.prepare_model(&schema).unwrap();
+    let read = again.read_model(&schema).unwrap();
+    assert_eq!(read, written, "the rows come back as written");
+    let mut session = archforge_notations::session_from_rows(&read, ids(1 << 41)).unwrap();
+    assert_eq!(rows_of(session.doc(), &schema), written, "read into a model, the same rows again");
+    let st = session.doc();
+    let r = st.by_uuid(Uuid::parse(&repo).unwrap()).unwrap();
+    assert_eq!(archforge_uml::templates::signature_rows(st, r), ["Key : DataType = Integer", "T : Class > Entity = Entity"]);
+    let listed = session.execute("uml.template-parameter.list", &json!({ "classifier": repo })).unwrap().value;
+    assert_eq!(listed["parameters"][1]["id"], json!(t), "the parameter keeps its id");
+    let card = session.execute("uml.class.get", &json!({ "class": repo })).unwrap().value;
+    assert_eq!(card["attributes"][0]["type"]["id"], json!(element), "the member keeps its type");
+    again.close().unwrap();
+}
+
 #[test]
 fn a_long_text_in_any_script_is_written_and_read_back_whole() {
     let env = Env::new("long");

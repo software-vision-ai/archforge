@@ -115,7 +115,7 @@ pub fn in_model(store: &Store, o: Obj) -> bool {
 pub fn is_context(store: &Store, o: Obj) -> bool {
     let Ok(class) = store.class_of(o) else { return false };
     let kind = (crate::is_classifier(class) && !crate::members::is_built_in(store, o)) || class == PACKAGE;
-    kind && in_model(store, o)
+    kind && in_model(store, o) && !crate::templates::is_parameter_element(store, o)
 }
 
 /// Whether a constraint may name `o`: a package, a classifier, a property (an attribute or an
@@ -125,7 +125,7 @@ pub fn is_constrainable(store: &Store, o: Obj) -> bool {
     let kind = crate::is_classifier(class)
         || crate::is_relationship(class)
         || [PACKAGE, crate::PROPERTY, crate::OPERATION, crate::PARAMETER, crate::ENUMERATION_LITERAL].contains(&class);
-    kind && in_model(store, o)
+    kind && in_model(store, o) && !crate::templates::is_parameter_element(store, o)
 }
 
 /// The constraints `context` owns, in its order.

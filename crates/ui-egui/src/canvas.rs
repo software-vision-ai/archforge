@@ -834,6 +834,8 @@ fn draw_node(
     // Clipped to the card as drawn, so a draft's growing keeps the rows it moved down in sight.
     let inner = paint.with_clip_rect(rect.intersect(paint.clip_rect()));
     let annotation = card.as_ref().is_some_and(|c| matches!(c.tone, Tone::Constraint | Tone::Braces));
+    // A template's signature rows, drawn over the card and its selection (AR-130).
+    let signature = card.as_ref().filter(|c| !annotation && !c.template.is_empty() && z >= DETAIL_ZOOM).map(|c| c.template.clone());
     match element {
         Some(_) if annotation && let Some(card) = card => draw_constraint(paint, &inner, d, n, &card, rect),
         Some(_) if let Some(card) = card => {
@@ -958,6 +960,13 @@ fn draw_node(
     }
     if selected {
         selection_ring(paint, p, rect);
+    }
+    // A template's signature over the card's top-right corner (AR-130).
+    if let Some(rows) = signature
+        && let Some(sig) = signature_box(paint, p, &rows, rect, z)
+        && let Some(id) = id
+    {
+        widgets::record_visible(ui, registry, &format!("workspace.canvas.node.{id}.signature"), "label", sig);
     }
     let e = element.filter(|e| d.problems.contains_key(e))?;
     Some((rect.right_top() + vec2(-2.0, 2.0), id?, store.uuid(e).ok()?, e, false))
@@ -1824,6 +1833,37 @@ pub(crate) fn qualifier_place(node: Rect, tip: Pos2, size: Vec2) -> (Rect, Pos2)
         2 => (Rect::from_min_size(pos2(tip.x - w / 2.0, node.top() - h), size), pos2(tip.x, node.top() - h)),
         _ => (Rect::from_min_size(pos2(tip.x - w / 2.0, node.bottom()), size), pos2(tip.x, node.bottom() + h)),
     }
+}
+
+/// How far a template's signature box reaches past its card's right side and above its top, in
+/// diagram units, as the design draws it (page 08, C1).
+const SIGNATURE_OUT: Vec2 = vec2(28.0, 24.0);
+
+/// Where a template signature box of `size` sits on `card`: over its top-right corner, reaching
+/// [`SIGNATURE_OUT`] past it, scaled by `z`.
+pub(crate) fn signature_place(card: Rect, size: Vec2, z: f32) -> Rect {
+    Rect::from_min_size(pos2(card.right() + SIGNATURE_OUT.x * z - size.x, card.top() - SIGNATURE_OUT.y * z), size)
+}
+
+/// A template's signature (AR-130): a dashed box on the surface over the card's top-right corner,
+/// one parameter a row in their order; gives its rectangle, none for a card that is no template.
+fn signature_box(paint: &egui::Painter, p: &Palette, rows: &[String], card: Rect, z: f32) -> Option<Rect> {
+    if rows.is_empty() {
+        return None;
+    }
+    let galleys: Vec<_> = rows.iter().map(|t| ux::galley(paint, t, types::CAPTION.scaled(z), p.text, None)).collect();
+    let width = galleys.iter().map(|g| g.size().x).fold(0.0_f32, f32::max) + 16.0 * z;
+    let height = galleys.iter().map(|g| g.size().y).sum::<f32>() + 8.0 * z;
+    let rect = signature_place(card, vec2(width, height), z);
+    paint.rect_filled(rect, 0.0, p.surface);
+    dashed_rect(paint, rect, Stroke::new(1.0, p.text_secondary), 4.0 * z, 3.0 * z);
+    let mut y = rect.top() + 4.0 * z;
+    for g in galleys {
+        let h = g.size().y;
+        paint.galley(pos2(rect.left() + 8.0 * z, y), g, p.text);
+        y += h;
+    }
+    Some(rect)
 }
 
 /// A qualifier box: the surface, framed in the line's ink, its rows in model order.

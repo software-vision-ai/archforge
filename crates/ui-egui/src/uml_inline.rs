@@ -91,7 +91,7 @@ fn resolve(store: &Store, inline: &InlineMember) -> Result<String, String> {
     if text.is_empty() {
         return Ok(String::new());
     }
-    match crate::uml_panel::types_named(store, text).as_slice() {
+    match crate::uml_panel::types_named(store, text, store.by_uuid(inline.edit.class)).as_slice() {
         [one] => Ok(one.clone()),
         [] => Err(fmt(&tr("There is no type named {name}."), &[("name", text)])),
         _ => Err(fmt(&tr("Several types are named {name}; pick one from the menu."), &[("name", text)])),
@@ -292,7 +292,7 @@ pub(crate) fn row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, view: View)
     // The type menu, under the type field: a pick sets the type and gives the field the keyboard.
     let mut picked = false;
     if shell.panels.menu == Some(crate::panels::Menu::InlineType) && !literal {
-        let choices = crate::uml_panel::choices_for_menu(shell);
+        let choices = crate::uml_panel::choices_for_menu(shell, Some(inline.edit.class));
         let chosen = crate::panels::menu_noted(shell, ui, p, type_rect, TYPE_ID, &choices.labels, &choices.notes, &choices.note_parts);
         let value = chosen.map(|i| choices.values.get(i).cloned().unwrap_or_default());
         crate::uml_panel::keep_choices(shell, choices);

@@ -55,11 +55,16 @@ pub(crate) fn has_packages(f: &Facts<'_, Store, ProjectView>) -> Result<(), &'st
     if f.doc.alive().any(|o| f.doc.class_of(o).ok() == Some(PACKAGE)) { Ok(()) } else { Err(NO_PACKAGES) }
 }
 
-/// The live element the id under `key` names, of whatever class.
+/// The live element the id under `key` names, of whatever class; never a template parameter's
+/// classifier, which is its template's own (AR-130).
 fn element_of(store: &Store, p: &Params, key: &str) -> Result<Obj, CommandError> {
     let id = text(p, key);
     let Some(uuid) = Uuid::parse(id) else { return Err(refuse(key, format!("{:?} is not an id", short(id)))) };
-    store.by_uuid(uuid).filter(|o| store.is_alive(*o)).ok_or_else(|| refuse(key, format!("there is no element {}", short(id))))
+    let obj = store.by_uuid(uuid).filter(|o| store.is_alive(*o)).ok_or_else(|| refuse(key, format!("there is no element {}", short(id))))?;
+    match crate::templates::parameter_element_problem(store, obj) {
+        Some(why) => Err(refuse(key, why)),
+        None => Ok(obj),
+    }
 }
 
 /// The element the id under `key` names, of `class` (`what` names it in a refusal).
@@ -730,8 +735,20 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
         ASSOCIATION_CLASS,
         crate::CONSTRAINT,
         crate::GENERALIZATION_SET,
+        crate::CLASSIFIER_TEMPLATE_PARAMETER,
     ];
+    // Template parameters a binding stands in the way of stay: one it substitutes, or a template's
+    // last while a binding names its signature (AR-130). A template going too takes its parameters
+    // and the bindings to it along, so its own are not asked.
+    let params = removed_parameters(store, objs);
+    if let Some(why) = crate::templates::removals_problem(store, &params) {
+        return Err(refuse("ids", why));
+    }
     for o in objs.iter().filter(|o| store.is_alive(**o)) {
+        // A template parameter's classifier is its parameter's: the parameter is what goes (AR-130).
+        if let Some(why) = crate::templates::parameter_element_problem(store, *o) {
+            return Err(refuse("ids", why));
+        }
         let class = store.class_of(*o).map_err(fail)?;
         // An association's end goes with its association.
         let end = class == crate::PROPERTY && store.get(*o, crate::property::ASSOCIATION).ok().and_then(|v| v.as_ref()).is_some();
@@ -744,6 +761,10 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
         // A built-in type, and a package holding one, stay.
         if let Some(why) = crate::members::removal_problem(store, *o) {
             return Err(refuse("ids", why));
+        }
+        // Only a classifier's template parameter is removed (AR-130).
+        if class == crate::CLASSIFIER_TEMPLATE_PARAMETER && !crate::templates::is_parameter(store, *o) {
+            return Err(refuse("ids", format!("{} cannot be removed yet", uuid_of(store, *o)?)));
         }
         if class == PACKAGE
             && let Some(parent) = package_of(store, *o)
@@ -765,11 +786,15 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
             objs.push(n);
         }
     }
+    // Template parameters go first, each signature left with none going with its last (AR-130);
+    // those of a template that goes too go with it.
+    let params = removed_parameters(store, &objs);
+    let mut gone = crate::templates::remove(store, &params)?;
+    objs.retain(|o| !params.contains(o) && !crate::templates::is_parameter(store, *o));
     let objs = objs.as_slice();
     // A constraint left constraining nothing goes with what it constrained (AR-133), worked out
     // before anything moves; the others lose the elements that go as the core destroys them.
     let orphans = crate::constraints::orphans(&crate::constraints::dropped_by(store, objs));
-    let mut gone = 0;
     // A nested package's contents and diagrams move up to its parent before it goes.
     let nested: Vec<Obj> = objs.iter().copied().filter(|o| store.is_alive(*o) && store.class_of(*o).ok() == Some(PACKAGE)).collect();
     for o in nested {
@@ -826,6 +851,15 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
     Ok(gone)
 }
 
+/// The template parameters among `objs` whose template does not go with them: a template that
+/// goes, named among `objs` or inside one of them, takes its parameters along (AR-130).
+fn removed_parameters(store: &Store, objs: &[Obj]) -> Vec<Obj> {
+    objs.iter()
+        .copied()
+        .filter(|o| crate::templates::template_of(store, *o).is_some_and(|t| !objs.iter().any(|x| *x == t || store.contains(*x, t))))
+        .collect()
+}
+
 /// The relationships that go when `classes` go: those that touch any of them or a classifier
 /// nested in one (AR-132), and, since an association class is a classifier too, those that touch
 /// an association class going with them, and so on, each once. A seen-set bounds the walk.
@@ -839,7 +873,9 @@ pub fn going_with(store: &Store, classes: &[Obj]) -> Vec<Obj> {
                 queue.push(n);
             }
         }
-        for r in crate::relations::relationships_of(store, c) {
+        // The bindings to a template go with it (AR-130): a binding needs its signature.
+        let bindings = crate::templates::bindings_to(store, c);
+        for r in crate::relations::relationships_of(store, c).into_iter().chain(bindings) {
             if seen.insert(r) {
                 out.push(r);
                 if store.class_of(r).ok() == Some(ASSOCIATION_CLASS) {

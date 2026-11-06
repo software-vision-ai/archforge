@@ -905,6 +905,37 @@ str		Counted per qualifier value of the other end; shown next to {class}.	もう
 str		One {owner} and one {qualifiers} pick {multiplicity} {target}.	1 つの {owner} と 1 つの {qualifiers} で {target} を {multiplicity} 選びます。
 str		Type a name: a qualifier without one picks nothing.	名前を入力してください。名前のない限定子は何も選びません。
 str		This end already has a qualifier named {name}. Pick another name.	この端には {name} という名前の限定子がすでにあります。別の名前を選んでください。
+# Templates (AR-130)
+str		Template parameters · {n}	テンプレートパラメーター · {n}
+str		Add template parameter	テンプレートパラメーターを追加
+str		Constrained to	制約
+str		Any	任意
+str		Value	値
+str		Parameter kind	パラメーターの種類
+str		not yet	未対応
+str		{kind} template parameters are not supported yet.	{kind} のテンプレートパラメーターはまだサポートされていません。
+str		this parameter	このパラメーター
+str		Arguments for {name} must be {constraint} or specialise it.	{name} の引数は {constraint} か、それを特化したものでなければなりません。
+str		Arguments for {name} must be classes.	{name} の引数はクラスでなければなりません。
+str		Arguments for {name} must be interfaces.	{name} の引数はインターフェースでなければなりません。
+str		Arguments for {name} must be data types.	{name} の引数はデータ型でなければなりません。
+str		Arguments for {name} must be enumerations.	{name} の引数は列挙型でなければなりません。
+str		Arguments for {name} must be primitive types.	{name} の引数はプリミティブ型でなければなりません。
+str		Bindings that leave it out use {default}.	これを省略するバインディングは {default} を使います。
+str		Renaming or reordering keeps every binding.	名前の変更や並べ替えをしてもすべてのバインディングは保たれます。
+str		Show the binding	バインディングを表示
+str		Show the binding selects the element that binds it.	「バインディングを表示」は、これをバインドしている要素を選択します。
+str		Renaming {name} or changing its default is allowed: bindings follow the parameter, not its name.	{name} の名前の変更や既定値の変更はできます。バインディングは名前ではなくパラメーターに従います。
+str		{bound} binds {name} -> {actual}. Change or remove that binding first, then remove {name}.	{bound} は {name} -> {actual} とバインドしています。先にそのバインディングを変更または削除してから {name} を削除してください。
+str		{bound} binds {template}, and {name} is its last parameter. Remove that binding first, then remove {name}.	{bound} は {template} をバインドしており、{name} はその最後のパラメーターです。先にそのバインディングを削除してから {name} を削除してください。
+plural		{n} more binding uses it too.	ほかに {n} 件のバインディングもこれを使っています。
+str		Type a name: a template parameter without one stands for nothing.	名前を入力してください。名前のないテンプレートパラメーターは何も表しません。
+str		{template} already has a template parameter named {name}. Pick another name.	{template} には {name} という名前のテンプレートパラメーターがすでにあります。別の名前を選んでください。
+str		{default} does not fit {name}: pick a default its arguments could be.	{default} は {name} に合いません。その引数になりうる既定値を選んでください。
+str		{bound} binds {name} -> {actual}, which would no longer fit. Change or remove that binding first.	{bound} は {name} -> {actual} とバインドしており、合わなくなります。先にそのバインディングを変更または削除してください。
+str		template parameter	テンプレートパラメーター
+str		template	テンプレート
+plural		{kind} · template, {n} parameter · model, in every diagram	{kind} · テンプレート、パラメーター {n} 個 · モデル、すべての図
 str		From	始点
 str		General	一般
 str		Generalization	汎化

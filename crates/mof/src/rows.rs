@@ -274,12 +274,14 @@ fn build(st: &mut Store, rows: &Rows, tables: &[Table], junctions: &[Junction]) 
                 items.sort_by_key(|(at, _)| *at);
                 // A unique list is checked for repeats once, so each value is added without a
                 // search of the list built so far. A unique list with an opposite may hold values
-                // already, put there as their opposites were set from a column or another list:
-                // read once, they are not added again, and the list then takes its saved order in
-                // one step.
+                // already, put there as their opposites were set from a column or another list,
+                // and so may a unique list a stored subsetting list fills (a template signature's
+                // `parameter`, filled by its `ownedParameter`): read once, they are not added
+                // again, and the list then takes its saved order in one step.
                 let mut seen = HashSet::new();
-                let paired = prop.opposite.is_some() && prop.is_unique;
-                let present: HashSet<Key> = if paired { st.list(o, j.prop)?.iter().map(key).collect() } else { HashSet::new() };
+                let held = if prop.is_unique { st.list(o, j.prop)? } else { Vec::new() };
+                let paired = prop.is_unique && (prop.opposite.is_some() || !held.is_empty());
+                let present: HashSet<Key> = if paired { held.iter().map(key).collect() } else { HashSet::new() };
                 let mut order: Vec<Value> = if paired { Vec::with_capacity(items.len()) } else { Vec::new() };
                 for (k, (at, cell)) in items.iter().enumerate() {
                     if *at as usize != k {

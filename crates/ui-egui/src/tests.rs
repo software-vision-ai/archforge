@@ -5688,6 +5688,7 @@ impl archforge_diagram::Notation for Sketch {
             tone: archforge_diagram::figure::Tone::Tinted,
             slanted: false,
             braces: None,
+            template: Vec::new(),
         })
     }
     fn line(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<archforge_diagram::figure::Line> {
@@ -6363,7 +6364,7 @@ fn member_rows(h: &Harness<'static, Shell>, class: archforge_mof::Uuid, operatio
 fn pick_type(h: &mut Harness<'static, Shell>, id: &str, label: &str) {
     let at = rect_of(h, id).center();
     click(h, at);
-    let i = crate::uml_panel::type_choices(h.state().session.as_ref().unwrap().doc()).iter().position(|(l, _)| l == label).expect(label);
+    let i = crate::uml_panel::type_choices(h.state().session.as_ref().unwrap().doc(), None).iter().position(|(l, _)| l == label).expect(label);
     let at = rect_of(h, &format!("{id}.{i}")).center();
     click(h, at);
 }
@@ -7234,7 +7235,7 @@ fn a_selected_class_takes_attributes_and_operations_typed_on_its_card_each_one_u
     h.run();
     let at = rect_of(&h, "workspace.canvas.member.type.menu").center();
     click(&mut h, at);
-    let real = crate::uml_panel::type_choices(h.state().session.as_ref().unwrap().doc()).iter().position(|(l, _)| l == "Real").unwrap();
+    let real = crate::uml_panel::type_choices(h.state().session.as_ref().unwrap().doc(), None).iter().position(|(l, _)| l == "Real").unwrap();
     let at = rect_of(&h, &format!("workspace.canvas.member.type.{real}")).center();
     click(&mut h, at);
     assert_eq!(h.state().canvas.inline.as_ref().unwrap().ty, "Real");
@@ -8328,7 +8329,9 @@ fn an_interface_takes_members_on_its_card_and_in_properties_and_is_offered_as_a_
     click(&mut h, at);
     // It is offered as a type: Customer's new attribute takes it.
     assert!(
-        crate::uml_panel::type_choices(h.state().session.as_ref().unwrap().doc()).iter().any(|(l, id)| l == "Payable" && *id == payable.to_string())
+        crate::uml_panel::type_choices(h.state().session.as_ref().unwrap().doc(), None)
+            .iter()
+            .any(|(l, id)| l == "Payable" && *id == payable.to_string())
     );
     let customer = select_named(&mut h, archforge_uml::CLASS, "Customer");
     let at = rect_of(&h, "workspace.properties.attributes.add").center();
@@ -9829,7 +9832,7 @@ fn an_enumeration_in_properties_shows_its_literals_and_is_offered_as_a_type() {
         assert!(painted(&h).iter().any(|t| t == "Literals · 3"), "its enumeration's panel stays");
         // It is offered as a type: Customer's new attribute takes it.
         assert!(
-            crate::uml_panel::type_choices(h.state().session.as_ref().unwrap().doc())
+            crate::uml_panel::type_choices(h.state().session.as_ref().unwrap().doc(), None)
                 .iter()
                 .any(|(l, id)| l == "Priority" && *id == priority.to_string())
         );
@@ -10327,7 +10330,7 @@ fn a_data_type_in_properties_takes_attributes_and_operations_and_is_offered_as_a
             assert!(texts.iter().any(|t| t == want), "{want} in {texts:?}");
         }
         // Offered as a type once, beside the built-in types, each once too: no type is listed twice.
-        let choices = crate::uml_panel::type_choices(h.state().session.as_ref().unwrap().doc());
+        let choices = crate::uml_panel::type_choices(h.state().session.as_ref().unwrap().doc(), None);
         assert_eq!(choices.iter().filter(|(l, id)| *id == money.to_string() && l == "Amount").count(), 1, "{choices:?}");
         let mut values: Vec<&str> = choices.iter().map(|(_, v)| v.as_str()).collect();
         let all = values.len();
@@ -10388,7 +10391,7 @@ fn a_type_far_down_the_type_menu_can_be_chosen_and_only_the_rows_in_sight_are_la
         click(&mut h, at);
         h.event(egui::Event::Text("zone".into()));
         h.run();
-        let choices = crate::uml_panel::type_choices(h.state().session.as_ref().unwrap().doc());
+        let choices = crate::uml_panel::type_choices(h.state().session.as_ref().unwrap().doc(), None);
         let wanted = choices.iter().position(|(l, _)| l == "Zone39").expect("every type is offered");
         assert!(wanted > 16 + archforge_uml::members::BUILT_IN.len(), "far past the sixteen the menu once listed: {wanted}");
         let at = rect_of(&h, "workspace.properties.member.type").center();
@@ -14409,4 +14412,245 @@ fn a_new_nested_classifier_takes_a_name_free_of_its_owners_members() {
     let st = h.state().session.as_ref().unwrap().doc();
     assert_eq!(archforge_core::name_of(st, st.by_uuid(made).unwrap()), "Enumeration 2", "the next name the owner leaves free");
     assert_eq!(h.state().explorer.rename.as_ref().map(|r| r.text.as_str()), Some("Enumeration 2"));
+}
+
+/// Repository, Order and Entity (Order specializes it) in the package Shop, on two class diagrams,
+/// the first open and Repository selected with Properties shown (AR-130). Gives the ids by name:
+/// Repository, Order, Entity, diagram, second.
+fn templates_sample(theme: ThemeKind) -> (Harness<'static, Shell>, std::collections::BTreeMap<&'static str, String>) {
+    let mut h = workspace_harness(theme, egui::vec2(1600.0, 1500.0));
+    let mut made = std::collections::BTreeMap::new();
+    {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let mut run = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap_or_default().to_string();
+        let pkg = run("uml.package.add", serde_json::json!({ "name": "Shop" }));
+        let repo = run("uml.class.add", serde_json::json!({ "package": pkg, "name": "Repository" }));
+        let order = run("uml.class.add", serde_json::json!({ "package": pkg, "name": "Order" }));
+        let entity = run("uml.class.add", serde_json::json!({ "package": pkg, "name": "Entity" }));
+        run("uml.generalization.add", serde_json::json!({ "specific": order, "general": entity }));
+        let mut diagrams = Vec::new();
+        for (name, x) in [("Shop", 200), ("Overview", 500)] {
+            let d = run("diagram.add", serde_json::json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": pkg, "name": name }));
+            run("diagram.place", serde_json::json!({ "diagram": d, "element": repo, "x": x, "y": 200 }));
+            diagrams.push(d);
+        }
+        for (k, v) in [("Repository", repo), ("Order", order), ("Entity", entity), ("diagram", diagrams[0].clone()), ("second", diagrams[1].clone())]
+        {
+            made.insert(k, v);
+        }
+    }
+    crate::canvas::open(h.state_mut(), archforge_mof::Uuid::parse(&made["diagram"]).unwrap());
+    h.run();
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [made["Repository"]] })).unwrap();
+    h.state_mut().state.show_panel(crate::state::Panel::Properties);
+    h.run();
+    (h, made)
+}
+
+/// The rows of Repository's signature, as its card describes them.
+fn signature_of(h: &Harness<'static, Shell>, c: &str) -> Vec<String> {
+    let st = h.state().session.as_ref().unwrap().doc();
+    archforge_uml::templates::signature_rows(st, st.by_uuid(archforge_mof::Uuid::parse(c).unwrap()).unwrap())
+}
+
+/// The id of `element`'s card on diagram `d`.
+fn node_on(h: &Harness<'static, Shell>, element: &str, d: &str) -> String {
+    let st = h.state().session.as_ref().unwrap().doc();
+    let d = st.by_uuid(archforge_mof::Uuid::parse(d).unwrap()).unwrap();
+    let n = archforge_diagram::views_of(st, st.by_uuid(archforge_mof::Uuid::parse(element).unwrap()).unwrap())
+        .2
+        .into_iter()
+        .find(|n| archforge_diagram::diagram_of(st, *n) == Some(d))
+        .unwrap();
+    st.uuid(n).unwrap().to_string()
+}
+
+/// Picks entry `i` of the menu the select `id` opens.
+fn pick_entry(h: &mut Harness<'static, Shell>, id: &str, entry: &str) {
+    let at = rect_of(h, id).center();
+    click(h, at);
+    let at = rect_of(h, &format!("{id}.{entry}")).center();
+    click(h, at);
+}
+
+/// Template parameters (design page 08, C1 and C4) are added in Properties with the row editor:
+/// T as a class parameter, then Key whose Kind menu lists the supported kinds and Value and
+/// Operation disabled, never picked, with Integer as its default; each Apply one undo step; the
+/// signature box sits over the card's top-right corner on both diagrams; Key moved up, renamed and
+/// removed with the bin. In light and dark.
+#[test]
+fn template_parameters_are_edited_in_properties_and_boxed_on_both_diagrams() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, made) = templates_sample(theme);
+        let repo = made["Repository"].clone();
+        assert!(painted(&h).iter().any(|t| t == "Template parameters · 0"), "{theme:?}: {:?}", painted(&h));
+        let at = rect_of(&h, "workspace.properties.class.templateParameters.add").center();
+        click(&mut h, at);
+        let found = ids(&h);
+        for id in ["name", "kind", "constraint", "default", "cancel", "apply"] {
+            assert!(found.iter().any(|i| *i == format!("workspace.properties.class.templateParameter.0.{id}")), "{theme:?}: {id} in {found:?}");
+        }
+        assert!(!found.iter().any(|i| i == "workspace.properties.class.templateParameter.0.remove"), "a new one has no bin");
+        h.event(egui::Event::Text("T".into()));
+        h.run();
+        assert!(painted(&h).iter().any(|t| t.starts_with("Arguments for T must be classes.")), "{:?}", painted(&h));
+        assert!(signature_of(&h, &repo).is_empty(), "nothing before Apply");
+        let at = rect_of(&h, "workspace.properties.class.templateParameter.0.apply").center();
+        click(&mut h, at);
+        assert!(h.state().panels.template.is_none(), "applied, the editor closes");
+        assert_eq!(signature_of(&h, &repo), ["T : Class"]);
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add template parameter"));
+        h.run();
+        let shown = painted(&h);
+        for said in ["Template parameters · 1", "T : Class", "Class · template, 1 parameter · model, in every diagram"] {
+            assert!(shown.iter().any(|t| t == said), "{theme:?}: {said} in {shown:?}");
+        }
+        // T types Repository's own members alone: its type menus offer it, noted, and no other's do.
+        let st = h.state().session.as_ref().unwrap().doc();
+        let r = st.by_uuid(archforge_mof::Uuid::parse(&repo).unwrap()).unwrap();
+        let inside = crate::uml_panel::type_choices(st, Some(r));
+        assert_eq!(inside.get(1).map(|(l, _)| l.as_str()), Some("T"), "nearest first: {inside:?}");
+        assert_eq!(crate::uml_panel::type_notes(st, &inside).get(1).cloned(), Some(vec!["template parameter".to_string()]));
+        assert!(!crate::uml_panel::type_choices(st, None).iter().any(|(l, _)| l == "T"), "never outside the template");
+        // Key: the Kind menu offers the supported kinds; Value and Operation are named, disabled.
+        let at = rect_of(&h, "workspace.properties.class.templateParameters.add").center();
+        click(&mut h, at);
+        h.event(egui::Event::Text("Key".into()));
+        h.run();
+        let kind = "workspace.properties.class.templateParameter.1.kind";
+        let at = rect_of(&h, kind).center();
+        click(&mut h, at);
+        let shown = painted(&h);
+        for said in ["PARAMETER KIND", "Class", "Interface", "Data type", "Enumeration", "Primitive type", "Value", "Operation", "not yet"] {
+            assert!(shown.iter().any(|t| t == said), "{theme:?}: {said} in {shown:?}");
+        }
+        let at = rect_of(&h, &format!("{kind}.value")).center();
+        click(&mut h, at);
+        assert_eq!(h.state().panels.template.as_ref().unwrap().kind, archforge_uml::templates::Kind::Class, "a kind not supported is never taken");
+        assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::TemplateKind), "the menu stays open");
+        let at = rect_of(&h, &format!("{kind}.data-type")).center();
+        click(&mut h, at);
+        assert_eq!(h.state().panels.template.as_ref().unwrap().kind, archforge_uml::templates::Kind::DataType);
+        pick_entry(&mut h, "workspace.properties.class.templateParameter.1.default", "1");
+        assert_eq!(h.state().panels.template.as_ref().unwrap().default, "Integer", "the built-in types first");
+        let at = rect_of(&h, "workspace.properties.class.templateParameter.1.apply").center();
+        click(&mut h, at);
+        assert_eq!(signature_of(&h, &repo), ["T : Class", "Key : DataType = Integer"]);
+        // The box over the card's top-right corner, on both diagrams: the content is the model's.
+        for d in ["diagram", "second"] {
+            crate::canvas::open(h.state_mut(), archforge_mof::Uuid::parse(&made[d]).unwrap());
+            h.run();
+            let node = node_on(&h, &repo, &made[d]);
+            let card = rect_of(&h, &format!("workspace.canvas.node.{node}"));
+            let sig = rect_of(&h, &format!("workspace.canvas.node.{node}.signature"));
+            assert!(sig.contains(card.right_top()) && sig.right() > card.right() && sig.top() < card.top(), "{d}: {sig:?} over {card:?}");
+            assert!(painted(&h).iter().any(|t| t == "Key : DataType = Integer"), "{d}");
+        }
+        // Key moved up with the editor's arrow, renamed, then removed with its bin.
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [repo] })).unwrap();
+        h.run();
+        let row = rect_of(&h, "workspace.properties.class.templateParameter.1").left_center() + egui::vec2(20.0, 0.0);
+        h.event(egui::Event::PointerMoved(row));
+        h.run();
+        let at = rect_of(&h, "workspace.properties.class.templateParameter.1.edit").center();
+        click(&mut h, at);
+        let at = rect_of(&h, "workspace.properties.class.templateParameter.1.up").center();
+        click(&mut h, at);
+        assert_eq!(signature_of(&h, &repo), ["Key : DataType = Integer", "T : Class"]);
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Move template parameter"));
+        h.run();
+        let at = rect_of(&h, "workspace.properties.class.templateParameter.0.name").center();
+        click(&mut h, at);
+        key(&mut h, egui::Key::A, egui::Modifiers::COMMAND);
+        h.event(egui::Event::Text("Id".into()));
+        h.run();
+        let at = rect_of(&h, "workspace.properties.class.templateParameter.0.apply").center();
+        click(&mut h, at);
+        assert_eq!(signature_of(&h, &repo), ["Id : DataType = Integer", "T : Class"]);
+        let at = rect_of(&h, "workspace.properties.class.templateParameter.0.edit").center();
+        click(&mut h, at);
+        let at = rect_of(&h, "workspace.properties.class.templateParameter.0.remove").center();
+        click(&mut h, at);
+        assert_eq!(signature_of(&h, &repo), ["T : Class"]);
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        assert_eq!(signature_of(&h, &repo), ["Id : DataType = Integer", "T : Class"], "the removal is one step");
+    }
+}
+
+/// A name another parameter has, whatever the case, and a default that does not fit are refused in
+/// place, nothing written; removing a parameter a binding uses is refused under the rows naming the
+/// binding (C5), and Show the binding selects the element that binds it. In light and dark.
+#[test]
+fn template_parameter_refusals_are_said_in_place_and_nothing_is_written() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, made) = templates_sample(theme);
+        let repo = made["Repository"].clone();
+        h.state_mut()
+            .session
+            .as_mut()
+            .unwrap()
+            .execute("uml.template-parameter.add", &serde_json::json!({ "classifier": repo, "name": "T", "constraint": made["Entity"] }))
+            .unwrap();
+        h.run();
+        let before = (signature_of(&h, &repo), h.state().session.as_ref().unwrap().undo_label().map(str::to_string));
+        let at = rect_of(&h, "workspace.properties.class.templateParameters.add").center();
+        click(&mut h, at);
+        h.event(egui::Event::Text("t".into()));
+        h.run();
+        let at = rect_of(&h, "workspace.properties.class.templateParameter.1.apply").center();
+        click(&mut h, at);
+        let edit = h.state().panels.template.clone().expect("the editor stays open");
+        assert_eq!(edit.refused_at, Some("name"));
+        let said = "Repository already has a template parameter named T. Pick another name.";
+        assert!(painted(&h).iter().any(|t| t == said), "{theme:?}: said in place, {:?}", painted(&h));
+        assert_eq!((signature_of(&h, &repo), h.state().session.as_ref().unwrap().undo_label().map(str::to_string)), before, "nothing written");
+        h.state_mut().panels.template = None;
+        h.run();
+        // T's default offers only what fits Entity: Order, Entity; Repository is left out.
+        let at = rect_of(&h, "workspace.properties.class.templateParameter.0.edit").center();
+        click(&mut h, at);
+        let at = rect_of(&h, "workspace.properties.class.templateParameter.0.default").center();
+        click(&mut h, at);
+        let shown = painted(&h);
+        assert!(
+            shown.iter().any(|t| t == "Order") && !ids(&h).iter().any(|i| i == "workspace.properties.class.templateParameter.0.default.3"),
+            "{shown:?}"
+        );
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        // Typed in by hand, a default that does not fit is refused under Default.
+        if let Some(e) = h.state_mut().panels.template.as_mut() {
+            e.default = repo.clone();
+        }
+        h.run();
+        let at = rect_of(&h, "workspace.properties.class.templateParameter.0.apply").center();
+        click(&mut h, at);
+        let edit = h.state().panels.template.clone().expect("the editor stays open");
+        assert_eq!(edit.refused_at, Some("default"), "{:?}", edit.refused);
+        assert_eq!(signature_of(&h, &repo), ["T : Class > Entity"], "nothing written");
+        h.state_mut().panels.template = None;
+        h.run();
+        // In the sample model OrderRepository binds Repository: Key's removal is refused, naming
+        // the binding (C5).
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1500.0));
+        crate::uml_ui::open_sample(h.state_mut()).unwrap();
+        h.run();
+        let (sample_id, _) = crate::uml_ui::put_repository(h.state_mut(), true).unwrap_or_else(|e| panic!("{e}"));
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        h.run();
+        let rows_before = signature_of(&h, &sample_id.to_string());
+        let at = rect_of(&h, "workspace.properties.class.templateParameter.1.edit").center();
+        click(&mut h, at);
+        let at = rect_of(&h, "workspace.properties.class.templateParameter.1.remove").center();
+        click(&mut h, at);
+        h.run();
+        assert_eq!(signature_of(&h, &sample_id.to_string()), rows_before, "nothing removed");
+        let said = "OrderRepository binds Key -> Integer. Change or remove that binding first, then remove Key.";
+        assert!(painted(&h).iter().any(|t| t == said), "{theme:?}: {:?}", painted(&h));
+        assert!(ids(&h).iter().any(|i| i == "workspace.properties.class.templateParameter.refusal"));
+        let at = rect_of(&h, "workspace.properties.class.templateParameter.showBinding").center();
+        click(&mut h, at);
+        let s = h.state().session.as_ref().unwrap();
+        let chosen = s.view().selection.first().copied().unwrap();
+        assert_eq!(archforge_core::name_of(s.doc(), chosen), "OrderRepository", "the element that binds it is selected");
+    }
 }

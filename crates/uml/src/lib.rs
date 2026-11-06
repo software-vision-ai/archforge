@@ -49,6 +49,7 @@ pub mod names;
 pub mod nesting;
 pub mod qualifiers;
 pub mod relations;
+pub mod templates;
 
 use std::sync::Arc;
 
@@ -256,6 +257,10 @@ impl Notation for UmlNotation {
         if members::is_built_in(store, element) {
             return Some("a built-in type carries no skill; a primitive type of the model's own does");
         }
+        // A template parameter's classifier is its template's (AR-130).
+        if templates::is_parameter_element(store, element) {
+            return Some("a template parameter carries no skill; its template does");
+        }
         // A qualifier is its end's, not an attribute (AR-127).
         if qualifiers::is_qualifier(store, element) {
             return Some("a qualifier carries no skill; its association's classes do");
@@ -314,6 +319,7 @@ pub fn registry() -> Result<Arc<archforge_engine::Registry<Store, ProjectView>>,
     specs.extend(generalization_sets::specs());
     specs.extend(qualifiers::specs());
     specs.extend(nesting::specs());
+    specs.extend(templates::specs());
     specs.extend(archforge_diagram::commands::specs::<ProjectView>());
     specs.extend(archforge_core::skills::specs::<ProjectView>());
     archforge_engine::Registry::new(specs)

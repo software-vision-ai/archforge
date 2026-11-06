@@ -904,6 +904,37 @@ str		Counted per qualifier value of the other end; shown next to {class}.	Counte
 str		One {owner} and one {qualifiers} pick {multiplicity} {target}.	One {owner} and one {qualifiers} pick {multiplicity} {target}.
 str		Type a name: a qualifier without one picks nothing.	Type a name: a qualifier without one picks nothing.
 str		This end already has a qualifier named {name}. Pick another name.	This end already has a qualifier named {name}. Pick another name.
+# Templates (AR-130)
+str		Template parameters · {n}	Template parameters · {n}
+str		Add template parameter	Add template parameter
+str		Constrained to	Constrained to
+str		Any	Any
+str		Value	Value
+str		Parameter kind	Parameter kind
+str		not yet	not yet
+str		{kind} template parameters are not supported yet.	{kind} template parameters are not supported yet.
+str		this parameter	this parameter
+str		Arguments for {name} must be {constraint} or specialise it.	Arguments for {name} must be {constraint} or specialise it.
+str		Arguments for {name} must be classes.	Arguments for {name} must be classes.
+str		Arguments for {name} must be interfaces.	Arguments for {name} must be interfaces.
+str		Arguments for {name} must be data types.	Arguments for {name} must be data types.
+str		Arguments for {name} must be enumerations.	Arguments for {name} must be enumerations.
+str		Arguments for {name} must be primitive types.	Arguments for {name} must be primitive types.
+str		Bindings that leave it out use {default}.	Bindings that leave it out use {default}.
+str		Renaming or reordering keeps every binding.	Renaming or reordering keeps every binding.
+str		Show the binding	Show the binding
+str		Show the binding selects the element that binds it.	Show the binding selects the element that binds it.
+str		Renaming {name} or changing its default is allowed: bindings follow the parameter, not its name.	Renaming {name} or changing its default is allowed: bindings follow the parameter, not its name.
+str		{bound} binds {name} -> {actual}. Change or remove that binding first, then remove {name}.	{bound} binds {name} -> {actual}. Change or remove that binding first, then remove {name}.
+str		{bound} binds {template}, and {name} is its last parameter. Remove that binding first, then remove {name}.	{bound} binds {template}, and {name} is its last parameter. Remove that binding first, then remove {name}.
+plural		{n} more binding uses it too.	{n} more binding uses it too.|{n} more bindings use it too.
+str		Type a name: a template parameter without one stands for nothing.	Type a name: a template parameter without one stands for nothing.
+str		{template} already has a template parameter named {name}. Pick another name.	{template} already has a template parameter named {name}. Pick another name.
+str		{default} does not fit {name}: pick a default its arguments could be.	{default} does not fit {name}: pick a default its arguments could be.
+str		{bound} binds {name} -> {actual}, which would no longer fit. Change or remove that binding first.	{bound} binds {name} -> {actual}, which would no longer fit. Change or remove that binding first.
+str		template parameter	template parameter
+str		template	template
+plural		{kind} · template, {n} parameter · model, in every diagram	{kind} · template, {n} parameter · model, in every diagram|{kind} · template, {n} parameters · model, in every diagram
 str		From	From
 str		General	General
 str		Generalization	Generalization
