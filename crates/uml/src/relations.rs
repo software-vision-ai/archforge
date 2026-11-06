@@ -28,6 +28,13 @@
 //! while nothing specializes it, the refusal naming the classifiers that do. Clearing it changes
 //! nothing else. It is UML's `isFinalSpecialization`, apart from a leaf element's `isLeaf`.
 //!
+//! A classifier, a property or an operation may be made leaf (AR-138), UML's `isLeaf`: nothing
+//! may redefine it then. It is made leaf only while nothing redefines it, the refusal naming what
+//! does ([`leaf_problem`]); a property that would redefine a leaf one is refused by the modifiers'
+//! rules. Clearing it changes nothing else. A classifier's is set with `uml.classifier.set`, a
+//! property's with the attribute commands and `uml.association.set-end`, an operation's with the
+//! operation commands.
+//!
 //! An association class (AR-125) is one element, UML's AssociationClass: a class and an
 //! association at once. It is made between two classes as a plain association is, owning both its
 //! ends, and its ends are set and reconnected as an association's are; it has attributes and
@@ -98,6 +105,62 @@ pub fn is_final(store: &Store, c: Obj) -> bool {
     store.get(c, classifier::IS_FINAL_SPECIALIZATION).ok().and_then(|v| v.as_bool()).unwrap_or(false)
 }
 
+/// Whether nothing may redefine the classifier, property or operation `o`: UML's `isLeaf`
+/// (AR-138), apart from a classifier's `isFinalSpecialization`.
+pub fn is_leaf(store: &Store, o: Obj) -> bool {
+    store.get(o, crate::redefinable_element::IS_LEAF).ok().and_then(|v| v.as_bool()).unwrap_or(false)
+}
+
+/// The elements that redefine `o` directly: the properties that list it among the properties they
+/// redefine, the operations among the operations, the classifiers among the classifiers; each
+/// once, in a stable order.
+pub fn redefiners(store: &Store, o: Obj) -> Vec<Obj> {
+    let by = [property::REDEFINED_PROPERTY, crate::operation::REDEFINED_OPERATION, classifier::REDEFINED_CLASSIFIER];
+    let mut out: Vec<Obj> =
+        store.referrers(o).into_iter().filter(|(r, prop)| by.contains(prop) && *r != o && store.is_alive(*r)).map(|(r, _)| r).collect();
+    out.sort();
+    out.dedup();
+    out
+}
+
+/// An element that redefines another, as a refusal names it: a property and an operation by
+/// their classifier and name (`CardPayment::amount`, `CardPayment::authorise()`), a classifier by
+/// its name.
+pub fn redefiner_name(store: &Store, o: Obj) -> String {
+    let own = name_of(store, o);
+    if store.class_of(o).is_ok_and(crate::is_classifier) {
+        return own;
+    }
+    let owner = match store.class_of(o).ok() {
+        Some(k) if k == PROPERTY => crate::modifiers::context_of(store, o).first().copied(),
+        _ => store.container(o).ok().flatten().map(|(c, _)| c),
+    };
+    let own = if store.class_of(o).ok() == Some(crate::OPERATION) { format!("{own}()") } else { own };
+    match owner {
+        Some(c) => format!("{}::{own}", name_of(store, c)),
+        None => own,
+    }
+}
+
+/// Why `o`, a classifier, a property or an operation, may not be made leaf, when it may not: a
+/// built-in type is never changed, and an element something redefines already would break the
+/// rule at once; the refusal names those elements and asks for their redefinitions to go first.
+pub fn leaf_problem(store: &Store, o: Obj) -> Option<String> {
+    let id = uuid_of(store, o).unwrap_or_default();
+    if crate::members::is_built_in(store, o) {
+        return Some(format!("{id} is the built-in type {}, which is never made leaf", name_of(store, o)));
+    }
+    let by = redefiners(store, o);
+    if by.is_empty() {
+        return None;
+    }
+    let names: Vec<String> = by.iter().map(|r| format!("{} ({})", redefiner_name(store, *r), uuid_of(store, *r).unwrap_or_default())).collect();
+    Some(format!(
+        "{id} is redefined by {}; remove those redefinitions (a property's redefines, with uml.attribute.set or uml.association.set-end) before making it leaf",
+        names.join(", ")
+    ))
+}
+
 /// The generalizations that specialize the classifier `c` directly, each with its specific
 /// classifier, in the order they were made.
 pub fn specializations(store: &Store, c: Obj) -> Vec<(Obj, Obj)> {
@@ -134,19 +197,33 @@ pub fn final_problem(store: &Store, c: Obj) -> Option<String> {
     Some(format!("{id} is specialized by {}; remove those generalizations (element.remove) before making it final", names.join(", ")))
 }
 
-/// `uml.classifier.set`: a classifier of any kind made final or not (AR-137); a field left out
-/// keeps its value. Made final only while nothing specializes it; cleared, it changes nothing else.
+/// `uml.classifier.set`: a classifier of any kind made final (AR-137) or leaf (AR-138) or not; a
+/// field left out keeps its value. Made final only while nothing specializes it, and leaf only
+/// while nothing redefines it, both checked before anything changes; cleared, either changes
+/// nothing else.
 fn classifier_set(ctx: &mut C<'_>, p: &Params) -> R {
     let c = classifier_of(ctx.doc, p, "classifier")?;
-    if let Some(on) = p.bool("final") {
-        if on && let Some(why) = final_problem(ctx.doc, c) {
-            return Err(refuse("final", why));
-        }
-        if on != is_final(ctx.doc, c) {
-            ctx.doc.set(c, classifier::IS_FINAL_SPECIALIZATION, Value::Bool(on)).map_err(fail)?;
-        }
+    let final_on = p.bool("final");
+    let leaf_on = p.bool("leaf");
+    if final_on == Some(true)
+        && !is_final(ctx.doc, c)
+        && let Some(why) = final_problem(ctx.doc, c)
+    {
+        return Err(refuse("final", why));
     }
-    Ok(json!({ "id": uuid_of(ctx.doc, c)?, "final": is_final(ctx.doc, c) }))
+    if leaf_on == Some(true)
+        && !is_leaf(ctx.doc, c)
+        && let Some(why) = leaf_problem(ctx.doc, c)
+    {
+        return Err(refuse("leaf", why));
+    }
+    if let Some(on) = final_on.filter(|on| *on != is_final(ctx.doc, c)) {
+        ctx.doc.set(c, classifier::IS_FINAL_SPECIALIZATION, Value::Bool(on)).map_err(fail)?;
+    }
+    if let Some(on) = leaf_on.filter(|on| *on != is_leaf(ctx.doc, c)) {
+        ctx.doc.set(c, crate::redefinable_element::IS_LEAF, Value::Bool(on)).map_err(fail)?;
+    }
+    Ok(json!({ "id": uuid_of(ctx.doc, c)?, "final": is_final(ctx.doc, c), "leaf": is_leaf(ctx.doc, c) }))
 }
 
 /// The aggregation of an association's end, as an index into [`AGGREGATIONS`].
@@ -1022,7 +1099,8 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             None,
             concat!(
                 "classifier: string; the id of the class, interface, enumeration, data type, primitive type or association class; every field left out keeps its value\n",
-                "final: bool?; nothing may specialize it (UML's isFinalSpecialization, not the leaf setting): made final only while no generalization specializes it and never for a built-in type; cleared, other classifiers may specialize it again; left out, kept"
+                "final: bool?; nothing may specialize it (UML's isFinalSpecialization, not the leaf setting): made final only while no generalization specializes it and never for a built-in type; cleared, other classifiers may specialize it again; left out, kept\n",
+                "leaf: bool?; nothing may redefine it (UML's isLeaf), written {leaf} after its name: made leaf only while nothing redefines it and never for a built-in type; cleared, it may be redefined again; left out, kept"
             ),
             has_classes,
             classifier_set

@@ -5,7 +5,8 @@
 //! (visibility, name, type, multiplicity) and its operations (visibility, name, parameters, return
 //! type), its name slanted when it is abstract, an abstract operation slanted and a static member
 //! underlined, and any classifier's name followed by `{final}` when nothing may specialize it
-//! (AR-137); an association as a line with its name, its ends'
+//! (AR-137), `{leaf}` when nothing may redefine it, both as `{final, leaf}`, and a leaf member's
+//! row ending in `{leaf}` (AR-138); an association as a line with its name, its ends'
 //! roles and multiplicities, an open arrow at every end it navigates to (owner decision), and a
 //! diamond, which takes the place of an arrow at its end, at the whole of an aggregation (hollow) or a composition (filled); a
 //! generalization as a line to a hollow triangle at the general class; a dependency dashed, with an
@@ -152,7 +153,8 @@ pub fn end_text(store: &Store, end: Obj) -> String {
     cut(text.trim_start().to_string())
 }
 
-/// An operation as a class's card lists it: `+ total(currency : Currency) : Money`.
+/// An operation as a class's card lists it: `+ total(currency : Currency) : Money`, then `{leaf}`
+/// when nothing may redefine it (AR-138).
 pub fn operation_text(store: &Store, op: Obj) -> String {
     let direction = |p: Obj| match store.get(p, parameter::DIRECTION).ok() {
         Some(Value::Enum(i)) => ParameterDirectionKind::from_index(i),
@@ -177,11 +179,15 @@ pub fn operation_text(store: &Store, op: Obj) -> String {
     if let Some(ty) = returns {
         text.push_str(&format!(" : {ty}"));
     }
+    if crate::relations::is_leaf(store, op) {
+        text.push_str(" {leaf}");
+    }
     cut(text)
 }
 
 /// A class's, an interface's, a data type's or an association class's card on `diagram`: its name,
-/// a class's slanted when it is abstract, `{final}` after it when nothing may specialize it, its
+/// a class's slanted when it is abstract, `{final}` after it when nothing may specialize it and
+/// `{leaf}` when nothing may redefine it (`{final, leaf}` for both), its
 /// attributes and its operations; one of another package
 /// than the diagram's is drawn as an outsider, its package named in the eyebrow. A class's eyebrow
 /// says Class, an association class's Association class, an interface's and a data type's their
@@ -226,10 +232,16 @@ pub fn card(store: &Store, c: Obj, diagram: Obj) -> Option<Card> {
     })
 }
 
-/// What a classifier's name row says in braces after its name: `{final}` when nothing may
-/// specialize it (AR-137); None when it says nothing.
+/// What a classifier's name row says in braces after its name: `final` when nothing may
+/// specialize it (AR-137), `leaf` when nothing may redefine it (AR-138), in one pair of braces
+/// (`{final, leaf}`); None when it says nothing.
 fn braces(store: &Store, c: Obj) -> Option<String> {
-    crate::relations::is_final(store, c).then(|| "{final}".to_string())
+    let words: Vec<&str> = [(crate::relations::is_final(store, c), "final"), (crate::relations::is_leaf(store, c), "leaf")]
+        .into_iter()
+        .filter(|(on, _)| *on)
+        .map(|(_, w)| w)
+        .collect();
+    (!words.is_empty()).then(|| format!("{{{}}}", words.join(", ")))
 }
 
 /// The package of `c` when it is another than `diagram`'s: `c` is drawn there as an outsider.

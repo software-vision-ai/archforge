@@ -569,3 +569,115 @@ fn nothing_specializes_a_final_classifier_and_one_with_subclasses_is_not_made_fi
     let below = archforge_uml::relations::specializations(s.doc(), obj(&s, &c[0]));
     assert_eq!(below.iter().map(|(_, sub)| archforge_core::name_of(s.doc(), *sub)).collect::<Vec<_>>(), ["WalletPayment"]);
 }
+
+/// Whether the classifier `id` is leaf, as `uml.class.get` says it.
+fn is_leaf(s: &mut S, id: &str) -> bool {
+    s.execute("uml.class.get", &json!({ "class": id })).unwrap().value["leaf"].as_bool().unwrap()
+}
+
+/// A classifier of every kind is made leaf and cleared again (AR-138), each one undo step, apart
+/// from final: its card says `{leaf}` after its name, `{final, leaf}` with both; a field left out
+/// keeps its value; it comes back from its rows leaf; a built-in type is never made leaf.
+#[test]
+fn a_classifier_of_every_kind_is_made_leaf_apart_from_final_and_comes_back_leaf() {
+    let mut s = session();
+    let (pkg, d, c, _) = classes(&mut s, &["Pricing", "Order"], 0);
+    let mut all = vec![c[0].clone()];
+    for (cmd, name) in
+        [("uml.interface.add", "Priced"), ("uml.enumeration.add", "Tier"), ("uml.data-type.add", "Money"), ("uml.primitive-type.add", "Sku")]
+    {
+        all.push(run(&mut s, cmd, json!({ "package": pkg, "name": name })));
+    }
+    for id in &all {
+        run(&mut s, "diagram.place", json!({ "diagram": d, "element": id, "x": 0, "y": 0 }));
+        let card = |s: &S| archforge_uml::figures::card(s.doc(), obj(s, id), obj(s, &d)).unwrap();
+        let before = snapshot(&s);
+        round_trip(&mut s, "uml.classifier.set", json!({ "classifier": id, "leaf": true }));
+        assert!(is_leaf(&mut s, id), "{id}");
+        assert!(!is_final(&mut s, id), "{id}: leaf is not final");
+        assert_eq!(card(&s).braces.as_deref(), Some("{leaf}"), "{id}");
+        // Final beside it: one pair of braces, final first; each left out keeps its value.
+        round_trip(&mut s, "uml.classifier.set", json!({ "classifier": id, "final": true }));
+        assert!(is_leaf(&mut s, id));
+        assert_eq!(card(&s).braces.as_deref(), Some("{final, leaf}"), "{id}");
+        round_trip(&mut s, "uml.classifier.set", json!({ "classifier": id, "leaf": false }));
+        assert_eq!(card(&s).braces.as_deref(), Some("{final}"), "{id}");
+        // Both in one call, one step; cleared, the model is as it was.
+        round_trip(&mut s, "uml.classifier.set", json!({ "classifier": id, "final": false, "leaf": true }));
+        assert_eq!(card(&s).braces.as_deref(), Some("{leaf}"), "{id}");
+        round_trip(&mut s, "uml.classifier.set", json!({ "classifier": id, "leaf": false }));
+        assert_eq!(snapshot(&s), before, "{id}: cleared, every value and id as it was");
+        run(&mut s, "uml.classifier.set", json!({ "classifier": id, "leaf": true }));
+    }
+    // A leaf classifier is specialized freely: leaf stops redefinition, not specialization.
+    round_trip(&mut s, "uml.generalization.add", json!({ "specific": c[1], "general": c[0] }));
+    // Saved and opened again, each is still leaf.
+    let (tables, junctions) = tables();
+    let saved = archforge_mof::rows::snapshot(s.doc(), &tables, &junctions).unwrap();
+    let mut back = store(1 << 20);
+    archforge_mof::rows::restore(&mut back, &saved, &tables, &junctions).unwrap();
+    for id in &all {
+        assert!(archforge_uml::relations::is_leaf(&back, back.by_uuid(Uuid::parse(id).unwrap()).unwrap()), "{id} reopened leaf");
+    }
+    // A built-in type is never made leaf.
+    run(&mut s, "uml.attribute.add", json!({ "class": c[1], "name": "count", "type": "Integer" }));
+    let integer = s.execute("uml.class.get", &json!({ "class": c[1] })).unwrap().value["attributes"][0]["type"]["id"].as_str().unwrap().to_string();
+    refused(&mut s, "uml.classifier.set", json!({ "classifier": integer, "leaf": true }), "built-in type Integer");
+}
+
+/// An operation is made leaf and cleared again (AR-138), one undo step each, its row ending in
+/// `{leaf}`; added leaf in one step; `uml.class.get` says it. An operation or a classifier something
+/// redefines already, as a model read from elsewhere may hold, is not made leaf: the refusal names
+/// what redefines it and nothing changes; one that is not redefined is.
+#[test]
+fn an_operation_is_made_leaf_and_one_redefined_is_refused_naming_what_redefines_it() {
+    let mut s = session();
+    let (_, d, c, _) = classes(&mut s, &["Payment", "CardPayment"], 2);
+    run(&mut s, "uml.generalization.add", json!({ "specific": c[1], "general": c[0] }));
+    let authorise = run(&mut s, "uml.operation.add", json!({ "class": c[0], "name": "authorise", "returns": "Boolean" }));
+    let card_authorise = run(&mut s, "uml.operation.add", json!({ "class": c[1], "name": "authorise", "returns": "Boolean" }));
+    let total = {
+        let before = snapshot(&s);
+        let id = run(&mut s, "uml.operation.add", json!({ "class": c[0], "name": "total", "returns": "Real", "leaf": true }));
+        s.undo().unwrap();
+        assert_eq!(snapshot(&s), before, "added leaf in one step");
+        s.redo().unwrap();
+        id
+    };
+    let text = |s: &S, id: &str| archforge_uml::figures::operation_text(s.doc(), obj(s, id));
+    assert_eq!(text(&s, &total), "+ total() : Real {leaf}");
+    let ops = s.execute("uml.class.get", &json!({ "class": c[0] })).unwrap().value["operations"].clone();
+    assert_eq!((ops[0]["leaf"].as_bool(), ops[1]["leaf"].as_bool()), (Some(false), Some(true)));
+    // The card's row says it on every diagram that shows the class.
+    let card = archforge_uml::figures::card(s.doc(), obj(&s, &c[0]), obj(&s, &d)).unwrap();
+    assert!(card.compartments.iter().flatten().any(|r| r.text == "+ total() : Real {leaf}"));
+    // Set and cleared, one step each, its other values kept as sent.
+    let set = |leaf: bool| json!({ "operation": authorise, "name": "authorise", "returns": "Boolean", "abstract": true, "leaf": leaf });
+    round_trip(&mut s, "uml.operation.set", set(true));
+    assert_eq!(text(&s, &authorise), "+ authorise() : Boolean {leaf}");
+    round_trip(&mut s, "uml.operation.set", set(false));
+    assert_eq!(text(&s, &authorise), "+ authorise() : Boolean");
+    // A model where CardPayment's authorise redefines Payment's, and CardPayment redefines Pricing,
+    // as one read from elsewhere may hold: neither may be made leaf.
+    let (tables, junctions) = tables();
+    let saved = archforge_mof::rows::snapshot(s.doc(), &tables, &junctions).unwrap();
+    let mut back = store(1 << 20);
+    archforge_mof::rows::restore(&mut back, &saved, &tables, &junctions).unwrap();
+    let at = |st: &Store, id: &str| st.by_uuid(Uuid::parse(id).unwrap()).unwrap();
+    let (base, over) = (at(&back, &authorise), at(&back, &card_authorise));
+    back.push(over, archforge_uml::operation::REDEFINED_OPERATION, Value::Ref(base)).unwrap();
+    let (payment, card_payment) = (at(&back, &c[0]), at(&back, &c[1]));
+    back.push(card_payment, archforge_uml::classifier::REDEFINED_CLASSIFIER, Value::Ref(payment)).unwrap();
+    let mut s = Session::with_view(registry().unwrap(), back, 1, Options::default(), ProjectView::new(ALONE));
+    assert_eq!(archforge_uml::relations::redefiners(s.doc(), obj(&s, &authorise)), [obj(&s, &card_authorise)]);
+    assert_eq!(archforge_uml::relations::redefiner_name(s.doc(), obj(&s, &card_authorise)), "CardPayment::authorise()");
+    let before = snapshot(&s);
+    let e = s.execute("uml.operation.set", &set(true)).unwrap_err().to_string();
+    assert!(e.contains("leaf") && e.contains("CardPayment::authorise()") && e.contains(&card_authorise), "{e}");
+    let e = s.execute("uml.classifier.set", &json!({ "classifier": c[0], "leaf": true })).unwrap_err().to_string();
+    assert!(e.contains("leaf") && e.contains("CardPayment"), "{e}");
+    assert_eq!(snapshot(&s), before, "nothing changed");
+    // The one nothing redefines is made leaf.
+    round_trip(&mut s, "uml.operation.set", json!({ "operation": card_authorise, "name": "authorise", "returns": "Boolean", "leaf": true }));
+    round_trip(&mut s, "uml.classifier.set", json!({ "classifier": c[1], "leaf": true }));
+}

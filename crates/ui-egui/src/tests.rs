@@ -6474,23 +6474,27 @@ fn a_class_takes_operations_with_parameters_and_turns_abstract_in_properties() {
     click(&mut h, at);
     type_into(&mut h, "workspace.properties.member.parameter.0.name", "to");
     pick_type(&mut h, "workspace.properties.member.parameter.0.type", "Customer");
+    let at = rect_of(&h, "workspace.properties.member.abstract").center();
+    click(&mut h, at);
     let at = rect_of(&h, "workspace.properties.member.parameter.add").center();
     click(&mut h, at);
     type_into(&mut h, "workspace.properties.member.parameter.1.name", "times");
+    // The editor grew with its parameters past the body's foot: the body scrolls to the rest.
+    let scroll = |h: &mut Harness<'static, Shell>| {
+        let body = h.state().panels.body.unwrap();
+        h.event(egui::Event::PointerMoved(body.center()));
+        h.event(egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Point,
+            delta: egui::vec2(0.0, -400.0),
+            modifiers: egui::Modifiers::NONE,
+            phase: egui::TouchPhase::Move,
+            source: egui::MouseWheelSource::Wheel,
+        });
+        h.run_steps(30);
+    };
+    scroll(&mut h);
     type_into(&mut h, "workspace.properties.member.parameter.1.multiplicity", "0..*");
-    let at = rect_of(&h, "workspace.properties.member.abstract").center();
-    click(&mut h, at);
-    // The editor grew with its parameters past the body's foot: the body scrolls to its Apply.
-    let body = h.state().panels.body.unwrap();
-    h.event(egui::Event::PointerMoved(body.center()));
-    h.event(egui::Event::MouseWheel {
-        unit: egui::MouseWheelUnit::Point,
-        delta: egui::vec2(0.0, -400.0),
-        modifiers: egui::Modifiers::NONE,
-        phase: egui::TouchPhase::Move,
-        source: egui::MouseWheelSource::Wheel,
-    });
-    h.run_steps(30);
+    scroll(&mut h);
     let at = rect_of(&h, "workspace.properties.member.apply").center();
     click(&mut h, at);
     assert!(h.state().panels.member.is_none(), "{:?}", h.state().panels.member);
@@ -8433,6 +8437,157 @@ fn no_subclasses_makes_a_classifier_final_and_specialising_it_is_refused() {
         click(&mut h, at);
         drag(&mut h, from, to);
         assert_eq!(edge_count(&h), edges + 1, "notice {:?}", h.state().canvas.notice);
+    }
+}
+
+/// No redefinition (leaf) in Properties (AR-138), in light and dark: on a classifier after No
+/// subclasses (final), described by its explanation, ticked it makes the classifier leaf in one undo
+/// step and its card says `{leaf}`, `{final, leaf}` beside final; in the operation editor, applied,
+/// the row says `{leaf}`, one step undone and redone; in the attribute editor of a property something
+/// redefines, it stays clear and a refusal names the redefining property, nothing written; and
+/// Redefines lists a leaf property marked `{leaf}`, its pick refused under the field, until leaf is
+/// cleared, when it is picked and applied.
+#[test]
+fn no_redefinition_makes_elements_leaf_and_redefining_them_is_refused() {
+    use crate::uml_panel::{LEAF_ID, MEMBER_LEAF_ID, MemberKind};
+    use egui_kittest::kittest::{NodeT, Queryable};
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1400.0));
+        let class = |h: &Harness<'static, Shell>, name: &str| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(st, *o) == name).unwrap()
+        };
+        let uuid = |h: &Harness<'static, Shell>, o: archforge_mof::Obj| h.state().session.as_ref().unwrap().doc().uuid(o).unwrap();
+        let member = |h: &Harness<'static, Shell>, c: &str, name: &str, operation: bool| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let c = class(h, c);
+            let all = if operation { archforge_uml::members::operations(st, c) } else { archforge_uml::members::attributes(st, c) };
+            all.into_iter().find(|m| archforge_core::name_of(st, *m) == name).unwrap()
+        };
+        let select = |h: &mut Harness<'static, Shell>, id: archforge_mof::Uuid| {
+            h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [id.to_string()] })).unwrap();
+            h.state_mut().state.show_panel(crate::state::Panel::Properties);
+            h.run();
+        };
+        let is_leaf =
+            |h: &Harness<'static, Shell>, o: archforge_mof::Obj| archforge_uml::relations::is_leaf(h.state().session.as_ref().unwrap().doc(), o);
+        let revision = |h: &Harness<'static, Shell>| h.state().session.as_ref().unwrap().revision();
+        // On a classifier: its accessible name and the explanation that describes it.
+        let pricing = class(&h, "PricingService");
+        let pricing_id = uuid(&h, pricing);
+        select(&mut h, pricing_id);
+        let node = h.get_by_label("No redefinition (leaf)").accesskit_node().data().clone();
+        let explained = "A subclass could not redefine PricingService where it is inherited. Shown as {leaf}.";
+        assert_eq!(node.description(), Some(explained));
+        assert_eq!(node.toggled(), Some(egui::accesskit::Toggled::False));
+        assert!(painted(&h).iter().any(|t| t == explained));
+        let at = rect_of(&h, LEAF_ID).center();
+        click(&mut h, at);
+        assert!(is_leaf(&h, pricing));
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Set classifier"));
+        h.run();
+        assert!(painted(&h).iter().any(|t| t == "{leaf}"), "the card says {{leaf}}");
+        assert_eq!(h.get_by_label("No redefinition (leaf)").accesskit_node().data().toggled(), Some(egui::accesskit::Toggled::True));
+        let at = rect_of(&h, crate::uml_panel::FINAL_ID).center();
+        click(&mut h, at);
+        h.run();
+        assert!(painted(&h).iter().any(|t| t == "{final, leaf}"), "final and leaf in one pair of braces");
+        // An operation made leaf in its editor: applied, one step, its row says `{leaf}`.
+        let payment = class(&h, "Payment");
+        let payment_id = uuid(&h, payment);
+        let authorise = member(&h, "Payment", "authorise", true);
+        select(&mut h, payment_id);
+        let authorise_id = uuid(&h, authorise);
+        crate::uml_panel::open(h.state_mut(), payment_id, MemberKind::Operation, Some(authorise_id));
+        h.run();
+        // The editor's own box, beside the classifier's: the one its explanation describes.
+        let member_node = |h: &Harness<'static, Shell>| {
+            h.get_all_by_label("No redefinition (leaf)")
+                .map(|n| n.accesskit_node().data().clone())
+                .find(|n| n.description().is_some_and(|d| d.starts_with("A subclass could not redefine this member.")))
+                .unwrap()
+        };
+        assert_eq!(member_node(&h).description(), Some("A subclass could not redefine this member. Shown as {leaf} after it."));
+        let at = rect_of(&h, MEMBER_LEAF_ID).center();
+        click(&mut h, at);
+        assert!(h.state().panels.member.as_ref().unwrap().is_leaf);
+        assert!(!is_leaf(&h, authorise), "nothing written before Apply");
+        let at = rect_of(&h, "workspace.properties.member.apply").center();
+        click(&mut h, at);
+        assert!(h.state().panels.member.is_none(), "{:?}", h.state().panels.member);
+        assert!(is_leaf(&h, authorise));
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Set operation"));
+        h.run();
+        assert!(painted(&h).iter().any(|t| t == "+ authorise() : Boolean {leaf}"), "{:?}", painted(&h));
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        assert!(!is_leaf(&h, authorise));
+        h.state_mut().session.as_mut().unwrap().redo().unwrap();
+        assert!(is_leaf(&h, authorise));
+        // CardPayment's amount redefines Payment's: leaf on Payment's amount is refused, naming it.
+        let amount = member(&h, "Payment", "amount", false);
+        let amount_id = uuid(&h, amount);
+        let card = class(&h, "CardPayment");
+        let card_id = uuid(&h, card);
+        let money = h.state().session.as_ref().unwrap().doc().get(amount, archforge_uml::typed_element::TYPE).unwrap().as_ref().unwrap();
+        let money = uuid(&h, money).to_string();
+        let params = serde_json::json!({ "class": card_id.to_string(), "name": "amount", "type": money, "redefines": [amount_id.to_string()] });
+        let card_amount =
+            h.state_mut().session.as_mut().unwrap().execute("uml.attribute.add", &params).unwrap().value["id"].as_str().unwrap().to_string();
+        let card_amount = archforge_mof::Uuid::parse(&card_amount).unwrap();
+        select(&mut h, payment_id);
+        crate::uml_panel::open(h.state_mut(), payment_id, MemberKind::Attribute, Some(amount_id));
+        h.run();
+        let before = revision(&h);
+        let at = rect_of(&h, MEMBER_LEAF_ID).center();
+        click(&mut h, at);
+        h.run();
+        let said = "CardPayment::amount redefines it. Remove that redefinition first.";
+        assert!(!h.state().panels.member.as_ref().unwrap().is_leaf, "the box stays clear");
+        assert!(painted(&h).iter().any(|t| t == said), "{:?}", painted(&h));
+        assert!(ids(&h).contains(&format!("{MEMBER_LEAF_ID}.refusal")));
+        let node = member_node(&h);
+        assert!(node.description().is_some_and(|d| d.ends_with(said)), "{:?}", node.description());
+        assert_eq!(revision(&h), before, "nothing entered the model or its history");
+        h.state_mut().panels.member = None;
+        // With that redefinition gone, Payment's amount made leaf; CardPayment's Redefines lists it
+        // marked `{leaf}`, and its pick is refused under the field.
+        let clear = serde_json::json!({ "attribute": card_amount.to_string(), "redefines": [] });
+        h.state_mut().session.as_mut().unwrap().execute("uml.attribute.set", &clear).unwrap();
+        let leaf = serde_json::json!({ "attribute": amount_id.to_string(), "leaf": true });
+        h.state_mut().session.as_mut().unwrap().execute("uml.attribute.set", &leaf).unwrap();
+        select(&mut h, card_id);
+        crate::uml_panel::open(h.state_mut(), card_id, MemberKind::Attribute, Some(card_amount));
+        h.run();
+        let at = rect_of(&h, "workspace.properties.member.redefines").center();
+        click(&mut h, at);
+        h.run();
+        assert!(painted(&h).iter().any(|t| t == "{leaf}"), "the leaf property is marked");
+        let at = rect_of(&h, "workspace.properties.member.redefines.1").center();
+        click(&mut h, at);
+        h.run();
+        let edit = h.state().panels.member.clone().unwrap();
+        assert!(edit.redefines.is_empty());
+        let refusal = "amount is leaf: nothing may redefine it. Clear \"No redefinition\" on it first.";
+        assert_eq!((edit.refused.as_deref(), edit.refused_at), (Some(refusal), Some("redefines")));
+        assert!(painted(&h).iter().any(|t| t == refusal), "{:?}", painted(&h));
+        // Leaf cleared on Payment's amount: Redefines offers it, and it is picked and applied.
+        h.state_mut().panels.member = None;
+        let clear = serde_json::json!({ "attribute": amount_id.to_string(), "leaf": false });
+        h.state_mut().session.as_mut().unwrap().execute("uml.attribute.set", &clear).unwrap();
+        crate::uml_panel::open(h.state_mut(), card_id, MemberKind::Attribute, Some(card_amount));
+        h.run();
+        let at = rect_of(&h, "workspace.properties.member.redefines").center();
+        click(&mut h, at);
+        h.run();
+        let at = rect_of(&h, "workspace.properties.member.redefines.1").center();
+        click(&mut h, at);
+        h.run();
+        assert_eq!(h.state().panels.member.as_ref().unwrap().redefines, [amount_id]);
+        let at = rect_of(&h, "workspace.properties.member.apply").center();
+        click(&mut h, at);
+        let st = h.state().session.as_ref().unwrap().doc();
+        let o = st.by_uuid(card_amount).unwrap();
+        assert_eq!(archforge_uml::modifiers::redefines(st, o), [amount]);
     }
 }
 

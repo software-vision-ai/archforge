@@ -589,6 +589,10 @@ plural		{name} has {n} subclass: {subclasses}.	{name} には {n} 個のサブク
 plural		Remove that generalization before making it final.	final にする前に、それらの汎化を削除してください。
 str		{names} and {last}	{names} と {last}
 plural		Select the generalization	{n} 個の汎化を選択
+str		No redefinition (leaf)	再定義なし (leaf)
+str		A subclass could not redefine {name} where it is inherited. Shown as {leaf}.	サブクラスは継承先で {name} を再定義できません。{leaf} と表示されます。
+str		A subclass could not redefine this member. Shown as {leaf} after it.	サブクラスはこのメンバーを再定義できません。後ろに {leaf} と表示されます。
+plural		{names} redefines it. Remove that redefinition first.	{names} がこれを再定義しています。先にその再定義を削除してください。
 str		Add attribute	属性を追加
 str		Add operation	操作を追加
 str		Add literal	リテラルを追加
@@ -649,6 +653,7 @@ str		{name} has a type this property's type does not conform to.	{name} の型�
 str		{name} holds fewer values than this property.	{name} が持てる値はこのプロパティより少ないです。
 str		This property's multiplicity does not lie within {name}'s.	このプロパティの多重度は {name} の多重度の範囲内にありません。
 str		{name} is composite; only a composite end redefines it.	{name} はコンポジションです。再定義できるのはコンポジションの端だけです。
+str		{name} is leaf: nothing may redefine it. Clear "No redefinition" on it first.	{name} は leaf です。何もこれを再定義できません。先にその「再定義なし」をオフにしてください。
 str		This attribute	この属性
 str		This literal	このリテラル
 str		This operation	この操作

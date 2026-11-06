@@ -69,8 +69,8 @@ name, roles, multiplicities, an arrow at every end it navigates to and a diamond
 an aggregation or a composition; a generalization's triangle; a dependency dashed with an open
 arrow; an interface realization dashed in the muted ink to a hollow triangle at its interface; an
 association class's line an association's and its card a class's under `Association class`),
-`relations::{specs, relationships_of, generalization_problem, GeneralizationProblem, is_final, specializations, final_problem, association_end_problem, association_class_end_problem, realization_problem, RealizationProblem}`
-(`uml.classifier.set` (AR-137): a classifier of any kind made final, UML's isFinalSpecialization, only while nothing specializes it and never a built-in type, after which no generalization is drawn to it or has its general end moved onto it; an enumeration specializes only an enumeration, a data type only a data type and a primitive type
+`relations::{specs, relationships_of, generalization_problem, GeneralizationProblem, is_final, specializations, final_problem, is_leaf, redefiners, redefiner_name, leaf_problem, association_end_problem, association_class_end_problem, realization_problem, RealizationProblem}`
+(`uml.classifier.set` (AR-137): a classifier of any kind made final, UML's isFinalSpecialization, only while nothing specializes it and never a built-in type, after which no generalization is drawn to it or has its general end moved onto it; and made leaf (AR-138), UML's isLeaf, only while nothing redefines it, `{leaf}` after its name, as a property is with the attribute commands and `uml.association.set-end` and an operation with the operation commands, after which no property redefines a leaf one (`modifiers::TargetProblem::Leaf`, `modifiers::redefines_leaf`); an enumeration specializes only an enumeration, a data type only a data type and a primitive type
 only a primitive type, each specialized only by its own kind, a built-in type specializing nothing,
 and none of them joins an association; `uml.realization.add`: a class
 realizes an interface, owned by the class, its client and supplier kept in step with its
@@ -81,7 +81,7 @@ its members with the member commands, renamed and moved with `uml.association-cl
 `.move` among its package's classifiers, refused at anything but a class; nothing specializes it),
 `commands::going_with` (the relationships that go with classifiers, an association class's own
 among them), `modifiers::{read, apply, parse_default, default_text, braces, suffix, Shape,
-subsets_candidates, redefines_candidates, subsets_problem, redefines_problem}` (AR-126: a
+subsets_candidates, redefines_candidates, redefines_leaf, subsets_problem, redefines_problem}` (AR-126: a
 property's default value read by its type, derived, read only, ordered, unique, and the properties
 it subsets and redefines, set by `uml.attribute.add`/`set` and `uml.association.set-end`, checked
 against UML's rules before anything changes; the card's and the line's notation, `figures::end_role`

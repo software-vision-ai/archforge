@@ -617,17 +617,26 @@ fn set_signature(store: &mut Store, op: Obj, p: &Params) -> Result<(), CommandEr
     Ok(())
 }
 
-/// Gives operation `op` of `owner` what the parameters say.
+/// Gives operation `op` of `owner` what the parameters say. Made leaf only while nothing redefines
+/// it (AR-138), checked before anything changes.
 fn set_operation(store: &mut Store, owner: Obj, op: Obj, p: &Params) -> Result<(), CommandError> {
     let name = text(p, "name");
     if let Some(problem) = archforge_core::skills::name_problem(name, crate::commands::MAX_NAME) {
         return Err(refuse("name", format!("the name {problem}")));
+    }
+    let leaf = p.bool("leaf").unwrap_or(false);
+    if leaf
+        && !crate::relations::is_leaf(store, op)
+        && let Some(why) = crate::relations::leaf_problem(store, op)
+    {
+        return Err(refuse("leaf", why));
     }
     let vis = visibility(store, owner, p, "visibility")?;
     set_name(store, op, name)?;
     store.set(op, named_element::VISIBILITY, vis).map_err(fail)?;
     store.set(op, feature::IS_STATIC, Value::Bool(p.bool("static").unwrap_or(false))).map_err(fail)?;
     store.set(op, behavioral_feature::IS_ABSTRACT, Value::Bool(p.bool("abstract").unwrap_or(false))).map_err(fail)?;
+    store.set(op, crate::redefinable_element::IS_LEAF, Value::Bool(leaf)).map_err(fail)?;
     set_signature(store, op, p)
 }
 
@@ -644,7 +653,8 @@ fn operation_add(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, op)? }))
 }
 
-/// `uml.operation.set`: an operation's name, visibility, flags and signature changed.
+/// `uml.operation.set`: an operation's name, visibility, flags (leaf among them, AR-138) and
+/// signature changed.
 fn operation_set(ctx: &mut C<'_>, p: &Params) -> R {
     let op = id_of(ctx.doc, p, "operation", OPERATION, "an operation")?;
     let owner = owner_of(ctx.doc, op).unwrap_or(op);
@@ -788,7 +798,8 @@ fn flag(store: &Store, o: Obj, prop: archforge_mof::PropId) -> bool {
 /// two ends besides, as `uml.relationship.list` gives an association's. Its `kind` is a word
 /// without spaces (`class`, `interface`, `enumeration`, `data_type`, `primitive_type`,
 /// `association_class`). It, each attribute, operation and literal give their description, or
-/// nothing (AR-186); it says whether it is final, so nothing may specialize it (AR-137).
+/// nothing (AR-186); it says whether it is final, so nothing may specialize it (AR-137), and it,
+/// each attribute and each operation whether it is leaf, so nothing may redefine it (AR-138).
 fn class_get(ctx: &mut C<'_>, p: &Params) -> R {
     let store = &*ctx.doc;
     let c = classifier_of(store, p, "class")?;
@@ -818,6 +829,7 @@ fn class_get(ctx: &mut C<'_>, p: &Params) -> R {
                 "visibility": visibility_word(store, op),
                 "static": flag(store, op, feature::IS_STATIC),
                 "abstract": flag(store, op, behavioral_feature::IS_ABSTRACT),
+                "leaf": crate::relations::is_leaf(store, op),
                 "parameters": params.into_iter().map(|p| json!({ "name": name_of(store, p), "type": type_ref(store, p), "multiplicity": crate::figures::multiplicity(store, p) })).collect::<Vec<_>>(),
                 "returns": ret.map_or(Json::Null, |r| type_ref(store, r)),
                 "description": description_of(store, op),
@@ -828,7 +840,7 @@ fn class_get(ctx: &mut C<'_>, p: &Params) -> R {
     let mut out = json!({
         "id": uuid_of(store, c)?, "kind": crate::commands::what(store, c).replace(' ', "_"), "name": name_of(store, c),
         "abstract": is_class && flag(store, c, class::IS_ABSTRACT), "final": crate::relations::is_final(store, c),
-        "description": description_of(store, c), "attributes": attrs, "operations": ops,
+        "leaf": crate::relations::is_leaf(store, c), "description": description_of(store, c), "attributes": attrs, "operations": ops,
     });
     if store.class_of(c).ok() == Some(PRIMITIVE_TYPE)
         && let Some(fields) = out.as_object_mut()
@@ -886,7 +898,8 @@ macro_rules! operation_lines {
             "\nparameters: array = []; its parameters, each {name, type, multiplicity}\n",
             "returns: string = \"\"; its return type's id or a built-in type's name, or nothing\n",
             "static: bool = false; belongs to the class, not its instances\n",
-            "abstract: bool = false; has no implementation here"
+            "abstract: bool = false; has no implementation here\n",
+            "leaf: bool = false; nothing may redefine it (UML's isLeaf), written {leaf} after it; made leaf only while no operation redefines it"
         )
     };
 }
