@@ -226,7 +226,7 @@ dependencies = [
 
 [[package]]
 name = "archforge"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "archforge-control",
  "archforge-core",
@@ -254,7 +254,7 @@ dependencies = [
 
 [[package]]
 name = "archforge-cli"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "archforge-control",
  "archforge-engine",
@@ -266,7 +266,7 @@ dependencies = [
 
 [[package]]
 name = "archforge-control"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "getrandom 0.3.4",
  "log",
@@ -276,7 +276,7 @@ dependencies = [
 
 [[package]]
 name = "archforge-core"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "archforge-engine",
  "archforge-mof",
@@ -285,7 +285,7 @@ dependencies = [
 
 [[package]]
 name = "archforge-diagram"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "archforge-core",
  "archforge-engine",
@@ -296,7 +296,7 @@ dependencies = [
 
 [[package]]
 name = "archforge-dolt"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "craft-atomic",
  "getrandom 0.3.4",
@@ -308,7 +308,7 @@ dependencies = [
 
 [[package]]
 name = "archforge-engine"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "archforge-engine",
  "log",
@@ -318,7 +318,7 @@ dependencies = [
 
 [[package]]
 name = "archforge-er"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "archforge-core",
  "archforge-diagram",
@@ -329,7 +329,7 @@ dependencies = [
 
 [[package]]
 name = "archforge-mcp"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "archforge-control",
  "serde_json",
@@ -337,7 +337,7 @@ dependencies = [
 
 [[package]]
 name = "archforge-mof"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "archforge-engine",
  "archforge-mof",
@@ -347,11 +347,11 @@ dependencies = [
 
 [[package]]
 name = "archforge-names"
-version = "0.11.0"
+version = "0.12.0"
 
 [[package]]
 name = "archforge-notations"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "archforge-core",
  "archforge-diagram",
@@ -364,7 +364,7 @@ dependencies = [
 
 [[package]]
 name = "archforge-project"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "archforge-core",
  "archforge-diagram",
@@ -381,7 +381,7 @@ dependencies = [
 
 [[package]]
 name = "archforge-ui-egui"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "archforge-core",
  "archforge-diagram",
@@ -404,7 +404,7 @@ dependencies = [
 
 [[package]]
 name = "archforge-uml"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "archforge-core",
  "archforge-diagram",
@@ -4825,7 +4825,7 @@ checksum = "e450f9b2ed1dff33c94c12589a87338689467b9c4f5d8a5710bd09a847d2c8a7"
 
 [[package]]
 name = "xtask"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "archforge-mof",
  "craft-atomic",
