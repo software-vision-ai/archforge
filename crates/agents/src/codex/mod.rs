@@ -437,6 +437,8 @@ pub struct CodexSession {
     max_line_bytes: usize,
     sign_in: SignInKind,
     ready: bool,
+    /// The handshake's `account/read` was answered: later reads are re-checks.
+    handshake_done: bool,
     sign_in_problem: Option<AgentError>,
     fatal: Option<AgentError>,
     thread: Thread,
@@ -555,6 +557,7 @@ impl CodexSession {
             max_line_bytes: config.limits.max_line_bytes,
             sign_in: kind,
             ready: false,
+            handshake_done: false,
             sign_in_problem: None,
             fatal: None,
             thread: Thread::None,
@@ -643,11 +646,27 @@ impl CodexSession {
 
     /// A notification: its events, and what it changes for the session.
     fn notified(&mut self, method: &str, params: &Value) {
-        if method == "account/login/completed" && params.get("success").and_then(Value::as_bool) == Some(false) {
-            self.sign_in_problem = Some(AgentError::reported(ErrorKind::InvalidCredential, "codex refused the sign-in"));
+        match (method, params.get("success").and_then(Value::as_bool)) {
+            ("account/login/completed", Some(false)) => {
+                self.sign_in_problem = Some(AgentError::reported(ErrorKind::InvalidCredential, "codex refused the sign-in"));
+            }
+            ("account/login/completed", Some(true)) => self.sign_in_problem = None,
+            _ => {}
         }
-        if method == "account/updated" && params.get("authMode").is_some_and(Value::is_null) {
-            log::warn!("codex reports that it is no longer signed in");
+        if method == "account/updated" {
+            match params.get("authMode") {
+                Some(Value::Null) => {
+                    log::warn!("codex reports that it is no longer signed in");
+                    self.sign_in_problem = Some(match self.sign_in {
+                        SignInKind::ChatGpt => {
+                            AgentError::reported(ErrorKind::SignInExpired, "the ChatGPT sign-in has ended; sign in again under Settings")
+                        }
+                        SignInKind::ApiKey => AgentError::reported(ErrorKind::InvalidCredential, "codex no longer holds the API key"),
+                    });
+                }
+                Some(Value::String(_)) => self.sign_in_problem = None,
+                _ => {}
+            }
         }
         match self.scope(method, params) {
             Scope::Current => self.deliver(method, params),
@@ -798,15 +817,27 @@ impl CodexSession {
             (Purpose::Login, Ok(_)) => log::debug!("codex took the API key"),
             (Purpose::Login, Err(e)) => self.sign_in_problem = Some(refused(method, &e, ErrorKind::InvalidCredential)),
             (Purpose::AccountRead, Ok(value)) => {
-                if value.get("account").is_none_or(Value::is_null) && self.sign_in_problem.is_none() {
-                    let detail = match self.sign_in {
-                        SignInKind::ApiKey => "codex holds no API key",
-                        SignInKind::ChatGpt => "codex is not signed in with ChatGPT; sign in under Settings",
-                    };
-                    self.sign_in_problem = Some(AgentError::reported(ErrorKind::InvalidCredential, detail));
+                if value.get("account").is_none_or(Value::is_null) {
+                    if self.sign_in_problem.is_none() {
+                        let detail = match self.sign_in {
+                            SignInKind::ApiKey => "codex holds no API key",
+                            SignInKind::ChatGpt => "codex is not signed in with ChatGPT; sign in under Settings",
+                        };
+                        self.sign_in_problem = Some(AgentError::reported(ErrorKind::InvalidCredential, detail));
+                    }
+                } else {
+                    // Signed in (again, after a sign-in under Settings): an earlier problem is over.
+                    self.sign_in_problem = None;
                 }
+                self.handshake_done = true;
                 self.ready = true;
                 self.proceed_or_fail();
+            }
+            // The handshake's read: the session cannot go on. A later read (after a sign-in
+            // problem): only the turn waiting for it fails.
+            (Purpose::AccountRead, Err(e)) if self.handshake_done => {
+                self.ready = true;
+                self.fail_turn(refused(method, &e, ErrorKind::Other));
             }
             (Purpose::AccountRead, Err(e)) => self.fail(refused(method, &e, ErrorKind::Other)),
             (Purpose::ThreadStart, Ok(value)) => match self.parser.thread_started(&value) {
@@ -862,7 +893,11 @@ impl CodexSession {
                     }
                 }
             }
-            (Purpose::TurnStart, Err(e)) => self.fail_turn(refused(method, &e, ErrorKind::Other)),
+            (Purpose::TurnStart, Err(e)) => {
+                // Refused: the message never reached the thread.
+                self.turn_requested = false;
+                self.fail_turn(refused(method, &e, ErrorKind::Other));
+            }
             (Purpose::Interrupt, Ok(_)) => log::debug!("codex took the stop request"),
             (Purpose::Interrupt, Err(e)) => log::warn!("codex refused the stop request: {}", e.message),
         }
@@ -879,6 +914,10 @@ impl CodexSession {
             }
             let error = AgentError::reported(ErrorKind::Other, &format!("codex did not answer {method} within {} ms", self.timeout.as_millis()));
             match purpose {
+                Purpose::AccountRead if self.handshake_done => {
+                    self.ready = true;
+                    self.fail_turn(error);
+                }
                 Purpose::Initialize | Purpose::Login | Purpose::AccountRead => self.fail(error),
                 Purpose::ThreadStart => {
                     self.thread = Thread::None;
@@ -992,6 +1031,11 @@ impl CodexSession {
         self.held.clear();
         self.unnamed_deadline = None;
         self.parser.reset_turn();
+        // A message whose `turn/start` was never sent or was refused never reached the thread:
+        // it leaves the copy, so a later thread is not given a question without its answer.
+        if !self.turn_requested && self.history.entries().last().is_some_and(|e| e.role == history::Role::User) {
+            self.history.pop();
+        }
         self.turn_open = false;
         self.turn_requested = false;
         self.awaiting = false;
@@ -1116,7 +1160,18 @@ impl AgentSession for CodexSession {
         self.queued = Some(text.to_owned());
         let entry = self.process.redact(text.to_owned());
         self.history.push(history::Role::User, entry);
-        if let Err(e) = self.proceed() {
+        // Not signed in with ChatGPT when last asked: the person may have signed in under Settings
+        // since (Codex keeps the sign-in in the keyring all its processes share), so the account is
+        // read again before the message goes anywhere.
+        let reread = self.ready && self.sign_in == SignInKind::ChatGpt && self.sign_in_problem.is_some();
+        let step = if reread {
+            self.ready = false;
+            self.request("account/read", Purpose::AccountRead, json!({})).map(|_| ())
+        } else {
+            self.proceed()
+        };
+        if let Err(e) = step {
+            self.ready = self.ready || reread;
             self.turn_open = false;
             self.queued = None;
             self.history.pop();

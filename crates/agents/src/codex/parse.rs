@@ -173,6 +173,8 @@ impl CodexParser {
         let Some(id) = id else { return Err(Skipped::Malformed { kind: "thread/start", reason: "its answer names no thread id" }) };
         let model = result.get("model").or_else(|| result.get("thread").and_then(|t| t.get("model"))).and_then(Value::as_str).unwrap_or_default();
         self.thread = Some((capped(id, MAX_NAME_BYTES), capped(model, MAX_NAME_BYTES)));
+        // A new thread starts its tool servers anew: the last thread's states say nothing of it.
+        self.servers.clear();
         Ok(self.started())
     }
 

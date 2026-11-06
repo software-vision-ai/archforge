@@ -242,7 +242,12 @@ macOS. Neither variant puts a secret in Codex's environment, so its tool server 
 `initialize` answer's `userAgent` (`archforge/0.166.0 …`) is a second version check: past the range
 ends the session as `MissingRuntime`, newer than tested is logged. No thread is started until the
 first `send`, as `thread/start` already reaches the network: a sign-in that is missing (no account)
-or refused fails the turn as `InvalidCredential` with no thread started. Then `thread/start
+or refused fails the turn as `InvalidCredential` with no thread started. While a ChatGPT
+conversation is not signed in, each message reads the account again first, so a sign-in made under
+Settings (the keyring is shared) is picked up without a restart; `account/updated` keeps the state
+current (`authMode` null: the next turn fails as `SignInExpired`; a mode: signed in). A message that
+never reached a thread (its turn failed or was stopped before `turn/start`, or `turn/start` was
+refused) leaves the copy again. Then `thread/start
 {cwd, approvalPolicy:"on-request", sandbox:"read-only", ephemeral:true, model?,
 developerInstructions?}`, the earlier messages on a resume, and `turn/start {threadId, input,
 model?}`. `Started` comes with the thread (its id and model) and again with each tool server state.
@@ -304,7 +309,8 @@ refused with words of an expired or revoked sign-in reads as `Expired`. `login_c
 `AccountEvent::LoginStarted`; an address must be `https` on `openai.com` or `chatgpt.com` (or below)
 without a user part, else it is refused and never queued; a device code is letters, digits and
 hyphens. Keep the process running until `LoginCompleted`: Codex receives the browser's answer on its
-own local callback. `cancel_login`, `logout`, `rate_limits` and `models` (every page, hidden models
+own local callback. At most 256 events wait to be read; past that the oldest is dropped and logged.
+`cancel_login`, `logout`, `rate_limits` and `models` (every page, hidden models
 left out, at most 10 pages and 1000 models) complete the set. ChatGPT calls on an API-key process
 are refused (`InvalidSetting`), so a key never meets the keyring.
 

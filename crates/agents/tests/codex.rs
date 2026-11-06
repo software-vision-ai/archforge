@@ -1176,6 +1176,57 @@ fn a_missing_sign_in_fails_the_turn_before_any_thread() {
     std::fs::remove_dir_all(&base).unwrap();
 }
 
+/// A ChatGPT conversation that started signed out fails its turn, and once the person signed in
+/// under Settings the next message reads the account again and goes through; when Codex later says
+/// the sign-in ended, the next turn fails as an expired sign-in. A message that never reached a
+/// thread leaves the copy.
+#[test]
+fn a_conversation_recovers_after_a_sign_in() {
+    let base = scratch("sign-in-later");
+    let body = r#"
+reads=0
+turns=0
+on_account() {
+  reads=$((reads+1))
+  if [ $reads = 2 ]; then send '{"id":@ID@,"result":{"account":{"type":"chatgpt","email":"p@example.com","planType":"plus"},"requiresOpenaiAuth":true}}';
+  else send '{"id":@ID@,"result":{"account":null,"requiresOpenaiAuth":true}}'; fi
+}
+on_turn() {
+  turns=$((turns+1))
+  send "{\"id\":$id,\"result\":{\"turn\":{\"id\":\"u-$turns\"}}}"
+  send "{\"method\":\"turn/completed\",\"params\":{\"turn\":{\"id\":\"u-$turns\",\"status\":\"completed\",\"items\":[]}}}"
+  send '{"method":"account/updated","params":{"authMode":null,"planType":null}}'
+}
+"#;
+    let (runtime, account, folder) = fake_codex(&base, body);
+    let mut session = CodexSession::start(&runtime, &account, &folder, config(false), SignIn::ChatGpt(KeyringAccess::default())).unwrap();
+    session.send("one").unwrap();
+    let events = events_until(&mut session, turn_end);
+    assert!(
+        matches!(events.last(), Some(SessionEvent::TurnFinished { outcome: TurnOutcome::Failed(e), .. }) if e.kind() == ErrorKind::InvalidCredential),
+        "{events:?}"
+    );
+    session.send("two").unwrap();
+    let events = events_until(&mut session, turn_end);
+    assert!(matches!(events.last(), Some(SessionEvent::TurnFinished { outcome: TurnOutcome::Completed, .. })), "{events:?}");
+    let texts: Vec<String> = session.history().entries().iter().map(|e| e.text.clone()).collect();
+    assert_eq!(texts, vec!["two".to_owned()], "the message that never reached a thread left the copy");
+    // Codex then says the sign-in ended.
+    std::thread::sleep(Duration::from_millis(100));
+    while session.next_event(Duration::from_millis(50)).is_some() {}
+    session.send("three").unwrap();
+    let events = events_until(&mut session, turn_end);
+    assert!(
+        matches!(events.last(), Some(SessionEvent::TurnFinished { outcome: TurnOutcome::Failed(e), .. }) if e.kind() == ErrorKind::SignInExpired),
+        "{events:?}"
+    );
+    let sent = stdin_lines(&base, 7);
+    assert_eq!(requests(&sent, "account/read").len(), 3, "the account is read again before each message while signed out: {sent:?}");
+    assert_eq!(requests(&sent, "thread/start").len(), 1, "no thread before a sign-in");
+    session.shutdown(Duration::from_secs(2)).unwrap();
+    std::fs::remove_dir_all(&base).unwrap();
+}
+
 /// A Codex that answers the handshake as a version past the range, or does not know a method or a
 /// setting Archforge needs, is a missing runtime.
 #[test]

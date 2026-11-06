@@ -30,6 +30,8 @@ const MAX_MODEL_PAGES: usize = 10;
 const MAX_MODELS: usize = 1000;
 /// The most output lines one `next_event` call reads while none means an event.
 const LINES_PER_CALL: u32 = 256;
+/// The most events waiting to be read.
+const MAX_EVENTS: usize = 256;
 /// The hosts a sign-in address may be on (and their subdomains): Archforge opens no other.
 pub const SIGN_IN_HOSTS: [&str; 2] = ["openai.com", "chatgpt.com"];
 
@@ -297,7 +299,7 @@ impl CodexAccounts {
         let login_id = field(&value, "loginId").ok_or_else(|| unreadable("account/login/start", "no sign-in id"))?;
         let auth_url = checked_url(value.get("authUrl").and_then(Value::as_str).unwrap_or_default())?;
         let started = LoginStarted::Browser { login_id: checked_id(&login_id)?, auth_url };
-        self.events.push_back(AccountEvent::LoginStarted(started.clone()));
+        self.queue(AccountEvent::LoginStarted(started.clone()));
         Ok(started)
     }
 
@@ -311,7 +313,7 @@ impl CodexAccounts {
         let verification_url = checked_url(value.get("verificationUrl").and_then(Value::as_str).unwrap_or_default())?;
         let user_code = checked_code(value.get("userCode").and_then(Value::as_str).unwrap_or_default())?;
         let started = LoginStarted::DeviceCode { login_id: checked_id(&login_id)?, verification_url, user_code };
-        self.events.push_back(AccountEvent::LoginStarted(started.clone()));
+        self.queue(AccountEvent::LoginStarted(started.clone()));
         Ok(started)
     }
 
@@ -404,6 +406,16 @@ impl CodexAccounts {
         self.process.shutdown(grace)
     }
 
+    /// Queues an event for [`next_event`](Self::next_event); past [`MAX_EVENTS`] waiting, the oldest
+    /// is dropped and logged, so a process nobody reads from cannot grow without bound.
+    fn queue(&mut self, event: AccountEvent) {
+        if self.events.len() >= MAX_EVENTS {
+            self.events.pop_front();
+            log::warn!("the Codex account process holds {MAX_EVENTS} unread events; the oldest was dropped");
+        }
+        self.events.push_back(event);
+    }
+
     /// Refuses a ChatGPT operation on a process that runs with the in-memory store.
     fn chatgpt_only(&self, what: &str) -> Result<(), AgentError> {
         match self.kind {
@@ -488,7 +500,7 @@ impl CodexAccounts {
     /// A notification as an event, where it means one.
     fn notified(&mut self, method: &str, params: &Value) {
         match method {
-            "account/login/completed" => self.events.push_back(AccountEvent::LoginCompleted {
+            "account/login/completed" => self.queue(AccountEvent::LoginCompleted {
                 login_id: field(params, "loginId"),
                 success: params.get("success").and_then(Value::as_bool).unwrap_or(false),
                 error: params.get("error").and_then(Value::as_str).map(|e| capped(e, MAX_DESCRIPTION_BYTES)),
@@ -500,10 +512,11 @@ impl CodexAccounts {
                         log::warn!("codex dropped the ChatGPT sign-in on its own");
                     }
                     self.logging_out = false;
+                    self.last_chatgpt = None;
                 }
-                self.events.push_back(AccountEvent::AccountChanged { auth_mode, plan: field(params, "planType").map(|p| kind_name(&p)) });
+                self.queue(AccountEvent::AccountChanged { auth_mode, plan: field(params, "planType").map(|p| kind_name(&p)) });
             }
-            "account/rateLimits/updated" => self.events.push_back(AccountEvent::RateLimits(rate_limits(params.get("rateLimits"), None))),
+            "account/rateLimits/updated" => self.queue(AccountEvent::RateLimits(rate_limits(params.get("rateLimits"), None))),
             other if super::QUIET_NOTIFICATIONS.contains(&other) => {}
             other => log::debug!("codex sent the notification {} to the account process; it means nothing there", kind_name(other)),
         }
@@ -524,7 +537,7 @@ impl CodexAccounts {
                 None => AgentError::reported(ErrorKind::Other, "codex closed its output"),
             })
         };
-        self.events.push_back(AccountEvent::Ended { exit, error });
+        self.queue(AccountEvent::Ended { exit, error });
     }
 }
 
