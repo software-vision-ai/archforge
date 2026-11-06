@@ -346,11 +346,12 @@ fn archforge_ui_egui_type_index(_h: &H, label: &str) -> usize {
     ["None", "Integer", "String", "Boolean", "Real", "UnlimitedNatural"].iter().position(|l| *l == label).expect("a built-in type")
 }
 
-/// A secure store the test can look into after the host has used it.
-struct Shared(std::sync::Arc<archforge_secrets::MemoryStore>);
+/// A secure store the test can look into after the host has used it, counting its reads.
+struct Shared(std::sync::Arc<archforge_secrets::MemoryStore>, std::sync::Arc<std::sync::atomic::AtomicUsize>);
 
 impl archforge_secrets::SecretStore for Shared {
     fn get(&self, name: &archforge_secrets::SecretName) -> Result<archforge_secrets::Secret, archforge_secrets::SecretError> {
+        self.1.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         self.0.get(name)
     }
     fn set(&self, name: &archforge_secrets::SecretName, secret: &archforge_secrets::Secret) -> Result<(), archforge_secrets::SecretError> {
@@ -383,7 +384,8 @@ fn an_api_key_goes_to_the_secure_store_and_never_into_the_preferences() {
     let _ = std::fs::remove_dir_all(&base);
     std::fs::create_dir_all(&base).unwrap();
     let store = std::sync::Arc::new(archforge_secrets::MemoryStore::new());
-    let host = crate::agents::Agents::with(&base, Box::new(Shared(store.clone())), archforge_agents::HostEnv::default());
+    let reads = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let host = crate::agents::Agents::with(&base, Box::new(Shared(store.clone(), reads.clone())), archforge_agents::HostEnv::default());
     let services = Services {
         agents: Some(std::sync::Arc::new(host)),
         agent_accounts: Some(std::sync::Arc::new(archforge_ui_egui::ai_agents::NotYet)),
@@ -397,10 +399,14 @@ fn an_api_key_goes_to_the_secure_store_and_never_into_the_preferences() {
         Shell::new(services),
     );
     h.run();
-    until(&mut h, "the look at start", |s| !s.agents.looking() && s.agents.look.claude_key != archforge_ui_egui::ai_agents::Key::NotRead);
+    until(&mut h, "the look at start", |s| !s.agents.looking() && s.agents.look.claude != archforge_ui_egui::ai_agents::Program::NotLooked);
     assert_eq!(h.state().agents.look.claude, archforge_ui_egui::ai_agents::Program::Missing, "no program on an empty PATH");
+    // Launching and Settings' Profile read no key: the store is first read by AI Agents.
     click_on(&mut h, "home.header.account");
+    assert_eq!(reads.load(std::sync::atomic::Ordering::Relaxed), 0, "no key is read at launch");
     click_on(&mut h, "settings.nav.agents");
+    until(&mut h, "the keys read", |s| s.agents.keys_known());
+    assert_eq!(reads.load(std::sync::atomic::Ordering::Relaxed), 2, "both keys read once, when the page needed them");
     // Claude's program is missing here, so its card offers the install steps; Codex on an API key
     // offers the key field.
     h.state_mut().state.agents.codex_sign_in = archforge_ui_egui::ai_agents::CodexSignIn::ApiKey;
@@ -441,8 +447,8 @@ fn without_a_secure_store_the_host_keeps_no_key() {
     use archforge_ui_egui::ai_agents::{AgentHost, KeyText, Provider};
     let base = std::env::temp_dir().join(format!("archforge-agents-nostore-{}", std::process::id()));
     let host = crate::agents::Agents::with(&base, Box::new(archforge_secrets::MemoryStore::unavailable()), archforge_agents::HostEnv::default());
-    let look = host.look().recv().unwrap();
-    assert!(look.store.missing(), "{look:?}");
+    let keys = host.read_keys().recv().unwrap();
+    assert!(keys.store.missing(), "{keys:?}");
     let refused = host.save_key(Provider::Claude, KeyText::new("sk-ant-api03-canary-0000-4F2a".into()).unwrap()).recv().unwrap();
     assert!(refused.unwrap_err().contains("no secure credential store"));
     let _ = std::fs::remove_dir_all(&base);

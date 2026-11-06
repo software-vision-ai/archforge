@@ -310,8 +310,11 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   agent (the neutral hexagon agent mark beside its name, never a provider's logo; a status badge
   at the card's right), Let Chat use the model, then Check connection and Send test message, each
   with its note beside it, and the status badge under them.
-- Opening the page runs nothing and sends nothing: the programs and the keys are looked for once
-  when Archforge starts, and again on Look again and Check connection. Check connection is free
+- Archforge never touches the system's credential store at launch, so it never asks for access
+  to it unless agents are used (owner, 2026-11-06): only the programs are looked for when it
+  starts. The keys are read, on the host's thread, the first time the AI Agents page (or Chat)
+  needs them, and kept until Look again, Check connection, a save or a removal, or a restart.
+  Opening the page sends nothing over the network; that first local read is all it does. Check connection is free
   and local (the programs, their versions, the keys or sign-in); Send test message carries its
   cost note and goes to the default agent's provider. The badge says when it was checked as a
   time ago ("Checked just now", "5 min ago"), not a clock time, as the window has no time zone.

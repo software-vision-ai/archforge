@@ -2,8 +2,9 @@
 //! key; Codex signed in with ChatGPT or with an API key), Let Chat use the model, and Check
 //! connection and Send test message with the status badge under them.
 //!
-//! The page shows what this run already knows: the programs and keys were looked for when
-//! Archforge started, through the host. Drawing it runs nothing and sends nothing; only Look
+//! The page shows what this run already knows: the programs were looked for when Archforge
+//! started, through the host; the keys are read from the secure store the first time the page is
+//! drawn (a local read, sending nothing), and kept. Otherwise drawing it runs nothing; only Look
 //! again, Check connection (local), a key's Save or Remove, Send test message and the sign-in
 //! buttons ask the host for anything. A key is typed into a hidden field that keeps no undo
 //! history, handed to the host once and its draft overwritten; afterwards only its last four
@@ -179,6 +180,8 @@ pub(crate) fn page(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, page: &mut
     if system != Some(System::Supported) {
         return unavailable(ui, p, system, left, top, width);
     }
+    // The keys are read from the secure store the first time the page is drawn, and kept.
+    agents::need_keys(shell);
     let mut y = top + 52.0;
     y += wrapped(&paint, pos2(left, y), width, &tr(INTRO), types::UI, p.text_secondary, 3) + 20.0;
     if let Store::Missing { why } = &shell.agents.look.store {

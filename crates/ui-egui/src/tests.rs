@@ -13499,11 +13499,13 @@ fn open_agents(h: &mut Harness<'static, Shell>) {
     h.run();
 }
 
-fn calls(f: &crate::ai_agents::fake::Fake) -> [usize; 8] {
+/// The fake's calls: look, keys, save, remove, test, account, login, cancel, logout.
+fn calls(f: &crate::ai_agents::fake::Fake) -> [usize; 9] {
     use std::sync::atomic::Ordering::Relaxed;
     let c = &f.calls;
     [
         c.look.load(Relaxed),
+        c.keys.load(Relaxed),
         c.save.load(Relaxed),
         c.remove.load(Relaxed),
         c.test.load(Relaxed),
@@ -13561,16 +13563,25 @@ fn settings_has_a_profile_and_an_ai_agents_section_with_done_in_the_footer() {
 }
 
 #[test]
-fn opening_ai_agents_runs_nothing_and_sends_nothing() {
+fn opening_ai_agents_reads_the_keys_once_and_sends_nothing() {
     let (mut h, f) = agents_harness(ThemeKind::Light, |_| {});
-    // The look at start: once, with Codex's account read after it; nothing sent.
+    // The look at start: the programs once, with Codex's account read after it; no key read and
+    // nothing sent.
     let at_start = calls(&f);
-    assert_eq!(at_start, [1, 0, 0, 0, 1, 0, 0, 0], "the look at start and the account read");
+    assert_eq!(at_start, [1, 0, 0, 0, 0, 1, 0, 0, 0], "the programs' look at start and the account read");
     open_agents(&mut h);
     for _ in 0..5 {
         h.run();
     }
-    assert_eq!(calls(&f), at_start, "opening the page asked the host for nothing");
+    let mut keys_read = at_start;
+    keys_read[1] = 1;
+    assert_eq!(calls(&f), keys_read, "opening the page read the keys from the store once, and asked for nothing else");
+    assert!(painted_has(&h, "Saved in the macOS Keychain"), "the store the read found");
+    // Kept: closed and opened again, the page reads nothing more.
+    let at = rect_of(&h, "settings.done").center();
+    click(&mut h, at);
+    open_agents(&mut h);
+    assert_eq!(calls(&f), keys_read, "the keys are kept until Look again, a save or a removal");
     assert_eq!(f.calls.outward(), 0, "no test message and no sign-in");
     // Opening Settings on a shell without the services draws the page and asks nothing either.
     crate::i18n::set_language("en");
@@ -13683,7 +13694,7 @@ fn every_designed_state_of_ai_agents_draws_from_the_fake_in_both_appearances() {
         let (mut h, f) = agents_harness(theme, |f| f.system = System::NotYet);
         open_agents(&mut h);
         assert!(painted_has(&h, "Not available on this system yet"));
-        assert_eq!(calls(&f), [0; 8], "nothing is looked for on such a system");
+        assert_eq!(calls(&f), [0; 9], "nothing is looked for on such a system");
         let _ = Store::NotLooked;
     }
 }
@@ -13869,4 +13880,68 @@ fn ai_agents_choices_a_later_version_wrote_fall_back_to_the_defaults_alone() {
     state.sanitize();
     assert_eq!(state.user_name, "Ada", "the rest of the file is read");
     assert_eq!(state.agents, crate::ai_agents::AgentPrefs::default());
+}
+
+#[test]
+fn starting_and_opening_other_pages_reads_no_key() {
+    let (mut h, f) = agents_harness(ThemeKind::Light, |_| {});
+    let keys = |f: &crate::ai_agents::fake::Fake| f.calls.keys.load(std::sync::atomic::Ordering::Relaxed);
+    for _ in 0..5 {
+        h.run();
+    }
+    assert_eq!(keys(&f), 0, "launching never touches the secure store");
+    // Settings on Profile, About, Home's search: still no key read.
+    let at = rect_of(&h, "home.header.account").center();
+    click(&mut h, at);
+    assert!(ids(&h).iter().any(|i| i == "settings.name"));
+    let at = rect_of(&h, "settings.done").center();
+    click(&mut h, at);
+    h.state_mut().open_about();
+    h.run();
+    h.event(egui::Event::Key { key: egui::Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::NONE });
+    h.run();
+    let at = rect_of(&h, "home.header.search").center();
+    click(&mut h, at);
+    assert_eq!(keys(&f), 0, "no page but AI Agents reads a key");
+    // AI Agents reads them once; Look again reads them again.
+    h.event(egui::Event::Key { key: egui::Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::NONE });
+    h.run();
+    open_agents(&mut h);
+    assert_eq!(keys(&f), 1);
+    crate::ai_agents::look(h.state_mut());
+    h.run();
+    assert_eq!(keys(&f), 2, "Look again reads the keys again");
+}
+
+#[test]
+fn a_key_saved_while_the_keys_are_being_read_stays_when_the_read_answers() {
+    let (mut h, f) = agents_harness(ThemeKind::Light, |f| {
+        f.hold_keys = true;
+        f.look.lock().unwrap().codex_key = crate::ai_agents::Key::Saved { last4: "9c1E".into() };
+    });
+    open_agents(&mut h);
+    assert!(!h.state().agents.keys_known(), "the read is still running");
+    // Saved while the read runs: the store answers the save at once.
+    let at = rect_of(&h, "settings.agents.claude.key").center();
+    click(&mut h, at);
+    h.event(egui::Event::Text("sk-ant-api03-saved-meanwhile-4F2a".into()));
+    h.run();
+    let at = rect_of(&h, "settings.agents.claude.save").center();
+    click(&mut h, at);
+    h.run();
+    let saved = crate::ai_agents::Key::Saved { last4: "4F2a".into() };
+    assert_eq!(h.state().agents.look.claude_key, saved);
+    // The read, begun before the save, answers with no Claude key: the saved one stays, and the
+    // read's answer is taken for the other agent.
+    f.release_keys();
+    h.run();
+    assert!(h.state().agents.keys_known());
+    assert_eq!(h.state().agents.look.claude_key, saved, "the older read does not undo the save");
+    assert_eq!(h.state().agents.look.codex_key, crate::ai_agents::Key::Saved { last4: "9c1E".into() });
+    // A later read applies in full again.
+    crate::ai_agents::look(h.state_mut());
+    h.run();
+    f.release_keys();
+    h.run();
+    assert_eq!(h.state().agents.look.claude_key, saved, "the store holds it now");
 }

@@ -1,6 +1,7 @@
 //! The host's AI Agents services: finding the agent programs and keeping their API keys in the
 //! system's secure store, each on a thread of its own so the window never waits. Nothing here
-//! sends anything over the network.
+//! sends anything over the network. The store is opened only when the keys are first needed,
+//! never at launch.
 //!
 //! The test message and Codex's ChatGPT sign-in come with the agents' adapters (AR-202, AR-203);
 //! until then the accounts service answers that they are not available yet.
@@ -11,7 +12,7 @@ use std::sync::{Arc, OnceLock};
 
 use archforge_agents::{Discovery, HostEnv, RuntimeKind, Workspace};
 use archforge_secrets::{KeyringStore, Secret, SecretError, SecretName, SecretStore};
-use archforge_ui_egui::ai_agents::{AgentHost, Key, KeyText, Look, Program, Provider, Store, System, last_four};
+use archforge_ui_egui::ai_agents::{AgentHost, Key, KeyText, Keys, Look, Program, Provider, Store, System, last_four};
 
 /// A secure store as the host keeps it: the system's, or another for the tests.
 type Opened = Result<Box<dyn SecretStore>, SecretError>;
@@ -117,33 +118,39 @@ impl AgentHost for Agents {
     }
 
     fn look(&self) -> Receiver<Look> {
-        let (store, root, env) = (self.store.clone(), self.workspace.clone(), self.env.clone());
+        let (root, env) = (self.workspace.clone(), self.env.clone());
         on_thread("agents-look", move || {
-            let store = store.get_or_init(open_system_store);
             let env = env.unwrap_or_else(HostEnv::from_process);
             let workspace = Workspace::open(&root).map_err(|e| e.to_string());
+            // The programs only: the secure store is not touched here, so launching Archforge
+            // never makes the system ask for access to it.
+            let look = Look {
+                claude: program_of(Provider::Claude, &env, &workspace),
+                codex: program_of(Provider::Codex, &env, &workspace),
+                ..Look::default()
+            };
+            log::info!("agent programs: claude {:?}, codex {:?}", look.claude, look.codex);
+            look
+        })
+    }
+
+    fn read_keys(&self) -> Receiver<Keys> {
+        let store = self.store.clone();
+        on_thread("agents-keys", move || {
+            let store = store.get_or_init(open_system_store);
             let (claude_key, gone) = key_of(store, Provider::Claude);
             let (codex_key, gone_too) = key_of(store, Provider::Codex);
-            let look = Look {
+            let keys = Keys {
                 store: match gone.or(gone_too) {
                     Some(why) => Store::Missing { why },
                     None => store_kind(store),
                 },
-                claude: program_of(Provider::Claude, &env, &workspace),
-                codex: program_of(Provider::Codex, &env, &workspace),
                 claude_key,
                 codex_key,
             };
             // The store's state and whether each key is saved; never a key, nor its last four.
-            log::info!(
-                "agent programs: claude {:?}, codex {:?}; secure store {:?}; keys saved: claude {}, codex {}",
-                look.claude,
-                look.codex,
-                look.store,
-                look.claude_key.saved(),
-                look.codex_key.saved()
-            );
-            look
+            log::info!("secure store {:?}; keys saved: claude {}, codex {}", keys.store, keys.claude_key.saved(), keys.codex_key.saved());
+            keys
         })
     }
 

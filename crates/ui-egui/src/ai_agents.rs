@@ -7,8 +7,12 @@
 //! a test message, and Codex's ChatGPT sign-in with its device code. Every call returns at once
 //! with a channel the host answers on from its own thread, so the window never waits.
 //!
-//! The local look runs once when Archforge starts and again on Look again and Check connection;
-//! opening Settings runs nothing and sends nothing. A key goes from the field to the host as a
+//! The programs are looked for once when Archforge starts (no key is read then: the secure store
+//! is not touched at launch, so it never asks for access unless agents are used). The keys are
+//! read from the store the first time the AI Agents page or Chat needs them, on the host's
+//! thread, and kept until Look again, Check connection, a save or a removal, or a restart.
+//! Nothing here sends anything over the network unless the user asks for a test message or a
+//! sign-in. A key goes from the field to the host as a
 //! [`KeyText`], whose bytes are overwritten when it drops; the shell only ever keeps a saved key's
 //! last four characters, never in the preferences.
 //! A failure is always a typed state the page shows, never a panic.
@@ -176,7 +180,8 @@ impl Store {
     }
 }
 
-/// What one local look found: the store, both programs and both keys. It sends nothing.
+/// What this run knows of the store, both programs and both keys. The programs come from one look,
+/// the store and the keys from one read of the store ([`Keys`]). Neither sends anything.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Look {
     pub store: Store,
@@ -207,6 +212,14 @@ impl Look {
             Provider::Codex => &mut self.codex_key,
         }
     }
+}
+
+/// What one read of the secure store found: the store itself and both keys, by their last four.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Keys {
+    pub store: Store,
+    pub claude_key: Key,
+    pub codex_key: Key,
 }
 
 /// The most bytes a key may have, as the secure store takes it.
@@ -281,8 +294,12 @@ pub trait AgentHost: Send + Sync {
     fn system(&self) -> System {
         System::Supported
     }
-    /// Looks for both programs and reads which keys are saved.
+    /// Looks for both programs; never touches the secure store, so the answer's store and keys
+    /// are left unread.
     fn look(&self) -> Receiver<Look>;
+    /// Opens the secure store and reads which keys are saved, by their last four: the only call
+    /// that reads a key, made the first time the AI Agents page or Chat needs one.
+    fn read_keys(&self) -> Receiver<Keys>;
     /// Saves `key` as `provider`'s, replacing the one saved before; the answer is the key as now
     /// kept, or why not in the host's words.
     fn save_key(&self, provider: Provider, key: KeyText) -> Receiver<Result<Key, String>>;
@@ -486,10 +503,16 @@ pub struct State {
     pub look: Look,
     looking: Option<Receiver<Look>>,
     asked: bool,
+    /// The read of the secure store under way, and whether its answer is in.
+    keys_reading: Option<Receiver<Keys>>,
+    keys_known: bool,
+    /// The keys saved or removed while the read runs: its answer, older than they are, leaves
+    /// them as they are now.
+    changed_while_reading: [bool; 2],
     /// Codex's account, once read: `None` before.
     pub codex: Option<Result<CodexAccount, AccountError>>,
     reading: Option<Receiver<Result<CodexAccount, AccountError>>>,
-    /// Check connection waits for the look and the account read it started.
+    /// Check connection waits for the look, the keys and the account read it started.
     checking: bool,
     pub outcome: Option<Outcome>,
     saving: [Option<Receiver<Result<Key, String>>>; 2],
@@ -508,6 +531,7 @@ impl State {
     /// Whether anything is under way: the window looks again soon while it is.
     pub fn busy(&self) -> bool {
         self.looking.is_some()
+            || self.keys_reading.is_some()
             || self.reading.is_some()
             || self.saving.iter().any(Option::is_some)
             || self.testing.is_some()
@@ -516,7 +540,12 @@ impl State {
     }
 
     pub fn looking(&self) -> bool {
-        self.looking.is_some()
+        self.looking.is_some() || self.keys_reading.is_some()
+    }
+
+    /// Whether the keys have been read from the store in this run.
+    pub fn keys_known(&self) -> bool {
+        self.keys_known
     }
 
     pub fn checking(&self) -> bool {
@@ -537,34 +566,60 @@ impl State {
 
     /// Sets what a look found, as a host's answer does (offscreen screens and tests).
     pub fn set_look(&mut self, look: Look) {
+        self.keys_known = look.claude_key != Key::NotRead || look.codex_key != Key::NotRead;
         self.look = look;
         self.asked = true;
     }
 }
 
-/// The local look at start, once, when the host has the service and the system runs agents.
+/// The look for the programs at start, once, when the host has the service and the system runs
+/// agents. It reads no key: the secure store is left alone until agents are used.
 pub(crate) fn start(shell: &mut crate::Shell) {
     if shell.agents.asked {
         return;
     }
     shell.agents.asked = true;
-    look(shell);
+    look_programs(shell);
 }
 
-/// Looks again for the programs and the keys (Look again); sends nothing.
-pub fn look(shell: &mut crate::Shell) {
-    let Some(host) = shell.services.agents.clone() else { return };
-    if host.system() == System::NotYet || shell.agents.looking.is_some() {
-        return;
+fn host(shell: &crate::Shell) -> Option<std::sync::Arc<dyn AgentHost>> {
+    shell.services.agents.clone().filter(|h| h.system() == System::Supported)
+}
+
+fn look_programs(shell: &mut crate::Shell) {
+    let Some(host) = host(shell) else { return };
+    if shell.agents.looking.is_none() {
+        shell.agents.looking = Some(host.look());
     }
-    shell.agents.looking = Some(host.look());
+}
+
+fn read_keys(shell: &mut crate::Shell) {
+    let Some(host) = host(shell) else { return };
+    if shell.agents.keys_reading.is_none() {
+        shell.agents.changed_while_reading = [false; 2];
+        shell.agents.keys_reading = Some(host.read_keys());
+    }
+}
+
+/// Reads the keys from the secure store the first time they are needed (the AI Agents page, or
+/// Chat); afterwards the answer is kept. A local read that sends nothing.
+pub fn need_keys(shell: &mut crate::Shell) {
+    if !shell.agents.keys_known {
+        read_keys(shell);
+    }
+}
+
+/// Looks again for the programs and reads the keys again (Look again); sends nothing.
+pub fn look(shell: &mut crate::Shell) {
+    look_programs(shell);
+    read_keys(shell);
 }
 
 /// Check connection: the local look and Codex's account read, then a badge that sums up each
 /// agent. It sends nothing.
 pub fn check_connection(shell: &mut crate::Shell) {
     look(shell);
-    shell.agents.checking = shell.agents.looking.is_some();
+    shell.agents.checking = shell.agents.looking.is_some() || shell.agents.keys_reading.is_some();
     if !shell.agents.checking {
         // Nothing to look with: the badge says what is known.
         finish_check(shell);
@@ -686,19 +741,42 @@ pub(crate) fn poll(shell: &mut crate::Shell) {
         match rx.try_recv() {
             Ok(look) => {
                 shell.agents.looking = None;
-                // A key that changed since a refusal is no longer the one refused.
-                for p in Provider::ALL {
-                    if look.key(p) != shell.agents.look.key(p) && shell.agents.look.key(p) != &Key::NotRead {
-                        shell.agents.refused[p.index()] = None;
-                    }
-                }
-                shell.agents.look = look;
+                // The programs only: the store and the keys come from their own read.
+                shell.agents.look.claude = look.claude;
+                shell.agents.look.codex = look.codex;
                 read_account(shell);
             }
             Err(TryRecvError::Empty) => {}
             Err(TryRecvError::Disconnected) => {
                 shell.agents.looking = None;
                 log::warn!("the look for the agent programs stopped without an answer");
+            }
+        }
+    }
+    if let Some(rx) = &shell.agents.keys_reading {
+        let answer = match rx.try_recv() {
+            Ok(keys) => Some(keys),
+            Err(TryRecvError::Empty) => None,
+            Err(TryRecvError::Disconnected) => {
+                let why = tr("The secure store stopped without an answer");
+                Some(Keys { store: Store::NotLooked, claude_key: Key::Unreadable { why: why.clone() }, codex_key: Key::Unreadable { why } })
+            }
+        };
+        if let Some(keys) = answer {
+            shell.agents.keys_reading = None;
+            shell.agents.keys_known = true;
+            let look = &mut shell.agents.look;
+            look.store = keys.store;
+            for (p, key) in [(Provider::Claude, keys.claude_key), (Provider::Codex, keys.codex_key)] {
+                // A key saved or removed while the read ran is newer than what the read found.
+                if std::mem::take(&mut shell.agents.changed_while_reading[p.index()]) {
+                    continue;
+                }
+                // A key that changed since a refusal is no longer the one refused.
+                if &key != look.key(p) && look.key(p) != &Key::NotRead {
+                    shell.agents.refused[p.index()] = None;
+                }
+                *look.key_mut(p) = key;
             }
         }
     }
@@ -715,7 +793,7 @@ pub(crate) fn poll(shell: &mut crate::Shell) {
             }
         }
     }
-    if shell.agents.checking && shell.agents.looking.is_none() && shell.agents.reading.is_none() {
+    if shell.agents.checking && shell.agents.looking.is_none() && shell.agents.keys_reading.is_none() && shell.agents.reading.is_none() {
         finish_check(shell);
     }
     for p in Provider::ALL {
@@ -725,6 +803,9 @@ pub(crate) fn poll(shell: &mut crate::Shell) {
             Ok(Ok(key)) => {
                 shell.agents.saving[i] = None;
                 shell.agents.refused[i] = None;
+                if shell.agents.keys_reading.is_some() {
+                    shell.agents.changed_while_reading[i] = true;
+                }
                 *shell.agents.look.key_mut(p) = key;
             }
             Ok(Err(why)) => {
@@ -839,6 +920,7 @@ pub mod fake {
     #[derive(Debug, Default)]
     pub struct Calls {
         pub look: AtomicUsize,
+        pub keys: AtomicUsize,
         pub save: AtomicUsize,
         pub remove: AtomicUsize,
         pub test: AtomicUsize,
@@ -856,6 +938,7 @@ pub mod fake {
         pub fn total(&self) -> usize {
             self.outward()
                 + self.look.load(Ordering::Relaxed)
+                + self.keys.load(Ordering::Relaxed)
                 + self.save.load(Ordering::Relaxed)
                 + self.remove.load(Ordering::Relaxed)
                 + self.account.load(Ordering::Relaxed)
@@ -876,6 +959,9 @@ pub mod fake {
         /// The open sign-ins' senders: a sign-in set up without an ending waits, as a real one
         /// does until the browser finishes.
         pub(crate) open: Mutex<Vec<std::sync::mpsc::Sender<LoginEvent>>>,
+        /// Holds each read of the keys until [`Fake::release_keys`], as a slow store would.
+        pub hold_keys: bool,
+        pub(crate) held: Mutex<Vec<(std::sync::mpsc::Sender<Keys>, Keys)>>,
     }
 
     impl Default for Fake {
@@ -889,6 +975,8 @@ pub mod fake {
                 saved: Mutex::new(Vec::new()),
                 calls: Calls::default(),
                 open: Mutex::new(Vec::new()),
+                hold_keys: false,
+                held: Mutex::new(Vec::new()),
             }
         }
     }
@@ -909,7 +997,19 @@ pub mod fake {
         }
         fn look(&self) -> Receiver<Look> {
             self.calls.look.fetch_add(1, Ordering::Relaxed);
-            answered(lock(&self.look).clone())
+            let look = lock(&self.look);
+            answered(Look { claude: look.claude.clone(), codex: look.codex.clone(), ..Look::default() })
+        }
+        fn read_keys(&self) -> Receiver<Keys> {
+            self.calls.keys.fetch_add(1, Ordering::Relaxed);
+            let look = lock(&self.look);
+            let keys = Keys { store: look.store.clone(), claude_key: look.claude_key.clone(), codex_key: look.codex_key.clone() };
+            if self.hold_keys {
+                let (tx, rx) = std::sync::mpsc::channel();
+                lock(&self.held).push((tx, keys));
+                return rx;
+            }
+            answered(keys)
         }
         fn save_key(&self, provider: Provider, key: KeyText) -> Receiver<Result<Key, String>> {
             self.calls.save.fetch_add(1, Ordering::Relaxed);
@@ -954,6 +1054,15 @@ pub mod fake {
             self.calls.logout.fetch_add(1, Ordering::Relaxed);
             *lock(&self.account) = Ok(CodexAccount::NotSignedIn);
             answered(Ok(()))
+        }
+    }
+
+    impl Fake {
+        /// Answers the reads of the keys held so far, with what the store held when each began.
+        pub fn release_keys(&self) {
+            for (tx, keys) in lock(&self.held).drain(..) {
+                let _ = tx.send(keys);
+            }
         }
     }
 

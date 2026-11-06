@@ -137,7 +137,9 @@ You set them up in **Settings ▸ AI Agents**: click the avatar at the right of 
   Chat reads the project's model and the status bar says so; changes still wait for **Allow
   changes** in each conversation.
 
-Opening the page sends nothing: Archforge looked for the programs and your keys when it started.
+Opening the page sends nothing over the network. Archforge looked for the programs when it
+started; your keys are read from the secure store the first time you open the page, never when
+Archforge starts, so the system asks for access only once you use AI agents.
 
 - **Check connection** is free and runs on your computer: it looks again for each program, its
   version and your key or sign-in, and sends nothing. The badge under it sums up each agent.
