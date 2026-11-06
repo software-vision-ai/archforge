@@ -409,9 +409,19 @@ show them, keep the draft, and map only the final outcome.
 `line` is exactly what crossed the pipe, so malformed input is representable. Files named
 `observed-*` were recorded from the installed programs and sanitised (paths replaced by
 `/tmp/archforge-agent/…` and `/opt/archforge/bin/archforge-cli`, the host name by `host.example`,
-the installation id zeroed, colour escapes removed, Codex tool tables cut to two entries). Files named
-`doc-*` are written from the documentation and the schema and start with a `note` line saying so;
-`synthetic-*` are made-up hostile lines.
+the installation id zeroed, colour escapes removed, Codex tool tables cut to two entries, and in
+`codex/observed-handshake.jsonl` the provider's wording in `model/list` (every model's
+`description`, `availabilityNux.message` and `upgradeInfo.migrationMarkdown`) replaced by neutral
+"Fixture text: …" strings with every field kept; that file's first `note` line lists its changes).
+Files named `doc-*` are written from the documentation and the schema and start with a `note` line
+saying so; `synthetic-*` are made-up hostile lines.
+
+The doc-derived tool calls use the bridge's real shapes. `er_entity_list` takes the schema's id, a
+UUID, and a command tool's `tools/call` answer is one text block holding the control channel's
+`engine.execute` answer as JSON, `{"result": <the command's value>, "undo": <the label of the
+newest undo step, or null>}`, with `isError: false` (`crates/mcp/src/lib.rs`, `call`;
+`crates/ui-egui/src/control.rs`, `engine.execute`). For `er_entity_list` the value is a list of
+`{"id": <uuid>, "name": …}`.
 
 | File | Shows |
 |---|---|
@@ -429,7 +439,7 @@ the installation id zeroed, colour escapes removed, Codex tool tables cut to two
 | `codex/observed-env-api-key-not-read.jsonl`, `observed-ephemeral-store-account-read.jsonl` | `account:null` despite `OPENAI_API_KEY` in the environment; the ephemeral store |
 | `codex/observed-sigint.jsonl`, `observed-sigterm.jsonl` | Exit on signals |
 | `codex/observed-recommended-flags-handshake.jsonl`, `observed-strict-config-unknown-key.jsonl` | The recommended command line under `--strict-config`; an unknown key refused |
-| `codex/doc-*.jsonl` | A turn with a tool call, interrupt, declined approvals, API-key, browser and device-code sign-in, logout, rate limits, turn errors per category |
+| `codex/doc-*.jsonl` | A turn with a tool call, interrupt, declined approvals, API-key, browser and device-code sign-in, logout, rate limits, and six failed turns, one per terminal error category |
 | `codex/schema/codex-app-server-0.166.0.schemas.json` | The generated protocol schema |
 | `synthetic-hostile-lines.jsonl` | Lines both parsers must survive |
 
