@@ -1,0 +1,21 @@
+codex-app-server-0.166.0.contract.json
+
+This file is cut down from the JSON schema of the Codex app-server protocol that OpenAI Codex
+(https://github.com/openai/codex), version 0.166.0 (release tag rust-v0.166.0, installed as
+codex-cli 0.166.0), generates with:
+
+    codex app-server generate-json-schema --out <folder>
+
+It keeps only the four message unions (method names and parameter references) and the shape of the
+definitions the contract tests in crates/agents/tests/codex.rs read (property names, required
+fields, type tags). Every description and every other definition was left out. It is regenerated
+and cut again for each Codex version Archforge is tested with.
+
+OpenAI Codex
+Copyright 2025 OpenAI
+
+OpenAI Codex is licensed under the Apache License, Version 2.0, and so is this cut of its schema.
+You may not use this file except in compliance with that licence. A copy of the licence is in
+LICENSE-APACHE at the root of this repository, and at https://www.apache.org/licenses/LICENSE-2.0.
+Unless required by applicable law or agreed to in writing, it is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.

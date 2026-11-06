@@ -317,7 +317,8 @@ the spike's transcripts in `tests/fixtures/` (every Claude one and the hostile l
 configuration for both settings, the canary key, stop by control request and its SIGINT fallback, an
 exit during a turn. `tests/codex.rs` for the Codex adapter, over every Codex transcript of the spike
 and the hostile lines, against the generated 0.166.0 schema (`tests/fixtures/codex/schema/` holds the part the
-tests read: the message unions and the shapes of the definitions used, cut as its `$comment` says;
+tests read: the message unions and the shapes of the definitions used, cut as its `$comment` says,
+credited to OpenAI Codex under Apache-2.0 in the `NOTICE` beside it and in `ATTRIBUTION.md`;
 every method sent, read or declined exists there, and every line the adapter wrote fits its
 method's parameters or its request's response), and against fake `codex` scripts that answer the
 handshake and replay the transcripts through `spawn`: a turn end to end, the resume and the primed

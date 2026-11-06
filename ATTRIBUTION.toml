@@ -1,4 +1,5 @@
-# One row per file under assets/:
+# One row per file under assets/, and per third-party file kept elsewhere (a test fixture cut from
+# another project's output):
 #
 # [[asset]]
 # path = "assets/icons/example.svg"
@@ -28,9 +29,17 @@ source = "original artwork, the app icon: a beaver in pen and ink on a blue tile
 licence = "Archforge brand mark, all rights reserved"
 sha256 = "67e2e06b43e5bd7f4336badd0519936845487bfe0922be03f9eb9bbe743997c5"
 
+[[asset]]
+path = "crates/agents/tests/fixtures/codex/schema/codex-app-server-0.166.0.contract.json"
+author = "OpenAI (OpenAI Codex, Copyright 2025 OpenAI)"
+source = "cut down from the schema OpenAI Codex 0.166.0 (github.com/openai/codex, tag rust-v0.166.0) generates with `codex app-server generate-json-schema`: the message unions and the shapes the contract tests read, descriptions left out; NOTICE beside it"
+licence = "Apache-2.0"
+sha256 = "76d7a097664e1125ae225e9286cff9fd0e7ca875a43000f87729ca0d23895f5f"
+
 [licences]
 "Archforge brand mark, all rights reserved" = "licenses/brand/archforge-icon.txt"
 "MIT OR Apache-2.0" = "LICENSE-MIT, LICENSE-APACHE"
+"Apache-2.0" = "LICENSE-APACHE"
 "Ubuntu Font Licence 1.0" = "licenses/fonts/Ubuntu-font-1.0.txt"
 "MIT (Hack), Bitstream Vera Licence" = "licenses/fonts/Hack.txt"
 "OFL-1.1" = "licenses/fonts/OFL-1.1.txt"
