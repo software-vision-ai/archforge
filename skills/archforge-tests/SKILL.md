@@ -16,6 +16,8 @@ description: "Use when writing, placing or running tests in Archforge: a regress
   - projects on disk: `crates/project/tests/project.rs` against a real dolt; the app's projects
     host: the `tests` module in `apps/archforge/src/projects.rs`
   - name rules: the case table in `crates/names/src/lib.rs`
+  - API keys: `crates/secrets/src/tests.rs`, against `MemoryStore`; another crate's tests use
+    `archforge_secrets::MemoryStore` (feature `testing`), never the system's store
   - the command engine: `crates/engine/tests/engine.rs` with its toy notation; a notation's own
     commands are checked with `archforge_engine::testing::round_trip` (feature `testing`)
 - A screen test builds the real `Shell` in an `egui_kittest` harness, draws it in both appearances
