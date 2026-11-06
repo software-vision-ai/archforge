@@ -800,7 +800,10 @@ What is UML's own, beside the shared rules above.
   Names: a nested classifier's differs, whatever the case, from everything its owner holds,
   attributes and operations included, and an attribute or operation never takes a nested one's
   name, since a model opening refuses two elements of one owner named alike (so the design's D2
-  `priority : Priority` beside nested Priority is refused; the sample says `urgency`). On the
+  `priority : Priority` beside nested Priority is refused; the sample says `urgency`). Owner
+  decision 2026-11-06: follow UML, where elements of different kinds may share a name and only a
+  clash of one kind is refused; this strict rule stays until the Fireline bug that relaxes the
+  loader's open-time check lands, and then relaxes to UML's. On the
   canvas a nested card whose owner's card is on the diagram is tied to it by a solid line in the
   muted ink (the accent while either is selected), straight where the cards face each other, else
   one elbow crossing as few cards as it can, ending in ⊕ just outside the owner's side; it is

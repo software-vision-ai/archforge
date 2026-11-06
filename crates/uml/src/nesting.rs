@@ -221,7 +221,9 @@ pub fn problem_text(store: &Store, c: Obj, owner: Obj, problem: &OwnerProblem) -
     match problem {
         OwnerProblem::Itself => format!("{cn} cannot own itself"),
         OwnerProblem::Inside => format!("{on} is nested in {cn}: owning {cn} would make a cycle"),
-        OwnerProblem::OwnsNone => format!("{on} is {} and owns no classifiers; a class, an interface or a package does", a_what(store, owner)),
+        OwnerProblem::OwnsNone => {
+            format!("{on} is {} and owns no classifiers; a package, a class, an interface or an association class does", a_what(store, owner))
+        }
         OwnerProblem::NotNestable => format!("{cn} is {}, which stays in a package and is never nested in a classifier", a_what(store, c)),
         OwnerProblem::NameTaken(s) => format!("{on} has {} named {} already", a_what(store, *s), name_of(store, *s)),
         OwnerProblem::Reserved => format!("the package {on} keeps the name {cn} for a built-in type"),

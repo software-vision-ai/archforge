@@ -14359,3 +14359,31 @@ fn the_nested_sample_shows_its_owner_in_models_properties_and_on_the_canvas() {
         assert!(!h.state().session.as_ref().unwrap().is_dirty(), "the sample is marked saved");
     }
 }
+
+/// A nested classifier dropped in Models (AR-132): onto its owner's row, or onto another classifier
+/// of its own package, it stays where it is; onto its package's row it moves out into the package;
+/// onto a classifier of another package it moves into that package.
+#[test]
+fn a_nested_classifier_dropped_within_its_package_stays_and_onto_a_package_row_moves() {
+    use crate::notation_ui::NotationUi;
+    let (mut h, _) = related_sample_in(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    let (priority, order) = crate::uml_ui::put_nested_priority(h.state_mut()).unwrap();
+    let other = h.state_mut().session.as_mut().unwrap().execute("uml.package.add", &serde_json::json!({ "name": "Billing" })).unwrap();
+    let other = other.value["id"].as_str().unwrap().to_string();
+    let invoice =
+        h.state_mut().session.as_mut().unwrap().execute("uml.class.add", &serde_json::json!({ "package": other, "name": "Invoice" })).unwrap();
+    let invoice = invoice.value["id"].as_str().unwrap().to_string();
+    let st = h.state().session.as_ref().unwrap().doc();
+    let obj = |id: &str| st.by_uuid(archforge_mof::Uuid::parse(id).unwrap()).unwrap();
+    let (p, o) = (obj(&priority), obj(&order));
+    let customer = st.alive().find(|c| st.class_of(*c).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(st, *c) == "Customer").unwrap();
+    let ui = crate::uml_ui::UmlUi;
+    assert_eq!(ui.drop_on(st, p, o), None, "onto its owner's row it stays");
+    assert_eq!(ui.drop_on(st, p, customer), None, "onto a classifier of its own package it stays");
+    let home = archforge_uml::nesting::home_package(st, p).unwrap();
+    let (cmd, params) = ui.drop_on(st, p, home).expect("onto its package's row it moves out");
+    assert_eq!((cmd, params["package"].as_str()), ("uml.enumeration.move", Some(st.uuid(home).unwrap().to_string().as_str())));
+    let (cmd, params) = ui.drop_on(st, p, obj(&invoice)).expect("onto a classifier of another package it moves there");
+    assert_eq!((cmd, params["package"].as_str()), ("uml.enumeration.move", Some(other.as_str())));
+    assert_eq!(ui.drop_on(st, customer, o), None, "a package member onto another of its package stays, as before");
+}

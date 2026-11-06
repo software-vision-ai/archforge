@@ -244,7 +244,8 @@ fn cycles_kinds_and_name_clashes_are_refused_with_the_reason() {
     assert!(refused(&mut s, "uml.classifier.set-owner", set(&order, &order)).contains("cannot own itself"));
     let cycle = refused(&mut s, "uml.classifier.set-owner", set(&order, &deep));
     assert!(cycle.contains("would make a cycle"), "{cycle}");
-    assert!(refused(&mut s, "uml.classifier.set-owner", set(&customer, &status)).contains("owns no classifiers"));
+    let none = refused(&mut s, "uml.classifier.set-owner", set(&customer, &status));
+    assert!(none.contains("owns no classifiers; a package, a class, an interface or an association class does"), "{none}");
     assert!(refused(&mut s, "uml.classifier.set-owner", set(&money, &order)).contains("stays in a package"));
     assert!(refused(&mut s, "uml.classifier.set-owner", set(&status, &customer)).contains("named Status already"));
     let integer = {

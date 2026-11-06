@@ -726,17 +726,23 @@ impl NotationUi for UmlUi {
         if class(store, obj) == Some(archforge_uml::PACKAGE) { package_of(store, obj) } else { None }
     }
 
-    /// A classifier dragged onto a package, or onto a classifier of
-    /// another package, moves there; a package dragged onto another package moves into it.
+    /// A classifier dragged onto a package moves there, a nested one out of its owner too; dragged
+    /// onto a classifier of another package, it moves into that package, and onto one of its own
+    /// package (its owner's row among them) it stays where it is (AR-132). A package dragged onto
+    /// another package moves into it.
     fn drop_on(&self, store: &Store, dragged: Obj, target: Obj) -> Option<(&'static str, serde_json::Value)> {
+        let on_classifier = class(store, target).is_some_and(archforge_uml::is_classifier);
         let to = match class(store, target)? {
             c if c == archforge_uml::PACKAGE => target,
-            c if archforge_uml::is_classifier(c) => archforge_uml::nesting::home_package(store, target)?,
+            _ if on_classifier => archforge_uml::nesting::home_package(store, target)?,
             _ => return None,
         };
         let id = |o: Obj| store.uuid(o).ok().map(|u| u.to_string());
+        // Where the dragged classifier is now: its own package on a package's row, its home package
+        // on a classifier's, so a drop within its own package changes nothing.
+        let here = |o: Obj| if on_classifier { archforge_uml::nesting::home_package(store, o) } else { package_of(store, o) };
         match class(store, dragged)? {
-            c if archforge_uml::is_classifier(c) && package_of(store, dragged) != Some(to) => {
+            c if archforge_uml::is_classifier(c) && here(dragged) != Some(to) => {
                 let (cmd, key) = Classifier::of(store, dragged)?.move_command();
                 Some((cmd, json!({ key: id(dragged)?, "package": id(to)? })))
             }
