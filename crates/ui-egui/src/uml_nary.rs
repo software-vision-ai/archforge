@@ -349,14 +349,31 @@ fn diamond_shape(paint: &egui::Painter, rect: Rect, fill: egui::Color32, stroke:
 
 /// Draws an n-ary association's diamond node at `rect` (AR-128): a hollow diamond in the line's
 /// ink, the accent while it is selected, its name above it.
-pub(crate) fn draw_diamond(paint: &egui::Painter, p: &Palette, rect: Rect, name: &str, z: f32, selected: bool, look: &crate::canvas::Look) {
+#[allow(clippy::too_many_arguments, reason = "a diamond is drawn with its name, its stereotypes and its look")]
+pub(crate) fn draw_diamond(
+    paint: &egui::Painter,
+    p: &Palette,
+    rect: Rect,
+    name: &str,
+    keyword: Option<&str>,
+    z: f32,
+    selected: bool,
+    look: &crate::canvas::Look,
+) {
     let ink = if selected { p.accent } else { look.stroke.unwrap_or(p.text_secondary) };
     let width = look.width.map_or((1.5 * z).clamp(1.0, 3.0), |w| (w * z).clamp(1.0, 6.0));
     diamond_shape(paint, rect, look.fill.unwrap_or(p.canvas), Stroke::new(width, ink));
+    let text_ink = look.text.unwrap_or(p.text_secondary);
+    let mut top = rect.top() - 8.0 * z;
     if !name.is_empty() {
-        let text_ink = look.text.unwrap_or(p.text_secondary);
         let g = ux::galley(paint, name, types::SMALL.scaled(z), text_ink, None);
-        paint.galley(pos2(rect.center().x - g.size().x / 2.0, rect.top() - 8.0 * z - g.size().y), g, text_ink);
+        top -= g.size().y;
+        paint.galley(pos2(rect.center().x - g.size().x / 2.0, top), g, text_ink);
+    }
+    // Its stereotypes above its name, `«Reference»`, as a line's are (AR-135).
+    if let Some(k) = keyword {
+        let g = ux::galley(paint, k, types::CAPTION.scaled(z), text_ink, None);
+        paint.galley(pos2(rect.center().x - g.size().x / 2.0, top - g.size().y - 1.0 * z), g, text_ink);
     }
 }
 
@@ -844,6 +861,9 @@ pub(crate) fn body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, m
         let _ = resp.on_hover_text(&path);
     }
     y += 17.0 + FIELD + 16.0;
+    // Its stereotypes (AR-135, F3).
+    y = crate::uml_stereotypes::section_for(shell, ui, p, r, y, a);
+    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
     let ends = nary::ends(store, a);
     let rows: Vec<String> = ends.iter().map(|e| row_text(store, *e)).collect();
     let title = fmt(&tr("Ends · {n}"), &[("n", &rows.len().to_string())]);

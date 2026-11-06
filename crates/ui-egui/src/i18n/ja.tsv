@@ -66,12 +66,14 @@ str		Delete {name} from the model?	{name} をモデルから削除しますか�
 str		Narrow the filter to see more	もっと見るにはフィルターを絞り込んでください
 str		No free name is left	空いている名前がありません
 str		What it holds goes with it.	含まれるものも一緒に削除されます。
+str		What it holds moves to {parent}.	含まれているものは {parent} に移動します。
 str		Remove from this diagram only	この図からのみ削除
 plural		It disappears from {n} diagram.	{n} 個の図から消えます。
 plural		{n} relationship goes with it.	{n} 件のリレーションシップが一緒に削除されます。
 plural		{n} key goes with it.	{n} 件のキーが一緒に削除されます。
 plural		{n} foreign key goes with it.	{n} 件の外部キーが一緒に削除されます。
 plural		{n} nested classifier goes with it: {names}.	{n} 個の入れ子の分類子も一緒に削除されます：{names}。
+plural		{n} stereotype application goes with it: {names}.	{n} 件のステレオタイプの適用も一緒に削除されます：{names}。
 str		Delete	削除
 str		Schema · model	スキーマ · モデル
 str		Table · model, in every diagram	テーブル · モデル、すべての図に
@@ -666,6 +668,7 @@ str		Primitive type	プリミティブ型
 str		«dataType»	«dataType»
 str		«stereotype»	«stereotype»
 str		«metaclass»	«metaclass»
+str		{keywords} · {package}	{keywords} · {package}
 str		«primitive»	«primitive»
 str		Association class	関連クラス
 str		Classifier	分類子
@@ -786,6 +789,49 @@ str		{first} and {second}	{first} と {second}
 plural		Show the use	{n} 件の使用箇所を表示
 str		A stereotype is shown on its profile's diagram	ステレオタイプはそのプロファイルの図に表示されます
 str		Place stereotype	ステレオタイプを配置
+# Stereotypes applied (AR-135)
+str		Stereotypes of {name} · {n}	{name} のステレオタイプ · {n}
+str		Stereotypes of this end · {n}	この端のステレオタイプ · {n}
+str		Apply stereotype	ステレオタイプを適用
+str		Remove «{stereotype}» from {name}	{name} から «{stereotype}» を外す
+str	value	default	既定
+str		{value} (default)	{value}（既定）
+str		Default ({value})	既定（{value}）
+str		No value	値なし
+str		Values you set are stored on {name}; a default shows the tag until you change it. Remove takes «{stereotype}» off {name} and keeps its definition.	設定した値は {name} に保存されます。既定値は変更するまでタグが付きます。外すと {name} から «{stereotype}» が外れ、その定義は残ります。
+str		None applied yet. + offers the stereotypes of the profiles applied to {package} or a package around it.	まだ適用されていません。+ では、{package} またはそれを囲むパッケージに適用されたプロファイルのステレオタイプを選べます。
+str		Show stereotype values on this diagram	この図にステレオタイプの値を表示
+str		Show stereotype values	ステレオタイプの値を表示
+str		Set stereotype value	ステレオタイプの値を設定
+str		Filter: {text}	絞り込み：{text}
+str		No stereotype matches.	一致するステレオタイプはありません。
+str		No stereotype yet. Make one in a profile from Models ▸ New ▸ Stereotype.	まだステレオタイプがありません。モデル ▸ 新規 ▸ ステレオタイプからプロファイルに作成してください。
+str		{kinds} only	{kinds} のみ
+str		classes	クラス
+str		interfaces	インターフェース
+str		enumerations	列挙型
+str		data types	データ型
+str		properties	プロパティ
+str		operations	操作
+str		associations	関連
+str		generalizations	汎化
+str		packages	パッケージ
+str		{profile} not applied	{profile} は未適用
+str		«{stereotype}» does not extend {metaclass}: it extends {metaclasses}.	«{stereotype}» は {metaclass} を拡張しません。拡張するのは {metaclasses} です。
+str		«{stereotype}» extends no metaclass yet.	«{stereotype}» はまだどのメタクラスも拡張していません。
+str		Its profile {profile} is not applied to {package} or a package around it.	プロファイル {profile} は {package} にもそれを囲むパッケージにも適用されていません。
+str		{value} is no value of {name}. {accepted}	{value} は {name} の値ではありません。{accepted}
+str		A whole number, such as 42 or -7.	42 や -7 のような整数です。
+str		A number, such as 2.5 or -1e3.	2.5 や -1e3 のような数値です。
+str		true or false.	true または false です。
+str		A whole number of 0 or more, or *.	0 以上の整数、または * です。
+str		Any text.	任意のテキストです。
+str		One of {literals}.	{literals} のいずれかです。
+str		{name} holds at most {n} values.	{name} が持てる値は最大 {n} 個です。
+str		{name} holds each value once, and {value} is there twice.	{name} は各値を一度だけ持ちますが、{value} が二度あります。
+str		A value is empty. Clear the field to show the default.	空の値があります。既定値を表示するにはフィールドを空にしてください。
+str		A value is longer than {n} characters.	{n} 文字を超える値があります。
+plural		{name} holds [{bounds}] values; {n} is given.	{name} が持つ値は [{bounds}] 個ですが、{n} 個が指定されています。
 str		nested	入れ子
 str		package	パッケージ
 str		class	クラス

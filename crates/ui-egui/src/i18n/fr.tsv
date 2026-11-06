@@ -66,12 +66,14 @@ str		Delete {name} from the model?	Supprimer {name} du modèle ?
 str		Narrow the filter to see more	Affinez le filtre pour en voir plus
 str		No free name is left	Plus aucun nom libre
 str		What it holds goes with it.	Ce qu’il contient part avec lui.
+str		What it holds moves to {parent}.	Ce qu’il contient passe dans {parent}.
 str		Remove from this diagram only	Retirer de ce diagramme seulement
 plural		It disappears from {n} diagram.	Il disparaît de {n} diagramme.|Il disparaît de {n} diagrammes.
 plural		{n} relationship goes with it.	{n} relation part avec lui.|{n} relations partent avec lui.
 plural		{n} key goes with it.	{n} clé part avec lui.|{n} clés partent avec lui.
 plural		{n} foreign key goes with it.	{n} clé étrangère part avec lui.|{n} clés étrangères partent avec lui.
 plural		{n} nested classifier goes with it: {names}.	{n} classificateur imbriqué part avec lui : {names}.|{n} classificateurs imbriqués partent avec lui : {names}.
+plural		{n} stereotype application goes with it: {names}.	{n} application de stéréotype part avec lui : {names}.|{n} applications de stéréotype partent avec lui : {names}.
 str		Delete	Supprimer
 str		Schema · model	Schéma · modèle
 str		Table · model, in every diagram	Table · modèle, dans chaque diagramme
@@ -666,6 +668,7 @@ str		Primitive type	Type primitif
 str		«dataType»	«dataType»
 str		«stereotype»	«stereotype»
 str		«metaclass»	«metaclass»
+str		{keywords} · {package}	{keywords} · {package}
 str		«primitive»	«primitive»
 str		Association class	Classe d’association
 str		Classifier	Classificateur
@@ -786,6 +789,49 @@ str		{first} and {second}	{first} et {second}
 plural		Show the use	Afficher l’utilisation|Afficher les {n} utilisations
 str		A stereotype is shown on its profile's diagram	Un stéréotype s’affiche sur le diagramme de son profil
 str		Place stereotype	Placer le stéréotype
+# Stereotypes applied (AR-135)
+str		Stereotypes of {name} · {n}	Stéréotypes de {name} · {n}
+str		Stereotypes of this end · {n}	Stéréotypes de cette extrémité · {n}
+str		Apply stereotype	Appliquer un stéréotype
+str		Remove «{stereotype}» from {name}	Retirer «{stereotype}» de {name}
+str	value	default	par défaut
+str		{value} (default)	{value} (par défaut)
+str		Default ({value})	Par défaut ({value})
+str		No value	Aucune valeur
+str		Values you set are stored on {name}; a default shows the tag until you change it. Remove takes «{stereotype}» off {name} and keeps its definition.	Les valeurs que vous définissez sont enregistrées sur {name} ; une valeur par défaut porte l’étiquette tant que vous ne la changez pas. Retirer enlève «{stereotype}» de {name} et garde sa définition.
+str		None applied yet. + offers the stereotypes of the profiles applied to {package} or a package around it.	Aucun appliqué pour l’instant. + propose les stéréotypes des profils appliqués à {package} ou à un paquetage qui l’entoure.
+str		Show stereotype values on this diagram	Afficher les valeurs des stéréotypes dans ce diagramme
+str		Show stereotype values	Afficher les valeurs des stéréotypes
+str		Set stereotype value	Définir la valeur du stéréotype
+str		Filter: {text}	Filtre : {text}
+str		No stereotype matches.	Aucun stéréotype ne correspond.
+str		No stereotype yet. Make one in a profile from Models ▸ New ▸ Stereotype.	Aucun stéréotype pour l’instant. Créez-en un dans un profil depuis Modèles ▸ Nouveau ▸ Stéréotype.
+str		{kinds} only	{kinds} uniquement
+str		classes	classes
+str		interfaces	interfaces
+str		enumerations	énumérations
+str		data types	types de données
+str		properties	propriétés
+str		operations	opérations
+str		associations	associations
+str		generalizations	généralisations
+str		packages	paquetages
+str		{profile} not applied	{profile} non appliqué
+str		«{stereotype}» does not extend {metaclass}: it extends {metaclasses}.	«{stereotype}» n’étend pas {metaclass} : il étend {metaclasses}.
+str		«{stereotype}» extends no metaclass yet.	«{stereotype}» n’étend encore aucune métaclasse.
+str		Its profile {profile} is not applied to {package} or a package around it.	Son profil {profile} n’est appliqué ni à {package} ni à un paquetage qui l’entoure.
+str		{value} is no value of {name}. {accepted}	{value} n’est pas une valeur de {name}. {accepted}
+str		A whole number, such as 42 or -7.	Un nombre entier, comme 42 ou -7.
+str		A number, such as 2.5 or -1e3.	Un nombre, comme 2.5 ou -1e3.
+str		true or false.	true ou false.
+str		A whole number of 0 or more, or *.	Un nombre entier de 0 ou plus, ou *.
+str		Any text.	N’importe quel texte.
+str		One of {literals}.	L’un de {literals}.
+str		{name} holds at most {n} values.	{name} contient au plus {n} valeurs.
+str		{name} holds each value once, and {value} is there twice.	{name} contient chaque valeur une seule fois, et {value} y figure deux fois.
+str		A value is empty. Clear the field to show the default.	Une valeur est vide. Videz le champ pour afficher la valeur par défaut.
+str		A value is longer than {n} characters.	Une valeur dépasse {n} caractères.
+plural		{name} holds [{bounds}] values; {n} is given.	{name} contient [{bounds}] valeurs ; {n} est donnée.|{name} contient [{bounds}] valeurs ; {n} sont données.
 str		nested	imbriqué
 str		package	paquetage
 str		class	classe

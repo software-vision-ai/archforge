@@ -104,6 +104,12 @@ pub(crate) trait NotationUi: Sync {
         let _ = (store, obj);
         Vec::new()
     }
+    /// The stereotype applications that go when `obj` is removed, by name, for the delete
+    /// dialog (AR-135); none by default.
+    fn applications_along(&self, store: &Store, obj: Obj) -> Vec<String> {
+        let _ = (store, obj);
+        Vec::new()
+    }
     /// Why `obj` cannot be removed, in the user's words, checked before the removal or its dialog
     /// (UML's package Types while it keeps the built-in types); none lets the command decide.
     fn remove_refusal(&self, store: &Store, obj: Obj) -> Option<String> {

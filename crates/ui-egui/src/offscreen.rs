@@ -192,9 +192,8 @@ pub enum Screen {
     /// selected, its Properties showing Extends and its properties, the editor open on cached
     /// (AR-134, F1).
     WorkspaceProfiles,
-    /// The sample with Persistence applied to Commerce and used there (stereotype applications
-    /// built in the store, as AR-135 will make them): Commerce selected, Unapply refused under its
-    /// Applied profiles, the five uses counted (AR-134, F6).
+    /// The sample with Persistence applied to Commerce and used there: Commerce selected, Unapply
+    /// refused under its Applied profiles, the five uses counted (AR-134, F6).
     WorkspaceProfileRefused,
     /// OrderRepository binds Repository, T to Order and Key to Integer: its dashed line labelled
     /// `«bind» <T -> Order, Key -> Integer>` selected, Properties showing the binding and its
@@ -215,6 +214,14 @@ pub enum Screen {
     /// The same, the bin of the Catalog end pressed: Properties asks to keep three ends or make it
     /// binary, Keep 3 ends focused (AR-128, A5).
     WorkspaceNaryBinary,
+    /// The sample with Persistence applied and used: Commerce's diagram showing the stereotype
+    /// values, Order selected, its Stereotypes section with «Entity», table set to orders and cached
+    /// at its default, the cards reading «Entity», `«Id» + id : Integer` and «Reference» on places
+    /// (AR-135, F3).
+    WorkspaceStereotypes,
+    /// The same, the Stereotypes picker open on Order: Entity applied and ticked, Auditable to
+    /// apply, then Id, Reference and Tracked disabled with why (AR-135, F4).
+    WorkspaceStereotypePicker,
     /// The user manual's class-model guide, first step: the root package's diagram Commerce with
     /// Customer (its name typed) and Order, a draft row open on Order's card with `number :
     /// Integer` typed.
@@ -611,6 +618,17 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
         shell.adopt_project();
         crate::uml_ui::open_sample(&mut shell)?;
         sample_profiles(&mut shell, screen == Screen::WorkspaceProfileRefused)?;
+    }
+    if screen == Screen::WorkspaceStereotypes || screen == Screen::WorkspaceStereotypePicker {
+        shell.adopt_project();
+        crate::uml_ui::open_sample(&mut shell)?;
+        let order = crate::uml_stereotypes::put_values(&mut shell)?;
+        crate::panels::run(&mut shell, "view.select", serde_json::json!({ "ids": [order.to_string()] }))?;
+        shell.state.show_panel(crate::state::Panel::Properties);
+        shell.state.show_explorer(crate::state::Explorer::Models);
+        if screen == Screen::WorkspaceStereotypePicker {
+            shell.panels.menu = Some(crate::panels::Menu::StereotypePick);
+        }
     }
     if screen == Screen::WorkspaceGeneralizationSets {
         shell.adopt_project();

@@ -850,7 +850,11 @@ fn draw_node(
         Some(_) if annotation && let Some(card) = card => draw_constraint(paint, &inner, d, n, &card, rect),
         // An n-ary association's diamond, its name above it (AR-128).
         Some(_) if diamond && let Some(card) = card => {
-            crate::uml_nary::draw_diamond(paint, p, rect, &card.name, z, selected, &look_of(store, n, node::STYLE));
+            let keyword = match &card.eyebrow {
+                archforge_diagram::figure::Text::Plain(k) => Some(k.as_str()),
+                archforge_diagram::figure::Text::Said(..) => None,
+            };
+            crate::uml_nary::draw_diamond(paint, p, rect, &card.name, keyword, z, selected, &look_of(store, n, node::STYLE));
         }
         Some(_) if let Some(card) = card => {
             // An element of another scope: dimmed, dashed, its scope named in the eyebrow.
@@ -1700,11 +1704,14 @@ fn draw_edge(
     {
         widgets::record_visible(ui, registry, &format!("workspace.canvas.edge.{id}.tie"), "edge", tied);
     }
-    if let Some(named) = bare_name(paint, d, element, &points)
+    let named = bare_name(paint, d, element, &points);
+    if let Some(named) = named
         && let Ok(id) = store.uuid(e)
     {
         widgets::record_visible(ui, registry, &format!("workspace.canvas.edge.{id}.name"), "label", named);
     }
+    // Where the line's name label sits, when it shows one: its stereotypes go above it.
+    let mut name_at: Option<Rect> = named;
     for (end, tip, back) in [(&line.ends[0], points[0], points[1]), (&line.ends[1], points[n - 1], points[n - 2])] {
         let (dir, base, _, _) = shape(end.mark, tip, back);
         line_mark(paint, end.mark, tip, back, stroke, z, p.canvas);
@@ -1808,6 +1815,9 @@ fn draw_edge(
                 (true, false) => vec2(-g.size().x / 2.0, -g.size().y - 6.0 * z),
                 (false, _) => vec2(-g.size().x / 2.0, 6.0 * z),
             };
+            if kind == "name" {
+                name_at = Some(Rect::from_min_size(at + offset, g.size()));
+            }
             paint.galley(at + offset, g, p.text_secondary);
         }
         if selected {
@@ -1821,7 +1831,34 @@ fn draw_edge(
             }
         }
     }
+    if let Some(keyword) = line.keyword.as_deref() {
+        let at = keyword_text(paint, d, keyword, &points, name_at);
+        if let Ok(id) = store.uuid(e) {
+            widgets::record_visible(ui, registry, &format!("workspace.canvas.edge.{id}.stereotypes"), "label", at);
+        }
+    }
     badge
+}
+
+/// A line's stereotypes, `«Reference»` (AR-135, F3), in the caption style: just above its name
+/// label `name` where it shows one, else at its middle where a name would sit. Gives where it is.
+fn keyword_text(paint: &egui::Painter, d: &Drawing<'_>, keyword: &str, points: &[Pos2], name: Option<Rect>) -> Rect {
+    let (p, z) = (d.p, d.view.zoom);
+    let g = ux::galley(paint, keyword, types::CAPTION.scaled(z), p.text_secondary, None);
+    let at = match name {
+        Some(r) => pos2(r.center().x - g.size().x / 2.0, r.top() - g.size().y - 1.0 * z),
+        None => {
+            let upright = {
+                let v = along(points, 0.51) - along(points, 0.49);
+                v.y.abs() > v.x.abs()
+            };
+            let offset = if upright { vec2(8.0 * z, -g.size().y / 2.0) } else { vec2(-g.size().x / 2.0, -g.size().y - 6.0 * z) };
+            along(points, 0.5) + offset
+        }
+    };
+    let rect = Rect::from_min_size(at, g.size());
+    paint.galley(at, g, p.text_secondary);
+    rect
 }
 
 /// The qualifier boxes of `line`'s ends (AR-127), each with its end's index, its rectangle and its

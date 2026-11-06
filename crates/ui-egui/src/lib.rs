@@ -56,6 +56,7 @@ mod uml_profiles;
 mod uml_qualifiers;
 mod uml_relate;
 mod uml_sets;
+mod uml_stereotypes;
 mod uml_templates;
 mod uml_ui;
 pub mod ux;

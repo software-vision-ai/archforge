@@ -1053,8 +1053,7 @@ extend are UML model elements of their own, saved with the model, not labels or 
   can undo and adds no stereotype by itself: the elements inside the package, and inside its
   packages, can then use the profile's stereotypes. The package's row in **Models** says *applies
   Persistence* after its name. The pencil on an applied profile offers **Unapply**.
-- **Nothing in use is dropped.** Using stereotypes on elements comes in a later version. Once
-  elements use them, unapplying a profile they need, deleting a stereotype or its profile,
+- **Nothing in use is dropped.** Once elements use stereotypes, unapplying a profile they need, deleting a stereotype or its profile,
   dropping a metaclass the elements need, moving a stereotype to another profile, deleting a
   stereotype's property whose values are set, and moving or deleting the package or element they
   sit in out of the profile's reach are refused, the uses counted: *Persistence is in use in
@@ -1062,8 +1061,11 @@ extend are UML model elements of their own, saved with the model, not labels or 
   those first.* **Show the 5 uses** selects them. Renaming a profile or a stereotype keeps every
   use. Deleting a package refuses the same way when its elements would lose the profile that
   reaches them, and when it would take along a profile that is in use.
-- **Deleting a used element** itself, such as *Order*, removes its stereotype applications with it,
-  in the same step: an application means nothing without its element.
+- **Deleting a used element** itself, such as *Order*, asks first, from **Models** too, and the
+  dialog names the stereotype applications that go with it and with what it takes along: *3
+  stereotype applications go with it: «Entity» on Order, «Id» on id,
+  «Reference» on places.* **Delete** removes them in the same step: an application means nothing
+  without its element.
 - **Deleting** an unused stereotype takes its extensions along; deleting an unused profile takes
   its stereotypes and its applications along, each as one step you can undo.
 
@@ -1071,12 +1073,66 @@ extend are UML model elements of their own, saved with the model, not labels or 
 
 <!-- picture: workspace-profile-refused light | Commerce selected, applying Persistence; unapplying it refused under Applied profiles, naming the uses, with Show the 5 uses -->
 
+#### Applying stereotypes
+
+Once a package applies a profile, its elements, and those of its packages, can carry the profile's
+stereotypes. A stereotype and its values are model data, saved with the model.
+
+- **Apply a stereotype.** Select the element: a class, an interface, an enumeration, a data type,
+  a primitive type or an association class; an attribute or an operation (select its row in its
+  class's **Properties**, and the section is *Stereotypes of id*); an association, a
+  generalization or a package; the end of an association between two classes, in that end's part
+  of the association's **Properties**. An n-ary association's ends have no **Stereotypes** section
+  yet: apply stereotypes to them with the command `uml.stereotype.apply`, giving the end's id as
+  `element`; `uml.association.add-nary` gives the ends' ids, and so does `uml.relationship.list` for
+  one of the association's classes. **+** under **Stereotypes** in its **Properties** lists every
+  stereotype of the model. Those that extend the element's kind and whose profile is applied to its
+  package, or a package around it, come first; one applied already is ticked. After a line, the
+  others are listed but disabled, with why: *properties only* for a stereotype that extends
+  Property, *Logging not applied* for one whose profile no package around the element applies.
+  Type to filter the list, **↑** and **↓** move, **Enter** applies, **Esc** closes. Applying is one
+  step you can undo. **Stereotypes** shows only once the model has a stereotype.
+- **Set its values.** Under the stereotype's row each of its properties has a control fitting its
+  type: a Boolean or an enumeration a select, any other a field. A property you have not set shows
+  its default, muted with a *default* tag; a value you set has no tag, even when it says the same
+  as the default. Type a value and press **Enter**, or pick one from the select; its first row,
+  *Default (false)*, clears it so the default shows again, as an empty field does. A property that
+  holds several values takes them separated by commas. A value its type does not read stays in
+  the field with the reason under it, and nothing is written: *many is no value of rows. A whole
+  number, such as 42 or -7.* So are too many or too few values for the property's multiplicity,
+  and the same value twice where each is held once.
+- **Remove a stereotype** with the bin on its row. Its values go with it; the stereotype's
+  definition stays in its profile.
+- **Removing an attribute or an operation** in its editor asks first when stereotypes are applied
+  to it, naming them, as deleting any element that carries stereotypes does.
+- **On the diagram** a stereotype takes the place of the kind's word on the card: *«Entity»* for
+  *CLASS*. A kind written as a keyword keeps it first: *«interface, Entity»*. An attribute's or an
+  operation's row starts with its stereotypes, *«Id» + id : Integer*, in **Properties** too, and a
+  line's stereotypes sit above its name: *«Reference»*. An n-ary association's sit above its
+  diamond's name, and an end's at the middle of its leg. **Models** shows them, muted, after the
+  element's name.
+- **Show stereotype values on this diagram**, under the section while a class diagram is open,
+  lists the values set on each card in a compartment per stereotype, *«Entity»* then *table =
+  "orders"*; a property left to its default is not listed. Each diagram keeps its own choice.
+  Turned on, cards that would hide a value grow, in the same step.
+- **Nothing is lost unseen.** While a value is set, the stereotype's property is not deleted, given
+  another type, or given a multiplicity the value breaks, and a literal a value names is not
+  deleted: each is refused, saying which value to change first.
+
+<!-- picture: workspace-stereotypes light | Order selected on Commerce's diagram: its card reads «Entity» over its name, «Id» + id : Integer, and an «Entity» compartment with table = "orders"; «Reference» above places; Properties shows Stereotypes · 1 with «Entity» Persistence, table set to orders and cached false with the default tag, and Show stereotype values on this diagram ticked -->
+
+<!-- picture: workspace-stereotype-picker light | The Stereotypes picker open on Order: APPLY TO ORDER, Entity ticked, Auditable to apply, then Id (properties only), Reference (associations only) and Tracked (Logging not applied) disabled -->
+
 For agents, `uml.profile.add`, `uml.profile.rename`, `uml.stereotype.add` and `uml.stereotype.set`
 make and change profiles and stereotypes, `uml.attribute.add` and its siblings their properties,
 `uml.profile.apply` and `uml.profile.unapply` apply them to packages, and `uml.profile.diagram`
 gives a profile's diagram filled as **Open profile diagram** fills it. `uml.profile.list`, `uml.stereotype.get`, `uml.package.profiles`,
 `uml.profile.uses` and `uml.metaclass.list` read them. A profile or a stereotype is deleted with
-`element.remove`.
+`element.remove`. `uml.stereotype.apply` and `uml.stereotype.unapply` apply a stereotype to an
+element and take it off, `uml.stereotype.set-value` sets a property's values (an empty list
+clears them), `uml.stereotype.show-values` turns a diagram's values compartments on or off, and
+`uml.stereotype.list-applied` and `uml.stereotype.applicable` read what an element carries and what
+it may take, with why not.
 
 ### Cards
 

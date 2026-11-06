@@ -66,12 +66,14 @@ str		Delete {name} from the model?	Eliminar {name} do modelo?
 str		Narrow the filter to see more	Restrinja o filtro para ver mais
 str		No free name is left	Não resta nenhum nome livre
 str		What it holds goes with it.	O que contém vai com ele.
+str		What it holds moves to {parent}.	O que contém passa para {parent}.
 str		Remove from this diagram only	Remover apenas deste diagrama
 plural		It disappears from {n} diagram.	Desaparece de {n} diagrama.|Desaparece de {n} diagramas.
 plural		{n} relationship goes with it.	{n} relação vai com ele.|{n} relações vão com ele.
 plural		{n} key goes with it.	{n} chave vai com ele.|{n} chaves vão com ele.
 plural		{n} foreign key goes with it.	{n} chave estrangeira vai com ele.|{n} chaves estrangeiras vão com ele.
 plural		{n} nested classifier goes with it: {names}.	{n} classificador aninhado vai com ele: {names}.|{n} classificadores aninhados vão com ele: {names}.
+plural		{n} stereotype application goes with it: {names}.	{n} aplicação de estereótipo vai com ele: {names}.|{n} aplicações de estereótipo vão com ele: {names}.
 str		Delete	Eliminar
 str		Schema · model	Esquema · modelo
 str		Table · model, in every diagram	Tabela · modelo, em todos os diagramas
@@ -666,6 +668,7 @@ str		Primitive type	Tipo primitivo
 str		«dataType»	«dataType»
 str		«stereotype»	«stereotype»
 str		«metaclass»	«metaclass»
+str		{keywords} · {package}	{keywords} · {package}
 str		«primitive»	«primitive»
 str		Association class	Classe de associação
 str		Classifier	Classificador
@@ -786,6 +789,49 @@ str		{first} and {second}	{first} e {second}
 plural		Show the use	Mostrar o uso|Mostrar os {n} usos
 str		A stereotype is shown on its profile's diagram	Um estereótipo aparece no diagrama do seu perfil
 str		Place stereotype	Colocar estereótipo
+# Stereotypes applied (AR-135)
+str		Stereotypes of {name} · {n}	Estereótipos de {name} · {n}
+str		Stereotypes of this end · {n}	Estereótipos desta extremidade · {n}
+str		Apply stereotype	Aplicar estereótipo
+str		Remove «{stereotype}» from {name}	Remover «{stereotype}» de {name}
+str	value	default	predefinido
+str		{value} (default)	{value} (predefinido)
+str		Default ({value})	Predefinido ({value})
+str		No value	Sem valor
+str		Values you set are stored on {name}; a default shows the tag until you change it. Remove takes «{stereotype}» off {name} and keeps its definition.	Os valores que define ficam guardados em {name}; um valor predefinido mostra a etiqueta até o alterar. Remover retira «{stereotype}» de {name} e mantém a sua definição.
+str		None applied yet. + offers the stereotypes of the profiles applied to {package} or a package around it.	Ainda nenhum aplicado. + oferece os estereótipos dos perfis aplicados a {package} ou a um pacote à sua volta.
+str		Show stereotype values on this diagram	Mostrar os valores de estereótipo neste diagrama
+str		Show stereotype values	Mostrar valores de estereótipo
+str		Set stereotype value	Definir valor de estereótipo
+str		Filter: {text}	Filtro: {text}
+str		No stereotype matches.	Nenhum estereótipo corresponde.
+str		No stereotype yet. Make one in a profile from Models ▸ New ▸ Stereotype.	Ainda não há estereótipos. Crie um num perfil em Modelos ▸ Novo ▸ Estereótipo.
+str		{kinds} only	só {kinds}
+str		classes	classes
+str		interfaces	interfaces
+str		enumerations	enumerações
+str		data types	tipos de dados
+str		properties	propriedades
+str		operations	operações
+str		associations	associações
+str		generalizations	generalizações
+str		packages	pacotes
+str		{profile} not applied	{profile} não aplicado
+str		«{stereotype}» does not extend {metaclass}: it extends {metaclasses}.	«{stereotype}» não estende {metaclass}: estende {metaclasses}.
+str		«{stereotype}» extends no metaclass yet.	«{stereotype}» ainda não estende nenhuma metaclasse.
+str		Its profile {profile} is not applied to {package} or a package around it.	O seu perfil {profile} não está aplicado a {package} nem a um pacote à sua volta.
+str		{value} is no value of {name}. {accepted}	{value} não é um valor de {name}. {accepted}
+str		A whole number, such as 42 or -7.	Um número inteiro, como 42 ou -7.
+str		A number, such as 2.5 or -1e3.	Um número, como 2.5 ou -1e3.
+str		true or false.	true ou false.
+str		A whole number of 0 or more, or *.	Um número inteiro de 0 ou mais, ou *.
+str		Any text.	Qualquer texto.
+str		One of {literals}.	Um de {literals}.
+str		{name} holds at most {n} values.	{name} contém no máximo {n} valores.
+str		{name} holds each value once, and {value} is there twice.	{name} contém cada valor uma vez, e {value} está lá duas vezes.
+str		A value is empty. Clear the field to show the default.	Um valor está vazio. Limpe o campo para mostrar o predefinido.
+str		A value is longer than {n} characters.	Um valor tem mais de {n} caracteres.
+plural		{name} holds [{bounds}] values; {n} is given.	{name} contém [{bounds}] valores; foi dado {n}.|{name} contém [{bounds}] valores; foram dados {n}.
 str		nested	aninhado
 str		package	pacote
 str		class	classe

@@ -614,6 +614,11 @@ fn attribute_set(ctx: &mut C<'_>, p: &Params) -> R {
         None => Some(crate::modifiers::bounds(ctx.doc, a)),
     };
     let modifiers = attribute_modifiers(ctx.doc, p, c, Some(a), &name, ty, bounds)?;
+    // A stereotype's property whose values are set keeps a type and bounds they fit (AR-135).
+    let shape = bounds.unwrap_or((1, Some(1)));
+    if let Some(why) = crate::applications::reshape_problem(ctx.doc, a, ty, shape, modifiers.unique) {
+        return Err(refuse(if ty != one(ctx.doc, a, typed_element::TYPE) { "type" } else { "multiplicity" }, why));
+    }
     set_name(ctx.doc, a, &name)?;
     ctx.doc.set(a, named_element::VISIBILITY, vis).map_err(fail)?;
     if let Some(on) = p.bool("static") {

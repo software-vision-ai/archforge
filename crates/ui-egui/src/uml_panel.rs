@@ -295,6 +295,8 @@ pub(crate) fn class_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
     }
     y = final_check(shell, ui, p, r, y, class, class_id);
     y = leaf_check(shell, ui, p, r, y, class, class_id);
+    // Its stereotypes, or the selected member's (AR-135, F3).
+    y = crate::uml_stereotypes::section_for(shell, ui, p, r, y, class);
     // The classifiers it nests, a class's or an interface's (AR-132, D1).
     if shell.session.as_ref().is_some_and(|s| crate::uml_nesting::owns(s.doc(), class)) {
         y = crate::uml_nesting::nested_section(shell, ui, p, r, y, class, class_id);
@@ -562,9 +564,10 @@ pub(crate) fn package_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r:
         &here,
         Menu::PackageParent,
     );
-    // The profiles it applies (AR-134, F5), then its constraints (AR-133).
+    // Its stereotypes (AR-135), the profiles it applies (AR-134, F5), then its constraints (AR-133).
     if let Some(id) = subject.id {
-        let below = crate::uml_profiles::applied_section(shell, ui, p, r, field.bottom() + 16.0, package, id);
+        let below = crate::uml_stereotypes::section_for(shell, ui, p, r, field.bottom() + 16.0, package);
+        let below = crate::uml_profiles::applied_section(shell, ui, p, r, below, package, id);
         crate::uml_constraints::section_of(shell, ui, p, r, below, package, id);
     }
     if shell.panels.menu == Some(Menu::PackageParent) {
@@ -633,7 +636,7 @@ pub(crate) fn members_section(
             .into_iter()
             .filter_map(|a| {
                 let marks = ux::Marks { slanted: false, underlined: archforge_uml::figures::is_static(store, a) };
-                Some((store.uuid(a).ok()?, archforge_uml::figures::attribute_text(store, a), marks))
+                Some((store.uuid(a).ok()?, archforge_uml::figures::member_text(store, a), marks))
             })
             .collect(),
         MemberKind::Operation => operations(store, class)
@@ -643,7 +646,7 @@ pub(crate) fn members_section(
                     slanted: flag(store, o, archforge_uml::behavioral_feature::IS_ABSTRACT),
                     underlined: archforge_uml::figures::is_static(store, o),
                 };
-                Some((store.uuid(o).ok()?, archforge_uml::figures::operation_text(store, o), marks))
+                Some((store.uuid(o).ok()?, archforge_uml::figures::member_text(store, o), marks))
             })
             .collect(),
         MemberKind::Literal => {
@@ -1074,6 +1077,11 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     shell.panels.member = Some(edit.clone());
     if cancel || (shell.panels.menu.is_none() && ui.input(|i| i.key_pressed(egui::Key::Escape))) {
         shell.panels.member = None;
+    } else if remove && let Some(asked) = ask_for_applications(shell, &edit) {
+        // Its stereotype applications would go with it: the delete dialog names them first, as
+        // every other delete of a carrier does (AR-135).
+        shell.panels.member = None;
+        shell.explorer.delete = Some(asked);
     } else if remove {
         let target = edit.target.map(|t| t.to_string()).unwrap_or_default();
         let said = crate::uml_constraints::before_removal(shell, std::slice::from_ref(&target));
@@ -1091,6 +1099,27 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
         commit(shell, &edit);
     }
     card.bottom() + 8.0
+}
+
+/// The delete dialog for the member `edit` edits, when stereotype applications would go with it
+/// (AR-135): naming them, so removing it never takes them along unasked. None when none would.
+fn ask_for_applications(shell: &Shell, edit: &MemberEdit) -> Option<crate::explorer::Delete> {
+    let target = edit.target?;
+    let store = shell.session.as_ref()?.doc();
+    let member = store.by_uuid(target)?;
+    let applications = crate::uml_stereotypes::going_along(store, member);
+    (!applications.is_empty()).then(|| crate::explorer::Delete {
+        ids: vec![target],
+        name: name(store, member),
+        relationships: 0,
+        keys: 0,
+        foreign_keys: 0,
+        diagrams: 0,
+        node: None,
+        along: Vec::new(),
+        applications,
+        hands_to: None,
+    })
 }
 
 /// The member editor's No redefinition (leaf) at `at`, `width` wide, with its explanation under it

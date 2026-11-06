@@ -112,6 +112,7 @@ pub fn line(store: &Store, element: Obj) -> Option<Line> {
                 note: None,
                 badge: true,
                 resolvable: many_to_many,
+                keyword: None,
             })
         }
         c if c == GENERALIZATION => {
@@ -126,6 +127,7 @@ pub fn line(store: &Store, element: Obj) -> Option<Line> {
                 note,
                 badge: false,
                 resolvable: false,
+                keyword: None,
             })
         }
         _ => None,

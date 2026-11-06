@@ -935,6 +935,9 @@ pub(crate) fn body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, m
     let height = said.size().y;
     paint.galley(pos2(r.left() + PAD, y), said, p.text_muted);
     y += (height + 12.0).max(28.0);
+    // Its stereotypes, an association's, an association class's or a generalization's, or its
+    // selected member's (AR-135, F3).
+    y = crate::uml_stereotypes::section_for(shell, ui, p, r, y, o);
     if class.is_some_and(archforge_uml::is_association) {
         y = ends_sections(shell, ui, p, r, y, o, id);
     }
@@ -1138,6 +1141,8 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
         y = next;
         // Its qualifiers, with their editor (AR-127).
         y = crate::uml_qualifiers::section_of(shell, ui, p, r, y, id, i, ends[i]);
+        // Its stereotypes, as an attribute's (AR-135).
+        y = crate::uml_stereotypes::end_section(shell, ui, p, r, y, ends[i], i);
         shell.panels.ends = Some(edit.clone());
         match asked {
             Asked::Nothing => {}
