@@ -13,8 +13,9 @@ description: "Use when writing, placing or running tests in Archforge: a regress
   - the task runner: a `tests` module in the `xtask/src` file it checks
   - the project database's server: unit tests beside the code in `crates/dolt/src`, and
     `crates/dolt/tests/server.rs` against a real dolt
-  - projects on disk: `crates/project/tests/project.rs` against a real dolt; the app's projects
-    host: the `tests` module in `apps/archforge/src/projects.rs`
+  - projects on disk: `crates/project/tests/project.rs` against a real dolt, a project's model in
+    `crates/project/tests/model.rs`, its conversations in `crates/project/tests/chat.rs`; the app's
+    projects host: the `tests` module in `apps/archforge/src/projects.rs`
   - name rules: the case table in `crates/names/src/lib.rs`
   - API keys: `crates/secrets/src/tests.rs`, against `MemoryStore`; another crate's tests use
     `archforge_secrets::MemoryStore` (feature `testing`), never the system's store

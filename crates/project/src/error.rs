@@ -69,6 +69,53 @@ pub enum Error {
         path: PathBuf,
         what: &'static str,
     },
+    /// A conversation's value over its limit, refused rather than cut: a question longer than may
+    /// be sent, a title longer than may be given.
+    TooLarge {
+        what: &'static str,
+        size: usize,
+        max: usize,
+        unit: &'static str,
+    },
+    /// The project holds as many conversations, or the conversation as many messages, as it may.
+    Full {
+        what: &'static str,
+        max: usize,
+    },
+    /// A question holds one of the API keys Archforge keeps, named here: it is neither sent nor
+    /// stored.
+    HeldKey {
+        name: String,
+    },
+    /// The API keys could not be read to check a question against them, so it is not stored.
+    KeyCheck(archforge_secrets::SecretError),
+    /// A conversation's value that cannot be stored as given.
+    ChatValue {
+        what: &'static str,
+        why: String,
+    },
+    /// No conversation, turn or change link with that id is in the project.
+    ChatMissing {
+        what: &'static str,
+        id: String,
+    },
+    /// The project's conversations cannot be read or written: a chat table of another shape, or a
+    /// row that does not read. The model is not affected.
+    ChatsUnreadable {
+        path: PathBuf,
+        why: String,
+    },
+    /// One conversation cannot be read: a row that does not read, an orphan, a broken order.
+    ChatUnreadable {
+        id: String,
+        why: String,
+    },
+    /// Don't save is refused: the conversations could not be committed first, and the reset would
+    /// lose them.
+    ChatsNotKept {
+        path: PathBuf,
+        why: String,
+    },
 
     Server(archforge_dolt::Error),
     Sql {
@@ -113,6 +160,17 @@ impl fmt::Display for Error {
             ),
             Error::Damaged { path, why } => write!(f, "the project {} is damaged: {why}", path.display()),
             Error::Scripted { path, what } => write!(f, "the project {} holds {what}, which Archforge does not run", path.display()),
+            Error::TooLarge { what, size, max, unit } => write!(f, "{what} of {size} {unit} is longer than the {max} {unit} allowed"),
+            Error::Full { what, max } => write!(f, "{what} already holds {max}, the most it may"),
+            Error::HeldKey { name } => write!(f, "the message holds the API key kept as {name}; it is neither sent nor stored"),
+            Error::KeyCheck(e) => write!(f, "the message cannot be checked against the API keys Archforge keeps: {e}"),
+            Error::ChatValue { what, why } => write!(f, "{what} cannot be stored: {why}"),
+            Error::ChatMissing { what, id } => write!(f, "no {what} {id} is in the project"),
+            Error::ChatsUnreadable { path, why } => write!(f, "the conversations in the project {} cannot be read: {why}", path.display()),
+            Error::ChatUnreadable { id, why } => write!(f, "the conversation {id} cannot be read: {why}"),
+            Error::ChatsNotKept { path, why } => {
+                write!(f, "the conversations in the project {} could not be kept, so it is not put back to its last save: {why}", path.display())
+            }
 
             Error::Server(e) => write!(f, "{e}"),
             Error::Sql { what, source } => write!(f, "{what}: {source}"),
@@ -125,6 +183,7 @@ impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Error::Server(e) => Some(e),
+            Error::KeyCheck(e) => Some(e),
             Error::Sql { source, .. } => Some(source),
             Error::Io { source, .. } => Some(source),
             _ => None,

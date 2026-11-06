@@ -17,6 +17,7 @@ shell never depends on it and it is never built for the portable target.
 | `MemoryStore` | `new()`, `unavailable()` (answers `NoSecureStore`, as a system without a store); feature `testing`, never shipped |
 | `Secret` | `new(String) -> Result<Secret, _>` (takes the string without copying; empty or over `MAX_SECRET_BYTES` refused), `expose(&self) -> &str` |
 | `SecretName` | `new(&str) -> Result<SecretName, _>`: 1 to 64 lowercase letters, digits and hyphens, starting with a letter; `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`; a refused name is not repeated in its error, only its length and the rule |
+| `held_key_in` | `pub fn held_key_in(store: &dyn SecretStore, text: &str) -> Result<Option<SecretName>, SecretError>`: the first kept API key `text` holds, by name (a key not kept, or no secure store, holds none; any other read failure is an error, so the text is not taken as checked); `held_names()` lists the names it looks under |
 | `Deleted` | `Removed`, `WasAbsent` |
 | `SecretError` | `NoSecureStore`, `NotFound`, `Denied` (locked or prompt declined), `InvalidName`, `EmptySecret`, `SecretTooLong`, `NotText`, `Platform { operation, name, detail }` |
 | `SERVICE`, `MAX_SECRET_BYTES`, `MAX_NAME_BYTES`, `MAX_DETAIL_BYTES`, `REDACTED` | `Archforge`, 1 KiB (within every platform's limit), 64, 1 KiB, `Secret(<redacted>)` |

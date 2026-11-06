@@ -17,6 +17,7 @@ use std::collections::BTreeMap;
 
 use mysql::prelude::Queryable;
 
+use crate::chat::is_chat_table;
 use crate::{AUTHOR, DATABASE, Error, Project};
 
 /// The most rows a table of the model may hold when read back: the store's own limit.
@@ -50,7 +51,7 @@ pub const EARLIER_MODELS: &[&str] = &[
 /// not unused, and the project is refused rather than read short (owner decision).
 const IN_USE: &str = "model_tables";
 /// The most tables a project's database may hold for an upgrade to look at.
-const MAX_TABLES: usize = 4096;
+pub(crate) const MAX_TABLES: usize = 4096;
 
 /// The model's tables as the project stores them: the generated tables and junctions with the SQL
 /// type of each junction's value, and their fingerprint.
@@ -74,7 +75,7 @@ impl ModelSchema {
         }
         let mut seen = std::collections::BTreeSet::new();
         for name in tables.iter().map(|t| t.name).chain(junctions.iter().map(|j| j.name)) {
-            if name == "settings" || name == IN_USE {
+            if name == "settings" || name == IN_USE || is_chat_table(name) || name.starts_with("chat_") {
                 return Err(format!("a model table is named {name}, as the project's own"));
             }
             if !seen.insert(name) {
@@ -169,12 +170,12 @@ fn fingerprint(text: &str) -> String {
     format!("{h:016x}")
 }
 
-fn sql(what: &'static str) -> impl Fn(mysql::Error) -> Error {
+pub(crate) fn sql(what: &'static str) -> impl Fn(mysql::Error) -> Error {
     move |source| Error::Sql { what, source }
 }
 
 impl Project {
-    fn model_connection(&self) -> Result<mysql::Conn, Error> {
+    pub(crate) fn model_connection(&self) -> Result<mysql::Conn, Error> {
         let mut c = self.server().connect().map_err(Error::Server)?;
         c.query_drop(format!("USE `{DATABASE}`")).map_err(sql("cannot use the project database"))?;
         Ok(c)
@@ -392,34 +393,94 @@ impl Project {
         Ok(rows)
     }
 
-    /// Whether the project holds changes not yet committed.
+    /// Whether the project holds changes not yet committed. The conversations are left out: they
+    /// are committed in chat commits of their own, and a chat message never makes the project
+    /// unsaved (owner decision, AR-206).
     pub fn has_unsaved(&self) -> Result<bool, Error> {
         let mut c = self.model_connection()?;
-        let any: Option<mysql::Row> = c.query_first("SELECT 1 FROM dolt_status LIMIT 1").map_err(sql("cannot read the project's status"))?;
-        Ok(any.is_some())
+        Ok(!unsaved_tables(&mut c, self.path())?.is_empty())
     }
 
-    /// Save: a Dolt commit of everything written, with `message`. False when there was nothing to
-    /// commit, which is a save all the same.
+    /// Save: a Dolt commit of every table written except the conversations', with `message`. False
+    /// when there was nothing to commit, which is a save all the same. The tables are staged by
+    /// name, never with `-A`, so a turn still running is never committed half-way by a Save: its rows
+    /// wait for the turn's own chat commit.
     pub fn commit(&self, message: &str) -> Result<bool, Error> {
-        if !self.has_unsaved()? {
+        let mut c = self.model_connection()?;
+        let tables = unsaved_tables(&mut c, self.path())?;
+        if tables.is_empty() {
+            self.changes_saved();
             return Ok(false);
         }
-        let mut c = self.model_connection()?;
+        // Whatever an interrupted step left staged is unstaged first, so only these tables go in.
+        c.query_drop("CALL DOLT_RESET()").map_err(sql("cannot prepare the save"))?;
+        stage(&mut c, &tables).map_err(sql("cannot prepare the save"))?;
         // The commit's reply is not read: converting a row that is not one string would panic.
-        c.exec_drop("CALL DOLT_COMMIT('-Am', ?, '--author', ?)", (message, AUTHOR)).map_err(sql("cannot save the project"))?;
+        c.exec_drop("CALL DOLT_COMMIT('-m', ?, '--author', ?)", (message, AUTHOR)).map_err(sql("cannot save the project"))?;
+        self.changes_saved();
         Ok(true)
     }
 
-    /// Don't save: puts the project back to its last save, throwing away every change written
-    /// since (owner decision): the tables it had are reset, and those made since (a
-    /// notation's table first used after the save) are removed. A project never saved goes back
-    /// to how it was created; its model's tables are made again when rows next go there.
-    pub fn discard(&self) -> Result<(), Error> {
+    /// Don't save: puts the model back to its last save, throwing away every change written since
+    /// (owner decision): the tables it had are reset, and those made since (a notation's table first
+    /// used after the save) are removed. A project never saved goes back to how it was created; its
+    /// model's tables are made again when rows next go there.
+    ///
+    /// The conversations are kept (owner decision, AR-206): whatever of them waits is committed in a
+    /// chat commit first, so the reset goes back to a commit that holds them, and Don't save is
+    /// refused when that fails or leaves any of them uncommitted. Then each turn of this session
+    /// that changed the model goes back to the state its changes had at the last save, or becomes
+    /// discarded when it ran since, stamped `now`, in a chat commit of its own.
+    pub fn discard(&self, now: &str) -> Result<(), Error> {
         let mut c = self.model_connection()?;
+        self.keep_chats(&mut c)?;
         c.query_drop("CALL DOLT_RESET('--hard')").map_err(sql("cannot put the project back to its last save"))?;
-        c.query_drop("CALL DOLT_CLEAN()").map_err(sql("cannot remove the tables made since the last save"))
+        c.query_drop("CALL DOLT_CLEAN()").map_err(sql("cannot remove the tables made since the last save"))?;
+        self.chats_after_discard(&mut c, now);
+        Ok(())
     }
+}
+
+/// The most rows of `dolt_status` read: each table may be listed staged and not staged.
+const MAX_STATUS: usize = 2 * MAX_TABLES + 2;
+
+/// The tables `dolt_status` lists as changed, by name: a renamed table under both its names.
+pub(crate) fn changed_tables(c: &mut mysql::Conn, path: &std::path::Path) -> Result<std::collections::BTreeSet<String>, Error> {
+    let rows: Vec<mysql::Row> = c
+        .query(format!("SELECT LEFT(CAST(table_name AS CHAR), 160) FROM dolt_status LIMIT {}", MAX_STATUS + 1))
+        .map_err(sql("cannot read the project's status"))?;
+    if rows.len() > MAX_STATUS {
+        return Err(Error::Damaged { path: path.to_path_buf(), why: format!("its status lists more than {MAX_STATUS} tables") });
+    }
+    let mut names = std::collections::BTreeSet::new();
+    for row in &rows {
+        let Some(name) = row.get_opt::<String, usize>(0).and_then(Result::ok) else {
+            return Err(Error::Damaged { path: path.to_path_buf(), why: "its status names a table that does not read".into() });
+        };
+        match name.split_once(" -> ") {
+            Some((from, to)) => {
+                names.insert(from.to_string());
+                names.insert(to.to_string());
+            }
+            None => {
+                names.insert(name);
+            }
+        }
+    }
+    Ok(names)
+}
+
+/// The changed tables a Save commits: every one but the conversations'.
+fn unsaved_tables(c: &mut mysql::Conn, path: &std::path::Path) -> Result<Vec<String>, Error> {
+    Ok(changed_tables(c, path)?.into_iter().filter(|name| !is_chat_table(name)).collect())
+}
+
+/// Stages exactly `tables`, by name.
+pub(crate) fn stage(c: &mut mysql::Conn, tables: &[String]) -> Result<(), mysql::Error> {
+    for chunk in tables.chunks(BATCH) {
+        c.exec_drop(format!("CALL DOLT_ADD({})", vec!["?"; chunk.len()].join(", ")), chunk.to_vec())?;
+    }
+    Ok(())
 }
 
 /// Splits `rows` into runs of at most [`BATCH`] rows and [`BATCH_BYTES`] bytes (a run holds at
@@ -532,11 +593,11 @@ enum Refusal {
 
 /// A column as `information_schema` gives it: its name, data type and length, whether it is plain
 /// (not generated), and whether it may be empty.
-type Found = (Option<String>, Option<String>, Option<i64>, bool, Option<bool>);
+pub(crate) type Found = (Option<String>, Option<String>, Option<i64>, bool, Option<bool>);
 
 /// Whether a column found is the one declared `(name, sql)`; a column declared with a length, such
 /// as `BINARY(16)`, must have exactly that length.
-fn same_column((name, ty, length, plain, nullable): &Found, (want_name, want_sql): &(&str, &str)) -> bool {
+pub(crate) fn same_column((name, ty, length, plain, nullable): &Found, (want_name, want_sql): &(&str, &str)) -> bool {
     let want = data_type(want_sql);
     let want_length = want_sql.split_once('(').and_then(|(_, rest)| rest.split_once(')')).and_then(|(n, _)| n.parse::<i64>().ok());
     *plain
@@ -552,9 +613,10 @@ impl ModelSchema {
         self.tables.iter().any(|t| t.name == name) || self.junctions.iter().any(|(j, _)| j.name == name)
     }
 
-    /// Whether `name` is a table the project holds: the model's, the settings or the tables in use.
+    /// Whether `name` is a table the project holds: the model's, the settings, the tables in use or
+    /// the conversations'.
     fn knows(&self, name: &str) -> bool {
-        name == "settings" || name == IN_USE || self.is_model_table(name)
+        name == "settings" || name == IN_USE || is_chat_table(name) || self.is_model_table(name)
     }
 }
 
@@ -595,6 +657,11 @@ fn in_use(c: &mut mysql::Conn, shapes: &BTreeMap<String, Shape>) -> Result<std::
 /// when a name is one of the model's in another case: the database finds a table under any case,
 /// so it would be read as missing and cleared as the model's.
 fn tables_held(c: &mut mysql::Conn, schema: &ModelSchema) -> Result<BTreeMap<String, bool>, String> {
+    tables_held_by(c, &|name| schema.knows(name))
+}
+
+/// [`tables_held`] for the tables `knows` names as Archforge's.
+pub(crate) fn tables_held_by(c: &mut mysql::Conn, knows: &dyn Fn(&str) -> bool) -> Result<BTreeMap<String, bool>, String> {
     let names: Vec<mysql::Row> = c
         .exec(
             format!(
@@ -612,7 +679,7 @@ fn tables_held(c: &mut mysql::Conn, schema: &ModelSchema) -> Result<BTreeMap<Str
         let text = |i: usize| row.get_opt::<String, usize>(i).and_then(Result::ok);
         let name = text(0).ok_or("a table's name cannot be read")?;
         // Archforge names its tables in plain lower-case ASCII; the database finds one under any case.
-        if !name.is_ascii() || (!schema.knows(&name) && schema.knows(&name.to_ascii_lowercase())) {
+        if !name.is_ascii() || (!knows(&name) && knows(&name.to_ascii_lowercase())) {
             return Err(format!("it holds the table {name:?}, named as one of Archforge's in another case or script"));
         }
         held.insert(name, text(1).as_deref() == Some("BASE TABLE"));
@@ -628,7 +695,8 @@ enum Shape {
     NotATable,
     /// A table the model does not have (its columns are not looked at).
     Unknown,
-    /// The settings: the project's own, not the model's.
+    /// The settings or a conversations' table: the project's own, not the model's (the
+    /// conversations' shapes are looked at apart, so a damaged one never blocks the model).
     Own,
 }
 
@@ -639,7 +707,7 @@ fn shapes(c: &mut mysql::Conn, schema: &ModelSchema) -> Result<BTreeMap<String, 
     let mut shapes = BTreeMap::new();
     let mut model = Vec::new();
     for (name, base) in tables_held(c, schema)? {
-        let shape = if name == "settings" {
+        let shape = if name == "settings" || is_chat_table(&name) {
             Shape::Own
         } else if !schema.knows(&name) {
             Shape::Unknown
@@ -651,12 +719,24 @@ fn shapes(c: &mut mysql::Conn, schema: &ModelSchema) -> Result<BTreeMap<String, 
         };
         shapes.insert(name, shape);
     }
-    if model.is_empty() {
-        return Ok(shapes);
+    for (table, found) in columns_of(c, model)? {
+        if let Some(Shape::Columns(found_columns)) = shapes.get_mut(&table) {
+            *found_columns = found;
+        }
     }
-    // No model table has more columns than this; a table that has is refused, and so is a
+    Ok(shapes)
+}
+
+/// The columns of `tables`, in order, looked at in one query: each table may have at most
+/// [`MAX_COLUMNS`], and a table that has more is refused.
+pub(crate) fn columns_of(c: &mut mysql::Conn, tables: Vec<String>) -> Result<BTreeMap<String, Vec<Found>>, String> {
+    let mut out: BTreeMap<String, Vec<Found>> = tables.iter().map(|t| (t.clone(), Vec::new())).collect();
+    if tables.is_empty() {
+        return Ok(out);
+    }
+    // No table of Archforge's has more columns than this; a table that has is refused, and so is a
     // database whose tables have more in all than the reading looks at.
-    let most = model.len() * (MAX_COLUMNS + 1);
+    let most = tables.len() * (MAX_COLUMNS + 1);
     let columns = c
         .exec_iter(
             format!(
@@ -664,16 +744,16 @@ fn shapes(c: &mut mysql::Conn, schema: &ModelSchema) -> Result<BTreeMap<String, 
                  character_maximum_length, LEFT(CAST(COALESCE(extra, '') AS CHAR), 64), LEFT(CAST(COALESCE(generation_expression, '') AS CHAR), 64), \
                  LEFT(CAST(is_nullable AS CHAR), 8) \
                  FROM information_schema.columns WHERE table_schema = ? AND table_name IN ({}) ORDER BY table_name, ordinal_position LIMIT {}",
-                vec!["?"; model.len()].join(", "),
+                vec!["?"; tables.len()].join(", "),
                 most + 1
             ),
-            std::iter::once(DATABASE.to_string()).chain(model).collect::<Vec<_>>(),
+            std::iter::once(DATABASE.to_string()).chain(tables).collect::<Vec<_>>(),
         )
-        .map_err(|e| format!("the columns of the model's tables cannot be looked at: {e}"))?;
+        .map_err(|e| format!("the columns of the tables cannot be looked at: {e}"))?;
     for (n, r) in columns.enumerate() {
-        let r = r.map_err(|e| format!("the columns of the model's tables cannot be looked at: {e}"))?;
+        let r = r.map_err(|e| format!("the columns of the tables cannot be looked at: {e}"))?;
         if n == most {
-            return Err("the model's tables have more columns than Archforge writes".into());
+            return Err("the tables have more columns than Archforge writes".into());
         }
         let text = |i: usize| r.get_opt::<String, usize>(i).and_then(Result::ok);
         // A generated column computes its value on every read: none is written.
@@ -684,13 +764,13 @@ fn shapes(c: &mut mysql::Conn, schema: &ModelSchema) -> Result<BTreeMap<String, 
             _ => None,
         };
         let found = (text(1), text(2).map(|t| t.to_ascii_lowercase()), r.get_opt::<i64, usize>(3).and_then(Result::ok), plain, nullable);
-        match text(0).and_then(|table| shapes.get_mut(&table)) {
-            Some(Shape::Columns(found_columns)) if found_columns.len() < MAX_COLUMNS => found_columns.push(found),
-            Some(Shape::Columns(_)) => return Err("a model table has more columns than Archforge writes".into()),
-            _ => return Err("a column of the model's tables cannot be read".into()),
+        match text(0).and_then(|table| out.get_mut(&table)) {
+            Some(found_columns) if found_columns.len() < MAX_COLUMNS => found_columns.push(found),
+            Some(_) => return Err("a table has more columns than Archforge writes".into()),
+            None => return Err("a column of the tables cannot be read".into()),
         }
     }
-    Ok(shapes)
+    Ok(out)
 }
 
 /// The type name `information_schema` gives a column declared `sql`: its first word, lower case.

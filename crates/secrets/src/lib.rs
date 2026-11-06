@@ -253,6 +253,27 @@ fn capped(mut text: String) -> String {
     text
 }
 
+/// The API keys Archforge keeps for the agents, by name.
+pub fn held_names() -> [SecretName; 2] {
+    [SecretName::ANTHROPIC_API_KEY, SecretName::OPENAI_API_KEY]
+}
+
+/// The name of the first API key kept in `store` that `text` holds, if any: a message about to be
+/// sent or stored is checked with it, so a key pasted into a question never leaves Archforge or
+/// lands in a project. A key not kept, or a system without a secure store, holds no key to find;
+/// any other failure to read a key is an error, since the text could then not be checked. The keys
+/// read are overwritten as they drop; neither the text nor a key is in the answer.
+pub fn held_key_in(store: &dyn SecretStore, text: &str) -> Result<Option<SecretName>, SecretError> {
+    for name in held_names() {
+        match store.get(&name) {
+            Ok(secret) if text.contains(secret.expose()) => return Ok(Some(name)),
+            Ok(_) | Err(SecretError::NotFound { .. } | SecretError::NoSecureStore { .. }) => {}
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(None)
+}
+
 /// A place secrets are kept, by name.
 pub trait SecretStore: Send + Sync {
     /// The secret kept under `name`; [`SecretError::NotFound`] when there is none.

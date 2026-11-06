@@ -10,7 +10,13 @@
 //! arrive for one no longer open are dropped, never written into another. Closing a project runs
 //! as an opening does, one at a time, and writes what waits for it first; when that fails the
 //! project stays open and the window is told, so its tab stays. Dolt is found on the worker the
-//! first time, never on the interface thread. On exit what waits is written, the running work is cancelled and waited for, then every
+//! first time, never on the interface thread.
+//!
+//! The project's conversations (AR-206) are written on the same writer, in the order they are
+//! asked with the model's rows, Save and Don't save: a chat job runs against the open project
+//! there. Opening marks turns left running as interrupted and commits what of the conversations
+//! was not; closing commits what waits; Don't save runs on the writer too, so no chat write can
+//! come between the conversations being kept and the model being put back. On exit what waits is written, the running work is cancelled and waited for, then every
 //! open project's server is stopped.
 
 use std::collections::BTreeMap;
@@ -39,9 +45,20 @@ enum Job {
     Write(PathBuf, Rows),
     Save(Option<PathBuf>, Sender<Result<bool, String>>),
     Flush(PathBuf, Sender<Result<(), String>>),
-    /// Forget what waits for a project without writing it (Don't save), then answer.
+    /// Forget what waits for a project without writing it (Close without writing), then answer.
     Drop(PathBuf, Sender<()>),
+    /// Don't save: keep a project's conversations and put its model back to its last save, then
+    /// forget what waits for it and answer. The flag is the claim: whoever sets it first, the writer
+    /// to run the job or the closing that stopped waiting for it, decides, so a job given up on is
+    /// never run late.
+    Discard(PathBuf, Arc<AtomicBool>, Sender<Result<(), String>>),
+    /// Work on a project's conversations: run against the project while it is open (none when it
+    /// is not), in order with every other job; it answers through its own channel.
+    Chat(PathBuf, ChatJob),
 }
+
+/// A job on a project's conversations, run on the writer thread.
+type ChatJob = Box<dyn FnOnce(Option<&Project>) + Send>;
 
 pub struct Projects {
     inner: Arc<Inner>,
@@ -312,6 +329,10 @@ fn open_job(inner: &Inner, path: &Path, reply: &Sender<Result<Opened, CreateErro
         let read = schema(inner).and_then(|s| {
             project.prepare_model(&s).map_err(kind)?;
             let rows = project.read_model(&s).map_err(kind)?;
+            // Damaged conversations never keep the model from opening: the chat panel says why.
+            if let Err(e) = project.open_chats(&now()) {
+                log::warn!("the conversations of {} were not prepared: {e}", project.path().display());
+            }
             let unsaved = project.has_unsaved().map_err(kind)?;
             Ok((rows, unsaved))
         });
@@ -364,13 +385,14 @@ fn adopt(inner: &Inner, project: Project) -> Result<(), CreateError> {
 /// Closes the project at `path`, one job at a time: what waits for it is written, then its server
 /// stops. When its changes cannot be written it stays open and the answer says why, so the window
 /// keeps its tab and nothing is lost.
-fn close_job(inner: &Inner, path: &Path, reply: &Sender<Result<(), String>>) {
+fn close_job(inner: &Arc<Inner>, path: &Path, reply: &Sender<Result<(), String>>) {
     let _job = lock(&inner.job);
     if let Err(e) = flush_one(inner, path) {
         log::error!("{} stays open: {e}", path.display());
         let _ = reply.send(Err(e));
         return;
     }
+    keep_chats(inner, path);
     let project = {
         let mut open = lock(&inner.open);
         open.iter().position(|p| p.path() == path).map(|i| open.remove(i))
@@ -390,25 +412,43 @@ fn close_job(inner: &Inner, path: &Path, reply: &Sender<Result<(), String>>) {
 /// reset that fails keeps it open, saying why; without (Close without writing) what was written
 /// stays, unsaved, for the next opening. A writer too busy to let go keeps it open too, so no
 /// forgotten rows can reach it later.
-fn discard_job(inner: &Inner, path: &Path, reset: bool, reply: &Sender<Result<(), String>>) {
+fn discard_job(inner: &Arc<Inner>, path: &Path, reset: bool, reply: &Sender<Result<(), String>>) {
     let _job = lock(&inner.job);
-    let writer = lock(&inner.writer).clone();
-    if let Some(tx) = writer {
-        let (done, answer) = channel();
-        if tx.send(Job::Drop(path.to_path_buf(), done)).is_err() || answer.recv_timeout(FLUSH_BUDGET).is_err() {
-            log::warn!("the writer did not let go of {} in time; it stays open", path.display());
-            let _ = reply.send(Err("the changes are still being written; try again in a moment".into()));
-            return;
-        }
-    }
+    let busy = || {
+        log::warn!("the writer did not let go of {} in time; it stays open", path.display());
+        "the changes are still being written; try again in a moment".to_string()
+    };
     if reset {
-        let undone = lock(&inner.open).iter().find(|p| p.path() == path).map(|p| p.discard());
-        if let Some(Err(e)) = undone {
+        // On the writer, after every job sent before it: what waits is forgotten, the conversations
+        // are kept, then the model goes back to its last save.
+        let (done, answer) = channel();
+        let claim = Arc::new(AtomicBool::new(false));
+        let undone = match writer(inner).send(Job::Discard(path.to_path_buf(), claim.clone(), done)) {
+            Ok(()) => match answer.recv_timeout(FLUSH_BUDGET) {
+                Ok(answer) => answer,
+                // Given up on before the writer took it: it will not run.
+                Err(_) if claim.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_ok() => Err(busy()),
+                // The writer has taken it: its answer comes once the reset ends.
+                Err(_) => answer.recv().unwrap_or_else(|_| Err("the writer stopped".into())),
+            },
+            Err(_) => Err(busy()),
+        };
+        if let Err(e) = undone {
             log::warn!("the project {} could not be put back to its last save: {e}", path.display());
             let _ = reply.send(Err(format!("it could not be put back to its last save ({e})")));
             return;
         }
         log::info!("put the project {} back to its last save", path.display());
+    } else {
+        let writer = lock(&inner.writer).clone();
+        if let Some(tx) = writer {
+            let (done, answer) = channel();
+            if tx.send(Job::Drop(path.to_path_buf(), done)).is_err() || answer.recv_timeout(FLUSH_BUDGET).is_err() {
+                let _ = reply.send(Err(busy()));
+                return;
+            }
+        }
+        keep_chats(inner, path);
     }
     let project = {
         let mut open = lock(&inner.open);
@@ -532,6 +572,31 @@ fn write_loop(inner: &Inner, rx: &Receiver<Job>) {
                 failed = false;
                 let _ = reply.send(());
             }
+            Some(Job::Discard(project, claim, reply)) => {
+                if claim.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+                    // The closing stopped waiting and kept the project open: nothing changes.
+                    continue;
+                }
+                let answer = match lock(&inner.open).iter().find(|p| p.path() == project) {
+                    Some(p) => p.discard(&now()).map_err(|e| e.to_string()),
+                    None => Err(format!("{} is no longer open", project.display())),
+                };
+                // The rows waiting are forgotten only once the model is back at its save: a refused
+                // Don't save keeps the project open with every change it shows.
+                if answer.is_ok() {
+                    waiting.remove(&project);
+                    failed = !waiting.is_empty();
+                }
+                let _ = reply.send(answer);
+            }
+            Some(Job::Chat(project, job)) => {
+                let open = lock(&inner.open);
+                // A failing job never stops the writer: the model's rows still get written.
+                let ran = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| job(open.iter().find(|p| p.path() == project))));
+                if ran.is_err() {
+                    log::error!("a job on the conversations of {} failed", project.display());
+                }
+            }
             Some(Job::Flush(project, reply)) => {
                 write_waiting(inner, &mut waiting);
                 failed = !waiting.is_empty();
@@ -583,11 +648,45 @@ fn write_waiting(inner: &Inner, waiting: &mut BTreeMap<PathBuf, Rows>) {
 
 /// Save: a commit of everything written to the project at `target`, with the time it was made.
 fn commit(inner: &Inner, target: &Path) -> Result<bool, String> {
-    let now = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
-    let message = format!("Saved {}", archforge_project::timestamp(now));
+    let message = format!("Saved {}", now());
     match lock(&inner.open).iter().find(|p| p.path() == target) {
         Some(project) => project.commit(&message).map_err(|e| e.to_string()),
         None => Err(format!("{} is no longer open", target.display())),
+    }
+}
+
+/// The time now, as the project stores times.
+fn now() -> String {
+    archforge_project::timestamp(SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0))
+}
+
+/// Runs `job` against the open project at `path` on the writer thread, after every job sent before
+/// it, and answers with what it gives; a project no longer open is an error.
+fn on_writer<T: Send + 'static>(
+    inner: &Arc<Inner>,
+    path: &Path,
+    job: impl FnOnce(&Project) -> Result<T, String> + Send + 'static,
+) -> Receiver<Result<T, String>> {
+    let (tx, rx) = channel();
+    let reply = tx.clone();
+    let shown = path.display().to_string();
+    let run: ChatJob = Box::new(move |project| {
+        let _ = reply.send(project.map_or_else(|| Err(format!("{shown} is no longer open")), job));
+    });
+    if let Err(e) = writer(inner).send(Job::Chat(path.to_path_buf(), run)) {
+        let _ = tx.send(Err(format!("the writer stopped: {e}")));
+    }
+    rx
+}
+
+/// Before a project closes: commits what of its conversations waits, on the writer. A failure only
+/// goes to the log: the rows stay in the project's working set, and the next opening commits them.
+fn keep_chats(inner: &Arc<Inner>, path: &Path) {
+    let answer = on_writer(inner, path, |p| p.commit_chats().map_err(|e| e.to_string())).recv_timeout(FLUSH_BUDGET);
+    match answer {
+        Ok(Ok(_)) => {}
+        Ok(Err(e)) => log::warn!("the conversations of {} wait for the next opening: {e}", path.display()),
+        Err(_) => log::warn!("the conversations of {} were not committed in time; they wait for the next opening", path.display()),
     }
 }
 
@@ -796,6 +895,55 @@ mod tests {
         assert!(back.model.as_deref().is_none_or(|rows| rows.is_empty()), "no model rows are left");
         assert_eq!(back.unsaved, as_created.unsaved, "as a project never touched opens");
         close(&host, &fresh).unwrap();
+        host.shutdown();
+        remove_settled(&base);
+    }
+
+    #[test]
+    fn dont_save_through_the_host_keeps_the_conversations_written_on_the_writer() {
+        use archforge_project::{NewChat, NewQuestion, NewTurn, Provider, TurnEnd, TurnOutcome};
+        let base = std::env::temp_dir().join(format!("af-chats-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        let host = Projects::new(&base.join("settings"), "Archforge test".into());
+        let path = wait(&host.create(&base.join("Documents/Archforge"), "Commerce platform")).unwrap().path;
+        let shop = model("shop");
+        host.write(&path, shop.clone());
+        assert_eq!(saved(&host, &path), Ok(true));
+        let id = |n: u8| archforge_mof::Uuid::v7(1_762_400_000_000, [n; 10]);
+        let chat = id(1);
+        let answer = |rx: Receiver<Result<(), String>>| rx.recv_timeout(Duration::from_secs(60)).expect("the writer answers");
+        // A conversation and a turn, written on the writer in order with the model's rows.
+        let made = on_writer(&host.inner, &path, move |p| {
+            let now = archforge_project::timestamp(1_762_437_731);
+            let new = NewChat {
+                id: chat,
+                origin: "Chat 1".into(),
+                title: "Add a schema".into(),
+                provider: Provider::Codex,
+                model: "gpt-5-codex".into(),
+                created_by: "Archforge test".into(),
+                now: now.clone(),
+            };
+            p.create_chat(&new, &archforge_secrets::MemoryStore::new()).map_err(|e| e.to_string())?;
+            let turn = NewTurn { id: id(2), chat, model: "gpt-5-codex".into(), allow_changes: true, now: now.clone() };
+            let question = NewQuestion { id: id(3), body: "Add a crm schema".into(), anchors: Vec::new() };
+            p.start_turn(&turn, &question, &archforge_secrets::MemoryStore::new()).map_err(|e| e.to_string())?;
+            p.end_turn(&TurnEnd { turn: id(2), outcome: TurnOutcome::Completed, error: None, now, changes: None }).map_err(|e| e.to_string())
+        });
+        assert_eq!(answer(made), Ok(()));
+        host.write(&path, model("crm"));
+        assert_eq!(host.flush_for_test(&path), Ok(()));
+        let answer = host.discard_and_close(&path).recv_timeout(Duration::from_secs(60)).expect("the closing answers");
+        assert_eq!(answer, Ok(()));
+        let back = wait(&host.open(&path)).unwrap();
+        assert_eq!(back.model.as_deref(), Some(&shop), "the model is back at its save");
+        assert!(!back.unsaved, "the conversation never makes the project unsaved");
+        let listed = on_writer(&host.inner, &path, |p| p.list_chats().map_err(|e| e.to_string()));
+        let listed = listed.recv_timeout(Duration::from_secs(60)).expect("the writer answers").unwrap();
+        let summary = listed[0].entry.as_ref().unwrap();
+        assert_eq!((listed.len(), summary.chat.provider, summary.messages), (1, Provider::Codex, 1), "the conversation stayed");
+        close(&host, &path).unwrap();
         host.shutdown();
         remove_settled(&base);
     }
