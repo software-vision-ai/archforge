@@ -697,6 +697,29 @@ What is UML's own, beside the shared rules above.
   Remove it from those sets before reconnecting it to Product."), the drag snapping back. Deleting
   a member takes it out of its sets in the same step, a set left with no member going too, the
   toast naming it; Delete on a selected set removes the set alone, its generalizations kept.
+- Qualified associations (AR-127, design page 08, frames A1 and A6): qualifiers belong to the end
+  where the box is drawn, the qualified end, the one at the class that picks (the Order end of
+  Order to OrderLine); the other end's multiplicity counts what one qualifier value picks and is
+  edited on that end. In Properties each end's part ends with `Qualifiers · n`, its `+`
+  (`workspace.properties.end.<i>.qualifiers.add`) opening the row editor: Name and Type (the
+  shared type menu) side by side, Multiplicity under them, a line saying what it picks ("One order
+  and one lineNo pick 0..1 line."), the bin and the moves at its foot on the left, Cancel and Apply
+  on the right; rows read `lineNo : Integer` with their pencil, ids
+  `workspace.properties.end.<i>.qualifier.<k>` and `….<k>.name`, `.type`, `.multiplicity`,
+  `.remove`, `.up`, `.down`, `.cancel`, `.apply` (a new one's `k` is the count). A qualified end
+  says "Qualified end: the qualifier box is drawn here, against Order." under its title; the
+  other end's multiplicity field is labelled Per qualifier value with "Counted per qualifier
+  value of the other end; shown next to OrderLine." under it. As built, the ends keep their two
+  sections (End at …) rather than the design's Ends switch, which belongs with n-ary associations
+  (AR-128). A name another qualifier of the end has, whatever the case, is refused in a tinted
+  box under the fields with the name ringed ("This end already has a qualifier named lineNo. Pick
+  another name."), the editor open and nothing written. On the canvas the box is drawn in the
+  surface, framed in the line's ink, against the side of the class's card the line leaves, rows in
+  model order; the line, its end mark, role, multiplicity and end handle start from its outer
+  side (`workspace.canvas.edge.<id>.qualifiers.<i>`). Selecting a qualifier shows its
+  association's panel, its row marked. Qualifiers are never attributes or roles: cards and
+  Attributes leave them out. Agents use `uml.qualifier.add`, `.set` and `.move`, and
+  `element.remove`.
 - A type menu offers None, every built-in type (Integer, String, Boolean, Real, UnlimitedNatural),
   then the model's own types by name, every one of them: the menu scrolls, the arrow keys reach any
   row, and only the rows in sight are laid out (AR-123). A built-in type is made in the package

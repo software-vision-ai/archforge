@@ -779,7 +779,7 @@ pub(crate) fn keep_choices(shell: &mut Shell, choices: crate::panels::TypeChoice
 }
 
 /// The menu of a type select, when it is open; sets `ty` to the type picked.
-fn type_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Rect, id: &str, ty: &mut String, which: Menu) {
+pub(crate) fn type_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Rect, id: &str, ty: &mut String, which: Menu) {
     if shell.panels.menu != Some(which) {
         return;
     }

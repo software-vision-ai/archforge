@@ -937,10 +937,13 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
         );
         let typed = edit.multiplicity[i].clone();
         let refusal = edit.refused[i].clone();
+        // Where the other end is qualified, this end's multiplicity counts per qualifier value (AR-127).
+        let per_value = shell.session.as_ref().and_then(|s| crate::uml_qualifiers::per_value_note(s.doc(), ends[1 - i], ends[i]));
+        let m_label = if per_value.is_some() { tr("Per qualifier value") } else { tr("Multiplicity") };
         let combo = Combo {
             id: &format!("{key}.multiplicity"),
-            label: &tr("Multiplicity"),
-            name: &format!("{title} · {}", tr("Multiplicity")),
+            label: &m_label,
+            name: &format!("{title} · {m_label}"),
             placeholder: "—",
             options: &MULTIPLICITIES,
             current: MULTIPLICITIES.iter().position(|m| *m == edit.written[i]),
@@ -999,6 +1002,12 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
             let height = said.size().y;
             paint.galley(pos2(r.left() + PAD, y - 2.0), said, p.danger);
             y += (height + 26.0).max(42.0);
+        } else if let Some(note) = &per_value {
+            let paint = ui.painter().clone();
+            let said = ux::galley_rows(&paint, note, types::CAPTION, p.text_muted, Some(width), 3);
+            let height = said.size().y;
+            paint.galley(pos2(r.left() + PAD, y - 4.0), said, p.text_muted);
+            y += height + 8.0;
         }
         // The whole's end, where the diamond sits, is never navigable: it shows no Navigable.
         let whole = aggregations[1 - i] != 0;
@@ -1049,6 +1058,8 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
         y += 28.0;
         let (next, asked) = if open { end_modifiers(shell, ui, p, r, y, &mut edit, ends[i], i) } else { (y, Asked::Nothing) };
         y = next;
+        // Its qualifiers, with their editor (AR-127).
+        y = crate::uml_qualifiers::section_of(shell, ui, p, r, y, id, i, ends[i]);
         shell.panels.ends = Some(edit.clone());
         match asked {
             Asked::Nothing => {}

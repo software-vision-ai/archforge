@@ -979,7 +979,7 @@ fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
 }
 
 /// An association's or an association class's two ends as the query commands give them: each with
-/// its class, role, multiplicity, navigability, aggregation, static and modifiers.
+/// its class, role, multiplicity, navigability, aggregation, static, modifiers and qualifiers.
 pub(crate) fn ends_json(store: &Store, r: Obj) -> Json {
     let id = |o: Obj| uuid_of(store, o).unwrap_or_default();
     let ends: Vec<Json> = crate::figures::member_ends(store, r)
@@ -996,6 +996,10 @@ pub(crate) fn ends_json(store: &Store, r: Obj) -> Json {
                         "static": store.get(*e, crate::feature::IS_STATIC).ok().and_then(|v| v.as_bool()).unwrap_or(false),
                     });
                     crate::modifiers::merge_into(store, *e, &mut end);
+                    // Its qualifiers, in order (AR-127).
+                    if let Some(fields) = end.as_object_mut() {
+                        fields.insert("qualifiers".to_string(), crate::qualifiers::qualifiers_json(store, *e));
+                    }
                     end
                 })
                 .collect()

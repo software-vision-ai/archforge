@@ -103,6 +103,12 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   `uml_constraint_show`, which shows a constraint on a class diagram as braces or as a linked
   note. The expression is kept exactly as sent and never evaluated; an empty one, or an element
   outside the model, is refused. A constraint is removed with `element_remove`.
+- **Qualifiers**: `uml_qualifier_add` qualifies one end of an association or an association class
+  (`end` 0 or 1, the end whose class does the picking) with a name, a type and a multiplicity;
+  `uml_qualifier_set` changes them, a field left out keeping its value; `uml_qualifier_move` puts
+  one at another place among its end's. A name another qualifier of the end has, whatever the case,
+  is refused. `uml_relationship_list` gives each end's qualifiers. A qualifier is removed with
+  `element_remove`.
 - **Generalization sets**: `uml_generalization_set_add` groups generalizations to one general
   class, complete or incomplete and disjoint or overlapping; `uml_generalization_set_set` renames
   it, changes either flag, and adds or takes out members; `uml_generalization_set_place` puts its

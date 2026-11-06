@@ -750,6 +750,10 @@ str		{name} deleted	{name} gelöscht
 str		Constraint · model, not evaluated	Einschränkung · Modell, nicht ausgewertet
 str		This constraint	Diese Einschränkung
 str		On this constraint · {n}	Bei dieser Einschränkung · {n}
+str		Qualifier · model	Qualifizierer · Modell
+str		Qualifier	Qualifizierer
+str		This qualifier	Dieser Qualifizierer
+str		On this qualifier · {n}	Bei diesem Qualifizierer · {n}
 str		Constraint · not evaluated	Einschränkung · nicht ausgewertet
 str		Parameter	Parameter
 str		No literals yet	Noch keine Literale
@@ -861,6 +865,14 @@ str		Drag a line end onto another class.	Ziehen Sie ein Linienende auf eine ande
 str		Drag onto another class to move this end	Auf eine andere Klasse ziehen, um dieses Ende zu verschieben
 str		Drag the class end onto another class, the interface end onto another interface.	Ziehen Sie das Klassenende auf eine andere Klasse, das Schnittstellenende auf eine andere Schnittstelle.
 str		End at {class}	Ende bei {class}
+str		Qualifiers · {n}	Qualifizierer · {n}
+str		Add qualifier	Qualifizierer hinzufügen
+str		Qualified end: the qualifier box is drawn here, against {class}.	Qualifiziertes Ende: Das Qualifiziererfeld wird hier gezeichnet, an {class}.
+str		Per qualifier value	Je Qualifiziererwert
+str		Counted per qualifier value of the other end; shown next to {class}.	Gezählt je Qualifiziererwert des anderen Endes; neben {class} angezeigt.
+str		One {owner} and one {qualifiers} pick {multiplicity} {target}.	Ein {owner} und ein {qualifiers} wählen {multiplicity} {target}.
+str		Type a name: a qualifier without one picks nothing.	Geben Sie einen Namen ein: Ein Qualifizierer ohne Namen wählt nichts aus.
+str		This end already has a qualifier named {name}. Pick another name.	Dieses Ende hat bereits einen Qualifizierer namens {name}. Wählen Sie einen anderen Namen.
 str		From	Von
 str		General	Allgemein
 str		Generalization	Generalisierung

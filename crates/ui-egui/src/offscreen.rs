@@ -165,6 +165,13 @@ pub enum Screen {
     /// generalizations to Payment grouped in the set method {complete, disjoint}, its dashed line
     /// across them and its label beside it; the set selected, its Properties open (AR-129).
     WorkspaceGeneralizationSets,
+    /// The sample class model with Order's composition to OrderLine named contains, its OrderLine
+    /// end line at 0..1 and its Order end qualified by lineNo : Integer, the qualifier box drawn
+    /// against Order; the association selected with the qualifier editor open on lineNo (AR-127).
+    WorkspaceQualifiers,
+    /// The same, a second qualifier lineNo : String applied on the Order end and refused in place:
+    /// the name ringed and the reason in a tinted box, nothing written (AR-127).
+    WorkspaceQualifierRefused,
     /// The user manual's class-model guide, first step: the root package's diagram Commerce with
     /// Customer (its name typed) and Order, a draft row open on Order's card with `number :
     /// Integer` typed.
@@ -550,6 +557,11 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
         shell.adopt_project();
         crate::uml_ui::open_sample(&mut shell)?;
         sample_generalization_sets(&mut shell)?;
+    }
+    if screen == Screen::WorkspaceQualifiers || screen == Screen::WorkspaceQualifierRefused {
+        shell.adopt_project();
+        crate::uml_ui::open_sample(&mut shell)?;
+        sample_qualifiers(&mut shell, screen == Screen::WorkspaceQualifierRefused)?;
     }
     if let Some(step) = guide_step(screen) {
         shell.adopt_project();
@@ -1097,6 +1109,43 @@ fn sample_generalization_sets(shell: &mut Shell) -> Result<(), String> {
     shell.canvas.fit_pending = false;
     shell.canvas.zoom = 0.75;
     shell.canvas.pan = egui::vec2(-470.0, -230.0);
+    Ok(())
+}
+
+/// In the sample class model, Order's composition to OrderLine named contains, its OrderLine end
+/// `line` at 0..1, its Order end qualified by lineNo : Integer, selected with the qualifier editor
+/// open on lineNo; or, `refused`, a second lineNo applied there and refused (AR-127).
+fn sample_qualifiers(shell: &mut Shell, refused: bool) -> Result<(), String> {
+    use serde_json::json;
+    let a_id = {
+        let store = shell.session.as_ref().ok_or("no project is open")?.doc();
+        let named = |o: archforge_mof::Obj, n: &str| archforge_core::name_of(store, o) == n;
+        let a = store
+            .alive()
+            .filter(|o| store.class_of(*o).ok() == Some(archforge_uml::ASSOCIATION))
+            .find(|o| archforge_uml::figures::ends(store, *o).is_some_and(|(from, to)| named(from, "Order") && named(to, "OrderLine")))
+            .ok_or("the sample has no association from Order to OrderLine")?;
+        store.uuid(a).map_err(|e| e.to_string())?
+    };
+    let id = a_id.to_string();
+    crate::panels::run(shell, "uml.relationship.rename", json!({ "relationship": id, "name": "contains" }))?;
+    crate::panels::run(shell, "uml.association.set-end", json!({ "association": id, "end": 1, "role": "line", "multiplicity": "0..1" }))?;
+    let out = crate::panels::run(shell, "uml.qualifier.add", json!({ "association": id, "end": 0, "name": "lineNo", "type": "Integer" }))?;
+    let q = archforge_mof::Uuid::parse(out["id"].as_str().ok_or("the qualifier's id")?).ok_or("the qualifier's id")?;
+    crate::panels::run(shell, "view.select", json!({ "ids": [id] }))?;
+    shell.state.show_panel(crate::state::Panel::Properties);
+    if let Some(s) = shell.session.as_mut() {
+        s.mark_saved().map_err(|e| e.to_string())?;
+    }
+    if refused {
+        crate::uml_qualifiers::refuse_sample(shell, a_id, 0, "lineNo", "String");
+    } else {
+        crate::uml_qualifiers::open(shell, a_id, 0, Some(q));
+    }
+    shell.panels.editors_for = Some(a_id);
+    shell.canvas.fit_pending = false;
+    shell.canvas.zoom = 0.85;
+    shell.canvas.pan = egui::vec2(-330.0, -20.0);
     Ok(())
 }
 

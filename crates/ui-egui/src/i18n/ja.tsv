@@ -750,6 +750,10 @@ str		{name} deleted	{name} を削除しました
 str		Constraint · model, not evaluated	制約 · モデル、評価されない
 str		This constraint	この制約
 str		On this constraint · {n}	この制約に · {n}
+str		Qualifier · model	限定子 · モデル
+str		Qualifier	限定子
+str		This qualifier	この限定子
+str		On this qualifier · {n}	この限定子に · {n}
 str		Constraint · not evaluated	制約 · 評価されない
 str		Parameter	パラメーター
 str		No literals yet	リテラルはまだありません
@@ -861,6 +865,14 @@ str		Drag a line end onto another class.	線の端を別のクラスへドラッ
 str		Drag onto another class to move this end	別のクラスへドラッグしてこの端を移動
 str		Drag the class end onto another class, the interface end onto another interface.	クラス側の端を別のクラスへ、インターフェース側の端を別のインターフェースへドラッグします。
 str		End at {class}	{class} 側の端
+str		Qualifiers · {n}	限定子 · {n}
+str		Add qualifier	限定子を追加
+str		Qualified end: the qualifier box is drawn here, against {class}.	限定された端: 限定子の枠は {class} に接してここに描かれます。
+str		Per qualifier value	限定子の値ごと
+str		Counted per qualifier value of the other end; shown next to {class}.	もう一方の端の限定子の値ごとに数えます。{class} の横に表示されます。
+str		One {owner} and one {qualifiers} pick {multiplicity} {target}.	1 つの {owner} と 1 つの {qualifiers} で {target} を {multiplicity} 選びます。
+str		Type a name: a qualifier without one picks nothing.	名前を入力してください。名前のない限定子は何も選びません。
+str		This end already has a qualifier named {name}. Pick another name.	この端には {name} という名前の限定子がすでにあります。別の名前を選んでください。
 str		From	始点
 str		General	一般
 str		Generalization	汎化

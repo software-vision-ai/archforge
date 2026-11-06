@@ -5693,7 +5693,10 @@ impl archforge_diagram::Notation for Sketch {
     fn line(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<archforge_diagram::figure::Line> {
         use archforge_diagram::figure::{End, EndMark, Line};
         Some(Line {
-            ends: [End { mark: EndMark::None, text: Some("specific".into()), slot: "sketch.specific", role: None }, End::marked(EndMark::Triangle)],
+            ends: [
+                End { mark: EndMark::None, text: Some("specific".into()), slot: "sketch.specific", role: None, qualifiers: Vec::new() },
+                End::marked(EndMark::Triangle),
+            ],
             styled: true,
             dashed: false,
             status: None,
@@ -12215,7 +12218,9 @@ fn leaving_a_multiplicity_closes_its_menu_and_its_rows_and_refusal_reach_assisti
 
 #[test]
 fn an_end_multiplicity_menu_opens_above_its_field_when_the_window_has_no_room_below() {
-    let (mut h, _) = paid_by(ThemeKind::Light, egui::vec2(1600.0, 820.0));
+    // Tall enough to show end 1's field under end 0's Qualifiers section (AR-127), its menu then
+    // having no room below.
+    let (mut h, _) = paid_by(ThemeKind::Light, egui::vec2(1600.0, 880.0));
     for (i, above) in [(0, false), (1, true)] {
         let at = rect_of(&h, &format!("workspace.properties.end.{i}.multiplicity.menu")).center();
         click(&mut h, at);
@@ -12229,7 +12234,7 @@ fn an_end_multiplicity_menu_opens_above_its_field_when_the_window_has_no_room_be
         } else {
             assert!(first.top() > field.bottom(), "end {i}: {first:?} under {field:?}");
         }
-        assert!(clear.bottom() <= 820.0 && first.top() >= 0.0, "end {i}: the whole menu shows");
+        assert!(clear.bottom() <= 880.0 && first.top() >= 0.0, "end {i}: the whole menu shows");
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
     }
 }
@@ -13944,4 +13949,200 @@ fn a_key_saved_while_the_keys_are_being_read_stays_when_the_read_answers() {
     f.release_keys();
     h.run();
     assert_eq!(h.state().agents.look.claude_key, saved, "the store holds it now");
+}
+
+/// Order and OrderLine joined by `contains`, its OrderLine end `line` at 0..1, on two class
+/// diagrams of the package Shop, the first open and the association selected with Properties
+/// shown (AR-127). Gives the ids by name: Order, OrderLine, contains, diagram, second.
+fn qualifiers_sample(theme: ThemeKind) -> (Harness<'static, Shell>, std::collections::BTreeMap<&'static str, String>) {
+    let mut h = workspace_harness(theme, egui::vec2(1600.0, 1500.0));
+    let mut ids = std::collections::BTreeMap::new();
+    {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let mut run = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap_or_default().to_string();
+        let pkg = run("uml.package.add", serde_json::json!({ "name": "Shop" }));
+        let order = run("uml.class.add", serde_json::json!({ "package": pkg, "name": "Order" }));
+        let line = run("uml.class.add", serde_json::json!({ "package": pkg, "name": "OrderLine" }));
+        let contains = run("uml.association.add", serde_json::json!({ "from": order, "to": line, "name": "contains" }));
+        run("uml.association.set-end", serde_json::json!({ "association": contains, "end": 0, "role": "order", "multiplicity": "1" }));
+        run("uml.association.set-end", serde_json::json!({ "association": contains, "end": 1, "role": "line", "multiplicity": "0..1" }));
+        let mut diagrams = Vec::new();
+        for (name, x) in [("Shop", 600), ("Overview", 120)] {
+            let d = run("diagram.add", serde_json::json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": pkg, "name": name }));
+            for (element, cx) in [(&order, 80), (&line, x)] {
+                run("diagram.place", serde_json::json!({ "diagram": d, "element": element, "x": cx, "y": if cx == 80 { 120 } else { 420 } }));
+            }
+            run("diagram.connect-all", serde_json::json!({ "diagram": d }));
+            diagrams.push(d);
+        }
+        for (k, v) in
+            [("Order", order), ("OrderLine", line), ("contains", contains.clone()), ("diagram", diagrams[0].clone()), ("second", diagrams[1].clone())]
+        {
+            ids.insert(k, v);
+        }
+    }
+    crate::canvas::open(h.state_mut(), archforge_mof::Uuid::parse(&ids["diagram"]).unwrap());
+    h.run();
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [ids["contains"]] })).unwrap();
+    h.state_mut().state.show_panel(crate::state::Panel::Properties);
+    h.run();
+    (h, ids)
+}
+
+/// The qualifier box's rows the association's line draws at its two ends.
+fn qualifier_rows(h: &Harness<'static, Shell>, a: &str) -> [Vec<String>; 2] {
+    let st = h.state().session.as_ref().unwrap().doc();
+    let l = archforge_uml::figures::line(st, st.by_uuid(archforge_mof::Uuid::parse(a).unwrap()).unwrap()).unwrap();
+    [l.ends[0].qualifiers.clone(), l.ends[1].qualifiers.clone()]
+}
+
+/// The edge of `element` on diagram `d`.
+fn edge_on(h: &Harness<'static, Shell>, element: &str, d: &str) -> String {
+    let st = h.state().session.as_ref().unwrap().doc();
+    let d = st.by_uuid(archforge_mof::Uuid::parse(d).unwrap()).unwrap();
+    let e = archforge_diagram::views_of(st, st.by_uuid(archforge_mof::Uuid::parse(element).unwrap()).unwrap())
+        .1
+        .into_iter()
+        .find(|e| archforge_diagram::diagram_of(st, *e) == Some(d))
+        .unwrap();
+    st.uuid(e).unwrap().to_string()
+}
+
+/// A qualifier is added on the Order end in Properties with the row editor, its type from the
+/// shared type selector; Apply is one undo step, the section says the end is qualified, the far
+/// end's multiplicity counts per qualifier value, and the box is drawn against Order on both
+/// diagrams; a second is moved up and removed, each one undo step. In light and dark.
+#[test]
+fn qualifiers_are_added_moved_and_removed_in_properties_and_boxed_on_the_line() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, made) = qualifiers_sample(theme);
+        let a = made["contains"].clone();
+        assert!(painted(&h).iter().any(|t| t == "Qualifiers · 0"), "{:?}", painted(&h));
+        let at = rect_of(&h, "workspace.properties.end.0.qualifiers.add").center();
+        click(&mut h, at);
+        let found = ids(&h);
+        for id in ["name", "type", "multiplicity", "cancel", "apply"] {
+            assert!(found.iter().any(|i| *i == format!("workspace.properties.end.0.qualifier.0.{id}")), "{theme:?}: {id} in {found:?}");
+        }
+        assert!(!found.iter().any(|i| i == "workspace.properties.end.0.qualifier.0.remove"), "a new one has no bin");
+        // The name takes the keyboard as the editor opens.
+        h.event(egui::Event::Text("lineNo".into()));
+        h.run();
+        pick_type(&mut h, "workspace.properties.end.0.qualifier.0.type", "Integer");
+        assert!(painted(&h).iter().any(|t| t == "One order and one lineNo pick 0..1 line."), "{:?}", painted(&h));
+        assert_eq!(qualifier_rows(&h, &a), [Vec::<String>::new(), Vec::new()], "nothing before Apply");
+        let at = rect_of(&h, "workspace.properties.end.0.qualifier.0.apply").center();
+        click(&mut h, at);
+        assert!(h.state().panels.qualifier.is_none(), "applied, the editor closes");
+        assert_eq!(qualifier_rows(&h, &a), [vec!["lineNo : Integer".to_string()], Vec::new()]);
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add qualifier"));
+        h.run();
+        let shown = painted(&h);
+        for said in [
+            "Qualifiers · 1",
+            "lineNo : Integer",
+            "Qualified end: the qualifier box is drawn here, against Order.",
+            "Per qualifier value",
+            "Counted per qualifier value of the other end; shown next to OrderLine.",
+        ] {
+            assert!(shown.iter().any(|t| t == said), "{theme:?}: {said} in {shown:?}");
+        }
+        let edge = edge_on(&h, &a, &made["diagram"]);
+        assert!(ids(&h).iter().any(|i| *i == format!("workspace.canvas.edge.{edge}.qualifiers.0")), "the box at Order");
+        assert!(!ids(&h).iter().any(|i| *i == format!("workspace.canvas.edge.{edge}.qualifiers.1")), "none at OrderLine");
+        // The box sits against Order's card, between it and the line.
+        let st = h.state().session.as_ref().unwrap().doc();
+        let order = st.by_uuid(archforge_mof::Uuid::parse(&made["Order"]).unwrap()).unwrap();
+        let node = archforge_diagram::views_of(st, order).2[0];
+        let card = rect_of(&h, &format!("workspace.canvas.node.{}", st.uuid(node).unwrap()));
+        let boxed = rect_of(&h, &format!("workspace.canvas.edge.{edge}.qualifiers.0"));
+        let touching = [boxed.top() - card.bottom(), boxed.bottom() - card.top(), boxed.left() - card.right(), boxed.right() - card.left()];
+        assert!(touching.iter().any(|g| g.abs() < 1.5) && !card.shrink(2.0).intersects(boxed), "{boxed:?} against {card:?}");
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        assert_eq!(qualifier_rows(&h, &a)[0], Vec::<String>::new(), "one undo step");
+        h.state_mut().session.as_mut().unwrap().redo().unwrap();
+        h.run();
+        // The same box on the second diagram: the content is the model's.
+        crate::canvas::open(h.state_mut(), archforge_mof::Uuid::parse(&made["second"]).unwrap());
+        h.run();
+        let edge2 = edge_on(&h, &a, &made["second"]);
+        assert!(ids(&h).iter().any(|i| *i == format!("workspace.canvas.edge.{edge2}.qualifiers.0")), "the box on the second diagram");
+        assert!(painted(&h).iter().any(|t| t == "lineNo : Integer"));
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [a] })).unwrap();
+        h.run();
+        // A second qualifier, moved up with the editor's arrow, then removed with its bin.
+        let at = rect_of(&h, "workspace.properties.end.0.qualifiers.add").center();
+        click(&mut h, at);
+        h.event(egui::Event::Text("kind".into()));
+        h.run();
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert_eq!(qualifier_rows(&h, &a)[0], ["lineNo : Integer", "kind"], "Enter applies; rows in model order");
+        let row = rect_of(&h, "workspace.properties.end.0.qualifier.1").left_center() + egui::vec2(20.0, 0.0);
+        h.event(egui::Event::PointerMoved(row));
+        h.run();
+        let at = rect_of(&h, "workspace.properties.end.0.qualifier.1.edit").center();
+        click(&mut h, at);
+        let at = rect_of(&h, "workspace.properties.end.0.qualifier.1.up").center();
+        click(&mut h, at);
+        assert_eq!(qualifier_rows(&h, &a)[0], ["kind", "lineNo : Integer"]);
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Move qualifier"));
+        h.run();
+        let at = rect_of(&h, "workspace.properties.end.0.qualifier.0.remove").center();
+        click(&mut h, at);
+        assert_eq!(qualifier_rows(&h, &a)[0], ["lineNo : Integer"]);
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        assert_eq!(qualifier_rows(&h, &a)[0], ["kind", "lineNo : Integer"], "the removal is one step");
+        // A row's click selects the qualifier: Properties stays the association's, the row marked.
+        h.state_mut().panels.qualifier = None;
+        h.run();
+        let at = rect_of(&h, "workspace.properties.end.0.qualifier.1").left_center() + egui::vec2(20.0, 0.0);
+        click(&mut h, at);
+        h.run();
+        let st = h.state().session.as_ref().unwrap();
+        let chosen = st.view().selection.first().copied().unwrap();
+        assert!(archforge_uml::qualifiers::is_qualifier(st.doc(), chosen), "the qualifier is selected");
+        let shown = painted(&h);
+        assert!(shown.iter().any(|t| t == "Qualifier · model") && shown.iter().any(|t| t == "Qualifiers · 2"), "{shown:?}");
+    }
+}
+
+/// A second qualifier named like the end's first, whatever the case, is refused in place (design
+/// frame A6): the reason under the fields, the editor open, the model and its history unchanged;
+/// corrected, it is written. In light and dark.
+#[test]
+fn a_duplicate_qualifier_name_is_refused_in_place_and_nothing_is_written() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, made) = qualifiers_sample(theme);
+        let a = made["contains"].clone();
+        h.state_mut()
+            .session
+            .as_mut()
+            .unwrap()
+            .execute("uml.qualifier.add", &serde_json::json!({ "association": a, "end": 0, "name": "lineNo", "type": "Integer" }))
+            .unwrap();
+        h.run();
+        let before = (qualifier_rows(&h, &a), h.state().session.as_ref().unwrap().undo_label().map(str::to_string));
+        let at = rect_of(&h, "workspace.properties.end.0.qualifiers.add").center();
+        click(&mut h, at);
+        h.event(egui::Event::Text("LineNo".into()));
+        h.run();
+        pick_type(&mut h, "workspace.properties.end.0.qualifier.1.type", "String");
+        let at = rect_of(&h, "workspace.properties.end.0.qualifier.1.apply").center();
+        click(&mut h, at);
+        let edit = h.state().panels.qualifier.clone().expect("the editor stays open");
+        assert_eq!(edit.refused_at, Some("name"));
+        assert_eq!(edit.refused.as_deref(), Some("This end already has a qualifier named lineNo. Pick another name."));
+        assert!(painted(&h).iter().any(|t| t == "This end already has a qualifier named lineNo. Pick another name."), "said in place");
+        assert_eq!((qualifier_rows(&h, &a), h.state().session.as_ref().unwrap().undo_label().map(str::to_string)), before, "nothing written");
+        // Typing again takes the reason away; another name is written.
+        let at = rect_of(&h, "workspace.properties.end.0.qualifier.1.name").center();
+        click(&mut h, at);
+        key(&mut h, egui::Key::A, egui::Modifiers::COMMAND);
+        h.event(egui::Event::Text("kind".into()));
+        h.run();
+        assert!(h.state().panels.qualifier.as_ref().is_some_and(|e| e.refused.is_none()));
+        let at = rect_of(&h, "workspace.properties.end.0.qualifier.1.apply").center();
+        click(&mut h, at);
+        assert_eq!(qualifier_rows(&h, &a)[0], ["lineNo : Integer", "kind : String"]);
+    }
 }

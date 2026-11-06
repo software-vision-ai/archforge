@@ -45,6 +45,7 @@ pub mod generalization_sets;
 mod generated;
 pub mod members;
 pub mod modifiers;
+pub mod qualifiers;
 pub mod relations;
 
 use std::sync::Arc;
@@ -246,6 +247,10 @@ impl Notation for UmlNotation {
         if members::is_built_in(store, element) {
             return Some("a built-in type carries no skill; a primitive type of the model's own does");
         }
+        // A qualifier is its end's, not an attribute (AR-127).
+        if qualifiers::is_qualifier(store, element) {
+            return Some("a qualifier carries no skill; its association's classes do");
+        }
         let end = store.class_of(element).ok() == Some(PROPERTY) && store.get(element, property::ASSOCIATION).ok().and_then(|v| v.as_ref()).is_some();
         end.then_some("an association's end carries no skill; its association's classes do")
     }
@@ -298,6 +303,7 @@ pub fn registry() -> Result<Arc<archforge_engine::Registry<Store, ProjectView>>,
     specs.extend(relations::specs());
     specs.extend(constraints::specs());
     specs.extend(generalization_sets::specs());
+    specs.extend(qualifiers::specs());
     specs.extend(archforge_diagram::commands::specs::<ProjectView>());
     specs.extend(archforge_core::skills::specs::<ProjectView>());
     archforge_engine::Registry::new(specs)

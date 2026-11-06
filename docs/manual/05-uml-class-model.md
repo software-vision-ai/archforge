@@ -743,6 +743,40 @@ new one.
 
 <!-- picture: workspace-generalization-sets light | Payment above CardPayment, BankTransfer and WalletPayment; the set method selected, its dashed line across their three generalizations and its label method {complete, disjoint} beside it; Properties shows its name, general class Payment, Complete and Disjoint chosen, and its three members -->
 
+### Qualified associations
+
+A *qualifier* picks out the instances at the far end of an association by a value. An order has
+many lines, but an order and a line number pick out at most one line: the association *contains*
+from *Order* to *OrderLine* is qualified at the *Order* end by `lineNo : Integer`, and its
+*OrderLine* end's multiplicity is `0..1`.
+
+Select the association and find the end the qualifier belongs to in **Properties**: the end at
+the class that does the picking, here **End at Order**. Under its fields, **Qualifiers** lists that
+end's qualifiers. Press **+** to add one: the editor takes its **Name**, its **Type**, chosen from
+the same list of types an attribute uses, and its **Multiplicity** (empty means one). A line under
+the fields says what it picks, such as *One order and one lineNo pick 0..1 line.* **Apply** (or
+Enter) adds it as one step you can undo; **Cancel** or Escape leaves the model as it was. The pencil
+on a row, or a double click, opens a qualifier again; in its editor the bin removes it and the
+arrows move it up and down the list.
+
+- **Where it is drawn.** The qualifier box sits against the qualified end's class, between the
+  class and the line, its rows in the order of the list, on every diagram that shows the line. The
+  end's role and multiplicity are written beside the box.
+- **The other end's multiplicity** counts the instances one qualifier value picks. Its field is
+  labelled **Per qualifier value** while the other end is qualified, and a line under it says so.
+- **Qualifiers are not attributes or roles.** A class's card and its **Attributes** never list
+  them, and the end's role stays its own.
+- **What is refused.** A name another qualifier of the same end has, whatever the case: *This end
+  already has a qualifier named lineNo. Pick another name.* The reason shows in the editor, the
+  editor stays open, and nothing reaches the model or the undo history. A qualifier needs a name,
+  and its multiplicity must read as one does elsewhere.
+- **Renaming or reconnecting** the association keeps its qualifiers: they belong to their end and
+  move with it. Deleting the association deletes them with it.
+
+<!-- picture: workspace-qualifiers light | Order above OrderLine joined by the composition contains; the qualifier box lineNo : Integer against Order's card, order and 1 beside it, line and 0..1 at OrderLine; Properties shows End at Order with Qualifiers · 1 and the editor open on lineNo, and End at OrderLine with Per qualifier value 0..1 -->
+
+<!-- picture: workspace-qualifier-refused light | The same, a second qualifier lineNo : String applied on the Order end and refused: the name ringed and the reason in a tinted box under the fields -->
+
 ### Constraints
 
 A constraint is owned by a class, an interface, an enumeration, a data type, your own primitive

@@ -94,7 +94,13 @@ pub fn line(store: &Store, element: Obj) -> Option<Line> {
             let end = |cardinality, slot, role| {
                 let c = rules::cardinality_of(store, element, cardinality);
                 let role = rules::role_of(store, element, role);
-                End { mark: end_mark(c), text: c.map(|c| cardinality_text(c).to_string()), slot, role: (!role.is_empty()).then_some(role) }
+                End {
+                    mark: end_mark(c),
+                    text: c.map(|c| cardinality_text(c).to_string()),
+                    slot,
+                    role: (!role.is_empty()).then_some(role),
+                    qualifiers: Vec::new(),
+                }
             };
             let many_to_many = rules::is_many_to_many(store, element);
             Some(Line {

@@ -844,6 +844,10 @@ impl NotationUi for UmlUi {
             c if c == archforge_uml::CONSTRAINT => {
                 words(tr("Constraint · model, not evaluated"), tr("Constraint"), tr("This constraint"), tr("On this constraint · {n}"))
             }
+            // A qualifier of an association's end (AR-127).
+            c if c == archforge_uml::PROPERTY && archforge_uml::qualifiers::is_qualifier(store, o) => {
+                words(tr("Qualifier · model"), tr("Qualifier"), tr("This qualifier"), tr("On this qualifier · {n}"))
+            }
             _ => match member_of(store, o)?.1 {
                 MemberKind::Attribute => words(tr("Attribute · model"), tr("Attribute"), tr("This attribute"), tr("On this attribute · {n}")),
                 MemberKind::Operation => words(tr("Operation · model"), tr("Operation"), tr("This operation"), tr("On this operation · {n}")),
@@ -860,6 +864,10 @@ impl NotationUi for UmlUi {
         if let Some(context) = constraint_context(store, o) {
             return Some(Classifier::of(store, context).map_or_else(|| tr("Package"), Classifier::word));
         }
+        // A qualifier's panel is its association's (AR-127).
+        if let Some((a, _)) = archforge_uml::qualifiers::association_of(store, o) {
+            return Some(if class(store, a) == Some(archforge_uml::ASSOCIATION_CLASS) { tr("Association class") } else { tr("Association") });
+        }
         owner_of(store, o).and_then(|c| Classifier::of(store, c)).map(Classifier::word)
     }
 
@@ -874,6 +882,13 @@ impl NotationUi for UmlUi {
             }
             Some(c) if c == archforge_uml::GENERALIZATION_SET => return crate::uml_sets::set_body(shell, ui, p, r, y, subject),
             _ => {}
+        }
+        // A qualifier shows its association's panel, its row marked (AR-127).
+        if let Some((a, _)) = archforge_uml::qualifiers::association_of(store, o) {
+            let Some(words) = self.words(store, a) else { return };
+            let (Ok(id), Ok(metaclass)) = (store.uuid(a), store.class_of(a)) else { return };
+            let of = Subject::of(a, id, metaclass, words);
+            return crate::uml_relate::body(shell, ui, p, r, y, &of);
         }
         // A constraint shows its context's panel, its row marked (AR-133).
         if let Some(c) = constraint_context(store, o) {

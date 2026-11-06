@@ -750,6 +750,10 @@ str		{name} deleted	已删除 {name}
 str		Constraint · model, not evaluated	约束 · 模型，不求值
 str		This constraint	此约束
 str		On this constraint · {n}	在此约束上 · {n}
+str		Qualifier · model	限定符 · 模型
+str		Qualifier	限定符
+str		This qualifier	此限定符
+str		On this qualifier · {n}	在此限定符上 · {n}
 str		Constraint · not evaluated	约束 · 不求值
 str		Parameter	参数
 str		No literals yet	尚无字面量
@@ -861,6 +865,14 @@ str		Drag a line end onto another class.	将线的一端拖到另一个类上。
 str		Drag onto another class to move this end	拖到另一个类上以移动此端
 str		Drag the class end onto another class, the interface end onto another interface.	将类一端拖到另一个类上，将接口一端拖到另一个接口上。
 str		End at {class}	{class} 端
+str		Qualifiers · {n}	限定符 · {n}
+str		Add qualifier	添加限定符
+str		Qualified end: the qualifier box is drawn here, against {class}.	受限定端：限定符框画在此处，紧贴 {class}。
+str		Per qualifier value	每个限定符值
+str		Counted per qualifier value of the other end; shown next to {class}.	按另一端的每个限定符值计数；显示在 {class} 旁。
+str		One {owner} and one {qualifiers} pick {multiplicity} {target}.	一个 {owner} 和一个 {qualifiers} 选出 {multiplicity} 个 {target}。
+str		Type a name: a qualifier without one picks nothing.	请输入名称：没有名称的限定符什么也选不出。
+str		This end already has a qualifier named {name}. Pick another name.	此端已有名为 {name} 的限定符。请另选一个名称。
 str		From	从
 str		General	一般
 str		Generalization	泛化

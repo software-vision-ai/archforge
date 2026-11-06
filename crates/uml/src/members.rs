@@ -328,7 +328,7 @@ fn ensure_types_package(store: &mut Store) -> Result<Obj, CommandError> {
 /// made in the package Types the first time it is used. Where Types holds a classifier named like
 /// it in another case or of another kind (from an older project), the built-in type is not made
 /// beside it: the refusal names that one and asks for it to be renamed.
-fn resolve_type(store: &mut Store, key: &str, value: &str) -> Result<Option<Obj>, CommandError> {
+pub(crate) fn resolve_type(store: &mut Store, key: &str, value: &str) -> Result<Option<Obj>, CommandError> {
     let value = value.trim();
     if value.is_empty() {
         return Ok(None);

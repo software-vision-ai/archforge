@@ -750,6 +750,10 @@ str		{name} deleted	{name} supprimé
 str		Constraint · model, not evaluated	Contrainte · modèle, non évaluée
 str		This constraint	Cette contrainte
 str		On this constraint · {n}	Sur cette contrainte · {n}
+str		Qualifier · model	Qualificatif · modèle
+str		Qualifier	Qualificatif
+str		This qualifier	Ce qualificatif
+str		On this qualifier · {n}	Sur ce qualificatif · {n}
 str		Constraint · not evaluated	Contrainte · non évaluée
 str		Parameter	Paramètre
 str		No literals yet	Aucun littéral pour l’instant
@@ -861,6 +865,14 @@ str		Drag a line end onto another class.	Faites glisser une extrémité de la li
 str		Drag onto another class to move this end	Faire glisser sur une autre classe pour déplacer cette extrémité
 str		Drag the class end onto another class, the interface end onto another interface.	Faites glisser l’extrémité de la classe sur une autre classe, et celle de l’interface sur une autre interface.
 str		End at {class}	Extrémité sur {class}
+str		Qualifiers · {n}	Qualificatifs · {n}
+str		Add qualifier	Ajouter un qualificatif
+str		Qualified end: the qualifier box is drawn here, against {class}.	Extrémité qualifiée : le cadre du qualificatif est dessiné ici, contre {class}.
+str		Per qualifier value	Par valeur du qualificatif
+str		Counted per qualifier value of the other end; shown next to {class}.	Compté par valeur du qualificatif de l’autre extrémité ; affiché à côté de {class}.
+str		One {owner} and one {qualifiers} pick {multiplicity} {target}.	Un {owner} et un {qualifiers} désignent {multiplicity} {target}.
+str		Type a name: a qualifier without one picks nothing.	Saisissez un nom : un qualificatif sans nom ne désigne rien.
+str		This end already has a qualifier named {name}. Pick another name.	Cette extrémité a déjà un qualificatif nommé {name}. Choisissez un autre nom.
 str		From	De
 str		General	Générale
 str		Generalization	Généralisation

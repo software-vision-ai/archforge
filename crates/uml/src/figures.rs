@@ -372,6 +372,12 @@ pub fn line(store: &Store, element: Obj) -> Option<Line> {
                     text: (!m.is_empty()).then_some(m),
                     slot: if i == 0 { "from_end" } else { "to_end" },
                     role: (!role.is_empty()).then_some(role),
+                    // The qualifier box at the qualified end, its rows in model order (AR-127).
+                    qualifiers: crate::qualifiers::qualifiers(store, here)
+                        .into_iter()
+                        .take(crate::qualifiers::MAX_QUALIFIERS)
+                        .map(|q| crate::qualifiers::qualifier_text(store, q))
+                        .collect(),
                 }
             };
             Some(Line { ends: [end(0), end(1)], styled: true, dashed: false, status: None, note: None, badge: false, resolvable: false })

@@ -749,6 +749,10 @@ str		{name} deleted	{name} deleted
 str		Constraint · model, not evaluated	Constraint · model, not evaluated
 str		This constraint	This constraint
 str		On this constraint · {n}	On this constraint · {n}
+str		Qualifier · model	Qualifier · model
+str		Qualifier	Qualifier
+str		This qualifier	This qualifier
+str		On this qualifier · {n}	On this qualifier · {n}
 str		Constraint · not evaluated	Constraint · not evaluated
 str		Parameter	Parameter
 str		No literals yet	No literals yet
@@ -860,6 +864,14 @@ str		Drag a line end onto another class.	Drag a line end onto another class.
 str		Drag onto another class to move this end	Drag onto another class to move this end
 str		Drag the class end onto another class, the interface end onto another interface.	Drag the class end onto another class, the interface end onto another interface.
 str		End at {class}	End at {class}
+str		Qualifiers · {n}	Qualifiers · {n}
+str		Add qualifier	Add qualifier
+str		Qualified end: the qualifier box is drawn here, against {class}.	Qualified end: the qualifier box is drawn here, against {class}.
+str		Per qualifier value	Per qualifier value
+str		Counted per qualifier value of the other end; shown next to {class}.	Counted per qualifier value of the other end; shown next to {class}.
+str		One {owner} and one {qualifiers} pick {multiplicity} {target}.	One {owner} and one {qualifiers} pick {multiplicity} {target}.
+str		Type a name: a qualifier without one picks nothing.	Type a name: a qualifier without one picks nothing.
+str		This end already has a qualifier named {name}. Pick another name.	This end already has a qualifier named {name}. Pick another name.
 str		From	From
 str		General	General
 str		Generalization	Generalization
