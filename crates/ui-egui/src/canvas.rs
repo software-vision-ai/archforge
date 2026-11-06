@@ -1151,7 +1151,7 @@ pub(crate) fn with_draft(card: &mut archforge_diagram::figure::Card, compartment
     match row {
         None => {
             if let Some(rows) = card.compartments.get_mut(compartment) {
-                rows.push(archforge_diagram::figure::Row { mark: None, text: String::new(), linked: false, slanted: false });
+                rows.push(archforge_diagram::figure::Row { mark: None, text: String::new(), linked: false, slanted: false, underlined: false });
             }
         }
         Some(index) => {
@@ -1198,8 +1198,9 @@ fn draw_rows(inner: &egui::Painter, p: &Palette, card: &archforge_diagram::figur
                 }
                 let text_x = rect.left() + ENTITY_TEXT * z;
                 let room_x = (rect.right() - ENTITY_INSET * z - text_x - if row.linked { 18.0 * z } else { 0.0 }).max(0.0);
-                let text = if row.slanted { ux::text_slanted } else { ux::text };
-                let drawn = text(inner, pos2(text_x, y), &row.text, types::UI.scaled(z), p.text, Some(room_x));
+                // An abstract operation slanted, a static member underlined.
+                let marks = ux::Marks { slanted: row.slanted, underlined: row.underlined };
+                let drawn = ux::text_marked(inner, pos2(text_x, y), &row.text, types::UI.scaled(z), p.text, Some(room_x), marks);
                 if row.linked {
                     ux::icon(inner, pos2(drawn.right() + 6.0 * z, y + 6.0 * z), &icons::LINK, 12.0 * z, p.text_secondary);
                 }

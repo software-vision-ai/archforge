@@ -5675,7 +5675,7 @@ impl archforge_diagram::Notation for Sketch {
                 .unwrap_or_default()
                 .iter()
                 .filter_map(archforge_mof::Value::as_ref)
-                .map(|o| Row { mark: None, text: archforge_core::name_of(store, o), linked: false, slanted: false })
+                .map(|o| Row { mark: None, text: archforge_core::name_of(store, o), linked: false, slanted: false, underlined: false })
                 .collect::<Vec<_>>()
         };
         Some(Card {
@@ -6725,6 +6725,94 @@ fn a_class_cards_compartments_are_padded_so_no_row_sits_on_a_dividing_line() {
     h.run();
     let texts = painted(&h);
     assert!(texts.iter().any(|t| t == "+ 2 more members") && texts.iter().any(|t| t == "+ number : Integer"), "{texts:?}");
+}
+
+/// Every level line segment the last frame painted: its left and right ends, its height, its
+/// thickness and its colour.
+fn level_lines(h: &Harness<'static, Shell>) -> Vec<(f32, f32, f32, f32, egui::Color32)> {
+    fn walk(s: &egui::Shape, out: &mut Vec<(f32, f32, f32, f32, egui::Color32)>) {
+        match s {
+            egui::Shape::LineSegment { points: [a, b], stroke } if (a.y - b.y).abs() < 0.01 => {
+                out.push((a.x.min(b.x), a.x.max(b.x), a.y, stroke.width, stroke.color));
+            }
+            egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, out)),
+            _ => {}
+        }
+    }
+    let mut out = Vec::new();
+    h.output().shapes.iter().for_each(|c| walk(&c.shape, &mut out));
+    out
+}
+
+/// A static member's row is underlined on its card (AR-136): the line runs under the row's text,
+/// from where it starts to no further than it ends, in the text's ink, at least a pixel thick, in
+/// light and dark and at the detail zoom, 100 % and 200 %; a static abstract operation is
+/// underlined and slanted; a plain row has none; Properties' rows read as the card's; a row cut
+/// short by a narrow card keeps its underline inside the card; clearing Static takes it away.
+#[test]
+fn a_static_members_row_is_underlined_on_its_card() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, order, _) = nested_orders(theme);
+        let p = crate::ux::palette(theme == ThemeKind::Dark);
+        let (number, pay) = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let o = st.by_uuid(order).unwrap();
+            let number = st.uuid(archforge_uml::members::attributes(st, o)[0]).unwrap();
+            let pay = st.uuid(archforge_uml::members::operations(st, o)[0]).unwrap();
+            (number, pay)
+        };
+        let session = |h: &mut Harness<'static, Shell>, command: &str, params: serde_json::Value| {
+            h.state_mut().session.as_mut().unwrap().execute(command, &params).unwrap_or_else(|e| panic!("{command}: {e}"));
+            h.run();
+        };
+        session(&mut h, "uml.attribute.set", serde_json::json!({ "attribute": number.to_string(), "static": true }));
+        let static_abstract =
+            serde_json::json!({ "operation": pay.to_string(), "name": "pay", "returns": "Boolean", "static": true, "abstract": true });
+        session(&mut h, "uml.operation.set", static_abstract);
+        // The underline under the row `text` within `area`, when there is one.
+        let under = |h: &Harness<'static, Shell>, area: egui::Rect, text: &str| {
+            let (_, r) =
+                text_boxes(h).into_iter().find(|(t, r)| t == text && area.contains(r.center())).unwrap_or_else(|| panic!("{text} in {area:?}"));
+            level_lines(h).into_iter().find(|(left, right, y, _, _)| {
+                (left - r.left()).abs() < 1.0 && *right <= r.right() + 0.5 && *right > r.center().x && *y > r.center().y && *y < r.bottom()
+            })
+        };
+        for zoom in [crate::canvas::DETAIL_ZOOM, 1.0, 2.0] {
+            h.state_mut().canvas.zoom = zoom;
+            h.run();
+            let card = rect_of(&h, &format!("workspace.canvas.node.{}", node_of(&h, order)));
+            for row in ["+ number : Integer", "+ pay() : Boolean"] {
+                let (_, _, _, width, colour) = under(&h, card, row).unwrap_or_else(|| panic!("{theme:?} at {zoom}: {row} is underlined"));
+                assert_eq!(colour, p.text, "{theme:?} at {zoom}: {row} in the text's ink");
+                assert!(width >= 1.0, "{theme:?} at {zoom}: {row} at least a pixel thick");
+            }
+            assert!(under(&h, card, "+ total : Money").is_none(), "{theme:?} at {zoom}: a plain row has no underline");
+        }
+        h.state_mut().canvas.zoom = 1.0;
+        h.run();
+        // Properties' rows read as the card's.
+        session(&mut h, "view.select", serde_json::json!({ "ids": [order.to_string()] }));
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        h.run();
+        let row = rect_of(&h, &format!("workspace.properties.attribute.{number}"));
+        assert!(under(&h, row, "+ number : Integer").is_some(), "{theme:?}: Properties' row is underlined");
+        let row = rect_of(&h, &format!("workspace.properties.operation.{pay}"));
+        assert!(under(&h, row, "+ pay() : Boolean").is_some(), "{theme:?}: Properties' operation row is underlined");
+        // A narrow card cuts the row short: its underline stays inside the card.
+        let node = node_of(&h, order);
+        let height = crate::uml_ui::members_height(2, 1);
+        session(&mut h, "diagram.resize", serde_json::json!({ "node": node, "width": 120, "height": height }));
+        let card = rect_of(&h, &format!("workspace.canvas.node.{node}"));
+        let (_, right, _, _, _) = under(&h, card, "+ number : Integer").unwrap_or_else(|| panic!("{theme:?}: the cut row is underlined"));
+        assert!(right < card.right(), "{theme:?}: the underline {right} ends inside the card {card:?}");
+        // Static cleared: the underline goes; undone, it is back.
+        session(&mut h, "uml.attribute.set", serde_json::json!({ "attribute": number.to_string(), "static": false }));
+        let card = rect_of(&h, &format!("workspace.canvas.node.{node}"));
+        assert!(under(&h, card, "+ number : Integer").is_none(), "{theme:?}: cleared, no underline");
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        h.run();
+        assert!(under(&h, card, "+ number : Integer").is_some(), "{theme:?}: undone, underlined again");
+    }
 }
 
 /// A literal's draft row is spaced as an attribute's and an operation's (AR-191): each ring takes

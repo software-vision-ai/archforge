@@ -174,7 +174,7 @@ impl Notation for UmlNotation {
     }
 
     /// A class, an interface or a data type: its name, a class's slanted when abstract, its
-    /// attributes, then its operations; an enumeration: its name and its literals; a primitive type:
+    /// attributes, then its operations, a static one underlined; an enumeration: its name and its literals; a primitive type:
     /// its name alone.
     fn card(&self, store: &Store, element: Obj, diagram: Obj) -> Option<Card> {
         figures::card(store, element, diagram)

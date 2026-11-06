@@ -367,11 +367,41 @@ pub fn galley_rows(painter: &egui::Painter, text: &str, ty: Type, color: Color32
 
 /// [`text`], slanted (an abstract class's name).
 pub fn text_slanted(painter: &egui::Painter, at: Pos2, text: &str, ty: Type, color: Color32, width: Option<f32>) -> Rect {
-    let g = laid_out(painter, text, ty, color, width, 1, true);
+    text_marked(painter, at, text, ty, color, width, Marks { slanted: true, underlined: false })
+}
+
+/// How a member's text is set beside its plain form, either or both: slanted (abstract) and
+/// underlined (static).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Marks {
+    pub slanted: bool,
+    pub underlined: bool,
+}
+
+/// [`text`] with its `marks`. The underline runs under the glyphs drawn, from the first to the end
+/// of the last (the ellipsis of a cut text too), a little under their baseline, in the text's
+/// colour and as thick as the text is large, so it reads in either appearance and at every zoom.
+pub fn text_marked(painter: &egui::Painter, at: Pos2, text: &str, ty: Type, color: Color32, width: Option<f32>, marks: Marks) -> Rect {
+    let g = laid_out(painter, text, ty, color, width, 1, marks.slanted);
     let rect = Rect::from_min_size(at, g.size());
+    if marks.underlined {
+        for row in &g.rows {
+            let (Some(first), Some(last)) = (row.glyphs.first(), row.glyphs.last()) else { continue };
+            let left = at.x + row.pos.x + first.pos.x;
+            let right = at.x + row.pos.x + last.max_x();
+            let thickness = (ty.size * UNDERLINE_WEIGHT).max(1.0);
+            let y = painter.round_to_pixel_center(at.y + row.pos.y + first.pos.y + ty.size * UNDERLINE_DROP);
+            painter.hline(left..=right, y, egui::Stroke::new(thickness, color));
+        }
+    }
     painter.galley(at, g, color);
     rect
 }
+
+/// An underline's thickness and its distance under the baseline, each a share of the text's size:
+/// a point at the design's 13-point member text.
+const UNDERLINE_WEIGHT: f32 = 0.075;
+const UNDERLINE_DROP: f32 = 0.15;
 
 fn laid_out(
     painter: &egui::Painter,
