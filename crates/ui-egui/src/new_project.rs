@@ -75,7 +75,7 @@ impl Dialog {
     }
 
     /// Shows `e` as the last creation's failure, for screenshots of the dialog.
-    #[cfg(feature = "snapshot")]
+    #[cfg(any(test, feature = "snapshot"))]
     pub(crate) fn show_failure(&mut self, e: CreateError) {
         self.failed = Some((self.name.clone(), e));
     }

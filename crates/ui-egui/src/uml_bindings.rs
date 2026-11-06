@@ -641,7 +641,7 @@ pub(crate) fn retain_valid(draft: &mut Option<BindingDraft>, store: &Store) {
 }
 
 /// The open draft's Apply pressed, as a sample to look at.
-#[cfg(feature = "snapshot")]
+#[cfg(any(test, feature = "snapshot"))]
 pub(crate) fn apply_sample(shell: &mut Shell) {
     apply_draft(shell);
 }

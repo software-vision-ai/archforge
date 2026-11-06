@@ -332,6 +332,43 @@ pub fn render(width: f32, height: f32, scale: f32, theme: ThemeKind) -> Result<(
 
 /// [`render`] of a given screen.
 pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, screen: Screen) -> Result<(u32, u32, Vec<u8>), String> {
+    let mut harness = drawn(width, height, scale, theme, screen)?;
+    let image = harness.render()?;
+    let (w, h) = (image.width(), image.height());
+    Ok((w, h, image.into_raw()))
+}
+
+/// The window of `screen` built and drawn, with no picture taken: every model change and view the
+/// screen makes has run, so a screen that cannot be built fails here, before any rendering.
+fn drawn(width: f32, height: f32, scale: f32, theme: ThemeKind, screen: Screen) -> Result<egui_kittest::Harness<'static, Shell>, String> {
+    let (shell, hover) = prepared(theme, screen)?;
+    let mut harness = egui_kittest::Harness::builder().with_size(egui::vec2(width, height)).with_pixels_per_point(scale).build_ui_state(
+        |ui, shell: &mut Shell| {
+            shell.logic(ui.ctx());
+            // The harness frames its ui with an 8 px margin; the shell draws on the whole window,
+            // as it does in the application.
+            let window = ui.ctx().content_rect();
+            let mut full = ui.new_child(egui::UiBuilder::new().max_rect(window));
+            full.set_clip_rect(window);
+            shell.ui(&mut full);
+        },
+        shell,
+    );
+    harness.run();
+    // The pointer over a control the screen names, as the design draws it there.
+    if let Some(id) = hover
+        && let Some(w) = harness.state().widgets().iter().find(|w| w.id == id)
+    {
+        let at = egui::pos2((w.rect[0] + w.rect[2]) / 2.0, w.rect[1] + 12.0);
+        harness.event(egui::Event::PointerMoved(at));
+        harness.run();
+    }
+    Ok(harness)
+}
+
+/// The shell of `screen` in `theme`, its project, model and view as the screen shows them, and the
+/// control the pointer rests on, if any.
+fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>), String> {
     crate::i18n::set_language("en");
     let n = std::sync::atomic::AtomicU64::new(0);
     let ids: std::sync::Arc<dyn Fn() -> archforge_mof::Uuid + Send + Sync> = std::sync::Arc::new(move || {
@@ -817,30 +854,7 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
             shell.canvas.popover = Some("relationship-types");
         }
     }
-    let mut harness = egui_kittest::Harness::builder().with_size(egui::vec2(width, height)).with_pixels_per_point(scale).build_ui_state(
-        |ui, shell: &mut Shell| {
-            shell.logic(ui.ctx());
-            // The harness frames its ui with an 8 px margin; the shell draws on the whole window,
-            // as it does in the application.
-            let window = ui.ctx().content_rect();
-            let mut full = ui.new_child(egui::UiBuilder::new().max_rect(window));
-            full.set_clip_rect(window);
-            shell.ui(&mut full);
-        },
-        shell,
-    );
-    harness.run();
-    // The pointer over a control the screen names, as the design draws it there.
-    if let Some(id) = hover
-        && let Some(w) = harness.state().widgets().iter().find(|w| w.id == id)
-    {
-        let at = egui::pos2((w.rect[0] + w.rect[2]) / 2.0, w.rect[1] + 12.0);
-        harness.event(egui::Event::PointerMoved(at));
-        harness.run();
-    }
-    let image = harness.render()?;
-    let (w, h) = (image.width(), image.height());
-    Ok((w, h, image.into_raw()))
+    Ok((shell, hover))
 }
 
 /// Settings → AI Agents over Home, in the state `screen` shows, from the fake agents host: what
@@ -2717,4 +2731,51 @@ fn sample_new_entity(shell: &mut Shell) -> Result<(), String> {
     shell.canvas.tool = crate::canvas::Tool::Place("entity");
     shell.canvas.rename = Some(crate::editing::NodeRename { node, entity, text: "Entity".to_string(), opened: true, refused: None });
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The user manual's guide screens, the walkthrough's twelve and Going further's ten.
+    const GUIDE: [Screen; 22] = [
+        Screen::GuideClasses,
+        Screen::GuideRelateKinds,
+        Screen::GuideAssociation,
+        Screen::GuideClassifierKinds,
+        Screen::GuideLiterals,
+        Screen::GuideDataType,
+        Screen::GuidePrimitiveType,
+        Screen::GuideRealization,
+        Screen::GuideAssociationClass,
+        Screen::GuideModifiers,
+        Screen::GuideConstraints,
+        Screen::GuideResult,
+        Screen::GuideStatic,
+        Screen::GuideQualifier,
+        Screen::GuideNary,
+        Screen::GuideGeneralizationSet,
+        Screen::GuideFinalLeaf,
+        Screen::GuideNested,
+        Screen::GuideTemplate,
+        Screen::GuideTemplateBinding,
+        Screen::GuideProfile,
+        Screen::GuideStereotype,
+    ];
+
+    /// Every guide screen the release attaches, in both appearances, builds its model and view
+    /// and draws its window without a refusal, so a command or a lookup that fails shows here
+    /// rather than when the release renders the gallery. The picture itself needs a GPU and is
+    /// not taken.
+    #[test]
+    fn every_guide_screen_builds_and_draws_in_both_appearances() {
+        for screen in GUIDE {
+            for theme in [ThemeKind::Light, ThemeKind::Dark] {
+                let h = drawn(1440.0, 900.0, 1.0, theme, screen).unwrap_or_else(|e| panic!("{screen:?} in {theme:?}: {e}"));
+                let shell = h.state();
+                assert!(shell.session.is_some() && shell.canvas.active.is_some(), "{screen:?} in {theme:?} opens a diagram");
+                assert_eq!(shell.canvas.notice, None, "{screen:?} in {theme:?} draws without a refusal");
+            }
+        }
+    }
 }

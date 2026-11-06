@@ -30,7 +30,7 @@ pub mod markdown;
 pub mod new_project;
 mod notation_ui;
 pub mod objects;
-#[cfg(feature = "snapshot")]
+#[cfg(any(test, feature = "snapshot"))]
 pub mod offscreen;
 pub(crate) mod package_nav;
 pub mod panels;

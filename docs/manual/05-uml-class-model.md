@@ -1246,7 +1246,7 @@ right-click one of them:
 
 The same actions are buttons in **Properties** when several generalizations are selected
 (**Create set from selection**), so the keyboard reaches them too. When the generalizations
-specialise different classes, or something else is selected with them, the actions stay listed but
+specialize different classes, or something else is selected with them, the actions stay listed but
 disabled, and the reason shows under the menu and on hover, such as *CardPayment specialises
 Payment and Voucher specialises Product. A set groups generalizations of one class.*
 
@@ -1445,7 +1445,7 @@ template when it gets its first parameter and stops being one when its last goes
   **Enumeration** or a **Primitive type**. **Value** and **Operation** parameters are listed in the
   menu but disabled, saying *not yet*: they are not supported in this version, and no other kind is
   used in their place.
-- **Constrained to** narrows the arguments to one classifier of the kind and those that specialise
+- **Constrained to** narrows the arguments to one classifier of the kind and those that specialize
   it; **Any** leaves them open. **Default** is the argument a binding that leaves the parameter out
   uses: a classifier of the kind that fits the constraint, so a *Data type* parameter takes
   *Integer* or your own *Money*, never the class *Order*. The menus offer only what fits.
@@ -1465,7 +1465,7 @@ template when it gets its first parameter and stops being one when its last goes
   already has a template parameter named T. Pick another name.* A default that does not fit is
   refused under **Default**. The reason shows in the editor, the editor stays open, and nothing
   reaches the model or the undo history. Deleting a generalization or a class so that a
-  parameter's default no longer specialises its constraint is refused too, naming the default;
+  parameter's default no longer specializes its constraint is refused too, naming the default;
   where another path of generalizations keeps it fitting, the deletion goes ahead.
 - **Parameters a binding uses.** A parameter a binding (see **Template bindings** below) gives an
   argument cannot be removed: the bin says, for example, *OrderRepository binds Key -> Integer.
@@ -1496,7 +1496,7 @@ dependency nor a realization.
   template writes nothing yet: **Properties** opens *New template binding*, *not in the model
   until you apply*, with the **Bound element**, the **Template**, and **Substitutions**, one row
   per parameter. Each selector lists only the arguments that fit the parameter: its kind, and its
-  constraint or what specialises it. A parameter with a default shows it, tagged *default*. While
+  constraint or what specializes it. A parameter with a default shows it, tagged *default*. While
   the draft is open the line stays dashed in the accent colour.
 - **Apply** adds the binding, its substitutions and its line as one step you can undo, and selects
   it. A parameter without a default needs an argument: **Apply** then says, for example, *T needs
