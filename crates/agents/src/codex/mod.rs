@@ -685,8 +685,9 @@ impl CodexSession {
     }
 
     /// Queues the events of one output event. A line is scrubbed of the key whole before it is
-    /// read, so no field, cut, log line or kept state can hold any part of a key written in it.
-    fn take(&mut self, event: OutputEvent) {
+    /// read, so no field, cut, log line or kept state can hold any part of a key written in it. The
+    /// caller's `deadline` bounds the wait for the exit when the output closed.
+    fn take(&mut self, event: OutputEvent, deadline: Option<Instant>) {
         match event {
             OutputEvent::Line(line) => {
                 self.lines_seen = true;
@@ -709,7 +710,7 @@ impl CodexSession {
                 self.pending.push_back(event);
             }
             OutputEvent::ReadFailed(detail) => log::warn!("codex's output could not be read: {detail}"),
-            OutputEvent::End => self.finish(),
+            OutputEvent::End => self.finish(deadline),
         }
     }
 
@@ -1185,10 +1186,17 @@ impl CodexSession {
         }
     }
 
-    /// The runtime's output closed: an open turn fails, then the session ends.
-    fn finish(&mut self) {
+    /// The runtime's output closed: an open turn fails, then the session ends. The exit is waited
+    /// for at most [`EXIT_WAIT`] and never past the caller's `deadline`, so `next_event` keeps its
+    /// timeout and a zero-timeout poll checks once without waiting; an exit not seen by then ends
+    /// with the general reason. After `shutdown` the wait is as it was: the exit is collected then.
+    fn finish(&mut self, deadline: Option<Instant>) {
         self.ended = true;
-        let exit = self.exit_status();
+        let wait = match deadline {
+            Some(d) if !self.shutting_down => d.saturating_duration_since(Instant::now()).min(EXIT_WAIT),
+            _ => EXIT_WAIT,
+        };
+        let exit = wait_for_exit(&mut self.process, wait);
         for (_, method, _) in self.requests.drain() {
             log::debug!("codex ended without answering {method}");
         }
@@ -1213,11 +1221,6 @@ impl CodexSession {
             self.fail_turn(failed);
         }
         self.pending.push_back(SessionEvent::Ended { exit, error });
-    }
-
-    /// The runtime's exit, waiting a little for it once its output closed.
-    fn exit_status(&mut self) -> Option<Exit> {
-        wait_for_exit(&mut self.process, EXIT_WAIT)
     }
 }
 
@@ -1303,8 +1306,9 @@ impl AgentSession for CodexSession {
     }
 
     /// Reads output lines until one means an event, the timeout passes, or a call's budget of lines
-    /// is spent; requests past their deadline are failed on the way. When the output closes, the
-    /// wait for the exit status may add up to half a second.
+    /// is spent; requests past their deadline are failed on the way. A zero timeout polls once
+    /// without waiting: it still reads what Codex has already written. When the output closes, the
+    /// exit is waited for only within the same timeout.
     fn next_event(&mut self, timeout: Duration) -> Option<SessionEvent> {
         let deadline = Instant::now().checked_add(timeout);
         let mut budget = LINES_PER_CALL;
@@ -1320,7 +1324,9 @@ impl AgentSession for CodexSession {
                 return Some(event);
             }
             let now = Instant::now();
-            if budget == 0 || deadline.is_some_and(|d| now >= d) {
+            // The deadline counts only after the first read, so a zero timeout still reads once.
+            let read_once = budget < LINES_PER_CALL;
+            if budget == 0 || (read_once && deadline.is_some_and(|d| now >= d)) {
                 return None;
             }
             budget -= 1;
@@ -1329,7 +1335,7 @@ impl AgentSession for CodexSession {
                 wait = wait.min(due.saturating_duration_since(now));
             }
             if let Some(event) = self.process.next_event(wait) {
-                self.take(event);
+                self.take(event, deadline);
             }
         }
     }

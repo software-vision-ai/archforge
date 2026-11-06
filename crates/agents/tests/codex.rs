@@ -1570,6 +1570,40 @@ fn lines_that_mean_nothing_cannot_hold_next_event() {
     std::fs::remove_dir_all(&base).unwrap();
 }
 
+/// The session's wait for Codex's exit once its output closed stays within the caller's time: a
+/// zero-timeout poll reads what Codex wrote and checks the exit once without waiting, a timed
+/// `next_event` keeps its timeout, and an exit not seen by then ends with the general reason.
+#[test]
+fn the_session_exit_wait_keeps_the_callers_timeout() {
+    // Codex answers the handshake, closes its output, and is seen to end only two seconds later.
+    let lingering = "on_account() { send '{\"id\":@ID@,\"result\":{\"account\":{\"type\":\"apiKey\"},\"requiresOpenaiAuth\":true}}'; exec 1>&-; sleep 2; exit 3; }";
+    let ended =
+        |event: &SessionEvent| matches!(event, SessionEvent::Ended { exit: None, error: Some(e) } if e.to_string().contains("its exit was not seen"));
+    for (name, timeout, bound) in
+        [("zero", Duration::ZERO, Duration::from_millis(100)), ("timed", Duration::from_millis(200), Duration::from_millis(400))]
+    {
+        let base = scratch(&format!("session-exit-{name}"));
+        let (runtime, account, folder) = fake_codex(&base, lingering);
+        let mut session = CodexSession::start(&runtime, &account, &folder, config(false), SignIn::ApiKey(canary())).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let last = loop {
+            let started = Instant::now();
+            let event = session.next_event(timeout);
+            assert!(started.elapsed() < bound, "{name}: next_event took {:?}", started.elapsed());
+            if let Some(event @ SessionEvent::Ended { .. }) = event {
+                break event;
+            }
+            assert!(Instant::now() < deadline, "{name}: the end never came");
+            if timeout.is_zero() {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        };
+        assert!(ended(&last), "{name}: {last:?}");
+        session.shutdown(Duration::from_secs(2)).unwrap();
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+}
+
 // --- the account operations ----------------------------------------------------------------------
 
 /// The fake's answers for the Settings page's calls.

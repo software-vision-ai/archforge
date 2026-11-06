@@ -183,8 +183,10 @@ is passed through `redact` before it is parsed, so no event, cut, log line or ke
 part of a key the runtime writes whole in a line (a key's characters are never escaped in JSON); a
 key split across two text deltas is caught only in the message they make up. `next_event` reads at
 most 256 lines a call and never past its timeout, so a runtime writing only lines that mean nothing
-cannot hold the caller; once the output closes it waits up to half a second for the exit status. A
-line is parsed into a whole `serde_json::Value`, which may take several times the line's size: keep
+cannot hold the caller; once the output closes it waits up to half a second for the exit status
+(Codex's session only within the call's timeout, and there a zero timeout polls once without
+waiting, still reading what Codex has written; an exit not seen in time ends with the general
+reason). A line is parsed into a whole `serde_json::Value`, which may take several times the line's size: keep
 `max_line_bytes` at its default or below for Claude. Claude's own
 `control_request`s (permission prompts) are not expected with `dontAsk` and are skipped as unknown.
 
