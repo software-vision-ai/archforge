@@ -301,8 +301,11 @@ fn replace_checked(path: &Path, bytes: &[u8], what: &str, private: &dyn Fn(&std:
         let _ = fs.remove(&temp);
         return Err(failed(format!("could not hold {what}: {e}")));
     }
-    // The bytes are in place; a failed folder sync cannot be undone, so it is best effort.
-    let _ = fs.sync_dir(dir);
+    // The bytes are in place; a failed folder sync cannot be undone, so it is best effort, logged by
+    // the folder and the file's name, never its contents.
+    if let Err(e) = fs.sync_dir(dir) {
+        log::warn!("the folder {} could not be synchronised after {what} was written: {e}", dir.display());
+    }
     if !std::fs::symlink_metadata(path).is_ok_and(|m| private(&m)) {
         return Err(failed(format!("was replaced, but what is there now is not {what} private to this user; it was left as it is")));
     }
