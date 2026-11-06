@@ -89,10 +89,18 @@ pub fn general_of(store: &Store, s: Obj) -> Option<Obj> {
     members(store, s).first().and_then(|g| general(store, *g))
 }
 
-/// The live sets of the model whose members specialize `general`, in a stable order.
+/// The live sets of the model whose members specialize `general`, in a stable order: found
+/// through the generalizations to it, from the store's index of referrers, not a scan of the store.
 pub fn sets_for(store: &Store, general: Obj) -> Vec<Obj> {
-    let mut out: Vec<Obj> = store.alive().filter(|s| is_set(store, *s) && general_of(store, *s) == Some(general)).collect();
+    let mut out: Vec<Obj> = store
+        .referrers(general)
+        .into_iter()
+        .filter(|(g, prop)| *prop == generalization::GENERAL && is_generalization(store, *g))
+        .flat_map(|(g, _)| sets_of(store, g))
+        .filter(|s| general_of(store, *s) == Some(general))
+        .collect();
     out.sort();
+    out.dedup();
     out
 }
 
@@ -384,7 +392,18 @@ fn set_set(ctx: &mut C<'_>, p: &Params) -> R {
         return Err(refuse("add", format!("a set groups at most {MAX_MEMBERS} generalizations")));
     }
     if !after.is_empty() {
-        shared_general(ctx.doc, &after).map_err(|e| grouping_refusal(ctx.doc, "add", e))?;
+        let next = shared_general(ctx.doc, &after).map_err(|e| grouping_refusal(ctx.doc, "add", e))?;
+        // A set keeps its general classifier, whose package holds it and tells its name apart.
+        if let Some(now) = general_of(ctx.doc, s).filter(|now| *now != next) {
+            return Err(refuse(
+                "add",
+                format!(
+                    "the set groups the specializations of {}; {} is another classifier, so its generalizations go in a set of their own",
+                    name_of(ctx.doc, now),
+                    name_of(ctx.doc, next)
+                ),
+            ));
+        }
     }
     let pkg = crate::commands::package_of(ctx.doc, s);
     let name = p.str("name").map(str::trim);

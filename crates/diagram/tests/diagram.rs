@@ -421,6 +421,11 @@ fn the_grid_finds_the_topmost_node_the_nearest_edge_and_what_a_viewport_shows() 
     assert_eq!(grid.hit(200.0, 160.0), Some(Hit::Node(obj(st, &c))), "C over A");
     assert_eq!(grid.hit(250.0, 210.0), Some(Hit::Node(obj(st, &port))), "the port over C");
     assert_eq!(grid.hit(500.0, 150.0), Some(Hit::Node(obj(st, &sm.b))));
+    // A node a view leaves out is looked through, to the node under it, or to nothing.
+    let not_port = |n| n != obj(st, &port);
+    assert_eq!(grid.hit_keeping(250.0, 210.0, not_port), Some(Hit::Node(obj(st, &c))), "C under the port");
+    let none = |_| false;
+    assert_eq!(grid.hit_keeping(250.0, 210.0, none), None, "no node kept, and no line there");
     // B's edge goes from B's centre (500, 160) through (300, 600) to A's centre (160, 140).
     assert_eq!(grid.hit(400.0, 380.0), Some(Hit::Edge(obj(st, &sm.edge))));
     assert_eq!(grid.hit(403.0, 380.0), Some(Hit::Edge(obj(st, &sm.edge))), "within the tolerance");

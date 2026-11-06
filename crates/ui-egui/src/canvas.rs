@@ -622,7 +622,7 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
                 .filter(|at| r.contains(*at) && shell.canvas.gesture.is_none() && ui.rect_contains_pointer(r))
                 .and_then(|at| {
                     let (x, y) = view.to_canvas(at);
-                    match grid.hit(x, y) {
+                    match crate::editing::hit(store, grid, x, y) {
                         Some(archforge_diagram::Hit::Edge(e)) => Some(e),
                         _ => None,
                     }

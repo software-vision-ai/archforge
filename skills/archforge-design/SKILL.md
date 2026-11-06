@@ -645,7 +645,9 @@ What is UML's own, beside the shared rules above.
   diagram that shows a member line; muted, the accent with a ring while selected. A click on the
   label, or its row in Models (`name` then a muted `generalization set`, after its general class),
   selects it; dragging the label moves it on that diagram alone (a node of the kind
-  `uml.generalization-set.label`, nested in the general class's node). A set's Properties (section
+  `uml.generalization-set.label`, nested in the general class's node). A label takes a press only
+  where it is drawn: on a diagram that shows none of its set's lines its node keeps the place but
+  is looked through, never hit. A set's Properties (section
   Set): Name and General class (read only), Completeness (Complete | Incomplete) and Disjointness
   (Disjoint | Overlapping) as segmented choices the arrow keys switch, what they mean
   ("Shown beside the lines as {complete, disjoint}: every Payment is exactly one of these kinds."),

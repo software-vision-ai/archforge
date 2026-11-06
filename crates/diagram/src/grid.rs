@@ -299,11 +299,18 @@ impl Grid {
 
     /// The topmost node at a point, else the nearest edge within [`EDGE_TOLERANCE`].
     pub fn hit(&self, x: f64, y: f64) -> Option<Hit> {
+        self.hit_keeping(x, y, |_| true)
+    }
+
+    /// [`Grid::hit`] among the nodes `keep` takes: a node it leaves out is looked through, to a node
+    /// or an edge under it, as a view does for a node that draws nothing there.
+    pub fn hit_keeping(&self, x: f64, y: f64, keep: impl Fn(Obj) -> bool) -> Option<Hit> {
         if !x.is_finite() || !y.is_finite() {
             return None;
         }
         let c = (cell(x), cell(y));
-        if let Some(top) = self.node_cells.get(&c).into_iter().flatten().filter(|i| self.nodes.get(**i).is_some_and(|n| n.rect.contains(x, y))).max()
+        if let Some(top) =
+            self.node_cells.get(&c).into_iter().flatten().filter(|i| self.nodes.get(**i).is_some_and(|n| n.rect.contains(x, y) && keep(n.obj))).max()
         {
             return self.nodes.get(*top).map(|n| Hit::Node(n.obj));
         }

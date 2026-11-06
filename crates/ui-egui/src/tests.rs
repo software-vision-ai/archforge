@@ -8613,6 +8613,69 @@ fn generalization_sets_are_made_from_the_menu_the_shortcut_and_properties() {
     }
 }
 
+/// A generalization set's label that draws nothing is never hit (AR-129), in light and dark: its
+/// label moved, so a node holds its place, and then every member line taken off the diagram, a
+/// click or a drag where the label was selects and moves nothing of the set, and the node keeps
+/// its place; the lines back, the label draws there again and takes the click.
+#[test]
+fn a_set_label_that_draws_nothing_takes_no_press() {
+    use archforge_uml::generalization_sets as sets;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        let (gens, _) = crate::uml_ui::put_payment_kinds(h.state_mut()).unwrap();
+        h.state_mut().canvas.zoom = 0.75;
+        h.state_mut().canvas.pan = egui::vec2(-470.0, -230.0);
+        let out = h
+            .state_mut()
+            .session
+            .as_mut()
+            .unwrap()
+            .execute("uml.generalization-set.add", &serde_json::json!({ "generalizations": gens, "name": "method" }))
+            .unwrap();
+        let set_id = out.value["id"].as_str().unwrap().to_string();
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [] })).unwrap();
+        h.run();
+        let label_id = format!("workspace.canvas.generalizationSet.{set_id}");
+        let label = rect_of(&h, &label_id);
+        drag(&mut h, label.center(), label.center() + egui::vec2(40.0, -20.0));
+        let (d, set) = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            (st.by_uuid(h.state().canvas.active.unwrap()).unwrap(), st.by_uuid(archforge_mof::Uuid::parse(&set_id).unwrap()).unwrap())
+        };
+        let node = sets::label_node(h.state().session.as_ref().unwrap().doc(), d, set).expect("a node holds its place");
+        let bounds = |h: &Harness<'static, Shell>| archforge_diagram::grid::bounds_of(h.state().session.as_ref().unwrap().doc(), node);
+        let placed = bounds(&h);
+        let at = rect_of(&h, &label_id).center();
+        // Every member line off this diagram: the label draws nothing and takes no press.
+        let edges: Vec<String> = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            gens.iter()
+                .flat_map(|g| archforge_diagram::views_of(st, st.by_uuid(archforge_mof::Uuid::parse(g).unwrap()).unwrap()).1)
+                .map(|e| st.uuid(e).unwrap().to_string())
+                .collect()
+        };
+        for e in &edges {
+            h.state_mut().session.as_mut().unwrap().execute("diagram.disconnect", &serde_json::json!({ "edge": e })).unwrap();
+        }
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [] })).unwrap();
+        h.run();
+        assert!(!ids(&h).contains(&label_id), "nothing drawn");
+        assert!(h.state().canvas.set_labels.is_empty());
+        click(&mut h, at);
+        assert!(!h.state().session.as_ref().unwrap().view().selection.contains(&set), "the hidden label is not selectable");
+        drag(&mut h, at, at + egui::vec2(60.0, 40.0));
+        assert!(!h.state().session.as_ref().unwrap().view().selection.contains(&set));
+        assert_eq!(bounds(&h), placed, "nor does it move");
+        // The lines back, the label draws at its place again and takes the click.
+        let diagram = h.state().canvas.active.unwrap().to_string();
+        h.state_mut().session.as_mut().unwrap().execute("diagram.connect-all", &serde_json::json!({ "diagram": diagram })).unwrap();
+        h.run();
+        let back = rect_of(&h, &label_id).center();
+        click(&mut h, back);
+        assert_eq!(h.state().session.as_ref().unwrap().view().selection, vec![set]);
+    }
+}
+
 /// No redefinition (leaf) in Properties (AR-138), in light and dark: on a classifier after No
 /// subclasses (final), described by its explanation, ticked it makes the classifier leaf in one undo
 /// step and its card says `{leaf}`, `{final, leaf}` beside final; in the operation editor, applied,

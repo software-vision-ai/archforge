@@ -117,6 +117,14 @@ pub struct EntityMenu {
     pub at: Pos2,
 }
 
+/// What lies at diagram point `(x, y)`: the grid's topmost node or nearest line, looking through a
+/// generalization set's label node (AR-129). A label takes a press only where the last frame drew it
+/// (`canvas.set_labels`), so one that draws nothing, its diagram showing none of its set's lines,
+/// is never hit.
+pub(crate) fn hit(store: &Store, grid: &Grid, x: f64, y: f64) -> Option<Hit> {
+    grid.hit_keeping(x, y, |n| !archforge_uml::generalization_sets::is_label(store, n))
+}
+
 /// What the pointer asked for this frame, decided over the store and applied after.
 enum Action {
     Nothing,
@@ -363,7 +371,7 @@ fn decide(
     let kind = crate::kinds::kind_of(shell, store, d);
     let hit_node = |pos: Pos2| {
         let (x, y) = view.to_canvas(pos);
-        let card = match grid.hit(x, y) {
+        let card = match hit(store, grid, x, y) {
             Some(Hit::Node(n)) => Some(n),
             _ => None,
         };
@@ -371,8 +379,7 @@ fn decide(
     };
     // A generalization set's label as the last frame drew it, where no card is over it (AR-129).
     let label_at = |pos: Pos2| {
-        let card = hit_node(pos).filter(|n| !archforge_uml::generalization_sets::is_label(store, *n));
-        if card.is_some() {
+        if hit_node(pos).is_some() {
             return None;
         }
         shell.canvas.set_labels.iter().rev().find(|l| l.rect.contains(pos)).cloned()
@@ -486,7 +493,7 @@ fn decide(
                     }
                     None => {
                         let (x, y) = view.to_canvas(from);
-                        match grid.hit(x, y) {
+                        match hit(store, grid, x, y) {
                             // A right-angled line's middle segment slides; the rest of a line holds.
                             Some(Hit::Edge(e)) => match (segment_at(store, grid, e, x, y, f64::from(SEGMENT_REACH / view.zoom)), uuid(store, e)) {
                                 (Some((index, route)), Some(edge)) => {
@@ -504,7 +511,7 @@ fn decide(
             if resp.secondary_clicked()
                 && hit_node(pos).is_none()
                 && let (x, y) = view.to_canvas(pos)
-                && let Some(Hit::Edge(e)) = grid.hit(x, y)
+                && let Some(Hit::Edge(e)) = hit(store, grid, x, y)
                 && let Some(g) = store.get(e, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref())
                 && archforge_uml::generalization_sets::is_generalization(store, g)
             {
@@ -528,7 +535,7 @@ fn decide(
                     return Action::ResetEnd(t.edge, t.end);
                 }
                 let (x, y) = view.to_canvas(pos);
-                if let Some(Hit::Edge(e)) = grid.hit(x, y)
+                if let Some(Hit::Edge(e)) = hit(store, grid, x, y)
                     && !store.list(e, archforge_diagram::edge::WAYPOINT).unwrap_or_default().is_empty()
                     && let Some(id) = uuid(store, e)
                 {
@@ -595,7 +602,7 @@ fn decide(
                 let (x, y) = view.to_canvas(pos);
                 // A package's tab is its card's (AR-113), over any line that crosses it; a card and a
                 // tab over each other give the one drawn on top.
-                let hit = grid.hit(x, y);
+                let hit = hit(store, grid, x, y);
                 let card = match hit {
                     Some(Hit::Node(n)) => Some(n),
                     _ => None,
@@ -704,15 +711,15 @@ pub(crate) fn pointer(shell: &mut Shell, ui: &egui::Ui, resp: &egui::Response, v
         && shell.canvas.tool == Tool::Select
         && let Some(at) = ui.input(|i| i.pointer.hover_pos()).filter(|at| resp.rect.contains(*at))
     {
-        let over_node = {
+        let over_node = shell.session.as_ref().is_some_and(|s| {
             let (x, y) = view.to_canvas(at);
-            matches!(grid.hit(x, y), Some(Hit::Node(_)))
-        };
+            matches!(hit(s.doc(), grid, x, y), Some(Hit::Node(_)))
+        });
         if !over_node && shell.canvas.ends.iter().any(|t| t.rect.contains(at)) {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
         } else if let Some(store) = shell.session.as_ref().map(|s| s.doc()) {
             let (x, y) = view.to_canvas(at);
-            if let Some(Hit::Edge(e)) = grid.hit(x, y)
+            if let Some(Hit::Edge(e)) = hit(store, grid, x, y)
                 && let Some((k, route)) = segment_at(store, grid, e, x, y, f64::from(SEGMENT_REACH / view.zoom))
             {
                 let level = (route[k].1 - route[k + 1].1).abs() < 1e-6;

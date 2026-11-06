@@ -243,6 +243,14 @@ fn a_mixed_selection_and_the_other_wrong_sets_are_refused_changing_nothing() {
         ("uml.generalization-set.add", json!({ "generalizations": [shop.bank], "name": " " }), "name", "needs a name"),
         ("uml.generalization-set.set", json!({ "set": set, "add": [shop.voucher] }), "add", "specialize different classifiers"),
         ("uml.generalization-set.set", json!({ "set": set, "remove": [shop.bank] }), "remove", "is not in the set"),
+        // Every member swapped for generalizations to another classifier in one call: the set
+        // keeps its general classifier, which its package and its name belong to.
+        (
+            "uml.generalization-set.set",
+            json!({ "set": set, "remove": [shop.card], "add": [shop.voucher] }),
+            "add",
+            "the set groups the specializations of Payment; Product is another classifier",
+        ),
         ("uml.generalization-set.set", json!({ "set": shop.card }), "set", "not a generalization set"),
         ("uml.generalization-set.list", json!({ "of": shop.pay }), "of", "neither a classifier nor a generalization"),
     ] {
@@ -266,7 +274,7 @@ fn a_generalization_belongs_to_two_sets() {
     let st = s.doc();
     assert_eq!(sets::sets_of(st, obj(st, &shop.card)), vec![obj(st, &method), obj(st, &channel)]);
     assert_eq!(sets::sets_of(st, obj(st, &shop.bank)), vec![obj(st, &method)], "membership is explicit");
-    assert_eq!(sets::sets_for(st, obj(st, &shop.payment)).len(), 2);
+    assert_eq!(sets::sets_for(st, obj(st, &shop.payment)), vec![obj(st, &method), obj(st, &channel)], "each once, in order");
     assert!(sets::sets_for(st, obj(st, &shop.product)).is_empty());
     let labels: Vec<Json> = listed(&mut s, &shop.card).into_iter().map(|j| j["label"].clone()).collect();
     assert_eq!(labels, vec![json!("method {complete, disjoint}"), json!("channel {incomplete, overlapping}")]);

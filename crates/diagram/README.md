@@ -50,7 +50,7 @@ tables.
 | `commands::specs` | `pub fn specs<V: DiagramView>() -> Vec<CommandSpec<Store, V>>`: the diagram commands for a notation's registry |
 | `metamodel`, `universe_with`, `with_slabs` | the metamodel; a universe of it and others; the slabs joined to a `CompositeSlabs` |
 | `remove_views_of`, `destroy_node_with_edges`, `views_of`, `edges_on`, `node_tree`, `diagram_of` | the cascades and the walks they rest on |
-| `Grid`, `Hit`, `Rect`, `grid::Visible` | `Grid::build(store, diagram)`, `hit(x, y)`, `visible(rect)`: the spatial index of one diagram, its lines routed as drawn |
+| `Grid`, `Hit`, `Rect`, `grid::Visible` | `Grid::build(store, diagram)`, `hit(x, y)`, `hit_keeping(x, y, keep)` (looking through the nodes `keep` leaves out), `visible(rect)`: the spatial index of one diagram, its lines routed as drawn |
 | `arrange::arrange` | `arrange(sizes, lines) -> Vec<(f64, f64)>`: boxes in layers along their lines, crossings few, groups side by side, lone boxes in rows |
 | `route`, `Way`, `route::{way_of, spreads}` | `route(way, from, to, at, via, boxes) -> Vec<(f64, f64)>`: a line straight, at right angles, around the other boxes, or curved; `way_of` reads an edge's routing (its own, else its diagram's); `spreads(store, diagram, rect)` places every line's ends along its boxes' sides, once per diagram |
 | `rules::{problems, kind_problem, text_problem, colour_problem, coord_problem, size_problem, depth_of}` | the rules, for commands and for a whole store |
