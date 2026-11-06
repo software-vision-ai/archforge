@@ -148,6 +148,14 @@ impl CodexParser {
         self.turn.stop_requested = true;
     }
 
+    /// Forgets the turn's state (its id, error, tokens, stop request and tool calls): the session
+    /// calls it whenever a turn ends, also when it ends one itself (a stop before the turn started,
+    /// a refused sign-in, a request that failed), so nothing of it reaches the next turn.
+    pub fn reset_turn(&mut self) {
+        self.turn = TurnState::default();
+        self.tool_names.clear();
+    }
+
     /// Notes the running turn's id from the answer to `turn/start`.
     pub fn turn_started(&mut self, id: &str) {
         self.turn.id = Some(capped(id, MAX_NAME_BYTES));

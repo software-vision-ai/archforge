@@ -799,6 +799,7 @@ impl CodexSession {
 
     /// The turn ended: the session takes the next message, and the copy is written.
     fn turn_closed(&mut self) {
+        self.parser.reset_turn();
         self.turn_open = false;
         self.turn_requested = false;
         self.awaiting = false;

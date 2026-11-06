@@ -826,18 +826,37 @@ fn stop_interrupts_the_turn() {
     std::fs::remove_dir_all(&base).unwrap();
 }
 
-/// A message stopped before its thread exists ends as stopped without a turn being started.
+/// A message stopped before its thread exists ends as stopped without a turn being started, and
+/// nothing of that stop reaches the next turns: one that fails without a category is a failure,
+/// and one that completes reports only its own tokens.
 #[test]
 fn a_stop_before_the_thread_starts_no_turn() {
     let base = scratch("early-stop");
-    let (runtime, account, folder) =
-        fake_codex(&base, "on_thread() { sleep 0.3; send '{\"id\":@ID@,\"result\":{\"thread\":{\"id\":\"t-1\"},\"model\":\"m\"}}'; }");
+    let body = concat!(
+        "turns=0\n",
+        "on_thread() { sleep 0.3; send '{\"id\":@ID@,\"result\":{\"thread\":{\"id\":\"t-1\"},\"model\":\"m\"}}'; }\n",
+        "on_turn() { turns=$((turns+1)); send \"{\\\"id\\\":$id,\\\"result\\\":{\\\"turn\\\":{\\\"id\\\":\\\"u-$turns\\\"}}}\"; ",
+        "send \"{\\\"method\\\":\\\"thread/tokenUsage/updated\\\",\\\"params\\\":{\\\"threadId\\\":\\\"t-1\\\",\\\"turnId\\\":\\\"u-$turns\\\",\\\"tokenUsage\\\":{\\\"total\\\":{},\\\"last\\\":{\\\"inputTokens\\\":7,\\\"outputTokens\\\":3}}}}\"; ",
+        "if [ $turns = 1 ]; then status=failed; else status=completed; fi; ",
+        "send \"{\\\"method\\\":\\\"turn/completed\\\",\\\"params\\\":{\\\"turn\\\":{\\\"id\\\":\\\"u-$turns\\\",\\\"status\\\":\\\"$status\\\",\\\"items\\\":[]}}}\"; }"
+    );
+    let (runtime, account, folder) = fake_codex(&base, body);
     let mut session = CodexSession::start(&runtime, &account, &folder, config(false), SignIn::ApiKey(canary())).unwrap();
     session.send("hi").unwrap();
     session.stop().unwrap();
     let events = events_until(&mut session, turn_end);
     assert!(matches!(events.last(), Some(SessionEvent::TurnFinished { outcome: TurnOutcome::Stopped, .. })), "{events:?}");
-    assert!(requests(&stdin_lines(&base, 5), "turn/start").is_empty());
+    assert!(requests(&stdin_lines(&base, 4), "turn/start").is_empty());
+    session.send("again").unwrap();
+    let events = events_until(&mut session, turn_end);
+    assert!(
+        matches!(events.last(), Some(SessionEvent::TurnFinished { outcome: TurnOutcome::Failed(e), .. }) if e.kind() == ErrorKind::Other),
+        "the earlier stop does not make this failure read as stopped: {events:?}"
+    );
+    session.send("once more").unwrap();
+    let events = events_until(&mut session, turn_end);
+    let fresh = Usage { input_tokens: 7, output_tokens: 3, ..Usage::default() };
+    assert_eq!(events.last(), Some(&SessionEvent::TurnFinished { outcome: TurnOutcome::Completed, usage: fresh }), "{events:?}");
     session.shutdown(Duration::from_secs(2)).unwrap();
     std::fs::remove_dir_all(&base).unwrap();
 }
