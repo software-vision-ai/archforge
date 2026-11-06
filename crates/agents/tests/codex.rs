@@ -956,6 +956,86 @@ on_turn() {
     std::fs::remove_dir_all(&base).unwrap();
 }
 
+/// Codex answering `turn/start` without naming the turn: the id comes from the first notification
+/// that names one, whether it was held before the answer or comes after it.
+#[test]
+fn an_unnamed_turn_takes_its_id_from_a_notification() {
+    let base = scratch("unnamed");
+    let body = r#"
+turns=0
+on_turn() {
+  turns=$((turns+1))
+  if [ $turns = 1 ]; then
+    send '{"method":"turn/started","params":{"threadId":"019a0000-0000-7000-8000-000000000001","turn":{"id":"u-9","status":"inProgress","items":[]}}}'
+    send '{"method":"item/agentMessage/delta","params":{"threadId":"019a0000-0000-7000-8000-000000000001","turnId":"u-9","itemId":"i","delta":"held"}}'
+    send '{"id":@ID@,"result":{"turn":{}}}'
+    send '{"method":"turn/completed","params":{"threadId":"019a0000-0000-7000-8000-000000000001","turn":{"id":"u-9","status":"completed","items":[]}}}'
+  else
+    send '{"id":@ID@,"result":{"turn":{}}}'
+    send '{"method":"turn/started","params":{"threadId":"019a0000-0000-7000-8000-000000000001","turn":{"id":"u-10","status":"inProgress","items":[]}}}'
+    send '{"method":"item/agentMessage/delta","params":{"threadId":"019a0000-0000-7000-8000-000000000001","turnId":"u-10","itemId":"i","delta":"after"}}'
+    send '{"method":"turn/completed","params":{"threadId":"019a0000-0000-7000-8000-000000000001","turn":{"id":"u-10","status":"completed","items":[]}}}'
+  fi
+}
+"#;
+    let (runtime, account, folder) = fake_codex(&base, body);
+    let mut session = CodexSession::start(&runtime, &account, &folder, config(false), SignIn::ApiKey(canary())).unwrap();
+    for (message, text) in [("one", "held"), ("two", "after")] {
+        session.send(message).unwrap();
+        let events = events_until(&mut session, turn_end);
+        let shown: Vec<&SessionEvent> = events.iter().filter(|e| !matches!(e, SessionEvent::Started { .. })).collect();
+        assert_eq!(
+            shown,
+            vec![
+                &SessionEvent::TextDelta { text: text.into() },
+                &SessionEvent::TurnFinished { outcome: TurnOutcome::Completed, usage: Usage::default() }
+            ],
+            "{message}: {events:?}"
+        );
+    }
+    session.shutdown(Duration::from_secs(2)).unwrap();
+    std::fs::remove_dir_all(&base).unwrap();
+}
+
+/// A turn Codex never names fails once one request timeout has passed, as Other; its thread is
+/// left, and the session takes the next message on a fresh thread.
+#[test]
+fn a_turn_never_named_fails_after_the_bound() {
+    let base = scratch("never-named");
+    let body = r#"
+turns=0
+threads=0
+on_thread() { threads=$((threads+1)); send "{\"id\":$id,\"result\":{\"thread\":{\"id\":\"t-$threads\"},\"model\":\"m\"}}"; }
+on_turn() {
+  turns=$((turns+1))
+  if [ $turns = 1 ]; then
+    send '{"id":@ID@,"result":{"turn":{}}}'
+  else
+    send '{"id":@ID@,"result":{"turn":{"id":"u-2"}}}'
+    send '{"method":"turn/completed","params":{"threadId":"t-2","turn":{"id":"u-2","status":"completed","items":[]}}}'
+  fi
+}
+"#;
+    let (runtime, account, folder) = fake_codex(&base, body);
+    let cfg = CodexConfig { request_timeout: Duration::from_millis(300), ..config(false) };
+    let mut session = CodexSession::start(&runtime, &account, &folder, cfg, SignIn::ApiKey(canary())).unwrap();
+    session.send("one").unwrap();
+    let started = Instant::now();
+    let events = events_until(&mut session, turn_end);
+    let Some(SessionEvent::TurnFinished { outcome: TurnOutcome::Failed(error), .. }) = events.last() else { panic!("{events:?}") };
+    assert_eq!(error.kind(), ErrorKind::Other);
+    assert!(error.to_string().contains("without naming it"), "{error}");
+    assert!(started.elapsed() < Duration::from_secs(3));
+    session.send("two").unwrap();
+    let events = events_until(&mut session, turn_end);
+    assert!(matches!(events.last(), Some(SessionEvent::TurnFinished { outcome: TurnOutcome::Completed, .. })), "{events:?}");
+    let sent = stdin_lines(&base, 9);
+    let starts: Vec<Value> = requests(&sent, "turn/start").into_iter().map(|l| serde_json::from_str(l).unwrap()).collect();
+    assert_eq!(starts[1]["params"]["threadId"], "t-2", "the next message starts on a fresh thread: {sent:?}");
+    session.shutdown(Duration::from_secs(2)).unwrap();
+    std::fs::remove_dir_all(&base).unwrap();
+}
+
 /// A stop while `turn/start` waits for an answer that never comes ends the turn as stopped once the
 /// request's deadline passes, not as failed.
 #[test]

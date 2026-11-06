@@ -377,6 +377,15 @@ fn api_key_login_line(id: u64, key: &Secret) -> Result<Zeroizing<String>, AgentE
     Ok(line)
 }
 
+/// The turn a notification names (`turnId`, or `turn.id`), cut like every name.
+fn turn_of(params: &Value) -> Option<String> {
+    params
+        .get("turnId")
+        .and_then(Value::as_str)
+        .or_else(|| params.get("turn").and_then(|t| t.get("id")).and_then(Value::as_str))
+        .map(|v| rpc::capped(v, MAX_NAME_BYTES))
+}
+
 /// Whom a notification is for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Scope {
@@ -445,6 +454,9 @@ pub struct CodexSession {
     /// `turn/start` requests that passed their deadline, with their thread: a late answer names a
     /// turn that runs without anyone waiting for it, which is then interrupted.
     late_starts: VecDeque<(u64, String)>,
+    /// When Codex answered `turn/start` without naming the turn: the turn waits at most one request
+    /// timeout for a notification that names it, then fails.
+    unnamed_deadline: Option<Instant>,
     lines_seen: bool,
     shutting_down: bool,
     ended: bool,
@@ -555,6 +567,7 @@ impl CodexSession {
             held: VecDeque::new(),
             stale_turns: VecDeque::new(),
             late_starts: VecDeque::new(),
+            unnamed_deadline: None,
             lines_seen: false,
             shutting_down: false,
             ended: false,
@@ -638,6 +651,14 @@ impl CodexSession {
         }
         match self.scope(method, params) {
             Scope::Current => self.deliver(method, params),
+            // Codex answered `turn/start` without naming the turn: the first notification that
+            // names a turn of this thread (none of the ended ones) names it.
+            Scope::Hold if self.unnamed_deadline.is_some() && turn_of(params).is_some() => {
+                if let Some(turn) = turn_of(params) {
+                    self.adopt(&turn);
+                }
+                self.deliver(method, params);
+            }
             Scope::Hold if self.held.len() < MAX_HELD => self.held.push_back((method.to_owned(), params.clone())),
             Scope::Hold => log::warn!("codex sent more than {MAX_HELD} turn notifications before naming the turn; the rest are dropped"),
             Scope::Other => log::debug!("codex sent {} for a turn or thread that is not current; it was ignored", parse::kind_name(method)),
@@ -664,8 +685,7 @@ impl CodexSession {
         if !self.turn_open || !self.turn_requested {
             return Scope::Other;
         }
-        let turn =
-            named("turnId").or_else(|| params.get("turn").and_then(|t| t.get("id")).and_then(Value::as_str).map(|v| rpc::capped(v, MAX_NAME_BYTES)));
+        let turn = turn_of(params);
         if turn.as_ref().is_some_and(|t| self.stale_turns.contains(t)) {
             return Scope::Other;
         }
@@ -695,16 +715,29 @@ impl CodexSession {
         }
     }
 
-    /// The notifications held until Codex named the turn, now for the turn it named.
+    /// The notifications held until Codex named the turn, now for the turn it named; while it has
+    /// named none, they stay held.
     fn release_held(&mut self) {
         let held: Vec<(String, Value)> = self.held.drain(..).collect();
         for (method, params) in held {
             match self.scope(&method, &params) {
                 Scope::Current => self.deliver(&method, &params),
-                // Codex named no turn: what it said meanwhile is taken as this turn's.
-                Scope::Hold => self.deliver(&method, &params),
+                Scope::Hold => self.held.push_back((method, params)),
                 Scope::Other => log::debug!("a held {} was for another turn; it was ignored", parse::kind_name(&method)),
             }
+        }
+    }
+
+    /// Takes `turn` as the running turn's id (from a notification, when Codex answered
+    /// `turn/start` without one): what was held is given to it, and a stop asked for meanwhile is
+    /// sent.
+    fn adopt(&mut self, turn: &str) {
+        log::info!("codex named the running turn in a notification");
+        self.parser.turn_started(turn);
+        self.unnamed_deadline = None;
+        self.release_held();
+        if self.stop_requested && self.turn_open {
+            self.interrupt();
         }
     }
 
@@ -802,12 +835,24 @@ impl CodexSession {
             }
             (Purpose::TurnStart, Ok(value)) => {
                 match value.get("turn").and_then(|t| t.get("id")).and_then(Value::as_str) {
-                    Some(id) => self.parser.turn_started(id),
-                    None => log::warn!("codex started a turn without naming it"),
-                }
-                self.release_held();
-                if self.stop_requested && self.turn_open {
-                    self.interrupt();
+                    Some(id) => {
+                        self.parser.turn_started(id);
+                        self.release_held();
+                        if self.stop_requested && self.turn_open {
+                            self.interrupt();
+                        }
+                    }
+                    None => {
+                        log::warn!("codex started a turn without naming it; a notification that names it is waited for");
+                        self.unnamed_deadline = Instant::now().checked_add(self.timeout);
+                        // `turn/started` (or any notification naming a turn) may already be held.
+                        let named = self.held.iter().find(|(m, _)| m == "turn/started").or_else(|| self.held.front()).and_then(|(_, p)| turn_of(p));
+                        match named {
+                            Some(turn) => self.adopt(&turn),
+                            None if self.unnamed_deadline.is_none() => self.abandon_unnamed(),
+                            None => {}
+                        }
+                    }
                 }
             }
             (Purpose::TurnStart, Err(e)) => self.fail_turn(refused(method, &e, ErrorKind::Other)),
@@ -818,6 +863,9 @@ impl CodexSession {
 
     /// Requests that waited past their deadline.
     fn expire(&mut self, now: Instant) {
+        if self.unnamed_deadline.is_some_and(|d| now >= d) {
+            self.abandon_unnamed();
+        }
         for (id, method, purpose) in self.requests.expired(now) {
             if matches!(purpose, Purpose::ThreadStart | Purpose::Inject) {
                 self.awaiting = false;
@@ -935,6 +983,7 @@ impl CodexSession {
             self.remember_stale(turn);
         }
         self.held.clear();
+        self.unnamed_deadline = None;
         self.parser.reset_turn();
         self.turn_open = false;
         self.turn_requested = false;
@@ -953,6 +1002,18 @@ impl CodexSession {
             self.turn_closed();
             self.pending.push_back(SessionEvent::TurnFinished { outcome, usage: Default::default() });
         }
+    }
+
+    /// Ends the open turn Codex never named: as stopped when a stop was asked for, else failed.
+    /// Its thread is left, as the unnamed turn may still run in it.
+    fn abandon_unnamed(&mut self) {
+        self.unnamed_deadline = None;
+        self.thread = Thread::None;
+        self.inject = !self.history.entries().is_empty();
+        self.abandon_turn(AgentError::reported(
+            ErrorKind::Other,
+            &format!("codex started the turn without naming it, and no notification named it within {} ms", self.timeout.as_millis()),
+        ));
     }
 
     /// Ends the open turn whose request went unanswered: as stopped when a stop was asked for,
@@ -1097,7 +1158,7 @@ impl AgentSession for CodexSession {
             }
             budget -= 1;
             let mut wait = deadline.map_or(timeout, |d| d.saturating_duration_since(now));
-            if let Some(due) = self.requests.next_deadline() {
+            for due in self.requests.next_deadline().into_iter().chain(self.unnamed_deadline) {
                 wait = wait.min(due.saturating_duration_since(now));
             }
             if let Some(event) = self.process.next_event(wait) {
