@@ -196,6 +196,13 @@ pub enum Screen {
     /// built in the store, as AR-135 will make them): Commerce selected, Unapply refused under its
     /// Applied profiles, the five uses counted (AR-134, F6).
     WorkspaceProfileRefused,
+    /// OrderRepository binds Repository, T to Order and Key to Integer: its dashed line labelled
+    /// `«bind» <T -> Order, Key -> Integer>` selected, Properties showing the binding and its
+    /// substitutions (AR-131, C2).
+    WorkspaceTemplateBinding,
+    /// A binding being drawn from OrderRepository to Repository: its draft in Properties, Key on its
+    /// default, Apply pressed with T still without an argument and the refusal said (AR-131, C3).
+    WorkspaceTemplateBindingNew,
     /// The user manual's class-model guide, first step: the root package's diagram Commerce with
     /// Customer (its name typed) and Order, a draft row open on Order's card with `number :
     /// Integer` typed.
@@ -596,6 +603,11 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
         shell.adopt_project();
         crate::uml_ui::open_sample(&mut shell)?;
         sample_template(&mut shell, screen)?;
+    }
+    if matches!(screen, Screen::WorkspaceTemplateBinding | Screen::WorkspaceTemplateBindingNew) {
+        shell.adopt_project();
+        crate::uml_ui::open_sample(&mut shell)?;
+        sample_binding(&mut shell, screen)?;
     }
     if screen == Screen::WorkspaceQualifiers || screen == Screen::WorkspaceQualifierRefused {
         shell.adopt_project();
@@ -1220,6 +1232,45 @@ fn sample_template(shell: &mut Shell, screen: Screen) -> Result<(), String> {
     shell.canvas.fit_pending = false;
     shell.canvas.zoom = 0.85;
     shell.canvas.pan = egui::vec2(-280.0, -420.0);
+    Ok(())
+}
+
+/// In the sample class model, Repository a template bound by OrderRepository (AR-131): the binding
+/// selected for `WorkspaceTemplateBinding`; for `WorkspaceTemplateBindingNew` the binding removed
+/// again and a new one's draft opened from OrderRepository's card to Repository's, Apply pressed
+/// with T still to pick.
+fn sample_binding(shell: &mut Shell, screen: Screen) -> Result<(), String> {
+    let (repo, _) = crate::uml_ui::put_repository(shell, true)?;
+    let d = shell.canvas.active.ok_or("the sample's diagram")?;
+    let session = shell.session.as_mut().ok_or("the binding sample needs a session")?;
+    let store = session.doc();
+    let r = store.by_uuid(repo).ok_or("Repository")?;
+    let b = archforge_uml::templates::bindings_to(store, r).first().copied().ok_or("the sample's binding")?;
+    let bound = archforge_uml::templates::bound_element(store, b).ok_or("OrderRepository")?;
+    let b_id = store.uuid(b).map_err(|e| e.to_string())?.to_string();
+    shell.state.show_panel(crate::state::Panel::Properties);
+    if screen == Screen::WorkspaceTemplateBinding {
+        session.execute("view.select", &serde_json::json!({ "ids": [b_id] })).map_err(|e| e.to_string())?;
+    } else {
+        session.execute("element.remove", &serde_json::json!({ "ids": [b_id] })).map_err(|e| e.to_string())?;
+        session.execute("view.select", &serde_json::json!({ "ids": [] })).map_err(|e| e.to_string())?;
+        session.mark_saved().map_err(|e| e.to_string())?;
+        let store = session.doc();
+        let d_obj = store.by_uuid(d).ok_or("the diagram")?;
+        let node_of = |c| {
+            archforge_diagram::views_of(store, c)
+                .2
+                .into_iter()
+                .find(|n| archforge_diagram::diagram_of(store, *n) == Some(d_obj))
+                .and_then(|n| store.uuid(n).ok())
+        };
+        let (Some(from), Some(to)) = (node_of(bound), node_of(r)) else { return Err("the sample's nodes".into()) };
+        crate::uml_bindings::open_new(shell, d_obj, (from, to), bound, r);
+        crate::uml_bindings::apply_sample(shell);
+    }
+    shell.canvas.fit_pending = false;
+    shell.canvas.zoom = 0.75;
+    shell.canvas.pan = egui::vec2(-20.0, -400.0);
     Ok(())
 }
 

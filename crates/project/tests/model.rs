@@ -508,6 +508,48 @@ fn template_parameters_are_saved_and_opened_again() {
     again.close().unwrap();
 }
 
+/// A template binding (AR-131), its substitutions and its line with its label, are saved in the
+/// project's existing tables and come back as written after the project is closed and opened
+/// again: no table or column is added for them, and the binding reads the same.
+#[test]
+fn template_bindings_are_saved_and_opened_again() {
+    let env = Env::new("bindings");
+    let schema = schema();
+    let project = Project::create(&env.dolt, &env.opts(), &env.base.join("Projects"), "Shop", "test", &timestamp(1_761_670_800)).unwrap();
+    project.prepare_model(&schema).unwrap();
+    let mut s = archforge_notations::new_project_session("Shop", ids(0)).unwrap();
+    let sales = run(&mut s, "uml.package.add", json!({ "name": "sales" }));
+    let order = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Order" }));
+    let repo = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Repository" }));
+    let bound = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "OrderRepository" }));
+    run(&mut s, "uml.template-parameter.add", json!({ "classifier": repo, "name": "T" }));
+    run(&mut s, "uml.template-parameter.add", json!({ "classifier": repo, "name": "Key", "kind": "data-type", "default": "Integer" }));
+    let b = run(&mut s, "uml.template-binding.add", json!({ "bound": bound, "template": repo, "arguments": { "T": order, "Key": "String" } }));
+    let d = run(&mut s, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": sales, "name": "Sales" }));
+    let from = run(&mut s, "diagram.place", json!({ "diagram": d, "element": bound, "x": 0, "y": 300 }));
+    let to = run(&mut s, "diagram.place", json!({ "diagram": d, "element": repo, "x": 400, "y": 0 }));
+    let e = run(&mut s, "diagram.connect", json!({ "diagram": d, "element": b, "source": from, "target": to }));
+    run(&mut s, "diagram.label", json!({ "edge": e, "kind": "name", "at": "middle" }));
+    let before = s.execute("uml.template-binding.list", &json!({ "classifier": bound })).unwrap().value;
+    let written = rows_of(s.doc(), &schema);
+    project.write_model(&schema, &written).unwrap();
+    project.commit("Bindings").unwrap();
+    let path = project.path().to_path_buf();
+    project.close().unwrap();
+    let again = Project::open(&env.dolt, &env.opts(), &path).unwrap();
+    again.prepare_model(&schema).unwrap();
+    let read = again.read_model(&schema).unwrap();
+    assert_eq!(read, written, "the rows come back as written");
+    let mut session = archforge_notations::session_from_rows(&read, ids(1 << 41)).unwrap();
+    assert_eq!(rows_of(session.doc(), &schema), written, "read into a model, the same rows again");
+    assert_eq!(session.execute("uml.template-binding.list", &json!({ "classifier": bound })).unwrap().value, before);
+    let st = session.doc();
+    let binding = st.by_uuid(Uuid::parse(&b).unwrap()).unwrap();
+    assert_eq!(archforge_uml::bindings::label(st, binding), "«bind» <T -> Order, Key -> String>");
+    assert_eq!(archforge_diagram::views_of(st, binding).1.len(), 1, "its line");
+    again.close().unwrap();
+}
+
 #[test]
 fn a_long_text_in_any_script_is_written_and_read_back_whole() {
     let env = Env::new("long");

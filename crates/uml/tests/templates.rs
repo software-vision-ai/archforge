@@ -360,14 +360,27 @@ fn a_parameter_s_classifier_stays_its_template_s_own() {
     assert!(types["types"].as_array().unwrap().iter().all(|t| t["id"] != json!(el)), "the type list leaves it out");
 }
 
-/// A binding (AR-131) built in the store: OrderRepository binds Repository's Key to Integer and T
-/// to Order. Gives the session over it and the binding's id.
+/// A binding made by `uml.template-binding.add` (AR-131) in a copy of `s`: the class
+/// OrderRepository binds Repository, T to Order and Key to Integer. Gives the session over the copy
+/// and the binding's id.
 fn bound(s: &S, shop: &Shop) -> (S, String) {
-    bind(s, shop, true)
+    let (tables, junctions) = tables();
+    let saved = rows::snapshot(s.doc(), &tables, &junctions).unwrap();
+    let mut st = store(1 << 30);
+    rows::restore(&mut st, &saved, &tables, &junctions).unwrap();
+    let mut s = session_over(st);
+    let bound_class = run(&mut s, "uml.class.add", json!({ "package": shop.shop, "name": "OrderRepository" }));
+    let id = run(
+        &mut s,
+        "uml.template-binding.add",
+        json!({ "bound": bound_class, "template": shop.repository, "arguments": { "T": shop.order, "Key": "Integer" } }),
+    );
+    (s, id)
 }
 
-/// A binding built in the store as [`bound`] builds it, with its substitutions or, without
-/// `substitute`, none: OrderRepository naming Repository's signature alone.
+/// A binding built straight in the store, as a project edited by hand may hold one, with its
+/// substitutions or, without `substitute`, none: OrderRepository naming Repository's signature
+/// alone, which the commands never make while a parameter has no default.
 fn bind(s: &S, shop: &Shop, substitute: bool) -> (S, String) {
     let (tables, junctions) = tables();
     let saved = rows::snapshot(s.doc(), &tables, &junctions).unwrap();
@@ -581,4 +594,278 @@ fn a_removal_that_breaks_a_binding_s_argument_is_refused() {
     let e = refused(&mut s, "element.remove", json!({ "ids": [g] }));
     assert!(e.contains("OrderRepository binds T to Order, and Order would no longer specialize Entity, T's constraint"), "{e}");
     assert_eq!(s.undo_label().map(str::to_string), undo, "no undo step");
+}
+
+/// Shop with Repository a template of `T : Class > Entity` and `Key : DataType = Integer`, and the
+/// class OrderRepository beside it on the diagram. Gives Shop, T's and Key's ids and
+/// OrderRepository's.
+fn templated() -> (S, Shop, String, String, String) {
+    let mut s = session();
+    let shop = shop(&mut s);
+    let t = run(&mut s, "uml.template-parameter.add", json!({ "classifier": shop.repository, "name": "T", "constraint": shop.entity }));
+    let key =
+        run(&mut s, "uml.template-parameter.add", json!({ "classifier": shop.repository, "name": "Key", "kind": "data-type", "default": "Integer" }));
+    let order_repo = run(&mut s, "uml.class.add", json!({ "package": shop.shop, "name": "OrderRepository" }));
+    run(&mut s, "diagram.place", json!({ "diagram": shop.d, "element": order_repo, "x": 0.0, "y": 400.0 }));
+    (s, shop, t, key, order_repo)
+}
+
+/// What `uml.template-binding.list` gives for `c`.
+fn bindings(s: &mut S, c: &str) -> Json {
+    s.execute("uml.template-binding.list", &json!({ "classifier": c })).unwrap().value
+}
+
+/// The label of binding `b`'s line.
+fn label(s: &S, b: &str) -> String {
+    let st = s.doc();
+    archforge_uml::figures::slot_text(st, obj(st, b), "name")
+}
+
+/// A binding is a real TemplateBinding with its substitutions, made in one undo step: the bound
+/// element owns it, it names the template's signature, each argument is a substitution of a
+/// parameter, and a parameter left out uses its default. Its line runs from the bound element to
+/// the template, dashed with an open arrow, labelled `«bind» <T -> Order, Key -> Integer>`; it is
+/// neither a dependency nor a realization, and the bound class keeps its identity.
+#[test]
+fn a_binding_is_made_with_its_substitutions_in_one_undo_step() {
+    let (mut s, shop, t, key, order_repo) = templated();
+    let b =
+        one_step(&mut s, "uml.template-binding.add", json!({ "bound": order_repo, "template": shop.repository, "arguments": { "T": shop.order } }));
+    let st = s.doc();
+    let binding = obj(st, &b);
+    assert_eq!(st.class_of(binding).unwrap(), archforge_uml::TEMPLATE_BINDING);
+    assert_eq!(templates::bound_element(st, binding), Some(obj(st, &order_repo)), "owned by the bound class");
+    assert_eq!(archforge_uml::bindings::template_of(st, binding), Some(obj(st, &shop.repository)));
+    let subs = archforge_uml::bindings::substitutions(st, binding);
+    assert_eq!(subs.len(), 1, "Key is left out: its default stands");
+    assert_eq!(templates::actual_of(st, subs[0]), Some(obj(st, &shop.order)));
+    assert_eq!(templates::users(st, obj(st, &t))[0].0, binding, "T knows its binding");
+    assert!(templates::users(st, obj(st, &key)).is_empty());
+    assert_eq!(label(&s, &b), "«bind» <T -> Order, Key -> Integer>");
+    assert_eq!(archforge_uml::figures::ends(st, binding), Some((obj(st, &order_repo), obj(st, &shop.repository))));
+    let line = archforge_uml::figures::line(st, binding).unwrap();
+    assert!(line.dashed && line.styled);
+    assert_eq!(line.ends[1].mark, archforge_diagram::figure::EndMark::OpenArrow);
+    assert_eq!(archforge_uml::figures::text_slots(archforge_uml::TEMPLATE_BINDING), ["name"]);
+    // The reads: list, the relationship list, and both ends.
+    let read = bindings(&mut s, &order_repo);
+    assert_eq!(read["binds"][0]["arguments"][0]["argument"]["name"], json!("Order"));
+    assert_eq!(
+        read["binds"][0]["arguments"][1],
+        json!({ "parameter": { "id": key, "name": "Key" }, "argument": read["binds"][0]["arguments"][1]["argument"], "default": true })
+    );
+    assert_eq!(bindings(&mut s, &shop.repository)["bound_by"][0]["id"], json!(b));
+    let rels = s.execute("uml.relationship.list", &json!({ "class": shop.repository })).unwrap().value;
+    assert_eq!(rels["relationships"].as_array().unwrap().iter().filter(|r| r["kind"] == json!("template_binding")).count(), 1);
+    // Distinct from a dependency and a realization: no name, no other kind's commands.
+    let e = refused(&mut s, "uml.relationship.rename", json!({ "relationship": b, "name": "x" }));
+    assert!(e.contains("no association or dependency"), "{e}");
+    let st = s.doc();
+    assert!(!st.universe().conforms(archforge_uml::TEMPLATE_BINDING, archforge_mof::TypeRef::Class(archforge_uml::DEPENDENCY)));
+    // Drawn on two diagrams from one element: the same label on each.
+    let d2 = run(&mut s, "diagram.add", json!({ "kind": CLASS_DIAGRAM, "name": "Overview", "element": shop.shop }));
+    for (c, x) in [(&order_repo, 0.0), (&shop.repository, 400.0)] {
+        run(&mut s, "diagram.place", json!({ "diagram": d2, "element": c, "x": x, "y": 0.0 }));
+    }
+    let node = |s: &S, d: &str, c: &str| {
+        let st = s.doc();
+        archforge_diagram::views_of(st, obj(st, c))
+            .2
+            .into_iter()
+            .find(|n| archforge_diagram::diagram_of(st, *n) == Some(obj(st, d)))
+            .map(|n| st.uuid(n).unwrap().to_string())
+            .unwrap()
+    };
+    for d in [&shop.d, &d2] {
+        let (from, to) = (node(&s, d, &order_repo), node(&s, d, &shop.repository));
+        let e = run(&mut s, "diagram.connect", json!({ "diagram": d, "element": b, "source": from, "target": to }));
+        run(&mut s, "diagram.label", json!({ "edge": e, "kind": "name", "at": "middle" }));
+    }
+    let st = s.doc();
+    assert_eq!(archforge_diagram::views_of(st, binding).1.len(), 2, "a line on each diagram");
+    // Renaming a parameter or an argument changes the label on every diagram, nothing stored.
+    run(&mut s, "uml.template-parameter.set", json!({ "parameter": t, "name": "Item" }));
+    run(&mut s, "uml.class.rename", json!({ "class": shop.order, "name": "Purchase" }));
+    assert_eq!(label(&s, &b), "«bind» <Item -> Purchase, Key -> Integer>");
+    assert_eq!(templates::users(s.doc(), obj(s.doc(), &t))[0].0, obj(s.doc(), &b));
+}
+
+/// What a binding is refused for, said with a reason, the store and the history untouched: a
+/// parameter without a default needs an argument, an argument must fit its parameter's kind and
+/// constraint, each parameter is named once, and the classifier rules hold.
+#[test]
+fn a_binding_missing_an_argument_or_with_one_that_does_not_fit_is_refused() {
+    let (mut s, shop, t, _key, order_repo) = templated();
+    let el = listed(&mut s, &shop.repository)[0]["element"].as_str().unwrap().to_string();
+    let iface = run(&mut s, "uml.interface.add", json!({ "package": shop.shop, "name": "Store" }));
+    let undo = s.undo_label().map(str::to_string);
+    let add = |args: Json| json!({ "bound": order_repo, "template": shop.repository, "arguments": args });
+    for (p, said) in [
+        (add(json!({})), "Repository needs an argument for T (a class), which has no default"),
+        (add(json!({ "T": shop.repository })), "Repository does not fit T: its argument is a class and must be Entity or specialize it"),
+        (add(json!({ "T": shop.money })), "Money does not fit T"),
+        (add(json!({ "T": shop.order, "Key": shop.order })), "Order does not fit Key: its argument is a data type"),
+        (add(json!({ "T": shop.order, "Key": "Decimal" })), "neither a classifier's id nor one of the built-in types"),
+        (add(json!({ "T": el })), "is the template parameter T of Repository"),
+        (add(json!({ "T": shop.order, "U": shop.order })), "its parameters are T, Key"),
+        (add(json!({ "T": shop.order, t.as_str(): shop.order })), "T is given twice"),
+        (json!({ "bound": order_repo, "template": shop.order, "arguments": {} }), "has no template parameter, so it is no template"),
+        (
+            json!({ "bound": iface, "template": shop.repository, "arguments": { "T": shop.order } }),
+            "a template is bound by a classifier of its own kind",
+        ),
+        (json!({ "bound": shop.repository, "template": shop.repository, "arguments": { "T": shop.order } }), "a template does not bind itself"),
+        (json!({ "bound": shop.status, "template": shop.repository, "arguments": { "T": shop.order } }), "only a class, an interface or a data type"),
+    ] {
+        let e = refused(&mut s, "uml.template-binding.add", p);
+        assert!(e.contains(said), "{said}: {e}");
+    }
+    assert_eq!(s.undo_label().map(str::to_string), undo, "no undo step");
+    // A second binding of the same template, and a cycle, are refused too.
+    let b = run(&mut s, "uml.template-binding.add", add(json!({ "T": shop.order })));
+    let e = refused(&mut s, "uml.template-binding.add", add(json!({ "T": shop.order })));
+    assert!(e.contains("OrderRepository binds Repository already"), "{e}");
+    run(&mut s, "uml.template-parameter.add", json!({ "classifier": order_repo, "name": "E", "default": shop.order }));
+    let e = refused(&mut s, "uml.template-binding.add", json!({ "bound": shop.repository, "template": order_repo }));
+    assert!(e.contains("which would make a cycle"), "{e}");
+    assert!(alive(&s, &b));
+}
+
+/// A parameter left out uses its default, whatever it is at the time; a parameter without a default
+/// is not added to a bound template, nor a default cleared that a binding relies on.
+#[test]
+fn a_parameter_left_out_uses_its_default() {
+    let (mut s, shop, t, key, order_repo) = templated();
+    let b = run(&mut s, "uml.template-binding.add", json!({ "bound": order_repo, "template": shop.repository, "arguments": { "T": shop.order } }));
+    assert_eq!(label(&s, &b), "«bind» <T -> Order, Key -> Integer>");
+    run(&mut s, "uml.template-parameter.set", json!({ "parameter": key, "default": shop.money }));
+    assert_eq!(label(&s, &b), "«bind» <T -> Order, Key -> Money>", "the default as it is now");
+    let e = refused(&mut s, "uml.template-parameter.set", json!({ "parameter": key, "default": "" }));
+    assert!(e.contains("OrderRepository binds Repository and gives Key no argument, so Key needs a default"), "{e}");
+    let e = refused(&mut s, "uml.template-parameter.add", json!({ "classifier": shop.repository, "name": "V", "kind": "enumeration" }));
+    assert!(e.contains("gives V no argument, so V needs a default"), "{e}");
+    run(&mut s, "uml.template-parameter.add", json!({ "classifier": shop.repository, "name": "V", "kind": "enumeration", "default": shop.status }));
+    assert_eq!(label(&s, &b), "«bind» <T -> Order, Key -> Money, V -> Status>");
+    // T has its argument, so its default may be cleared; Key, once given one, too.
+    run(&mut s, "uml.template-parameter.set", json!({ "parameter": t, "default": "" }));
+    run(&mut s, "uml.template-binding.set", json!({ "binding": b, "arguments": { "Key": "Integer" } }));
+    run(&mut s, "uml.template-parameter.set", json!({ "parameter": key, "default": "" }));
+    assert_eq!(label(&s, &b), "«bind» <T -> Order, Key -> Integer, V -> Status>");
+}
+
+/// A binding's arguments, bound element and template are edited, each one undo step, everything
+/// checked first: an argument changed or taken back to its default, another bound element keeping
+/// the arguments, another template taking its own arguments; its ends move on the canvas too.
+#[test]
+fn a_binding_is_edited_with_undo_and_redo() {
+    let (mut s, shop, _t, _key, order_repo) = templated();
+    let b = run(
+        &mut s,
+        "uml.template-binding.add",
+        json!({ "bound": order_repo, "template": shop.repository, "arguments": { "T": shop.order, "Key": shop.money } }),
+    );
+    let invoice = run(&mut s, "uml.class.add", json!({ "package": shop.shop, "name": "Invoice" }));
+    run(&mut s, "uml.generalization.add", json!({ "specific": invoice, "general": shop.entity }));
+    one_step(&mut s, "uml.template-binding.set", json!({ "binding": b, "arguments": { "T": invoice } }));
+    assert_eq!(label(&s, &b), "«bind» <T -> Invoice, Key -> Money>", "Key not named keeps its argument");
+    one_step(&mut s, "uml.template-binding.set", json!({ "binding": b, "arguments": { "Key": "" } }));
+    assert_eq!(label(&s, &b), "«bind» <T -> Invoice, Key -> Integer>", "back to the default");
+    let e = refused(&mut s, "uml.template-binding.set", json!({ "binding": b, "arguments": { "T": "" } }));
+    assert!(e.contains("T has no default"), "{e}");
+    let e = refused(&mut s, "uml.template-binding.set", json!({ "binding": b, "arguments": { "T": shop.repository } }));
+    assert!(e.contains("does not fit T"), "{e}");
+    // Another bound element keeps the arguments; the line follows on the diagram.
+    let other = run(&mut s, "uml.class.add", json!({ "package": shop.shop, "name": "InvoiceRepository" }));
+    run(&mut s, "diagram.place", json!({ "diagram": shop.d, "element": other, "x": 400.0, "y": 400.0 }));
+    let node = |s: &S, c: &str| {
+        let st = s.doc();
+        st.uuid(archforge_diagram::views_of(st, obj(st, c)).2[0]).unwrap().to_string()
+    };
+    let (from, to) = (node(&s, &order_repo), node(&s, &shop.repository));
+    run(&mut s, "diagram.connect", json!({ "diagram": shop.d, "element": b, "source": from, "target": to }));
+    one_step(&mut s, "uml.template-binding.set", json!({ "binding": b, "bound": other }));
+    let st = s.doc();
+    assert_eq!(templates::bound_element(st, obj(st, &b)), Some(obj(st, &other)));
+    assert!(archforge_uml::bindings::bindings_of(st, obj(st, &order_repo)).is_empty());
+    let edge = archforge_diagram::views_of(st, obj(st, &b)).1[0];
+    assert_eq!(st.get(edge, archforge_diagram::edge::SOURCE).unwrap().as_ref().map(|n| st.uuid(n).unwrap().to_string()), Some(node(&s, &other)));
+    assert_eq!(label(&s, &b), "«bind» <T -> Invoice, Key -> Integer>");
+    // Reconnected on the canvas: the source to another class keeps the arguments.
+    one_step(&mut s, "uml.relationship.reconnect", json!({ "relationship": b, "end": "source", "class": order_repo }));
+    // Another template: the target moves only when that one needs no argument, else set names them.
+    let pair = run(&mut s, "uml.class.add", json!({ "package": shop.shop, "name": "Pair" }));
+    run(&mut s, "uml.template-parameter.add", json!({ "classifier": pair, "name": "A" }));
+    let e = refused(&mut s, "uml.relationship.reconnect", json!({ "relationship": b, "end": "target", "class": pair }));
+    assert!(e.contains("Pair needs an argument for A") && e.contains("uml.template-binding.set"), "{e}");
+    one_step(&mut s, "uml.template-binding.set", json!({ "binding": b, "template": pair, "arguments": { "A": shop.order } }));
+    assert_eq!(label(&s, &b), "«bind» <A -> Order>", "the old template's arguments went");
+    let st = s.doc();
+    assert_eq!(archforge_uml::bindings::substitutions(st, obj(st, &b)).len(), 1);
+    assert!(archforge_diagram::views_of(st, obj(st, &b)).1.is_empty(), "the diagram does not show Pair, so the line goes");
+}
+
+/// Removing what a binding names leaves nothing dangling: a classifier used as an argument is
+/// refused naming the binding, the store and the history untouched; the binding removed goes with
+/// its substitutions and lines; the bound element and the template each take it along.
+#[test]
+fn removing_what_a_binding_names_is_refused_or_takes_the_binding_along() {
+    let (mut s, shop, t, _key, order_repo) = templated();
+    let b = run(
+        &mut s,
+        "uml.template-binding.add",
+        json!({ "bound": order_repo, "template": shop.repository, "arguments": { "T": shop.order, "Key": shop.money } }),
+    );
+    let undo = s.undo_label().map(str::to_string);
+    let e = refused(&mut s, "element.remove", json!({ "ids": [shop.order] }));
+    assert!(e.contains("OrderRepository binds Repository with T -> Order, so Order is its argument; change or remove that binding"), "{e}");
+    let e = refused(&mut s, "element.remove", json!({ "ids": [shop.money] }));
+    assert!(e.contains("Key -> Money"), "{e}");
+    let e = refused(&mut s, "element.remove", json!({ "ids": [t] }));
+    assert!(e.contains("OrderRepository binds T to Order"), "{e}");
+    assert_eq!(s.undo_label().map(str::to_string), undo, "no undo step");
+    // With the binding going too, the argument goes.
+    let before = picture(s.doc());
+    run(&mut s, "element.remove", json!({ "ids": [shop.order, order_repo] }));
+    assert!(!alive(&s, &b) && !alive(&s, &shop.order));
+    s.undo().unwrap();
+    assert_eq!(picture(s.doc()), before);
+    // The binding alone goes with its substitutions; then the argument may go.
+    let subs: Vec<Obj> = archforge_uml::bindings::substitutions(s.doc(), obj(s.doc(), &b));
+    one_step(&mut s, "element.remove", json!({ "ids": [b] }));
+    assert!(subs.iter().all(|x| !s.doc().is_alive(*x)) && alive(&s, &order_repo));
+    s.undo().unwrap();
+    // The template removed takes the binding along, the bound class kept.
+    run(&mut s, "element.remove", json!({ "ids": [shop.repository] }));
+    assert!(!alive(&s, &b) && alive(&s, &order_repo));
+}
+
+/// A binding and its substitutions saved as rows read back identical, and the binding reads the
+/// same in the session over them.
+#[test]
+fn bindings_are_saved_and_read_back_identical() {
+    let (mut s, shop, _t, _key, order_repo) = templated();
+    let b = run(&mut s, "uml.template-binding.add", json!({ "bound": order_repo, "template": shop.repository, "arguments": { "T": shop.order } }));
+    let (tables, junctions) = tables();
+    let saved = rows::snapshot(s.doc(), &tables, &junctions).unwrap();
+    let mut back = store(1 << 31);
+    rows::restore(&mut back, &saved, &tables, &junctions).unwrap();
+    assert_eq!(rows::snapshot(&back, &tables, &junctions).unwrap(), saved);
+    assert!(back.first_problem().is_none(), "{:?}", back.first_problem());
+    let mut back = session_over(back);
+    assert_eq!(bindings(&mut back, &order_repo), bindings(&mut s, &order_repo));
+    assert_eq!(label(&back, &b), "«bind» <T -> Order, Key -> Integer>");
+}
+
+/// The sweep over the binding commands breaks nothing.
+#[test]
+fn the_sweep_over_bindings_breaks_nothing() {
+    let (mut s, shop, t, _key, order_repo) = templated();
+    let b = run(&mut s, "uml.template-binding.add", json!({ "bound": order_repo, "template": shop.repository, "arguments": { "T": shop.order } }));
+    let listed: Vec<String> = s.registry().infos(&s.facts()).into_iter().map(|i| i.id.to_string()).collect();
+    for cmd in ["uml.template-binding.add", "uml.template-binding.set", "uml.template-binding.list"] {
+        assert!(listed.iter().any(|l| l == cmd), "{cmd} is swept");
+    }
+    let ids = [b.as_str(), t.as_str(), order_repo.as_str(), shop.repository.as_str(), shop.order.as_str(), "not-an-id"];
+    let calls = sweep_with(&mut s, &ids, picture).unwrap();
+    assert!(calls > 20, "{calls}");
 }

@@ -122,8 +122,25 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   `element_remove`, refused while a binding uses it; the template's last parameter takes its
   signature along, and is refused while any binding names the template. `element_remove` also
   refuses removing a generalization or a classifier when a parameter's default, or a binding's
-  argument, would then no longer specialize the parameter's constraint. No command makes a
-  binding in this version yet, so `bound_by` stays empty in a model made here.
+  argument, would then no longer specialize the parameter's constraint. A parameter without a
+  default is refused on a template a binding names, and so is clearing a default a binding
+  relies on.
+- **Template bindings**: `uml_template_binding_add` makes `bound` (a class, an interface or a data
+  type) bind `template` (one of the same kind with template parameters), with `arguments`, an
+  object mapping each parameter's name or id to a classifier's id or a built-in type's name; a
+  parameter without a default needs one, and one left out uses its default.
+  `uml_template_binding_set` changes the bound element, the template (its arguments given anew) or
+  some arguments (`""` takes one back to its default); `uml_template_binding_list` gives a
+  classifier's bindings (`binds`) and those to it (`bound_by`), each with its `label`, `«bind» <T ->
+  Order, Key -> Integer>`, and every parameter's argument, `default` true where the default is
+  used. An argument of another kind, one that does not fit the parameter's constraint, a template
+  parameter's own classifier, a template of another kind, a second binding of the same template and
+  a cycle of bindings are refused. Show it on a class diagram with `diagram_connect` and its text
+  with `diagram_label` (`kind` name). `uml_relationship_reconnect` moves its source to another
+  bound element, or its target to another template whose parameters all have defaults.
+  `element_remove` removes it with its substitutions; a classifier a binding uses as an argument is
+  refused, naming the binding, until that binding changes or goes; removing the bound element or
+  the template takes the binding along.
 - **Generalization sets**: `uml_generalization_set_add` groups generalizations to one general
   class, complete or incomplete and disjoint or overlapping; `uml_generalization_set_set` renames
   it, changes either flag, and adds or takes out members; `uml_generalization_set_place` puts its

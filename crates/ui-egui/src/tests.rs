@@ -14579,7 +14579,7 @@ fn template_parameters_are_edited_in_properties_and_boxed_on_both_diagrams() {
 
 /// A name another parameter has, whatever the case, and a default that does not fit are refused in
 /// place, nothing written; removing a parameter a binding uses is refused under the rows naming the
-/// binding (C5), and Show the binding selects the element that binds it. In light and dark.
+/// binding (C5), and Show the binding selects the binding itself (AR-131). In light and dark.
 #[test]
 fn template_parameter_refusals_are_said_in_place_and_nothing_is_written() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
@@ -14651,7 +14651,188 @@ fn template_parameter_refusals_are_said_in_place_and_nothing_is_written() {
         click(&mut h, at);
         let s = h.state().session.as_ref().unwrap();
         let chosen = s.view().selection.first().copied().unwrap();
-        assert_eq!(archforge_core::name_of(s.doc(), chosen), "OrderRepository", "the element that binds it is selected");
+        assert_eq!(s.doc().class_of(chosen).unwrap(), archforge_uml::TEMPLATE_BINDING, "the binding itself is selected");
+        assert_eq!(
+            archforge_uml::templates::bound_element(s.doc(), chosen).map(|b| archforge_core::name_of(s.doc(), b)).as_deref(),
+            Some("OrderRepository")
+        );
+        h.run();
+        assert!(ids(&h).iter().any(|i| i == "workspace.properties.templateBinding.substitution.0.argument"), "its Properties show");
+    }
+}
+
+/// The template sample with T (no default) and Key (a data type, Integer by default) on
+/// Repository, and the class OrderRepository placed on the diagram beside it: gives the harness,
+/// the sample's ids, and the cards of OrderRepository and Repository.
+fn binding_sample(
+    theme: ThemeKind,
+) -> (Harness<'static, Shell>, std::collections::BTreeMap<&'static str, String>, (archforge_mof::Uuid, archforge_mof::Uuid)) {
+    let (mut h, mut made) = templates_sample(theme);
+    let repo = made["Repository"].clone();
+    let s = h.state_mut().session.as_mut().unwrap();
+    s.execute("uml.template-parameter.add", &serde_json::json!({ "classifier": repo, "name": "T" })).unwrap();
+    s.execute("uml.template-parameter.add", &serde_json::json!({ "classifier": repo, "name": "Key", "kind": "data-type", "default": "Integer" }))
+        .unwrap();
+    let st = s.doc();
+    let pkg = archforge_uml::commands::package_of(st, st.by_uuid(archforge_mof::Uuid::parse(&repo).unwrap()).unwrap()).unwrap();
+    let pkg = st.uuid(pkg).unwrap().to_string();
+    let bound = s.execute("uml.class.add", &serde_json::json!({ "package": pkg, "name": "OrderRepository" })).unwrap().value["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    s.execute("diagram.place", &serde_json::json!({ "diagram": made["diagram"], "element": bound, "x": 200, "y": 600 })).unwrap();
+    s.execute("view.select", &serde_json::json!({ "ids": [] })).unwrap();
+    made.insert("OrderRepository", bound.clone());
+    h.run();
+    let nodes = (
+        archforge_mof::Uuid::parse(&node_on(&h, &bound, &made["diagram"])).unwrap(),
+        archforge_mof::Uuid::parse(&node_on(&h, &repo, &made["diagram"])).unwrap(),
+    );
+    (h, made, nodes)
+}
+
+/// The bindings in the harness's model.
+fn bindings_in(h: &Harness<'static, Shell>) -> Vec<archforge_mof::Obj> {
+    let st = h.state().session.as_ref().unwrap().doc();
+    st.alive().filter(|o| archforge_uml::bindings::is_binding(st, *o)).collect()
+}
+
+/// A template binding is drawn from OrderRepository to Repository (design page 08, C3): releasing it
+/// opens the draft in Properties and writes nothing; Apply with T still to pick is refused naming
+/// it, the draft kept; Cancel, and Escape, leave the model and its history as they were; with T
+/// picked, Apply adds the binding, its line and its label as one undo step and selects it, Key on
+/// its default. In light and dark.
+#[test]
+fn a_template_binding_is_drawn_and_applied_from_its_draft() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _, (from, to)) = binding_sample(theme);
+        let d = h.state().canvas.active.unwrap();
+        let undo = h.state().session.as_ref().unwrap().undo_label().map(str::to_string);
+        h.state_mut().canvas.uml_relation = crate::uml_relate::Relate::TemplateBinding;
+        let draw = |h: &mut Harness<'static, Shell>| {
+            let d = h.state().session.as_ref().unwrap().doc().by_uuid(d).unwrap();
+            crate::uml_relate::connect(h.state_mut(), d, from, to);
+            h.run();
+        };
+        draw(&mut h);
+        assert!(bindings_in(&h).is_empty(), "{theme:?}: nothing in the model while drawing");
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label().map(str::to_string), undo);
+        let shown = painted(&h);
+        assert!(shown.iter().any(|t| t == "New template binding") && shown.iter().any(|t| t == "Choose a class"), "{shown:?}");
+        assert!(shown.iter().any(|t| t == "default"), "Key shows its default");
+        let st = h.state().session.as_ref().unwrap().doc();
+        assert_eq!(crate::uml_bindings::draft_line(h.state(), st.by_uuid(d).unwrap()), Some((from, to)), "the draft's line is drawn");
+        for id in ["bound", "template", "substitution.0.argument", "substitution.1.argument", "apply", "cancel"] {
+            assert!(ids(&h).iter().any(|i| *i == format!("workspace.properties.templateBinding.{id}")), "{id}");
+        }
+        // Apply with T to pick: refused, said, the draft kept.
+        let at = rect_of(&h, "workspace.properties.templateBinding.apply").center();
+        click(&mut h, at);
+        assert!(painted(&h).iter().any(|t| t.contains("T needs an argument: pick a class.")), "{:?}", painted(&h));
+        assert!(ids(&h).iter().any(|i| i == "workspace.properties.templateBinding.refusal"));
+        assert!(h.state().panels.binding.is_some() && bindings_in(&h).is_empty());
+        // Cancel leaves nothing; so does Escape.
+        let at = rect_of(&h, "workspace.properties.templateBinding.cancel").center();
+        click(&mut h, at);
+        assert!(h.state().panels.binding.is_none() && bindings_in(&h).is_empty());
+        draw(&mut h);
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert!(h.state().panels.binding.is_none() && bindings_in(&h).is_empty());
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label().map(str::to_string), undo, "{theme:?}: the history as it was");
+        // T picked from its selector (Entity, Order, OrderRepository, Repository), then Apply.
+        draw(&mut h);
+        pick_entry(&mut h, "workspace.properties.templateBinding.substitution.0.argument", "1");
+        let at = rect_of(&h, "workspace.properties.templateBinding.apply").center();
+        click(&mut h, at);
+        let made_now = bindings_in(&h);
+        assert_eq!(made_now.len(), 1, "{theme:?}");
+        let s = h.state().session.as_ref().unwrap();
+        assert_eq!(s.undo_label(), Some("Add template binding"));
+        assert_eq!(s.view().selection, made_now, "the binding is selected");
+        let st = s.doc();
+        assert_eq!(archforge_uml::figures::slot_text(st, made_now[0], "name"), "«bind» <T -> Order, Key -> Integer>");
+        assert_eq!(archforge_diagram::views_of(st, made_now[0]).1.len(), 1, "its line");
+        h.run();
+        assert!(painted(&h).iter().any(|t| t == "«bind» <T -> Order, Key -> Integer>"), "the label on the canvas");
+        assert!(ids(&h).iter().any(|i| i == "workspace.properties.templateBinding.substitution.1.argument"), "its Properties");
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        assert!(bindings_in(&h).is_empty(), "one undo step");
+    }
+}
+
+/// A binding's substitutions are edited in its Properties (C2), each pick one undo step: Key given
+/// String, then back to its default; another template opens the draft over the binding until
+/// Apply; a draft is dropped when the selection moves on. Models writes binds Repository after the
+/// bound class. In light and dark.
+#[test]
+fn a_template_binding_s_substitutions_are_edited_in_properties() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, made, _) = binding_sample(theme);
+        let s = h.state_mut().session.as_mut().unwrap();
+        let b = s
+            .execute(
+                "uml.template-binding.add",
+                &serde_json::json!({ "bound": made["OrderRepository"], "template": made["Repository"], "arguments": { "T": made["Order"] } }),
+            )
+            .unwrap()
+            .value["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        h.run();
+        assert!(painted(&h).iter().any(|t| t == "Template binding"), "{theme:?}: its heading");
+        let label = |h: &Harness<'static, Shell>| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            archforge_uml::bindings::label(st, st.by_uuid(archforge_mof::Uuid::parse(&b).unwrap()).unwrap())
+        };
+        // Key's menu: Default (Integer), then the built-in types and data types; String is one.
+        let at = rect_of(&h, "workspace.properties.templateBinding.substitution.1.argument").center();
+        click(&mut h, at);
+        assert!(painted(&h).iter().any(|t| t == "Default (Integer)"), "{:?}", painted(&h));
+        let entries: Vec<String> =
+            ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.templateBinding.substitution.1.argument.")).collect();
+        assert!(!entries.is_empty());
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        // Default (Integer) first, then the built-in types in their order: Integer, String, ….
+        let string_at = (archforge_uml::members::BUILT_IN.iter().position(|b| *b == "String").unwrap() + 1).to_string();
+        pick_entry(&mut h, "workspace.properties.templateBinding.substitution.1.argument", &string_at);
+        assert_eq!(label(&h), "«bind» <T -> Order, Key -> String>");
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Set template binding"));
+        pick_entry(&mut h, "workspace.properties.templateBinding.substitution.1.argument", "0");
+        assert_eq!(label(&h), "«bind» <T -> Order, Key -> Integer>", "back to the default");
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        assert_eq!(label(&h), "«bind» <T -> Order, Key -> String>", "undone");
+        h.state_mut().session.as_mut().unwrap().redo().unwrap();
+        // Models names the template after the bound class.
+        let all: Vec<archforge_mof::Uuid> = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            st.alive().filter_map(|o| st.uuid(o).ok()).collect()
+        };
+        h.state_mut().explorer.expanded.extend(all);
+        h.run();
+        assert!(painted(&h).iter().any(|t| t == "binds Repository"), "{:?}", painted(&h));
+        // Another template opens the draft over the binding; selecting something else drops it.
+        let s = h.state_mut().session.as_mut().unwrap();
+        let pair = s
+            .execute("uml.class.add", &serde_json::json!({ "package": archforge_uml::commands::package_of(s.doc(), s.doc().by_uuid(archforge_mof::Uuid::parse(&made["Repository"]).unwrap()).unwrap()).and_then(|p| s.doc().uuid(p).ok()).unwrap().to_string(), "name": "Pair" }))
+            .unwrap()
+            .value["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        s.execute("uml.template-parameter.add", &serde_json::json!({ "classifier": pair, "name": "A" })).unwrap();
+        s.execute("view.select", &serde_json::json!({ "ids": [b] })).unwrap();
+        h.run();
+        let before = label(&h);
+        // Pair is the first template by name, Repository the second.
+        pick_entry(&mut h, "workspace.properties.templateBinding.template", "0");
+        assert!(h.state().panels.binding.as_ref().is_some_and(|d| d.binding.is_some()), "the draft over the binding");
+        assert!(ids(&h).iter().any(|i| i == "workspace.properties.templateBinding.apply"));
+        assert_eq!(label(&h), before, "nothing written yet");
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [made["Order"]] })).unwrap();
+        h.run();
+        assert!(h.state().panels.binding.is_none(), "{theme:?}: the draft goes with the selection");
+        assert_eq!(label(&h), before);
     }
 }
 

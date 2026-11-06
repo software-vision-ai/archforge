@@ -244,7 +244,8 @@ fn upper(store: &Store, end: Obj) -> Option<u64> {
 
 /// The relationships that touch class `c`: the associations and association classes with an end
 /// typed by it, the generalizations to and from it, the dependencies it is a client or supplier of,
-/// and the interface realizations it implements or is the contract of; each once. An association
+/// the interface realizations it implements or is the contract of, and the template bindings it
+/// owns as the bound element or that bind it as a template (AR-131); each once. An association
 /// class's own ends are not among an association class's relationships: they touch its classes.
 pub fn relationships_of(store: &Store, c: Obj) -> Vec<Obj> {
     let mut out = Vec::new();
@@ -275,6 +276,8 @@ pub fn relationships_of(store: &Store, c: Obj) -> Vec<Obj> {
     }
     out.extend(list(store, c, classifier::GENERALIZATION));
     out.extend(list(store, c, behaviored_classifier::INTERFACE_REALIZATION));
+    out.extend(crate::bindings::bindings_of(store, c));
+    out.extend(crate::templates::bindings_to(store, c));
     out.sort();
     out.dedup();
     out
@@ -855,7 +858,7 @@ fn association_set_end(ctx: &mut C<'_>, p: &Params) -> R {
 
 /// Moves the drawn lines of `element` to the nodes of its classes on each diagram; a diagram that
 /// does not show a class the element now joins loses the line.
-fn follow_ends(store: &mut Store, element: Obj) -> Result<(), CommandError> {
+pub(crate) fn follow_ends(store: &mut Store, element: Obj) -> Result<(), CommandError> {
     let Some((from, to)) = crate::figures::ends(store, element) else { return Ok(()) };
     let (_, edges, _) = archforge_diagram::views_of(store, element);
     for e in edges {
@@ -897,7 +900,10 @@ fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
     let r = crate::RELATIONSHIPS.into_iter().find_map(|k| id_of(ctx.doc, p, key, k, "").ok()).ok_or_else(|| {
         refuse(
             key,
-            format!("{} is no association, generalization, dependency, interface realization or association class", crate::commands::short(id)),
+            format!(
+                "{} is no association, generalization, dependency, interface realization, association class or template binding",
+                crate::commands::short(id)
+            ),
         )
     })?;
     let source = match text(p, "end") {
@@ -964,6 +970,12 @@ fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
         }
         ctx.doc.set(r, interface_realization::CONTRACT, Value::Ref(c)).map_err(fail)?;
         mirror_ends(ctx.doc, r)?;
+    } else if class == crate::TEMPLATE_BINDING {
+        // A binding's source moves to another bound element, keeping its arguments; its target to
+        // another template only when that one's parameters all have defaults (AR-131).
+        if crate::figures::ends(ctx.doc, r).map(|(a, b)| if source { a } else { b }) != Some(c) {
+            crate::bindings::reconnect(ctx.doc, r, source, c)?;
+        }
     } else {
         let (client, supplier) = crate::figures::ends(ctx.doc, r).ok_or_else(|| refuse(key, "the dependency joins no two classifiers"))?;
         let (cl, su) = if source { (c, supplier) } else { (client, c) };
@@ -1028,6 +1040,7 @@ fn describe(store: &Store, r: Obj) -> Json {
             json!({ "id": id(r), "kind": "generalization", "specific": from, "general": to, "sets": sets })
         }
         Some(c) if c == INTERFACE_REALIZATION => json!({ "id": id(r), "kind": "realization", "implementing": from, "contract": to }),
+        Some(c) if c == crate::TEMPLATE_BINDING => crate::bindings::binding_json(store, r),
         _ => json!({ "id": id(r), "kind": "dependency", "name": name_of(store, r), "client": from, "supplier": to }),
     };
     if let Some(fields) = out.as_object_mut() {
@@ -1156,16 +1169,16 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
         cmd!(
             "uml.relationship.reconnect",
             "Reconnect relationship",
-            &["Association", "Generalization", "Dependency", "Interface realization", "Association class"],
+            &["Association", "Generalization", "Dependency", "Interface realization", "Association class", "Template binding"],
             None,
             concat!(
-                "relationship: string; the association's, generalization's, dependency's, interface realization's or association class's id\n",
-                "end: string, source|target; the end to move: the classifier it was drawn from (the specific one, the client, the implementing class) or to\n",
-                "class: string; the id of the class, interface, enumeration, data type or primitive type the end moves to; an association's end never moves to an enumeration, a data type or a primitive type; a generalization in a generalization set keeps its ends, refused naming its sets; a generalization's end keeps its rules: an interface specializes only an interface, a class never one, an enumeration only an enumeration, a data type only a data type, a primitive type only a primitive type, a built-in type nothing, and the general end never moves onto a final classifier; a realization's source is a class and its target an interface, the class realizing it once; an association class's ends move only onto a class or another association class; a moved association's ends drop what they subset or redefine that the rules no longer allow, listed under dropped in the result"
+                "relationship: string; the association's, generalization's, dependency's, interface realization's, association class's or template binding's id\n",
+                "end: string, source|target; the end to move: the classifier it was drawn from (the specific one, the client, the implementing class, the bound element) or to\n",
+                "class: string; the id of the class, interface, enumeration, data type or primitive type the end moves to; an association's end never moves to an enumeration, a data type or a primitive type; a generalization in a generalization set keeps its ends, refused naming its sets; a generalization's end keeps its rules: an interface specializes only an interface, a class never one, an enumeration only an enumeration, a data type only a data type, a primitive type only a primitive type, a built-in type nothing, and the general end never moves onto a final classifier; a realization's source is a class and its target an interface, the class realizing it once; an association class's ends move only onto a class or another association class; a template binding's source moves onto another class, interface or data type of the template's kind, keeping its arguments, and its target onto another template only when every parameter of that one has a default (else uml.template-binding.set gives the template with its arguments); a moved association's ends drop what they subset or redefine that the rules no longer allow, listed under dropped in the result"
             ),
             has_classes,
             relationship_reconnect
         ),
-        cmd!(query "uml.relationship.list", "List relationships", &["Association", "Generalization", "Dependency", "Interface realization", "Association class"], None, "class: string; the class's, interface's, enumeration's, data type's, primitive type's or association class's id", has_classes, relationship_list),
+        cmd!(query "uml.relationship.list", "List relationships", &["Association", "Generalization", "Dependency", "Interface realization", "Association class", "Template binding"], None, "class: string; the class's, interface's, enumeration's, data type's, primitive type's or association class's id", has_classes, relationship_list),
     ]
 }

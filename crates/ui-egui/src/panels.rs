@@ -97,6 +97,9 @@ pub struct State {
     /// parameter (AR-130).
     pub template: Option<crate::uml_templates::TemplateEdit>,
     pub template_in_use: Option<crate::uml_templates::InUse>,
+    /// A template binding before it is written: a new one drawn on the canvas, or another template
+    /// picked for a binding (AR-131).
+    pub binding: Option<crate::uml_bindings::BindingDraft>,
     /// The body's scroll: how far it is scrolled, how tall its content was last
     /// frame, what it was scrolled for (a new panel or selection starts at the top), the editors
     /// open last frame, whether an editor that just opened is still to be brought into view, and
@@ -257,6 +260,10 @@ pub enum Menu {
     TemplateKind,
     TemplateConstraint,
     TemplateDefault,
+    /// A template binding's bound element, template, and parameter `k`'s argument (AR-131).
+    BindingBound,
+    BindingTemplate,
+    BindingArgument(usize),
     /// A classifier's owner, a package or a classifier (AR-132), and the kinds its Nested
     /// classifiers `+` offers.
     ClassOwner,
@@ -404,6 +411,7 @@ pub fn retain_valid(state: &mut State, store: &Store) {
     if state.profile_refused.as_ref().is_some_and(|r| store.by_uuid(r.owner).is_none()) {
         state.profile_refused = None;
     }
+    crate::uml_bindings::retain_valid(&mut state.binding, store);
     if state.ends.as_ref().is_some_and(|e| store.by_uuid(e.association).is_none()) {
         state.ends = None;
     }
@@ -1416,6 +1424,10 @@ fn close_editors(shell: &mut Shell) {
         panels.template = None;
     }
     panels.template_in_use = None;
+    // A binding's menus belong to the binding they opened on (AR-131).
+    if matches!(panels.menu, Some(Menu::BindingBound | Menu::BindingTemplate | Menu::BindingArgument(_))) {
+        panels.menu = None;
+    }
 }
 
 /// Opens the column editor on `target`, or on a column to add to `entity`.
@@ -2211,6 +2223,10 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, 
             return;
         }
         Panel::Properties | Panel::Skills => {}
+    }
+    // A template binding being drawn: its draft, nothing in the model yet (AR-131).
+    if panel == Panel::Properties && crate::uml_bindings::draft_panel(shell, ui, p, r, y) {
+        return;
     }
     // Several elements, generalizations among them: what a set may be made of them (AR-129).
     if panel == Panel::Properties

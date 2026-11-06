@@ -1504,6 +1504,16 @@ pub(crate) fn overlays(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rec
             paint.rect_stroke(rect.expand(3.0), 6.0, Stroke::new(2.0, p.accent), StrokeKind::Outside);
         }
     }
+    // A template binding's draft (AR-131): dashed in the accent colour from the bound class to the
+    // template until Apply, nothing in the model yet.
+    if let Some((from, to)) = crate::uml_bindings::draft_line(shell, d)
+        && let Some(store) = shell.session.as_ref().map(|s| s.doc())
+    {
+        let rect = |id: Uuid| overrides.get(&id).copied().or_else(|| store.by_uuid(id).map(|n| view.rect(&bounds_of(store, n))));
+        if let (Some(a), Some(b)) = (rect(from), rect(to)) {
+            crate::uml_bindings::paint_draft(&paint, p, a, b, view.zoom);
+        }
+    }
     if let Some(Gesture::Marquee { from }) = shell.canvas.gesture
         && let Some(to) = ui.input(|i| i.pointer.hover_pos())
     {

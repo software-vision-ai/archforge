@@ -46,10 +46,13 @@ pub enum Relate {
     Realization,
     /// An association class: a line between two classes with a card of its own (AR-125).
     AssociationClass,
+    /// A template binding, from the bound class to its template (AR-131): released on the
+    /// template, it opens its draft in Properties instead of drawing at once.
+    TemplateBinding,
 }
 
 impl Relate {
-    pub(crate) const ALL: [Relate; 8] = [
+    pub(crate) const ALL: [Relate; 9] = [
         Relate::Association,
         Relate::Directed,
         Relate::Aggregation,
@@ -58,6 +61,7 @@ impl Relate {
         Relate::Dependency,
         Relate::Realization,
         Relate::AssociationClass,
+        Relate::TemplateBinding,
     ];
 
     /// Its name in the menu, in the catalogue.
@@ -71,6 +75,7 @@ impl Relate {
             Relate::Dependency => "Dependency",
             Relate::Realization => "Interface realization",
             Relate::AssociationClass => "Association class",
+            Relate::TemplateBinding => "Template binding",
         }
     }
 
@@ -80,20 +85,22 @@ impl Relate {
         match self {
             Relate::Realization => Some("Interface realization: from the implementing class to its interface"),
             Relate::AssociationClass => Some("Association class: between two classes, with a card of its own"),
+            Relate::TemplateBinding => Some("Template binding: from the bound class to its template"),
             _ => None,
         }
     }
 
     /// Whether a separator sets it apart above it in the menu: realizing is neither relating nor
-    /// specializing; the association class follows the realization in that group.
+    /// specializing; the association class follows the realization in that group; a template
+    /// binding starts the group after it (design A2), where the n-ary association joins it.
     fn after_separator(self) -> bool {
-        self == Relate::Realization
+        matches!(self, Relate::Realization | Relate::TemplateBinding)
     }
 
     /// Whether its line carries the relationship's name at its middle: a generalization and a
     /// realization have none, and an association class's name is on its card.
     fn named(self) -> bool {
-        !matches!(self, Relate::Generalization | Relate::Realization | Relate::AssociationClass)
+        !matches!(self, Relate::Generalization | Relate::Realization | Relate::AssociationClass | Relate::TemplateBinding)
     }
 
     /// Whether it draws an association, of any kind.
@@ -112,6 +119,7 @@ impl Relate {
             Relate::Dependency => "dependency",
             Relate::Realization => "realization",
             Relate::AssociationClass => "association-class",
+            Relate::TemplateBinding => "template-binding",
         }
     }
 
@@ -126,6 +134,7 @@ impl Relate {
             Relate::Dependency => ([EndMark::None, EndMark::OpenArrow], true),
             Relate::Realization => ([EndMark::None, EndMark::Triangle], true),
             Relate::AssociationClass => ([EndMark::None, EndMark::None], false),
+            Relate::TemplateBinding => ([EndMark::None, EndMark::OpenArrow], true),
         }
     }
 
@@ -172,6 +181,12 @@ fn sample(paint: &egui::Painter, a: Pos2, b: Pos2, kind: Relate, ink: egui::Colo
         paint.rect_filled(card, 1.0, fill);
         paint.rect_stroke(card, 1.0, stroke, StrokeKind::Inside);
         paint.extend(egui::Shape::dashed_line(&[pos2(middle.x, card.bottom()), middle], Stroke::new(1.0, ink), 1.5, 1.5));
+    }
+    // A template binding's keyword over its line, small, as its label sits over the canvas's line.
+    if kind == Relate::TemplateBinding {
+        let g = ux::galley(paint, &tr("«bind»"), types::TINY, ink, None);
+        let middle = a + (b - a) / 2.0;
+        paint.galley(pos2(middle.x - g.size().x / 2.0, middle.y - g.size().y - 1.0), g, ink);
     }
 }
 
@@ -309,6 +324,9 @@ fn kind_start_problem(kind: Relate, store: &Store, element: Obj) -> Option<Strin
     if kind == Relate::Realization && !is_class(store, element) {
         return Some(tr("Only a class implements an interface"));
     }
+    if kind == Relate::TemplateBinding {
+        return crate::uml_bindings::start_problem(store, element);
+    }
     association_refusal(kind, store, element).or_else(|| class_end_refusal(kind, store, element))
 }
 
@@ -377,6 +395,14 @@ pub(crate) fn connect(shell: &mut Shell, d: Obj, from_node: Uuid, to_node: Uuid)
     }
     if kind == Relate::AssociationClass {
         connect_class(shell, d, (from, from_node), (to, to_node), None);
+        return;
+    }
+    // A template binding writes nothing yet: its draft opens in Properties for the arguments (C3).
+    if kind == Relate::TemplateBinding {
+        match crate::uml_bindings::refusal(store, from, to, None) {
+            Some(why) => shell.canvas.notice = Some(why),
+            None => crate::uml_bindings::open_new(shell, d, (from_node, to_node), from, to),
+        }
         return;
     }
     let (Ok(from), Ok(to), Ok(diagram)) = (store.uuid(from), store.uuid(to), store.uuid(d)) else { return };
@@ -520,6 +546,11 @@ pub(crate) fn connect_to_new(shell: &mut Shell, d: Obj, from_node: Uuid, x: f64,
         shell.canvas.notice = Some(why);
         return;
     }
+    // A binding ends at a template that exists: empty canvas makes none.
+    if kind == Relate::TemplateBinding {
+        shell.canvas.notice = Some(tr("A binding ends at a template: a class, an interface or a data type with template parameters"));
+        return;
+    }
     if kind == Relate::AssociationClass {
         let names = archforge_uml::commands::classifiers(store, package).into_iter().map(|c| archforge_core::name_of(store, c));
         let Some(name) = crate::explorer::fresh_name(crate::uml_classifier::Classifier::Class.stem(), names, false) else {
@@ -631,6 +662,16 @@ pub(crate) fn reconnect(shell: &mut Shell, element: Uuid, source: bool, to_node:
     let now = ends.map(|(a, b)| if source { a } else { b });
     if now == Some(target) {
         return;
+    }
+    // A binding's ends keep the binding rules; another template needs its arguments picked (AR-131).
+    if let (Some(r), Some((bound, template))) = (line.filter(|l| store.class_of(*l).ok() == Some(archforge_uml::TEMPLATE_BINDING)), ends) {
+        let (b, t) = if source { (target, template) } else { (bound, target) };
+        let why = crate::uml_bindings::refusal(store, b, t, Some(r))
+            .or_else(|| (!source).then(|| crate::uml_bindings::needs_arguments(store, t)).flatten());
+        if let Some(why) = why {
+            shell.canvas.notice = Some(why);
+            return;
+        }
     }
     // A generalization in a set keeps its ends (AR-129): said here and in its Properties.
     if let Some(r) = line.filter(|l| store.class_of(*l).ok() == Some(archforge_uml::GENERALIZATION))

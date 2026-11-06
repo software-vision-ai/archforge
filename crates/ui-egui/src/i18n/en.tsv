@@ -979,7 +979,7 @@ str		Arguments for {name} must be primitive types.	Arguments for {name} must be 
 str		Bindings that leave it out use {default}.	Bindings that leave it out use {default}.
 str		Renaming or reordering keeps every binding.	Renaming or reordering keeps every binding.
 str		Show the binding	Show the binding
-str		Show the binding selects the element that binds it.	Show the binding selects the element that binds it.
+str		Show the binding selects it, on the canvas and in Properties.	Show the binding selects it, on the canvas and in Properties.
 str		Renaming {name} or changing its default is allowed: bindings follow the parameter, not its name.	Renaming {name} or changing its default is allowed: bindings follow the parameter, not its name.
 str		{bound} binds {name} -> {actual}. Change or remove that binding first, then remove {name}.	{bound} binds {name} -> {actual}. Change or remove that binding first, then remove {name}.
 str		{bound} binds {template}, and {name} is its last parameter. Remove that binding first, then remove {name}.	{bound} binds {template}, and {name} is its last parameter. Remove that binding first, then remove {name}.
@@ -991,6 +991,45 @@ str		{bound} binds {name} -> {actual}, which would no longer fit. Change or remo
 str		template parameter	template parameter
 str		template	template
 plural		{kind} · template, {n} parameter · model, in every diagram	{kind} · template, {n} parameter · model, in every diagram|{kind} · template, {n} parameters · model, in every diagram
+# Template bindings (AR-131)
+str		Template binding	Template binding
+str		Template binding: from the bound class to its template	Template binding: from the bound class to its template
+str		«bind»	«bind»
+str		Add template binding	Add template binding
+str		This template binding	This template binding
+str		On this template binding · {n}	On this template binding · {n}
+str		Binding · {bound} binds {template} · model, in every diagram	Binding · {bound} binds {template} · model, in every diagram
+str		binds {template}	binds {template}
+str		Binding	Binding
+str		Bound element	Bound element
+str		Template	Template
+str		Substitutions · {n}	Substitutions · {n}
+str		default	default
+str		Default ({name})	Default ({name})
+str		Choose a class	Choose a class
+str		Choose an interface	Choose an interface
+str		Choose a data type	Choose a data type
+str		Choose an enumeration	Choose an enumeration
+str		Choose a primitive type	Choose a primitive type
+str		{name} needs an argument: pick a class.	{name} needs an argument: pick a class.
+str		{name} needs an argument: pick an interface.	{name} needs an argument: pick an interface.
+str		{name} needs an argument: pick a data type.	{name} needs an argument: pick a data type.
+str		{name} needs an argument: pick an enumeration.	{name} needs an argument: pick an enumeration.
+str		{name} needs an argument: pick a primitive type.	{name} needs an argument: pick a primitive type.
+plural		{names} can keep its default.	{names} can keep its default.|{names} can keep their defaults.
+str		New template binding	New template binding
+str		Drawing · not in the model until you apply	Drawing · not in the model until you apply
+str		Releasing the line on a template opens this. The line stays dashed in the accent colour until Apply; one undo step then adds the binding with its arguments. Cancel or Esc removes the draft and leaves nothing.	Releasing the line on a template opens this. The line stays dashed in the accent colour until Apply; one undo step then adds the binding with its arguments. Cancel or Esc removes the draft and leaves nothing.
+str		Another template takes arguments of its own: pick them, then Apply. Cancel or Esc keeps the binding as it is.	Another template takes arguments of its own: pick them, then Apply. Cancel or Esc keeps the binding as it is.
+str		Each selector lists only the arguments that fit its parameter: its kind, and its constraint or what specialises it. A parameter on its default follows the template's default.	Each selector lists only the arguments that fit its parameter: its kind, and its constraint or what specialises it. A parameter on its default follows the template's default.
+str		The line reads «bind» with each parameter and its argument, and points at the template. The binding keeps its arguments in the model; it is neither a dependency nor a realization.	The line reads «bind» with each parameter and its argument, and points at the template. The binding keeps its arguments in the model; it is neither a dependency nor a realization.
+str		Only a class, an interface or a data type binds a template	Only a class, an interface or a data type binds a template
+str		A binding ends at a template: a class, an interface or a data type with template parameters	A binding ends at a template: a class, an interface or a data type with template parameters
+str		A template is bound by a classifier of its own kind	A template is bound by a classifier of its own kind
+str		A template does not bind itself	A template does not bind itself
+str		This one binds that template already	This one binds that template already
+str		That template binds this one already, which would make a cycle	That template binds this one already, which would make a cycle
+str		Pick another template in the binding's Properties, where its arguments are chosen.	Pick another template in the binding's Properties, where its arguments are chosen.
 str		From	From
 str		General	General
 str		Generalization	Generalization

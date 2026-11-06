@@ -136,6 +136,7 @@ pub fn registry() -> Result<Arc<archforge_engine::Registry<Store, ProjectView>>,
     specs.extend(archforge_uml::nesting::specs());
     specs.extend(archforge_uml::templates::specs());
     specs.extend(archforge_uml::profiles::specs());
+    specs.extend(archforge_uml::bindings::specs());
     specs.extend(archforge_diagram::commands::specs::<ProjectView>());
     specs.extend(archforge_core::skills::specs::<ProjectView>());
     archforge_engine::Registry::new(specs)

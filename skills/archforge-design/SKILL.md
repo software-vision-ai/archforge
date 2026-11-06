@@ -847,9 +847,8 @@ What is UML's own, beside the shared rules above.
   tint ("OrderRepository binds Key -> Integer. Change or remove that binding first, then remove
   Key."), its row marked, with Show the binding (`….showBinding`), and so is a template's last
   parameter while any binding names the template ("OrderRepository binds Repository, and Key is
-  its last parameter. …"). Bindings cannot be made yet (AR-131), and the manual says so; until
-  they are made and drawn, Show the binding selects the element that binds it, and the line under
-  it says so. The card shows the
+  its last parameter. …"). Show the binding selects the binding itself (AR-131), its line and its
+  Properties, and the line under it says so. The card shows the
   signature in a dashed box in the secondary text colour on the surface, over its top-right corner
   (28 past its right side, 24 above its top), one parameter a row in the caption style, drawn over
   the selection (`workspace.canvas.node.<id>.signature`), on every diagram, at the detail zoom.
@@ -857,6 +856,34 @@ What is UML's own, beside the shared rules above.
   parameters · model, in every diagram`. A parameter's classifier types its template's own members
   alone: their type menus list its parameters first, after None, each noted `template parameter`.
   Agents use `uml.template-parameter.add`, `.set`, `.move` and `.list`, and `element.remove`.
+- Template bindings (AR-131, design page 08, A2, C2 and C3). Template binding is the Relationship
+  menu's group after Association class, under a separator (`workspace.relate.template-binding`,
+  its sample a dashed line with an open arrow under a tiny `«bind»`; the n-ary association joins
+  that group). It is dragged from the bound class to the template; releasing it on a template
+  commits nothing: Properties shows the draft, `New template binding` over `Drawing · not in the
+  model until you apply`, Binding with Bound element and Template read only, `Substitutions · n`
+  with one row per parameter (its name strong, its kind muted after it, its selector at the right,
+  `workspace.properties.templateBinding.substitution.<k>.argument`), each listing only what fits
+  the parameter's kind and constraint, Default (Integer) first where the parameter has a default,
+  a parameter on its default showing it with a `default` tag and a parameter without one `Choose a
+  class`. Cancel and Apply are the design's text buttons (`….cancel`, `….apply`), the help under
+  them. The draft's line is dashed in the accent colour from card to card with an open arrow until
+  Apply, which adds the binding, its line and its `name` label as one undo step and selects it. A
+  parameter still needing an argument refuses Apply on the danger tint (`T needs an argument: pick
+  a class. Key can keep its default.`, `….refusal`), its selector ringed, the draft kept. Cancel,
+  Escape, another selection or another diagram drops the draft, nothing written. Drawn, the line is
+  dashed in its own colour with an open arrow at the template and reads `«bind» <T -> Order, Key ->
+  Integer>` at its middle; the text writes `->`, which Inter draws as an arrow, as every message
+  about bindings writes it. Its Properties are titled Template binding, kind line `Binding ·
+  OrderRepository binds Repository · model, in every diagram`, the section Binding with Bound
+  element and Template selects (`….bound`, `….template`), then the substitutions, each pick one
+  undo step; another template opens the draft over the binding, applied by Apply. Models writes a
+  muted `binds Repository` after the bound class. A drop that may not bind (another kind, the
+  template itself, a second binding of one template, a cycle) is said at the canvas's top; empty
+  canvas makes nothing. The binding's end drags onto another template only when that one needs no
+  argument, else the canvas points to Properties. Deleting a classifier a binding uses as an
+  argument is refused, naming the binding. Agents use `uml.template-binding.add`, `.set` and
+  `.list`, `uml.relationship.reconnect` and `element.remove`.
 - Profiles and stereotypes (AR-134, design page 08, F1, F2, F5, F6; owner decisions 2026-11-06).
   A profile sits in a package beside its packages, never in a classifier, made with Models' row
   menu New ▸ Profile on a package or the root (New ▸ lists Package and Profile, a line, then the

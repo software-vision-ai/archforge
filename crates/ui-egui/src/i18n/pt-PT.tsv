@@ -980,7 +980,7 @@ str		Arguments for {name} must be primitive types.	Os argumentos de {name} têm 
 str		Bindings that leave it out use {default}.	As vinculações que o omitem usam {default}.
 str		Renaming or reordering keeps every binding.	Mudar o nome ou reordenar mantém todas as vinculações.
 str		Show the binding	Mostrar a vinculação
-str		Show the binding selects the element that binds it.	Mostrar a vinculação seleciona o elemento que o vincula.
+str		Show the binding selects it, on the canvas and in Properties.	Mostrar a vinculação seleciona-a, na tela e nas Propriedades.
 str		Renaming {name} or changing its default is allowed: bindings follow the parameter, not its name.	Mudar o nome de {name} ou alterar o seu valor predefinido é permitido: as vinculações seguem o parâmetro, não o nome.
 str		{bound} binds {name} -> {actual}. Change or remove that binding first, then remove {name}.	{bound} vincula {name} -> {actual}. Altere ou remova primeiro essa vinculação e depois remova {name}.
 str		{bound} binds {template}, and {name} is its last parameter. Remove that binding first, then remove {name}.	{bound} vincula {template}, e {name} é o seu último parâmetro. Remova primeiro essa vinculação e depois remova {name}.
@@ -992,6 +992,45 @@ str		{bound} binds {name} -> {actual}, which would no longer fit. Change or remo
 str		template parameter	parâmetro de modelo
 str		template	modelo
 plural		{kind} · template, {n} parameter · model, in every diagram	{kind} · modelo, {n} parâmetro · modelo, em todos os diagramas|{kind} · modelo, {n} parâmetros · modelo, em todos os diagramas
+# Template bindings (AR-131)
+str		Template binding	Vinculação de modelo
+str		Template binding: from the bound class to its template	Vinculação de modelo: da classe vinculada para o seu modelo
+str		«bind»	«bind»
+str		Add template binding	Adicionar vinculação de modelo
+str		This template binding	Esta vinculação de modelo
+str		On this template binding · {n}	Nesta vinculação de modelo · {n}
+str		Binding · {bound} binds {template} · model, in every diagram	Vinculação · {bound} vincula {template} · modelo, em todos os diagramas
+str		binds {template}	vincula {template}
+str		Binding	Vinculação
+str		Bound element	Elemento vinculado
+str		Template	Modelo
+str		Substitutions · {n}	Substituições · {n}
+str		default	predefinição
+str		Default ({name})	Predefinição ({name})
+str		Choose a class	Escolha uma classe
+str		Choose an interface	Escolha uma interface
+str		Choose a data type	Escolha um tipo de dados
+str		Choose an enumeration	Escolha uma enumeração
+str		Choose a primitive type	Escolha um tipo primitivo
+str		{name} needs an argument: pick a class.	{name} precisa de um argumento: escolha uma classe.
+str		{name} needs an argument: pick an interface.	{name} precisa de um argumento: escolha uma interface.
+str		{name} needs an argument: pick a data type.	{name} precisa de um argumento: escolha um tipo de dados.
+str		{name} needs an argument: pick an enumeration.	{name} precisa de um argumento: escolha uma enumeração.
+str		{name} needs an argument: pick a primitive type.	{name} precisa de um argumento: escolha um tipo primitivo.
+plural		{names} can keep its default.	{names} pode manter a sua predefinição.|{names} podem manter as suas predefinições.
+str		New template binding	Nova vinculação de modelo
+str		Drawing · not in the model until you apply	A desenhar · não está no modelo até aplicar
+str		Releasing the line on a template opens this. The line stays dashed in the accent colour until Apply; one undo step then adds the binding with its arguments. Cancel or Esc removes the draft and leaves nothing.	Largar a linha sobre um modelo abre isto. A linha fica tracejada na cor de destaque até Aplicar; um passo de anular acrescenta então a vinculação com os seus argumentos. Cancelar ou Esc remove o rascunho e não deixa nada.
+str		Another template takes arguments of its own: pick them, then Apply. Cancel or Esc keeps the binding as it is.	Outro modelo tem argumentos próprios: escolha-os e depois Aplicar. Cancelar ou Esc mantém a vinculação como está.
+str		Each selector lists only the arguments that fit its parameter: its kind, and its constraint or what specialises it. A parameter on its default follows the template's default.	Cada seletor lista só os argumentos que servem ao seu parâmetro: o seu tipo, e a sua restrição ou o que a especializa. Um parâmetro na predefinição segue a predefinição do modelo.
+str		The line reads «bind» with each parameter and its argument, and points at the template. The binding keeps its arguments in the model; it is neither a dependency nor a realization.	A linha mostra «bind» com cada parâmetro e o seu argumento, e aponta para o modelo. A vinculação guarda os seus argumentos no modelo; não é uma dependência nem uma realização.
+str		Only a class, an interface or a data type binds a template	Só uma classe, uma interface ou um tipo de dados vincula um modelo
+str		A binding ends at a template: a class, an interface or a data type with template parameters	Uma vinculação termina num modelo: uma classe, uma interface ou um tipo de dados com parâmetros de modelo
+str		A template is bound by a classifier of its own kind	Um modelo é vinculado por um classificador do seu próprio tipo
+str		A template does not bind itself	Um modelo não se vincula a si próprio
+str		This one binds that template already	Este já vincula esse modelo
+str		That template binds this one already, which would make a cycle	Esse modelo já vincula este, o que faria um ciclo
+str		Pick another template in the binding's Properties, where its arguments are chosen.	Escolha outro modelo nas Propriedades da vinculação, onde se escolhem os seus argumentos.
 str		From	De
 str		General	Geral
 str		Generalization	Generalização

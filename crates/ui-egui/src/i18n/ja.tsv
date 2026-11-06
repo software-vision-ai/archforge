@@ -980,7 +980,7 @@ str		Arguments for {name} must be primitive types.	{name} の引数はプリミ�
 str		Bindings that leave it out use {default}.	これを省略するバインディングは {default} を使います。
 str		Renaming or reordering keeps every binding.	名前の変更や並べ替えをしてもすべてのバインディングは保たれます。
 str		Show the binding	バインディングを表示
-str		Show the binding selects the element that binds it.	「バインディングを表示」は、これをバインドしている要素を選択します。
+str		Show the binding selects it, on the canvas and in Properties.	「バインディングを表示」はバインディングそのものをキャンバスとプロパティで選択します。
 str		Renaming {name} or changing its default is allowed: bindings follow the parameter, not its name.	{name} の名前の変更や既定値の変更はできます。バインディングは名前ではなくパラメーターに従います。
 str		{bound} binds {name} -> {actual}. Change or remove that binding first, then remove {name}.	{bound} は {name} -> {actual} とバインドしています。先にそのバインディングを変更または削除してから {name} を削除してください。
 str		{bound} binds {template}, and {name} is its last parameter. Remove that binding first, then remove {name}.	{bound} は {template} をバインドしており、{name} はその最後のパラメーターです。先にそのバインディングを削除してから {name} を削除してください。
@@ -992,6 +992,45 @@ str		{bound} binds {name} -> {actual}, which would no longer fit. Change or remo
 str		template parameter	テンプレートパラメーター
 str		template	テンプレート
 plural		{kind} · template, {n} parameter · model, in every diagram	{kind} · テンプレート、パラメーター {n} 個 · モデル、すべての図
+# Template bindings (AR-131)
+str		Template binding	テンプレートバインディング
+str		Template binding: from the bound class to its template	テンプレートバインディング：バインドするクラスからそのテンプレートへ
+str		«bind»	«bind»
+str		Add template binding	テンプレートバインディングを追加
+str		This template binding	このテンプレートバインディング
+str		On this template binding · {n}	このテンプレートバインディング上 · {n}
+str		Binding · {bound} binds {template} · model, in every diagram	バインディング · {bound} が {template} をバインド · モデル、すべての図
+str		binds {template}	{template} をバインド
+str		Binding	バインディング
+str		Bound element	バインドする要素
+str		Template	テンプレート
+str		Substitutions · {n}	置換 · {n}
+str		default	既定
+str		Default ({name})	既定値（{name}）
+str		Choose a class	クラスを選択
+str		Choose an interface	インターフェースを選択
+str		Choose a data type	データ型を選択
+str		Choose an enumeration	列挙型を選択
+str		Choose a primitive type	プリミティブ型を選択
+str		{name} needs an argument: pick a class.	{name} には引数が必要です。クラスを選んでください。
+str		{name} needs an argument: pick an interface.	{name} には引数が必要です。インターフェースを選んでください。
+str		{name} needs an argument: pick a data type.	{name} には引数が必要です。データ型を選んでください。
+str		{name} needs an argument: pick an enumeration.	{name} には引数が必要です。列挙型を選んでください。
+str		{name} needs an argument: pick a primitive type.	{name} には引数が必要です。プリミティブ型を選んでください。
+plural		{names} can keep its default.	{names} は既定値のままにできます。
+str		New template binding	新しいテンプレートバインディング
+str		Drawing · not in the model until you apply	描画中 · 適用するまでモデルには入りません
+str		Releasing the line on a template opens this. The line stays dashed in the accent colour until Apply; one undo step then adds the binding with its arguments. Cancel or Esc removes the draft and leaves nothing.	テンプレート上で線を離すとこれが開きます。適用するまで線はアクセントカラーの破線のままです。適用すると、1 回の取り消し単位でバインディングとその引数が追加されます。キャンセルまたは Esc で下書きは消え、何も残りません。
+str		Another template takes arguments of its own: pick them, then Apply. Cancel or Esc keeps the binding as it is.	別のテンプレートには独自の引数があります。引数を選んでから適用してください。キャンセルまたは Esc でバインディングはそのままです。
+str		Each selector lists only the arguments that fit its parameter: its kind, and its constraint or what specialises it. A parameter on its default follows the template's default.	各セレクターには、そのパラメーターに合う引数だけが並びます。種類と、制約またはそれを特化するものです。既定値のままのパラメーターはテンプレートの既定値に従います。
+str		The line reads «bind» with each parameter and its argument, and points at the template. The binding keeps its arguments in the model; it is neither a dependency nor a realization.	線には «bind» と各パラメーターとその引数が書かれ、テンプレートを指します。バインディングは引数をモデルに保持します。依存でも実現でもありません。
+str		Only a class, an interface or a data type binds a template	テンプレートをバインドできるのはクラス、インターフェース、データ型だけです
+str		A binding ends at a template: a class, an interface or a data type with template parameters	バインディングの終点はテンプレート、つまりテンプレートパラメーターを持つクラス、インターフェース、データ型です
+str		A template is bound by a classifier of its own kind	テンプレートをバインドするのは同じ種類の分類子です
+str		A template does not bind itself	テンプレートは自分自身をバインドしません
+str		This one binds that template already	これはすでにそのテンプレートをバインドしています
+str		That template binds this one already, which would make a cycle	そのテンプレートはすでにこれをバインドしているため、循環になります
+str		Pick another template in the binding's Properties, where its arguments are chosen.	別のテンプレートは、引数を選べるバインディングのプロパティで選んでください。
 str		From	始点
 str		General	一般
 str		Generalization	汎化
