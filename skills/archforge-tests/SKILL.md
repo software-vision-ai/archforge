@@ -18,6 +18,9 @@ description: "Use when writing, placing or running tests in Archforge: a regress
   - name rules: the case table in `crates/names/src/lib.rs`
   - API keys: `crates/secrets/src/tests.rs`, against `MemoryStore`; another crate's tests use
     `archforge_secrets::MemoryStore` (feature `testing`), never the system's store
+  - agent runtimes: unit tests beside the code in `crates/agents/src`, and
+    `crates/agents/tests/runtimes.rs` against fake runtimes (shell scripts), never an installed
+    `claude` or `codex`: give `find` a whole `HostEnv` so the machine's own PATH is not searched
   - the command engine: `crates/engine/tests/engine.rs` with its toy notation; a notation's own
     commands are checked with `archforge_engine::testing::round_trip` (feature `testing`)
 - A screen test builds the real `Shell` in an `egui_kittest` harness, draws it in both appearances

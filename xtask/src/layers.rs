@@ -59,6 +59,9 @@ pub const TABLE: &[(&str, Class)] = &[
     // API keys in the system's credential store, never in a file. A host service like the ones
     // above, never built for the portable target.
     ("secrets", Class::Layer(9)),
+    // The agent runtimes a person installs: found, version-checked, run and supervised as child
+    // processes with keys from `secrets`. A host service, never built for the portable target.
+    ("agents", Class::Layer(10)),
     ("mcp", Class::Layer(10)),
 ];
 
