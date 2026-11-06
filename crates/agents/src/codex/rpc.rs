@@ -26,10 +26,12 @@ pub struct RpcError {
 }
 
 impl RpcError {
-    /// Whether the answer says Codex does not know the method, which is how a Codex too old for a
-    /// method Archforge needs shows at run time (`-32600 … unknown variant`).
-    pub fn unknown_method(&self) -> bool {
-        self.message.contains("unknown variant")
+    /// Whether the answer says Codex does not know `method`, the method that was asked for, which
+    /// is how a Codex too old for a method Archforge needs shows at run time (`-32600 … unknown
+    /// variant `<method>``). Codex reads a parameter's value through the same path, so an unknown
+    /// value (a sign-in `type`, say) counts only when the first unknown variant is `method` itself.
+    pub fn unknown_method(&self, method: &str) -> bool {
+        self.message.split_once("unknown variant `").and_then(|(_, rest)| rest.split_once('`')).is_some_and(|(variant, _)| variant == method)
     }
 }
 
@@ -239,9 +241,17 @@ mod tests {
         else {
             panic!()
         };
-        assert_eq!((error.code, error.message.as_str(), error.unknown_method()), (-32600, "Not initialized", false));
+        assert_eq!((error.code, error.message.as_str(), error.unknown_method("x/y")), (-32600, "Not initialized", false));
         let unknown = read_line(r#"{"error":{"code":-32600,"message":"Invalid request: unknown variant `x/y`, expected one of"},"id":6}"#, max);
-        assert!(matches!(unknown, Incoming::Response { result: Err(e), .. } if e.unknown_method()));
+        assert!(matches!(&unknown, Incoming::Response { result: Err(e), .. } if e.unknown_method("x/y") && !e.unknown_method("x/z")));
+        // An unknown value of a parameter is not an unknown method.
+        let value = RpcError {
+            code: -32600,
+            message: "Invalid request: unknown variant `chatgptLater`, expected one of `apiKey`, `chatgpt`, `chatgptDeviceCode`".to_owned(),
+        };
+        assert!(!value.unknown_method("account/login/start"));
+        let late = RpcError { code: -32600, message: "unknown variant `chatgptLater` in params; unknown variant `x/y`".to_owned() };
+        assert!(!late.unknown_method("x/y"), "only the first unknown variant counts");
         assert!(
             matches!(read_line(r#"{"method":"turn/started","params":{}}"#, max), Incoming::Notification { method, .. } if method == "turn/started")
         );

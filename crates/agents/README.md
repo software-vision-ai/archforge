@@ -155,9 +155,11 @@ from `HOME` (or `XDG_CONFIG_HOME`), and takes no token path yet, while `claude` 
 `HOME`; `env` therefore gives the bridge the person's own (`BridgeHome::from_process`), and a start
 without it is refused. AR-203 can drop that once `archforge-cli mcp` takes the token file or settings
 folder itself. A configuration that holds the key (pasted into the origin label, say) is refused
-before it is written, as `SecretExposed`; an earlier private file of this user is replaced by an
-atomic rename, anything else at the file's place (a link among them) is removed first, and the new
-file must come out a regular file only this user can read.
+before it is written, as `SecretExposed`. The file is written to a temporary file created new
+beside it (mode 0600, which never follows a link), synchronised and renamed over its place; the
+rename replaces whatever is there, a link itself rather than what it names, so a link put there,
+even between a check and the write, never sends the bytes out of the private folder. A folder at
+the place is refused, and the new file must come out a regular file only this user can read.
 
 `send` writes `{"type":"user","message":{"role":"user","content":…},"parent_tool_use_id":null}`
 and refuses a second message while a turn runs. `stop` writes
@@ -320,14 +322,19 @@ started the turn (only a message that never reached Codex, or that Codex refused
 the next thread may be given that question without its answer; a late answer names that turn, which is interrupted while the
 current turn goes on. A `thread/inject_items` past its deadline leaves its thread too, so the
 earlier messages are never given twice.
-There is no signal fallback: SIGINT ends `codex app-server`. Shutdown closes the input (Codex exits
-0), then terminates and kills as for every runtime.
+There is no signal fallback: SIGINT ends `codex app-server`. A stop request that could not be
+written is sent again by the next `stop`; one Codex refuses or leaves unanswered is not, and the
+turn then stays open (no new message is taken, as Codex may still run it) for one more request
+timeout: Codex saying the turn ended closes it as usual, and otherwise the session ends with a
+reason ("did not stop the turn"), so the caller starts it again with `Start::Resume`. Shutdown
+closes the input (Codex exits 0), then terminates and kills as for every runtime.
 
 *Requests and errors.* Every request has its own deadline (`request_timeout`), as Codex never
 answers a line it cannot read: a handshake request past it ends the session, a thread or turn
 request fails the turn, both as `Other` ("did not answer … within"). At most 64 wait at once. Codex
-answers every error with -32600; one whose message says `unknown variant` (a method this Codex
-lacks) is `MissingRuntime`, as is a start that stops before its first line with `unknown
+answers every error with -32600; one whose first `unknown variant` is the method asked for (a
+method this Codex lacks; an unknown value of a parameter, a sign-in `type` say, stays the refusal
+it is) is `MissingRuntime`, as is a start that stops before its first line with `unknown
 configuration field` or `unexpected argument`. Approvals and questions from Codex are declined in
 the shape each takes and logged by method (`decision: decline` for commands and files, `action:
 decline` for elicitations, an empty grant for permissions, no answers for questions, `denied` for
@@ -365,7 +372,8 @@ it), so a wrong or revoked key is accepted by `open` and shows only on the first
 turn, as `InvalidCredential`; `open` answers `InvalidCredential` only when Codex refuses to take the
 key at all (API-key sign-in switched off, or the key could not be held), and a timeout or an early
 end stays `Other`. The key is not kept, since each conversation gives it again. `read(refresh)` is `account/read` (`refreshToken` renews a ChatGPT
-sign-in, reaching the sign-in service only); `check` reads and, for ChatGPT, renews once: a renewal
+sign-in, reaching the sign-in service only; an answer without the required `requiresOpenaiAuth`
+flag cannot be read and is an error, while a missing or null `account` is signed out); `check` reads and, for ChatGPT, renews once: a renewal
 Codex refuses with its own failure for a sign-in that can no longer be renewed reads as `Expired`.
 codex-cli 0.166.0 gives no structured reason, so that is its internal error (-32603) with exactly
 one of the five messages of its refresh-token failure; any other refusal stays an error, even one

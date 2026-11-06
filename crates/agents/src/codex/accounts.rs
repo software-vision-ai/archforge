@@ -283,7 +283,7 @@ impl CodexAccounts {
             // Only Codex refusing to take the key means no key reached it (`InvalidCredential`); a
             // timeout or an early end stays what it is.
             accounts.exchange("account/login/start", &line).map_err(|e| match e {
-                Call::Refused(refusal) if refusal.unknown_method() => refused("account/login/start", &refusal),
+                Call::Refused(refusal) if refusal.unknown_method("account/login/start") => refused("account/login/start", &refusal),
                 Call::Refused(refusal) => {
                     AgentError::reported(ErrorKind::InvalidCredential, &format!("codex did not take the API key: {}", refusal.message))
                 }
@@ -318,7 +318,7 @@ impl CodexAccounts {
     fn read_account(&mut self, refresh: bool) -> Result<AccountState, Call> {
         let params = if refresh { json!({ "refreshToken": true }) } else { json!({}) };
         let value = self.exchange("account/read", &rpc::request_line(self.next_id, "account/read", Some(params)))?;
-        let state = account_state(&value);
+        let state = account_state(&value).map_err(Call::Failed)?;
         if let AccountStatus::ChatGpt { email, plan, .. } = &state.status {
             self.last_chatgpt = Some((email.clone(), plan.clone()));
         }
@@ -713,7 +713,7 @@ impl Call {
 /// The error for a request Codex refused: `MissingRuntime` when it does not know the method (a
 /// Codex too old for it), else `Other` with Codex's words.
 fn refused(method: &str, refusal: &rpc::RpcError) -> AgentError {
-    if refusal.unknown_method() {
+    if refusal.unknown_method(method) {
         AgentError::reported(ErrorKind::MissingRuntime, &format!("codex does not know {method}, which Archforge needs; update it"))
     } else {
         AgentError::reported(ErrorKind::Other, &format!("codex refused {method}: {}", refusal.message))
@@ -756,9 +756,14 @@ fn unreadable(method: &str, what: &str) -> AgentError {
     AgentError::reported(ErrorKind::Other, &format!("codex answered {method} with {what}"))
 }
 
-/// The account of an `account/read` answer.
-fn account_state(value: &Value) -> AccountState {
-    let requires_openai_auth = value.get("requiresOpenaiAuth").and_then(Value::as_bool).unwrap_or(true);
+/// The account of an `account/read` answer. `requiresOpenaiAuth` is required and a boolean (codex-cli
+/// 0.166.0's `GetAccountResponse`), so an answer without one cannot be read and is refused rather
+/// than guessed; `account` is optional, and a missing or null one means signed out.
+fn account_state(value: &Value) -> Result<AccountState, AgentError> {
+    let requires_openai_auth = value
+        .get("requiresOpenaiAuth")
+        .and_then(Value::as_bool)
+        .ok_or_else(|| unreadable("account/read", "no requiresOpenaiAuth flag (true or false)"))?;
     let status = match value.get("account") {
         None | Some(Value::Null) => AccountStatus::SignedOut,
         Some(account) => match account.get("type").and_then(Value::as_str) {
@@ -771,7 +776,7 @@ fn account_state(value: &Value) -> AccountState {
             other => AccountStatus::Other { kind: kind_name(other.unwrap_or_default()) },
         },
     };
-    AccountState { status, requires_openai_auth }
+    Ok(AccountState { status, requires_openai_auth })
 }
 
 /// The rate limits of a `rateLimits` object.
@@ -944,8 +949,12 @@ mod tests {
     /// Each account shape reads as its status; odd shapes never panic.
     #[test]
     fn accounts_are_read() {
-        let read = |v: Value| account_state(&v).status;
-        assert_eq!(read(json!({"account": null, "requiresOpenaiAuth": true})), AccountStatus::SignedOut);
+        let read = |mut v: Value| {
+            v["requiresOpenaiAuth"] = json!(true);
+            account_state(&v).unwrap().status
+        };
+        assert_eq!(read(json!({"account": null})), AccountStatus::SignedOut);
+        assert_eq!(read(json!({})), AccountStatus::SignedOut, "a missing account is signed out");
         assert_eq!(read(json!({"account": {"type": "apiKey"}})), AccountStatus::ApiKey);
         assert_eq!(
             read(json!({"account": {"type": "chatgpt", "email": "person@example.com", "planType": "plus", "workspaceName": null}})),
@@ -953,6 +962,12 @@ mod tests {
         );
         assert_eq!(read(json!({"account": {"type": "gcp"}})), AccountStatus::Other { kind: "gcp".into() });
         assert_eq!(read(json!({"account": 7})), AccountStatus::Other { kind: "<unnamed>".into() });
+        // The flag is read as it is, and is required to be true or false.
+        assert!(!account_state(&json!({"account": null, "requiresOpenaiAuth": false})).unwrap().requires_openai_auth);
+        for bad in [json!({"account": null}), json!({"account": null, "requiresOpenaiAuth": null}), json!({"requiresOpenaiAuth": "true"})] {
+            let error = account_state(&bad).unwrap_err();
+            assert!(error.to_string().contains("no requiresOpenaiAuth flag"), "{bad}: {error}");
+        }
         let refusal = |code: i64, message: &str| rpc::RpcError { code, message: message.to_owned() };
         for message in RENEWAL_REFUSED {
             assert!(renewal_refused(&refusal(INTERNAL_ERROR, message)), "{message}");

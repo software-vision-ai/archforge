@@ -351,7 +351,7 @@ pub(crate) fn decline_line(id: &Value, method: &str) -> String {
 
 /// The error for a request Codex refused: a missing runtime when Codex does not know the method.
 fn refused(method: &str, error: &RpcError, kind: ErrorKind) -> AgentError {
-    if error.unknown_method() {
+    if error.unknown_method(method) {
         AgentError::reported(ErrorKind::MissingRuntime, &format!("codex does not know {method}, which Archforge needs; update it"))
     } else {
         AgentError::reported(kind, &format!("codex refused {method}: {}", error.message))
@@ -458,7 +458,10 @@ enum Purpose {
     ThreadStart,
     Inject,
     TurnStart,
+    /// `turn/interrupt` for a late turn Codex started after its request's deadline.
     Interrupt,
+    /// `turn/interrupt` for the open turn, after a stop.
+    StopTurn,
 }
 
 /// Where the session's thread stands.
@@ -524,6 +527,9 @@ pub struct CodexSession {
     /// When Codex answered `turn/start` without naming the turn: the turn waits at most one request
     /// timeout for a notification that names it, then fails.
     unnamed_deadline: Option<Instant>,
+    /// When Codex refused the open turn's stop request or did not answer it in time: the turn waits
+    /// at most one more request timeout for Codex to say it ended, then the session ends.
+    stop_deadline: Option<Instant>,
     lines_seen: bool,
     shutting_down: bool,
     ended: bool,
@@ -648,6 +654,7 @@ impl CodexSession {
             stale_turns: VecDeque::new(),
             late_starts: VecDeque::new(),
             unnamed_deadline: None,
+            stop_deadline: None,
             lines_seen: false,
             shutting_down: false,
             ended: false,
@@ -976,7 +983,7 @@ impl CodexSession {
                 self.proceed_or_fail();
             }
             (Purpose::Inject, Err(e)) => {
-                let error = if e.unknown_method() {
+                let error = if e.unknown_method(method) {
                     refused(method, &e, ErrorKind::Other)
                 } else {
                     AgentError::reported(ErrorKind::Other, &format!("codex did not take the conversation's earlier messages: {}", e.message))
@@ -1012,8 +1019,13 @@ impl CodexSession {
                 self.turn_requested = false;
                 self.fail_turn(refused(method, &e, ErrorKind::Other));
             }
-            (Purpose::Interrupt, Ok(_)) => log::debug!("codex took the stop request"),
-            (Purpose::Interrupt, Err(e)) => log::warn!("codex refused the stop request: {}", e.message),
+            (Purpose::Interrupt, Ok(_)) => log::debug!("codex took the stop request for a late turn"),
+            (Purpose::Interrupt, Err(e)) => log::warn!("codex refused the stop request for a late turn: {}", e.message),
+            (Purpose::StopTurn, Ok(_)) => log::debug!("codex took the stop request"),
+            (Purpose::StopTurn, Err(e)) => {
+                log::warn!("codex refused the stop request: {}", e.message);
+                self.await_stop();
+            }
         }
     }
 
@@ -1059,7 +1071,38 @@ impl CodexSession {
                     self.abandon_turn(error);
                 }
                 Purpose::Interrupt => log::warn!("{error}"),
+                Purpose::StopTurn => {
+                    log::warn!("{error}");
+                    self.await_stop();
+                }
             }
+        }
+        if self.stop_deadline.is_some_and(|d| now >= d) {
+            self.stop_deadline = None;
+            if self.turn_open {
+                self.fail(AgentError::reported(
+                    ErrorKind::Other,
+                    &format!(
+                        "codex did not stop the turn: it refused or did not answer the stop request, and the turn had not ended {} ms later; \
+                         the session was ended so the turn cannot run on unseen; start it again with Start::Resume",
+                        self.timeout.as_millis()
+                    ),
+                ));
+            }
+        }
+    }
+
+    /// Codex refused the open turn's stop request or did not answer it in time, so the turn may
+    /// still run: it stays open (no new message is taken) for at most one more request timeout,
+    /// in which Codex's own word that the turn ended closes it as usual; past that, the session
+    /// ends ([`expire`](Self::expire)).
+    fn await_stop(&mut self) {
+        if !self.turn_open || self.stop_deadline.is_some() {
+            return;
+        }
+        match Instant::now().checked_add(self.timeout) {
+            Some(deadline) => self.stop_deadline = Some(deadline),
+            None => self.fail(AgentError::reported(ErrorKind::Other, "codex did not stop the turn, and the wait for it cannot be timed")),
         }
     }
 
@@ -1139,13 +1182,15 @@ impl CodexSession {
         }
     }
 
-    /// Sends `turn/interrupt` for the running turn, once.
+    /// Sends `turn/interrupt` for the running turn, once; one that could not be written is tried
+    /// again by the next stop. One Codex refuses or leaves unanswered is not sent again: the turn
+    /// then waits for its end, bounded ([`await_stop`](Self::await_stop)).
     fn interrupt(&mut self) {
         if self.interrupt_sent {
             return;
         }
         let (Some(thread), Some(turn)) = (self.thread_id().map(str::to_owned), self.parser.turn_id().map(str::to_owned)) else { return };
-        match self.request("turn/interrupt", Purpose::Interrupt, json!({ "threadId": thread, "turnId": turn })) {
+        match self.request("turn/interrupt", Purpose::StopTurn, json!({ "threadId": thread, "turnId": turn })) {
             Ok(_) => self.interrupt_sent = true,
             Err(e) => log::warn!("codex's stop request could not be sent: {e}"),
         }
@@ -1173,6 +1218,7 @@ impl CodexSession {
         self.awaiting = false;
         self.stop_requested = false;
         self.interrupt_sent = false;
+        self.stop_deadline = None;
         self.queued = None;
         self.history_problem = match self.history.write(&self.folder) {
             Ok(_) => None,
@@ -1374,7 +1420,7 @@ impl AgentSession for CodexSession {
             }
             budget -= 1;
             let mut wait = deadline.map_or(timeout, |d| d.saturating_duration_since(now));
-            for due in self.requests.next_deadline().into_iter().chain(self.unnamed_deadline) {
+            for due in self.requests.next_deadline().into_iter().chain(self.unnamed_deadline).chain(self.stop_deadline) {
                 wait = wait.min(due.saturating_duration_since(now));
             }
             if let Some(event) = self.process.next_event(wait) {

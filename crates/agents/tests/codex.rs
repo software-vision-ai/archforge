@@ -954,6 +954,48 @@ on_turn() {
     std::fs::remove_dir_all(&base).unwrap();
 }
 
+/// A stop request Codex refuses or leaves unanswered does not leave the turn stuck: the turn stays
+/// open (no new message is taken) while Codex may still run it, ends as stopped when Codex says it
+/// ended, and otherwise ends the session one request timeout later with a reason, so the caller
+/// starts it again.
+#[test]
+fn a_stop_codex_does_not_take_cannot_leave_the_turn_stuck() {
+    let turn = r#"on_turn() { send '{"id":@ID@,"result":{"turn":{"id":"u-1"}}}'; send '{"method":"item/agentMessage/delta","params":{"threadId":"019a0000-0000-7000-8000-000000000001","turnId":"u-1","itemId":"x","delta":"working"}}'; }"#;
+    let refused = r#"on_interrupt() { send '{"id":@ID@,"error":{"code":-32600,"message":"no such turn"}}'; }"#;
+    let silent = "on_interrupt() { :; }";
+    let reconciled = r#"on_interrupt() { send '{"id":@ID@,"error":{"code":-32600,"message":"no such turn"}}'; send '{"method":"turn/completed","params":{"threadId":"019a0000-0000-7000-8000-000000000001","turn":{"id":"u-1","status":"interrupted","items":[]}}}'; }"#;
+    for (name, interrupt) in [("refused", refused), ("silent", silent), ("reconciled", reconciled)] {
+        let base = scratch(&format!("stuck-stop-{name}"));
+        let (runtime, account, folder) = fake_codex(&base, &format!("{turn}\n{interrupt}"));
+        let cfg = CodexConfig { request_timeout: Duration::from_millis(300), ..config(false) };
+        let mut session = CodexSession::start(&runtime, &account, &folder, cfg, SignIn::ApiKey(canary())).unwrap();
+        session.send("hi").unwrap();
+        events_until(&mut session, |e| matches!(e, SessionEvent::TextDelta { .. }));
+        session.stop().unwrap();
+        assert!(matches!(session.send("again"), Err(AgentError::TurnRunning { .. })), "{name}: no new turn while Codex may still run one");
+        let events = events_until(&mut session, |e| matches!(e, SessionEvent::TurnFinished { .. }));
+        if name == "reconciled" {
+            assert!(matches!(events.last(), Some(SessionEvent::TurnFinished { outcome: TurnOutcome::Stopped, .. })), "{name}: {events:?}");
+            assert!(session.send("next").is_ok(), "{name}: the session goes on");
+        } else {
+            assert!(
+                matches!(events.last(), Some(SessionEvent::TurnFinished { outcome: TurnOutcome::Failed(e), .. }) if e.to_string().contains("did not stop the turn")),
+                "{name}: {events:?}"
+            );
+            let ended = events_until(&mut session, |e| matches!(e, SessionEvent::Ended { .. }));
+            assert!(
+                matches!(ended.last(), Some(SessionEvent::Ended { error: Some(e), .. }) if e.to_string().contains("Start::Resume")),
+                "{name}: {ended:?}"
+            );
+            assert!(session.send("next").is_err(), "{name}: the ended session takes no message");
+        }
+        let sent = stdin_lines(&base, 6);
+        assert_eq!(requests(&sent, "turn/interrupt").len(), 1, "{name}: the stop request is sent once");
+        session.shutdown(Duration::from_secs(2)).unwrap();
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+}
+
 /// A `turn/start` that passed its deadline fails its turn but keeps its message in the copy, as
 /// Codex may have taken it; the next message starts a fresh thread (with the copy) so it cannot
 /// join a turn that runs after all; when the late answer comes, that turn is interrupted by name

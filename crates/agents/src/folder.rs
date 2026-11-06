@@ -234,24 +234,50 @@ impl Drop for ProbeFolder {
     }
 }
 
+/// How many temporary names [`write_private_file`] tries before it gives up.
+const TEMP_TRIES: usize = 16;
+
 /// Writes `bytes` to `path` atomically (a temporary file beside it, synchronised, renamed over it),
-/// readable by this user alone (0600). An earlier private regular file of this user is replaced by
-/// the rename, so a failed write leaves it whole; anything else at the place (a link, a file of
-/// another user or readable by others) is removed first, so the write never follows a link out of
-/// the private folder and never keeps a looser mode. `what` names the file in errors.
+/// readable by this user alone (0600); a failed write leaves an earlier file whole. Nothing on the
+/// way follows a link: the temporary file is created new (it fails when anything, a link included,
+/// already has its name) with mode 0600, and the rename replaces whatever is at `path`, a link
+/// itself rather than what it names, so a link put in its place, even between a check and the
+/// write, can never send the bytes out of the private folder. A folder at `path` is refused. `what`
+/// names the file in errors.
 pub(crate) fn write_private_file(path: &Path, bytes: &[u8], what: &str) -> Result<(), AgentError> {
+    use craft_atomic::AtomicFs;
+    use std::io::Write;
     let failed = |problem: String| AgentError::Folder { path: path.to_path_buf(), problem };
-    match std::fs::symlink_metadata(path) {
-        Ok(meta) if meta.is_dir() => return Err(failed(format!("holds a folder where {what} belongs"))),
-        Ok(meta) if private_file(&meta) => {}
-        Ok(_) => std::fs::remove_file(path).map_err(|e| failed(format!("could not remove the earlier {what}: {e}")))?,
-        Err(e) if e.kind() == io::ErrorKind::NotFound => {}
-        Err(e) => return Err(failed(format!("could not be checked for {what}: {e}"))),
+    let (Some(dir), Some(name)) = (path.parent(), path.file_name()) else {
+        return Err(failed(format!("names no file in a folder for {what}")));
+    };
+    if std::fs::symlink_metadata(path).is_ok_and(|m| m.is_dir()) {
+        return Err(failed(format!("holds a folder where {what} belongs")));
     }
-    craft_atomic::WriteOptions::default()
-        .with_new_file_permissions(craft_atomic::NewFilePermissions::Private)
-        .atomic_write(path, bytes)
-        .map_err(|e| failed(format!("could not hold {what}: {e}")))?;
+    let fs = craft_atomic::RealFs;
+    let mut created = None;
+    for _ in 0..TEMP_TRIES {
+        let temp = dir.join(craft_atomic::temp_name(&name.to_string_lossy()));
+        match fs.create_new(&temp, craft_atomic::NewFilePermissions::Private) {
+            Ok(file) => {
+                created = Some((temp, file));
+                break;
+            }
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
+            Err(e) => return Err(failed(format!("could not hold {what}: {e}"))),
+        }
+    }
+    let Some((temp, mut file)) = created else {
+        return Err(failed(format!("found no free temporary name beside {what} after {TEMP_TRIES} tries")));
+    };
+    let written = file.write_all(bytes).and_then(|()| fs.sync(&file));
+    drop(file);
+    if let Err(e) = written.and_then(|()| fs.rename(&temp, path)) {
+        let _ = fs.remove(&temp);
+        return Err(failed(format!("could not hold {what}: {e}")));
+    }
+    // The bytes are in place; a failed folder sync cannot be undone, so it is best effort.
+    let _ = fs.sync_dir(dir);
     if !std::fs::symlink_metadata(path).is_ok_and(|m| private_file(&m)) {
         let _ = std::fs::remove_file(path);
         return Err(failed(format!("did not keep {what} private to this user")));
@@ -296,6 +322,33 @@ fn check_private(path: &Path, uid: u32) -> Result<(), AgentError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A private write replaces a link at its place, never the file the link names: the file
+    /// outside stays as it was, and the place holds a private regular file with the bytes.
+    #[test]
+    #[cfg(unix)]
+    fn a_private_write_never_follows_a_link() {
+        let base = std::env::temp_dir().join(format!("archforge-private-write-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        sys::make_private_folder(&base.join("private"), true).unwrap();
+        let outside = base.join("outside.txt");
+        std::fs::write(&outside, "keep").unwrap();
+        let target = base.join("private/copy.json");
+        std::os::unix::fs::symlink(&outside, &target).unwrap();
+        write_private_file(&target, b"new", "the copy").unwrap();
+        assert_eq!(std::fs::read_to_string(&outside).unwrap(), "keep", "the file the link named is untouched");
+        let meta = std::fs::symlink_metadata(&target).unwrap();
+        assert!(private_file(&meta), "a private regular file took the link's place");
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "new");
+        let names: Vec<_> = std::fs::read_dir(base.join("private")).unwrap().map(|e| e.unwrap().file_name()).collect();
+        assert_eq!(names, vec![std::ffi::OsString::from("copy.json")], "no temporary file is left");
+        // A folder in its place is refused, and stays.
+        std::fs::remove_file(&target).unwrap();
+        std::fs::create_dir(&target).unwrap();
+        assert!(write_private_file(&target, b"new", "the copy").is_err());
+        assert!(target.is_dir());
+        std::fs::remove_dir_all(&base).unwrap();
+    }
 
     /// Ids are lowercase letters, digits and hyphens, and a refused id is never repeated.
     #[test]
