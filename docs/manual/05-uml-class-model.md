@@ -891,16 +891,15 @@ template when it gets its first parameter and stops being one when its last goes
   reaches the model or the undo history. Deleting a generalization or a class so that a
   parameter's default no longer specialises its constraint is refused too, naming the default;
   where another path of generalizations keeps it fitting, the deletion goes ahead.
-- **Bindings.** A *binding* is another class that binds a template, giving each parameter an
-  argument. Making a binding is not available in this version yet: there is no tool, menu or
-  command for it, and drawing bindings comes in a later version. What follows holds for a model
-  that already has bindings, and it is how the parameters will behave once bindings can be made.
-  A parameter a binding uses cannot be removed: the bin says, for example, *OrderRepository binds
-  Key -> Integer. Change or remove that binding first, then remove Key.*, under the rows, and
-  **Show the binding** selects the element that binds it. A template's last parameter cannot be
-  removed while any binding names the template, even one with no arguments yet, since the template
-  would stop being one under it. Its kind or constraint cannot change so that an argument no
-  longer fits either. Deleting a template deletes the bindings to it.
+- **Parameters a binding uses.** A parameter a binding (see **Template bindings** below) gives an
+  argument cannot be removed: the bin says, for example, *OrderRepository binds Key -> Integer.
+  Change or remove that binding first, then remove Key.*, under the rows, and **Show the binding**
+  selects the binding itself, its line on the canvas and its **Properties**. A template's last
+  parameter cannot be removed while any binding names the template, since the template would stop
+  being one under it. Its kind or constraint cannot change so that an argument no longer fits
+  either. A binding that leaves a parameter out uses its default, so a parameter without a default
+  cannot be added to a template that is bound, and a default cannot be cleared while a binding
+  relies on it. Deleting a template deletes the bindings to it.
 
 <!-- picture: workspace-template light | Repository with its signature box T : Class and Key : DataType = Integer over its card's top-right corner, items : T [*], find(key : Key) : T and save(item : T) on the card; Properties shows Template parameters · 2 with the editor open on Key: Kind Data type, Constrained to Any, Default Integer -->
 
@@ -911,6 +910,53 @@ template when it gets its first parameter and stops being one when its last goes
 For agents, `uml.template-parameter.add`, `.set` and `.move` add, change and move a parameter,
 `uml.template-parameter.list` lists a classifier's parameters with the bindings that use them, and
 `element.remove` removes one.
+
+### Template bindings
+
+A *template binding* says that a class is a template with its parameters filled in:
+*OrderRepository* binds *Repository* with `T -> Order` and `Key -> Integer`. It is a relationship of
+its own, kept in the model with each *substitution*, a parameter and its argument; it is neither a
+dependency nor a realization.
+
+- **Draw one.** Pick **Template binding** in the **Relationship** tool's menu, under **Association
+  class**, and drag from the class that binds to the template. A class binds a class template, an
+  interface an interface template, a data type a data type template. Releasing the line on the
+  template writes nothing yet: **Properties** opens *New template binding*, *not in the model
+  until you apply*, with the **Bound element**, the **Template**, and **Substitutions**, one row
+  per parameter. Each selector lists only the arguments that fit the parameter: its kind, and its
+  constraint or what specialises it. A parameter with a default shows it, tagged *default*. While
+  the draft is open the line stays dashed in the accent colour.
+- **Apply** adds the binding, its substitutions and its line as one step you can undo, and selects
+  it. A parameter without a default needs an argument: **Apply** then says, for example, *T needs
+  an argument: pick a class. Key can keep its default.*, its selector ringed, and keeps the draft.
+  **Cancel** or Escape removes the draft and leaves the model and its history as they were;
+  selecting something else does the same.
+- **On a diagram** the line is dashed with an open arrowhead at the template, and reads `«bind» <T
+  -> Order, Key -> Integer>`, each parameter with its argument, a parameter left on its default
+  with the default. Every diagram that shows the binding shows the same line and text. **Models**
+  writes *binds Repository* after the class that binds.
+- **Change one.** Select the binding: **Properties** shows its **Binding**, the bound element and the
+  template, and its **Substitutions**. Picking another argument, or **Default** to go back to the
+  parameter's default, is one step you can undo. Another bound element keeps the arguments.
+  Another template opens the draft over the binding, its own arguments to pick before **Apply**.
+  On the canvas the binding's start drags onto another class; its end drags onto another template
+  only when that template needs no argument, else the canvas says to pick it in **Properties**.
+- **What is refused.** A class that is no class, interface or data type of the model, a template
+  of another kind, the template itself, a second binding of the same template, and a template that
+  binds the class already, directly or through other bindings: the canvas says why and draws
+  nothing. Renaming a parameter or an argument changes the line's text and nothing else: the
+  binding follows them. Deleting a class that a binding uses as an argument is refused, naming the
+  binding: change or remove that binding first. Deleting the class that binds deletes its
+  bindings, and deleting a template deletes the bindings to it.
+
+<!-- picture: workspace-template-binding light | OrderRepository binds Repository: the dashed line labelled «bind» <T -> Order, Key -> Integer> selected, Properties showing the Binding with Bound element and Template, and Substitutions · 2 -->
+
+<!-- picture: workspace-template-binding-new light | A binding being drawn from OrderRepository to Repository: New template binding in Properties, Key on its default Integer, and Apply refused: T needs an argument: pick a class. Key can keep its default. -->
+
+For agents, `uml.template-binding.add` makes a binding with its arguments, `uml.template-binding.set`
+changes its bound element, template or arguments, `uml.template-binding.list` lists the bindings a
+classifier makes and those to it, `uml.relationship.reconnect` moves its ends, and
+`element.remove` removes it.
 
 ### Profiles and stereotypes
 

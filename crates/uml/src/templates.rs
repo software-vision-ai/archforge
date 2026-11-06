@@ -28,12 +28,15 @@
 //! parameters, are typed by it. Names are told apart among the signature's parameters whatever the
 //! case, by the shared name rule ([`name_clash`]); a signature holds at most [`MAX_PARAMETERS`].
 //!
-//! Bindings (`TemplateBinding`, AR-131) name a parameter through a substitution's `formal`. A
-//! parameter a binding substitutes is never removed, and its kind and constraint change only while
-//! every argument bound to it still fits; its name and its default change freely, since bindings
-//! follow the parameter, not its name. A template's last parameter is never removed while a
-//! binding names the template's signature, substitutions or none, since the signature would go
-//! with it. A template removed takes the bindings to it along.
+//! Bindings (`TemplateBinding`, AR-131, [`crate::bindings`]) name a parameter through a
+//! substitution's `formal`. A parameter a binding substitutes is never removed, and its kind and
+//! constraint change only while every argument bound to it still fits; its name changes freely,
+//! since bindings follow the parameter, not its name, and so does its default, except that a
+//! binding leaving the parameter out uses the default, so a parameter without one is not added to
+//! a template a binding names, nor is the default cleared while such a binding relies on it. A
+//! template's last parameter is never removed while a binding names the template's signature,
+//! substitutions or none, since the signature would go with it. A template removed takes the
+//! bindings to it along.
 
 use archforge_diagram::ProjectView;
 use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, always, cmd};
@@ -725,6 +728,10 @@ fn parameter_add(ctx: &mut C<'_>, p: &Params) -> R {
     check_constraint(ctx.doc, kind, constraint)?;
     let default = classifier_param(ctx.doc, "default", text(p, "default"))?;
     check_default(ctx.doc, kind, constraint, default)?;
+    // A binding of the template would have no argument for a parameter without a default.
+    if let Some(why) = crate::bindings::needs_argument_problem(ctx.doc, template, &name, default.is_some(), None) {
+        return Err(refuse("default", why));
+    }
     let meta = kind.metaclass().ok_or_else(|| refuse("kind", "not supported yet"))?;
     let sig = match signature(ctx.doc, template) {
         Some(s) => s,
@@ -792,6 +799,12 @@ fn parameter_set(ctx: &mut C<'_>, p: &Params) -> R {
         None => default_of(ctx.doc, param),
     };
     check_default(ctx.doc, kind, constraint, default)?;
+    // A binding that leaves the parameter out uses its default, which then stays.
+    if default_of(ctx.doc, param).is_some()
+        && let Some(why) = crate::bindings::needs_argument_problem(ctx.doc, template, &name, default.is_some(), Some(param))
+    {
+        return Err(refuse("default", why));
+    }
     if (kind != was || constraint != constraint_of(ctx.doc, param))
         && let Some(why) = bindings_problem(ctx.doc, param, kind, constraint)
     {

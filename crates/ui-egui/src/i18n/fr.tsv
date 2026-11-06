@@ -980,7 +980,7 @@ str		Arguments for {name} must be primitive types.	Les arguments de {name} doive
 str		Bindings that leave it out use {default}.	Les liaisons qui l’omettent utilisent {default}.
 str		Renaming or reordering keeps every binding.	Renommer ou réordonner conserve chaque liaison.
 str		Show the binding	Afficher la liaison
-str		Show the binding selects the element that binds it.	Afficher la liaison sélectionne l’élément qui le lie.
+str		Show the binding selects it, on the canvas and in Properties.	Afficher la liaison la sélectionne, sur le canevas et dans les Propriétés.
 str		Renaming {name} or changing its default is allowed: bindings follow the parameter, not its name.	Renommer {name} ou changer sa valeur par défaut est permis : les liaisons suivent le paramètre, pas son nom.
 str		{bound} binds {name} -> {actual}. Change or remove that binding first, then remove {name}.	{bound} lie {name} -> {actual}. Modifiez ou supprimez d’abord cette liaison, puis supprimez {name}.
 str		{bound} binds {template}, and {name} is its last parameter. Remove that binding first, then remove {name}.	{bound} lie {template}, et {name} est son dernier paramètre. Supprimez d’abord cette liaison, puis supprimez {name}.
@@ -992,6 +992,45 @@ str		{bound} binds {name} -> {actual}, which would no longer fit. Change or remo
 str		template parameter	paramètre de modèle
 str		template	modèle
 plural		{kind} · template, {n} parameter · model, in every diagram	{kind} · modèle, {n} paramètre · modèle, dans chaque diagramme|{kind} · modèle, {n} paramètres · modèle, dans chaque diagramme
+# Template bindings (AR-131)
+str		Template binding	Liaison de modèle
+str		Template binding: from the bound class to its template	Liaison de modèle : de la classe liée à son modèle
+str		«bind»	«bind»
+str		Add template binding	Ajouter une liaison de modèle
+str		This template binding	Cette liaison de modèle
+str		On this template binding · {n}	Sur cette liaison de modèle · {n}
+str		Binding · {bound} binds {template} · model, in every diagram	Liaison · {bound} lie {template} · modèle, dans chaque diagramme
+str		binds {template}	lie {template}
+str		Binding	Liaison
+str		Bound element	Élément lié
+str		Template	Modèle
+str		Substitutions · {n}	Substitutions · {n}
+str		default	par défaut
+str		Default ({name})	Valeur par défaut ({name})
+str		Choose a class	Choisissez une classe
+str		Choose an interface	Choisissez une interface
+str		Choose a data type	Choisissez un type de données
+str		Choose an enumeration	Choisissez une énumération
+str		Choose a primitive type	Choisissez un type primitif
+str		{name} needs an argument: pick a class.	{name} a besoin d’un argument : choisissez une classe.
+str		{name} needs an argument: pick an interface.	{name} a besoin d’un argument : choisissez une interface.
+str		{name} needs an argument: pick a data type.	{name} a besoin d’un argument : choisissez un type de données.
+str		{name} needs an argument: pick an enumeration.	{name} a besoin d’un argument : choisissez une énumération.
+str		{name} needs an argument: pick a primitive type.	{name} a besoin d’un argument : choisissez un type primitif.
+plural		{names} can keep its default.	{names} peut garder sa valeur par défaut.|{names} peuvent garder leurs valeurs par défaut.
+str		New template binding	Nouvelle liaison de modèle
+str		Drawing · not in the model until you apply	Tracé en cours · pas dans le modèle avant d’appliquer
+str		Releasing the line on a template opens this. The line stays dashed in the accent colour until Apply; one undo step then adds the binding with its arguments. Cancel or Esc removes the draft and leaves nothing.	Relâcher la ligne sur un modèle ouvre ceci. La ligne reste en pointillés dans la couleur d’accent jusqu’à Appliquer ; une seule étape d’annulation ajoute alors la liaison avec ses arguments. Annuler ou Échap retire le brouillon et ne laisse rien.
+str		Another template takes arguments of its own: pick them, then Apply. Cancel or Esc keeps the binding as it is.	Un autre modèle prend ses propres arguments : choisissez-les, puis Appliquer. Annuler ou Échap garde la liaison telle quelle.
+str		Each selector lists only the arguments that fit its parameter: its kind, and its constraint or what specialises it. A parameter on its default follows the template's default.	Chaque sélecteur ne liste que les arguments qui conviennent à son paramètre : son genre, et sa contrainte ou ce qui la spécialise. Un paramètre sur sa valeur par défaut suit celle du modèle.
+str		The line reads «bind» with each parameter and its argument, and points at the template. The binding keeps its arguments in the model; it is neither a dependency nor a realization.	La ligne affiche «bind» avec chaque paramètre et son argument, et pointe vers le modèle. La liaison garde ses arguments dans le modèle ; ce n’est ni une dépendance ni une réalisation.
+str		Only a class, an interface or a data type binds a template	Seule une classe, une interface ou un type de données lie un modèle
+str		A binding ends at a template: a class, an interface or a data type with template parameters	Une liaison aboutit à un modèle : une classe, une interface ou un type de données avec des paramètres de modèle
+str		A template is bound by a classifier of its own kind	Un modèle est lié par un classificateur de son propre genre
+str		A template does not bind itself	Un modèle ne se lie pas lui-même
+str		This one binds that template already	Celui-ci lie déjà ce modèle
+str		That template binds this one already, which would make a cycle	Ce modèle lie déjà celui-ci, ce qui ferait un cycle
+str		Pick another template in the binding's Properties, where its arguments are chosen.	Choisissez un autre modèle dans les Propriétés de la liaison, où se choisissent ses arguments.
 str		From	De
 str		General	Générale
 str		Generalization	Généralisation

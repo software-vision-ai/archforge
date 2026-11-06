@@ -980,7 +980,7 @@ str		Arguments for {name} must be primitive types.	{name} 的实参必须是基�
 str		Bindings that leave it out use {default}.	省略它的绑定使用 {default}。
 str		Renaming or reordering keeps every binding.	重命名或重新排序会保留所有绑定。
 str		Show the binding	显示绑定
-str		Show the binding selects the element that binds it.	“显示绑定”会选中绑定它的元素。
+str		Show the binding selects it, on the canvas and in Properties.	“显示绑定”会选中绑定本身，在画布和属性中均可见。
 str		Renaming {name} or changing its default is allowed: bindings follow the parameter, not its name.	可以重命名 {name} 或更改其默认值：绑定跟随参数，而不是其名称。
 str		{bound} binds {name} -> {actual}. Change or remove that binding first, then remove {name}.	{bound} 将 {name} 绑定为 -> {actual}。请先更改或删除该绑定，再删除 {name}。
 str		{bound} binds {template}, and {name} is its last parameter. Remove that binding first, then remove {name}.	{bound} 绑定了 {template}，而 {name} 是它的最后一个参数。请先删除该绑定，再删除 {name}。
@@ -992,6 +992,45 @@ str		{bound} binds {name} -> {actual}, which would no longer fit. Change or remo
 str		template parameter	模板参数
 str		template	模板
 plural		{kind} · template, {n} parameter · model, in every diagram	{kind} · 模板，{n} 个参数 · 模型，在所有图中
+# Template bindings (AR-131)
+str		Template binding	模板绑定
+str		Template binding: from the bound class to its template	模板绑定：从绑定的类指向其模板
+str		«bind»	«bind»
+str		Add template binding	添加模板绑定
+str		This template binding	此模板绑定
+str		On this template binding · {n}	在此模板绑定上 · {n}
+str		Binding · {bound} binds {template} · model, in every diagram	绑定 · {bound} 绑定 {template} · 模型，在每个图中
+str		binds {template}	绑定 {template}
+str		Binding	绑定
+str		Bound element	绑定元素
+str		Template	模板
+str		Substitutions · {n}	替换 · {n}
+str		default	默认
+str		Default ({name})	默认值（{name}）
+str		Choose a class	选择一个类
+str		Choose an interface	选择一个接口
+str		Choose a data type	选择一个数据类型
+str		Choose an enumeration	选择一个枚举
+str		Choose a primitive type	选择一个基本类型
+str		{name} needs an argument: pick a class.	{name} 需要一个实参：请选择一个类。
+str		{name} needs an argument: pick an interface.	{name} 需要一个实参：请选择一个接口。
+str		{name} needs an argument: pick a data type.	{name} 需要一个实参：请选择一个数据类型。
+str		{name} needs an argument: pick an enumeration.	{name} 需要一个实参：请选择一个枚举。
+str		{name} needs an argument: pick a primitive type.	{name} 需要一个实参：请选择一个基本类型。
+plural		{names} can keep its default.	{names} 可以保留默认值。
+str		New template binding	新建模板绑定
+str		Drawing · not in the model until you apply	正在绘制 · 应用之前不在模型中
+str		Releasing the line on a template opens this. The line stays dashed in the accent colour until Apply; one undo step then adds the binding with its arguments. Cancel or Esc removes the draft and leaves nothing.	在模板上松开线会打开此处。在应用之前，线保持为强调色虚线；应用后，一个撤销步骤会添加绑定及其实参。取消或 Esc 会移除草稿，不留下任何内容。
+str		Another template takes arguments of its own: pick them, then Apply. Cancel or Esc keeps the binding as it is.	另一个模板需要自己的实参：先选择它们，再应用。取消或 Esc 会保持绑定不变。
+str		Each selector lists only the arguments that fit its parameter: its kind, and its constraint or what specialises it. A parameter on its default follows the template's default.	每个选择器只列出适合其参数的实参：参数的种类，以及其约束或特化该约束的类型。使用默认值的参数会跟随模板的默认值。
+str		The line reads «bind» with each parameter and its argument, and points at the template. The binding keeps its arguments in the model; it is neither a dependency nor a realization.	线上写着 «bind» 以及每个参数和它的实参，并指向模板。绑定在模型中保存其实参；它既不是依赖，也不是实现。
+str		Only a class, an interface or a data type binds a template	只有类、接口或数据类型才能绑定模板
+str		A binding ends at a template: a class, an interface or a data type with template parameters	绑定的终点是模板：带有模板参数的类、接口或数据类型
+str		A template is bound by a classifier of its own kind	模板只能由同种类的分类器绑定
+str		A template does not bind itself	模板不能绑定自身
+str		This one binds that template already	它已经绑定了该模板
+str		That template binds this one already, which would make a cycle	该模板已经绑定了它，这会形成循环
+str		Pick another template in the binding's Properties, where its arguments are chosen.	请在绑定的属性中选择另一个模板，在那里选择它的实参。
 str		From	从
 str		General	一般
 str		Generalization	泛化

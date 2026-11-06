@@ -45,6 +45,7 @@ pub mod subtypes;
 pub mod support;
 pub mod theme;
 pub mod types;
+mod uml_bindings;
 mod uml_classifier;
 mod uml_constraints;
 mod uml_inline;

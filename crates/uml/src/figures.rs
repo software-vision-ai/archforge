@@ -12,15 +12,16 @@
 //! generalization as a line to a hollow triangle at the general class; a dependency dashed, with an
 //! open arrow at its supplier; an interface realization dashed in the muted ink, with a hollow
 //! triangle at its interface; an association class as an association's line and a class's card,
-//! its eyebrow Association class (AR-125), which the canvas ties to the line's middle. The canvas
-//! draws these descriptions.
+//! its eyebrow Association class (AR-125), which the canvas ties to the line's middle; a template
+//! binding dashed, with an open arrow at its template and its `«bind» <T -> Order>` label at its
+//! middle (AR-131). The canvas draws these descriptions.
 
 use archforge_diagram::figure::{Card, End, EndMark, Line, Row, Text, Tone};
 use archforge_mof::{Obj, Store, Value};
 
 use crate::{
     ASSOCIATION, ASSOCIATION_CLASS, AggregationKind, CLASS, DATA_TYPE, DEPENDENCY, ENUMERATION, GENERALIZATION, INTERFACE, INTERFACE_REALIZATION,
-    PRIMITIVE_TYPE, ParameterDirectionKind, VisibilityKind, association, behavioral_feature, class, dependency, generalization,
+    PRIMITIVE_TYPE, ParameterDirectionKind, TEMPLATE_BINDING, VisibilityKind, association, behavioral_feature, class, dependency, generalization,
     interface_realization, literal_integer, literal_unlimited_natural, multiplicity_element, named_element, operation, parameter, property,
     typed_element,
 };
@@ -388,9 +389,10 @@ fn aggregation(store: &Store, end: Obj) -> AggregationKind {
     }
 }
 
-/// The classes an association, an association class, a generalization, a dependency or an
-/// interface realization joins, as its line runs: a realization from its implementing class to its
-/// interface.
+/// The classes an association, an association class, a generalization, a dependency, an interface
+/// realization, a template binding or an extension joins, as its line runs: a realization from its
+/// implementing class to its interface, a template binding from its bound element to its template,
+/// an extension from its stereotype to its metaclass.
 pub fn ends(store: &Store, element: Obj) -> Option<(Obj, Obj)> {
     match store.class_of(element).ok()? {
         c if crate::is_association(c) => {
@@ -407,6 +409,7 @@ pub fn ends(store: &Store, element: Obj) -> Option<(Obj, Obj)> {
         }
         // An extension runs from its stereotype to the metaclass it extends (AR-134).
         c if c == crate::EXTENSION => crate::profiles::extension_ends(store, element),
+        c if c == TEMPLATE_BINDING => Some((crate::templates::bound_element(store, element)?, crate::bindings::template_of(store, element)?)),
         _ => None,
     }
 }
@@ -481,18 +484,30 @@ pub fn line(store: &Store, element: Obj) -> Option<Line> {
             badge: false,
             resolvable: false,
         }),
+        // Dashed with an open arrow at the template, as a dependency's, and labelled «bind» with its
+        // substitutions: a binding is neither a dependency nor a realization (AR-131).
+        c if c == TEMPLATE_BINDING => Some(Line {
+            ends: [End::marked(EndMark::None), End::marked(EndMark::OpenArrow)],
+            styled: true,
+            dashed: true,
+            status: None,
+            note: None,
+            badge: false,
+            resolvable: false,
+        }),
         _ => None,
     }
 }
 
 /// The text slots a label of an association or a dependency may show; an association class's line
-/// its ends' alone, its name being on its card.
+/// its ends' alone, its name being on its card; a template binding's its `«bind»` label, in the
+/// name's slot, as it has no name.
 pub fn text_slots(class: archforge_mof::ClassId) -> &'static [&'static str] {
     if class == ASSOCIATION {
         &["name", "from_end", "to_end", "from_role", "to_role"]
     } else if class == ASSOCIATION_CLASS {
         &["from_end", "to_end", "from_role", "to_role"]
-    } else if class == DEPENDENCY {
+    } else if class == DEPENDENCY || class == TEMPLATE_BINDING {
         &["name"]
     } else {
         &[]
@@ -505,6 +520,7 @@ pub fn slot_text(store: &Store, element: Obj, slot: &str) -> String {
     let end = |i: usize| member_ends(store, element).map(|e| e[i]);
     let ends = store.class_of(element).is_ok_and(crate::is_association);
     match slot {
+        "name" if store.class_of(element).ok() == Some(TEMPLATE_BINDING) => crate::bindings::label(store, element),
         "name" => name(store, element),
         "from_end" if ends => end(0).map(|e| end_text(store, e)).unwrap_or_default(),
         "to_end" if ends => end(1).map(|e| end_text(store, e)).unwrap_or_default(),

@@ -725,7 +725,8 @@ fn hand_up_problem(store: &Store, pkg: Obj, parent: Obj) -> Option<String> {
 
 /// Removes UML elements (packages, classes, interfaces, enumerations, data types, attributes,
 /// operations, literals, primitive types, associations, generalizations, dependencies, interface
-/// realizations, association classes, constraints and generalization sets), each with what it holds (an enumeration its literals, a
+/// realizations, association classes, constraints, generalization sets, template parameters,
+/// profiles, stereotypes and template bindings), each with what it holds (an enumeration its literals, a
 /// data type or an association class its attributes and operations, an association its ends) and the
 /// diagrams, nodes and lines that show them (`element.remove`, through [`crate::UmlNotation`]). A
 /// nested package hands what it holds, and its diagrams, up to its parent first (owner decision); a
@@ -736,7 +737,10 @@ fn hand_up_problem(store: &Store, pkg: Obj, parent: Obj) -> Option<String> {
 /// a constraint left naming none goes too, in the same step (AR-133,
 /// [`crate::constraints::dropped_by`]). A generalization set goes alone, keeping its generalizations;
 /// a generalization leaves its sets, and a set left with no member goes too, in the same step
-/// (AR-129, [`crate::generalization_sets::emptied_by`]).
+/// (AR-129, [`crate::generalization_sets::emptied_by`]). A template binding goes with its
+/// substitutions, and with its bound element or its template; a classifier a binding that stays
+/// uses as an argument is refused, naming the binding (AR-131,
+/// [`crate::bindings::argument_removal_problem`]).
 pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, CommandError> {
     // Every id is checked before anything goes, so a refusal leaves the store as it was.
     let removable = [
@@ -759,6 +763,7 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
         crate::CLASSIFIER_TEMPLATE_PARAMETER,
         crate::PROFILE,
         crate::STEREOTYPE,
+        crate::TEMPLATE_BINDING,
     ];
     // Template parameters a binding stands in the way of stay: one it substitutes, or a template's
     // last while a binding names its signature (AR-130). A template going too takes its parameters
@@ -805,6 +810,13 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
     // specialize its constraint once what goes has gone is refused before anything goes (AR-130).
     let (gone_classes, gone_generalizations) = going_for_constraints(store, objs);
     if let Some(why) = crate::templates::constraint_problem(store, &gone_classes, &gone_generalizations, &params) {
+        return Err(refuse("ids", why));
+    }
+    // A classifier a binding that stays uses as an argument stays too (AR-131): the binding would
+    // be left naming nothing for its parameter.
+    let classes: Vec<Obj> = gone_classes.iter().copied().collect();
+    let going: Vec<Obj> = going_with(store, &classes).into_iter().chain(objs.iter().copied()).collect();
+    if let Some(why) = crate::bindings::argument_removal_problem(store, &classes, &going) {
         return Err(refuse("ids", why));
     }
     // A classifier's nested classifiers go with it (AR-132), named among what goes so their

@@ -14,7 +14,7 @@
 //! has, whatever the case, and a default that does not fit are refused in place, in a tinted box
 //! under the fields, the editor kept open and nothing written. Removing a parameter a binding
 //! substitutes is refused under the rows on the danger tint, naming the binding, with Show the
-//! binding, which selects the element that binds it (C5).
+//! binding, which selects the binding itself, its line and its Properties (C5, AR-131).
 
 use archforge_mof::{Obj, Store, TypeRef, Uuid};
 use archforge_uml::templates::{self, Kind};
@@ -52,12 +52,12 @@ pub struct TemplateEdit {
 }
 
 /// A removal refused while a binding uses the parameter (C5): the parameter, the reason, and the
-/// element that binds it.
+/// binding that stands in the way.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InUse {
     pub parameter: Uuid,
     pub why: String,
-    pub bound: Option<Uuid>,
+    pub binding: Option<Uuid>,
 }
 
 fn name_of(store: &Store, o: Obj) -> String {
@@ -66,7 +66,7 @@ fn name_of(store: &Store, o: Obj) -> String {
 
 /// A classifier as the commands take it for a constraint or a default: a built-in type by its name,
 /// any other by its id.
-fn value_of(store: &Store, c: Option<Obj>) -> String {
+pub(crate) fn value_of(store: &Store, c: Option<Obj>) -> String {
     match c {
         Some(t) if archforge_uml::members::is_built_in(store, t) => name_of(store, t),
         Some(t) => store.uuid(t).map(|u| u.to_string()).unwrap_or_default(),
@@ -75,7 +75,7 @@ fn value_of(store: &Store, c: Option<Obj>) -> String {
 }
 
 /// The classifier a constraint's or a default's value names, a built-in type made yet or not.
-fn classifier_named(store: &Store, value: &str) -> Option<Obj> {
+pub(crate) fn classifier_named(store: &Store, value: &str) -> Option<Obj> {
     if value.is_empty() {
         return None;
     }
@@ -133,7 +133,7 @@ fn row_key(k: usize) -> String {
 /// The classifiers a constraint of a `kind` parameter may be, as a menu offers them: the model's
 /// own whose metaclass is of the kind, and, for a data type or a primitive type, the built-in
 /// types, each as it reads and as the commands take it, by name.
-fn of_kind(store: &Store, kind: Kind) -> Vec<(String, String)> {
+pub(crate) fn of_kind(store: &Store, kind: Kind) -> Vec<(String, String)> {
     let Some(meta) = kind.metaclass() else { return Vec::new() };
     let u = store.universe();
     let mut own: Vec<(String, String)> = store
@@ -257,15 +257,15 @@ fn in_use_box(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y:
     paint.rect_stroke(b, 6.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
     paint.galley(pos2(b.left() + 12.0, b.center().y - g.size().y / 2.0), g, p.text);
     if control(shell, ui, &format!("{ID}.showBinding"), "button", b, true).accessible_name(label).clicked()
-        && let Some(bound) = u.bound
+        && let Some(binding) = u.binding
     {
         shell.panels.template_in_use = None;
-        crate::panels::select_element(shell, bound);
+        crate::panels::select_element(shell, binding);
     }
     y = b.bottom() + 12.0;
     let name = shell.session.as_ref().and_then(|s| s.doc().by_uuid(u.parameter).map(|o| templates::parameter_name(s.doc(), o))).unwrap_or_default();
     let renaming = fmt(&tr("Renaming {name} or changing its default is allowed: bindings follow the parameter, not its name."), &[("name", &name)]);
-    let said = format!("{} {renaming}", tr("Show the binding selects the element that binds it."));
+    let said = format!("{} {renaming}", tr("Show the binding selects it, on the canvas and in Properties."));
     let g = ux::galley_rows(&paint, &said, types::CAPTION, p.text_muted, Some(width), 5);
     let h = g.size().y;
     paint.galley(pos2(left, y), g, p.text_muted);
@@ -520,12 +520,12 @@ fn refuse(shell: &mut Shell, why: String, at: Option<&'static str>) {
     }
 }
 
-/// Why parameter `p` may not be removed, in the user's words, with the element that binds it: a
+/// Why parameter `p` may not be removed, in the user's words, with the binding in the way: a
 /// binding substitutes it (C5), or it is its template's last and a binding names the template,
 /// substitutions or none. The model keeps the same rule (`templates::removals_problem`).
 pub(crate) fn in_use(store: &Store, p: Obj) -> Option<(String, Option<Uuid>)> {
     let users = templates::users(store, p);
-    let Some(&(_, bound, actual)) = users.first() else { return last_in_use(store, p) };
+    let Some(&(binding, bound, actual)) = users.first() else { return last_in_use(store, p) };
     let name = templates::parameter_name(store, p);
     let bound_name = bound.map(|b| name_of(store, b)).unwrap_or_default();
     let actual = actual.map(|a| name_of(store, a)).unwrap_or_default();
@@ -538,7 +538,7 @@ pub(crate) fn in_use(store: &Store, p: Obj) -> Option<(String, Option<Uuid>)> {
         why.push(' ');
         why.push_str(&trn("{n} more binding uses it too.", "{n} more bindings use it too.", more));
     }
-    Some((why, bound.and_then(|b| store.uuid(b).ok())))
+    Some((why, store.uuid(binding).ok()))
 }
 
 /// Why `p`, its template's last parameter, may not be removed while a binding names the template:
@@ -546,13 +546,14 @@ pub(crate) fn in_use(store: &Store, p: Obj) -> Option<(String, Option<Uuid>)> {
 fn last_in_use(store: &Store, p: Obj) -> Option<(String, Option<Uuid>)> {
     templates::last_parameter_problem(store, p)?;
     let t = templates::template_of(store, p)?;
-    let bound = templates::bindings_to(store, t).first().and_then(|b| templates::bound_element(store, *b));
+    let binding = templates::bindings_to(store, t).first().copied();
+    let bound = binding.and_then(|b| templates::bound_element(store, b));
     let name = templates::parameter_name(store, p);
     let why = fmt(
         &tr("{bound} binds {template}, and {name} is its last parameter. Remove that binding first, then remove {name}."),
         &[("bound", &bound.map(|b| name_of(store, b)).unwrap_or_default()), ("template", &name_of(store, t)), ("name", &name)],
     );
-    Some((why, bound.and_then(|b| store.uuid(b).ok())))
+    Some((why, binding.and_then(|b| store.uuid(b).ok())))
 }
 
 /// The bin: removes the parameter, or, while a binding substitutes it, closes the editor and says
@@ -560,9 +561,9 @@ fn last_in_use(store: &Store, p: Obj) -> Option<(String, Option<Uuid>)> {
 fn remove_parameter(shell: &mut Shell, edit: &TemplateEdit) {
     let Some(target) = edit.target else { return };
     let refused = shell.session.as_ref().and_then(|s| s.doc().by_uuid(target).and_then(|o| in_use(s.doc(), o)));
-    if let Some((why, bound)) = refused {
+    if let Some((why, binding)) = refused {
         shell.panels.template = None;
-        shell.panels.template_in_use = Some(InUse { parameter: target, why, bound });
+        shell.panels.template_in_use = Some(InUse { parameter: target, why, binding });
         return;
     }
     match run(shell, "element.remove", json!({ "ids": [target.to_string()] })) {

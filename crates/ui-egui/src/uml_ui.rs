@@ -909,6 +909,10 @@ impl NotationUi for UmlUi {
         if archforge_uml::generalization_sets::is_set(store, o) {
             return Some(tr("Set"));
         }
+        // A template binding's first section is the Binding (AR-131, C2).
+        if class(store, o) == Some(archforge_uml::TEMPLATE_BINDING) {
+            return Some(tr("Binding"));
+        }
         if let Some(context) = constraint_context(store, o) {
             return Some(Classifier::of(store, context).map_or_else(|| tr("Package"), Classifier::word));
         }
@@ -938,6 +942,8 @@ impl NotationUi for UmlUi {
             // A profile's and a stereotype's panels (AR-134, F1).
             Some(c) if c == archforge_uml::PROFILE => return crate::uml_profiles::profile_body(shell, ui, p, r, y, subject),
             Some(c) if c == archforge_uml::STEREOTYPE => return crate::uml_profiles::stereotype_body(shell, ui, p, r, y, subject),
+            // A template binding's own panel (AR-131, C2).
+            Some(c) if c == archforge_uml::TEMPLATE_BINDING => return crate::uml_bindings::body(shell, ui, p, r, y, subject),
             Some(c) if archforge_uml::is_relationship(c) => {
                 return crate::uml_relate::body(shell, ui, p, r, y, subject);
             }
@@ -1030,6 +1036,14 @@ fn words_of(store: &Store, o: Obj) -> Option<Words> {
             tr("This interface realization"),
             tr("On this interface realization · {n}"),
         ),
+        // Named by its kind, which it has in place of a name; its kind line says what binds what (AR-131).
+        c if c == archforge_uml::TEMPLATE_BINDING => Words {
+            kind: crate::uml_bindings::kind_line(store, o),
+            word: tr("Template binding"),
+            this: tr("This template binding"),
+            on_this: tr("On this template binding · {n}"),
+            name: tr("Template binding"),
+        },
         c if c == archforge_uml::GENERALIZATION_SET => words(
             tr("Generalization set · model, in every diagram"),
             tr("Generalization set"),
@@ -1211,8 +1225,8 @@ fn class_rows(store: &Store, c: Obj, depth: u8, t: &Tree<'_>) -> Vec<Row> {
     let expandable = if t.filtering() { !members.is_empty() } else { !t.skills(c).is_empty() || has_members(store, c) };
     let expanded = expandable && t.open(c);
     let kind = Classifier::of(store, c).unwrap_or_default();
-    // A template says so after its name (AR-130, C1).
-    let note = archforge_uml::templates::is_template(store, c).then(|| tr("template"));
+    // A template says so after its name (AR-130, C1), and a class that binds one names it (AR-131, C2).
+    let note = archforge_uml::templates::is_template(store, c).then(|| tr("template")).or_else(|| crate::uml_bindings::binds_note(store, c));
     let mut out: Vec<Row> = t
         .row(c, depth, kind.key(), kind.icon(), label)
         .map(|row| Row { expandable, expanded, draggable: true, note: note.clone().or(row.note), ..row })
@@ -1277,8 +1291,8 @@ pub(crate) fn put_nested_priority(shell: &mut Shell) -> Result<(String, String),
 /// parameters `T : Class` and `Key : DataType = Integer`, its attribute `- items : T [*]` and its
 /// operations `find(key : Key) : T [0..1]` and `save(item : T)`, its card placed on the open
 /// diagram below Order's line and selected. With `bound`, OrderRepository, a class of the sample's
-/// package, binds it, T to Order and Key to Integer: built in the store as a binding of AR-131 would
-/// be, the session made again over it. The project is then marked saved as it stands. Gives
+/// package placed left of it, binds it, T to Order and Key to Integer (AR-131, C2), its line drawn
+/// with its label. All as one step; the project is then marked saved as it stands. Gives
 /// Repository's id and the parameters' ids.
 #[cfg(any(test, feature = "snapshot"))]
 pub(crate) fn put_repository(shell: &mut Shell, bound: bool) -> Result<(Uuid, [Uuid; 2]), String> {
@@ -1289,6 +1303,7 @@ pub(crate) fn put_repository(shell: &mut Shell, bound: bool) -> Result<(Uuid, [U
         .alive()
         .find(|o| store.class_of(*o).ok() == Some(archforge_uml::CLASS) && name(store, *o) == "Order")
         .ok_or("the sample has no Order")?;
+    let order_id = store.uuid(order).map_err(|e| e.to_string())?.to_string();
     let pkg = package_of(store, order).and_then(|p| store.uuid(p).ok()).ok_or("Order's package")?.to_string();
     let id = |v: serde_json::Value| v["id"].as_str().unwrap_or_default().to_string();
     let element = |v: &serde_json::Value| v["element"].as_str().unwrap_or_default().to_string();
@@ -1304,58 +1319,30 @@ pub(crate) fn put_repository(shell: &mut Shell, bound: bool) -> Result<(Uuid, [U
             b.execute("uml.attribute.add", &json!({ "class": repo, "name": "items", "type": te, "multiplicity": "*", "visibility": "private" }))?;
             b.execute("uml.operation.add", &json!({ "class": repo, "name": "find", "parameters": [{ "name": "key", "type": ke }], "returns": te }))?;
             b.execute("uml.operation.add", &json!({ "class": repo, "name": "save", "parameters": [{ "name": "item", "type": te }] }))?;
-            b.execute(
+            let repo_node = id(b.execute(
                 "diagram.place",
                 &json!({ "diagram": d.to_string(), "element": repo, "x": 560.0, "y": 700.0, "width": 290.0, "height": members_height(1, 2) }),
-            )?;
+            )?);
             if bound {
-                b.execute("uml.class.add", &json!({ "package": pkg, "name": "OrderRepository" }))?;
+                let bound_class = id(b.execute("uml.class.add", &json!({ "package": pkg, "name": "OrderRepository" }))?);
+                let bound_node = id(b.execute(
+                    "diagram.place",
+                    &json!({ "diagram": d.to_string(), "element": bound_class, "x": 80.0, "y": 1000.0, "width": 240.0, "height": 66.0 }),
+                )?);
+                let binding = id(b.execute(
+                    "uml.template-binding.add",
+                    &json!({ "bound": bound_class, "template": repo, "arguments": { "T": order_id, "Key": "Integer" } }),
+                )?);
+                let edge = id(b.execute(
+                    "diagram.connect",
+                    &json!({ "diagram": d.to_string(), "element": binding, "source": bound_node, "target": repo_node }),
+                )?);
+                b.execute("diagram.label", &json!({ "edge": edge, "kind": "name", "at": "middle" }))?;
             }
             b.execute("view.select", &json!({ "ids": [repo] }))?;
             Ok(())
         })
         .map_err(|e| e.to_string())?;
-    // The binding itself, AR-131's, built straight into the store.
-    if bound {
-        use archforge_mof::{Value, rows};
-        let fail = |e: &dyn std::fmt::Display| e.to_string();
-        let (tables, junctions) = archforge_notations::storage();
-        let counter = |start: u64| {
-            let n = std::sync::atomic::AtomicU64::new(start);
-            Box::new(move || {
-                let i = n.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                let mut r = [0u8; 10];
-                r[2..].copy_from_slice(&i.to_be_bytes());
-                archforge_mof::Uuid::v7(1_761_670_800_000, r)
-            })
-        };
-        let mut st = archforge_notations::store(counter(1 << 33)).map_err(|e| fail(&e))?;
-        rows::restore(&mut st, &rows::snapshot(session.doc(), &tables, &junctions).map_err(|e| fail(&e))?, &tables, &junctions)
-            .map_err(|e| fail(&e))?;
-        let named = |st: &Store, n: &str| {
-            st.alive().find(|o| archforge_uml::is_classifier(st.class_of(*o).unwrap_or(archforge_uml::PACKAGE)) && name(st, *o) == n)
-        };
-        let (Some(r), Some(bound_class), Some(order), Some(integer)) =
-            (named(&st, "Repository"), named(&st, "OrderRepository"), named(&st, "Order"), named(&st, "Integer"))
-        else {
-            return Err("the template sample's classes".into());
-        };
-        let sig = archforge_uml::templates::signature(&st, r).ok_or("Repository's signature")?;
-        let b = st.create(archforge_uml::TEMPLATE_BINDING).map_err(|e| fail(&e))?;
-        st.set(b, archforge_uml::template_binding::SIGNATURE, Value::Ref(sig)).map_err(|e| fail(&e))?;
-        st.push(bound_class, archforge_uml::templateable_element::TEMPLATE_BINDING, Value::Ref(b)).map_err(|e| fail(&e))?;
-        for (p, actual) in archforge_uml::templates::parameters(&st, r).into_iter().zip([order, integer]) {
-            let sub = st.create(archforge_uml::TEMPLATE_PARAMETER_SUBSTITUTION).map_err(|e| fail(&e))?;
-            st.set(sub, archforge_uml::template_parameter_substitution::FORMAL, Value::Ref(p)).map_err(|e| fail(&e))?;
-            st.set(sub, archforge_uml::template_parameter_substitution::ACTUAL, Value::Ref(actual)).map_err(|e| fail(&e))?;
-            st.push(b, archforge_uml::template_binding::PARAMETER_SUBSTITUTION, Value::Ref(sub)).map_err(|e| fail(&e))?;
-        }
-        let back = rows::snapshot(&st, &tables, &junctions).map_err(|e| fail(&e))?;
-        let mut again = archforge_notations::session_from_rows(&back, counter(1 << 34))?;
-        let r_id = again.doc().uuid(r).map_err(|e| fail(&e))?.to_string();
-        again.execute("view.select", &json!({ "ids": [r_id] })).map_err(|e| e.to_string())?;
-        *session = again;
-    }
     session.mark_saved().map_err(|e| e.to_string())?;
     let parse = |s: &str| Uuid::parse(s).ok_or_else(|| format!("{s} is no id"));
     Ok((parse(&repo)?, [parse(&t)?, parse(&key)?]))

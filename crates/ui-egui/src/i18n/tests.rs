@@ -99,6 +99,7 @@ fn required() -> (Vec<(String, String)>, Vec<String>) {
     strings.extend(crate::settings_agents::texts().map(|s| (String::new(), s.to_string())));
     strings.extend(crate::uml_qualifiers::texts().map(|s| (String::new(), s.to_string())));
     strings.extend(crate::uml_templates::texts().map(|s| (String::new(), s.to_string())));
+    strings.extend(crate::uml_bindings::texts().map(|s| (String::new(), s.to_string())));
     strings.extend(crate::uml_nesting::texts().map(|s| (String::new(), s.to_string())));
     strings.extend(crate::uml_profiles::texts().map(|s| (String::new(), s.to_string())));
     // The plurals the notations' cards say, which `trn` takes through their descriptions.

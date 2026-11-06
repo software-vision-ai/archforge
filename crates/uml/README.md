@@ -122,9 +122,20 @@ one of the model's; a parameter a binding's substitution names (`formal`) never 
 changed to a kind or constraint the binding's argument would not fit, nor a template's last
 parameter removed while any binding names its signature, nor a generalization or a classifier
 removed when a surviving parameter's default or a binding's argument would then no longer specialize
-its constraint (`constraint_problem`) (no command makes a binding yet; AR-131 brings them), all checked before anything is written
-(`removals_problem`, `last_parameter_problem`); removed through `element.remove`; the card's `template` rows drawn as the signature box), `commands::going_with` (the relationships that go with classifiers, an association class's own
-among them, and the bindings to a template), `names::{kind, clash, CLASSIFIER}` (AR-208: which elements may share a
+its constraint (`constraint_problem`), nor a parameter without a default added to a bound template or a default cleared
+that a binding relies on, all checked before anything is written
+(`removals_problem`, `last_parameter_problem`); removed through `element.remove`; the card's `template` rows drawn as the signature box),
+`bindings::{specs, is_binding, bindings_of, template_of, substitutions, substitution_for, argument, missing,
+substitution_text, label, argument_uses, can_bind, binds, problem, Problem, arg_of, arg_fits, Arg,
+argument_removal_problem, needs_argument_problem, binding_json}` (AR-131: `uml.template-binding.{add, set, list}`; UML's
+TemplateBinding owned by its bound element, a class, an interface or a data type of the template's kind, naming the
+template's signature, with a TemplateParameterSubstitution per argument given; a parameter left out uses its default,
+one without a default needs an argument, each argument of its parameter's kind and its constraint or one that
+specializes it, never a template parameter's classifier; never the template itself, a second binding of one template, or a
+cycle of bindings; one of `RELATIONSHIPS`, drawn dashed with an open arrow at the template and labelled `«bind» <T -> Order>`
+in its `name` slot, its ends moved by `uml.relationship.reconnect`; a classifier a binding uses as an argument not removed
+while the binding stays; gone with its bound element or its template), `commands::going_with` (the relationships that go with classifiers, an association class's own
+among them, the bindings they own, and the bindings to a template), `names::{kind, clash, CLASSIFIER}` (AR-208: which elements may share a
 name in one owner, as UML has it: two of one kind never, whatever the case; every classifier is one kind, a package, a
 property, an operation, a parameter, a literal and a generalization set each one of their own, relationships and constraints
 labels that never clash; the check a project gets as it opens and every command that names, adds or moves an element ask this
@@ -162,8 +173,12 @@ diagrams; rows read back identical; the sweep. `tests/templates.rs` (AR-130): pa
 moved and removed, each one undo step, the signature made and gone with them; identity and the
 members typed by a parameter kept across rename, reorder and kind; value and operation refused;
 defaults and constraints checked by kind; a parameter's classifier kept the template's own; a
-binding built in the store keeping its parameters; the box on two diagrams; rows read back
-identical; the sweep. `tests/profiles.rs` (AR-134): profiles and stereotypes made, extending and owning properties, one undo step each; unsupported metaclasses and property types refused; a profile applied and unapplied; unapplying, removing and moving refused while stereotype applications built in the store use them, the uses counted; the library out of types and reads; a profile's names a package's; rows read back identical; the profile's diagram; the sweep. `tests/qualifiers.rs` (AR-127): qualifiers added, edited, moved and removed, each one undo
+binding keeping its parameters; the box on two diagrams; rows read back identical; the sweep; and
+(AR-131) a binding made with its substitutions in one undo step, its line and label on two
+diagrams, distinct from a dependency; a missing argument, one that does not fit and the other wrong
+bindings refused; a parameter left out using its default; arguments, bound element and template
+edited with undo and redo, and its ends reconnected; an argument's removal refused, the binding
+gone with its bound element or its template; rows read back identical; the sweep. `tests/profiles.rs` (AR-134): profiles and stereotypes made, extending and owning properties, one undo step each; unsupported metaclasses and property types refused; a profile applied and unapplied; unapplying, removing and moving refused while stereotype applications built in the store use them, the uses counted; the library out of types and reads; a profile's names a package's; rows read back identical; the profile's diagram; the sweep. `tests/qualifiers.rs` (AR-127): qualifiers added, edited, moved and removed, each one undo
 step; a duplicate name and the other wrong edits refused, changing nothing; a built-in type or the
 model's own; kept apart from attributes and roles and gone with their association; kept through
 renaming and reconnecting; the box on two diagrams; rows read back identical; the sweep. `tests/modifiers.rs` (AR-126):

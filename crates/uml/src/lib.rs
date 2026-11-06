@@ -37,6 +37,7 @@ macro_rules! kept_modifier_lines {
     };
 }
 
+pub mod bindings;
 pub mod commands;
 pub mod constraints;
 pub mod descriptions;
@@ -88,9 +89,10 @@ pub fn is_classifier(class: ClassId) -> bool {
 }
 
 /// The relationships a class diagram draws as lines: associations, generalizations, dependencies,
-/// interface realizations, and association classes, which have a card of their own besides
-/// (AR-125): one element shown twice on a diagram, a node and an edge, so no view record is new.
-pub const RELATIONSHIPS: [ClassId; 5] = [ASSOCIATION, GENERALIZATION, DEPENDENCY, INTERFACE_REALIZATION, ASSOCIATION_CLASS];
+/// interface realizations, association classes, which have a card of their own besides
+/// (AR-125): one element shown twice on a diagram, a node and an edge, so no view record is new;
+/// and template bindings (AR-131), from the bound element to its template.
+pub const RELATIONSHIPS: [ClassId; 6] = [ASSOCIATION, GENERALIZATION, DEPENDENCY, INTERFACE_REALIZATION, ASSOCIATION_CLASS, TEMPLATE_BINDING];
 
 /// Whether `class` is an association or an association class: what has ends to set, roles,
 /// multiplicities, navigability and aggregation.
@@ -187,7 +189,8 @@ impl Notation for UmlNotation {
         }
     }
 
-    /// Associations, generalizations, dependencies, interface realizations and association classes.
+    /// Associations, generalizations, dependencies, interface realizations, association classes,
+    /// template bindings, and a profile's extensions (AR-134).
     fn connects(&self, _kind: &str, class: ClassId) -> bool {
         is_relationship(class) || class == EXTENSION
     }
@@ -346,6 +349,7 @@ pub fn registry() -> Result<Arc<archforge_engine::Registry<Store, ProjectView>>,
     specs.extend(nesting::specs());
     specs.extend(templates::specs());
     specs.extend(profiles::specs());
+    specs.extend(bindings::specs());
     specs.extend(archforge_diagram::commands::specs::<ProjectView>());
     specs.extend(archforge_core::skills::specs::<ProjectView>());
     archforge_engine::Registry::new(specs)
