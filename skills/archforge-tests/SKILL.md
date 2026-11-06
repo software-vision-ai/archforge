@@ -20,7 +20,9 @@ description: "Use when writing, placing or running tests in Archforge: a regress
     `archforge_secrets::MemoryStore` (feature `testing`), never the system's store
   - agent runtimes: unit tests beside the code in `crates/agents/src`, and
     `crates/agents/tests/runtimes.rs` against fake runtimes (shell scripts), never an installed
-    `claude` or `codex`: give `find` a whole `HostEnv` so the machine's own PATH is not searched
+    `claude` or `codex`: give `find` a whole `HostEnv` so the machine's own PATH is not searched;
+    the Claude adapter in `crates/agents/tests/claude.rs`, over the transcripts in
+    `crates/agents/tests/fixtures/` and fake `claude` scripts that replay them
   - the command engine: `crates/engine/tests/engine.rs` with its toy notation; a notation's own
     commands are checked with `archforge_engine::testing::round_trip` (feature `testing`)
 - A screen test builds the real `Shell` in an `egui_kittest` harness, draws it in both appearances

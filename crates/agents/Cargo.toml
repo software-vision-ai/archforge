@@ -9,8 +9,11 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+archforge-control.workspace = true
 archforge-secrets.workspace = true
+craft-atomic.workspace = true
 log.workspace = true
+serde_json.workspace = true
 zeroize.workspace = true
 
 [target.'cfg(unix)'.dependencies]

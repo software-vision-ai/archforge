@@ -71,6 +71,11 @@ pub enum AgentError {
     InputBacklog { runtime: RuntimeKind },
     /// Talking to the runtime's process failed: `action` says what was being done.
     Io { runtime: RuntimeKind, action: &'static str, detail: String },
+    /// A setting an adapter was given was refused: `setting` names it, `bytes` is its length; the
+    /// value itself is never repeated, as it may be a key pasted into the wrong field.
+    InvalidSetting { setting: &'static str, bytes: usize, reason: String },
+    /// A message was sent while a turn is still running; stop it or wait for its end.
+    TurnRunning { runtime: RuntimeKind },
     /// A failure an adapter read from the runtime's own output, already in its category.
     Reported { kind: ErrorKind, detail: String },
 }
@@ -96,6 +101,8 @@ impl AgentError {
             | AgentError::InputClosed { .. }
             | AgentError::InvalidLine { .. }
             | AgentError::InputBacklog { .. }
+            | AgentError::InvalidSetting { .. }
+            | AgentError::TurnRunning { .. }
             | AgentError::Io { .. } => ErrorKind::Other,
         }
     }
@@ -145,6 +152,8 @@ impl fmt::Display for AgentError {
             AgentError::InvalidLine { runtime, bytes, reason } => write!(f, "a line of {bytes} bytes for {runtime} was refused: {reason}"),
             AgentError::InputBacklog { runtime } => write!(f, "{runtime} is not reading its input; the line was not queued"),
             AgentError::Io { runtime, action, detail } => write!(f, "could not {action} {runtime}: {detail}"),
+            AgentError::InvalidSetting { setting, bytes, reason } => write!(f, "the {setting} of {bytes} bytes was refused: {reason}"),
+            AgentError::TurnRunning { runtime } => write!(f, "{runtime} is still answering; stop the turn or wait for its end before sending"),
             AgentError::Reported { detail, .. } => f.write_str(detail),
         }
     }

@@ -452,6 +452,12 @@ impl RuntimeProcess {
         self.tail.lock().unwrap_or_else(PoisonError::into_inner).render(&self.scrub, usize::MAX)
     }
 
+    /// `text` with every occurrence of a secret this runtime was given replaced by `<redacted>`,
+    /// for what an adapter shows from the runtime's standard output, which is not scrubbed.
+    pub fn redact(&self, text: String) -> String {
+        crate::output::scrub(text, &self.scrub)
+    }
+
     /// The error for a runtime that ended as `exit`: [`AgentError::Exited`] or
     /// [`AgentError::Crashed`], with at most the last [`crate::MAX_DETAIL_BYTES`] of the error
     /// stream, starting at a line, secrets replaced.
