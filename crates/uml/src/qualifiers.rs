@@ -177,7 +177,7 @@ fn qualifier_add(ctx: &mut C<'_>, p: &Params) -> R {
             .ok_or_else(|| refuse("at", format!("{at} is past the end of {count} qualifiers; a place from 0 to {count}, or -1 for the end")))?,
     };
     let at = u32::try_from(at).map_err(|_| refuse("at", format!("{at} is too far; a place from 0 to {count}, or -1 for the end")))?;
-    let ty = crate::members::resolve_type(ctx.doc, "type", text(p, "type"))?;
+    let ty = crate::members::resolve_type(ctx.doc, "type", text(p, "type"), None)?;
     let q = ctx.doc.create(PROPERTY).map_err(fail)?;
     set_name(ctx.doc, q, name)?;
     ctx.doc.set(q, typed_element::TYPE, ty.map_or(Value::Null, Value::Ref)).map_err(fail)?;
@@ -200,7 +200,7 @@ fn qualifier_set(ctx: &mut C<'_>, p: &Params) -> R {
         check_multiplicity(p)?;
     }
     let ty = match p.str("type") {
-        Some(t) => crate::members::resolve_type(ctx.doc, "type", t)?,
+        Some(t) => crate::members::resolve_type(ctx.doc, "type", t, None)?,
         None => one(ctx.doc, q, typed_element::TYPE),
     };
     set_name(ctx.doc, q, &name)?;

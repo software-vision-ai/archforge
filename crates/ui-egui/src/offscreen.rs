@@ -176,6 +176,16 @@ pub enum Screen {
     /// Order, `nested` after its name; on the diagram its card is tied to Order's by the line ending
     /// in ⊕ at Order; it is selected, Properties showing its Owner, Order (AR-132, D2).
     WorkspaceNestedClassifiers,
+    /// The sample class model with Repository a template of T : Class and Key : DataType =
+    /// Integer, its signature box over its card's top-right corner; Repository selected with the
+    /// template parameter editor open on Key (AR-130, C1).
+    WorkspaceTemplate,
+    /// The same, the editor's Kind menu open: the supported kinds, Data type ticked, then Value and
+    /// Operation disabled, saying not yet (AR-130, C4).
+    WorkspaceTemplateKinds,
+    /// The same, OrderRepository binding Key to Integer, and Key's removal refused under the rows
+    /// with Show the binding (AR-130, C5).
+    WorkspaceTemplateInUse,
     /// The user manual's class-model guide, first step: the root package's diagram Commerce with
     /// Customer (its name typed) and Order, a draft row open on Order's card with `number :
     /// Integer` typed.
@@ -566,6 +576,11 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
         shell.adopt_project();
         crate::uml_ui::open_sample(&mut shell)?;
         sample_generalization_sets(&mut shell)?;
+    }
+    if matches!(screen, Screen::WorkspaceTemplate | Screen::WorkspaceTemplateKinds | Screen::WorkspaceTemplateInUse) {
+        shell.adopt_project();
+        crate::uml_ui::open_sample(&mut shell)?;
+        sample_template(&mut shell, screen)?;
     }
     if screen == Screen::WorkspaceQualifiers || screen == Screen::WorkspaceQualifierRefused {
         shell.adopt_project();
@@ -1136,6 +1151,26 @@ fn sample_generalization_sets(shell: &mut Shell) -> Result<(), String> {
     shell.canvas.fit_pending = false;
     shell.canvas.zoom = 0.75;
     shell.canvas.pan = egui::vec2(-470.0, -230.0);
+    Ok(())
+}
+
+/// In the sample class model, Repository made a template of T and Key, selected, with the editor
+/// open on Key; its Kind menu open for `WorkspaceTemplateKinds`; for `WorkspaceTemplateInUse`
+/// OrderRepository binding it and Key's removal refused (AR-130).
+fn sample_template(shell: &mut Shell, screen: Screen) -> Result<(), String> {
+    let in_use = screen == Screen::WorkspaceTemplateInUse;
+    let (repo, [_, key]) = crate::uml_ui::put_repository(shell, in_use)?;
+    shell.state.show_panel(crate::state::Panel::Properties);
+    crate::uml_templates::open(shell, repo, Some(key));
+    if in_use {
+        crate::uml_templates::remove_sample(shell);
+    } else if screen == Screen::WorkspaceTemplateKinds {
+        shell.panels.menu = Some(crate::panels::Menu::TemplateKind);
+    }
+    shell.panels.editors_for = Some(repo);
+    shell.canvas.fit_pending = false;
+    shell.canvas.zoom = 0.85;
+    shell.canvas.pan = egui::vec2(-280.0, -420.0);
     Ok(())
 }
 

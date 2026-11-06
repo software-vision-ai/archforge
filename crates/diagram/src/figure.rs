@@ -40,6 +40,9 @@ pub struct Card {
     /// What its name row says in braces after the name, as notation, never translated: `{final}`
     /// for a classifier nothing may specialize. None for nothing.
     pub braces: Option<String>,
+    /// The rows of its template signature, drawn in a dashed box over its top-right corner, one
+    /// parameter each in their order: a UML template (AR-130). Empty for none.
+    pub template: Vec<String>,
 }
 
 /// The colours a card is drawn in.

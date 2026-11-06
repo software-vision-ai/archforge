@@ -852,6 +852,59 @@ owner, `uml.nested.list` lists what a classifier nests and `uml.classifier.owner
 classifier may go, with the reasons. The existing `uml.class.move` and its siblings still move a
 classifier, a nested one included, into a package.
 
+### Templates
+
+A *template* is a class, an interface or a data type written in terms of *parameters* it leaves
+open: a *Repository* of some item type `T` found by some key type `Key`. A classifier becomes a
+template when it gets its first parameter and stops being one when its last goes.
+
+- **Add a parameter.** Select the class and press **+** in **Template parameters** in
+  **Properties**. The editor takes its **Name**, its **Kind**, what it **Constrained to** and its
+  **Default**, and a line under the fields says what that asks of an argument, such as *Arguments
+  for Key must be data types. Bindings that leave it out use Integer.* **Apply** (or Enter in the
+  name) adds it as one step you can undo; **Cancel** or Escape leaves the model as it was. The
+  pencil on a row, or a double click, opens a parameter again; in its editor the bin removes it and
+  the arrows move it up and down the list.
+- **Kinds.** A parameter stands for a **Class**, an **Interface**, a **Data type**, an
+  **Enumeration** or a **Primitive type**. **Value** and **Operation** parameters are listed in the
+  menu but disabled, saying *not yet*: they are not supported in this version, and no other kind is
+  used in their place.
+- **Constrained to** narrows the arguments to one classifier of the kind and those that specialise
+  it; **Any** leaves them open. **Default** is the argument a binding that leaves the parameter out
+  uses: a classifier of the kind that fits the constraint, so a *Data type* parameter takes
+  *Integer* or your own *Money*, never the class *Order*. The menus offer only what fits.
+- **Using a parameter.** Inside the template, the type menus of its attributes, operations and
+  parameters offer its template parameters first, each marked *template parameter*: `- items : T
+  [*]`, `+ find(key : Key) : T`. No other classifier can use them, and they never appear in
+  **Models**, the search or a diagram on their own.
+- **On a diagram** the card shows the signature in a dashed box over its top-right corner, one
+  parameter a line, such as `T : Class` and `Key : DataType = Integer`; a constraint follows `>`.
+  Every diagram that shows the template shows the same box. **Models** writes *template* after its
+  name, and **Properties** says *Class · template, 2 parameters*.
+- **Identity.** Renaming a parameter, moving it or changing its default keeps it the same
+  parameter: every member typed by it follows, and so does every binding. Changing its kind keeps
+  the parameter too, and the members typed by it follow.
+- **What is refused.** A name another parameter of the template has, whatever the case: *Repository
+  already has a template parameter named T. Pick another name.* A default that does not fit is
+  refused under **Default**. The reason shows in the editor, the editor stays open, and nothing
+  reaches the model or the undo history.
+- **Bindings.** Another class can *bind* a template, giving each parameter an argument. A parameter
+  a binding uses cannot be removed: the bin says, for example, *OrderRepository binds Key ->
+  Integer. Change or remove that binding first, then remove Key.*, under the rows, and **Show the
+  binding** selects the element that binds it. Its kind or constraint cannot change so that an
+  argument no longer fits either. Drawing bindings comes in a later version; deleting a template
+  deletes the bindings to it.
+
+<!-- picture: workspace-template light | Repository with its signature box T : Class and Key : DataType = Integer over its card's top-right corner, items : T [*], find(key : Key) : T and save(item : T) on the card; Properties shows Template parameters · 2 with the editor open on Key: Kind Data type, Constrained to Any, Default Integer -->
+
+<!-- picture: workspace-template-kinds light | The same, the Kind menu open: Class, Interface, Data type ticked, Enumeration and Primitive type, then Value and Operation disabled, saying not yet -->
+
+<!-- picture: workspace-template-in-use light | OrderRepository binds Repository: Key's removal is refused under the rows, naming the binding, with Show the binding under it -->
+
+For agents, `uml.template-parameter.add`, `.set` and `.move` add, change and move a parameter,
+`uml.template-parameter.list` lists a classifier's parameters with the bindings that use them, and
+`element.remove` removes one.
+
 ### Cards
 
 A card grows to show every member you add. A card you made shorter by hand says how many rows it

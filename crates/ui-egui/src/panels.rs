@@ -89,6 +89,10 @@ pub struct State {
     pub ends: Option<crate::uml_relate::EndsEdit>,
     /// An association end's qualifier editor (AR-127).
     pub qualifier: Option<crate::uml_qualifiers::QualifierEdit>,
+    /// A classifier's template parameter editor, and a removal refused while a binding uses the
+    /// parameter (AR-130).
+    pub template: Option<crate::uml_templates::TemplateEdit>,
+    pub template_in_use: Option<crate::uml_templates::InUse>,
     /// The body's scroll: how far it is scrolled, how tall its content was last
     /// frame, what it was scrolled for (a new panel or selection starts at the top), the editors
     /// open last frame, whether an editor that just opened is still to be brought into view, and
@@ -116,6 +120,7 @@ fn open_editors(s: &State) -> Vec<Option<Option<Uuid>>> {
         s.member.as_ref().map(|e| e.target),
         s.constraint.as_ref().map(|e| e.target),
         s.qualifier.as_ref().map(|e| e.target),
+        s.template.as_ref().map(|e| e.target),
     ]
 }
 
@@ -243,6 +248,10 @@ pub enum Menu {
     EndRedefines(usize),
     /// A qualifier editor's type (AR-127).
     QualifierType,
+    /// A template parameter editor's kind, constraint and default (AR-130).
+    TemplateKind,
+    TemplateConstraint,
+    TemplateDefault,
     /// A classifier's owner, a package or a classifier (AR-132), and the kinds its Nested
     /// classifiers `+` offers.
     ClassOwner,
@@ -377,6 +386,7 @@ pub fn retain_valid(state: &mut State, store: &Store) {
     crate::uml_panel::retain_valid(&mut state.member, store);
     crate::uml_constraints::retain_valid(&mut state.constraint, store);
     crate::uml_qualifiers::retain_valid(&mut state.qualifier, store);
+    crate::uml_templates::retain_valid(&mut state.template, &mut state.template_in_use, store);
     if state.ends.as_ref().is_some_and(|e| store.by_uuid(e.association).is_none()) {
         state.ends = None;
     }
@@ -820,6 +830,8 @@ pub struct TypeChoices {
     pub project: Option<Uuid>,
     pub revision: u64,
     pub language: &'static str,
+    /// The classifier whose member is typed, whose template parameters the menu offers (AR-130).
+    pub within: Option<Uuid>,
     pub labels: Vec<String>,
     pub values: Vec<String>,
     pub notes: Vec<String>,
@@ -1379,6 +1391,10 @@ fn close_editors(shell: &mut Shell) {
     if panels.qualifier.as_ref().is_some_and(|e| !e.opened) {
         panels.qualifier = None;
     }
+    if panels.template.as_ref().is_some_and(|e| !e.opened) {
+        panels.template = None;
+    }
+    panels.template_in_use = None;
 }
 
 /// Opens the column editor on `target`, or on a column to add to `entity`.

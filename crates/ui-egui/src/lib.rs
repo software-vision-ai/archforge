@@ -53,6 +53,7 @@ mod uml_panel;
 mod uml_qualifiers;
 mod uml_relate;
 mod uml_sets;
+mod uml_templates;
 mod uml_ui;
 pub mod ux;
 pub mod widgets;

@@ -104,8 +104,24 @@ through `element.remove`; `uml.association-class.add` (AR-125): one AssociationC
 classes, owning both its ends as an association does, its ends set with `uml.association.set-end`,
 its members with the member commands, renamed and moved with `uml.association-class.rename` and
 `.move` among its package's classifiers, refused at anything but a class; nothing specializes it),
-`commands::going_with` (the relationships that go with classifiers, an association class's own
-among them), `names::{kind, clash, CLASSIFIER}` (AR-208: which elements may share a
+`templates::{specs, signature, parameters, is_template, is_parameter, template_of, element_of,
+parameter_of, is_parameter_element, parameter_element_problem, type_scope_problem, kind_of,
+constraint_of, default_of, parameter_name, parameter_text, signature_rows, name_clash,
+substitutions, binding_of, bound_element, actual_of, users, bindings_to, removal_problem, fits,
+parameter_json, parameters_json, can_be_template, Kind, TEMPLATES, MAX_PARAMETERS}` (AR-130:
+`uml.template-parameter.{add, set, move, list}`; a class, an interface or a data type made a
+template by its first ClassifierTemplateParameter, its RedefinableTemplateSignature made with the
+first and removed with the last; each parameter owning a classifier of its kind (class, interface,
+data type, enumeration or primitive type; value and operation refused as not supported yet, never
+converted), named as the parameter, constrained to at most one classifier of its kind, with a
+default of its kind that fits the constraint (UML's `isCompatibleWith`), `allowSubstitutable`
+false; names told apart across the signature by the shared rule of `names`; its identity, and
+what it types, kept across rename, reorder and a change of kind; that classifier types only its
+template's own members (`members` refuses it elsewhere) and is never listed, placed or edited as
+one of the model's; a parameter a binding's substitution names (`formal`) never removed, nor
+changed to a kind or constraint the binding's argument would not fit; removed through
+`element.remove`; the card's `template` rows drawn as the signature box), `commands::going_with` (the relationships that go with classifiers, an association class's own
+among them, and the bindings to a template), `names::{kind, clash, CLASSIFIER}` (AR-208: which elements may share a
 name in one owner, as UML has it: two of one kind never, whatever the case; every classifier is one kind, a package, a
 property, an operation, a parameter, a literal and a generalization set each one of their own, relationships and constraints
 labels that never clash; the check a project gets as it opens and every command that names, adds or moves an element ask this
@@ -139,7 +155,12 @@ the kinds a skill aims at; inheritance down the package tree with an override by
 going with its element, a nested package's too, and back with undo. `tests/generalization_sets.rs` (AR-129): a set made, renamed, made complete and disjoint, given and
 losing members, each one undo step; a mixed selection and the other wrong sets refused, changing nothing; a generalization
 in two sets; a member's reconnection refused; a set emptied by a deletion going in the same step; its label placed on two
-diagrams; rows read back identical; the sweep. `tests/qualifiers.rs` (AR-127): qualifiers added, edited, moved and removed, each one undo
+diagrams; rows read back identical; the sweep. `tests/templates.rs` (AR-130): parameters added, edited,
+moved and removed, each one undo step, the signature made and gone with them; identity and the
+members typed by a parameter kept across rename, reorder and kind; value and operation refused;
+defaults and constraints checked by kind; a parameter's classifier kept the template's own; a
+binding built in the store keeping its parameters; the box on two diagrams; rows read back
+identical; the sweep. `tests/qualifiers.rs` (AR-127): qualifiers added, edited, moved and removed, each one undo
 step; a duplicate name and the other wrong edits refused, changing nothing; a built-in type or the
 model's own; kept apart from attributes and roles and gone with their association; kept through
 renaming and reconnecting; the box on two diagrams; rows read back identical; the sweep. `tests/modifiers.rs` (AR-126):

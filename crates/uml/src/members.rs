@@ -327,8 +327,9 @@ fn ensure_types_package(store: &mut Store) -> Result<Obj, CommandError> {
 /// The type `value` names: empty for none, an element's id, or a built-in type's name, which is
 /// made in the package Types the first time it is used. Where Types holds a classifier named like
 /// it in another case or of another kind (from an older project), the built-in type is not made
-/// beside it: the refusal names that one and asks for it to be renamed.
-pub(crate) fn resolve_type(store: &mut Store, key: &str, value: &str) -> Result<Option<Obj>, CommandError> {
+/// beside it: the refusal names that one and asks for it to be renamed. A template parameter's
+/// classifier types only the members of its template, `within` (AR-130).
+pub(crate) fn resolve_type(store: &mut Store, key: &str, value: &str, within: Option<Obj>) -> Result<Option<Obj>, CommandError> {
     let value = value.trim();
     if value.is_empty() {
         return Ok(None);
@@ -364,6 +365,9 @@ pub(crate) fn resolve_type(store: &mut Store, key: &str, value: &str) -> Result<
     let class = store.class_of(t).map_err(fail)?;
     if !store.universe().conforms(class, TypeRef::Class(TYPE)) {
         return Err(refuse(key, format!("{value} is not a type")));
+    }
+    if let Some(why) = crate::templates::type_scope_problem(store, t, within) {
+        return Err(refuse(key, why));
     }
     Ok(Some(t))
 }
@@ -511,7 +515,7 @@ fn attribute_add(ctx: &mut C<'_>, p: &Params) -> R {
     let name = text(p, "name");
     check_name(ctx.doc, c, name, None)?;
     let vis = visibility(ctx.doc, c, p, "visibility")?;
-    let ty = resolve_type(ctx.doc, "type", text(p, "type"))?;
+    let ty = resolve_type(ctx.doc, "type", text(p, "type"), Some(c))?;
     let modifiers = attribute_modifiers(ctx.doc, p, c, None, name, ty, typed_bounds(p)?)?;
     let a = ctx.doc.create(PROPERTY).map_err(fail)?;
     set_name(ctx.doc, a, name)?;
@@ -546,7 +550,7 @@ fn attribute_set(ctx: &mut C<'_>, p: &Params) -> R {
         None => ctx.doc.get(a, named_element::VISIBILITY).map_err(fail)?,
     };
     let ty = match p.str("type") {
-        Some(t) => resolve_type(ctx.doc, "type", t)?,
+        Some(t) => resolve_type(ctx.doc, "type", t, Some(c))?,
         None => one(ctx.doc, a, typed_element::TYPE),
     };
     let bounds = match p.str("multiplicity") {
@@ -596,8 +600,8 @@ fn operation_move(ctx: &mut C<'_>, p: &Params) -> R {
 }
 
 /// Gives an operation the parameters under `parameters` and the return type under `returns`,
-/// replacing the ones it had.
-fn set_signature(store: &mut Store, op: Obj, p: &Params) -> Result<(), CommandError> {
+/// replacing the ones it had; a template parameter types them only in its template, `owner`.
+fn set_signature(store: &mut Store, owner: Obj, op: Obj, p: &Params) -> Result<(), CommandError> {
     let items = p.get("parameters").and_then(Json::as_array).cloned().unwrap_or_default();
     if items.len() > MAX_PARAMETERS {
         return Err(refuse("parameters", format!("at most {MAX_PARAMETERS} parameters")));
@@ -613,11 +617,11 @@ fn set_signature(store: &mut Store, op: Obj, p: &Params) -> Result<(), CommandEr
             return Err(refuse("parameters", format!("two parameters are named {name}")));
         }
         names.push(name.clone());
-        let ty = resolve_type(store, "parameters", item.get("type").and_then(Json::as_str).unwrap_or_default())?;
+        let ty = resolve_type(store, "parameters", item.get("type").and_then(Json::as_str).unwrap_or_default(), Some(owner))?;
         let m = item.get("multiplicity").and_then(Json::as_str).unwrap_or_default().to_string();
         made.push((name, ty, m));
     }
-    let returns = resolve_type(store, "returns", text(p, "returns"))?;
+    let returns = resolve_type(store, "returns", text(p, "returns"), Some(owner))?;
     for old in list(store, op, operation::OWNED_PARAMETER) {
         store.destroy(old).map_err(fail)?;
     }
@@ -658,7 +662,7 @@ fn set_operation(store: &mut Store, owner: Obj, op: Obj, p: &Params) -> Result<(
     store.set(op, feature::IS_STATIC, Value::Bool(p.bool("static").unwrap_or(false))).map_err(fail)?;
     store.set(op, behavioral_feature::IS_ABSTRACT, Value::Bool(p.bool("abstract").unwrap_or(false))).map_err(fail)?;
     store.set(op, crate::redefinable_element::IS_LEAF, Value::Bool(leaf)).map_err(fail)?;
-    set_signature(store, op, p)
+    set_signature(store, owner, op, p)
 }
 
 /// `uml.operation.add`: an operation of a class, an interface, a data type or an association class,
@@ -879,6 +883,10 @@ fn class_get(ctx: &mut C<'_>, p: &Params) -> R {
             .collect();
         fields.insert("nested".to_string(), Json::Array(nested));
     }
+    // Its template parameters, in their order (AR-130).
+    if let Some(fields) = out.as_object_mut() {
+        fields.insert("template_parameters".to_string(), crate::templates::parameters_json(store, c));
+    }
     // Its constraints, stored as written and never evaluated (AR-133).
     let rules: Vec<Json> = crate::constraints::constraints_of(store, c).into_iter().map(|k| crate::constraints::constraint_json(store, k)).collect();
     if let Some(fields) = out.as_object_mut() {
@@ -907,6 +915,8 @@ fn type_list(ctx: &mut C<'_>, _: &Params) -> R {
     let held: Vec<Json> = store
         .alive()
         .filter(|o| store.class_of(*o).is_ok_and(|c| store.universe().conforms(c, TypeRef::Class(TYPE))))
+        // A template parameter's classifier types its template's members alone (AR-130).
+        .filter(|t| !crate::templates::is_parameter_element(store, *t))
         .map(|t| json!({ "id": uuid_of(store, t).unwrap_or_default(), "name": name_of(store, t) }))
         .collect();
     Ok(json!({ "built_in": BUILT_IN, "types": held }))

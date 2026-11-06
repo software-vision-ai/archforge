@@ -905,6 +905,36 @@ str		Counted per qualifier value of the other end; shown next to {class}.	Contad
 str		One {owner} and one {qualifiers} pick {multiplicity} {target}.	Um {owner} e um {qualifiers} escolhem {multiplicity} {target}.
 str		Type a name: a qualifier without one picks nothing.	Escreva um nome: um qualificador sem nome não escolhe nada.
 str		This end already has a qualifier named {name}. Pick another name.	Esta ponta já tem um qualificador chamado {name}. Escolha outro nome.
+# Templates (AR-130)
+str		Template parameters · {n}	Parâmetros de modelo · {n}
+str		Add template parameter	Adicionar parâmetro de modelo
+str		Constrained to	Restrito a
+str		Any	Qualquer
+str		Value	Valor
+str		Parameter kind	Tipo de parâmetro
+str		not yet	ainda não
+str		{kind} template parameters are not supported yet.	Os parâmetros de modelo do tipo {kind} ainda não são suportados.
+str		this parameter	este parâmetro
+str		Arguments for {name} must be {constraint} or specialise it.	Os argumentos de {name} têm de ser {constraint} ou especializá-lo.
+str		Arguments for {name} must be classes.	Os argumentos de {name} têm de ser classes.
+str		Arguments for {name} must be interfaces.	Os argumentos de {name} têm de ser interfaces.
+str		Arguments for {name} must be data types.	Os argumentos de {name} têm de ser tipos de dados.
+str		Arguments for {name} must be enumerations.	Os argumentos de {name} têm de ser enumerações.
+str		Arguments for {name} must be primitive types.	Os argumentos de {name} têm de ser tipos primitivos.
+str		Bindings that leave it out use {default}.	As vinculações que o omitem usam {default}.
+str		Renaming or reordering keeps every binding.	Mudar o nome ou reordenar mantém todas as vinculações.
+str		Show the binding	Mostrar a vinculação
+str		Show the binding selects the element that binds it.	Mostrar a vinculação seleciona o elemento que o vincula.
+str		Renaming {name} or changing its default is allowed: bindings follow the parameter, not its name.	Mudar o nome de {name} ou alterar o seu valor predefinido é permitido: as vinculações seguem o parâmetro, não o nome.
+str		{bound} binds {name} -> {actual}. Change or remove that binding first, then remove {name}.	{bound} vincula {name} -> {actual}. Altere ou remova primeiro essa vinculação e depois remova {name}.
+plural		{n} more binding uses it too.	Mais {n} vinculação também o usa.|Mais {n} vinculações também o usam.
+str		Type a name: a template parameter without one stands for nothing.	Escreva um nome: um parâmetro de modelo sem nome não representa nada.
+str		{template} already has a template parameter named {name}. Pick another name.	{template} já tem um parâmetro de modelo chamado {name}. Escolha outro nome.
+str		{default} does not fit {name}: pick a default its arguments could be.	{default} não serve para {name}: escolha um valor predefinido que possa ser um dos seus argumentos.
+str		{bound} binds {name} -> {actual}, which would no longer fit. Change or remove that binding first.	{bound} vincula {name} -> {actual}, que deixaria de servir. Altere ou remova primeiro essa vinculação.
+str		template parameter	parâmetro de modelo
+str		template	modelo
+plural		{kind} · template, {n} parameter · model, in every diagram	{kind} · modelo, {n} parâmetro · modelo, em todos os diagramas|{kind} · modelo, {n} parâmetros · modelo, em todos os diagramas
 str		From	De
 str		General	Geral
 str		Generalization	Generalização

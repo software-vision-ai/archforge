@@ -109,6 +109,18 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   one at another place among its end's. A name another qualifier of the end has, whatever the case,
   is refused. `uml_relationship_list` gives each end's qualifiers. A qualifier is removed with
   `element_remove`.
+- **Templates**: `uml_template_parameter_add` gives a class, an interface or a data type a
+  template parameter (`kind` class, interface, data-type, enumeration or primitive-type, an
+  optional `constraint` and `default`, each a classifier's id or a built-in type's name), making it
+  a template; `uml_template_parameter_set` changes one, a field left out keeping its value;
+  `uml_template_parameter_move` puts one at another place; `uml_template_parameter_list` lists them
+  with the bindings that use them, and `uml_class_get` gives them too. The kinds `value` and
+  `operation` are refused as not supported yet, never turned into another kind. A name another
+  parameter of the template has, whatever the case, a constraint of another kind and a default that
+  does not fit are refused. A parameter's `element` types the template's own attributes,
+  operations and parameters, and no other classifier's. A parameter is removed with
+  `element_remove`, refused while a binding uses it; the template's last parameter takes its
+  signature along.
 - **Generalization sets**: `uml_generalization_set_add` groups generalizations to one general
   class, complete or incomplete and disjoint or overlapping; `uml_generalization_set_set` renames
   it, changes either flag, and adds or takes out members; `uml_generalization_set_place` puts its

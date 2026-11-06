@@ -230,6 +230,7 @@ pub fn card(store: &Store, c: Obj, diagram: Obj) -> Option<Card> {
         tone: Tone::Plain,
         slanted: is_class && flag(store, c, class::IS_ABSTRACT),
         braces: braces(store, c),
+        template: crate::templates::signature_rows(store, c),
     })
 }
 
@@ -285,6 +286,7 @@ fn primitive_type_card(store: &Store, t: Obj, diagram: Obj) -> Card {
         tone: Tone::Plain,
         slanted: false,
         braces: braces(store, t),
+        template: Vec::new(),
     }
 }
 
@@ -315,6 +317,7 @@ fn enumeration_card(store: &Store, e: Obj, diagram: Obj) -> Card {
         tone: Tone::Plain,
         slanted: false,
         braces: braces(store, e),
+        template: Vec::new(),
     }
 }
 
@@ -496,6 +499,7 @@ fn constraint_card(store: &Store, c: Obj, diagram: Obj) -> Card {
         tone,
         slanted: false,
         braces: None,
+        template: Vec::new(),
     }
 }
 
@@ -512,5 +516,6 @@ fn package_card(store: &Store, p: Obj) -> Card {
         tone: Tone::Tabbed,
         slanted: false,
         braces: None,
+        template: Vec::new(),
     }
 }

@@ -255,6 +255,9 @@ fn owner_param(store: &Store, p: &Params, key: &str) -> Result<Obj, CommandError
         .and_then(|u| store.by_uuid(u))
         .filter(|o| store.is_alive(*o))
         .ok_or_else(|| refuse(key, format!("there is no package or classifier {}", crate::commands::short(id))))?;
+    if let Some(why) = crate::templates::parameter_element_problem(store, obj) {
+        return Err(refuse(key, why));
+    }
     match store.class_of(obj).ok() {
         Some(c) if c == PACKAGE || crate::is_classifier(c) => Ok(obj),
         _ => Err(refuse(key, format!("{id} is neither a package nor a classifier"))),

@@ -135,11 +135,27 @@ fn model_types(store: &Store) -> Vec<(String, String)> {
             })
         })
         .filter(|t| !built_in(store, *t))
+        // A template parameter's classifier is offered only inside its template (AR-130).
+        .filter(|t| !archforge_uml::templates::is_parameter_element(store, *t))
         .filter_map(|t| Some((store.uuid(t).ok()?.to_string(), name(store, t))))
         .filter(|(_, n)| !n.is_empty())
         .collect();
     out.sort_by_key(|a| a.1.to_lowercase());
     out
+}
+
+/// The template parameters of `within`, when it is a template, as a type menu offers them: each by
+/// its name and its classifier's id, in their order (AR-130).
+fn parameter_types(store: &Store, within: Option<Obj>) -> Vec<(String, String)> {
+    within
+        .map(|c| archforge_uml::templates::parameters(store, c))
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|p| {
+            let e = archforge_uml::templates::element_of(store, p)?;
+            Some((name(store, e), store.uuid(e).ok()?.to_string()))
+        })
+        .collect()
 }
 
 /// Opens the editor of `kind` on `target`, or on a new member of `class`.
@@ -277,6 +293,10 @@ pub(crate) fn class_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
     // The classifiers it nests, a class's or an interface's (AR-132, D1).
     if shell.session.as_ref().is_some_and(|s| crate::uml_nesting::owns(s.doc(), class)) {
         y = crate::uml_nesting::nested_section(shell, ui, p, r, y, class, class_id);
+    }
+    // Its template parameters, a class's, an interface's or a data type's (AR-130, C1).
+    if shell.session.as_ref().is_some_and(|s| s.doc().class_of(class).is_ok_and(archforge_uml::templates::can_be_template)) {
+        y = crate::uml_templates::section_of(shell, ui, p, r, y, class, class_id);
     }
     if kind == Classifier::Enumeration {
         y = members_section(shell, ui, p, r, y, class, class_id, MemberKind::Literal);
@@ -674,19 +694,22 @@ pub(crate) fn members_section(
     y + 10.0
 }
 
-/// What a type menu offers, each as it reads and as the commands take it: None, every built-in
-/// type by its name, which the commands always resolve to the one in Types, then the model's own
-/// by name. A type of the model's own named like a built-in one never hides it: both are offered,
-/// told apart by [`type_notes`].
-pub(crate) fn type_choices(store: &Store) -> Vec<(String, String)> {
+/// What a type menu offers, each as it reads and as the commands take it: None, the template
+/// parameters of `within` (the classifier whose member is typed) when it is a template, nearest
+/// first (AR-130), every built-in type by its name, which the commands always resolve to the one
+/// in Types, then the model's own by name. A type of the model's own named like a built-in one
+/// never hides it: both are offered, told apart by [`type_notes`].
+pub(crate) fn type_choices(store: &Store, within: Option<Obj>) -> Vec<(String, String)> {
     std::iter::once((tr("None"), String::new()))
+        .chain(parameter_types(store, within))
         .chain(BUILT_IN.iter().map(|b| (b.to_string(), b.to_string())))
         .chain(model_types(store).into_iter().map(|(id, n)| (n, id)))
         .collect()
 }
 
 /// The muted note after each of `choices` (from [`type_choices`]) in a type menu, empty for most:
-/// where several choices share a name, whatever the case, each says where it is from, "built-in"
+/// a template parameter always says so (AR-130); where several choices share a name, whatever the
+/// case, each says where it is from, "built-in"
 /// for a built-in type and its package's path below the root package (every package's top) for
 /// one of the model's own, so the entries are told apart. Each is given by its parts, the path's
 /// names, so a long one folds from its front.
@@ -700,6 +723,9 @@ pub(crate) fn type_notes(store: &Store, choices: &[(String, String)]) -> Vec<Vec
     choices
         .iter()
         .map(|(label, value)| {
+            if Uuid::parse(value).and_then(|u| store.by_uuid(u)).is_some_and(|t| archforge_uml::templates::is_parameter_element(store, t)) {
+                return vec![tr("template parameter")];
+            }
             if value.is_empty() || counts.get(&label.to_lowercase()).copied().unwrap_or(0) < 2 {
                 return Vec::new();
             }
@@ -719,8 +745,9 @@ pub(crate) fn type_notes(store: &Store, choices: &[(String, String)]) -> Vec<Vec
 /// Every type named `name`, ignoring case, as the commands take it: the built-in type of that
 /// name, and each of the model's own types, whichever package holds it. Typed where several share
 /// the name, it is refused and the menu, which tells them apart, picks one: a built-in type is
-/// never taken for one of the model's own nor one of those for it.
-pub(crate) fn types_named(store: &Store, name: &str) -> Vec<String> {
+/// never taken for one of the model's own nor one of those for it. Inside a template, `within`, its
+/// parameters are types too (AR-130).
+pub(crate) fn types_named(store: &Store, name: &str, within: Option<Obj>) -> Vec<String> {
     let universe = store.universe();
     let own = store
         .alive()
@@ -729,29 +756,31 @@ pub(crate) fn types_named(store: &Store, name: &str) -> Vec<String> {
                 universe.conforms(c, TypeRef::Class(archforge_uml::TYPE)) && !universe.conforms(c, TypeRef::Class(archforge_uml::ASSOCIATION))
             })
         })
-        .filter(|t| !built_in(store, *t) && self::name(store, *t).eq_ignore_ascii_case(name))
+        .filter(|t| !built_in(store, *t) && !archforge_uml::templates::is_parameter_element(store, *t))
+        .filter(|t| self::name(store, *t).eq_ignore_ascii_case(name))
         .filter_map(|t| store.uuid(t).ok().map(|u| u.to_string()));
     let builtin = BUILT_IN.iter().find(|b| b.eq_ignore_ascii_case(name)).map(|b| b.to_string());
-    builtin.into_iter().chain(own).collect()
+    let params = parameter_types(store, within).into_iter().filter(|(n, _)| n.eq_ignore_ascii_case(name)).map(|(_, id)| id);
+    params.chain(builtin).chain(own).collect()
 }
 
-/// The open type menu's choices, built by [`type_choices`] only when the project, its state or the
-/// interface language changed since they were last built; taken out of the shell for the frame, to be handed back
-/// with [`keep_choices`].
-pub(crate) fn choices_for_menu(shell: &mut Shell) -> crate::panels::TypeChoices {
+/// The open type menu's choices for a member of `within`, built by [`type_choices`] only when the
+/// project, its state, the classifier or the interface language changed since they were last built;
+/// taken out of the shell for the frame, to be handed back with [`keep_choices`].
+pub(crate) fn choices_for_menu(shell: &mut Shell, within: Option<Uuid>) -> crate::panels::TypeChoices {
     let Some(session) = shell.session.as_ref() else { return crate::panels::TypeChoices::default() };
     let store = session.doc();
     let project = archforge_uml::commands::model(store).ok().and_then(|m| store.uuid(m).ok());
     let revision = session.revision();
     let language = crate::i18n::language();
     match shell.panels.type_choices.take() {
-        Some(kept) if kept.project == project && kept.revision == revision && kept.language == language => kept,
+        Some(kept) if kept.project == project && kept.revision == revision && kept.language == language && kept.within == within => kept,
         _ => {
-            let choices = type_choices(store);
+            let choices = type_choices(store, within.and_then(|w| store.by_uuid(w)));
             let note_parts = type_notes(store, &choices);
             let notes = note_parts.iter().map(|parts| parts.join(crate::panels::PATH_SEP)).collect();
             let (labels, values) = choices.into_iter().unzip();
-            crate::panels::TypeChoices { project, revision, language, labels, values, notes, note_parts }
+            crate::panels::TypeChoices { project, revision, language, within, labels, values, notes, note_parts }
         }
     }
 }
@@ -761,12 +790,14 @@ pub(crate) fn keep_choices(shell: &mut Shell, choices: crate::panels::TypeChoice
     shell.panels.type_choices = Some(choices);
 }
 
-/// The menu of a type select, when it is open; sets `ty` to the type picked.
-pub(crate) fn type_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Rect, id: &str, ty: &mut String, which: Menu) {
+/// The menu of a type select for a member of `within`, when it is open; sets `ty` to the type
+/// picked.
+#[allow(clippy::too_many_arguments, reason = "a menu is drawn for its field, id, value and the classifier typed in")]
+pub(crate) fn type_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Rect, id: &str, ty: &mut String, which: Menu, within: Option<Uuid>) {
     if shell.panels.menu != Some(which) {
         return;
     }
-    let choices = choices_for_menu(shell);
+    let choices = choices_for_menu(shell, within);
     if let Some(i) = crate::panels::menu_noted(shell, ui, p, field, id, &choices.labels, &choices.notes, &choices.note_parts) {
         *ty = choices.values.get(i).cloned().unwrap_or_default();
     }
@@ -992,13 +1023,14 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     {
         edit.visibility = i;
     }
+    let within = edit.class;
     for (field, id, which) in menus {
         let slot = match which {
             Menu::ParamType(i) => edit.params.get_mut(i).map(|p| &mut p.ty),
             _ => Some(&mut edit.ty),
         };
         if let Some(ty) = slot {
-            type_menu(shell, ui, p, field, &id, ty, which);
+            type_menu(shell, ui, p, field, &id, ty, which, Some(within));
         }
     }
     if let Some(m) = modifier_menus {

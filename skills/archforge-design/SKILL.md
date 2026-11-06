@@ -829,6 +829,31 @@ What is UML's own, beside the shared rules above.
   Deleting an owner from the model asks first, the dialog naming what it nests (`{n} nested
   classifiers go with it: Order::Priority.`), and takes them along with their relationships and
   cards in one step.
+- Templates (AR-130, design page 08, C1, C4 and C5). A class, an interface or a data type
+  becomes a template with its first parameter: `Template parameters · n` in its Properties, after
+  Nested classifiers, its `+` (`workspace.properties.class.templateParameters.add`) opening the
+  row editor; rows read `Key : DataType = Integer` with their pencil (a double click opens it too),
+  ids `workspace.properties.class.templateParameter.<k>` and `….<k>.name`, `.kind`, `.constraint`,
+  `.default`, `.remove`, `.up`, `.down`, `.cancel`, `.apply`. The editor holds Name and Kind side
+  by side, Constrained to (Any, or a classifier of the kind) and Default (None, or one of the kind
+  that fits the constraint) under them, a line saying what an argument must be ("Arguments for Key
+  must be data types. Bindings that leave it out use Integer. Renaming or reordering keeps every
+  binding."), the bin and the moves at its foot on the left, Cancel and Apply on the right. The
+  Kind menu, headed PARAMETER KIND, lists Class, Interface, Data type, Enumeration and Primitive
+  type, the current one ticked, then after a line Value and Operation, disabled with "not yet" at
+  their right and the reason on hover, never taken (`….kind.<kind>`). A name another parameter has,
+  whatever the case, and a default that does not fit are refused in a tinted box under the fields,
+  the field ringed. Removing a parameter a binding uses is refused under the rows on the danger
+  tint ("OrderRepository binds Key -> Integer. Change or remove that binding first, then remove
+  Key."), its row marked, with Show the binding (`….showBinding`); until bindings are drawn
+  (AR-131) it selects the element that binds it, and the line under it says so. The card shows the
+  signature in a dashed box in the secondary text colour on the surface, over its top-right corner
+  (28 past its right side, 24 above its top), one parameter a row in the caption style, drawn over
+  the selection (`workspace.canvas.node.<id>.signature`), on every diagram, at the detail zoom.
+  Models writes a muted `template` after its name; its kind line reads `Class · template, 2
+  parameters · model, in every diagram`. A parameter's classifier types its template's own members
+  alone: their type menus list its parameters first, after None, each noted `template parameter`.
+  Agents use `uml.template-parameter.add`, `.set`, `.move` and `.list`, and `element.remove`.
 
 On every line: a role, and a label at the line's middle, sit above a level stretch of the line and
 beside an upright one, never on the line or its mark.

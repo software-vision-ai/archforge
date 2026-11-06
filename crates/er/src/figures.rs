@@ -84,6 +84,7 @@ pub fn card(store: &Store, table: Obj, diagram: Obj) -> Option<Card> {
         tone: archforge_diagram::figure::Tone::Tinted,
         slanted: false,
         braces: None,
+        template: Vec::new(),
     })
 }
 

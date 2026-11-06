@@ -905,6 +905,36 @@ str		Counted per qualifier value of the other end; shown next to {class}.	按另
 str		One {owner} and one {qualifiers} pick {multiplicity} {target}.	一个 {owner} 和一个 {qualifiers} 选出 {multiplicity} 个 {target}。
 str		Type a name: a qualifier without one picks nothing.	请输入名称：没有名称的限定符什么也选不出。
 str		This end already has a qualifier named {name}. Pick another name.	此端已有名为 {name} 的限定符。请另选一个名称。
+# Templates (AR-130)
+str		Template parameters · {n}	模板参数 · {n}
+str		Add template parameter	添加模板参数
+str		Constrained to	约束为
+str		Any	任意
+str		Value	值
+str		Parameter kind	参数种类
+str		not yet	暂不支持
+str		{kind} template parameters are not supported yet.	{kind} 模板参数暂不支持。
+str		this parameter	此参数
+str		Arguments for {name} must be {constraint} or specialise it.	{name} 的实参必须是 {constraint} 或其特化。
+str		Arguments for {name} must be classes.	{name} 的实参必须是类。
+str		Arguments for {name} must be interfaces.	{name} 的实参必须是接口。
+str		Arguments for {name} must be data types.	{name} 的实参必须是数据类型。
+str		Arguments for {name} must be enumerations.	{name} 的实参必须是枚举。
+str		Arguments for {name} must be primitive types.	{name} 的实参必须是基本类型。
+str		Bindings that leave it out use {default}.	省略它的绑定使用 {default}。
+str		Renaming or reordering keeps every binding.	重命名或重新排序会保留所有绑定。
+str		Show the binding	显示绑定
+str		Show the binding selects the element that binds it.	“显示绑定”会选中绑定它的元素。
+str		Renaming {name} or changing its default is allowed: bindings follow the parameter, not its name.	可以重命名 {name} 或更改其默认值：绑定跟随参数，而不是其名称。
+str		{bound} binds {name} -> {actual}. Change or remove that binding first, then remove {name}.	{bound} 将 {name} 绑定为 -> {actual}。请先更改或删除该绑定，再删除 {name}。
+plural		{n} more binding uses it too.	另有 {n} 个绑定也在使用它。
+str		Type a name: a template parameter without one stands for nothing.	请输入名称：没有名称的模板参数不代表任何内容。
+str		{template} already has a template parameter named {name}. Pick another name.	{template} 已有名为 {name} 的模板参数。请换一个名称。
+str		{default} does not fit {name}: pick a default its arguments could be.	{default} 不适合 {name}：请选择可以作为其实参的默认值。
+str		{bound} binds {name} -> {actual}, which would no longer fit. Change or remove that binding first.	{bound} 将 {name} 绑定为 -> {actual}，修改后将不再适合。请先更改或删除该绑定。
+str		template parameter	模板参数
+str		template	模板
+plural		{kind} · template, {n} parameter · model, in every diagram	{kind} · 模板，{n} 个参数 · 模型，在所有图中
 str		From	从
 str		General	一般
 str		Generalization	泛化
