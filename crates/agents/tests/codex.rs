@@ -1639,21 +1639,38 @@ fn a_browser_sign_in_reads_the_account_and_signs_out() {
     std::fs::remove_dir_all(&base).unwrap();
 }
 
-/// A sign-in address on another host is refused, never handed to the browser; a renewal refused
-/// for an expired sign-in reads as expired.
+/// The fake's answers for the expiry check: the account reads as signed in with ChatGPT, and each
+/// renewal is refused, first for another reason that also says "revoked", then with codex 0.166.0's
+/// own words for a revoked renewal token (`REFRESH_TOKEN_INVALIDATED_MESSAGE`).
+const REFUSED_RENEWALS: &str = r#"
+on_login() { send '{"id":@ID@,"result":{"type":"chatgpt","loginId":"l","authUrl":"https://auth.openai.com.evil.example/x"}}'; }
+renewals=0
+on_account() {
+  case "$line" in
+    *refreshToken*)
+      renewals=$((renewals+1))
+      if [ "$renewals" = 1 ]; then send '{"id":@ID@,"error":{"code":-32603,"message":"application network permission was revoked"}}';
+      else send '{"id":@ID@,"error":{"code":-32603,"message":"Your access token could not be refreshed because your refresh token was revoked. Please log out and sign in again."}}'; fi ;;
+    *) send '{"id":@ID@,"result":{"account":{"type":"chatgpt","email":"p@example.com","planType":"pro"},"requiresOpenaiAuth":true}}' ;;
+  esac
+}
+"#;
+
+/// A sign-in address on another host is refused, never handed to the browser. A renewal Codex
+/// refuses with its own words for a sign-in that can no longer be renewed reads as expired; another
+/// refusal that merely says "revoked" stays an error.
 #[test]
 fn foreign_addresses_are_refused_and_expiry_is_read() {
     let base = scratch("foreign");
-    let body = format!(
-        "{ACCOUNT_BODY}\non_login() {{ send '{{\"id\":@ID@,\"result\":{{\"type\":\"chatgpt\",\"loginId\":\"l\",\"authUrl\":\"https://auth.openai.com.evil.example/x\"}}}}'; }}\n\
-         on_account() {{ case \"$line\" in *refreshToken*) send '{{\"id\":@ID@,\"error\":{{\"code\":-32600,\"message\":\"refresh token was revoked\"}}}}' ;; *) send '{{\"id\":@ID@,\"result\":{{\"account\":{{\"type\":\"chatgpt\",\"email\":\"p@example.com\",\"planType\":\"pro\"}},\"requiresOpenaiAuth\":true}}}}' ;; esac; }}"
-    );
-    let (runtime, account, _) = fake_codex(&base, &body);
+    let (runtime, account, _) = fake_codex(&base, &format!("{ACCOUNT_BODY}\n{REFUSED_RENEWALS}"));
     let mut accounts = CodexAccounts::open(&runtime, &account, SignIn::ChatGpt(KeyringAccess::default()), Default::default()).unwrap();
     let error = accounts.login_chatgpt().unwrap_err();
     assert!(error.to_string().contains("does not open"), "{error}");
     let queued: Vec<AccountEvent> = std::iter::from_fn(|| accounts.next_event(Duration::from_millis(50))).collect();
     assert!(!queued.iter().any(|e| matches!(e, AccountEvent::LoginStarted(_))), "nothing to open was queued: {queued:?}");
+    let error = accounts.check().unwrap_err();
+    assert_eq!(error.kind(), ErrorKind::Other, "{error}");
+    assert!(error.to_string().contains("application network permission was revoked"), "{error}");
     assert_eq!(accounts.check().unwrap().status, AccountStatus::Expired { email: Some("p@example.com".into()), plan: Some("pro".into()) });
     accounts.shutdown(Duration::from_secs(2)).unwrap();
     std::fs::remove_dir_all(&base).unwrap();

@@ -281,8 +281,13 @@ impl CodexAccounts {
     /// Who Codex is signed in as (`account/read`). With `refresh`, Codex renews a ChatGPT sign-in
     /// first, which reaches the sign-in service but no model.
     pub fn read(&mut self, refresh: bool) -> Result<AccountState, AgentError> {
+        self.read_account(refresh).map_err(|e| e.into_error("account/read"))
+    }
+
+    /// [`read`](Self::read), with Codex's refusal kept apart from every other failure.
+    fn read_account(&mut self, refresh: bool) -> Result<AccountState, Call> {
         let params = if refresh { json!({ "refreshToken": true }) } else { json!({}) };
-        let value = self.call("account/read", Some(params))?;
+        let value = self.exchange("account/read", &rpc::request_line(self.next_id, "account/read", Some(params)))?;
         let state = account_state(&value);
         if let AccountStatus::ChatGpt { email, plan, .. } = &state.status {
             self.last_chatgpt = Some((email.clone(), plan.clone()));
@@ -291,22 +296,23 @@ impl CodexAccounts {
     }
 
     /// The free check: the account as Codex reads it, and for a ChatGPT sign-in whether it can still
-    /// be renewed: a renewal refused with words of an expired or revoked sign-in reads as
-    /// [`AccountStatus::Expired`]. For an API key it says only that Codex holds one, not that the
-    /// key is valid: that shows only on a real request (a metered test, a turn, is a
+    /// be renewed: a renewal Codex refuses with its own failure for a sign-in that can no longer be
+    /// renewed ([`renewal_refused`]) reads as [`AccountStatus::Expired`]; any other refusal stays
+    /// the error it is, whatever its words. For an API key it says only that Codex holds one, not
+    /// that the key is valid: that shows only on a real request (a metered test, a turn, is a
     /// conversation's).
     pub fn check(&mut self) -> Result<AccountState, AgentError> {
         let state = self.read(false)?;
         if !matches!(state.status, AccountStatus::ChatGpt { .. }) {
             return Ok(state);
         }
-        match self.read(true) {
+        match self.read_account(true) {
             Ok(renewed) => Ok(renewed),
-            Err(AgentError::Reported { detail, .. }) if expired_words(&detail) => {
+            Err(Call::Refused(refusal)) if renewal_refused(&refusal) => {
                 let (email, plan) = self.last_chatgpt.clone().unwrap_or_default();
                 Ok(AccountState { status: AccountStatus::Expired { email, plan }, requires_openai_auth: state.requires_openai_auth })
             }
-            Err(e) => Err(e),
+            Err(e) => Err(e.into_error("account/read")),
         }
     }
 
@@ -472,10 +478,7 @@ impl CodexAccounts {
     /// know the method, else `Other`.
     fn call(&mut self, method: &'static str, params: Option<Value>) -> Result<Value, AgentError> {
         let line = rpc::request_line(self.next_id, method, params);
-        self.exchange(method, &line).map_err(|e| match e {
-            Call::Refused(refusal) => refused(method, &refusal),
-            Call::Failed(error) => error,
-        })
+        self.exchange(method, &line).map_err(|e| e.into_error(method))
     }
 
     /// Sends `line`, the request `method` under the next id, and waits at most the request timeout
@@ -619,6 +622,16 @@ enum Call {
     Failed(AgentError),
 }
 
+impl Call {
+    /// The error for a failed `method`: a refusal as [`refused`] says, any other failure as it is.
+    fn into_error(self, method: &str) -> AgentError {
+        match self {
+            Call::Refused(refusal) => refused(method, &refusal),
+            Call::Failed(error) => error,
+        }
+    }
+}
+
 /// The error for a request Codex refused: `MissingRuntime` when it does not know the method (a
 /// Codex too old for it), else `Other` with Codex's words.
 fn refused(method: &str, refusal: &rpc::RpcError) -> AgentError {
@@ -629,11 +642,25 @@ fn refused(method: &str, refusal: &rpc::RpcError) -> AgentError {
     }
 }
 
-/// Whether a refused renewal's words say the sign-in itself is gone (expired, revoked, or its
-/// renewal token refused), rather than that the service could not be reached.
-fn expired_words(detail: &str) -> bool {
-    let lower = detail.to_lowercase();
-    ["expired", "revoked", "already used", "invalid_grant", "sign in again", "log in again"].iter().any(|w| lower.contains(w))
+/// The JSON-RPC code of Codex's internal error, which a refused renewal comes as.
+const INTERNAL_ERROR: i64 = -32603;
+
+/// What codex-cli 0.166.0 says when a ChatGPT sign-in can no longer be renewed: the message of its
+/// `RefreshTokenFailedError` (`REFRESH_TOKEN_EXPIRED_MESSAGE`, `_REUSED_`, `_INVALIDATED_`,
+/// `_UNKNOWN_` and `_ACCOUNT_MISMATCH_MESSAGE` in `codex-rs/login/src/auth/manager.rs`), which
+/// `account/read` sends alone as an internal error with no data.
+const RENEWAL_REFUSED: [&str; 5] = [
+    "Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again.",
+    "Your access token could not be refreshed because your refresh token was already used. Please log out and sign in again.",
+    "Your access token could not be refreshed because your refresh token was revoked. Please log out and sign in again.",
+    "Your access token could not be refreshed. Please log out and sign in again.",
+    "Your access token could not be refreshed because you have since logged out or signed in to another account. Please sign in again.",
+];
+
+/// Whether Codex refused because the sign-in itself can no longer be renewed: its internal error
+/// with one of the [`RENEWAL_REFUSED`] messages exactly, nothing else that merely shares a word.
+fn renewal_refused(refusal: &rpc::RpcError) -> bool {
+    refusal.code == INTERNAL_ERROR && RENEWAL_REFUSED.contains(&refusal.message.as_str())
 }
 
 /// A text field of an answer, cut to [`MAX_FIELD_BYTES`].
@@ -803,7 +830,18 @@ mod tests {
         );
         assert_eq!(read(json!({"account": {"type": "gcp"}})), AccountStatus::Other { kind: "gcp".into() });
         assert_eq!(read(json!({"account": 7})), AccountStatus::Other { kind: "<unnamed>".into() });
-        assert!(expired_words("codex refused account/read: refresh token was revoked"));
-        assert!(!expired_words("codex refused account/read: error sending request"));
+        let refusal = |code: i64, message: &str| rpc::RpcError { code, message: message.to_owned() };
+        for message in RENEWAL_REFUSED {
+            assert!(renewal_refused(&refusal(INTERNAL_ERROR, message)), "{message}");
+            assert!(!renewal_refused(&refusal(-32600, message)), "another code: {message}");
+        }
+        for other in [
+            "application network permission was revoked",
+            "refresh token was revoked",
+            "workspace routing discovery failed",
+            "codex refused account/read: Your access token could not be refreshed. Please log out and sign in again.",
+        ] {
+            assert!(!renewal_refused(&refusal(INTERNAL_ERROR, other)), "{other}");
+        }
     }
 }

@@ -246,8 +246,9 @@ order, in `codex-history.json` in the conversation's folder (written after every
 0600, at most 4096 messages and 4 MiB, a message cut at 1 MiB, the oldest dropped first and
 logged, never the newest; the person's text is scrubbed of the key). A copy that cannot be read is
 renamed to `codex-history.json.damaged-<n>`, logged, and refused as a typed error that says where
-it went. When the rename fails, 64 damaged copies are already set aside, or the system refuses the
-read itself, the file stays in place and the error says so; every start that would write the copy
+it went; the name is claimed before the move, so a damaged copy set aside earlier, even by another
+process at the same moment, is never replaced. When the rename fails, 64 damaged copies are
+already set aside, or the system refuses the read itself, the file stays in place and the error says so; every start that would write the copy
 (`Start::New` and `Start::ResumeFrom` as well as `Start::Resume`) is then refused with that error,
 so a damaged copy is never overwritten: keep the file aside by hand, or fix what the error names,
 before starting again. `Start::Resume` gives a new thread that copy with `thread/inject_items`
@@ -345,8 +346,10 @@ turn, as `InvalidCredential`; `open` answers `InvalidCredential` only when Codex
 key at all (API-key sign-in switched off, or the key could not be held), and a timeout or an early
 end stays `Other`. The key is not kept, since each conversation gives it again. `read(refresh)` is `account/read` (`refreshToken` renews a ChatGPT
 sign-in, reaching the sign-in service only); `check` reads and, for ChatGPT, renews once: a renewal
-refused with words of an expired or revoked sign-in reads as `Expired`; for an API key it says only
-that Codex holds one. `login_chatgpt` and
+Codex refuses with its own failure for a sign-in that can no longer be renewed reads as `Expired`.
+codex-cli 0.166.0 gives no structured reason, so that is its internal error (-32603) with exactly
+one of the five messages of its refresh-token failure; any other refusal stays an error, even one
+that says "revoked". For an API key it says only that Codex holds one. `login_chatgpt` and
 `login_device_code` answer the address to open, or the code and the address, and queue the same as
 `AccountEvent::LoginStarted`; an address must be `https` on `openai.com` or `chatgpt.com` (or below)
 without a user part, else it is refused and never queued; a device code is letters, digits and

@@ -238,25 +238,44 @@ fn read_file(path: &std::path::Path) -> Result<History, Unreadable> {
 }
 
 /// Renames a damaged copy aside under the first free `.damaged-<n>` name and answers that name; a
-/// copy that cannot be moved stays, which the answer says.
+/// copy that cannot be moved stays, which the answer says. A name taken meanwhile, by another
+/// process setting a copy aside too, is skipped, never replaced ([`move_aside`]).
 fn set_aside(path: &std::path::Path) -> String {
     for n in 1..=64u32 {
         let aside = path.with_file_name(format!("{HISTORY_FILE}.damaged-{n}"));
-        if std::fs::symlink_metadata(&aside).is_ok() {
-            continue;
-        }
-        return match std::fs::rename(path, &aside) {
+        match move_aside(path, &aside) {
             Ok(()) => {
                 log::warn!("the damaged Codex conversation copy was set aside as {}", aside.display());
-                aside.display().to_string()
+                return aside.display().to_string();
             }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
             Err(e) => {
                 log::warn!("the damaged Codex conversation copy could not be set aside: {e}");
-                "nothing: it could not be moved".to_owned()
+                return "nothing: it could not be moved".to_owned();
             }
-        };
+        }
     }
     "nothing: 64 damaged copies are already set aside".to_owned()
+}
+
+/// Moves `path` to `aside` without ever replacing what is there. A rename alone would replace a
+/// file that appeared at `aside` after it was found free, so the name is first claimed with a new
+/// empty file (a new empty folder when `path` is a folder), which fails with `AlreadyExists` when
+/// anything is there; the rename then replaces only that placeholder. A failed rename removes the
+/// placeholder again.
+fn move_aside(path: &std::path::Path, aside: &std::path::Path) -> std::io::Result<()> {
+    let folder = std::fs::symlink_metadata(path)?.is_dir();
+    if folder {
+        std::fs::create_dir(aside)?;
+    } else {
+        std::fs::OpenOptions::new().write(true).create_new(true).open(aside)?;
+    }
+    std::fs::rename(path, aside).inspect_err(|_| {
+        let removed = if folder { std::fs::remove_dir(aside) } else { std::fs::remove_file(aside) };
+        if let Err(e) = removed {
+            log::warn!("the placeholder {} stays: {e}", aside.display());
+        }
+    })
 }
 
 /// Whether the conversation's folder holds a copy (readable or not), for a caller choosing between
@@ -281,6 +300,34 @@ pub fn path(folder: &ConversationFolder) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A damaged copy is never moved over a name that is taken, even one taken after it was found
+    /// free: the move claims the name first and refuses a taken one, and setting aside skips to the
+    /// next free name, for a file and for a folder alike.
+    #[test]
+    fn a_damaged_copy_never_replaces_another() {
+        let dir = std::env::temp_dir().join(format!("archforge-codex-aside-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let copy = dir.join(HISTORY_FILE);
+        let first = dir.join(format!("{HISTORY_FILE}.damaged-1"));
+        std::fs::write(&copy, "newer").unwrap();
+        std::fs::write(&first, "older").unwrap();
+        assert_eq!(move_aside(&copy, &first).unwrap_err().kind(), std::io::ErrorKind::AlreadyExists);
+        assert_eq!(std::fs::read_to_string(&first).unwrap(), "older", "the taken name is not replaced");
+        assert_eq!(std::fs::read_to_string(&copy).unwrap(), "newer", "and the copy stays");
+        assert!(set_aside(&copy).ends_with(".damaged-2"));
+        assert_eq!(std::fs::read_to_string(&first).unwrap(), "older");
+        assert_eq!(std::fs::read_to_string(dir.join(format!("{HISTORY_FILE}.damaged-2"))).unwrap(), "newer");
+        assert!(!copy.exists());
+        std::fs::create_dir(&copy).unwrap();
+        std::fs::write(copy.join("inside"), "kept").unwrap();
+        std::fs::create_dir(dir.join(format!("{HISTORY_FILE}.damaged-3"))).unwrap();
+        assert!(set_aside(&copy).ends_with(".damaged-4"));
+        assert_eq!(std::fs::read_to_string(dir.join(format!("{HISTORY_FILE}.damaged-4/inside"))).unwrap(), "kept");
+        assert_eq!(std::fs::read_dir(dir.join(format!("{HISTORY_FILE}.damaged-3"))).unwrap().count(), 0, "the taken folder is untouched");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 
     /// The oldest messages go first when the copy passes its caps, never the newest; the injected
     /// items leave out the waiting message and fit their budget.
