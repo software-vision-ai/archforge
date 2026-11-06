@@ -6,8 +6,9 @@ supervised child processes in private folders. Archforge never bundles them. The
 speak each runtime's protocol (AR-201, AR-202) build on this crate; the AR-196 spike's note records
 how the runtimes behave.
 
-**Layer.** 10, a host service above `secrets`, whose `Secret` carries the keys: it starts processes
-and makes folders, so the shell never depends on it and it is never built for the portable target.
+**Layer.** 10, a host service above `secrets`, whose `Secret` carries the keys, and `control`, whose
+origin label check the Claude adapter shares with `archforge-cli`: it starts processes and makes
+folders, so the shell never depends on it and it is never built for the portable target.
 
 **Public API.**
 
@@ -26,6 +27,14 @@ and makes folders, so the shell never depends on it and it is never built for th
 | `RuntimeProcess` | `send_line` (never waits), `close_input`, `next_event(timeout)`, `try_next_event`, `interrupt`, `status`, `shutdown(grace)` (waits up to twice `grace`, so on a worker), `stderr_tail`, `exit_error(Exit)`, `pid`; kills its group on drop |
 | `OutputEvent`, `Dropped`, `Exit` | `Line`, `Dropped(TooLong \| NotText { bytes })`, `ReadFailed`, `End`; `code`, `signal` |
 | `AgentError`, `ErrorKind` | every failure; `kind()` gives `MissingRuntime`, `InvalidCredential`, `SignInExpired`, `RateLimited`, `Network`, `ModelUnavailable` or `Other`; `AgentError::reported(kind, detail)` for the adapters |
+| `RuntimeProcess::redact` | `fn redact(&self, String) -> String`: the runtime's secrets replaced, for what an adapter shows from standard output |
+| `AgentSession` | the neutral trait every adapter implements: `send(&mut self, &str)`, `stop(&mut self)`, `next_event(&mut self, Duration) -> Option<SessionEvent>`, `shutdown(&mut self, Duration) -> Result<Exit, _>` |
+| `SessionEvent` | `Started { session_id, model, tools, servers }`, `TextDelta`, `MessageDone`, `ToolStarted { id, server, tool, input }`, `ToolFinished { id, tool, ok, summary }`, `Retrying { attempt, max_attempts, delay_ms, kind }`, `TurnFinished { outcome, usage }`, `Ignored(Skipped)`, `Ended { exit, error }` |
+| `TurnOutcome`, `Usage`, `ToolServer`, `Skipped` | `Completed`, `Stopped`, `Failed(AgentError)`; token counts without a cost; a tool server's name and state; why a line was skipped |
+| `claude::ClaudeSession` | `start(&Runtime, &ConversationFolder, ClaudeConfig, Secret) -> Result<ClaudeSession, _>`, `AgentSession`, `session_id`, `skipped`, `turn_running`, `process` |
+| `claude::ClaudeConfig` | `session: SessionId` (the conversation's UUID), `start: Start` (`New`, `Resume`), `model: Model`, `bridge: Bridge { cli, port, origin, allow_changes, home: BridgeHome }`, `limits` |
+| `claude::command_line`, `mcp_config`, `write_mcp_config` | the arguments; the tool server configuration as JSON; that configuration written to `claude-mcp.json` in the conversation's folder (atomic, 0600) |
+| `claude::ClaudeParser`, `kind_of` | stream-json lines to events, usable alone; an error category to its `ErrorKind` |
 
 **Discovery.** The override variable, when set, is the only place looked at: a relative path is
 refused, a missing file is `Missing`, and nothing falls back to the search. Otherwise the PATH's
@@ -106,15 +115,80 @@ its contents are kept for a resume. `remove_conversation` removes the whole fold
 a folder not private to this user; `remove_dir_all` never follows a link inside it. Stop the runtime
 first. A probe folder that could not be removed stays as `probe-<pid>-<n>` and is logged.
 
+**The Claude adapter** (`claude`, AR-201, after the AR-196 spike's note). `ClaudeSession::start`
+writes the tool server configuration and starts
+
+```sh
+claude -p --bare --input-format stream-json --output-format stream-json --verbose \
+  --include-partial-messages --mcp-config <conversation>/claude-mcp.json --strict-mcp-config \
+  --tools "" --allowedTools "mcp__archforge__*" --permission-mode dontAsk \
+  --model <model> --session-id <uuid>      # or --resume <uuid>
+```
+
+with `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` and the key as `ANTHROPIC_API_KEY`, its only way
+in. The model is named on every start, as a resume does not keep it; the session id is the
+conversation's UUID, and the transcripts stay under the conversation's `CLAUDE_CONFIG_DIR`. The
+configuration names one server:
+
+```json
+{"mcpServers":{"archforge":{"command":"<abs>/archforge-cli",
+  "args":["mcp","--bridge","<port>","--read-only","--origin","<label>"],
+  "env":{"ANTHROPIC_API_KEY":"","HOME":"<the person's home>"}}}}
+```
+
+`--read-only` goes only when "Allow changes" is off; switching it is a shutdown and a new start with
+`Start::Resume`, which rewrites the file (not yet verified live: the spike's round-trip item 5).
+Claude hands its whole environment to the server, so every secret variable is blanked in `env`
+(verified live later: item 4). The bridge finds the control token in the settings folder it derives
+from `HOME` (or `XDG_CONFIG_HOME`), and takes no token path yet, while `claude` gets a private
+`HOME`; `env` therefore gives the bridge the person's own (`BridgeHome::from_process`), and a start
+without it is refused. AR-203 can drop that once `archforge-cli mcp` takes the token file or settings
+folder itself. A configuration that holds the key (pasted into the origin label, say) is refused
+before it is written, as `SecretExposed`; whatever stands at the file's place, a link among them, is
+removed first, and the new file must come out a regular file only this user can read.
+
+`send` writes `{"type":"user","message":{"role":"user","content":…},"parent_tool_use_id":null}`
+and refuses a second message while a turn runs. `stop` writes
+`{"type":"control_request","request_id":"archforge-stop-<n>","request":{"subtype":"interrupt"}}`;
+when that cannot be sent, when Claude answers it with an error, or on a second stop, SIGINT goes to
+`claude` alone. Both end the turn and leave it up. The outcome is read from `result.is_error` and
+the category fields, never `result.subtype` (which says `success` for failed calls): a synthetic
+`assistant` message's `error` (with `api_error`) or a rejected `rate_limit_event` before the
+`result`, else the result's `api_error`/`api_error_status`, else why the last retry happened.
+`authentication_failed` and `cloud_credential_error` are `InvalidCredential`; `rate_limit` and
+`billing_error` `RateLimited`; `model_not_found` and `overloaded` `ModelUnavailable`;
+`connection_failed` `Network`; the rest `Other`. A failed result after a stop, or with
+`terminal_reason: aborted_streaming`, is `Stopped`. `api_retry` is `Retrying` (no HTTP status and
+`unknown`: `Network`). `init`, which comes after the first user line, is `Started`; a tool not under
+`mcp__archforge__` there is logged. An exit during a turn fails it; an exit before any output with
+`unknown option` on the error stream is `MissingRuntime`; the exit code decides nothing else.
+
+Every line is hostile: empty, not JSON, nested past serde_json's 128 levels, not an object, untyped,
+of an unknown type or a known type without its fields becomes `Ignored` and is counted
+(`skipped`); ids and names are cut to 256 bytes, tool input to 64 KiB, summaries to 2 KiB, tool
+lists to 4096 names, remembered tool calls to 1024 a turn, each cut logged by its length. Each line
+is passed through `redact` before it is parsed, so no event, cut, log line or kept state holds any
+part of a key the runtime writes whole in a line (a key's characters are never escaped in JSON); a
+key split across two text deltas is caught only in the message they make up. `next_event` reads at
+most 256 lines a call and never past its timeout, so a runtime writing only lines that mean nothing
+cannot hold the caller; once the output closes it waits up to half a second for the exit status. A
+line is parsed into a whole `serde_json::Value`, which may take several times the line's size: keep
+`max_line_bytes` at its default or below for Claude. Claude's own
+`control_request`s (permission prompts) are not expected with `dontAsk` and are skipped as unknown.
+
 **Tests.** `cargo test -p archforge-agents`: unit tests beside the code, and `tests/runtimes.rs`
 against fake runtimes (shell scripts that answer `--version` and then do what a test needs) for
 discovery order and the override, relative PATH entries, links, untrusted installers' folders, the
 locale filter, the version decisions, a failing and a hanging probe, the cleared environment, the
 canary key, the line cap, the error tail cap, the input backlog, SIGINT, the shutdown steps, the group
-killed on drop and on exit, and the private folders. Unix only.
+killed on drop and on exit, and the private folders; `tests/claude.rs` for the Claude adapter, over
+the spike's transcripts in `tests/fixtures/` (every Claude one and the hostile lines) and against fake
+`claude` scripts that replay them: the events of a turn, the error categories, the command line and
+configuration for both settings, the canary key, stop by control request and its SIGINT fallback, an
+exit during a turn. Its one real round trip is `#[ignore]`d: it needs a real key and the owner's OK.
+Unix only.
 
 **Non-goals.** Windows: every entry point answers `AgentError::NotAvailable` ("not available on this
-system yet"). The protocols, the turn and its errors (AR-201, AR-202), storing conversations, and the
-Codex sign-in over standard input come later. The bridge `archforge-cli mcp` finds its control token
-through `HOME`, which a runtime's private home hides; the spike's open question 6 lets the bridge
-take the token file directly.
+system yet"). The Codex protocol (AR-202), storing conversations, and the Codex sign-in over standard input
+come later. The bridge's token lookup through `HOME` (the spike's open question 6) is bridged by the
+Claude adapter's configuration for now.

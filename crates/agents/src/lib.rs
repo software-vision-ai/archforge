@@ -13,6 +13,9 @@
 //!   [`RuntimeProcess`] reads its output as capped lines, keeps the end of its error stream for a
 //!   diagnosis, stops a turn with an interrupt, shuts it down in steps, and kills its whole process
 //!   group when dropped.
+//! - [`AgentSession`] is a conversation with a running runtime, turn by turn, and [`SessionEvent`]
+//!   what it says, the same for every runtime; [`claude::ClaudeSession`] drives Claude Code over
+//!   stream-json.
 //! - [`AgentError`] is every failure, and [`ErrorKind`] the neutral category the interface shows.
 //!
 //! No secret appears in an error, a log line or a `Debug` output: keys arrive as
@@ -23,11 +26,13 @@
 
 use std::fmt;
 
+pub mod claude;
 mod discover;
 mod error;
 mod folder;
 mod output;
 mod process;
+mod session;
 mod sys;
 mod version;
 
@@ -36,6 +41,7 @@ pub use error::{AgentError, ErrorKind, MAX_DETAIL_BYTES};
 pub use folder::{ConversationFolder, ConversationId, MAX_CONVERSATION_ID_BYTES, Workspace};
 pub use output::{Dropped, OutputEvent};
 pub use process::{Exit, Limits, MAX_GRACE, RuntimeProcess, SpawnRequest, spawn};
+pub use session::{AgentSession, SessionEvent, Skipped, ToolServer, TurnOutcome, Usage};
 pub use version::{Fit, Version, VersionRange};
 
 /// How long `<runtime> --version` may take before the probe is stopped and the runtime refused.
