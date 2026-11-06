@@ -321,13 +321,15 @@ fn owner_menu_body(shell: &mut Shell, ui: &egui::Ui, p: &Palette, m: Rect, rows:
     picked
 }
 
-/// Makes a classifier of `kind` nested in `owner`, named afresh among the owner's nested ones
+/// Makes a classifier of `kind` nested in `owner`, named afresh among everything the owner holds
 /// (`Enumeration 1`), as one undo step, selected; Models opens the rows above it and its name for
 /// typing there (D1), so it is named in place whichever way it was asked for.
 pub(crate) fn add_nested(shell: &mut Shell, owner: Uuid, kind: Classifier) -> Result<Uuid, String> {
     let store = shell.session.as_ref().map(|s| s.doc()).ok_or_else(|| tr("The model could not be opened"))?;
     let o = store.by_uuid(owner).ok_or_else(|| tr("The model could not be opened"))?;
-    let taken = nesting::nested(store, o).into_iter().map(|c| name(store, c));
+    // Free among everything the owner holds, its attributes and operations too, which a nested
+    // classifier's name may not take.
+    let taken = nesting::names_under(store, o).into_iter().map(|c| name(store, c));
     let fresh = fresh_name(kind.stem(), taken, false).ok_or_else(|| tr("No free name is left"))?;
     let out = run(shell, "uml.nested.add", json!({ "owner": owner.to_string(), "kind": command_kind(kind), "name": fresh }))?;
     let id = out.get("id").and_then(|v| v.as_str()).and_then(Uuid::parse).ok_or_else(|| tr("The model could not be opened"))?;

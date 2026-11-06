@@ -14392,3 +14392,21 @@ fn a_nested_classifier_dropped_within_its_package_stays_and_onto_a_package_row_m
     assert_eq!((cmd, params["package"].as_str()), ("uml.enumeration.move", Some(other.as_str())));
     assert_eq!(ui.drop_on(st, customer, o), None, "a package member onto another of its package stays, as before");
 }
+
+/// A nested classifier's default name is free among everything its owner holds (AR-132): with an
+/// attribute named like the next default, New inside picks the following free name and is made.
+#[test]
+fn a_new_nested_classifier_takes_a_name_free_of_its_owners_members() {
+    let (mut h, _) = related_sample_in(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    let order = select_named(&mut h, archforge_uml::CLASS, "Order");
+    h.state_mut()
+        .session
+        .as_mut()
+        .unwrap()
+        .execute("uml.attribute.add", &serde_json::json!({ "class": order.to_string(), "name": "enumeration 1" }))
+        .unwrap();
+    let made = crate::uml_nesting::add_nested(h.state_mut(), order, crate::uml_classifier::Classifier::Enumeration).expect("made");
+    let st = h.state().session.as_ref().unwrap().doc();
+    assert_eq!(archforge_core::name_of(st, st.by_uuid(made).unwrap()), "Enumeration 2", "the next name the owner leaves free");
+    assert_eq!(h.state().explorer.rename.as_ref().map(|r| r.text.as_str()), Some("Enumeration 2"));
+}
