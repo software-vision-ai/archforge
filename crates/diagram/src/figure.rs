@@ -91,6 +91,8 @@ pub enum EndMark {
     OneOrMore,
     /// A hollow triangle, the line stopping at its base: a generalization's general end.
     Triangle,
+    /// A filled triangle, the line stopping at its base: a UML extension's metaclass end.
+    FilledTriangle,
     /// An open arrowhead at the end: a navigable association end, a dependency's supplier.
     OpenArrow,
     /// A diamond, the line stopping at its far corner: the whole of a shared aggregation
@@ -103,7 +105,7 @@ impl EndMark {
     /// How far from its end the line stops, in diagram units, so the mark draws on its own.
     pub fn set_back(self) -> f32 {
         match self {
-            EndMark::Triangle => 12.0,
+            EndMark::Triangle | EndMark::FilledTriangle => 12.0,
             EndMark::HollowDiamond | EndMark::FilledDiamond => 20.0,
             _ => 0.0,
         }

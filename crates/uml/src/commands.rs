@@ -73,6 +73,10 @@ pub(crate) fn id_of(store: &Store, p: &Params, key: &str, class: ClassId, what: 
     if store.class_of(obj).ok() != Some(class) {
         return Err(refuse(key, format!("{} is not {what}", text(p, key))));
     }
+    // A metaclass of the hidden UML library is UML's own, never the model's (AR-134).
+    if let Some(why) = crate::profiles::library_problem(store, obj) {
+        return Err(refuse(key, why));
+    }
     Ok(obj)
 }
 
@@ -92,6 +96,9 @@ pub(crate) fn classifier_of(store: &Store, p: &Params, key: &str) -> Result<Obj,
             key,
             format!("{} is not a class, an interface, an enumeration, a data type, a primitive type or an association class", text(p, key)),
         ));
+    }
+    if let Some(why) = crate::profiles::library_problem(store, obj) {
+        return Err(refuse(key, why));
     }
     Ok(obj)
 }
@@ -265,6 +272,8 @@ pub(crate) fn what(store: &Store, o: Obj) -> &'static str {
         Some(c) if c == crate::PROPERTY => "attribute",
         Some(c) if c == crate::OPERATION => "operation",
         Some(c) if c == crate::CONSTRAINT => "constraint",
+        Some(c) if c == crate::PROFILE => "profile",
+        Some(c) if c == crate::STEREOTYPE => "stereotype",
         _ => "element",
     }
 }
@@ -406,6 +415,12 @@ fn package_move(ctx: &mut C<'_>, p: &Params) -> R {
         return Err(refuse("to", why));
     }
     check_name(ctx.doc, holder_of(ctx.doc, to), PACKAGE, &name_of(ctx.doc, pkg), Some(pkg))?;
+    if let Some(to) = to {
+        let uses = crate::profiles::moving_uses(ctx.doc, pkg, to);
+        if !uses.is_empty() {
+            return Err(refuse("to", crate::profiles::stranding(ctx.doc, pkg, &uses)));
+        }
+    }
     detach(ctx.doc, pkg)?;
     place_package(ctx.doc, pkg, to)?;
     // Its cards go from the diagrams of a package that no longer holds it (AR-102): a class
@@ -442,6 +457,12 @@ fn classifier_move(ctx: &mut C<'_>, p: &Params, kind: ClassId, key: &str, what: 
     }
     if !(name.is_empty() && kind == ASSOCIATION_CLASS) {
         check_name(ctx.doc, Some(to), kind, &name, Some(c))?;
+    }
+    // A move that would take stereotype applications out of their profile's scope is refused
+    // (AR-134).
+    let uses = crate::profiles::moving_uses(ctx.doc, c, to);
+    if !uses.is_empty() {
+        return Err(refuse("package", crate::profiles::stranding(ctx.doc, c, &uses)));
     }
     detach(ctx.doc, c)?;
     ctx.doc.push(to, package::PACKAGED_ELEMENT, Value::Ref(c)).map_err(fail)?;
@@ -736,6 +757,8 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
         crate::CONSTRAINT,
         crate::GENERALIZATION_SET,
         crate::CLASSIFIER_TEMPLATE_PARAMETER,
+        crate::PROFILE,
+        crate::STEREOTYPE,
     ];
     // Template parameters a binding stands in the way of stay: one it substitutes, or a template's
     // last while a binding names its signature (AR-130). A template going too takes its parameters
@@ -752,6 +775,11 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
         let class = store.class_of(*o).map_err(fail)?;
         // An association's end goes with its association.
         let end = class == crate::PROPERTY && store.get(*o, crate::property::ASSOCIATION).ok().and_then(|v| v.as_ref()).is_some();
+        // A profile, a stereotype or a property in use, a package whose applications its contents
+        // need, and UML's own metaclasses stay, the uses named (AR-134).
+        if let Some(refused) = crate::profiles::removal_problem(store, *o) {
+            return Err(refused);
+        }
         if !removable.contains(&class) || end {
             return Err(refuse("ids", format!("{} cannot be removed yet", uuid_of(store, *o)?)));
         }
@@ -836,11 +864,20 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
     // removing a set keeps its generalizations.
     let emptied = crate::generalization_sets::emptied_by(store, &all);
     all.extend(emptied);
+    // A stereotype application goes with the element it applies to (AR-134).
+    let applications = crate::profiles::applications_on(store, &all);
+    all.extend(applications);
     // A default that is a literal goes with the literal: an InstanceValue needs its instance.
     let defaults = crate::modifiers::literal_defaults(store);
     for o in all {
         if !store.is_alive(o) {
             continue;
+        }
+        // A profile's applications, and a stereotype's extensions, go before it (AR-134).
+        match store.class_of(o).ok() {
+            Some(c) if c == crate::PROFILE => crate::profiles::before_profile_removal(store, o)?,
+            Some(c) if c == crate::STEREOTYPE => crate::profiles::before_stereotype_removal(store, o)?,
+            _ => {}
         }
         gone += store
             .transaction(|st| {

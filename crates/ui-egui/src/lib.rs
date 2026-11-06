@@ -50,6 +50,7 @@ mod uml_constraints;
 mod uml_inline;
 mod uml_nesting;
 mod uml_panel;
+mod uml_profiles;
 mod uml_qualifiers;
 mod uml_relate;
 mod uml_sets;

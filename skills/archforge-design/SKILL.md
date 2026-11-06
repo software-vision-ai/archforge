@@ -857,6 +857,44 @@ What is UML's own, beside the shared rules above.
   parameters · model, in every diagram`. A parameter's classifier types its template's own members
   alone: their type menus list its parameters first, after None, each noted `template parameter`.
   Agents use `uml.template-parameter.add`, `.set`, `.move` and `.list`, and `element.remove`.
+- Profiles and stereotypes (AR-134, design page 08, F1, F2, F5, F6; owner decisions 2026-11-06).
+  A profile sits in a package beside its packages, never in a classifier, made with Models' row
+  menu New ▸ Profile on a package or the root (New ▸ lists Package and Profile, a line, then the
+  classifier kinds; ids `workspace.explorer.contextMenu.newInside.{package, profile, class, …}`),
+  named in place, `profile` muted after its row; a profile's name is a package's kind. New ▸
+  Stereotype on a profile, or the `+` under its Properties' Stereotypes · n
+  (`workspace.properties.profile.stereotypes.add`), makes a stereotype, its row muted `extends
+  Class, …` (or `extends nothing yet`). A stereotype's Properties: Name and Profile
+  (`workspace.properties.stereotype.profile`) side by side, Extends · n with `+`
+  (`workspace.properties.stereotype.extends.add`, its menu the metaclasses Archforge draws by UML's
+  names, Class, Interface, Enumeration, DataType, Property, Operation, Association, Generalization,
+  Package, then Activity, Actor, Artifact, Component, Interaction, Node, StateMachine and UseCase
+  disabled with `not drawn by Archforge yet`), each row's pencil opening an editor with the
+  metaclass, the bin, Cancel and Apply; then Properties · n through the member editor, whose type
+  menu offers only primitive types, enumerations and data types; a name starting `base_` is kept
+  for the extensions. A package's Properties (the root's too) have Applied profiles · n
+  (`workspace.properties.package.profiles.add`, its menu every profile, those applied ticked and
+  disabled), each row's pencil opening Unapply (`workspace.properties.package.profileEditor.unapply`)
+  and Cancel; the package's row says `applies Persistence` after its name. Storage (owner decision
+  2026-11-06): everything is UML's own Profile, Stereotype, Extension, ExtensionEnd and
+  ProfileApplication; the metaclasses are Classes of a hidden UML library, a second, unnamed UML
+  Model at the project's top level known by UML's address `http://www.omg.org/spec/UML/20161101`,
+  each made the first time a stereotype extends it and never twice, never shown in Models, type
+  menus, the search or `uml.type.list`, and never changed; no `Profile::metaclassReference` is
+  stored (the rows reader refuses an import its composite superset lists too), the extensions
+  naming the metaclasses. A stereotype application (AR-135, owner decision 2026-11-06) is an
+  InstanceSpecification classified by the stereotype with Slots for its values and a core Link
+  from it to its element; one function finds them, and while any exists, unapplying a profile they
+  need, deleting a stereotype or a profile, dropping an extension they need, moving a stereotype to
+  another profile, deleting a property whose values are set, and moving or deleting what they sit
+  in out of the profile's scope are refused, the uses counted under the section in a tinted box
+  (`Persistence is in use in Commerce: «Entity» on Order and Customer, «Id» on 2 elements,
+  «Reference» on places. Remove those first.`, two of one name counted, not named twice) with Show
+  the {n} uses selecting them. Open profile diagram (`workspace.properties.profile.diagram`) opens
+  the profile's class diagram, made the first time, placing what it lacks: «metaclass» cards in a
+  row, «stereotype» cards under them, joined by extension lines, solid, a filled triangle at the
+  metaclass; a stereotype's row dragged onto it comes with its metaclasses. A selected metaclass's
+  Properties say it is UML's own and change nothing.
 
 On every line: a role, and a label at the line's middle, sit above a level stretch of the line and
 beside an upright one, never on the line or its mark.

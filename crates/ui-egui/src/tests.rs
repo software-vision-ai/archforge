@@ -14654,3 +14654,117 @@ fn template_parameter_refusals_are_said_in_place_and_nothing_is_written() {
         assert_eq!(archforge_core::name_of(s.doc(), chosen), "OrderRepository", "the element that binds it is selected");
     }
 }
+
+/// Profiles and stereotypes (AR-134, design page 08, F1, F2, F5 and F6), in light and dark: a
+/// right click on a package's row in Models opens New ▸, which offers Package and Profile before
+/// the classifiers; a profile is made in one undo step and named in place, `profile` after its
+/// row; New ▸ Stereotype on the profile makes one; its Properties' Extends `+` lists the
+/// metaclasses Archforge draws and those it does not, disabled with why, and a pick extends it in
+/// one step, `extends Class` after its row; a property is added through the member editor, typed
+/// by a built-in type; the package's Applied profiles `+` applies the profile in one step,
+/// `applies …` after the package's row. With the profile in use, Unapply is refused under the
+/// rows, the uses counted, nothing written, and Show the uses selects them.
+#[test]
+fn profiles_are_made_in_models_edited_in_properties_and_applied_to_packages() {
+    use egui_kittest::kittest::Queryable;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1100.0));
+        let commerce = select_named(&mut h, archforge_uml::PACKAGE, "Commerce");
+        // F2: New ▸ on the package.
+        let row = rect_of(&h, &format!("workspace.explorer.row.{commerce}"));
+        right_click(&mut h, row.center());
+        let at = rect_of(&h, "workspace.explorer.contextMenu.newInside").center();
+        click(&mut h, at);
+        assert!(painted(&h).iter().any(|t| t == "NEW IN COMMERCE"), "{theme:?}: {:?}", painted(&h));
+        for kind in ["package", "profile", "class", "interface", "enumeration"] {
+            assert!(ids(&h).iter().any(|i| *i == format!("workspace.explorer.contextMenu.newInside.{kind}")), "{kind}");
+        }
+        let at = rect_of(&h, "workspace.explorer.contextMenu.newInside.profile").center();
+        click(&mut h, at);
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add profile"));
+        let rename = h.state().explorer.rename.clone().expect("named in place");
+        assert_eq!(rename.text, "Profile 1");
+        let profile = rename.target;
+        h.state_mut().explorer.rename = None;
+        h.run();
+        assert!(painted(&h).iter().any(|t| t == "profile"), "{theme:?}: `profile` after its row");
+        // New ▸ Stereotype on the profile.
+        let row = rect_of(&h, &format!("workspace.explorer.row.{profile}"));
+        right_click(&mut h, row.center());
+        let at = rect_of(&h, "workspace.explorer.contextMenu.newInside").center();
+        click(&mut h, at);
+        let at = rect_of(&h, "workspace.explorer.contextMenu.newInside.stereotype").center();
+        click(&mut h, at);
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add stereotype"));
+        let stereotype = h.state().explorer.rename.clone().expect("named in place").target;
+        h.state_mut().explorer.rename = None;
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [stereotype.to_string()] })).unwrap();
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        h.run();
+        // F1: Extends · 0, its + listing what may be extended and what may not.
+        assert!(painted(&h).iter().any(|t| t == "Extends · 0"), "{theme:?}: {:?}", painted(&h));
+        assert!(painted(&h).iter().any(|t| t.starts_with("Stereotype · in profile Profile 1")));
+        assert!(h.query_by_label("Profile: Profile 1").is_some(), "the Profile select's accessible name");
+        let at = rect_of(&h, crate::uml_profiles::EXTENDS_ADD_ID).center();
+        click(&mut h, at);
+        assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::StereotypeExtends));
+        assert!(painted(&h).iter().any(|t| t == "not drawn by Archforge yet"), "the rest disabled with why");
+        let before = h.state().session.as_ref().unwrap().revision();
+        let refused = format!("{}.{}", crate::uml_profiles::EXTENDS_ADD_ID, archforge_uml::profiles::METACLASSES.len());
+        let at = rect_of(&h, &refused).center();
+        click(&mut h, at);
+        assert_eq!(h.state().session.as_ref().unwrap().revision(), before, "a metaclass not drawn picks nothing");
+        let at = rect_of(&h, &format!("{}.0", crate::uml_profiles::EXTENDS_ADD_ID)).center();
+        click(&mut h, at);
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Change stereotype"));
+        h.run();
+        assert!(painted(&h).iter().any(|t| t == "Extends · 1"));
+        assert!(painted(&h).iter().any(|t| t == "extends Class"), "{theme:?}: after its row in Models");
+        // A property through the member editor.
+        assert!(painted(&h).iter().any(|t| t == "Properties · 0"));
+        let at = rect_of(&h, "workspace.properties.attributes.add").center();
+        click(&mut h, at);
+        h.event(egui::Event::Text("table".into()));
+        h.run();
+        pick_type(&mut h, "workspace.properties.member.type", "String");
+        let at = rect_of(&h, "workspace.properties.member.apply").center();
+        click(&mut h, at);
+        {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let props = archforge_uml::profiles::properties(st, st.by_uuid(stereotype).unwrap());
+            assert_eq!(props.iter().map(|a| archforge_uml::figures::attribute_text(st, *a)).collect::<Vec<_>>(), ["+ table : String"]);
+        }
+        // F5: Commerce applies it.
+        select_named(&mut h, archforge_uml::PACKAGE, "Commerce");
+        h.run();
+        assert!(painted(&h).iter().any(|t| t == "Applied profiles · 0"), "{theme:?}: {:?}", painted(&h));
+        let at = rect_of(&h, crate::uml_profiles::APPLIED_ADD_ID).center();
+        click(&mut h, at);
+        let at = rect_of(&h, &format!("{}.0", crate::uml_profiles::APPLIED_ADD_ID)).center();
+        click(&mut h, at);
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Apply profile"));
+        h.run();
+        assert!(painted(&h).iter().any(|t| t == "Applied profiles · 1"));
+        assert!(painted(&h).iter().any(|t| t == "applies Profile 1"), "after the package's row");
+
+        // F6: in use, Unapply is refused with the uses counted, and they can be selected.
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1100.0));
+        let (commerce, persistence, _) = crate::uml_profiles::put_profiles(h.state_mut(), true).unwrap();
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [commerce] })).unwrap();
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        h.run();
+        let at = rect_of(&h, &format!("{}.{persistence}.edit", crate::uml_profiles::APPLIED_ROW_ID)).center();
+        click(&mut h, at);
+        let before = (h.state().session.as_ref().unwrap().revision(), h.state().session.as_ref().unwrap().undo_label().map(str::to_string));
+        let at = rect_of(&h, &format!("{}.unapply", crate::uml_profiles::APPLIED_EDIT_ID)).center();
+        click(&mut h, at);
+        let after = (h.state().session.as_ref().unwrap().revision(), h.state().session.as_ref().unwrap().undo_label().map(str::to_string));
+        assert_eq!(after, before, "{theme:?}: nothing written");
+        let why = "Persistence is in use in Commerce: «Entity» on Order and Customer, «Id» on 2 elements, «Reference» on places. Remove those first.";
+        assert!(painted(&h).iter().any(|t| t == why), "{theme:?}: {:?}", painted(&h));
+        assert!(painted(&h).iter().any(|t| t == "Show the 5 uses"));
+        let at = rect_of(&h, &format!("{}.show", crate::uml_profiles::USES_ID)).center();
+        click(&mut h, at);
+        assert_eq!(h.state().session.as_ref().unwrap().view().selection.len(), 5, "the uses selected");
+    }
+}

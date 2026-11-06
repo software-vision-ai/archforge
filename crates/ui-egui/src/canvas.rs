@@ -1552,7 +1552,7 @@ fn mark_shape(mark: EndMark, tip: Pos2, back: Pos2, z: f32) -> (Vec2, Pos2, Vec2
     let dir = if (tip - back).length() > f32::EPSILON { (tip - back).normalized() } else { vec2(0.0, -1.0) };
     let s = z.max(0.6);
     let (len, half) = match mark {
-        EndMark::Triangle => (12.0 * s, 7.5 * s),
+        EndMark::Triangle | EndMark::FilledTriangle => (12.0 * s, 7.5 * s),
         EndMark::HollowDiamond | EndMark::FilledDiamond => (20.0 * s, 6.0 * s),
         _ => (0.0, 6.0 * s),
     };
@@ -1565,7 +1565,7 @@ fn mark_shape(mark: EndMark, tip: Pos2, back: Pos2, z: f32) -> (Vec2, Pos2, Vec2
 pub(crate) fn mark_outline(mark: EndMark, tip: Pos2, back: Pos2, z: f32) -> Vec<Pos2> {
     let (dir, base, side, len) = mark_shape(mark, tip, back, z);
     match mark {
-        EndMark::Triangle => vec![tip, base + side, base - side],
+        EndMark::Triangle | EndMark::FilledTriangle => vec![tip, base + side, base - side],
         EndMark::HollowDiamond | EndMark::FilledDiamond => {
             let middle = tip - dir * (len / 2.0);
             vec![tip, middle + side, base, middle - side]
@@ -1587,7 +1587,7 @@ pub(crate) fn line_mark(paint: &egui::Painter, mark: EndMark, tip: Pos2, back: P
         (EndMark::Triangle | EndMark::HollowDiamond, [_, ..]) => {
             paint.add(egui::Shape::convex_polygon(outline, bg, stroke));
         }
-        (EndMark::FilledDiamond, [_, ..]) => {
+        (EndMark::FilledDiamond | EndMark::FilledTriangle, [_, ..]) => {
             paint.add(egui::Shape::convex_polygon(outline, stroke.color, stroke));
         }
         (EndMark::OpenArrow, [tip, left, right]) => {
@@ -2072,7 +2072,7 @@ fn outside_by(outline: &[Pos2], at: Pos2) -> f32 {
 fn mark_extent(mark: EndMark, z: f32) -> (f32, f32) {
     let s = z.max(0.6);
     match mark {
-        EndMark::Triangle => (12.0 * s, 7.5 * s),
+        EndMark::Triangle | EndMark::FilledTriangle => (12.0 * s, 7.5 * s),
         EndMark::HollowDiamond | EndMark::FilledDiamond => (20.0 * s, 6.0 * s),
         EndMark::OpenArrow => (12.0 * s, 6.0 * s),
         _ => (0.0, 0.0),

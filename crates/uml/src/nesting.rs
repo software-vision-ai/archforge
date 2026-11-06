@@ -316,6 +316,12 @@ fn set_owner(ctx: &mut C<'_>, p: &Params) -> R {
         return Err(refuse(key, problem_text(ctx.doc, c, owner, &problem)));
     }
     if owner_of(ctx.doc, c) != Some(owner) {
+        // A move that would take stereotype applications out of their profile's scope is refused
+        // (AR-134).
+        let uses = crate::profiles::moving_uses(ctx.doc, c, owner);
+        if !uses.is_empty() {
+            return Err(refuse("owner", crate::profiles::stranding(ctx.doc, c, &uses)));
+        }
         if let Some((from, prop)) = ctx.doc.container(c).map_err(fail)? {
             ctx.doc.remove_value(from, prop, &Value::Ref(c)).map_err(fail)?;
         }

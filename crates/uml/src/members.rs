@@ -194,7 +194,8 @@ fn has_class(f: &Facts<'_, Store, ProjectView>) -> Result<(), &'static str> {
 /// its members are its literals.
 pub fn member_lists(store: &Store, c: Obj) -> Option<(archforge_mof::PropId, archforge_mof::PropId)> {
     match store.class_of(c).ok()? {
-        k if k == CLASS || k == crate::ASSOCIATION_CLASS => Some((class::OWNED_ATTRIBUTE, class::OWNED_OPERATION)),
+        // A stereotype keeps its properties as the class it is (AR-134).
+        k if k == CLASS || k == crate::ASSOCIATION_CLASS || k == crate::STEREOTYPE => Some((class::OWNED_ATTRIBUTE, class::OWNED_OPERATION)),
         k if k == INTERFACE => Some((interface::OWNED_ATTRIBUTE, interface::OWNED_OPERATION)),
         k if k == DATA_TYPE => Some((data_type::OWNED_ATTRIBUTE, data_type::OWNED_OPERATION)),
         _ => None,
@@ -369,6 +370,13 @@ pub(crate) fn resolve_type(store: &mut Store, key: &str, value: &str, within: Op
     if let Some(why) = crate::templates::type_scope_problem(store, t, within) {
         return Err(refuse(key, why));
     }
+    // UML's own metaclasses and the stereotypes type nothing of the model (AR-134).
+    if let Some(why) = crate::profiles::library_problem(store, t) {
+        return Err(refuse(key, why));
+    }
+    if class == crate::STEREOTYPE || class == crate::EXTENSION {
+        return Err(refuse(key, format!("{value} is {}, which types nothing; it is applied to elements", crate::commands::a_what(store, t))));
+    }
     Ok(Some(t))
 }
 
@@ -399,6 +407,15 @@ fn visibility(store: &Store, owner: Obj, p: &Params, key: &str) -> Result<Value,
 fn check_name(store: &Store, owner: Obj, name: &str, except: Option<Obj>) -> Result<(), CommandError> {
     if let Some(p) = archforge_core::skills::name_problem(name, crate::commands::MAX_NAME) {
         return Err(refuse("name", format!("the name {p}")));
+    }
+    // A stereotype keeps the names starting base_ for its extensions' ends (AR-134).
+    if store.class_of(owner).ok() == Some(crate::STEREOTYPE)
+        && name.get(..crate::profiles::BASE.len()).is_some_and(|b| b.eq_ignore_ascii_case(crate::profiles::BASE))
+    {
+        return Err(refuse(
+            "name",
+            format!("a stereotype keeps the names starting {} for its extensions; name {name} otherwise", crate::profiles::BASE),
+        ));
     }
     let Some(other) = crate::names::clash(store, owner, PROPERTY, name, except).or_else(|| end_role_clash(store, owner, name)) else {
         return Ok(());
@@ -470,7 +487,40 @@ fn no_members(store: &Store, c: Obj, members: &str) -> String {
 /// The class, interface, data type or association class that owns `member` in its list of
 /// attributes or operations.
 fn owner_of(store: &Store, member: Obj) -> Option<Obj> {
-    store.container(member).ok().flatten().map(|(c, _)| c).filter(|c| store.class_of(*c).is_ok_and(crate::is_classifier))
+    store
+        .container(member)
+        .ok()
+        .flatten()
+        .map(|(c, _)| c)
+        .filter(|c| store.class_of(*c).is_ok_and(|k| crate::is_classifier(k) || k == crate::STEREOTYPE))
+}
+
+/// What owns the attributes the id under `key` names: a classifier, or a stereotype, whose
+/// properties are attributes too (AR-134).
+fn attribute_owner(store: &Store, p: &Params, key: &str) -> Result<Obj, CommandError> {
+    let id = text(p, key);
+    if let Some(s) = Uuid::parse(id).and_then(|u| store.by_uuid(u)).filter(|o| crate::profiles::is_stereotype(store, *o)) {
+        return Ok(s);
+    }
+    classifier_of(store, p, key)
+}
+
+/// Why a stereotype's property may not have the type `ty`: it is typed by a primitive type, an
+/// enumeration or a data type of the model (AR-134, F1); none is allowed too.
+fn stereotype_type_problem(store: &Store, owner: Obj, ty: Option<Obj>) -> Option<String> {
+    if store.class_of(owner).ok() != Some(crate::STEREOTYPE) {
+        return None;
+    }
+    let t = ty?;
+    let class = store.class_of(t).ok()?;
+    if [PRIMITIVE_TYPE, ENUMERATION, DATA_TYPE].contains(&class) {
+        return None;
+    }
+    Some(format!(
+        "{} is {}; a stereotype's property is typed by a primitive type, an enumeration or a data type",
+        name_of(store, t),
+        crate::commands::a_what(store, t)
+    ))
 }
 
 /// Where in the list `at` puts a member: -1 or past the end for the end.
@@ -510,12 +560,15 @@ fn typed_bounds(p: &Params) -> Result<Option<(u64, Option<u64>)>, CommandError> 
 /// `uml.attribute.add`: an attribute of a class, an interface, a data type or an association class,
 /// its name free among its attributes, with its modifiers (AR-126).
 fn attribute_add(ctx: &mut C<'_>, p: &Params) -> R {
-    let c = classifier_of(ctx.doc, p, "class")?;
+    let c = attribute_owner(ctx.doc, p, "class")?;
     let Some((owned, _)) = member_lists(ctx.doc, c) else { return Err(refuse("class", no_members(ctx.doc, c, "attributes"))) };
     let name = text(p, "name");
     check_name(ctx.doc, c, name, None)?;
     let vis = visibility(ctx.doc, c, p, "visibility")?;
     let ty = resolve_type(ctx.doc, "type", text(p, "type"), Some(c))?;
+    if let Some(why) = stereotype_type_problem(ctx.doc, c, ty) {
+        return Err(refuse("type", why));
+    }
     let modifiers = attribute_modifiers(ctx.doc, p, c, None, name, ty, typed_bounds(p)?)?;
     let a = ctx.doc.create(PROPERTY).map_err(fail)?;
     set_name(ctx.doc, a, name)?;
@@ -538,7 +591,7 @@ fn attribute_add(ctx: &mut C<'_>, p: &Params) -> R {
 fn attribute_set(ctx: &mut C<'_>, p: &Params) -> R {
     let a = id_of(ctx.doc, p, "attribute", PROPERTY, "an attribute")?;
     let Some(c) = owner_of(ctx.doc, a).filter(|_| one(ctx.doc, a, property::ASSOCIATION).is_none()) else {
-        return Err(refuse("attribute", "it is not a class's, an interface's, a data type's or an association class's attribute"));
+        return Err(refuse("attribute", "it is not a class's, an interface's, a data type's, an association class's or a stereotype's attribute"));
     };
     let name = match p.str("name") {
         Some(n) => n.to_string(),
@@ -553,6 +606,9 @@ fn attribute_set(ctx: &mut C<'_>, p: &Params) -> R {
         Some(t) => resolve_type(ctx.doc, "type", t, Some(c))?,
         None => one(ctx.doc, a, typed_element::TYPE),
     };
+    if let Some(why) = stereotype_type_problem(ctx.doc, c, ty) {
+        return Err(refuse("type", why));
+    }
     let bounds = match p.str("multiplicity") {
         Some(_) => typed_bounds(p)?,
         None => Some(crate::modifiers::bounds(ctx.doc, a)),
@@ -917,6 +973,8 @@ fn type_list(ctx: &mut C<'_>, _: &Params) -> R {
         .filter(|o| store.class_of(*o).is_ok_and(|c| store.universe().conforms(c, TypeRef::Class(TYPE))))
         // A template parameter's classifier types its template's members alone (AR-130).
         .filter(|t| !crate::templates::is_parameter_element(store, *t))
+        // UML's own metaclasses, the stereotypes and their extensions type nothing (AR-134).
+        .filter(|o| store.class_of(*o).is_ok_and(|c| c != crate::STEREOTYPE && c != crate::EXTENSION) && !crate::profiles::in_library(store, *o))
         .map(|t| json!({ "id": uuid_of(store, t).unwrap_or_default(), "name": name_of(store, t) }))
         .collect();
     Ok(json!({ "built_in": BUILT_IN, "types": held }))

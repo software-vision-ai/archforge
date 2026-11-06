@@ -664,6 +664,8 @@ str		«enumeration»	«enumeration»
 str		Data type	数据类型
 str		Primitive type	基本类型
 str		«dataType»	«dataType»
+str		«stereotype»	«stereotype»
+str		«metaclass»	«metaclass»
 str		«primitive»	«primitive»
 str		Association class	关联类
 str		Classifier	分类器
@@ -730,6 +732,58 @@ str		{kind} · nested in {owner} · model, in every diagram	{kind} · 嵌套于 
 str		Nested classifiers · {n}	嵌套分类器 · {n}
 str		Add nested classifier	添加嵌套分类器
 str		None yet. Add one here or from Models ▸ New inside {name}; both offer the same kinds.	暂无。可在此处或从“模型 ▸ 在 {name} 中新建”添加；两者提供相同的种类。
+str		New	新建
+str		New in {name}	在 {name} 中新建
+str	uml	Profile	配置文件
+str		profile	配置文件
+str		Stereotype	构造型
+str		extends {metaclasses}	扩展 {metaclasses}
+str		extends nothing yet	尚未扩展任何元类
+str		applies {profiles}	应用 {profiles}
+str		Profile · model	配置文件 · 模型
+str		This profile	此配置文件
+str		On this profile · {n}	此配置文件上 · {n}
+str		Stereotype · in profile {profile} · model	构造型 · 位于配置文件 {profile} · 模型
+str		This stereotype	此构造型
+str		On this stereotype · {n}	此构造型上 · {n}
+str		Metaclass · UML	元类 · UML
+str		Metaclass	元类
+str		This metaclass	此元类
+str		On this metaclass · {n}	此元类上 · {n}
+str		Metaclasses carry no skills	元类不带技能
+str		A UML metaclass, which stereotypes extend. It is UML's own, kept out of Models and the type menus, and never changes.	构造型所扩展的 UML 元类。它属于 UML 本身，不出现在模型和类型菜单中，也从不改变。
+str		Stereotypes · {n}	构造型 · {n}
+str		Add stereotype	添加构造型
+str		None yet. Add one here or from Models ▸ New ▸ Stereotype.	尚无。可在此处或通过 模型 ▸ 新建 ▸ 构造型 添加。
+str		Open profile diagram	打开配置文件图
+str		A package applies the profile through Applied profiles in its Properties; its elements may then use the profile's stereotypes.	包可通过其属性中的“已应用配置文件”应用该配置文件；其元素随后即可使用该配置文件的构造型。
+str		Extends · {n}	扩展 · {n}
+str		Add extended metaclass	添加扩展的元类
+str		{name} extends	{name} 扩展
+str		extended	已扩展
+str		Extended already	已扩展
+str		not drawn by Archforge yet	Archforge 尚未绘制
+str		Offered: the metaclasses Archforge draws. Other metaclasses are listed, disabled, as not drawn by Archforge yet.	可选：Archforge 绘制的元类。其他元类会以禁用状态列出，标明 Archforge 尚未绘制。
+str		Properties · {n}	属性 · {n}
+str		Types: primitive types, enumerations and data types of the model. Renaming {name} keeps every application; removing it is refused while elements use it.	类型：模型的基本类型、枚举和数据类型。重命名 {name} 会保留所有应用；只要仍有元素使用它，就拒绝删除。
+str		Applied profiles · {n}	已应用的配置文件 · {n}
+str		Apply profile	应用配置文件
+str		Apply to {name}	应用到 {name}
+str		applied	已应用
+str		Applied already	已应用
+str		No profile yet	尚无配置文件
+str		Make one with New ▸ Profile in Models.	可在模型中通过 新建 ▸ 配置文件 创建。
+str		Elements inside {name}, and inside its packages, can use the stereotypes of the applied profiles. Applying is one undo step; it adds no stereotype by itself.	{name} 及其包中的元素可以使用已应用配置文件的构造型。应用是一个撤销步骤；它本身不会添加任何构造型。
+str		Unapply profile	取消应用配置文件
+str		{profile} is in use in {package}: {uses}. Remove those first.	{profile} 在 {package} 中正在使用：{uses}。请先移除这些使用。
+str		{name} is in use: {uses}. Remove those first.	{name} 正在使用：{uses}。请先移除这些使用。
+str		{name} applies the profiles its elements use: {uses}. Remove those first.	{name} 应用了其元素所使用的配置文件：{uses}。请先移除这些使用。
+str		«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.	{metaclass} 上的 «{stereotype}» 正在使用：{uses}。请先移除这些使用。
+str		«{stereotype}» on {elements}	{elements} 上的 «{stereotype}»
+str		{first} and {second}	{first} 和 {second}
+plural		Show the use	显示 {n} 处使用
+str		A stereotype is shown on its profile's diagram	构造型显示在其配置文件的图中
+str		Place stereotype	放置构造型
 str		nested	嵌套
 str		package	包
 str		class	类
