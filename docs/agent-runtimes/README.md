@@ -426,11 +426,14 @@ fixtures were checked against, with codex-cli **0.166.0** installed:
 
 ```sh
 codex --version                                    # codex-cli 0.166.0
+SCHEMA_DIR="${SCHEMA_DIR:-$(mktemp -d)}"           # keeps a folder already set, else a new temporary one
 codex app-server generate-json-schema --out "$SCHEMA_DIR"
+echo "$SCHEMA_DIR/codex_app_server_protocol.schemas.json"
 ```
 
-`$SCHEMA_DIR/codex_app_server_protocol.schemas.json` is the whole bundle (v1 and v2 definitions,
-non-experimental, about 750 KB). The stable protocol has 106 client requests, 1 client notification
+The bundle lands in that folder, `$SCHEMA_DIR/codex_app_server_protocol.schemas.json` (the last
+line prints its path), beside one file per message type and the `v1/` and `v2/` folders. It is
+the whole bundle (v1 and v2 definitions, non-experimental, about 750 KB). The stable protocol has 106 client requests, 1 client notification
 (`initialized`), 10 server requests and 85 server notifications. Every observed message and every
 doc-derived Codex fixture validated against it (checked with `jsonschema`, Draft 7, requests and
 notifications by kind, responses by method). The Codex adapter's tests use a small, credited cut
