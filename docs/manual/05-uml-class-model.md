@@ -816,10 +816,13 @@ refused in the editor, and nothing is written. An n-ary association's ends are n
 so the editor offers no **Aggregation**.
 
 - **Add an end.** Press **+** beside **Ends**, or choose **Add end** on the diamond's menu (right
-  click), then click a class. The new leg is drawn on every diagram that shows the diamond and
-  that class.
+  click), then click a class. The new leg is drawn only on the diagrams that show both the
+  diamond and that class; on the others it appears once you place the class there.
 - **Move an end.** Drag the end of a leg onto another class, or pick another **Type** in the end's
-  editor. The leg follows on every diagram.
+  editor. On each diagram that shows the diamond, the leg moves to the new class's card; where that
+  class is not shown, the leg goes until you place it. The ends may drop **Subsets** or
+  **Redefines** entries that the move makes invalid; the canvas names them, and **Undo** brings
+  them back with the end.
 - **Remove an end.** The bin in the end's editor removes it with its legs. With four ends or more
   it goes at once, and a message offers **Undo**. A constraint that applies to that end alone goes
   with it, and the ends left drop any **Subsets** or **Redefines** entry that the removal makes

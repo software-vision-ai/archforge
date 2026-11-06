@@ -255,6 +255,45 @@ fn too_few_ends_and_a_data_type_are_refused() {
     assert!(why.contains("data type"), "{why}");
 }
 
+/// A metaclass of the hidden UML library is never an end: UML's own, it is refused before
+/// anything is made.
+#[test]
+fn a_metaclass_is_refused_as_an_end() {
+    let mut s = session();
+    let shop = shop(&mut s);
+    let tools = run(&mut s, "uml.package.add", json!({ "name": "Tools" }));
+    let audit = run(&mut s, "uml.profile.add", json!({ "name": "Audit", "package": tools }));
+    run(&mut s, "uml.stereotype.add", json!({ "profile": audit, "name": "Tracked", "extends": ["Class"] }));
+    let st = s.doc();
+    let metaclass = st.uuid(archforge_uml::profiles::metaclass(st, "Class").unwrap()).unwrap().to_string();
+    let why = refused(&mut s, "uml.association.add-nary", json!({ "classes": [shop.customer, shop.product, metaclass] }));
+    assert!(why.contains("UML metaclass Class"), "{why}");
+    let a = run(&mut s, "uml.association.add-nary", json!({ "classes": [shop.customer, shop.product, shop.catalog] }));
+    let why = refused(&mut s, "uml.association.add-end", json!({ "association": a, "class": metaclass }));
+    assert!(why.contains("UML metaclass Class"), "{why}");
+}
+
+/// Deleting a class at one end of a four-ended association deletes the association with all its
+/// ends, its diamond and its legs, as one step; undo brings them all back.
+#[test]
+fn deleting_a_class_at_an_end_deletes_the_whole_association() {
+    let mut s = session();
+    let shop = shop(&mut s);
+    let a = draw(&mut s, &shop.d, &[&shop.customer, &shop.product, &shop.catalog, &shop.store]);
+    let ends: Vec<String> = nary::ends(s.doc(), obj(s.doc(), &a)).into_iter().map(|e| s.doc().uuid(e).unwrap().to_string()).collect();
+    assert_eq!(ends.len(), 4);
+    let before = picture(s.doc());
+    run(&mut s, "element.remove", json!({ "ids": [shop.store] }));
+    assert!(!alive(&s, &a) && ends.iter().all(|e| !alive(&s, e)), "the association and its four ends go");
+    let st = s.doc();
+    let d = obj(st, &shop.d);
+    assert_eq!(st.list(d, archforge_diagram::diagram::NODE).unwrap().len(), 3, "the diamond and Store's card go, the other cards stay");
+    assert!(st.list(d, archforge_diagram::diagram::EDGE).unwrap().is_empty(), "and every leg");
+    s.undo().unwrap();
+    assert_eq!(picture(s.doc()), before, "undo brings them all back");
+    assert_eq!(legs(&s, &shop.d, &a), ["Catalog", "Customer", "Product", "Store"]);
+}
+
 /// A class at two ends: each end has its own role, and a role another end has is refused.
 #[test]
 fn a_class_repeats_at_two_ends_with_different_roles() {

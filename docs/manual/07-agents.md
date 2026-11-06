@@ -148,7 +148,9 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   end's id (or `diagram_connect_all`), all in one `batch` for one undo step. `uml_association_set_end`
   sets an end by its place among the ends; its role must differ from every other end's, and an
   n-ary end takes no aggregation. `uml_association_add_end`, `uml_association_reconnect_end` and
-  `uml_association_remove_end` add, move and remove an end, the legs following on every diagram.
+  `uml_association_remove_end` add, move and remove an end; a leg is drawn or kept only on the
+  diagrams that show both the diamond and the end's class, and what the ends subset or redefine
+  that a move or removal makes invalid is dropped and listed.
   Removing one of three ends is refused unless `binary` is true, which makes it an ordinary
   association between the two classes left. `uml_relationship_list` gives it with the kind
   `n-ary association` and all its ends.

@@ -790,7 +790,7 @@ What is UML's own, beside the shared rules above.
   the editor. The design's arrows that reorder ends are left out: nothing reorders them yet. Add
   end (`+`, or the diamond's or a leg's right-click menu: Add end, Reconnect end, Remove from this
   diagram, Delete from the model…) waits for a class click; dragging a leg's class end, or picking
-  another Type, moves that end; legs follow on every diagram. Removing one of three ends asks in
+  another Type, moves that end; a leg is drawn on each diagram that shows the diamond and its class. Removing one of three ends asks in
   Properties (frame A5): "Two ends would remain", Keep 3 ends (focused, as Esc) or Make it
   binary, which turns it into a plain association between the two classes left, a named line in the
   diamond's place wherever both are shown, as one undo step; with four ends or more the bin removes

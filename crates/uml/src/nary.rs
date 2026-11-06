@@ -221,6 +221,10 @@ fn classifiers_of(store: &Store, p: &Params, key: &str) -> Result<Vec<Obj>, Comm
         if !store.class_of(c).is_ok_and(crate::is_classifier) {
             return Err(refuse(key, format!("{} is {}; an association's ends are classes and interfaces", short(id), a_what(store, c))));
         }
+        // A metaclass of the hidden UML library is UML's own, never the model's (AR-134).
+        if let Some(why) = crate::profiles::library_problem(store, c) {
+            return Err(refuse(key, why));
+        }
         out.push(c);
     }
     Ok(out)
