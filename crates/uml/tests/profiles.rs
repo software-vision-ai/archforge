@@ -2,14 +2,17 @@
 //! stereotypes extending metaclasses of the hidden UML library and owning typed properties, each
 //! change one undo step; unsupported metaclasses and property types refused with the reason; a
 //! profile applied to a package and unapplied; unapplying, removing and moving refused while
-//! stereotype applications (built directly in the store, as AR-135 will make them) use them, the
-//! uses counted and named; the library kept out of types and reads; saved as rows and read back
-//! identical, the model still opening; the profile's diagram; the sweep.
+//! stereotype applications use them, the uses counted and named; the library kept out of types and
+//! reads; saved as rows and read back identical, the model still opening; the profile's diagram;
+//! the sweep. Then the applications themselves (AR-135): applied and unapplied, the picker's
+//! filter, values read by type and multiplicity, defaults apart from values set, the notation on
+//! cards, members and lines, each diagram's choice to show values, and nothing lost unseen.
 
 use archforge_diagram::{Notation, ProjectView};
 use archforge_engine::testing::sweep_with;
 use archforge_engine::{Options, Session};
 use archforge_mof::{CompositeSlabs, Obj, Store, Uuid, Value, rows};
+use archforge_uml::applications;
 use archforge_uml::profiles::{self, UML_URI};
 use archforge_uml::{ALONE, UmlNotation, registry};
 use serde_json::{Value as Json, json};
@@ -133,24 +136,18 @@ fn shop(s: &mut S) -> [String; 8] {
     [commerce, order, customer, id_attr, persistence, entity, id, reference]
 }
 
-/// The session `s` with stereotype applications built directly in its store, as AR-135 will make
-/// them: an InstanceSpecification classified by the stereotype, in the element's package, and a
-/// core Link from it to the element. Gives a session over the rows read back with them.
+/// The session `s` with stereotype applications made by `uml.stereotype.apply`, each
+/// (stereotype, element), in a session over the rows read back.
 fn with_applications(s: &S, uses: &[(&str, &str)]) -> S {
     let (tables, junctions) = tables();
     let saved = rows::snapshot(s.doc(), &tables, &junctions).unwrap();
     let mut st = store(1 << 40);
     rows::restore(&mut st, &saved, &tables, &junctions).unwrap();
-    let model = archforge_uml::commands::model(&st).unwrap();
+    let mut s = session_over(st);
     for (stereotype, element) in uses {
-        let (stereotype, element) = (obj(&st, stereotype), obj(&st, element));
-        let home = profiles::home_of(&st, element).unwrap();
-        let instance = st.create(archforge_uml::INSTANCE_SPECIFICATION).unwrap();
-        st.push(instance, archforge_uml::instance_specification::CLASSIFIER, Value::Ref(stereotype)).unwrap();
-        st.push(home, archforge_uml::package::PACKAGED_ELEMENT, Value::Ref(instance)).unwrap();
-        archforge_core::link(&mut st, model, profiles::APPLICATION_LINK, instance, element, None).unwrap();
+        run(&mut s, "uml.stereotype.apply", json!({ "element": element, "stereotype": stereotype }));
     }
-    session_over(st)
+    s
 }
 
 /// A profile and its stereotypes are made one undo step each; each extension is UML's own shape:
@@ -549,4 +546,422 @@ fn the_profile_diagram_command_fills_the_diagram_keeping_what_it_shows() {
     assert_eq!(count(&s), (8, 4));
     let st = s.doc();
     assert_eq!(st.get(obj(st, &node), archforge_diagram::node::X).unwrap(), before, "a card placed stays where it is");
+}
+
+// Stereotype applications and their values (AR-135).
+
+/// The shop with Persistence applied to Commerce: as [`shop`].
+fn applied_shop(s: &mut S) -> [String; 8] {
+    let ids = shop(s);
+    run(s, "uml.profile.apply", json!({ "package": ids[0], "profile": ids[4] }));
+    ids
+}
+
+/// The ids of a stereotype's property named `name`.
+fn property(s: &mut S, stereotype: &str, name: &str) -> String {
+    let got = read(s, "uml.stereotype.get", json!({ "stereotype": stereotype }));
+    got["properties"].as_array().unwrap().iter().find(|p| p["name"] == name).unwrap()["id"].as_str().unwrap().to_string()
+}
+
+/// A stereotype is applied and unapplied one undo step each: an InstanceSpecification classified by
+/// it at the project's top level, a core trace Link to the element and no other change; unapplying
+/// takes its values along and keeps the stereotype's definition.
+#[test]
+fn stereotypes_are_applied_and_unapplied_one_step_each() {
+    let mut s = session();
+    let [_, order, customer, _, _, entity, ..] = applied_shop(&mut s);
+    let instance = one_step(&mut s, "uml.stereotype.apply", json!({ "element": order, "stereotype": entity }));
+    {
+        let st = s.doc();
+        let i = obj(st, &instance);
+        let model = archforge_uml::commands::model(st).unwrap();
+        assert_eq!(st.container(i).unwrap(), Some((model, archforge_core::model::MEMBER)), "beside the library, in no package");
+        assert_eq!(profiles::element_of(st, i), Some(obj(st, &order)));
+        assert_eq!(applications::stereotype_of(st, i), Some(obj(st, &entity)));
+        assert_eq!(applications::keywords(st, obj(st, &order)).as_deref(), Some("«Entity»"));
+        assert_eq!(profiles::stereotype_uses(st, obj(st, &entity)).total(), 1, "AR-134's refusals see it");
+        assert_eq!(st.first_problem_by(archforge_uml::names::kind), None);
+    }
+    let listed = read(&mut s, "uml.stereotype.list-applied", json!({ "element": order }));
+    assert_eq!(listed["keywords"], "«Entity»");
+    assert_eq!(listed["applied"][0]["profile"], "Persistence");
+    assert_eq!(listed["applied"][0]["properties"][1]["default"], "false");
+    assert_eq!(listed["applied"][0]["properties"][1]["set"], false);
+    run(&mut s, "uml.stereotype.set-value", json!({ "element": order, "stereotype": entity, "property": "table", "values": ["orders"] }));
+    one_step(&mut s, "uml.stereotype.unapply", json!({ "element": order, "stereotype": entity }));
+    let st = s.doc();
+    assert!(applications::applied_to(st, obj(st, &order)).is_empty());
+    assert!(profiles::is_stereotype(st, obj(st, &entity)), "the definition stays");
+    for class in [archforge_uml::INSTANCE_SPECIFICATION, archforge_uml::SLOT, archforge_uml::LITERAL_STRING, archforge_core::LINK] {
+        assert!(st.alive().all(|o| st.class_of(o).ok() != Some(class)), "nothing of the application is left");
+    }
+    run(&mut s, "uml.stereotype.apply", json!({ "element": customer, "stereotype": entity }));
+    let why = refused(&mut s, "uml.stereotype.unapply", json!({ "element": order, "stereotype": entity }));
+    assert!(why.contains("«Entity» is not applied to Order"), "{why}");
+}
+
+/// The picker (F4) lists every stereotype: those that extend the element's metaclass and whose
+/// profile a package around it applies are open, one applied already is marked, and the rest are
+/// refused with why; applying a refused one is refused alike, changing nothing.
+#[test]
+fn the_picker_offers_what_extends_the_element_in_scope() {
+    let mut s = session();
+    let [commerce, order, _, id_attr, _, entity, id, reference] = applied_shop(&mut s);
+    let logging = run(&mut s, "uml.profile.add", json!({ "name": "Logging" }));
+    let tracked = run(&mut s, "uml.stereotype.add", json!({ "profile": logging, "name": "Tracked", "extends": ["Class"] }));
+    run(&mut s, "uml.stereotype.apply", json!({ "element": order, "stereotype": entity }));
+    let offered = read(&mut s, "uml.stereotype.applicable", json!({ "element": order }));
+    let state = |name: &str| {
+        let all = offered["stereotypes"].as_array().unwrap();
+        let s = all.iter().find(|s| s["name"] == name).unwrap();
+        (s["state"].as_str().unwrap().to_string(), s["why"].as_str().unwrap_or_default().to_string())
+    };
+    assert_eq!(state("Entity").0, "applied");
+    assert_eq!(state("Id"), ("refused".into(), "«Id» extends Property, and Order is a class".into()));
+    assert!(state("Reference").1.contains("extends Association"));
+    let (tracked_state, why) = state("Tracked");
+    assert_eq!(tracked_state, "refused");
+    assert!(why.contains("«Tracked» is of the profile Logging, which no package around Order applies; apply it to Commerce"), "{why}");
+    assert!(refused(&mut s, "uml.stereotype.apply", json!({ "element": order, "stereotype": tracked })).contains("no package around Order"));
+    assert!(refused(&mut s, "uml.stereotype.apply", json!({ "element": order, "stereotype": id })).contains("«Id» extends Property"));
+    assert!(refused(&mut s, "uml.stereotype.apply", json!({ "element": order, "stereotype": entity })).contains("applied to Order already"));
+    // Applied around Order, Tracked opens; Id applies to an attribute, which is a Property.
+    run(&mut s, "uml.profile.apply", json!({ "package": commerce, "profile": logging }));
+    one_step(&mut s, "uml.stereotype.apply", json!({ "element": order, "stereotype": tracked }));
+    one_step(&mut s, "uml.stereotype.apply", json!({ "element": id_attr, "stereotype": id }));
+    assert_eq!(read(&mut s, "uml.stereotype.list-applied", json!({ "element": order }))["keywords"], "«Entity, Tracked»");
+    // What takes no stereotype: a stereotype, UML's own metaclasses, an application, a template
+    // parameter's classifier.
+    let class = {
+        let st = s.doc();
+        st.uuid(profiles::metaclass(st, "Class").unwrap()).unwrap().to_string()
+    };
+    assert!(refused(&mut s, "uml.stereotype.apply", json!({ "element": entity, "stereotype": entity })).contains("belongs to a profile"));
+    assert!(refused(&mut s, "uml.stereotype.apply", json!({ "element": class, "stereotype": entity })).contains("UML metaclass Class"));
+    let instance = read(&mut s, "uml.stereotype.list-applied", json!({ "element": order }))["applied"][0]["id"].as_str().unwrap().to_string();
+    assert!(refused(&mut s, "uml.stereotype.apply", json!({ "element": instance, "stereotype": entity })).contains("is a stereotype application"));
+    assert_eq!(read(&mut s, "uml.stereotype.applicable", json!({ "element": instance }))["takes"], false);
+    let _ = reference;
+}
+
+/// Every kind whose metaclass a stereotype extends takes it: the 0.12.0 classifiers, an
+/// association class as a Class and an Association, a nested classifier, a template, an operation,
+/// an association, a generalization and a package; the package around a nested classifier is its
+/// owner's.
+#[test]
+fn every_extended_kind_takes_its_stereotypes() {
+    let mut s = session();
+    let [commerce, order, customer, _, persistence, ..] = applied_shop(&mut s);
+    let all = run(
+        &mut s,
+        "uml.stereotype.add",
+        json!({ "profile": persistence, "name": "Any", "extends": ["Class", "Interface", "Enumeration", "DataType", "Operation", "Association", "Generalization", "Package"] }),
+    );
+    let mut elements = Vec::new();
+    for (cmd, name) in
+        [("uml.interface.add", "Priced"), ("uml.enumeration.add", "Status"), ("uml.data-type.add", "Money"), ("uml.primitive-type.add", "Sku")]
+    {
+        elements.push(run(&mut s, cmd, json!({ "package": commerce, "name": name })));
+    }
+    elements.push(run(&mut s, "uml.nested.add", json!({ "owner": order, "kind": "enumeration", "name": "Priority" })));
+    let repo = run(&mut s, "uml.class.add", json!({ "package": commerce, "name": "Repository" }));
+    run(&mut s, "uml.template-parameter.add", json!({ "classifier": repo, "name": "T" }));
+    elements.push(repo);
+    elements.push(run(&mut s, "uml.association-class.add", json!({ "from": order, "to": customer, "name": "Line" })));
+    elements.push(run(&mut s, "uml.association.add", json!({ "from": order, "to": customer })));
+    elements.push(run(&mut s, "uml.generalization.add", json!({ "specific": customer, "general": order })));
+    elements.push(run(&mut s, "uml.operation.add", json!({ "class": order, "name": "total" })));
+    elements.push(commerce.clone());
+    for e in &elements {
+        one_step(&mut s, "uml.stereotype.apply", json!({ "element": e, "stereotype": all }));
+    }
+    assert_eq!(profiles::stereotype_uses(s.doc(), obj(s.doc(), &all)).total(), elements.len());
+    // A template parameter's classifier is its template's own.
+    let param = {
+        let st = s.doc();
+        let r = obj(st, &elements[5]);
+        let c = st.alive().find(|o| archforge_uml::templates::is_parameter_element(st, *o) && st.contains(r, *o)).unwrap();
+        st.uuid(c).unwrap().to_string()
+    };
+    assert!(!refused(&mut s, "uml.stereotype.apply", json!({ "element": param, "stereotype": all })).is_empty());
+}
+
+/// Each value is read by its property's type, as a default is: a String's any text, an Integer's a
+/// whole number, a Real's a number, a Boolean's true or false, an UnlimitedNatural's a whole number
+/// or *, an enumeration's a literal (kept as an InstanceValue), a data type's an expression's text;
+/// a value that does not read, too many or too few for the multiplicity, and the same one twice in
+/// a unique property are refused naming why, changing nothing.
+#[test]
+fn values_are_read_by_type_and_multiplicity() {
+    let mut s = session();
+    let [commerce, order, _, _, _, entity, ..] = applied_shop(&mut s);
+    let fetch = run(&mut s, "uml.enumeration.add", json!({ "package": commerce, "name": "Fetch" }));
+    for l in ["eager", "lazy"] {
+        run(&mut s, "uml.literal.add", json!({ "enumeration": fetch, "name": l }));
+    }
+    let money = run(&mut s, "uml.data-type.add", json!({ "package": commerce, "name": "Money" }));
+    for (name, ty, multiplicity) in [
+        ("rows", "Integer", ""),
+        ("ratio", "Real", ""),
+        ("limit", "UnlimitedNatural", ""),
+        ("fetch", fetch.as_str(), ""),
+        ("budget", money.as_str(), ""),
+        ("tags", "String", "0..2"),
+    ] {
+        run(&mut s, "uml.attribute.add", json!({ "class": entity, "name": name, "type": ty, "multiplicity": multiplicity }));
+    }
+    run(&mut s, "uml.stereotype.apply", json!({ "element": order, "stereotype": entity }));
+    let set = |s: &mut S, property: &str, values: Json| {
+        let p = json!({ "element": order, "stereotype": entity, "property": property, "values": values });
+        one_step(s, "uml.stereotype.set-value", p);
+    };
+    let wrong = |s: &mut S, property: &str, values: Json| {
+        refused(s, "uml.stereotype.set-value", json!({ "element": order, "stereotype": entity, "property": property, "values": values }))
+    };
+    set(&mut s, "table", json!(["orders"]));
+    set(&mut s, "cached", json!(["TRUE"]));
+    set(&mut s, "rows", json!([" 42 "]));
+    set(&mut s, "ratio", json!(["2.5"]));
+    set(&mut s, "limit", json!(["*"]));
+    set(&mut s, "fetch", json!(["Lazy"]));
+    set(&mut s, "budget", json!(["10 EUR"]));
+    set(&mut s, "tags", json!(["a", "b"]));
+    let listed = read(&mut s, "uml.stereotype.list-applied", json!({ "element": order }));
+    let values: Vec<(String, Json)> = listed["applied"][0]["properties"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| (p["name"].as_str().unwrap().to_string(), p["values"].clone()))
+        .collect();
+    assert_eq!(
+        values,
+        [
+            ("table".to_string(), json!(["orders"])),
+            ("cached".into(), json!(["true"])),
+            ("rows".into(), json!(["42"])),
+            ("ratio".into(), json!(["2.5"])),
+            ("limit".into(), json!(["*"])),
+            ("fetch".into(), json!(["lazy"])),
+            ("budget".into(), json!(["10 EUR"])),
+            ("tags".into(), json!(["a", "b"])),
+        ]
+    );
+    {
+        let st = s.doc();
+        let i = applications::application(st, obj(st, &order), obj(st, &entity)).unwrap();
+        let fetch_p = profiles::properties(st, obj(st, &entity)).into_iter().find(|p| name(st, *p) == "fetch").unwrap();
+        let v = applications::values(st, i, fetch_p)[0];
+        assert_eq!(st.class_of(v).unwrap(), archforge_uml::INSTANCE_VALUE, "a literal is referred to, never copied as text");
+    }
+    assert!(wrong(&mut s, "rows", json!(["many"])).contains("\"many\" is no value of rows: an Integer is a whole number"));
+    assert!(wrong(&mut s, "cached", json!(["yes"])).contains("a Boolean is true or false"));
+    assert!(wrong(&mut s, "fetch", json!(["never"])).contains("one of its literals: eager, lazy"));
+    assert!(wrong(&mut s, "ratio", json!(["NaN"])).contains("a Real is a number"));
+    assert!(wrong(&mut s, "table", json!(["a", "b"])).contains("the multiplicity of table, [1], does not allow 2 values"));
+    assert!(wrong(&mut s, "tags", json!(["a", "b", "c"])).contains("[0..2]"));
+    assert!(wrong(&mut s, "tags", json!(["a", "a"])).contains("tags is unique and holds \"a\" twice"));
+    assert!(wrong(&mut s, "tags", json!(["  "])).contains("a value is empty"));
+    assert!(wrong(&mut s, "colour", json!(["red"])).contains("«Entity» has no property \"colour\""));
+    let why = wrong(&mut s, "tags", json!("a"));
+    assert!(why.contains("values"), "{why}");
+}
+
+/// A property left unset shows its default and is not set; a value set, even one equal to the
+/// default, is set; clearing it shows the default again.
+#[test]
+fn defaults_are_kept_apart_from_values_set() {
+    let mut s = session();
+    let [_, order, _, _, _, entity, ..] = applied_shop(&mut s);
+    run(&mut s, "uml.stereotype.apply", json!({ "element": order, "stereotype": entity }));
+    let cached = |s: &mut S| read(s, "uml.stereotype.list-applied", json!({ "element": order }))["applied"][0]["properties"][1].clone();
+    assert_eq!(
+        (cached(&mut s)["set"].clone(), cached(&mut s)["values"].clone(), cached(&mut s)["default"].clone()),
+        (json!(false), json!([]), json!("false"))
+    );
+    run(&mut s, "uml.stereotype.set-value", json!({ "element": order, "stereotype": entity, "property": "cached", "values": ["false"] }));
+    assert_eq!((cached(&mut s)["set"].clone(), cached(&mut s)["values"].clone()), (json!(true), json!(["false"])), "set to the default, it is set");
+    one_step(&mut s, "uml.stereotype.set-value", json!({ "element": order, "stereotype": entity, "property": "cached", "values": [] }));
+    assert_eq!(cached(&mut s)["set"], false);
+    assert!(s.doc().alive().all(|o| s.doc().class_of(o).ok() != Some(archforge_uml::SLOT)), "clearing takes the slot away");
+}
+
+/// On a card the stereotypes replace the kind's word (`«Entity»` for Class), a keyword kind keeping
+/// its keyword first; a member's row and a line write them before their text; a diagram lists the
+/// values set in an `«Entity»` compartment only while it shows them, each diagram its own choice.
+#[test]
+fn cards_members_and_lines_show_their_stereotypes() {
+    let mut s = session();
+    let [commerce, order, customer, id_attr, persistence, entity, id, reference] = applied_shop(&mut s);
+    let priced = run(&mut s, "uml.interface.add", json!({ "package": commerce, "name": "Priced" }));
+    run(&mut s, "uml.stereotype.set", json!({ "stereotype": entity, "extends": ["Class", "Interface"] }));
+    let places = run(&mut s, "uml.association.add", json!({ "from": customer, "to": order, "name": "places" }));
+    for (e, st) in [(&order, &entity), (&priced, &entity), (&id_attr, &id), (&places, &reference)] {
+        run(&mut s, "uml.stereotype.apply", json!({ "element": e, "stereotype": st }));
+    }
+    run(&mut s, "uml.stereotype.set-value", json!({ "element": order, "stereotype": entity, "property": "table", "values": ["orders"] }));
+    let one = run(&mut s, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "name": "One", "element": commerce }));
+    let two = run(&mut s, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "name": "Two", "element": commerce }));
+    let rows = |s: &S, d: &str| {
+        let st = s.doc();
+        let card = UmlNotation.card(st, obj(st, &order), obj(st, d)).unwrap();
+        card.compartments.iter().map(|c| c.iter().map(|r| r.text.clone()).collect::<Vec<_>>()).collect::<Vec<_>>()
+    };
+    {
+        let st = s.doc();
+        let (o, d) = (obj(st, &order), obj(st, &one));
+        assert_eq!(UmlNotation.card(st, o, d).unwrap().eyebrow, archforge_diagram::figure::Text::Plain("«Entity»".into()));
+        assert_eq!(UmlNotation.card(st, obj(st, &priced), d).unwrap().eyebrow, archforge_diagram::figure::Text::Plain("«interface, Entity»".into()));
+        assert_eq!(UmlNotation.line(st, obj(st, &places)).unwrap().keyword.as_deref(), Some("«Reference»"));
+        assert_eq!(UmlNotation.line(st, obj(st, &places)).unwrap().ends[0].role, None);
+        assert_eq!(archforge_uml::figures::member_text(st, obj(st, &id_attr)), "«Id» + id : Integer");
+    }
+    assert_eq!(rows(&s, &one), [vec!["«Id» + id : Integer".to_string()], vec![]], "no values while the diagram hides them");
+    one_step(&mut s, "uml.stereotype.show-values", json!({ "diagram": one, "show": true }));
+    assert_eq!(rows(&s, &one)[2], ["«Entity»", "table = \"orders\""], "a value set shows, a default does not");
+    assert_eq!(rows(&s, &two).len(), 2, "the other diagram keeps its own choice");
+    assert_eq!(read(&mut s, "uml.stereotype.list-applied", json!({ "element": order, "diagram": one }))["values_shown"], true);
+    assert_eq!(read(&mut s, "uml.stereotype.list-applied", json!({ "element": order, "diagram": two }))["values_shown"], false);
+    // An outsider names its package beside its stereotypes.
+    let other = run(&mut s, "uml.package.add", json!({ "name": "Other" }));
+    let elsewhere = run(&mut s, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "name": "E", "element": other }));
+    {
+        let st = s.doc();
+        let eyebrow = UmlNotation.card(st, obj(st, &order), obj(st, &elsewhere)).unwrap().eyebrow;
+        assert_eq!(
+            eyebrow,
+            archforge_diagram::figure::Text::Said("{keywords} · {package}", vec![("keywords", "«Entity»".into()), ("package", "Commerce".into())])
+        );
+    }
+    // One tag lists the diagrams that show values; turning the last off takes it away.
+    let tags = |s: &S| {
+        let st = s.doc();
+        st.alive()
+            .filter(|o| st.class_of(*o).ok() == Some(archforge_core::TAG) && archforge_core::name_of(st, *o) == applications::VALUES_TAG)
+            .count()
+    };
+    one_step(&mut s, "uml.stereotype.show-values", json!({ "diagram": two, "show": true }));
+    assert_eq!(tags(&s), 1, "one tag for both diagrams");
+    run(&mut s, "uml.stereotype.show-values", json!({ "diagram": two, "show": false }));
+    assert_eq!(rows(&s, &one)[2], ["«Entity»", "table = \"orders\""], "the other keeps its choice");
+    run(&mut s, "uml.stereotype.show-values", json!({ "diagram": one, "show": false }));
+    assert_eq!(tags(&s), 0, "the last turned off takes the tag away");
+    // A removed diagram leaves the tag on nothing, which the next one turned on reuses.
+    run(&mut s, "uml.stereotype.show-values", json!({ "diagram": one, "show": true }));
+    one_step(&mut s, "diagram.remove", json!({ "diagram": one }));
+    run(&mut s, "uml.stereotype.show-values", json!({ "diagram": two, "show": true }));
+    assert_eq!(tags(&s), 1);
+    let st = s.doc();
+    assert_eq!(st.first_problem_by(archforge_uml::names::kind), None);
+    let _ = persistence;
+    assert!(refused(&mut s, "uml.stereotype.show-values", json!({ "diagram": order, "show": true })).contains("is not a class diagram"));
+}
+
+/// Deleting an element takes its stereotype applications and their values along in one step; a
+/// literal a value names, a new type for a property whose values are set, and bounds a set value
+/// breaks are refused, so no value is lost unseen.
+#[test]
+fn values_are_never_lost_unseen() {
+    let mut s = session();
+    let [commerce, order, customer, id_attr, _, entity, id, _] = applied_shop(&mut s);
+    let fetch = run(&mut s, "uml.enumeration.add", json!({ "package": commerce, "name": "Fetch" }));
+    let lazy = run(&mut s, "uml.literal.add", json!({ "enumeration": fetch, "name": "lazy" }));
+    let fetch_p = run(&mut s, "uml.attribute.add", json!({ "class": entity, "name": "fetch", "type": fetch }));
+    let tags = run(&mut s, "uml.attribute.add", json!({ "class": entity, "name": "tags", "type": "String", "multiplicity": "*" }));
+    run(&mut s, "uml.stereotype.apply", json!({ "element": order, "stereotype": entity }));
+    run(&mut s, "uml.stereotype.apply", json!({ "element": id_attr, "stereotype": id }));
+    run(&mut s, "uml.stereotype.set-value", json!({ "element": order, "stereotype": entity, "property": "fetch", "values": ["lazy"] }));
+    run(&mut s, "uml.stereotype.set-value", json!({ "element": order, "stereotype": entity, "property": "tags", "values": ["a", "b"] }));
+    let why = refused(&mut s, "element.remove", json!({ "ids": [lazy] }));
+    assert!(why.contains("the literal lazy is the value of fetch in «Entity» on Order"), "{why}");
+    assert!(refused(&mut s, "element.remove", json!({ "ids": [fetch] })).contains("the literal lazy"));
+    assert!(refused(&mut s, "element.remove", json!({ "ids": [fetch_p] })).contains("the values of fetch are set on 1 element"));
+    let why = refused(&mut s, "uml.attribute.set", json!({ "attribute": tags, "type": "Integer" }));
+    assert!(why.contains("clear them before giving it another type"), "{why}");
+    let why = refused(&mut s, "uml.attribute.set", json!({ "attribute": tags, "multiplicity": "0..1" }));
+    assert!(why.contains("do not fit tags [0..1]"), "{why}");
+    run(&mut s, "uml.attribute.set", json!({ "attribute": tags, "multiplicity": "1..5" }));
+    // Deleting the carrier: Order with its id attribute and their applications, one step.
+    one_step(&mut s, "element.remove", json!({ "ids": [order] }));
+    let st = s.doc();
+    assert_eq!(profiles::stereotype_uses(st, obj(st, &entity)).total(), 0);
+    assert_eq!(profiles::stereotype_uses(st, obj(st, &id)).total(), 0);
+    for class in [archforge_uml::INSTANCE_SPECIFICATION, archforge_uml::SLOT, archforge_uml::INSTANCE_VALUE, archforge_core::LINK] {
+        assert!(st.alive().all(|o| st.class_of(o).ok() != Some(class)), "nothing of the applications is left");
+    }
+    // Free again, the literal goes.
+    one_step(&mut s, "element.remove", json!({ "ids": [lazy] }));
+    let _ = customer;
+}
+
+/// Applications and their values are saved as rows and read back identical, the model opening
+/// again; moving what carries them keeps them, their instance staying at the top level.
+#[test]
+fn applications_are_saved_read_back_and_kept_through_moves() {
+    let mut s = session();
+    let [commerce, order, _, _, persistence, entity, ..] = applied_shop(&mut s);
+    run(&mut s, "uml.stereotype.apply", json!({ "element": order, "stereotype": entity }));
+    run(&mut s, "uml.stereotype.set-value", json!({ "element": order, "stereotype": entity, "property": "table", "values": ["orders"] }));
+    let other = run(&mut s, "uml.package.add", json!({ "name": "Other" }));
+    run(&mut s, "uml.profile.apply", json!({ "package": other, "profile": persistence }));
+    one_step(&mut s, "uml.class.move", json!({ "class": order, "package": other }));
+    // Commerce, emptied of Order, may now go: its contents move up and the application stays.
+    one_step(&mut s, "element.remove", json!({ "ids": [commerce] }));
+    let (tables, junctions) = tables();
+    let saved = rows::snapshot(s.doc(), &tables, &junctions).unwrap();
+    let mut back = store(1 << 35);
+    rows::restore(&mut back, &saved, &tables, &junctions).unwrap();
+    assert_eq!(rows::snapshot(&back, &tables, &junctions).unwrap(), saved, "the rows read back are the rows written");
+    let o = obj(&back, &order);
+    let e = obj(&back, &entity);
+    let i = applications::application(&back, o, e).expect("still applied");
+    let table = profiles::properties(&back, e)[0];
+    assert_eq!(applications::value_texts(&back, i, table), ["orders"]);
+    assert_eq!(back.first_problem_by(archforge_uml::names::kind), None, "the model opens again");
+}
+
+/// The sweep over the applications' commands breaks nothing.
+#[test]
+fn the_sweep_over_applications_breaks_nothing() {
+    let mut s = session();
+    let [commerce, order, _, id_attr, _, entity, id, _] = applied_shop(&mut s);
+    run(&mut s, "uml.stereotype.apply", json!({ "element": order, "stereotype": entity }));
+    let d = run(&mut s, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "name": "One", "element": commerce }));
+    let listed: Vec<String> = s.registry().infos(&s.facts()).into_iter().map(|i| i.id.to_string()).collect();
+    for cmd in [
+        "uml.stereotype.apply",
+        "uml.stereotype.unapply",
+        "uml.stereotype.set-value",
+        "uml.stereotype.list-applied",
+        "uml.stereotype.applicable",
+        "uml.stereotype.show-values",
+    ] {
+        assert!(listed.iter().any(|l| l == cmd), "{cmd} is swept");
+    }
+    let table = property(&mut s, &entity, "table");
+    let ids = [order.as_str(), entity.as_str(), id.as_str(), id_attr.as_str(), table.as_str(), d.as_str(), "table", "not-an-id"];
+    let calls = sweep_with(&mut s, &ids, picture).unwrap();
+    assert!(calls > 50, "{calls}");
+}
+
+/// An n-ary association takes the stereotypes extending Association, written above its diamond's
+/// name, and each of its ends those extending Property, written at its leg's middle (AR-135 over
+/// AR-128).
+#[test]
+fn n_ary_associations_and_their_legs_show_their_stereotypes() {
+    let mut s = session();
+    let [commerce, order, customer, _, _, _, id, reference] = applied_shop(&mut s);
+    let product = run(&mut s, "uml.class.add", json!({ "package": commerce, "name": "Product" }));
+    let a = run(&mut s, "uml.association.add-nary", json!({ "classes": [customer, order, product], "name": "recommends" }));
+    one_step(&mut s, "uml.stereotype.apply", json!({ "element": a, "stereotype": reference }));
+    let end = {
+        let st = s.doc();
+        st.uuid(archforge_uml::nary::ends(st, obj(st, &a))[0]).unwrap().to_string()
+    };
+    one_step(&mut s, "uml.stereotype.apply", json!({ "element": end, "stereotype": id }));
+    let d = run(&mut s, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "name": "One", "element": commerce }));
+    let st = s.doc();
+    let card = UmlNotation.card(st, obj(st, &a), obj(st, &d)).unwrap();
+    assert_eq!(card.eyebrow, archforge_diagram::figure::Text::Plain("«Reference»".into()));
+    assert_eq!(UmlNotation.line(st, obj(st, &end)).unwrap().keyword.as_deref(), Some("«Id»"));
+    let _ = order;
 }

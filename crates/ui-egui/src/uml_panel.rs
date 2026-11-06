@@ -295,6 +295,8 @@ pub(crate) fn class_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
     }
     y = final_check(shell, ui, p, r, y, class, class_id);
     y = leaf_check(shell, ui, p, r, y, class, class_id);
+    // Its stereotypes, or the selected member's (AR-135, F3).
+    y = crate::uml_stereotypes::section_for(shell, ui, p, r, y, class);
     // The classifiers it nests, a class's or an interface's (AR-132, D1).
     if shell.session.as_ref().is_some_and(|s| crate::uml_nesting::owns(s.doc(), class)) {
         y = crate::uml_nesting::nested_section(shell, ui, p, r, y, class, class_id);
@@ -562,9 +564,10 @@ pub(crate) fn package_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r:
         &here,
         Menu::PackageParent,
     );
-    // The profiles it applies (AR-134, F5), then its constraints (AR-133).
+    // Its stereotypes (AR-135), the profiles it applies (AR-134, F5), then its constraints (AR-133).
     if let Some(id) = subject.id {
-        let below = crate::uml_profiles::applied_section(shell, ui, p, r, field.bottom() + 16.0, package, id);
+        let below = crate::uml_stereotypes::section_for(shell, ui, p, r, field.bottom() + 16.0, package);
+        let below = crate::uml_profiles::applied_section(shell, ui, p, r, below, package, id);
         crate::uml_constraints::section_of(shell, ui, p, r, below, package, id);
     }
     if shell.panels.menu == Some(Menu::PackageParent) {
@@ -633,7 +636,7 @@ pub(crate) fn members_section(
             .into_iter()
             .filter_map(|a| {
                 let marks = ux::Marks { slanted: false, underlined: archforge_uml::figures::is_static(store, a) };
-                Some((store.uuid(a).ok()?, archforge_uml::figures::attribute_text(store, a), marks))
+                Some((store.uuid(a).ok()?, archforge_uml::figures::member_text(store, a), marks))
             })
             .collect(),
         MemberKind::Operation => operations(store, class)
@@ -643,7 +646,7 @@ pub(crate) fn members_section(
                     slanted: flag(store, o, archforge_uml::behavioral_feature::IS_ABSTRACT),
                     underlined: archforge_uml::figures::is_static(store, o),
                 };
-                Some((store.uuid(o).ok()?, archforge_uml::figures::operation_text(store, o), marks))
+                Some((store.uuid(o).ok()?, archforge_uml::figures::member_text(store, o), marks))
             })
             .collect(),
         MemberKind::Literal => {

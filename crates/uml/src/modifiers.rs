@@ -212,7 +212,13 @@ pub fn parse_default(store: &Store, form: DefaultForm, text: &str) -> Result<Opt
 /// The default of `p` as it is typed: a number, true or false, `*`, a String's text, a literal's
 /// name or an expression's text; empty when it has none.
 pub fn default_text(store: &Store, p: Obj) -> String {
-    let Some(v) = one(store, p, property::DEFAULT_VALUE) else { return String::new() };
+    one(store, p, property::DEFAULT_VALUE).map(|v| spec_text(store, v)).unwrap_or_default()
+}
+
+/// A value specification `v` as it is typed: a number, true or false, `*`, a String's text, a
+/// literal's name or an expression's text; empty for any other. A default and a stereotype's
+/// value (AR-135) are read alike.
+pub fn spec_text(store: &Store, v: Obj) -> String {
     let get = |prop| store.get(v, prop).ok();
     match store.class_of(v).ok() {
         Some(c) if c == LITERAL_INTEGER => match get(literal_integer::VALUE) {
@@ -238,15 +244,18 @@ pub fn default_text(store: &Store, p: Obj) -> String {
     }
 }
 
+/// A value specification `v` as a card writes it: a String's text in double quotes, any other as
+/// it is typed.
+pub fn spec_shown(store: &Store, v: Obj) -> String {
+    let text = spec_text(store, v);
+    if store.class_of(v).ok() == Some(LITERAL_STRING) { format!("\"{text}\"") } else { text }
+}
+
 /// The default of `p` as a card writes it after `=`: a String's text in double quotes, any other
 /// as it is typed; none when it has none.
 pub fn default_shown(store: &Store, p: Obj) -> Option<String> {
-    let text = default_text(store, p);
-    if text.is_empty() {
-        return None;
-    }
-    let string = one(store, p, property::DEFAULT_VALUE).is_some_and(|v| store.class_of(v).ok() == Some(LITERAL_STRING));
-    Some(if string { format!("\"{text}\"") } else { text })
+    let v = one(store, p, property::DEFAULT_VALUE)?;
+    (!spec_text(store, v).is_empty()).then(|| spec_shown(store, v))
 }
 
 /// Gives `p` the default `value`, replacing the one it had; none takes it away.
@@ -255,6 +264,14 @@ pub fn set_default(store: &mut Store, p: Obj, value: Option<&DefaultValue>) -> R
         store.destroy(old).map_err(fail)?;
     }
     let Some(value) = value else { return Ok(()) };
+    let o = make_spec(store, value)?;
+    store.set(p, property::DEFAULT_VALUE, Value::Ref(o)).map_err(fail)
+}
+
+/// A new value specification holding `value`, owned by nothing yet: a literal of its kind, an
+/// InstanceValue for an enumeration's literal, an opaque expression for any other text. A default
+/// and a stereotype's value (AR-135) are kept alike.
+pub fn make_spec(store: &mut Store, value: &DefaultValue) -> Result<Obj, CommandError> {
     let (class, prop, v) = match value {
         DefaultValue::Integer(n) => (LITERAL_INTEGER, literal_integer::VALUE, Value::Int(*n)),
         DefaultValue::Real(n) => (LITERAL_REAL, literal_real::VALUE, Value::Real(*n)),
@@ -265,12 +282,12 @@ pub fn set_default(store: &mut Store, p: Obj, value: Option<&DefaultValue>) -> R
         DefaultValue::Opaque(s) => {
             let e = store.create(OPAQUE_EXPRESSION).map_err(fail)?;
             store.push(e, opaque_expression::BODY, Value::str(s)).map_err(fail)?;
-            return store.set(p, property::DEFAULT_VALUE, Value::Ref(e)).map_err(fail);
+            return Ok(e);
         }
     };
     let o = store.create(class).map_err(fail)?;
     store.set(o, prop, v).map_err(fail)?;
-    store.set(p, property::DEFAULT_VALUE, Value::Ref(o)).map_err(fail)
+    Ok(o)
 }
 
 /// The defaults that refer to a literal, each with that literal: what removing the literal, or the
@@ -824,7 +841,12 @@ pub fn read(store: &Store, p: &Params, shape: &Shape, current: Option<Obj>) -> R
 
 /// The default `p` keeps, as [`parse_default`] would give it back; none when it has none.
 fn stored_default(store: &Store, p: Obj) -> Option<DefaultValue> {
-    let v = one(store, p, property::DEFAULT_VALUE)?;
+    stored_spec(store, one(store, p, property::DEFAULT_VALUE)?)
+}
+
+/// The value specification `v` as [`parse_default`] would give it back; none for one of another
+/// kind. A default and a stereotype's value (AR-135) are read alike.
+pub fn stored_spec(store: &Store, v: Obj) -> Option<DefaultValue> {
     let get = |prop| store.get(v, prop).ok();
     Some(match store.class_of(v).ok()? {
         c if c == LITERAL_INTEGER => DefaultValue::Integer(match get(literal_integer::VALUE)? {
@@ -842,7 +864,7 @@ fn stored_default(store: &Store, p: Obj) -> Option<DefaultValue> {
         }),
         c if c == LITERAL_STRING => DefaultValue::String(get(literal_string::VALUE)?.as_str()?.to_string()),
         c if c == INSTANCE_VALUE => DefaultValue::Literal(one(store, v, instance_value::INSTANCE)?),
-        c if c == OPAQUE_EXPRESSION => DefaultValue::Opaque(default_text(store, p)),
+        c if c == OPAQUE_EXPRESSION => DefaultValue::Opaque(spec_text(store, v)),
         _ => return None,
     })
 }

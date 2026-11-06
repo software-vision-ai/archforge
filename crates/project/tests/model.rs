@@ -342,6 +342,51 @@ fn profiles_and_the_uml_library_are_saved_and_the_project_opens_again() {
     assert!(archforge_uml::profiles::library(st).is_some(), "the library comes back");
 }
 
+/// AR-135: stereotype applications with their values set and left to their defaults, and a class
+/// diagram showing the values, are saved, closed and opened again through a real dolt, the
+/// project's tables unchanged and its check on open passing; the reopened model holds them as made.
+#[test]
+fn stereotype_applications_and_their_values_are_saved_and_opened_again() {
+    let env = Env::new("applications");
+    let schema = schema();
+    let project = Project::create(&env.dolt, &env.opts(), &env.base.join("Projects"), "Applications", "test", &timestamp(1_761_670_800)).unwrap();
+    let path = project.path().to_path_buf();
+    project.close().unwrap();
+    let mut s = model();
+    let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+    let order = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Order" }));
+    let id = run(&mut s, "uml.attribute.add", json!({ "class": order, "name": "id", "type": "Integer" }));
+    let fetch = run(&mut s, "uml.enumeration.add", json!({ "package": sales, "name": "Fetch" }));
+    run(&mut s, "uml.literal.add", json!({ "enumeration": fetch, "name": "lazy" }));
+    let persistence = run(&mut s, "uml.profile.add", json!({ "name": "Persistence", "package": sales }));
+    let entity = run(&mut s, "uml.stereotype.add", json!({ "profile": persistence, "name": "Entity", "extends": ["Class"] }));
+    run(&mut s, "uml.attribute.add", json!({ "class": entity, "name": "table", "type": "String" }));
+    run(&mut s, "uml.attribute.add", json!({ "class": entity, "name": "cached", "type": "Boolean", "default": "false" }));
+    run(&mut s, "uml.attribute.add", json!({ "class": entity, "name": "fetch", "type": fetch }));
+    run(&mut s, "uml.attribute.add", json!({ "class": entity, "name": "tags", "type": "String", "multiplicity": "*" }));
+    let key = run(&mut s, "uml.stereotype.add", json!({ "profile": persistence, "name": "Id", "extends": ["Property"] }));
+    run(&mut s, "uml.profile.apply", json!({ "package": sales, "profile": persistence }));
+    run(&mut s, "uml.stereotype.apply", json!({ "element": order, "stereotype": entity }));
+    run(&mut s, "uml.stereotype.apply", json!({ "element": id, "stereotype": key }));
+    for (property, values) in [("table", json!(["orders"])), ("fetch", json!(["lazy"])), ("tags", json!(["a", "b"]))] {
+        run(&mut s, "uml.stereotype.set-value", json!({ "element": order, "stereotype": entity, "property": property, "values": values }));
+    }
+    let d = run(&mut s, "diagram.add", json!({ "kind": "uml.class", "name": "Sales", "element": sales }));
+    run(&mut s, "uml.stereotype.show-values", json!({ "diagram": d, "show": true }));
+    assert_eq!(schema.fingerprint(), CURRENT, "no table changed");
+    let back = save_and_reopen(&env, &schema, &path, s.doc(), "Applications").expect("a project with stereotype applications opens");
+    assert_eq!(rows_of(back.doc(), &schema), rows_of(s.doc(), &schema));
+    let st = back.doc();
+    let o = st.by_uuid(Uuid::parse(&order).unwrap()).unwrap();
+    let e = st.by_uuid(Uuid::parse(&entity).unwrap()).unwrap();
+    let i = archforge_uml::applications::application(st, o, e).expect("Order is still an «Entity»");
+    let shown: Vec<Option<String>> =
+        archforge_uml::profiles::properties(st, e).into_iter().map(|p| archforge_uml::applications::shown(st, i, p)).collect();
+    assert_eq!(shown, [Some("\"orders\"".into()), None, Some("lazy".into()), Some("\"a\", \"b\"".into())], "set values back, the default unset");
+    assert_eq!(archforge_uml::applications::keywords(st, st.by_uuid(Uuid::parse(&id).unwrap()).unwrap()).as_deref(), Some("«Id»"));
+    assert!(archforge_uml::applications::values_shown(st, st.by_uuid(Uuid::parse(&d).unwrap()).unwrap()), "the diagram's choice comes back");
+}
+
 /// Saved, closed and opened again through the project, the rows come back and a session is made
 /// of them, or the reason it is not.
 fn save_and_reopen(env: &Env, schema: &ModelSchema, path: &std::path::Path, st: &Store, message: &str) -> Result<Session, String> {

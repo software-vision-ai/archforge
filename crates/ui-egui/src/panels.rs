@@ -67,6 +67,8 @@ pub struct State {
     /// under its section (AR-134).
     pub profile_edit: Option<crate::uml_profiles::ProfileEdit>,
     pub profile_refused: Option<crate::uml_profiles::ProfileRefusal>,
+    /// The Stereotypes section: a value being typed, the picker's filter and a refusal (AR-135).
+    pub stereotypes: crate::uml_stereotypes::Stereotypes,
     /// The selection the open editors belong to: selecting anything else closes them.
     pub editors_for: Option<Uuid>,
     /// A relationship's Properties (slice E3): a role being typed, whether More is open, and the
@@ -290,6 +292,10 @@ pub enum Menu {
     StereotypeExtends,
     ExtensionMetaclass,
     AppliedProfile,
+    /// The Stereotypes section's picker, and a property's value select by its place among the
+    /// section's properties (AR-135).
+    StereotypePick,
+    StereotypeValue(usize),
 }
 
 /// The selection the panels describe.
@@ -421,6 +427,7 @@ pub fn retain_valid(state: &mut State, store: &Store) {
     }
     crate::uml_bindings::retain_valid(&mut state.binding, store);
     crate::uml_nary::retain_valid(state, store);
+    crate::uml_stereotypes::retain_valid(&mut state.stereotypes, store);
     if state.ends.as_ref().is_some_and(|e| store.by_uuid(e.association).is_none()) {
         state.ends = None;
     }
@@ -1420,6 +1427,8 @@ fn close_editors(shell: &mut Shell) {
     panels.leaf_refused = None;
     panels.set_refused = None;
     panels.profile_refused = None;
+    // A value typed and not entered closes with the editors, as a member's editor does (AR-135).
+    panels.stereotypes = crate::uml_stereotypes::Stereotypes::default();
     if panels.profile_edit.as_ref().is_some_and(|e| !e.opened) {
         panels.profile_edit = None;
     }

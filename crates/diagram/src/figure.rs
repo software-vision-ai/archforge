@@ -152,6 +152,9 @@ pub struct Line {
     /// resolve it (a many-to-many relationship waiting for its mapping table).
     pub badge: bool,
     pub resolvable: bool,
+    /// The keywords written at the line's middle, above its name: a UML element's stereotypes,
+    /// `«Reference»` (AR-135). None for none.
+    pub keyword: Option<String>,
 }
 
 impl Default for Line {
@@ -165,6 +168,7 @@ impl Default for Line {
             note: None,
             badge: false,
             resolvable: false,
+            keyword: None,
         }
     }
 }

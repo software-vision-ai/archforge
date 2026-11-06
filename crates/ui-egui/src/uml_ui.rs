@@ -710,6 +710,11 @@ impl NotationUi for UmlUi {
         archforge_uml::nesting::nested_within(store, obj).into_iter().map(|n| archforge_uml::nesting::qualified_name(store, n)).collect()
     }
 
+    /// The stereotype applications that go with `obj` and what it takes along (AR-135).
+    fn applications_along(&self, store: &Store, obj: Obj) -> Vec<String> {
+        crate::uml_stereotypes::going_along(store, obj)
+    }
+
     /// Whether `obj` has rows under it: a package what it holds (the built-in types in Types, which
     /// Models does not show, aside), a classifier its members (an enumeration its literals).
     fn has_children(&self, store: &Store, obj: Obj) -> bool {
@@ -1003,8 +1008,10 @@ impl NotationUi for UmlUi {
         let is_package = class(store, o) == Some(archforge_uml::PACKAGE);
         crate::panels::name_field(shell, ui, p, egui::pos2(r.left() + crate::panels::PAD, y), width, subject, cmd, key);
         let mut below = y + 17.0 + crate::panels::FIELD + 16.0;
-        // The root package applies profiles as any package does (AR-134, F5).
+        // The root package applies profiles as any package does (AR-134, F5), and carries
+        // stereotypes (AR-135).
         if is_package && let Some(id) = subject.id {
+            below = crate::uml_stereotypes::section_for(shell, ui, p, r, below, o);
             below = crate::uml_profiles::applied_section(shell, ui, p, r, below, o, id);
         }
         // The root package's constraints hold for the whole model (AR-133).
@@ -1166,7 +1173,13 @@ fn package_rows(store: &Store, package: Obj, depth: u8, t: &Tree<'_>) -> Vec<Row
     let mut out: Vec<Row> = t
         .row(package, depth, "package", &icons::PACKAGE, label)
         // The profiles it applies, muted after its name (AR-134, F1).
-        .map(|row| Row { expandable, expanded, draggable: true, note: crate::uml_profiles::package_note(store, package), ..row })
+        .map(|row| Row {
+            expandable,
+            expanded,
+            draggable: true,
+            note: notes([archforge_uml::applications::keywords(store, package), crate::uml_profiles::package_note(store, package)]),
+            ..row
+        })
         .into_iter()
         .collect();
     if expanded {
@@ -1212,7 +1225,7 @@ fn class_rows(store: &Store, c: Obj, depth: u8, t: &Tree<'_>) -> Vec<Row> {
                 class_rows(store, n, depth.saturating_add(1), t)
                     .into_iter()
                     .enumerate()
-                    .map(|(i, row)| if i == 0 { Row { note: Some(tr("nested")), ..row } } else { row }),
+                    .map(|(i, row)| if i == 0 { Row { note: notes([Some(tr("nested")), row.note.clone()]), ..row } } else { row }),
             );
         }
         for l in archforge_uml::commands::literals(store, c) {
@@ -1245,8 +1258,12 @@ fn class_rows(store: &Store, c: Obj, depth: u8, t: &Tree<'_>) -> Vec<Row> {
     let expandable = if t.filtering() { !members.is_empty() } else { !t.skills(c).is_empty() || has_members(store, c) };
     let expanded = expandable && t.open(c);
     let kind = Classifier::of(store, c).unwrap_or_default();
-    // A template says so after its name (AR-130, C1), and a class that binds one names it (AR-131, C2).
-    let note = archforge_uml::templates::is_template(store, c).then(|| tr("template")).or_else(|| crate::uml_bindings::binds_note(store, c));
+    // Its stereotypes after its name (AR-135, F3), then a template says so (AR-130, C1), and a
+    // class that binds one names it (AR-131, C2).
+    let note = notes([
+        archforge_uml::applications::keywords(store, c),
+        archforge_uml::templates::is_template(store, c).then(|| tr("template")).or_else(|| crate::uml_bindings::binds_note(store, c)),
+    ]);
     let mut out: Vec<Row> = t
         .row(c, depth, kind.key(), kind.icon(), label)
         .map(|row| Row { expandable, expanded, draggable: true, note: note.clone().or(row.note), ..row })
@@ -1256,6 +1273,12 @@ fn class_rows(store: &Store, c: Obj, depth: u8, t: &Tree<'_>) -> Vec<Row> {
         out.extend(members);
     }
     out
+}
+
+/// What a row says muted after its name, its notes joined: `«Entity» · template`; none for none.
+fn notes<const N: usize>(parts: [Option<String>; N]) -> Option<String> {
+    let parts: Vec<String> = parts.into_iter().flatten().filter(|p| !p.is_empty()).collect();
+    (!parts.is_empty()).then(|| parts.join(" · "))
 }
 
 /// In the sample class model, the enumeration Priority nested in Order with the literals Standard

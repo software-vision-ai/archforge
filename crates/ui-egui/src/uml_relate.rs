@@ -935,6 +935,9 @@ pub(crate) fn body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, m
     let height = said.size().y;
     paint.galley(pos2(r.left() + PAD, y), said, p.text_muted);
     y += (height + 12.0).max(28.0);
+    // Its stereotypes, an association's, an association class's or a generalization's, or its
+    // selected member's (AR-135, F3).
+    y = crate::uml_stereotypes::section_for(shell, ui, p, r, y, o);
     if class.is_some_and(archforge_uml::is_association) {
         y = ends_sections(shell, ui, p, r, y, o, id);
     }

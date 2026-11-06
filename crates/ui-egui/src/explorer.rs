@@ -169,6 +169,9 @@ pub struct Delete {
     /// What goes with it by name, the dialog naming each: a UML classifier's nested classifiers
     /// (AR-132).
     pub along: Vec<String>,
+    /// The stereotype applications that go with it and what it takes along, `«Entity» on Order`,
+    /// the dialog naming each (AR-135).
+    pub applications: Vec<String>,
 }
 
 /// One row of the tree as drawn.
@@ -429,7 +432,9 @@ pub fn remove_selection(shell: &mut Shell) {
     let has_children = ui.is_some_and(|u| u.has_children(store, obj));
     // The diagrams that show it, counted as the canvas counts them (AR-187).
     let diagrams = crate::editing::diagrams_showing(store, obj);
-    if [relationships, keys, foreign_keys, diagrams].iter().all(|n| *n == 0) && !has_children {
+    // Stereotype applications go with it: removing them is never silent (AR-135).
+    let applications = ui.map(|u| u.applications_along(store, obj)).unwrap_or_default();
+    if [relationships, keys, foreign_keys, diagrams].iter().all(|n| *n == 0) && !has_children && applications.is_empty() {
         let lead = fmt(&tr("{name} deleted"), &[("name", &name_of(store, obj))]);
         let said = crate::uml_constraints::before_removal(shell, &[id.to_string()]);
         match run(shell, "element.remove", json!({ "ids": [id.to_string()] })) {
@@ -439,7 +444,8 @@ pub fn remove_selection(shell: &mut Shell) {
         return;
     }
     let along = ui.map(|u| u.goes_along(store, obj)).unwrap_or_default();
-    shell.explorer.delete = Some(Delete { ids: vec![id], name: name_of(store, obj), relationships, keys, foreign_keys, diagrams, node: None, along });
+    shell.explorer.delete =
+        Some(Delete { ids: vec![id], name: name_of(store, obj), relationships, keys, foreign_keys, diagrams, node: None, along, applications });
 }
 
 /// Drops what the store no longer has, so a rename or a dialog never points at a gone element.
@@ -1282,6 +1288,14 @@ fn delete_dialog_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: 
         lines.push(fmt(
             &trn("{n} nested classifier goes with it: {names}.", "{n} nested classifiers go with it: {names}.", n),
             &[("names", &d.along.join(", "))],
+        ));
+    }
+    // The stereotype applications that go with it, by name (AR-135): their values go too.
+    if !d.applications.is_empty() {
+        let n = u64::try_from(d.applications.len()).unwrap_or(u64::MAX);
+        lines.push(fmt(
+            &trn("{n} stereotype application goes with it: {names}.", "{n} stereotype applications go with it: {names}.", n),
+            &[("names", &d.applications.join(", "))],
         ));
     }
     lines.push(tr("What it holds goes with it."));

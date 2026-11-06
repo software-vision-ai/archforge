@@ -37,6 +37,7 @@ macro_rules! kept_modifier_lines {
     };
 }
 
+pub mod applications;
 pub mod bindings;
 pub mod commands;
 pub mod constraints;
@@ -341,6 +342,7 @@ pub const WORDS: &[&str] = &[
     "«stereotype»",
     "«metaclass»",
     "N-ary association",
+    "{keywords} · {package}",
 ];
 pub const PLURALS: &[&str] = &["+ {n} more member", "+ {n} more literal", "+ {n} more element", "+ {n} more line"];
 
@@ -360,6 +362,7 @@ pub fn registry() -> Result<Arc<archforge_engine::Registry<Store, ProjectView>>,
     specs.extend(templates::specs());
     specs.extend(profiles::specs());
     specs.extend(bindings::specs());
+    specs.extend(applications::specs());
     specs.extend(archforge_diagram::commands::specs::<ProjectView>());
     specs.extend(archforge_core::skills::specs::<ProjectView>());
     archforge_engine::Registry::new(specs)

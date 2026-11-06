@@ -825,6 +825,12 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
     if let Some(why) = crate::bindings::argument_removal_problem(store, &classes, &going) {
         return Err(refuse("ids", why));
     }
+    // A literal a stereotype's value names stays while the element carrying that value stays
+    // (AR-135): the value would go with it unseen.
+    let going: Vec<Obj> = gone_classes.iter().chain(&gone_generalizations).copied().chain(going_with(store, &classes)).collect();
+    if let Some(why) = crate::applications::literal_problem(store, |o| goes_by(store, objs, &going, o)) {
+        return Err(refuse("ids", why));
+    }
     // A classifier's nested classifiers go with it (AR-132), named among what goes so their
     // relationships, constraints and sets are worked out as theirs.
     let mut objs: Vec<Obj> = objs.to_vec();
@@ -945,6 +951,14 @@ fn going_for_constraints(store: &Store, objs: &[Obj]) -> (std::collections::BTre
         .filter(|g| store.is_alive(*g) && store.class_of(*g).ok() == Some(crate::GENERALIZATION))
         .collect();
     (classes, generalizations)
+}
+
+/// Whether `o` goes when `objs` are removed, `going` being the classifiers, generalizations and
+/// relationships that go with them ([`going_for_constraints`], [`going_with`]): it is one of them, or
+/// inside one; what a nested package holds is handed up and stays.
+fn goes_by(store: &Store, objs: &[Obj], going: &[Obj], o: Obj) -> bool {
+    let handed_up = |x: Obj| store.class_of(x).ok() == Some(PACKAGE) && package_of(store, x).is_some();
+    objs.iter().any(|x| *x == o || (store.contains(*x, o) && !handed_up(*x))) || going.iter().any(|x| *x == o || store.contains(*x, o))
 }
 
 /// The template parameters among `objs` whose template does not go with them: a template that

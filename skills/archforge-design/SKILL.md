@@ -948,12 +948,63 @@ What is UML's own, beside the shared rules above.
   refused, the uses counted under the section in a tinted box
   (`Persistence is in use in Commerce: «Entity» on Order and Customer, «Id» on 2 elements,
   «Reference» on places. Remove those first.`, two of one name counted, not named twice) with Show
-  the {n} uses selecting them; deleting a used element itself removes its applications with it.
+  the {n} uses selecting them; deleting a used element itself removes its applications with it,
+  the delete dialog naming them (AR-135).
   Open profile diagram (`workspace.properties.profile.diagram`, `uml.profile.diagram`) opens the
   profile's class diagram, made the first time, placing what it lacks below what it shows: «metaclass» cards in a
   row, «stereotype» cards under them, joined by extension lines, solid, a filled triangle at the
   metaclass; a stereotype's row dragged onto it comes with its metaclasses. A selected metaclass's
   Properties say it is UML's own and change nothing.
+- Stereotypes applied (AR-135, design page 08, F3 and F4; owner decisions 2026-11-06). The
+  Properties of every element a stereotype may extend (a classifier, a package, an association,
+  a generalization; an attribute or an operation selected on its class's panel, the section then
+  `Stereotypes of id · n`) have `Stereotypes · n`, after No redefinition and before the other
+  sections, shown only once the model has a stereotype (only what works is shown). Its `+`
+  (`workspace.properties.stereotypes.add`) opens the picker headed `APPLY TO ORDER`: every
+  stereotype of the model, those that apply first (their profile at the right), one applied ticked
+  on the accent tint, then after a line the rest, muted and disabled with the short reason at the
+  right (`properties only`, `classes and interfaces only`, `extends nothing yet`, `Logging not
+  applied`), the whole reason on hover and as the description; typing filters it (`Filter: ent`
+  under the heading), the arrows walk what applies, Enter applies (the first that applies when none
+  is reached), Escape or a press elsewhere closes; rows `….add.<stereotypeId>`. Each applied
+  stereotype is a row, `«Entity»` semibold and its profile muted, a bin at its right
+  (`workspace.properties.stereotypes.applied.<id>.remove`) taking it off with its values, its
+  definition kept; then a line per property, its name at the left and its control at the right
+  (`….applied.<id>.value.<propertyId>`): a select for a Boolean or an enumeration holding one value,
+  its first row `Default (false)` (or `No value`) clearing it; a field for any other value, several
+  separated by commas, written on Enter or leaving it, emptied to clear it. Unset, the control shows
+  the property's default muted with a bordered `default` tag (a muted dash without one); a value set
+  has no tag even when it equals the default. A value that does not read stays in its field, ringed
+  in the danger colour, the reason under it (`many is no value of rows. A whole number, such as 42
+  or -7.`, `….refusal`), nothing written; so are too many or too few values for the multiplicity
+  and a unique property's value twice. Under the rows, "Values you set are stored on Order; …", and
+  while a class diagram is open the check Show stereotype values on this diagram
+  (`workspace.properties.stereotypes.showValues`). On a card the stereotypes replace the kind's
+  word (`«Entity»` for CLASS, `«Entity, Auditable»` for two, in the profiles' order); a kind written
+  as a keyword keeps it first (`«interface, Entity»`, a decision of ours, the design silent: the
+  kind stays readable); an outsider reads `«Entity» · Commerce`. A member's row, on the card and in
+  Properties, starts with its stereotypes (`«Id» + id : Integer`); a line's sit above its name in
+  the caption style (`«Reference»`), at the middle where it has no name; an n-ary association's
+  above its diamond's name, and an n-ary end's at its leg's middle (AR-128). A template binding
+  shows none: no stereotype extends its metaclass yet (it is not among those offered). Models writes them muted
+  after the name (`«Entity» · template`). With the diagram's check on, a card lists, under its
+  members, a compartment per stereotype with a value set: `«Entity»`, then `table = "orders"`, a
+  String's in quotes; a property left to its default is not listed; turning it on, and setting a
+  value while it is on, grows the cards that would hide one, in the same undo step. Storage (owner
+  decision 2026-11-06, with ours where it was silent): the InstanceSpecification sits at the
+  project's top level beside the hidden library, so moving or handing up its element never moves
+  it; a Slot exists only for a value set, so a default is never stored as a value; values are
+  ValueSpecifications read by the property's type as a default is, an enumeration's an
+  InstanceValue referring to the literal; the diagram's choice is kept by a core tag, as the root package's mark is: the
+  one tag named `archforge.stereotypeValues` lists the diagrams that show their values, and goes
+  when the last is turned off. Nothing is lost unseen: a property whose values are set is not removed, retyped or
+  given bounds a value breaks, and a literal a value names is not removed, each refused naming the
+  value. Deleting an element its stereotypes are applied to asks first, from Models too, and the
+  dialog names the applications going with it and with what it takes along (`3 stereotype
+  applications go with it: «Entity» on Order, «Id» on id, «Reference» on
+  places.`), as it names nested classifiers (decision of ours, the design silent). An association
+  end takes stereotypes through the commands only so far. Agents use `uml.stereotype.apply`,
+  `.unapply`, `.set-value`, `.show-values`, `.list-applied` and `.applicable`.
 
 On every line: a role, and a label at the line's middle, sit above a level stretch of the line and
 beside an upright one, never on the line or its mark.

@@ -987,10 +987,8 @@ pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
 /// In the sample class model, the profile Persistence of F1 in the root package beside Commerce:
 /// Entity extending Class with `table : String` and `cached : Boolean = false`, Id extending
 /// Property and Reference extending Association with `lazy : Boolean = true`; Commerce applies it.
-/// With `uses`, the stereotypes are applied as AR-135 will apply them, built directly in the store
-/// (an InstanceSpecification classified by the stereotype and a core link to the element):
-/// «Entity» on Order and Customer, «Id» on their id attributes, «Reference» on places (F6). Gives
-/// (Commerce, Persistence, Entity) ids.
+/// With `uses`, the stereotypes are applied (AR-135): «Entity» on Order and Customer, «Id» on their
+/// id attributes, «Reference» on places (F6). Gives (Commerce, Persistence, Entity) ids.
 #[cfg(any(test, feature = "snapshot"))]
 pub(crate) fn put_profiles(shell: &mut Shell, uses: bool) -> Result<(String, String, String), String> {
     let id = |v: serde_json::Value| v.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string();
@@ -1020,49 +1018,30 @@ pub(crate) fn put_profiles(shell: &mut Shell, uses: bool) -> Result<(String, Str
     Ok((commerce, persistence, entity))
 }
 
-/// The sample's stereotype applications (F6), built directly in a copy of the store, as AR-135 will
-/// make them, which the shell's session then opens.
+/// The sample's stereotype applications (F6), made as the window makes them
+/// (`uml.stereotype.apply`): «Entity» on Order and Customer, «Id» on their id attributes,
+/// «Reference» on places.
 #[cfg(any(test, feature = "snapshot"))]
 fn apply_samples(shell: &mut Shell) -> Result<(), String> {
-    use archforge_mof::rows;
-    let fail = |e: &dyn std::fmt::Display| e.to_string();
-    let session = shell.session.as_ref().ok_or("the sample needs a session")?;
-    let (tables, junctions) = archforge_notations::storage();
-    let counter = |start: u64| {
-        let n = std::sync::atomic::AtomicU64::new(start);
-        Box::new(move || {
-            let i = n.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            let mut r = [0u8; 10];
-            r[2..].copy_from_slice(&i.to_be_bytes());
-            archforge_mof::Uuid::v7(1_761_670_800_000, r)
-        })
+    let session = shell.session.as_mut().ok_or("the sample needs a session")?;
+    let uses: Vec<(String, String)> = {
+        let st = session.doc();
+        let find = |class: archforge_mof::ClassId, n: &str| st.alive().find(|o| st.class_of(*o).ok() == Some(class) && name(st, *o) == n);
+        let id = |o: Obj| st.uuid(o).map(|u| u.to_string()).map_err(|e| e.to_string());
+        let (order, customer) = (find(archforge_uml::CLASS, "Order").ok_or("Order")?, find(archforge_uml::CLASS, "Customer").ok_or("Customer")?);
+        let places = find(archforge_uml::ASSOCIATION, "places").ok_or("places")?;
+        let stereo = |n: &str| find(archforge_uml::STEREOTYPE, n).ok_or_else(|| format!("the stereotype {n}"));
+        let mut uses = vec![(id(stereo("Entity")?)?, id(order)?), (id(stereo("Entity")?)?, id(customer)?)];
+        for c in [order, customer] {
+            if let Some(a) = archforge_uml::members::attributes(st, c).into_iter().find(|a| name(st, *a) == "id") {
+                uses.push((id(stereo("Id")?)?, id(a)?));
+            }
+        }
+        uses.push((id(stereo("Reference")?)?, id(places)?));
+        uses
     };
-    let mut st = archforge_notations::store(counter(1 << 33)).map_err(|e| fail(&e))?;
-    rows::restore(&mut st, &rows::snapshot(session.doc(), &tables, &junctions).map_err(|e| fail(&e))?, &tables, &junctions).map_err(|e| fail(&e))?;
-    let model = archforge_uml::commands::model(&st).map_err(|e| e.to_string())?;
-    let find = |st: &Store, class: archforge_mof::ClassId, n: &str| st.alive().find(|o| st.class_of(*o).ok() == Some(class) && name(st, *o) == n);
-    let (order, customer) =
-        (find(&st, archforge_uml::CLASS, "Order").ok_or("Order")?, find(&st, archforge_uml::CLASS, "Customer").ok_or("Customer")?);
-    let ids: Vec<Obj> =
-        [order, customer].iter().filter_map(|c| archforge_uml::members::attributes(&st, *c).into_iter().find(|a| name(&st, *a) == "id")).collect();
-    let places = find(&st, archforge_uml::ASSOCIATION, "places").ok_or("places")?;
-    let stereo = |st: &Store, n: &str| find(st, archforge_uml::STEREOTYPE, n).ok_or_else(|| format!("the stereotype {n}"));
-    let mut uses = vec![(stereo(&st, "Entity")?, order), (stereo(&st, "Entity")?, customer)];
-    uses.extend(ids.into_iter().map(|a| (stereo(&st, "Id"), a)).filter_map(|(s, a)| Some((s.ok()?, a))));
-    uses.push((stereo(&st, "Reference")?, places));
     for (stereotype, element) in uses {
-        let home = profiles::home_of(&st, element).ok_or("an element's package")?;
-        let instance = st.create(archforge_uml::INSTANCE_SPECIFICATION).map_err(|e| fail(&e))?;
-        st.push(instance, archforge_uml::instance_specification::CLASSIFIER, archforge_mof::Value::Ref(stereotype)).map_err(|e| fail(&e))?;
-        st.push(home, archforge_uml::package::PACKAGED_ELEMENT, archforge_mof::Value::Ref(instance)).map_err(|e| fail(&e))?;
-        archforge_core::link(&mut st, model, profiles::APPLICATION_LINK, instance, element, None).map_err(|e| fail(&e))?;
-    }
-    let back = rows::snapshot(&st, &tables, &junctions).map_err(|e| fail(&e))?;
-    let active = shell.canvas.active;
-    let session = archforge_notations::session_from_rows(&back, counter(1 << 34))?;
-    shell.session = Some(session);
-    if let Some(d) = active {
-        crate::canvas::open(shell, d);
+        session.execute("uml.stereotype.apply", &json!({ "element": element, "stereotype": stereotype })).map_err(|e| e.to_string())?;
     }
     Ok(())
 }

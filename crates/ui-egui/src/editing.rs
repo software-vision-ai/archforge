@@ -1503,8 +1503,10 @@ fn ask_delete_of(shell: &mut Shell, node: Option<Uuid>, entity: Uuid) {
     let (relationships, keys, foreign_keys) = crate::notation_ui::of(shell.notation_uis, store, e).map_or((0, 0, 0), |ui| ui.consequences(store, e));
     let diagrams = diagrams_showing(store, e);
     let along = crate::notation_ui::of(shell.notation_uis, store, e).map(|ui| ui.goes_along(store, e)).unwrap_or_default();
+    let applications = crate::notation_ui::of(shell.notation_uis, store, e).map(|ui| ui.applications_along(store, e)).unwrap_or_default();
     shell.explorer.delete = Some(crate::explorer::Delete {
         along,
+        applications,
         ids: vec![entity],
         name: archforge_core::name_of(store, e),
         relationships,

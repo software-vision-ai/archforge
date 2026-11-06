@@ -72,6 +72,7 @@ plural		{n} relationship goes with it.	{n} Beziehung geht mit.|{n} Beziehungen g
 plural		{n} key goes with it.	{n} Schlüssel geht mit.|{n} Schlüssel gehen mit.
 plural		{n} foreign key goes with it.	{n} Fremdschlüssel geht mit.|{n} Fremdschlüssel gehen mit.
 plural		{n} nested classifier goes with it: {names}.	{n} verschachtelter Klassifizierer geht mit: {names}.|{n} verschachtelte Klassifizierer gehen mit: {names}.
+plural		{n} stereotype application goes with it: {names}.	{n} Stereotyp-Anwendung geht mit: {names}.|{n} Stereotyp-Anwendungen gehen mit: {names}.
 str		Delete	Löschen
 str		Schema · model	Schema · Modell
 str		Table · model, in every diagram	Tabelle · Modell, in jedem Diagramm
@@ -666,6 +667,7 @@ str		Primitive type	Primitiver Typ
 str		«dataType»	«dataType»
 str		«stereotype»	«stereotype»
 str		«metaclass»	«metaclass»
+str		{keywords} · {package}	{keywords} · {package}
 str		«primitive»	«primitive»
 str		Association class	Assoziationsklasse
 str		Classifier	Klassifikator
@@ -786,6 +788,48 @@ str		{first} and {second}	{first} und {second}
 plural		Show the use	Die Verwendung zeigen|Die {n} Verwendungen zeigen
 str		A stereotype is shown on its profile's diagram	Ein Stereotyp erscheint im Diagramm seines Profils
 str		Place stereotype	Stereotyp platzieren
+# Stereotypes applied (AR-135)
+str		Stereotypes of {name} · {n}	Stereotypen von {name} · {n}
+str		Apply stereotype	Stereotyp anwenden
+str		Remove «{stereotype}» from {name}	«{stereotype}» von {name} entfernen
+str	value	default	Standard
+str		{value} (default)	{value} (Standard)
+str		Default ({value})	Standard ({value})
+str		No value	Kein Wert
+str		Values you set are stored on {name}; a default shows the tag until you change it. Remove takes «{stereotype}» off {name} and keeps its definition.	Gesetzte Werte werden an {name} gespeichert; ein Standardwert zeigt die Markierung, bis Sie ihn ändern. Entfernen nimmt «{stereotype}» von {name} und behält seine Definition.
+str		None applied yet. + offers the stereotypes of the profiles applied to {package} or a package around it.	Noch keiner angewendet. + bietet die Stereotypen der Profile an, die auf {package} oder ein Paket darum herum angewendet sind.
+str		Show stereotype values on this diagram	Stereotyp-Werte in diesem Diagramm zeigen
+str		Show stereotype values	Stereotyp-Werte zeigen
+str		Set stereotype value	Stereotyp-Wert setzen
+str		Filter: {text}	Filter: {text}
+str		No stereotype matches.	Kein Stereotyp passt.
+str		No stereotype yet. Make one in a profile from Models ▸ New ▸ Stereotype.	Noch kein Stereotyp. Legen Sie einen in einem Profil an, über Modelle ▸ Neu ▸ Stereotyp.
+str		{kinds} only	nur {kinds}
+str		classes	Klassen
+str		interfaces	Schnittstellen
+str		enumerations	Aufzählungen
+str		data types	Datentypen
+str		properties	Eigenschaften
+str		operations	Operationen
+str		associations	Assoziationen
+str		generalizations	Generalisierungen
+str		packages	Pakete
+str		{profile} not applied	{profile} nicht angewendet
+str		«{stereotype}» does not extend {metaclass}: it extends {metaclasses}.	«{stereotype}» erweitert nicht {metaclass}: es erweitert {metaclasses}.
+str		«{stereotype}» extends no metaclass yet.	«{stereotype}» erweitert noch keine Metaklasse.
+str		Its profile {profile} is not applied to {package} or a package around it.	Sein Profil {profile} ist weder auf {package} noch auf ein Paket darum herum angewendet.
+str		{value} is no value of {name}. {accepted}	{value} ist kein Wert von {name}. {accepted}
+str		A whole number, such as 42 or -7.	Eine ganze Zahl, etwa 42 oder -7.
+str		A number, such as 2.5 or -1e3.	Eine Zahl, etwa 2.5 oder -1e3.
+str		true or false.	true oder false.
+str		A whole number of 0 or more, or *.	Eine ganze Zahl ab 0 oder *.
+str		Any text.	Beliebiger Text.
+str		One of {literals}.	Eines von {literals}.
+str		{name} holds at most {n} values.	{name} fasst höchstens {n} Werte.
+str		{name} holds each value once, and {value} is there twice.	{name} fasst jeden Wert einmal, und {value} steht zweimal da.
+str		A value is empty. Clear the field to show the default.	Ein Wert ist leer. Leeren Sie das Feld, um den Standardwert zu zeigen.
+str		A value is longer than {n} characters.	Ein Wert ist länger als {n} Zeichen.
+plural		{name} holds [{bounds}] values; {n} is given.	{name} fasst [{bounds}] Werte; {n} ist angegeben.|{name} fasst [{bounds}] Werte; {n} sind angegeben.
 str		nested	verschachtelt
 str		package	Paket
 str		class	Klasse

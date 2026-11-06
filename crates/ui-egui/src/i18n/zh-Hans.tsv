@@ -72,6 +72,7 @@ plural		{n} relationship goes with it.	{n} 个关系将一并删除。
 plural		{n} key goes with it.	{n} 个键将一并删除。
 plural		{n} foreign key goes with it.	{n} 个外键将一并删除。
 plural		{n} nested classifier goes with it: {names}.	{n} 个嵌套分类器将一并删除：{names}。
+plural		{n} stereotype application goes with it: {names}.	{n} 个构造型应用将一并删除：{names}。
 str		Delete	删除
 str		Schema · model	架构 · 模型
 str		Table · model, in every diagram	表 · 模型，出现在每张图中
@@ -666,6 +667,7 @@ str		Primitive type	基本类型
 str		«dataType»	«dataType»
 str		«stereotype»	«stereotype»
 str		«metaclass»	«metaclass»
+str		{keywords} · {package}	{keywords} · {package}
 str		«primitive»	«primitive»
 str		Association class	关联类
 str		Classifier	分类器
@@ -786,6 +788,48 @@ str		{first} and {second}	{first} 和 {second}
 plural		Show the use	显示 {n} 处使用
 str		A stereotype is shown on its profile's diagram	构造型显示在其配置文件的图中
 str		Place stereotype	放置构造型
+# Stereotypes applied (AR-135)
+str		Stereotypes of {name} · {n}	{name} 的构造型 · {n}
+str		Apply stereotype	应用构造型
+str		Remove «{stereotype}» from {name}	从 {name} 移除 «{stereotype}»
+str	value	default	默认
+str		{value} (default)	{value}（默认）
+str		Default ({value})	默认（{value}）
+str		No value	无值
+str		Values you set are stored on {name}; a default shows the tag until you change it. Remove takes «{stereotype}» off {name} and keeps its definition.	您设置的值保存在 {name} 上；默认值在您更改之前会显示标签。移除会从 {name} 上取下 «{stereotype}»，并保留其定义。
+str		None applied yet. + offers the stereotypes of the profiles applied to {package} or a package around it.	尚未应用。+ 提供应用于 {package} 或其外层包的配置文件中的构造型。
+str		Show stereotype values on this diagram	在此图中显示构造型值
+str		Show stereotype values	显示构造型值
+str		Set stereotype value	设置构造型值
+str		Filter: {text}	筛选：{text}
+str		No stereotype matches.	没有匹配的构造型。
+str		No stereotype yet. Make one in a profile from Models ▸ New ▸ Stereotype.	尚无构造型。请通过 模型 ▸ 新建 ▸ 构造型 在配置文件中创建。
+str		{kinds} only	仅{kinds}
+str		classes	类
+str		interfaces	接口
+str		enumerations	枚举
+str		data types	数据类型
+str		properties	属性
+str		operations	操作
+str		associations	关联
+str		generalizations	泛化
+str		packages	包
+str		{profile} not applied	{profile} 未应用
+str		«{stereotype}» does not extend {metaclass}: it extends {metaclasses}.	«{stereotype}» 不扩展 {metaclass}：它扩展 {metaclasses}。
+str		«{stereotype}» extends no metaclass yet.	«{stereotype}» 尚未扩展任何元类。
+str		Its profile {profile} is not applied to {package} or a package around it.	其配置文件 {profile} 未应用于 {package} 或其外层包。
+str		{value} is no value of {name}. {accepted}	{value} 不是 {name} 的值。{accepted}
+str		A whole number, such as 42 or -7.	整数，例如 42 或 -7。
+str		A number, such as 2.5 or -1e3.	数字，例如 2.5 或 -1e3。
+str		true or false.	true 或 false。
+str		A whole number of 0 or more, or *.	0 或更大的整数，或 *。
+str		Any text.	任意文本。
+str		One of {literals}.	{literals} 之一。
+str		{name} holds at most {n} values.	{name} 最多包含 {n} 个值。
+str		{name} holds each value once, and {value} is there twice.	{name} 每个值只能出现一次，而 {value} 出现了两次。
+str		A value is empty. Clear the field to show the default.	有一个值为空。清空该字段即可显示默认值。
+str		A value is longer than {n} characters.	有一个值超过 {n} 个字符。
+plural		{name} holds [{bounds}] values; {n} is given.	{name} 包含 [{bounds}] 个值；给出了 {n} 个。
 str		nested	嵌套
 str		package	包
 str		class	类
