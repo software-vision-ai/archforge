@@ -2394,7 +2394,6 @@ fn sample_guide_more(shell: &mut Shell, screen: Screen) -> Result<(), String> {
         }
         Screen::GuideNary => {
             let catalog = id(&run(shell, "uml.class.add", json!({ "package": root.to_string(), "name": "Catalog" }))?)?;
-            run(shell, "uml.attribute.add", json!({ "class": catalog.to_string(), "name": "season", "type": "String" }))?;
             sample_nary(shell, Screen::WorkspaceNary)?;
             let product = find(shell, None, "Product")?;
             guide_view(shell, &[customer, product, catalog], 0.85)?;

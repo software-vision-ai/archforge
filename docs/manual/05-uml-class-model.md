@@ -373,10 +373,10 @@ These extra facts are *property modifiers*.
 1. Select *Order*.
 2. In **Properties**, under **Attributes**, choose the pencil on *number*. Its editor opens.
 3. Tick **Read only**.
-4. Choose the check at the editor's foot, or press Enter.
+4. Choose the check at the editor's foot.
 5. Choose the pencil on *status*.
 6. Open **Default value** and choose *Placed*. The menu lists *OrderStatus*'s literals.
-7. Choose the check, or press Enter.
+7. Choose the check.
 
 <!-- picture: workspace-guide-modifiers light | Order selected, its card reading number : Integer {readOnly} and status : OrderStatus = Placed; Properties shows the attribute editor on status, its Default value Placed, the flags, Subsets and Redefines -->
 
@@ -394,21 +394,25 @@ the elements it is about, exactly as you write it, and never evaluates it: nothi
 against the model. Write it in any language you like, OCL, plain English or another.
 
 1. Select *Order*.
-2. In **Properties**, choose **+** beside **Constraints**. The editor opens with *Order* among the
-   **Constrained elements**.
-3. Type *positiveNumber* as the **Name** and `number > 0` as the **Expression**. In **Language**,
-   pick **OCL**, or type any other language; left empty, it is plain text.
-4. Choose the check at the editor's foot. A short rule shows in braces under *Order*'s card:
+2. In **Properties**, choose **+** beside **Constraints · 0**. The editor opens with *Order* among
+   the **Constrained elements**, and **Name** says *Constraint 1*.
+3. Replace *Constraint 1* in **Name** with *positiveNumber*.
+4. Type `number > 0` in **Expression**.
+5. In **Language**, pick **OCL**, or type any other language; left empty, it is plain text.
+6. Choose the check at the editor's foot. A short rule shows in braces under *Order*'s card:
    `{number > 0}`.
-5. Choose **+** again. Name it *paidInFull*, and type a longer rule on two lines:
-   `status = OrderStatus::Paid` and `implies total.amount > 0`.
-6. Choose **+** beside the chips of **Constrained elements** and pick *OrderStatus*.
-7. Under **On this diagram**, choose **Linked note**, then the check.
+7. Choose **+** again, and replace the name with *paidInFull*.
+8. In **Language**, pick **OCL**.
+9. In **Expression**, type `status = OrderStatus::Paid`, press Enter for a new line (Enter does not
+   apply here), and type `implies total.amount > 0`.
+10. Under **Constrained elements**, choose the **+** after *Order* and pick *OrderStatus*.
+11. Under **On this diagram**, check that **Linked note** is chosen: Archforge chooses it for a
+    long rule about several elements. Then choose the check.
 
 <!-- picture: workspace-guide-constraints light | Order selected: {number > 0} in braces under its card, and the constraint note paidInFull, its eyebrow CONSTRAINT · NOT EVALUATED, linked by dashed lines to Order and OrderStatus; Properties shows Constraints · 2 with the editor open on paidInFull, its language OCL, its expression on two lines, Order and OrderStatus as chips and Linked note chosen -->
 
 The note says *CONSTRAINT · NOT EVALUATED*, and dashed lines join it to *Order* and
-*OrderStatus*. It looks different from a plain note on purpose: a plain note is your remark on the
+*OrderStatus*. (The picture shows the editor opened again with the pencil on *paidInFull*.) It looks different from a plain note on purpose: a plain note is your remark on the
 diagram, a constraint is part of the model.
 
 What Archforge checks, and what it does not:
@@ -586,7 +590,7 @@ Start from the Commerce diagram of steps 1 to 12.
 4. Press Escape to close the empty draft.
 5. In **Properties**, under **Operations**, choose the pencil on *nextNumber*. Its editor opens.
 6. Tick **Static**.
-7. Choose the check at the editor's foot, or press Enter.
+7. Choose the check at the editor's foot.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-guide-static-dark.png">
@@ -596,8 +600,9 @@ Start from the Commerce diagram of steps 1 to 12.
 *An underlined row is a static member: it belongs to Order itself, not to each order.*
 
 The row `+ nextNumber() : Integer` is now underlined, on every card that shows *Order* and in
-**Properties**. An attribute works the same way: tick **Static** in its editor for a value that all
-instances share, such as the last number handed out.
+**Properties**. (The picture shows its editor opened again with the pencil.) An attribute works
+the same way: tick **Static** in its editor for a value that all instances share, such as the last
+number handed out.
 
 To undo it, open the editor again and clear **Static**: the underline goes. An operation that is
 both static and **Abstract** is underlined and slanted.
@@ -612,14 +617,17 @@ Start from the Commerce diagram, with the association *places* of
 [step 4](#4-connect-customer-and-order-an-association).
 
 1. Click the line *places* to select it. **Properties** shows a section for each end.
-2. Under **End at Customer**, find **Qualifiers · 0** and choose its **+**. The qualifier goes on
-   the end of the class that does the looking up: a customer looks up its orders. An editor opens.
+2. Below the fields of **End at Customer**, find **Qualifiers · 0** and choose its **+**. An editor
+   opens.
 3. In **Name**, type *number*.
 4. Open **Type** and choose *Integer*.
 5. Leave **Multiplicity** empty: one number picks.
-6. Choose the check at the editor's foot, or press Enter.
+6. Choose the check at the editor's foot.
 7. Under **End at Order**, the field that said **Multiplicity** now says **Per qualifier value**.
    Open it and choose `0..1`.
+
+The qualifier goes on the end of the class that does the looking up: a customer looks up its
+orders, so it is on **End at Customer**.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-guide-qualifier-dark.png">
@@ -630,9 +638,11 @@ Start from the Commerce diagram, with the association *places* of
 0..1 orders.*
 
 A small box reading `number : Integer` sits against *Customer*'s card, where the line starts. The
-`0..1` at *Order* now counts the orders for one number, not all of a customer's orders. The editor
-says it in words, such as *One Customer and one number pick 0..1 orders.* If the box pushes the
-line's labels together, drag *Customer*'s card a little to the left; the picture shows it moved.
+`0..1` at *Order* now counts the orders for one number, not all of a customer's orders. The
+qualifier's editor says it in words: choose the pencil on *number* to see *One Customer and one
+number pick 0..1 orders.*, as the picture does. (While you typed it, before step 7, it said
+*pick \* orders*.) If the box pushes the line's labels together, drag *Customer*'s card a little
+to the left; the picture shows it moved.
 
 A qualifier is not an attribute: *Customer*'s card and its **Attributes** do not list it.
 
@@ -652,24 +662,22 @@ drawn as a diamond with a leg to each class.
 
 Start with a new class diagram, so the legs have room.
 
-1. Choose the **+** at the start of the centre's tab strip, then the **Class diagram** card, then
-   **Continue**.
-2. In **Name**, type *Recommendations*, and choose **Create**.
-3. Drag *Customer*'s row from **Models** onto the canvas, towards the top left.
-4. Drag *Product*'s row onto the canvas, towards the top right.
-5. Choose the classifier tool (its tooltip says **Class**) and click below the two cards.
-6. Type *Catalog* and press Enter.
-7. Open the chevron beside the **Relationship** tool and choose **N-ary association**, below the
+1. Make a class diagram named *Recommendations*, as in [step 1](#1-make-a-class-diagram).
+2. Drag *Customer*'s row from **Models** onto the canvas, towards the top left.
+3. Drag *Product*'s row onto the canvas, towards the top right.
+4. Choose the classifier tool (its tooltip says **Class**) and click below the two cards.
+5. Type *Catalog* and press Enter.
+6. Open the chevron beside the **Relationship** tool and choose **N-ary association**, below the
    line after **Association class**. Its tooltip says to click each class in turn.
-8. Click *Customer*.
-9. Click *Product*. A diamond appears between them, and the bar at the top of the canvas counts
+7. Click *Customer*.
+8. Click *Product*. A diamond appears between them, and the bar at the top of the canvas counts
    the ends.
-10. Click *Catalog*.
-11. Press Enter. The association is drawn and selected.
-12. In **Properties**, type *recommends* in **Name** and press Enter.
-13. Under **Ends · 3**, choose the pencil on the *catalog* row. The end's editor opens.
-14. Open **Multiplicity** and choose `1`.
-15. Choose the check at the editor's foot, or press Enter.
+9. Click *Catalog*.
+10. Press Enter. The association is drawn and selected.
+11. In **Properties**, type *recommends* in **Name** and press Enter.
+12. Under **Ends · 3**, choose the pencil on the *catalog* row. The end's editor opens.
+13. Open **Multiplicity** and choose `1`.
+14. Choose the check at the editor's foot, or press Enter.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-guide-nary-dark.png">
@@ -680,7 +688,8 @@ Start with a new class diagram, so the legs have room.
 choice at every other end: for one customer and one product, exactly one catalog.*
 
 Each end is named after its class (*customer*, *product*, *catalog*) and starts at `*`, any
-number. A click on the diamond or on any leg selects the whole association.
+number. A click on the diamond or on any leg selects the whole association. (The picture shows the
+*catalog* end's editor opened again with its pencil.)
 
 - **Add an end:** choose **+** beside **Ends**, or right-click the diamond and choose **Add end**,
   then click a class.
@@ -688,7 +697,7 @@ number. A click on the diamond or on any leg selects the whole association.
 - **Remove an end:** choose the red bin in the end's editor. With three ends left, Archforge asks
   first: **Keep 3 ends** changes nothing, **Make it binary** turns it into an ordinary association
   between the two classes left.
-- **Take it off this diagram:** Delete. **Delete it from the model:** ⇧⌫ (Shift Delete).
+- **Take it off this diagram:** press Delete (⌫). **Delete it from the model:** ⇧⌫ (Shift Delete).
 
 If you press Escape, choose another tool or click empty canvas while drawing, nothing is added. An
 n-ary association joins classes and interfaces only. More in the reference:
@@ -708,7 +717,8 @@ Start with a new class diagram for payments.
 2. With the classifier tool on **Class**, click near the top and add the class *Payment*.
 3. With *Payment* selected, press ⌘↩ (Ctrl Enter), type *amount*, press Tab, type *Money*, and
    press Enter. Press Escape.
-4. Add three classes in a row below *Payment*: *CardPayment*, *BankTransfer* and *WalletPayment*.
+4. Add three classes in a row below *Payment*: for each, choose the classifier tool, click, type
+   its name and press Enter. Name them *CardPayment*, *BankTransfer* and *WalletPayment*.
 5. Open the chevron beside the **Relationship** tool and choose **Generalization**.
 6. Press on *CardPayment*, drag onto *Payment*, and let go. A line with a hollow triangle at
    *Payment* says that a card payment is a kind of payment.
@@ -718,8 +728,8 @@ Start with a new class diagram for payments.
 9. Click *CardPayment*'s line to select it.
 10. Hold Shift and click the other two lines. All three are selected.
 11. Right-click one of them and choose **Create generalization set…** (⌥⌘G, or Ctrl Alt G).
-    **Properties** shows the new set, its name ready to type.
-12. Type *method* and press Enter.
+    **Properties** shows the new set, named *GeneralizationSet 1*, its **Name** field active.
+12. Select the whole name with ⌘A (Ctrl A), type *method*, and press Enter.
 13. Under **Completeness**, choose **Complete**.
 14. Under **Disjointness**, choose **Disjoint**.
 
@@ -737,12 +747,12 @@ The two choices mean:
   there may be payments of other kinds too.
 - **Disjoint**: no payment is two kinds at once. **Overlapping**: one payment may be several kinds.
 
-A new set starts **Incomplete** and **Overlapping**, which UML leaves unwritten; the label shows
-what you choose. Click the label, or the set's row in **Models**, to select the set again.
+A new set starts **Incomplete** and **Overlapping**, and its label says `{incomplete,
+overlapping}` until you choose otherwise. Click the label, or the set's row in **Models**, to select the set again.
 
 - **Add or take out members:** under **Members** in the set's **Properties**, **+** offers the
   other generalizations to *Payment*, and the cross takes one out. Or right-click selected
-  generalizations and choose **Add to set ▸**.
+  generalizations and choose **Add to set ▸ method**.
 - **Move the label:** drag it. Where it sits is this diagram's own choice.
 - **Delete the set:** Delete with it selected. Its generalizations stay; only the grouping goes.
 
@@ -765,8 +775,8 @@ to *CardPayment*, nothing is drawn, and the top of the canvas says *CardPayment 
 may specialise it. Clear "No subclasses" in its Properties first.*
 
 You can only tick the box while nothing specializes the class yet. Otherwise the box stays clear,
-and **Properties** names the classes that specialize it, with **Select the generalization** to
-find their lines. Clear the box to allow more specific kinds again.
+and **Properties** names the classes that specialize it, with a button such as **Select the
+generalization** to find their lines. Clear the box to allow more specific kinds again.
 
 More in the reference: [Forbidding subclasses: final](#forbidding-subclasses-final).
 
@@ -777,12 +787,13 @@ A more specific class may *redefine* a member it inherits: *CardPayment* could r
 payment's amount means the same. A *leaf* member may be inherited, but not replaced. This is a
 different promise from final: other classes may still be kinds of *Payment*.
 
-This section builds on the *Payments* diagram too.
+This section builds on the *Payments* diagram too; the picture also shows `{final}` from the
+section before.
 
 1. Select *Payment*.
 2. In **Properties**, under **Attributes**, choose the pencil on *amount*. Its editor opens.
 3. Tick **No redefinition (leaf)**.
-4. Choose the check at the editor's foot, or press Enter.
+4. Choose the check at the editor's foot.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-guide-final-leaf-dark.png">
@@ -791,7 +802,7 @@ This section builds on the *Payments* diagram too.
 
 *`{final}` after a class's name: no more specific kinds. `{leaf}` after a member: no replacing it.*
 
-*Payment*'s row now reads `+ amount : Money {leaf}`. If a more specific class gets an attribute
+*Payment*'s row now reads `+ amount : Money {leaf}` (the picture shows its editor opened again). If a more specific class gets an attribute
 whose **Redefines** names *amount*, its editor lists *amount* last with `{leaf}` beside it, and
 choosing it is refused: *amount is leaf: nothing may redefine it. Clear "No redefinition" on it
 first.*
@@ -868,9 +879,9 @@ Start with a new class diagram.
 12. Open **Multiplicity**, choose `*` (a repository holds many items), and choose the check.
 13. Press ⇧⌘↩ (Ctrl Shift Enter), type *find*, press Tab, type *T*, and press Enter. Press Escape.
 14. In **Properties**, under **Operations**, choose the pencil on *find*.
-15. Choose **Add parameter** and type *key* as its name.
-16. Open the parameter's type menu. The template's own parameters come first, marked *template
-    parameter*. Choose *Key*.
+15. Choose **Add parameter**, click the new row's **Name** field, and type *key*.
+16. Open the parameter's type menu. The template's own parameters come first, after **None**,
+    each marked *template parameter*. Choose *Key*.
 17. Choose the check.
 
 <picture>
@@ -882,7 +893,7 @@ Start with a new class diagram.
 default.*
 
 The card shows the template's signature in a dashed box over its top-right corner: `T : Class`
-and `Key : DataType = Integer`. **Models** writes *template* after *Repository*, and **Properties**
+and `Key : DataType = Integer`. (The picture shows *Key*'s editor opened again with its pencil.) **Models** writes *template* after *Repository*, and **Properties**
 says *Class · template, 2 parameters*. Read it as: a repository holds any number of items of some
 class *T*, and finds one by a key of some data type *Key*, a whole number unless a binding says
 otherwise.
@@ -925,7 +936,8 @@ This section builds on the *Storage* diagram of the section before.
 
 *«bind» and the substitutions: OrderRepository is Repository with T as Order and Key as Integer.*
 
-A dashed line with an open arrowhead at *Repository* reads `«bind» <T -> Order, Key -> Integer>`.
+A dashed line with an open arrowhead at *Repository* reads `«bind» <T -> Order, Key -> Integer>`
+(the arrows may show as →).
 **Models** writes *binds Repository* after *OrderRepository*. Its card stays empty: the members
 come from the template, and Archforge does not copy them.
 
@@ -934,11 +946,11 @@ needs an argument: pick a class. Key can keep its default.* **Cancel**, or Escap
 draft and leaves the model as it was.
 
 - **Change an argument:** select the line and pick another one under **Substitutions**, or
-  **Default** to go back to a parameter's default.
+  **Default (Integer)**, say, to go back to a parameter's default.
 - **Remove the binding:** select the line and press ⇧⌫ (Shift Delete).
 - **What is refused:** a binding between different kinds (a class binds a class template, an
   interface an interface template, a data type a data type template), a second binding of the same
-  template, and a class that a binding uses as an argument being deleted.
+  template, and deleting a class that a binding uses as an argument, such as *Order*.
 
 More in the reference: [Template bindings](#template-bindings).
 
@@ -966,6 +978,7 @@ Start from any diagram; this happens in **Models**.
 8. Choose **+** beside **Properties · 0**. An editor opens, as for an attribute.
 9. Type *table* in **Name**, choose *String* in **Type**, and choose the check.
 10. Select *Persistence* and choose **Open profile diagram** in its **Properties**.
+11. Click *Entity* on the diagram to see its **Properties** again.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-guide-profile-dark.png">
