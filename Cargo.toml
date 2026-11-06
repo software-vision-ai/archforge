@@ -24,6 +24,7 @@ archforge-diagram = { path = "crates/diagram" }
 archforge-project = { path = "crates/project" }
 archforge-control = { path = "crates/control" }
 archforge-mcp = { path = "crates/mcp" }
+archforge-secrets = { path = "crates/secrets" }
 
 # External crates.
 egui = { version = "0.37", features = ["default_fonts", "monochrome_emoji_fonts"] }
@@ -67,6 +68,15 @@ fontdb = { version = "=0.24.0", default-features = false, features = ["std"] }
 mysql = { version = "=28.0.4", default-features = false, features = ["minimal-rust"] }
 # Random passwords and run folder names for the Dolt server. MIT OR Apache-2.0.
 getrandom = "0.3"
+# API keys in the system credential store (owner decision; crates/secrets/README.md says why these
+# features): its v1 set with the defaults named, so only the macOS keychain, the Windows Credential
+# Manager and the pure-Rust Secret Service over zbus build; no libdbus, no OpenSSL. MIT OR
+# Apache-2.0; pinned exactly, as it holds the keys. Its store crates (keyring-core and the three
+# backends) are held by Cargo.lock and move only with a reviewed lockfile change.
+keyring = { version = "=4.2.0", default-features = false, features = ["v1"] }
+# Overwrites a secret's bytes when it is dropped. MIT OR Apache-2.0, pure Rust; also pulled in by
+# keyring's Windows store.
+zeroize = "1"
 # The effective user id and the open flags for the control token file's checks (Unix), through a
 # safe API;
 # already in the lockfile, Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT.

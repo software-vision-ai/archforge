@@ -56,6 +56,9 @@ pub const TABLE: &[(&str, Class)] = &[
     // Agent access: the control channel's token, loopback server and client, and the MCP server
     // bridged to it. Host services like the two above, never built for the portable target.
     ("control", Class::Layer(9)),
+    // API keys in the system's credential store, never in a file. A host service like the ones
+    // above, never built for the portable target.
+    ("secrets", Class::Layer(9)),
     ("mcp", Class::Layer(10)),
 ];
 
