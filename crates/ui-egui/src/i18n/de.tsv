@@ -1031,6 +1031,43 @@ str		A template does not bind itself	Ein Template bindet sich nicht selbst
 str		This one binds that template already	Dieses bindet dieses Template bereits
 str		That template binds this one already, which would make a cycle	Dieses Template bindet dieses Element bereits, was einen Zyklus ergäbe
 str		Pick another template in the binding's Properties, where its arguments are chosen.	Wählen Sie ein anderes Template in den Eigenschaften der Bindung, wo seine Argumente gewählt werden.
+str		N-ary association	N-äre Assoziation
+str		N-ary association: click each class in turn, then press Enter	N-äre Assoziation: Klicken Sie nacheinander auf jede Klasse und drücken Sie dann die Eingabetaste
+str		An n-ary association is drawn by clicking each class in turn	Eine n-äre Assoziation wird durch Klicken auf jede Klasse nacheinander gezeichnet
+str		Enter finishes at 3+ · Backspace drops the last · Esc cancels	Eingabe beendet ab 3 · Rücktaste entfernt das letzte · Esc bricht ab
+str		Click a class for the new end	Klicken Sie auf eine Klasse für das neue Ende
+str		Esc cancels	Esc bricht ab
+str		An n-ary association joins classes and interfaces	Eine n-äre Assoziation verbindet Klassen und Schnittstellen
+str		An association takes at most {n} ends	Eine Assoziation hat höchstens {n} Enden
+str		An n-ary association needs three ends or more: click another class	Eine n-äre Assoziation braucht drei Enden oder mehr: Klicken Sie auf eine weitere Klasse
+str		Add n-ary association	N-äre Assoziation hinzufügen
+str		New n-ary association	Neue n-äre Assoziation
+str		Drawing · not in the model until you finish	Zeichnen · erst im Modell, wenn Sie fertig sind
+str		Ends so far · {n}	Bisherige Enden · {n}
+str		Next: click a class on the canvas	Weiter: Klicken Sie auf eine Klasse im Zeichenbereich
+str		Next: click a class on the canvas, or press Enter to finish	Weiter: Klicken Sie auf eine Klasse im Zeichenbereich oder drücken Sie die Eingabetaste, um abzuschließen
+str		Enter, or a double-click on the last class, finishes once there are 3 ends or more. One undo step adds the association, its diamond and every end.	Die Eingabetaste oder ein Doppelklick auf die letzte Klasse schließt ab, sobald es 3 Enden oder mehr sind. Ein Rückgängig-Schritt fügt die Assoziation, ihre Raute und jedes Ende hinzu.
+str		Esc, switching tools or clicking empty canvas cancels and leaves nothing in the model. Backspace takes the last end off.	Esc, ein Werkzeugwechsel oder ein Klick auf leere Fläche bricht ab und lässt nichts im Modell. Die Rücktaste nimmt das letzte Ende weg.
+str		New ends are named after their class and start at *; change them after finishing.	Neue Enden werden nach ihrer Klasse benannt und beginnen bei *; ändern Sie sie nach dem Abschließen.
+str		Ends · {n}	Enden · {n}
+str		Add end	Ende hinzufügen
+str		Draws a new leg	Zeichnet einen neuen Schenkel
+str		Reconnect end	Ende neu verbinden
+str		Drag a leg end	Ein Schenkelende ziehen
+str		Open a class diagram to pick the new end's class	Öffnen Sie ein Klassendiagramm, um die Klasse des neuen Endes zu wählen
+str		Ends of an n-ary association are not aggregations, so Aggregation is not offered. Repeat a type for two ends when the roles differ.	Enden einer n-ären Assoziation sind keine Aggregationen, daher wird Aggregation nicht angeboten. Wiederholen Sie einen Typ für zwei Enden, wenn sich die Rollen unterscheiden.
+str		Another end has the role {role} already. Pick another role.	Ein anderes Ende hat bereits die Rolle {role}. Wählen Sie eine andere Rolle.
+str		Set association end	Assoziationsende festlegen
+str		End {role} removed	Ende {role} entfernt
+str		Selecting the diamond or any leg selects the one association. Remove from this diagram hides it here; Delete from the model deletes it and its ends everywhere.	Die Raute oder ein beliebiger Schenkel wählt die eine Assoziation aus. Aus diesem Diagramm entfernen blendet sie hier aus; Aus dem Modell löschen löscht sie und ihre Enden überall.
+str		Two ends would remain	Zwei Enden blieben übrig
+str		An n-ary association needs three ends or more. Without {role}, only {first} and {second} remain.	Eine n-äre Assoziation braucht drei Enden oder mehr. Ohne {role} bleiben nur {first} und {second}.
+str		Keep 3 ends	3 Enden behalten
+str		Make it binary	Binär machen
+str		Make it binary turns it into a plain association between {first} and {second}, keeping both ends, as one undo step. Keep 3 ends, or Esc, changes nothing.	Binär machen macht sie zu einer einfachen Assoziation zwischen {first} und {second}, mit beiden Enden, in einem Rückgängig-Schritt. 3 Enden behalten oder Esc ändert nichts.
+str		Make it binary turns {name} into a plain association between {first} and {second}, keeping its name and both ends, as one undo step. Keep 3 ends, or Esc, changes nothing.	Binär machen macht {name} zu einer einfachen Assoziation zwischen {first} und {second}, mit ihrem Namen und beiden Enden, in einem Rückgängig-Schritt. 3 Enden behalten oder Esc ändert nichts.
+plural		N-ary association · {n} end · model, in every diagram	N-äre Assoziation · {n} Ende · Modell, in jedem Diagramm|N-äre Assoziation · {n} Enden · Modell, in jedem Diagramm
+plural		N-ary association · {n} end — click a class for the next end	N-äre Assoziation · {n} Ende — Klasse für das nächste Ende anklicken|N-äre Assoziation · {n} Enden — Klasse für das nächste Ende anklicken
 str		From	Von
 str		General	Allgemein
 str		Generalization	Generalisierung

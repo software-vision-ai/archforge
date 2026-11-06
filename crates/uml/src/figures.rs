@@ -208,6 +208,7 @@ pub fn card(store: &Store, c: Obj, diagram: Obj) -> Option<Card> {
         k if k == DATA_TYPE => ("«dataType»", "«dataType» · {package}", false),
         k if k == ASSOCIATION_CLASS => ("Association class", "Association class · {package}", false),
         k if k == crate::CONSTRAINT => return Some(constraint_card(store, c, diagram)),
+        k if k == ASSOCIATION => return crate::nary::is_nary(store, c).then(|| diamond_card(store, c)),
         _ => return None,
     };
     let elsewhere = elsewhere(store, c, diagram);
@@ -362,12 +363,47 @@ fn enumeration_card(store: &Store, e: Obj, diagram: Obj) -> Card {
     }
 }
 
-/// An association's two ends, in its member order.
+/// A binary association's two ends, in its member order; None for an n-ary one, whose ends
+/// [`crate::nary::ends`] gives (AR-128).
 pub fn member_ends(store: &Store, a: Obj) -> Option<[Obj; 2]> {
     match list(store, a, association::MEMBER_END).as_slice() {
-        [first, second, ..] => Some([*first, *second]),
+        [first, second] => Some([*first, *second]),
         _ => None,
     }
+}
+
+/// An n-ary association's diamond (AR-128): its name, which the canvas writes above the diamond,
+/// and no rows.
+fn diamond_card(store: &Store, a: Obj) -> Card {
+    Card {
+        eyebrow: Text::said("N-ary association"),
+        name: name(store, a),
+        compartments: Vec::new(),
+        more: ("+ {n} more member", "+ {n} more members"),
+        hidden: 0,
+        elsewhere: false,
+        tone: Tone::Diamond,
+        slanted: false,
+        braces: None,
+        template: Vec::new(),
+    }
+}
+
+/// The leg of an n-ary association's end `end` (AR-128): from the diamond, unmarked, to the end's
+/// class, an open arrow there when the association navigates to it, the end's role and its
+/// multiplicity beside it.
+fn leg_line(store: &Store, end: Obj) -> Option<Line> {
+    let a = crate::nary::association_of_end(store, end)?;
+    let m = end_text(store, end);
+    let role = end_role(store, end);
+    let to = End {
+        mark: if navigable(store, a, end) { EndMark::OpenArrow } else { EndMark::None },
+        text: (!m.is_empty()).then_some(m),
+        slot: "to_end",
+        role: (!role.is_empty()).then_some(role),
+        qualifiers: Vec::new(),
+    };
+    Some(Line { ends: [End::marked(EndMark::None), to], styled: true, dashed: false, status: None, note: None, badge: false, resolvable: false })
 }
 
 /// Whether the association navigates to its end `end`: a class or an interface owns the end, or the
@@ -418,6 +454,7 @@ pub fn ends(store: &Store, element: Obj) -> Option<(Obj, Obj)> {
 /// apart), a generalization, a dependency or an interface realization.
 pub fn line(store: &Store, element: Obj) -> Option<Line> {
     match store.class_of(element).ok()? {
+        c if c == crate::PROPERTY => leg_line(store, element),
         c if crate::is_association(c) => {
             let ends = member_ends(store, element)?;
             let end = |i: usize| {
@@ -509,6 +546,9 @@ pub fn text_slots(class: archforge_mof::ClassId) -> &'static [&'static str] {
         &["from_end", "to_end", "from_role", "to_role"]
     } else if class == DEPENDENCY || class == TEMPLATE_BINDING {
         &["name"]
+    } else if class == crate::PROPERTY {
+        // An n-ary association's leg: its end's texts at the class (AR-128).
+        &["to_end", "to_role"]
     } else {
         &[]
     }
@@ -519,6 +559,14 @@ pub fn text_slots(class: archforge_mof::ClassId) -> &'static [&'static str] {
 pub fn slot_text(store: &Store, element: Obj, slot: &str) -> String {
     let end = |i: usize| member_ends(store, element).map(|e| e[i]);
     let ends = store.class_of(element).is_ok_and(crate::is_association);
+    // An n-ary association's leg writes its own end's texts (AR-128).
+    if crate::nary::association_of_end(store, element).is_some() {
+        return match slot {
+            "to_end" => end_text(store, element),
+            "to_role" => end_role(store, element),
+            _ => String::new(),
+        };
+    }
     match slot {
         "name" if store.class_of(element).ok() == Some(TEMPLATE_BINDING) => crate::bindings::label(store, element),
         "name" => name(store, element),

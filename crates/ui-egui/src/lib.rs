@@ -49,6 +49,7 @@ mod uml_bindings;
 mod uml_classifier;
 mod uml_constraints;
 mod uml_inline;
+mod uml_nary;
 mod uml_nesting;
 mod uml_panel;
 mod uml_profiles;
@@ -798,6 +799,9 @@ impl Shell {
     fn stash(&mut self) {
         let Some(i) = self.active else { return };
         let Some(project) = self.project.take() else { return };
+        // A drawing under way never outlives the project it was on (AR-128).
+        self.canvas.nary = None;
+        self.canvas.nary_menu = None;
         let parked = Parked {
             project,
             session: self.session.take(),

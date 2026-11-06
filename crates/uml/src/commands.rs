@@ -780,6 +780,12 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
         let class = store.class_of(*o).map_err(fail)?;
         // An association's end goes with its association.
         let end = class == crate::PROPERTY && store.get(*o, crate::property::ASSOCIATION).ok().and_then(|v| v.as_ref()).is_some();
+        if end && crate::nary::association_of_end(store, *o).is_some() {
+            return Err(refuse(
+                "ids",
+                format!("{} is an end of an n-ary association; remove it with uml.association.remove-end", uuid_of(store, *o)?),
+            ));
+        }
         // A profile, a stereotype or a property in use, a package whose applications its contents
         // need, and UML's own metaclasses stay, the uses named (AR-134).
         if let Some(refused) = crate::profiles::removal_problem(store, *o) {

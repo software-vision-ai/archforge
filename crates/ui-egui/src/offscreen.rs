@@ -203,6 +203,18 @@ pub enum Screen {
     /// A binding being drawn from OrderRepository to Repository: its draft in Properties, Key on its
     /// default, Apply pressed with T still without an argument and the refusal said (AR-131, C3).
     WorkspaceTemplateBindingNew,
+    /// The sample class model's diagram Recommendations, Customer and Product side by side and
+    /// Catalog under them, the Relationship tool drawing an n-ary association: Customer and Product
+    /// picked, the preview diamond between them, the pointer on Catalog, the gesture hint counting
+    /// two ends and Properties showing the draft (AR-128, A3).
+    WorkspaceNaryDrawing,
+    /// The same diagram with the n-ary association recommends drawn, selected, its diamond and legs
+    /// in the accent, Properties showing its ends with the editor open on its Catalog end (AR-128,
+    /// A4).
+    WorkspaceNary,
+    /// The same, the bin of the Catalog end pressed: Properties asks to keep three ends or make it
+    /// binary, Keep 3 ends focused (AR-128, A5).
+    WorkspaceNaryBinary,
     /// The user manual's class-model guide, first step: the root package's diagram Commerce with
     /// Customer (its name typed) and Order, a draft row open on Order's card with `number :
     /// Integer` typed.
@@ -584,6 +596,12 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
         crate::uml_ui::open_sample(&mut shell)?;
         sample_leaf(&mut shell)?;
     }
+    let mut hover: Option<String> = None;
+    if matches!(screen, Screen::WorkspaceNaryDrawing | Screen::WorkspaceNary | Screen::WorkspaceNaryBinary) {
+        shell.adopt_project();
+        crate::uml_ui::open_sample(&mut shell)?;
+        hover = sample_nary(&mut shell, screen)?;
+    }
     if screen == Screen::WorkspaceNestedClassifiers {
         shell.adopt_project();
         crate::uml_ui::open_sample(&mut shell)?;
@@ -746,6 +764,14 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
         shell,
     );
     harness.run();
+    // The pointer over a control the screen names, as the design draws it there.
+    if let Some(id) = hover
+        && let Some(w) = harness.state().widgets().iter().find(|w| w.id == id)
+    {
+        let at = egui::pos2((w.rect[0] + w.rect[2]) / 2.0, w.rect[1] + 12.0);
+        harness.event(egui::Event::PointerMoved(at));
+        harness.run();
+    }
     let image = harness.render()?;
     let (w, h) = (image.width(), image.height());
     Ok((w, h, image.into_raw()))
@@ -1139,6 +1165,39 @@ fn sample_final(shell: &mut Shell) -> Result<(), String> {
     shell.canvas.zoom = 1.0;
     shell.canvas.pan = egui::vec2(260.0 - 1040.0, 60.0 - 80.0);
     Ok(())
+}
+
+/// The n-ary association's screens (AR-128): the sample's Recommendations diagram at 100 %, the
+/// draft of Customer and Product on it, or recommends drawn and selected with the Catalog end's
+/// editor or the question its removal asks. Gives the control the pointer rests on.
+fn sample_nary(shell: &mut Shell, screen: Screen) -> Result<Option<String>, String> {
+    let drawn = screen != Screen::WorkspaceNaryDrawing;
+    let ids = crate::uml_nary::put_recommends(shell, drawn)?;
+    shell.state.show_panel(crate::state::Panel::Properties);
+    shell.canvas.fit_pending = false;
+    shell.canvas.zoom = 1.0;
+    shell.canvas.pan = egui::vec2(20.0, 30.0);
+    let uuid = |k: &str| ids.get(k).and_then(|v| archforge_mof::Uuid::parse(v)).ok_or_else(|| format!("the sample's {k}"));
+    if !drawn {
+        shell.canvas.tool = crate::canvas::Tool::Connect("relationship");
+        shell.canvas.uml_relation = crate::uml_relate::Relate::NAry;
+        let diagram = uuid("diagram")?;
+        let ends = vec![
+            crate::uml_nary::DraftEnd { class: uuid("Customer")?, node: uuid("customer")? },
+            crate::uml_nary::DraftEnd { class: uuid("Product")?, node: uuid("product")? },
+        ];
+        shell.canvas.nary = Some(crate::uml_nary::Nary::Draft { diagram, ends });
+        return Ok(Some(format!("workspace.canvas.node.{}", uuid("catalog")?)));
+    }
+    let a = uuid("recommends")?;
+    crate::panels::run(shell, "view.select", serde_json::json!({ "ids": [a.to_string()] }))?;
+    shell.panels.editors_for = Some(a);
+    if screen == Screen::WorkspaceNary {
+        crate::uml_nary::open(shell, a, 2);
+    } else {
+        shell.panels.nary_remove = Some(crate::uml_nary::RemoveAsk { association: a, end: 2, opened: true });
+    }
+    Ok(None)
 }
 
 /// In the sample class model, Priority nested in Order, placed under it with the ⊕ line, selected

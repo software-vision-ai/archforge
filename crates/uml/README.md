@@ -145,7 +145,13 @@ qualifier_text, qualifiers_json, MAX_QUALIFIERS}` (AR-127: `uml.qualifier.{add, 
 owns, each with a name, a type and a multiplicity; the qualified end's box drawn at its class
 (`figures::line` gives its rows in the end's `qualifiers`); a name told apart from its end's other
 qualifiers whatever the case, at most 32 an end; never an attribute or a role; kept through renaming
-and reconnecting; removed through `element.remove`), `modifiers::{read, apply, parse_default, default_text, braces, suffix, Shape,
+and reconnecting; removed through `element.remove`), `nary::{specs, ends, is_nary, association_of_end, end_type,
+leg_ends, default_role, diamonds, node_in, follow_legs, role_problem, MIN_ENDS, MAX_ENDS, DIAMOND_SIZE}` (AR-128:
+`uml.association.{add-nary, add-end, remove-end, reconnect-end}`; an Association with three to 32 member ends, one
+element drawn as a diamond, a node of the association in the diagram's existing node rows, with a leg per end, an edge of
+the end's Property from the diamond to its class's card (`figures::line` draws it); a class at several ends when their
+roles differ; its ends never aggregations; removing one of three refused unless made binary, which puts a named line in
+the diamond's place; `figures::member_ends` gives a binary association's two ends only), `modifiers::{read, apply, parse_default, default_text, braces, suffix, Shape,
 subsets_candidates, redefines_candidates, redefines_leaf, subsets_problem, redefines_problem}` (AR-126: a
 property's default value read by its type, derived, read only, ordered, unique, and the properties
 it subsets and redefines, set by `uml.attribute.add`/`set` and `uml.association.set-end`, checked
@@ -181,7 +187,11 @@ edited with undo and redo, and its ends reconnected; an argument's removal refus
 gone with its bound element or its template; rows read back identical; the sweep. `tests/profiles.rs` (AR-134): profiles and stereotypes made, extending and owning properties, one undo step each; unsupported metaclasses and property types refused; a profile applied and unapplied; unapplying, removing and moving refused while stereotype applications built in the store use them, the uses counted; the library out of types and reads; a profile's names a package's; rows read back identical; the profile's diagram; the sweep. `tests/qualifiers.rs` (AR-127): qualifiers added, edited, moved and removed, each one undo
 step; a duplicate name and the other wrong edits refused, changing nothing; a built-in type or the
 model's own; kept apart from attributes and roles and gone with their association; kept through
-renaming and reconnecting; the box on two diagrams; rows read back identical; the sweep. `tests/modifiers.rs` (AR-126):
+renaming and reconnecting; the box on two diagrams; rows read back identical; the sweep. `tests/nary_associations.rs` (AR-128):
+made with three and four ends, each one undo step, and drawn as one; too few ends and a data type refused; a class at two
+ends with different roles; no aggregation on an n-ary end; ends added, removed and reconnected with their legs on two
+diagrams; removing one of three ends kept or made binary; Remove from this diagram apart from Delete from the model; a
+card's legs gone and back; a binary association still a line; rows read back identical; the sweep. `tests/modifiers.rs` (AR-126):
 each modifier set and cleared on an attribute and an end, one undo step each; defaults for every
 built-in type, an enumeration and opaque text, and the type-change refusal; Subsets and Redefines
 valid and refused; the card's and the line's notation; rows read back identical; the sweep.

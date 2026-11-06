@@ -13,7 +13,7 @@ use serde_json::json;
 
 use crate::Shell;
 use crate::explorer::{Row, Tree, fresh_name};
-use crate::i18n::{fmt, tr, tr_ctx};
+use crate::i18n::{fmt, tr, tr_ctx, trn};
 use crate::kinds::{DiagramKind, KindTool, ToolUse};
 use crate::notation_ui::{Added, Entry, NotationUi, Offer, Words};
 use crate::panels::Subject;
@@ -300,7 +300,9 @@ impl DiagramKind for UmlKind {
     /// A class, an interface, an enumeration, a data type, or a package on the diagram, goes from the model with
     /// ⇧⌫ (AR-95).
     fn deletes(&self, store: &Store, element: Obj) -> bool {
-        classifier(store, element) || matches!(class(store, element), Some(c) if c == archforge_uml::PACKAGE || c == archforge_uml::CONSTRAINT)
+        classifier(store, element)
+            || matches!(class(store, element), Some(c) if c == archforge_uml::PACKAGE || c == archforge_uml::CONSTRAINT)
+            || archforge_uml::nary::is_nary(store, element)
     }
 
     /// A package on a class diagram renames in place with a double click, as a class does.
@@ -413,6 +415,12 @@ impl DiagramKind for UmlKind {
             .filter(|l| *l == c || archforge_diagram::Notation::ends(&notation, store, *l).is_some_and(|(a, b)| a == c || b == c))
             // A line the diagram draws already (an association class's, its card not yet placed) stays as it is.
             .filter(|l| archforge_diagram::views_of(store, *l).1.iter().all(|e| archforge_diagram::diagram_of(store, *e) != Some(d)))
+            // The legs of n-ary associations whose diamond this diagram shows, from their ends at
+            // the classifier (AR-128).
+            .chain(store.alive().filter(|e| {
+                archforge_uml::nary::leg_ends(store, *e).is_some_and(|(a, t)| t == c && crate::editing::on_diagram(store, d, a))
+                    && archforge_diagram::views_of(store, *e).1.iter().all(|l| archforge_diagram::diagram_of(store, *l) != Some(d))
+            }))
             .collect();
         let (width, _) = kind.size();
         crate::editing::place_with_lines(shell, d, c, at, (width, content_height(store, c)), &links, &notation, &kind.place_step());
@@ -884,6 +892,14 @@ impl NotationUi for UmlUi {
 
     /// How Properties names `o`: its kind line, its word, This …, and On this … · {n}.
     fn words(&self, store: &Store, o: Obj) -> Option<Words> {
+        // An n-ary association's kind line counts its ends (AR-128, A4).
+        if archforge_uml::nary::is_nary(store, o) {
+            let n = u64::try_from(archforge_uml::nary::ends(store, o).len()).unwrap_or(u64::MAX);
+            let mut w = words_of(store, o)?;
+            w.kind = trn("N-ary association · {n} end · model, in every diagram", "N-ary association · {n} ends · model, in every diagram", n);
+            w.word = tr("N-ary association");
+            return Some(w);
+        }
         // A nested classifier's kind line names its owner (AR-132, D2).
         if let Some(owner) = archforge_uml::nesting::classifier_owner(store, o)
             && let Some(kind) = Classifier::of(store, o)
@@ -906,6 +922,10 @@ impl NotationUi for UmlUi {
 
     /// A member's panel is its classifier's, a literal's its enumeration's.
     fn heading(&self, store: &Store, o: Obj) -> Option<String> {
+        // An n-ary association's first section is Association, as a binary one's (AR-128, A4).
+        if archforge_uml::nary::is_nary(store, o) {
+            return Some(tr("Association"));
+        }
         if archforge_uml::generalization_sets::is_set(store, o) {
             return Some(tr("Set"));
         }

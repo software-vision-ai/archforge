@@ -768,6 +768,10 @@ fn association_of(store: &Store, p: &Params, key: &str) -> Result<Obj, CommandEr
 /// out keeps what the end has; clearing is said explicitly.
 fn association_set_end(ctx: &mut C<'_>, p: &Params) -> R {
     let a = association_of(ctx.doc, p, "association")?;
+    // An n-ary association's ends are set one by one as a binary one's are (AR-128).
+    if crate::nary::is_nary(ctx.doc, a) {
+        return nary_set_end(ctx, p, a);
+    }
     let ends = ends_of(ctx.doc, a, "association")?;
     let i = match p.integer("end") {
         Some(i @ 0..=1) => i as usize,
@@ -852,6 +856,61 @@ fn association_set_end(ctx: &mut C<'_>, p: &Params) -> R {
     if kind != 0 {
         own_end(ctx.doc, a, other)?;
         set_navigable(ctx.doc, a, other, false)?;
+    }
+    Ok(json!({ "id": uuid_of(ctx.doc, end)? }))
+}
+
+/// `uml.association.set-end` on an n-ary association's end (AR-128): its role, free among all its
+/// ends' roles whatever the case; its multiplicity, navigability, static and modifiers, its context
+/// the classes at all its other ends. Its ends are never aggregations: none but `none` is taken.
+fn nary_set_end(ctx: &mut C<'_>, p: &Params, a: Obj) -> R {
+    let ends = crate::nary::ends(ctx.doc, a);
+    let last = ends.len().saturating_sub(1);
+    let end = p.integer("end").and_then(|i| usize::try_from(i).ok()).and_then(|i| ends.get(i).copied());
+    let end = end.ok_or_else(|| refuse("end", format!("the end is one of 0 to {last}")))?;
+    let kept_role = name_of(ctx.doc, end);
+    let role = p.str("role").unwrap_or(&kept_role).to_string();
+    if let Some(why) = crate::nary::role_problem(ctx.doc, a, &role, Some(end)) {
+        return Err(refuse("role", why));
+    }
+    if let Some(k) = p.str("aggregation").filter(|k| *k != "none") {
+        if !AGGREGATIONS.contains(&k) {
+            return Err(refuse("aggregation", format!("{k:?} is not one of {}", AGGREGATIONS.join(", "))));
+        }
+        return Err(refuse("aggregation", "an n-ary association's ends are not aggregations: only a binary association has a whole and a part"));
+    }
+    let bounds = match p.str("multiplicity") {
+        Some(typed) => crate::members::parse_multiplicity(typed).map_err(|why| refuse("multiplicity", format!("the multiplicity {why}")))?,
+        None => Some(crate::modifiers::bounds(ctx.doc, end)),
+    };
+    let navigable = p.bool("navigable").unwrap_or_else(|| crate::figures::navigable(ctx.doc, a, end));
+    let (lower, upper) = bounds.unwrap_or((1, Some(1)));
+    let mut context: Vec<Obj> = ends.iter().filter(|e| **e != end).filter_map(|e| one(ctx.doc, *e, typed_element::TYPE)).collect();
+    context.sort();
+    context.dedup();
+    let shape = crate::modifiers::Shape {
+        itself: Some(end),
+        context,
+        ty: one(ctx.doc, end, typed_element::TYPE),
+        lower,
+        upper,
+        composite: false,
+        name: role.clone(),
+    };
+    let modifiers = crate::modifiers::read(ctx.doc, p, &shape, Some(end))?;
+    own_end(ctx.doc, a, end)?;
+    set_name(ctx.doc, end, &role)?;
+    if let Some(typed) = p.str("multiplicity") {
+        crate::members::set_multiplicity(ctx.doc, end, typed, "multiplicity")?;
+    }
+    if let Some(on) = p.bool("static") {
+        ctx.doc.set(end, crate::feature::IS_STATIC, Value::Bool(on)).map_err(fail)?;
+    }
+    crate::modifiers::apply(ctx.doc, end, &modifiers)?;
+    set_navigable(ctx.doc, a, end, navigable)?;
+    // A file may give an end an aggregation; any edit takes it away.
+    if aggregation(ctx.doc, end) != 0 {
+        ctx.doc.set(end, property::AGGREGATION, Value::Enum(0)).map_err(fail)?;
     }
     Ok(json!({ "id": uuid_of(ctx.doc, end)? }))
 }
@@ -991,33 +1050,31 @@ fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, r)?, "dropped": dropped }))
 }
 
-/// An association's or an association class's two ends as the query commands give them: each with
-/// its class, role, multiplicity, navigability, aggregation, static, modifiers and qualifiers.
+/// An association's or an association class's ends, two or more (AR-128), as the query commands
+/// give them: each with its class, role, multiplicity, navigability, aggregation, static,
+/// modifiers and qualifiers.
 pub(crate) fn ends_json(store: &Store, r: Obj) -> Json {
     let id = |o: Obj| uuid_of(store, o).unwrap_or_default();
-    let ends: Vec<Json> = crate::figures::member_ends(store, r)
-        .map(|ends| {
-            ends.iter()
-                .map(|e| {
-                    let mut end = json!({
-                        "id": id(*e),
-                        "class": one(store, *e, typed_element::TYPE).map_or(Json::Null, |t| json!(id(t))),
-                        "role": name_of(store, *e),
-                        "multiplicity": crate::figures::multiplicity(store, *e),
-                        "navigable": crate::figures::navigable(store, r, *e),
-                        "aggregation": AGGREGATIONS[aggregation(store, *e)],
-                        "static": store.get(*e, crate::feature::IS_STATIC).ok().and_then(|v| v.as_bool()).unwrap_or(false),
-                    });
-                    crate::modifiers::merge_into(store, *e, &mut end);
-                    // Its qualifiers, in order (AR-127).
-                    if let Some(fields) = end.as_object_mut() {
-                        fields.insert("qualifiers".to_string(), crate::qualifiers::qualifiers_json(store, *e));
-                    }
-                    end
-                })
-                .collect()
+    let ends: Vec<Json> = crate::nary::ends(store, r)
+        .iter()
+        .map(|e| {
+            let mut end = json!({
+                "id": id(*e),
+                "class": one(store, *e, typed_element::TYPE).map_or(Json::Null, |t| json!(id(t))),
+                "role": name_of(store, *e),
+                "multiplicity": crate::figures::multiplicity(store, *e),
+                "navigable": crate::figures::navigable(store, r, *e),
+                "aggregation": AGGREGATIONS[aggregation(store, *e)],
+                "static": store.get(*e, crate::feature::IS_STATIC).ok().and_then(|v| v.as_bool()).unwrap_or(false),
+            });
+            crate::modifiers::merge_into(store, *e, &mut end);
+            // Its qualifiers, in order (AR-127).
+            if let Some(fields) = end.as_object_mut() {
+                fields.insert("qualifiers".to_string(), crate::qualifiers::qualifiers_json(store, *e));
+            }
+            end
         })
-        .unwrap_or_default();
+        .collect();
     Json::Array(ends)
 }
 
@@ -1026,6 +1083,10 @@ fn describe(store: &Store, r: Obj) -> Json {
     let id = |o: Obj| uuid_of(store, o).unwrap_or_default();
     let (from, to) = crate::figures::ends(store, r).map_or((Json::Null, Json::Null), |(a, b)| (json!(id(a)), json!(id(b))));
     let mut out = match store.class_of(r).ok() {
+        // An n-ary one has no from and to: its ends say its classes (AR-128).
+        Some(c) if c == ASSOCIATION && crate::nary::is_nary(store, r) => {
+            json!({ "id": id(r), "kind": "n-ary association", "name": name_of(store, r), "ends": ends_json(store, r) })
+        }
         Some(c) if c == ASSOCIATION => {
             json!({ "id": id(r), "kind": "association", "name": name_of(store, r), "from": from, "to": to, "ends": ends_json(store, r) })
         }
@@ -1061,11 +1122,11 @@ macro_rules! end_lines {
     () => {
         concat!(
             "association: string; the association's or association class's id\n",
-            "end: integer, 0..1; which end, 0 at the class or interface it was drawn from, 1 at the other; every other field left out keeps what the end has, and clearing is said explicitly\n",
-            "role: string?; the end's role name, \"\" for none; an association class's end never takes one of its attributes' names; left out, kept\n",
+            "end: integer, 0..31; which end, 0 at the class or interface it was drawn from, 1 at the other; an n-ary association's end by its place among its ends from 0; every other field left out keeps what the end has, and clearing is said explicitly\n",
+            "role: string?; the end's role name, \"\" for none; never another end's role whatever the case; an association class's end never takes one of its attributes' names; left out, kept\n",
             "multiplicity: string?; 1, 0..1, *, 1..*, 2..5, \"\" for none; left out, kept\n",
             "navigable: bool?; the association navigates to this end; never the whole's end of an aggregation or composition; left out, kept\n",
-            "aggregation: string?, none|shared|composite; this end is a part of the other end's class, shared or composed; left out, kept\n",
+            "aggregation: string?, none|shared|composite; this end is a part of the other end's class, shared or composed; an n-ary association's ends take none; left out, kept\n",
             "static: bool?; belongs to the class, not its instances; left out, kept\n",
             kept_modifier_lines!()
         )

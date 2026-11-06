@@ -141,6 +141,17 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   `element_remove` removes it with its substitutions; a classifier a binding uses as an argument is
   refused, naming the binding, until that binding changes or goes; removing the bound element or
   the template takes the binding along.
+- **N-ary associations**: `uml_association_add_nary` joins three to 32 classes or interfaces in one
+  association (`classes`, in order; a class given twice has two ends), each end named after its
+  class and starting at `*`. On a class diagram it is a diamond: `diagram_place` with the
+  association's id, then `diagram_connect` from the diamond's node to each class's node with the
+  end's id (or `diagram_connect_all`), all in one `batch` for one undo step. `uml_association_set_end`
+  sets an end by its place among the ends; its role must differ from every other end's, and an
+  n-ary end takes no aggregation. `uml_association_add_end`, `uml_association_reconnect_end` and
+  `uml_association_remove_end` add, move and remove an end, the legs following on every diagram.
+  Removing one of three ends is refused unless `binary` is true, which makes it an ordinary
+  association between the two classes left. `uml_relationship_list` gives it with the kind
+  `n-ary association` and all its ends.
 - **Generalization sets**: `uml_generalization_set_add` groups generalizations to one general
   class, complete or incomplete and disjoint or overlapping; `uml_generalization_set_set` renames
   it, changes either flag, and adds or takes out members; `uml_generalization_set_place` puts its

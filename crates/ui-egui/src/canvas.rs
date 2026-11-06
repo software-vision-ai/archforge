@@ -124,6 +124,10 @@ pub struct State {
     pub menu: Option<crate::editing::EntityMenu>,
     /// The context menu of selected generalization lines, open at a screen point (AR-129).
     pub line_menu: Option<Pos2>,
+    /// An n-ary association being drawn, or a class click awaited for a new end (AR-128).
+    pub nary: Option<crate::uml_nary::Nary>,
+    /// The context menu of an n-ary association's diamond or leg, at a screen point (AR-128).
+    pub nary_menu: Option<(Pos2, Uuid)>,
     pub focused: bool,
     /// Relationships (slice E2): the ends a new line gets, the chevron whose popover is open (the
     /// cardinality popover, a menu of kinds), the mapping table offer and the toast with Undo.
@@ -210,6 +214,8 @@ impl Default for State {
             gesture: None,
             menu: None,
             line_menu: None,
+            nary: None,
+            nary_menu: None,
             focused: false,
             relationship: crate::connect::RelKind::default(),
             popover: None,
@@ -290,6 +296,7 @@ pub fn retain_valid(state: &mut State, store: &Store) {
         state.reopen_pending = state.active.is_some();
     }
     crate::editing::retain_valid(state, store);
+    crate::uml_nary::retain(state, store);
     if state.mapping.as_ref().is_some_and(|m| store.by_uuid(m.relationship).is_none_or(|o| !store.is_alive(o))) {
         state.mapping = None;
     }
@@ -701,6 +708,8 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
         }
     }
     toolbar(shell, ui, p, r);
+    // What an n-ary association's drawing has so far, or what Add end waits for (AR-128).
+    crate::uml_nary::hint_bar(shell, ui, p, r, below_path);
     if let Some(notice) = shell.canvas.notice.clone() {
         ux::text(&paint, r.min + vec2(16.0, 12.0 + below_path), &notice, types::CAPTION, p.amber, Some((r.width() - 32.0).max(0.0)));
     }
@@ -836,8 +845,13 @@ fn draw_node(
     let annotation = card.as_ref().is_some_and(|c| matches!(c.tone, Tone::Constraint | Tone::Braces));
     // A template's signature rows, drawn over the card and its selection (AR-130).
     let signature = card.as_ref().filter(|c| !annotation && !c.template.is_empty() && z >= DETAIL_ZOOM).map(|c| c.template.clone());
+    let diamond = card.as_ref().is_some_and(|c| c.tone == Tone::Diamond);
     match element {
         Some(_) if annotation && let Some(card) = card => draw_constraint(paint, &inner, d, n, &card, rect),
+        // An n-ary association's diamond, its name above it (AR-128).
+        Some(_) if diamond && let Some(card) = card => {
+            crate::uml_nary::draw_diamond(paint, p, rect, &card.name, z, selected, &look_of(store, n, node::STYLE));
+        }
         Some(_) if let Some(card) = card => {
             // An element of another scope: dimmed, dashed, its scope named in the eyebrow.
             let dim = |c: egui::Color32| if card.elsewhere { c.gamma_multiply(FOREIGN_ALPHA) } else { c };
@@ -1173,6 +1187,8 @@ pub(crate) enum MiniLook {
     /// A constraint note and a constraint's braces (AR-133).
     Constraint,
     Braces,
+    /// An n-ary association's diamond (AR-128).
+    Diamond,
 }
 
 /// One card of a thumbnail, on screen: its look and how many rows each of its compartments has.
@@ -1225,6 +1241,7 @@ pub(crate) fn preview(store: &Store, notations: &archforge_diagram::ProjectView,
                         archforge_diagram::figure::Tone::Tinted => MiniLook::Tinted,
                         archforge_diagram::figure::Tone::Constraint => MiniLook::Constraint,
                         archforge_diagram::figure::Tone::Braces => MiniLook::Braces,
+                        archforge_diagram::figure::Tone::Diamond => MiniLook::Diamond,
                     };
                     (look, card.compartments.iter().map(Vec::len).collect())
                 }
@@ -1294,11 +1311,17 @@ fn mini_card(paint: &egui::Painter, p: &Palette, c: &MiniCard, s: f32) {
         paint.rect_filled(Rect::from_min_size(r.left_top(), vec2(r.width(), (5.0 * s).max(1.0))), 1.0, p.purple);
         return;
     }
+    // An n-ary association's diamond, hollow in the lines' ink (AR-128).
+    if c.look == MiniLook::Diamond {
+        let points = vec![r.left_center(), r.center_top(), r.right_center(), r.center_bottom()];
+        paint.add(egui::Shape::convex_polygon(points, p.surface, Stroke::new(1.0, p.text_secondary)));
+        return;
+    }
     let (fill, edge) = match c.look {
         MiniLook::Tinted => (p.entity, p.entity_edge),
         MiniLook::Note => (p.amber_tint, p.amber),
         MiniLook::Constraint => (p.surface, p.purple),
-        MiniLook::Plain | MiniLook::Tabbed | MiniLook::Braces => (p.surface, p.border),
+        MiniLook::Plain | MiniLook::Tabbed | MiniLook::Braces | MiniLook::Diamond => (p.surface, p.border),
     };
     if c.look == MiniLook::Tabbed {
         let tab =
@@ -1619,9 +1642,20 @@ fn draw_edge(
     let mut points = edge_points(d, e)?;
     let n = points.len();
     // A selected qualifier marks its association's line, as a selected member marks its card.
+    // An n-ary association's leg draws selected with its association, the diamond and every leg
+    // being the one element (AR-128).
     let selected = selection.contains(&e)
         || selection.contains(&element)
-        || selection.iter().any(|o| archforge_uml::qualifiers::association_of(store, *o).is_some_and(|(a, _)| a == element));
+        || selection.iter().any(|o| archforge_uml::qualifiers::association_of(store, *o).is_some_and(|(a, _)| a == element))
+        || archforge_uml::nary::association_of_end(store, element).is_some_and(|a| selection.contains(&a));
+    // A leg leaves its diamond where the line meets the diamond's outline, not its node's border.
+    if let Some(source) = element_of(store, e, edge::SOURCE)
+        && element_of(store, source, node::ELEMENT).is_some_and(|a| archforge_uml::nary::is_nary(store, a))
+        && let (Some(tip), Some(next)) = (points.first().copied(), points.get(1).copied())
+        && let Some(on) = crate::uml_nary::onto_diamond(d.node_rect(source), tip, next)
+    {
+        points[0] = on;
+    }
     // A qualified end's box sits against its node, the line starting from its outer side (AR-127).
     let boxes = qualifier_boxes(paint, d, e, &line, &mut points);
     let hovered = d.hovered == Some(e);

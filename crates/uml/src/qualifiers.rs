@@ -153,7 +153,16 @@ fn qualifier_add(ctx: &mut C<'_>, p: &Params) -> R {
     let a = id_of(ctx.doc, p, "association", ASSOCIATION, "")
         .or_else(|_| id_of(ctx.doc, p, "association", ASSOCIATION_CLASS, ""))
         .map_err(|_| refuse("association", format!("{} is no association or association class", short(text(p, "association")))))?;
-    let ends = crate::figures::member_ends(ctx.doc, a).ok_or_else(|| refuse("association", "the association has not two ends"))?;
+    // An n-ary association's ends take no qualifier here (AR-128): the box belongs to a binary line.
+    let ends = crate::figures::member_ends(ctx.doc, a).ok_or_else(|| {
+        refuse(
+            "association",
+            format!(
+                "{} has not two ends: qualifiers go on a binary association's or an association class's ends",
+                uuid_of(ctx.doc, a).unwrap_or_default()
+            ),
+        )
+    })?;
     let i = match p.integer("end") {
         Some(i @ 0..=1) => i as usize,
         _ => return Err(refuse("end", "the end is 0 or 1")),
