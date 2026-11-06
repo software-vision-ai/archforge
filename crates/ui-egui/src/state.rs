@@ -32,6 +32,12 @@ pub struct UiState {
     pub recent_sort: RecentSort,
     /// The user's name as entered in Settings; the bar shows its initials. Empty: JD, for John Doe.
     pub user_name: String,
+    /// Settings → AI Agents' choices: the default agent, the models, how Codex signs in, and
+    /// whether Chat may use the model. No key is ever kept here. A section a preferences file
+    /// holds in a shape the window does not read (a later version's choice) goes back to the
+    /// defaults, not the whole file.
+    #[serde(deserialize_with = "lenient_agents")]
+    pub agents: crate::ai_agents::AgentPrefs,
 }
 
 /// The recent list as a file holds it: the entries that read, the others left out (the next
@@ -52,6 +58,24 @@ fn lenient_recent<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<RecentPr
             Entry::Unread(_) => RecentProject::default(),
         })
         .collect())
+}
+
+/// The AI Agents choices as a file holds them, or the defaults when they do not read (said in the
+/// log).
+fn lenient_agents<'de, D: serde::Deserializer<'de>>(d: D) -> Result<crate::ai_agents::AgentPrefs, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Entry {
+        Read(crate::ai_agents::AgentPrefs),
+        Unread(serde::de::IgnoredAny),
+    }
+    Ok(match Entry::deserialize(d)? {
+        Entry::Read(prefs) => prefs,
+        Entry::Unread(_) => {
+            log::warn!("the AI Agents choices in the preferences do not read; the defaults are used");
+            crate::ai_agents::AgentPrefs::default()
+        }
+    })
 }
 
 /// The pinned folders as a file holds them: an entry that is not a path is left out, not the
@@ -154,6 +178,7 @@ impl Default for UiState {
             recent_view: RecentView::List,
             recent_sort: RecentSort::LastOpened,
             user_name: String::new(),
+            agents: crate::ai_agents::AgentPrefs::default(),
         }
     }
 }
@@ -220,6 +245,7 @@ impl UiState {
     /// either list keeps. Says in the log how many went.
     pub fn sanitize(&mut self) {
         self.user_name = crate::settings::clean(&self.user_name);
+        self.agents.sanitize();
         let pins = self.pinned.len();
         let mut pinned = std::collections::HashSet::new();
         self.pinned.retain(|p| pin_ok(p) && pinned.insert(p.clone()));

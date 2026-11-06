@@ -345,3 +345,105 @@ fn a_user_models_an_er_diagram_saves_it_closes_it_and_opens_it_again_as_it_was()
 fn archforge_ui_egui_type_index(_h: &H, label: &str) -> usize {
     ["None", "Integer", "String", "Boolean", "Real", "UnlimitedNatural"].iter().position(|l| *l == label).expect("a built-in type")
 }
+
+/// A secure store the test can look into after the host has used it.
+struct Shared(std::sync::Arc<archforge_secrets::MemoryStore>);
+
+impl archforge_secrets::SecretStore for Shared {
+    fn get(&self, name: &archforge_secrets::SecretName) -> Result<archforge_secrets::Secret, archforge_secrets::SecretError> {
+        self.0.get(name)
+    }
+    fn set(&self, name: &archforge_secrets::SecretName, secret: &archforge_secrets::Secret) -> Result<(), archforge_secrets::SecretError> {
+        self.0.set(name, secret)
+    }
+    fn delete(&self, name: &archforge_secrets::SecretName) -> Result<archforge_secrets::Deleted, archforge_secrets::SecretError> {
+        self.0.delete(name)
+    }
+}
+
+/// Draws frames until `done` holds, as the window does while its host works; fails past a budget.
+fn until(h: &mut H, what: &str, done: impl Fn(&Shell) -> bool) {
+    let start = Instant::now();
+    while !done(h.state()) {
+        assert!(start.elapsed() < Duration::from_secs(20), "waited too long for {what}");
+        std::thread::sleep(Duration::from_millis(10));
+        h.run();
+    }
+}
+
+/// Settings → AI Agents over the real agents host, its secure store an in-memory one and no program
+/// on its PATH: a key typed into the page reaches the store whole, the page shows its last four,
+/// it is replaced and removed there, and the preferences file never holds it.
+#[test]
+fn an_api_key_goes_to_the_secure_store_and_never_into_the_preferences() {
+    use archforge_secrets::SecretStore;
+    const CANARY: &str = "sk-ant-api03-CANARY-7a1e9f-do-not-store-4F2a";
+    archforge_ui_egui::i18n::set_language("en");
+    let base = std::env::temp_dir().join(format!("archforge-agents-acceptance-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&base).unwrap();
+    let store = std::sync::Arc::new(archforge_secrets::MemoryStore::new());
+    let host = crate::agents::Agents::with(&base, Box::new(Shared(store.clone())), archforge_agents::HostEnv::default());
+    let services = Services {
+        agents: Some(std::sync::Arc::new(host)),
+        agent_accounts: Some(std::sync::Arc::new(archforge_ui_egui::ai_agents::NotYet)),
+        ..Services::default()
+    };
+    let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1400.0)).build_ui_state(
+        |ui, shell: &mut Shell| {
+            shell.logic(ui.ctx());
+            shell.ui(ui);
+        },
+        Shell::new(services),
+    );
+    h.run();
+    until(&mut h, "the look at start", |s| !s.agents.looking() && s.agents.look.claude_key != archforge_ui_egui::ai_agents::Key::NotRead);
+    assert_eq!(h.state().agents.look.claude, archforge_ui_egui::ai_agents::Program::Missing, "no program on an empty PATH");
+    click_on(&mut h, "home.header.account");
+    click_on(&mut h, "settings.nav.agents");
+    // Claude's program is missing here, so its card offers the install steps; Codex on an API key
+    // offers the key field.
+    h.state_mut().state.agents.codex_sign_in = archforge_ui_egui::ai_agents::CodexSignIn::ApiKey;
+    h.state_mut().agents.look.codex = archforge_ui_egui::ai_agents::Program::Found { version: "0.166.0".into(), tested: true };
+    h.run();
+    click_on(&mut h, "settings.agents.codex.key");
+    h.event(egui::Event::Text(CANARY.into()));
+    h.run();
+    click_on(&mut h, "settings.agents.codex.save");
+    until(&mut h, "the key saved", |s| !s.agents.saving(archforge_ui_egui::ai_agents::Provider::Codex));
+    assert_eq!(store.get(&archforge_secrets::SecretName::OPENAI_API_KEY).unwrap().expose(), CANARY, "the store holds the key whole");
+    assert_eq!(h.state().agents.look.codex_key, archforge_ui_egui::ai_agents::Key::Saved { last4: "4F2a".into() });
+    // The preferences, captured and written as the app writes them, hold no part of the key.
+    crate::prefs::save(&base, &crate::prefs::capture(h.state())).unwrap();
+    let written = std::fs::read_to_string(base.join(crate::prefs::FILE)).unwrap();
+    assert!(written.contains("codex_sign_in"), "the agents' choices are in the file");
+    for part in [CANARY, "CANARY", "7a1e9f", "4F2a"] {
+        assert!(!written.contains(part), "the preferences hold {part:?}");
+    }
+    // Replace, then Remove.
+    click_on(&mut h, "settings.agents.codex.replace");
+    h.event(egui::Event::Text("sk-proj-second-key-0000-9c1E".into()));
+    h.run();
+    click_on(&mut h, "settings.agents.codex.save");
+    until(&mut h, "the key replaced", |s| !s.agents.saving(archforge_ui_egui::ai_agents::Provider::Codex));
+    assert_eq!(store.get(&archforge_secrets::SecretName::OPENAI_API_KEY).unwrap().expose(), "sk-proj-second-key-0000-9c1E");
+    click_on(&mut h, "settings.agents.codex.remove");
+    until(&mut h, "the key removed", |s| !s.agents.saving(archforge_ui_egui::ai_agents::Provider::Codex));
+    assert!(matches!(store.get(&archforge_secrets::SecretName::OPENAI_API_KEY), Err(archforge_secrets::SecretError::NotFound { .. })));
+    assert_eq!(h.state().agents.look.codex_key, archforge_ui_egui::ai_agents::Key::Absent);
+    let _ = std::fs::remove_dir_all(&base);
+}
+
+/// On a system without a secure store the host says so, and a key handed to it anyway is refused,
+/// never kept elsewhere.
+#[test]
+fn without_a_secure_store_the_host_keeps_no_key() {
+    use archforge_ui_egui::ai_agents::{AgentHost, KeyText, Provider};
+    let base = std::env::temp_dir().join(format!("archforge-agents-nostore-{}", std::process::id()));
+    let host = crate::agents::Agents::with(&base, Box::new(archforge_secrets::MemoryStore::unavailable()), archforge_agents::HostEnv::default());
+    let look = host.look().recv().unwrap();
+    assert!(look.store.missing(), "{look:?}");
+    let refused = host.save_key(Provider::Claude, KeyText::new("sk-ant-api03-canary-0000-4F2a".into()).unwrap()).recv().unwrap();
+    assert!(refused.unwrap_err().contains("no secure credential store"));
+    let _ = std::fs::remove_dir_all(&base);
+}

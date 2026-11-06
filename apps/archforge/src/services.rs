@@ -1,11 +1,12 @@
 //! The host services the shell may call: the installed fonts, the folder new projects go in, the
-//! folder picker, the projects themselves, and where support for Archforge goes.
+//! folder picker, the projects themselves, where support for Archforge goes, and the agent programs
+//! with their keys.
 
 use std::path::PathBuf;
 
 use archforge_ui_egui::{Folder, Services};
 
-pub fn native(projects: std::sync::Arc<crate::projects::Projects>) -> Services {
+pub fn native(projects: std::sync::Arc<crate::projects::Projects>, settings: &std::path::Path) -> Services {
     Services {
         // The installed fonts, scanned and read on the shell's font worker.
         fonts: Some(std::sync::Arc::new(crate::fonts::SystemFonts::installed())),
@@ -17,6 +18,9 @@ pub fn native(projects: std::sync::Arc<crate::projects::Projects>) -> Services {
         find_projects: Some(std::sync::Arc::new(find_projects)),
         ids: Some(std::sync::Arc::new(fresh_id)),
         support: support(),
+        agents: Some(std::sync::Arc::new(crate::agents::Agents::new(settings))),
+        // The test message and Codex's sign-in come with the agents' adapters (AR-202, AR-203).
+        agent_accounts: Some(std::sync::Arc::new(archforge_ui_egui::ai_agents::NotYet)),
     }
 }
 

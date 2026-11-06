@@ -125,8 +125,9 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
 - The bar's avatar shows the initials of the name entered in Settings (owner, 2026-11-01): the
   first and last words' first letters, or the first two letters of a single word; with no name,
   JD for John Doe. Archforge never reads the name from the operating system's account. The avatar
-  and the command key with comma open Settings, which for now holds Your name, with the initials
-  beside it changing as it is typed; Done, the close button, Enter or Esc close it.
+  and the command key with comma open Settings (see Settings and AI Agents below); Profile holds
+  Your name, with the initials beside it changing as it is typed; Done, the close button, Enter in
+  the name or Esc close it.
 - The bar's Help button (and, on macOS, Archforge ▸ About Archforge…) opens About Archforge:
   what Archforge is, and Support Archforge with GitHub Sponsors and Ko-fi, each opening
   its provider's page in the browser. Only an approved HTTPS address of the provider opens; one
@@ -298,6 +299,40 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   `archforge://skills/effective/{id}/export`) and the model's revision. Its status line says
   whether agent access is on, that the request was copied, and when the model changed after;
   nothing in it shows output or claims the agent did anything. The dialog changes nothing.
+
+## Settings and AI Agents
+- Settings is an 880-wide modal dialog (owner, 2026-11-06, AR-204): its title and close button on
+  top, its sections listed on the left as nav items with an icon (Profile with the person, AI
+  Agents with the agent mark), the section's page on the right, scrolling when the window is
+  short, and Done alone in the footer. A choice takes effect as it is made; Tab stays in the
+  dialog and the window behind takes no keys.
+- AI Agents (page 07 of the design, frames A1-A8): the default agent select on top, a card per
+  agent (the neutral hexagon agent mark beside its name, never a provider's logo; a status badge
+  at the card's right), Let Chat use the model, then Check connection and Send test message, each
+  with its note beside it, and the status badge under them.
+- Opening the page runs nothing and sends nothing: the programs and the keys are looked for once
+  when Archforge starts, and again on Look again and Check connection. Check connection is free
+  and local (the programs, their versions, the keys or sign-in); Send test message carries its
+  cost note and goes to the default agent's provider. The badge says when it was checked as a
+  time ago ("Checked just now", "5 min ago"), not a clock time, as the window has no time zone.
+- Claude uses an API key only: typed into a hidden field, saved to the system's secure store and
+  nowhere else, then shown masked to its last four characters with Replace and Remove. Its model
+  select waits until a key is saved. A key the provider refused is outlined in the danger colour
+  with why under it; the refusal comes from a test message, since Check connection sends nothing.
+- Codex has a segmented control, Sign in with ChatGPT or API key. The codex program keeps the
+  ChatGPT sign-in itself; Archforge starts it, shows its device code inline (the code with Copy,
+  Open sign-in page, the wait and Cancel) and shows who is signed in with Sign out. On an API key
+  the saved key shows as a row (key icon, "ends in" its last four) with Replace and Remove.
+- A missing program shows why, the maker's install command with Copy, Look again (primary) and
+  Installation guide; a program newer than tested is accepted with an amber badge, "Not yet
+  tested with this version".
+- Without a secure store (Linux without a Secret Service) an amber notice says keys can't be
+  saved and why in the system's words, the key fields and Codex's API key way are off, and
+  nothing falls back; ChatGPT sign-in still works. The store's answer holds until Archforge
+  restarts, so the notice says to start one and restart, and offers no Look again (a departure
+  from frame A7, which could not keep its promise). On Windows the page says AI Agents are not available on this system yet.
+- What is kept in the preferences: the default agent, each agent's model, Codex's way of signing
+  in and Let Chat use the model (off until turned on). Never a key, nor any part of one.
 
 ## Messages
 - Problems show as an orange badge on the box or line and in a Problems section of Properties,

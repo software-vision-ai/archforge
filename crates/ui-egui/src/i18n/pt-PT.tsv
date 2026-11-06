@@ -305,7 +305,6 @@ str		Grid	Grelha
 str		Arrange diagram	Organizar o diagrama
 str		Move cardinality	Mover a cardinalidade
 str		Settings	Definições
-str		How Archforge knows you.	Como o Archforge o conhece.
 str		About Archforge	Acerca do Archforge
 str		About Archforge…	Acerca do Archforge…
 str		Free and open source modelling of software systems.	Modelação livre e de código aberto de sistemas de software.
@@ -319,7 +318,119 @@ str		Opens in your browser	Abre no seu navegador
 str		Not set up yet	Ainda não configurado
 str		Payment happens on the provider’s page in your browser; Archforge never sees it, and your project stays open here.	O pagamento é feito na página do fornecedor, no seu navegador; o Archforge nunca o vê, e o seu projeto continua aberto aqui.
 str		Your name	O seu nome
-str		The bar shows your initials. Without a name they are JD, for John Doe.	A barra mostra as suas iniciais. Sem nome são JD, de John Doe.
+str		The program's default	Predefinição do programa
+str		The look stopped without an answer	A procura parou sem resposta
+str		The secure store stopped without an answer	O armazenamento seguro parou sem resposta
+str		The test stopped without an answer	O teste parou sem resposta
+str		The sign-in stopped without an answer	O início de sessão parou sem resposta
+str		The sign-out stopped without an answer	O fim de sessão parou sem resposta
+str		Profile	Perfil
+str		AI Agents	Agentes de IA
+str		Your name shows as initials in the bar's avatar. Archforge never reads it from the computer's account.	O seu nome aparece em iniciais no avatar da barra. O Archforge nunca o lê da conta do computador.
+str		the macOS Keychain	o Porta-chaves do macOS
+str		the Secret Service	o Secret Service
+str		the system's secure store	o armazenamento seguro do sistema
+str		just now	agora mesmo
+str		{n} min ago	há {n} min
+str		{n} h ago	há {n} h
+str		The provider refused the key ({detail}).	O fornecedor recusou a chave ({detail}).
+str		There is no key or sign-in to use.	Não há chave nem sessão iniciada para usar.
+str		{agent} ready	{agent} pronto
+str		{agent} not found	{agent} não encontrado
+str		{agent} too old	{agent} demasiado antigo
+str		{agent} can't be used	{agent} não pode ser usado
+str		{agent} sign-in could not be read	não foi possível ler a sessão de {agent}
+str		The sign-in gave a code that is not letters, digits and hyphens.	O início de sessão deu um código que não é só letras, algarismos e hífenes.
+str		{agent} has no key	{agent} não tem chave
+str		{agent} key refused	chave de {agent} recusada
+str		{agent} not signed in	{agent} sem sessão iniciada
+str		{agent} sign-in expired	sessão de {agent} expirada
+str		{agent} sign-in not available yet	início de sessão de {agent} ainda indisponível
+str		{agent} not looked for yet	{agent} ainda não procurado
+str		Chat talks to an agent program installed on this computer. Archforge finds the program and keeps your keys in the system's secure store. Opening this page sends nothing.	A Conversa fala com um programa de agente instalado neste computador. O Archforge encontra o programa e guarda as suas chaves no armazenamento seguro do sistema. Abrir esta página não envia nada.
+str		Default agent	Agente predefinido
+str		Let Chat use the model	Deixar a Conversa usar o modelo
+str		Off until you turn it on. While a conversation holds this access, Chat reads the project's model and the status bar says so. Changes still wait for Allow changes in each conversation.	Desligado até o ligar. Enquanto uma conversa tiver este acesso, a Conversa lê o modelo do projeto e a barra de estado indica-o. As alterações continuam a aguardar Permitir alterações em cada conversa.
+str		Checking…	A verificar…
+str		Check connection	Verificar ligação
+str		Sending…	A enviar…
+str		Send test message	Enviar mensagem de teste
+str		Free, runs on this computer: finds the program, its version and your key or sign-in. Sends nothing.	Gratuito, corre neste computador: encontra o programa, a sua versão e a sua chave ou sessão. Não envia nada.
+str		Set up {agent} first: it is the default agent.	Configure primeiro {agent}: é o agente predefinido.
+str		Sends one short message to the default agent's provider. It uses a little of your plan or API credit.	Envia uma mensagem curta ao fornecedor do agente predefinido. Gasta um pouco do seu plano ou crédito de API.
+str		Sending a test message…	A enviar uma mensagem de teste…
+str		Checked {when}	Verificado {when}
+str		{agent} answered the test message {when}	{agent} respondeu à mensagem de teste {when}
+str		The test message to {agent} failed: {why}	A mensagem de teste para {agent} falhou: {why}
+str		Chat talks to an agent program installed on this computer.	A Conversa fala com um programa de agente instalado neste computador.
+str		Not available on this system yet	Ainda não disponível neste sistema
+str		AI Agents work on macOS and Linux for now. On Windows, Chat and these settings stay off; everything else in Archforge works as usual.	Os agentes de IA funcionam por agora no macOS e no Linux. No Windows, a Conversa e estas definições ficam desligados; tudo o resto no Archforge funciona como habitualmente.
+str		This build of Archforge has no agent programs to talk to.	Esta compilação do Archforge não tem programas de agente com quem falar.
+str		Archforge keeps API keys only in the system's secure store, and this session has none running (a Secret Service such as GNOME Keyring or KWallet). Start one and restart Archforge to save keys; Archforge never keeps them anywhere else.	O Archforge guarda as chaves de API apenas no armazenamento seguro do sistema, e esta sessão não tem nenhum em execução (um Secret Service como o GNOME Keyring ou o KWallet). Inicie um e reinicie o Archforge para guardar chaves; o Archforge nunca as guarda noutro lado.
+str		No secure store on this system	Sem armazenamento seguro neste sistema
+str		Looking…	A procurar…
+str		Not looked for yet	Ainda não procurado
+str		Sign-in expired	Sessão expirada
+str		Found · {what}	Encontrado · {what}
+str		Not yet tested with this version · {what}	Ainda não testado com esta versão · {what}
+str		Too old · {what}	Demasiado antigo · {what}
+str		Can't be used	Não pode ser usado
+str		Not found	Não encontrado
+str		API key	Chave de API
+str		Sign-in	Início de sessão
+str		Sign in first	Inicie sessão primeiro
+str		Save a key first	Guarde primeiro uma chave
+str		{agent} model	Modelo de {agent}
+str		Archforge found {program} {version}, older than {floor}, the oldest version it works with. Update it, then choose Look again.	O Archforge encontrou {program} {version}, mais antigo do que {floor}, a versão mais antiga com que funciona. Atualize-o e escolha Procurar novamente.
+str		Archforge found the {program} program but can't use it: {why}	O Archforge encontrou o programa {program}, mas não o pode usar: {why}
+str		Archforge has not looked for the {program} program yet.	O Archforge ainda não procurou o programa {program}.
+str		Archforge looked for the {program} program on this computer and didn't find it. Chat runs {agent} through that program, so install it first.	O Archforge procurou o programa {program} neste computador e não o encontrou. A Conversa usa {agent} através desse programa, por isso instale-o primeiro.
+str		1. In a terminal, update it:	1. Num terminal, atualize-o:
+str		1. In a terminal, install it:	1. Num terminal, instale-o:
+str		Copy the command	Copiar o comando
+str		2. Come back and choose Look again. Archforge checks your PATH and the usual install folders, and sends nothing.	2. Volte e escolha Procurar novamente. O Archforge verifica o seu PATH e as pastas de instalação habituais, e não envia nada.
+str		Installation guide	Guia de instalação
+str		Paste an API key	Cole uma chave de API
+str		Can't be saved: there is no secure store to keep it in.	Não pode ser guardada: não há armazenamento seguro para a guardar.
+str		Save key	Guardar chave
+str		API key saved, ending in {last4}	Chave de API guardada, termina em {last4}
+str		Replace	Substituir
+str		The provider refused this key when the test message was sent ({detail}). Replace it with a valid key, or remove it.	O fornecedor recusou esta chave quando a mensagem de teste foi enviada ({detail}). Substitua-a por uma chave válida ou remova-a.
+str		Kept in {store}. Archforge never shows it again; Replace pastes a new one.	Guardada em {store}. O Archforge nunca a volta a mostrar; Substituir cola uma nova.
+str		{agent} API key	Chave de API de {agent}
+str		Paste a key first.	Cole primeiro uma chave.
+str		A key is one word, without spaces.	Uma chave é uma só palavra, sem espaços.
+str		That is longer than any API key.	Isso é mais longo do que qualquer chave de API.
+str		Saved in {store}, never in the project. Create a key in your Anthropic account.	Guardada em {store}, nunca no projeto. Crie uma chave na sua conta Anthropic.
+str		Saved in {store}, never in the project. Create a key in your OpenAI account.	Guardada em {store}, nunca no projeto. Crie uma chave na sua conta OpenAI.
+str		The secure store refused: {why}	O armazenamento seguro recusou: {why}
+str		The secure store could not be read: {why}	Não foi possível ler o armazenamento seguro: {why}
+str		Sign in with ChatGPT	Iniciar sessão com ChatGPT
+str		Waiting for you to finish in the browser…	À espera que termine no navegador…
+str		The codex program keeps this sign-in itself.	O programa codex guarda este início de sessão por si.
+str		Reading the sign-in…	A ler o início de sessão…
+str		Not checked yet	Ainda não verificado
+str		Not signed in	Sem sessão iniciada
+str		Sign in…	Iniciar sessão…
+str		Signed in as {email} · {plan}	Sessão iniciada como {email} · {plan}
+str		Signed in as {email}	Sessão iniciada como {email}
+str		Sign out	Terminar sessão
+str		The ChatGPT sign-in for {email} has expired.	A sessão da ConversaGPT de {email} expirou.
+str		Sign in again…	Iniciar sessão de novo…
+str		Signing in with ChatGPT is not available in this version yet.	Iniciar sessão com a ConversaGPT ainda não está disponível nesta versão.
+str		The sign-in could not be read: {why}	Não foi possível ler o início de sessão: {why}
+str		The codex program keeps its ChatGPT sign-in in its own files, so this works without the secure store. An API key for Codex would need it.	O programa codex guarda o seu início de sessão da ConversaGPT nos seus próprios ficheiros, por isso funciona sem o armazenamento seguro. Uma chave de API para o Codex precisaria dele.
+str		Sign in opens your browser; the codex program keeps the sign-in itself.	Iniciar sessão abre o seu navegador; o programa codex guarda o início de sessão por si.
+str		The codex program keeps the sign-in itself.	O programa codex guarda o início de sessão por si.
+str		No browser on this computer? Sign in with a device code.	Sem navegador neste computador? Inicie sessão com um código de dispositivo.
+str		Sign in with a device code	Iniciar sessão com um código de dispositivo
+str		On any device with a browser, open the sign-in page and enter this code. It runs out in {n} minutes.	Em qualquer dispositivo com navegador, abra a página de início de sessão e introduza este código. Expira dentro de {n} minutos.
+str		Copy the code	Copiar o código
+str		Open sign-in page	Abrir a página de início de sessão
+str		Not an address Archforge opens	Não é um endereço que o Archforge abra
+str		The code comes from the codex program, which keeps the sign-in itself. Archforge only shows it.	O código vem do programa codex, que guarda o início de sessão por si. O Archforge apenas o mostra.
+str		API key saved · ends in {last4}	Chave de API guardada · termina em {last4}
+str		Kept in {store}, never in the project, and handed to codex only when Chat runs it.	Guardada em {store}, nunca no projeto, e entregue ao codex só quando a Conversa o executa.
 str		Done	Concluído
 str		Add table	Adicionar tabela
 str		Place table	Colocar tabela

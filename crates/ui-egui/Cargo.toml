@@ -26,6 +26,8 @@ egui_kittest = { workspace = true, optional = true, features = ["wgpu"] }
 serde.workspace = true
 serde_json.workspace = true
 log.workspace = true
+# Overwrites an API key typed in Settings once it is handed to the host.
+zeroize.workspace = true
 skrifa.workspace = true
 pulldown-cmark.workspace = true
 egui_commonmark.workspace = true

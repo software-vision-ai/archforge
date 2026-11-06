@@ -114,6 +114,51 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
 Ask it in your own words, for example: *"Add a table Invoice to the Shop schema with an id
 primary key and a foreign key to Order."* The table appears on screen as the agent adds it.
 
+## Setting up AI agents for Chat
+
+Chat, coming in a later version, talks to an agent program installed on your computer: Claude
+through the program `claude`, or Codex through the program `codex`. Archforge never bundles them.
+You set them up in **Settings ▸ AI Agents**: click the avatar at the right of the bar, or press
+⌘, (Ctrl ,), and choose **AI Agents** on the left.
+
+<!-- picture: settings-ai-agents-ready light | Settings, AI Agents: Claude with its key saved and Codex signed in with ChatGPT, checked -->
+
+- **Default agent** is the one Chat starts with.
+- **Claude** uses an API key from your Anthropic account. Paste it and choose **Save key**.
+  Archforge keeps it in the system's secure store (the macOS Keychain, or the Secret Service on
+  Linux) and nowhere else: never in the project and never in the preferences. Afterwards it shows
+  only the key's last four characters, with **Replace** and **Remove**. Its model can be chosen
+  once a key is saved.
+- **Codex** signs in with ChatGPT or with an API key from your OpenAI account. **Sign in…** lets
+  the codex program open your browser; the codex program keeps that sign-in itself. On a computer
+  without a browser, choose **Sign in with a device code**: Archforge shows the code, which you enter
+  on any device with a browser.
+- **Let Chat use the model** is off until you turn it on. While a conversation holds this access,
+  Chat reads the project's model and the status bar says so; changes still wait for **Allow
+  changes** in each conversation.
+
+Opening the page sends nothing: Archforge looked for the programs and your keys when it started.
+
+- **Check connection** is free and runs on your computer: it looks again for each program, its
+  version and your key or sign-in, and sends nothing. The badge under it sums up each agent.
+- **Send test message** sends one short message to the default agent's provider, which uses a
+  little of your plan or API credit.
+
+When a program is missing, its card shows how to install it, as its maker documents it:
+
+```sh
+npm install -g @anthropic-ai/claude-code
+npm install -g @openai/codex
+```
+
+Then choose **Look again**; **Installation guide** opens the maker's own page. A program newer than
+the version Archforge was tested with works, and its badge says *Not yet tested with this version*.
+
+On Linux without a running Secret Service (such as GNOME Keyring or KWallet), API keys cannot be
+saved until you start one and restart Archforge, and Archforge keeps them nowhere else; Codex's ChatGPT sign-in still works, as the codex
+program keeps it in its own files. On Windows, AI Agents are not available yet; everything else
+works as usual.
+
 ## The Generate handoff
 
 To have an agent generate something from the model, such as SQL DDL for a schema:

@@ -13458,3 +13458,415 @@ fn a_moved_end_drops_what_it_no_longer_subsets_and_says_so() {
         assert!(roled.is_ok(), "{roled:?}");
     }
 }
+
+/// Settings → AI Agents over Home, from the fake agents host set up by `setup`; the window is tall
+/// enough to show the whole page. The look at start has run once, and its answers are in.
+fn agents_harness(
+    theme: ThemeKind,
+    setup: impl FnOnce(&mut crate::ai_agents::fake::Fake),
+) -> (Harness<'static, Shell>, std::sync::Arc<crate::ai_agents::fake::Fake>) {
+    use crate::ai_agents::{Look, Provider, Store, fake};
+    crate::i18n::set_language("en");
+    let mut f = fake::Fake::default();
+    *f.look.lock().unwrap() = Look {
+        store: Store::MacKeychain,
+        claude: fake::found(Provider::Claude),
+        codex: fake::found(Provider::Codex),
+        claude_key: crate::ai_agents::Key::Absent,
+        codex_key: crate::ai_agents::Key::Absent,
+    };
+    setup(&mut f);
+    let f = std::sync::Arc::new(f);
+    let mut shell = Shell::new(Services { agents: Some(f.clone()), agent_accounts: Some(f.clone()), ..Services::default() });
+    shell.state.theme = theme;
+    let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1400.0)).build_ui_state(
+        |ui, shell: &mut Shell| {
+            shell.logic(ui.ctx());
+            shell.ui(ui);
+        },
+        shell,
+    );
+    h.run();
+    (h, f)
+}
+
+/// Opens Settings → AI Agents the way a person does: the avatar, then the section.
+fn open_agents(h: &mut Harness<'static, Shell>) {
+    let at = rect_of(h, "home.header.account").center();
+    click(h, at);
+    let at = rect_of(h, "settings.nav.agents").center();
+    click(h, at);
+    h.run();
+}
+
+fn calls(f: &crate::ai_agents::fake::Fake) -> [usize; 8] {
+    use std::sync::atomic::Ordering::Relaxed;
+    let c = &f.calls;
+    [
+        c.look.load(Relaxed),
+        c.save.load(Relaxed),
+        c.remove.load(Relaxed),
+        c.test.load(Relaxed),
+        c.account.load(Relaxed),
+        c.login.load(Relaxed),
+        c.cancel.load(Relaxed),
+        c.logout.load(Relaxed),
+    ]
+}
+
+fn painted_has(h: &Harness<'static, Shell>, text: &str) -> bool {
+    painted(h).iter().any(|t| t.contains(text))
+}
+
+#[test]
+fn settings_has_a_profile_and_an_ai_agents_section_with_done_in_the_footer() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = agents_harness(theme, |_| {});
+        let at = rect_of(&h, "home.header.account").center();
+        click(&mut h, at);
+        let found = ids(&h);
+        for id in ["settings.nav.profile", "settings.nav.agents", "settings.name", "settings.close", "settings.done"] {
+            assert!(found.iter().any(|i| i == id), "{theme:?}: {id} in {found:?}");
+        }
+        let dialog = rect_of(&h, "settings.close");
+        let done = rect_of(&h, "settings.done");
+        assert!(done.top() > rect_of(&h, "settings.name").bottom(), "Done sits in the footer");
+        assert!(dialog.right() - rect_of(&h, "settings.nav.profile").left() > 800.0, "the dialog is 880 wide");
+        let at = rect_of(&h, "settings.nav.agents").center();
+        click(&mut h, at);
+        let found = ids(&h);
+        for id in [
+            "settings.agents.default",
+            "settings.agents.claude.key",
+            "settings.agents.claude.save",
+            "settings.agents.claude.model",
+            "settings.agents.claude.status",
+            "settings.agents.codex.way.chatgpt",
+            "settings.agents.codex.way.api-key",
+            "settings.agents.codex.sign-in",
+            "settings.agents.codex.device-code",
+            "settings.agents.codex.model",
+            "settings.agents.chat-uses-model",
+            "settings.agents.check",
+            "settings.agents.test",
+        ] {
+            assert!(found.iter().any(|i| i == id), "{theme:?}: {id} in {found:?}");
+        }
+        assert!(!found.iter().any(|i| i == "settings.name"), "Profile's field is not on AI Agents");
+        // Escape closes it.
+        h.event(egui::Event::Key { key: egui::Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::NONE });
+        h.run();
+        assert!(h.state().settings.is_none());
+    }
+}
+
+#[test]
+fn opening_ai_agents_runs_nothing_and_sends_nothing() {
+    let (mut h, f) = agents_harness(ThemeKind::Light, |_| {});
+    // The look at start: once, with Codex's account read after it; nothing sent.
+    let at_start = calls(&f);
+    assert_eq!(at_start, [1, 0, 0, 0, 1, 0, 0, 0], "the look at start and the account read");
+    open_agents(&mut h);
+    for _ in 0..5 {
+        h.run();
+    }
+    assert_eq!(calls(&f), at_start, "opening the page asked the host for nothing");
+    assert_eq!(f.calls.outward(), 0, "no test message and no sign-in");
+    // Opening Settings on a shell without the services draws the page and asks nothing either.
+    crate::i18n::set_language("en");
+    let mut bare = harness(ThemeKind::Dark);
+    let at = rect_of(&bare, "home.header.account").center();
+    click(&mut bare, at);
+    let at = rect_of(&bare, "settings.nav.agents").center();
+    click(&mut bare, at);
+    assert!(painted_has(&bare, "This build of Archforge has no agent programs to talk to."));
+}
+
+#[test]
+fn every_designed_state_of_ai_agents_draws_from_the_fake_in_both_appearances() {
+    use crate::ai_agents::{AccountError, CodexAccount, Key, LoginEvent, Program, Store, System};
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        // A2: found, nothing set up: the model selects wait, Send test message waits.
+        let (mut h, _) = agents_harness(theme, |_| {});
+        open_agents(&mut h);
+        assert!(painted_has(&h, "Found · claude 2.1.317") && painted_has(&h, "Found · codex 0.166.0"));
+        assert!(painted_has(&h, "Not signed in"));
+        let at = rect_of(&h, "settings.agents.claude.model").center();
+        click(&mut h, at);
+        assert!(h.state().settings.as_ref().unwrap().agents.menu.is_none(), "{theme:?}: the model waits for a key");
+        // A3: Claude missing with its install steps; Codex on a saved API key.
+        let (mut h, _) = agents_harness(theme, |f| {
+            let mut look = f.look.lock().unwrap();
+            look.claude = Program::Missing;
+            look.codex_key = Key::Saved { last4: "9c1E".into() };
+        });
+        h.state_mut().state.agents.codex_sign_in = crate::ai_agents::CodexSignIn::ApiKey;
+        open_agents(&mut h);
+        assert!(painted_has(&h, "Not found") && painted_has(&h, "npm install -g @anthropic-ai/claude-code"));
+        assert!(painted_has(&h, "API key saved · ends in 9c1E"));
+        for id in [
+            "settings.agents.claude.look-again",
+            "settings.agents.claude.guide",
+            "settings.agents.claude.copy-install",
+            "settings.agents.codex.replace",
+        ] {
+            assert!(ids(&h).iter().any(|i| i == id), "{theme:?}: {id}");
+        }
+        let at = rect_of(&h, "settings.agents.check").center();
+        click(&mut h, at);
+        h.run();
+        assert!(painted_has(&h, "Claude not found · Codex ready"), "{theme:?}: the badge sums it up");
+        // A newer version than tested is accepted with a warning.
+        let (mut h, _) = agents_harness(theme, |f| f.look.lock().unwrap().claude = Program::Found { version: "2.9.0".into(), tested: false });
+        open_agents(&mut h);
+        assert!(painted_has(&h, "Not yet tested with this version · claude 2.9.0"));
+        // A4: ready: the key masked, Codex signed in, Check connection green.
+        let (mut h, _) = agents_harness(theme, |f| {
+            f.look.lock().unwrap().claude_key = Key::Saved { last4: "4F2a".into() };
+            *f.account.lock().unwrap() = Ok(CodexAccount::SignedIn { email: "you@example.com".into(), plan: Some("ChatGPT Plus".into()) });
+        });
+        open_agents(&mut h);
+        assert!(painted_has(&h, "•••••••••••••••••••• 4F2a"));
+        assert!(painted_has(&h, "Signed in as you@example.com · ChatGPT Plus"));
+        let at = rect_of(&h, "settings.agents.check").center();
+        click(&mut h, at);
+        h.run();
+        assert!(painted_has(&h, "Checked just now · Claude ready · Codex ready"));
+        // A5: the key refused by a test message, Codex's sign-in expired.
+        let (mut h, f) = agents_harness(theme, |f| {
+            f.look.lock().unwrap().claude_key = Key::Saved { last4: "4F2a".into() };
+            *f.account.lock().unwrap() = Ok(CodexAccount::Expired { email: "you@example.com".into() });
+            *f.test.lock().unwrap() = Err(AccountError::KeyRefused { detail: "401, invalid key".into() });
+        });
+        open_agents(&mut h);
+        let at = rect_of(&h, "settings.agents.test").center();
+        click(&mut h, at);
+        h.run();
+        assert_eq!(f.calls.test.load(std::sync::atomic::Ordering::Relaxed), 1, "Send test message goes to the default agent");
+        assert!(painted_has(&h, "The provider refused this key when the test message was sent (401, invalid key)."));
+        assert!(painted_has(&h, "Sign-in expired") && painted_has(&h, "has expired."));
+        let at = rect_of(&h, "settings.agents.check").center();
+        click(&mut h, at);
+        h.run();
+        assert!(painted_has(&h, "Claude key refused · Codex sign-in expired"));
+        // A6: the device code, Copy, Open sign-in page and Cancel.
+        let (mut h, f) = agents_harness(theme, |f| {
+            *f.login.lock().unwrap() =
+                vec![LoginEvent::DeviceCode { code: "WXYZ-4821".into(), url: "https://auth.openai.com/codex/device".into(), minutes: 15 }];
+        });
+        open_agents(&mut h);
+        let at = rect_of(&h, "settings.agents.codex.device-code").center();
+        click(&mut h, at);
+        h.run();
+        assert!(painted_has(&h, "WXYZ-4821"));
+        for id in ["settings.agents.codex.copy-code", "settings.agents.codex.open-page", "settings.agents.codex.cancel"] {
+            assert!(ids(&h).iter().any(|i| i == id), "{theme:?}: {id}");
+        }
+        let at = rect_of(&h, "settings.agents.codex.cancel").center();
+        click(&mut h, at);
+        assert_eq!(f.calls.cancel.load(std::sync::atomic::Ordering::Relaxed), 1);
+        assert!(h.state().agents.login.is_none());
+        // A sign-in that finishes shows who is signed in.
+        let (mut h, _) = agents_harness(theme, |f| {
+            *f.login.lock().unwrap() = vec![LoginEvent::Done(CodexAccount::SignedIn { email: "you@example.com".into(), plan: None })];
+        });
+        open_agents(&mut h);
+        let at = rect_of(&h, "settings.agents.codex.sign-in").center();
+        click(&mut h, at);
+        h.run();
+        assert!(painted_has(&h, "Signed in as you@example.com"));
+        // The real accounts service before AR-202: sign-in says it is not available yet.
+        let (mut h, _) = agents_harness(theme, |f| *f.account.lock().unwrap() = Err(AccountError::NotAvailableYet));
+        open_agents(&mut h);
+        assert!(painted_has(&h, "Signing in with ChatGPT is not available in this version yet."));
+        // A8: a system agents do not run on yet.
+        let (mut h, f) = agents_harness(theme, |f| f.system = System::NotYet);
+        open_agents(&mut h);
+        assert!(painted_has(&h, "Not available on this system yet"));
+        assert_eq!(calls(&f), [0; 8], "nothing is looked for on such a system");
+        let _ = Store::NotLooked;
+    }
+}
+
+#[test]
+fn a_key_is_saved_shown_masked_replaced_and_removed() {
+    let (mut h, f) = agents_harness(ThemeKind::Light, |_| {});
+    open_agents(&mut h);
+    // Save key waits for a key.
+    let before = calls(&f);
+    let at = rect_of(&h, "settings.agents.claude.save").center();
+    click(&mut h, at);
+    assert_eq!(calls(&f), before, "nothing to save");
+    let at = rect_of(&h, "settings.agents.claude.key").center();
+    click(&mut h, at);
+    h.event(egui::Event::Text("  sk-ant-api03-canary-0000-4F2a\n".into()));
+    h.run();
+    assert!(!painted_has(&h, "sk-ant-api03"), "the field hides what is typed");
+    let at = rect_of(&h, "settings.agents.claude.save").center();
+    click(&mut h, at);
+    h.run();
+    assert_eq!(f.saved.lock().unwrap().as_slice(), &[(crate::ai_agents::Provider::Claude, "4F2a".to_string())]);
+    // Saved: masked to its last four, with Replace and Remove; the model may be chosen now.
+    assert!(painted_has(&h, "•••••••••••••••••••• 4F2a"));
+    assert!(!painted_has(&h, "canary"), "the key is never shown again");
+    assert!(ids(&h).iter().any(|i| i == "settings.agents.claude.key.masked"));
+    let at = rect_of(&h, "settings.agents.claude.model").center();
+    click(&mut h, at);
+    let at = rect_of(&h, "settings.agents.claude.model.2").center();
+    click(&mut h, at);
+    assert_eq!(h.state().state.agents.claude_model, "opus");
+    // Replace opens the field again; a new key replaces the saved one.
+    let at = rect_of(&h, "settings.agents.claude.replace").center();
+    click(&mut h, at);
+    h.event(egui::Event::Text("sk-ant-api03-second-key-9z9Z".into()));
+    h.run();
+    let at = rect_of(&h, "settings.agents.claude.save").center();
+    click(&mut h, at);
+    h.run();
+    assert!(painted_has(&h, "•••••••••••••••••••• 9z9Z"), "the new key replaced the old one");
+    // A key with a space in it is refused under the field.
+    let at = rect_of(&h, "settings.agents.claude.replace").center();
+    click(&mut h, at);
+    h.event(egui::Event::Text("not a key".into()));
+    h.run();
+    let at = rect_of(&h, "settings.agents.claude.save").center();
+    click(&mut h, at);
+    h.run();
+    assert!(painted_has(&h, "A key is one word, without spaces."));
+    let at = rect_of(&h, "settings.agents.claude.cancel").center();
+    click(&mut h, at);
+    // Remove.
+    let at = rect_of(&h, "settings.agents.claude.remove").center();
+    click(&mut h, at);
+    h.run();
+    assert_eq!(h.state().agents.look.claude_key, crate::ai_agents::Key::Absent);
+    assert!(ids(&h).iter().any(|i| i == "settings.agents.claude.key"), "the field is back");
+}
+
+#[test]
+fn without_a_secure_store_keys_cannot_be_saved_but_chatgpt_sign_in_works() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, f) = agents_harness(theme, |f| {
+            f.look.lock().unwrap().store = crate::ai_agents::Store::Missing { why: "no Secret Service".into() };
+        });
+        open_agents(&mut h);
+        assert!(painted_has(&h, "No secure store on this system"));
+        assert!(painted_has(&h, "Can't be saved: there is no secure store to keep it in."));
+        // The key field takes no typing and Save key does nothing.
+        let at = rect_of(&h, "settings.agents.claude.key").center();
+        click(&mut h, at);
+        h.event(egui::Event::Text("sk-ant-api03-canary-0000-4F2a".into()));
+        h.run();
+        let at = rect_of(&h, "settings.agents.claude.save").center();
+        click(&mut h, at);
+        h.run();
+        assert_eq!(f.calls.save.load(std::sync::atomic::Ordering::Relaxed), 0, "{theme:?}: no key reaches the host");
+        // Codex's API key way is off; its ChatGPT sign-in is not.
+        let at = rect_of(&h, "settings.agents.codex.way.api-key").center();
+        click(&mut h, at);
+        assert_eq!(h.state().state.agents.codex_sign_in, crate::ai_agents::CodexSignIn::ChatGpt);
+        let at = rect_of(&h, "settings.agents.codex.sign-in").center();
+        click(&mut h, at);
+        assert_eq!(f.calls.login.load(std::sync::atomic::Ordering::Relaxed), 1, "{theme:?}: ChatGPT sign-in still starts");
+        // Why, in the system's words, and that a restart is what finds a store started later.
+        assert!(painted_has(&h, "no Secret Service"));
+        assert!(painted_has(&h, "Start one and restart Archforge to save keys"));
+        assert!(!ids(&h).iter().any(|i| i == "settings.agents.store.look-again"), "looking again cannot find a store started later");
+    }
+}
+
+#[test]
+fn let_chat_use_the_model_is_off_until_turned_on_and_kept() {
+    let (mut h, _) = agents_harness(ThemeKind::Dark, |_| {});
+    assert!(!h.state().state.agents.chat_uses_model, "off until turned on");
+    open_agents(&mut h);
+    let at = rect_of(&h, "settings.agents.chat-uses-model").center();
+    click(&mut h, at);
+    assert!(h.state().state.agents.chat_uses_model);
+    // The default agent and the toggle are kept in the preferences, and read back.
+    let at = rect_of(&h, "settings.agents.default").center();
+    click(&mut h, at);
+    let at = rect_of(&h, "settings.agents.default.1").center();
+    click(&mut h, at);
+    assert_eq!(h.state().state.agents.default_agent, crate::ai_agents::Provider::Codex);
+    let text = serde_json::to_string(&h.state().state).unwrap();
+    let mut back: UiState = serde_json::from_str(&text).unwrap();
+    back.sanitize();
+    assert!(back.agents.chat_uses_model);
+    assert_eq!(back.agents.default_agent, crate::ai_agents::Provider::Codex);
+    // A file without the section reads as the defaults: off.
+    let old: UiState = serde_json::from_str(r#"{"user_name":"Ada"}"#).unwrap();
+    assert!(!old.agents.chat_uses_model);
+}
+
+#[test]
+fn a_key_typed_and_not_saved_is_dropped_with_the_fields_memory_of_it() {
+    let (mut h, f) = agents_harness(ThemeKind::Light, |_| {});
+    open_agents(&mut h);
+    let field = egui::Id::unique(("automation", "settings.agents.claude.key"));
+    for leave in ["escape", "profile", "done"] {
+        if leave != "escape" || h.state().settings.is_none() {
+            open_agents(&mut h);
+        }
+        let at = rect_of(&h, "settings.agents.claude.key").center();
+        click(&mut h, at);
+        for part in ["sk-ant-", "api03-", "canary-0000-4F2a"] {
+            h.event(egui::Event::Text(part.into()));
+            h.run();
+        }
+        assert!(crate::settings_agents::drafted(&h.state().settings.as_ref().unwrap().agents), "{leave}: typed");
+        let undo = egui::text_edit::TextEditState::load(&h.ctx, field).map(|s| s.undoer().has_undo(&Default::default()));
+        assert_ne!(undo, Some(true), "{leave}: the hidden field keeps no undo history of the key");
+        match leave {
+            "escape" => {
+                h.event(egui::Event::Key {
+                    key: egui::Key::Escape,
+                    physical_key: None,
+                    pressed: true,
+                    repeat: false,
+                    modifiers: egui::Modifiers::NONE,
+                });
+                h.run();
+                assert!(h.state().settings.is_none());
+            }
+            "profile" => {
+                let at = rect_of(&h, "settings.nav.profile").center();
+                click(&mut h, at);
+                assert!(!crate::settings_agents::drafted(&h.state().settings.as_ref().unwrap().agents), "another section drops the draft");
+                let at = rect_of(&h, "settings.done").center();
+                click(&mut h, at);
+            }
+            _ => {
+                let at = rect_of(&h, "settings.done").center();
+                click(&mut h, at);
+            }
+        }
+        let state = egui::text_edit::TextEditState::load(&h.ctx, field);
+        assert!(state.is_none_or(|s| !s.undoer().has_undo(&Default::default())), "{leave}: the field's memory is cleared");
+    }
+    assert_eq!(f.calls.save.load(std::sync::atomic::Ordering::Relaxed), 0, "nothing was saved");
+}
+
+#[test]
+fn a_device_code_that_is_not_letters_digits_and_hyphens_is_not_shown() {
+    use crate::ai_agents::LoginEvent;
+    let (mut h, _) = agents_harness(ThemeKind::Light, |f| {
+        *f.login.lock().unwrap() =
+            vec![LoginEvent::DeviceCode { code: "WXYZ\u{202E}4821".into(), url: "https://auth.openai.com/codex/device".into(), minutes: 15 }];
+    });
+    open_agents(&mut h);
+    let at = rect_of(&h, "settings.agents.codex.device-code").center();
+    click(&mut h, at);
+    h.run();
+    assert!(h.state().agents.login.is_none());
+    assert!(painted_has(&h, "The sign-in gave a code that is not letters, digits and hyphens."));
+    assert!(!painted_has(&h, "4821"));
+}
+
+#[test]
+fn ai_agents_choices_a_later_version_wrote_fall_back_to_the_defaults_alone() {
+    let mut state: UiState = serde_json::from_str(r#"{"user_name":"Ada","agents":{"default_agent":"Gemini","chat_uses_model":true}}"#).unwrap();
+    state.sanitize();
+    assert_eq!(state.user_name, "Ada", "the rest of the file is read");
+    assert_eq!(state.agents, crate::ai_agents::AgentPrefs::default());
+}

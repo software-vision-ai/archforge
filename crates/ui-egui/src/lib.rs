@@ -6,6 +6,7 @@
 //! supplies `Services`.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
+pub mod ai_agents;
 pub mod appearance;
 pub mod canvas;
 pub mod checks;
@@ -37,6 +38,7 @@ pub mod problems;
 mod project_search;
 pub mod relation;
 pub mod settings;
+mod settings_agents;
 pub mod skill_tab;
 pub mod state;
 pub mod subtypes;
@@ -88,6 +90,12 @@ pub struct Services {
     /// Where About Archforge sends support: the provider pages the host has set up; a
     /// destination left out says it is not set up yet.
     pub support: support::Destinations,
+    /// Settings → AI Agents' local work: finding the agent programs and keeping their API keys in
+    /// the system's secure store; none leaves the page saying it is not available.
+    pub agents: Option<std::sync::Arc<dyn ai_agents::AgentHost>>,
+    /// What talks to an agent's provider or to the codex program's sign-in: the test message and
+    /// Codex's ChatGPT sign-in; none keeps them unavailable.
+    pub agent_accounts: Option<std::sync::Arc<dyn ai_agents::AgentAccounts>>,
 }
 
 /// The host's search for projects in folders: the folders and a wake in, the projects found sent
@@ -346,6 +354,8 @@ pub struct Shell {
     pub settings: Option<settings::Dialog>,
     /// About Archforge, with how to support it, while it is open.
     pub about: Option<support::Dialog>,
+    /// AI Agents as this run knows it: the programs and keys found, the sign-in, what is under way.
+    pub agents: ai_agents::State,
     /// The open projects, one tab each, in the bar's order; the one shown has its state in the
     /// fields below, the others keep theirs parked in their tab.
     pub tabs: Vec<Tab>,
@@ -431,6 +441,7 @@ impl Shell {
             new_project: None,
             settings: None,
             about: None,
+            agents: ai_agents::State::default(),
             tabs: Vec::new(),
             active: None,
             project: None,
@@ -1274,6 +1285,9 @@ impl Shell {
             self.look_for_dolt();
         }
         self.poll_host();
+        // The agent programs and keys are looked for once at start, never by opening Settings.
+        ai_agents::start(self);
+        ai_agents::poll(self);
         control::drain(self);
         // While the host works on an opening, a save or a write, the window looks again soon, so
         // its answer shows without waiting for the pointer to move.
@@ -1287,7 +1301,7 @@ impl Shell {
             _ => false,
         };
         let closing = self.tabs.iter().any(Tab::closing);
-        if self.opening.is_some() || self.dolt_check.is_some() || self.saving.is_some() || writing || closing {
+        if self.opening.is_some() || self.dolt_check.is_some() || self.saving.is_some() || writing || closing || self.agents.busy() {
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
         }
         // Cmd+S (Ctrl+S) saves the open project and Cmd+O (Ctrl+O) opens one; on macOS the menu
@@ -1359,10 +1373,10 @@ impl Shell {
             ui.ctx().send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
             self.last_title = title;
         }
-        // While About is over the window, the window behind it takes no keys: its tree,
+        // While About or Settings is over the window, the window behind it takes no keys: its tree,
         // canvas and editors read keys directly, so the frame's keys are held back while it is
         // drawn and given back for the dialogs.
-        let held = if self.about.is_some() { hold_keys(ui.ctx()) } else { Vec::new() };
+        let held = if self.about.is_some() || self.settings.is_some() { hold_keys(ui.ctx()) } else { Vec::new() };
         if self.project.is_some() {
             workspace::show(self, ui);
         } else {
