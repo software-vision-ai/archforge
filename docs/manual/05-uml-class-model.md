@@ -697,7 +697,8 @@ number. A click on the diamond or on any leg selects the whole association. (The
 - **Remove an end:** choose the red bin in the end's editor. With three ends left, Archforge asks
   first: **Keep 3 ends** changes nothing, **Make it binary** turns it into an ordinary association
   between the two classes left.
-- **Take it off this diagram:** press Delete (⌫). **Delete it from the model:** ⇧⌫ (Shift Delete).
+- **Take it off this diagram:** press Delete (⌫). **Delete it from the model:** press ⇧⌫ (Shift
+  Delete); Archforge asks *Delete recommends from the model?*, and **Delete** confirms.
 
 If you press Escape, choose another tool or click empty canvas while drawing, nothing is added. An
 n-ary association joins classes and interfaces only. More in the reference:
@@ -876,7 +877,7 @@ Start with a new class diagram.
 10. With *Repository* selected, press ⌘↩ (Ctrl Enter), type *items*, press Tab, type *T*, and
     press Enter. Press Escape.
 11. In **Properties**, under **Attributes**, choose the pencil on *items*.
-12. Open **Multiplicity**, choose `*` (a repository holds many items), and choose the check.
+12. Type `*` in **Multiplicity** (a repository holds many items), and choose the check.
 13. Press ⇧⌘↩ (Ctrl Shift Enter), type *find*, press Tab, type *T*, and press Enter. Press Escape.
 14. In **Properties**, under **Operations**, choose the pencil on *find*.
 15. Choose **Add parameter**, click the new row's **Name** field, and type *key*.
@@ -947,7 +948,8 @@ draft and leaves the model as it was.
 
 - **Change an argument:** select the line and pick another one under **Substitutions**, or
   **Default (Integer)**, say, to go back to a parameter's default.
-- **Remove the binding:** select the line and press ⇧⌫ (Shift Delete).
+- **Remove the binding:** select the line and press ⇧⌫ (Shift Delete). Archforge asks *Delete …
+  from the model?*; choose **Delete**.
 - **What is refused:** a binding between different kinds (a class binds a class template, an
   interface an interface template, a data type a data type template), a second binding of the same
   template, and deleting a class that a binding uses as an argument, such as *Order*.
