@@ -496,7 +496,8 @@ still carries the package's name.
 
 ### Move an element into a package
 
-Drag a classifier's row in **Models** onto a package's row to move it there. A classifier of
+Drag a classifier's row in **Models** onto a package's row to move it there, or pick the package
+as its **Owner** in **Properties** (see [Nested classifiers](#nested-classifiers)). A classifier of
 another package on a diagram is drawn dimmed, its package named above its name. Removing a
 package hands what it holds up to the package around it, in the end the root package, which
 itself stays.
@@ -801,6 +802,50 @@ classifier, attribute, operation, literal or relationship of the model, in the o
   names it. Deleting the context deletes its constraints.
 - The editor's bin deletes the constraint; its arrows move it up and down the list.
 
+### Nested classifiers
+
+A class, an interface or an association class can *own* classifiers of its own: a *Priority*
+enumeration that only makes sense for an *Order*, say. Such a classifier is *nested* in its owner
+rather than held by a package.
+
+- **Make one.** Right-click a class in **Models** (or select it and press ⇧F10) and choose **New
+  inside Order ▸**, then **Class**, **Interface**, **Enumeration** or **Data type**. The new
+  classifier appears under *Order* with its name ready to type. **Package** is listed but disabled:
+  a package never goes inside a class. The class's **Properties** offer the same kinds under
+  **Nested classifiers**, whose **+** names the new one in **Models** too. An enumeration, a data
+  type or a primitive type owns no classifiers, so their **New inside** is disabled with the reason.
+- **In Models** a nested classifier is listed under its owner, before the owner's attributes and
+  operations, with a muted *nested* after its name. **Show in diagram**, **Rename** and **Delete
+  from model** are in the same menu.
+- **Owner.** Every classifier's **Properties** have **Owner** where **Package** used to be. Pick a
+  package or a classifier to move it there, as one step you can undo. It keeps its identity, its
+  members, its relationships and every type that uses it. The menu lists each package and
+  classifier with its kind; those that cannot take it stay listed, disabled, with the reason at
+  the right: *itself*, *owns none* (an enumeration, a data type or a primitive type), or *class
+  Priority already holds that name* where the owner already has a member of that name, said by its
+  kind. A classifier inside it is never
+  offered, since owning it would make a cycle. A primitive type and an association class stay in a
+  package.
+- **Names.** A nested classifier's name differs, whatever the case, from everything its owner
+  holds: its other nested classifiers, its attributes and its operations. So an attribute of
+  *Order* cannot be called *priority* while *Order* nests *Priority*; name it *urgency* instead.
+- **On a diagram**, drag the nested classifier's row from **Models** onto the canvas. Where its
+  owner is on the diagram too, a line ending in ⊕ at the owner shows the ownership; it is worked out
+  from the model, comes and goes with either card, and cannot be selected. Where the owner is not on
+  the diagram, the card reads *Order::Priority*, so its context is never lost. A card that merely
+  sits over another card means nothing: only **Models** and **Owner** change ownership. The
+  classifier tool on the canvas still places classifiers in the diagram's package.
+- **Deleting the owner** from the model deletes what it nests, with their relationships and cards,
+  as one step you can undo. The dialog names them first, such as *1 nested classifier goes with it:
+  Order::Priority.* Removing the owner's card from a diagram only removes the card.
+
+<!-- picture: workspace-nested-classifiers light | Priority nested in Order: Models lists it under Order with nested after its name; on the diagram Priority's card sits over Order's, joined by a line ending in ⊕ at Order; Properties shows Owner Order and what changing it keeps -->
+
+For agents, `uml.nested.add` makes a nested classifier, `uml.classifier.set-owner` changes an
+owner, `uml.nested.list` lists what a classifier nests and `uml.classifier.owners` lists where a
+classifier may go, with the reasons. The existing `uml.class.move` and its siblings still move a
+classifier, a nested one included, into a package.
+
 ### Cards
 
 A card grows to show every member you add. A card you made shorter by hand says how many rows it
@@ -813,7 +858,8 @@ As everywhere in Archforge (see [The workspace](03-workspace.md#removing-from-a-
 **Remove from this diagram**, or Delete, takes a card or a line off the diagram and keeps it in
 the model; **Delete from the model…** (⇧⌫) asks first, then deletes it everywhere.
 
-- Deleting a class or an interface takes its interface realizations with it.
+- Deleting a class or an interface takes its interface realizations with it, and the classifiers
+  it nests with theirs.
 - Deleting a generalization takes it out of its generalization sets, and a set left with no member
   goes with it.
 - Deleting an association class takes its ends, attributes and operations with it. Removing a

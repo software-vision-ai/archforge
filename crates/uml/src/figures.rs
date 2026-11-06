@@ -222,7 +222,7 @@ pub fn card(store: &Store, c: Obj, diagram: Obj) -> Option<Card> {
     });
     Some(Card {
         eyebrow,
-        name: name(store, c),
+        name: card_name(store, c, diagram),
         compartments: vec![attributes, operations],
         more: ("+ {n} more member", "+ {n} more members"),
         hidden,
@@ -245,10 +245,26 @@ fn braces(store: &Store, c: Obj) -> Option<String> {
     (!words.is_empty()).then(|| format!("{{{}}}", words.join(", ")))
 }
 
-/// The package of `c` when it is another than `diagram`'s: `c` is drawn there as an outsider.
+/// The package of `c` when it is another than `diagram`'s: `c` is drawn there as an outsider. A
+/// nested classifier's package is its owner's (AR-132).
 fn elsewhere(store: &Store, c: Obj, diagram: Obj) -> Option<Obj> {
     let here = store.get(diagram, archforge_diagram::diagram::ELEMENT).ok().and_then(|v| v.as_ref()).filter(|o| store.is_alive(*o));
-    crate::commands::package_of(store, c).filter(|p| here.is_some_and(|h| h != *p))
+    crate::nesting::home_package(store, c).filter(|p| here.is_some_and(|h| h != *p))
+}
+
+/// The name a classifier's card shows on `diagram` (AR-132): its own, or, nested in a classifier
+/// the diagram does not show, its owners' names before it, `Order::Priority`, so its context is
+/// never lost. With its owner on the diagram the line ending in ⊕ shows whose it is.
+pub fn card_name(store: &Store, c: Obj, diagram: Obj) -> String {
+    match crate::nesting::classifier_owner(store, c) {
+        Some(owner) if !shows(store, diagram, owner) => crate::nesting::qualified_name(store, c),
+        _ => name(store, c),
+    }
+}
+
+/// Whether `diagram` has a node of `element`.
+pub fn shows(store: &Store, diagram: Obj, element: Obj) -> bool {
+    archforge_diagram::views_of(store, element).2.into_iter().any(|n| archforge_diagram::diagram_of(store, n) == Some(diagram))
 }
 
 /// A primitive type's card on `diagram`: the keyword «primitive» in its eyebrow, its package beside
@@ -261,7 +277,7 @@ fn primitive_type_card(store: &Store, t: Obj, diagram: Obj) -> Card {
     };
     Card {
         eyebrow,
-        name: name(store, t),
+        name: card_name(store, t, diagram),
         compartments: Vec::new(),
         more: ("+ {n} more member", "+ {n} more members"),
         hidden: 0,
@@ -291,7 +307,7 @@ fn enumeration_card(store: &Store, e: Obj, diagram: Obj) -> Card {
     });
     Card {
         eyebrow,
-        name: name(store, e),
+        name: card_name(store, e, diagram),
         compartments: vec![literals],
         more: ("+ {n} more literal", "+ {n} more literals"),
         hidden,

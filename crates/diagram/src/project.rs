@@ -81,6 +81,13 @@ pub trait Notation: Send + Sync + 'static {
         let _ = (store, element, diagram);
         Vec::new()
     }
+    /// The element that owns `element` as a nested member, its node tied to `element`'s by a line
+    /// ending in ⊕ at it where a diagram shows both, worked out from the model, never stored: a
+    /// nested classifier's owner (AR-132). None for an element nested in nothing.
+    fn nested_in(&self, store: &Store, element: Obj) -> Option<Obj> {
+        let _ = (store, element);
+        None
+    }
     /// The line an edge of `element` draws; None draws a plain solid line.
     fn line(&self, store: &Store, element: Obj) -> Option<Line> {
         let _ = (store, element);

@@ -650,6 +650,7 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
         shell.canvas.ends = draw.ends.take();
         shell.canvas.qualified_ends = draw.qualified_ends.take();
         draw_constraint_links(&clip, &draw);
+        draw_nesting_lines(&clip, &draw);
         shell.canvas.set_labels = draw_sets(&clip, &draw, &mut shell.registry, ui);
         // A set's label says its whole text while the pointer is on it.
         if let Some(at) = ui.input(|i| i.pointer.hover_pos())
@@ -1029,6 +1030,101 @@ fn draw_constraint_links(paint: &egui::Painter, d: &Drawing<'_>) {
                 paint.extend(egui::Shape::dashed_line(&[from, to], stroke, (3.0 * z).max(1.5), (3.0 * z).max(1.5)));
             }
         }
+    }
+}
+
+/// The radius of the ⊕ at an owner's end of a nesting line, in diagram units (AR-132).
+const CONTAINMENT_RADIUS: f32 = 7.0;
+
+/// The route of the line that ties a nested classifier's card `nested` to its owner's card
+/// `owner` (AR-132): straight where the cards face each other across a gap, else leaving the owner
+/// at its side and turning once into the nested card, the elbow crossing fewer of the `others`
+/// cards. Gives the points from the
+/// ⊕'s rim to the nested card, and the ⊕'s centre, `radius` out from the owner's side; None when
+/// the cards overlap, since a card over another is no ownership of its own and draws no line.
+pub(crate) fn nesting_route(owner: Rect, nested: Rect, radius: f32, others: &[Rect]) -> Option<(Vec<Pos2>, Pos2)> {
+    if owner.intersects(nested) || !owner.is_finite() || !nested.is_finite() {
+        return None;
+    }
+    let (x_lo, x_hi) = (owner.left().max(nested.left()), owner.right().min(nested.right()));
+    let (y_lo, y_hi) = (owner.top().max(nested.top()), owner.bottom().min(nested.bottom()));
+    let below = nested.top() >= owner.bottom();
+    let right = nested.left() >= owner.right();
+    // Leaves the owner at `at` going `dir`: the ⊕ sits just outside, the line starts at its rim.
+    let ring = |at: Pos2, dir: Vec2| (at + dir * radius, at + dir * 2.0 * radius);
+    if x_hi - x_lo >= 2.0 * radius {
+        let x = (x_lo + x_hi) / 2.0;
+        let (from, to, dir) = if below {
+            (pos2(x, owner.bottom()), pos2(x, nested.top()), vec2(0.0, 1.0))
+        } else {
+            (pos2(x, owner.top()), pos2(x, nested.bottom()), vec2(0.0, -1.0))
+        };
+        let (centre, start) = ring(from, dir);
+        return Some((vec![start, to], centre));
+    }
+    if y_hi - y_lo >= 2.0 * radius {
+        let y = (y_lo + y_hi) / 2.0;
+        let (from, to, dir) = if right {
+            (pos2(owner.right(), y), pos2(nested.left(), y), vec2(1.0, 0.0))
+        } else {
+            (pos2(owner.left(), y), pos2(nested.right(), y), vec2(-1.0, 0.0))
+        };
+        let (centre, start) = ring(from, dir);
+        return Some((vec![start, to], centre));
+    }
+    // Apart both ways: an elbow, out of the owner's side then down or up into the nested card, or
+    // out of its top or bottom then across into the nested card's side; the one crossing fewer
+    // other cards.
+    let (x, y) = (nested.center().x, nested.center().y);
+    let toward_x = if x >= owner.center().x { 1.0 } else { -1.0 };
+    let toward_y = if y >= owner.center().y { 1.0 } else { -1.0 };
+    let side = pos2(if toward_x > 0.0 { owner.right() } else { owner.left() }, owner.center().y);
+    let end_v = pos2(x, if toward_y > 0.0 { nested.top() } else { nested.bottom() });
+    let (c1, s1) = ring(side, vec2(toward_x, 0.0));
+    let across_first = vec![s1, pos2(x, side.y), end_v];
+    let foot = pos2(owner.center().x, if toward_y > 0.0 { owner.bottom() } else { owner.top() });
+    let end_h = pos2(if toward_x > 0.0 { nested.left() } else { nested.right() }, y);
+    let (c2, s2) = ring(foot, vec2(0.0, toward_y));
+    let down_first = vec![s2, pos2(foot.x, y), end_h];
+    let crossings = |points: &[Pos2]| points.windows(2).map(|w| others.iter().filter(|o| segment_crosses(**o, w[0], w[1])).count()).sum::<usize>();
+    if crossings(&down_first) < crossings(&across_first) { Some((down_first, c2)) } else { Some((across_first, c1)) }
+}
+
+/// Whether the level or upright segment from `a` to `b` passes through `r`, shrunk a little so a
+/// segment along its edge does not count.
+fn segment_crosses(r: Rect, a: Pos2, b: Pos2) -> bool {
+    let inner = r.shrink(2.0);
+    let seg = Rect::from_two_pos(a, b);
+    inner.intersects(seg.expand(0.5))
+}
+
+/// The lines that tie each nested classifier's card to its owner's card where the diagram shows
+/// both (AR-132): solid in the muted ink, the accent while either is selected, ending in ⊕ at the
+/// owner. Worked out from the model each frame, never stored; overlapping cards draw none.
+fn draw_nesting_lines(paint: &egui::Painter, d: &Drawing<'_>) {
+    let (p, store, z) = (d.p, d.store, d.view.zoom);
+    let mut node_of: std::collections::HashMap<Obj, Obj> = std::collections::HashMap::new();
+    for (n, _) in &d.boxes {
+        if let Some(e) = element_of(store, *n, node::ELEMENT) {
+            node_of.entry(e).or_insert(*n);
+        }
+    }
+    for (n, _) in &d.boxes {
+        let Some(e) = element_of(store, *n, node::ELEMENT) else { continue };
+        let Some(notation) = d.notations.of_element(store, e) else { continue };
+        let Some(owner) = notation.nested_in(store, e) else { continue };
+        let Some(on) = node_of.get(&owner).copied() else { continue };
+        let others: Vec<Rect> = d.boxes.iter().filter(|(b, _)| *b != on && *b != *n).map(|(b, _)| d.node_rect(*b)).collect();
+        let Some((points, centre)) = nesting_route(d.node_rect(on), d.node_rect(*n), CONTAINMENT_RADIUS * z, &others) else { continue };
+        let selected = [*n, e, on, owner].iter().any(|o| d.selection.contains(o));
+        let ink = if selected { p.accent } else { p.text_secondary };
+        let stroke = Stroke::new((1.2 * z).clamp(1.0, 2.5), ink);
+        paint.add(egui::Shape::line(points, stroke));
+        let r = CONTAINMENT_RADIUS * z;
+        paint.circle(centre, r, p.surface, stroke);
+        let arm = r * 0.62;
+        paint.line_segment([centre - vec2(arm, 0.0), centre + vec2(arm, 0.0)], stroke);
+        paint.line_segment([centre - vec2(0.0, arm), centre + vec2(0.0, arm)], stroke);
     }
 }
 

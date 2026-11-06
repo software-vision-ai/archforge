@@ -84,7 +84,17 @@ named once and at most 256, complete or not (isCovering) and disjoint or not (is
 sets; a member is never reconnected (`uml.relationship.reconnect` refuses it, naming its sets); removed through
 `element.remove`, which keeps its generalizations, and a set left with no member by a removal, or by `uml.generalization-set.set`,
 goes in the same step; where a diagram shows its label, once moved, a node of the kind `uml.generalization-set.label` nested in
-the general classifier's node; the set line itself is the canvas's, worked out from the model), `relations::{specs, relationships_of, generalization_problem, GeneralizationProblem, is_final, specializations, final_problem, is_leaf, redefiners, redefiner_name, leaf_problem, association_end_problem, association_class_end_problem, realization_problem, RealizationProblem}`
+the general classifier's node; the set line itself is the canvas's, worked out from the model), `nesting::{specs, nested,
+nested_within, classifier_owner, owner_of, home_package, owner_chain, qualified_name, names_under, siblings, member_clash,
+owner_problem, problem_text, candidates, can_own, can_nest, is_nested, OwnerProblem, OWNERS, NESTABLE, KINDS}` (AR-132:
+`uml.nested.add`, `uml.classifier.set-owner`, `uml.nested.list`, `uml.classifier.owners`; a class, an interface, an
+enumeration or a data type in a class's, an interface's or an association class's `nestedClassifier`, its home package its
+owner's; an owner changed keeping the id, members, relationships and type references; a cycle, an owner of a kind that owns
+none, a primitive type or an association class put in a classifier, and a name anything the owner holds has, whatever the case,
+refused with the reason; an attribute or an operation never takes a nested classifier's name; removing an owner removes what
+it nests, their relationships and views, in the same step; `UmlNotation::nested_in` names the owner the canvas ties a nested
+card to with a line ending in ⊕, worked out from the model; a card of a nested classifier whose owner the diagram does not show
+reads `Order::Priority`), `relations::{specs, relationships_of, generalization_problem, GeneralizationProblem, is_final, specializations, final_problem, is_leaf, redefiners, redefiner_name, leaf_problem, association_end_problem, association_class_end_problem, realization_problem, RealizationProblem}`
 (`uml.classifier.set` (AR-137): a classifier of any kind made final, UML's isFinalSpecialization, only while nothing specializes it and never a built-in type, after which no generalization is drawn to it or has its general end moved onto it; and made leaf (AR-138), UML's isLeaf, only while nothing redefines it, `{leaf}` after its name, as a property is with the attribute commands and `uml.association.set-end` and an operation with the operation commands, after which no property redefines a leaf one (`modifiers::TargetProblem::Leaf`, `modifiers::redefines_leaf`); an enumeration specializes only an enumeration, a data type only a data type and a primitive type
 only a primitive type, each specialized only by its own kind, a built-in type specializing nothing,
 and none of them joins an association; `uml.realization.add`: a class

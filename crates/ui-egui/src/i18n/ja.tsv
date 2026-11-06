@@ -71,6 +71,7 @@ plural		It disappears from {n} diagram.	{n} 個の図から消えます。
 plural		{n} relationship goes with it.	{n} 件のリレーションシップが一緒に削除されます。
 plural		{n} key goes with it.	{n} 件のキーが一緒に削除されます。
 plural		{n} foreign key goes with it.	{n} 件の外部キーが一緒に削除されます。
+plural		{n} nested classifier goes with it: {names}.	{n} 個の入れ子の分類子も一緒に削除されます：{names}。
 str		Delete	削除
 str		Schema · model	スキーマ · モデル
 str		Table · model, in every diagram	テーブル · モデル、すべての図に
@@ -723,6 +724,37 @@ str		Attribute · model	属性 · モデル
 str		Literal · model	リテラル · モデル
 str		Attributes · {n}	属性 · {n}
 str		Literals · {n}	リテラル · {n}
+str		Owner	所有者
+str		Owner is a package or a classifier. Changing it keeps {name}'s identity, members, relationships and every type that uses it.	所有者はパッケージまたは分類子です。変更しても {name} の同一性、メンバー、リレーションシップ、それを使うすべての型は保たれます。
+str		{kind} · nested in {owner} · model, in every diagram	{kind} · {owner} の中に入れ子 · モデル、すべての図で
+str		Nested classifiers · {n}	入れ子の分類子 · {n}
+str		Add nested classifier	入れ子の分類子を追加
+str		None yet. Add one here or from Models ▸ New inside {name}; both offer the same kinds.	まだありません。ここか、モデル ▸ {name} の中に新規作成から追加します。どちらも同じ種類を提供します。
+str		nested	入れ子
+str		package	パッケージ
+str		class	クラス
+str		interface	インターフェース
+str		enumeration	列挙
+str		data type	データ型
+str		primitive type	プリミティブ型
+str		association class	関連クラス
+str		attribute	属性
+str		operation	操作
+str		constraint	制約
+str		element	要素
+str		itself	自分自身
+str		inside it	その中
+str		owns none	所有しない
+str		{kind} {name} already holds that name	{kind} {name} がすでにその名前です
+str		kept for a built-in type	組み込み型用に予約
+str		built-in type	組み込み型
+str		{name} cannot own itself.	{name} は自分自身を所有できません。
+str		{owner} is inside {name}: owning {name} would make a cycle.	{owner} は {name} の中にあります。{name} を所有すると循環になります。
+str		{owner} owns no classifiers: only a package, a class, an interface or an association class does.	{owner} は分類子を所有しません。所有できるのはパッケージ、クラス、インターフェース、関連クラスだけです。
+str		{name} stays in a package: a primitive type or an association class is never nested in a classifier.	{name} はパッケージに留まります。プリミティブ型や関連クラスは分類子の中に入れ子にしません。
+str		{owner} already owns a member named {name}.	{owner} にはすでに {name} という名前のメンバーがあります。
+str		The package {owner} keeps the name {name} for a built-in type.	パッケージ {owner} は名前 {name} を組み込み型用に予約しています。
+str		{name} is a built-in type and stays in Types.	{name} は組み込み型で、Types に留まります。
 str		Constraints · {n}	制約 · {n}
 str		Add constraint	制約を追加
 str		Edit constraint	制約を編集
@@ -892,6 +924,20 @@ str		Completeness	完全性
 str		Create generalization set…	汎化セットを作成…
 str		Create set from selection	選択からセットを作成
 str		Delete from the model	モデルから削除
+str		Rename	名前を変更
+str		Show in diagram	図で表示
+str		No diagram shows it yet	まだどの図にも表示されていません
+str		Delete from model	モデルから削除
+str		A skill is removed from its tab	スキルはそのタブから削除します
+str		New inside {name}	{name} の中に新規作成
+str		not inside a class	クラスの中には不可
+str		{name} is {kind}, which owns no classifiers: only a class, an interface or an association class does.	{name} は{kind}で、分類子を所有しません。所有できるのはクラス、インターフェース、関連クラスだけです。
+str		a class	クラス
+str		an interface	インターフェース
+str		an enumeration	列挙
+str		a data type	データ型
+str		a primitive type	プリミティブ型
+str		an association class	関連クラス
 str		Deleting the set keeps its generalizations; only the grouping goes. The set line is drawn across its members; drag its label to move it, a diagram-only change.	セットを削除しても汎化は残り、グループ化だけがなくなります。セットの線はメンバーを横切って描かれます。ラベルをドラッグすると移動でき、図だけの変更です。
 str		Deleting this generalization takes it out of its sets in the same undo step; a set left with no members goes too.	この汎化を削除すると同じ取り消し手順でセットから外れ、メンバーがいなくなったセットも削除されます。
 str		Disjointness	排他性

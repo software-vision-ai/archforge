@@ -404,7 +404,7 @@ What is UML's own, beside the shared rules above.
   root while it is still to be made, and Create makes it). It cannot be moved or removed; removing
   a package hands its contents up, in the end into the root. A project opened without one gets it,
   its top-level packages moved in, as one undoable step.
-- Properties' Package and Parent package selects show a package by its path from the root,
+- Properties' Owner (a classifier's, AR-132) and Parent package selects show a package by its path from the root,
   `Commerce platform › Orders`, every ancestor named however deep. Too long for the field, the
   path's front folds into `…` (`… › Orders`) so the package's own name shows; a name too long alone
   is cut at its end, as any name is. The whole path is the select's tooltip and accessible name.
@@ -778,6 +778,42 @@ What is UML's own, beside the shared rules above.
   ("Payment deleted · paidInFull now constrains Order only"); a constraint left naming nothing goes
   with it and the toast names it. The content is the model's, shared by every diagram; the form and
   the place are each diagram's.
+- Nested classifiers (AR-132, design page 08, D1 to D4; owner decisions 2026-11-06). A class, an
+  interface or an association class owns classifiers through UML's nestedClassifier: a class, an
+  interface, an enumeration or a data type (the design's four kinds; a primitive type and an
+  association class stay in a package, and an enumeration, a data type and a primitive type own
+  none). A row's context menu in Models (right click, or ⇧F10; `workspace.explorer.contextMenu.*`)
+  holds New inside {name} ▸ (its submenu headed NEW INSIDE {NAME}: Class, Interface, Enumeration,
+  Data type, then Package disabled, "not inside a class"; on an owner of none the row is disabled
+  with the reason), Rename F2, Show in diagram, a line, and Delete from model; the arrows walk it,
+  → opens the submenu, Enter picks, Escape closes. A pick makes the classifier as one undo step,
+  named afresh and open for typing in Models. Models lists it under its owner before the owner's
+  members, a muted `nested` after its name. Properties: Package becomes Owner on every classifier
+  (`workspace.properties.class.owner`), a package or a classifier; its menu (OWNER) lists the
+  owners that may take it with their kind at the right and the current one ticked, then, after a
+  line, those that may not, muted with a short reason (itself, owns none, `{kind} {name} already
+  holds that name` naming the clashing element by its kind, for a package owner too, not inside a
+  class) and the whole reason on hover and as their description; one nested in it is never
+  listed. A pick is `uml.classifier.set-owner`, one step, keeping identity, members, relationships
+  and type references. A nested classifier's kind line reads `{kind} · nested in {owner} · model, in
+  every diagram`, and an explanation sits under Owner. A class's or an interface's panel has
+  Nested classifiers · n after No redefinition, its `+` offering the same kinds, its rows selecting.
+  Names: a nested classifier's differs, whatever the case, from everything its owner holds,
+  attributes and operations included, and an attribute or operation never takes a nested one's
+  name, since a model opening refuses two elements of one owner named alike (so the design's D2
+  `priority : Priority` beside nested Priority is refused; the sample says `urgency`). Owner
+  decision 2026-11-06: follow UML, where elements of different kinds may share a name and only a
+  clash of one kind is refused; this strict rule stays until the Fireline bug that relaxes the
+  loader's open-time check lands, and then relaxes to UML's. On the
+  canvas a nested card whose owner's card is on the diagram is tied to it by a solid line in the
+  muted ink (the accent while either is selected), straight where the cards face each other, else
+  one elbow crossing as few cards as it can, ending in ⊕ just outside the owner's side; it is
+  worked out from the model, never stored nor selected, and overlapping cards draw none. Where the
+  owner is not shown, the card reads `Order::Priority`. A card over another is never ownership. It
+  is placed by dragging its row from Models; the classifier tool keeps placing package members.
+  Deleting an owner from the model asks first, the dialog naming what it nests (`{n} nested
+  classifiers go with it: Order::Priority.`), and takes them along with their relationships and
+  cards in one step.
 
 On every line: a role, and a label at the line's middle, sit above a level stretch of the line and
 beside an upright one, never on the line or its mark.

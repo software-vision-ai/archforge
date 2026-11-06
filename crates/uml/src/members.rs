@@ -398,6 +398,7 @@ fn check_name(store: &Store, owner: Obj, name: &str, siblings: &[Obj], except: O
     if siblings.iter().any(|s| Some(*s) != except && name_of(store, *s).to_lowercase() == name.to_lowercase()) {
         return Err(refuse("name", format!("the {} has an attribute named {name} already", crate::commands::what(store, owner))));
     }
+    nested_clash(store, owner, name)?;
     if let Some(end) = end_role_clash(store, owner, name) {
         return Err(refuse(
             "name",
@@ -410,6 +411,18 @@ fn check_name(store: &Store, owner: Obj, name: &str, siblings: &[Obj], except: O
         ));
     }
     Ok(())
+}
+
+/// A member's name may not be a classifier's nested in its owner, whatever the case (AR-132): the
+/// two share their owner, whose elements a model opening is checked to name apart.
+fn nested_clash(store: &Store, owner: Obj, name: &str) -> Result<(), CommandError> {
+    match crate::nesting::member_clash(store, owner, name, None) {
+        Some(n) => Err(refuse(
+            "name",
+            format!("the {} nests {} named {} already", crate::commands::what(store, owner), crate::commands::a_what(store, n), name_of(store, n)),
+        )),
+        None => Ok(()),
+    }
 }
 
 /// The end of association class `owner` whose role is `name`, whatever the case: an attribute of
@@ -624,6 +637,7 @@ fn set_operation(store: &mut Store, owner: Obj, op: Obj, p: &Params) -> Result<(
     if let Some(problem) = archforge_core::skills::name_problem(name, crate::commands::MAX_NAME) {
         return Err(refuse("name", format!("the name {problem}")));
     }
+    nested_clash(store, owner, name)?;
     let leaf = p.bool("leaf").unwrap_or(false);
     if leaf
         && !crate::relations::is_leaf(store, op)
@@ -847,6 +861,18 @@ fn class_get(ctx: &mut C<'_>, p: &Params) -> R {
     {
         fields.insert("built_in".to_string(), Json::Bool(is_built_in(store, c)));
     }
+    // Its owner, a package or the classifier that nests it, and those it nests (AR-132).
+    if let Some(fields) = out.as_object_mut() {
+        let owner = crate::nesting::owner_of(store, c).map_or(Json::Null, |o| {
+            json!({ "id": uuid_of(store, o).unwrap_or_default(), "kind": crate::commands::what(store, o).replace(' ', "_"), "name": name_of(store, o) })
+        });
+        fields.insert("owner".to_string(), owner);
+        let nested: Vec<Json> = crate::nesting::nested(store, c)
+            .into_iter()
+            .map(|n| json!({ "id": uuid_of(store, n).unwrap_or_default(), "kind": crate::commands::what(store, n).replace(' ', "_"), "name": name_of(store, n) }))
+            .collect();
+        fields.insert("nested".to_string(), Json::Array(nested));
+    }
     // Its constraints, stored as written and never evaluated (AR-133).
     let rules: Vec<Json> = crate::constraints::constraints_of(store, c).into_iter().map(|k| crate::constraints::constraint_json(store, k)).collect();
     if let Some(fields) = out.as_object_mut() {
@@ -1028,7 +1054,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Get class",
             &["Class", "Interface", "Enumeration", "Data type", "Primitive type", "Association class"],
             None,
-            "class: string; the class's, interface's, enumeration's, data type's, primitive type's or association class's id; an enumeration comes with its literals, a primitive type has no members, and an association class comes with its two ends",
+            "class: string; the class's, interface's, enumeration's, data type's, primitive type's or association class's id; an enumeration comes with its literals, a primitive type has no members, and an association class comes with its two ends; each says its owner (a package, or the classifier that nests it) and the classifiers it nests",
             has_classes,
             class_get
         ),

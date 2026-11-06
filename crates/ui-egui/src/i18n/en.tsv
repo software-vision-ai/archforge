@@ -70,6 +70,7 @@ plural		It disappears from {n} diagram.	It disappears from {n} diagram.|It disap
 plural		{n} relationship goes with it.	{n} relationship goes with it.|{n} relationships go with it.
 plural		{n} key goes with it.	{n} key goes with it.|{n} keys go with it.
 plural		{n} foreign key goes with it.	{n} foreign key goes with it.|{n} foreign keys go with it.
+plural		{n} nested classifier goes with it: {names}.	{n} nested classifier goes with it: {names}.|{n} nested classifiers go with it: {names}.
 str		Delete	Delete
 str		Schema · model	Schema · model
 str		Table · model, in every diagram	Table · model, in every diagram
@@ -722,6 +723,37 @@ str		Attribute · model	Attribute · model
 str		Literal · model	Literal · model
 str		Attributes · {n}	Attributes · {n}
 str		Literals · {n}	Literals · {n}
+str		Owner	Owner
+str		Owner is a package or a classifier. Changing it keeps {name}'s identity, members, relationships and every type that uses it.	Owner is a package or a classifier. Changing it keeps {name}'s identity, members, relationships and every type that uses it.
+str		{kind} · nested in {owner} · model, in every diagram	{kind} · nested in {owner} · model, in every diagram
+str		Nested classifiers · {n}	Nested classifiers · {n}
+str		Add nested classifier	Add nested classifier
+str		None yet. Add one here or from Models ▸ New inside {name}; both offer the same kinds.	None yet. Add one here or from Models ▸ New inside {name}; both offer the same kinds.
+str		nested	nested
+str		package	package
+str		class	class
+str		interface	interface
+str		enumeration	enumeration
+str		data type	data type
+str		primitive type	primitive type
+str		association class	association class
+str		attribute	attribute
+str		operation	operation
+str		constraint	constraint
+str		element	element
+str		itself	itself
+str		inside it	inside it
+str		owns none	owns none
+str		{kind} {name} already holds that name	{kind} {name} already holds that name
+str		kept for a built-in type	kept for a built-in type
+str		built-in type	built-in type
+str		{name} cannot own itself.	{name} cannot own itself.
+str		{owner} is inside {name}: owning {name} would make a cycle.	{owner} is inside {name}: owning {name} would make a cycle.
+str		{owner} owns no classifiers: only a package, a class, an interface or an association class does.	{owner} owns no classifiers: only a package, a class, an interface or an association class does.
+str		{name} stays in a package: a primitive type or an association class is never nested in a classifier.	{name} stays in a package: a primitive type or an association class is never nested in a classifier.
+str		{owner} already owns a member named {name}.	{owner} already owns a member named {name}.
+str		The package {owner} keeps the name {name} for a built-in type.	The package {owner} keeps the name {name} for a built-in type.
+str		{name} is a built-in type and stays in Types.	{name} is a built-in type and stays in Types.
 str		Constraints · {n}	Constraints · {n}
 str		Add constraint	Add constraint
 str		Edit constraint	Edit constraint
@@ -891,6 +923,20 @@ str		Completeness	Completeness
 str		Create generalization set…	Create generalization set…
 str		Create set from selection	Create set from selection
 str		Delete from the model	Delete from the model
+str		Rename	Rename
+str		Show in diagram	Show in diagram
+str		No diagram shows it yet	No diagram shows it yet
+str		Delete from model	Delete from model
+str		A skill is removed from its tab	A skill is removed from its tab
+str		New inside {name}	New inside {name}
+str		not inside a class	not inside a class
+str		{name} is {kind}, which owns no classifiers: only a class, an interface or an association class does.	{name} is {kind}, which owns no classifiers: only a class, an interface or an association class does.
+str		a class	a class
+str		an interface	an interface
+str		an enumeration	an enumeration
+str		a data type	a data type
+str		a primitive type	a primitive type
+str		an association class	an association class
 str		Deleting the set keeps its generalizations; only the grouping goes. The set line is drawn across its members; drag its label to move it, a diagram-only change.	Deleting the set keeps its generalizations; only the grouping goes. The set line is drawn across its members; drag its label to move it, a diagram-only change.
 str		Deleting this generalization takes it out of its sets in the same undo step; a set left with no members goes too.	Deleting this generalization takes it out of its sets in the same undo step; a set left with no members goes too.
 str		Disjointness	Disjointness

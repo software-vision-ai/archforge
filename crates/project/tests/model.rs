@@ -276,6 +276,42 @@ fn er_and_uml_live_in_one_project_and_a_project_of_er_alone_takes_uml() {
     project.close().unwrap();
 }
 
+/// Classifiers nested in a class (AR-132), and one moved from a package into it, are saved in the
+/// project's existing tables and come back nested, in their order, with the type they give, after
+/// the project is closed and opened again: no table or column is added for them.
+#[test]
+fn nested_classifiers_are_saved_and_opened_again_nested() {
+    let env = Env::new("nested");
+    let schema = schema();
+    let project = Project::create(&env.dolt, &env.opts(), &env.base.join("Projects"), "Shop", "test", &timestamp(1_761_670_800)).unwrap();
+    project.prepare_model(&schema).unwrap();
+    let mut s = archforge_notations::new_project_session("Shop", ids(0)).unwrap();
+    let sales = run(&mut s, "uml.package.add", json!({ "name": "sales" }));
+    let order = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Order" }));
+    let priority = run(&mut s, "uml.nested.add", json!({ "owner": order, "kind": "enumeration", "name": "Priority" }));
+    run(&mut s, "uml.literal.add", json!({ "enumeration": priority, "name": "Express" }));
+    let line = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Line" }));
+    run(&mut s, "uml.classifier.set-owner", json!({ "classifier": line, "owner": order }));
+    run(&mut s, "uml.attribute.add", json!({ "class": order, "name": "urgency", "type": priority }));
+    let written = rows_of(s.doc(), &schema);
+    project.write_model(&schema, &written).unwrap();
+    project.commit("Nested").unwrap();
+    let path = project.path().to_path_buf();
+    project.close().unwrap();
+    let again = Project::open(&env.dolt, &env.opts(), &path).unwrap();
+    again.prepare_model(&schema).unwrap();
+    let read = again.read_model(&schema).unwrap();
+    assert_eq!(read, written, "the rows come back as written");
+    let session = archforge_notations::session_from_rows(&read, ids(1 << 41)).unwrap();
+    let st = session.doc();
+    let o = st.by_uuid(Uuid::parse(&order).unwrap()).unwrap();
+    let names: Vec<String> = archforge_uml::nesting::nested(st, o).into_iter().map(|c| archforge_core::name_of(st, c)).collect();
+    assert_eq!(names, ["Priority", "Line"], "nested in Order, in their order");
+    let p = st.by_uuid(Uuid::parse(&priority).unwrap()).unwrap();
+    assert_eq!(archforge_uml::nesting::qualified_name(st, p), "Order::Priority");
+    again.close().unwrap();
+}
+
 #[test]
 fn a_long_text_in_any_script_is_written_and_read_back_whole() {
     let env = Env::new("long");

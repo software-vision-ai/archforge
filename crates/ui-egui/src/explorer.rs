@@ -48,6 +48,8 @@ pub struct State {
     pub rename: Option<Rename>,
     /// The `+` menu, open under its button.
     pub menu_open: bool,
+    /// A row's context menu, open where it was asked for (AR-132, D1).
+    pub context: Option<ContextMenu>,
     /// The removal waiting for the dialog's answer.
     pub delete: Option<Delete>,
     /// Whether the tree has the keyboard.
@@ -117,6 +119,17 @@ pub(crate) fn scroll_tree(
     state.offset
 }
 
+/// A row's context menu: the row's element, where it opens, whether its New inside ▸ submenu is
+/// open, and the rows the arrow keys reached in it and in the submenu.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ContextMenu {
+    pub target: Uuid,
+    pub at: egui::Pos2,
+    pub sub: bool,
+    pub reached: Option<usize>,
+    pub sub_reached: Option<usize>,
+}
+
 /// A name being typed in place: the element, the text so far, whether the element was just made
 /// (its default name is then selected, so typing replaces it), and the engine's refusal, if any.
 #[derive(Debug, Clone, PartialEq)]
@@ -133,6 +146,11 @@ impl Rename {
     fn new(target: Uuid, text: String, fresh: bool) -> Self {
         Self { target, text, fresh, refused: None, opened: true }
     }
+
+    /// A name just made, selected whole so typing replaces it.
+    pub(crate) fn fresh(target: Uuid, text: String) -> Self {
+        Self::new(target, text, true)
+    }
 }
 
 /// A removal the dialog asks about: what goes, named, and what goes with it.
@@ -148,6 +166,9 @@ pub struct Delete {
     pub diagrams: usize,
     /// The node the canvas asked from, when it did.
     pub node: Option<Uuid>,
+    /// What goes with it by name, the dialog naming each: a UML classifier's nested classifiers
+    /// (AR-132).
+    pub along: Vec<String>,
 }
 
 /// One row of the tree as drawn.
@@ -417,7 +438,8 @@ pub fn remove_selection(shell: &mut Shell) {
         }
         return;
     }
-    shell.explorer.delete = Some(Delete { ids: vec![id], name: name_of(store, obj), relationships, keys, foreign_keys, diagrams, node: None });
+    let along = ui.map(|u| u.goes_along(store, obj)).unwrap_or_default();
+    shell.explorer.delete = Some(Delete { ids: vec![id], name: name_of(store, obj), relationships, keys, foreign_keys, diagrams, node: None, along });
 }
 
 /// Drops what the store no longer has, so a rename or a dialog never points at a gone element.
@@ -612,11 +634,32 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
         ux::text(&paint, pos2(r.left() + 16.0, r.bottom() - 40.0), &notice, types::CAPTION, p.amber, Some((r.width() - 32.0).max(0.0)));
     }
     let no_widget_has_keys = ui.memory(|m| m.focused().is_none());
-    if shell.explorer.focused && no_widget_has_keys && !typing_at_start && shell.explorer.rename.is_none() && shell.explorer.delete.is_none() {
+    let tree_keys =
+        shell.explorer.focused && no_widget_has_keys && !typing_at_start && shell.explorer.rename.is_none() && shell.explorer.delete.is_none();
+    // ⇧F10 opens the selected row's menu under it, as a right click does (D1).
+    if tree_keys
+        && shell.explorer.context.is_none()
+        && ui.input_mut(|i| i.consume_key(egui::Modifiers::SHIFT, egui::Key::F10))
+        && let Some(i) = selected_obj.and_then(|o| rows.iter().position(|row| row.obj == o))
+    {
+        let y = r.top() + FIRST_ROW + i as f32 * ROW - offset;
+        let indent = f32::from(rows[i].depth) * INDENT;
+        shell.explorer.context = Some(ContextMenu {
+            target: rows[i].id,
+            at: pos2(r.left() + 53.0 + indent, y + ROW_HEIGHT - 6.0),
+            sub: false,
+            reached: Some(0),
+            sub_reached: None,
+        });
+    }
+    if tree_keys && shell.explorer.context.is_none() {
         keyboard(shell, ui, &rows, selected_obj);
     }
     if shell.explorer.menu_open {
         add_menu(shell, ui, p, add);
+    }
+    if shell.explorer.context.is_some() {
+        context_menu(shell, ui, p);
     }
     drag_ghost(shell, ui, p, &rows);
     // A drag whose row was not drawn when the button went up has ended all the same.
@@ -736,6 +779,17 @@ fn tree_row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, column: Rect, y: 
     if resp.double_clicked() && row.expandable {
         toggle(&mut shell.explorer, row);
     }
+    // A right click selects the row and opens its menu where it was pressed (D1).
+    if resp.secondary_clicked() {
+        shell.explorer.focused = true;
+        shell.explorer.menu_open = false;
+        if shell.explorer.rename.is_some() {
+            commit_rename(shell);
+        }
+        select(shell, Some(row.id));
+        let at = ui.input(|i| i.pointer.interact_pos()).unwrap_or(pos2(hit.left() + 45.0 + indent, hit.bottom()));
+        shell.explorer.context = Some(ContextMenu { target: row.id, at, sub: false, reached: None, sub_reached: None });
+    }
 }
 
 /// The name typed in place: a bordered field with the text selected when the element is new;
@@ -828,6 +882,316 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, rows: &[Row], selected_obj: Option
     }
 }
 
+/// What a row of the context menu does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ContextAct {
+    Inside,
+    Rename,
+    Show,
+    Delete,
+}
+
+/// A row of the context menu or its submenu: its id, words, the detail at its right (a shortcut, a
+/// reason), whether it may be picked, and the whole reason when it may not.
+struct MenuRow {
+    id: String,
+    label: String,
+    detail: String,
+    live: bool,
+    why: Option<String>,
+    icon: Option<&'static ux::Icon>,
+}
+
+const CONTEXT_WIDTH: f32 = 232.0;
+const CONTEXT_ROW: f32 = 30.0;
+
+/// The rows of a menu at `m`, from `top`, a line before row `separator`: each live row a control,
+/// each other one saying why on hover and to a screen reader; the row `reached` (the arrow keys')
+/// marked as a hovered one is. Gives the row clicked and the row under the pointer.
+#[allow(clippy::too_many_arguments, reason = "a menu's rows are drawn for their frame, layer and marks")]
+fn menu_rows(
+    shell: &mut Shell,
+    ui: &egui::Ui,
+    p: &Palette,
+    m: Rect,
+    top: f32,
+    rows: &[MenuRow],
+    separator: Option<usize>,
+    reached: Option<usize>,
+    danger: Option<usize>,
+) -> (Option<usize>, Option<usize>) {
+    let paint = ui.painter().clone();
+    let (mut clicked, mut hovered) = (None, None);
+    let mut y = top;
+    for (i, item) in rows.iter().enumerate() {
+        if separator == Some(i) {
+            paint.rect_filled(Rect::from_min_size(pos2(m.left() + 8.0, y + 4.0), vec2(m.width() - 16.0, 1.0)), 0.0, p.border);
+            y += 9.0;
+        }
+        let row = Rect::from_min_size(pos2(m.left() + 4.0, y), vec2(m.width() - 8.0, CONTEXT_ROW));
+        y += CONTEXT_ROW;
+        let resp = if item.live {
+            control(shell, ui, &item.id, "menu-item", row, true).accessible_name(item.label.as_str())
+        } else {
+            widgets::record_visible(ui, &mut shell.registry, &item.id, "menu-item", row);
+            let resp = ui.interact(row, widgets::egui_id(&item.id), Sense::hover());
+            let why = item.why.clone().unwrap_or_else(|| item.detail.clone());
+            ui.ctx().accesskit_node_builder(widgets::egui_id(&item.id), |node| {
+                node.set_role(egui::accesskit::Role::MenuItem);
+                node.set_disabled();
+                node.set_description(why.clone());
+            });
+            resp.on_hover_text(why).accessible_name(item.label.as_str())
+        };
+        if resp.hovered() {
+            hovered = Some(i);
+        }
+        if item.live && (resp.hovered() || reached == Some(i)) {
+            paint.rect_filled(row, 5.0, p.accent_tint);
+        }
+        let ink = if !item.live {
+            p.text_muted
+        } else if danger == Some(i) {
+            p.danger
+        } else {
+            p.text
+        };
+        let mut x = row.left() + 10.0;
+        if let Some(icon) = item.icon {
+            ux::icon_mid(&paint, pos2(x + 7.0, row.center().y), icon, if item.live { p.text_secondary } else { p.text_muted });
+            x += 26.0;
+        }
+        let detail = ux::galley(&paint, &item.detail, types::CAPTION, p.text_muted, Some(m.width() / 2.0));
+        let dw = detail.size().x;
+        paint.galley(pos2(row.right() - 10.0 - dw, row.center().y - detail.size().y / 2.0), detail, p.text_muted);
+        ux::text_mid(&paint, x, row.center().y, &item.label, types::SMALL, ink, Some((row.right() - 18.0 - dw - x).max(0.0)));
+        if item.live && resp.clicked() {
+            clicked = Some(i);
+        }
+    }
+    (clicked, hovered)
+}
+
+/// A row's context menu (D1): New inside {name} ▸ on a classifier, its submenu the kinds it may
+/// nest, then Rename, Show in diagram and Delete from model. The arrows walk it, → opens the
+/// submenu and ← closes it, Enter picks, Escape closes; a press elsewhere closes it.
+fn context_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette) {
+    let Some(menu) = shell.explorer.context.clone() else { return };
+    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+    let Some(obj) = store.by_uuid(menu.target).filter(|o| store.is_alive(*o)) else {
+        shell.explorer.context = None;
+        return;
+    };
+    let ui_of = crate::notation_ui::of(shell.notation_uis, store, obj);
+    let inside = ui_of.and_then(|u| u.inside(store, obj));
+    let mac = ui.ctx().os() == egui::os::OperatingSystem::Mac;
+    let mut rows: Vec<(MenuRow, ContextAct)> = Vec::new();
+    if let Some(inside) = &inside {
+        rows.push((
+            MenuRow {
+                id: "workspace.explorer.contextMenu.newInside".into(),
+                label: inside.word.clone(),
+                detail: "▸".into(),
+                live: inside.why_not.is_none(),
+                why: inside.why_not.clone(),
+                icon: None,
+            },
+            ContextAct::Inside,
+        ));
+    }
+    let skill = store.class_of(obj).ok() == Some(archforge_core::SKILL);
+    let label = name_of(store, obj);
+    let shown = !skill && crate::editing::diagrams_showing(store, ui_of.and_then(|u| u.shown(store, obj)).unwrap_or(obj)) > 0;
+    rows.push((
+        MenuRow {
+            id: "workspace.explorer.contextMenu.rename".into(),
+            label: tr("Rename"),
+            detail: "F2".into(),
+            live: renames(shell, obj),
+            why: None,
+            icon: None,
+        },
+        ContextAct::Rename,
+    ));
+    rows.push((
+        MenuRow {
+            id: "workspace.explorer.contextMenu.show".into(),
+            label: tr("Show in diagram"),
+            detail: String::new(),
+            live: shown,
+            why: (!shown).then(|| tr("No diagram shows it yet")),
+            icon: None,
+        },
+        ContextAct::Show,
+    ));
+    let separator = rows.len();
+    rows.push((
+        MenuRow {
+            id: "workspace.explorer.contextMenu.delete".into(),
+            label: tr("Delete from model"),
+            detail: (if mac { "⌘⌫" } else { "Del" }).into(),
+            live: !skill,
+            why: skill.then(|| tr("A skill is removed from its tab")),
+            icon: None,
+        },
+        ContextAct::Delete,
+    ));
+    let window = ui.ctx().content_rect();
+    let height = 8.0 + rows.len() as f32 * CONTEXT_ROW + 9.0;
+    let x = menu.at.x.min(window.right() - CONTEXT_WIDTH - 8.0).max(window.left() + 8.0);
+    let y = menu.at.y.min(window.bottom() - height - 8.0).max(window.top() + 8.0);
+    let m = Rect::from_min_size(pos2(x, y), vec2(CONTEXT_WIDTH, height));
+    // The submenu beside it, at its first row, on the side with room.
+    let sub_rows: Vec<MenuRow> = inside
+        .as_ref()
+        .map(|inside| {
+            let kinds = inside.kinds.iter().map(|(key, word, icon)| MenuRow {
+                id: format!("workspace.explorer.contextMenu.newInside.{key}"),
+                label: word.clone(),
+                detail: String::new(),
+                live: true,
+                why: None,
+                icon: Some(*icon),
+            });
+            let refused = inside.refused.iter().map(|(key, word, why)| MenuRow {
+                id: format!("workspace.explorer.contextMenu.newInside.{key}"),
+                label: word.clone(),
+                detail: why.clone(),
+                live: false,
+                why: Some(why.clone()),
+                icon: None,
+            });
+            kinds.chain(refused).collect()
+        })
+        .unwrap_or_default();
+    let kinds_n = inside.as_ref().map_or(0, |i| i.kinds.len());
+    let sub_height = 8.0 + 26.0 + sub_rows.len() as f32 * CONTEXT_ROW + 9.0;
+    let sub_x = if m.right() + 4.0 + CONTEXT_WIDTH <= window.right() - 8.0 {
+        m.right() + 4.0
+    } else {
+        (m.left() - 4.0 - CONTEXT_WIDTH).max(window.left() + 8.0)
+    };
+    let sub_y = m.top().min(window.bottom() - sub_height - 8.0).max(window.top() + 8.0);
+    let sub = Rect::from_min_size(pos2(sub_x, sub_y), vec2(CONTEXT_WIDTH, sub_height));
+    // The keys: the arrows walk the live rows, → and ← open and close the submenu.
+    let live: Vec<usize> = rows.iter().enumerate().filter(|(_, (r, _))| r.live).map(|(i, _)| i).collect();
+    let (down, up, right, left, enter, escape) = ui.input_mut(|i| {
+        (
+            i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown),
+            i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowUp),
+            i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowRight),
+            i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowLeft),
+            i.consume_key(egui::Modifiers::NONE, egui::Key::Enter),
+            i.consume_key(egui::Modifiers::NONE, egui::Key::Escape),
+        )
+    });
+    let mut state = menu.clone();
+    let step = |at: Option<usize>, n: usize, down: bool| -> Option<usize> {
+        if n == 0 {
+            return None;
+        }
+        Some(match at {
+            None => 0,
+            Some(i) if down => (i + 1).min(n - 1),
+            Some(i) => i.saturating_sub(1),
+        })
+    };
+    if state.sub {
+        if down || up {
+            state.sub_reached = step(state.sub_reached, kinds_n, down);
+        }
+        if left || escape {
+            state.sub = false;
+            state.sub_reached = None;
+        }
+    } else {
+        if down || up {
+            let at = state.reached.and_then(|r| live.iter().position(|l| *l == r));
+            state.reached = step(at, live.len(), down).and_then(|i| live.get(i).copied());
+        }
+        let on_inside = state.reached.and_then(|i| rows.get(i)).is_some_and(|(_, a)| *a == ContextAct::Inside);
+        if on_inside && (right || enter) {
+            state.sub = true;
+            state.sub_reached = Some(0);
+        }
+        if escape {
+            shell.explorer.context = None;
+            return;
+        }
+    }
+    let p2 = *p;
+    let main_rows: Vec<MenuRow> = rows
+        .iter()
+        .map(|(r, _)| MenuRow { id: r.id.clone(), label: r.label.clone(), detail: r.detail.clone(), live: r.live, why: r.why.clone(), icon: r.icon })
+        .collect();
+    let (clicked, hovered) = ux::overlay(ui, widgets::egui_id("workspace.explorer.contextMenu.layer"), m, |ui| {
+        let paint = ui.painter().clone();
+        ux::shadow(&paint, m, 8.0, p2.shadow);
+        paint.rect_filled(m, 8.0, p2.surface);
+        paint.rect_stroke(m, 8.0, Stroke::new(1.0, p2.border), StrokeKind::Inside);
+        let danger = main_rows.len().checked_sub(1);
+        menu_rows(shell, ui, &p2, m, m.top() + 4.0, &main_rows, Some(separator), state.reached, danger)
+    });
+    // Hovering New inside ▸ opens the submenu, as a click does.
+    if let Some(i) = hovered.or(clicked) {
+        state.reached = rows.get(i).filter(|(r, _)| r.live).map(|_| i);
+        let over_inside = rows.get(i).is_some_and(|(r, a)| *a == ContextAct::Inside && r.live);
+        if over_inside {
+            state.sub = true;
+        } else if hovered.is_some() {
+            state.sub = false;
+        }
+    }
+    let mut sub_clicked = None;
+    let mut area = m;
+    if state.sub && !sub_rows.is_empty() {
+        let heading = inside.as_ref().map(|i| crate::canvas::eyebrow_case(&i.heading)).unwrap_or_default();
+        let sub_reached = state.sub_reached;
+        let (c, _) = ux::overlay(ui, widgets::egui_id("workspace.explorer.contextMenu.sub.layer"), sub, |ui| {
+            let paint = ui.painter().clone();
+            ux::shadow(&paint, sub, 8.0, p2.shadow);
+            paint.rect_filled(sub, 8.0, p2.surface);
+            paint.rect_stroke(sub, 8.0, Stroke::new(1.0, p2.border), StrokeKind::Inside);
+            ux::text(&paint, pos2(sub.left() + 12.0, sub.top() + 12.0), &heading, types::EYEBROW, p2.text_muted, Some(CONTEXT_WIDTH - 24.0));
+            menu_rows(shell, ui, &p2, sub, sub.top() + 4.0 + 26.0, &sub_rows, Some(kinds_n), sub_reached, None)
+        });
+        sub_clicked = c;
+        if enter && state.sub_reached.is_some() && menu.sub {
+            sub_clicked = state.sub_reached;
+        }
+        area = area.union(sub);
+    }
+    let picked = clicked
+        .and_then(|i| rows.get(i))
+        .map(|(_, a)| *a)
+        .or_else(|| (enter && !state.sub && !menu.sub).then(|| state.reached.and_then(|i| rows.get(i)).map(|(_, a)| *a)).flatten());
+    let outside = ui.input(|i| i.pointer.any_pressed() && !i.pointer.interact_pos().is_some_and(|pos| area.contains(pos)));
+    shell.explorer.context = (!outside).then_some(state);
+    if let Some(k) = sub_clicked.and_then(|i| inside.as_ref()?.kinds.get(i)).map(|(key, _, _)| *key) {
+        shell.explorer.context = None;
+        if let Some(Err(e)) = ui_of.and_then(|u| u.add_inside(shell, k, obj)) {
+            shell.explorer.notice = Some(e);
+        }
+        return;
+    }
+    match picked {
+        Some(ContextAct::Rename) => {
+            shell.explorer.context = None;
+            shell.explorer.rename = Some(Rename::new(menu.target, label, false));
+        }
+        Some(ContextAct::Show) => {
+            shell.explorer.context = None;
+            crate::project_search::go(shell, crate::project_search::Found::Element(menu.target));
+        }
+        Some(ContextAct::Delete) => {
+            shell.explorer.context = None;
+            select(shell, Some(menu.target));
+            remove_selection(shell);
+        }
+        Some(ContextAct::Inside) | None => {}
+    }
+}
+
 /// The `+` menu under its button: what can be added at the selection, Folder shown but not yet
 /// live.
 fn add_menu(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, anchor: Rect) {
@@ -910,6 +1274,14 @@ fn delete_dialog_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: 
     }
     if d.foreign_keys > 0 {
         lines.push(trn("{n} foreign key goes with it.", "{n} foreign keys go with it.", d.foreign_keys as u64));
+    }
+    // What goes with it by name: a classifier's nested classifiers (AR-132).
+    if !d.along.is_empty() {
+        let n = u64::try_from(d.along.len()).unwrap_or(u64::MAX);
+        lines.push(fmt(
+            &trn("{n} nested classifier goes with it: {names}.", "{n} nested classifiers go with it: {names}.", n),
+            &[("names", &d.along.join(", "))],
+        ));
     }
     lines.push(tr("What it holds goes with it."));
     let size = vec2(440.0_f32.min(window.width() - 32.0), 110.0 + lines.len() as f32 * 20.0);

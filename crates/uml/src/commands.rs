@@ -258,11 +258,15 @@ pub(crate) fn what(store: &Store, o: Obj) -> &'static str {
         Some(c) if c == PACKAGE => "package",
         Some(c) if c == crate::ENUMERATION_LITERAL => "literal",
         Some(c) if c == crate::GENERALIZATION_SET => "generalization set",
+        Some(c) if c == crate::PROPERTY => "attribute",
+        Some(c) if c == crate::OPERATION => "operation",
+        Some(c) if c == crate::CONSTRAINT => "constraint",
         _ => "element",
     }
 }
 
-/// The package an element (a class, or a nested package) sits in.
+/// The package an element (a class, or a nested package) sits in directly; a classifier nested in
+/// another has none of its own (`nesting::home_package` gives its owner's).
 pub fn package_of(store: &Store, class: Obj) -> Option<Obj> {
     store.container(class).ok().flatten().map(|(c, _)| c).filter(|c| store.class_of(*c).ok() == Some(PACKAGE))
 }
@@ -471,7 +475,8 @@ fn classifier_rename(ctx: &mut C<'_>, p: &Params, kind: ClassId, key: &str, what
     if let Some(why) = package_of(ctx.doc, c).and_then(|pkg| crate::members::reserved_problem(ctx.doc, pkg, name)) {
         return Err(refuse("name", why));
     }
-    let siblings = package_of(ctx.doc, c).map(|pkg| classifiers(ctx.doc, pkg)).unwrap_or_default();
+    // A nested classifier's name is told apart from its owner's other nested ones (AR-132).
+    let siblings = crate::nesting::siblings(ctx.doc, c);
     check_name(ctx.doc, name, &siblings, Some(c))?;
     set_name(ctx.doc, c, name)?;
     Ok(json!({ "id": uuid_of(ctx.doc, c)? }))
@@ -652,9 +657,14 @@ fn held(store: &Store, pkg: Obj) -> Vec<Obj> {
     store.list(pkg, package::PACKAGED_ELEMENT).unwrap_or_default().iter().filter_map(Value::as_ref).filter(|o| store.is_alive(*o)).collect()
 }
 
-/// Every classifier inside a package, at any depth.
+/// Every classifier inside a package, at any depth, those nested in its classifiers among them
+/// (AR-132).
 pub(crate) fn classifiers_within(store: &Store, pkg: Obj) -> Vec<Obj> {
-    let mut out = classifiers(store, pkg);
+    let mut out = Vec::new();
+    for c in classifiers(store, pkg) {
+        out.push(c);
+        out.extend(crate::nesting::nested_within(store, c));
+    }
     for sub in subpackages(store, pkg) {
         out.extend(classifiers_within(store, sub));
     }
@@ -746,6 +756,20 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
             return Err(refuse("ids", format!("its contents cannot move up: {why}")));
         }
     }
+    // A classifier's nested classifiers go with it (AR-132), named among what goes so their
+    // relationships, constraints and sets are worked out as theirs.
+    let mut objs: Vec<Obj> = objs.to_vec();
+    let nested: Vec<Obj> = objs
+        .iter()
+        .filter(|o| store.is_alive(**o) && store.class_of(**o).is_ok_and(crate::is_classifier))
+        .flat_map(|o| crate::nesting::nested_within(store, *o))
+        .collect();
+    for n in nested {
+        if !objs.contains(&n) {
+            objs.push(n);
+        }
+    }
+    let objs = objs.as_slice();
     // A constraint left constraining nothing goes with what it constrained (AR-133), worked out
     // before anything moves; the others lose the elements that go as the core destroys them.
     let orphans = crate::constraints::orphans(&crate::constraints::dropped_by(store, objs));
@@ -806,14 +830,19 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
     Ok(gone)
 }
 
-/// The relationships that go when `classes` go: those that touch any of them, and, since an
-/// association class is a classifier too, those that touch an association class going with them,
-/// and so on, each once. A seen-set bounds the walk.
+/// The relationships that go when `classes` go: those that touch any of them or a classifier
+/// nested in one (AR-132), and, since an association class is a classifier too, those that touch
+/// an association class going with them, and so on, each once. A seen-set bounds the walk.
 pub fn going_with(store: &Store, classes: &[Obj]) -> Vec<Obj> {
     let mut seen: std::collections::BTreeSet<Obj> = classes.iter().copied().collect();
     let mut queue: Vec<Obj> = classes.to_vec();
     let mut out = Vec::new();
     while let Some(c) = queue.pop() {
+        for n in crate::nesting::nested(store, c) {
+            if seen.insert(n) {
+                queue.push(n);
+            }
+        }
         for r in crate::relations::relationships_of(store, c) {
             if seen.insert(r) {
                 out.push(r);

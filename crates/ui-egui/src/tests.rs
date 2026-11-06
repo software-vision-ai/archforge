@@ -6598,12 +6598,12 @@ fn a_package_select_cuts_a_long_path_from_its_front_so_the_package_name_shows() 
             let root = archforge_core::name_of(st, archforge_uml::commands::root_package(st).unwrap());
             format!("{root} › Fulfilment › Orders")
         };
-        let field = rect_of(&h, "workspace.properties.class.package");
+        let field = rect_of(&h, "workspace.properties.class.owner");
         let shown: Vec<String> = text_boxes(&h).into_iter().filter(|(_, r)| field.contains(r.center())).map(|(t, _)| t).collect();
         assert_eq!(shown, ["… › Orders"], "{theme:?}: the package's own name, its path's front folded");
         {
             use egui_kittest::kittest::Queryable;
-            assert!(h.query_by_label(&format!("Package: {path}")).is_some(), "the whole path is its accessible name");
+            assert!(h.query_by_label(&format!("Owner: {path}")).is_some(), "the whole path is its accessible name");
         }
         // Hovered long enough, its tooltip says the whole path.
         h.event(egui::Event::PointerMoved(field.center()));
@@ -6675,16 +6675,16 @@ fn a_package_path_names_every_ancestor_and_a_cycle_ends() {
     h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [class] })).unwrap();
     h.state_mut().state.show_panel(crate::state::Panel::Properties);
     h.run();
-    let field = rect_of(&h, "workspace.properties.class.package");
+    let field = rect_of(&h, "workspace.properties.class.owner");
     let shown: Vec<String> = text_boxes(&h).into_iter().filter(|(_, r)| field.contains(r.center())).map(|(t, _)| t).collect();
     let [shown] = shown.as_slice() else { panic!("one text in the field: {shown:?}") };
     assert!(shown.ends_with("Package 40") && !shown.starts_with(root.as_str()), "the field keeps the package's own name: {shown:?}");
     click(&mut h, field.center());
-    assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::ClassPackage));
+    assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::ClassOwner));
     for _ in 0..=row_of {
         key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
     }
-    let row = rect_of(&h, &format!("workspace.properties.class.package.{row_of}"));
+    let row = rect_of(&h, &format!("workspace.properties.class.owner.{row_of}"));
     // The row's text, over what the window shows under the menu.
     let drawn: Vec<String> = text_boxes(&h).into_iter().filter(|(t, r)| row.contains(r.center()) && t.contains("Package")).map(|(t, _)| t).collect();
     let [drawn] = drawn.as_slice() else { panic!("one path in the row: {drawn:?}") };
@@ -9805,7 +9805,7 @@ fn an_enumeration_in_properties_shows_its_literals_and_is_offered_as_a_type() {
             assert!(texts.iter().any(|t| t == want), "{want} in {texts:?}");
         }
         let found = ids(&h);
-        assert!(found.iter().any(|i| i == "workspace.properties.class.package"), "its package");
+        assert!(found.iter().any(|i| i == "workspace.properties.class.owner"), "its package");
         for none in ["workspace.properties.class.abstract", "workspace.properties.attributes.add", "workspace.properties.operations.add"] {
             assert!(!found.iter().any(|i| i == none), "{none} for an enumeration");
         }
@@ -10285,7 +10285,7 @@ fn a_data_type_in_properties_takes_attributes_and_operations_and_is_offered_as_a
         for id in [
             "workspace.properties.name",
             "workspace.properties.description",
-            "workspace.properties.class.package",
+            "workspace.properties.class.owner",
             "workspace.properties.attributes.add",
             "workspace.properties.operations.add",
         ] {
@@ -10707,7 +10707,7 @@ fn primitive_types_are_listed_added_with_the_plus_found_and_dragged_while_the_bu
             assert!(texts.iter().any(|t| t == want), "{want} in {texts:?}");
         }
         let found = ids(&h);
-        for id in ["workspace.properties.name", "workspace.properties.description", "workspace.properties.class.package"] {
+        for id in ["workspace.properties.name", "workspace.properties.description", "workspace.properties.class.owner"] {
             assert!(found.iter().any(|i| i == id), "{id} in {found:?}");
         }
         for none in [
@@ -12392,13 +12392,13 @@ fn the_models_tree_nests_packages_lists_members_and_moves_a_class_by_drag_or_pro
     let order = select_named(&mut h, archforge_uml::CLASS, "Order");
     h.state_mut().state.show_panel(crate::state::Panel::Properties);
     h.run();
-    let at = rect_of(&h, "workspace.properties.class.package").center();
+    let at = rect_of(&h, "workspace.properties.class.owner").center();
     click(&mut h, at);
     let i = {
         let st = h.state().session.as_ref().unwrap().doc();
         archforge_uml::commands::all_packages(st).iter().position(|p| *p == billing).unwrap()
     };
-    let at = rect_of(&h, &format!("workspace.properties.class.package.{i}")).center();
+    let at = rect_of(&h, &format!("workspace.properties.class.owner.{i}")).center();
     click(&mut h, at);
     assert_eq!(package_of(&h, order).as_deref(), Some("Billing"));
     // On the Commerce diagram Order is now an outsider, its package named.
@@ -14145,4 +14145,250 @@ fn a_duplicate_qualifier_name_is_refused_in_place_and_nothing_is_written() {
         click(&mut h, at);
         assert_eq!(qualifier_rows(&h, &a)[0], ["lineNo : Integer", "kind : String"]);
     }
+}
+
+/// Nested classifiers (AR-132, design page 08, D1 to D4), in light and dark: a right click on
+/// Order's row in Models opens its menu, New inside Order ▸ offers the kinds and Package disabled,
+/// a pick makes one nested classifier in one undo step, named in place, `nested` after its row;
+/// ⇧F10 opens the menu from the keys and Escape closes it; an enumeration's New inside is disabled
+/// with the reason. Its Properties name its owner and the Owner menu lists the owners, the current
+/// one ticked, itself and a class with a member of its name disabled with the reason; a pick moves
+/// it in one step, kept by id. On a diagram without Order its card reads `Order::Enumeration 1`.
+/// Deleting Order asks first, naming the nested classifier, and takes it along in one step.
+#[test]
+fn nested_classifiers_are_made_from_models_owned_in_properties_and_named_on_the_canvas() {
+    use egui_kittest::kittest::Queryable;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        let order = select_named(&mut h, archforge_uml::CLASS, "Order");
+        // D1: the menu on Order's row.
+        let row = rect_of(&h, &format!("workspace.explorer.row.{order}"));
+        right_click(&mut h, row.center());
+        assert!(h.state().explorer.context.is_some(), "{theme:?}: the menu opened");
+        for id in [
+            "workspace.explorer.contextMenu.newInside",
+            "workspace.explorer.contextMenu.rename",
+            "workspace.explorer.contextMenu.show",
+            "workspace.explorer.contextMenu.delete",
+        ] {
+            assert!(ids(&h).iter().any(|i| i == id), "{theme:?}: {id}");
+        }
+        assert!(painted(&h).iter().any(|t| t == "New inside Order"));
+        let at = rect_of(&h, "workspace.explorer.contextMenu.newInside").center();
+        click(&mut h, at);
+        assert!(painted(&h).iter().any(|t| t == "NEW INSIDE ORDER"), "{:?}", painted(&h));
+        for kind in ["class", "interface", "enumeration", "data-type", "package"] {
+            assert!(ids(&h).iter().any(|i| *i == format!("workspace.explorer.contextMenu.newInside.{kind}")), "{kind}");
+        }
+        assert!(painted(&h).iter().any(|t| t == "not inside a class"), "Package disabled with its reason");
+        let at = rect_of(&h, "workspace.explorer.contextMenu.newInside.enumeration").center();
+        click(&mut h, at);
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add nested classifier"));
+        let made = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let o = st.by_uuid(order).unwrap();
+            let nested = archforge_uml::nesting::nested(st, o);
+            assert_eq!(nested.len(), 1, "{theme:?}: one nested classifier");
+            assert_eq!(st.class_of(nested[0]).ok(), Some(archforge_uml::ENUMERATION));
+            st.uuid(nested[0]).unwrap()
+        };
+        let rename = h.state().explorer.rename.clone().expect("named in place");
+        assert_eq!((rename.target, rename.text.as_str()), (made, "Enumeration 1"));
+        h.state_mut().explorer.rename = None;
+        h.run();
+        assert!(painted(&h).iter().any(|t| t == "nested"), "{theme:?}: `nested` after its row");
+        // Order's Properties list it under Nested classifiers, whose + offers the same kinds.
+        select_named(&mut h, archforge_uml::CLASS, "Order");
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        h.run();
+        assert!(painted(&h).iter().any(|t| t == "Nested classifiers · 1"), "{theme:?}: {:?}", painted(&h));
+        assert!(ids(&h).contains(&format!("{}.{made}", crate::uml_nesting::NESTED_ROW_ID)));
+        let at = rect_of(&h, crate::uml_nesting::NESTED_ADD_ID).center();
+        click(&mut h, at);
+        let at = rect_of(&h, &format!("{}.1", crate::uml_nesting::NESTED_ADD_ID)).center();
+        click(&mut h, at);
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add nested classifier"));
+        assert_eq!(h.state().explorer.rename.as_ref().map(|r| r.text.as_str()), Some("Interface 1"), "named in place in Models");
+        h.state_mut().explorer.rename = None;
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        select_named(&mut h, archforge_uml::CLASS, "Order");
+        // ⇧F10 opens the menu on the selected row; Escape closes it.
+        select_named(&mut h, archforge_uml::CLASS, "Order");
+        h.state_mut().explorer.focused = true;
+        key(&mut h, egui::Key::F10, egui::Modifiers::SHIFT);
+        assert!(h.state().explorer.context.is_some(), "the keys open the menu");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert!(h.state().explorer.context.is_none(), "Escape closes it");
+        // An enumeration owns none: New inside is listed, disabled, the reason its description.
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [made.to_string()] })).unwrap();
+        h.run();
+        let row = rect_of(&h, &format!("workspace.explorer.row.{made}"));
+        right_click(&mut h, row.center());
+        assert!(painted(&h).iter().any(|t| t == "New inside Enumeration 1"));
+        let before = (h.state().session.as_ref().unwrap().revision(), h.state().session.as_ref().unwrap().doc().alive().count());
+        let at = rect_of(&h, "workspace.explorer.contextMenu.newInside").center();
+        click(&mut h, at);
+        // Disabled, it makes nothing and opens no name.
+        let st = h.state().session.as_ref().unwrap().doc();
+        assert_eq!((h.state().session.as_ref().unwrap().revision(), st.alive().count()), before, "{theme:?}: the model unchanged");
+        assert!(archforge_uml::nesting::nested(st, st.by_uuid(made).unwrap()).is_empty(), "nothing nested in the enumeration");
+        assert!(h.state().explorer.rename.is_none(), "no name opened for typing");
+        h.state_mut().explorer.context = None;
+        // D2: its Properties name its owner.
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        h.run();
+        assert!(painted(&h).iter().any(|t| t.starts_with("Enumeration · nested in Order")), "{:?}", painted(&h));
+        assert!(h.query_by_label("Owner: Order").is_some(), "the Owner select's accessible name");
+        // D3: the Owner menu, itself and a clash disabled with the reason; a pick moves it.
+        let customer = select_named(&mut h, archforge_uml::CLASS, "Customer");
+        h.state_mut()
+            .session
+            .as_mut()
+            .unwrap()
+            .execute("uml.nested.add", &serde_json::json!({ "owner": customer.to_string(), "kind": "class", "name": "Enumeration 1" }))
+            .unwrap();
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [made.to_string()] })).unwrap();
+        h.run();
+        let field = rect_of(&h, crate::uml_nesting::OWNER_ID);
+        click(&mut h, field.center());
+        assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::ClassOwner));
+        assert!(painted(&h).iter().any(|t| t == "OWNER"));
+        assert!(painted(&h).iter().any(|t| t == "itself"), "{theme:?}: {:?}", painted(&h));
+        assert!(painted(&h).iter().any(|t| t == "class Enumeration 1 already holds that name"), "Customer owns one of its name");
+        let rows = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            crate::uml_nesting::owner_rows(st, st.by_uuid(made).unwrap())
+        };
+        assert!(rows.iter().any(|r| r.current && r.parts == ["Order"]), "Order ticked");
+        let to = rows.iter().position(|r| r.parts == ["Product"] && r.why.is_none()).expect("Product may own it");
+        let at = rect_of(&h, &format!("{}.{to}", crate::uml_nesting::OWNER_ID)).center();
+        click(&mut h, at);
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Change owner"));
+        let owner_name = |h: &Harness<'static, Shell>| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            archforge_uml::nesting::owner_of(st, st.by_uuid(made).unwrap()).map(|o| archforge_core::name_of(st, o))
+        };
+        assert_eq!(owner_name(&h).as_deref(), Some("Product"), "the same id, under Product");
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        assert_eq!(owner_name(&h).as_deref(), Some("Order"));
+        // D4: placed on a diagram without Order, its card names its owner.
+        let root = h.state_mut().session.as_mut().unwrap().execute("uml.package.add", &serde_json::json!({ "name": "Elsewhere" })).unwrap();
+        let root = root.value["id"].as_str().unwrap().to_string();
+        let other = h
+            .state_mut()
+            .session
+            .as_mut()
+            .unwrap()
+            .execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::CLASS_DIAGRAM, "name": "Alone", "element": root }))
+            .unwrap();
+        let other = archforge_mof::Uuid::parse(other.value["id"].as_str().unwrap()).unwrap();
+        crate::canvas::open(h.state_mut(), other);
+        h.run();
+        // Dropped there from Models, as a row dragged onto the canvas is.
+        let d = h.state().session.as_ref().unwrap().doc().by_uuid(other).unwrap();
+        crate::kinds::DiagramKind::drop(&crate::uml_ui::UmlKind, h.state_mut(), d, made, (200.0, 200.0));
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Place enumeration"), "notice {:?}", h.state().canvas.notice);
+        h.run();
+        assert!(painted(&h).iter().any(|t| t == "Order::Enumeration 1"), "{theme:?}: the qualified name, {:?}", painted(&h));
+        // Deleting Order asks first and names it; the confirmation takes both in one step.
+        select_named(&mut h, archforge_uml::CLASS, "Order");
+        crate::explorer::remove_selection(h.state_mut());
+        h.run();
+        let asked = h.state().explorer.delete.clone().expect("a dialog");
+        assert_eq!(asked.along, ["Order::Enumeration 1"]);
+        assert!(painted(&h).iter().any(|t| t == "1 nested classifier goes with it: Order::Enumeration 1."), "{:?}", painted(&h));
+        let at = rect_of(&h, "workspace.explorer.delete.confirm").center();
+        click(&mut h, at);
+        let gone = |h: &Harness<'static, Shell>| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            st.by_uuid(made).is_none_or(|o| !st.is_alive(o))
+        };
+        assert!(gone(&h), "the nested classifier went with Order");
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        assert!(!gone(&h), "one step brings both back");
+    }
+}
+
+/// The line that ties a nested card to its owner's (AR-132): straight where the cards face each
+/// other, its ⊕ just outside the owner's side; an elbow where they are apart both ways, the one
+/// crossing fewer other cards; none where the cards overlap, which is no ownership (D4).
+#[test]
+fn the_nesting_line_runs_from_the_owners_side_and_none_joins_overlapping_cards() {
+    use crate::canvas::nesting_route;
+    use egui::{Rect, pos2};
+    let owner = Rect::from_min_size(pos2(0.0, 0.0), egui::vec2(200.0, 100.0));
+    let below = Rect::from_min_size(pos2(50.0, 200.0), egui::vec2(200.0, 80.0));
+    let (points, centre) = nesting_route(owner, below, 7.0, &[]).unwrap();
+    assert_eq!(centre, pos2(125.0, 107.0), "the ⊕ under the owner's foot, in the overlap's middle");
+    assert_eq!(points, [pos2(125.0, 114.0), pos2(125.0, 200.0)]);
+    let right = Rect::from_min_size(pos2(400.0, 20.0), egui::vec2(100.0, 60.0));
+    let (points, centre) = nesting_route(owner, right, 7.0, &[]).unwrap();
+    assert_eq!((centre, points.len()), (pos2(207.0, 50.0), 2), "straight across from the owner's right side");
+    let apart = Rect::from_min_size(pos2(400.0, 300.0), egui::vec2(100.0, 60.0));
+    let (points, _) = nesting_route(owner, apart, 7.0, &[]).unwrap();
+    assert_eq!(points.len(), 3, "one bend");
+    // A card in the way of the first elbow sends the line the other way.
+    let blocker = Rect::from_min_size(pos2(300.0, 20.0), egui::vec2(60.0, 60.0));
+    let (points, centre) = nesting_route(owner, apart, 7.0, &[blocker]).unwrap();
+    assert_eq!(centre, pos2(100.0, 107.0), "out of the owner's foot instead");
+    assert_eq!(points.last().copied(), Some(pos2(400.0, 330.0)));
+    let over = Rect::from_min_size(pos2(150.0, 60.0), egui::vec2(100.0, 80.0));
+    assert!(nesting_route(owner, over, 7.0, &[]).is_none(), "overlapping cards draw no line");
+}
+
+/// The nested sample of the snapshot screen (D2), in light and dark: Priority nested in Order, its
+/// card above Order's on the open diagram reading its own name, the ⊕ line's route between the two
+/// cards, Models listing it under Order with `nested`, and its Properties naming Order as its owner.
+#[test]
+fn the_nested_sample_shows_its_owner_in_models_properties_and_on_the_canvas() {
+    use egui_kittest::kittest::Queryable;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        let (priority, order) = crate::uml_ui::put_nested_priority(h.state_mut()).unwrap();
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [priority] })).unwrap();
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        h.run();
+        let card = |h: &Harness<'static, Shell>, id: &str| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let o = st.by_uuid(archforge_mof::Uuid::parse(id).unwrap()).unwrap();
+            let n = archforge_diagram::views_of(st, o).2[0];
+            rect_of(h, &format!("workspace.canvas.node.{}", st.uuid(n).unwrap()))
+        };
+        let (p, o) = (card(&h, &priority), card(&h, &order));
+        assert!(crate::canvas::nesting_route(o, p, 7.0, &[]).is_some(), "{theme:?}: a line ties them");
+        assert!(painted(&h).iter().any(|t| t == "Priority"), "its own name with Order shown");
+        assert!(!painted(&h).iter().any(|t| t == "Order::Priority"));
+        assert!(painted(&h).iter().any(|t| t == "nested"));
+        assert!(h.query_by_label("Owner: Order").is_some());
+        assert!(painted(&h).iter().any(|t| t.starts_with("Owner is a package or a classifier.")));
+        assert!(!h.state().session.as_ref().unwrap().is_dirty(), "the sample is marked saved");
+    }
+}
+
+/// A nested classifier dropped in Models (AR-132): onto its owner's row, or onto another classifier
+/// of its own package, it stays where it is; onto its package's row it moves out into the package;
+/// onto a classifier of another package it moves into that package.
+#[test]
+fn a_nested_classifier_dropped_within_its_package_stays_and_onto_a_package_row_moves() {
+    use crate::notation_ui::NotationUi;
+    let (mut h, _) = related_sample_in(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
+    let (priority, order) = crate::uml_ui::put_nested_priority(h.state_mut()).unwrap();
+    let other = h.state_mut().session.as_mut().unwrap().execute("uml.package.add", &serde_json::json!({ "name": "Billing" })).unwrap();
+    let other = other.value["id"].as_str().unwrap().to_string();
+    let invoice =
+        h.state_mut().session.as_mut().unwrap().execute("uml.class.add", &serde_json::json!({ "package": other, "name": "Invoice" })).unwrap();
+    let invoice = invoice.value["id"].as_str().unwrap().to_string();
+    let st = h.state().session.as_ref().unwrap().doc();
+    let obj = |id: &str| st.by_uuid(archforge_mof::Uuid::parse(id).unwrap()).unwrap();
+    let (p, o) = (obj(&priority), obj(&order));
+    let customer = st.alive().find(|c| st.class_of(*c).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(st, *c) == "Customer").unwrap();
+    let ui = crate::uml_ui::UmlUi;
+    assert_eq!(ui.drop_on(st, p, o), None, "onto its owner's row it stays");
+    assert_eq!(ui.drop_on(st, p, customer), None, "onto a classifier of its own package it stays");
+    let home = archforge_uml::nesting::home_package(st, p).unwrap();
+    let (cmd, params) = ui.drop_on(st, p, home).expect("onto its package's row it moves out");
+    assert_eq!((cmd, params["package"].as_str()), ("uml.enumeration.move", Some(st.uuid(home).unwrap().to_string().as_str())));
+    let (cmd, params) = ui.drop_on(st, p, obj(&invoice)).expect("onto a classifier of another package it moves there");
+    assert_eq!((cmd, params["package"].as_str()), ("uml.enumeration.move", Some(other.as_str())));
+    assert_eq!(ui.drop_on(st, customer, o), None, "a package member onto another of its package stays, as before");
 }
