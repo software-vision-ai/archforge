@@ -178,9 +178,11 @@ pub enum Start {
     /// A conversation whose folder holds no copy (opened on another computer, or the folder was
     /// lost or its copy damaged): the new thread is primed with these messages instead, built from
     /// the project's own record of the conversation (AR-206). These messages are used even when
-    /// the folder does hold a copy, and the folder's copy is replaced by them (and the first
-    /// turn) at the end of that turn, so check [`history::exists`] first and choose
-    /// [`Start::Resume`] when it does.
+    /// the folder does hold a readable copy, and the folder's copy is replaced by them (and the
+    /// first turn) at the end of that turn, so check [`history::exists`] first and choose
+    /// [`Start::Resume`] when it does. A copy that cannot be read is set aside first; while it
+    /// cannot be (see [`History::read`]), this start, like [`Start::New`], is refused with that
+    /// error, so a damaged copy is never overwritten.
     ResumeFrom(History),
 }
 
@@ -342,6 +344,24 @@ fn refused(method: &str, error: &RpcError, kind: ErrorKind) -> AgentError {
         AgentError::reported(ErrorKind::MissingRuntime, &format!("codex does not know {method}, which Archforge needs; update it"))
     } else {
         AgentError::reported(kind, &format!("codex refused {method}: {}", error.message))
+    }
+}
+
+/// Refuses a start that would write the copy (`New`, `ResumeFrom`) while the folder holds a copy
+/// that cannot be read and could not be set aside (the rename failed, the system refused the read,
+/// or 64 damaged copies are already set aside): its first turn's write would replace it. A
+/// readable copy, or one that was set aside, lets the start go on.
+fn keep_unreadable_copy(folder: &ConversationFolder) -> Result<(), AgentError> {
+    if !history::exists(folder) {
+        return Ok(());
+    }
+    match History::read(folder) {
+        Ok(_) => Ok(()),
+        Err(error) if history::exists(folder) => Err(error),
+        Err(error) => {
+            log::warn!("a Codex conversation copy that could not be read was set aside before a new copy began: {error}");
+            Ok(())
+        }
     }
 }
 
@@ -514,9 +534,15 @@ impl CodexSession {
             return Err(setting("developer instructions", text, &format!("instructions are at most {MAX_INSTRUCTIONS_BYTES} bytes")));
         }
         let history = match &config.start {
-            Start::New => History::default(),
+            Start::New => {
+                keep_unreadable_copy(folder)?;
+                History::default()
+            }
             Start::Resume => History::read(folder)?,
-            Start::ResumeFrom(history) => history.clone(),
+            Start::ResumeFrom(history) => {
+                keep_unreadable_copy(folder)?;
+                history.clone()
+            }
         };
         let state = StateFolders::of(folder);
         let kind = sign_in.kind();

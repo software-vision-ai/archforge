@@ -1402,6 +1402,30 @@ fn settings_are_refused_before_anything_starts() {
     assert!(!history::path(&folder).exists(), "the damaged copy was moved");
     let aside = folder.path().join("codex-history.json.damaged-1");
     assert_eq!(std::fs::read_to_string(&aside).unwrap(), "{\"version\":9}", "and kept, so no later write replaces it");
+    // While a damaged copy cannot be set aside (every name taken), no start that would write the
+    // copy goes on, so it is never replaced; once it can be, they do.
+    std::fs::write(history::path(&folder), "damaged").unwrap();
+    for n in 2..=64 {
+        std::fs::write(folder.path().join(format!("codex-history.json.damaged-{n}")), "older").unwrap();
+    }
+    for start in [Start::New, Start::ResumeFrom(History::default()), Start::Resume] {
+        let error = CodexSession::start(&runtime, &account, &folder, CodexConfig { start: start.clone(), ..config(false) }, SignIn::ApiKey(canary()))
+            .unwrap_err();
+        assert!(matches!(&error, AgentError::Folder { problem, .. } if problem.contains("64 damaged copies")), "{start:?}: {error:?}");
+        assert_eq!(std::fs::read_to_string(history::path(&folder)).unwrap(), "damaged", "{start:?} left the copy in place");
+    }
+    std::fs::remove_file(folder.path().join("codex-history.json.damaged-64")).unwrap();
+    let mut session = CodexSession::start(
+        &runtime,
+        &account,
+        &folder,
+        CodexConfig { start: Start::ResumeFrom(History::default()), ..config(false) },
+        SignIn::ApiKey(canary()),
+    )
+    .unwrap();
+    assert_eq!(std::fs::read_to_string(folder.path().join("codex-history.json.damaged-64")).unwrap(), "damaged", "set aside, then the start went on");
+    assert!(!history::exists(&folder));
+    session.shutdown(Duration::from_secs(2)).unwrap();
     std::fs::remove_dir_all(&base).unwrap();
 }
 

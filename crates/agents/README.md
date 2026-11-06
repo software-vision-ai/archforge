@@ -245,11 +245,15 @@ history under `CODEX_HOME`; Archforge keeps its own copy, the person's messages 
 order, in `codex-history.json` in the conversation's folder (written after every turn, atomically,
 0600, at most 4096 messages and 4 MiB, a message cut at 1 MiB, the oldest dropped first and
 logged, never the newest; the person's text is scrubbed of the key). A copy that cannot be read is
-set aside as `codex-history.json.damaged-<n>`, logged, and refused as a typed error, so a later
-write never replaces it. `Start::Resume` gives a new thread that copy with `thread/inject_items`
+renamed to `codex-history.json.damaged-<n>`, logged, and refused as a typed error that says where
+it went. When the rename fails, 64 damaged copies are already set aside, or the system refuses the
+read itself, the file stays in place and the error says so; every start that would write the copy
+(`Start::New` and `Start::ResumeFrom` as well as `Start::Resume`) is then refused with that error,
+so a damaged copy is never overwritten: keep the file aside by hand, or fix what the error names,
+before starting again. `Start::Resume` gives a new thread that copy with `thread/inject_items`
 before the first turn; `Start::ResumeFrom(History)` primes it from the project's record (AR-206)
 instead, for when the folder has none, as on another computer. It uses the history it is given even
-when the folder holds a copy, and replaces that copy at the end of the first turn: check
+when the folder holds a readable copy, and replaces that copy at the end of the first turn: check
 `history::exists(folder)` first and choose `Start::Resume` when it is true. Tool calls
 are not in the copy.
 

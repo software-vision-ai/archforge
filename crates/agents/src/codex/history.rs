@@ -124,8 +124,11 @@ impl History {
     }
 
     /// The copy in `folder`: empty when there is none yet. A copy that cannot be read (past its
-    /// size, not a regular file, not this layout) is set aside as `codex-history.json.damaged-<n>`
-    /// so a later write cannot replace it, logged, and refused as a typed error naming the file.
+    /// size, not a regular file, not this layout) is renamed to `codex-history.json.damaged-<n>`,
+    /// logged, and refused as a typed error naming the file and where it went. When the rename
+    /// fails, or 64 damaged copies are already set aside, or the system refuses the read itself,
+    /// the file stays where it is and the error says so; a session start that would write the copy
+    /// (`Start::New`, `Start::ResumeFrom`) is then refused too, so the file is never replaced.
     pub fn read(folder: &ConversationFolder) -> Result<History, AgentError> {
         let path = path(folder);
         match read_file(&path) {
