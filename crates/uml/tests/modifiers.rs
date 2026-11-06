@@ -651,6 +651,81 @@ fn subsets_and_redefines_on_association_ends_take_the_other_end_s_properties() {
     assert_eq!(archforge_uml::figures::end_text(s.doc(), end), "*");
 }
 
+/// A property is made leaf and cleared again (AR-138), one undo step each, its row and its end's text
+/// saying `{leaf}` first in its braces while it is; nothing may redefine it then, so a new
+/// redefinition of it is refused, naming it and why, and Redefines no longer offers it; a property
+/// something redefines already is not made leaf, the refusal naming what redefines it; cleared, it
+/// is redefined again; leaf left out is kept; it comes back from its rows leaf.
+#[test]
+fn a_leaf_property_is_never_redefined_and_one_redefined_is_not_made_leaf() {
+    let mut s = session();
+    let (_, _, item, order, _) = shop(&mut s);
+    let parts = run(&mut s, "uml.attribute.add", json!({ "class": item, "name": "parts", "type": item, "multiplicity": "*" }));
+    let total = run(&mut s, "uml.attribute.add", json!({ "class": item, "name": "total", "type": "Real" }));
+    let lines = run(&mut s, "uml.attribute.add", json!({ "class": order, "name": "lines", "type": order, "multiplicity": "*" }));
+    let a = run(&mut s, "uml.association.add", json!({ "from": order, "to": item }));
+    run(&mut s, "uml.association.set-end", json!({ "association": a, "end": 1, "role": "items", "multiplicity": "*" }));
+    // Leaf, one step, said first in the braces; the reads say it.
+    let before = snapshot(&s);
+    round_trip(&mut s, "uml.attribute.set", json!({ "attribute": parts, "leaf": true, "read_only": true }));
+    assert_eq!(row(&s, &parts), "+ parts : Item [*] {leaf, readOnly}");
+    assert_eq!(read(&mut s, &item, &parts)["leaf"], json!(true));
+    assert_eq!(read(&mut s, &item, &total)["leaf"], json!(false));
+    // Left out, kept.
+    round_trip(&mut s, "uml.attribute.set", json!({ "attribute": parts, "name": "parts", "read_only": false }));
+    assert_eq!(row(&s, &parts), "+ parts : Item [*] {leaf}");
+    // Nothing may redefine it: refused, naming it and why; Redefines offers nothing; the shell's
+    // list of what is leaf names it.
+    refused(&mut s, "uml.attribute.set", json!({ "attribute": lines, "redefines": [parts] }), "redefines", &[parts.as_str(), "is leaf"]);
+    refused(
+        &mut s,
+        "uml.attribute.add",
+        json!({ "class": order, "name": "more", "type": order, "multiplicity": "*", "redefines": [parts] }),
+        "redefines",
+        &[parts.as_str(), "is leaf"],
+    );
+    {
+        let st = s.doc();
+        let shape = archforge_uml::modifiers::Shape::of(st, obj(&s, &lines));
+        assert!(archforge_uml::modifiers::redefines_candidates(st, &shape).is_empty());
+        assert_eq!(archforge_uml::modifiers::redefines_leaf(st, &shape), [obj(&s, &parts)]);
+        assert_eq!(archforge_uml::modifiers::redefines_problem(st, &shape, obj(&s, &parts)), Some(archforge_uml::modifiers::TargetProblem::Leaf));
+        // Subsetting it stays allowed: leaf is about redefinition alone.
+        assert!(archforge_uml::modifiers::subsets_candidates(st, &shape).contains(&obj(&s, &parts)));
+    }
+    // An association's end may not redefine it either.
+    refused(
+        &mut s,
+        "uml.association.set-end",
+        json!({ "association": a, "end": 1, "redefines": [parts] }),
+        "redefines",
+        &[parts.as_str(), "is leaf"],
+    );
+    // Cleared, one step, every id and other value as before; then redefined again.
+    round_trip(&mut s, "uml.attribute.set", json!({ "attribute": parts, "leaf": false }));
+    assert_eq!(snapshot(&s), before, "cleared, the model is as it was");
+    round_trip(&mut s, "uml.attribute.set", json!({ "attribute": lines, "redefines": [parts] }));
+    // Redefined now: made leaf is refused, naming Order's lines, and nothing changes.
+    let e =
+        refused(&mut s, "uml.attribute.set", json!({ "attribute": parts, "leaf": true }), "leaf", &[lines.as_str(), "Order::lines", "redefined by"]);
+    assert!(e.contains(&parts), "{e}");
+    assert_eq!(archforge_uml::relations::redefiners(s.doc(), obj(&s, &parts)), [obj(&s, &lines)]);
+    assert!(archforge_uml::relations::leaf_problem(s.doc(), obj(&s, &total)).is_none());
+    // An end made leaf says so beside its line, and comes back from its rows leaf.
+    round_trip(&mut s, "uml.association.set-end", json!({ "association": a, "end": 1, "leaf": true }));
+    let end = archforge_uml::figures::member_ends(s.doc(), obj(&s, &a)).unwrap()[1];
+    assert_eq!(archforge_uml::figures::end_text(s.doc(), end), "* {leaf}");
+    run(&mut s, "uml.attribute.set", json!({ "attribute": total, "leaf": true }));
+    let (tables, junctions) = tables();
+    let saved = archforge_mof::rows::snapshot(s.doc(), &tables, &junctions).unwrap();
+    let mut back = store(1 << 20);
+    archforge_mof::rows::restore(&mut back, &saved, &tables, &junctions).unwrap();
+    assert_eq!(archforge_mof::rows::snapshot(&back, &tables, &junctions).unwrap(), saved);
+    let total_back = back.by_uuid(Uuid::parse(&total).unwrap()).unwrap();
+    assert!(archforge_uml::relations::is_leaf(&back, total_back), "reopened leaf");
+    assert_eq!(archforge_uml::figures::attribute_text(&back, total_back), "+ total : Real {leaf}");
+}
+
 /// Attributes and ends with every modifier come back from their rows identical, as a saved project
 /// opens.
 #[test]

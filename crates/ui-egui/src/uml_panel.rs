@@ -65,6 +65,8 @@ pub struct MemberEdit {
     pub multiplicity: String,
     pub is_static: bool,
     pub is_abstract: bool,
+    /// No redefinition (leaf), an attribute's or an operation's (AR-138).
+    pub is_leaf: bool,
     pub params: Vec<ParamEdit>,
     /// An attribute's modifiers (AR-126): its default as typed, its flags, and the ids of the
     /// properties it subsets and redefines.
@@ -77,7 +79,7 @@ pub struct MemberEdit {
     pub redefines: Vec<Uuid>,
     pub refused: Option<String>,
     /// The field the refusal sits under (`type`, `multiplicity`, `default`, `subsets`,
-    /// `redefines`), or none for the card's foot.
+    /// `redefines`, `leaf`), or none for the card's foot.
     pub refused_at: Option<&'static str>,
     /// True until the editor has been shown once: the name field takes the keyboard then.
     pub opened: bool,
@@ -160,6 +162,7 @@ pub(crate) fn edit_of(store: Option<&Store>, class: Uuid, kind: MemberKind, targ
         multiplicity: String::new(),
         is_static: false,
         is_abstract: false,
+        is_leaf: false,
         params: Vec::new(),
         default: String::new(),
         derived: false,
@@ -185,6 +188,7 @@ pub(crate) fn edit_of(store: Option<&Store>, class: Uuid, kind: MemberKind, targ
             _ => 0,
         };
         edit.is_static = flag(store, o, archforge_uml::feature::IS_STATIC);
+        edit.is_leaf = archforge_uml::relations::is_leaf(store, o);
         match kind {
             MemberKind::Attribute => {
                 edit.ty = type_value(store, o);
@@ -229,8 +233,8 @@ pub(crate) fn member_of(store: &Store, o: Obj) -> Option<(Obj, MemberKind)> {
     }
 }
 
-/// A classifier's panel: its name and package, then a class's Abstract, No subclasses (final) for
-/// every kind but a built-in type (AR-137), then a class's, an interface's or a data type's
+/// A classifier's panel: its name and package, then a class's Abstract, No subclasses (final) and
+/// No redefinition (leaf) for every kind but a built-in type (AR-137, AR-138), then a class's, an interface's or a data type's
 /// attributes and operations, or an enumeration's literals, each with its editor; a primitive type
 /// has none.
 pub(crate) fn class_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, subject: &Subject) {
@@ -284,6 +288,7 @@ pub(crate) fn class_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
         }
     }
     y = final_check(shell, ui, p, r, y, class, class_id);
+    y = leaf_check(shell, ui, p, r, y, class, class_id);
     if kind == Classifier::Enumeration {
         members_section(shell, ui, p, r, y, class, class_id, MemberKind::Literal);
     }
@@ -407,6 +412,113 @@ pub(crate) fn final_refusal(name: &str, below: &[(Uuid, String)]) -> String {
     );
     let remove = trn("Remove that generalization before making it final.", "Remove those generalizations before making it final.", n);
     format!("{has} {remove}")
+}
+
+/// The id of a classifier's No redefinition (leaf), the design's own (AR-138).
+pub(crate) const LEAF_ID: &str = "workspace.properties.element.isLeaf";
+/// The id of a member editor's No redefinition (leaf).
+pub(crate) const MEMBER_LEAF_ID: &str = "workspace.properties.member.isLeaf";
+
+/// A check box at `at` labelled `label`, its explanation under it `width` wide, which also describes
+/// it, and `refused`, when given, on the danger tint under that with its warning mark, joining its
+/// description; its state is said as a check box's. Gives what a click made of `was` and the y under
+/// what it drew.
+#[allow(clippy::too_many_arguments, reason = "a check box is drawn with its explanation and refusal")]
+pub(crate) fn explained_check(
+    shell: &mut Shell,
+    ui: &mut egui::Ui,
+    p: &Palette,
+    at: egui::Pos2,
+    width: f32,
+    id: &str,
+    label: &str,
+    was: bool,
+    explained: &str,
+    refused: Option<&str>,
+) -> (bool, f32) {
+    let mut on = was;
+    check(shell, ui, p, at, id, label, &mut on);
+    let described = match refused {
+        Some(why) => format!("{explained} {why}"),
+        None => explained.to_string(),
+    };
+    ui.ctx().accesskit_node_builder(crate::widgets::egui_id(id), |node| {
+        node.set_role(egui::accesskit::Role::CheckBox);
+        node.set_toggled(if was { egui::accesskit::Toggled::True } else { egui::accesskit::Toggled::False });
+        node.set_description(described);
+        if refused.is_some() {
+            node.set_invalid(egui::accesskit::Invalid::True);
+        }
+    });
+    let paint = ui.painter().clone();
+    let said = ux::galley_rows(&paint, explained, types::CAPTION, p.text_muted, Some((width - 24.0).max(0.0)), 3);
+    let tall = said.size().y;
+    paint.galley(pos2(at.x + 24.0, at.y + 22.0), said, p.text_muted);
+    let mut y = at.y + 22.0 + tall + 12.0;
+    if let Some(why) = refused {
+        let text = ux::galley_rows(&paint, why, types::SMALL, p.text, Some((width - 42.0).max(0.0)), 8);
+        let card = Rect::from_min_size(pos2(at.x, y), vec2(width, text.size().y + 20.0));
+        paint.rect_filled(card, 6.0, p.danger_tint);
+        ux::icon_in(&paint, Rect::from_min_size(pos2(at.x + 10.0, y + 11.5), vec2(14.0, 14.0)), &icons::WARNING, p.danger);
+        paint.galley(pos2(at.x + 32.0, y + 10.0), text, p.text);
+        crate::widgets::record_visible(ui, &mut shell.registry, &format!("{id}.refusal"), "text", card);
+        y = card.bottom() + 12.0;
+    }
+    (on, y)
+}
+
+/// Why an element may not be made leaf while `by` redefine it, in the user's words: each named
+/// (`CardPayment::authorise()`), their redefinitions to be removed first (AR-138).
+pub(crate) fn leaf_refusal(by: &[String]) -> String {
+    let listed = match by.split_last() {
+        Some((last, rest)) if !rest.is_empty() => fmt(&tr("{names} and {last}"), &[("names", &rest.join(", ")), ("last", last)]),
+        _ => by.join(", "),
+    };
+    let n = u64::try_from(by.len()).unwrap_or(u64::MAX);
+    fmt(
+        &trn("{names} redefines it. Remove that redefinition first.", "{names} redefine it. Remove those redefinitions first.", n),
+        &[("names", &listed)],
+    )
+}
+
+/// What redefines `o`, by name, as [`leaf_refusal`] names them.
+pub(crate) fn redefiner_names(store: &Store, o: Obj) -> Vec<String> {
+    archforge_uml::relations::redefiners(store, o).into_iter().map(|r| archforge_uml::relations::redefiner_name(store, r)).collect()
+}
+
+/// No redefinition (leaf) at `y`, after No subclasses (final), with its explanation under it
+/// (AR-138): ticked, nothing may redefine the classifier and its card says `{leaf}` after its name
+/// (`uml.classifier.set`, one undo step). Ticked while something redefines it, the box stays clear,
+/// nothing is written, and a refusal under it names what does. Left out for a built-in type, which
+/// is never changed. Gives the y under it.
+fn leaf_check(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, class: Obj, class_id: Uuid) -> f32 {
+    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return y };
+    if archforge_uml::members::is_built_in(store, class) {
+        return y;
+    }
+    let was = archforge_uml::relations::is_leaf(store, class);
+    let by = redefiner_names(store, class);
+    let explained = fmt(&tr("A subclass could not redefine {name} where it is inherited. Shown as {leaf}."), &[("name", &name(store, class))]);
+    let refused = (shell.panels.leaf_refused == Some(class_id) && !was && !by.is_empty()).then(|| leaf_refusal(&by));
+    let width = (r.width() - 2.0 * PAD).max(0.0);
+    let (on, y) =
+        explained_check(shell, ui, p, pos2(r.left() + PAD, y), width, LEAF_ID, &tr("No redefinition (leaf)"), was, &explained, refused.as_deref());
+    if on != was {
+        if on && !by.is_empty() {
+            // Refused before anything is written: the box stays clear and the history untouched.
+            shell.panels.leaf_refused = Some(class_id);
+            ui.ctx().request_repaint();
+        } else {
+            match run(shell, "uml.classifier.set", json!({ "classifier": class_id.to_string(), "leaf": on })) {
+                Ok(_) => {
+                    shell.panels.notice = None;
+                    shell.panels.leaf_refused = None;
+                }
+                Err(e) => shell.panels.notice = Some(e),
+            }
+        }
+    }
+    y
 }
 
 /// A package's panel: its name, and the package it sits in, a pick moving it there with what it
@@ -783,7 +895,8 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
             cy += row;
             let right = check(shell, ui, p, at(0.0, cy), "workspace.properties.member.static", &tr("Static"), &mut edit.is_static);
             check(shell, ui, p, pos2(right + 4.0, y + cy), "workspace.properties.member.abstract", &tr("Abstract"), &mut edit.is_abstract);
-            cy += 16.0 + 16.0;
+            cy += 26.0;
+            cy = member_leaf(shell, ui, p, at(0.0, cy), inner, &mut edit) - y + 4.0;
             // Parameters: a name, a type and a multiplicity on a row.
             ux::text(&paint, at(0.0, cy), &tr("Parameters"), types::CAPTION, p.text_secondary, Some(inner));
             cy += 20.0;
@@ -920,6 +1033,49 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     card.bottom() + 8.0
 }
 
+/// The member editor's No redefinition (leaf) at `at`, `width` wide, with its explanation under it
+/// (AR-138): ticked, the member is to be leaf when applied. Ticked on a member something redefines
+/// already, the box stays clear and a refusal under it names what does. Gives the y under it.
+fn member_leaf(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: egui::Pos2, width: f32, edit: &mut MemberEdit) -> f32 {
+    let refused = edit.refused.clone().filter(|_| edit.refused_at == Some("leaf"));
+    let explained = tr("A subclass could not redefine this member. Shown as {leaf} after it.");
+    let label = tr("No redefinition (leaf)");
+    let (on, y) = explained_check(shell, ui, p, at, width, MEMBER_LEAF_ID, &label, edit.is_leaf, &explained, refused.as_deref());
+    if on != edit.is_leaf {
+        match shell.session.as_ref().and_then(|s| member_leaf_refusal(s.doc(), edit, on)) {
+            // Refused before anything is written: the box stays clear.
+            Some(why) => {
+                edit.refused = Some(why);
+                edit.refused_at = Some("leaf");
+                ui.ctx().request_repaint();
+            }
+            None => {
+                edit.is_leaf = on;
+                if edit.refused_at == Some("leaf") {
+                    edit.refused = None;
+                    edit.refused_at = None;
+                }
+            }
+        }
+    }
+    y
+}
+
+/// Why the member as edited may not be made leaf (`leaf`), in the user's words: something redefines
+/// it already, named; the rule the commands keep too (AR-138). None when it is leaf already, or
+/// may be made so.
+pub(crate) fn member_leaf_refusal(store: &Store, edit: &MemberEdit, leaf: bool) -> Option<String> {
+    if !leaf || edit.kind == MemberKind::Literal {
+        return None;
+    }
+    let o = edit.target.and_then(|t| store.by_uuid(t))?;
+    if archforge_uml::relations::is_leaf(store, o) {
+        return None;
+    }
+    let by = redefiner_names(store, o);
+    (!by.is_empty()).then(|| leaf_refusal(&by))
+}
+
 /// The refusal of `edit` when it sits under one of `fields`, wrapped under the field at `at`;
 /// gives the y under it.
 fn refusal_under(paint: &egui::Painter, p: &Palette, at: egui::Pos2, width: f32, edit: &MemberEdit, fields: &[&str]) -> f32 {
@@ -1000,7 +1156,8 @@ fn modifiers(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: egui::Pos2, 
     check(shell, ui, p, pos2(right, y), "workspace.properties.member.ordered", &tr("Ordered"), &mut edit.ordered);
     y += 26.0;
     check(shell, ui, p, pos2(at.x, y), "workspace.properties.member.unique", &tr("Unique"), &mut edit.unique);
-    y += 16.0 + 16.0;
+    y += 26.0;
+    y = member_leaf(shell, ui, p, pos2(at.x, y), width, edit) + 4.0;
     // Subsets and Redefines.
     let (subsets_shown, redefines_shown) = match shell.session.as_ref() {
         Some(s) => (chosen_names(s.doc(), &edit.subsets), chosen_names(s.doc(), &edit.redefines)),
@@ -1022,7 +1179,10 @@ fn modifiers(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: egui::Pos2, 
     y += 17.0 + FIELD + 6.0;
     let mut said = 0.0_f32;
     let no_subsets = offered_subsets(&targets, &edit.name).is_empty();
-    for (empty, x, text) in [(no_subsets, at.x, tr("No property to subset")), (targets.redefines.is_empty(), right, tr("No property to redefine"))] {
+    for (empty, x, text) in [
+        (no_subsets, at.x, tr("No property to subset")),
+        (targets.redefines.is_empty() && targets.leaf.is_empty(), right, tr("No property to redefine")),
+    ] {
         if empty {
             let g = ux::galley_rows(&paint, &text, types::CAPTION, p.text_muted, Some(half), 2);
             said = said.max(g.size().y);
@@ -1062,12 +1222,21 @@ fn modifier_menu_picks(shell: &mut Shell, ui: &egui::Ui, p: &Palette, m: Modifie
                 edit.subsets = pick;
             }
         }
-        Some(Menu::MemberRedefines) => {
-            let offered: Vec<&Target> = targets.redefines.iter().collect();
-            if let Some(pick) = target_menu(shell, ui, p, redefines_field, "workspace.properties.member.redefines", &offered) {
+        Some(Menu::MemberRedefines) => match redefines_menu(shell, ui, p, redefines_field, "workspace.properties.member.redefines", &targets) {
+            Some(Ok(pick)) => {
                 edit.redefines = pick;
+                if edit.refused_at == Some("redefines") {
+                    edit.refused = None;
+                    edit.refused_at = None;
+                }
             }
-        }
+            // A leaf property: nothing changes, and why sits under Redefines.
+            Some(Err(why)) => {
+                edit.refused = Some(why);
+                edit.refused_at = Some("redefines");
+            }
+            None => {}
+        },
         _ => {}
     }
     keep_targets(shell, targets);
@@ -1087,6 +1256,30 @@ pub(crate) fn target_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: 
     let items: Vec<String> = std::iter::once(tr("None")).chain(offered.iter().map(|t| t.label.clone())).collect();
     let i = menu(shell, ui, p, field, id, &items)?;
     Some(i.checked_sub(1).and_then(|i| offered.get(i)).map(|t| vec![t.id]).unwrap_or_default())
+}
+
+/// Redefines' open menu (AR-126, AR-138): None first, the properties it offers by their labels, then
+/// those it may not take for being leaf, each with a muted `{leaf}` after it. Gives the one property
+/// picked, none for None, or, for a leaf one, why it may not be picked.
+pub(crate) fn redefines_menu(
+    shell: &mut Shell,
+    ui: &egui::Ui,
+    p: &Palette,
+    field: Rect,
+    id: &str,
+    targets: &TargetChoices,
+) -> Option<Result<Vec<Uuid>, String>> {
+    let items: Vec<String> = std::iter::once(tr("None")).chain(targets.redefines.iter().chain(&targets.leaf).map(|t| t.label.clone())).collect();
+    let notes: Vec<String> = std::iter::repeat_n(String::new(), 1 + targets.redefines.len())
+        .chain(std::iter::repeat_n("{leaf}".to_string(), targets.leaf.len()))
+        .collect();
+    let i = crate::panels::menu_noted(shell, ui, p, field, id, &items, &notes, &[])?;
+    let Some(i) = i.checked_sub(1) else { return Some(Ok(Vec::new())) };
+    if let Some(t) = targets.redefines.get(i) {
+        return Some(Ok(vec![t.id]));
+    }
+    let t = targets.leaf.get(i.saturating_sub(targets.redefines.len()))?;
+    Some(Err(target_refusal(&t.name, archforge_uml::modifiers::TargetProblem::Leaf, true)))
 }
 
 /// The properties Subsets offers a property named `name`: the kept list, less a property named
@@ -1113,6 +1306,9 @@ pub struct TargetChoices {
     pub key: String,
     pub subsets: Vec<Target>,
     pub redefines: Vec<Target>,
+    /// The properties Redefines would offer but for their being leaf (AR-138): listed after the
+    /// others, each marked `{leaf}`, and refused with why when picked.
+    pub leaf: Vec<Target>,
     /// At most [`archforge_uml::members::MAX_LITERALS`], as an enumeration holds.
     pub literals: Option<Vec<String>>,
 }
@@ -1157,6 +1353,7 @@ pub(crate) fn take_targets(
             key,
             subsets: labelled(archforge_uml::modifiers::subsets_candidates_named(store, &sh, false)),
             redefines: labelled(archforge_uml::modifiers::redefines_candidates(store, &sh)),
+            leaf: labelled(archforge_uml::modifiers::redefines_leaf(store, &sh)),
             literals,
         },
         None => TargetChoices { key, literals, ..TargetChoices::default() },
@@ -1310,6 +1507,7 @@ pub(crate) fn target_refusal(name: &str, problem: archforge_uml::modifiers::Targ
         (P::Upper, _) => tr("{name} holds fewer values than this property."),
         (P::Multiplicity, _) => tr("This property's multiplicity does not lie within {name}'s."),
         (P::Composite, _) => tr("{name} is composite; only a composite end redefines it."),
+        (P::Leaf, _) => tr("{name} is leaf: nothing may redefine it. Clear \"No redefinition\" on it first."),
     };
     fmt(&said, &[("name", name)])
 }
@@ -1361,7 +1559,11 @@ fn move_member(shell: &mut Shell, edit: &MemberEdit, up: bool) {
 /// Writes the member through its command; a modifier, a type or a multiplicity the rules refuse is
 /// said under its field in the user's words, and nothing is written.
 fn commit(shell: &mut Shell, edit: &MemberEdit) {
-    if let Some((field, why)) = shell.session.as_ref().and_then(|s| modifier_refusal(s.doc(), edit)) {
+    let refusal = shell.session.as_ref().and_then(|s| {
+        let store = s.doc();
+        member_leaf_refusal(store, edit, edit.is_leaf).map(|why| ("leaf", why)).or_else(|| modifier_refusal(store, edit))
+    });
+    if let Some((field, why)) = refusal {
         refuse(shell, Some(why));
         if let Some(e) = shell.panels.member.as_mut() {
             e.refused_at = Some(field);
@@ -1389,7 +1591,7 @@ pub(crate) fn command_of(edit: &MemberEdit) -> (&'static str, serde_json::Value)
             if edit.target.is_some() { "uml.attribute.set" } else { "uml.attribute.add" },
             json!({
                 "name": edit.name.trim(), "visibility": visibility, "type": edit.ty,
-                "multiplicity": edit.multiplicity.trim(), "static": edit.is_static,
+                "multiplicity": edit.multiplicity.trim(), "static": edit.is_static, "leaf": edit.is_leaf,
                 "default": edit.default, "derived": edit.derived, "read_only": edit.read_only, "ordered": edit.ordered, "unique": edit.unique,
                 "subsets": edit.subsets.iter().map(Uuid::to_string).collect::<Vec<_>>(),
                 "redefines": edit.redefines.iter().map(Uuid::to_string).collect::<Vec<_>>(),
@@ -1400,6 +1602,7 @@ pub(crate) fn command_of(edit: &MemberEdit) -> (&'static str, serde_json::Value)
             if edit.target.is_some() { "uml.operation.set" } else { "uml.operation.add" },
             json!({
                 "name": edit.name.trim(), "visibility": visibility, "returns": edit.ty, "static": edit.is_static, "abstract": edit.is_abstract,
+                "leaf": edit.is_leaf,
                 "parameters": edit.params.iter().map(|p| json!({ "name": p.name.trim(), "type": p.ty, "multiplicity": p.multiplicity.trim() })).collect::<Vec<_>>(),
             }),
             "operation",
@@ -1457,8 +1660,10 @@ pub(crate) fn attribute_refusal(store: &Store, edit: &MemberEdit) -> Option<Stri
 pub(crate) fn write_in_sight(shell: &mut Shell, edit: &MemberEdit, cmd: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
     let Some(session) = shell.session.as_mut() else { return Err(tr("The model could not be opened")) };
     let store = session.doc();
-    if let Some(why) =
-        literal_refusal(store, edit).or_else(|| attribute_refusal(store, edit)).or_else(|| modifier_refusal(store, edit).map(|(_, w)| w))
+    if let Some(why) = literal_refusal(store, edit)
+        .or_else(|| attribute_refusal(store, edit))
+        .or_else(|| member_leaf_refusal(store, edit, edit.is_leaf))
+        .or_else(|| modifier_refusal(store, edit).map(|(_, w)| w))
     {
         return Err(why);
     }

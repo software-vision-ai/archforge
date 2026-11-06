@@ -1201,9 +1201,10 @@ fn end_modifiers(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
     y += 17.0 + FIELD + 6.0;
     let mut said = 0.0_f32;
     let offered = crate::uml_panel::offered_subsets(&targets, &role);
-    for (empty, x, text) in
-        [(offered.is_empty(), left, tr("No property to subset")), (targets.redefines.is_empty(), right, tr("No property to redefine"))]
-    {
+    for (empty, x, text) in [
+        (offered.is_empty(), left, tr("No property to subset")),
+        (targets.redefines.is_empty() && targets.leaf.is_empty(), right, tr("No property to redefine")),
+    ] {
         if empty {
             let g = ux::galley_rows(&paint, &text, types::CAPTION, p.text_muted, Some(half), 2);
             said = said.max(g.size().y);
@@ -1253,9 +1254,16 @@ fn end_modifiers(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
             }
         }
         Some(Menu::EndRedefines(k)) if k == i => {
-            let all: Vec<&crate::uml_panel::Target> = targets.redefines.iter().collect();
-            if let Some(pick) = crate::uml_panel::target_menu(shell, ui, p, redefines, &format!("{key}.redefines"), &all) {
-                m.redefines = pick;
+            match crate::uml_panel::redefines_menu(shell, ui, p, redefines, &format!("{key}.redefines"), &targets) {
+                Some(Ok(pick)) => {
+                    m.redefines = pick;
+                    if edit.modifier_refused[i].as_ref().is_some_and(|(field, _)| *field == "redefines") {
+                        edit.modifier_refused[i] = None;
+                    }
+                }
+                // A leaf property: nothing changes, and why sits under Redefines (AR-138).
+                Some(Err(why)) => edit.modifier_refused[i] = Some(("redefines", why)),
+                None => {}
             }
         }
         _ => {}

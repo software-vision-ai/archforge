@@ -13,8 +13,9 @@ macro_rules! modifier_lines {
             "read_only: bool = false; it is not changed once set, written {readOnly}\n",
             "ordered: bool = false; its values have an order, written {ordered} when it holds more than one\n",
             "unique: bool = true; its values are all different; written {nonunique} when false and it holds more than one\n",
+            "leaf: bool = false; nothing may redefine it (UML's isLeaf), written {leaf}\n",
             "subsets: array = []; the properties it subsets, each an id or an {id, name} object as the reads give them: of its classifier (an end's: the class at the other end) or one that classifier specializes, named otherwise, whose type its type conforms to, whose upper bound is not below its own, and not subsetting it already; at most 32\n",
-            "redefines: array = []; the properties it redefines, each an id or an {id, name} object as the reads give them: of a classifier its classifier specializes, whose type its type conforms to, whose bounds hold its own, and not composite unless it is; at most 32"
+            "redefines: array = []; the properties it redefines, each an id or an {id, name} object as the reads give them: of a classifier its classifier specializes, whose type its type conforms to, whose bounds hold its own, not composite unless it is, and not leaf; at most 32"
         )
     };
 }
@@ -29,8 +30,9 @@ macro_rules! kept_modifier_lines {
             "read_only: bool?; it is not changed once set, written {readOnly}; left out, kept\n",
             "ordered: bool?; its values have an order, written {ordered} when it holds more than one; left out, kept\n",
             "unique: bool?; its values are all different; written {nonunique} when false and it holds more than one; left out, kept\n",
+            "leaf: bool?; nothing may redefine it (UML's isLeaf), written {leaf}: made leaf only while no property redefines it; cleared, it may be redefined again; left out, kept\n",
             "subsets: array?; the properties it subsets, each an id or an {id, name} object as the reads give them: of its classifier (an end's: the class at the other end) or one that classifier specializes, named otherwise, whose type its type conforms to, whose upper bound is not below its own, and not subsetting it already; at most 32; [] clears them; left out, kept; only properties not there before are checked\n",
-            "redefines: array?; the properties it redefines, each an id or an {id, name} object as the reads give them: of a classifier its classifier specializes, whose type its type conforms to, whose bounds hold its own, and not composite unless it is; at most 32; [] clears them; left out, kept; only properties not there before are checked"
+            "redefines: array?; the properties it redefines, each an id or an {id, name} object as the reads give them: of a classifier its classifier specializes, whose type its type conforms to, whose bounds hold its own, not composite unless it is, and not leaf; at most 32; [] clears them; left out, kept; only properties not there before are checked"
         )
     };
 }

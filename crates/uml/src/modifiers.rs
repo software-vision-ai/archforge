@@ -1,8 +1,8 @@
 //! A property's modifiers (AR-126): its default value; whether it is derived, read only, ordered and
-//! unique; and the properties it subsets and redefines. They are set with the attribute commands
+//! unique, and leaf (AR-138); and the properties it subsets and redefines. They are set with the attribute commands
 //! and with `uml.association.set-end`, never on their own, and kept in the property's own UML
-//! fields: `defaultValue`, `isDerived`, `isReadOnly`, `isOrdered`, `isUnique`, `subsettedProperty`
-//! and `redefinedProperty`. Static stays where it was, beside them.
+//! fields: `defaultValue`, `isDerived`, `isReadOnly`, `isOrdered`, `isUnique`, `isLeaf`,
+//! `subsettedProperty` and `redefinedProperty`. Static stays where it was, beside them.
 //!
 //! A default value is typed as text and read by the property's type: an Integer's as a whole
 //! number, a Real's as a number, a Boolean's as true or false, an UnlimitedNatural's as a whole
@@ -16,7 +16,8 @@
 //! the property's, and whose name differs from the property's (UML 2.5.1, 9.9.17). Redefines
 //! offers the properties of the classifiers the context specializes alone, those the property is
 //! consistent with: a conforming type, a multiplicity whose bounds both lie within the target's,
-//! and composite wherever the target is. An attribute's context is its classifier; an association
+//! and composite wherever the target is, never a leaf property, which nothing may redefine; a
+//! property is made leaf only while nothing redefines it. An attribute's context is its classifier; an association
 //! end's is the classifier at the association's other end, so the properties of a classifier are
 //! its attributes and the ends that face it. A property without a name is never offered: it could
 //! not be named in the braces.
@@ -330,13 +331,16 @@ pub fn redefines(store: &Store, p: Obj) -> Vec<Obj> {
     list(store, p, property::REDEFINED_PROPERTY)
 }
 
-/// The words in braces a card writes after `p`: what differs from the usual. Read only always;
-/// ordered and nonunique only for a multi-valued property, where they say something; then each
-/// property it subsets and each it redefines, by name.
+/// The words in braces a card writes after `p`: what differs from the usual. Leaf (AR-138) and read
+/// only always; ordered and nonunique only for a multi-valued property, where they say something;
+/// then each property it subsets and each it redefines, by name.
 pub fn braces(store: &Store, p: Obj) -> Vec<String> {
     let (_, read_only, ordered, unique) = flags(store, p);
     let multi = multi_valued(store, p);
     let mut out = Vec::new();
+    if crate::relations::is_leaf(store, p) {
+        out.push("leaf".to_string());
+    }
     if read_only {
         out.push("readOnly".to_string());
     }
@@ -522,6 +526,8 @@ pub enum TargetProblem {
     Multiplicity,
     /// It is composite and the shape is not.
     Composite,
+    /// It is leaf (`isLeaf`): nothing may redefine it (AR-138).
+    Leaf,
 }
 
 impl TargetProblem {
@@ -544,6 +550,9 @@ impl TargetProblem {
             (TargetProblem::Upper, _) => "allows fewer values than this property; a subset's upper bound is not above the one it subsets",
             (TargetProblem::Multiplicity, _) => "has a multiplicity this property's lower and upper bounds do not both lie within",
             (TargetProblem::Composite, _) => "is composite and this property is not; only a composite property redefines a composite one",
+            (TargetProblem::Leaf, _) => {
+                "is leaf (isLeaf), so nothing may redefine it; clear leaf on it with uml.attribute.set or uml.association.set-end first"
+            }
         }
     }
 }
@@ -622,7 +631,10 @@ fn redefines_problem_in(store: &Store, shape: &Shape, t: Obj, reach: &Reach) -> 
     if shape.lower < lower || !upper_within {
         return Some(TargetProblem::Multiplicity);
     }
-    (is_composite(store, t) && !shape.composite).then_some(TargetProblem::Composite)
+    if is_composite(store, t) && !shape.composite {
+        return Some(TargetProblem::Composite);
+    }
+    crate::relations::is_leaf(store, t).then_some(TargetProblem::Leaf)
 }
 
 /// Why `shape` may not subset `t`, when it may not.
@@ -655,6 +667,13 @@ pub fn redefines_candidates(store: &Store, shape: &Shape) -> Vec<Obj> {
     reach.order.iter().copied().filter(|t| redefines_problem_in(store, shape, *t, &reach).is_none()).collect()
 }
 
+/// The properties `shape` could redefine but for their being leaf (AR-138), in the order of
+/// [`redefines_candidates`]: a shell shows them with the reason they may not be picked.
+pub fn redefines_leaf(store: &Store, shape: &Shape) -> Vec<Obj> {
+    let reach = Reach::of(store, &shape.redefine_owners(store));
+    reach.order.iter().copied().filter(|t| redefines_problem_in(store, shape, *t, &reach) == Some(TargetProblem::Leaf)).collect()
+}
+
 /// `targets` as a refusal lists the accepted ones: at most [`LISTED`] as `name (Class)`, then how
 /// many more; "none" when there are none.
 fn listed(store: &Store, targets: &[Obj]) -> String {
@@ -681,6 +700,7 @@ pub struct Modifiers {
     pub read_only: bool,
     pub ordered: bool,
     pub unique: bool,
+    pub leaf: bool,
     pub subsets: Vec<Obj>,
     pub redefines: Vec<Obj>,
 }
@@ -724,7 +744,8 @@ fn targets(store: &Store, items: &[Json], key: &str) -> Result<Vec<Obj>, Command
 /// is read by the shape's type, and one that fitted the old type but not a new one refuses the type
 /// change, naming the default, never clearing it. Every target is checked against the new shape
 /// except one the property had that the rules no longer allowed already, which never blocks an
-/// unrelated edit; a refusal names the target, why, and the properties it may name instead.
+/// unrelated edit; a refusal names the target, why, and the properties it may name instead. Leaf
+/// is taken only while nothing redefines the property (AR-138).
 pub fn read(store: &Store, p: &Params, shape: &Shape, current: Option<Obj>) -> Result<Modifiers, CommandError> {
     let stored = current.map(|c| default_text(store, c)).unwrap_or_default();
     let type_changed = current.is_some_and(|c| one(store, c, typed_element::TYPE) != shape.ty);
@@ -780,6 +801,14 @@ pub fn read(store: &Store, p: &Params, shape: &Shape, current: Option<Obj>) -> R
             return Err(refuse("redefines", format!("{} ({}) {}; it may redefine: {may}", id(*t), name_of(store, *t), problem.why(true))));
         }
     }
+    let was_leaf = current.is_some_and(|c| crate::relations::is_leaf(store, c));
+    let leaf = p.bool("leaf").unwrap_or(was_leaf);
+    if leaf
+        && !was_leaf
+        && let Some(why) = current.and_then(|c| crate::relations::leaf_problem(store, c))
+    {
+        return Err(refuse("leaf", why));
+    }
     let (derived, read_only, ordered, unique) = current.map(|c| flags(store, c)).unwrap_or((false, false, false, true));
     Ok(Modifiers {
         default,
@@ -787,6 +816,7 @@ pub fn read(store: &Store, p: &Params, shape: &Shape, current: Option<Obj>) -> R
         read_only: p.bool("read_only").unwrap_or(read_only),
         ordered: p.bool("ordered").unwrap_or(ordered),
         unique: p.bool("unique").unwrap_or(unique),
+        leaf,
         subsets: subsets_wanted,
         redefines: redefines_wanted,
     })
@@ -841,6 +871,9 @@ pub fn apply(store: &mut Store, p: Obj, m: &Modifiers) -> Result<(), CommandErro
     store.set(p, structural_feature::IS_READ_ONLY, Value::Bool(m.read_only)).map_err(fail)?;
     store.set(p, multiplicity_element::IS_ORDERED, Value::Bool(m.ordered)).map_err(fail)?;
     store.set(p, multiplicity_element::IS_UNIQUE, Value::Bool(m.unique)).map_err(fail)?;
+    if m.leaf != crate::relations::is_leaf(store, p) {
+        store.set(p, crate::redefinable_element::IS_LEAF, Value::Bool(m.leaf)).map_err(fail)?;
+    }
     set_list(store, p, property::SUBSETTED_PROPERTY, &m.subsets)?;
     set_list(store, p, property::REDEFINED_PROPERTY, &m.redefines)
 }
@@ -897,6 +930,7 @@ pub fn json(store: &Store, p: Obj) -> Json {
         "read_only": read_only,
         "ordered": ordered,
         "unique": unique,
+        "leaf": crate::relations::is_leaf(store, p),
         "subsets": named(subsets(store, p)),
         "redefines": named(redefines(store, p)),
     })

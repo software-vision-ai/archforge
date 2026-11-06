@@ -589,6 +589,10 @@ plural		{name} has {n} subclass: {subclasses}.	{name} tiene {n} subclase: {subcl
 plural		Remove that generalization before making it final.	Quite esa generalización antes de hacerlo final.|Quite esas generalizaciones antes de hacerlo final.
 str		{names} and {last}	{names} y {last}
 plural		Select the generalization	Seleccionar la generalización|Seleccionar las {n} generalizaciones
+str		No redefinition (leaf)	Sin redefinición (leaf)
+str		A subclass could not redefine {name} where it is inherited. Shown as {leaf}.	Una subclase no podría redefinir {name} donde lo hereda. Se muestra como {leaf}.
+str		A subclass could not redefine this member. Shown as {leaf} after it.	Una subclase no podría redefinir este miembro. Se muestra como {leaf} tras él.
+plural		{names} redefines it. Remove that redefinition first.	{names} lo redefine. Quite primero esa redefinición.|{names} lo redefinen. Quite primero esas redefiniciones.
 str		Add attribute	Añadir atributo
 str		Add operation	Añadir operación
 str		Add literal	Añadir literal
@@ -649,6 +653,7 @@ str		{name} has a type this property's type does not conform to.	{name} tiene un
 str		{name} holds fewer values than this property.	{name} admite menos valores que esta propiedad.
 str		This property's multiplicity does not lie within {name}'s.	La multiplicidad de esta propiedad no cabe en la de {name}.
 str		{name} is composite; only a composite end redefines it.	{name} es compuesta; solo un extremo compuesto la redefine.
+str		{name} is leaf: nothing may redefine it. Clear "No redefinition" on it first.	{name} es leaf: nada puede redefinirlo. Desmarque primero «Sin redefinición» en él.
 str		This attribute	Este atributo
 str		This literal	Este literal
 str		This operation	Esta operación

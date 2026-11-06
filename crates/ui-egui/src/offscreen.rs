@@ -138,6 +138,11 @@ pub enum Screen {
     /// Payment selected after No subclasses was refused on it: Properties names its subclass
     /// CardPayment and offers to select the generalization (AR-137).
     WorkspaceFinal,
+    /// The sample class model with Order's total() leaf (`+ total() : Money {leaf}`) and
+    /// PricingService final and leaf (`{final, leaf}` after its name), CardPayment's amount
+    /// redefining Payment's; Payment selected with its attribute editor open on amount, No
+    /// redefinition (leaf) refused there, naming CardPayment::amount (AR-138).
+    WorkspaceLeaf,
     /// The user manual's class-model guide, first step: the root package's diagram Commerce with
     /// Customer (its name typed) and Order, a draft row open on Order's card with `number :
     /// Integer` typed.
@@ -501,6 +506,11 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
         shell.adopt_project();
         crate::uml_ui::open_sample(&mut shell)?;
         sample_final(&mut shell)?;
+    }
+    if screen == Screen::WorkspaceLeaf {
+        shell.adopt_project();
+        crate::uml_ui::open_sample(&mut shell)?;
+        sample_leaf(&mut shell)?;
     }
     if let Some(step) = guide_step(screen) {
         shell.adopt_project();
@@ -945,6 +955,59 @@ fn sample_final(shell: &mut Shell) -> Result<(), String> {
     shell.canvas.fit_pending = false;
     shell.canvas.zoom = 1.0;
     shell.canvas.pan = egui::vec2(260.0 - 1040.0, 60.0 - 80.0);
+    Ok(())
+}
+
+/// In the sample class model, Order's total() and PricingService made leaf, PricingService final
+/// too, CardPayment given an amount that redefines Payment's, and Payment selected with its
+/// attribute editor open on amount after No redefinition was refused there, as a click on it
+/// leaves the editor (AR-138).
+fn sample_leaf(shell: &mut Shell) -> Result<(), String> {
+    use crate::uml_panel::{MemberEdit, MemberKind, command_of, edit_of, write_in_sight};
+    use archforge_mof::Obj;
+    let store = shell.session.as_ref().ok_or("no project is open")?.doc();
+    let class = |name: &str| {
+        store
+            .alive()
+            .find(|o| store.class_of(*o).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(store, *o) == name)
+            .ok_or("the sample has no such class")
+    };
+    let member = |c: Obj, name: &str, operation: bool| {
+        let all = if operation { archforge_uml::members::operations(store, c) } else { archforge_uml::members::attributes(store, c) };
+        all.into_iter().find(|m| archforge_core::name_of(store, *m) == name).ok_or("the sample has no such member")
+    };
+    let uuid = |o: Obj| store.uuid(o).map_err(|e| e.to_string());
+    let (order, pricing, payment, card) = (class("Order")?, class("PricingService")?, class("Payment")?, class("CardPayment")?);
+    let (order_id, pricing_id, payment_id, card_id) = (uuid(order)?, uuid(pricing)?, uuid(payment)?, uuid(card)?);
+    let total = uuid(member(order, "total", true)?)?;
+    let amount = member(payment, "amount", false)?;
+    let amount_id = uuid(amount)?;
+    let money = archforge_uml::typed_element::TYPE;
+    let money = store.get(amount, money).ok().and_then(|v| v.as_ref()).ok_or("amount has no type")?;
+    let money_id = uuid(money)?;
+    let total_edit = MemberEdit { is_leaf: true, ..edit_of(Some(store), order_id, MemberKind::Operation, Some(total)) };
+    let card_amount = MemberEdit {
+        name: "amount".into(),
+        ty: money_id.to_string(),
+        redefines: vec![amount_id],
+        ..edit_of(Some(store), card_id, MemberKind::Attribute, None)
+    };
+    let amount_edit = edit_of(Some(store), payment_id, MemberKind::Attribute, Some(amount_id));
+    for edit in [&total_edit, &card_amount] {
+        let (cmd, params) = command_of(edit);
+        write_in_sight(shell, edit, cmd, params)?;
+    }
+    crate::panels::run(shell, "uml.classifier.set", serde_json::json!({ "classifier": pricing_id.to_string(), "final": true, "leaf": true }))?;
+    crate::panels::run(shell, "view.select", serde_json::json!({ "ids": [payment_id.to_string()] }))?;
+    shell.state.show_panel(crate::state::Panel::Properties);
+    shell.panels.editors_for = Some(payment_id);
+    let refused = shell.session.as_ref().and_then(|s| crate::uml_panel::member_leaf_refusal(s.doc(), &amount_edit, true));
+    shell.panels.member = Some(MemberEdit { refused, refused_at: Some("leaf"), opened: false, ..amount_edit });
+    // Order, PricingService, Payment and CardPayment in sight, so `{leaf}` reads on Order's total()
+    // and `{final, leaf}` after PricingService's name.
+    shell.canvas.fit_pending = false;
+    shell.canvas.zoom = 0.75;
+    shell.canvas.pan = egui::vec2(20.0 - 560.0 * 0.75, 40.0 - 80.0 * 0.75);
     Ok(())
 }
 

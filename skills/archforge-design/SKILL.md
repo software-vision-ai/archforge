@@ -604,13 +604,26 @@ What is UML's own, beside the shared rules above.
 - No subclasses (final) (AR-137, design page 08, frames G1 and G3) sits in a classifier's
   Properties after Abstract, for every kind but a built-in type (an association class needs none:
   nothing specializes one), its explanation under it ("Nothing may specialise Payment. Shown as
-  {final} after its name."), which also describes it; No redefinition (leaf) is to follow it. Ticked,
+  {final} after its name."), which also describes it; No redefinition (leaf) follows it. Ticked,
   the card shows `{final}` after the name in the small secondary style, and a generalization drawn
   to it, or a general end dragged onto it, is refused at the canvas's top ("PricingService is final:
   nothing may specialise it. Clear "No subclasses" in its Properties first."). Ticked while
   something specializes it, the box stays clear, nothing is written, and a refusal on the danger
   tint under it names those classifiers, with Select the n generalizations under it. Agents use
   `uml.classifier.set`.
+- No redefinition (leaf) (AR-138, design page 08, frames G1, G2 and G4) follows No subclasses in a
+  classifier's Properties (`workspace.properties.element.isLeaf`), its explanation under it ("A
+  subclass could not redefine Payment where it is inherited. Shown as {leaf}."), and sits in the
+  attribute editor under Unique and in the operation editor under Static and Abstract
+  (`workspace.properties.member.isLeaf`, "A subclass could not redefine this member. Shown as
+  {leaf} after it."); the explanation describes the box. Ticked, `{leaf}` follows the classifier's
+  name in the same braces as final (`{final, leaf}`) and ends a member's row (first in a property's
+  braces). Ticked on an element something redefines, the box stays clear, nothing is written, and a
+  refusal on the danger tint under it names what does ("CardPayment::amount redefines it. Remove
+  that redefinition first."). Redefines lists a leaf property last with a muted `{leaf}`; picking
+  it changes nothing and the reason sits under the field. A classifier's box writes at once; a
+  member's with its editor's Apply. Agents use `uml.classifier.set`, the attribute and operation
+  commands and `uml.association.set-end`, each with `leaf`.
 - A type menu offers None, every built-in type (Integer, String, Boolean, Real, UnlimitedNatural),
   then the model's own types by name, every one of them: the menu scrolls, the arrow keys reach any
   row, and only the rows in sight are laid out (AR-123). A built-in type is made in the package

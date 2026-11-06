@@ -112,8 +112,9 @@ them in a package named *Types*, which it made the first time you used one. You 
 
 Select a class to edit it in **Properties**. It shows a **Description**, the **Name** and
 **Package**, **Abstract** (tick it for a class that has no instances of its own, only more
-specific classes) and **No subclasses (final)** (see
-[Forbidding subclasses: final](#forbidding-subclasses-final)). Then come **Attributes** and
+specific classes), **No subclasses (final)** (see
+[Forbidding subclasses: final](#forbidding-subclasses-final)) and **No redefinition (leaf)** (see
+[Forbidding redefinition: leaf](#forbidding-redefinition-leaf)). Then come **Attributes** and
 **Operations**, each with a **+** and a pencil on every row. The pencil opens the member's editor. There you set what the card row cannot hold, such
 as the visibility (who may use the member) and an operation's parameters. Apply the change with
 the check at the editor's foot, or Enter; cancel it with the cross, or Escape. The red bin
@@ -122,7 +123,7 @@ removes the member. On a draft row, the **⋯** at its right opens the same edit
 The editor's **Static** marks a member that belongs to the class itself, not to each instance. Its
 row is underlined on every card that shows the class, and in **Properties**; clear **Static** and
 the underline goes. An operation's **Abstract** slants its row, so a static abstract operation is
-both underlined and slanted.
+both underlined and slanted. **No redefinition (leaf)** writes `{leaf}` after the member's row.
 
 ## 4. Connect Customer and Order: an association
 
@@ -524,6 +525,8 @@ An attribute's modifiers are in its editor in **Properties**, under **Type** and
   underlines its row.
 - **Derived**: the value is worked out from other values, such as a total from the lines.
 - **Read only**: the value cannot change once set.
+- **No redefinition (leaf)**: no property of a more specific class may redefine this one. See
+  [Forbidding redefinition: leaf](#forbidding-redefinition-leaf).
 - **Ordered** and **Unique** matter only when the attribute holds more than one value, that is,
   when its multiplicity's upper bound is above 1. You can set them either way, but the card shows
   them only then. **Unique** is on unless you turn it off.
@@ -533,7 +536,9 @@ An attribute's modifiers are in its editor in **Properties**, under **Type** and
   as many values, and which have another name.
 - **Redefines** names a property of a class its class specializes that this one replaces. It
   offers only properties of those classes whose multiplicity holds this attribute's, and that are
-  composite only if this attribute is too.
+  composite only if this attribute is too. A property marked **No redefinition (leaf)** is listed
+  last with `{leaf}` beside it; choosing it changes nothing and the reason shows under
+  **Redefines**.
 - When **Subsets** or **Redefines** has nothing to offer, a muted line under it says so.
 
 The check (or Enter) writes every change in the editor as one step you can undo; the cross (or
@@ -546,7 +551,7 @@ The card writes modifiers the UML way:
 
 - `/` before the name of a derived attribute;
 - `=` and the default after the multiplicity; a String's default is in double quotes;
-- in braces, what differs from the usual: `{readOnly}`, `{ordered}`, `{nonunique}`,
+- in braces, what differs from the usual: `{leaf}`, `{readOnly}`, `{ordered}`, `{nonunique}`,
   `{subsets name}` and `{redefines name}`. Unique is the usual, so it is not written;
 - a static attribute's or operation's whole row underlined, as `create() : Order` in the picture.
 
@@ -634,6 +639,32 @@ again. Clearing the box later allows new generalizations again and changes nothi
 change is one step you can undo, and the project keeps it once saved.
 
 <!-- picture: workspace-final light | PricingService with {final} after its name on its card; Payment selected, No subclasses refused in its Properties: it names its subclass CardPayment and offers to select the generalization -->
+
+### Forbidding redefinition: leaf
+
+A more specific class may *redefine* what it inherits: an attribute of its own that replaces one
+of the general class's, named under **Redefines**. Tick **No redefinition (leaf)** when nothing may
+redefine an element. It is in the **Properties** of a class, an interface, an enumeration, a data
+type or a primitive type of your own, right after **No subclasses (final)**, and in the editor of
+an attribute and of an operation. It is a separate setting from final: a leaf class may still be
+specialized; only what it holds may not be redefined.
+
+The element then shows `{leaf}`: after a class's name (`{final, leaf}` when both are ticked), and
+after an attribute's or an operation's row, as in `+ total() : Money {leaf}`, on every diagram.
+An association's end shows it beside its line too.
+
+While it is ticked, **Redefines** lists the property last with `{leaf}` beside it, and choosing it
+is refused under the field: *amount is leaf: nothing may redefine it. Clear "No redefinition" on
+it first.*
+
+You can only tick it while nothing redefines the element yet. Otherwise the box stays clear,
+nothing changes, and the reason under it names what redefines it, such as *CardPayment::amount
+redefines it. Remove that redefinition first.* Set that attribute's **Redefines** to **None**, then
+tick the box again. Clearing the box later allows redefinitions again and changes nothing else.
+A class's box is written at once; a member's is written with the rest of its editor when you apply
+it. Each change is one step you can undo, and the project keeps it once saved.
+
+<!-- picture: workspace-leaf light | Order's total() : Money {leaf} and PricingService {final, leaf} on their cards; Payment selected with the attribute editor open on amount, No redefinition (leaf) refused: CardPayment::amount redefines it -->
 
 ### Cards
 

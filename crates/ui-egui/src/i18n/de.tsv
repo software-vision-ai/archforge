@@ -589,6 +589,10 @@ plural		{name} has {n} subclass: {subclasses}.	{name} hat {n} Unterklasse: {subc
 plural		Remove that generalization before making it final.	Entfernen Sie diese Generalisierung, bevor Sie es final machen.|Entfernen Sie diese Generalisierungen, bevor Sie es final machen.
 str		{names} and {last}	{names} und {last}
 plural		Select the generalization	Die Generalisierung auswählen|Die {n} Generalisierungen auswählen
+str		No redefinition (leaf)	Keine Redefinition (leaf)
+str		A subclass could not redefine {name} where it is inherited. Shown as {leaf}.	Eine Unterklasse könnte {name} dort, wo es geerbt wird, nicht redefinieren. Als {leaf} gezeigt.
+str		A subclass could not redefine this member. Shown as {leaf} after it.	Eine Unterklasse könnte dieses Element nicht redefinieren. Als {leaf} dahinter gezeigt.
+plural		{names} redefines it. Remove that redefinition first.	{names} redefiniert es. Entfernen Sie zuerst diese Redefinition.|{names} redefinieren es. Entfernen Sie zuerst diese Redefinitionen.
 str		Add attribute	Attribut hinzufügen
 str		Add operation	Operation hinzufügen
 str		Add literal	Literal hinzufügen
@@ -649,6 +653,7 @@ str		{name} has a type this property's type does not conform to.	{name} hat eine
 str		{name} holds fewer values than this property.	{name} fasst weniger Werte als diese Eigenschaft.
 str		This property's multiplicity does not lie within {name}'s.	Die Multiplizität dieser Eigenschaft liegt nicht innerhalb der von {name}.
 str		{name} is composite; only a composite end redefines it.	{name} ist eine Komposition; nur ein Kompositionsende redefiniert sie.
+str		{name} is leaf: nothing may redefine it. Clear "No redefinition" on it first.	{name} ist leaf: Nichts darf es redefinieren. Entfernen Sie zuerst „Keine Redefinition“ daran.
 str		This attribute	Dieses Attribut
 str		This literal	Dieses Literal
 str		This operation	Diese Operation

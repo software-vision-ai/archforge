@@ -56,6 +56,9 @@ pub struct State {
     /// The classifier No subclasses (final) was refused on, while something specializes it: the
     /// refusal shows under the check box, naming those classifiers (AR-137).
     pub final_refused: Option<Uuid>,
+    /// The classifier No redefinition (leaf) was refused on, while something redefines it: the
+    /// refusal shows under the check box, naming what does (AR-138).
+    pub leaf_refused: Option<Uuid>,
     /// The selection the open editors belong to: selecting anything else closes them.
     pub editors_for: Option<Uuid>,
     /// A relationship's Properties (slice E3): a role being typed, whether More is open, and the
@@ -1346,6 +1349,7 @@ fn close_editors(shell: &mut Shell) {
         panels.member = None;
     }
     panels.final_refused = None;
+    panels.leaf_refused = None;
 }
 
 /// Opens the column editor on `target`, or on a column to add to `entity`.
