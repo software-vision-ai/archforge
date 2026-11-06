@@ -34,6 +34,12 @@ fn class(store: &Store, o: Obj) -> Option<archforge_mof::ClassId> {
     store.class_of(o).ok()
 }
 
+/// A relationship's tables as its line runs, `Customer → Order`.
+fn relationship_ends(store: &Store, o: Obj) -> String {
+    let end = |p| store.get(o, p).ok().and_then(|v| v.as_ref()).map(|e| name(store, e)).unwrap_or_default();
+    crate::notation_ui::ends_label(&end(archforge_er::relationship::FROM), &end(archforge_er::relationship::TO))
+}
+
 /// The schemas of the model, in the order the model lists them.
 fn schemas(store: &Store) -> Vec<Obj> {
     let Some(model) = archforge_core::skills::model_of(store) else { return Vec::new() };
@@ -237,11 +243,8 @@ impl NotationUi for ErUi {
                 entry(&icons::COLUMN, 3, name(store, o), place(tr("Column"), table))
             }
             c if c == archforge_er::RELATIONSHIP => {
-                let end = |p| store.get(o, p).ok().and_then(|v| v.as_ref()).map(|e| name(store, e)).unwrap_or_default();
-                let ends = format!("{} → {}", end(archforge_er::relationship::FROM), end(archforge_er::relationship::TO));
-                let own = name(store, o);
-                let label = if own.is_empty() { ends.clone() } else { own };
-                entry(&icons::LINK, 4, label, place(tr("Relationship"), ends))
+                let ends = relationship_ends(store, o);
+                entry(&icons::LINK, 4, crate::notation_ui::label(crate::notation_ui::UIS, store, o), place(tr("Relationship"), ends))
             }
             c if c == archforge_er::DOMAIN => entry(&icons::DOMAIN, 5, name(store, o), place(tr("Domain"), schema_name(o))),
             c if c == archforge_er::ENUM_TYPE => entry(&icons::ENUM, 5, name(store, o), place(tr("Enum type"), schema_name(o))),
@@ -384,6 +387,19 @@ impl NotationUi for ErUi {
             }
             _ => return None,
         })
+    }
+
+    /// An unnamed relationship by its tables, `Customer → Order`, as the search lists it; a subtype
+    /// link from its subtype to its supertype, as a UML generalization reads (AR-216).
+    fn unnamed(&self, store: &Store, o: Obj) -> Option<String> {
+        match class(store, o)? {
+            c if c == archforge_er::RELATIONSHIP => Some(relationship_ends(store, o)),
+            c if c == archforge_er::GENERALIZATION => {
+                let (sup, sub, _) = r::generalization_parts(store, o);
+                Some(crate::notation_ui::ends_label(&name(store, sub?), &name(store, sup?)))
+            }
+            _ => None,
+        }
     }
 
     /// A relationship carries no skills: the Skills panel says so in its words.

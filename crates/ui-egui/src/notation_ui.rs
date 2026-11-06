@@ -176,6 +176,12 @@ pub(crate) trait NotationUi: Sync {
 
     /// How Properties names `obj`.
     fn words(&self, store: &Store, obj: Obj) -> Option<Words>;
+    /// What a sentence calls `obj` when it has no name of its own (AR-216): a relationship by its
+    /// ends as its line runs, `CardPayment → Payment`; none leaves its kind's word ([`label`]).
+    fn unnamed(&self, store: &Store, obj: Obj) -> Option<String> {
+        let _ = (store, obj);
+        None
+    }
     /// The title of the first section, when it is not the selection's word (a column's panel is
     /// its table's).
     fn heading(&self, store: &Store, obj: Obj) -> Option<String> {
@@ -194,4 +200,22 @@ pub(crate) static UIS: &[&dyn NotationUi] = &[&crate::er_ui::ErUi, &crate::uml_u
 pub(crate) fn of(uis: &[&'static dyn NotationUi], store: &Store, obj: Obj) -> Option<&'static dyn NotationUi> {
     let class = store.class_of(obj).ok()?;
     uis.iter().copied().find(|u| u.metamodel() == class.metamodel())
+}
+
+/// What a sentence such as "Delete {name} from the model?" calls `obj`, one rule for every path
+/// that asks (AR-216): its name; without one, its notation's words for it
+/// ([`NotationUi::unnamed`]); else its kind's word, as Properties says it.
+pub(crate) fn label(uis: &[&'static dyn NotationUi], store: &Store, obj: Obj) -> String {
+    let own = archforge_core::name_of(store, obj);
+    if !own.is_empty() {
+        return own;
+    }
+    let ui = of(uis, store, obj);
+    ui.and_then(|u| u.unnamed(store, obj)).or_else(|| ui.and_then(|u| u.words(store, obj)).map(|w| w.word)).unwrap_or_default()
+}
+
+/// An unnamed relationship by its ends, as its line runs: `CardPayment → Payment`, as the
+/// generalization set's members and the project search's relationships read.
+pub(crate) fn ends_label(from: &str, to: &str) -> String {
+    format!("{from} → {to}")
 }

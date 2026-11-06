@@ -417,7 +417,7 @@ pub fn remove_selection(shell: &mut Shell) {
     // What it holds moves up to its parent (a nested package): no dialog, the toast says where;
     // the dialog when its stereotype applications would go with it.
     if let Some(parent) = ui.and_then(|u| u.hands_up(store, obj)).filter(|_| applications.is_empty()) {
-        let (name, to) = (name_of(store, obj), name_of(store, parent));
+        let (name, to) = (crate::notation_ui::label(shell.notation_uis, store, obj), name_of(store, parent));
         let held = ui.is_some_and(|u| u.has_children(store, obj));
         let said = crate::uml_constraints::before_removal(shell, &[id.to_string()]);
         match run(shell, "element.remove", json!({ "ids": [id.to_string()] })) {
@@ -440,7 +440,7 @@ pub fn remove_selection(shell: &mut Shell) {
     // The diagrams that show it, counted as the canvas counts them (AR-187).
     let diagrams = crate::editing::diagrams_showing(store, obj);
     if [relationships, keys, foreign_keys, diagrams].iter().all(|n| *n == 0) && !has_children && applications.is_empty() {
-        let lead = fmt(&tr("{name} deleted"), &[("name", &name_of(store, obj))]);
+        let lead = fmt(&tr("{name} deleted"), &[("name", &crate::notation_ui::label(shell.notation_uis, store, obj))]);
         let said = crate::uml_constraints::before_removal(shell, &[id.to_string()]);
         match run(shell, "element.remove", json!({ "ids": [id.to_string()] })) {
             Ok(_) => crate::uml_constraints::say_dropped(shell, said, &lead),
@@ -452,7 +452,8 @@ pub fn remove_selection(shell: &mut Shell) {
     let hands_to = ui.and_then(|u| u.hands_up(store, obj)).map(|p| (name_of(store, p), has_children));
     shell.explorer.delete = Some(Delete {
         ids: vec![id],
-        name: name_of(store, obj),
+        // Named as the canvas names it, an unnamed relationship by its ends (AR-216).
+        name: crate::notation_ui::label(shell.notation_uis, store, obj),
         relationships,
         keys,
         foreign_keys,

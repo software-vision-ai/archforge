@@ -1110,7 +1110,7 @@ fn ask_for_applications(shell: &Shell, edit: &MemberEdit) -> Option<crate::explo
     let applications = crate::uml_stereotypes::going_along(store, member);
     (!applications.is_empty()).then(|| crate::explorer::Delete {
         ids: vec![target],
-        name: name(store, member),
+        name: crate::notation_ui::label(shell.notation_uis, store, member),
         relationships: 0,
         keys: 0,
         foreign_keys: 0,
