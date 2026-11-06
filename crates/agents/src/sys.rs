@@ -9,6 +9,25 @@ use std::process::{Child, Command, ExitStatus};
 
 use crate::Exit;
 
+/// How often [`kill_group`] signals a group, and the pause between passes.
+const KILL_PASSES: u32 = 3;
+const KILL_PAUSE: std::time::Duration = std::time::Duration::from_millis(5);
+
+/// Kills every process in the group led by `raw`, and `raw` itself in case it left the group. The
+/// group is signalled more than once: a process the group was forking at the moment of the first
+/// signal can come into being after it (observed on macOS) and is caught by the next pass, while its
+/// parent, killed by the first, starts no more. Call it only while `raw` is not collected yet, so
+/// its id cannot belong to another process or group.
+pub(crate) fn kill_group(raw: u32) {
+    let _ = signal_process(raw, Sig::Kill);
+    for pass in 0..KILL_PASSES {
+        let _ = signal_group(raw, Sig::Kill);
+        if pass.saturating_add(1) < KILL_PASSES {
+            std::thread::sleep(KILL_PAUSE);
+        }
+    }
+}
+
 /// The signals this crate sends.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Sig {

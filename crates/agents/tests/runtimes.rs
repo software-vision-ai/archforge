@@ -128,6 +128,20 @@ fn alive(pid: i32) -> bool {
     rustix::process::test_kill_process(rustix::process::Pid::from_raw(pid).unwrap()).is_ok()
 }
 
+/// Whether any process is left in the group `pgid` (its leader collected).
+fn group_alive(pgid: i32) -> bool {
+    rustix::process::test_kill_process_group(rustix::process::Pid::from_raw(pgid).unwrap()).is_ok()
+}
+
+/// Waits up to ten seconds for the group `pgid` to be empty, and says whether it is.
+fn group_gone(pgid: i32) -> bool {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while group_alive(pgid) && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    !group_alive(pgid)
+}
+
 /// Every way a value can be shown: debug, pretty debug, and display for errors.
 fn shown(error: &AgentError) -> String {
     format!("{error:?}\n{error:#?}\n{error}")
@@ -637,10 +651,13 @@ fn the_whole_process_group_is_killed_on_drop_and_on_exit() {
         std::thread::sleep(Duration::from_millis(20));
     }
     assert!(!alive(grandchild) && !alive(child), "a process outlived the drop");
+    // The foreground sleep too, even when the drop came while the shell was starting it.
+    assert!(group_gone(child), "a process of the group outlived the drop");
 
     let (runtime, folder) = claude(&base, "/bin/sleep 300 & echo \"$!\"; read line; exit 0");
     let mut process = spawn(&runtime, &folder, SpawnRequest::default()).unwrap();
     let grandchild: i32 = next_line(&process).parse().unwrap();
+    let child = i32::try_from(process.pid()).unwrap();
     process.close_input();
     assert_eq!(wait_exit(&mut process).code, Some(0));
     let deadline = Instant::now() + Duration::from_secs(10);
@@ -648,5 +665,6 @@ fn the_whole_process_group_is_killed_on_drop_and_on_exit() {
         std::thread::sleep(Duration::from_millis(20));
     }
     assert!(!alive(grandchild), "what the runtime left running outlived it");
+    assert!(group_gone(child), "a process of the group outlived the runtime");
     std::fs::remove_dir_all(&base).unwrap();
 }

@@ -80,7 +80,9 @@ running; both runtimes stop the turn and stay up. `shutdown(grace)` closes the i
 again, then sends SIGKILL; `grace` past 60 s is refused. Whenever the runtime has ended, by itself or
 not, whatever is left in its group is killed with SIGKILL before the runtime is collected: the check
 that it ended leaves it uncollected (`waitid` with `WNOWAIT`), so its process id, the group's id,
-cannot be reused by another process before the group signal. Dropping a `RuntimeProcess` kills the
+cannot be reused by another process before the group signal. The group is signalled three times,
+5 ms apart: a process the group was forking at the first signal can appear after it (seen on macOS,
+where a test caught such a survivor) and the next pass kills it. Dropping a `RuntimeProcess` kills the
 group and the runtime and collects it, and signals nothing when the runtime can no longer be checked
 as this process's child. Out of reach: a process that leaves the group on purpose (`setsid`); if it
 keeps an output pipe open, that pipe's reader thread waits for it. A process stuck in an

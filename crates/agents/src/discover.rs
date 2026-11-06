@@ -467,7 +467,7 @@ fn run_probe(
         readers = start_thread(format!("{kind}-probe-stderr"), move || drop(tx.send((false, capped_read(err, kind)))));
     }
     if let Err(e) = readers {
-        kill_all(pid);
+        sys::kill_group(pid);
         let _ = child.wait();
         return Err(e);
     }
@@ -477,19 +477,19 @@ fn run_probe(
             Ok(true) => break,
             Ok(false) if started.elapsed() < PROBE_BUDGET => std::thread::sleep(POLL),
             Ok(false) => {
-                kill_all(pid);
+                sys::kill_group(pid);
                 let _ = child.wait();
                 return Ok(None);
             }
             Err(e) => {
-                kill_all(pid);
+                sys::kill_group(pid);
                 let _ = child.wait();
                 return Err(e);
             }
         }
     }
     // Anything the probe left running in its group goes with it, before the probe is collected.
-    let _ = sys::signal_group(pid, sys::Sig::Kill);
+    sys::kill_group(pid);
     let exit = sys::exit_of(child.wait()?);
     let (mut stdout, mut stderr) = (String::new(), String::new());
     for _ in 0..2 {
@@ -500,13 +500,6 @@ fn run_probe(
         }
     }
     Ok(Some(ProbeOutput { exit, stdout, stderr }))
-}
-
-/// Kills the probe's whole group, and the probe itself in case it left the group, so the wait that
-/// follows cannot hang.
-fn kill_all(pid: u32) {
-    let _ = sys::signal_group(pid, sys::Sig::Kill);
-    let _ = sys::signal_process(pid, sys::Sig::Kill);
 }
 
 /// Reads `stream` to its end, keeping its first [`PROBE_OUTPUT_BYTES`], so a talkative probe never

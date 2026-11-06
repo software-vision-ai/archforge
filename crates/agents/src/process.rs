@@ -210,9 +210,7 @@ pub fn spawn(runtime: &Runtime, folder: &ConversationFolder, request: SpawnReque
     })?;
 
     let thread_failed = |child: &mut Child, e: io::Error| {
-        let pid = child.id();
-        let _ = sys::signal_group(pid, sys::Sig::Kill);
-        let _ = sys::signal_process(pid, sys::Sig::Kill);
+        sys::kill_group(child.id());
         let _ = child.wait();
         AgentError::Spawn {
             runtime: kind,
@@ -484,10 +482,8 @@ impl RuntimeProcess {
     /// While it is not collected, its process id cannot be reused, so the group signal reaches only
     /// what it started.
     fn collect(&mut self) -> Result<Exit, AgentError> {
-        let pid = self.child.id();
-        let _ = sys::signal_group(pid, sys::Sig::Kill);
         // The runtime itself too, in case it left its group: otherwise the wait could hang.
-        let _ = sys::signal_process(pid, sys::Sig::Kill);
+        sys::kill_group(self.child.id());
         let status = self.child.wait().map_err(|e| self.io("collect", e))?;
         let exit = sys::exit_of(status);
         self.exit = Some(exit);
@@ -510,8 +506,7 @@ impl Drop for RuntimeProcess {
             let pid = self.child.id();
             match sys::has_ended(&self.child) {
                 Ok(_) => {
-                    let _ = sys::signal_group(pid, sys::Sig::Kill);
-                    let _ = sys::signal_process(pid, sys::Sig::Kill);
+                    sys::kill_group(pid);
                     let _ = self.child.wait();
                 }
                 Err(e) => log::warn!("{} (process {pid}) is not signalled on drop: it cannot be checked ({e})", self.kind),
