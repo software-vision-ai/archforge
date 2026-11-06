@@ -1,5 +1,5 @@
 //! The neutral face of a conversation with an agent runtime: one trait every adapter implements
-//! (Claude here, Codex in AR-202) and the events the Chat panel reads, the same for every runtime.
+//! (`claude` and `codex`) and the events the Chat panel reads, the same for every runtime.
 
 use std::time::Duration;
 

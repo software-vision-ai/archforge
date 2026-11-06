@@ -15,18 +15,20 @@
 //!   group when dropped.
 //! - [`AgentSession`] is a conversation with a running runtime, turn by turn, and [`SessionEvent`]
 //!   what it says, the same for every runtime; [`claude::ClaudeSession`] drives Claude Code over
-//!   stream-json.
+//!   stream-json, [`codex::CodexSession`] drives `codex app-server` over JSON-RPC, and
+//!   [`codex::CodexAccounts`] reads and changes the Codex account for the Settings page.
 //! - [`AgentError`] is every failure, and [`ErrorKind`] the neutral category the interface shows.
 //!
 //! No secret appears in an error, a log line or a `Debug` output: keys arrive as
-//! [`archforge_secrets::Secret`], reach the child only through its environment, and are scrubbed
-//! from the error stream's tail. The runtimes are available on macOS and Linux; elsewhere every
+//! [`archforge_secrets::Secret`], reach the child only through its environment (Claude) or once
+//! over its standard input (Codex), and are scrubbed from its output and the error stream's tail. The runtimes are available on macOS and Linux; elsewhere every
 //! call answers [`AgentError::NotAvailable`].
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
 use std::fmt;
 
 pub mod claude;
+pub mod codex;
 mod discover;
 mod error;
 mod folder;

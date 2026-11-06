@@ -447,6 +447,7 @@ fn the_environment_is_cleared_but_for_the_allowlist_and_the_given_variables() {
         vars: vec![("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC".into(), "1".into())],
         secret_vars: vec![("ANTHROPIC_API_KEY".into(), canary())],
         limits: Limits::default(),
+        ..SpawnRequest::default()
     };
     let request_debug = format!("{request:?}");
     assert!(!request_debug.contains(CANARY), "{request_debug}");
@@ -489,7 +490,7 @@ fn the_key_never_appears_in_errors_debug_or_the_error_tail() {
     let base = scratch("canary");
     let (runtime, folder) = claude(&base, "echo \"auth failed for key=$ANTHROPIC_API_KEY\" >&2; exit 1");
     let refused = |args: Vec<OsString>, vars: Vec<(String, OsString)>| {
-        let request = SpawnRequest { args, vars, secret_vars: vec![("ANTHROPIC_API_KEY".into(), canary())], limits: Limits::default() };
+        let request = SpawnRequest { args, vars, secret_vars: vec![("ANTHROPIC_API_KEY".into(), canary())], ..SpawnRequest::default() };
         spawn(&runtime, &folder, request).unwrap_err()
     };
     let in_args = refused(vec![format!("--api-key={CANARY}").into()], vec![]);

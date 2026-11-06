@@ -5,6 +5,7 @@
 use std::ffi::OsString;
 use std::fmt;
 use std::io::{self, Write};
+use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender, TryRecvError, TrySendError, sync_channel};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -95,6 +96,16 @@ pub struct SpawnRequest {
     /// runtime. They are also kept to scrub the error stream's tail, and overwritten when the
     /// process is dropped.
     pub secret_vars: Vec<(String, Secret)>,
+    /// Secrets the runtime gets another way, such as a key sent over its input: never put in its
+    /// environment, but refused like `secret_vars` in the command line and the plain variables,
+    /// kept to scrub the error stream's tail and [`RuntimeProcess::redact`], and overwritten when
+    /// the process is dropped.
+    pub scrub: Vec<Secret>,
+    /// The folder the runtime's settings variable names instead of the conversation's own
+    /// configuration folder: the account folder every Codex conversation shares
+    /// ([`crate::Workspace::account`]). It must be an absolute path to a real folder private to this
+    /// user.
+    pub config_home: Option<PathBuf>,
     /// The caps on the runtime's output.
     pub limits: Limits,
 }
@@ -130,18 +141,18 @@ impl fmt::Display for Exit {
 ///
 /// The environment is cleared and holds only: `PATH` (the runtime's [`Runtime::child_path`]),
 /// the host's `LANG` and `LC_*`, `HOME` and `TMPDIR` in the conversation's folder, the runtime's
-/// settings variable (`CLAUDE_CONFIG_DIR` or `CODEX_HOME`) at its private configuration folder,
-/// and the request's variables. The working folder is the conversation's work folder; standard
+/// settings variable (`CLAUDE_CONFIG_DIR` or `CODEX_HOME`) at its private configuration folder (or
+/// at the request's `config_home`), and the request's variables. The working folder is the conversation's work folder; standard
 /// input, output and error are pipes; the runtime leads a new process group.
 ///
 /// Refused before anything starts: a limit out of range, a malformed or duplicated variable name,
-/// a name this crate sets itself, a NUL in a value, and a secret's value in the command line or in
-/// a plain variable.
+/// a name this crate sets itself, a NUL in a value, a secret's value in the command line or in a
+/// plain variable, and a `config_home` that is not a private folder of this user.
 pub fn spawn(runtime: &Runtime, folder: &ConversationFolder, request: SpawnRequest) -> Result<RuntimeProcess, AgentError> {
     if !sys::AVAILABLE {
         return Err(AgentError::NotAvailable);
     }
-    let SpawnRequest { args, vars, secret_vars, limits } = request;
+    let SpawnRequest { args, vars, secret_vars, scrub, config_home, limits } = request;
     limits.check()?;
     let mut names: Vec<&str> = Vec::new();
     for name in vars.iter().map(|(n, _)| n.as_str()).chain(secret_vars.iter().map(|(n, _)| n.as_str())) {
@@ -157,19 +168,29 @@ pub fn spawn(runtime: &Runtime, folder: &ConversationFolder, request: SpawnReque
         }
     }
     for (name, secret) in &secret_vars {
-        let value = secret.expose();
-        if value.contains('\0') {
+        if secret.expose().contains('\0') {
             return Err(AgentError::InvalidVariable { name: Some(name.clone()), bytes: name.len(), reason: "its value holds a NUL byte".to_owned() });
         }
+    }
+    let named = secret_vars.iter().map(|(name, secret)| (name.as_str(), secret));
+    for (name, secret) in named.chain(scrub.iter().map(|secret| ("the key sent over standard input", secret))) {
+        let value = secret.expose();
         let appears_in = |text: &OsString| contains_bytes(text.as_encoded_bytes(), value.as_bytes());
         if args.iter().any(appears_in) {
-            return Err(AgentError::SecretExposed { variable: name.clone(), place: "command line" });
+            return Err(AgentError::SecretExposed { variable: name.to_owned(), place: "command line" });
         }
         if vars.iter().any(|(_, v)| appears_in(v)) {
-            return Err(AgentError::SecretExposed { variable: name.clone(), place: "plain variables" });
+            return Err(AgentError::SecretExposed { variable: name.to_owned(), place: "plain variables" });
         }
     }
     let kind = runtime.kind();
+    let config = match &config_home {
+        Some(path) => {
+            check_config_home(path)?;
+            path.as_path()
+        }
+        None => folder.config(),
+    };
     let path = runtime.path();
     match std::fs::metadata(path) {
         Ok(meta) if sys::is_executable(&meta) => {}
@@ -191,7 +212,7 @@ pub fn spawn(runtime: &Runtime, folder: &ConversationFolder, request: SpawnReque
         .envs(runtime.locale().iter().map(|(k, v)| (k, v)))
         .env("HOME", folder.home())
         .env("TMPDIR", folder.tmp())
-        .env(kind.config_var(), folder.config())
+        .env(kind.config_var(), config)
         .envs(vars.iter().map(|(k, v)| (k, v)))
         .envs(secret_vars.iter().map(|(k, s)| (k, s.expose())))
         .current_dir(folder.work())
@@ -237,7 +258,7 @@ pub fn spawn(runtime: &Runtime, folder: &ConversationFolder, request: SpawnReque
         start_thread(format!("{kind}-stdin"), move || write_lines(stdin, queue, failed)).map_err(|e| thread_failed(&mut child, e))?;
         input = Some(lines);
     }
-    let scrub = secret_vars.into_iter().map(|(_, s)| s).collect();
+    let scrub = secret_vars.into_iter().map(|(_, s)| s).chain(scrub).collect();
     Ok(RuntimeProcess { kind, input, input_failed, max_line_bytes: limits.max_line_bytes, events, tail, exit: None, scrub, child })
 }
 
@@ -284,6 +305,20 @@ fn check_name(name: &str) -> Result<(), AgentError> {
         });
     }
     Ok(())
+}
+
+/// Refuses a settings folder other than a conversation's own unless it is an absolute path to a
+/// real folder of this user that no one else may read or enter.
+fn check_config_home(path: &Path) -> Result<(), AgentError> {
+    let problem = |problem: String| AgentError::Folder { path: path.to_path_buf(), problem };
+    if !path.is_absolute() {
+        return Err(problem("is not an absolute path, so it cannot be the runtime's settings folder".to_owned()));
+    }
+    let meta = std::fs::symlink_metadata(path).map_err(|e| problem(format!("cannot be read: {e}")))?;
+    match sys::private_folder_problem(&meta, sys::current_uid()) {
+        Some(why) => Err(problem(format!("{why}, so it cannot be the runtime's settings folder"))),
+        None => Ok(()),
+    }
 }
 
 /// Whether `needle` occurs in `haystack`.

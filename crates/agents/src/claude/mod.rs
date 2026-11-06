@@ -202,16 +202,33 @@ pub fn command_line(config: &ClaudeConfig, mcp_config: &Path) -> Vec<OsString> {
 /// home given back for the token. Refused: a relative or non-UTF-8 path, and an origin label
 /// `archforge-cli` would refuse.
 pub fn mcp_config(bridge: &Bridge) -> Result<String, AgentError> {
-    let path_text = |what: &'static str, path: &Path| -> Result<String, AgentError> {
-        if !path.is_absolute() {
-            return Err(AgentError::InvalidSetting { setting: what, bytes: path.as_os_str().len(), reason: "it is not an absolute path".to_owned() });
-        }
-        path.to_str().map(str::to_owned).ok_or_else(|| AgentError::InvalidSetting {
-            setting: what,
-            bytes: path.as_os_str().len(),
-            reason: "it is not UTF-8 text".to_owned(),
-        })
-    };
+    let command = bridge_command(bridge)?;
+    let mut env = Map::new();
+    for name in SECRET_VARS {
+        env.insert(name.to_owned(), Value::String(String::new()));
+    }
+    for (name, value) in command.env {
+        env.insert(name.to_owned(), Value::String(value));
+    }
+    let config = json!({ "mcpServers": { SERVER_NAME: { "command": command.cli, "args": command.args, "env": env } } });
+    Ok(config.to_string())
+}
+
+/// How a runtime is to start the bridge, checked: the program, its arguments and the variables
+/// that give it the person's home back.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct BridgeCommand {
+    /// The absolute path of `archforge-cli`, as text.
+    pub(crate) cli: String,
+    /// `mcp --bridge <port> [--read-only] --origin <label>`.
+    pub(crate) args: Vec<String>,
+    /// `HOME`, and `XDG_CONFIG_HOME` where set.
+    pub(crate) env: Vec<(&'static str, String)>,
+}
+
+/// The bridge's command, checked: a relative or non-UTF-8 path, port 0, an unknown home folder and
+/// an origin label `archforge-cli` would refuse are refused here, never passed on.
+pub(crate) fn bridge_command(bridge: &Bridge) -> Result<BridgeCommand, AgentError> {
     let cli = path_text("archforge-cli path", &bridge.cli)?;
     if bridge.port == 0 {
         return Err(AgentError::InvalidSetting { setting: "bridge port", bytes: 1, reason: "the port is 1 to 65535".to_owned() });
@@ -226,10 +243,6 @@ pub fn mcp_config(bridge: &Bridge) -> Result<String, AgentError> {
     }
     args.push("--origin".to_owned());
     args.push(bridge.origin.clone());
-    let mut env = Map::new();
-    for name in SECRET_VARS {
-        env.insert(name.to_owned(), Value::String(String::new()));
-    }
     // Until the bridge takes the token's place itself (AR-203), without the person's home it could
     // not find the token and would fail on every call: refused here instead.
     let home = bridge.home.home.as_ref().ok_or_else(|| AgentError::InvalidSetting {
@@ -237,45 +250,38 @@ pub fn mcp_config(bridge: &Bridge) -> Result<String, AgentError> {
         bytes: 0,
         reason: "the person's home folder is unknown, so the tool server could not find the control token".to_owned(),
     })?;
-    env.insert("HOME".to_owned(), Value::String(path_text("home folder", home)?));
+    let mut env = vec![("HOME", path_text("home folder", home)?)];
     if let Some(xdg) = &bridge.home.xdg_config_home {
-        env.insert("XDG_CONFIG_HOME".to_owned(), Value::String(path_text("XDG_CONFIG_HOME", xdg)?));
+        env.push(("XDG_CONFIG_HOME", path_text("XDG_CONFIG_HOME", xdg)?));
     }
-    let config = json!({ "mcpServers": { SERVER_NAME: { "command": cli, "args": args, "env": env } } });
-    Ok(config.to_string())
+    Ok(BridgeCommand { cli, args, env })
+}
+
+/// `path` as text, refused when it is relative or not UTF-8; `what` names the setting.
+pub(crate) fn path_text(what: &'static str, path: &Path) -> Result<String, AgentError> {
+    if !path.is_absolute() {
+        return Err(AgentError::InvalidSetting { setting: what, bytes: path.as_os_str().len(), reason: "it is not an absolute path".to_owned() });
+    }
+    path.to_str().map(str::to_owned).ok_or_else(|| AgentError::InvalidSetting {
+        setting: what,
+        bytes: path.as_os_str().len(),
+        reason: "it is not UTF-8 text".to_owned(),
+    })
 }
 
 /// Writes the tool server configuration into the conversation's folder, atomically and readable by
 /// this user alone (0600); answers its path. Refused before anything is written: a configuration
 /// that holds the key (pasted into the origin label, say), which would put it on the bridge's
-/// command line. Whatever stands at the file's place from an earlier start, a link among them, is
-/// removed first, so the write never follows a link out of the private folder.
+/// command line. An earlier private configuration is replaced by an atomic rename; anything else
+/// at the file's place, a link among them, is removed first, so the write never follows a link out
+/// of the private folder.
 pub fn write_mcp_config(folder: &ConversationFolder, bridge: &Bridge, key: &Secret) -> Result<PathBuf, AgentError> {
     let text = mcp_config(bridge)?;
     if !key.expose().is_empty() && text.contains(key.expose()) {
         return Err(AgentError::SecretExposed { variable: KEY_VAR.to_owned(), place: "tool server configuration" });
     }
     let path = folder.path().join(MCP_CONFIG_FILE);
-    let failed = |problem: String| AgentError::Folder { path: path.clone(), problem };
-    match std::fs::symlink_metadata(&path) {
-        Ok(meta) if meta.is_dir() => return Err(failed("holds a folder where the tool server configuration belongs".to_owned())),
-        Ok(_) => std::fs::remove_file(&path).map_err(|e| failed(format!("could not remove the earlier tool server configuration: {e}")))?,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-        Err(e) => return Err(failed(format!("could not be checked for the tool server configuration: {e}"))),
-    }
-    craft_atomic::WriteOptions::default()
-        .with_new_file_permissions(craft_atomic::NewFilePermissions::Private)
-        .atomic_write(&path, text.as_bytes())
-        .map_err(|e| failed(format!("could not hold the tool server configuration: {e}")))?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let private = std::fs::symlink_metadata(&path).is_ok_and(|m| m.file_type().is_file() && m.permissions().mode() & 0o077 == 0);
-        if !private {
-            let _ = std::fs::remove_file(&path);
-            return Err(failed("did not keep the tool server configuration private to this user".to_owned()));
-        }
-    }
+    crate::folder::write_private_file(&path, text.as_bytes(), "the tool server configuration")?;
     Ok(path)
 }
 
@@ -315,6 +321,7 @@ impl ClaudeSession {
             vars: vec![("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC".to_owned(), "1".into())],
             secret_vars: vec![(KEY_VAR.to_owned(), key)],
             limits: config.limits,
+            ..SpawnRequest::default()
         };
         let process = spawn(runtime, folder, request)?;
         Ok(ClaudeSession {
@@ -493,7 +500,7 @@ impl AgentSession for ClaudeSession {
 }
 
 /// A refused setting, named by its length only: the value is never repeated.
-fn setting(what: &'static str, value: &str, reason: &str) -> AgentError {
+pub(crate) fn setting(what: &'static str, value: &str, reason: &str) -> AgentError {
     AgentError::InvalidSetting { setting: what, bytes: value.len(), reason: reason.to_owned() }
 }
 

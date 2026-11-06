@@ -1,0 +1,2663 @@
+{
+ "$comment": "Cut from the schema codex-cli 0.166.0 writes with `codex app-server generate-json-schema` (the AR-196 spike): the four message unions (method names and params references) and the shape (property names, required fields, type tags) of the definitions the contract test in tests/codex.rs reads; descriptions and every other definition left out. Regenerate on each tested Codex bump.",
+ "definitions": {
+  "ApplyPatchApprovalResponse": {
+   "properties": {
+    "decision": {}
+   },
+   "required": [
+    "decision"
+   ]
+  },
+  "ClientNotification": {
+   "oneOf": [
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "initialized"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  "ClientRequest": {
+   "oneOf": [
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "initialize"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/InitializeParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/start"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadStartParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/resume"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadResumeParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/fork"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadForkParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/archive"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadArchiveParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/delete"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadDeleteParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/unsubscribe"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadUnsubscribeParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/name/set"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadSetNameParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/goal/set"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadGoalSetParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/goal/get"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadGoalGetParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/goal/clear"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadGoalClearParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/metadata/update"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadMetadataUpdateParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/attachment/add"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadAttachmentAddParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/attachment/list"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadAttachmentListParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/attachmentOwner/list"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadAttachmentOwnerListParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/attachment/remove"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadAttachmentRemoveParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/section/move"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadSectionMoveParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/unarchive"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadUnarchiveParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/compact/start"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadCompactStartParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/shellCommand"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadShellCommandParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/approveGuardianDeniedAction"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadApproveGuardianDeniedActionParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/revert"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadRevertParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/list"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadListParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "threadSection/list"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadSectionListParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "threadSection/create"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadSectionCreateParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "threadSection/update"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadSectionUpdateParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "threadSection/delete"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadSectionDeleteParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/loaded/list"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadLoadedListParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/read"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadReadParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/turns/list"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadTurnsListParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/items/list"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadItemsListParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/inject_items"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadInjectItemsParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "skills/list"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/SkillsListParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "skills/extraRoots/set"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/SkillsExtraRootsSetParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "hooks/list"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/HooksListParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "marketplace/add"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/MarketplaceAddParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "marketplace/remove"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/MarketplaceRemoveParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "marketplace/upgrade"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/MarketplaceUpgradeParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "plugin/list"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/PluginListParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "plugin/installed"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/PluginInstalledParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "plugin/reconcile"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/PluginReconcileParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "plugin/read"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/PluginReadParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "plugin/skill/read"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/PluginSkillReadParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "plugin/share/save"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/PluginShareSaveParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "plugin/share/updateTargets"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/PluginShareUpdateTargetsParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "plugin/share/list"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/PluginShareListParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "plugin/share/checkout"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/PluginShareCheckoutParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "plugin/share/delete"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/PluginShareDeleteParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "app/read"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/AppsReadParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "app/list"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/AppsListParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "app/installed"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/AppsInstalledParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "fs/readFile"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/FsReadFileParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "fs/writeFile"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/FsWriteFileParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "fs/createDirectory"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/FsCreateDirectoryParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "fs/getMetadata"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/FsGetMetadataParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "fs/readDirectory"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/FsReadDirectoryParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "fs/remove"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/FsRemoveParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "fs/copy"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/FsCopyParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "fs/watch"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/FsWatchParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "fs/unwatch"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/FsUnwatchParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "skills/config/write"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/SkillsConfigWriteParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "plugin/install"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/PluginInstallParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "plugin/uninstall"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/PluginUninstallParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "turn/start"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/TurnStartParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "turn/steer"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/TurnSteerParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "turn/interrupt"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/TurnInterruptParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "review/start"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ReviewStartParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "model/list"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ModelListParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "account/gatewayOAuth/read"
+       ]
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "account/gatewayOAuth/login"
+       ]
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "account/gatewayOAuth/cancel"
+       ]
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "modelProvider/capabilities/read"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ModelProviderCapabilitiesReadParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "experimentalFeature/list"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ExperimentalFeatureListParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "permissionProfile/list"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/PermissionProfileListParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "experimentalFeature/enablement/set"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ExperimentalFeatureEnablementSetParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "mcpServer/oauth/login"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/McpServerOauthLoginParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "config/mcpServer/reload"
+       ]
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "mcpServerStatus/list"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ListMcpServerStatusParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "mcpServer/resource/read"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/McpResourceReadParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "mcpServer/tool/call"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/McpServerToolCallParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "windowsSandbox/setupStart"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/WindowsSandboxSetupStartParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "windowsSandbox/readiness"
+       ]
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "account/login/start"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/LoginAccountParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "account/login/cancel"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/CancelLoginAccountParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "account/logout"
+       ]
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "account/rateLimits/read"
+       ]
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "account/rateLimitResetCredit/consume"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ConsumeAccountRateLimitResetCreditParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "account/usage/read"
+       ]
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "account/workspaceMessages/read"
+       ]
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "account/sendAddCreditsNudgeEmail"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/SendAddCreditsNudgeEmailParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "feedback/upload"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/FeedbackUploadParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "feedback/save"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/FeedbackSaveParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "command/exec"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/CommandExecParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "command/exec/write"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/CommandExecWriteParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "command/exec/terminate"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/CommandExecTerminateParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "command/exec/resize"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/CommandExecResizeParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "config/read"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ConfigReadParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "externalAgentConfig/detect"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ExternalAgentConfigDetectParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "externalAgentConfig/import"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ExternalAgentConfigImportParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "externalAgentConfig/import/recordHistory"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ExternalAgentConfigImportHistoryRecordParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "externalAgentConfig/import/readHistories"
+       ]
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "config/value/write"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ConfigValueWriteParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "config/batchWrite"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ConfigBatchWriteParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "configRequirements/read"
+       ]
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "account/read"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/GetAccountParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "fuzzyFileSearch"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/FuzzyFileSearchParams"
+      }
+     }
+    }
+   ]
+  },
+  "CommandExecutionRequestApprovalResponse": {
+   "properties": {
+    "decision": {}
+   },
+   "required": [
+    "decision"
+   ]
+  },
+  "ExecCommandApprovalResponse": {
+   "properties": {
+    "decision": {}
+   },
+   "required": [
+    "decision"
+   ]
+  },
+  "FileChangeRequestApprovalResponse": {
+   "properties": {
+    "decision": {}
+   },
+   "required": [
+    "decision"
+   ]
+  },
+  "InitializeParams": {
+   "properties": {
+    "capabilities": {},
+    "clientInfo": {}
+   },
+   "required": [
+    "clientInfo"
+   ]
+  },
+  "McpServerElicitationRequestResponse": {
+   "properties": {
+    "_meta": {},
+    "action": {},
+    "content": {}
+   },
+   "required": [
+    "action"
+   ]
+  },
+  "PermissionsRequestApprovalResponse": {
+   "properties": {
+    "permissions": {},
+    "scope": {},
+    "strictAutoReview": {}
+   },
+   "required": [
+    "permissions"
+   ]
+  },
+  "ServerNotification": {
+   "oneOf": [
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "error"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ErrorNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/started"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadStartedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/status/changed"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadStatusChangedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/readState/changed"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadReadStateChangedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/archived"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadArchivedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/deleted"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadDeletedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/unarchived"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadUnarchivedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/closed"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadClosedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/reverted"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadRevertedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "skills/changed"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/SkillsChangedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/name/updated"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadNameUpdatedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/attachment/updated"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadAttachmentUpdatedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/goal/updated"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadGoalUpdatedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/prediction/updated"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadPredictionUpdatedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/goal/cleared"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadGoalClearedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/queue/changed"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadQueueChangedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "project/changed"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ProjectChangedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/project/updated"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadProjectUpdatedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/environment/connected"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/EnvironmentConnectionNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/environment/disconnected"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/EnvironmentConnectionNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/settings/updated"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadSettingsUpdatedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/tokenUsage/updated"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadTokenUsageUpdatedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "turn/started"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/TurnStartedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "hook/started"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/HookStartedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "turn/completed"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/TurnCompletedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "hook/completed"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/HookCompletedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "turn/diff/updated"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/TurnDiffUpdatedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "turn/plan/updated"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/TurnPlanUpdatedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "item/started"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ItemStartedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "item/autoApprovalReview/started"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ItemGuardianApprovalReviewStartedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "item/autoApprovalReview/completed"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ItemGuardianApprovalReviewCompletedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "autoApprovalReview/strictReviewRequired"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/StrictReviewRequiredNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "item/completed"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ItemCompletedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "item/agentMessage/delta"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/AgentMessageDeltaNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "item/plan/delta"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/PlanDeltaNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "command/exec/outputDelta"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/CommandExecOutputDeltaNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "process/outputDelta"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ProcessOutputDeltaNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "process/exited"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ProcessExitedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "item/commandExecution/outputDelta"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/CommandExecutionOutputDeltaNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "item/commandExecution/terminalInteraction"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/TerminalInteractionNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "item/fileChange/outputDelta"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/FileChangeOutputDeltaNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "item/fileChange/patchUpdated"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/FileChangePatchUpdatedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "serverRequest/resolved"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ServerRequestResolvedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "item/mcpToolCall/progress"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/McpToolCallProgressNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "mcpServer/oauthLogin/completed"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/McpServerOauthLoginCompletedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "mcpServer/startupStatus/updated"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/McpServerStatusUpdatedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "mcpServer/event/stream/notification"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/McpServerEventStreamNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "account/updated"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/AccountUpdatedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "account/gatewayOAuth/changed"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/GatewayOAuthChangedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "account/rateLimits/updated"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/AccountRateLimitsUpdatedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "app/list/updated"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/AppListUpdatedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "remoteControl/status/changed"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/RemoteControlStatusChangedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "externalAgentConfig/import/progress"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ExternalAgentConfigImportProgressNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "externalAgentConfig/import/completed"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ExternalAgentConfigImportCompletedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "fs/changed"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/FsChangedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "item/reasoning/summaryTextDelta"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ReasoningSummaryTextDeltaNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "item/reasoning/summaryPartAdded"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ReasoningSummaryPartAddedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "item/reasoning/textDelta"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ReasoningTextDeltaNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/compacted"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ContextCompactedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "model/rerouted"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ModelReroutedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "model/verification"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ModelVerificationNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "modelProvider/authRecoveryStarted"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/AuthRecoveryNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "modelProvider/authRecoveryCompleted"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/AuthRecoveryNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "turn/moderationMetadata"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/TurnModerationMetadataNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "model/safetyBuffering/updated"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ModelSafetyBufferingUpdatedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "warning"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/WarningNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "guardianWarning"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/GuardianWarningNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "deprecationNotice"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/DeprecationNoticeNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "configWarning"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ConfigWarningNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "fuzzyFileSearch/sessionUpdated"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/FuzzyFileSearchSessionUpdatedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "fuzzyFileSearch/sessionCompleted"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/FuzzyFileSearchSessionCompletedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/realtime/started"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadRealtimeStartedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/realtime/itemAdded"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadRealtimeItemAddedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/realtime/item/started"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadRealtimeItemStartedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/realtime/item/transcript/delta"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadRealtimeItemTranscriptDeltaNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/realtime/item/completed"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadRealtimeItemCompletedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/realtime/transcript/delta"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadRealtimeTranscriptDeltaNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/realtime/transcript/done"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadRealtimeTranscriptDoneNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/realtime/outputAudio/delta"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadRealtimeOutputAudioDeltaNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/realtime/sdp"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadRealtimeSdpNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/realtime/error"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadRealtimeErrorNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "thread/realtime/closed"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/ThreadRealtimeClosedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "windows/worldWritableWarning"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/WindowsWorldWritableWarningNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "windowsSandbox/setupCompleted"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/WindowsSandboxSetupCompletedNotification"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "account/login/completed"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/v2/AccountLoginCompletedNotification"
+      }
+     }
+    }
+   ]
+  },
+  "ServerRequest": {
+   "oneOf": [
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "item/commandExecution/requestApproval"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/CommandExecutionRequestApprovalParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "item/fileChange/requestApproval"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/FileChangeRequestApprovalParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "item/tool/requestUserInput"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/ToolRequestUserInputParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "mcpServer/elicitation/request"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/McpServerElicitationRequestParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "item/permissions/requestApproval"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/PermissionsRequestApprovalParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "item/tool/call"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/DynamicToolCallParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "account/chatgptAuthTokens/refresh"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/ChatgptAuthTokensRefreshParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "attestation/generate"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/AttestationGenerateParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "applyPatchApproval"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/ApplyPatchApprovalParams"
+      }
+     }
+    },
+    {
+     "properties": {
+      "method": {
+       "enum": [
+        "execCommandApproval"
+       ]
+      },
+      "params": {
+       "$ref": "#/definitions/ExecCommandApprovalParams"
+      }
+     }
+    }
+   ]
+  },
+  "ToolRequestUserInputResponse": {
+   "properties": {
+    "answers": {}
+   },
+   "required": [
+    "answers"
+   ]
+  },
+  "v2": {
+   "CancelLoginAccountParams": {
+    "properties": {
+     "loginId": {}
+    },
+    "required": [
+     "loginId"
+    ]
+   },
+   "GetAccountParams": {
+    "properties": {
+     "refreshToken": {}
+    }
+   },
+   "LoginAccountParams": {
+    "oneOf": [
+     {
+      "properties": {
+       "apiKey": {},
+       "type": {
+        "enum": [
+         "apiKey"
+        ]
+       }
+      },
+      "required": [
+       "apiKey",
+       "type"
+      ]
+     },
+     {
+      "properties": {
+       "appBrand": {},
+       "codexStreamlinedLogin": {},
+       "type": {
+        "enum": [
+         "chatgpt"
+        ]
+       },
+       "useHostedLoginSuccessPage": {}
+      },
+      "required": [
+       "type"
+      ]
+     },
+     {
+      "properties": {
+       "type": {
+        "enum": [
+         "chatgptDeviceCode"
+        ]
+       }
+      },
+      "required": [
+       "type"
+      ]
+     },
+     {
+      "properties": {
+       "accessToken": {},
+       "chatgptAccountId": {},
+       "chatgptPlanType": {},
+       "type": {
+        "enum": [
+         "chatgptAuthTokens"
+        ]
+       }
+      },
+      "required": [
+       "accessToken",
+       "chatgptAccountId",
+       "type"
+      ]
+     },
+     {
+      "properties": {
+       "apiKey": {},
+       "region": {},
+       "type": {
+        "enum": [
+         "amazonBedrock"
+        ]
+       }
+      },
+      "required": [
+       "apiKey",
+       "region",
+       "type"
+      ]
+     },
+     {
+      "properties": {
+       "accessKeyId": {},
+       "region": {},
+       "secretAccessKey": {},
+       "sessionToken": {},
+       "type": {
+        "enum": [
+         "amazonBedrockAccessKeys"
+        ]
+       }
+      },
+      "required": [
+       "accessKeyId",
+       "region",
+       "secretAccessKey",
+       "type"
+      ]
+     }
+    ]
+   },
+   "ModelListParams": {
+    "properties": {
+     "cursor": {},
+     "includeHidden": {},
+     "limit": {}
+    }
+   },
+   "ThreadInjectItemsParams": {
+    "properties": {
+     "items": {},
+     "threadId": {}
+    },
+    "required": [
+     "items",
+     "threadId"
+    ]
+   },
+   "ThreadStartParams": {
+    "properties": {
+     "approvalPolicy": {},
+     "approvalsReviewer": {},
+     "baseInstructions": {},
+     "config": {},
+     "cwd": {},
+     "developerInstructions": {},
+     "ephemeral": {},
+     "model": {},
+     "modelProvider": {},
+     "personality": {},
+     "sandbox": {},
+     "serviceName": {},
+     "serviceTier": {},
+     "sessionStartSource": {},
+     "threadSource": {}
+    }
+   },
+   "TurnInterruptParams": {
+    "properties": {
+     "threadId": {},
+     "turnId": {}
+    },
+    "required": [
+     "threadId",
+     "turnId"
+    ]
+   },
+   "TurnStartParams": {
+    "properties": {
+     "approvalPolicy": {},
+     "approvalsReviewer": {},
+     "clientUserMessageId": {},
+     "cwd": {},
+     "disabledPluginIds": {},
+     "effort": {},
+     "input": {},
+     "model": {},
+     "outputSchema": {},
+     "parentTurnId": {},
+     "personality": {},
+     "rootTurnId": {},
+     "sandboxPolicy": {},
+     "serviceTier": {},
+     "serviceTierForTurn": {},
+     "summary": {},
+     "threadId": {},
+     "toolOutput": {},
+     "turnTrigger": {}
+    },
+    "required": [
+     "input",
+     "threadId"
+    ]
+   }
+  }
+ }
+}

@@ -14,6 +14,8 @@ pub const MAX_CONVERSATION_ID_BYTES: usize = 64;
 
 /// The prefix of a conversation's folder name.
 const CONVERSATION_PREFIX: &str = "conversation-";
+/// The prefix of a runtime's account folder name.
+const ACCOUNT_PREFIX: &str = "account-";
 /// The prefix of a version probe's folder name.
 const PROBE_PREFIX: &str = "probe-";
 /// The folders inside a conversation's folder.
@@ -107,6 +109,24 @@ impl Workspace {
             ensure_private(&path.join(inner), self.uid)?;
         }
         Ok(ConversationFolder { id: id.clone(), home: path.join(HOME), config: path.join(CONFIG), work: path.join(WORK), tmp: path.join(TMP), path })
+    }
+
+    /// The private folder of `kind`'s account, shaped like a conversation's folder and made or
+    /// checked the same way: `account-<program>` in the workspace, never a conversation's (those
+    /// are `conversation-<id>`), so removing a conversation never touches it. Its configuration
+    /// folder is the settings folder every conversation of that runtime shares: Codex keeps its
+    /// sign-in reference there (`CODEX_HOME`; the ChatGPT tokens themselves stay in the system's
+    /// keyring), and its home, work and temporary folders serve the processes that only read or
+    /// change the account (`codex::CodexAccounts`). Its `id()` is `account-<program>`.
+    pub fn account(&self, kind: crate::RuntimeKind) -> Result<ConversationFolder, AgentError> {
+        let name = format!("{ACCOUNT_PREFIX}{}", kind.program());
+        let id = ConversationId::new(&name)?;
+        let path = self.root.join(&name);
+        ensure_private(&path, self.uid)?;
+        for inner in [HOME, CONFIG, WORK, TMP] {
+            ensure_private(&path.join(inner), self.uid)?;
+        }
+        Ok(ConversationFolder { id, home: path.join(HOME), config: path.join(CONFIG), work: path.join(WORK), tmp: path.join(TMP), path })
     }
 
     /// Removes the private folder of conversation `id` and everything in it, and says whether there
@@ -214,8 +234,47 @@ impl Drop for ProbeFolder {
     }
 }
 
+/// Writes `bytes` to `path` atomically (a temporary file beside it, synchronised, renamed over it),
+/// readable by this user alone (0600). An earlier private regular file of this user is replaced by
+/// the rename, so a failed write leaves it whole; anything else at the place (a link, a file of
+/// another user or readable by others) is removed first, so the write never follows a link out of
+/// the private folder and never keeps a looser mode. `what` names the file in errors.
+pub(crate) fn write_private_file(path: &Path, bytes: &[u8], what: &str) -> Result<(), AgentError> {
+    let failed = |problem: String| AgentError::Folder { path: path.to_path_buf(), problem };
+    match std::fs::symlink_metadata(path) {
+        Ok(meta) if meta.is_dir() => return Err(failed(format!("holds a folder where {what} belongs"))),
+        Ok(meta) if private_file(&meta) => {}
+        Ok(_) => std::fs::remove_file(path).map_err(|e| failed(format!("could not remove the earlier {what}: {e}")))?,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+        Err(e) => return Err(failed(format!("could not be checked for {what}: {e}"))),
+    }
+    craft_atomic::WriteOptions::default()
+        .with_new_file_permissions(craft_atomic::NewFilePermissions::Private)
+        .atomic_write(path, bytes)
+        .map_err(|e| failed(format!("could not hold {what}: {e}")))?;
+    if !std::fs::symlink_metadata(path).is_ok_and(|m| private_file(&m)) {
+        let _ = std::fs::remove_file(path);
+        return Err(failed(format!("did not keep {what} private to this user")));
+    }
+    Ok(())
+}
+
+/// Whether `meta` is a regular file (not a link) of this user that no one else may read.
+fn private_file(meta: &std::fs::Metadata) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        meta.file_type().is_file() && meta.uid() == sys::current_uid() && meta.mode() & 0o077 == 0
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = meta;
+        false
+    }
+}
+
 /// Makes `path` as a private folder, or checks the one there.
-fn ensure_private(path: &Path, uid: u32) -> Result<(), AgentError> {
+pub(crate) fn ensure_private(path: &Path, uid: u32) -> Result<(), AgentError> {
     match sys::make_private_folder(path, false) {
         Ok(()) => {}
         Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
