@@ -1,0 +1,7 @@
+{"t": 0.0, "dir": "note", "line": "OBSERVED, SANITISED. Recorded from codex-cli 0.166.0 app-server; sanitised as the README's Fixtures section says. The spike's recording driver wrote its scripted lines without waiting for answers, so initialized and the next request went out before the initialize result arrived. That was the driver's simplicity, not a protocol test; app-server read the lines in order and answered initialize first, so the observation (how app-server exits on SIGINT) does not depend on it. Archforge's adapter keeps the order the README gives: initialize, its result, then initialized and further requests."}
+{"t": 0.0, "dir": "in", "line": "{\"id\": 1, \"method\": \"initialize\", \"params\": {\"clientInfo\": {\"name\": \"archforge\", \"title\": \"Archforge\", \"version\": \"0.13.0\"}, \"capabilities\": {\"experimentalApi\": false, \"requestAttestation\": false}}}"}
+{"t": 0.0, "dir": "in", "line": "{\"method\": \"initialized\"}"}
+{"t": 0.023, "dir": "out", "line": "{\"id\":1,\"result\":{\"userAgent\":\"archforge/0.166.0 (Mac OS 27.2.0; arm64) unknown (archforge; 0.13.0)\",\"codexHome\":\"/tmp/archforge-agent/codex-home\",\"platformFamily\":\"unix\",\"platformOs\":\"macos\"}}"}
+{"t": 0.024, "dir": "out", "line": "{\"method\":\"remoteControl/status/changed\",\"params\":{\"status\":\"disabled\",\"serverName\":\"host.example\",\"installationId\":\"00000000-0000-0000-0000-000000000000\",\"environmentId\":null},\"emittedAtMs\":1793934450435}"}
+{"t": 1.002, "dir": "sig", "line": "SIGINT"}
+{"t": 3.208, "dir": "exit", "line": "-2"}

@@ -8,5 +8,5 @@
 {"t": 6.021, "dir": "out", "line": "{\"type\":\"control_response\",\"response\":{\"subtype\":\"success\",\"request_id\":\"req-1\",\"response\":{\"still_queued\":[]}}}"}
 {"t": 7.022, "dir": "in", "line": "not json at all"}
 {"t": 7.023, "dir": "err", "line": "Error parsing streaming input line (type=unknown, 15 chars): SyntaxError"}
-{"t": 8.034, "dir": "in", "line": "<EOF>"}
+{"t": 8.034, "dir": "close", "line": ""}
 {"t": 8.245, "dir": "exit", "line": "1"}
