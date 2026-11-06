@@ -45,6 +45,7 @@ pub mod generalization_sets;
 mod generated;
 pub mod members;
 pub mod modifiers;
+pub mod nesting;
 pub mod qualifiers;
 pub mod relations;
 
@@ -152,7 +153,8 @@ impl Notation for UmlNotation {
             Some(c) if c == PACKAGE => of.is_some() && commands::package_of(store, element) == of,
             // A constraint shows on any class diagram: its elements may be on several.
             Some(c) if c == CONSTRAINT => of.is_some() && constraints::in_model(store, element),
-            _ => of.is_some() && commands::package_of(store, element).is_some(),
+            // A nested classifier belongs in its owner's package (AR-132).
+            _ => of.is_some() && nesting::home_package(store, element).is_some(),
         }
     }
 
@@ -203,6 +205,12 @@ impl Notation for UmlNotation {
             Some((_, constraints::Form::Note)) => constraints::linked_nodes(store, diagram, element),
             _ => Vec::new(),
         }
+    }
+
+    /// A nested classifier's owner, tied to it on a diagram by a line ending in ⊕ at the owner
+    /// (AR-132).
+    fn nested_in(&self, store: &Store, element: Obj) -> Option<Obj> {
+        nesting::classifier_owner(store, element)
     }
 
     /// The text of a line's slot `slot`: its name, an end's role or multiplicity.
@@ -304,6 +312,7 @@ pub fn registry() -> Result<Arc<archforge_engine::Registry<Store, ProjectView>>,
     specs.extend(constraints::specs());
     specs.extend(generalization_sets::specs());
     specs.extend(qualifiers::specs());
+    specs.extend(nesting::specs());
     specs.extend(archforge_diagram::commands::specs::<ProjectView>());
     specs.extend(archforge_core::skills::specs::<ProjectView>());
     archforge_engine::Registry::new(specs)

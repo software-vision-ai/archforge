@@ -49,7 +49,7 @@ use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, cmd};
 use archforge_mof::{Obj, Store, Value};
 use serde_json::{Value as Json, json};
 
-use crate::commands::{a_what, classifier_of, fail, id_of, name_of, package_of, refuse, set_name, text, uuid_of, what};
+use crate::commands::{a_what, classifier_of, fail, id_of, name_of, refuse, set_name, text, uuid_of, what};
 use crate::{
     ASSOCIATION, ASSOCIATION_CLASS, CLASS, DATA_TYPE, DEPENDENCY, ENUMERATION, GENERALIZATION, INTERFACE, INTERFACE_REALIZATION, PRIMITIVE_TYPE,
     PROPERTY, association, behaviored_classifier, classifier, dependency, generalization, interface_realization, package, property, typed_element,
@@ -280,10 +280,11 @@ pub fn relationships_of(store: &Store, c: Obj) -> Vec<Obj> {
     out
 }
 
-/// The classifier under `key`, which must sit in a package.
+/// The classifier under `key`, which must sit in a package, its owner's when it is nested
+/// (AR-132).
 fn class_in_package(store: &Store, p: &Params, key: &str) -> Result<(Obj, Obj), CommandError> {
     let c = classifier_of(store, p, key)?;
-    let pkg = package_of(store, c).ok_or_else(|| refuse(key, format!("the {} is in no package", what(store, c))))?;
+    let pkg = crate::nesting::home_package(store, c).ok_or_else(|| refuse(key, format!("the {} is in no package", what(store, c))))?;
     Ok((c, pkg))
 }
 

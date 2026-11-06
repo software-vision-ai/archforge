@@ -233,7 +233,7 @@ pub(crate) fn member_of(store: &Store, o: Obj) -> Option<(Obj, MemberKind)> {
     }
 }
 
-/// A classifier's panel: its name and package, then a class's Abstract, No subclasses (final) and
+/// A classifier's panel: its name and owner (AR-132), then a class's Abstract, No subclasses (final) and
 /// No redefinition (leaf) for every kind but a built-in type (AR-137, AR-138), then a class's, an interface's or a data type's
 /// attributes and operations, or an enumeration's literals, each with its editor; a primitive type
 /// has none.
@@ -248,32 +248,17 @@ pub(crate) fn class_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
     let half = ((width - 8.0) / 2.0).max(0.0);
     let (rename, key) = kind.rename_command();
     crate::panels::name_field(shell, ui, p, pos2(r.left() + PAD, y), half, subject, rename, key);
-    // Its package: a pick moves it there.
-    let (here, choices) = match shell.session.as_ref() {
-        Some(s) => {
-            let store = s.doc();
-            let here = archforge_uml::commands::package_of(store, class).map(|p| package_parts(store, p)).unwrap_or_default();
-            let choices: Vec<(Uuid, Vec<String>)> = archforge_uml::commands::all_packages(store)
-                .into_iter()
-                .filter_map(|p| Some((store.uuid(p).ok()?, package_parts(store, p))))
-                .collect();
-            (here, choices)
-        }
-        None => (Vec::new(), Vec::new()),
-    };
-    let package_id = "workspace.properties.class.package";
-    let field = crate::panels::path_select_field(
-        shell,
-        ui,
-        p,
-        pos2(r.left() + PAD + half + 8.0, y),
-        half,
-        package_id,
-        &tr("Package"),
-        &here,
-        Menu::ClassPackage,
-    );
+    // Its owner, a package or a classifier: a pick moves it there (AR-132, D2 and D3).
+    let field = crate::uml_nesting::owner_field(shell, ui, p, pos2(r.left() + PAD + half + 8.0, y), half, class);
     let mut y = y + 17.0 + FIELD + 12.0;
+    // A nested classifier's owner explained under it (D2).
+    if let Some(help) = shell.session.as_ref().and_then(|s| crate::uml_nesting::owner_help(s.doc(), class)) {
+        let paint = ui.painter().clone();
+        let g = ux::galley_rows(&paint, &help, types::CAPTION, p.text_muted, Some(width.max(0.0)), 4);
+        let tall = g.size().y;
+        paint.galley(pos2(r.left() + PAD, y), g, p.text_muted);
+        y += tall + 14.0;
+    }
     // An interface is abstract by what it is: it has no Abstract of its own.
     if kind == Classifier::Class {
         let was = shell.session.as_ref().is_some_and(|s| flag(s.doc(), class, archforge_uml::class::IS_ABSTRACT));
@@ -289,6 +274,10 @@ pub(crate) fn class_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
     }
     y = final_check(shell, ui, p, r, y, class, class_id);
     y = leaf_check(shell, ui, p, r, y, class, class_id);
+    // The classifiers it nests, a class's or an interface's (AR-132, D1).
+    if shell.session.as_ref().is_some_and(|s| crate::uml_nesting::owns(s.doc(), class)) {
+        y = crate::uml_nesting::nested_section(shell, ui, p, r, y, class, class_id);
+    }
     if kind == Classifier::Enumeration {
         y = members_section(shell, ui, p, r, y, class, class_id, MemberKind::Literal);
     }
@@ -300,19 +289,8 @@ pub(crate) fn class_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
     if shell.session.as_ref().is_some_and(|s| archforge_uml::constraints::is_context(s.doc(), class)) {
         crate::uml_constraints::section_of(shell, ui, p, r, y + 4.0, class, class_id);
     }
-    // The package menu last, over the sections.
-    if shell.panels.menu == Some(Menu::ClassPackage) {
-        let paths: Vec<Vec<String>> = choices.iter().map(|(_, n)| n.clone()).collect();
-        if let Some(i) = crate::panels::menu_paths(shell, ui, p, field, package_id, &paths)
-            && let Some((to, _)) = choices.get(i)
-        {
-            let (cmd, key) = kind.move_command();
-            match run(shell, cmd, json!({ key: class_id.to_string(), "package": to.to_string() })) {
-                Ok(_) => shell.panels.notice = None,
-                Err(e) => shell.panels.notice = Some(e),
-            }
-        }
-    }
+    // The owner menu last, over the sections.
+    crate::uml_nesting::owner_menu(shell, ui, p, field, class, class_id);
 }
 
 /// The id of No subclasses (final), the design's own (AR-137).
@@ -726,7 +704,12 @@ pub(crate) fn type_notes(store: &Store, choices: &[(String, String)]) -> Vec<Vec
                 return Vec::new();
             }
             match Uuid::parse(value).and_then(|u| store.by_uuid(u)) {
-                Some(t) => archforge_uml::commands::package_of(store, t).map(|p| path_below_root(store, p)).unwrap_or_default(),
+                // A nested type is told apart by its owners too (AR-132): `sales › Order`.
+                Some(t) => {
+                    let mut parts = archforge_uml::nesting::home_package(store, t).map(|p| path_below_root(store, p)).unwrap_or_default();
+                    parts.extend(archforge_uml::nesting::owner_chain(store, t).into_iter().map(|o| name(store, o)));
+                    parts
+                }
                 None => vec![tr("built-in")],
             }
         })

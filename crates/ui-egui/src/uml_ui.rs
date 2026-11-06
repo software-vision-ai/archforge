@@ -13,7 +13,7 @@ use serde_json::json;
 
 use crate::Shell;
 use crate::explorer::{Row, Tree, fresh_name};
-use crate::i18n::tr;
+use crate::i18n::{fmt, tr};
 use crate::kinds::{DiagramKind, KindTool, ToolUse};
 use crate::notation_ui::{Added, Entry, NotationUi, Offer, Words};
 use crate::panels::Subject;
@@ -667,6 +667,24 @@ impl NotationUi for UmlUi {
         (archforge_uml::commands::going_with(store, &held).len(), 0, 0)
     }
 
+    /// New inside ▸ on a classifier: the kinds it may nest (AR-132).
+    fn inside(&self, store: &Store, obj: Obj) -> Option<crate::notation_ui::Inside> {
+        crate::uml_nesting::inside(store, obj)
+    }
+
+    fn add_inside(&self, shell: &mut Shell, key: &str, obj: Obj) -> Option<Result<Uuid, String>> {
+        crate::uml_nesting::add_inside(shell, key, obj)
+    }
+
+    /// A classifier's nested classifiers at any depth, by the names they read by, `Order::Priority`
+    /// (AR-132): they go with it.
+    fn goes_along(&self, store: &Store, obj: Obj) -> Vec<String> {
+        if !classifier(store, obj) {
+            return Vec::new();
+        }
+        archforge_uml::nesting::nested_within(store, obj).into_iter().map(|n| archforge_uml::nesting::qualified_name(store, n)).collect()
+    }
+
     /// Whether `obj` has rows under it: a package what it holds (the built-in types in Types, which
     /// Models does not show, aside), a classifier its members (an enumeration its literals).
     fn has_children(&self, store: &Store, obj: Obj) -> bool {
@@ -682,20 +700,23 @@ impl NotationUi for UmlUi {
     /// The package and every package and classifier with members or literals under it.
     fn foldable(&self, store: &Store, package: Obj) -> Vec<Obj> {
         let mut out = vec![package];
-        out.extend(classifiers(store, package).into_iter().filter(|c| has_members(store, *c)));
+        for c in classifiers(store, package) {
+            out.extend(std::iter::once(c).chain(archforge_uml::nesting::nested_within(store, c)).filter(|c| has_members(store, *c)));
+        }
         for sub in archforge_uml::commands::subpackages(store, package) {
             out.extend(self.foldable(store, sub));
         }
         out
     }
 
-    /// The packages above, and a member's class or a literal's enumeration.
+    /// The packages above, the classifiers a nested one sits in, and a member's class or a
+    /// literal's enumeration.
     fn parents(&self, store: &Store, obj: Obj) -> Vec<Obj> {
-        let (start, mut out) = match owner_of(store, obj) {
-            Some(c) => (Some(c), vec![c]),
-            None => (package_of(store, obj), Vec::new()),
-        };
-        let home = if out.is_empty() { start } else { start.and_then(|c| package_of(store, c)) };
+        let mut out: Vec<Obj> = owner_of(store, obj).into_iter().collect();
+        // The classifiers that nest it, or its member's classifier, innermost first (AR-132).
+        let start = out.first().copied().unwrap_or(obj);
+        out.extend(archforge_uml::nesting::owner_chain(store, start).into_iter().rev());
+        let home = if classifier(store, start) { archforge_uml::nesting::home_package(store, start) } else { package_of(store, start) };
         out.extend(home.map(|h| chain(store, h)).unwrap_or_default());
         out
     }
@@ -710,7 +731,7 @@ impl NotationUi for UmlUi {
     fn drop_on(&self, store: &Store, dragged: Obj, target: Obj) -> Option<(&'static str, serde_json::Value)> {
         let to = match class(store, target)? {
             c if c == archforge_uml::PACKAGE => target,
-            c if archforge_uml::is_classifier(c) => package_of(store, target)?,
+            c if archforge_uml::is_classifier(c) => archforge_uml::nesting::home_package(store, target)?,
             _ => return None,
         };
         let id = |o: Obj| store.uuid(o).ok().map(|u| u.to_string());
@@ -731,7 +752,7 @@ impl NotationUi for UmlUi {
     fn drop_refused(&self, store: &Store, dragged: Obj, target: Obj) -> bool {
         let to = match class(store, target) {
             Some(c) if c == archforge_uml::PACKAGE => target,
-            Some(c) if archforge_uml::is_classifier(c) => match package_of(store, target) {
+            Some(c) if archforge_uml::is_classifier(c) => match archforge_uml::nesting::home_package(store, target) {
                 Some(p) => p,
                 None => return false,
             },
@@ -751,7 +772,11 @@ impl NotationUi for UmlUi {
             }
             c if archforge_uml::is_classifier(c) && !archforge_uml::members::is_built_in(store, o) => {
                 let kind = Classifier::of(store, o)?;
-                let at = package_of(store, o).map(|p| name(store, p)).unwrap_or_default();
+                // A nested classifier is found where it lives: its owners' path (AR-132).
+                let at = match archforge_uml::nesting::classifier_owner(store, o) {
+                    Some(owner) => archforge_uml::nesting::qualified_name(store, owner),
+                    None => package_of(store, o).map(|p| name(store, p)).unwrap_or_default(),
+                };
                 let detail = if at.is_empty() { kind.word() } else { format!("{} · {at}", kind.word()) };
                 Some(Entry { icon: kind.icon(), order: 2, label: name(store, o), detail })
             }
@@ -795,65 +820,15 @@ impl NotationUi for UmlUi {
 
     /// How Properties names `o`: its kind line, its word, This …, and On this … · {n}.
     fn words(&self, store: &Store, o: Obj) -> Option<Words> {
-        let words = |kind: String, word: String, this: String, on_this: String| Words { kind, word, this, on_this, name: name(store, o) };
-        Some(match class(store, o)? {
-            c if c == archforge_uml::PACKAGE => words(tr("Package · model"), tr("Package"), tr("This package"), tr("On this package · {n}")),
-            c if c == archforge_uml::CLASS => words(tr("Class · model, in every diagram"), tr("Class"), tr("This class"), tr("On this class · {n}")),
-            c if c == archforge_uml::INTERFACE => {
-                words(tr("Interface · model, in every diagram"), tr("Interface"), tr("This interface"), tr("On this interface · {n}"))
-            }
-            c if c == archforge_uml::ENUMERATION => {
-                words(tr("Enumeration · model, in every diagram"), tr("Enumeration"), tr("This enumeration"), tr("On this enumeration · {n}"))
-            }
-            c if c == archforge_uml::DATA_TYPE => {
-                words(tr("Data type · model, in every diagram"), tr("Data type"), tr("This data type"), tr("On this data type · {n}"))
-            }
-            c if c == archforge_uml::PRIMITIVE_TYPE => words(
-                tr("Primitive type · model, in every diagram"),
-                tr("Primitive type"),
-                tr("This primitive type"),
-                tr("On this primitive type · {n}"),
-            ),
-            c if c == archforge_uml::ASSOCIATION => {
-                words(tr("Association · model"), tr("Association"), tr("This association"), tr("On this association · {n}"))
-            }
-            c if c == archforge_uml::ASSOCIATION_CLASS => words(
-                tr("Association class · model, in every diagram"),
-                tr("Association class"),
-                tr("This association class"),
-                tr("On this association class · {n}"),
-            ),
-            c if c == archforge_uml::GENERALIZATION => {
-                words(tr("Generalization · model"), tr("Generalization"), tr("This generalization"), tr("On this generalization · {n}"))
-            }
-            c if c == archforge_uml::DEPENDENCY => {
-                words(tr("Dependency · model"), tr("Dependency"), tr("This dependency"), tr("On this dependency · {n}"))
-            }
-            c if c == archforge_uml::INTERFACE_REALIZATION => words(
-                tr("Interface realization · model"),
-                tr("Interface realization"),
-                tr("This interface realization"),
-                tr("On this interface realization · {n}"),
-            ),
-            c if c == archforge_uml::GENERALIZATION_SET => words(
-                tr("Generalization set · model, in every diagram"),
-                tr("Generalization set"),
-                tr("This generalization set"),
-                tr("On this generalization set · {n}"),
-            ),
-            c if c == archforge_uml::CONSTRAINT => {
-                words(tr("Constraint · model, not evaluated"), tr("Constraint"), tr("This constraint"), tr("On this constraint · {n}"))
-            }
-            // A qualifier of an association's end (AR-127).
-            c if c == archforge_uml::PROPERTY && archforge_uml::qualifiers::is_qualifier(store, o) => {
-                words(tr("Qualifier · model"), tr("Qualifier"), tr("This qualifier"), tr("On this qualifier · {n}"))
-            }
-            _ => match member_of(store, o)?.1 {
-                MemberKind::Attribute => words(tr("Attribute · model"), tr("Attribute"), tr("This attribute"), tr("On this attribute · {n}")),
-                MemberKind::Operation => words(tr("Operation · model"), tr("Operation"), tr("This operation"), tr("On this operation · {n}")),
-                MemberKind::Literal => words(tr("Literal · model"), tr("Literal"), tr("This literal"), tr("On this literal · {n}")),
-            },
-        })
+        // A nested classifier's kind line names its owner (AR-132, D2).
+        if let Some(owner) = archforge_uml::nesting::classifier_owner(store, o)
+            && let Some(kind) = Classifier::of(store, o)
+        {
+            let mut w = words_of(store, o)?;
+            w.kind = fmt(&tr("{kind} · nested in {owner} · model, in every diagram"), &[("kind", &kind.word()), ("owner", &name(store, owner))]);
+            return Some(w);
+        }
+        words_of(store, o)
     }
 
     /// A member's panel is its classifier's, a literal's its enumeration's.
@@ -917,13 +892,73 @@ impl NotationUi for UmlUi {
     }
 }
 
+/// How Properties names `o`, whatever owns it.
+fn words_of(store: &Store, o: Obj) -> Option<Words> {
+    let words = |kind: String, word: String, this: String, on_this: String| Words { kind, word, this, on_this, name: name(store, o) };
+    Some(match class(store, o)? {
+        c if c == archforge_uml::PACKAGE => words(tr("Package · model"), tr("Package"), tr("This package"), tr("On this package · {n}")),
+        c if c == archforge_uml::CLASS => words(tr("Class · model, in every diagram"), tr("Class"), tr("This class"), tr("On this class · {n}")),
+        c if c == archforge_uml::INTERFACE => {
+            words(tr("Interface · model, in every diagram"), tr("Interface"), tr("This interface"), tr("On this interface · {n}"))
+        }
+        c if c == archforge_uml::ENUMERATION => {
+            words(tr("Enumeration · model, in every diagram"), tr("Enumeration"), tr("This enumeration"), tr("On this enumeration · {n}"))
+        }
+        c if c == archforge_uml::DATA_TYPE => {
+            words(tr("Data type · model, in every diagram"), tr("Data type"), tr("This data type"), tr("On this data type · {n}"))
+        }
+        c if c == archforge_uml::PRIMITIVE_TYPE => {
+            words(tr("Primitive type · model, in every diagram"), tr("Primitive type"), tr("This primitive type"), tr("On this primitive type · {n}"))
+        }
+        c if c == archforge_uml::ASSOCIATION => {
+            words(tr("Association · model"), tr("Association"), tr("This association"), tr("On this association · {n}"))
+        }
+        c if c == archforge_uml::ASSOCIATION_CLASS => words(
+            tr("Association class · model, in every diagram"),
+            tr("Association class"),
+            tr("This association class"),
+            tr("On this association class · {n}"),
+        ),
+        c if c == archforge_uml::GENERALIZATION => {
+            words(tr("Generalization · model"), tr("Generalization"), tr("This generalization"), tr("On this generalization · {n}"))
+        }
+        c if c == archforge_uml::DEPENDENCY => {
+            words(tr("Dependency · model"), tr("Dependency"), tr("This dependency"), tr("On this dependency · {n}"))
+        }
+        c if c == archforge_uml::INTERFACE_REALIZATION => words(
+            tr("Interface realization · model"),
+            tr("Interface realization"),
+            tr("This interface realization"),
+            tr("On this interface realization · {n}"),
+        ),
+        c if c == archforge_uml::GENERALIZATION_SET => words(
+            tr("Generalization set · model, in every diagram"),
+            tr("Generalization set"),
+            tr("This generalization set"),
+            tr("On this generalization set · {n}"),
+        ),
+        c if c == archforge_uml::CONSTRAINT => {
+            words(tr("Constraint · model, not evaluated"), tr("Constraint"), tr("This constraint"), tr("On this constraint · {n}"))
+        }
+        // A qualifier of an association's end (AR-127).
+        c if c == archforge_uml::PROPERTY && archforge_uml::qualifiers::is_qualifier(store, o) => {
+            words(tr("Qualifier · model"), tr("Qualifier"), tr("This qualifier"), tr("On this qualifier · {n}"))
+        }
+        _ => match member_of(store, o)?.1 {
+            MemberKind::Attribute => words(tr("Attribute · model"), tr("Attribute"), tr("This attribute"), tr("On this attribute · {n}")),
+            MemberKind::Operation => words(tr("Operation · model"), tr("Operation"), tr("This operation"), tr("On this operation · {n}")),
+            MemberKind::Literal => words(tr("Literal · model"), tr("Literal"), tr("This literal"), tr("On this literal · {n}")),
+        },
+    })
+}
+
 /// The package an element belongs in: a package itself, a classifier's, or a member's or a
 /// literal's owner's.
 fn home_of(store: &Store, o: Obj) -> Option<Obj> {
     match class(store, o)? {
         c if c == archforge_uml::PACKAGE => Some(o),
-        c if archforge_uml::is_classifier(c) => package_of(store, o),
-        _ => owner_of(store, o).and_then(|c| package_of(store, c)),
+        c if archforge_uml::is_classifier(c) => archforge_uml::nesting::home_package(store, o),
+        _ => owner_of(store, o).and_then(|c| archforge_uml::nesting::home_package(store, c)),
     }
 }
 
@@ -938,10 +973,11 @@ fn chain(store: &Store, package: Obj) -> Vec<Obj> {
     out
 }
 
-/// Whether a class, an interface or a data type has an attribute or an operation, or an
-/// enumeration a literal.
+/// Whether a class, an interface or a data type has a nested classifier (AR-132), an attribute or
+/// an operation, or an enumeration a literal.
 fn has_members(store: &Store, c: Obj) -> bool {
-    !archforge_uml::members::attributes(store, c).is_empty()
+    !archforge_uml::nesting::nested(store, c).is_empty()
+        || !archforge_uml::members::attributes(store, c).is_empty()
         || !archforge_uml::members::operations(store, c).is_empty()
         || !archforge_uml::commands::literals(store, c).is_empty()
 }
@@ -1017,6 +1053,15 @@ fn class_rows(store: &Store, c: Obj, depth: u8, t: &Tree<'_>) -> Vec<Row> {
     let mut members = Vec::new();
     if t.filtering() || t.open(c) {
         members.extend(t.skill_rows(c, depth.saturating_add(1)));
+        // Its nested classifiers come first, each `nested` after its name (AR-132, D2).
+        for n in archforge_uml::nesting::nested(store, c) {
+            members.extend(
+                class_rows(store, n, depth.saturating_add(1), t)
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, row)| if i == 0 { Row { note: Some(tr("nested")), ..row } } else { row }),
+            );
+        }
         for l in archforge_uml::commands::literals(store, c) {
             let label = name(store, l);
             if t.matches(&label) {
@@ -1053,6 +1098,55 @@ fn class_rows(store: &Store, c: Obj, depth: u8, t: &Tree<'_>) -> Vec<Row> {
         out.extend(members);
     }
     out
+}
+
+/// In the sample class model, the enumeration Priority nested in Order with the literals Standard
+/// and Express, Order's attribute `urgency : Priority`, and Priority's card placed above Order's on
+/// the open diagram, tied to it by the ⊕ line, as one step, for the snapshot screens
+/// and the tests (AR-132); the project is then marked saved as it stands. Gives Priority's id and
+/// Order's.
+#[cfg(any(test, feature = "snapshot"))]
+pub(crate) fn put_nested_priority(shell: &mut Shell) -> Result<(String, String), String> {
+    let d = shell.canvas.active.ok_or("the sample's diagram")?;
+    let session = shell.session.as_mut().ok_or("the nested sample needs a session")?;
+    let store = session.doc();
+    let order = store
+        .alive()
+        .find(|o| store.class_of(*o).ok() == Some(archforge_uml::CLASS) && name(store, *o) == "Order")
+        .ok_or("the sample has no Order")?;
+    let diagram = store.by_uuid(d).ok_or("the sample's diagram")?;
+    let node = archforge_diagram::views_of(store, order)
+        .2
+        .into_iter()
+        .find(|n| archforge_diagram::diagram_of(store, *n) == Some(diagram))
+        .ok_or("Order's card")?;
+    let b = archforge_diagram::grid::bounds_of(store, node);
+    let grow = crate::uml_ui::short_cards(store, order, (1, 0));
+    let order = store.uuid(order).map_err(|e| e.to_string())?.to_string();
+    let id = |v: serde_json::Value| v["id"].as_str().unwrap_or_default().to_string();
+    let mut priority = String::new();
+    session
+        .batch("Nest Priority in Order", |b2| {
+            priority = id(b2.execute("uml.nested.add", &json!({ "owner": order, "kind": "enumeration", "name": "Priority" }))?);
+            for l in ["Standard", "Express"] {
+                b2.execute("uml.literal.add", &json!({ "enumeration": priority, "name": l }))?;
+            }
+            // An attribute shares its class's names with what the class nests, whatever the case.
+            b2.execute("uml.attribute.add", &json!({ "class": order, "name": "urgency", "type": priority }))?;
+            for (n, width, height) in &grow {
+                b2.execute("diagram.resize", &json!({ "node": n.to_string(), "width": width, "height": height }))?;
+            }
+            // Above Order, where the sample has room, so the ⊕ line runs straight up to it.
+            let (x, y) = (b.x + 60.0, b.y - literals_height(2) - 90.0);
+            b2.execute(
+                "diagram.place",
+                &json!({ "diagram": d.to_string(), "element": priority, "x": x, "y": y, "width": 240.0, "height": literals_height(2) }),
+            )?;
+            Ok(())
+        })
+        .map_err(|e| e.to_string())?;
+    session.mark_saved().map_err(|e| e.to_string())?;
+    Ok((priority, order))
 }
 
 /// In the sample class model, BankTransfer and WalletPayment beside CardPayment, each specializing

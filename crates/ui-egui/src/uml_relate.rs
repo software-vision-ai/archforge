@@ -430,7 +430,7 @@ type NewEnd = (String, (f64, f64, f64, f64));
 pub(crate) fn connect_class(shell: &mut Shell, d: Obj, from: (Obj, Uuid), to: (Obj, Uuid), new: Option<NewEnd>) {
     let Some(session) = shell.session.as_mut() else { return };
     let store = session.doc();
-    let Some(package) = archforge_uml::commands::package_of(store, from.0) else {
+    let Some(package) = archforge_uml::nesting::home_package(store, from.0) else {
         shell.canvas.notice = Some(tr("A relationship joins two classes or interfaces"));
         return;
     };

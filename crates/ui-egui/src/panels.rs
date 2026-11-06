@@ -243,8 +243,10 @@ pub enum Menu {
     EndRedefines(usize),
     /// A qualifier editor's type (AR-127).
     QualifierType,
-    /// A class's package.
-    ClassPackage,
+    /// A classifier's owner, a package or a classifier (AR-132), and the kinds its Nested
+    /// classifiers `+` offers.
+    ClassOwner,
+    NestedKind,
     /// The package a package sits in (AR-102).
     PackageParent,
     /// A generalization set's Add member, and a generalization's sets' `+` (AR-129).

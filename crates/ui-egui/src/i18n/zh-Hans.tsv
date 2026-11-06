@@ -71,6 +71,7 @@ plural		It disappears from {n} diagram.	将从 {n} 个图中消失。
 plural		{n} relationship goes with it.	{n} 个关系将一并删除。
 plural		{n} key goes with it.	{n} 个键将一并删除。
 plural		{n} foreign key goes with it.	{n} 个外键将一并删除。
+plural		{n} nested classifier goes with it: {names}.	{n} 个嵌套分类器将一并删除：{names}。
 str		Delete	删除
 str		Schema · model	架构 · 模型
 str		Table · model, in every diagram	表 · 模型，出现在每张图中
@@ -723,6 +724,34 @@ str		Attribute · model	属性 · 模型
 str		Literal · model	字面量 · 模型
 str		Attributes · {n}	属性 · {n}
 str		Literals · {n}	字面量 · {n}
+str		Owner	所有者
+str		Owner is a package or a classifier. Changing it keeps {name}'s identity, members, relationships and every type that uses it.	所有者是包或分类器。更改它会保留 {name} 的标识、成员、关系以及使用它的每个类型。
+str		{kind} · nested in {owner} · model, in every diagram	{kind} · 嵌套于 {owner} · 模型，所有图中
+str		Nested classifiers · {n}	嵌套分类器 · {n}
+str		Add nested classifier	添加嵌套分类器
+str		None yet. Add one here or from Models ▸ New inside {name}; both offer the same kinds.	暂无。可在此处或从“模型 ▸ 在 {name} 中新建”添加；两者提供相同的种类。
+str		nested	嵌套
+str		package	包
+str		class	类
+str		interface	接口
+str		enumeration	枚举
+str		data type	数据类型
+str		primitive type	基本类型
+str		association class	关联类
+str		itself	自身
+str		inside it	在其内部
+str		owns none	不拥有
+str		owns a {name}	拥有 {name}
+str		holds a {name}	包含 {name}
+str		kept for a built-in type	保留给内置类型
+str		built-in type	内置类型
+str		{name} cannot own itself.	{name} 不能拥有自身。
+str		{owner} is inside {name}: owning {name} would make a cycle.	{owner} 位于 {name} 内部：拥有 {name} 会形成循环。
+str		{owner} owns no classifiers: only a package, a class, an interface or an association class does.	{owner} 不拥有分类器：只有包、类、接口或关联类可以拥有。
+str		{name} stays in a package: a primitive type or an association class is never nested in a classifier.	{name} 留在包中：基本类型或关联类从不嵌套在分类器中。
+str		{owner} already owns a member named {name}.	{owner} 已拥有名为 {name} 的成员。
+str		The package {owner} keeps the name {name} for a built-in type.	包 {owner} 将名称 {name} 保留给内置类型。
+str		{name} is a built-in type and stays in Types.	{name} 是内置类型，留在 Types 中。
 str		Constraints · {n}	约束 · {n}
 str		Add constraint	添加约束
 str		Edit constraint	编辑约束
@@ -892,6 +921,20 @@ str		Completeness	完整性
 str		Create generalization set…	创建泛化集…
 str		Create set from selection	从所选创建集合
 str		Delete from the model	从模型中删除
+str		Rename	重命名
+str		Show in diagram	在图中显示
+str		No diagram shows it yet	尚无图显示它
+str		Delete from model	从模型中删除
+str		A skill is removed from its tab	技能在其标签页中删除
+str		New inside {name}	在 {name} 中新建
+str		not inside a class	不能在类中
+str		{name} is {kind}, which owns no classifiers: only a class, an interface or an association class does.	{name} 是{kind}，不拥有分类器：只有类、接口或关联类可以拥有。
+str		a class	类
+str		an interface	接口
+str		an enumeration	枚举
+str		a data type	数据类型
+str		a primitive type	基本类型
+str		an association class	关联类
 str		Deleting the set keeps its generalizations; only the grouping goes. The set line is drawn across its members; drag its label to move it, a diagram-only change.	删除集合会保留其泛化，只去掉分组。集合线横穿其成员；拖动其标签可移动它，这只是图上的改动。
 str		Deleting this generalization takes it out of its sets in the same undo step; a set left with no members goes too.	删除此泛化会在同一撤销步骤中将其移出所属集合；没有成员的集合也会随之删除。
 str		Disjointness	互斥性

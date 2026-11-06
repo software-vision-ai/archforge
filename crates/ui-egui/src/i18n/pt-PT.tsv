@@ -71,6 +71,7 @@ plural		It disappears from {n} diagram.	Desaparece de {n} diagrama.|Desaparece d
 plural		{n} relationship goes with it.	{n} relação vai com ele.|{n} relações vão com ele.
 plural		{n} key goes with it.	{n} chave vai com ele.|{n} chaves vão com ele.
 plural		{n} foreign key goes with it.	{n} chave estrangeira vai com ele.|{n} chaves estrangeiras vão com ele.
+plural		{n} nested classifier goes with it: {names}.	{n} classificador aninhado vai com ele: {names}.|{n} classificadores aninhados vão com ele: {names}.
 str		Delete	Eliminar
 str		Schema · model	Esquema · modelo
 str		Table · model, in every diagram	Tabela · modelo, em todos os diagramas
@@ -723,6 +724,34 @@ str		Attribute · model	Atributo · modelo
 str		Literal · model	Literal · modelo
 str		Attributes · {n}	Atributos · {n}
 str		Literals · {n}	Literais · {n}
+str		Owner	Proprietário
+str		Owner is a package or a classifier. Changing it keeps {name}'s identity, members, relationships and every type that uses it.	O proprietário é um pacote ou um classificador. Alterá-lo mantém a identidade, os membros e as relações de {name} e cada tipo que o usa.
+str		{kind} · nested in {owner} · model, in every diagram	{kind} · aninhado em {owner} · modelo, em todos os diagramas
+str		Nested classifiers · {n}	Classificadores aninhados · {n}
+str		Add nested classifier	Adicionar classificador aninhado
+str		None yet. Add one here or from Models ▸ New inside {name}; both offer the same kinds.	Nenhum ainda. Adicione um aqui ou em Modelos ▸ Novo dentro de {name}; ambos oferecem os mesmos tipos.
+str		nested	aninhado
+str		package	pacote
+str		class	classe
+str		interface	interface
+str		enumeration	enumeração
+str		data type	tipo de dados
+str		primitive type	tipo primitivo
+str		association class	classe de associação
+str		itself	ele próprio
+str		inside it	dentro dele
+str		owns none	não possui nenhum
+str		owns a {name}	possui um {name}
+str		holds a {name}	contém um {name}
+str		kept for a built-in type	reservado a um tipo integrado
+str		built-in type	tipo integrado
+str		{name} cannot own itself.	{name} não pode possuir-se a si próprio.
+str		{owner} is inside {name}: owning {name} would make a cycle.	{owner} está dentro de {name}: possuir {name} criaria um ciclo.
+str		{owner} owns no classifiers: only a package, a class, an interface or an association class does.	{owner} não possui classificadores: só um pacote, uma classe, uma interface ou uma classe de associação os possui.
+str		{name} stays in a package: a primitive type or an association class is never nested in a classifier.	{name} fica num pacote: um tipo primitivo ou uma classe de associação nunca é aninhado num classificador.
+str		{owner} already owns a member named {name}.	{owner} já possui um membro chamado {name}.
+str		The package {owner} keeps the name {name} for a built-in type.	O pacote {owner} reserva o nome {name} para um tipo integrado.
+str		{name} is a built-in type and stays in Types.	{name} é um tipo integrado e fica em Types.
 str		Constraints · {n}	Restrições · {n}
 str		Add constraint	Adicionar restrição
 str		Edit constraint	Editar restrição
@@ -892,6 +921,20 @@ str		Completeness	Completude
 str		Create generalization set…	Criar conjunto de generalização…
 str		Create set from selection	Criar conjunto a partir da seleção
 str		Delete from the model	Eliminar do modelo
+str		Rename	Mudar o nome
+str		Show in diagram	Mostrar no diagrama
+str		No diagram shows it yet	Nenhum diagrama o mostra ainda
+str		Delete from model	Eliminar do modelo
+str		A skill is removed from its tab	Uma competência é removida no seu separador
+str		New inside {name}	Novo dentro de {name}
+str		not inside a class	não dentro de uma classe
+str		{name} is {kind}, which owns no classifiers: only a class, an interface or an association class does.	{name} é {kind}, que não possui classificadores: só uma classe, uma interface ou uma classe de associação os possui.
+str		a class	uma classe
+str		an interface	uma interface
+str		an enumeration	uma enumeração
+str		a data type	um tipo de dados
+str		a primitive type	um tipo primitivo
+str		an association class	uma classe de associação
 str		Deleting the set keeps its generalizations; only the grouping goes. The set line is drawn across its members; drag its label to move it, a diagram-only change.	Eliminar o conjunto mantém as suas generalizações; só o agrupamento desaparece. A linha do conjunto atravessa os seus membros; arraste a sua etiqueta para a mover, uma alteração só do diagrama.
 str		Deleting this generalization takes it out of its sets in the same undo step; a set left with no members goes too.	Eliminar esta generalização retira-a dos seus conjuntos no mesmo passo de anulação; um conjunto que fique sem membros também desaparece.
 str		Disjointness	Disjunção

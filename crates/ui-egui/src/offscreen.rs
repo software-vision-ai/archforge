@@ -172,6 +172,10 @@ pub enum Screen {
     /// The same, a second qualifier lineNo : String applied on the Order end and refused in place:
     /// the name ringed and the reason in a tinted box, nothing written (AR-127).
     WorkspaceQualifierRefused,
+    /// The sample class model with the enumeration Priority nested in Order: Models lists it under
+    /// Order, `nested` after its name; on the diagram its card is tied to Order's by the line ending
+    /// in ⊕ at Order; it is selected, Properties showing its Owner, Order (AR-132, D2).
+    WorkspaceNestedClassifiers,
     /// The user manual's class-model guide, first step: the root package's diagram Commerce with
     /// Customer (its name typed) and Order, a draft row open on Order's card with `number :
     /// Integer` typed.
@@ -552,6 +556,11 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
         shell.adopt_project();
         crate::uml_ui::open_sample(&mut shell)?;
         sample_leaf(&mut shell)?;
+    }
+    if screen == Screen::WorkspaceNestedClassifiers {
+        shell.adopt_project();
+        crate::uml_ui::open_sample(&mut shell)?;
+        sample_nested(&mut shell)?;
     }
     if screen == Screen::WorkspaceGeneralizationSets {
         shell.adopt_project();
@@ -1087,6 +1096,24 @@ fn sample_final(shell: &mut Shell) -> Result<(), String> {
     shell.canvas.fit_pending = false;
     shell.canvas.zoom = 1.0;
     shell.canvas.pan = egui::vec2(260.0 - 1040.0, 60.0 - 80.0);
+    Ok(())
+}
+
+/// In the sample class model, Priority nested in Order, placed under it with the ⊕ line, selected
+/// with its Properties open and its row in Models in sight (AR-132, D2).
+fn sample_nested(shell: &mut Shell) -> Result<(), String> {
+    let (priority, order) = crate::uml_ui::put_nested_priority(shell)?;
+    crate::panels::run(shell, "view.select", serde_json::json!({ "ids": [priority] }))?;
+    shell.state.show_panel(crate::state::Panel::Properties);
+    // At 80 %, Priority's card over Order's, the ⊕ line between them in sight.
+    let store = shell.session.as_ref().ok_or("no project is open")?.doc();
+    let order = store.by_uuid(archforge_mof::Uuid::parse(&order).ok_or("Order's id")?).ok_or("Order")?;
+    let node = archforge_diagram::views_of(store, order).2.into_iter().next().ok_or("Order's card")?;
+    let b = archforge_diagram::grid::bounds_of(store, node);
+    let z = 0.8_f32;
+    shell.canvas.fit_pending = false;
+    shell.canvas.zoom = z;
+    shell.canvas.pan = egui::vec2(140.0 - b.x as f32 * z, 360.0 - b.y as f32 * z);
     Ok(())
 }
 

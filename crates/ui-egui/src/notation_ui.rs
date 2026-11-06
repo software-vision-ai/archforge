@@ -26,6 +26,17 @@ pub(crate) struct Added {
     pub parents: Vec<Uuid>,
 }
 
+/// What the Models context menu's New inside ▸ offers on an element (AR-132): its row's word, the
+/// submenu's heading, the kinds it makes (key, word, icon), the rows shown disabled with their
+/// reason (key, word, reason), and why the row is disabled when the element owns none.
+pub(crate) struct Inside {
+    pub word: String,
+    pub heading: String,
+    pub kinds: Vec<(&'static str, String, &'static Icon)>,
+    pub refused: Vec<(&'static str, String, String)>,
+    pub why_not: Option<String>,
+}
+
 /// An element as the project search lists it: its icon, its kind's place in the list (diagrams
 /// 0, skills 6, notes 7), its name and what it is and where.
 pub(crate) struct Entry {
@@ -73,6 +84,22 @@ pub(crate) trait NotationUi: Sync {
     fn consequences(&self, store: &Store, obj: Obj) -> (usize, usize, usize) {
         let _ = (store, obj);
         (0, 0, 0)
+    }
+    /// What the Models context menu's New inside ▸ offers on `obj`; None for no such row.
+    fn inside(&self, store: &Store, obj: Obj) -> Option<Inside> {
+        let _ = (store, obj);
+        None
+    }
+    /// Makes what New inside ▸ `key` names inside `obj`, its name open for typing in Models.
+    fn add_inside(&self, shell: &mut Shell, key: &str, obj: Obj) -> Option<Result<Uuid, String>> {
+        let _ = (shell, key, obj);
+        None
+    }
+    /// What goes with `obj` when it is removed, by name, for the dialog to name each: a UML
+    /// classifier's nested classifiers (AR-132).
+    fn goes_along(&self, store: &Store, obj: Obj) -> Vec<String> {
+        let _ = (store, obj);
+        Vec::new()
     }
     /// Why `obj` cannot be removed, in the user's words, checked before the removal or its dialog
     /// (UML's package Types while it keeps the built-in types); none lets the command decide.

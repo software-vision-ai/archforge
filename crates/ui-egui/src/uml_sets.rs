@@ -114,7 +114,7 @@ fn ids(store: &Store, objs: &[Obj]) -> Vec<String> {
 /// the set is selected and Properties opens with its name ready for typing.
 pub(crate) fn create(shell: &mut Shell, gens: &[Obj], general: Obj) {
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
-    let taken: Vec<String> = archforge_uml::commands::package_of(store, general)
+    let taken: Vec<String> = archforge_uml::nesting::home_package(store, general)
         .map(|pkg| {
             store
                 .list(pkg, archforge_uml::package::PACKAGED_ELEMENT)

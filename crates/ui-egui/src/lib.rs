@@ -48,6 +48,7 @@ pub mod types;
 mod uml_classifier;
 mod uml_constraints;
 mod uml_inline;
+mod uml_nesting;
 mod uml_panel;
 mod uml_qualifiers;
 mod uml_relate;

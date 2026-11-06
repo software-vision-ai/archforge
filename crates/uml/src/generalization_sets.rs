@@ -348,7 +348,7 @@ fn check_set_name(store: &Store, name: &str, package: Obj, except: Option<Obj>) 
 fn set_add(ctx: &mut C<'_>, p: &Params) -> R {
     let gens = generalizations_param(ctx.doc, p, "generalizations")?;
     let general = shared_general(ctx.doc, &gens).map_err(|e| grouping_refusal(ctx.doc, "generalizations", e))?;
-    let pkg = crate::commands::package_of(ctx.doc, general)
+    let pkg = crate::nesting::home_package(ctx.doc, general)
         .ok_or_else(|| refuse("generalizations", format!("{} is in no package", name_of(ctx.doc, general))))?;
     let name = text(p, "name").trim();
     check_set_name(ctx.doc, name, pkg, None)?;
