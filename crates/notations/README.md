@@ -23,10 +23,11 @@ holds no notation and so knows no diagram kind.
 
 | Item | What it is |
 |---|---|
-| `Part`, `PARTS` | what a metamodel brings to the store; the list a project holds |
+| `Part`, `PARTS` | what a metamodel brings to the store, its name rule among it; the list a project holds |
+| `name_kind` | the kind an element is told apart within by name in its owner, by its metamodel's rule (UML's is `archforge_uml::names::kind`): the check as a project opens refuses only two of one kind named alike (AR-208) |
 | `NOTATIONS`, `view` | the notations a project's view asks; a `ProjectView` of them |
 | `universe`, `store` | the universe of every notation; an empty store over it with the host's ids |
 | `storage` | every metamodel's tables and list tables, in the order of `PARTS` |
 | `registry`, `Session` | the edit area, the shared element commands, every notation's own, the diagrams' and the skills'; a project's session, `Session<Store, ProjectView>` |
 | `new_project_session` | a session with the project's Model root named `name`; the host supplies the ids |
-| `session_from_rows`, `session_from_rows_repaired` | a session rebuilt from a project's rows and checked, saved as it is; the second runs a repair on the store first |
+| `session_from_rows`, `session_from_rows_repaired` | a session rebuilt from a project's rows and checked (by `name_kind`), saved as it is; the second runs a repair on the store first |

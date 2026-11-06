@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use archforge_diagram::{Notation, ProjectView};
 use archforge_mof::schema::{Junction, Table};
-use archforge_mof::{CompositeSlabs, MetaError, Metamodel, Slabs, Store, Universe, Uuid};
+use archforge_mof::{ClassId, CompositeSlabs, MetaError, Metamodel, NameKind, Slabs, Store, Universe, Uuid};
 
 /// What a metamodel brings to a project's store.
 pub struct Part {
@@ -22,7 +22,14 @@ pub struct Part {
     /// The tables and list tables its objects are stored in.
     pub tables: &'static [Table],
     pub junctions: &'static [Junction],
+    /// The kind each of its classes is told apart within by name, among its owner's elements, for
+    /// the check a project gets as it opens ([`name_kind`]); none for names that never clash
+    /// there.
+    pub name_kind: fn(ClassId) -> Option<NameKind>,
 }
+
+/// One kind for every named element of a notation: two named alike in one owner always clash.
+const ONE_KIND: Option<NameKind> = Some(NameKind::Group(""));
 
 /// What a project holds: the shared core and the diagrams first, then the notations. Their tables
 /// are stored in this order, so a metamodel joins at the end.
@@ -34,6 +41,9 @@ pub const PARTS: &[Part] = &[
         slabs: || Box::new(archforge_core::CoreSlabs::default()),
         tables: archforge_core::TABLES,
         junctions: archforge_core::JUNCTIONS,
+        // Skills share the model's one list but are named uniquely per subject, by their own rule
+        // (`archforge_core::skills::first_duplicate`).
+        name_kind: |c| if c == archforge_core::SKILL { None } else { ONE_KIND },
     },
     Part {
         name: "diagram",
@@ -42,6 +52,9 @@ pub const PARTS: &[Part] = &[
         slabs: || Box::new(archforge_diagram::DiagramSlabs::default()),
         tables: archforge_diagram::TABLES,
         junctions: archforge_diagram::JUNCTIONS,
+        // A diagram's name is a label: two diagrams may be named alike, as `diagram.add`, `diagram.rename`
+        // and a package's own diagram, named like its package, let them be (AR-208).
+        name_kind: |c| if c == archforge_diagram::DIAGRAM { None } else { ONE_KIND },
     },
     Part {
         name: "er",
@@ -50,6 +63,7 @@ pub const PARTS: &[Part] = &[
         slabs: || Box::new(archforge_er::ErSlabs::default()),
         tables: archforge_er::TABLES,
         junctions: archforge_er::JUNCTIONS,
+        name_kind: |_| ONE_KIND,
     },
     Part {
         name: "uml",
@@ -58,6 +72,8 @@ pub const PARTS: &[Part] = &[
         slabs: || Box::new(archforge_uml::UmlSlabs::default()),
         tables: archforge_uml::TABLES,
         junctions: archforge_uml::JUNCTIONS,
+        // UML's own rule, the one its commands ask too.
+        name_kind: archforge_uml::names::kind,
     },
 ];
 
@@ -66,6 +82,13 @@ pub static NOTATIONS: &[&dyn Notation] = &[&archforge_er::ErNotation, &archforge
 
 /// A project's session: its store, the view and the commands.
 pub type Session = archforge_engine::Session<Store, ProjectView>;
+
+/// The kind an element of `class` is told apart within by its name among its owner's elements, by
+/// the rule of the notation the class is of ([`Part::name_kind`]): the check a project gets as it
+/// opens refuses only two elements of one kind named alike, whatever the case, in one owner.
+pub fn name_kind(class: ClassId) -> Option<NameKind> {
+    PARTS.iter().find(|p| p.index == class.metamodel()).map_or(ONE_KIND, |p| (p.name_kind)(class))
+}
 
 /// A view of a project holding every notation.
 pub fn view() -> ProjectView {
@@ -147,8 +170,8 @@ pub fn session_from_rows_repaired(
     // Built without an undo log, so a model of any size the read budgets let through opens.
     let mut st = archforge_mof::rows::restore_into_empty(store(ids)?, rows, &tables, &junctions).map_err(|e| e.to_string())?;
     repair(&mut st);
-    // Skills share the model's one list but are named uniquely per subject, by their own rule.
-    if let Some(problem) = st.first_problem_except(&[archforge_core::SKILL]) {
+    // Only elements of one kind clash by name in one owner (AR-208); skills by their own rule.
+    if let Some(problem) = st.first_problem_by(name_kind) {
         return Err(format!("the model does not hold together: {problem:?}"));
     }
     if let Some(problem) = archforge_core::skills::first_duplicate(&st) {

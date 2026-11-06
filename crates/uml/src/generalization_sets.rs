@@ -333,11 +333,11 @@ fn check_set_name(store: &Store, name: &str, package: Obj, except: Option<Obj>) 
     if name.trim().is_empty() {
         return Err(refuse("name", "a generalization set needs a name"));
     }
-    let siblings: Vec<Obj> = refs(store, package, package::PACKAGED_ELEMENT).into_iter().filter(|o| is_set(store, *o)).collect();
     if let Some(why) = archforge_core::skills::name_problem(name, crate::commands::MAX_NAME) {
         return Err(refuse("name", format!("the name {why}")));
     }
-    if siblings.iter().any(|s| Some(*s) != except && name_of(store, *s).to_lowercase() == name.to_lowercase()) {
+    // Sets are a kind of their own among the package's elements (`crate::names`).
+    if crate::names::clash(store, package, GENERALIZATION_SET, name, except).is_some() {
         return Err(refuse("name", format!("there is a generalization set named {name} already")));
     }
     Ok(())

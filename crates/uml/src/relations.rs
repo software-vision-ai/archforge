@@ -410,7 +410,7 @@ fn association_class_add(ctx: &mut C<'_>, p: &Params) -> R {
         if let Some(why) = crate::members::reserved_problem(ctx.doc, pkg, name) {
             return Err(refuse("name", why));
         }
-        crate::commands::check_name(ctx.doc, name, &crate::commands::classifiers(ctx.doc, pkg), None)?;
+        crate::commands::check_name(ctx.doc, Some(pkg), ASSOCIATION_CLASS, name, None)?;
     }
     let a = ctx.doc.create(ASSOCIATION_CLASS).map_err(fail)?;
     set_name(ctx.doc, a, name)?;

@@ -389,44 +389,35 @@ fn visibility(store: &Store, owner: Obj, p: &Params, key: &str) -> Result<Value,
     Ok(v)
 }
 
-/// A member's name: a name, told apart from its owner's other attributes when it is one, and, in an
-/// association class, from its ends' roles, which share its names in UML.
-fn check_name(store: &Store, owner: Obj, name: &str, siblings: &[Obj], except: Option<Obj>) -> Result<(), CommandError> {
+/// An attribute's name: a name, told apart from its owner's other properties by the shared rule
+/// ([`crate::names`]): its other attributes and, in an association class, its ends' roles, which
+/// share its names in UML; its operations' names are another kind's.
+fn check_name(store: &Store, owner: Obj, name: &str, except: Option<Obj>) -> Result<(), CommandError> {
     if let Some(p) = archforge_core::skills::name_problem(name, crate::commands::MAX_NAME) {
         return Err(refuse("name", format!("the name {p}")));
     }
-    if siblings.iter().any(|s| Some(*s) != except && name_of(store, *s).to_lowercase() == name.to_lowercase()) {
+    let Some(other) = crate::names::clash(store, owner, PROPERTY, name, except).or_else(|| end_role_clash(store, owner, name)) else {
+        return Ok(());
+    };
+    if one(store, other, property::ASSOCIATION).is_none() {
         return Err(refuse("name", format!("the {} has an attribute named {name} already", crate::commands::what(store, owner))));
     }
-    nested_clash(store, owner, name)?;
-    if let Some(end) = end_role_clash(store, owner, name) {
-        return Err(refuse(
-            "name",
-            format!(
-                "the association class {} has an end {} with the role {}; its attributes and its ends' roles share its names, so the attribute {name} takes another",
-                uuid_of(store, owner)?,
-                uuid_of(store, end)?,
-                name_of(store, end)
-            ),
-        ));
-    }
-    Ok(())
-}
-
-/// A member's name may not be a classifier's nested in its owner, whatever the case (AR-132): the
-/// two share their owner, whose elements a model opening is checked to name apart.
-fn nested_clash(store: &Store, owner: Obj, name: &str) -> Result<(), CommandError> {
-    match crate::nesting::member_clash(store, owner, name, None) {
-        Some(n) => Err(refuse(
-            "name",
-            format!("the {} nests {} named {} already", crate::commands::what(store, owner), crate::commands::a_what(store, n), name_of(store, n)),
-        )),
-        None => Ok(()),
-    }
+    Err(refuse(
+        "name",
+        format!(
+            "the {} {} has an end {} with the role {}; its attributes and its ends' roles share its names, so the attribute {name} takes another",
+            crate::commands::what(store, owner),
+            uuid_of(store, owner)?,
+            uuid_of(store, other)?,
+            name_of(store, other)
+        ),
+    ))
 }
 
 /// The end of association class `owner` whose role is `name`, whatever the case: an attribute of
-/// it may not take that name. None for anything but an association class, and for no name.
+/// it may not take that name. None for anything but an association class, and for no name. Every
+/// member end counts, the one a class still owns (a project of an earlier Archforge) too, since
+/// both ends are members of the association in UML.
 pub fn end_role_clash(store: &Store, owner: Obj, name: &str) -> Option<Obj> {
     if name.is_empty() || store.class_of(owner).ok() != Some(crate::ASSOCIATION_CLASS) {
         return None;
@@ -437,10 +428,26 @@ pub fn end_role_clash(store: &Store, owner: Obj, name: &str) -> Option<Obj> {
 /// The attribute of association class `owner` named `role`, whatever the case: an end of it may not
 /// take that role. None for anything but an association class, and for no role.
 pub fn attribute_clash(store: &Store, owner: Obj, role: &str) -> Option<Obj> {
-    if role.is_empty() || store.class_of(owner).ok() != Some(crate::ASSOCIATION_CLASS) {
+    if store.class_of(owner).ok() != Some(crate::ASSOCIATION_CLASS) {
         return None;
     }
-    attributes(store, owner).into_iter().find(|a| name_of(store, *a).to_lowercase() == role.to_lowercase())
+    crate::names::clash(store, owner, PROPERTY, role, None).filter(|p| one(store, *p, property::ASSOCIATION).is_none())
+}
+
+/// An operation's name in `owner`: none of its other operations' whatever the case, by the shared
+/// rule ([`crate::names`]); its attributes' names are another kind's.
+fn check_operation_name(store: &Store, owner: Obj, name: &str, except: Option<Obj>) -> Result<(), CommandError> {
+    match crate::names::clash(store, owner, OPERATION, name, except) {
+        Some(other) => Err(refuse(
+            "name",
+            format!(
+                "the {} has an operation named {} already, and {name:?} matches it whatever the case",
+                crate::commands::what(store, owner),
+                name_of(store, other)
+            ),
+        )),
+        None => Ok(()),
+    }
 }
 
 /// Why `c` takes no `members` (attributes or operations): its id, what it is (an enumeration,
@@ -502,7 +509,7 @@ fn attribute_add(ctx: &mut C<'_>, p: &Params) -> R {
     let c = classifier_of(ctx.doc, p, "class")?;
     let Some((owned, _)) = member_lists(ctx.doc, c) else { return Err(refuse("class", no_members(ctx.doc, c, "attributes"))) };
     let name = text(p, "name");
-    check_name(ctx.doc, c, name, &attributes(ctx.doc, c), None)?;
+    check_name(ctx.doc, c, name, None)?;
     let vis = visibility(ctx.doc, c, p, "visibility")?;
     let ty = resolve_type(ctx.doc, "type", text(p, "type"))?;
     let modifiers = attribute_modifiers(ctx.doc, p, c, None, name, ty, typed_bounds(p)?)?;
@@ -533,7 +540,7 @@ fn attribute_set(ctx: &mut C<'_>, p: &Params) -> R {
         Some(n) => n.to_string(),
         None => name_of(ctx.doc, a),
     };
-    check_name(ctx.doc, c, &name, &attributes(ctx.doc, c), Some(a))?;
+    check_name(ctx.doc, c, &name, Some(a))?;
     let vis = match p.str("visibility") {
         Some(_) => visibility(ctx.doc, c, p, "visibility")?,
         None => ctx.doc.get(a, named_element::VISIBILITY).map_err(fail)?,
@@ -637,7 +644,7 @@ fn set_operation(store: &mut Store, owner: Obj, op: Obj, p: &Params) -> Result<(
     if let Some(problem) = archforge_core::skills::name_problem(name, crate::commands::MAX_NAME) {
         return Err(refuse("name", format!("the name {problem}")));
     }
-    nested_clash(store, owner, name)?;
+    check_operation_name(store, owner, name, Some(op))?;
     let leaf = p.bool("leaf").unwrap_or(false);
     if leaf
         && !crate::relations::is_leaf(store, op)
@@ -685,8 +692,7 @@ pub fn literal_owner(store: &Store, literal: Obj) -> Option<Obj> {
 /// with: literals are told apart within their enumeration whatever the case, so `Paid` and `paid`
 /// clash. The commands and the shell ask this one rule.
 pub fn literal_clash(store: &Store, enumeration: Obj, name: &str, except: Option<Obj>) -> Option<Obj> {
-    let wanted = name.to_lowercase();
-    crate::commands::literals(store, enumeration).into_iter().find(|l| Some(*l) != except && name_of(store, *l).to_lowercase() == wanted)
+    crate::names::clash(store, enumeration, ENUMERATION_LITERAL, name, except)
 }
 
 /// A literal's name in `enumeration`: a name, none of its other literals' whatever the case. A
@@ -924,7 +930,7 @@ macro_rules! visibility_line {
 macro_rules! operation_lines {
     () => {
         concat!(
-            "name: string; the operation's name\n",
+            "name: string; the operation's name, none of its owner's other operations' whatever the case; an attribute may share it\n",
             visibility_line!(),
             "\nparameters: array = []; its parameters, each {name, type, multiplicity}\n",
             "returns: string = \"\"; its return type's id or a built-in type's name, or nothing\n",
@@ -953,7 +959,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             &["Class"],
             None,
             concat!(
-                "class: string; the class's, interface's, data type's or association class's id\nname: string; the attribute's name; in an association class never one of its ends' roles\n",
+                "class: string; the class's, interface's, data type's or association class's id\nname: string; the attribute's name, none of its owner's other attributes' whatever the case (an operation may share it); in an association class never one of its ends' roles\n",
                 type_line!(),
                 "\n",
                 multiplicity_line!(),

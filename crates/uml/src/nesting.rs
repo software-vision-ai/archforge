@@ -10,8 +10,9 @@
 //! a primitive type own none. A class, an interface, an enumeration and a data type may be nested;
 //! a primitive type and an association class stay in a package, as the design offers them (page
 //! 08, D1). An owner is never the classifier itself nor one nested in it at any depth, and a nested
-//! classifier's name is told apart from its owner's other nested classifiers whatever the case, as
-//! a package's classifiers' names are. A built-in type is never moved.
+//! classifier's name is told apart from its owner's other classifiers whatever the case, as a
+//! package's classifiers' names are, by the one rule of [`crate::names`]: an attribute, an
+//! operation or a package may share it (AR-208). A built-in type is never moved.
 //!
 //! Ownership is not package membership: a nested classifier's package is its owner's, its home
 //! package ([`home_package`]), which places it on its package's diagrams; and it is never what a
@@ -140,27 +141,18 @@ pub fn qualified_name(store: &Store, c: Obj) -> String {
     parts.join("::")
 }
 
-/// The elements whose names a classifier's must differ from under `owner`, whatever the case:
-/// every named element `owner` holds, a package's classifiers, packages and sets, a classifier's
-/// nested classifiers, attributes, operations and constraints. A project's model is checked as it
-/// opens for two elements of one owner named alike, so a nested classifier never takes the name of
-/// an attribute of its owner, nor an attribute that of a nested classifier ([`member_clash`]).
+/// Every named element `owner` holds, whatever its kind: what a new nested classifier's default
+/// name is kept free of, so it never reads as a member's. Only its classifiers clash with it
+/// ([`classifier_clash`]).
 pub fn names_under(store: &Store, owner: Obj) -> Vec<Obj> {
     store.owned_elements(owner).unwrap_or_default().into_iter().filter(|o| store.is_alive(*o) && !name_of(store, *o).is_empty()).collect()
 }
 
-/// The classifier nested in `owner` named `name`, whatever the case, other than `except`: an
-/// attribute or an operation of `owner` may not take its name.
-pub fn member_clash(store: &Store, owner: Obj, name: &str, except: Option<Obj>) -> Option<Obj> {
-    if name.is_empty() {
-        return None;
-    }
-    nested(store, owner).into_iter().find(|n| Some(*n) != except && name_of(store, *n).to_lowercase() == name.to_lowercase())
-}
-
-/// The classifiers whose names `c`'s must differ from where it is now.
-pub fn siblings(store: &Store, c: Obj) -> Vec<Obj> {
-    owner_of(store, c).map(|o| names_under(store, o)).unwrap_or_default()
+/// The classifier `owner` holds (nests, or for a package holds), other than `except`, that a
+/// classifier named `name` would clash with there, whatever the case: classifiers are one kind
+/// ([`crate::names`]), so an attribute, an operation or a package of that name never clashes.
+pub fn classifier_clash(store: &Store, owner: Obj, name: &str, except: Option<Obj>) -> Option<Obj> {
+    crate::names::clash(store, owner, CLASS, name, except)
 }
 
 /// Why a classifier may not go under an owner: each a reason the Owner selector shows beside a
@@ -212,7 +204,7 @@ pub fn owner_problem(store: &Store, c: Obj, owner: Obj) -> Option<OwnerProblem> 
     if name.is_empty() {
         return None;
     }
-    names_under(store, owner).into_iter().find(|s| *s != c && name_of(store, *s).to_lowercase() == name.to_lowercase()).map(OwnerProblem::NameTaken)
+    classifier_clash(store, owner, &name, Some(c)).map(OwnerProblem::NameTaken)
 }
 
 /// The refusal `problem` makes of `c` going under `owner`, in full.
@@ -281,7 +273,8 @@ fn place(store: &mut Store, c: Obj, owner: Obj) -> Result<(), CommandError> {
 }
 
 /// `uml.nested.add`: a class, an interface, an enumeration or a data type nested in a class, an
-/// interface or an association class, its name free among the owner's nested classifiers.
+/// interface or an association class, its name free among the owner's nested classifiers (other
+/// kinds may share it, [`crate::names`]).
 fn nested_add(ctx: &mut C<'_>, p: &Params) -> R {
     let owner = classifier_of(ctx.doc, p, "owner")?;
     let owner_class = ctx.doc.class_of(owner).map_err(fail)?;
@@ -301,7 +294,7 @@ fn nested_add(ctx: &mut C<'_>, p: &Params) -> R {
         return Err(refuse("kind", format!("{kind:?} is not one of {}", names.join(", "))));
     };
     let name = text(p, "name");
-    check_name(ctx.doc, name, &names_under(ctx.doc, owner), None)?;
+    check_name(ctx.doc, Some(owner), *metaclass, name, None)?;
     let c = ctx.doc.create(*metaclass).map_err(fail)?;
     set_name(ctx.doc, c, name)?;
     place(ctx.doc, c, owner)?;
@@ -396,7 +389,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             concat!(
                 "owner: string; the id of the class, interface or association class that owns it (an enumeration, a data type or a primitive type owns none)\n",
                 "kind: string = \"class\", class|interface|enumeration|data-type; what it is\n",
-                "name: string; its name, free among the owner's nested classifiers whatever the case"
+                "name: string; its name, free among the owner's nested classifiers whatever the case; an attribute or an operation of the owner may share it"
             ),
             has_owners,
             nested_add
@@ -408,7 +401,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             None,
             concat!(
                 "classifier: string; the classifier's id; it keeps its id, members, relationships and every type reference to it; a built-in type stays in Types\n",
-                "owner: string; the id of a package, or of a class, an interface or an association class it is nested in; never the classifier itself nor one nested in it; only a class, an interface, an enumeration or a data type is nested in a classifier; its name must be free there, whatever the case"
+                "owner: string; the id of a package, or of a class, an interface or an association class it is nested in; never the classifier itself nor one nested in it; only a class, an interface, an enumeration or a data type is nested in a classifier; its name must be free among the classifiers there, whatever the case (an attribute, an operation or a package may share it)"
             ),
             has_classifiers,
             set_owner

@@ -5,7 +5,7 @@
 
 use archforge_engine::{CommandError, Ctx, Document, EngineError, Facts, Options, Params, Registry, Session, View, always, cmd};
 use archforge_mof::toy::{self, *};
-use archforge_mof::{Delta, Invalid, Obj, Op, Problem, Store, TypeRef, Value};
+use archforge_mof::{Delta, Invalid, NameKind, Obj, Op, Problem, Store, TypeRef, Value};
 use serde_json::{Value as Json, json};
 
 fn s(v: &str) -> Value {
@@ -428,8 +428,46 @@ fn the_first_problem_is_found_in_time_linear_in_the_model() {
     }
     assert!(matches!(st.first_problem(), Some(Problem::DuplicateName { .. })));
     // A class named by a rule of its own is left out of the siblings' check.
-    assert_eq!(st.first_problem_except(&[CLASS]), None);
+    assert_eq!(st.first_problem_by(|c| (c != CLASS).then_some(NameKind::Class(c))), None);
     assert!(started.elapsed() < std::time::Duration::from_secs(5), "{:?}", started.elapsed());
+}
+
+/// With kinds, only siblings of one kind must be named apart, and the one-name question asks the
+/// same rule as the whole-model check (AR-208).
+#[test]
+fn siblings_of_different_kinds_may_share_a_name_and_one_name_is_asked_by_the_same_rule() {
+    // Packages and classes are kinds of their own; enumerations count as classes.
+    let kind = |c| match c {
+        c if c == CLASS || c == ENUMERATION => Some(NameKind::Group("classifier")),
+        c if c == PACKAGE => Some(NameKind::Class(c)),
+        _ => None,
+    };
+    let mut st = store();
+    let pkg = st.create(PACKAGE).unwrap();
+    let named = |st: &mut Store, class, name: &str| {
+        let o = st.create(class).unwrap();
+        st.set(o, NAMED_ELEMENT_NAME, s(name)).unwrap();
+        st.push(pkg, PACKAGE_PACKAGED_ELEMENT, Value::Ref(o)).unwrap();
+        o
+    };
+    let sub = named(&mut st, PACKAGE, "Billing");
+    let class = named(&mut st, CLASS, "billing");
+    // Free (none): never checked, whatever its name.
+    named(&mut st, ASSOCIATION, "BILLING");
+    named(&mut st, ASSOCIATION, "Billing");
+    assert_eq!(st.first_problem_by(kind), None, "a package and a class may share a name");
+    assert!(matches!(st.first_problem(), Some(Problem::DuplicateName { .. })), "without kinds every sibling clashes");
+    assert_eq!(st.name_clash(pkg, PACKAGE, "BILLING", None, kind), Some(sub));
+    assert_eq!(st.name_clash(pkg, ENUMERATION, "BILLING", None, kind), Some(class), "an enumeration is a classifier");
+    assert_eq!(st.name_clash(pkg, ENUMERATION, "billing", Some(class), kind), None, "the element itself never clashes");
+    assert_eq!(st.name_clash(pkg, ASSOCIATION, "billing", None, kind), None, "a free kind never clashes");
+    assert_eq!(st.name_clash(pkg, CLASS, "", None, kind), None, "an empty name names nothing");
+    assert_eq!(st.name_clash(sub, CLASS, "billing", None, kind), None, "another owner's names are its own");
+    let twin = named(&mut st, ENUMERATION, "BILLING");
+    assert!(
+        matches!(st.first_problem_by(kind), Some(Problem::DuplicateName { obj, other, .. }) if obj == twin && other == class),
+        "two classifiers clash, whatever their metaclasses"
+    );
 }
 
 struct Rng(u64);

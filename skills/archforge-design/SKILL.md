@@ -515,6 +515,16 @@ What is UML's own, beside the shared rules above.
   reaches them). In a package named Types their names, whatever the case, are kept for them, so no
   classifier of the user's own takes one there. A built-in type's name always means the one in
   Types, never a type of the user's own named alike, and is never made twice.
+- Names in one owner are told apart by kind, as UML does (owner decision, 2026-11-06, AR-208),
+  compared without case: every classifier (class, interface, enumeration, data type, primitive
+  type, association class) is one kind; a package, a property (attribute, association end,
+  qualifier), an operation, a parameter, a literal and a generalization set are each a kind of
+  their own; relationships, constraints and diagrams carry their names as labels and never clash.
+  Two of one kind named alike are refused ("there is a package named Billing already", "the class
+  has an operation named total already"); a package and a class, or an attribute and an operation,
+  may share a name. `archforge_uml::names::kind` is the one rule: the commands ask it and the
+  project's check as it opens asks it, so a project the commands made always opens again.
+  Operations are not overloaded: two of one name are refused whatever their parameters.
 - The package Types is the one named exactly Types directly under the root package (at the top
   level in a project without a root yet); a package named Types anywhere else is ordinary. Nothing
   is stored to mark it. While it holds built-in types it keeps its name and its place and is not
@@ -798,13 +808,10 @@ What is UML's own, beside the shared rules above.
   and type references. A nested classifier's kind line reads `{kind} · nested in {owner} · model, in
   every diagram`, and an explanation sits under Owner. A class's or an interface's panel has
   Nested classifiers · n after No redefinition, its `+` offering the same kinds, its rows selecting.
-  Names: a nested classifier's differs, whatever the case, from everything its owner holds,
-  attributes and operations included, and an attribute or operation never takes a nested one's
-  name, since a model opening refuses two elements of one owner named alike (so the design's D2
-  `priority : Priority` beside nested Priority is refused; the sample says `urgency`). Owner
-  decision 2026-11-06: follow UML, where elements of different kinds may share a name and only a
-  clash of one kind is refused; this strict rule stays until the Fireline bug that relaxes the
-  loader's open-time check lands, and then relaxes to UML's. On the
+  Names: a nested classifier's differs, whatever the case, from the other classifiers its owner
+  holds, by the one rule of names in an owner (owner decision 2026-11-06, AR-208): an attribute
+  or an operation of the owner may share it, so the sample has the design's D2 `priority :
+  Priority` beside nested Priority. On the
   canvas a nested card whose owner's card is on the diagram is tied to it by a solid line in the
   muted ink (the accent while either is selected), straight where the cards face each other, else
   one elbow crossing as few cards as it can, ending in ⊕ just outside the owner's side; it is
