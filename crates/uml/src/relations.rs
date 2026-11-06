@@ -926,6 +926,13 @@ fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
     } else if class == GENERALIZATION {
         let (specific, general) = crate::figures::ends(ctx.doc, r).ok_or_else(|| refuse(key, "the generalization joins no two classifiers"))?;
         let (s, g) = if source { (c, general) } else { (specific, c) };
+        // A member of a generalization set keeps its ends, so every set stays one of a single
+        // general classifier (AR-129).
+        if (s, g) != (specific, general)
+            && let Some(why) = crate::generalization_sets::reconnect_problem(ctx.doc, r)
+        {
+            return Err(refuse(key, why));
+        }
         if let Some(problem) = generalization_problem(ctx.doc, s, g, Some(r)) {
             return Err(refuse("class", problem.why(ctx.doc, s, g)));
         }
@@ -1008,7 +1015,13 @@ fn describe(store: &Store, r: Obj) -> Json {
         Some(c) if c == ASSOCIATION_CLASS => {
             json!({ "id": id(r), "kind": "association_class", "name": name_of(store, r), "from": from, "to": to, "ends": ends_json(store, r) })
         }
-        Some(c) if c == GENERALIZATION => json!({ "id": id(r), "kind": "generalization", "specific": from, "general": to }),
+        Some(c) if c == GENERALIZATION => {
+            let sets: Vec<Json> = crate::generalization_sets::sets_of(store, r)
+                .into_iter()
+                .map(|s| json!({ "id": id(s), "name": name_of(store, s), "label": crate::generalization_sets::label(store, s) }))
+                .collect();
+            json!({ "id": id(r), "kind": "generalization", "specific": from, "general": to, "sets": sets })
+        }
         Some(c) if c == INTERFACE_REALIZATION => json!({ "id": id(r), "kind": "realization", "implementing": from, "contract": to }),
         _ => json!({ "id": id(r), "kind": "dependency", "name": name_of(store, r), "client": from, "supplier": to }),
     };
@@ -1143,7 +1156,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             concat!(
                 "relationship: string; the association's, generalization's, dependency's, interface realization's or association class's id\n",
                 "end: string, source|target; the end to move: the classifier it was drawn from (the specific one, the client, the implementing class) or to\n",
-                "class: string; the id of the class, interface, enumeration, data type or primitive type the end moves to; an association's end never moves to an enumeration, a data type or a primitive type; a generalization's end keeps its rules: an interface specializes only an interface, a class never one, an enumeration only an enumeration, a data type only a data type, a primitive type only a primitive type, a built-in type nothing, and the general end never moves onto a final classifier; a realization's source is a class and its target an interface, the class realizing it once; an association class's ends move only onto a class or another association class; a moved association's ends drop what they subset or redefine that the rules no longer allow, listed under dropped in the result"
+                "class: string; the id of the class, interface, enumeration, data type or primitive type the end moves to; an association's end never moves to an enumeration, a data type or a primitive type; a generalization in a generalization set keeps its ends, refused naming its sets; a generalization's end keeps its rules: an interface specializes only an interface, a class never one, an enumeration only an enumeration, a data type only a data type, a primitive type only a primitive type, a built-in type nothing, and the general end never moves onto a final classifier; a realization's source is a class and its target an interface, the class realizing it once; an association class's ends move only onto a class or another association class; a moved association's ends drop what they subset or redefine that the rules no longer allow, listed under dropped in the result"
             ),
             has_classes,
             relationship_reconnect

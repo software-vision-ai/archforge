@@ -122,6 +122,8 @@ pub struct State {
     pub(crate) inline: Option<crate::uml_inline::InlineMember>,
     pub gesture: Option<crate::editing::Gesture>,
     pub menu: Option<crate::editing::EntityMenu>,
+    /// The context menu of selected generalization lines, open at a screen point (AR-129).
+    pub line_menu: Option<Pos2>,
     pub focused: bool,
     /// Relationships (slice E2): the ends a new line gets, the chevron whose popover is open (the
     /// cardinality popover, a menu of kinds), the mapping table offer and the toast with Undo.
@@ -147,6 +149,8 @@ pub struct State {
     pub ends: Vec<EndText>,
     /// The packages' tabs the last frame drew, which take a press as their cards do (AR-113).
     pub package_tabs: Vec<PackageTab>,
+    /// The generalization sets' labels the last frame drew, which take a press (AR-129).
+    pub set_labels: Vec<SetLabel>,
     /// Moving between a package's diagram and its parent's (AR-95).
     pub(crate) nav: crate::package_nav::Nav,
 }
@@ -170,6 +174,16 @@ pub struct PackageTab {
     pub cut: Option<String>,
 }
 
+/// A generalization set's label as drawn (AR-129): its set, where it was on screen, the node that
+/// holds where it was moved to on this diagram, when it was moved, and its whole text.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SetLabel {
+    pub set: Uuid,
+    pub rect: Rect,
+    pub node: Option<Uuid>,
+    pub text: String,
+}
+
 impl Default for State {
     /// A canvas with no diagram open: Select, the grid and minimap on, no menu open, Class as the classifier kind.
     fn default() -> Self {
@@ -191,6 +205,7 @@ impl Default for State {
             inline: None,
             gesture: None,
             menu: None,
+            line_menu: None,
             focused: false,
             relationship: crate::connect::RelKind::default(),
             popover: None,
@@ -204,6 +219,7 @@ impl Default for State {
             skills: Vec::new(),
             ends: Vec::new(),
             package_tabs: Vec::new(),
+            set_labels: Vec::new(),
             nav: crate::package_nav::Nav::default(),
         }
     }
@@ -618,6 +634,7 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
             rename_text: shell.canvas.rename.as_ref().map(|rn| rn.text.as_str()),
             tabs: std::cell::RefCell::new(Vec::new()),
             led: std::cell::OnceCell::new(),
+            set_drag: crate::editing::set_label_preview(shell, pointer),
         };
         for e in &visible.edges {
             if let Some(badge) = draw_edge(&clip, &draw, *e, &mut shell.registry, ui) {
@@ -626,6 +643,14 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
         }
         shell.canvas.ends = draw.ends.take();
         draw_constraint_links(&clip, &draw);
+        shell.canvas.set_labels = draw_sets(&clip, &draw, &mut shell.registry, ui);
+        // A set's label says its whole text while the pointer is on it.
+        if let Some(at) = ui.input(|i| i.pointer.hover_pos())
+            && shell.canvas.gesture.is_none()
+            && let Some(l) = shell.canvas.set_labels.iter().rev().find(|l| l.rect.contains(at))
+        {
+            let _ = resp.clone().on_hover_text_at_pointer(fmt(&tr("Generalization set {label}"), &[("label", &l.text)]));
+        }
         for n in &visible.nodes {
             if let Some(badge) = draw_node(&clip, &draw, *n, &mut shell.registry, ui) {
                 badges.push(badge);
@@ -734,6 +759,8 @@ struct Drawing<'a> {
     /// The diagram each element leads to, by the element: worked out once a frame, when a card
     /// first shows one (a package's own diagram, AR-113).
     led: std::cell::OnceCell<std::collections::HashMap<Obj, Obj>>,
+    /// A set's label being dragged where no node holds it yet: the set and how far it moved.
+    set_drag: Option<(Uuid, Vec2)>,
 }
 
 impl Drawing<'_> {
@@ -770,6 +797,10 @@ fn draw_node(
         return None;
     }
     let z = view.zoom;
+    // A generalization set's label is drawn with its set line (AR-129), not as a card.
+    if archforge_uml::generalization_sets::is_label(store, n) {
+        return None;
+    }
     let id = store.uuid(n).ok();
     if let Some(id) = id {
         widgets::record_visible(ui, registry, &format!("workspace.canvas.node.{id}"), "node", rect);
@@ -1912,6 +1943,162 @@ fn halo(paint: &egui::Painter, points: &[Pos2], stroke: Stroke, p: &Palette) {
 /// waypoints; a relationship of a table with itself loops out of its right side. Routed in diagram
 /// coordinates from the rectangles drawn, so a table being dragged takes its lines along. None
 /// when an end is missing.
+/// Where a generalization set shows on screen: its dashed line across its members' lines and its
+/// label's rectangle.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct SetPlace {
+    pub line: [Pos2; 2],
+    pub label: Rect,
+}
+
+/// Where a set shows (AR-129), from its members' routes on screen, each from the specific class
+/// to the general one: the set line runs square across them at a level along their common
+/// direction, `nth` steps of 26 px towards the general class for the `nth` set of the same lines,
+/// and the label of `size` sits on the general's side of it, beside the middle member. A label
+/// moved there (`placed`) sets the level instead: the line runs just past its edge.
+pub(crate) fn set_place(routes: &[Vec<Pos2>], nth: usize, size: Vec2, placed: Option<Rect>, z: f32) -> Option<SetPlace> {
+    let routes: Vec<&Vec<Pos2>> = routes.iter().filter(|r| r.len() >= 2 && r.iter().all(|p| p.is_finite())).collect();
+    if routes.is_empty() {
+        return None;
+    }
+    let sum = routes.iter().fold(Vec2::ZERO, |acc, r| match (r.first(), r.last()) {
+        (Some(a), Some(b)) => acc + (*b - *a),
+        _ => acc,
+    });
+    // Square to the axis the lines mostly run along, as their right-angled routes are.
+    let dir = match (sum.x.abs() > sum.y.abs(), sum.x < 0.0, sum.y > 0.0) {
+        (true, true, _) => vec2(-1.0, 0.0),
+        (true, false, _) => vec2(1.0, 0.0),
+        (false, _, true) => vec2(0.0, 1.0),
+        (false, _, false) => vec2(0.0, -1.0),
+    };
+    let side = vec2(-dir.y, dir.x);
+    let along = |p: Pos2| p.to_vec2().dot(dir);
+    let across = |p: Pos2| p.to_vec2().dot(side);
+    // The extents of the label along the line's direction and across it.
+    let ext_d = dir.y.abs() * size.y + dir.x.abs() * size.x;
+    let ext_n = side.x.abs() * size.x + side.y.abs() * size.y;
+    let gap = 4.0 * z;
+    let level = match placed {
+        Some(r) => along(r.center()) - ext_d / 2.0 - gap,
+        None => {
+            let spans: Vec<(f32, f32)> = routes
+                .iter()
+                .filter_map(|r| {
+                    let (a, b) = (along(*r.first()?), along(*r.last()?));
+                    Some((a.min(b), a.max(b)))
+                })
+                .collect();
+            let lo = spans.iter().map(|s| s.0).fold(f32::MIN, f32::max);
+            let hi = spans.iter().map(|s| s.1).fold(f32::MAX, f32::min);
+            let base = if lo < hi { lo + 0.3 * (hi - lo) } else { spans.iter().map(|s| (s.0 + s.1) / 2.0).sum::<f32>() / spans.len().max(1) as f32 };
+            base + nth.min(16) as f32 * 26.0 * z
+        }
+    };
+    // Where each member's route crosses the level, or its point nearest it.
+    let mut crossings: Vec<f32> = routes
+        .iter()
+        .map(|r| {
+            let hit = r.windows(2).find_map(|w| {
+                let (a, b) = (along(w[0]), along(w[1]));
+                if (a - level) * (b - level) <= 0.0 && (a - b).abs() > 1e-6 {
+                    let t = (level - a) / (b - a);
+                    Some(across(w[0] + (w[1] - w[0]) * t))
+                } else {
+                    None
+                }
+            });
+            hit.unwrap_or_else(|| {
+                let near = r.iter().copied().fold(r[0], |m, p| if (along(p) - level).abs() < (along(m) - level).abs() { p } else { m });
+                across(near)
+            })
+        })
+        .collect();
+    crossings.sort_by(f32::total_cmp);
+    let (first, last) = (*crossings.first()?, *crossings.last()?);
+    let pad = if crossings.len() == 1 { 36.0 * z } else { 24.0 * z };
+    let at = |t: f32| (dir * level + side * t).to_pos2();
+    let line = [at(first - pad), at(last + pad)];
+    let label = match placed {
+        Some(r) => r,
+        None => {
+            let middle = crossings.get(crossings.len() / 2).copied().unwrap_or(first);
+            let anchor = at(middle) + side * 8.0 * z + dir * gap;
+            Rect::from_center_size(anchor + dir * (ext_d / 2.0) + side * (ext_n / 2.0), size)
+        }
+    };
+    (line.iter().all(|p| p.is_finite()) && label.is_finite()).then_some(SetPlace { line, label })
+}
+
+/// The generalization sets of the diagram's lines (AR-129): for each set with a member line here,
+/// a dashed line across its members' lines and its label, `name {complete, disjoint}`, beside it,
+/// worked out from the model each frame; muted, the accent while the set is selected. A label moved
+/// on this diagram sits where its node holds it. Gives the labels drawn, for the next frame's press.
+fn draw_sets(paint: &egui::Painter, d: &Drawing<'_>, registry: &mut widgets::Registry, ui: &egui::Ui) -> Vec<SetLabel> {
+    use archforge_uml::generalization_sets as sets;
+    let (p, store, z) = (d.p, d.store, d.view.zoom);
+    let mut by_set: std::collections::BTreeMap<Obj, Vec<Obj>> = std::collections::BTreeMap::new();
+    for e in refs(store, d.diagram, diagram::EDGE) {
+        let Some(g) = element_of(store, e, edge::ELEMENT).filter(|g| sets::is_generalization(store, *g)) else { continue };
+        for s in sets::sets_of(store, g) {
+            by_set.entry(s).or_default().push(e);
+        }
+    }
+    let mut out = Vec::new();
+    // The sets of one general classifier's lines take a level each.
+    let mut nth_of: std::collections::BTreeMap<Option<Obj>, usize> = std::collections::BTreeMap::new();
+    for (s, edges) in by_set {
+        let routes: Vec<Vec<Pos2>> = edges.iter().filter_map(|e| edge_points(d, *e)).collect();
+        let nth = nth_of.entry(sets::general_of(store, s)).or_insert(0);
+        let k = *nth;
+        *nth += 1;
+        let name = archforge_core::name_of(store, s);
+        let braces = sets::braces(store, s);
+        let selected = d.selection.contains(&s);
+        let (name_ink, braces_ink, line_ink) = if selected { (p.accent, p.accent, p.accent) } else { (p.text_secondary, p.text_muted, p.text_muted) };
+        let name_g = ux::galley(paint, &name, types::CAPTION_STRONG.scaled(z), name_ink, None);
+        let braces_g = ux::galley(paint, &braces, types::CAPTION.scaled(z), braces_ink, None);
+        let pad = vec2(6.0, 2.0) * z;
+        let gap = if name.is_empty() { 0.0 } else { 5.0 * z };
+        let size = vec2(name_g.size().x + gap + braces_g.size().x, name_g.size().y.max(braces_g.size().y)) + pad * 2.0;
+        let node = sets::label_node(store, d.diagram, s);
+        let placed = node.map(|n| Rect::from_min_size(d.node_rect(n).min, size));
+        let id = store.uuid(s).ok();
+        let placed = match (d.set_drag, id) {
+            (Some((dragged, by)), Some(id)) if dragged == id => {
+                set_place(&routes, k, size, placed, z).map(|at| Rect::from_min_size(at.label.min + by, size))
+            }
+            _ => placed,
+        };
+        let Some(at) = set_place(&routes, k, size, placed, z) else { continue };
+        let stroke = Stroke::new((1.2 * z).clamp(1.0, 2.5), line_ink);
+        paint.extend(egui::Shape::dashed_line(&at.line, stroke, (5.0 * z).max(2.0), (4.0 * z).max(2.0)));
+        let label = at.label;
+        paint.rect_filled(label, 4.0 * z, p.canvas);
+        if selected {
+            paint.rect_stroke(label, 4.0 * z, Stroke::new(1.0, p.accent), StrokeKind::Inside);
+        }
+        let mut x = label.left() + pad.x;
+        let y = label.center().y;
+        let name_w = name_g.size().x;
+        paint.galley(pos2(x, y - name_g.size().y / 2.0), name_g, name_ink);
+        x += name_w + gap;
+        paint.galley(pos2(x, y - braces_g.size().y / 2.0), braces_g, braces_ink);
+        let Some(id) = id else { continue };
+        widgets::record_visible(ui, registry, &format!("workspace.canvas.generalizationSet.{id}"), "label", label);
+        widgets::record_visible(
+            ui,
+            registry,
+            &format!("workspace.canvas.generalizationSet.{id}.line"),
+            "line",
+            Rect::from_two_pos(at.line[0], at.line[1]).expand(3.0),
+        );
+        let text = if name.is_empty() { braces } else { format!("{name} {braces}") };
+        out.push(SetLabel { set: id, rect: label, node: node.and_then(|n| store.uuid(n).ok()), text });
+    }
+    out
+}
+
 fn edge_points(d: &Drawing<'_>, e: Obj) -> Option<Vec<Pos2>> {
     let (store, view) = (d.store, d.view);
     let (Some(source), Some(target)) = (element_of(store, e, edge::SOURCE), element_of(store, e, edge::TARGET)) else { return None };

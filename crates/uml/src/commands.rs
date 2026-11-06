@@ -257,6 +257,7 @@ pub(crate) fn what(store: &Store, o: Obj) -> &'static str {
         Some(c) if c == PRIMITIVE_TYPE => "primitive type",
         Some(c) if c == PACKAGE => "package",
         Some(c) if c == crate::ENUMERATION_LITERAL => "literal",
+        Some(c) if c == crate::GENERALIZATION_SET => "generalization set",
         _ => "element",
     }
 }
@@ -692,7 +693,7 @@ fn hand_up_problem(store: &Store, pkg: Obj, parent: Obj) -> Option<String> {
 
 /// Removes UML elements (packages, classes, interfaces, enumerations, data types, attributes,
 /// operations, literals, primitive types, associations, generalizations, dependencies, interface
-/// realizations, association classes and constraints), each with what it holds (an enumeration its literals, a
+/// realizations, association classes, constraints and generalization sets), each with what it holds (an enumeration its literals, a
 /// data type or an association class its attributes and operations, an association its ends) and the
 /// diagrams, nodes and lines that show them (`element.remove`, through [`crate::UmlNotation`]). A
 /// nested package hands what it holds, and its diagrams, up to its parent first (owner decision); a
@@ -701,7 +702,9 @@ fn hand_up_problem(store: &Store, pkg: Obj, parent: Obj) -> Option<String> {
 /// dropped from what had it, and so is a default that is a literal that goes (AR-126), as the
 /// property's own type would be. An element a constraint names leaves the constraint's elements, and
 /// a constraint left naming none goes too, in the same step (AR-133,
-/// [`crate::constraints::dropped_by`]).
+/// [`crate::constraints::dropped_by`]). A generalization set goes alone, keeping its generalizations;
+/// a generalization leaves its sets, and a set left with no member goes too, in the same step
+/// (AR-129, [`crate::generalization_sets::emptied_by`]).
 pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, CommandError> {
     // Every id is checked before anything goes, so a refusal leaves the store as it was.
     let removable = [
@@ -720,6 +723,7 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
         crate::INTERFACE_REALIZATION,
         ASSOCIATION_CLASS,
         crate::CONSTRAINT,
+        crate::GENERALIZATION_SET,
     ];
     for o in objs.iter().filter(|o| store.is_alive(**o)) {
         let class = store.class_of(*o).map_err(fail)?;
@@ -777,6 +781,10 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
     let mut all = going_with(store, &classes);
     all.extend(objs);
     all.extend(orphans);
+    // A generalization set left with no member goes with its last one (AR-129), in the same step;
+    // removing a set keeps its generalizations.
+    let emptied = crate::generalization_sets::emptied_by(store, &all);
+    all.extend(emptied);
     // A default that is a literal goes with the literal: an InstanceValue needs its instance.
     let defaults = crate::modifiers::literal_defaults(store);
     for o in all {

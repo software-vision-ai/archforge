@@ -497,6 +497,7 @@ str		Literals carry no skills	Literals carry no skills
 str		Built-in types carry no skills	Built-in types carry no skills
 str		Types keeps the built-in types, so it stays while it holds them	Types keeps the built-in types, so it stays while it holds them
 str		Relationships carry no skills	Relationships carry no skills
+str		Generalization sets carry no skills	Generalization sets carry no skills
 str		This element carries no skills	This element carries no skills
 str		Diagram	Diagram
 str		Diagram · of {schema}	Diagram · of {schema}
@@ -754,6 +755,65 @@ str		Generalization · model	Generalization · model
 str		Implementing class	Implementing class
 str		Interface realization	Interface realization
 str		Interface realization · model	Interface realization · model
+# Generalization sets (AR-129)
+str		A set groups generalizations of one class.	A set groups generalizations of one class.
+str		Add member	Add member
+str		Add member offers only generalizations to {general}. Edit opens that generalization.	Add member offers only generalizations to {general}. Edit opens that generalization.
+str		Add to a generalization set	Add to a generalization set
+str		Add to set	Add to set
+str		Add to set ▸ {name}	Add to set ▸ {name}
+str		Add to {name}	Add to {name}
+str		Completeness	Completeness
+str		Create generalization set…	Create generalization set…
+str		Create set from selection	Create set from selection
+str		Delete from the model	Delete from the model
+str		Deleting the set keeps its generalizations; only the grouping goes. The set line is drawn across its members; drag its label to move it, a diagram-only change.	Deleting the set keeps its generalizations; only the grouping goes. The set line is drawn across its members; drag its label to move it, a diagram-only change.
+str		Deleting this generalization takes it out of its sets in the same undo step; a set left with no members goes too.	Deleting this generalization takes it out of its sets in the same undo step; a set left with no members goes too.
+str		Disjointness	Disjointness
+str		General class	General class
+str		Generalization set	Generalization set
+str		Generalization set {label}	Generalization set {label}
+str		Generalization set · model, in every diagram	Generalization set · model, in every diagram
+str		Generalization sets	Generalization sets
+str		Generalization sets · {n}	Generalization sets · {n}
+str		Incomplete	Incomplete
+str		Members · {n}	Members · {n}
+str		Membership is listed here for every set, and each set draws its own line and label on the canvas.	Membership is listed here for every set, and each set draws its own line and label on the canvas.
+str		New set from this generalization	New set from this generalization
+str		No other generalization to {general}	No other generalization to {general}
+str		None of these is in a set yet.	None of these is in a set yet.
+str		Not in a set yet.	Not in a set yet.
+str		On this generalization set · {n}	On this generalization set · {n}
+str		Overlapping	Overlapping
+str		Remove from set	Remove from set
+str		Same action as the context menu's Create generalization set… ({chord}). Only generalizations to one class form a set; a mixed selection disables it and says why.	Same action as the context menu's Create generalization set… ({chord}). Only generalizations to one class form a set; a mixed selection disables it and says why.
+str		Select generalizations to one class first.	Select generalizations to one class first.
+str		Selection · all specialise {general}	Selection · all specialise {general}
+str		Selection · mixed	Selection · mixed
+str		Set	Set
+str		Shown beside the lines as {braces}: a {general} is at most one of these kinds.	Shown beside the lines as {braces}: a {general} is at most one of these kinds.
+str		Shown beside the lines as {braces}: a {general} may be any number of these kinds.	Shown beside the lines as {braces}: a {general} may be any number of these kinds.
+str		Shown beside the lines as {braces}: every {general} is at least one of these kinds.	Shown beside the lines as {braces}: every {general} is at least one of these kinds.
+str		Shown beside the lines as {braces}: every {general} is exactly one of these kinds.	Shown beside the lines as {braces}: every {general} is exactly one of these kinds.
+str		Some of these are in a set already.	Some of these are in a set already.
+str		Something selected	Something selected
+str		This generalization set	This generalization set
+str		already in it	already in it
+str		generalization set	generalization set
+str		no shared parent	no shared parent
+str		none for {general} yet	none for {general} yet
+str		not all generalizations	not all generalizations
+str		nothing selected	nothing selected
+str		parents differ	parents differ
+str		{generalization} is in {sets}, which group the specialisations of {general}. Remove it from those sets before reconnecting it to {target}.	{generalization} is in {sets}, which group the specialisations of {general}. Remove it from those sets before reconnecting it to {target}.
+str		{generalization} is in {sets}, which groups the specialisations of {general}. Remove it from the set before reconnecting it to {target}.	{generalization} is in {sets}, which groups the specialisations of {general}. Remove it from the set before reconnecting it to {target}.
+str		{name} is not a generalization.	{name} is not a generalization.
+str		{name} removed; its generalizations stay	{name} removed; its generalizations stay
+str		{specific} specialises {general}	{specific} specialises {general}
+plural		{n} element	{n} element|{n} elements
+plural		{n} generalization	{n} generalization|{n} generalizations
+plural		{n} generalization · to {general}	{n} generalization · to {general}|{n} generalizations · to {general}
+plural		{sets} had no other member and went too	{sets} had no other member and went too|{sets} had no other members and went too
 str		Interface realization: from the implementing class to its interface	Interface realization: from the implementing class to its interface
 str		Association class: between two classes, with a card of its own	Association class: between two classes, with a card of its own
 str		Navigable	Navigable

@@ -624,6 +624,39 @@ What is UML's own, beside the shared rules above.
   it changes nothing and the reason sits under the field. A classifier's box writes at once; a
   member's with its editor's Apply. Agents use `uml.classifier.set`, the attribute and operation
   commands and `uml.association.set-end`, each with `leaf`.
+- Generalization sets (AR-129, design page 08, frames B1 to B4) have no tool. Generalizations
+  selected (Shift-click their lines) are grouped from their right-click menu: its heading `3
+  GENERALIZATIONS · TO PAYMENT`, then Create generalization set… and Add to set ▸ a set of their
+  class (one row a set, `none for Payment yet` when there is none, `already in it`), then Remove
+  from this diagram and Delete from the model (`workspace.canvas.contextMenu.generalizationSet.create`,
+  `.add.<i>`). The shortcut is ⌥⌘G (Ctrl Alt G elsewhere): the design's ⇧⌘G is File ▸ Generate…'s
+  already, so the owner is to confirm this one. A new set takes a fresh name (`GeneralizationSet
+  1`), is selected, and its name field in Properties takes the keyboard. Several elements selected
+  with a generalization among them show Properties' selection panel (`3 generalizations`,
+  `Selection · all specialise Payment`) with Create set from selection
+  (`workspace.properties.selection.createGeneralizationSet`) and Add to … buttons. Generalizations
+  of different classes, or anything else selected with them, leave the actions listed but disabled,
+  the short reason at the row's right (`parents differ`, `no shared parent`), the whole reason on
+  hover, as the description for screen readers and on the danger tint under the menu and the
+  buttons ("CardPayment specialises Payment and Voucher specialises Product. A set groups
+  generalizations of one class."). On the canvas a set is a dashed line square across its member
+  lines, a step towards the general class for each further set of the same lines, and its label
+  `name {complete, disjoint}` beside the middle member, on the general class's side, on every
+  diagram that shows a member line; muted, the accent with a ring while selected. A click on the
+  label, or its row in Models (`name` then a muted `generalization set`, after its general class),
+  selects it; dragging the label moves it on that diagram alone (a node of the kind
+  `uml.generalization-set.label`, nested in the general class's node). A set's Properties (section
+  Set): Name and General class (read only), Completeness (Complete | Incomplete) and Disjointness
+  (Disjoint | Overlapping) as segmented choices the arrow keys switch, what they mean
+  ("Shown beside the lines as {complete, disjoint}: every Payment is exactly one of these kinds."),
+  then Members · n with `+` (only generalizations to its general class), a pencil (select the
+  generalization) and a cross (take it out) per row. A generalization's Properties add
+  Generalization sets · n, each set with its braces, `+` adding it to another set or starting one.
+  Reconnecting a member is refused at the canvas's top and on the danger tint in its Properties
+  ("CardPayment → Payment is in method and channel, which group the specialisations of Payment.
+  Remove it from those sets before reconnecting it to Product."), the drag snapping back. Deleting
+  a member takes it out of its sets in the same step, a set left with no member going too, the
+  toast naming it; Delete on a selected set removes the set alone, its generalizations kept.
 - A type menu offers None, every built-in type (Integer, String, Boolean, Real, UnlimitedNatural),
   then the model's own types by name, every one of them: the menu scrolls, the arrow keys reach any
   row, and only the rows in sight are laid out (AR-123). A built-in type is made in the package

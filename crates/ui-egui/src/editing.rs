@@ -104,6 +104,9 @@ pub enum Gesture {
     /// A selected line's end dragged towards another element: the line's
     /// element, whether it is the source end, and the screen point of the end that stays.
     Reconnect { element: Uuid, source: bool, fixed: Pos2 },
+    /// A generalization set's label dragged where no node holds it yet (AR-129): the set, the
+    /// screen point the drag started at and the label's rectangle then.
+    SetLabel { set: Uuid, from: Pos2, rect: Rect },
 }
 
 /// The entity menu, open at a screen point.
@@ -123,6 +126,9 @@ enum Action {
     Commit,
     Place(&'static str, f64, f64),
     Menu(EntityMenu),
+    /// The context menu of generalization lines at a screen point, the line pressed selected
+    /// first when it was not (AR-129).
+    LineMenu(Pos2, Option<Uuid>),
     Rename(Uuid, Uuid),
     Open(Uuid, Option<usize>),
     PlaceNote(f64, f64),
@@ -205,7 +211,7 @@ fn single_selected(store: &Store, d: Obj, selection: &[Obj]) -> Option<Obj> {
 
 /// The corner handle of the selected node under `pos`, if any.
 fn handle_at(store: &Store, d: Obj, selection: &[Obj], view: View, pos: Pos2) -> Option<(Obj, Corner)> {
-    let n = single_selected(store, d, selection)?;
+    let n = single_selected(store, d, selection).filter(|n| !archforge_uml::generalization_sets::is_label(store, *n))?;
     let ring = view.rect(&bounds_of(store, n)).expand(4.0);
     let corners = [
         (Corner::TopLeft, ring.left_top()),
@@ -268,9 +274,18 @@ pub(crate) fn preview_rects(shell: &Shell, view: View, pointer: Option<Pos2>) ->
         | Gesture::LinkNote { .. }
         | Gesture::EndText { .. }
         | Gesture::Segment { .. }
-        | Gesture::Reconnect { .. } => {}
+        | Gesture::Reconnect { .. }
+        | Gesture::SetLabel { .. } => {}
     }
     out
+}
+
+/// A set's label being dragged where no node holds it yet: its set and how far it moved.
+pub(crate) fn set_label_preview(shell: &Shell, pointer: Option<Pos2>) -> Option<(Uuid, Vec2)> {
+    match (shell.canvas.gesture.as_ref(), pointer.filter(|p| p.is_finite())) {
+        (Some(Gesture::SetLabel { set, from, .. }), Some(at)) => Some((*set, at - *from)),
+        _ => None,
+    }
 }
 
 /// A cardinality text being dragged: its line, end and where its centre is now.
@@ -353,6 +368,14 @@ fn decide(
             _ => None,
         };
         on_top(shell, store, grid, card, pos)
+    };
+    // A generalization set's label as the last frame drew it, where no card is over it (AR-129).
+    let label_at = |pos: Pos2| {
+        let card = hit_node(pos).filter(|n| !archforge_uml::generalization_sets::is_label(store, *n));
+        if card.is_some() {
+            return None;
+        }
+        shell.canvas.set_labels.iter().rev().find(|l| l.rect.contains(pos)).cloned()
     };
     match shell.canvas.tool {
         Tool::Pan => Action::Nothing,
@@ -443,6 +466,14 @@ fn decide(
                 {
                     return Action::Start(Gesture::Resize { node: id, corner, base: unit_rect(store, n), from }, None);
                 }
+                // A set's label moves on this diagram alone: its node when it has one, else one is
+                // made where it is let go.
+                if let Some(l) = label_at(from) {
+                    return match l.node {
+                        Some(node) => Action::Start(Gesture::Move { nodes: vec![node], from }, Some(l.set)),
+                        None => Action::Start(Gesture::SetLabel { set: l.set, from, rect: l.rect }, Some(l.set)),
+                    };
+                }
                 return match hit_node(from) {
                     Some(n) => {
                         let nodes = if is_selected(store, selection, n) {
@@ -468,6 +499,17 @@ fn decide(
                         }
                     }
                 };
+            }
+            // A right click on a generalization's line opens the set actions (AR-129).
+            if resp.secondary_clicked()
+                && hit_node(pos).is_none()
+                && let (x, y) = view.to_canvas(pos)
+                && let Some(Hit::Edge(e)) = grid.hit(x, y)
+                && let Some(g) = store.get(e, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref())
+                && archforge_uml::generalization_sets::is_generalization(store, g)
+            {
+                let chosen = crate::uml_sets::elements(store, selection).contains(&g);
+                return Action::LineMenu(pos, if chosen { None } else { uuid(store, g) });
             }
             if resp.secondary_clicked()
                 && kind.is_some_and(|k| k.menu())
@@ -544,6 +586,11 @@ fn decide(
                 };
                 return Action::Open(entity_id, row);
             }
+            if resp.clicked()
+                && let Some(l) = label_at(pos)
+            {
+                return if shift { Action::Toggle(l.set) } else { Action::Select(vec![l.set]) };
+            }
             if resp.clicked() {
                 let (x, y) = view.to_canvas(pos);
                 // A package's tab is its card's (AR-113), over any line that crosses it; a card and a
@@ -587,6 +634,7 @@ pub(crate) fn pointer(shell: &mut Shell, ui: &egui::Ui, resp: &egui::Response, v
     if resp.clicked() || resp.drag_started() || resp.secondary_clicked() {
         shell.canvas.focused = true;
         shell.canvas.menu = None;
+        shell.canvas.line_menu = None;
     }
     match action {
         Action::Nothing => {}
@@ -615,6 +663,12 @@ pub(crate) fn pointer(shell: &mut Shell, ui: &egui::Ui, resp: &egui::Response, v
             }
         }
         Action::Menu(m) => shell.canvas.menu = Some(m),
+        Action::LineMenu(at, first) => {
+            if let Some(id) = first {
+                select(shell, vec![id]);
+            }
+            shell.canvas.line_menu = Some(at);
+        }
         Action::Rename(node, entity) => open_rename(shell, node, entity),
         Action::PlaceNote(x, y) => place_note(shell, d, x, y),
         Action::EditNote(node) => {
@@ -766,6 +820,17 @@ fn commit(shell: &mut Shell, view: View, d: Obj, pointer: Option<Pos2>, shift: b
                 let (x, y) = view.to_canvas(pointer);
                 kind.connect_to_new(shell, tool, d, from_node, x, y);
                 shell.canvas.tool = Tool::Select;
+            }
+        }
+        Gesture::SetLabel { set, from, rect } => {
+            if ((pointer - from) / view.zoom).length() < DRAG_MIN {
+                return;
+            }
+            let (x, y) = view.to_canvas(rect.min + (pointer - from));
+            let Some(diagram) = shell.session.as_ref().and_then(|s| s.doc().uuid(d).ok()) else { return };
+            let params = json!({ "diagram": diagram.to_string(), "set": set.to_string(), "x": x.round(), "y": y.round() });
+            if let Err(e) = run(shell, "uml.generalization-set.place", params) {
+                shell.canvas.notice = Some(e);
             }
         }
         Gesture::Reconnect { element, source, .. } => {
@@ -1497,6 +1562,9 @@ pub(crate) fn overlays(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rec
     if let Some(menu) = shell.canvas.menu.clone() {
         entity_menu(shell, ui, p, r, &menu);
     }
+    if let Some(at) = shell.canvas.line_menu {
+        crate::uml_sets::line_menu(shell, ui, p, r, at, d);
+    }
     keyboard(shell, ui, d);
 }
 
@@ -1886,6 +1954,7 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
         || shell.canvas.inline.is_some()
         || shell.canvas.note_edit.is_some()
         || shell.canvas.menu.is_some()
+        || shell.canvas.line_menu.is_some()
         || shell.explorer.delete.is_some()
         || shell.diagrams.new.is_some()
     {
@@ -1915,11 +1984,19 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
         shell.canvas.menu_focus = None;
         return;
     }
+    // ⌥⌘G (Ctrl Alt G): the selected generalizations into a new set (AR-129).
+    if ui.input(|i| i.modifiers.command && i.modifiers.alt && !i.modifiers.shift && i.key_pressed(egui::Key::G)) && crate::uml_sets::shortcut(shell) {
+        return;
+    }
     if escape {
         shell.canvas.tool = Tool::Select;
         shell.canvas.gesture = None;
         shell.canvas.popover = None;
         shell.canvas.mapping = None;
+        return;
+    }
+    // A selected generalization set goes from the model, its generalizations kept (AR-129).
+    if delete && crate::uml_sets::remove_selected_set(shell) {
         return;
     }
     if delete

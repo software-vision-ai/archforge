@@ -498,6 +498,7 @@ str		Literals carry no skills	Les littéraux ne portent pas de compétences
 str		Built-in types carry no skills	Les types intégrés ne portent pas de compétences
 str		Types keeps the built-in types, so it stays while it holds them	Types garde les types intégrés, il reste donc tant qu’il les contient
 str		Relationships carry no skills	Les relations ne portent pas de compétences
+str		Generalization sets carry no skills	Les ensembles de généralisations ne portent pas de compétences
 str		This element carries no skills	Cet élément ne porte pas de compétences
 str		Diagram	Diagramme
 str		Diagram · of {schema}	Diagramme · de {schema}
@@ -755,6 +756,65 @@ str		Generalization · model	Généralisation · modèle
 str		Implementing class	Classe qui implémente
 str		Interface realization	Réalisation d’interface
 str		Interface realization · model	Réalisation d’interface · modèle
+# Ensembles de généralisations (AR-129)
+str		A set groups generalizations of one class.	Un ensemble regroupe des généralisations d'une seule classe.
+str		Add member	Ajouter un membre
+str		Add member offers only generalizations to {general}. Edit opens that generalization.	Ajouter un membre ne propose que des généralisations vers {general}. Modifier ouvre cette généralisation.
+str		Add to a generalization set	Ajouter à un ensemble de généralisations
+str		Add to set	Ajouter à l'ensemble
+str		Add to set ▸ {name}	Ajouter à l'ensemble ▸ {name}
+str		Add to {name}	Ajouter à {name}
+str		Completeness	Complétude
+str		Create generalization set…	Créer un ensemble de généralisations…
+str		Create set from selection	Créer un ensemble depuis la sélection
+str		Delete from the model	Supprimer du modèle
+str		Deleting the set keeps its generalizations; only the grouping goes. The set line is drawn across its members; drag its label to move it, a diagram-only change.	Supprimer l'ensemble conserve ses généralisations ; seul le regroupement disparaît. La ligne de l'ensemble traverse ses membres ; faites glisser son libellé pour la déplacer, un changement propre au diagramme.
+str		Deleting this generalization takes it out of its sets in the same undo step; a set left with no members goes too.	Supprimer cette généralisation la retire de ses ensembles dans la même étape d'annulation ; un ensemble laissé sans membre disparaît aussi.
+str		Disjointness	Disjonction
+str		General class	Classe générale
+str		Generalization set	Ensemble de généralisations
+str		Generalization set {label}	Ensemble de généralisations {label}
+str		Generalization set · model, in every diagram	Ensemble de généralisations · modèle, dans chaque diagramme
+str		Generalization sets	Ensembles de généralisations
+str		Generalization sets · {n}	Ensembles de généralisations · {n}
+str		Incomplete	Incomplet
+str		Members · {n}	Membres · {n}
+str		Membership is listed here for every set, and each set draws its own line and label on the canvas.	L'appartenance à chaque ensemble est listée ici, et chaque ensemble dessine sa propre ligne et son libellé sur le canevas.
+str		New set from this generalization	Nouvel ensemble avec cette généralisation
+str		No other generalization to {general}	Aucune autre généralisation vers {general}
+str		None of these is in a set yet.	Aucune n'est encore dans un ensemble.
+str		Not in a set yet.	Dans aucun ensemble pour l'instant.
+str		On this generalization set · {n}	Sur cet ensemble de généralisations · {n}
+str		Overlapping	Chevauchant
+str		Remove from set	Retirer de l'ensemble
+str		Same action as the context menu's Create generalization set… ({chord}). Only generalizations to one class form a set; a mixed selection disables it and says why.	La même action que Créer un ensemble de généralisations… du menu contextuel ({chord}). Seules des généralisations vers une même classe forment un ensemble ; une sélection mixte la désactive et dit pourquoi.
+str		Select generalizations to one class first.	Sélectionnez d'abord des généralisations vers une même classe.
+str		Selection · all specialise {general}	Sélection · toutes spécialisent {general}
+str		Selection · mixed	Sélection · mixte
+str		Set	Ensemble
+str		Shown beside the lines as {braces}: a {general} is at most one of these kinds.	Affiché près des lignes sous la forme {braces} : un {general} est au plus l'un de ces types.
+str		Shown beside the lines as {braces}: a {general} may be any number of these kinds.	Affiché près des lignes sous la forme {braces} : un {general} peut être un nombre quelconque de ces types.
+str		Shown beside the lines as {braces}: every {general} is at least one of these kinds.	Affiché près des lignes sous la forme {braces} : tout {general} est au moins l'un de ces types.
+str		Shown beside the lines as {braces}: every {general} is exactly one of these kinds.	Affiché près des lignes sous la forme {braces} : tout {general} est exactement l'un de ces types.
+str		Some of these are in a set already.	Certaines sont déjà dans un ensemble.
+str		Something selected	Un élément sélectionné
+str		This generalization set	Cet ensemble de généralisations
+str		already in it	déjà dedans
+str		generalization set	ensemble de généralisations
+str		no shared parent	aucun parent commun
+str		none for {general} yet	aucun pour {general}
+str		not all generalizations	pas uniquement des généralisations
+str		nothing selected	rien de sélectionné
+str		parents differ	parents différents
+str		{generalization} is in {sets}, which group the specialisations of {general}. Remove it from those sets before reconnecting it to {target}.	{generalization} appartient à {sets}, qui regroupent les spécialisations de {general}. Retirez-la de ces ensembles avant de la reconnecter à {target}.
+str		{generalization} is in {sets}, which groups the specialisations of {general}. Remove it from the set before reconnecting it to {target}.	{generalization} appartient à {sets}, qui regroupe les spécialisations de {general}. Retirez-la de l'ensemble avant de la reconnecter à {target}.
+str		{name} is not a generalization.	{name} n'est pas une généralisation.
+str		{name} removed; its generalizations stay	Supprimé : {name} ; ses généralisations restent
+str		{specific} specialises {general}	{specific} spécialise {general}
+plural		{n} element	{n} élément|{n} éléments
+plural		{n} generalization	{n} généralisation|{n} généralisations
+plural		{n} generalization · to {general}	{n} généralisation · vers {general}|{n} généralisations · vers {general}
+plural		{sets} had no other member and went too	{sets} n'avait pas d'autre membre et est parti aussi|{sets} n'avaient pas d'autres membres et sont partis aussi
 str		Interface realization: from the implementing class to its interface	Réalisation d’interface : de la classe qui implémente à son interface
 str		Association class: between two classes, with a card of its own	Classe d’association : entre deux classes, avec sa propre carte
 str		Navigable	Navigable

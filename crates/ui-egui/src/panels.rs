@@ -59,6 +59,10 @@ pub struct State {
     /// The classifier No redefinition (leaf) was refused on, while something redefines it: the
     /// refusal shows under the check box, naming what does (AR-138).
     pub leaf_refused: Option<Uuid>,
+    /// A generalization set just made: its name field takes the keyboard once (AR-129).
+    pub set_name_focus: Option<Uuid>,
+    /// A reconnection refused on a generalization in a set, said in its Properties (AR-129).
+    pub set_refused: Option<(Uuid, String)>,
     /// The selection the open editors belong to: selecting anything else closes them.
     pub editors_for: Option<Uuid>,
     /// A relationship's Properties (slice E3): a role being typed, whether More is open, and the
@@ -238,6 +242,9 @@ pub enum Menu {
     ClassPackage,
     /// The package a package sits in (AR-102).
     PackageParent,
+    /// A generalization set's Add member, and a generalization's sets' `+` (AR-129).
+    SetMember,
+    SetJoin,
     /// A constraint editor's language presets and the elements it may name (AR-133).
     ConstraintLanguage,
     ConstraintElement,
@@ -1357,6 +1364,7 @@ fn close_editors(shell: &mut Shell) {
     }
     panels.final_refused = None;
     panels.leaf_refused = None;
+    panels.set_refused = None;
     if panels.constraint.as_ref().is_some_and(|e| !e.opened) {
         panels.constraint = None;
     }
@@ -2155,6 +2163,13 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, 
             return;
         }
         Panel::Properties | Panel::Skills => {}
+    }
+    // Several elements, generalizations among them: what a set may be made of them (AR-129).
+    if panel == Panel::Properties
+        && let Some(all) = crate::uml_sets::selected(shell).filter(|all| all.len() >= 2)
+    {
+        crate::uml_sets::selection_body(shell, ui, p, r, y, &all);
+        return;
     }
     ux::text(&paint, r.min + vec2(PAD, y), &s.name, types::CARD_TITLE, p.text, Some((r.width() - 2.0 * PAD).max(0.0)));
     ux::text(&paint, r.min + vec2(PAD, y + 26.0), &s.kind, types::CAPTION, p.text_secondary, Some((r.width() - 2.0 * PAD).max(0.0)));

@@ -103,6 +103,13 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   `uml_constraint_show`, which shows a constraint on a class diagram as braces or as a linked
   note. The expression is kept exactly as sent and never evaluated; an empty one, or an element
   outside the model, is refused. A constraint is removed with `element_remove`.
+- **Generalization sets**: `uml_generalization_set_add` groups generalizations to one general
+  class, complete or incomplete and disjoint or overlapping; `uml_generalization_set_set` renames
+  it, changes either flag, and adds or takes out members; `uml_generalization_set_place` puts its
+  label somewhere on a class diagram; `uml_generalization_set_list` lists the sets of the model, of
+  a class or of a generalization. Generalizations to different classes are refused. A set is
+  removed with `element_remove`, which keeps its generalizations; a set left with no member goes
+  with its last one. A generalization in a set cannot be reconnected until it is taken out.
 
 Ask it in your own words, for example: *"Add a table Invoice to the Shop schema with an id
 primary key and a foreign key to Order."* The table appears on screen as the agent adds it.

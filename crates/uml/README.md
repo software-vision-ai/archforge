@@ -76,7 +76,15 @@ or a package, naming the elements it constrains in order and stating its rule as
 language, kept exactly as typed and never evaluated; the only refusals an empty expression and an element outside the model;
 shown per diagram as a node of the kind `uml.constraint.braces`, nested in its element's node, or `uml.constraint.note`, linked
 to its elements by `Notation::links`; removed through `element.remove`, and a constraint left naming nothing by a removal goes
-with it in the same step), `relations::{specs, relationships_of, generalization_problem, GeneralizationProblem, is_final, specializations, final_problem, is_leaf, redefiners, redefiner_name, leaf_problem, association_end_problem, association_class_end_problem, realization_problem, RealizationProblem}`
+with it in the same step), `generalization_sets::{specs, is_set, is_generalization, members, sets_of, general, specific,
+general_of, sets_for, flags, braces, label, shared_general, Grouping, generalization_name, reconnect_problem, emptied_by,
+label_node, is_label, place, set_json, LABEL, MAX_MEMBERS}` (AR-129: `uml.generalization-set.{add, set, place, list}`; a
+GeneralizationSet in its general classifier's package, grouping generalizations that all specialize that classifier, each
+named once and at most 256, complete or not (isCovering) and disjoint or not (isDisjoint); a generalization may be in several
+sets; a member is never reconnected (`uml.relationship.reconnect` refuses it, naming its sets); removed through
+`element.remove`, which keeps its generalizations, and a set left with no member by a removal, or by `uml.generalization-set.set`,
+goes in the same step; where a diagram shows its label, once moved, a node of the kind `uml.generalization-set.label` nested in
+the general classifier's node; the set line itself is the canvas's, worked out from the model), `relations::{specs, relationships_of, generalization_problem, GeneralizationProblem, is_final, specializations, final_problem, is_leaf, redefiners, redefiner_name, leaf_problem, association_end_problem, association_class_end_problem, realization_problem, RealizationProblem}`
 (`uml.classifier.set` (AR-137): a classifier of any kind made final, UML's isFinalSpecialization, only while nothing specializes it and never a built-in type, after which no generalization is drawn to it or has its general end moved onto it; and made leaf (AR-138), UML's isLeaf, only while nothing redefines it, `{leaf}` after its name, as a property is with the attribute commands and `uml.association.set-end` and an operation with the operation commands, after which no property redefines a leaf one (`modifiers::TargetProblem::Leaf`, `modifiers::redefines_leaf`); an enumeration specializes only an enumeration, a data type only a data type and a primitive type
 only a primitive type, each specialized only by its own kind, a built-in type specializing nothing,
 and none of them joins an association; `uml.realization.add`: a class
@@ -108,7 +116,10 @@ store (both ends of `ownedAttribute` and `class`, containment, `ownedElement`, `
 the million-object test (release only). `tests/skills.rs`: skills on a package, a class, an
 attribute and an operation, each one undo step; a relationship and an association's end refused;
 the kinds a skill aims at; inheritance down the package tree with an override by name; a skill
-going with its element, a nested package's too, and back with undo. `tests/modifiers.rs` (AR-126):
+going with its element, a nested package's too, and back with undo. `tests/generalization_sets.rs` (AR-129): a set made, renamed, made complete and disjoint, given and
+losing members, each one undo step; a mixed selection and the other wrong sets refused, changing nothing; a generalization
+in two sets; a member's reconnection refused; a set emptied by a deletion going in the same step; its label placed on two
+diagrams; rows read back identical; the sweep. `tests/modifiers.rs` (AR-126):
 each modifier set and cleared on an attribute and an end, one undo step each; defaults for every
 built-in type, an enumeration and opaque text, and the type-change refusal; Subsets and Redefines
 valid and refused; the card's and the line's notation; rows read back identical; the sweep.

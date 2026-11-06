@@ -633,6 +633,7 @@ impl NotationUi for UmlUi {
         match class(store, obj)? {
             c if c == archforge_uml::PACKAGE => Some(("uml.package.rename", "package")),
             c if c == archforge_uml::ENUMERATION_LITERAL => Some(("uml.literal.rename", "literal")),
+            c if c == archforge_uml::GENERALIZATION_SET => Some(("uml.generalization-set.set", "set")),
             _ => Classifier::of(store, obj).map(Classifier::rename_command),
         }
     }
@@ -754,12 +755,20 @@ impl NotationUi for UmlUi {
                 let detail = if at.is_empty() { kind.word() } else { format!("{} · {at}", kind.word()) };
                 Some(Entry { icon: kind.icon(), order: 2, label: name(store, o), detail })
             }
+            c if c == archforge_uml::GENERALIZATION_SET => {
+                let at = package_of(store, o).map(|p| name(store, p)).unwrap_or_default();
+                let detail = if at.is_empty() { tr("Generalization set") } else { format!("{} · {at}", tr("Generalization set")) };
+                Some(Entry { icon: &icons::GENERALIZATION_SET, order: 3, label: name(store, o), detail })
+            }
             _ => None,
         }
     }
 
     /// A member's class or a literal's enumeration, which the canvas brings into view for it.
     fn shown(&self, store: &Store, o: Obj) -> Option<Obj> {
+        if archforge_uml::generalization_sets::is_set(store, o) {
+            return archforge_uml::generalization_sets::general_of(store, o);
+        }
         Some(owner_of(store, o).unwrap_or(o))
     }
 
@@ -779,6 +788,7 @@ impl NotationUi for UmlUi {
             // An association class carries skills as the class it is.
             c if c == archforge_uml::ASSOCIATION_CLASS => None,
             c if archforge_uml::is_relationship(c) => Some(tr("Relationships carry no skills")),
+            c if c == archforge_uml::GENERALIZATION_SET => Some(tr("Generalization sets carry no skills")),
             _ => None,
         }
     }
@@ -825,6 +835,12 @@ impl NotationUi for UmlUi {
                 tr("This interface realization"),
                 tr("On this interface realization · {n}"),
             ),
+            c if c == archforge_uml::GENERALIZATION_SET => words(
+                tr("Generalization set · model, in every diagram"),
+                tr("Generalization set"),
+                tr("This generalization set"),
+                tr("On this generalization set · {n}"),
+            ),
             c if c == archforge_uml::CONSTRAINT => {
                 words(tr("Constraint · model, not evaluated"), tr("Constraint"), tr("This constraint"), tr("On this constraint · {n}"))
             }
@@ -838,6 +854,9 @@ impl NotationUi for UmlUi {
 
     /// A member's panel is its classifier's, a literal's its enumeration's.
     fn heading(&self, store: &Store, o: Obj) -> Option<String> {
+        if archforge_uml::generalization_sets::is_set(store, o) {
+            return Some(tr("Set"));
+        }
         if let Some(context) = constraint_context(store, o) {
             return Some(Classifier::of(store, context).map_or_else(|| tr("Package"), Classifier::word));
         }
@@ -853,6 +872,7 @@ impl NotationUi for UmlUi {
             Some(c) if archforge_uml::is_relationship(c) => {
                 return crate::uml_relate::body(shell, ui, p, r, y, subject);
             }
+            Some(c) if c == archforge_uml::GENERALIZATION_SET => return crate::uml_sets::set_body(shell, ui, p, r, y, subject),
             _ => {}
         }
         // A constraint shows its context's panel, its row marked (AR-133).
@@ -920,11 +940,21 @@ fn package_rows(store: &Store, package: Obj, depth: u8, t: &Tree<'_>) -> Vec<Row
         under.extend(package_rows(store, sub, depth.saturating_add(1), t));
     }
     let shown = shown_classifiers(store, package);
+    // A generalization set sits after its general classifier when the package holds that, else
+    // after the classifiers (AR-129).
+    let sets = sets_in(store, package);
     for c in &shown {
         under.extend(class_rows(store, *c, depth.saturating_add(1), t));
+        for s in sets.iter().filter(|s| archforge_uml::generalization_sets::general_of(store, **s) == Some(*c)) {
+            under.extend(set_row(store, *s, depth.saturating_add(1), t));
+        }
+    }
+    for s in sets.iter().filter(|s| archforge_uml::generalization_sets::general_of(store, **s).is_none_or(|g| !shown.contains(&g))) {
+        under.extend(set_row(store, *s, depth.saturating_add(1), t));
     }
     let label = name(store, package);
-    let empty = t.skills(package).is_empty() && archforge_uml::commands::subpackages(store, package).is_empty() && shown.is_empty();
+    let empty =
+        t.skills(package).is_empty() && archforge_uml::commands::subpackages(store, package).is_empty() && shown.is_empty() && sets.is_empty();
     if !t.matches(&label) && under.is_empty() {
         return Vec::new();
     }
@@ -939,6 +969,27 @@ fn package_rows(store: &Store, package: Obj, depth: u8, t: &Tree<'_>) -> Vec<Row
         out.extend(under);
     }
     out
+}
+
+/// The generalization sets `package` holds, in its order (AR-129).
+fn sets_in(store: &Store, package: Obj) -> Vec<Obj> {
+    store
+        .list(package, archforge_uml::package::PACKAGED_ELEMENT)
+        .unwrap_or_default()
+        .iter()
+        .filter_map(archforge_mof::Value::as_ref)
+        .filter(|o| archforge_uml::generalization_sets::is_set(store, *o))
+        .collect()
+}
+
+/// A generalization set's row: its name, `generalization set` after it, renamed in place and
+/// removed with Delete, its generalizations kept.
+fn set_row(store: &Store, s: Obj, depth: u8, t: &Tree<'_>) -> Option<Row> {
+    let label = name(store, s);
+    if !t.matches(&label) {
+        return None;
+    }
+    t.row(s, depth, "generalization-set", &icons::GENERALIZATION_SET, label).map(|row| Row { note: Some(tr("generalization set")), ..row })
 }
 
 /// A classifier's rows: itself, draggable onto a diagram or a package, then, when open, its
@@ -987,6 +1038,52 @@ fn class_rows(store: &Store, c: Obj, depth: u8, t: &Tree<'_>) -> Vec<Row> {
         out.extend(members);
     }
     out
+}
+
+/// In the sample class model, BankTransfer and WalletPayment beside CardPayment, each specializing
+/// Payment, placed in a row under it with their lines, as one step, for the snapshot screens and
+/// the tests (AR-129); the project is then marked saved as it stands. Gives the generalizations
+/// from CardPayment, BankTransfer and WalletPayment to Payment, and Payment, by id.
+#[cfg(any(test, feature = "snapshot"))]
+pub(crate) fn put_payment_kinds(shell: &mut Shell) -> Result<([String; 3], String), String> {
+    let d = shell.canvas.active.ok_or("the sample's diagram")?.to_string();
+    let session = shell.session.as_mut().ok_or("the payment kinds need a session")?;
+    let store = session.doc();
+    let class = |n: &str| {
+        store
+            .alive()
+            .find(|o| store.class_of(*o).ok() == Some(archforge_uml::CLASS) && name(store, *o) == n)
+            .and_then(|o| store.uuid(o).ok())
+            .map(|u| u.to_string())
+            .ok_or("the sample has no such class")
+    };
+    let (payment, card) = (class("Payment")?, class("CardPayment")?);
+    let pkg = package_of(store, store.by_uuid(Uuid::parse(&payment).ok_or("Payment's id")?).ok_or("Payment")?)
+        .and_then(|p| store.uuid(p).ok())
+        .ok_or("Payment's package")?
+        .to_string();
+    let card_gen = {
+        let (p, c) = (store.by_uuid(Uuid::parse(&payment).ok_or("Payment's id")?), store.by_uuid(Uuid::parse(&card).ok_or("CardPayment's id")?));
+        let (p, c) = (p.ok_or("Payment")?, c.ok_or("CardPayment")?);
+        let (g, _) = archforge_uml::relations::specializations(store, p).into_iter().find(|(_, s)| *s == c).ok_or("CardPayment's generalization")?;
+        store.uuid(g).map_err(|e| e.to_string())?.to_string()
+    };
+    let id = |v: serde_json::Value| v["id"].as_str().unwrap_or_default().to_string();
+    let mut gens = vec![card_gen];
+    session
+        .batch("Add payment kinds", |b| {
+            for (n, x) in [("BankTransfer", 1360), ("WalletPayment", 720)] {
+                let c = id(b.execute("uml.class.add", &json!({ "package": pkg, "name": n }))?);
+                b.execute("diagram.place", &json!({ "diagram": d, "element": c, "x": x, "y": 700, "width": 290, "height": members_height(0, 0) }))?;
+                gens.push(id(b.execute("uml.generalization.add", &json!({ "specific": c, "general": payment }))?));
+            }
+            b.execute("diagram.connect-all", &json!({ "diagram": d }))?;
+            Ok(())
+        })
+        .map_err(|e| e.to_string())?;
+    session.mark_saved().map_err(|e| e.to_string())?;
+    let gens: [String; 3] = gens.try_into().map_err(|_| "three generalizations".to_string())?;
+    Ok((gens, payment))
 }
 
 /// Adds literals named `names` at the end of the enumeration `enumeration` through

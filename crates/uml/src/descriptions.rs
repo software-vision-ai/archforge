@@ -33,7 +33,7 @@ pub const MAX_DESCRIPTION: usize = 4096;
 pub const MAX_COMMENTS: usize = 64;
 
 /// The kinds of UML element that take a description, as a refusal names them.
-const DESCRIBABLE: &str = "a package, a class, an interface, an enumeration, a data type, a primitive type, an association class, an attribute, an operation, a literal, an association, a generalization, a dependency or an interface realization";
+const DESCRIBABLE: &str = "a package, a class, an interface, an enumeration, a data type, a primitive type, an association class, an attribute, an operation, a literal, an association, a generalization, a dependency, an interface realization or a generalization set";
 
 /// Whether `o` takes a description: a package, a classifier, a member (an attribute, an operation,
 /// a literal) or a relationship; what the model shows and Properties describes. An association's
@@ -45,7 +45,9 @@ pub fn describable(store: &Store, o: Obj) -> bool {
     if class == PROPERTY {
         return store.get(o, property::ASSOCIATION).ok().and_then(|v| v.as_ref()).is_none();
     }
-    crate::is_classifier(class) || crate::is_relationship(class) || [PACKAGE, OPERATION, ENUMERATION_LITERAL].contains(&class)
+    crate::is_classifier(class)
+        || crate::is_relationship(class)
+        || [PACKAGE, OPERATION, ENUMERATION_LITERAL, crate::GENERALIZATION_SET].contains(&class)
 }
 
 /// The Comments `element` owns, borrowed, at most [`MAX_COMMENTS`] of them, and whether it owns

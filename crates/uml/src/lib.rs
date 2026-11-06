@@ -41,6 +41,7 @@ pub mod commands;
 pub mod constraints;
 pub mod descriptions;
 pub mod figures;
+pub mod generalization_sets;
 mod generated;
 pub mod members;
 pub mod modifiers;
@@ -296,6 +297,7 @@ pub fn registry() -> Result<Arc<archforge_engine::Registry<Store, ProjectView>>,
     specs.extend(members::specs());
     specs.extend(relations::specs());
     specs.extend(constraints::specs());
+    specs.extend(generalization_sets::specs());
     specs.extend(archforge_diagram::commands::specs::<ProjectView>());
     specs.extend(archforge_core::skills::specs::<ProjectView>());
     archforge_engine::Registry::new(specs)
