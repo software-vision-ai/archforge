@@ -544,6 +544,9 @@ pub struct CodexSession {
     /// When Codex refused the open turn's stop request or did not answer it in time: the turn waits
     /// at most one more request timeout for Codex to say it ended, then the session ends.
     stop_deadline: Option<Instant>,
+    /// When a session that cannot go on closed Codex's input: Codex has one request timeout to exit
+    /// on its own, then it is ended, so [`SessionEvent::Ended`] always follows.
+    end_deadline: Option<Instant>,
     lines_seen: bool,
     shutting_down: bool,
     ended: bool,
@@ -671,6 +674,7 @@ impl CodexSession {
             late_threads: VecDeque::new(),
             unnamed_deadline: None,
             stop_deadline: None,
+            end_deadline: None,
             lines_seen: false,
             shutting_down: false,
             ended: false,
@@ -1122,6 +1126,17 @@ impl CodexSession {
                 Purpose::Unsubscribe => log::warn!("{error}"),
             }
         }
+        if self.end_deadline.is_some_and(|d| now >= d) {
+            self.end_deadline = None;
+            if !self.ended {
+                // Signalled at once (the grace has passed): its output then closes and the session
+                // ends with the error it failed with.
+                log::warn!("codex did not exit after its input closed; it is ended");
+                if let Err(e) = self.process.shutdown(Duration::ZERO) {
+                    log::warn!("codex could not be ended: {e}");
+                }
+            }
+        }
         self.late_threads.retain(|(_, forget)| now < *forget);
         while self.late_starts.front().is_some_and(|(_, _, forget)| now >= *forget) {
             if let Some((_, thread, _)) = self.late_starts.pop_front() {
@@ -1335,13 +1350,16 @@ impl CodexSession {
     }
 
     /// A failure the session cannot go on from: the open turn fails, and the runtime's input is
-    /// closed so it exits; [`SessionEvent::Ended`] carries the error.
+    /// closed so it exits; [`SessionEvent::Ended`] carries the error. A Codex that has not exited one
+    /// request timeout later is ended ([`expire`](Self::expire)), so the end always comes.
     fn fail(&mut self, error: AgentError) {
         if self.fatal.is_none() {
             log::warn!("the Codex session cannot go on: {error}");
             self.fail_turn(error.clone());
             self.fatal = Some(error);
             self.process.close_input();
+            let now = Instant::now();
+            self.end_deadline = Some(now.checked_add(self.timeout).unwrap_or(now));
         }
     }
 
@@ -1493,7 +1511,7 @@ impl AgentSession for CodexSession {
             }
             budget -= 1;
             let mut wait = if polling { Duration::ZERO } else { deadline.map_or(timeout, |d| d.saturating_duration_since(now)) };
-            for due in self.requests.next_deadline().into_iter().chain(self.unnamed_deadline).chain(self.stop_deadline) {
+            for due in self.requests.next_deadline().into_iter().chain(self.unnamed_deadline).chain(self.stop_deadline).chain(self.end_deadline) {
                 wait = wait.min(due.saturating_duration_since(now));
             }
             match self.process.next_event(wait) {

@@ -336,7 +336,10 @@ There is no signal fallback: SIGINT ends `codex app-server`. A stop request that
 written is sent again by the next `stop`; one Codex refuses or leaves unanswered is not, and the
 turn then stays open (no new message is taken, as Codex may still run it) for one more request
 timeout: Codex saying the turn ended closes it as usual, and otherwise the session ends with a
-reason ("did not stop the turn"), so the caller starts it again with `Start::Resume`. A stop
+reason ("did not stop the turn"), so the caller starts it again with `Start::Resume`. When the
+session ends this way (or any way it cannot go on), Codex's input is closed; a Codex that has not
+exited one request timeout later is ended (SIGTERM to its group, then SIGKILL, as at shutdown), so
+`Ended` always follows, with the error the session failed with. A stop
 request names its turn: a refusal or timeout that comes after that turn ended is ignored, so it
 never times a newer turn. Shutdown
 closes the input (Codex exits 0), then terminates and kills as for every runtime.

@@ -1079,6 +1079,36 @@ fn a_thread_left_by_an_unanswered_turn_is_let_go() {
     std::fs::remove_dir_all(&base).unwrap();
 }
 
+/// A Codex that ignores its input closing after a fatal stop failure is ended one request timeout
+/// later, so the session's end still comes, with the error it failed with, and the process is gone.
+#[test]
+fn a_codex_that_will_not_exit_is_ended_after_a_fatal_stop_failure() {
+    let base = scratch("will-not-exit");
+    // The stop is refused, and then Codex stops reading its input and never exits by itself.
+    let body = r#"
+on_turn() { send '{"id":@ID@,"result":{"turn":{"id":"u-1"}}}'; send '{"method":"item/agentMessage/delta","params":{"threadId":"019a0000-0000-7000-8000-000000000001","turnId":"u-1","itemId":"x","delta":"working"}}'; }
+on_interrupt() { send '{"id":@ID@,"error":{"code":-32600,"message":"no such turn"}}'; exec sleep 1000; }
+"#;
+    let (runtime, account, folder) = fake_codex(&base, body);
+    let cfg = CodexConfig { request_timeout: Duration::from_millis(300), ..config(false) };
+    let mut session = CodexSession::start(&runtime, &account, &folder, cfg, SignIn::ApiKey(canary())).unwrap();
+    session.send("hi").unwrap();
+    events_until(&mut session, |e| matches!(e, SessionEvent::TextDelta { .. }));
+    let pid = session.process().pid();
+    let stopped = Instant::now();
+    session.stop().unwrap();
+    let events = events_until(&mut session, |e| matches!(e, SessionEvent::Ended { .. }));
+    assert!(stopped.elapsed() < Duration::from_secs(3), "the end came after {:?}", stopped.elapsed());
+    assert!(
+        matches!(events.last(), Some(SessionEvent::Ended { error: Some(e), .. }) if e.to_string().contains("did not stop the turn")),
+        "{events:?}"
+    );
+    let alive = std::process::Command::new("/bin/kill").args(["-0", &pid.to_string()]).status().unwrap().success();
+    assert!(!alive, "the process is gone");
+    session.shutdown(Duration::from_secs(2)).unwrap();
+    std::fs::remove_dir_all(&base).unwrap();
+}
+
 /// A stop request's result that comes after its turn ended belongs to no open turn: refused late
 /// or timed out, it never starts the wait for a newer turn's stop, which runs on undisturbed.
 #[test]
