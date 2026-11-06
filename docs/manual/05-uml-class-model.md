@@ -948,8 +948,9 @@ draft and leaves the model as it was.
 
 - **Change an argument:** select the line and pick another one under **Substitutions**, or
   **Default (Integer)**, say, to go back to a parameter's default.
-- **Remove the binding:** select the line and press ⇧⌫ (Shift Delete). Archforge asks *Delete …
-  from the model?*; choose **Delete**.
+- **Remove the binding:** select its line and press Delete (⌫). It goes from the model at once,
+  without a question, and the message at the canvas's foot says *Template binding removed* and
+  offers **Undo**.
 - **What is refused:** a binding between different kinds (a class binds a class template, an
   interface an interface template, a data type a data type template), a second binding of the same
   template, and deleting a class that a binding uses as an argument, such as *Order*.
