@@ -66,6 +66,7 @@ str		Delete {name} from the model?	{name} をモデルから削除しますか�
 str		Narrow the filter to see more	もっと見るにはフィルターを絞り込んでください
 str		No free name is left	空いている名前がありません
 str		What it holds goes with it.	含まれるものも一緒に削除されます。
+str		What it holds moves to {parent}.	含まれているものは {parent} に移動します。
 str		Remove from this diagram only	この図からのみ削除
 plural		It disappears from {n} diagram.	{n} 個の図から消えます。
 plural		{n} relationship goes with it.	{n} 件のリレーションシップが一緒に削除されます。
@@ -790,6 +791,7 @@ str		A stereotype is shown on its profile's diagram	ステレオタイプはそ�
 str		Place stereotype	ステレオタイプを配置
 # Stereotypes applied (AR-135)
 str		Stereotypes of {name} · {n}	{name} のステレオタイプ · {n}
+str		Stereotypes of this end · {n}	この端のステレオタイプ · {n}
 str		Apply stereotype	ステレオタイプを適用
 str		Remove «{stereotype}» from {name}	{name} から «{stereotype}» を外す
 str	value	default	既定

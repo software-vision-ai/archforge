@@ -1002,8 +1002,14 @@ What is UML's own, beside the shared rules above.
   value. Deleting an element its stereotypes are applied to asks first, from Models too, and the
   dialog names the applications going with it and with what it takes along (`3 stereotype
   applications go with it: «Entity» on Order, «Id» on id, «Reference» on
-  places.`), as it names nested classifiers (decision of ours, the design silent). An association
-  end takes stereotypes through the commands only so far. Agents use `uml.stereotype.apply`,
+  places.`), as it names nested classifiers (decision of ours, the design silent); so does a
+  member's Remove in its editor when applications would go with it, writing nothing until
+  confirmed, and a nested package carrying one, its dialog saying `What it holds moves to
+  Commerce.` and its toast where it went. While the picker is open it takes the keys: Backspace
+  edits its filter, never deletes the selection. A binary association's end has a section of its own in its part of Properties, after
+  its qualifiers (`Stereotypes of customer · n`, `Stereotypes of this end · n` without a role; ids
+  `workspace.properties.end.<i>.stereotypes.*`, no diagram check); an n-ary end takes them through
+  the commands so far. Agents use `uml.stereotype.apply`,
   `.unapply`, `.set-value`, `.show-values`, `.list-applied` and `.applicable`.
 
 On every line: a role, and a label at the line's middle, sit above a level stretch of the line and

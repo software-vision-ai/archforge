@@ -66,6 +66,7 @@ str		Delete {name} from the model?	从模型中删除 {name}？
 str		Narrow the filter to see more	缩小筛选范围以查看更多
 str		No free name is left	没有可用的名称了
 str		What it holds goes with it.	它包含的内容也会一并删除。
+str		What it holds moves to {parent}.	其所含内容将移到 {parent}。
 str		Remove from this diagram only	仅从此图中移除
 plural		It disappears from {n} diagram.	将从 {n} 个图中消失。
 plural		{n} relationship goes with it.	{n} 个关系将一并删除。
@@ -790,6 +791,7 @@ str		A stereotype is shown on its profile's diagram	构造型显示在其配置�
 str		Place stereotype	放置构造型
 # Stereotypes applied (AR-135)
 str		Stereotypes of {name} · {n}	{name} 的构造型 · {n}
+str		Stereotypes of this end · {n}	此端的构造型 · {n}
 str		Apply stereotype	应用构造型
 str		Remove «{stereotype}» from {name}	从 {name} 移除 «{stereotype}»
 str	value	default	默认

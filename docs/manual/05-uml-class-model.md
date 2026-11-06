@@ -1081,7 +1081,8 @@ stereotypes. A stereotype and its values are model data, saved with the model.
 - **Apply a stereotype.** Select the element: a class, an interface, an enumeration, a data type,
   a primitive type or an association class; an attribute or an operation (select its row in its
   class's **Properties**, and the section is *Stereotypes of id*); an association, a
-  generalization or a package. **+** under **Stereotypes** in its **Properties** lists every
+  generalization or a package; an association's end in its part of the association's
+  **Properties**. **+** under **Stereotypes** in its **Properties** lists every
   stereotype of the model. Those that extend the element's kind and whose profile is applied to its
   package, or a package around it, come first; one applied already is ticked. After a line, the
   others are listed but disabled, with why: *properties only* for a stereotype that extends
@@ -1099,6 +1100,8 @@ stereotypes. A stereotype and its values are model data, saved with the model.
   and the same value twice where each is held once.
 - **Remove a stereotype** with the bin on its row. Its values go with it; the stereotype's
   definition stays in its profile.
+- **Removing an attribute or an operation** in its editor asks first when stereotypes are applied
+  to it, naming them, as deleting any element that carries stereotypes does.
 - **On the diagram** a stereotype takes the place of the kind's word on the card: *«Entity»* for
   *CLASS*. A kind written as a keyword keeps it first: *«interface, Entity»*. An attribute's or an
   operation's row starts with its stereotypes, *«Id» + id : Integer*, in **Properties** too, and a

@@ -1077,6 +1077,11 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     shell.panels.member = Some(edit.clone());
     if cancel || (shell.panels.menu.is_none() && ui.input(|i| i.key_pressed(egui::Key::Escape))) {
         shell.panels.member = None;
+    } else if remove && let Some(asked) = ask_for_applications(shell, &edit) {
+        // Its stereotype applications would go with it: the delete dialog names them first, as
+        // every other delete of a carrier does (AR-135).
+        shell.panels.member = None;
+        shell.explorer.delete = Some(asked);
     } else if remove {
         let target = edit.target.map(|t| t.to_string()).unwrap_or_default();
         let said = crate::uml_constraints::before_removal(shell, std::slice::from_ref(&target));
@@ -1094,6 +1099,27 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
         commit(shell, &edit);
     }
     card.bottom() + 8.0
+}
+
+/// The delete dialog for the member `edit` edits, when stereotype applications would go with it
+/// (AR-135): naming them, so removing it never takes them along unasked. None when none would.
+fn ask_for_applications(shell: &Shell, edit: &MemberEdit) -> Option<crate::explorer::Delete> {
+    let target = edit.target?;
+    let store = shell.session.as_ref()?.doc();
+    let member = store.by_uuid(target)?;
+    let applications = crate::uml_stereotypes::going_along(store, member);
+    (!applications.is_empty()).then(|| crate::explorer::Delete {
+        ids: vec![target],
+        name: name(store, member),
+        relationships: 0,
+        keys: 0,
+        foreign_keys: 0,
+        diagrams: 0,
+        node: None,
+        along: Vec::new(),
+        applications,
+        hands_to: None,
+    })
 }
 
 /// The member editor's No redefinition (leaf) at `at`, `width` wide, with its explanation under it

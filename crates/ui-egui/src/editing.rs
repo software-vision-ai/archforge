@@ -1504,6 +1504,9 @@ fn ask_delete_of(shell: &mut Shell, node: Option<Uuid>, entity: Uuid) {
     let diagrams = diagrams_showing(store, e);
     let along = crate::notation_ui::of(shell.notation_uis, store, e).map(|ui| ui.goes_along(store, e)).unwrap_or_default();
     let applications = crate::notation_ui::of(shell.notation_uis, store, e).map(|ui| ui.applications_along(store, e)).unwrap_or_default();
+    // A nested package hands what it holds up: the dialog says where, and so does the toast.
+    let hands_to = crate::notation_ui::of(shell.notation_uis, store, e)
+        .and_then(|ui| Some((archforge_core::name_of(store, ui.hands_up(store, e)?), ui.has_children(store, e))));
     shell.explorer.delete = Some(crate::explorer::Delete {
         along,
         applications,
@@ -1514,6 +1517,7 @@ fn ask_delete_of(shell: &mut Shell, node: Option<Uuid>, entity: Uuid) {
         foreign_keys,
         diagrams,
         node,
+        hands_to,
     });
     shell.canvas.menu = None;
 }
@@ -2044,6 +2048,8 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
         || shell.canvas.nary_menu.is_some()
         || shell.explorer.delete.is_some()
         || shell.diagrams.new.is_some()
+        // The Stereotypes picker takes typing, Backspace, the arrows and Enter (AR-135).
+        || shell.panels.menu == Some(crate::panels::Menu::StereotypePick)
     {
         return;
     }

@@ -66,6 +66,7 @@ str		Delete {name} from the model?	¿Eliminar {name} del modelo?
 str		Narrow the filter to see more	Acote el filtro para ver más
 str		No free name is left	No queda ningún nombre libre
 str		What it holds goes with it.	Lo que contiene se va con él.
+str		What it holds moves to {parent}.	Lo que contiene pasa a {parent}.
 str		Remove from this diagram only	Quitar solo de este diagrama
 plural		It disappears from {n} diagram.	Desaparece de {n} diagrama.|Desaparece de {n} diagramas.
 plural		{n} relationship goes with it.	{n} relación se va con él.|{n} relaciones se van con él.
@@ -790,6 +791,7 @@ str		A stereotype is shown on its profile's diagram	Un estereotipo se muestra en
 str		Place stereotype	Colocar estereotipo
 # Stereotypes applied (AR-135)
 str		Stereotypes of {name} · {n}	Estereotipos de {name} · {n}
+str		Stereotypes of this end · {n}	Estereotipos de este extremo · {n}
 str		Apply stereotype	Aplicar estereotipo
 str		Remove «{stereotype}» from {name}	Quitar «{stereotype}» de {name}
 str	value	default	predeterminado

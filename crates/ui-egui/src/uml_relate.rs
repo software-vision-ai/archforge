@@ -1141,6 +1141,8 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
         y = next;
         // Its qualifiers, with their editor (AR-127).
         y = crate::uml_qualifiers::section_of(shell, ui, p, r, y, id, i, ends[i]);
+        // Its stereotypes, as an attribute's (AR-135).
+        y = crate::uml_stereotypes::end_section(shell, ui, p, r, y, ends[i], i);
         shell.panels.ends = Some(edit.clone());
         match asked {
             Asked::Nothing => {}

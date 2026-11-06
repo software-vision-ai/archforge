@@ -65,6 +65,7 @@ str		Delete {name} from the model?	Delete {name} from the model?
 str		Narrow the filter to see more	Narrow the filter to see more
 str		No free name is left	No free name is left
 str		What it holds goes with it.	What it holds goes with it.
+str		What it holds moves to {parent}.	What it holds moves to {parent}.
 str		Remove from this diagram only	Remove from this diagram only
 plural		It disappears from {n} diagram.	It disappears from {n} diagram.|It disappears from {n} diagrams.
 plural		{n} relationship goes with it.	{n} relationship goes with it.|{n} relationships go with it.
@@ -789,6 +790,7 @@ str		A stereotype is shown on its profile's diagram	A stereotype is shown on its
 str		Place stereotype	Place stereotype
 # Stereotypes applied (AR-135)
 str		Stereotypes of {name} · {n}	Stereotypes of {name} · {n}
+str		Stereotypes of this end · {n}	Stereotypes of this end · {n}
 str		Apply stereotype	Apply stereotype
 str		Remove «{stereotype}» from {name}	Remove «{stereotype}» from {name}
 str	value	default	default

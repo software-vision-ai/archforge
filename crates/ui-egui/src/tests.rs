@@ -15727,3 +15727,132 @@ fn deleting_a_stereotyped_element_names_its_applications() {
         assert_eq!(left, ["Customer", "id"], "{theme:?}: Customer's stay");
     }
 }
+
+/// Removing a member from its editor asks first when stereotype applications would go with it, the
+/// dialog naming them as every other delete of a carrier does, and writes nothing until confirmed;
+/// a member without one goes at once, as before (AR-135).
+#[test]
+fn a_members_remove_asks_before_its_stereotype_applications_go() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1100.0));
+        crate::uml_profiles::put_profiles(h.state_mut(), true).unwrap();
+        let order = select_named(&mut h, archforge_uml::CLASS, "Order");
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        let member = |h: &Harness<'static, Shell>, n: &str| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let o = st.by_uuid(order).unwrap();
+            archforge_uml::members::attributes(st, o).into_iter().find(|a| archforge_core::name_of(st, *a) == n).and_then(|a| st.uuid(a).ok())
+        };
+        let id_attr = member(&h, "id").unwrap();
+        crate::uml_panel::open(h.state_mut(), order, crate::uml_panel::MemberKind::Attribute, Some(id_attr));
+        h.run();
+        let before = h.state().session.as_ref().unwrap().revision();
+        let at = rect_of(&h, "workspace.properties.member.remove").center();
+        click(&mut h, at);
+        assert_eq!(h.state().session.as_ref().unwrap().revision(), before, "{theme:?}: nothing written before the answer");
+        let asked = h.state().explorer.delete.clone().expect("a dialog");
+        assert_eq!(asked.applications, ["«Id» on id"]);
+        assert!(painted_has(&h, "1 stereotype application goes with it: «Id» on id."), "{theme:?}: {:?}", painted(&h));
+        let at = rect_of(&h, "workspace.explorer.delete.confirm").center();
+        click(&mut h, at);
+        assert_eq!(member(&h, "id"), None, "{theme:?}: removed once confirmed");
+        // One without an application goes at once.
+        let placed = member(&h, "placedAt").unwrap();
+        crate::uml_panel::open(h.state_mut(), order, crate::uml_panel::MemberKind::Attribute, Some(placed));
+        h.run();
+        let at = rect_of(&h, "workspace.properties.member.remove").center();
+        click(&mut h, at);
+        assert!(h.state().explorer.delete.is_none());
+        assert_eq!(member(&h, "placedAt"), None);
+    }
+}
+
+/// An association end's part of Properties has a Stereotypes section of its own, beside the
+/// association's, its ids its own: its picker applies a stereotype extending Property to that end
+/// alone, one undo step (AR-135).
+#[test]
+fn an_association_end_takes_stereotypes_in_its_part_of_properties() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 2000.0));
+        crate::uml_profiles::put_profiles(h.state_mut(), false).unwrap();
+        let places = select_named(&mut h, archforge_uml::ASSOCIATION, "places");
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        h.run();
+        let ids_now = ids(&h);
+        assert!(ids_now.iter().any(|i| i == "workspace.properties.stereotypes.add"), "{theme:?}: the association's own");
+        assert!(ids_now.iter().any(|i| i == "workspace.properties.end.0.stereotypes.add"), "{theme:?}: {ids_now:?}");
+        let id_stereotype = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let s = st.alive().find(|o| archforge_uml::profiles::is_stereotype(st, *o) && archforge_core::name_of(st, *o) == "Id").unwrap();
+            st.uuid(s).unwrap()
+        };
+        let at = rect_of(&h, "workspace.properties.end.0.stereotypes.add").center();
+        click(&mut h, at);
+        assert!(!ids(&h).iter().any(|i| i.starts_with("workspace.properties.stereotypes.add.")), "{theme:?}: only the end's picker opens");
+        let at = rect_of(&h, &format!("workspace.properties.end.0.stereotypes.add.{id_stereotype}")).center();
+        click(&mut h, at);
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Apply stereotype"));
+        let st = h.state().session.as_ref().unwrap().doc();
+        let a = st.by_uuid(places).unwrap();
+        let ends = archforge_uml::figures::member_ends(st, a).unwrap();
+        assert_eq!(archforge_uml::applications::keywords(st, ends[0]).as_deref(), Some("«Id»"), "{theme:?}");
+        assert_eq!(archforge_uml::applications::keywords(st, ends[1]), None);
+        assert_eq!(archforge_uml::applications::keywords(st, a), None);
+    }
+}
+
+/// A nested package carrying a stereotype is not removed unasked from Models: the dialog names the
+/// application and says its contents move up, and once confirmed the toast says where they went,
+/// as a removal without the dialog does (AR-135). With the Stereotypes picker open, Backspace edits
+/// its filter and never deletes the selected card.
+#[test]
+fn a_stereotyped_nested_package_asks_and_the_picker_keeps_backspace() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1100.0));
+        let (commerce, persistence, _) = crate::uml_profiles::put_profiles(h.state_mut(), false).unwrap();
+        {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let module =
+                s.execute("uml.stereotype.add", &serde_json::json!({ "profile": persistence, "name": "Module", "extends": ["Package"] })).unwrap();
+            let billing = s.execute("uml.package.add", &serde_json::json!({ "name": "Billing", "parent": commerce })).unwrap();
+            let billing = billing.value["id"].as_str().unwrap().to_string();
+            s.execute("uml.class.add", &serde_json::json!({ "package": billing, "name": "Invoice" })).unwrap();
+            s.execute("uml.stereotype.apply", &serde_json::json!({ "element": billing, "stereotype": module.value["id"] })).unwrap();
+        }
+        select_named(&mut h, archforge_uml::PACKAGE, "Billing");
+        let before = h.state().session.as_ref().unwrap().revision();
+        crate::explorer::remove_selection(h.state_mut());
+        h.run();
+        assert_eq!(h.state().session.as_ref().unwrap().revision(), before, "{theme:?}: nothing removed unasked");
+        let asked = h.state().explorer.delete.clone().expect("a dialog");
+        assert_eq!(asked.applications, ["«Module» on Billing"]);
+        assert!(painted_has(&h, "What it holds moves to Commerce."), "{theme:?}: {:?}", painted(&h));
+        let at = rect_of(&h, "workspace.explorer.delete.confirm").center();
+        click(&mut h, at);
+        let toast = h.state().canvas.toast.as_ref().map(|t| t.text.clone());
+        assert_eq!(toast.as_deref(), Some("Billing removed; what it held moved to Commerce"));
+        let st = h.state().session.as_ref().unwrap().doc();
+        let invoice =
+            st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(st, *o) == "Invoice").unwrap();
+        assert_eq!(archforge_uml::commands::package_of(st, invoice).map(|p| archforge_core::name_of(st, p)).as_deref(), Some("Commerce"));
+        // Backspace with the picker open edits its filter, the selected card stays.
+        let order = select_named(&mut h, archforge_uml::CLASS, "Order");
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        h.state_mut().canvas.focused = true;
+        h.run();
+        let shown = |h: &Harness<'static, Shell>| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            archforge_diagram::views_of(st, st.by_uuid(order).unwrap()).2.len()
+        };
+        let cards = shown(&h);
+        let at = rect_of(&h, crate::uml_stereotypes::ADD_ID).center();
+        click(&mut h, at);
+        h.state_mut().canvas.focused = true;
+        h.event(egui::Event::Text("en".into()));
+        h.run();
+        key(&mut h, egui::Key::Backspace, egui::Modifiers::NONE);
+        assert_eq!(h.state().panels.stereotypes.filter, "e", "{theme:?}: Backspace edits the filter");
+        assert_eq!(shown(&h), cards, "{theme:?}: the card stays on the diagram");
+        assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::StereotypePick));
+    }
+}

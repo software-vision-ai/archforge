@@ -26,10 +26,12 @@ use crate::panels::{FIELD, Menu, PAD, ROW, run, section};
 use crate::ux::{self, Palette, icons, types};
 
 /// The ids of the Stereotypes section (F3, F4).
+pub(crate) const PREFIX: &str = "workspace.properties.stereotypes";
+#[cfg(test)]
 pub(crate) const ADD_ID: &str = "workspace.properties.stereotypes.add";
+#[cfg(test)]
 pub(crate) const APPLIED_ID: &str = "workspace.properties.stereotypes.applied";
 pub(crate) const SHOW_ID: &str = "workspace.properties.stereotypes.showValues";
-pub(crate) const REFUSAL_ID: &str = "workspace.properties.stereotypes.refusal";
 
 /// What values and Remove mean, under the section (F3), and where stereotypes come from while none
 /// is applied: too long for a line of code, so named here and listed for the catalogue in [`texts`].
@@ -74,6 +76,28 @@ pub struct Stereotypes {
     pub value: Option<ValueEdit>,
     pub filter: String,
     pub refused: Option<(Uuid, String)>,
+    /// The element whose section's picker or value menu is open: an association and each of its
+    /// ends have a section of their own on one panel.
+    pub menu_for: Option<Uuid>,
+}
+
+/// Which section a panel draws: the panel's own element's, a member's selected on it, or an
+/// association end's (`i`, its place among the ends), each with ids of its own.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Heading {
+    Own,
+    Member,
+    End(usize),
+}
+
+impl Heading {
+    /// The start of the section's ids.
+    fn prefix(self) -> String {
+        match self {
+            Heading::Own | Heading::Member => PREFIX.to_string(),
+            Heading::End(i) => format!("workspace.properties.end.{i}.stereotypes"),
+        }
+    }
 }
 
 /// Drops what the store no longer has.
@@ -162,23 +186,30 @@ fn picks(store: &Store, element: Obj, filter: &str) -> Vec<Pick> {
 
 /// The Stereotypes section of `element` at `y` (F3): its title with the count and the picker's
 /// `+`, a row per applied stereotype with its profile and its bin, a control per property, what
-/// values mean, a refusal, and Show stereotype values on this diagram. `of_member` names the element
-/// in the title, a member selected on its class's panel. Gives the y under it.
+/// values mean, a refusal, and Show stereotype values on this diagram. `heading` says whose section it
+/// is: the panel's own element's, a member's selected there, which the title names, or an association
+/// end's, with ids of its own and no diagram check. Gives the y under it.
 #[allow(clippy::too_many_arguments, reason = "a section is drawn into the panel for its element")]
-pub(crate) fn section_of(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, element: Obj, of_member: bool) -> f32 {
+pub(crate) fn section_of(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y: f32, element: Obj, heading: Heading) -> f32 {
+    let prefix = heading.prefix();
+    let add_id = format!("{prefix}.add");
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return y };
     let Ok(element_id) = store.uuid(element) else { return y };
     let own = name(store, element);
     let applied: Vec<(Obj, Obj)> = applications::applied_to(store, element);
     let n = applied.len().to_string();
-    let title =
-        if of_member { fmt(&tr("Stereotypes of {name} · {n}"), &[("name", &own), ("n", &n)]) } else { fmt(&tr("Stereotypes · {n}"), &[("n", &n)]) };
+    let title = match heading {
+        Heading::Own => fmt(&tr("Stereotypes · {n}"), &[("n", &n)]),
+        Heading::End(_) if own.is_empty() => fmt(&tr("Stereotypes of this end · {n}"), &[("n", &n)]),
+        Heading::Member | Heading::End(_) => fmt(&tr("Stereotypes of {name} · {n}"), &[("name", &own), ("n", &n)]),
+    };
     let add = Rect::from_min_size(pos2(r.right() - PAD - 28.0, y + 11.0), vec2(28.0, 28.0));
-    match section(shell, ui, p, r, y, &title, Some((ADD_ID, "Apply stereotype"))) {
+    let picking = shell.panels.menu == Some(Menu::StereotypePick) && shell.panels.stereotypes.menu_for == Some(element_id);
+    match section(shell, ui, p, r, y, &title, Some((&add_id, "Apply stereotype"))) {
         Some(next) => y = next - 6.0,
         None => {
-            let open = shell.panels.menu == Some(Menu::StereotypePick);
-            shell.panels.menu = if open { None } else { Some(Menu::StereotypePick) };
+            shell.panels.menu = if picking { None } else { Some(Menu::StereotypePick) };
+            shell.panels.stereotypes.menu_for = Some(element_id);
             shell.panels.stereotypes.filter.clear();
             shell.panels.menu_reached = None;
             y += 44.0;
@@ -188,10 +219,10 @@ pub(crate) fn section_of(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
     let left = r.left() + PAD;
     let mut row_index = 0usize;
     for (s, instance) in &applied {
-        y = applied_rows(shell, ui, p, left, y, width, element, element_id, *s, *instance, &mut row_index);
+        y = applied_rows(shell, ui, p, (left, width), y, &prefix, element, element_id, *s, *instance, &mut row_index);
     }
     if let Some((_, why)) = shell.panels.stereotypes.refused.clone().filter(|(e, _)| *e == element_id) {
-        y = refusal(shell, ui, p, left, y + 4.0, width, &why);
+        y = refusal(shell, ui, p, left, y + 4.0, width, &why, &format!("{prefix}.refusal"));
     }
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return y };
     let said = match applied.first() {
@@ -202,9 +233,12 @@ pub(crate) fn section_of(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
         }
     };
     y = help(ui, p, left, y + 4.0, width, &said);
-    y = show_values_check(shell, ui, p, left, y);
-    if shell.panels.menu == Some(Menu::StereotypePick) {
-        picker(shell, ui, p, add, element, element_id);
+    // The diagram's choice once, under the panel's own section, not under each end's.
+    if !matches!(heading, Heading::End(_)) {
+        y = show_values_check(shell, ui, p, left, y);
+    }
+    if shell.panels.menu == Some(Menu::StereotypePick) && shell.panels.stereotypes.menu_for == Some(element_id) {
+        picker(shell, ui, p, add, &add_id, element, element_id);
     }
     y + 6.0
 }
@@ -225,7 +259,18 @@ pub(crate) fn section_for(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: 
     if !takes(store, target) || (applications::all_stereotypes(store).is_empty() && applications::applied_to(store, target).is_empty()) {
         return y;
     }
-    section_of(shell, ui, p, r, y, target, member.is_some())
+    section_of(shell, ui, p, r, y, target, if member.is_some() { Heading::Member } else { Heading::Own })
+}
+
+/// The Stereotypes section of association end `end`, the `i`th, in its part of the association's
+/// Properties, as an attribute's is; none while the model has no stereotype to apply. Gives the y
+/// under it.
+pub(crate) fn end_section(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, end: Obj, i: usize) -> f32 {
+    let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return y };
+    if !takes(store, end) || (applications::all_stereotypes(store).is_empty() && applications::applied_to(store, end).is_empty()) {
+        return y;
+    }
+    section_of(shell, ui, p, r, y, end, Heading::End(i))
 }
 
 /// A muted line of help at `y`, `width` wide; gives the y under it.
@@ -238,14 +283,15 @@ fn help(ui: &egui::Ui, p: &Palette, left: f32, y: f32, width: f32, text: &str) -
 }
 
 /// A refusal on the danger's tint with its warning; gives the y under it.
-fn refusal(shell: &mut Shell, ui: &egui::Ui, p: &Palette, left: f32, y: f32, width: f32, why: &str) -> f32 {
+#[allow(clippy::too_many_arguments, reason = "a refusal is drawn at its place with its id")]
+fn refusal(shell: &mut Shell, ui: &egui::Ui, p: &Palette, left: f32, y: f32, width: f32, why: &str, id: &str) -> f32 {
     let paint = ui.painter().clone();
     let text = ux::galley_rows(&paint, why, types::SMALL, p.text, Some((width - 42.0).max(0.0)), 8);
     let card = Rect::from_min_size(pos2(left, y), vec2(width, text.size().y + 20.0));
     paint.rect_filled(card, 6.0, p.danger_tint);
     ux::icon_in(&paint, Rect::from_min_size(pos2(left + 10.0, y + 11.5), vec2(14.0, 14.0)), &icons::WARNING, p.danger);
     paint.galley(pos2(left + 32.0, y + 10.0), text, p.text);
-    crate::widgets::record_visible(ui, &mut shell.registry, REFUSAL_ID, "text", card);
+    crate::widgets::record_visible(ui, &mut shell.registry, id, "text", card);
     card.bottom() + 12.0
 }
 
@@ -256,9 +302,9 @@ fn applied_rows(
     shell: &mut Shell,
     ui: &mut egui::Ui,
     p: &Palette,
-    left: f32,
+    (left, width): (f32, f32),
     mut y: f32,
-    width: f32,
+    prefix: &str,
     element: Obj,
     element_id: Uuid,
     s: Obj,
@@ -270,7 +316,7 @@ fn applied_rows(
     let label = format!("«{}»", name(store, s));
     let profile = profiles::profile_of(store, s).map(|x| name(store, x)).unwrap_or_default();
     let properties: Vec<Obj> = profiles::properties(store, s);
-    let key = format!("{APPLIED_ID}.{s_id}");
+    let key = format!("{prefix}.applied.{s_id}");
     let paint = ui.painter().clone();
     let r = Rect::from_min_size(pos2(left, y), vec2(width, ROW));
     crate::widgets::record_visible(ui, &mut shell.registry, &key, "row", r);
@@ -304,7 +350,7 @@ fn applied_rows(
     }
     y += ROW;
     for property in properties {
-        y = value_line(shell, ui, p, left, y, width, element_id, s_id, instance, property, *row_index);
+        y = value_line(shell, ui, p, (left, width), y, &key, element_id, s_id, instance, property, *row_index);
         *row_index = row_index.saturating_add(1);
     }
     y + 4.0
@@ -328,9 +374,9 @@ fn value_line(
     shell: &mut Shell,
     ui: &mut egui::Ui,
     p: &Palette,
-    left: f32,
+    (left, width): (f32, f32),
     y: f32,
-    width: f32,
+    row_key: &str,
     element_id: Uuid,
     s_id: Uuid,
     instance: Obj,
@@ -344,7 +390,7 @@ fn value_line(
     let field = Rect::from_min_size(pos2(left + label_w, y + 4.0), vec2((width - label_w).max(0.0), FIELD));
     let p_name = name(store, property);
     ux::text_mid(&paint, left + 10.0, field.center().y, &p_name, types::SMALL, p.text_secondary, Some((label_w - 14.0).max(0.0)));
-    let id = format!("{APPLIED_ID}.{s_id}.value.{p_id}");
+    let id = format!("{row_key}.value.{p_id}");
     let set = applications::is_set(store, instance, property);
     let typed = applications::value_texts(store, instance, property);
     let default = archforge_uml::modifiers::default_text(store, property);
@@ -375,11 +421,13 @@ fn value_line(
             let state =
                 if set { shown.clone() } else { fmt(&tr("{value} (default)"), &[("value", if default.is_empty() { "—" } else { &default })]) };
             let menu = Menu::StereotypeValue(index);
+            let open = shell.panels.menu == Some(menu) && shell.panels.stereotypes.menu_for == Some(element_id);
             if control(shell, ui, &id, "select", field, true).accessible_name(format!("{p_name}: {state}")).clicked() {
-                shell.panels.menu = if shell.panels.menu == Some(menu) { None } else { Some(menu) };
+                shell.panels.menu = if open { None } else { Some(menu) };
+                shell.panels.stereotypes.menu_for = Some(element_id);
                 shell.panels.menu_reached = None;
             }
-            if shell.panels.menu == Some(menu) {
+            if open {
                 let mut items = vec![if default.is_empty() { tr("No value") } else { fmt(&tr("Default ({value})"), &[("value", &default)]) }];
                 items.extend(choices.iter().cloned());
                 if let Some(i) = crate::panels::menu(shell, ui, p, field, &id, &items) {
@@ -620,7 +668,7 @@ pub(crate) fn show_values(shell: &mut Shell, d: Uuid, on: bool) -> Result<(), St
 /// stereotypes that apply and those applied (ticked), a line, and the rest, muted, their short
 /// reason at the right and the whole one on hover and for screen readers. Typing filters, the arrows
 /// walk the rows that apply, Enter applies, Escape or a press elsewhere closes.
-fn picker(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, element: Obj, element_id: Uuid) {
+fn picker(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, add_id: &str, element: Obj, element_id: Uuid) {
     // Typing filters the rows; Backspace takes the last character back.
     let typed: String = ui.input(|i| i.events.iter().filter_map(|e| if let egui::Event::Text(t) = e { Some(t.clone()) } else { None }).collect());
     let back = ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Backspace));
@@ -650,7 +698,7 @@ fn picker(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, element: 
     let left = (anchor.right() - width).min(window.right() - 8.0 - width).max(window.left() + 8.0);
     let m = Rect::from_min_size(pos2(left, anchor.bottom() + 4.0), vec2(width, height));
     let live: Vec<usize> = rows.iter().enumerate().filter(|(_, r)| r.live).map(|(i, _)| i).collect();
-    let picked = ux::overlay(ui, crate::widgets::egui_id(&format!("{ADD_ID}.layer")), m, |ui| {
+    let picked = ux::overlay(ui, crate::widgets::egui_id(&format!("{add_id}.layer")), m, |ui| {
         let paint = ui.painter().clone();
         ux::shadow(&paint, m, 8.0, p.shadow);
         paint.rect_filled(m, 8.0, p.surface);
@@ -667,8 +715,8 @@ fn picker(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, element: 
             let said = fmt(&tr("Filter: {text}"), &[("text", &filter)]);
             ux::text(&paint, pos2(m.left() + 14.0, m.top() + 30.0), &said, types::CAPTION, p.text_secondary, Some(m.width() - 28.0));
         }
-        crate::widgets::record_visible(ui, &mut shell.registry, &format!("{ADD_ID}.menu"), "menu", m);
-        let mut reached = shell.panels.menu_reached.as_ref().filter(|(of, _)| of == ADD_ID).map(|(_, i)| *i);
+        crate::widgets::record_visible(ui, &mut shell.registry, &format!("{add_id}.menu"), "menu", m);
+        let mut reached = shell.panels.menu_reached.as_ref().filter(|(of, _)| of == add_id).map(|(_, i)| *i);
         let (down, up, enter) = ui.input_mut(|i| {
             (
                 i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown),
@@ -687,7 +735,7 @@ fn picker(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, element: 
         }
         // Enter with nothing reached applies the first that applies, as the filter left it.
         let reached_for_enter = reached.or_else(|| live.first().copied());
-        shell.panels.menu_reached = reached.map(|i| (ADD_ID.to_string(), i));
+        shell.panels.menu_reached = reached.map(|i| (add_id.to_string(), i));
         let list = Rect::from_min_max(pos2(m.left(), m.top() + 4.0 + head), pos2(m.right(), m.bottom() - 4.0));
         let clipped = paint.with_clip_rect(list);
         if rows.is_empty() {
@@ -709,7 +757,7 @@ fn picker(shell: &mut Shell, ui: &egui::Ui, p: &Palette, anchor: Rect, element: 
             if !list.intersects(r) {
                 continue;
             }
-            let rid = format!("{ADD_ID}.{}", row.stereotype);
+            let rid = format!("{add_id}.{}", row.stereotype);
             let resp = if row.live {
                 control(shell, ui, &rid, "menu-item", r.intersect(list), true).accessible_name(format!("{} {}", row.label, row.detail))
             } else {
@@ -793,7 +841,7 @@ pub(crate) fn going_along(store: &Store, element: Obj) -> Vec<String> {
 /// table set to `orders`, cached left to its default; the profile Auditing (Auditable, extending
 /// Class) applied to Commerce, and Logging (Tracked, extending Class) applied nowhere, so the picker
 /// (F4) shows each kind of row; the open diagram showing the values. Gives Order's id.
-#[cfg(any(test, feature = "snapshot"))]
+#[cfg(feature = "snapshot")]
 pub(crate) fn put_values(shell: &mut Shell) -> Result<Uuid, String> {
     let (commerce, _, entity) = crate::uml_profiles::put_profiles(shell, true)?;
     let session = shell.session.as_mut().ok_or("the sample needs a session")?;
