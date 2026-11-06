@@ -17,7 +17,7 @@ use zeroize::Zeroize;
 use crate::ai_agents::{
     self as agents, AccountError, CodexAccount, CodexSignIn, Key, KeyRefusal, KeyText, LoginWay, Outcome, Program, Provider, Readiness, Store, System,
 };
-use crate::i18n::{fmt, tr};
+use crate::i18n::{fmt, tr, trn};
 use crate::settings::{Look, Tone, badge, button, control, focus_ring, icon_button, wrapped};
 use crate::ux::{self, Palette, icons, types};
 use crate::{Shell, widgets};
@@ -126,14 +126,24 @@ fn store_name(store: &Store) -> String {
 
 /// How long ago `at` was, for the status badge.
 fn ago(at: u64) -> String {
-    let secs = crate::home::now().saturating_sub(at);
+    ago_secs(crate::home::now().saturating_sub(at))
+}
+
+/// `secs` seconds ago in words: just now, then whole minutes, then whole hours.
+fn ago_secs(secs: u64) -> String {
     if secs < 60 {
         tr("just now")
     } else if secs < 3600 {
-        fmt(&tr("{n} min ago"), &[("n", &(secs / 60).to_string())])
+        trn("{n} minute ago", "{n} minutes ago", secs / 60)
     } else {
-        fmt(&tr("{n} h ago"), &[("n", &(secs / 3600).to_string())])
+        trn("{n} hour ago", "{n} hours ago", secs / 3600)
     }
+}
+
+/// What the device-code box says: where to enter the code, and in how many minutes it runs out.
+fn device_code_hint(minutes: u32) -> String {
+    let expiry = trn("It runs out in {n} minute.", "It runs out in {n} minutes.", u64::from(minutes));
+    format!("{} {expiry}", tr("On any device with a browser, open the sign-in page and enter this code."))
 }
 
 /// An account error in a sentence's words.
@@ -829,18 +839,7 @@ fn device_code(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, x: f32, y: f32
     paint.rect_filled(r, 8.0, p.page);
     let ix = r.left() + 12.0;
     ux::text(&paint, pos2(ix, r.top() + 12.0), &tr("Sign in with a device code"), types::UI, p.text, Some(inner - 24.0));
-    wrapped(
-        &paint,
-        pos2(ix, r.top() + 36.0),
-        inner - 24.0,
-        &fmt(
-            &tr("On any device with a browser, open the sign-in page and enter this code. It runs out in {n} minutes."),
-            &[("n", &minutes.to_string())],
-        ),
-        types::SMALL,
-        p.text_secondary,
-        2,
-    );
+    wrapped(&paint, pos2(ix, r.top() + 36.0), inner - 24.0, &device_code_hint(minutes), types::SMALL, p.text_secondary, 2);
     let shown = ux::code_mid(&paint, ix, r.top() + 72.0, code, 20.0, p.text, Some(inner - 64.0));
     widgets::record_visible(ui, &mut shell.registry, "settings.agents.codex.code", "text", shown);
     let copy = Rect::from_center_size(pos2(shown.right() + 18.0, shown.center().y), Vec2::splat(24.0));
@@ -1076,4 +1075,33 @@ fn toggle(shell: &mut Shell, ui: &egui::Ui, p: &Palette, id: &str, r: Rect, on: 
     paint.circle_filled(pos2(knob, r.center().y), 6.0, p.on_accent);
     focus_ring(&paint, p, r, 8.0, &resp);
     resp
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn minutes_and_hours_take_their_plural_forms() {
+        crate::i18n::set_language("en");
+        assert_eq!(ago_secs(30), "just now");
+        assert_eq!(ago_secs(60), "1 minute ago");
+        assert_eq!(ago_secs(5 * 60), "5 minutes ago");
+        assert_eq!(ago_secs(3600), "1 hour ago");
+        assert_eq!(ago_secs(3 * 3600), "3 hours ago");
+        assert!(device_code_hint(1).ends_with("It runs out in 1 minute."));
+        assert!(device_code_hint(15).ends_with("It runs out in 15 minutes."));
+        crate::i18n::set_language("de");
+        assert_eq!(ago_secs(60), "vor 1 Minute");
+        assert_eq!(ago_secs(2 * 60), "vor 2 Minuten");
+        assert!(device_code_hint(1).ends_with("Er läuft in 1 Minute ab."));
+        assert!(device_code_hint(15).ends_with("Er läuft in 15 Minuten ab."));
+        crate::i18n::set_language("fr");
+        assert_eq!(ago_secs(3600), "il y a 1 heure");
+        assert_eq!(ago_secs(2 * 3600), "il y a 2 heures");
+        crate::i18n::set_language("ja");
+        assert_eq!(ago_secs(60), "1 分前");
+        assert_eq!(ago_secs(5 * 60), "5 分前");
+        crate::i18n::set_language("en");
+    }
 }

@@ -331,8 +331,8 @@ str		the macOS Keychain	le trousseau macOS
 str		the Secret Service	le Secret Service
 str		the system's secure store	le stockage sécurisé du système
 str		just now	à l’instant
-str		{n} min ago	il y a {n} min
-str		{n} h ago	il y a {n} h
+plural		{n} minute ago	il y a {n} minute|il y a {n} minutes
+plural		{n} hour ago	il y a {n} heure|il y a {n} heures
 str		The provider refused the key ({detail}).	Le fournisseur a refusé la clé ({detail}).
 str		There is no key or sign-in to use.	Il n’y a ni clé ni connexion à utiliser.
 str		{agent} ready	{agent} prêt
@@ -424,7 +424,8 @@ str		Sign in opens your browser; the codex program keeps the sign-in itself.	La 
 str		The codex program keeps the sign-in itself.	Le programme codex garde lui-même la connexion.
 str		No browser on this computer? Sign in with a device code.	Pas de navigateur sur cet ordinateur ? Connectez-vous avec un code d’appareil.
 str		Sign in with a device code	Se connecter avec un code d’appareil
-str		On any device with a browser, open the sign-in page and enter this code. It runs out in {n} minutes.	Sur n’importe quel appareil doté d’un navigateur, ouvrez la page de connexion et saisissez ce code. Il expire dans {n} minutes.
+str		On any device with a browser, open the sign-in page and enter this code.	Sur n’importe quel appareil doté d’un navigateur, ouvrez la page de connexion et saisissez ce code.
+plural		It runs out in {n} minute.	Il expire dans {n} minute.|Il expire dans {n} minutes.
 str		Copy the code	Copier le code
 str		Open sign-in page	Ouvrir la page de connexion
 str		Not an address Archforge opens	Pas une adresse qu’Archforge ouvre

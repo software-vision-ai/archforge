@@ -331,8 +331,8 @@ str		the macOS Keychain	macOS 钥匙串
 str		the Secret Service	Secret Service
 str		the system's secure store	系统的安全存储
 str		just now	刚刚
-str		{n} min ago	{n} 分钟前
-str		{n} h ago	{n} 小时前
+plural		{n} minute ago	{n} 分钟前
+plural		{n} hour ago	{n} 小时前
 str		The provider refused the key ({detail}).	提供方拒绝了此密钥（{detail}）。
 str		There is no key or sign-in to use.	没有可用的密钥或登录。
 str		{agent} ready	{agent} 已就绪
@@ -424,7 +424,8 @@ str		Sign in opens your browser; the codex program keeps the sign-in itself.	登
 str		The codex program keeps the sign-in itself.	登录由 codex 程序自行保存。
 str		No browser on this computer? Sign in with a device code.	这台计算机没有浏览器？使用设备代码登录。
 str		Sign in with a device code	使用设备代码登录
-str		On any device with a browser, open the sign-in page and enter this code. It runs out in {n} minutes.	在任意带浏览器的设备上打开登录页面并输入此代码。它将在 {n} 分钟后失效。
+str		On any device with a browser, open the sign-in page and enter this code.	在任意带浏览器的设备上打开登录页面并输入此代码。
+plural		It runs out in {n} minute.	它将在 {n} 分钟后失效。
 str		Copy the code	复制代码
 str		Open sign-in page	打开登录页面
 str		Not an address Archforge opens	Archforge 不会打开此地址

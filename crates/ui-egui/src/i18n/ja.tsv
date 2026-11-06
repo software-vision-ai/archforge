@@ -331,8 +331,8 @@ str		the macOS Keychain	macOS キーチェーン
 str		the Secret Service	Secret Service
 str		the system's secure store	システムのセキュアストア
 str		just now	たった今
-str		{n} min ago	{n} 分前
-str		{n} h ago	{n} 時間前
+plural		{n} minute ago	{n} 分前
+plural		{n} hour ago	{n} 時間前
 str		The provider refused the key ({detail}).	プロバイダーがキーを拒否しました（{detail}）。
 str		There is no key or sign-in to use.	使えるキーもサインインもありません。
 str		{agent} ready	{agent} 準備完了
@@ -424,7 +424,8 @@ str		Sign in opens your browser; the codex program keeps the sign-in itself.	サ
 str		The codex program keeps the sign-in itself.	サインインは codex プログラム自身が保持します。
 str		No browser on this computer? Sign in with a device code.	このコンピューターにブラウザーがありませんか？デバイスコードでサインインします。
 str		Sign in with a device code	デバイスコードでサインイン
-str		On any device with a browser, open the sign-in page and enter this code. It runs out in {n} minutes.	ブラウザーのある端末でサインインページを開き、このコードを入力してください。{n} 分で期限が切れます。
+str		On any device with a browser, open the sign-in page and enter this code.	ブラウザーのある端末でサインインページを開き、このコードを入力してください。
+plural		It runs out in {n} minute.	{n} 分で期限が切れます。
 str		Copy the code	コードをコピー
 str		Open sign-in page	サインインページを開く
 str		Not an address Archforge opens	Archforge が開くアドレスではありません
