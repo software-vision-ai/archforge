@@ -350,8 +350,11 @@ that Codex holds one. `login_chatgpt` and
 `login_device_code` answer the address to open, or the code and the address, and queue the same as
 `AccountEvent::LoginStarted`; an address must be `https` on `openai.com` or `chatgpt.com` (or below)
 without a user part, else it is refused and never queued; a device code is letters, digits and
-hyphens. Keep the process running until `LoginCompleted`: Codex receives the browser's answer on its
-own local callback. At most 256 events wait to be read; past that the oldest is dropped and logged.
+hyphens. A refused address or code also cancels the sign-in Codex already began (best effort, and
+only when Codex's own id is a valid one), so it does not wait for an answer that never comes. Keep
+the process running until `LoginCompleted`: Codex receives the browser's answer on its own local
+callback. `next_event` with a zero timeout polls once without waiting, still reading what Codex has
+already written. At most 256 events wait to be read; past that the oldest is dropped and logged.
 `cancel_login`, `logout`, `rate_limits` and `models` (every page, hidden models
 left out, at most 10 pages and 1000 models) complete the set. ChatGPT calls on an API-key process
 are refused (`InvalidSetting`), so a key never meets the keyring.

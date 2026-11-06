@@ -316,11 +316,11 @@ impl CodexAccounts {
     pub fn login_chatgpt(&mut self) -> Result<LoginStarted, AgentError> {
         self.chatgpt_only("a ChatGPT sign-in")?;
         let value = self.call("account/login/start", Some(json!({ "type": "chatgpt" })))?;
-        let login_id = field(&value, "loginId").ok_or_else(|| unreadable("account/login/start", "no sign-in id"))?;
-        let auth_url = checked_url(value.get("authUrl").and_then(Value::as_str).unwrap_or_default())?;
-        let started = LoginStarted::Browser { login_id: checked_id(&login_id)?, auth_url };
-        self.queue(AccountEvent::LoginStarted(started.clone()));
-        Ok(started)
+        let started = login_id_of(&value).and_then(|raw| {
+            let auth_url = checked_url(value.get("authUrl").and_then(Value::as_str).unwrap_or_default())?;
+            Ok(LoginStarted::Browser { login_id: checked_id(raw)?, auth_url })
+        });
+        self.settle(&value, started)
     }
 
     /// Begins a ChatGPT sign-in with a device code, for when the browser cannot reach this
@@ -329,12 +329,12 @@ impl CodexAccounts {
     pub fn login_device_code(&mut self) -> Result<LoginStarted, AgentError> {
         self.chatgpt_only("a ChatGPT sign-in")?;
         let value = self.call("account/login/start", Some(json!({ "type": "chatgptDeviceCode" })))?;
-        let login_id = field(&value, "loginId").ok_or_else(|| unreadable("account/login/start", "no sign-in id"))?;
-        let verification_url = checked_url(value.get("verificationUrl").and_then(Value::as_str).unwrap_or_default())?;
-        let user_code = checked_code(value.get("userCode").and_then(Value::as_str).unwrap_or_default())?;
-        let started = LoginStarted::DeviceCode { login_id: checked_id(&login_id)?, verification_url, user_code };
-        self.queue(AccountEvent::LoginStarted(started.clone()));
-        Ok(started)
+        let started = login_id_of(&value).and_then(|raw| {
+            let verification_url = checked_url(value.get("verificationUrl").and_then(Value::as_str).unwrap_or_default())?;
+            let user_code = checked_code(value.get("userCode").and_then(Value::as_str).unwrap_or_default())?;
+            Ok(LoginStarted::DeviceCode { login_id: checked_id(raw)?, verification_url, user_code })
+        });
+        self.settle(&value, started)
     }
 
     /// Cancels the sign-in `login_id`.
@@ -396,7 +396,8 @@ impl CodexAccounts {
     }
 
     /// The next thing Codex said on its own, waiting at most `timeout`; `None` when nothing came,
-    /// and for every call after [`AccountEvent::Ended`].
+    /// and for every call after [`AccountEvent::Ended`]. A zero timeout polls once without waiting:
+    /// it still reads what Codex has already written.
     pub fn next_event(&mut self, timeout: Duration) -> Option<AccountEvent> {
         let deadline = Instant::now().checked_add(timeout);
         let mut budget = LINES_PER_CALL;
@@ -405,7 +406,9 @@ impl CodexAccounts {
                 return Some(event);
             }
             let now = Instant::now();
-            if self.ended || budget == 0 || deadline.is_some_and(|d| now >= d) {
+            // The deadline counts only after the first read, so a zero timeout still reads once.
+            let read_once = budget < LINES_PER_CALL;
+            if self.ended || budget == 0 || (read_once && deadline.is_some_and(|d| now >= d)) {
                 return None;
             }
             budget -= 1;
@@ -420,6 +423,27 @@ impl CodexAccounts {
     pub fn shutdown(&mut self, grace: Duration) -> Result<Exit, AgentError> {
         self.shutting_down = true;
         self.process.shutdown(grace)
+    }
+
+    /// Answers a sign-in Codex began, as `started` checked it, and queues it. When Archforge refused
+    /// it (an address or a code it does not open or show), the sign-in Codex already began is
+    /// cancelled, best effort, so it does not wait for an answer that never comes; that happens only
+    /// when Codex's own id is a valid one, never with a cut or altered id. The refusal is answered.
+    fn settle(&mut self, value: &Value, started: Result<LoginStarted, AgentError>) -> Result<LoginStarted, AgentError> {
+        let refusal = match started {
+            Ok(started) => {
+                self.queue(AccountEvent::LoginStarted(started.clone()));
+                return Ok(started);
+            }
+            Err(refusal) => refusal,
+        };
+        if let Some(id) = value.get("loginId").and_then(Value::as_str).filter(|id| checked_id(id).is_ok()) {
+            match self.cancel_login(id) {
+                Ok(_) => log::info!("the sign-in Codex began was cancelled, as Archforge refused it"),
+                Err(e) => log::warn!("the sign-in Archforge refused could not be cancelled: {e}"),
+            }
+        }
+        Err(refusal)
     }
 
     /// Queues an event for [`next_event`](Self::next_event); past [`MAX_EVENTS`] waiting, the oldest
@@ -615,6 +639,11 @@ fn expired_words(detail: &str) -> bool {
 /// A text field of an answer, cut to [`MAX_FIELD_BYTES`].
 fn field(value: &Value, key: &str) -> Option<String> {
     value.get(key).and_then(Value::as_str).map(|s| capped(s, MAX_FIELD_BYTES))
+}
+
+/// The sign-in id of an `account/login/start` answer, as Codex wrote it (checked by the caller).
+fn login_id_of(value: &Value) -> Result<&str, AgentError> {
+    value.get("loginId").and_then(Value::as_str).ok_or_else(|| unreadable("account/login/start", "no sign-in id"))
 }
 
 /// An answer that could not be read.

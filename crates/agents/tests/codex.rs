@@ -1648,8 +1648,84 @@ fn foreign_addresses_are_refused_and_expiry_is_read() {
     let mut accounts = CodexAccounts::open(&runtime, &account, SignIn::ChatGpt(KeyringAccess::default()), Default::default()).unwrap();
     let error = accounts.login_chatgpt().unwrap_err();
     assert!(error.to_string().contains("does not open"), "{error}");
-    assert_eq!(accounts.next_event(Duration::from_millis(50)), None, "nothing to open was queued");
+    let queued: Vec<AccountEvent> = std::iter::from_fn(|| accounts.next_event(Duration::from_millis(50))).collect();
+    assert!(!queued.iter().any(|e| matches!(e, AccountEvent::LoginStarted(_))), "nothing to open was queued: {queued:?}");
     assert_eq!(accounts.check().unwrap().status, AccountStatus::Expired { email: Some("p@example.com".into()), plan: Some("pro".into()) });
+    accounts.shutdown(Duration::from_secs(2)).unwrap();
+    std::fs::remove_dir_all(&base).unwrap();
+}
+
+/// The fake's answers to four sign-ins in turn: a foreign address, a device code that is not one,
+/// then a foreign address and a good one, each with an id that is not valid (`@LONG@` is replaced
+/// by an over-long one).
+const REFUSED_LOGINS: &str = r#"
+logins=0
+on_login() {
+  logins=$((logins+1))
+  case $logins in
+    1) send '{"id":@ID@,"result":{"type":"chatgpt","loginId":"login-7","authUrl":"https://auth.openai.com.evil.example/x"}}' ;;
+    2) send '{"id":@ID@,"result":{"type":"chatgptDeviceCode","loginId":"login-8","verificationUrl":"https://auth.openai.com/codex/device","userCode":"AB CD"}}' ;;
+    3) send '{"id":@ID@,"result":{"type":"chatgpt","loginId":"bad id","authUrl":"https://auth.openai.com.evil.example/x"}}' ;;
+    4) send '{"id":@ID@,"result":{"type":"chatgpt","loginId":"@LONG@","authUrl":"https://auth.openai.com/oauth/authorize?PLACEHOLDER"}}' ;;
+  esac
+}
+"#;
+
+/// A sign-in Archforge refuses after Codex began it (an address it does not open, a code it does
+/// not show) is cancelled with Codex's own id, and the refusal is still what the caller gets; an id
+/// that is itself not valid is never sent back, so nothing is cancelled then.
+#[test]
+fn a_refused_sign_in_is_cancelled() {
+    let base = scratch("refused-login");
+    let body = format!("{ACCOUNT_BODY}\n{}", REFUSED_LOGINS.replace("@LONG@", &"x".repeat(300)));
+    let (runtime, account, _) = fake_codex(&base, &body);
+    let mut accounts = CodexAccounts::open(&runtime, &account, SignIn::ChatGpt(KeyringAccess::default()), Default::default()).unwrap();
+    let cancels = |base: &Path| -> Vec<Value> {
+        let sent = std::fs::read_to_string(base.join("stdin")).unwrap_or_default().lines().map(str::to_owned).collect::<Vec<_>>();
+        requests(&sent, "account/login/cancel").iter().map(|l| serde_json::from_str::<Value>(l).unwrap()["params"].clone()).collect()
+    };
+
+    let error = accounts.login_chatgpt().unwrap_err();
+    assert!(error.to_string().contains("does not open"), "the refusal stays: {error}");
+    assert_eq!(cancels(&base), vec![json!({ "loginId": "login-7" })]);
+
+    let error = accounts.login_device_code().unwrap_err();
+    assert!(error.to_string().contains("device code"), "the refusal stays: {error}");
+    assert_eq!(cancels(&base), vec![json!({ "loginId": "login-7" }), json!({ "loginId": "login-8" })]);
+
+    let error = accounts.login_chatgpt().unwrap_err();
+    assert!(error.to_string().contains("does not open"), "the refusal stays: {error}");
+    let error = accounts.login_chatgpt().unwrap_err();
+    assert!(matches!(error, AgentError::InvalidSetting { setting: "sign-in id", bytes: 300, .. }), "{error}");
+    // A last round trip, so every line sent so far has been read.
+    assert_eq!(accounts.read(false).unwrap().status, AccountStatus::SignedOut);
+    assert_eq!(cancels(&base).len(), 2, "an id that is not valid is never sent back: {:?}", cancels(&base));
+    let queued: Vec<AccountEvent> = std::iter::from_fn(|| accounts.next_event(Duration::from_millis(50))).collect();
+    assert!(!queued.iter().any(|e| matches!(e, AccountEvent::LoginStarted(_))), "nothing to open was queued: {queued:?}");
+    accounts.shutdown(Duration::from_secs(2)).unwrap();
+    std::fs::remove_dir_all(&base).unwrap();
+}
+
+/// A zero timeout polls without waiting, yet still reads what Codex has already written.
+#[test]
+fn a_zero_timeout_reads_what_codex_already_wrote() {
+    let base = scratch("zero-poll");
+    let (runtime, account, _) = fake_codex(&base, ACCOUNT_BODY);
+    let mut accounts = CodexAccounts::open(&runtime, &account, SignIn::ChatGpt(KeyringAccess::default()), Default::default()).unwrap();
+    // Codex writes the account change after its answer to the sign-out, so it is still unread.
+    accounts.logout().unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let event = loop {
+        if let Some(event) = accounts.next_event(Duration::ZERO) {
+            break event;
+        }
+        assert!(Instant::now() < deadline, "a zero-timeout poll never read the account change");
+        std::thread::sleep(Duration::from_millis(10));
+    };
+    assert_eq!(event, AccountEvent::AccountChanged { auth_mode: None, plan: None });
+    let started = Instant::now();
+    assert_eq!(accounts.next_event(Duration::ZERO), None);
+    assert!(started.elapsed() < Duration::from_secs(1), "a zero timeout does not wait: {:?}", started.elapsed());
     accounts.shutdown(Duration::from_secs(2)).unwrap();
     std::fs::remove_dir_all(&base).unwrap();
 }
