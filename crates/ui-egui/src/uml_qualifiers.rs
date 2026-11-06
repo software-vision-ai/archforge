@@ -169,7 +169,7 @@ pub(crate) fn section_of(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
 fn refusal_box(paint: &egui::Painter, p: &Palette, at: egui::Pos2, width: f32, why: &str) -> f32 {
     let g = ux::galley_rows(paint, why, types::SMALL, p.text, Some((width - 40.0).max(0.0)), 6);
     let r = Rect::from_min_size(at, vec2(width.max(0.0), g.size().y + 20.0));
-    paint.rect_filled(r, 6.0, p.danger.gamma_multiply(0.1));
+    paint.rect_filled(r, 6.0, p.danger_tint);
     ux::icon_in(paint, Rect::from_min_size(r.min + vec2(10.0, 11.0), Vec2::splat(14.0)), &icons::ISSUE, p.danger);
     paint.galley(r.min + vec2(32.0, 10.0), g, p.text);
     r.height()
