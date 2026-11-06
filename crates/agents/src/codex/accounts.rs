@@ -457,8 +457,13 @@ impl CodexAccounts {
             if let Some(event) = self.events.pop_front() {
                 return Some(event);
             }
+            if self.ended {
+                // A process ended without waiting is collected here, as soon as it has gone.
+                let _ = self.process.status();
+                return None;
+            }
             let now = Instant::now();
-            if self.ended || budget == 0 || (!polling && deadline.is_some_and(|d| now >= d)) {
+            if budget == 0 || (!polling && deadline.is_some_and(|d| now >= d)) {
                 return None;
             }
             budget -= 1;
@@ -627,11 +632,22 @@ impl CodexAccounts {
             let wait = deadline.map_or(super::EXIT_WAIT, |d| d.saturating_duration_since(Instant::now()).min(super::EXIT_WAIT));
             super::wait_for_exit(&mut self.process, wait)
         };
+        // An account process that closed its output but still runs is of no more use: it is ended
+        // now, without waiting, and collected later (`next_event`, `shutdown`, the drop). Its exit
+        // stays unseen in `Ended`: the signal would be Archforge's, not a crash.
+        let ended_here = exit.is_none() && !self.shutting_down;
+        if ended_here {
+            log::warn!("the Codex account process closed its output but still runs; it is ended");
+            if let Err(e) = self.process.terminate() {
+                log::warn!("the Codex account process could not be ended: {e}");
+            }
+        }
         let error = if self.shutting_down {
             None
         } else {
             Some(match exit {
                 Some(exit) => self.process.exit_error(exit),
+                None if ended_here => AgentError::reported(ErrorKind::Other, "codex closed its output and its exit was not seen; it was ended"),
                 None => AgentError::reported(ErrorKind::Other, "codex closed its output and its exit was not seen"),
             })
         };

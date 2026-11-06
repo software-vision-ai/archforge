@@ -2225,6 +2225,32 @@ fn a_crashed_account_process_reports_why() {
     std::fs::remove_dir_all(&base).unwrap();
 }
 
+/// An account process that closes its output but keeps running (and ignores SIGTERM) is ended
+/// as it ends, and is gone within the bound.
+#[test]
+fn an_account_process_that_closes_its_output_but_keeps_running_is_ended() {
+    let base = scratch("account-closed-but-running");
+    let body = format!(
+        "{ACCOUNT_BODY}\non_account() {{ send '{{\"id\":@ID@,\"result\":{{\"account\":null,\"requiresOpenaiAuth\":true}}}}'; exec 1>&-; trap '' TERM; exec sleep 1000; }}"
+    );
+    let (runtime, account, _) = fake_codex(&base, &body);
+    let mut accounts = CodexAccounts::open(&runtime, &account, SignIn::ChatGpt(KeyringAccess::default()), Default::default()).unwrap();
+    let pid = accounts.process().pid();
+    assert_eq!(accounts.read(false).unwrap().status, AccountStatus::SignedOut);
+    let events = account_events_until(&mut accounts, |e| matches!(e, AccountEvent::Ended { .. }));
+    assert!(
+        matches!(events.last(), Some(AccountEvent::Ended { exit: None, error: Some(e) }) if e.to_string().contains("it was ended")),
+        "{events:?}"
+    );
+    let deadline = Instant::now() + Duration::from_secs(1);
+    while alive(pid) && Instant::now() < deadline {
+        assert_eq!(accounts.next_event(Duration::from_millis(10)), None);
+    }
+    assert!(!alive(pid), "the process is gone within the bound");
+    accounts.shutdown(Duration::from_secs(2)).unwrap();
+    std::fs::remove_dir_all(&base).unwrap();
+}
+
 /// One zero-timeout poll reads past a line that means nothing to the event Codex wrote after it.
 #[test]
 fn a_zero_timeout_poll_reads_past_lines_that_mean_nothing() {
