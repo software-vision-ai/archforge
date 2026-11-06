@@ -1395,11 +1395,15 @@ impl AgentSession for CodexSession {
     }
 
     /// Reads output lines until one means an event, the timeout passes, or a call's budget of lines
-    /// is spent; requests past their deadline are failed on the way. A zero timeout polls once
-    /// without waiting: it still reads what Codex has already written. When the output closes, the
-    /// exit is waited for only within the same timeout.
+    /// is spent; requests past their deadline are failed on the way. A zero timeout polls without
+    /// waiting: it reads every line Codex has already written (at most a call's budget of them)
+    /// until one means an event, and answers `None` only once nothing more is there. When the output
+    /// closes, the exit is waited for only within the same timeout.
     fn next_event(&mut self, timeout: Duration) -> Option<SessionEvent> {
         let deadline = Instant::now().checked_add(timeout);
+        // A zero timeout reads, without waiting, every line already there until one means an event;
+        // the first time nothing is there ends it.
+        let polling = timeout.is_zero();
         let mut budget = LINES_PER_CALL;
         loop {
             if let Some(event) = self.pending.pop_front() {
@@ -1413,18 +1417,19 @@ impl AgentSession for CodexSession {
                 return Some(event);
             }
             let now = Instant::now();
-            // The deadline counts only after the first read, so a zero timeout still reads once.
-            let read_once = budget < LINES_PER_CALL;
-            if budget == 0 || (read_once && deadline.is_some_and(|d| now >= d)) {
+            if budget == 0 || (!polling && deadline.is_some_and(|d| now >= d)) {
                 return None;
             }
             budget -= 1;
-            let mut wait = deadline.map_or(timeout, |d| d.saturating_duration_since(now));
+            let mut wait = if polling { Duration::ZERO } else { deadline.map_or(timeout, |d| d.saturating_duration_since(now)) };
             for due in self.requests.next_deadline().into_iter().chain(self.unnamed_deadline).chain(self.stop_deadline) {
                 wait = wait.min(due.saturating_duration_since(now));
             }
-            if let Some(event) = self.process.next_event(wait) {
-                self.take(event, deadline);
+            match self.process.next_event(wait) {
+                Some(event) => self.take(event, deadline),
+                // Nothing more is there: a zero-timeout poll is done.
+                None if polling => return None,
+                None => {}
             }
         }
     }

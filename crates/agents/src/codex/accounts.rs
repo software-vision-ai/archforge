@@ -443,24 +443,26 @@ impl CodexAccounts {
     }
 
     /// The next thing Codex said on its own, waiting at most `timeout`; `None` when nothing came,
-    /// and for every call after [`AccountEvent::Ended`]. A zero timeout polls once without waiting:
-    /// it still reads what Codex has already written. When the output closes, Codex's exit is
+    /// and for every call after [`AccountEvent::Ended`]. A zero timeout polls without waiting: it
+    /// reads every line Codex has already written (at most a call's budget of them) until one means
+    /// an event, and answers `None` only once nothing more is there. When the output closes, Codex's exit is
     /// waited for only within the same `timeout`; one not seen by then ends without its reason.
     pub fn next_event(&mut self, timeout: Duration) -> Option<AccountEvent> {
         let deadline = Instant::now().checked_add(timeout);
+        // A zero timeout reads, without waiting, every line already there until one means an event;
+        // the first time nothing is there ends it.
+        let polling = timeout.is_zero();
         let mut budget = LINES_PER_CALL;
         loop {
             if let Some(event) = self.events.pop_front() {
                 return Some(event);
             }
             let now = Instant::now();
-            // The deadline counts only after the first read, so a zero timeout still reads once.
-            let read_once = budget < LINES_PER_CALL;
-            if self.ended || budget == 0 || (read_once && deadline.is_some_and(|d| now >= d)) {
+            if self.ended || budget == 0 || (!polling && deadline.is_some_and(|d| now >= d)) {
                 return None;
             }
             budget -= 1;
-            let wait = deadline.map_or(timeout, |d| d.saturating_duration_since(now));
+            let wait = if polling { Duration::ZERO } else { deadline.map_or(timeout, |d| d.saturating_duration_since(now)) };
             let event = self.process.next_event(wait)?;
             let _ = self.take(event, None, deadline);
         }

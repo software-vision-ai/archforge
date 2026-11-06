@@ -186,9 +186,9 @@ part of a key the runtime writes whole in a line (a key's characters are never e
 key split across two text deltas is caught only in the message they make up. `next_event` reads at
 most 256 lines a call and never past its timeout, so a runtime writing only lines that mean nothing
 cannot hold the caller; once the output closes it waits up to half a second for the exit status
-(Codex's session only within the call's timeout, and there a zero timeout polls once without
-waiting, still reading what Codex has written; an exit not seen in time ends with the general
-reason). A line is parsed into a whole `serde_json::Value`, which may take several times the line's size: keep
+(Codex's session only within the call's timeout, and there a zero timeout polls without waiting,
+reading every line Codex has already written until one means an event; an exit not seen in time
+ends with the general reason). A line is parsed into a whole `serde_json::Value`, which may take several times the line's size: keep
 `max_line_bytes` at its default or below for Claude. Claude's own
 `control_request`s (permission prompts) are not expected with `dontAsk` and are skipped as unknown.
 
@@ -385,8 +385,9 @@ without a user part, else it is refused and never queued; a device code is lette
 hyphens. A refused address or code also cancels the sign-in Codex already began (best effort, and
 only when Codex's own id is a valid one), so it does not wait for an answer that never comes. Keep
 the process running until `LoginCompleted`: Codex receives the browser's answer on its own local
-callback. `next_event` with a zero timeout polls once without waiting, still reading what Codex has
-already written. When the account process ends without being shut down, its exit is waited for
+callback. `next_event` with a zero timeout polls without waiting: it reads every line Codex has
+already written (at most 256) until one means an event, and answers `None` only once nothing more
+is there. When the account process ends without being shut down, its exit is waited for
 at most 500 ms, as a conversation's is, and never past the timeout of the call that read the end
 (so a zero-timeout poll checks once without waiting), so `Ended` carries a crash's exit status and
 the end of its error stream; an exit not seen by then ends with the general reason. At most 256 events wait to be read; past that the oldest is dropped and logged.

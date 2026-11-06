@@ -1650,6 +1650,29 @@ on_thread() {
     std::fs::remove_dir_all(&base).unwrap();
 }
 
+/// One zero-timeout poll of a session reads past a line that means nothing to the event Codex
+/// wrote after it.
+#[test]
+fn a_zero_timeout_session_poll_reads_past_lines_that_mean_nothing() {
+    let base = scratch("session-zero-drain");
+    let body = r#"
+on_thread() {
+  send '{"method":"thread/status/changed","params":{}}'
+  send '{"id":@ID@,"result":{"thread":{"id":"019a0000-0000-7000-8000-000000000001","ephemeral":true,"model":"gpt-6.1-sol","status":{"type":"idle"},"path":null},"model":"gpt-6.1-sol","modelProvider":"openai","cwd":"/tmp","approvalPolicy":"on-request","approvalsReviewer":"user","sandbox":{"type":"readOnly","networkAccess":false}}}'
+}
+"#;
+    let (runtime, account, folder) = fake_codex(&base, body);
+    let mut session = CodexSession::start(&runtime, &account, &folder, config(false), SignIn::ApiKey(canary())).unwrap();
+    // The handshake's lines are read first.
+    while session.next_event(Duration::from_millis(200)).is_some() {}
+    session.send("hi").unwrap();
+    std::thread::sleep(Duration::from_millis(300));
+    let event = session.next_event(Duration::ZERO);
+    assert!(matches!(&event, Some(SessionEvent::Started { session_id, .. }) if session_id == THREAD), "{event:?}");
+    session.shutdown(Duration::from_secs(2)).unwrap();
+    std::fs::remove_dir_all(&base).unwrap();
+}
+
 /// The session's wait for Codex's exit once its output closed stays within the caller's time: a
 /// zero-timeout poll reads what Codex wrote and checks the exit once without waiting, a timed
 /// `next_event` keeps its timeout, and an exit not seen by then ends with the general reason.
@@ -1992,6 +2015,29 @@ fn a_crashed_account_process_reports_why() {
     let Some(AccountEvent::Ended { exit, error }) = events.last() else { panic!("{events:?}") };
     assert_eq!(exit.map(|e| e.code), Some(Some(3)), "{events:?}");
     assert!(matches!(error, Some(AgentError::Exited { code: Some(3), stderr_tail, .. }) if stderr_tail.contains("codex broke here")), "{error:?}");
+    std::fs::remove_dir_all(&base).unwrap();
+}
+
+/// One zero-timeout poll reads past a line that means nothing to the event Codex wrote after it.
+#[test]
+fn a_zero_timeout_poll_reads_past_lines_that_mean_nothing() {
+    let base = scratch("zero-drain");
+    let body = format!(
+        "{ACCOUNT_BODY}\non_account() {{ send '{{\"id\":@ID@,\"result\":{{\"account\":null,\"requiresOpenaiAuth\":true}}}}'; \
+         send '{{\"method\":\"thread/status/changed\",\"params\":{{}}}}'; send 'not a message'; \
+         send '{{\"method\":\"account/updated\",\"params\":{{\"authMode\":\"chatgpt\",\"planType\":\"plus\"}}}}'; }}"
+    );
+    let (runtime, account, _) = fake_codex(&base, &body);
+    let mut accounts = CodexAccounts::open(&runtime, &account, SignIn::ChatGpt(KeyringAccess::default()), Default::default()).unwrap();
+    assert_eq!(accounts.read(false).unwrap().status, AccountStatus::SignedOut);
+    // Let the lines after the answer arrive, then poll once.
+    std::thread::sleep(Duration::from_millis(300));
+    assert_eq!(
+        accounts.next_event(Duration::ZERO),
+        Some(AccountEvent::AccountChanged { auth_mode: Some("chatgpt".into()), plan: Some("plus".into()) })
+    );
+    assert_eq!(accounts.next_event(Duration::ZERO), None, "and nothing more is there");
+    accounts.shutdown(Duration::from_secs(2)).unwrap();
     std::fs::remove_dir_all(&base).unwrap();
 }
 
