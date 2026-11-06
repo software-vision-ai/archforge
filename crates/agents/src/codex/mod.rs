@@ -527,9 +527,11 @@ pub struct CodexSession {
     history_problem: Option<AgentError>,
     /// Turns that ended or were abandoned: their late notifications are ignored.
     stale_turns: VecDeque<String>,
-    /// `turn/start` requests that passed their deadline, with their thread: a late answer names a
-    /// turn that runs without anyone waiting for it, which is then interrupted.
-    late_starts: VecDeque<(u64, String)>,
+    /// `turn/start` requests that passed their deadline, with their thread and when they are
+    /// forgotten: a late answer names a turn that runs without anyone waiting for it, which is then
+    /// interrupted. The session has left that thread, so it is let go once the late answer is
+    /// handled, or when the request is forgotten.
+    late_starts: VecDeque<(u64, String, Instant)>,
     /// `thread/start` requests past their deadline, with when they are forgotten: a late answer
     /// names a thread the session no longer uses, which is let go (`thread/unsubscribe`).
     late_threads: VecDeque<(u64, Instant)>,
@@ -898,20 +900,23 @@ impl CodexSession {
             }
             return;
         }
-        let Some(at) = self.late_starts.iter().position(|(late, _)| *late == id) else {
+        let Some(at) = self.late_starts.iter().position(|(late, _, _)| *late == id) else {
             log::debug!("codex answered a request that is not waiting (id {id})");
             let event = self.parser.skip(Skipped::Malformed { kind: "response", reason: "it answers no request waiting" });
             self.pending.push_back(event);
             return;
         };
-        let Some((_, thread)) = self.late_starts.remove(at) else { return };
+        let Some((_, thread, _)) = self.late_starts.remove(at) else { return };
         let turn = result.ok().and_then(|v| v.get("turn").and_then(|t| t.get("id")).and_then(Value::as_str).map(|t| rpc::capped(t, MAX_NAME_BYTES)));
-        let Some(turn) = turn else { return };
-        log::warn!("codex started a turn after its request's deadline; it is interrupted");
-        self.remember_stale(turn.clone());
-        if let Err(e) = self.request("turn/interrupt", Purpose::Interrupt, json!({ "threadId": thread, "turnId": turn })) {
-            log::warn!("the late turn could not be interrupted: {e}");
+        if let Some(turn) = turn {
+            log::warn!("codex started a turn after its request's deadline; it is interrupted");
+            self.remember_stale(turn.clone());
+            if let Err(e) = self.request("turn/interrupt", Purpose::Interrupt, json!({ "threadId": thread.clone(), "turnId": turn })) {
+                log::warn!("the late turn could not be interrupted: {e}");
+            }
         }
+        // The session moved on to a fresh thread: this one is let go, after its late turn's stop.
+        self.release_thread(thread);
     }
 
     /// Remembers a turn whose late notifications are to be ignored.
@@ -1089,13 +1094,18 @@ impl CodexSession {
                 }
                 // Codex may have taken the message and started the turn, so the message stays in
                 // the copy (only a message that never reached Codex, or that it refused, leaves it);
-                // the turn fails, and its late answer is interrupted and shows nothing.
+                // the turn fails, and its late answer is interrupted and shows nothing. The session
+                // leaves the thread (the next message starts a fresh one with the copy), so it is
+                // let go once the late answer is handled, or when the request is forgotten.
                 Purpose::TurnStart => {
                     if let Thread::Ready(thread) = std::mem::replace(&mut self.thread, Thread::None) {
-                        if self.late_starts.len() >= MAX_LATE_STARTS {
-                            self.late_starts.pop_front();
+                        if self.late_starts.len() >= MAX_LATE_STARTS
+                            && let Some((_, oldest, _)) = self.late_starts.pop_front()
+                        {
+                            self.release_thread(oldest);
                         }
-                        self.late_starts.push_back((id, thread));
+                        let forget = now.checked_add(self.timeout.saturating_mul(LATE_THREAD_TIMEOUTS)).unwrap_or(now);
+                        self.late_starts.push_back((id, thread, forget));
                     }
                     self.inject = !self.history.entries().is_empty();
                     self.abandon_turn(error);
@@ -1109,6 +1119,11 @@ impl CodexSession {
             }
         }
         self.late_threads.retain(|(_, forget)| now < *forget);
+        while self.late_starts.front().is_some_and(|(_, _, forget)| now >= *forget) {
+            if let Some((_, thread, _)) = self.late_starts.pop_front() {
+                self.release_thread(thread);
+            }
+        }
         if self.stop_deadline.is_some_and(|d| now >= d) {
             self.stop_deadline = None;
             if self.turn_open {

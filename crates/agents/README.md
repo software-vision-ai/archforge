@@ -328,7 +328,9 @@ earlier messages are never given twice. A thread left after its setup timed out 
 (`thread/unsubscribe`), so it and its tool server do not stay loaded for the session: a thread
 whose `thread/inject_items` timed out at once, and one from a `thread/start` past its deadline when
 its late answer names it (such a request is remembered for ten request timeouts, at most 16 of
-them).
+them). A `turn/start` past its deadline leaves its thread too, as the next message starts a fresh
+one: that thread is let go once the late answer is handled (after its turn is interrupted), or,
+with no answer, when the request is forgotten, after the same ten request timeouts.
 There is no signal fallback: SIGINT ends `codex app-server`. A stop request that could not be
 written is sent again by the next `stop`; one Codex refuses or leaves unanswered is not, and the
 turn then stays open (no new message is taken, as Codex may still run it) for one more request

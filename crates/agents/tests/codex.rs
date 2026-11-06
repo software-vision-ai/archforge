@@ -1052,10 +1052,37 @@ fn threads_left_after_setup_timeouts_are_let_go() {
     std::fs::remove_dir_all(&base).unwrap();
 }
 
+/// The thread of a `turn/start` whose answer never comes is let go once the request is forgotten
+/// (ten request timeouts), as the session has moved on from it; not before.
+#[test]
+fn a_thread_left_by_an_unanswered_turn_is_let_go() {
+    let base = scratch("unanswered-turn");
+    let (runtime, account, folder) = fake_codex(&base, "on_turn() { :; }");
+    let cfg = CodexConfig { request_timeout: Duration::from_millis(100), ..config(false) };
+    let mut session = CodexSession::start(&runtime, &account, &folder, cfg, SignIn::ApiKey(canary())).unwrap();
+    session.send("hi").unwrap();
+    let events = events_until(&mut session, turn_end);
+    assert!(
+        matches!(events.last(), Some(SessionEvent::TurnFinished { outcome: TurnOutcome::Failed(e), .. }) if e.to_string().contains("did not answer turn/start")),
+        "{events:?}"
+    );
+    let unsubscribed = |base: &Path| requests(&stdin_lines(base, 1), "thread/unsubscribe").len();
+    assert_eq!(unsubscribed(&base), 0, "kept while a late answer may still come");
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while unsubscribed(&base) == 0 && Instant::now() < deadline {
+        let _ = session.next_event(Duration::from_millis(50));
+    }
+    let sent = stdin_lines(&base, 1);
+    let unsubscribe: Value = serde_json::from_str(requests(&sent, "thread/unsubscribe")[0]).unwrap();
+    assert_eq!(unsubscribe["params"], json!({ "threadId": THREAD }));
+    session.shutdown(Duration::from_secs(2)).unwrap();
+    std::fs::remove_dir_all(&base).unwrap();
+}
+
 /// A `turn/start` that passed its deadline fails its turn but keeps its message in the copy, as
 /// Codex may have taken it; the next message starts a fresh thread (with the copy) so it cannot
 /// join a turn that runs after all; when the late answer comes, that turn is interrupted by name
-/// while the current turn goes on, and nothing of it is shown.
+/// while the current turn goes on, nothing of it is shown, and its old thread is let go.
 #[test]
 fn a_late_turn_start_answer_is_interrupted() {
     let base = scratch("late-start");
@@ -1101,6 +1128,11 @@ on_turn() {
     let interrupts: Vec<Value> = requests(&sent, "turn/interrupt").into_iter().map(|l| serde_json::from_str(l).unwrap()).collect();
     assert_eq!(interrupts.len(), 1, "{sent:?}");
     assert_eq!(interrupts[0]["params"], json!({ "threadId": "t-1", "turnId": "u-late" }));
+    // The session moved on to t-2, so t-1 is let go once its late turn is stopped.
+    let position = |method: &str| sent.iter().position(|l| serde_json::from_str::<Value>(l).is_ok_and(|v| v["method"] == method));
+    let unsubscribes: Vec<Value> = requests(&sent, "thread/unsubscribe").into_iter().map(|l| serde_json::from_str(l).unwrap()).collect();
+    assert_eq!(unsubscribes.iter().map(|u| u["params"].clone()).collect::<Vec<_>>(), vec![json!({ "threadId": "t-1" })], "{sent:?}");
+    assert!(position("turn/interrupt") < position("thread/unsubscribe"), "after the late turn's stop: {sent:?}");
     let starts: Vec<Value> = requests(&sent, "turn/start").into_iter().map(|l| serde_json::from_str(l).unwrap()).collect();
     assert_eq!(starts[1]["params"]["threadId"], "t-2", "the next message starts on a fresh thread");
     let inject: Value = serde_json::from_str(requests(&sent, "thread/inject_items")[0]).unwrap();
