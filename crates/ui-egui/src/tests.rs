@@ -9356,6 +9356,31 @@ fn constraints_are_added_in_properties_shown_as_braces_or_a_note_and_follow_a_de
         h.state_mut().session.as_mut().unwrap().undo().unwrap();
         h.run();
         assert_eq!(constraint_rows(&h, "Order").len(), 1, "one undo step brings it back");
+        // An association class's Properties end with its constraints too, as the class it is.
+        let s = h.state_mut().session.as_mut().unwrap();
+        let line = s
+            .execute("uml.association-class.add", &serde_json::json!({ "from": order.to_string(), "to": payment.to_string(), "name": "Settlement" }))
+            .unwrap()
+            .value["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let rule = s
+            .execute("uml.constraint.add", &serde_json::json!({ "context": line, "name": "settled", "expression": "amount > 0" }))
+            .unwrap()
+            .value["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        s.execute("view.select", &serde_json::json!({ "ids": [line] })).unwrap();
+        h.run();
+        assert!(painted(&h).iter().any(|t| t == "Constraints · 1"), "the association class's section");
+        // It follows the operations, at the foot of a long panel: scrolled into view.
+        h.state_mut().panels.scroll = 10_000.0;
+        h.run();
+        let found = ids(&h);
+        assert!(found.iter().any(|i| i == "workspace.properties.constraints.add"));
+        assert!(found.iter().any(|i| *i == format!("workspace.properties.constraint.{rule}.edit")), "its row with its pencil");
     }
 }
 

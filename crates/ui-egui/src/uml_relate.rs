@@ -855,7 +855,11 @@ pub(crate) fn body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, m
     if association_class {
         use crate::uml_panel::{MemberKind, members_section};
         let y = members_section(shell, ui, p, r, y, o, id, MemberKind::Attribute);
-        members_section(shell, ui, p, r, y + 4.0, o, id, MemberKind::Operation);
+        let y = members_section(shell, ui, p, r, y + 4.0, o, id, MemberKind::Operation);
+        // Its constraints, as the class it is (AR-133).
+        if shell.session.as_ref().is_some_and(|s| archforge_uml::constraints::is_context(s.doc(), o)) {
+            crate::uml_constraints::section_of(shell, ui, p, r, y + 4.0, o, id);
+        }
     }
 }
 

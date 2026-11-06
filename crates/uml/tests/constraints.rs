@@ -213,6 +213,18 @@ fn an_empty_expression_and_an_element_outside_the_model_are_refused_changing_not
         assert!(e.contains(key) && e.contains(why), "{cmd} {p}: {e}");
     }
     assert_eq!(s.undo_label().map(str::to_string), undo, "the history is untouched");
+    // An association class owns constraints, as the class it is.
+    let st = s.doc();
+    let payment = st
+        .alive()
+        .find(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(st, *o) == "Payment")
+        .map(|o| st.uuid(o).unwrap().to_string())
+        .unwrap();
+    let line = run(&mut s, "uml.association-class.add", json!({ "from": order, "to": payment, "name": "Settlement" }));
+    let on_line = one_step(&mut s, "uml.constraint.add", json!({ "context": line, "expression": "amount > 0", "constrained": [line, order] }));
+    let st = s.doc();
+    assert_eq!(constraints::context_of(st, obj(st, &on_line)), Some(obj(st, &line)));
+    assert_eq!(listed(&mut s, &line).len(), 1);
     // A package owns constraints too; a built-in type does not.
     run(&mut s, "uml.constraint.add", json!({ "context": sales, "expression": "every class is named" }));
     let st = s.doc();
