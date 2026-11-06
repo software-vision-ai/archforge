@@ -4,14 +4,17 @@ use super::*;
 /// A value no output may ever show.
 const CANARY: &str = "sk-canary-5f0e2b7d91c4a3";
 
+/// The canary wrapped as a secret, for the tests that look for it in output.
 fn canary() -> Secret {
     Secret::new(CANARY.to_owned()).unwrap()
 }
 
+/// A secret holding `value`; the tests give only valid, short values.
 fn secret(value: &str) -> Secret {
     Secret::new(value.to_owned()).unwrap()
 }
 
+/// A platform error carrying `message`, as a store backend reports one.
 fn boxed(message: &str) -> Box<dyn std::error::Error + Send + Sync> {
     Box::new(std::io::Error::other(message.to_owned()))
 }
@@ -21,6 +24,7 @@ fn shown(error: &SecretError) -> String {
     format!("{error:?}\n{error:#?}\n{error}")
 }
 
+/// A set value is read back unchanged.
 #[test]
 fn a_secret_comes_back_as_it_was_set() {
     let store = MemoryStore::new();
@@ -28,6 +32,7 @@ fn a_secret_comes_back_as_it_was_set() {
     assert_eq!(store.get(&SecretName::ANTHROPIC_API_KEY).unwrap().expose(), "sk-ant-one");
 }
 
+/// A second set under the same name wins; the first value is not kept beside it.
 #[test]
 fn setting_again_replaces_the_secret() {
     let store = MemoryStore::new();
@@ -36,6 +41,7 @@ fn setting_again_replaces_the_secret() {
     assert_eq!(store.get(&SecretName::OPENAI_API_KEY).unwrap().expose(), "second");
 }
 
+/// Setting one name leaves the other name's value as it was.
 #[test]
 fn secrets_under_different_names_stay_apart() {
     let store = MemoryStore::new();
@@ -45,6 +51,7 @@ fn secrets_under_different_names_stay_apart() {
     assert_eq!(store.get(&SecretName::OPENAI_API_KEY).unwrap().expose(), "o");
 }
 
+/// Delete reports the removal, and a read afterwards finds nothing.
 #[test]
 fn a_deleted_secret_is_gone() {
     let store = MemoryStore::new();
@@ -53,12 +60,14 @@ fn a_deleted_secret_is_gone() {
     assert_eq!(store.get(&SecretName::ANTHROPIC_API_KEY).unwrap_err(), SecretError::NotFound { name: "anthropic-api-key".into() });
 }
 
+/// Deleting a name never set succeeds and reports that nothing was there.
 #[test]
 fn deleting_a_missing_secret_says_it_was_absent() {
     let store = MemoryStore::new();
     assert_eq!(store.delete(&SecretName::OPENAI_API_KEY).unwrap(), Deleted::WasAbsent);
 }
 
+/// Reading a name never set answers `NotFound`, and its message names the secret.
 #[test]
 fn a_missing_secret_is_not_found_by_name() {
     let error = MemoryStore::new().get(&SecretName::OPENAI_API_KEY).unwrap_err();
@@ -66,6 +75,7 @@ fn a_missing_secret_is_not_found_by_name() {
     assert!(error.to_string().contains("openai-api-key"), "{error}");
 }
 
+/// Every debug form of a secret, alone or inside a container, shows the redaction and not the value.
 #[test]
 fn a_secret_never_shows_its_value() {
     let secret = canary();
@@ -75,6 +85,7 @@ fn a_secret_never_shows_its_value() {
     }
 }
 
+/// A store's debug output lists the names it keeps but none of their values.
 #[test]
 fn a_store_never_shows_its_secrets() {
     let store = MemoryStore::new();
@@ -84,6 +95,8 @@ fn a_store_never_shows_its_secrets() {
     assert!(text.contains("anthropic-api-key"), "{text}");
 }
 
+/// No error built from a value-carrying store failure, an echoing platform message, an oversized
+/// secret or a pasted key shows the canary or even its start.
 #[test]
 fn no_error_carries_the_secret() {
     let name = SecretName::ANTHROPIC_API_KEY;
@@ -117,6 +130,7 @@ fn no_error_carries_the_secret() {
     assert_eq!(errors[0], SecretError::NotText { name: "anthropic-api-key".into() });
 }
 
+/// A platform failure keeps the system's own message and says which operation failed on which name.
 #[test]
 fn a_platform_error_keeps_the_systems_words() {
     let error = map_error(keyring::Error::PlatformFailure(boxed("the daemon went away")), Operation::Delete, &SecretName::OPENAI_API_KEY, None);
@@ -124,6 +138,7 @@ fn a_platform_error_keeps_the_systems_words() {
     assert_eq!(error.to_string(), "the credential store could not remove 'openai-api-key': the daemon went away");
 }
 
+/// A platform message over the cap is cut at a character boundary, so multi-byte text never splits.
 #[test]
 fn a_long_platform_message_is_capped() {
     let long = "é".repeat(MAX_DETAIL_BYTES);
@@ -135,6 +150,7 @@ fn a_long_platform_message_is_capped() {
     assert!(detail.len() <= MAX_DETAIL_BYTES + '…'.len_utf8(), "{}", detail.len());
 }
 
+/// A missing entry maps to `NotFound` and a locked or declined store to `Denied`, keeping the detail.
 #[test]
 fn the_store_errors_map_to_their_own_kinds() {
     let name = SecretName::OPENAI_API_KEY;
@@ -145,6 +161,8 @@ fn the_store_errors_map_to_their_own_kinds() {
     );
 }
 
+/// A store that cannot open, and an entry asked for after that, both answer `NoSecureStore` with the
+/// system's reason.
 #[test]
 fn a_system_without_a_secure_store_says_so() {
     let error = no_store(&keyring::Error::PlatformFailure(boxed("org.freedesktop.secrets was not provided by any service")));
@@ -155,6 +173,7 @@ fn a_system_without_a_secure_store_says_so() {
     assert!(matches!(error, SecretError::NoSecureStore { .. }), "{error:?}");
 }
 
+/// Without a secure store, get, set and delete all refuse with `NoSecureStore`; nothing is kept elsewhere.
 #[test]
 fn a_store_that_is_not_there_refuses_every_call() {
     let store = MemoryStore::unavailable();
@@ -164,6 +183,7 @@ fn a_store_that_is_not_there_refuses_every_call() {
     assert!(matches!(store.delete(&name), Err(SecretError::NoSecureStore { .. })));
 }
 
+/// An empty value and one a byte over the cap are refused; one exactly at the cap is taken.
 #[test]
 fn empty_and_oversized_secrets_are_refused() {
     assert_eq!(Secret::new(String::new()).unwrap_err(), SecretError::EmptySecret);
@@ -172,6 +192,7 @@ fn empty_and_oversized_secrets_are_refused() {
     assert!(Secret::new("k".repeat(MAX_SECRET_BYTES)).is_ok());
 }
 
+/// The built-in names pass the same check a name given at run time passes.
 #[test]
 fn the_known_names_follow_the_rules() {
     for name in [SecretName::ANTHROPIC_API_KEY, SecretName::OPENAI_API_KEY] {
@@ -179,6 +200,7 @@ fn the_known_names_follow_the_rules() {
     }
 }
 
+/// Each broken rule is reported with its own reason and the name's length, never the name.
 #[test]
 fn a_name_breaking_a_rule_is_refused_with_the_rule() {
     for (name, reason) in [

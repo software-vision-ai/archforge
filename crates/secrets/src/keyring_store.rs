@@ -29,22 +29,30 @@ impl KeyringStore {
         Ok(KeyringStore { service })
     }
 
+    /// The system store's entry for `name` under this store's service; a failure is mapped as the
+    /// call `operation` maps one.
     fn entry(&self, name: &SecretName, operation: Operation) -> Result<Entry, SecretError> {
         Entry::new(self.service, name.as_str()).map_err(|e| map_error(e, operation, name, None))
     }
 }
 
 impl SecretStore for KeyringStore {
+    /// Reads the value as text; one that is empty or longer than [`crate::MAX_SECRET_BYTES`] is
+    /// refused and overwritten.
     fn get(&self, name: &SecretName) -> Result<Secret, SecretError> {
         let value = self.entry(name, Operation::Get)?.get_password().map_err(|e| map_error(e, Operation::Get, name, None))?;
         Secret::new(value)
     }
 
+    /// Saves through the system store, replacing an earlier value; a failure's platform message is
+    /// scrubbed of the value before it is kept.
     fn set(&self, name: &SecretName, secret: &Secret) -> Result<(), SecretError> {
         let entry = self.entry(name, Operation::Set)?;
         entry.set_password(secret.expose()).map_err(|e| map_error(e, Operation::Set, name, Some(secret.expose())))
     }
 
+    /// Removes the entry: a missing one answers `WasAbsent` rather than an error, and any other failure
+    /// is mapped without the value.
     fn delete(&self, name: &SecretName) -> Result<Deleted, SecretError> {
         match self.entry(name, Operation::Delete)?.delete_credential() {
             Ok(()) => Ok(Deleted::Removed),

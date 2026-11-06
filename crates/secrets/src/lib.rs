@@ -58,12 +58,14 @@ impl SecretName {
         }
     }
 
+    /// The name as the system store keys it, already checked against the rules.
     pub fn as_str(&self) -> &str {
         &self.0
     }
 }
 
 impl fmt::Display for SecretName {
+    /// Writes the bare name; a name is never secret, so it may appear in messages.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.0)
     }
@@ -131,12 +133,14 @@ impl Secret {
 }
 
 impl Drop for Secret {
+    /// Overwrites the value's bytes, spare capacity included, before the memory is freed.
     fn drop(&mut self) {
         self.0.zeroize();
     }
 }
 
 impl fmt::Debug for Secret {
+    /// Writes [`REDACTED`] whatever the value, so no log or panic message can show it.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(REDACTED)
     }
@@ -160,6 +164,7 @@ pub enum Operation {
 }
 
 impl fmt::Display for Operation {
+    /// Writes the operation as a verb for an error message: read, save or remove.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
             Operation::Get => "read",
@@ -193,6 +198,8 @@ pub enum SecretError {
 }
 
 impl fmt::Display for SecretError {
+    /// Writes one sentence naming the secret and the cause, built only from fields that hold no
+    /// secret.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             SecretError::NoSecureStore { reason } => {
