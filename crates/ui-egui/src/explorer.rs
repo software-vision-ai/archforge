@@ -164,6 +164,8 @@ pub struct Row {
     pub label: String,
     /// A column's type, after its name.
     pub detail: Option<String>,
+    /// What the row is, muted after its name (a UML generalization set's `generalization set`).
+    pub note: Option<String>,
     pub expandable: bool,
     pub expanded: bool,
     /// Whether the row drags onto the canvas (a table).
@@ -203,7 +205,7 @@ impl Tree<'_> {
     /// A row of `obj`, closed, without a detail.
     pub(crate) fn row(&self, obj: Obj, depth: u8, kind: &'static str, icon: &'static ux::Icon, label: String) -> Option<Row> {
         let id = uuid_of(self.store, obj)?;
-        Some(Row { id, obj, depth, kind, icon, muted: false, label, detail: None, expandable: false, expanded: false, draggable: false })
+        Some(Row { id, obj, depth, kind, icon, muted: false, label, detail: None, note: None, expandable: false, expanded: false, draggable: false })
     }
 
     /// The rows of the skills on `obj` whose names hold the filter.
@@ -708,7 +710,13 @@ fn tree_row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, column: Rect, y: 
         Some(ty) => format!("{} : {ty}", row.label),
         None => row.label.clone(),
     };
-    ux::text_mid(&paint, name_x, mid, &label, types::UI, ink, Some((column.right() - 16.0 - name_x).max(0.0)));
+    let drawn = ux::text_mid(&paint, name_x, mid, &label, types::UI, ink, Some((column.right() - 16.0 - name_x).max(0.0)));
+    if let Some(note) = &row.note {
+        let room = column.right() - 16.0 - drawn.right() - 6.0;
+        if room > 0.0 {
+            ux::text_mid(&paint, drawn.right() + 6.0, mid, note, types::CAPTION, p.text_muted, Some(room));
+        }
+    }
     if resp.clicked() {
         shell.explorer.focused = true;
         shell.explorer.menu_open = false;

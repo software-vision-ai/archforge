@@ -498,6 +498,7 @@ str		Literals carry no skills	リテラルはスキルを持ちません
 str		Built-in types carry no skills	組み込み型はスキルを持ちません
 str		Types keeps the built-in types, so it stays while it holds them	Types は組み込み型を保持しているため、保持している間は残ります
 str		Relationships carry no skills	関係はスキルを持ちません
+str		Generalization sets carry no skills	汎化セットはスキルを持ちません
 str		This element carries no skills	この要素はスキルを持ちません
 str		Diagram	図
 str		Diagram · of {schema}	図 · {schema} の
@@ -755,6 +756,65 @@ str		Generalization · model	汎化 · モデル
 str		Implementing class	実装クラス
 str		Interface realization	インターフェース実現
 str		Interface realization · model	インターフェース実現 · モデル
+# 汎化セット (AR-129)
+str		A set groups generalizations of one class.	セットは 1 つのクラスへの汎化をまとめます。
+str		Add member	メンバーを追加
+str		Add member offers only generalizations to {general}. Edit opens that generalization.	メンバーを追加は {general} への汎化だけを示します。編集でその汎化を開きます。
+str		Add to a generalization set	汎化セットに追加
+str		Add to set	セットに追加
+str		Add to set ▸ {name}	セットに追加 ▸ {name}
+str		Add to {name}	{name} に追加
+str		Completeness	完全性
+str		Create generalization set…	汎化セットを作成…
+str		Create set from selection	選択からセットを作成
+str		Delete from the model	モデルから削除
+str		Deleting the set keeps its generalizations; only the grouping goes. The set line is drawn across its members; drag its label to move it, a diagram-only change.	セットを削除しても汎化は残り、グループ化だけがなくなります。セットの線はメンバーを横切って描かれます。ラベルをドラッグすると移動でき、図だけの変更です。
+str		Deleting this generalization takes it out of its sets in the same undo step; a set left with no members goes too.	この汎化を削除すると同じ取り消し手順でセットから外れ、メンバーがいなくなったセットも削除されます。
+str		Disjointness	排他性
+str		General class	一般クラス
+str		Generalization set	汎化セット
+str		Generalization set {label}	汎化セット {label}
+str		Generalization set · model, in every diagram	汎化セット · モデル、すべての図
+str		Generalization sets	汎化セット
+str		Generalization sets · {n}	汎化セット · {n}
+str		Incomplete	不完全
+str		Members · {n}	メンバー · {n}
+str		Membership is listed here for every set, and each set draws its own line and label on the canvas.	所属するセットはすべてここに表示され、各セットはキャンバスに自分の線とラベルを描きます。
+str		New set from this generalization	この汎化から新しいセット
+str		No other generalization to {general}	{general} への他の汎化はありません
+str		None of these is in a set yet.	どれもまだセットに属していません。
+str		Not in a set yet.	まだどのセットにも属していません。
+str		On this generalization set · {n}	この汎化セット · {n}
+str		Overlapping	重複
+str		Remove from set	セットから外す
+str		Same action as the context menu's Create generalization set… ({chord}). Only generalizations to one class form a set; a mixed selection disables it and says why.	コンテキストメニューの 汎化セットを作成…（{chord}）と同じ操作です。1 つのクラスへの汎化だけがセットになり、混在した選択では無効になり理由を示します。
+str		Select generalizations to one class first.	まず 1 つのクラスへの汎化を選択してください。
+str		Selection · all specialise {general}	選択 · すべて {general} を特化
+str		Selection · mixed	選択 · 混在
+str		Set	セット
+str		Shown beside the lines as {braces}: a {general} is at most one of these kinds.	線の横に {braces} と表示: {general} はこれらの種類の多くとも 1 つです。
+str		Shown beside the lines as {braces}: a {general} may be any number of these kinds.	線の横に {braces} と表示: {general} はこれらの種類をいくつでも兼ねられます。
+str		Shown beside the lines as {braces}: every {general} is at least one of these kinds.	線の横に {braces} と表示: すべての {general} はこれらの種類の少なくとも 1 つです。
+str		Shown beside the lines as {braces}: every {general} is exactly one of these kinds.	線の横に {braces} と表示: すべての {general} はこれらの種類のちょうど 1 つです。
+str		Some of these are in a set already.	一部はすでにセットに属しています。
+str		Something selected	選択した要素
+str		This generalization set	この汎化セット
+str		already in it	追加済み
+str		generalization set	汎化セット
+str		no shared parent	共通の親なし
+str		none for {general} yet	{general} にはまだなし
+str		not all generalizations	汎化以外を含む
+str		nothing selected	選択なし
+str		parents differ	親が異なる
+str		{generalization} is in {sets}, which group the specialisations of {general}. Remove it from those sets before reconnecting it to {target}.	{generalization} は {general} の特化をまとめる {sets} に属しています。{target} に接続し直す前にそれらのセットから外してください。
+str		{generalization} is in {sets}, which groups the specialisations of {general}. Remove it from the set before reconnecting it to {target}.	{generalization} は {general} の特化をまとめる {sets} に属しています。{target} に接続し直す前にセットから外してください。
+str		{name} is not a generalization.	{name} は汎化ではありません。
+str		{name} removed; its generalizations stay	{name} を削除しました。汎化は残ります
+str		{specific} specialises {general}	{specific} は {general} を特化します
+plural		{n} element	{n} 個の要素
+plural		{n} generalization	{n} 個の汎化
+plural		{n} generalization · to {general}	{n} 個の汎化 · {general} へ
+plural		{sets} had no other member and went too	{sets} にはほかのメンバーがなく、一緒に削除されました
 str		Interface realization: from the implementing class to its interface	インターフェース実現：実装クラスからそのインターフェースへ
 str		Association class: between two classes, with a card of its own	関連クラス：2 つのクラスの間に、専用のカードを持つ
 str		Navigable	ナビゲーション可能

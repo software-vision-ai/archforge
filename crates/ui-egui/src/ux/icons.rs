@@ -1099,6 +1099,21 @@ pub const ASSOCIATION_CLASS: Icon = Icon {
         L([1.0, 13.5], [15.0, 13.5]),
     ],
 };
+/// A UML generalization set (AR-129, the design's Icon / Generalization set): a hollow triangle
+/// over a dashed set line, in the Models tree, the menu and Properties.
+pub const GENERALIZATION_SET: Icon = Icon {
+    size: [14.0, 14.0],
+    stroke: 1.1,
+    segments: &[
+        L([7.0, 1.5], [12.0, 8.0]),
+        L([12.0, 8.0], [2.0, 8.0]),
+        L([2.0, 8.0], [7.0, 1.5]),
+        L([1.0, 11.5], [3.0, 11.5]),
+        L([4.5, 11.5], [6.5, 11.5]),
+        L([8.0, 11.5], [10.0, 11.5]),
+        L([11.5, 11.5], [13.0, 11.5]),
+    ],
+};
 /// An enumeration's literal in the Models tree: one row of the enumeration's list.
 pub const LITERAL: Icon = Icon { size: [16.0, 16.0], stroke: 1.3, segments: &[L([3.0, 8.0], [5.0, 8.0]), L([7.5, 8.0], [13.0, 8.0])] };
 /// A UML package: a box with its tab at the top left.

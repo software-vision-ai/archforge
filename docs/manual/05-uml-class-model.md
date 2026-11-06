@@ -605,6 +605,8 @@ as when you draw the line. When you move an end of an association or an associat
 **Subsets** or **Redefines** entry that can no longer reach its property from there is dropped in
 the same step. The canvas names what was dropped, and you can undo it. For an interface
 realization, drag the class end onto another class, or the interface end onto another interface.
+A generalization in a generalization set keeps its ends: take it out of its sets first (see
+[Generalization sets](#generalization-sets)).
 
 ### What each line can join
 
@@ -695,6 +697,52 @@ it. Each change is one step you can undo, and the project keeps it once saved.
 
 <!-- picture: workspace-leaf light | Order's total() : Money {leaf} and PricingService {final, leaf} on their cards; Payment selected with the attribute editor open on amount, No redefinition (leaf) refused: CardPayment::amount redefines it -->
 
+### Generalization sets
+
+A *generalization set* groups generalizations to one class and says two things about them: whether
+every instance of that class is one of the more specific kinds (**Complete**, or **Incomplete**)
+and whether an instance may be of several of them at once (**Disjoint**, or **Overlapping**). In a
+payment model, *method* groups the generalizations from *CardPayment*, *BankTransfer* and
+*WalletPayment* to *Payment* and is `{complete, disjoint}`: every payment is made exactly one of
+those ways.
+
+There is no tool for it. Select the generalizations, clicking their lines with Shift held, then
+right-click one of them:
+
+- **Create generalization set…** (⌥⌘G, or Ctrl Alt G on Windows and Linux) groups them in a new set
+  named *GeneralizationSet 1*, as one step you can undo. The set is selected and its name is ready
+  to type in **Properties**.
+- **Add to set ▸ method** adds them to a set the class has already. **Add to set** says *none for
+  Payment yet* when it has none.
+
+The same actions are buttons in **Properties** when several generalizations are selected
+(**Create set from selection**), so the keyboard reaches them too. When the generalizations
+specialise different classes, or something else is selected with them, the actions stay listed but
+disabled, and the reason shows under the menu and on hover, such as *CardPayment specialises
+Payment and Voucher specialises Product. A set groups generalizations of one class.*
+
+On the diagram a set is a dashed line across its members' lines, with its name and
+`{complete, disjoint}` beside it, on every diagram that shows them. Click the label, or the set's
+row in **Models**, to select it. Drag the label to move it: where it sits is that diagram's own,
+and it moves with the general class's card.
+
+A set's **Properties** hold its **Name**, its **General class**, **Completeness** and
+**Disjointness** (each two choices; the arrow keys switch them) and its **Members**: **+** offers
+only generalizations to the general class, the pencil opens a member, and the cross takes it out
+of the set. A generalization's own **Properties** list the sets it is in under **Generalization
+sets**; one generalization may be in several sets, and **+** there adds it to another or starts a
+new one.
+
+- **Reconnecting** a generalization that is in a set is refused: the line's end snaps back and the
+  canvas and its **Properties** say *CardPayment → Payment is in method and channel, which group
+  the specialisations of Payment. Remove it from those sets before reconnecting it to Product.*
+- **Deleting a generalization** takes it out of its sets in the same step you can undo. A set left
+  with no member is deleted with it, and the toast names it.
+- **Deleting the set** (Delete with it selected, or in **Models**) keeps its generalizations; only
+  the grouping goes.
+
+<!-- picture: workspace-generalization-sets light | Payment above CardPayment, BankTransfer and WalletPayment; the set method selected, its dashed line across their three generalizations and its label method {complete, disjoint} beside it; Properties shows its name, general class Payment, Complete and Disjoint chosen, and its three members -->
+
 ### Constraints
 
 A constraint is owned by a class, an interface, an enumeration, a data type, your own primitive
@@ -732,6 +780,8 @@ As everywhere in Archforge (see [The workspace](03-workspace.md#removing-from-a-
 the model; **Delete from the model…** (⇧⌫) asks first, then deletes it everywhere.
 
 - Deleting a class or an interface takes its interface realizations with it.
+- Deleting a generalization takes it out of its generalization sets, and a set left with no member
+  goes with it.
 - Deleting an association class takes its ends, attributes and operations with it. Removing a
   class at either end takes the association class along.
 - An association class's row in **Models** can be dragged onto a diagram to place its card; where

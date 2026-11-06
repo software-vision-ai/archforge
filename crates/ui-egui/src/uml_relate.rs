@@ -632,6 +632,14 @@ pub(crate) fn reconnect(shell: &mut Shell, element: Uuid, source: bool, to_node:
     if now == Some(target) {
         return;
     }
+    // A generalization in a set keeps its ends (AR-129): said here and in its Properties.
+    if let Some(r) = line.filter(|l| store.class_of(*l).ok() == Some(archforge_uml::GENERALIZATION))
+        && let Some(why) = crate::uml_sets::reconnect_refusal(store, r, target)
+    {
+        shell.canvas.notice = Some(why.clone());
+        shell.panels.set_refused = Some((element, why));
+        return;
+    }
     // A generalization's moved end keeps the classifier rules, said in the user's words.
     if let (Some(r), Some((specific, general))) = (line.filter(|l| store.class_of(*l).ok() == Some(archforge_uml::GENERALIZATION)), ends) {
         let (s, g) = if source { (target, general) } else { (specific, target) };
@@ -851,6 +859,10 @@ pub(crate) fn body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, m
     y += (height + 12.0).max(28.0);
     if class.is_some_and(archforge_uml::is_association) {
         y = ends_sections(shell, ui, p, r, y, o, id);
+    }
+    // The sets a generalization is in (AR-129).
+    if class == Some(archforge_uml::GENERALIZATION) {
+        crate::uml_sets::generalization_section(shell, ui, p, r, y, o, id);
     }
     if association_class {
         use crate::uml_panel::{MemberKind, members_section};

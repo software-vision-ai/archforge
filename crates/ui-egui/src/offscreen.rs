@@ -143,6 +143,10 @@ pub enum Screen {
     /// redefining Payment's; Payment selected with its attribute editor open on amount, No
     /// redefinition (leaf) refused there, naming CardPayment::amount (AR-138).
     WorkspaceLeaf,
+    /// The sample class model with BankTransfer and WalletPayment beside CardPayment, the three
+    /// generalizations to Payment grouped in the set method {complete, disjoint}, its dashed line
+    /// across them and its label beside it; the set selected, its Properties open (AR-129).
+    WorkspaceGeneralizationSets,
     /// The user manual's class-model guide, first step: the root package's diagram Commerce with
     /// Customer (its name typed) and Order, a draft row open on Order's card with `number :
     /// Integer` typed.
@@ -515,6 +519,11 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
         shell.adopt_project();
         crate::uml_ui::open_sample(&mut shell)?;
         sample_leaf(&mut shell)?;
+    }
+    if screen == Screen::WorkspaceGeneralizationSets {
+        shell.adopt_project();
+        crate::uml_ui::open_sample(&mut shell)?;
+        sample_generalization_sets(&mut shell)?;
     }
     if let Some(step) = guide_step(screen) {
         shell.adopt_project();
@@ -959,6 +968,28 @@ fn sample_final(shell: &mut Shell) -> Result<(), String> {
     shell.canvas.fit_pending = false;
     shell.canvas.zoom = 1.0;
     shell.canvas.pan = egui::vec2(260.0 - 1040.0, 60.0 - 80.0);
+    Ok(())
+}
+
+/// In the sample class model, BankTransfer and WalletPayment beside CardPayment, the three
+/// generalizations to Payment grouped in the set method {complete, disjoint}, the set selected with
+/// its Properties open, Payment and its three kinds in sight (AR-129).
+fn sample_generalization_sets(shell: &mut Shell) -> Result<(), String> {
+    let (gens, _) = crate::uml_ui::put_payment_kinds(shell)?;
+    let out = crate::panels::run(
+        shell,
+        "uml.generalization-set.add",
+        serde_json::json!({ "generalizations": gens, "name": "method", "complete": true, "disjoint": true }),
+    )?;
+    let set = out["id"].as_str().ok_or("the set's id")?.to_string();
+    crate::panels::run(shell, "view.select", serde_json::json!({ "ids": [set] }))?;
+    shell.state.show_panel(crate::state::Panel::Properties);
+    if let Some(s) = shell.session.as_mut() {
+        s.mark_saved().map_err(|e| e.to_string())?;
+    }
+    shell.canvas.fit_pending = false;
+    shell.canvas.zoom = 0.75;
+    shell.canvas.pan = egui::vec2(-470.0, -230.0);
     Ok(())
 }
 

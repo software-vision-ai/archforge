@@ -8440,6 +8440,242 @@ fn no_subclasses_makes_a_classifier_final_and_specialising_it_is_refused() {
     }
 }
 
+/// A screen point on the line of diagram edge `edge` as the canvas drew it, found by the diagram's
+/// own hit test inside the line's drawn bounds.
+fn point_on_edge(h: &Harness<'static, Shell>, edge: archforge_mof::Uuid) -> egui::Pos2 {
+    let s = h.state();
+    let st = s.session.as_ref().unwrap().doc();
+    let d = st.by_uuid(s.canvas.active.unwrap()).unwrap();
+    let e = st.by_uuid(edge).unwrap();
+    let grid = archforge_diagram::Grid::build(st, d);
+    let origin = rect_of(h, "workspace.canvas").min;
+    let bounds = rect_of(h, &format!("workspace.canvas.edge.{edge}"));
+    let (pan, zoom) = (s.canvas.pan, s.canvas.zoom);
+    for i in 0..=40 {
+        for j in 0..=40 {
+            let at = bounds.min + egui::vec2(bounds.width() * i as f32 / 40.0, bounds.height() * j as f32 / 40.0);
+            let c = (at - origin - pan) / zoom;
+            if grid.hit(f64::from(c.x), f64::from(c.y)) == Some(archforge_diagram::Hit::Edge(e)) {
+                return at;
+            }
+        }
+    }
+    panic!("no point of the line {edge} on screen")
+}
+
+/// Generalization sets (AR-129, design page 08, B1 to B4), in light and dark: three generalizations
+/// to Payment selected, a right click on one of their lines opens the set actions, Create
+/// generalization set… makes one undo step and selects the set, its name ready, its label `name
+/// {incomplete, overlapping}` drawn beside the lines; Properties' Completeness and Disjointness
+/// write in one step each, undone and redone, the label following; a member is taken out; ⌥⌘G
+/// makes a second set; the generalization in both lists both; a mixed selection disables Create in
+/// the menu and in Properties with the reason; reconnecting a member is refused, said at the canvas's
+/// top and in its Properties, changing nothing; Delete on a set keeps its generalizations.
+#[test]
+fn generalization_sets_are_made_from_the_menu_the_shortcut_and_properties() {
+    use crate::uml_sets::{CREATE_ID, PANEL_CREATE_ID};
+    use archforge_uml::generalization_sets as sets;
+    use egui_kittest::kittest::Queryable;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        let (gens, payment) = crate::uml_ui::put_payment_kinds(h.state_mut()).unwrap();
+        h.state_mut().canvas.zoom = 0.75;
+        h.state_mut().canvas.pan = egui::vec2(-470.0, -230.0);
+        h.run();
+        let obj = |h: &Harness<'static, Shell>, id: &str| {
+            h.state().session.as_ref().unwrap().doc().by_uuid(archforge_mof::Uuid::parse(id).unwrap()).unwrap()
+        };
+        let select = |h: &mut Harness<'static, Shell>, ids: Vec<String>| {
+            h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": ids })).unwrap();
+            h.state_mut().state.show_panel(crate::state::Panel::Properties);
+            h.run();
+        };
+        let all_sets = |h: &Harness<'static, Shell>| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let mut v: Vec<archforge_mof::Obj> = st.alive().filter(|o| sets::is_set(st, *o)).collect();
+            v.sort();
+            v
+        };
+        let edge_of = |h: &Harness<'static, Shell>, g: &str| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            st.uuid(archforge_diagram::views_of(st, obj(h, g)).1[0]).unwrap()
+        };
+        // B1: the three selected, a right click on one of their lines opens the set actions.
+        select(&mut h, gens.to_vec());
+        let at = point_on_edge(&h, edge_of(&h, &gens[1]));
+        h.event(egui::Event::PointerMoved(at));
+        for pressed in [true, false] {
+            h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Secondary, pressed, modifiers: egui::Modifiers::NONE });
+        }
+        h.run();
+        assert!(h.state().canvas.line_menu.is_some(), "the menu opened");
+        assert_eq!(h.state().session.as_ref().unwrap().view().selection.len(), 3, "the selection is kept");
+        assert!(painted(&h).iter().any(|t| t == "3 GENERALIZATIONS · TO PAYMENT"), "{:?}", painted(&h));
+        assert!(painted(&h).iter().any(|t| t == "none for Payment yet"));
+        assert!(h.query_by_label("Create generalization set…").is_some(), "its accessible name");
+        for id in [
+            CREATE_ID,
+            "workspace.canvas.contextMenu.generalizationSet.add",
+            "workspace.canvas.contextMenu.remove",
+            "workspace.canvas.contextMenu.delete",
+        ] {
+            assert!(ids(&h).iter().any(|i| i == id), "{id}");
+        }
+        let at = rect_of(&h, CREATE_ID).center();
+        click(&mut h, at);
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Create generalization set"));
+        let made = all_sets(&h);
+        assert_eq!(made.len(), 1);
+        let set = made[0];
+        let set_id = h.state().session.as_ref().unwrap().doc().uuid(set).unwrap();
+        assert_eq!(h.state().session.as_ref().unwrap().view().selection, vec![set], "the new set is selected");
+        h.run();
+        assert!(painted(&h).iter().any(|t| t == "GeneralizationSet 1"), "its fresh name");
+        assert!(painted(&h).iter().any(|t| t == "{incomplete, overlapping}"), "its label beside the lines");
+        assert!(ids(&h).contains(&format!("workspace.canvas.generalizationSet.{set_id}")));
+        // B2: Completeness and Disjointness, one step each, the label following.
+        let at = rect_of(&h, "workspace.properties.generalizationSet.complete").center();
+        click(&mut h, at);
+        let at = rect_of(&h, "workspace.properties.generalizationSet.disjoint").center();
+        click(&mut h, at);
+        assert_eq!(sets::flags(h.state().session.as_ref().unwrap().doc(), set), (true, true));
+        assert!(painted(&h).iter().any(|t| t == "{complete, disjoint}"));
+        assert!(painted(&h).iter().any(|t| t == "Shown beside the lines as {complete, disjoint}: every Payment is exactly one of these kinds."));
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        assert_eq!(sets::flags(h.state().session.as_ref().unwrap().doc(), set), (true, false));
+        h.state_mut().session.as_mut().unwrap().redo().unwrap();
+        assert_eq!(sets::flags(h.state().session.as_ref().unwrap().doc(), set), (true, true));
+        h.run();
+        // Its label dragged up: where it sits is this diagram's own, a node nested in Payment's.
+        let d = h.state().session.as_ref().unwrap().doc().by_uuid(h.state().canvas.active.unwrap()).unwrap();
+        let label = rect_of(&h, &format!("workspace.canvas.generalizationSet.{set_id}"));
+        drag(&mut h, label.center(), label.center() + egui::vec2(30.0, -24.0));
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Place generalization set label"));
+        let node = sets::label_node(h.state().session.as_ref().unwrap().doc(), d, set).expect("a node holds its place");
+        let moved = rect_of(&h, &format!("workspace.canvas.generalizationSet.{set_id}"));
+        assert!((moved.min - label.min - egui::vec2(30.0, -24.0)).length() < 2.0, "{label:?} {moved:?}");
+        // Dragged again, the node moves.
+        drag(&mut h, moved.center(), moved.center() + egui::vec2(-30.0, 0.0));
+        let again = rect_of(&h, &format!("workspace.canvas.generalizationSet.{set_id}"));
+        assert!((again.min.x - (moved.min.x - 30.0)).abs() < 2.0, "{moved:?} {again:?}");
+        assert_eq!(sets::label_node(h.state().session.as_ref().unwrap().doc(), d, set), Some(node));
+        // A member taken out from the set's Properties.
+        let wallet = obj(&h, &gens[2]);
+        let at = rect_of(&h, &format!("workspace.properties.generalizationSet.member.{}.remove", gens[2])).center();
+        click(&mut h, at);
+        assert_eq!(sets::members(h.state().session.as_ref().unwrap().doc(), set).len(), 2);
+        assert!(!sets::members(h.state().session.as_ref().unwrap().doc(), set).contains(&wallet));
+        // ⌥⌘G: CardPayment's and WalletPayment's generalizations into a second set.
+        select(&mut h, vec![gens[0].clone(), gens[2].clone()]);
+        h.state_mut().canvas.focused = true;
+        key(&mut h, egui::Key::G, egui::Modifiers::COMMAND | egui::Modifiers::ALT);
+        assert_eq!(all_sets(&h).len(), 2, "notice {:?}", h.state().canvas.notice);
+        // B4: CardPayment's generalization lists both sets.
+        select(&mut h, vec![gens[0].clone()]);
+        assert!(painted(&h).iter().any(|t| t == "Generalization sets · 2"), "{:?}", painted(&h));
+        for s in all_sets(&h) {
+            let sid = h.state().session.as_ref().unwrap().doc().uuid(s).unwrap();
+            assert!(ids(&h).contains(&format!("workspace.properties.generalization.set.{sid}")));
+        }
+        // Its general end dragged onto Product is refused, said at the canvas's top and in Properties.
+        let revision = h.state().session.as_ref().unwrap().revision();
+        let handle = rect_of(&h, "workspace.canvas.line-end.target").center();
+        let bank_node = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let c =
+                st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(st, *o) == "BankTransfer").unwrap();
+            st.uuid(archforge_diagram::views_of(st, c).2[0]).unwrap()
+        };
+        let to = rect_of(&h, &format!("workspace.canvas.node.{bank_node}")).center();
+        drag(&mut h, handle, to);
+        let notice = h.state().canvas.notice.clone().unwrap_or_default();
+        assert!(notice.starts_with("CardPayment → Payment is in GeneralizationSet 1 and GeneralizationSet 2"), "{notice}");
+        assert!(notice.ends_with("Remove it from those sets before reconnecting it to BankTransfer."), "{notice}");
+        assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "nothing moved");
+        h.run();
+        assert!(ids(&h).iter().any(|i| i == "workspace.properties.generalization.sets.refusal"));
+        // B3: a generalization and a class: Create is disabled, with the reason, in Properties.
+        select(&mut h, vec![gens[0].clone(), payment.clone()]);
+        assert!(painted(&h).iter().any(|t| t == "Selection · mixed"));
+        assert!(ids(&h).iter().any(|i| i == PANEL_CREATE_ID));
+        assert!(ids(&h).iter().any(|i| i == "workspace.properties.selection.generalizationSet.reason"));
+        let before = all_sets(&h).len();
+        let at = rect_of(&h, PANEL_CREATE_ID).center();
+        click(&mut h, at);
+        assert_eq!(all_sets(&h).len(), before, "disabled: nothing made");
+        // Delete on a selected set removes it and keeps its generalizations.
+        let gens_alive = |h: &Harness<'static, Shell>| gens.iter().all(|g| h.state().session.as_ref().unwrap().doc().is_alive(obj(h, g)));
+        select(&mut h, vec![set_id.to_string()]);
+        h.state_mut().canvas.focused = true;
+        key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
+        assert_eq!(all_sets(&h).len(), 1);
+        assert!(gens_alive(&h), "its generalizations stay");
+    }
+}
+
+/// A generalization set's label that draws nothing is never hit (AR-129), in light and dark: its
+/// label moved, so a node holds its place, and then every member line taken off the diagram, a
+/// click or a drag where the label was selects and moves nothing of the set, and the node keeps
+/// its place; the lines back, the label draws there again and takes the click.
+#[test]
+fn a_set_label_that_draws_nothing_takes_no_press() {
+    use archforge_uml::generalization_sets as sets;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        let (gens, _) = crate::uml_ui::put_payment_kinds(h.state_mut()).unwrap();
+        h.state_mut().canvas.zoom = 0.75;
+        h.state_mut().canvas.pan = egui::vec2(-470.0, -230.0);
+        let out = h
+            .state_mut()
+            .session
+            .as_mut()
+            .unwrap()
+            .execute("uml.generalization-set.add", &serde_json::json!({ "generalizations": gens, "name": "method" }))
+            .unwrap();
+        let set_id = out.value["id"].as_str().unwrap().to_string();
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [] })).unwrap();
+        h.run();
+        let label_id = format!("workspace.canvas.generalizationSet.{set_id}");
+        let label = rect_of(&h, &label_id);
+        drag(&mut h, label.center(), label.center() + egui::vec2(40.0, -20.0));
+        let (d, set) = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            (st.by_uuid(h.state().canvas.active.unwrap()).unwrap(), st.by_uuid(archforge_mof::Uuid::parse(&set_id).unwrap()).unwrap())
+        };
+        let node = sets::label_node(h.state().session.as_ref().unwrap().doc(), d, set).expect("a node holds its place");
+        let bounds = |h: &Harness<'static, Shell>| archforge_diagram::grid::bounds_of(h.state().session.as_ref().unwrap().doc(), node);
+        let placed = bounds(&h);
+        let at = rect_of(&h, &label_id).center();
+        // Every member line off this diagram: the label draws nothing and takes no press.
+        let edges: Vec<String> = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            gens.iter()
+                .flat_map(|g| archforge_diagram::views_of(st, st.by_uuid(archforge_mof::Uuid::parse(g).unwrap()).unwrap()).1)
+                .map(|e| st.uuid(e).unwrap().to_string())
+                .collect()
+        };
+        for e in &edges {
+            h.state_mut().session.as_mut().unwrap().execute("diagram.disconnect", &serde_json::json!({ "edge": e })).unwrap();
+        }
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [] })).unwrap();
+        h.run();
+        assert!(!ids(&h).contains(&label_id), "nothing drawn");
+        assert!(h.state().canvas.set_labels.is_empty());
+        click(&mut h, at);
+        assert!(!h.state().session.as_ref().unwrap().view().selection.contains(&set), "the hidden label is not selectable");
+        drag(&mut h, at, at + egui::vec2(60.0, 40.0));
+        assert!(!h.state().session.as_ref().unwrap().view().selection.contains(&set));
+        assert_eq!(bounds(&h), placed, "nor does it move");
+        // The lines back, the label draws at its place again and takes the click.
+        let diagram = h.state().canvas.active.unwrap().to_string();
+        h.state_mut().session.as_mut().unwrap().execute("diagram.connect-all", &serde_json::json!({ "diagram": diagram })).unwrap();
+        h.run();
+        let back = rect_of(&h, &label_id).center();
+        click(&mut h, back);
+        assert_eq!(h.state().session.as_ref().unwrap().view().selection, vec![set]);
+    }
+}
+
 /// No redefinition (leaf) in Properties (AR-138), in light and dark: on a classifier after No
 /// subclasses (final), described by its explanation, ticked it makes the classifier leaf in one undo
 /// step and its card says `{leaf}`, `{final, leaf}` beside final; in the operation editor, applied,
