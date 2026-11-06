@@ -375,14 +375,43 @@ an attribute that holds several values. The editor holds more modifiers: **Stati
 **Derived**, **Ordered**, **Unique**, **Subsets** and **Redefines**.
 [Property modifiers](#property-modifiers) in the reference explains each one.
 
+## 12. State a rule: constraints
+
+Some facts are rules rather than values: an order's number is always above zero, and an order
+that is paid has a total above zero. Such a rule is a *constraint*. Archforge keeps its text and
+the elements it is about, exactly as you write it, and never evaluates it: nothing is checked
+against the model. Write it in any language you like, OCL, plain English or another.
+
+1. Select *Order*.
+2. In **Properties**, choose **+** beside **Constraints**. The editor opens with *Order* among the
+   **Constrained elements**.
+3. Type *positiveNumber* as the **Name** and `number > 0` as the **Expression**. In **Language**,
+   pick **OCL**, or type any other language; left empty, it is plain text.
+4. Choose the check at the editor's foot. A short rule shows in braces under *Order*'s card:
+   `{number > 0}`.
+5. Choose **+** again. Name it *paidInFull*, and type a longer rule on two lines:
+   `status = OrderStatus::Paid` and `implies total.amount > 0`.
+6. Choose **+** beside the chips of **Constrained elements** and pick *OrderStatus*.
+7. Under **On this diagram**, choose **Linked note**, then the check.
+
+<!-- picture: workspace-guide-constraints light | Order selected: {number > 0} in braces under its card, and the constraint note paidInFull, its eyebrow CONSTRAINT · NOT EVALUATED, linked by dashed lines to Order and OrderStatus; Properties shows Constraints · 2 with the editor open on paidInFull, its language OCL, its expression on two lines, Order and OrderStatus as chips and Linked note chosen -->
+
+The note says *CONSTRAINT · NOT EVALUATED*, and dashed lines join it to *Order* and
+*OrderStatus*. It looks different from a plain note on purpose: a plain note is your remark on the
+diagram, a constraint is part of the model.
+
+A constraint belongs to the model, so every diagram shares its text; how it is shown is each
+diagram's own choice. [Constraints](#constraints) in the reference says more.
+
 ## The result
 
 Your model now has three classes, an enumeration, a data type, a primitive type, an interface, an
-association and an association class, all in the root package:
+association, an association class and two constraints, all in the root package:
 
 - *Customer* places any number of *Order*s, and has an *email* of the type *Email*.
 - *Order* has a read-only *number*, a *status* that starts as *Placed*, and a *total* in *Money*.
-  It realizes *Payable*.
+  It realizes *Payable*. Its number is always above zero, and a paid order has a total above
+  zero.
 - *OrderLine* links an order to its products and holds each product's *quantity*.
 
 <!-- picture: workspace-guide-result light | The finished Commerce diagram: Customer, Order and Product in a row, Payable and OrderLine above, Email, OrderStatus and Money below; every element listed in Models -->
@@ -665,6 +694,30 @@ A class's box is written at once; a member's is written with the rest of its edi
 it. Each change is one step you can undo, and the project keeps it once saved.
 
 <!-- picture: workspace-leaf light | Order's total() : Money {leaf} and PricingService {final, leaf} on their cards; Payment selected with the attribute editor open on amount, No redefinition (leaf) refused: CardPayment::amount redefines it -->
+
+### Constraints
+
+A constraint is owned by a class, an interface, an enumeration, a data type, your own primitive
+type, an association class or a package: its *context*, the element whose **Properties** list it
+under **Constraints**. It names the elements it is about, its *constrained elements*: any package,
+classifier, attribute, operation, literal or relationship of the model, in the order you give.
+
+- **Stored, never evaluated.** The expression and the language are kept exactly as typed, spaces
+  and line breaks included. Nothing reads them for meaning.
+- **What is refused.** An empty expression ("Type an expression. A constraint without one states no
+  rule."), and an element that is not in this model. Nothing else.
+- **On a diagram.** Each diagram chooses for each constraint between braces, `{expression}` by the
+  first of its elements the diagram shows, for short text, and a linked constraint note, for long
+  text or several elements. Choose it under **On this diagram** in the editor; a new constraint
+  starts in braces when its expression is one short line about one element. The braces move with
+  their card. The note's dashed links follow the constrained elements on their own. Delete takes
+  braces or a note off the diagram and keeps the constraint; double-click either to open its
+  editor.
+- **Deleting a constrained element** drops it from the constraint in the same undo step, and the
+  toast says what the constraint constrains now, such as *Payment deleted · paidInFull now
+  constrains Order only*. A constraint left with no element is deleted with it, and the toast
+  names it. Deleting the context deletes its constraints.
+- The editor's bin deletes the constraint; its arrows move it up and down the list.
 
 ### Cards
 

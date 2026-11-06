@@ -654,6 +654,34 @@ What is UML's own, beside the shared rules above.
   fits, whichever compartment they are in; with no row's place left, a row above the card's foot
   while that is under the header, and on a card shorter still at the right of its eyebrow's line.
   Below the detail zoom every card shows only its name.
+- Constraints (AR-133, page 08 section E): a classifier's or a package's Properties end with
+  `Constraints · n`, its `+` opening the editor with the selected element as the one constrained
+  element; each row reads `name {expression}` with its pencil (a double click opens it too). The
+  editor holds Name and Language (an editable select: Plain text when empty, OCL, English, or any
+  label typed), the Expression in a field of several lines (Enter is a new line there), the
+  Constrained elements as chips, each with its ✕ while more than one is left, and a `+` that offers
+  every package, classifier, member and relationship of the model; then, while a class diagram is
+  open, On this diagram: Linked note | Braces, and the lines "Stored as written…" and "Long or
+  multi-element constraints read best as a linked note…". Bin, Move up and Move down sit at its
+  foot on the left, Cancel and Apply on the right. Apply is one undo step: the constraint and how
+  the open diagram shows it (a new one is shown there always; an existing one where it is shown or
+  when its form was picked). A new constraint's form follows its text until picked: braces for one
+  line of at most 40 characters about one element, else a note. Stored, never evaluated: the
+  expression and the language are kept exactly as typed. The only refusals are an empty or blank
+  expression ("Type an expression. A constraint without one states no rule.", in a tinted box under
+  the chips, the field ringed) and an element outside the model; braces on a diagram that shows
+  none of the constraint's elements are refused under the switch. On the canvas, braces are
+  `{expression}` in purple, nested in the node of the first constrained element the diagram shows
+  (a member's: its classifier's), so they move with it; a constraint note is the page-02
+  Constraint note: the surface, a purple border and folded corner, `CONSTRAINT · NOT EVALUATED` in
+  its purple eyebrow, its name, its expression between braces, tied to its elements' cards by
+  dashed purple links worked out from the model, never stored. A plain note stays amber and
+  linked by hand. A double click on braces or a note opens the editor; Delete takes them off the
+  diagram only; selecting a constraint shows its context's panel, its row marked. Deleting a
+  constrained element drops it from the constraint in the same undo step and the toast says so
+  ("Payment deleted · paidInFull now constrains Order only"); a constraint left naming nothing goes
+  with it and the toast names it. The content is the model's, shared by every diagram; the form and
+  the place are each diagram's.
 
 On every line: a role, and a label at the line's middle, sit above a level stretch of the line and
 beside an upright one, never on the line or its mark.

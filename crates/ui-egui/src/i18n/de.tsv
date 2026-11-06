@@ -580,6 +580,8 @@ str		This primitive type	Dieser primitive Typ
 str		This package	Dieses Paket
 plural		+ {n} more member	+ {n} weiteres Element|+ {n} weitere Elemente
 plural		+ {n} more literal	+ {n} weiteres Literal|+ {n} weitere Literale
+plural		{n} constraint changed	{n} Einschränkung geändert|{n} Einschränkungen geändert
+plural		+ {n} more line	+ {n} weitere Zeile|+ {n} weitere Zeilen
 plural		+ {n} more element	+ {n} weiteres Element|+ {n} weitere Elemente
 # Klassenmerkmale in den Eigenschaften
 str		Abstract	Abstrakt
@@ -608,6 +610,35 @@ str		Attribute · model	Attribut · Modell
 str		Literal · model	Literal · Modell
 str		Attributes · {n}	Attribute · {n}
 str		Literals · {n}	Literale · {n}
+str		Constraints · {n}	Einschränkungen · {n}
+str		Add constraint	Einschränkung hinzufügen
+str		Edit constraint	Einschränkung bearbeiten
+str		Constraint	Einschränkung
+str		Describe the rule…	Regel beschreiben …
+str		Constrained elements	Eingeschränkte Elemente
+str		Remove {name} from the constrained elements	{name} aus den eingeschränkten Elementen entfernen
+str		Add a constrained element	Eingeschränktes Element hinzufügen
+str		On this diagram	In diesem Diagramm
+str		Linked note	Verknüpfte Notiz
+str		Braces	Geschweifte Klammern
+str		Language	Sprache
+str		Plain text	Klartext
+str		Pick a language	Sprache wählen
+str		Pick the constraint's language	Sprache der Einschränkung wählen
+str		Or type any language	Oder eine beliebige Sprache eingeben
+str		Stored as written. Archforge keeps the text and its references but does not evaluate it: nothing is checked against the model.	So gespeichert, wie geschrieben. Archforge bewahrt den Text und seine Verweise auf, wertet ihn aber nicht aus: Nichts wird gegen das Modell geprüft.
+str		Long or multi-element constraints read best as a linked note; the choice is per diagram.	Lange Einschränkungen oder solche über mehrere Elemente lesen sich am besten als verknüpfte Notiz; die Wahl gilt je Diagramm.
+str		Type an expression. A constraint without one states no rule.	Geben Sie einen Ausdruck ein. Eine Einschränkung ohne Ausdruck legt keine Regel fest.
+str		Braces sit by an element they constrain, and this diagram shows none of them. Show it as a linked note.	Geschweifte Klammern stehen bei einem eingeschränkten Element, und dieses Diagramm zeigt keines davon. Zeigen Sie sie als verknüpfte Notiz.
+str		a constraint	eine Einschränkung
+str		{constraint} constrained nothing else and went with it	{constraint} schränkte nichts anderes ein und wurde mit entfernt
+str		{constraint} now constrains {elements} only	{constraint} schränkt jetzt nur noch {elements} ein
+str		{name} deleted	{name} gelöscht
+str		Constraint · model, not evaluated	Einschränkung · Modell, nicht ausgewertet
+str		This constraint	Diese Einschränkung
+str		On this constraint · {n}	Bei dieser Einschränkung · {n}
+str		Constraint · not evaluated	Einschränkung · nicht ausgewertet
+str		Parameter	Parameter
 str		No literals yet	Noch keine Literale
 str		Move down	Nach unten
 str		Move up	Nach oben

@@ -52,6 +52,12 @@ pub enum Tone {
     Plain,
     /// [`Tone::Plain`] with a tab at its top left, as a folder: a package.
     Tabbed,
+    /// A constraint note (AR-133): the surface with the purple border and a folded corner, its
+    /// eyebrow purple, its name over its expression in braces, linked to what it constrains.
+    Constraint,
+    /// A constraint's braces beside its element (AR-133): its one row, `{expression}`, in purple,
+    /// with no card around it.
+    Braces,
 }
 
 /// A row of a compartment: a mark before it (such as `PK`, shown while the status marks are on),

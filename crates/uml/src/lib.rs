@@ -38,6 +38,7 @@ macro_rules! kept_modifier_lines {
 }
 
 pub mod commands;
+pub mod constraints;
 pub mod descriptions;
 pub mod figures;
 mod generated;
@@ -136,9 +137,9 @@ impl Notation for UmlNotation {
     }
 
     /// A class diagram shows classes, interfaces, enumerations, data types, primitive types,
-    /// association classes and packages as cards.
+    /// association classes and packages as cards, and constraints as braces or notes (AR-133).
     fn shows(&self, _kind: &str, class: ClassId) -> bool {
-        is_classifier(class) || class == PACKAGE
+        is_classifier(class) || class == PACKAGE || class == CONSTRAINT
     }
 
     /// A package's diagram shows its own classes and, as outsiders, classes of other packages; and
@@ -147,6 +148,8 @@ impl Notation for UmlNotation {
         let of = store.get(diagram, archforge_diagram::diagram::ELEMENT).ok().and_then(|v| v.as_ref());
         match store.class_of(element).ok() {
             Some(c) if c == PACKAGE => of.is_some() && commands::package_of(store, element) == of,
+            // A constraint shows on any class diagram: its elements may be on several.
+            Some(c) if c == CONSTRAINT => of.is_some() && constraints::in_model(store, element),
             _ => of.is_some() && commands::package_of(store, element).is_some(),
         }
     }
@@ -157,6 +160,7 @@ impl Notation for UmlNotation {
         match class {
             c if c == PACKAGE => PACKAGE_SIZE,
             c if c == PRIMITIVE_TYPE => PRIMITIVE_TYPE_SIZE,
+            c if c == CONSTRAINT => (constraints::NOTE_WIDTH, 96.0),
             _ => CLASS_SIZE,
         }
     }
@@ -184,6 +188,15 @@ impl Notation for UmlNotation {
 
     fn line(&self, store: &Store, element: Obj) -> Option<Line> {
         figures::line(store, element)
+    }
+
+    /// A constraint note's dashed links to the nodes of the elements it constrains, worked out from
+    /// the model on every frame (AR-133); braces have none.
+    fn links(&self, store: &Store, element: Obj, diagram: Obj) -> Vec<Obj> {
+        match constraints::shown_on(store, diagram, element) {
+            Some((_, constraints::Form::Note)) => constraints::linked_nodes(store, diagram, element),
+            _ => Vec::new(),
+        }
     }
 
     /// The text of a line's slot `slot`: its name, an end's role or multiplicity.
@@ -266,8 +279,9 @@ pub const WORDS: &[&str] = &[
     "Association class",
     "Association class · {package}",
     "Package",
+    "Constraint · not evaluated",
 ];
-pub const PLURALS: &[&str] = &["+ {n} more member", "+ {n} more literal", "+ {n} more element"];
+pub const PLURALS: &[&str] = &["+ {n} more member", "+ {n} more literal", "+ {n} more element", "+ {n} more line"];
 
 /// The command registry of UML alone: the edit area, the shared element commands, UML's, the
 /// diagrams' and the skills'.
@@ -277,6 +291,7 @@ pub fn registry() -> Result<Arc<archforge_engine::Registry<Store, ProjectView>>,
     specs.extend(commands::specs());
     specs.extend(members::specs());
     specs.extend(relations::specs());
+    specs.extend(constraints::specs());
     specs.extend(archforge_diagram::commands::specs::<ProjectView>());
     specs.extend(archforge_core::skills::specs::<ProjectView>());
     archforge_engine::Registry::new(specs)

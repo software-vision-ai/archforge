@@ -580,6 +580,8 @@ str		This primitive type	Este tipo primitivo
 str		This package	Este pacote
 plural		+ {n} more member	+ {n} membro mais|+ {n} membros mais
 plural		+ {n} more literal	+ {n} literal mais|+ {n} literais mais
+plural		{n} constraint changed	{n} restrição alterada|{n} restrições alteradas
+plural		+ {n} more line	+ {n} linha a mais|+ {n} linhas a mais
 plural		+ {n} more element	+ {n} elemento mais|+ {n} elementos mais
 # Membros de classe nas Propriedades
 str		Abstract	Abstrata
@@ -608,6 +610,35 @@ str		Attribute · model	Atributo · modelo
 str		Literal · model	Literal · modelo
 str		Attributes · {n}	Atributos · {n}
 str		Literals · {n}	Literais · {n}
+str		Constraints · {n}	Restrições · {n}
+str		Add constraint	Adicionar restrição
+str		Edit constraint	Editar restrição
+str		Constraint	Restrição
+str		Describe the rule…	Descreva a regra…
+str		Constrained elements	Elementos restringidos
+str		Remove {name} from the constrained elements	Remover {name} dos elementos restringidos
+str		Add a constrained element	Adicionar um elemento restringido
+str		On this diagram	Neste diagrama
+str		Linked note	Nota ligada
+str		Braces	Chavetas
+str		Language	Linguagem
+str		Plain text	Texto simples
+str		Pick a language	Escolher uma linguagem
+str		Pick the constraint's language	Escolher a linguagem da restrição
+str		Or type any language	Ou escreva qualquer linguagem
+str		Stored as written. Archforge keeps the text and its references but does not evaluate it: nothing is checked against the model.	Guardada tal como foi escrita. O Archforge mantém o texto e as suas referências, mas não o avalia: nada é verificado em relação ao modelo.
+str		Long or multi-element constraints read best as a linked note; the choice is per diagram.	Restrições longas ou de vários elementos leem-se melhor como nota ligada; a escolha é feita por diagrama.
+str		Type an expression. A constraint without one states no rule.	Escreva uma expressão. Uma restrição sem expressão não enuncia nenhuma regra.
+str		Braces sit by an element they constrain, and this diagram shows none of them. Show it as a linked note.	As chavetas ficam junto a um elemento restringido, e este diagrama não mostra nenhum. Mostre-a como nota ligada.
+str		a constraint	uma restrição
+str		{constraint} constrained nothing else and went with it	{constraint} não restringia mais nada e foi eliminada com ele
+str		{constraint} now constrains {elements} only	{constraint} agora só restringe {elements}
+str		{name} deleted	{name} eliminado
+str		Constraint · model, not evaluated	Restrição · modelo, não avaliada
+str		This constraint	Esta restrição
+str		On this constraint · {n}	Nesta restrição · {n}
+str		Constraint · not evaluated	Restrição · não avaliada
+str		Parameter	Parâmetro
 str		No literals yet	Ainda não há literais
 str		Move down	Descer
 str		Move up	Subir

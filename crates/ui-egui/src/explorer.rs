@@ -386,6 +386,7 @@ pub fn remove_selection(shell: &mut Shell) {
     if let Some(parent) = ui.and_then(|u| u.hands_up(store, obj)) {
         let (name, to) = (name_of(store, obj), name_of(store, parent));
         let held = ui.is_some_and(|u| u.has_children(store, obj));
+        let said = crate::uml_constraints::before_removal(shell, &[id.to_string()]);
         match run(shell, "element.remove", json!({ "ids": [id.to_string()] })) {
             Ok(_) => {
                 let text = if held {
@@ -395,6 +396,7 @@ pub fn remove_selection(shell: &mut Shell) {
                 };
                 let undo_label = shell.session.as_ref().and_then(|s| s.undo_label().map(str::to_string));
                 shell.canvas.toast = Some(crate::connect::Toast { text, until: shell.frames.saturating_add(300), undo_label });
+                crate::uml_constraints::say_dropped(shell, said, &name);
             }
             Err(e) => shell.explorer.notice = Some(e),
         }
@@ -405,8 +407,11 @@ pub fn remove_selection(shell: &mut Shell) {
     // The diagrams that show it, counted as the canvas counts them (AR-187).
     let diagrams = crate::editing::diagrams_showing(store, obj);
     if [relationships, keys, foreign_keys, diagrams].iter().all(|n| *n == 0) && !has_children {
-        if let Err(e) = run(shell, "element.remove", json!({ "ids": [id.to_string()] })) {
-            shell.explorer.notice = Some(e);
+        let lead = fmt(&tr("{name} deleted"), &[("name", &name_of(store, obj))]);
+        let said = crate::uml_constraints::before_removal(shell, &[id.to_string()]);
+        match run(shell, "element.remove", json!({ "ids": [id.to_string()] })) {
+            Ok(_) => crate::uml_constraints::say_dropped(shell, said, &lead),
+            Err(e) => shell.explorer.notice = Some(e),
         }
         return;
     }
@@ -925,8 +930,10 @@ fn delete_dialog_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: 
             shell.explorer.delete = None;
             if primary {
                 let ids: Vec<String> = d.ids.iter().map(|i| i.to_string()).collect();
-                if let Err(e) = run(shell, "element.remove", json!({ "ids": ids })) {
-                    shell.explorer.notice = Some(e);
+                let said = crate::uml_constraints::before_removal(shell, &ids);
+                match run(shell, "element.remove", json!({ "ids": ids })) {
+                    Ok(_) => crate::uml_constraints::say_dropped(shell, said, &fmt(&tr("{name} deleted"), &[("name", &d.name)])),
+                    Err(e) => shell.explorer.notice = Some(e),
                 }
             } else if id == "workspace.explorer.delete.unplace"
                 && let Some(node) = d.node

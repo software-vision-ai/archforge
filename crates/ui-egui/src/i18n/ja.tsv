@@ -580,6 +580,8 @@ str		This primitive type	このプリミティブ型
 str		This package	このパッケージ
 plural		+ {n} more member	+ 他 {n} メンバー
 plural		+ {n} more literal	+ 他 {n} リテラル
+plural		{n} constraint changed	{n} 件の制約が変わりました
+plural		+ {n} more line	+ 他 {n} 行
 plural		+ {n} more element	+ 他 {n} 要素
 # プロパティのクラスメンバー
 str		Abstract	抽象
@@ -608,6 +610,35 @@ str		Attribute · model	属性 · モデル
 str		Literal · model	リテラル · モデル
 str		Attributes · {n}	属性 · {n}
 str		Literals · {n}	リテラル · {n}
+str		Constraints · {n}	制約 · {n}
+str		Add constraint	制約を追加
+str		Edit constraint	制約を編集
+str		Constraint	制約
+str		Describe the rule…	ルールを記述…
+str		Constrained elements	制約される要素
+str		Remove {name} from the constrained elements	制約される要素から {name} を外す
+str		Add a constrained element	制約される要素を追加
+str		On this diagram	この図では
+str		Linked note	リンクされたノート
+str		Braces	波括弧
+str		Language	言語
+str		Plain text	プレーンテキスト
+str		Pick a language	言語を選ぶ
+str		Pick the constraint's language	制約の言語を選ぶ
+str		Or type any language	または任意の言語を入力
+str		Stored as written. Archforge keeps the text and its references but does not evaluate it: nothing is checked against the model.	書いたとおりに保存されます。テキストとその参照は Archforge が保持しますが、評価はしません。モデルに対して何も検査されません。
+str		Long or multi-element constraints read best as a linked note; the choice is per diagram.	長い制約や複数の要素にまたがる制約は、リンクされたノートにすると読みやすくなります。選択は図ごとです。
+str		Type an expression. A constraint without one states no rule.	式を入力してください。式のない制約はルールを表しません。
+str		Braces sit by an element they constrain, and this diagram shows none of them. Show it as a linked note.	波括弧は制約される要素のそばに置かれますが、この図にはそのどれも表示されていません。リンクされたノートとして表示してください。
+str		a constraint	制約
+str		{constraint} constrained nothing else and went with it	{constraint} はほかに何も制約していなかったため、一緒に削除されました
+str		{constraint} now constrains {elements} only	{constraint} が制約するのは {elements} だけになりました
+str		{name} deleted	{name} を削除しました
+str		Constraint · model, not evaluated	制約 · モデル、評価されない
+str		This constraint	この制約
+str		On this constraint · {n}	この制約に · {n}
+str		Constraint · not evaluated	制約 · 評価されない
+str		Parameter	パラメーター
 str		No literals yet	リテラルはまだありません
 str		Move down	下へ移動
 str		Move up	上へ移動

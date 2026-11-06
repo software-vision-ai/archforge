@@ -203,6 +203,7 @@ pub fn card(store: &Store, c: Obj, diagram: Obj) -> Option<Card> {
         k if k == INTERFACE => ("«interface»", "«interface» · {package}", false),
         k if k == DATA_TYPE => ("«dataType»", "«dataType» · {package}", false),
         k if k == ASSOCIATION_CLASS => ("Association class", "Association class · {package}", false),
+        k if k == crate::CONSTRAINT => return Some(constraint_card(store, c, diagram)),
         _ => return None,
     };
     let elsewhere = elsewhere(store, c, diagram);
@@ -433,6 +434,46 @@ pub fn slot_text(store: &Store, element: Obj, slot: &str) -> String {
         "from_role" if ends => end(0).map(|e| end_role(store, e)).unwrap_or_default(),
         "to_role" if ends => end(1).map(|e| end_role(store, e)).unwrap_or_default(),
         _ => String::new(),
+    }
+}
+
+/// The most lines of a constraint's expression its note lists.
+const MAX_EXPRESSION_LINES: usize = 64;
+
+/// A constraint as `diagram` shows it (AR-133): braces, its one row `{expression}` as written; or a
+/// constraint note, `Constraint · not evaluated` in its eyebrow, its name, and its expression's
+/// lines between braces, as written. The expression is never read for meaning.
+fn constraint_card(store: &Store, c: Obj, diagram: Obj) -> Card {
+    let form = crate::constraints::shown_on(store, diagram, c).map(|(_, f)| f);
+    let expression = crate::constraints::expression(store, c);
+    let plain = |text: String| Row { mark: None, text, linked: false, slanted: false, underlined: false };
+    let (tone, rows) = if form == Some(crate::constraints::Form::Braces) {
+        (Tone::Braces, vec![plain(cut(crate::constraints::braces(store, c)))])
+    } else {
+        let lines: Vec<&str> = expression.lines().collect();
+        let last = lines.len().saturating_sub(1);
+        let rows = lines
+            .iter()
+            .take(MAX_EXPRESSION_LINES)
+            .enumerate()
+            .map(|(i, l)| {
+                let open = if i == 0 { "{ " } else { "  " };
+                let close = if i == last { " }" } else { "" };
+                plain(cut(format!("{open}{l}{close}")))
+            })
+            .collect();
+        (Tone::Constraint, rows)
+    };
+    Card {
+        eyebrow: Text::said("Constraint · not evaluated"),
+        name: name(store, c),
+        compartments: vec![rows],
+        more: ("+ {n} more line", "+ {n} more lines"),
+        hidden: expression.lines().count().saturating_sub(MAX_EXPRESSION_LINES),
+        elsewhere: false,
+        tone,
+        slanted: false,
+        braces: None,
     }
 }
 
