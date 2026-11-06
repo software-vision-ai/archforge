@@ -107,7 +107,8 @@ pub fn is_constraint(store: &Store, o: Obj) -> bool {
 
 /// Whether `o` lies inside the project's model.
 pub fn in_model(store: &Store, o: Obj) -> bool {
-    store.is_alive(o) && crate::commands::model(store).is_ok_and(|m| store.contains(m, o))
+    // The hidden UML library's metaclasses are UML's own, not the model's (AR-134).
+    store.is_alive(o) && crate::commands::model(store).is_ok_and(|m| store.contains(m, o)) && !crate::profiles::in_library(store, o)
 }
 
 /// Whether `o` may own constraints: a classifier of the model's own (a built-in type stays as it

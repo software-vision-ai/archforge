@@ -141,6 +141,21 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   `uml_classifier_owners` where a classifier may go, each owner allowed or with its reason.
   `uml_class_get` says a classifier's owner and what it nests. Removing an owner with
   `element_remove` removes what it nests.
+- **Profiles and stereotypes**: `uml_profile_add` makes a profile in a package, the root package
+  when none is named; `uml_stereotype_add` makes a stereotype in it, with the metaclasses it
+  extends by UML's names (Class, Interface, Enumeration, DataType, Property, Operation,
+  Association, Generalization, Package; any other is refused, saying it is not drawn yet);
+  `uml_stereotype_set` renames it, moves it to another profile or replaces what it extends;
+  `uml_attribute_add` with the stereotype's id adds a property, typed by a primitive type, an
+  enumeration or a data type; `uml_profile_apply` and `uml_profile_unapply` apply a profile to a
+  package and take it away; `uml_profile_diagram` gives the profile's diagram, made the first time
+  and filled with every stereotype, every metaclass they extend and the extension lines, what it
+  showed already kept, as the window's Open profile diagram does. Unapplying,
+  deleting, dropping an extension, moving a stereotype or moving what a use sits in is refused
+  while elements use the stereotypes, the uses named; deleting a used element with
+  `element_remove` removes its applications with it. `uml_profile_list`, `uml_stereotype_get`,
+  `uml_package_profiles`, `uml_profile_uses` and `uml_metaclass_list` read them; a profile or a
+  stereotype is removed with `element_remove`.
 
 Ask it in your own words, for example: *"Add a table Invoice to the Shop schema with an id
 primary key and a foreign key to Order."* The table appears on screen as the agent adds it.

@@ -1226,6 +1226,42 @@ pub const ASSOCIATION_CLASS: Icon = Icon {
         L([1.0, 13.5], [15.0, 13.5]),
     ],
 };
+/// A UML profile (AR-134, the design's Icon / Profile): a folder with guillemets on it, in the
+/// Models tree, the New menu and the search.
+pub const PROFILE: Icon = Icon {
+    size: [14.0, 14.0],
+    stroke: 1.1,
+    segments: &[
+        L([1.5, 3.5], [1.5, 12.5]),
+        L([1.5, 12.5], [12.5, 12.5]),
+        L([12.5, 12.5], [12.5, 5.0]),
+        L([12.5, 5.0], [6.5, 5.0]),
+        L([6.5, 5.0], [5.5, 3.5]),
+        L([5.5, 3.5], [1.5, 3.5]),
+        L([6.0, 7.0], [4.5, 8.75]),
+        L([4.5, 8.75], [6.0, 10.5]),
+        L([9.5, 7.0], [8.0, 8.75]),
+        L([8.0, 8.75], [9.5, 10.5]),
+    ],
+};
+
+/// A UML stereotype (AR-134, the design's Icon / Stereotype): a pair of guillemets, «», the
+/// design's glyph centred in its box with the 1.5 margin the profile's icon keeps.
+pub const STEREOTYPE: Icon = Icon {
+    size: [14.0, 14.0],
+    stroke: 1.1,
+    segments: &[
+        L([4.0, 3.5], [1.5, 7.0]),
+        L([1.5, 7.0], [4.0, 10.5]),
+        L([6.5, 3.5], [4.0, 7.0]),
+        L([4.0, 7.0], [6.5, 10.5]),
+        L([7.5, 3.5], [10.0, 7.0]),
+        L([10.0, 7.0], [7.5, 10.5]),
+        L([10.0, 3.5], [12.5, 7.0]),
+        L([12.5, 7.0], [10.0, 10.5]),
+    ],
+};
+
 /// A UML generalization set (AR-129, the design's Icon / Generalization set): a hollow triangle
 /// over a dashed set line, in the Models tree, the menu and Properties.
 pub const GENERALIZATION_SET: Icon = Icon {

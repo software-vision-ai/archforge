@@ -1065,6 +1065,7 @@ fn context_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette) {
         })
         .unwrap_or_default();
     let kinds_n = inside.as_ref().map_or(0, |i| i.kinds.len());
+    let split = inside.as_ref().and_then(|i| i.split).unwrap_or(kinds_n);
     let sub_height = 8.0 + 26.0 + sub_rows.len() as f32 * CONTEXT_ROW + 9.0;
     let sub_x = if m.right() + 4.0 + CONTEXT_WIDTH <= window.right() - 8.0 {
         m.right() + 4.0
@@ -1153,7 +1154,7 @@ fn context_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette) {
             paint.rect_filled(sub, 8.0, p2.surface);
             paint.rect_stroke(sub, 8.0, Stroke::new(1.0, p2.border), StrokeKind::Inside);
             ux::text(&paint, pos2(sub.left() + 12.0, sub.top() + 12.0), &heading, types::EYEBROW, p2.text_muted, Some(CONTEXT_WIDTH - 24.0));
-            menu_rows(shell, ui, &p2, sub, sub.top() + 4.0 + 26.0, &sub_rows, Some(kinds_n), sub_reached, None)
+            menu_rows(shell, ui, &p2, sub, sub.top() + 4.0 + 26.0, &sub_rows, Some(split), sub_reached, None)
         });
         sub_clicked = c;
         if enter && state.sub_reached.is_some() && menu.sub {

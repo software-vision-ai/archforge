@@ -137,6 +137,8 @@ fn model_types(store: &Store) -> Vec<(String, String)> {
         .filter(|t| !built_in(store, *t))
         // A template parameter's classifier is offered only inside its template (AR-130).
         .filter(|t| !archforge_uml::templates::is_parameter_element(store, *t))
+        // UML's own metaclasses and the stereotypes type nothing of the model (AR-134).
+        .filter(|t| !archforge_uml::profiles::is_stereotype(store, *t) && !archforge_uml::profiles::in_library(store, *t))
         .filter_map(|t| Some((store.uuid(t).ok()?.to_string(), name(store, t))))
         .filter(|(_, n)| !n.is_empty())
         .collect();
@@ -238,7 +240,10 @@ pub(crate) fn edit_of(store: Option<&Store>, class: Uuid, kind: MemberKind, targ
 /// association's end, an operation, or an enumeration's literal.
 pub(crate) fn member_of(store: &Store, o: Obj) -> Option<(Obj, MemberKind)> {
     let (c, _) = store.container(o).ok()??;
-    if !archforge_uml::is_classifier(store.class_of(c).ok()?) {
+    // A stereotype's properties are members as a class's attributes are (AR-134); its base_
+    // attributes, an extension's ends, are not, as an association's end is not.
+    let owner = store.class_of(c).ok()?;
+    if !archforge_uml::is_classifier(owner) && owner != archforge_uml::STEREOTYPE {
         return None;
     }
     match store.class_of(o).ok()? {
@@ -557,9 +562,10 @@ pub(crate) fn package_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r:
         &here,
         Menu::PackageParent,
     );
-    // Its constraints (AR-133).
+    // The profiles it applies (AR-134, F5), then its constraints (AR-133).
     if let Some(id) = subject.id {
-        crate::uml_constraints::section_of(shell, ui, p, r, field.bottom() + 16.0, package, id);
+        let below = crate::uml_profiles::applied_section(shell, ui, p, r, field.bottom() + 16.0, package, id);
+        crate::uml_constraints::section_of(shell, ui, p, r, below, package, id);
     }
     if shell.panels.menu == Some(Menu::PackageParent) {
         let paths: Vec<Vec<String>> = choices.iter().map(|(_, n)| n.clone()).collect();
@@ -649,6 +655,9 @@ pub(crate) fn members_section(
         MemberKind::Operation => (tr("Operations · {n}"), "workspace.properties.operations.add", "Add operation", "workspace.properties.operation"),
         MemberKind::Literal => (tr("Literals · {n}"), "workspace.properties.literals.add", "Add literal", "workspace.properties.literal"),
     };
+    // A stereotype's attributes are its properties (AR-134, F1).
+    let stereotype = archforge_uml::profiles::is_stereotype(store, class);
+    let (title, hint) = if stereotype && kind == MemberKind::Attribute { (tr("Properties · {n}"), "Add property") } else { (title, hint) };
     let title = fmt(&title, &[("n", &rows.len().to_string())]);
     let Some(next) = section(shell, ui, p, r, y, &title, Some((add, hint))) else {
         open(shell, class_id, kind, None);
@@ -758,6 +767,7 @@ pub(crate) fn types_named(store: &Store, name: &str, within: Option<Obj>) -> Vec
         })
         .filter(|t| !built_in(store, *t) && !archforge_uml::templates::is_parameter_element(store, *t))
         .filter(|t| self::name(store, *t).eq_ignore_ascii_case(name))
+        .filter(|t| !archforge_uml::profiles::is_stereotype(store, *t) && !archforge_uml::profiles::in_library(store, *t))
         .filter_map(|t| store.uuid(t).ok().map(|u| u.to_string()));
     let builtin = BUILT_IN.iter().find(|b| b.eq_ignore_ascii_case(name)).map(|b| b.to_string());
     let params = parameter_types(store, within).into_iter().filter(|(n, _)| n.eq_ignore_ascii_case(name)).map(|(_, id)| id);
@@ -798,8 +808,33 @@ pub(crate) fn type_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Re
         return;
     }
     let choices = choices_for_menu(shell, within);
-    if let Some(i) = crate::panels::menu_noted(shell, ui, p, field, id, &choices.labels, &choices.notes, &choices.note_parts) {
-        *ty = choices.values.get(i).cloned().unwrap_or_default();
+    // A stereotype's property is typed by a primitive type, an enumeration or a data type alone
+    // (AR-134): the menu offers those.
+    let stereotype = shell
+        .panels
+        .member
+        .as_ref()
+        .and_then(|e| shell.session.as_ref().and_then(|s| s.doc().by_uuid(e.class).map(|c| archforge_uml::profiles::is_stereotype(s.doc(), c))))
+        .unwrap_or(false);
+    let offered: Vec<usize> = (0..choices.values.len())
+        .filter(|i| {
+            !stereotype
+                || choices.values.get(*i).is_none_or(|v| {
+                    shell.session.as_ref().is_none_or(|s| match Uuid::parse(v).and_then(|u| s.doc().by_uuid(u)) {
+                        Some(t) => s
+                            .doc()
+                            .class_of(t)
+                            .is_ok_and(|c| c == archforge_uml::PRIMITIVE_TYPE || c == archforge_uml::ENUMERATION || c == archforge_uml::DATA_TYPE),
+                        None => true,
+                    })
+                })
+        })
+        .collect();
+    let pick = |v: &[String]| offered.iter().filter_map(|i| v.get(*i).cloned()).collect::<Vec<String>>();
+    let (labels, notes) = (pick(&choices.labels), pick(&choices.notes));
+    let note_parts: Vec<Vec<String>> = offered.iter().filter_map(|i| choices.note_parts.get(*i).cloned()).collect();
+    if let Some(i) = crate::panels::menu_noted(shell, ui, p, field, id, &labels, &notes, &note_parts) {
+        *ty = offered.get(i).and_then(|i| choices.values.get(*i)).cloned().unwrap_or_default();
     }
     keep_choices(shell, choices);
 }
@@ -1732,5 +1767,6 @@ pub(crate) fn retain_valid(edit: &mut Option<MemberEdit>, store: &Store) {
 /// The hover texts given by key and the visibilities' words, for the catalogue tests.
 #[cfg(test)]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
-    ["Add attribute", "Add operation", "Add literal", "Remove", "Remove parameter", "Move up", "Move down", "Cancel", "Apply"].into_iter()
+    ["Add attribute", "Add property", "Add operation", "Add literal", "Remove", "Remove parameter", "Move up", "Move down", "Cancel", "Apply"]
+        .into_iter()
 }

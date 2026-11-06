@@ -186,6 +186,16 @@ pub enum Screen {
     /// The same, OrderRepository binding Key to Integer, and Key's removal refused under the rows
     /// with Show the binding (AR-130, C5).
     WorkspaceTemplateInUse,
+    /// The sample class model with the profile Persistence beside Commerce, which applies it: its
+    /// diagram open with the «stereotype» cards Entity, Id and Reference under the «metaclass» cards
+    /// Class, Property and Association, joined by extensions; Models open on Persistence; Entity
+    /// selected, its Properties showing Extends and its properties, the editor open on cached
+    /// (AR-134, F1).
+    WorkspaceProfiles,
+    /// The sample with Persistence applied to Commerce and used there (stereotype applications
+    /// built in the store, as AR-135 will make them): Commerce selected, Unapply refused under its
+    /// Applied profiles, the five uses counted (AR-134, F6).
+    WorkspaceProfileRefused,
     /// The user manual's class-model guide, first step: the root package's diagram Commerce with
     /// Customer (its name typed) and Order, a draft row open on Order's card with `number :
     /// Integer` typed.
@@ -571,6 +581,11 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
         shell.adopt_project();
         crate::uml_ui::open_sample(&mut shell)?;
         sample_nested(&mut shell)?;
+    }
+    if screen == Screen::WorkspaceProfiles || screen == Screen::WorkspaceProfileRefused {
+        shell.adopt_project();
+        crate::uml_ui::open_sample(&mut shell)?;
+        sample_profiles(&mut shell, screen == Screen::WorkspaceProfileRefused)?;
     }
     if screen == Screen::WorkspaceGeneralizationSets {
         shell.adopt_project();
@@ -1129,6 +1144,40 @@ fn sample_nested(shell: &mut Shell) -> Result<(), String> {
     shell.canvas.fit_pending = false;
     shell.canvas.zoom = z;
     shell.canvas.pan = egui::vec2(140.0 - b.x as f32 * z, 360.0 - b.y as f32 * z);
+    Ok(())
+}
+
+/// The profile Persistence of F1 in the sample: its diagram open with Entity selected and the
+/// editor on cached; or, `refused`, Commerce selected with Unapply refused for its uses (F6).
+fn sample_profiles(shell: &mut Shell, refused: bool) -> Result<(), String> {
+    let (commerce, persistence, entity) = crate::uml_profiles::put_profiles(shell, refused)?;
+    let id = |s: &str| archforge_mof::Uuid::parse(s).ok_or_else(|| "an id".to_string());
+    shell.state.show_panel(crate::state::Panel::Properties);
+    shell.state.show_explorer(crate::state::Explorer::Models);
+    if refused {
+        crate::panels::run(shell, "view.select", serde_json::json!({ "ids": [commerce] }))?;
+        shell.explorer.expanded.insert(id(&commerce)?);
+        crate::uml_profiles::unapply_profile(shell, id(&commerce)?, id(&persistence)?);
+        shell.panels.editors_for = Some(id(&commerce)?);
+        return Ok(());
+    }
+    crate::uml_profiles::open_profile_diagram(shell, id(&persistence)?)?;
+    crate::panels::run(shell, "view.select", serde_json::json!({ "ids": [entity] }))?;
+    shell.explorer.expanded.insert(id(&persistence)?);
+    let cached = {
+        let store = shell.session.as_ref().ok_or("no project is open")?.doc();
+        let e = store.by_uuid(id(&entity)?).ok_or("Entity")?;
+        let c = archforge_uml::profiles::properties(store, e).into_iter().find(|a| archforge_core::name_of(store, *a) == "cached").ok_or("cached")?;
+        store.uuid(c).map_err(|e| e.to_string())?
+    };
+    crate::uml_panel::open(shell, id(&entity)?, crate::uml_panel::MemberKind::Attribute, Some(cached));
+    shell.panels.editors_for = Some(id(&entity)?);
+    if let Some(s) = shell.session.as_mut() {
+        s.mark_saved().map_err(|e| e.to_string())?;
+    }
+    shell.canvas.fit_pending = false;
+    shell.canvas.zoom = 0.8;
+    shell.canvas.pan = egui::vec2(60.0, 60.0);
     Ok(())
 }
 

@@ -664,6 +664,8 @@ str		«enumeration»	«enumeration»
 str		Data type	データ型
 str		Primitive type	プリミティブ型
 str		«dataType»	«dataType»
+str		«stereotype»	«stereotype»
+str		«metaclass»	«metaclass»
 str		«primitive»	«primitive»
 str		Association class	関連クラス
 str		Classifier	分類子
@@ -710,6 +712,7 @@ str		A subclass could not redefine {name} where it is inherited. Shown as {leaf}
 str		A subclass could not redefine this member. Shown as {leaf} after it.	サブクラスはこのメンバーを再定義できません。後ろに {leaf} と表示されます。
 plural		{names} redefines it. Remove that redefinition first.	{names} がこれを再定義しています。先にその再定義を削除してください。
 str		Add attribute	属性を追加
+str		Add property	プロパティを追加
 str		Add operation	操作を追加
 str		Add literal	リテラルを追加
 str		More details in Properties	詳細はプロパティで
@@ -730,6 +733,59 @@ str		{kind} · nested in {owner} · model, in every diagram	{kind} · {owner} �
 str		Nested classifiers · {n}	入れ子の分類子 · {n}
 str		Add nested classifier	入れ子の分類子を追加
 str		None yet. Add one here or from Models ▸ New inside {name}; both offer the same kinds.	まだありません。ここか、モデル ▸ {name} の中に新規作成から追加します。どちらも同じ種類を提供します。
+str		New	新規
+str		New in {name}	{name} に新規
+str	uml	Profile	プロファイル
+str		profile	プロファイル
+str		Stereotype	ステレオタイプ
+str		extends {metaclasses}	{metaclasses} を拡張
+str		extends nothing yet	まだ何も拡張していません
+str		applies {profiles}	{profiles} を適用
+str		Profile · model	プロファイル · モデル
+str		This profile	このプロファイル
+str		On this profile · {n}	このプロファイル上 · {n}
+str		Stereotype · in profile {profile} · model	ステレオタイプ · プロファイル {profile} 内 · モデル
+str		This stereotype	このステレオタイプ
+str		On this stereotype · {n}	このステレオタイプ上 · {n}
+str		Metaclass · UML	メタクラス · UML
+str		Metaclass	メタクラス
+str		This metaclass	このメタクラス
+str		On this metaclass · {n}	このメタクラス上 · {n}
+str		Metaclasses carry no skills	メタクラスにはスキルを付けられません
+str		A UML metaclass, which stereotypes extend. It is UML's own, kept out of Models and the type menus, and never changes.	ステレオタイプが拡張する UML のメタクラスです。これは UML 自身のもので、モデルや型メニューには表示されず、変更されることもありません。
+str		Stereotypes · {n}	ステレオタイプ · {n}
+str		Add stereotype	ステレオタイプを追加
+str		None yet. Add one here or from Models ▸ New ▸ Stereotype.	まだありません。ここか、モデル ▸ 新規 ▸ ステレオタイプから追加できます。
+str		Open profile diagram	プロファイル図を開く
+str		A package applies the profile through Applied profiles in its Properties; its elements may then use the profile's stereotypes.	パッケージはプロパティの「適用済みプロファイル」でプロファイルを適用します。その要素はプロファイルのステレオタイプを使えるようになります。
+str		Extends · {n}	拡張 · {n}
+str		Add extended metaclass	拡張するメタクラスを追加
+str		{name} extends	{name} の拡張先
+str		extended	拡張済み
+str		Extended already	すでに拡張しています
+str		not drawn by Archforge yet	Archforge ではまだ描画されません
+str		Offered: the metaclasses Archforge draws. Other metaclasses are listed, disabled, as not drawn by Archforge yet.	選べるのは Archforge が描画するメタクラスです。その他のメタクラスは、Archforge ではまだ描画されないものとして無効の状態で表示されます。
+str		Properties · {n}	プロパティ · {n}
+str		Types: primitive types, enumerations and data types of the model. Renaming {name} keeps every application; removing it is refused while elements use it.	型: モデルのプリミティブ型、列挙型、データ型。{name} の名前を変えても適用はすべて保たれます。要素が使っている間は削除できません。
+str		Applied profiles · {n}	適用済みプロファイル · {n}
+str		Apply profile	プロファイルを適用
+str		Apply to {name}	{name} に適用
+str		applied	適用済み
+str		Applied already	すでに適用されています
+str		No profile yet	まだプロファイルはありません
+str		Make one with New ▸ Profile in Models.	モデルの 新規 ▸ プロファイル で作成できます。
+str		Elements inside {name}, and inside its packages, can use the stereotypes of the applied profiles. Applying is one undo step; it adds no stereotype by itself.	{name} とその中のパッケージの要素は、適用済みプロファイルのステレオタイプを使えます。適用は 1 回の取り消し操作で、それだけではステレオタイプは付きません。
+str		Unapply profile	プロファイルの適用を解除
+str		{profile} is in use in {package}: {uses}. Remove those first.	{profile} は {package} で使われています: {uses}。先にそれらを外してください。
+str		{name} is in use: {uses}. Remove those first.	{name} は使われています: {uses}。先にそれらを外してください。
+str		{name} applies the profiles its elements use: {uses}. Remove those first.	{name} は要素が使うプロファイルを適用しています: {uses}。先にそれらを外してください。
+str		{name} holds the profile {profile}, which is in use: {uses}. Remove those first.	{name} には使われているプロファイル {profile} があります: {uses}。先にそれらを外してください。
+str		«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.	{metaclass} への «{stereotype}» は使われています: {uses}。先にそれらを外してください。
+str		«{stereotype}» on {elements}	{elements} に «{stereotype}»
+str		{first} and {second}	{first} と {second}
+plural		Show the use	{n} 件の使用箇所を表示
+str		A stereotype is shown on its profile's diagram	ステレオタイプはそのプロファイルの図に表示されます
+str		Place stereotype	ステレオタイプを配置
 str		nested	入れ子
 str		package	パッケージ
 str		class	クラス

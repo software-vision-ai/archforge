@@ -197,6 +197,9 @@ pub fn card(store: &Store, c: Obj, diagram: Obj) -> Option<Card> {
     // The eyebrow alone, and with the outsider's package beside it.
     let (here, away, is_class) = match store.class_of(c).ok()? {
         k if k == crate::PACKAGE => return Some(package_card(store, c)),
+        // A stereotype and a metaclass on a profile's diagram (AR-134, F1).
+        k if k == crate::STEREOTYPE => return Some(stereotype_card(store, c)),
+        k if k == CLASS && crate::profiles::is_metaclass(store, c) => return Some(metaclass_card(store, c)),
         k if k == ENUMERATION => return Some(enumeration_card(store, c, diagram)),
         k if k == PRIMITIVE_TYPE => return Some(primitive_type_card(store, c, diagram)),
         k if k == CLASS => ("Class", "Class · {package}", true),
@@ -290,6 +293,43 @@ fn primitive_type_card(store: &Store, t: Obj, diagram: Obj) -> Card {
     }
 }
 
+/// A stereotype's card on its profile's diagram (AR-134, F1): `«stereotype»` in its eyebrow, its
+/// name, and its properties as a class's attributes, its extensions' ends left out.
+fn stereotype_card(store: &Store, s: Obj) -> Card {
+    let (mut room, mut hidden) = (MAX_CARD_ROWS, 0);
+    let row = |text, member| Row { mark: None, text, linked: false, slanted: false, underlined: is_static(store, member) };
+    let properties = capped(crate::profiles::properties(store, s), &mut room, &mut hidden, |a| row(attribute_text(store, a), a));
+    Card {
+        eyebrow: Text::said("«stereotype»"),
+        name: name(store, s),
+        compartments: vec![properties],
+        more: ("+ {n} more member", "+ {n} more members"),
+        hidden,
+        elsewhere: false,
+        tone: Tone::Plain,
+        slanted: false,
+        braces: None,
+        template: Vec::new(),
+    }
+}
+
+/// A metaclass's card on a profile's diagram (AR-134, F1): `«metaclass»` over its UML name, with
+/// no compartment.
+fn metaclass_card(store: &Store, m: Obj) -> Card {
+    Card {
+        eyebrow: Text::said("«metaclass»"),
+        name: name(store, m),
+        compartments: Vec::new(),
+        more: ("+ {n} more member", "+ {n} more members"),
+        hidden: 0,
+        elsewhere: false,
+        tone: Tone::Plain,
+        slanted: false,
+        braces: None,
+        template: Vec::new(),
+    }
+}
+
 /// An enumeration's card on `diagram`: the keyword «enumeration» in its eyebrow, its package beside
 /// it when it is an outsider, its name, and one compartment of its literals in their order, empty
 /// when it has none; past [`MAX_CARD_ROWS`] the rest are counted, not listed.
@@ -365,6 +405,8 @@ pub fn ends(store: &Store, element: Obj) -> Option<(Obj, Obj)> {
         c if c == INTERFACE_REALIZATION => {
             Some((one(store, element, interface_realization::IMPLEMENTING_CLASSIFIER)?, one(store, element, interface_realization::CONTRACT)?))
         }
+        // An extension runs from its stereotype to the metaclass it extends (AR-134).
+        c if c == crate::EXTENSION => crate::profiles::extension_ends(store, element),
         _ => None,
     }
 }
@@ -401,6 +443,16 @@ pub fn line(store: &Store, element: Obj) -> Option<Line> {
             };
             Some(Line { ends: [end(0), end(1)], styled: true, dashed: false, status: None, note: None, badge: false, resolvable: false })
         }
+        // An extension: a solid line with a filled triangle at the metaclass (AR-134, F1).
+        c if c == crate::EXTENSION => Some(Line {
+            ends: [End::marked(EndMark::None), End::marked(EndMark::FilledTriangle)],
+            styled: true,
+            dashed: false,
+            status: None,
+            note: None,
+            badge: false,
+            resolvable: false,
+        }),
         c if c == GENERALIZATION => Some(Line {
             ends: [End::marked(EndMark::None), End::marked(EndMark::Triangle)],
             styled: false,

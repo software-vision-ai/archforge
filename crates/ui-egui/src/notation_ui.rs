@@ -35,6 +35,9 @@ pub(crate) struct Inside {
     pub kinds: Vec<(&'static str, String, &'static Icon)>,
     pub refused: Vec<(&'static str, String, String)>,
     pub why_not: Option<String>,
+    /// Where a line parts the kinds, when not before the disabled rows: after a package's
+    /// Package and Profile (AR-134, F2).
+    pub split: Option<usize>,
 }
 
 /// An element as the project search lists it: its icon, its kind's place in the list (diagrams

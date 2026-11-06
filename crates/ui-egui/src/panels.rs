@@ -63,6 +63,10 @@ pub struct State {
     pub set_name_focus: Option<Uuid>,
     /// A reconnection refused on a generalization in a set, said in its Properties (AR-129).
     pub set_refused: Option<(Uuid, String)>,
+    /// An extension's or an applied profile's editor, and a change refused for its uses, said
+    /// under its section (AR-134).
+    pub profile_edit: Option<crate::uml_profiles::ProfileEdit>,
+    pub profile_refused: Option<crate::uml_profiles::ProfileRefusal>,
     /// The selection the open editors belong to: selecting anything else closes them.
     pub editors_for: Option<Uuid>,
     /// A relationship's Properties (slice E3): a role being typed, whether More is open, and the
@@ -121,6 +125,7 @@ fn open_editors(s: &State) -> Vec<Option<Option<Uuid>>> {
         s.constraint.as_ref().map(|e| e.target),
         s.qualifier.as_ref().map(|e| e.target),
         s.template.as_ref().map(|e| e.target),
+        s.profile_edit.as_ref().map(|e| e.target.as_deref().and_then(Uuid::parse)),
     ]
 }
 
@@ -264,6 +269,12 @@ pub enum Menu {
     /// A constraint editor's language presets and the elements it may name (AR-133).
     ConstraintLanguage,
     ConstraintElement,
+    /// A stereotype's profile, its Extends `+` and an extension editor's metaclass, and a
+    /// package's Applied profiles `+` (AR-134).
+    StereotypeProfile,
+    StereotypeExtends,
+    ExtensionMetaclass,
+    AppliedProfile,
 }
 
 /// The selection the panels describe.
@@ -387,6 +398,12 @@ pub fn retain_valid(state: &mut State, store: &Store) {
     crate::uml_constraints::retain_valid(&mut state.constraint, store);
     crate::uml_qualifiers::retain_valid(&mut state.qualifier, store);
     crate::uml_templates::retain_valid(&mut state.template, &mut state.template_in_use, store);
+    if state.profile_edit.as_ref().is_some_and(|e| store.by_uuid(e.owner).is_none()) {
+        state.profile_edit = None;
+    }
+    if state.profile_refused.as_ref().is_some_and(|r| store.by_uuid(r.owner).is_none()) {
+        state.profile_refused = None;
+    }
     if state.ends.as_ref().is_some_and(|e| store.by_uuid(e.association).is_none()) {
         state.ends = None;
     }
@@ -1385,6 +1402,10 @@ fn close_editors(shell: &mut Shell) {
     panels.final_refused = None;
     panels.leaf_refused = None;
     panels.set_refused = None;
+    panels.profile_refused = None;
+    if panels.profile_edit.as_ref().is_some_and(|e| !e.opened) {
+        panels.profile_edit = None;
+    }
     if panels.constraint.as_ref().is_some_and(|e| !e.opened) {
         panels.constraint = None;
     }

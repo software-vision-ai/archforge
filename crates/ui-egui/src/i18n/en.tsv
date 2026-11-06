@@ -663,6 +663,8 @@ str		«enumeration»	«enumeration»
 str		Data type	Data type
 str		Primitive type	Primitive type
 str		«dataType»	«dataType»
+str		«stereotype»	«stereotype»
+str		«metaclass»	«metaclass»
 str		«primitive»	«primitive»
 str		Association class	Association class
 str		Classifier	Classifier
@@ -709,6 +711,7 @@ str		A subclass could not redefine {name} where it is inherited. Shown as {leaf}
 str		A subclass could not redefine this member. Shown as {leaf} after it.	A subclass could not redefine this member. Shown as {leaf} after it.
 plural		{names} redefines it. Remove that redefinition first.	{names} redefines it. Remove that redefinition first.|{names} redefine it. Remove those redefinitions first.
 str		Add attribute	Add attribute
+str		Add property	Add property
 str		Add operation	Add operation
 str		Add literal	Add literal
 str		More details in Properties	More details in Properties
@@ -729,6 +732,59 @@ str		{kind} · nested in {owner} · model, in every diagram	{kind} · nested in 
 str		Nested classifiers · {n}	Nested classifiers · {n}
 str		Add nested classifier	Add nested classifier
 str		None yet. Add one here or from Models ▸ New inside {name}; both offer the same kinds.	None yet. Add one here or from Models ▸ New inside {name}; both offer the same kinds.
+str		New	New
+str		New in {name}	New in {name}
+str	uml	Profile	Profile
+str		profile	profile
+str		Stereotype	Stereotype
+str		extends {metaclasses}	extends {metaclasses}
+str		extends nothing yet	extends nothing yet
+str		applies {profiles}	applies {profiles}
+str		Profile · model	Profile · model
+str		This profile	This profile
+str		On this profile · {n}	On this profile · {n}
+str		Stereotype · in profile {profile} · model	Stereotype · in profile {profile} · model
+str		This stereotype	This stereotype
+str		On this stereotype · {n}	On this stereotype · {n}
+str		Metaclass · UML	Metaclass · UML
+str		Metaclass	Metaclass
+str		This metaclass	This metaclass
+str		On this metaclass · {n}	On this metaclass · {n}
+str		Metaclasses carry no skills	Metaclasses carry no skills
+str		A UML metaclass, which stereotypes extend. It is UML's own, kept out of Models and the type menus, and never changes.	A UML metaclass, which stereotypes extend. It is UML's own, kept out of Models and the type menus, and never changes.
+str		Stereotypes · {n}	Stereotypes · {n}
+str		Add stereotype	Add stereotype
+str		None yet. Add one here or from Models ▸ New ▸ Stereotype.	None yet. Add one here or from Models ▸ New ▸ Stereotype.
+str		Open profile diagram	Open profile diagram
+str		A package applies the profile through Applied profiles in its Properties; its elements may then use the profile's stereotypes.	A package applies the profile through Applied profiles in its Properties; its elements may then use the profile's stereotypes.
+str		Extends · {n}	Extends · {n}
+str		Add extended metaclass	Add extended metaclass
+str		{name} extends	{name} extends
+str		extended	extended
+str		Extended already	Extended already
+str		not drawn by Archforge yet	not drawn by Archforge yet
+str		Offered: the metaclasses Archforge draws. Other metaclasses are listed, disabled, as not drawn by Archforge yet.	Offered: the metaclasses Archforge draws. Other metaclasses are listed, disabled, as not drawn by Archforge yet.
+str		Properties · {n}	Properties · {n}
+str		Types: primitive types, enumerations and data types of the model. Renaming {name} keeps every application; removing it is refused while elements use it.	Types: primitive types, enumerations and data types of the model. Renaming {name} keeps every application; removing it is refused while elements use it.
+str		Applied profiles · {n}	Applied profiles · {n}
+str		Apply profile	Apply profile
+str		Apply to {name}	Apply to {name}
+str		applied	applied
+str		Applied already	Applied already
+str		No profile yet	No profile yet
+str		Make one with New ▸ Profile in Models.	Make one with New ▸ Profile in Models.
+str		Elements inside {name}, and inside its packages, can use the stereotypes of the applied profiles. Applying is one undo step; it adds no stereotype by itself.	Elements inside {name}, and inside its packages, can use the stereotypes of the applied profiles. Applying is one undo step; it adds no stereotype by itself.
+str		Unapply profile	Unapply profile
+str		{profile} is in use in {package}: {uses}. Remove those first.	{profile} is in use in {package}: {uses}. Remove those first.
+str		{name} is in use: {uses}. Remove those first.	{name} is in use: {uses}. Remove those first.
+str		{name} applies the profiles its elements use: {uses}. Remove those first.	{name} applies the profiles its elements use: {uses}. Remove those first.
+str		{name} holds the profile {profile}, which is in use: {uses}. Remove those first.	{name} holds the profile {profile}, which is in use: {uses}. Remove those first.
+str		«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.	«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.
+str		«{stereotype}» on {elements}	«{stereotype}» on {elements}
+str		{first} and {second}	{first} and {second}
+plural		Show the use	Show the use|Show the {n} uses
+str		A stereotype is shown on its profile's diagram	A stereotype is shown on its profile's diagram
+str		Place stereotype	Place stereotype
 str		nested	nested
 str		package	package
 str		class	class

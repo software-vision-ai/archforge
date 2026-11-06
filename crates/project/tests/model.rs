@@ -312,6 +312,36 @@ fn nested_classifiers_are_saved_and_opened_again_nested() {
     again.close().unwrap();
 }
 
+/// AR-134: profiles, their stereotypes with extensions and properties, a profile applied to a
+/// package and the hidden UML library of metaclasses are saved, closed and opened again, the
+/// project's tables unchanged and its check on open passing; the reopened model holds them as made.
+#[test]
+fn profiles_and_the_uml_library_are_saved_and_the_project_opens_again() {
+    let env = Env::new("profiles");
+    let schema = schema();
+    let project = Project::create(&env.dolt, &env.opts(), &env.base.join("Projects"), "Profiles", "test", &timestamp(1_761_670_800)).unwrap();
+    let path = project.path().to_path_buf();
+    project.close().unwrap();
+    let mut s = model();
+    let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+    run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Persistence" }));
+    let persistence = run(&mut s, "uml.profile.add", json!({ "name": "Persistence", "package": sales }));
+    let entity = run(&mut s, "uml.stereotype.add", json!({ "profile": persistence, "name": "Entity", "extends": ["Class", "Association"] }));
+    run(&mut s, "uml.attribute.add", json!({ "class": entity, "name": "table", "type": "String" }));
+    run(&mut s, "uml.stereotype.add", json!({ "profile": persistence, "name": "Id", "extends": ["Property"] }));
+    run(&mut s, "uml.profile.apply", json!({ "package": sales, "profile": persistence }));
+    run(&mut s, "uml.profile.diagram", json!({ "profile": persistence }));
+    assert_eq!(schema.fingerprint(), CURRENT, "no table changed");
+    let back = save_and_reopen(&env, &schema, &path, s.doc(), "Profiles").expect("a project with profiles opens");
+    assert_eq!(rows_of(back.doc(), &schema), rows_of(s.doc(), &schema));
+    let st = back.doc();
+    let p = st.by_uuid(Uuid::parse(&persistence).unwrap()).unwrap();
+    let e = st.by_uuid(Uuid::parse(&entity).unwrap()).unwrap();
+    assert_eq!(archforge_uml::profiles::extended(st, e), ["Class", "Association"]);
+    assert_eq!(archforge_uml::profiles::applying(st, p).len(), 1);
+    assert!(archforge_uml::profiles::library(st).is_some(), "the library comes back");
+}
+
 /// Saved, closed and opened again through the project, the rows come back and a session is made
 /// of them, or the reason it is not.
 fn save_and_reopen(env: &Env, schema: &ModelSchema, path: &std::path::Path, st: &Store, message: &str) -> Result<Session, String> {

@@ -664,6 +664,8 @@ str		«enumeration»	«enumeration»
 str		Data type	Datentyp
 str		Primitive type	Primitiver Typ
 str		«dataType»	«dataType»
+str		«stereotype»	«stereotype»
+str		«metaclass»	«metaclass»
 str		«primitive»	«primitive»
 str		Association class	Assoziationsklasse
 str		Classifier	Klassifikator
@@ -710,6 +712,7 @@ str		A subclass could not redefine {name} where it is inherited. Shown as {leaf}
 str		A subclass could not redefine this member. Shown as {leaf} after it.	Eine Unterklasse könnte dieses Element nicht redefinieren. Als {leaf} dahinter gezeigt.
 plural		{names} redefines it. Remove that redefinition first.	{names} redefiniert es. Entfernen Sie zuerst diese Redefinition.|{names} redefinieren es. Entfernen Sie zuerst diese Redefinitionen.
 str		Add attribute	Attribut hinzufügen
+str		Add property	Eigenschaft hinzufügen
 str		Add operation	Operation hinzufügen
 str		Add literal	Literal hinzufügen
 str		More details in Properties	Weitere Angaben in den Eigenschaften
@@ -730,6 +733,59 @@ str		{kind} · nested in {owner} · model, in every diagram	{kind} · verschacht
 str		Nested classifiers · {n}	Verschachtelte Klassifizierer · {n}
 str		Add nested classifier	Verschachtelten Klassifizierer hinzufügen
 str		None yet. Add one here or from Models ▸ New inside {name}; both offer the same kinds.	Noch keine. Hier oder über Modelle ▸ Neu in {name} hinzufügen; beide bieten dieselben Arten.
+str		New	Neu
+str		New in {name}	Neu in {name}
+str	uml	Profile	Profil
+str		profile	Profil
+str		Stereotype	Stereotyp
+str		extends {metaclasses}	erweitert {metaclasses}
+str		extends nothing yet	erweitert noch nichts
+str		applies {profiles}	wendet {profiles} an
+str		Profile · model	Profil · Modell
+str		This profile	Dieses Profil
+str		On this profile · {n}	Auf diesem Profil · {n}
+str		Stereotype · in profile {profile} · model	Stereotyp · im Profil {profile} · Modell
+str		This stereotype	Dieser Stereotyp
+str		On this stereotype · {n}	Auf diesem Stereotyp · {n}
+str		Metaclass · UML	Metaklasse · UML
+str		Metaclass	Metaklasse
+str		This metaclass	Diese Metaklasse
+str		On this metaclass · {n}	Auf dieser Metaklasse · {n}
+str		Metaclasses carry no skills	Metaklassen tragen keine Skills
+str		A UML metaclass, which stereotypes extend. It is UML's own, kept out of Models and the type menus, and never changes.	Eine UML-Metaklasse, die Stereotypen erweitern. Sie gehört UML selbst, erscheint weder in Modelle noch in den Typmenüs und ändert sich nie.
+str		Stereotypes · {n}	Stereotypen · {n}
+str		Add stereotype	Stereotyp hinzufügen
+str		None yet. Add one here or from Models ▸ New ▸ Stereotype.	Noch keiner. Hier hinzufügen oder in Modelle ▸ Neu ▸ Stereotyp.
+str		Open profile diagram	Profildiagramm öffnen
+str		A package applies the profile through Applied profiles in its Properties; its elements may then use the profile's stereotypes.	Ein Paket wendet das Profil über Angewendete Profile in seinen Eigenschaften an; seine Elemente können dann die Stereotypen des Profils verwenden.
+str		Extends · {n}	Erweitert · {n}
+str		Add extended metaclass	Erweiterte Metaklasse hinzufügen
+str		{name} extends	{name} erweitert
+str		extended	erweitert
+str		Extended already	Bereits erweitert
+str		not drawn by Archforge yet	von Archforge noch nicht gezeichnet
+str		Offered: the metaclasses Archforge draws. Other metaclasses are listed, disabled, as not drawn by Archforge yet.	Angeboten: die Metaklassen, die Archforge zeichnet. Andere Metaklassen stehen deaktiviert in der Liste, als von Archforge noch nicht gezeichnet.
+str		Properties · {n}	Eigenschaften · {n}
+str		Types: primitive types, enumerations and data types of the model. Renaming {name} keeps every application; removing it is refused while elements use it.	Typen: primitive Typen, Aufzählungen und Datentypen des Modells. Umbenennen von {name} behält jede Anwendung; Entfernen wird abgelehnt, solange Elemente ihn verwenden.
+str		Applied profiles · {n}	Angewendete Profile · {n}
+str		Apply profile	Profil anwenden
+str		Apply to {name}	Auf {name} anwenden
+str		applied	angewendet
+str		Applied already	Bereits angewendet
+str		No profile yet	Noch kein Profil
+str		Make one with New ▸ Profile in Models.	Eines mit Neu ▸ Profil in Modelle anlegen.
+str		Elements inside {name}, and inside its packages, can use the stereotypes of the applied profiles. Applying is one undo step; it adds no stereotype by itself.	Elemente in {name} und in seinen Paketen können die Stereotypen der angewendeten Profile verwenden. Anwenden ist ein Rückgängig-Schritt; es fügt selbst keinen Stereotyp hinzu.
+str		Unapply profile	Profil nicht mehr anwenden
+str		{profile} is in use in {package}: {uses}. Remove those first.	{profile} wird in {package} verwendet: {uses}. Diese zuerst entfernen.
+str		{name} is in use: {uses}. Remove those first.	{name} wird verwendet: {uses}. Diese zuerst entfernen.
+str		{name} applies the profiles its elements use: {uses}. Remove those first.	{name} wendet die Profile an, die seine Elemente verwenden: {uses}. Diese zuerst entfernen.
+str		{name} holds the profile {profile}, which is in use: {uses}. Remove those first.	{name} enthält das Profil {profile}, das verwendet wird: {uses}. Diese zuerst entfernen.
+str		«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.	«{stereotype}» auf {metaclass} wird verwendet: {uses}. Diese zuerst entfernen.
+str		«{stereotype}» on {elements}	«{stereotype}» auf {elements}
+str		{first} and {second}	{first} und {second}
+plural		Show the use	Die Verwendung zeigen|Die {n} Verwendungen zeigen
+str		A stereotype is shown on its profile's diagram	Ein Stereotyp erscheint im Diagramm seines Profils
+str		Place stereotype	Stereotyp platzieren
 str		nested	verschachtelt
 str		package	Paket
 str		class	Klasse

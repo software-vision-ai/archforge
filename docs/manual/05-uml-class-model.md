@@ -912,6 +912,66 @@ For agents, `uml.template-parameter.add`, `.set` and `.move` add, change and mov
 `uml.template-parameter.list` lists a classifier's parameters with the bindings that use them, and
 `element.remove` removes one.
 
+### Profiles and stereotypes
+
+A *profile* extends UML for your own project: it holds *stereotypes*, such as *Entity*, each saying
+which kinds of element it is for and which values it carries. Profiles, stereotypes and what they
+extend are UML model elements of their own, saved with the model, not labels or tags.
+
+- **Make a profile.** Right-click a package in **Models**, the root package included (or select it
+  and press ⇧F10), and choose **New ▸ Profile**. **New** also offers **Package** and the
+  classifier kinds. The profile sits in the package beside its packages, with a muted *profile*
+  after its name, and its name is ready to type. A profile never goes inside a class.
+- **Make a stereotype.** Right-click the profile and choose **New ▸ Stereotype**, or use **+** under
+  **Stereotypes** in the profile's **Properties**. In **Models** each stereotype is listed under its
+  profile, with what it extends after its name, such as *extends Class*.
+- **What a stereotype extends.** In the stereotype's **Properties**, **+** under **Extends** lists
+  the metaclasses Archforge draws: Class, Interface, Enumeration, DataType, Property, Operation,
+  Association, Generalization and Package. Other UML metaclasses, such as Actor or UseCase, are
+  listed but disabled, *not drawn by Archforge yet*. The pencil on an extension changes it to
+  another metaclass or removes it. **Profile** moves the stereotype to another profile.
+- **Its properties.** Under **Properties**, **+** opens the same editor as a class's attributes.
+  A stereotype's property is typed by a primitive type, an enumeration or a data type; the type
+  menu offers those, and the built-in types. Names starting *base_* are kept for the stereotype's
+  extensions.
+- **The profile's diagram.** **Open profile diagram** in the profile's **Properties** opens its
+  diagram, made the first time, showing each stereotype as a «stereotype» card under the
+  «metaclass» cards of what it extends, joined by a line with a filled triangle at the metaclass.
+  Each time, it adds what the diagram lacks below what it shows, as one step you can undo; cards
+  you placed stay where they are.
+  Drag a stereotype's row from **Models** onto it to show it there with its metaclasses. The
+  metaclasses themselves are UML's own: they never appear in **Models**, the search or the type
+  menus, and nothing renames, moves or deletes them.
+- **Apply a profile to a package.** In a package's **Properties**, **+** under **Applied profiles**
+  lists every profile of the model; a profile applied already is ticked. Applying is one step you
+  can undo and adds no stereotype by itself: the elements inside the package, and inside its
+  packages, can then use the profile's stereotypes. The package's row in **Models** says *applies
+  Persistence* after its name. The pencil on an applied profile offers **Unapply**.
+- **Nothing in use is dropped.** Using stereotypes on elements comes in a later version. Once
+  elements use them, unapplying a profile they need, deleting a stereotype or its profile,
+  dropping a metaclass the elements need, moving a stereotype to another profile, deleting a
+  stereotype's property whose values are set, and moving or deleting the package or element they
+  sit in out of the profile's reach are refused, the uses counted: *Persistence is in use in
+  Commerce: «Entity» on Order and Customer, «Id» on 2 elements, «Reference» on places. Remove
+  those first.* **Show the 5 uses** selects them. Renaming a profile or a stereotype keeps every
+  use. Deleting a package refuses the same way when its elements would lose the profile that
+  reaches them, and when it would take along a profile that is in use.
+- **Deleting a used element** itself, such as *Order*, removes its stereotype applications with it,
+  in the same step: an application means nothing without its element.
+- **Deleting** an unused stereotype takes its extensions along; deleting an unused profile takes
+  its stereotypes and its applications along, each as one step you can undo.
+
+<!-- picture: workspace-profiles light | The profile Persistence beside Commerce in Models, its stereotypes Entity, Id and Reference listed under it with what each extends; its diagram shows the three «stereotype» cards under the «metaclass» cards Class, Property and Association, joined by lines with filled triangles; Properties shows Entity's name, profile, Extends Class and its properties, the editor open on cached -->
+
+<!-- picture: workspace-profile-refused light | Commerce selected, applying Persistence; unapplying it refused under Applied profiles, naming the uses, with Show the 5 uses -->
+
+For agents, `uml.profile.add`, `uml.profile.rename`, `uml.stereotype.add` and `uml.stereotype.set`
+make and change profiles and stereotypes, `uml.attribute.add` and its siblings their properties,
+`uml.profile.apply` and `uml.profile.unapply` apply them to packages, and `uml.profile.diagram`
+gives a profile's diagram filled as **Open profile diagram** fills it. `uml.profile.list`, `uml.stereotype.get`, `uml.package.profiles`,
+`uml.profile.uses` and `uml.metaclass.list` read them. A profile or a stereotype is deleted with
+`element.remove`.
+
 ### Cards
 
 A card grows to show every member you add. A card you made shorter by hand says how many rows it
