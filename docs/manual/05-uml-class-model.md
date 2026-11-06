@@ -793,12 +793,15 @@ association *recommends* joins *Customer*, *Product* and *Catalog*. It is drawn 
 a leg to each class, and it is one association, however many legs it has.
 
 **Draw one.** Open the **Relationship** tool's chevron and pick **N-ary association**, below
-**Association class**. Then click each class in turn: the diamond appears with the second class,
-and the bar at the top of the canvas counts the ends. Press **Enter**, or double-click the last
-class, to finish once there are three ends or more. The association, its diamond and every leg are
-added as one step you can undo. **Backspace** takes the last end off. **Esc**, choosing another
-tool, or a click on empty canvas cancels and leaves nothing in the model. Click a class twice to
-give it two ends: each end then has a role of its own.
+**Association class**. Then click each class in turn: every click on a class adds one end, the
+diamond appears with the second end, and the bar at the top of the canvas counts the ends. Press
+**Enter** to finish once there are three ends or more, or double-click the last class: the first
+click of the double-click adds its end, and the second finishes the association instead of adding
+that class again. The association, its diamond and every leg are added as one step you can undo.
+**Backspace** takes the last end off; before the first end, it removes the selection as usual.
+**Esc**, choosing another tool, or a click on empty canvas cancels and leaves nothing in the model.
+To give a class two ends, click it twice while fewer than three ends are drawn, or once more later:
+each end then has a role of its own.
 
 Each new end is named after its class, such as *customer*, and starts at `*`; a second end at the
 same class is *customer2*. Change them afterwards in **Properties**.
@@ -817,12 +820,14 @@ so the editor offers no **Aggregation**.
   that class.
 - **Move an end.** Drag the end of a leg onto another class, or pick another **Type** in the end's
   editor. The leg follows on every diagram.
-- **Remove an end.** The bin in the end's editor removes it with its legs. When only three ends are
-  left, removing one would leave two, and an n-ary association needs three or more. **Properties**
-  asks first: **Keep 3 ends** (where the focus starts; Esc does the same) changes nothing, and
-  **Make it binary** turns it into an ordinary association between the two classes left, keeping
-  its name and both ends, as one step you can undo. Wherever a diagram showed the diamond and both
-  classes, a line takes its place.
+- **Remove an end.** The bin in the end's editor removes it with its legs. With four ends or more
+  it goes at once, and a message offers **Undo**. A constraint that applies to that end alone goes
+  with it, and the ends left drop any **Subsets** or **Redefines** entry that the removal makes
+  invalid. **Undo** brings all of it back. When only three ends are left, removing one would leave
+  two, and an n-ary association needs three or more. **Properties** asks first: **Keep 3 ends**
+  (where the focus starts; Esc does the same) changes nothing, and **Make it binary** turns it into
+  an ordinary association between the two classes left, keeping its name and both ends, as one
+  step you can undo. Wherever a diagram showed the diamond and both classes, a line takes its place.
 - **Remove from this diagram** (Delete, or the diamond's menu) takes the diamond and its legs off
   this diagram only. **Delete from the model…** (Shift+Delete) asks first, then deletes the
   association and its ends from every diagram.

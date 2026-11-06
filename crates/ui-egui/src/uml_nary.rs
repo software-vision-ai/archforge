@@ -292,7 +292,7 @@ pub(crate) fn finish(shell: &mut Shell, d: Obj) {
 }
 
 /// The keys while something n-ary is under way on diagram `d`: with a draft, Enter finishes,
-/// Backspace (or Delete) drops the last end and Escape cancels; with Add end, Escape cancels. True
+/// Backspace (or Delete) drops the last end while there is one and Escape cancels; with Add end, Escape cancels. True
 /// when a key was taken.
 pub(crate) fn keys(shell: &mut Shell, ui: &egui::Ui, d: Obj) -> bool {
     let drafting = armed(shell);
@@ -315,7 +315,9 @@ pub(crate) fn keys(shell: &mut Shell, ui: &egui::Ui, d: Obj) -> bool {
         finish(shell, d);
         return true;
     }
-    if drafting && back_key {
+    // Only a draft with an end to drop takes Backspace; before the first end it reaches the
+    // selection's removal as everywhere else.
+    if drafting && back_key && !draft(shell).is_empty() {
         back(shell);
         return true;
     }

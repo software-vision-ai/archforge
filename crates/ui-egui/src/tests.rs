@@ -15190,6 +15190,28 @@ fn backspace_drops_the_last_end_and_every_cancel_leaves_nothing_behind() {
     assert!(naries(&h).is_empty());
 }
 
+/// Before the first end is clicked, Backspace is not the draft's: it reaches the selection's
+/// removal, so a selected card leaves the diagram as it does with any other tool.
+#[test]
+fn backspace_before_the_first_end_removes_the_selection_as_ever() {
+    let (mut h, ids) = nary_sample(ThemeKind::Light, false);
+    arm_nary(&mut h);
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [ids["Product"]] })).unwrap();
+    h.run();
+    assert!(h.state().canvas.nary.as_ref().is_none_or(|n| matches!(n, crate::uml_nary::Nary::Draft { ends, .. } if ends.is_empty())), "no end yet");
+    let shown = |h: &Harness<'static, Shell>| {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let d = st.by_uuid(archforge_mof::Uuid::parse(&ids["diagram"]).unwrap()).unwrap();
+        let product = st.by_uuid(archforge_mof::Uuid::parse(&ids["Product"]).unwrap()).unwrap();
+        archforge_uml::nary::node_in(st, d, product).is_some()
+    };
+    assert!(shown(&h));
+    h.state_mut().canvas.focused = true;
+    key(&mut h, egui::Key::Backspace, egui::Modifiers::NONE);
+    assert!(!shown(&h), "the selected card left the diagram");
+    assert!(naries(&h).is_empty(), "and nothing n-ary was made");
+}
+
 /// A class clicked twice gives two ends at it, told apart by their roles; a data type is refused at
 /// the canvas's top and adds no end.
 #[test]

@@ -359,12 +359,14 @@ fn remove_end(ctx: &mut C<'_>, p: &Params) -> R {
     // A constraint left constraining nothing goes with the end, as with any element that goes.
     let orphans = crate::constraints::orphans(&crate::constraints::dropped_by(ctx.doc, &[end]));
     let diamonds = diamonds(ctx.doc, a);
+    // The end and each constraint left naming nothing go with their views, and with the links and
+    // skills on them, as every removal does (`archforge_core::destroy_with_links`).
     archforge_diagram::remove_views_of(ctx.doc, end).map_err(fail)?;
-    ctx.doc.destroy(end).map_err(fail)?;
+    archforge_core::destroy_with_links(ctx.doc, end).map_err(fail)?;
     for o in orphans {
         if ctx.doc.is_alive(o) {
             archforge_diagram::remove_views_of(ctx.doc, o).map_err(fail)?;
-            ctx.doc.destroy(o).map_err(fail)?;
+            archforge_core::destroy_with_links(ctx.doc, o).map_err(fail)?;
         }
     }
     let mut dropped: Vec<Json> = Vec::new();

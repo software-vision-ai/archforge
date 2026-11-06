@@ -354,6 +354,38 @@ fn removing_one_of_three_ends_keeps_them_or_makes_it_binary() {
     assert!(why.contains("stays n-ary"), "{why}");
 }
 
+/// An end removed takes the links on it and a constraint that named only it, leaving no link or
+/// reference behind; undo brings them all back.
+#[test]
+fn a_removed_end_takes_its_links_and_its_own_constraint_along() {
+    let mut s = session();
+    let shop = shop(&mut s);
+    let a = run(&mut s, "uml.association.add-nary", json!({ "classes": [shop.customer, shop.product, shop.catalog, shop.store] }));
+    let end = s.doc().uuid(nary::ends(s.doc(), obj(s.doc(), &a))[3]).unwrap().to_string();
+    let only = run(&mut s, "uml.constraint.add", json!({ "context": shop.store, "expression": "size > 0", "constrained": [end] }));
+    let both = run(&mut s, "uml.constraint.add", json!({ "context": shop.store, "expression": "open", "constrained": [end, shop.store] }));
+    // A trace from the end to Customer, as a file may hold one.
+    let (tables, junctions) = tables();
+    let saved = rows::snapshot(s.doc(), &tables, &junctions).unwrap();
+    let mut st = store(1 << 40);
+    rows::restore(&mut st, &saved, &tables, &junctions).unwrap();
+    let link = st.create(archforge_core::LINK).unwrap();
+    st.set(link, archforge_core::link::SOURCE, Value::Ref(obj(&st, &end))).unwrap();
+    st.set(link, archforge_core::link::TARGET, Value::Ref(obj(&st, &shop.customer))).unwrap();
+    let model = archforge_uml::commands::model(&st).unwrap();
+    st.push(model, archforge_core::model::LINK, Value::Ref(link)).unwrap();
+    let mut s = session_over(st);
+    let before = picture(s.doc());
+    run(&mut s, "uml.association.remove-end", json!({ "association": a, "end": 3 }));
+    let st = s.doc();
+    assert!(!alive(&s, &end) && !alive(&s, &only), "the end and the constraint naming only it go");
+    assert!(alive(&s, &both), "a constraint naming something else stays");
+    assert!(st.alive().all(|o| st.class_of(o).ok() != Some(archforge_core::LINK)), "no link left");
+    assert_eq!(st.first_problem_by(archforge_uml::names::kind), None);
+    s.undo().unwrap();
+    assert_eq!(picture(s.doc()), before, "undo brings the end, its link and its constraint back");
+}
+
 /// Remove from this diagram takes the diamond and its legs off one diagram, the model kept; Delete
 /// from the model takes the association, its ends and every diamond and leg; an end alone is not
 /// deleted with element.remove.
