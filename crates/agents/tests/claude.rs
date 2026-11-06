@@ -275,7 +275,7 @@ fn a_turn_with_a_tool_call_reads_in_order() {
         *rest[7],
         SessionEvent::TurnFinished {
             outcome: TurnOutcome::Completed,
-            usage: Usage { input_tokens: 4300, output_tokens: 120, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+            usage: Usage { input_tokens: 4300, output_tokens: 52, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
         }
     );
     assert_eq!(rest.len(), 8);

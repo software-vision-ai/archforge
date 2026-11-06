@@ -98,10 +98,10 @@ claude -p --bare \
 | `--input-format stream-json` | One JSON user message per stdin line. Refused without `--output-format stream-json`: `Error: --input-format=stream-json requires output-format=stream-json.`, exit 1. |
 | `--output-format stream-json --verbose` | One JSON event per stdout line. Without `--verbose`: `Error: When using --print, --output-format=stream-json requires --verbose`, exit 1. |
 | `--include-partial-messages` | Adds `stream_event` lines (raw model stream events) for live text. |
-| `--mcp-config <file or JSON>` | `{"mcpServers":{"archforge":{"command":"<abs path>/archforge-cli","args":["mcp","--bridge","<port>"],"env":{}}}}`. Observed: the server connected (`mcp_servers:[{"name":"archforge","status":"connected","source":"dynamic"}]`) and its 151 tools were listed. |
+| `--mcp-config <file or JSON>` | `{"mcpServers":{"archforge":{"command":"<abs path>/archforge-cli","args":["mcp","--bridge","<port>","--read-only"],"env":{}}}}`, without `--read-only` only once "Allow changes" is on. Observed (the spike ran before `--read-only` existed, so without it): the server connected (`mcp_servers:[{"name":"archforge","status":"connected","source":"dynamic"}]`) and its 151 tools were listed. |
 | `--strict-mcp-config` | Only the servers from `--mcp-config` (no project `.mcp.json`, no user servers). Use it: a stray project file is otherwise a second source. |
 | `--tools ""` | Removes every built-in tool (Bash, Edit, Read, WebFetch, Task, …). Observed: with it the init `tools` list held only `mcp__archforge__*`; without it, bare mode listed `Bash`, `Edit`, `Read`. MCP tools are not affected (doc). |
-| `--allowedTools "mcp__archforge__*"` | Pre-approves the server's tools so `dontAsk` does not deny them. |
+| `--allowedTools "mcp__archforge__*"` | Pre-approves the server's tools so `dontAsk` does not deny them. The wildcard is safe because read-only is enforced by the bridge, not by this list: a conversation's server runs `archforge-cli mcp --bridge <port> --read-only` (AR-198, [Working with an agent](../manual/07-agents.md#read-only-sessions-and-labelled-changes)), which lists and allows only the reads and refuses every other tool with JSON-RPC error -32004 before the call reaches Archforge. Only "Allow changes to the model" drops `--read-only`, which means restarting the session with a new `--mcp-config` and `--resume`. |
 | `--permission-mode dontAsk` | Anything that would ask is denied instead; allowed tools run (doc). Choices in 2.1.317: `acceptEdits, auto, bypassPermissions, manual, dontAsk, plan`; an unknown value exits 1 with the list. `--permission-prompts none` (2.1.259+) is the equivalent switch for who answers. |
 | `--model` | An alias (`sonnet`, `opus`, `haiku`, `fable`) or a full name; the init event names the resolved model (`sonnet` resolved to `claude-sonnet-5-5`). The model is **not** remembered across `--resume`: a resumed run without `--model` used the default model, so pass it on every spawn. `--fallback-model` takes a list (doc). |
 | `--session-id <uuid>` | Fixes the conversation id; a non-UUID exits 1 with `Error: Invalid session ID. Must be a valid UUID.` |
@@ -235,7 +235,7 @@ The Archforge server goes in `<CODEX_HOME>/config.toml` (observed working):
 ```toml
 [mcp_servers.archforge]
 command = "/abs/path/archforge-cli"
-args = ["mcp", "--bridge", "47000"]
+args = ["mcp", "--bridge", "47000", "--read-only"]   # without --read-only only after "Allow changes"
 startup_timeout_sec = 10
 tool_timeout_sec = 60
 ```
@@ -443,8 +443,9 @@ newest undo step, or null>}`, with `isError: false` (`crates/mcp/src/lib.rs`, `c
 | `codex/schema/codex-app-server-0.166.0.schemas.json` | The generated protocol schema |
 | `synthetic-hostile-lines.jsonl` | Lines both parsers must survive |
 
-These live under `docs/` because the adapter crate (AR-200) does not exist yet; AR-201 and AR-202
-move what they use into the crate's `tests/fixtures/`.
+The Claude adapter (AR-201) copied the Claude fixtures and the hostile lines into
+`crates/agents/tests/fixtures/`, where its tests read them; a change to one copy goes to the other in
+the same commit. AR-202 does the same for the Codex fixtures.
 
 ## To verify with a real round trip (needs the owner's OK)
 
