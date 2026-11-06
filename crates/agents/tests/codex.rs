@@ -1526,7 +1526,7 @@ on_account() {
 }
 on_login() {
   case "$line" in
-    *'"type":"chatgptDeviceCode"'*) send '{"id":@ID@,"result":{"type":"chatgptDeviceCode","loginId":"login-2","verificationUrl":"https://auth.openai.com/codex/device","userCode":"ABCD-EFGH"}}' ;;
+    *'"type":"chatgptDeviceCode"'*) send '{"id":@ID@,"result":{"type":"chatgptDeviceCode","loginId":"019a0000-0000-7000-8000-00000000c002","verificationUrl":"https://auth.openai.com/codex/device","userCode":"ABCD-EFGH"}}' ;;
     *'"type":"chatgpt"'*) send '{"id":@ID@,"result":{"type":"chatgpt","loginId":"login-1","authUrl":"https://auth.openai.com/oauth/authorize?PLACEHOLDER"}}'
       signed_in=1
       send '{"method":"account/login/completed","params":{"loginId":"login-1","success":true,"error":null,"onboardingEntrypoint":null}}'
@@ -1537,7 +1537,7 @@ on_login() {
 on_key_login() { send '{"id":@ID@,"result":{"type":"apiKey"}}'; }
 on_other() {
   case "$line" in
-    *'"method":"account/login/cancel"'*) send '{"id":@ID@,"result":{"status":"canceled"}}'; send '{"method":"account/login/completed","params":{"loginId":"login-2","success":false,"error":"login cancelled","onboardingEntrypoint":null}}' ;;
+    *'"method":"account/login/cancel"'*) send '{"id":@ID@,"result":{"status":"canceled"}}'; send '{"method":"account/login/completed","params":{"loginId":"019a0000-0000-7000-8000-00000000c002","success":false,"error":"Login was not completed","onboardingEntrypoint":null}}' ;;
     *'"method":"account/logout"'*) signed_in=; send '{"id":@ID@,"result":{}}'; send '{"method":"account/updated","params":{"authMode":null,"planType":null}}' ;;
     *'"method":"model/list"'*'"cursor"'*) send '{"id":@ID@,"result":{"data":[{"id":"gpt-6.1-mini","model":"gpt-6.1-mini","displayName":"GPT-6.1-Mini","description":"Fixture text.","hidden":false,"isDefault":false,"supportedReasoningEfforts":[{"reasoningEffort":"low","description":"x"}],"defaultReasoningEffort":"low"}],"nextCursor":null}}' ;;
     *'"method":"model/list"'*) send '{"id":@ID@,"result":{"data":[{"id":"gpt-6.1-sol","model":"gpt-6.1-sol","displayName":"GPT-6.1-Sol","description":"Fixture text.","hidden":false,"isDefault":true,"supportedReasoningEfforts":[{"reasoningEffort":"low","description":"x"},{"reasoningEffort":"high","description":"y"}],"defaultReasoningEffort":"medium"},{"model":"no-id"}],"nextCursor":"page-2"}}' ;;
@@ -1572,7 +1572,7 @@ fn a_device_code_sign_in_is_shown_and_cancelled() {
     assert_eq!(accounts.read(false).unwrap().status, AccountStatus::SignedOut);
     let started = accounts.login_device_code().unwrap();
     let expected = LoginStarted::DeviceCode {
-        login_id: "login-2".into(),
+        login_id: "019a0000-0000-7000-8000-00000000c002".into(),
         verification_url: "https://auth.openai.com/codex/device".into(),
         user_code: "ABCD-EFGH".into(),
     };
@@ -1582,13 +1582,17 @@ fn a_device_code_sign_in_is_shown_and_cancelled() {
     let events = account_events_until(&mut accounts, |e| matches!(e, AccountEvent::LoginCompleted { .. }));
     assert_eq!(
         events.last(),
-        Some(&AccountEvent::LoginCompleted { login_id: Some("login-2".into()), success: false, error: Some("login cancelled".into()) })
+        Some(&AccountEvent::LoginCompleted {
+            login_id: Some("019a0000-0000-7000-8000-00000000c002".into()),
+            success: false,
+            error: Some("Login was not completed".into())
+        })
     );
     let sent = stdin_lines(&base, 5);
     let login: Value = serde_json::from_str(requests(&sent, "account/login/start")[0]).unwrap();
     assert_eq!(login["params"], json!({ "type": "chatgptDeviceCode" }));
     let cancel: Value = serde_json::from_str(requests(&sent, "account/login/cancel")[0]).unwrap();
-    assert_eq!(cancel["params"], json!({ "loginId": "login-2" }));
+    assert_eq!(cancel["params"], json!({ "loginId": "019a0000-0000-7000-8000-00000000c002" }));
     assert!(requests(&sent, "thread/start").is_empty(), "the Settings page starts no thread");
     accounts.shutdown(Duration::from_secs(2)).unwrap();
     std::fs::remove_dir_all(&base).unwrap();
