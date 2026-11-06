@@ -1008,8 +1008,9 @@ What is UML's own, beside the shared rules above.
   Commerce.` and its toast where it went. While the picker is open it takes the keys: Backspace
   edits its filter, never deletes the selection. A binary association's end has a section of its own in its part of Properties, after
   its qualifiers (`Stereotypes of customer · n`, `Stereotypes of this end · n` without a role; ids
-  `workspace.properties.end.<i>.stereotypes.*`, no diagram check); an n-ary end takes them through
-  the commands so far. Agents use `uml.stereotype.apply`,
+  `workspace.properties.end.<i>.stereotypes.*`, no diagram check); an n-ary association's ends have no section
+  yet and take stereotypes through `uml.stereotype.apply` with the end's id, which
+  `uml.association.add-nary` and `uml.relationship.list` give. Agents use `uml.stereotype.apply`,
   `.unapply`, `.set-value`, `.show-values`, `.list-applied` and `.applicable`.
 
 On every line: a role, and a label at the line's middle, sit above a level stretch of the line and

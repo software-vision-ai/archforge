@@ -1081,8 +1081,11 @@ stereotypes. A stereotype and its values are model data, saved with the model.
 - **Apply a stereotype.** Select the element: a class, an interface, an enumeration, a data type,
   a primitive type or an association class; an attribute or an operation (select its row in its
   class's **Properties**, and the section is *Stereotypes of id*); an association, a
-  generalization or a package; an association's end in its part of the association's
-  **Properties**. **+** under **Stereotypes** in its **Properties** lists every
+  generalization or a package; the end of an association between two classes, in that end's part
+  of the association's **Properties**. An n-ary association's ends have no **Stereotypes** section
+  yet: apply stereotypes to them with the command `uml.stereotype.apply`, giving the end's id as
+  `element`; `uml.association.add-nary` gives the ends' ids, and so does `uml.relationship.list` for
+  one of the association's classes. **+** under **Stereotypes** in its **Properties** lists every
   stereotype of the model. Those that extend the element's kind and whose profile is applied to its
   package, or a package around it, come first; one applied already is ticked. After a line, the
   others are listed but disabled, with why: *properties only* for a stereotype that extends
