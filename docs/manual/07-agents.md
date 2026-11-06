@@ -16,20 +16,27 @@ makes shows in the window at once and ⌘Z (Ctrl Z) takes it back.
 
 Agent access works on macOS and Linux for now.
 
-1. Start Archforge with a control port:
+1. Start Archforge with a control port: on macOS
+   `/Applications/Archforge.app/Contents/MacOS/archforge --control 47000`, on Linux
+   `archforge --control 47000`, or from the source,
 
    ```sh
    cargo run -p archforge -- --control 47000
    ```
 
-2. Build the command-line tool:
+2. Find the command-line tool. The macOS and Linux packages carry it beside the application:
+   `/Applications/Archforge.app/Contents/MacOS/archforge-cli` on macOS, `/usr/bin/archforge-cli`
+   from the deb or rpm package, and `bin/archforge-cli` beside `bin/archforge` in the tar.gz. The
+   AppImage carries it inside the image, at `usr/bin/archforge-cli` of what
+   `--appimage-extract` unpacks. From the source, build it:
 
    ```sh
    cargo build -p archforge-cli
    ```
 
-3. Let your agent run its MCP server, bridged to that port: `target/debug/archforge-cli mcp --bridge
-   47000`. The repository's `.mcp.json` registers exactly this for agents that read it.
+3. Let your agent run its MCP server, bridged to that port: `archforge-cli mcp --bridge 47000`,
+   with the path of step 2 (`target/debug/archforge-cli` from the source). The repository's
+   `.mcp.json` registers the source build for agents that read it.
 
 **File ▸ Generate…** says whether agent access is on. The port listens only on your own computer, and a
 token made for each start, kept in a file only you can read in Archforge's settings folder, guards

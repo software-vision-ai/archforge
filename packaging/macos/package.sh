@@ -15,12 +15,19 @@ bundle="$out/$APP_NAME.app"
 
 if [ "$sign" != "--sign" ]; then
   for target in x86_64-apple-darwin aarch64-apple-darwin; do
-    cargo build --release --locked --target "$target" -p "$APP" --manifest-path "$ROOT/Cargo.toml"
+    # One build each, so the application is built with its own features only, as before.
+    for b in "$APP" "$CLI"; do
+      cargo build --release --locked --target "$target" -p "$b" --manifest-path "$ROOT/Cargo.toml"
+    done
   done
   rm -rf "$bundle"
   mkdir -p "$bundle/Contents/MacOS" "$bundle/Contents/Resources"
-  lipo -create -output "$bundle/Contents/MacOS/$APP" \
-    "$TARGET_DIR/x86_64-apple-darwin/release/$APP" "$TARGET_DIR/aarch64-apple-darwin/release/$APP"
+  # The command-line tool lies beside the application's executable, inside the bundle, so signing
+  # and notarising cover it and the application finds it there.
+  for b in "$APP" "$CLI"; do
+    lipo -create -output "$bundle/Contents/MacOS/$b" \
+      "$TARGET_DIR/x86_64-apple-darwin/release/$b" "$TARGET_DIR/aarch64-apple-darwin/release/$b"
+  done
   sed -e "s|__VERSION__|${version%%-*}|g; s|__BUNDLE_ID__|$BUNDLE_ID|g" "$ROOT/packaging/macos/Info.plist.in" >"$bundle/Contents/Info.plist"
   # Inside the bundle, so signing covers them and a copy of the application carries them.
   ship_licences "$bundle/Contents/Resources"
@@ -55,7 +62,9 @@ else
   rm -rf "$bundle"
   mv "$unpacked/$APP_NAME.app" "$bundle"
   rm -rf "$unpacked"
-  [ -x "$bundle/Contents/MacOS/$APP" ] || die "$bundle/Contents/MacOS/$APP is not executable after unpacking"
+  for b in "$APP" "$CLI"; do
+    [ -x "$bundle/Contents/MacOS/$b" ] || die "$bundle/Contents/MacOS/$b is not executable after unpacking"
+  done
   need codesign xcrun security
   keychain="$RUNNER_TEMP/signing.keychain-db"
   security create-keychain -p "" "$keychain"
@@ -64,8 +73,14 @@ else
   echo "$MACOS_CERTIFICATE_P12" | base64 --decode >"$RUNNER_TEMP/cert.p12"
   security import "$RUNNER_TEMP/cert.p12" -k "$keychain" -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
   security list-keychains -d user -s "$keychain"
+  # Inside out: the nested command-line tool is signed first, with the same identity and the
+  # hardened runtime, because signing the bundle seals its nested code but does not sign it, and
+  # notarisation refuses an unsigned executable.
+  codesign --force --options runtime --timestamp --entitlements "$ROOT/packaging/macos/entitlements.plist" \
+    --sign "$MACOS_SIGNING_IDENTITY" "$bundle/Contents/MacOS/$CLI"
   codesign --force --options runtime --timestamp --entitlements "$ROOT/packaging/macos/entitlements.plist" \
     --sign "$MACOS_SIGNING_IDENTITY" "$bundle"
+  codesign --verify --strict --deep "$bundle"
 fi
 
 # The disk image: the bundle, a link to the applications folder, and, when installer artwork exists

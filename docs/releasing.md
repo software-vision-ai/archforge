@@ -61,6 +61,23 @@ the packages stay on the run as artefacts.
 | Windows 11 on ARM, ARM64 | `archforge-<v>-windows-arm64.msi`, `archforge-<v>-windows-arm64.zip` | `windows-11-arm` |
 | Linux x86_64 and aarch64, glibc 2.35 or later | `archforge-<v>-linux-<arch>.{AppImage,AppImage.zsync,deb,rpm,tar.gz}` | `ubuntu-22.04`, `ubuntu-22.04-arm` |
 
+The macOS and Linux packages carry `archforge-cli`, the command-line tool agents run
+(`archforge-cli mcp --bridge <port>`), which the in-app chat is to start. It is built in release
+mode with the application and placed beside its executable, where `archforge_control::cli_path`
+finds it:
+
+| Package | The application | `archforge-cli` |
+|---|---|---|
+| macOS dmg | `Archforge.app/Contents/MacOS/archforge` | `Archforge.app/Contents/MacOS/archforge-cli`, universal too |
+| Linux tar.gz (and the Flatpak made from it) | `bin/archforge` | `bin/archforge-cli` |
+| Linux deb and rpm | `/usr/bin/archforge` | `/usr/bin/archforge-cli` |
+| Linux AppImage | `usr/bin/archforge` inside the image | `usr/bin/archforge-cli` inside the image |
+
+Inside the macOS bundle it is covered when the bundle is signed and notarised: the signing step
+signs it first, with the same identity and the hardened runtime, then the bundle. The workflow
+checks that every package holds it, and that the dmg's and the AppImage's report the release's
+version (`archforge-cli --version`). The Windows packages don't carry it yet.
+
 Each comes from its script under `packaging/`. Every package reports its version, commit and date
 (`archforge --version`): the workflow sets `ARCHFORGE_BUILD_SHA` and `ARCHFORGE_BUILD_DATE`, which
 `apps/archforge/build.rs` reads; a plain `cargo build` reports a dev build. Where a system takes
