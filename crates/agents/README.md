@@ -35,11 +35,11 @@ folders, so the shell never depends on it and it is never built for the portable
 | `claude::ClaudeConfig` | `session: SessionId` (the conversation's UUID), `start: Start` (`New`, `Resume`), `model: Model`, `bridge: Bridge { cli, port, origin, allow_changes, home: BridgeHome }`, `limits` |
 | `claude::command_line`, `mcp_config`, `write_mcp_config` | the arguments; the tool server configuration as JSON; that configuration written to `claude-mcp.json` in the conversation's folder (atomic, 0600) |
 | `claude::ClaudeParser`, `kind_of` | stream-json lines to events, usable alone; an error category to its `ErrorKind` |
-| `codex::CodexSession` | `start(&Runtime, account: &ConversationFolder, folder: &ConversationFolder, CodexConfig, SignIn) -> Result<CodexSession, _>`, `AgentSession`, `thread_id`, `skipped`, `turn_running`, `history`, `process` |
+| `codex::CodexSession` | `start(&Runtime, account: &ConversationFolder, folder: &ConversationFolder, CodexConfig, SignIn) -> Result<CodexSession, _>`, `AgentSession`, `thread_id`, `skipped`, `turn_running`, `history`, `history_problem`, `process` |
 | `codex::CodexConfig`, `SignIn`, `Start` | `start: Start` (`New`, `Resume`, `ResumeFrom(History)`), `model: Option<Model>`, `instructions: Option<String>` (64 KiB), `bridge: Bridge`, `limits`, `request_timeout` (1 ms to 600 s; `DEFAULT_REQUEST_TIMEOUT` 30 s); `SignIn::ApiKey(Secret)`, `SignIn::ChatGpt(KeyringAccess)`; `SignInKind` |
 | `codex::CodexAccounts` | `open(&Runtime, account: &ConversationFolder, SignIn, AccountOptions) -> Result<CodexAccounts, _>`; `read(refresh) -> AccountState`, `check() -> AccountState`, `login_chatgpt() -> LoginStarted`, `login_device_code() -> LoginStarted`, `cancel_login(&str) -> CancelStatus`, `logout()`, `rate_limits() -> RateLimits`, `models() -> Vec<ModelInfo>`, `next_event(Duration) -> Option<AccountEvent>`, `shutdown(Duration)` |
 | `codex::AccountState`, `AccountStatus`, `LoginStarted`, `AccountEvent` | `status` + `requires_openai_auth`; `SignedOut`, `ApiKey`, `ChatGpt { email, plan, workspace }`, `Expired { email, plan }`, `Other { kind }`; `Browser { login_id, auth_url }`, `DeviceCode { login_id, verification_url, user_code }`; `LoginStarted`, `LoginCompleted { login_id, success, error }`, `AccountChanged { auth_mode, plan }`, `RateLimits`, `Ended { exit, error }` |
-| `codex::command_line`, `toml_string`, `StateFolders`, `History`, `history::path` | the arguments for a sign-in kind, state folders and bridge; a TOML basic string; the conversation's state and log folders; Archforge's copy of the conversation and its file |
+| `codex::command_line`, `toml_string`, `StateFolders`, `History`, `history::path`, `history::exists` | the arguments for a sign-in kind, state folders and bridge; a TOML basic string; the conversation's state and log folders; Archforge's copy of the conversation and its file |
 | `codex::CodexParser`, `kind_of`, `rpc` | notifications to events, usable alone; a `codexErrorInfo` to its `ErrorKind`; the wire: `read_line`, `Incoming`, `Requests` (ids and per-request deadlines), `RpcError` |
 
 **Discovery.** The override variable, when set, is the only place looked at: a relative path is
@@ -255,7 +255,12 @@ before the first turn (the most recent earlier messages whose JSON, as written, 
 with the request around it; older ones are dropped and logged); `Start::ResumeFrom(History)` primes it from the project's record (AR-206)
 instead, for when the folder has none, as on another computer. It uses the history it is given even
 when the folder holds a readable copy, and replaces that copy at the end of the first turn: check
-`history::exists(folder)` first and choose `Start::Resume` when it is true. Tool calls
+`history::exists(folder)` first (an error when the system cannot tell, never taken for "no copy")
+and choose `Start::Resume` when it is true. A copy that cannot be written at a turn's end (a full
+disk, a folder in its place) does not fail the turn: it is logged and `CodexSession::history_problem()`
+names the error until a later turn writes the copy again; meanwhile the file lacks the newest
+messages and a restart would not see them, so keep `CodexSession::history()` (or the project's own
+record) while the session lives and the problem stands. Tool calls
 are not in the copy.
 
 *Sign-in.* `SignIn::ApiKey(key)`: the key goes once, in the `account/login/start
@@ -327,9 +332,12 @@ past its timeout or the next request deadline.
 *The account operations* (`CodexAccounts`, for AR-204's `AgentAccounts`). Each opens its own
 `codex app-server` in the account folder (its home, work and temporary folders), without a tool
 server and never starting a thread, so nothing reaches a model; its state and log databases go to a
-folder of its own under the account's temporary folder, removed when it drops, so nothing it logs
-outlives it. Every call waits for its own answer
-at most the request timeout, so call it on a worker. `open` with `SignIn::ChatGpt` uses the keyring
+folder of its own under the account's temporary folder, removed when it drops. That removal is
+best effort: a failure is logged and leaves the folder, and a crash of Archforge leaves it too,
+under `account-codex/tmp/codex-<pid>-<n>`, until the account folder is cleared. The request timeout
+applies to each request, not to a call: `open` makes one or two requests (the handshake, and the
+key's login), `check` up to two, `models` up to ten (one a page), every other call one, so a call
+may take up to that many timeouts. Call them on a worker. `open` with `SignIn::ChatGpt` uses the keyring
 store; with `SignIn::ApiKey` the in-memory one and gives the key at once. Codex keeps the key
 without asking OpenAI whether it is valid (codex-cli 0.166.0's `account/login/start` only stores
 it), so a wrong or revoked key is accepted by `open` and shows only on the first real request, a
@@ -354,8 +362,11 @@ no `auth.json`; the ChatGPT sign-in in the browser and with a device code under 
 expired sign-in looks like; whether an MCP tool call still raises an elicitation with `approve`;
 `turn/interrupt` timing; `thread/inject_items` with the copy's messages; `account/rateLimits/read`
 for both kinds; that the switched-off tools stay off; that no state or log database holds the key
-after an API-key login; and whether processes sharing one ChatGPT sign-in renew it without
-spending each other's renewal.
+after an API-key login; whether processes sharing one ChatGPT sign-in renew it without spending
+each other's renewal; and whether a running conversation's Codex sees a ChatGPT sign-in made under
+Settings while it runs (the session reads the account again before each message while signed out;
+if Codex does not pick the sign-in up, the fallback is a new start with `Start::Resume`, which keeps
+the conversation).
 
 **Tests.** `cargo test -p archforge-agents`: unit tests beside the code, and `tests/runtimes.rs`
 against fake runtimes (shell scripts that answer `--version` and then do what a test needs) for

@@ -261,9 +261,16 @@ fn set_aside(path: &std::path::Path) -> String {
 
 /// Whether the conversation's folder holds a copy (readable or not), for a caller choosing between
 /// [`Start::Resume`](super::Start::Resume), which reads it, and
-/// [`Start::ResumeFrom`](super::Start::ResumeFrom), which replaces it.
-pub fn exists(folder: &ConversationFolder) -> bool {
-    std::fs::symlink_metadata(path(folder)).is_ok()
+/// [`Start::ResumeFrom`](super::Start::ResumeFrom), which replaces it. Only a missing file is
+/// `false`: when the system cannot tell (the folder cannot be searched, say), that is an error,
+/// never taken for "no copy".
+pub fn exists(folder: &ConversationFolder) -> Result<bool, AgentError> {
+    let path = path(folder);
+    match std::fs::symlink_metadata(&path) {
+        Ok(_) => Ok(true),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(e) => Err(AgentError::Folder { path, problem: format!("cannot be checked for a conversation copy: {e}") }),
+    }
 }
 
 /// Where the copy of the conversation in `folder` is kept.

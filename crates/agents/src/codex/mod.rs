@@ -354,12 +354,13 @@ fn refused(method: &str, error: &RpcError, kind: ErrorKind) -> AgentError {
 /// or 64 damaged copies are already set aside): its first turn's write would replace it. A
 /// readable copy, or one that was set aside, lets the start go on.
 fn keep_unreadable_copy(folder: &ConversationFolder) -> Result<(), AgentError> {
-    if !history::exists(folder) {
+    if !history::exists(folder)? {
         return Ok(());
     }
     match History::read(folder) {
         Ok(_) => Ok(()),
-        Err(error) if history::exists(folder) => Err(error),
+        // Still there, or the system cannot tell: refused either way.
+        Err(error) if history::exists(folder).unwrap_or(true) => Err(error),
         Err(error) => {
             log::warn!("a Codex conversation copy that could not be read was set aside before a new copy began: {error}");
             Ok(())
@@ -477,6 +478,8 @@ pub struct CodexSession {
     held: VecDeque<(String, Value)>,
     /// The bytes of the output lines the held notifications came from.
     held_bytes: usize,
+    /// Why the copy could not be written at the end of the last turn.
+    history_problem: Option<AgentError>,
     /// Turns that ended or were abandoned: their late notifications are ignored.
     stale_turns: VecDeque<String>,
     /// `turn/start` requests that passed their deadline, with their thread: a late answer names a
@@ -601,6 +604,7 @@ impl CodexSession {
             interrupt_sent: false,
             held: VecDeque::new(),
             held_bytes: 0,
+            history_problem: None,
             stale_turns: VecDeque::new(),
             late_starts: VecDeque::new(),
             unnamed_deadline: None,
@@ -636,6 +640,14 @@ impl CodexSession {
     /// Archforge's copy of the conversation so far.
     pub fn history(&self) -> &History {
         &self.history
+    }
+
+    /// Why the copy could not be written at the end of the last turn, or `None` when it was. The
+    /// turn itself still ends as it did; while this is `Some`, the file lacks the newest messages
+    /// and a later start with [`Start::Resume`] would not see them, so keep [`history`](Self::history)
+    /// (or the project's own record) until a later turn writes the copy again.
+    pub fn history_problem(&self) -> Option<&AgentError> {
+        self.history_problem.as_ref()
     }
 
     /// Sends a request and registers it for its answer.
@@ -1086,9 +1098,13 @@ impl CodexSession {
         self.stop_requested = false;
         self.interrupt_sent = false;
         self.queued = None;
-        if let Err(e) = self.history.write(&self.folder) {
-            log::warn!("the Codex conversation copy could not be written: {e}");
-        }
+        self.history_problem = match self.history.write(&self.folder) {
+            Ok(_) => None,
+            Err(e) => {
+                log::warn!("the Codex conversation copy could not be written: {e}");
+                Some(e)
+            }
+        };
     }
 
     /// Ends the open turn with `outcome`.

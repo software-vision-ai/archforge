@@ -752,6 +752,55 @@ fn a_replayed_turn_runs_end_to_end() {
     std::fs::remove_dir_all(&base).unwrap();
 }
 
+/// A copy that cannot be written at a turn's end does not fail the turn, but the session says so
+/// until a later turn writes it again.
+#[test]
+fn a_failed_copy_write_is_reported() {
+    let base = scratch("copy-write");
+    let body = r#"
+turns=0
+on_turn() {
+  turns=$((turns+1))
+  send "{\"id\":$id,\"result\":{\"turn\":{\"id\":\"u-$turns\"}}}"
+  send "{\"method\":\"turn/completed\",\"params\":{\"turn\":{\"id\":\"u-$turns\",\"status\":\"completed\",\"items\":[]}}}"
+}
+"#;
+    let (runtime, account, folder) = fake_codex(&base, body);
+    let mut session = CodexSession::start(&runtime, &account, &folder, config(false), SignIn::ApiKey(canary())).unwrap();
+    assert!(session.history_problem().is_none());
+    std::fs::create_dir(history::path(&folder)).unwrap();
+    session.send("one").unwrap();
+    let events = events_until(&mut session, turn_end);
+    assert!(matches!(events.last(), Some(SessionEvent::TurnFinished { outcome: TurnOutcome::Completed, .. })), "the turn still ends as it did");
+    assert!(matches!(session.history_problem(), Some(AgentError::Folder { .. })), "{:?}", session.history_problem());
+    assert_eq!(session.history().entries().len(), 1, "the session still holds the copy");
+    std::fs::remove_dir(history::path(&folder)).unwrap();
+    session.send("two").unwrap();
+    events_until(&mut session, turn_end);
+    assert!(session.history_problem().is_none(), "a later write clears it");
+    let written: Vec<String> = History::read(&folder).unwrap().entries().iter().map(|e| e.text.clone()).collect();
+    assert_eq!(written, vec!["one".to_owned(), "two".to_owned()]);
+    session.shutdown(Duration::from_secs(2)).unwrap();
+    std::fs::remove_dir_all(&base).unwrap();
+}
+
+/// Only a missing copy counts as none: when the folder cannot be searched, `exists` is an error and
+/// a start that would write the copy is refused rather than taking the copy for absent.
+#[test]
+fn an_unknown_copy_is_not_taken_for_absent() {
+    let base = scratch("copy-unknown");
+    let (runtime, account, folder) = fake_codex(&base, "");
+    std::fs::write(history::path(&folder), "{\"version\":9}").unwrap();
+    std::fs::set_permissions(folder.path(), std::fs::Permissions::from_mode(0o000)).unwrap();
+    let exists = history::exists(&folder);
+    let started = CodexSession::start(&runtime, &account, &folder, config(false), SignIn::ApiKey(canary())).map(|_| ());
+    std::fs::set_permissions(folder.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+    assert!(matches!(exists, Err(AgentError::Folder { .. })), "{exists:?}");
+    assert!(matches!(started, Err(AgentError::Folder { .. })), "{started:?}");
+    assert_eq!(std::fs::read_to_string(history::path(&folder)).unwrap(), "{\"version\":9}", "the copy is untouched");
+    std::fs::remove_dir_all(&base).unwrap();
+}
+
 /// A resumed conversation starts a new ephemeral thread and gives it Archforge's copy of the earlier
 /// messages before the turn, the waiting message not among them.
 #[test]
@@ -784,9 +833,9 @@ fn a_resume_gives_the_thread_the_earlier_messages() {
 
     // Without the folder's copy (another computer), the caller primes the thread from the
     // project's record, and the folder's copy starts from it.
-    assert!(history::exists(&folder));
+    assert!(history::exists(&folder).unwrap());
     std::fs::remove_file(history::path(&folder)).unwrap();
-    assert!(!history::exists(&folder), "the caller sees there is no copy to resume");
+    assert!(!history::exists(&folder).unwrap(), "the caller sees there is no copy to resume");
     std::fs::remove_file(base.join("stdin")).unwrap();
     let mut record = History::default();
     record.push(history::Role::User, "From the project".into());
@@ -1424,7 +1473,7 @@ fn settings_are_refused_before_anything_starts() {
     )
     .unwrap();
     assert_eq!(std::fs::read_to_string(folder.path().join("codex-history.json.damaged-64")).unwrap(), "damaged", "set aside, then the start went on");
-    assert!(!history::exists(&folder));
+    assert!(!history::exists(&folder).unwrap());
     session.shutdown(Duration::from_secs(2)).unwrap();
     std::fs::remove_dir_all(&base).unwrap();
 }
