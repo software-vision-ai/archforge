@@ -1,0 +1,6 @@
+{"t": 0.0, "dir": "in", "line": "{\"id\": 1, \"method\": \"initialize\", \"params\": {\"clientInfo\": {\"name\": \"archforge\", \"title\": \"Archforge\", \"version\": \"0.13.0\"}, \"capabilities\": {\"experimentalApi\": false, \"requestAttestation\": false}}}"}
+{"t": 0.0, "dir": "in", "line": "{\"method\": \"initialized\"}"}
+{"t": 0.027, "dir": "out", "line": "{\"id\":1,\"result\":{\"userAgent\":\"archforge/0.166.0 (Mac OS 27.2.0; arm64) unknown (archforge; 0.13.0)\",\"codexHome\":\"/tmp/archforge-agent/codex-home\",\"platformFamily\":\"unix\",\"platformOs\":\"macos\"}}"}
+{"t": 0.027, "dir": "out", "line": "{\"method\":\"remoteControl/status/changed\",\"params\":{\"status\":\"disabled\",\"serverName\":\"host.example\",\"installationId\":\"00000000-0000-0000-0000-000000000000\",\"environmentId\":null},\"emittedAtMs\":1793934453691}"}
+{"t": 1.011, "dir": "sig", "line": "SIGTERM"}
+{"t": 3.223, "dir": "exit", "line": "0"}

@@ -1,0 +1,6 @@
+{"t": 0.0, "dir": "note", "line": "DOC-DERIVED EXAMPLE, NOT OBSERVED. Device-code sign-in: show verificationUrl and userCode; the person cancels. Shapes follow the codex-cli 0.166.0 generated schema (schema/codex-app-server-0.166.0.schemas.json) and https://learn.chatgpt.com/docs/app-server. Verify with a real round trip."}
+{"t": 0.0, "dir": "in", "line": "{\"id\":24,\"method\":\"account/login/start\",\"params\":{\"type\":\"chatgptDeviceCode\"}}"}
+{"t": 0.3, "dir": "out", "line": "{\"id\":24,\"result\":{\"type\":\"chatgptDeviceCode\",\"loginId\":\"login-2\",\"verificationUrl\":\"https://auth.openai.com/codex/device\",\"userCode\":\"ABCD-EFGH\"}}"}
+{"t": 20.0, "dir": "in", "line": "{\"id\":25,\"method\":\"account/login/cancel\",\"params\":{\"loginId\":\"login-2\"}}"}
+{"t": 20.01, "dir": "out", "line": "{\"id\":25,\"result\":{}}"}
+{"t": 20.02, "dir": "out", "line": "{\"method\":\"account/login/completed\",\"params\":{\"loginId\":\"login-2\",\"success\":false,\"error\":\"login cancelled\",\"onboardingEntrypoint\":null}}"}
