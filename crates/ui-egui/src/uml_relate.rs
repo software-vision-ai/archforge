@@ -840,7 +840,7 @@ pub(crate) fn end_refusal(store: &Store, end: Obj, m: &EndModifiers) -> Option<(
 
 /// `typed` in end `end`'s multiplicity of association `id`, committed and refused, as a sample
 /// to look at.
-#[cfg(feature = "snapshot")]
+#[cfg(any(test, feature = "snapshot"))]
 pub(crate) fn refuse_typed(shell: &mut Shell, id: Uuid, end: usize, typed: &str) -> Result<(), String> {
     let store = shell.session.as_ref().ok_or("no project is open")?.doc();
     let a = store.by_uuid(id).ok_or("no such association")?;

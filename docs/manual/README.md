@@ -14,9 +14,24 @@ the first time to a small model you can build on, and shows how an agent joins i
    versus deleting.
 4. [A first ER model](04-er-model.md): the database aspect of a system, with tables, columns,
    keys and a relationship.
-5. [A first UML class model](05-uml-class-model.md): one walkthrough from a first class to
-   interfaces, enumerations, data types, primitive types, association classes and property
-   modifiers, with a guide to which element you need and a reference of the rules.
+5. [A first UML class model](05-uml-class-model.md): the classes of a system's code. One
+   walkthrough from a first class to interfaces, enumerations, data types, primitive types,
+   association classes, property modifiers and constraints, with a guide to which element you
+   need. Then [Going further](05-uml-class-model.md#going-further), short sections to read when
+   you need them:
+   - [static members](05-uml-class-model.md#a-member-of-the-class-as-a-whole-static-members);
+   - [qualified associations](05-uml-class-model.md#find-an-item-by-a-key-qualified-associations)
+     and [n-ary associations](05-uml-class-model.md#link-three-things-at-once-n-ary-associations);
+   - [generalization sets](05-uml-class-model.md#divide-a-class-into-kinds-generalization-sets),
+     [final](05-uml-class-model.md#allow-no-more-specific-kinds-final) and
+     [leaf](05-uml-class-model.md#allow-no-replaced-members-leaf);
+   - [nested classifiers](05-uml-class-model.md#keep-a-type-inside-its-class-nested-classifiers);
+   - [defining a template](05-uml-class-model.md#one-class-for-many-types-defining-a-template) and
+     [binding it](05-uml-class-model.md#fill-in-a-template-binding-it);
+   - [defining a profile](05-uml-class-model.md#words-of-your-own-defining-a-profile-and-its-stereotypes)
+     and [applying its stereotypes](05-uml-class-model.md#label-elements-with-your-words-applying-stereotypes).
+
+   A reference of the rules closes the chapter.
 6. [Skills](06-skills.md): guidance written on the model for people and agents.
 7. [Working with an agent](07-agents.md): letting an agent read and change the model, and the
    Generate handoff.
@@ -41,6 +56,11 @@ cargo xtask manual
 The illustrated chapters and their pictures are written to `plan/manual/`; open
 `plan/manual/README.md` there. In the text here, each picture is a comment that names the screen it
 shows.
+
+The sections of [Going further](05-uml-class-model.md#going-further) show their pictures here too:
+each release carries them, drawn from its own code (`cargo xtask screens --gallery`), and the
+chapter loads them from the latest release. Until a release has a section's feature, its picture
+does not load.
 
 ## Keeping the manual current
 

@@ -841,7 +841,7 @@ pub(crate) fn going_along(store: &Store, element: Obj) -> Vec<String> {
 /// table set to `orders`, cached left to its default; the profile Auditing (Auditable, extending
 /// Class) applied to Commerce, and Logging (Tracked, extending Class) applied nowhere, so the picker
 /// (F4) shows each kind of row; the open diagram showing the values. Gives Order's id.
-#[cfg(feature = "snapshot")]
+#[cfg(any(test, feature = "snapshot"))]
 pub(crate) fn put_values(shell: &mut Shell) -> Result<Uuid, String> {
     let (commerce, _, entity) = crate::uml_profiles::put_profiles(shell, true)?;
     let session = shell.session.as_mut().ok_or("the sample needs a session")?;

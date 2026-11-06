@@ -25,7 +25,7 @@ pub const GALLERY: [(&str, &str); 4] =
 /// The wiki's guide screens: a screen of the snapshot example and the file stem it is published as,
 /// beside the README's gallery (`screenshot-<stem>-<light|dark>.png`, attached to every release).
 /// The wiki loads them from the latest release; the README shows none of them.
-pub const WIKI_GALLERY: [(&str, &str); 10] = [
+pub const WIKI_GALLERY: [(&str, &str); 20] = [
     ("workspace-guide-classifier-kinds", "guide-classifier-kinds"),
     ("workspace-guide-relate-kinds", "guide-relate-kinds"),
     ("workspace-guide-literals", "guide-literals"),
@@ -36,6 +36,16 @@ pub const WIKI_GALLERY: [(&str, &str); 10] = [
     ("workspace-guide-modifiers", "guide-modifiers"),
     ("workspace-guide-constraints", "guide-constraints"),
     ("workspace-guide-result", "guide-result"),
+    ("workspace-guide-static", "guide-static"),
+    ("workspace-guide-qualifier", "guide-qualifier"),
+    ("workspace-guide-nary", "guide-nary"),
+    ("workspace-guide-generalization-set", "guide-generalization-set"),
+    ("workspace-guide-final-leaf", "guide-final-leaf"),
+    ("workspace-guide-nested", "guide-nested"),
+    ("workspace-guide-template", "guide-template"),
+    ("workspace-guide-template-binding", "guide-template-binding"),
+    ("workspace-guide-profile", "guide-profile"),
+    ("workspace-guide-stereotype", "guide-stereotype"),
 ];
 
 /// The screens the snapshot example's `--screen` takes, in its order: each `Some("<name>") =>
@@ -179,6 +189,24 @@ mod tests {
         stems.sort_unstable();
         let shared: Vec<&str> = stems.windows(2).filter(|pair| pair[0] == pair[1]).map(|pair| pair[0]).collect();
         assert!(shared.is_empty(), "two published screenshots share a name: {shared:?}");
+    }
+
+    /// Every guide picture a chapter of the user manual loads from the latest release is one the
+    /// release publishes, in both appearances, so no picture of the manual stays broken.
+    #[test]
+    fn every_guide_picture_the_manual_loads_is_one_the_release_publishes() {
+        let dir = util::root().join("docs/manual");
+        let published: Vec<String> = WIKI_GALLERY.iter().flat_map(|(_, stem)| THEMES.map(|t| format!("screenshot-{stem}-{t}.png"))).collect();
+        let mut loaded = 0;
+        for chapter in crate::manual::chapters(&dir).unwrap() {
+            let text = std::fs::read_to_string(&chapter).unwrap();
+            for rest in text.split("releases/latest/download/").skip(1) {
+                let file: String = rest.chars().take_while(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '.').collect();
+                assert!(published.contains(&file), "{} loads {file}, which no release publishes", chapter.display());
+                loaded += 1;
+            }
+        }
+        assert!(loaded > 0, "the manual loads its guide pictures from the latest release");
     }
 
     #[test]

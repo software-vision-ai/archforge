@@ -379,7 +379,7 @@ pub(crate) fn retain_valid(edit: &mut Option<QualifierEdit>, store: &Store) {
 
 /// `typed` as a new qualifier's name on end `end` of association `association`, applied and
 /// refused, as a sample to look at.
-#[cfg(feature = "snapshot")]
+#[cfg(any(test, feature = "snapshot"))]
 pub(crate) fn refuse_sample(shell: &mut Shell, association: Uuid, end: usize, typed: &str, ty: &str) {
     open(shell, association, end, None);
     if let Some(e) = shell.panels.qualifier.as_mut() {

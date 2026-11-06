@@ -29,9 +29,9 @@ can't be released again, so the next release always bumps it first.
 
    The workflow starts by itself.
 3. **Wait for the draft.** After about 40 minutes the Releases page has the draft
-   `Archforge v<version>`, with every package, `SHA256SUMS` and 26 screenshots: the README
-   gallery's eight, which the workflow makes no draft without, and the wiki's eighteen guide
-   pictures (see [Screenshots](#screenshots)). Its notes are Archforge's own lines
+   `Archforge v<version>`, with every package, `SHA256SUMS` and 48 screenshots: the README
+   gallery's eight, which the workflow makes no draft without, and the forty guide pictures of the
+   wiki and the user manual (see [Screenshots](#screenshots)). Its notes are Archforge's own lines
    (install Dolt first, the packages are unsigned, what isn't available yet) above GitHub's notes
    from the pull requests merged since the last release: *What's Changed*, *New Contributors* and the
    *Full Changelog* link.
@@ -90,10 +90,12 @@ The README's gallery shows four screens in the visitor's appearance: Home, an ER
 class diagram and File → Generate. The pictures are never committed. The workflow renders them
 from the release's own commit with `cargo xtask screens --gallery <dir>` (the screens and their
 file names are `GALLERY` in `xtask/src/screens.rs`) and attaches them to the release as
-`screenshot-<name>-<light|dark>.png`. The same command renders the wiki's nine guide screens
-beside them (`WIKI_GALLERY`, published as `screenshot-guide-<name>-<light|dark>.png`), which the
-README doesn't show. The README and the wiki load them from `releases/latest/download/`, so every
-published release refreshes them, and they show the latest release. A pre-release carries its own
+`screenshot-<name>-<light|dark>.png`. The same command renders twenty guide screens beside them
+(`WIKI_GALLERY`, published as `screenshot-guide-<name>-<light|dark>.png`), which the README
+doesn't show: the wiki shows them, and the user manual's
+[Going further](manual/05-uml-class-model.md#going-further) shows those of its sections. The
+README, the wiki and the manual load them from `releases/latest/download/`, so every published
+release refreshes them, and they show the latest release. A pre-release carries its own
 pictures too, but `latest` skips it.
 
 The gallery stays whole in two ways:
@@ -101,8 +103,9 @@ The gallery stays whole in two ways:
 - **The workflow refuses a release without it.** After rendering, the Screenshots job checks that
   every `screenshot-*.png` the README names is among the pictures. The draft needs that job, so a
   missing picture stops the release before anything is published. A test in `xtask/src/screens.rs`
-  keeps `GALLERY` and the README's pictures in step, and another that every `WIKI_GALLERY` screen
-  is one the snapshot example draws and that no two published pictures share a name.
+  keeps `GALLERY` and the README's pictures in step, another that every `WIKI_GALLERY` screen
+  is one the snapshot example draws and that no two published pictures share a name, and a third
+  that every guide picture the manual loads is one `WIKI_GALLERY` publishes.
 - **Look after publishing**, as step 6 above says: the front page for a release, the
   pre-release's own `releases/download/v<version>/` files for a pre-release. A draft can't be
   checked through `latest`.
@@ -148,7 +151,8 @@ The packages themselves stay as they were; only the pictures and the checksum li
 
 To change what the gallery shows, edit `GALLERY` and the README's Screenshots section together (a
 test keeps them in step), and render them locally with the same command to look at them first. To
-change the wiki's guide screens, edit `WIKI_GALLERY` and the wiki pages that load them together.
+change the guide screens, edit `WIKI_GALLERY` together with the wiki pages and the manual's
+sections that load them.
 
 Nothing is signed yet. The macOS and Windows scripts have their signing steps, which wait for their
 secrets: until then macOS and Windows ask before they first open Archforge, as the README says.

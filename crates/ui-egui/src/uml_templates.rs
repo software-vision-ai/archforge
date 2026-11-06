@@ -671,7 +671,7 @@ fn commit(shell: &mut Shell, edit: &TemplateEdit) {
 
 /// The open editor's bin pressed, as a sample to look at: the removal refused while a binding
 /// uses the parameter.
-#[cfg(feature = "snapshot")]
+#[cfg(any(test, feature = "snapshot"))]
 pub(crate) fn remove_sample(shell: &mut Shell) {
     if let Some(edit) = shell.panels.template.clone() {
         remove_parameter(shell, &edit);
