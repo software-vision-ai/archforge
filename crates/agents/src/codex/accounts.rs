@@ -25,6 +25,9 @@ const MAX_DESCRIPTION_BYTES: usize = 1024;
 const MAX_URL_BYTES: usize = 8 * 1024;
 /// The longest device code accepted, in characters.
 const MAX_USER_CODE: usize = 64;
+/// The longest next-page cursor of `model/list` passed back, in bytes: a sanity bound only, as the
+/// cursor is opaque (codex-cli 0.166.0 sends a model index, a few digits).
+const MAX_CURSOR_BYTES: usize = 64 * 1024;
 /// The most pages of models read, and the most models kept.
 const MAX_MODEL_PAGES: usize = 10;
 const MAX_MODELS: usize = 1000;
@@ -373,7 +376,10 @@ impl CodexAccounts {
     }
 
     /// The models Codex offers (`model/list`, every page, hidden ones left out), which needs no
-    /// sign-in; what an account may really use shows only on a turn.
+    /// sign-in; what an account may really use shows only on a turn. Pages follow Codex's
+    /// `nextCursor`, passed back unchanged; a missing or null one ends the list, and one that is
+    /// empty, not text or past [`MAX_CURSOR_BYTES`] is an answer that cannot be read, never taken for
+    /// the end.
     pub fn models(&mut self) -> Result<Vec<ModelInfo>, AgentError> {
         let mut models = Vec::new();
         let mut cursor: Option<String> = None;
@@ -392,10 +398,18 @@ impl CodexAccounts {
                     models.push(info);
                 }
             }
-            cursor = value.get("nextCursor").and_then(Value::as_str).filter(|c| !c.is_empty() && c.len() <= MAX_DESCRIPTION_BYTES).map(str::to_owned);
-            if cursor.is_none() {
-                return Ok(models);
-            }
+            cursor = match value.get("nextCursor") {
+                None | Some(Value::Null) => return Ok(models),
+                Some(Value::String(next)) if next.is_empty() => return Err(unreadable("model/list", "an empty next-page cursor")),
+                Some(Value::String(next)) if next.len() > MAX_CURSOR_BYTES => {
+                    return Err(unreadable(
+                        "model/list",
+                        &format!("a next-page cursor of {} bytes, more than the {MAX_CURSOR_BYTES} Archforge passes back", next.len()),
+                    ));
+                }
+                Some(Value::String(next)) => Some(next.clone()),
+                Some(_) => return Err(unreadable("model/list", "a next-page cursor that is not text")),
+            };
         }
         log::warn!("codex lists models on more than {MAX_MODEL_PAGES} pages; the rest are left out");
         Ok(models)

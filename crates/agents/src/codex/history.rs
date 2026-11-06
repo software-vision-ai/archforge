@@ -397,6 +397,16 @@ mod tests {
         let written = std::fs::metadata(path(&folder)).unwrap().len();
         assert!(written <= MAX_FILE_BYTES, "{written} > {MAX_FILE_BYTES}");
         assert_eq!(History::read(&folder).unwrap(), history);
+        // The largest file any copy makes (the figure the README gives): four messages of control
+        // characters filling the text cap, since a fifth message costs 64 bytes of text, which is
+        // 384 escaped bytes, for about 30 bytes of JSON.
+        let mut worst = History::default();
+        for _ in 0..4 {
+            worst.push(Role::Assistant, "\u{1}".repeat((MAX_HISTORY_BYTES - 4 * 64) / 4));
+        }
+        worst.write(&folder).unwrap();
+        assert_eq!(std::fs::metadata(path(&folder)).unwrap().len(), 25_164_437);
+        assert_eq!(History::read(&folder).unwrap(), worst);
         std::fs::remove_dir_all(&base).unwrap();
     }
 }

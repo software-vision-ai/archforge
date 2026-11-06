@@ -1876,6 +1876,51 @@ fn a_crashed_account_process_reports_why() {
     std::fs::remove_dir_all(&base).unwrap();
 }
 
+/// The fake's `model/list` answers, one per call: a page whose cursor is long and opaque (`@LONG@`
+/// is replaced by it), the last page with a null cursor, a page without one, a page whose cursor is
+/// empty, and one whose cursor is not text.
+const MODEL_PAGES: &str = r#"
+pages=0
+on_other() {
+  case "$line" in
+    *'"method":"model/list"'*)
+      pages=$((pages+1))
+      case $pages in
+        1) send '{"id":@ID@,"result":{"data":[{"id":"m-1"}],"nextCursor":"@LONG@"}}' ;;
+        2) send '{"id":@ID@,"result":{"data":[{"id":"m-2"}],"nextCursor":null}}' ;;
+        3) send '{"id":@ID@,"result":{"data":[{"id":"m-3"}]}}' ;;
+        4) send '{"id":@ID@,"result":{"data":[{"id":"m-4"}],"nextCursor":""}}' ;;
+        5) send '{"id":@ID@,"result":{"data":[{"id":"m-5"}],"nextCursor":7}}' ;;
+      esac ;;
+  esac
+}
+"#;
+
+/// Model pages follow Codex's cursor: a long opaque one goes back unchanged, a null or missing one
+/// ends the list, and an empty or non-text one is an answer that cannot be read, never a quiet
+/// partial list.
+#[test]
+fn model_pages_follow_the_cursor_codex_gives() {
+    let base = scratch("model-pages");
+    let long = format!("opaque-{}", "x".repeat(4000));
+    let (runtime, account, _) = fake_codex(&base, &format!("{ACCOUNT_BODY}\n{}", MODEL_PAGES.replace("@LONG@", &long)));
+    let mut accounts = CodexAccounts::open(&runtime, &account, SignIn::ChatGpt(KeyringAccess::default()), Default::default()).unwrap();
+    let ids = |models: Vec<archforge_agents::codex::ModelInfo>| models.into_iter().map(|m| m.id).collect::<Vec<_>>();
+    assert_eq!(ids(accounts.models().unwrap()), vec!["m-1", "m-2"], "a null cursor ends the list");
+    let sent = stdin_lines(&base, 4);
+    let pages: Vec<Value> = requests(&sent, "model/list").iter().map(|l| serde_json::from_str::<Value>(l).unwrap()["params"].clone()).collect();
+    assert_eq!(pages.len(), 2);
+    assert_eq!(pages[0].get("cursor"), None);
+    assert_eq!(pages[1]["cursor"], json!(long), "the cursor goes back unchanged");
+    assert_eq!(ids(accounts.models().unwrap()), vec!["m-3"], "a missing cursor ends the list");
+    let error = accounts.models().unwrap_err();
+    assert!(error.to_string().contains("an empty next-page cursor"), "{error}");
+    let error = accounts.models().unwrap_err();
+    assert!(error.to_string().contains("a next-page cursor that is not text"), "{error}");
+    accounts.shutdown(Duration::from_secs(2)).unwrap();
+    std::fs::remove_dir_all(&base).unwrap();
+}
+
 /// A call Codex never answers fails on its own deadline instead of waiting forever.
 #[test]
 fn an_unanswered_account_call_times_out() {

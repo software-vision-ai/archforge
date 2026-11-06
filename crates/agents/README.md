@@ -243,8 +243,12 @@ it: Codex's state and log databases (`sqlite_home`, `log_dir`, checked offline t
 `*.sqlite` there), and the conversation itself. Threads are `ephemeral`, so Codex writes no thread
 history under `CODEX_HOME`; Archforge keeps its own copy, the person's messages and the answers in
 order, in `codex-history.json` in the conversation's folder (written after every turn, atomically,
-0600, at most 4096 messages and 4 MiB, a message cut at 1 MiB, the oldest dropped first and
-logged, never the newest; the person's text is scrubbed of the key). A copy that cannot be read is
+0600; the person's text is scrubbed of the key). The limits count the messages' text, not the file:
+at most 4096 messages whose text, with 64 bytes counted for each message, takes at most 4 MiB, a
+message cut at 1 MiB; the oldest are dropped first and logged, never the newest. JSON escaping can
+make the file up to six times its text (a control character becomes `\u00XX`), so the file itself
+is at most 25,164,437 bytes (just under 24 MiB: four messages of control characters at the cut);
+the reader accepts up to 25,428,032 (24.25 MiB), so every copy it wrote reads back. A copy that cannot be read is
 renamed to `codex-history.json.damaged-<n>`, logged, and refused as a typed error that says where
 it went; the name is claimed before the move, so a damaged copy set aside earlier, even by another
 process at the same moment, is never replaced. When the rename fails, 64 damaged copies are
