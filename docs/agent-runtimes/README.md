@@ -475,8 +475,9 @@ show them, keep the draft, and map only the final outcome.
 `/tmp/archforge-agent/…` and `/opt/archforge/bin/archforge-cli`, the host name by `host.example`,
 the installation id zeroed, colour escapes removed, Codex tool tables cut to two entries, and in
 `codex/observed-handshake.jsonl` the provider's wording in `model/list` (every model's
-`description`, `availabilityNux.message` and `upgradeInfo.migrationMarkdown`) replaced by neutral
-"Fixture text: …" strings with every field kept; that file's first `note` line lists its changes).
+`description`, `availabilityNux.message`, `upgradeInfo.migrationMarkdown`,
+`supportedReasoningEfforts[].description` and `serviceTiers[].name` and `.description`) replaced by
+neutral "Fixture text: …" strings with every field kept; that file's first `note` line lists its changes).
 Files named `doc-*` are written from the documentation and the schema and start with a `note` line
 saying so; `synthetic-*` are made-up hostile lines.
 
