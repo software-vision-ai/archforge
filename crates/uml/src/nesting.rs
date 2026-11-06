@@ -255,6 +255,9 @@ fn owner_param(store: &Store, p: &Params, key: &str) -> Result<Obj, CommandError
         .and_then(|u| store.by_uuid(u))
         .filter(|o| store.is_alive(*o))
         .ok_or_else(|| refuse(key, format!("there is no package or classifier {}", crate::commands::short(id))))?;
+    if let Some(why) = crate::templates::parameter_element_problem(store, obj) {
+        return Err(refuse(key, why));
+    }
     match store.class_of(obj).ok() {
         Some(c) if c == PACKAGE || crate::is_classifier(c) => Ok(obj),
         _ => Err(refuse(key, format!("{id} is neither a package nor a classifier"))),
@@ -313,6 +316,12 @@ fn set_owner(ctx: &mut C<'_>, p: &Params) -> R {
         return Err(refuse(key, problem_text(ctx.doc, c, owner, &problem)));
     }
     if owner_of(ctx.doc, c) != Some(owner) {
+        // A move that would take stereotype applications out of their profile's scope is refused
+        // (AR-134).
+        let uses = crate::profiles::moving_uses(ctx.doc, c, owner);
+        if !uses.is_empty() {
+            return Err(refuse("owner", crate::profiles::stranding(ctx.doc, c, &uses)));
+        }
         if let Some((from, prop)) = ctx.doc.container(c).map_err(fail)? {
             ctx.doc.remove_value(from, prop, &Value::Ref(c)).map_err(fail)?;
         }

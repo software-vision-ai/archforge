@@ -66,12 +66,14 @@ str		Delete {name} from the model?	{name} をモデルから削除しますか�
 str		Narrow the filter to see more	もっと見るにはフィルターを絞り込んでください
 str		No free name is left	空いている名前がありません
 str		What it holds goes with it.	含まれるものも一緒に削除されます。
+str		What it holds moves to {parent}.	含まれているものは {parent} に移動します。
 str		Remove from this diagram only	この図からのみ削除
 plural		It disappears from {n} diagram.	{n} 個の図から消えます。
 plural		{n} relationship goes with it.	{n} 件のリレーションシップが一緒に削除されます。
 plural		{n} key goes with it.	{n} 件のキーが一緒に削除されます。
 plural		{n} foreign key goes with it.	{n} 件の外部キーが一緒に削除されます。
 plural		{n} nested classifier goes with it: {names}.	{n} 個の入れ子の分類子も一緒に削除されます：{names}。
+plural		{n} stereotype application goes with it: {names}.	{n} 件のステレオタイプの適用も一緒に削除されます：{names}。
 str		Delete	削除
 str		Schema · model	スキーマ · モデル
 str		Table · model, in every diagram	テーブル · モデル、すべての図に
@@ -664,6 +666,9 @@ str		«enumeration»	«enumeration»
 str		Data type	データ型
 str		Primitive type	プリミティブ型
 str		«dataType»	«dataType»
+str		«stereotype»	«stereotype»
+str		«metaclass»	«metaclass»
+str		{keywords} · {package}	{keywords} · {package}
 str		«primitive»	«primitive»
 str		Association class	関連クラス
 str		Classifier	分類子
@@ -710,6 +715,7 @@ str		A subclass could not redefine {name} where it is inherited. Shown as {leaf}
 str		A subclass could not redefine this member. Shown as {leaf} after it.	サブクラスはこのメンバーを再定義できません。後ろに {leaf} と表示されます。
 plural		{names} redefines it. Remove that redefinition first.	{names} がこれを再定義しています。先にその再定義を削除してください。
 str		Add attribute	属性を追加
+str		Add property	プロパティを追加
 str		Add operation	操作を追加
 str		Add literal	リテラルを追加
 str		More details in Properties	詳細はプロパティで
@@ -730,6 +736,102 @@ str		{kind} · nested in {owner} · model, in every diagram	{kind} · {owner} �
 str		Nested classifiers · {n}	入れ子の分類子 · {n}
 str		Add nested classifier	入れ子の分類子を追加
 str		None yet. Add one here or from Models ▸ New inside {name}; both offer the same kinds.	まだありません。ここか、モデル ▸ {name} の中に新規作成から追加します。どちらも同じ種類を提供します。
+str		New	新規
+str		New in {name}	{name} に新規
+str	uml	Profile	プロファイル
+str		profile	プロファイル
+str		Stereotype	ステレオタイプ
+str		extends {metaclasses}	{metaclasses} を拡張
+str		extends nothing yet	まだ何も拡張していません
+str		applies {profiles}	{profiles} を適用
+str		Profile · model	プロファイル · モデル
+str		This profile	このプロファイル
+str		On this profile · {n}	このプロファイル上 · {n}
+str		Stereotype · in profile {profile} · model	ステレオタイプ · プロファイル {profile} 内 · モデル
+str		This stereotype	このステレオタイプ
+str		On this stereotype · {n}	このステレオタイプ上 · {n}
+str		Metaclass · UML	メタクラス · UML
+str		Metaclass	メタクラス
+str		This metaclass	このメタクラス
+str		On this metaclass · {n}	このメタクラス上 · {n}
+str		Metaclasses carry no skills	メタクラスにはスキルを付けられません
+str		A UML metaclass, which stereotypes extend. It is UML's own, kept out of Models and the type menus, and never changes.	ステレオタイプが拡張する UML のメタクラスです。これは UML 自身のもので、モデルや型メニューには表示されず、変更されることもありません。
+str		Stereotypes · {n}	ステレオタイプ · {n}
+str		Add stereotype	ステレオタイプを追加
+str		None yet. Add one here or from Models ▸ New ▸ Stereotype.	まだありません。ここか、モデル ▸ 新規 ▸ ステレオタイプから追加できます。
+str		Open profile diagram	プロファイル図を開く
+str		A package applies the profile through Applied profiles in its Properties; its elements may then use the profile's stereotypes.	パッケージはプロパティの「適用済みプロファイル」でプロファイルを適用します。その要素はプロファイルのステレオタイプを使えるようになります。
+str		Extends · {n}	拡張 · {n}
+str		Add extended metaclass	拡張するメタクラスを追加
+str		{name} extends	{name} の拡張先
+str		extended	拡張済み
+str		Extended already	すでに拡張しています
+str		not drawn by Archforge yet	Archforge ではまだ描画されません
+str		Offered: the metaclasses Archforge draws. Other metaclasses are listed, disabled, as not drawn by Archforge yet.	選べるのは Archforge が描画するメタクラスです。その他のメタクラスは、Archforge ではまだ描画されないものとして無効の状態で表示されます。
+str		Properties · {n}	プロパティ · {n}
+str		Types: primitive types, enumerations and data types of the model. Renaming {name} keeps every application; removing it is refused while elements use it.	型: モデルのプリミティブ型、列挙型、データ型。{name} の名前を変えても適用はすべて保たれます。要素が使っている間は削除できません。
+str		Applied profiles · {n}	適用済みプロファイル · {n}
+str		Apply profile	プロファイルを適用
+str		Apply to {name}	{name} に適用
+str		applied	適用済み
+str		Applied already	すでに適用されています
+str		No profile yet	まだプロファイルはありません
+str		Make one with New ▸ Profile in Models.	モデルの 新規 ▸ プロファイル で作成できます。
+str		Elements inside {name}, and inside its packages, can use the stereotypes of the applied profiles. Applying is one undo step; it adds no stereotype by itself.	{name} とその中のパッケージの要素は、適用済みプロファイルのステレオタイプを使えます。適用は 1 回の取り消し操作で、それだけではステレオタイプは付きません。
+str		Unapply profile	プロファイルの適用を解除
+str		{profile} is in use in {package}: {uses}. Remove those first.	{profile} は {package} で使われています: {uses}。先にそれらを外してください。
+str		{name} is in use: {uses}. Remove those first.	{name} は使われています: {uses}。先にそれらを外してください。
+str		{name} applies the profiles its elements use: {uses}. Remove those first.	{name} は要素が使うプロファイルを適用しています: {uses}。先にそれらを外してください。
+str		{name} holds the profile {profile}, which is in use: {uses}. Remove those first.	{name} には使われているプロファイル {profile} があります: {uses}。先にそれらを外してください。
+str		«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.	{metaclass} への «{stereotype}» は使われています: {uses}。先にそれらを外してください。
+str		«{stereotype}» on {elements}	{elements} に «{stereotype}»
+str		{first} and {second}	{first} と {second}
+plural		Show the use	{n} 件の使用箇所を表示
+str		A stereotype is shown on its profile's diagram	ステレオタイプはそのプロファイルの図に表示されます
+str		Place stereotype	ステレオタイプを配置
+# Stereotypes applied (AR-135)
+str		Stereotypes of {name} · {n}	{name} のステレオタイプ · {n}
+str		Stereotypes of this end · {n}	この端のステレオタイプ · {n}
+str		Apply stereotype	ステレオタイプを適用
+str		Remove «{stereotype}» from {name}	{name} から «{stereotype}» を外す
+str	value	default	既定
+str		{value} (default)	{value}（既定）
+str		Default ({value})	既定（{value}）
+str		No value	値なし
+str		Values you set are stored on {name}; a default shows the tag until you change it. Remove takes «{stereotype}» off {name} and keeps its definition.	設定した値は {name} に保存されます。既定値は変更するまでタグが付きます。外すと {name} から «{stereotype}» が外れ、その定義は残ります。
+str		None applied yet. + offers the stereotypes of the profiles applied to {package} or a package around it.	まだ適用されていません。+ では、{package} またはそれを囲むパッケージに適用されたプロファイルのステレオタイプを選べます。
+str		Show stereotype values on this diagram	この図にステレオタイプの値を表示
+str		Show stereotype values	ステレオタイプの値を表示
+str		Set stereotype value	ステレオタイプの値を設定
+str		Filter: {text}	絞り込み：{text}
+str		No stereotype matches.	一致するステレオタイプはありません。
+str		No stereotype yet. Make one in a profile from Models ▸ New ▸ Stereotype.	まだステレオタイプがありません。モデル ▸ 新規 ▸ ステレオタイプからプロファイルに作成してください。
+str		{kinds} only	{kinds} のみ
+str		classes	クラス
+str		interfaces	インターフェース
+str		enumerations	列挙型
+str		data types	データ型
+str		properties	プロパティ
+str		operations	操作
+str		associations	関連
+str		generalizations	汎化
+str		packages	パッケージ
+str		{profile} not applied	{profile} は未適用
+str		«{stereotype}» does not extend {metaclass}: it extends {metaclasses}.	«{stereotype}» は {metaclass} を拡張しません。拡張するのは {metaclasses} です。
+str		«{stereotype}» extends no metaclass yet.	«{stereotype}» はまだどのメタクラスも拡張していません。
+str		Its profile {profile} is not applied to {package} or a package around it.	プロファイル {profile} は {package} にもそれを囲むパッケージにも適用されていません。
+str		{value} is no value of {name}. {accepted}	{value} は {name} の値ではありません。{accepted}
+str		A whole number, such as 42 or -7.	42 や -7 のような整数です。
+str		A number, such as 2.5 or -1e3.	2.5 や -1e3 のような数値です。
+str		true or false.	true または false です。
+str		A whole number of 0 or more, or *.	0 以上の整数、または * です。
+str		Any text.	任意のテキストです。
+str		One of {literals}.	{literals} のいずれかです。
+str		{name} holds at most {n} values.	{name} が持てる値は最大 {n} 個です。
+str		{name} holds each value once, and {value} is there twice.	{name} は各値を一度だけ持ちますが、{value} が二度あります。
+str		A value is empty. Clear the field to show the default.	空の値があります。既定値を表示するにはフィールドを空にしてください。
+str		A value is longer than {n} characters.	{n} 文字を超える値があります。
+plural		{name} holds [{bounds}] values; {n} is given.	{name} が持つ値は [{bounds}] 個ですが、{n} 個が指定されています。
 str		nested	入れ子
 str		package	パッケージ
 str		class	クラス
@@ -905,6 +1007,114 @@ str		Counted per qualifier value of the other end; shown next to {class}.	もう
 str		One {owner} and one {qualifiers} pick {multiplicity} {target}.	1 つの {owner} と 1 つの {qualifiers} で {target} を {multiplicity} 選びます。
 str		Type a name: a qualifier without one picks nothing.	名前を入力してください。名前のない限定子は何も選びません。
 str		This end already has a qualifier named {name}. Pick another name.	この端には {name} という名前の限定子がすでにあります。別の名前を選んでください。
+# Templates (AR-130)
+str		Template parameters · {n}	テンプレートパラメーター · {n}
+str		Add template parameter	テンプレートパラメーターを追加
+str		Constrained to	制約
+str		Any	任意
+str		Value	値
+str		Parameter kind	パラメーターの種類
+str		not yet	未対応
+str		{kind} template parameters are not supported yet.	{kind} のテンプレートパラメーターはまだサポートされていません。
+str		this parameter	このパラメーター
+str		Arguments for {name} must be {constraint} or specialise it.	{name} の引数は {constraint} か、それを特化したものでなければなりません。
+str		Arguments for {name} must be classes.	{name} の引数はクラスでなければなりません。
+str		Arguments for {name} must be interfaces.	{name} の引数はインターフェースでなければなりません。
+str		Arguments for {name} must be data types.	{name} の引数はデータ型でなければなりません。
+str		Arguments for {name} must be enumerations.	{name} の引数は列挙型でなければなりません。
+str		Arguments for {name} must be primitive types.	{name} の引数はプリミティブ型でなければなりません。
+str		Bindings that leave it out use {default}.	これを省略するバインディングは {default} を使います。
+str		Renaming or reordering keeps every binding.	名前の変更や並べ替えをしてもすべてのバインディングは保たれます。
+str		Show the binding	バインディングを表示
+str		Show the binding selects it, on the canvas and in Properties.	「バインディングを表示」はバインディングそのものをキャンバスとプロパティで選択します。
+str		Renaming {name} or changing its default is allowed: bindings follow the parameter, not its name.	{name} の名前の変更や既定値の変更はできます。バインディングは名前ではなくパラメーターに従います。
+str		{bound} binds {name} -> {actual}. Change or remove that binding first, then remove {name}.	{bound} は {name} -> {actual} とバインドしています。先にそのバインディングを変更または削除してから {name} を削除してください。
+str		{bound} binds {template}, and {name} is its last parameter. Remove that binding first, then remove {name}.	{bound} は {template} をバインドしており、{name} はその最後のパラメーターです。先にそのバインディングを削除してから {name} を削除してください。
+plural		{n} more binding uses it too.	ほかに {n} 件のバインディングもこれを使っています。
+str		Type a name: a template parameter without one stands for nothing.	名前を入力してください。名前のないテンプレートパラメーターは何も表しません。
+str		{template} already has a template parameter named {name}. Pick another name.	{template} には {name} という名前のテンプレートパラメーターがすでにあります。別の名前を選んでください。
+str		{default} does not fit {name}: pick a default its arguments could be.	{default} は {name} に合いません。その引数になりうる既定値を選んでください。
+str		{bound} binds {name} -> {actual}, which would no longer fit. Change or remove that binding first.	{bound} は {name} -> {actual} とバインドしており、合わなくなります。先にそのバインディングを変更または削除してください。
+str		template parameter	テンプレートパラメーター
+str		template	テンプレート
+plural		{kind} · template, {n} parameter · model, in every diagram	{kind} · テンプレート、パラメーター {n} 個 · モデル、すべての図
+# Template bindings (AR-131)
+str		Template binding	テンプレートバインディング
+str		Template binding: from the bound class to its template	テンプレートバインディング：バインドするクラスからそのテンプレートへ
+str		«bind»	«bind»
+str		Add template binding	テンプレートバインディングを追加
+str		This template binding	このテンプレートバインディング
+str		On this template binding · {n}	このテンプレートバインディング上 · {n}
+str		Binding · {bound} binds {template} · model, in every diagram	バインディング · {bound} が {template} をバインド · モデル、すべての図
+str		binds {template}	{template} をバインド
+str		Binding	バインディング
+str		Bound element	バインドする要素
+str		Template	テンプレート
+str		Substitutions · {n}	置換 · {n}
+str		default	既定
+str		Default ({name})	既定値（{name}）
+str		Choose a class	クラスを選択
+str		Choose an interface	インターフェースを選択
+str		Choose a data type	データ型を選択
+str		Choose an enumeration	列挙型を選択
+str		Choose a primitive type	プリミティブ型を選択
+str		{name} needs an argument: pick a class.	{name} には引数が必要です。クラスを選んでください。
+str		{name} needs an argument: pick an interface.	{name} には引数が必要です。インターフェースを選んでください。
+str		{name} needs an argument: pick a data type.	{name} には引数が必要です。データ型を選んでください。
+str		{name} needs an argument: pick an enumeration.	{name} には引数が必要です。列挙型を選んでください。
+str		{name} needs an argument: pick a primitive type.	{name} には引数が必要です。プリミティブ型を選んでください。
+plural		{names} can keep its default.	{names} は既定値のままにできます。
+str		New template binding	新しいテンプレートバインディング
+str		Drawing · not in the model until you apply	描画中 · 適用するまでモデルには入りません
+str		Releasing the line on a template opens this. The line stays dashed in the accent colour until Apply; one undo step then adds the binding with its arguments. Cancel or Esc removes the draft and leaves nothing.	テンプレート上で線を離すとこれが開きます。適用するまで線はアクセントカラーの破線のままです。適用すると、1 回の取り消し単位でバインディングとその引数が追加されます。キャンセルまたは Esc で下書きは消え、何も残りません。
+str		Another template takes arguments of its own: pick them, then Apply. Cancel or Esc keeps the binding as it is.	別のテンプレートには独自の引数があります。引数を選んでから適用してください。キャンセルまたは Esc でバインディングはそのままです。
+str		Each selector lists only the arguments that fit its parameter: its kind, and its constraint or what specialises it. A parameter on its default follows the template's default.	各セレクターには、そのパラメーターに合う引数だけが並びます。種類と、制約またはそれを特化するものです。既定値のままのパラメーターはテンプレートの既定値に従います。
+str		The line reads «bind» with each parameter and its argument, and points at the template. The binding keeps its arguments in the model; it is neither a dependency nor a realization.	線には «bind» と各パラメーターとその引数が書かれ、テンプレートを指します。バインディングは引数をモデルに保持します。依存でも実現でもありません。
+str		Only a class, an interface or a data type binds a template	テンプレートをバインドできるのはクラス、インターフェース、データ型だけです
+str		A binding ends at a template: a class, an interface or a data type with template parameters	バインディングの終点はテンプレート、つまりテンプレートパラメーターを持つクラス、インターフェース、データ型です
+str		A template is bound by a classifier of its own kind	テンプレートをバインドするのは同じ種類の分類子です
+str		A template does not bind itself	テンプレートは自分自身をバインドしません
+str		This one binds that template already	これはすでにそのテンプレートをバインドしています
+str		That template binds this one already, which would make a cycle	そのテンプレートはすでにこれをバインドしているため、循環になります
+str		Pick another template in the binding's Properties, where its arguments are chosen.	別のテンプレートは、引数を選べるバインディングのプロパティで選んでください。
+str		N-ary association	多項関連
+str		this n-ary association	この多項関連
+str		N-ary association: click each class in turn, then press Enter	多項関連: 各クラスを順にクリックしてから Enter を押します
+str		An n-ary association is drawn by clicking each class in turn	多項関連は各クラスを順にクリックして描きます
+str		Enter finishes at 3+ · Backspace drops the last · Esc cancels	3 つ以上で Enter で完了 · Backspace で最後を取り消し · Esc でキャンセル
+str		Click a class for the new end	新しい端のクラスをクリックしてください
+str		Esc cancels	Esc でキャンセル
+str		An n-ary association joins classes and interfaces	多項関連はクラスとインターフェースを結びます
+str		An association takes at most {n} ends	関連の端は最大 {n} 個です
+str		An n-ary association needs three ends or more: click another class	多項関連には 3 つ以上の端が必要です。別のクラスをクリックしてください
+str		Add n-ary association	多項関連を追加
+str		New n-ary association	新しい多項関連
+str		Drawing · not in the model until you finish	描画中 · 完了するまでモデルには入りません
+str		Ends so far · {n}	これまでの端 · {n}
+str		Next: click a class on the canvas	次: キャンバス上のクラスをクリック
+str		Next: click a class on the canvas, or press Enter to finish	次: キャンバス上のクラスをクリック、または Enter で完了
+str		Enter, or a double-click on the last class, finishes once there are 3 ends or more. One undo step adds the association, its diamond and every end.	端が 3 つ以上になったら、Enter または最後のクラスのダブルクリックで完了します。関連、そのひし形、各端が 1 回の取り消し単位で追加されます。
+str		Esc, switching tools or clicking empty canvas cancels and leaves nothing in the model. Backspace takes the last end off.	Esc、ツールの切り替え、空のキャンバスのクリックでキャンセルし、モデルには何も残りません。最後の端は Backspace で取り除きます。
+str		New ends are named after their class and start at *; change them after finishing.	新しい端はクラス名にちなんで命名され、* から始まります。完了後に変更してください。
+str		Ends · {n}	端 · {n}
+str		Add end	端を追加
+str		Draws a new leg	新しい脚を描きます
+str		Reconnect end	端をつなぎ直す
+str		Drag a leg end	脚の端をドラッグ
+str		Open a class diagram to pick the new end's class	新しい端のクラスを選ぶには、クラス図を開いてください
+str		Ends of an n-ary association are not aggregations, so Aggregation is not offered. Repeat a type for two ends when the roles differ.	多項関連の端は集約ではないため、集約は表示されません。ロールが異なる場合は、2 つの端に同じ型を使えます。
+str		Another end has the role {role} already. Pick another role.	別の端がすでにロール {role} を持っています。別のロールを選んでください。
+str		Set association end	関連の端を設定
+str		End {role} removed	端 {role} を削除しました
+str		Selecting the diamond or any leg selects the one association. Remove from this diagram hides it here; Delete from the model deletes it and its ends everywhere.	ひし形またはいずれかの脚を選択すると、1 つの関連が選択されます。この図から削除はここで非表示にし、モデルから削除は関連とその端をすべての場所から削除します。
+str		Two ends would remain	端が 2 つだけ残ります
+str		An n-ary association needs three ends or more. Without {role}, only {first} and {second} remain.	多項関連には 3 つ以上の端が必要です。{role} がなくなると、{first} と {second} だけが残ります。
+str		Keep 3 ends	3 つの端を保つ
+str		Make it binary	二項にする
+str		Make it binary turns it into a plain association between {first} and {second}, keeping both ends, as one undo step. Keep 3 ends, or Esc, changes nothing.	二項にすると、両方の端を保ったまま {first} と {second} の間の通常の関連になります。1 回の取り消し単位です。3 つの端を保つ、または Esc では何も変わりません。
+str		Make it binary turns {name} into a plain association between {first} and {second}, keeping its name and both ends, as one undo step. Keep 3 ends, or Esc, changes nothing.	二項にすると、{name} は名前と両方の端を保ったまま {first} と {second} の間の通常の関連になります。1 回の取り消し単位です。3 つの端を保つ、または Esc では何も変わりません。
+plural		N-ary association · {n} end · model, in every diagram	多項関連 · 端 {n} 個 · モデル、すべての図
+plural		N-ary association · {n} end — click a class for the next end	多項関連 · 端 {n} 個 — 次の端のクラスをクリック
 str		From	始点
 str		General	一般
 str		Generalization	汎化

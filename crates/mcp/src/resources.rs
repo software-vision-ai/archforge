@@ -53,7 +53,7 @@ pub(crate) fn templates() -> Value {
             "uriTemplate": "archforge://element/{id}",
             "name": "element",
             "title": "An element",
-            "description": "A schema with its tables, a table, a class, an interface, an enumeration with its literals, a data type with its attributes and operations, a primitive type, an association class with its ends, attributes and operations, or a diagram, by id; each attribute and association end with its modifiers (default, derived, read_only, ordered, unique, subsets, redefines), an association end with its qualifiers; a UML element, its attributes, operations and literals each with its description; a classifier with its constraints, stored as written and never evaluated. Packages and other elements are read through the tools.",
+            "description": "A schema with its tables, a table, a class, an interface, an enumeration with its literals, a data type with its attributes and operations, a primitive type, an association class with its ends, attributes and operations, or a diagram, by id; each attribute and association end with its modifiers (default, derived, read_only, ordered, unique, subsets, redefines), an association end with its qualifiers; a UML element, its attributes, operations and literals each with its description; a classifier with its constraints, stored as written and never evaluated, and a template with its template parameters (kind, constraint, default and the bindings that use each). Packages and other elements are read through the tools.",
             "mimeType": JSON_TYPE,
         },
         {

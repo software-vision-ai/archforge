@@ -312,6 +312,81 @@ fn nested_classifiers_are_saved_and_opened_again_nested() {
     again.close().unwrap();
 }
 
+/// AR-134: profiles, their stereotypes with extensions and properties, a profile applied to a
+/// package and the hidden UML library of metaclasses are saved, closed and opened again, the
+/// project's tables unchanged and its check on open passing; the reopened model holds them as made.
+#[test]
+fn profiles_and_the_uml_library_are_saved_and_the_project_opens_again() {
+    let env = Env::new("profiles");
+    let schema = schema();
+    let project = Project::create(&env.dolt, &env.opts(), &env.base.join("Projects"), "Profiles", "test", &timestamp(1_761_670_800)).unwrap();
+    let path = project.path().to_path_buf();
+    project.close().unwrap();
+    let mut s = model();
+    let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+    run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Persistence" }));
+    let persistence = run(&mut s, "uml.profile.add", json!({ "name": "Persistence", "package": sales }));
+    let entity = run(&mut s, "uml.stereotype.add", json!({ "profile": persistence, "name": "Entity", "extends": ["Class", "Association"] }));
+    run(&mut s, "uml.attribute.add", json!({ "class": entity, "name": "table", "type": "String" }));
+    run(&mut s, "uml.stereotype.add", json!({ "profile": persistence, "name": "Id", "extends": ["Property"] }));
+    run(&mut s, "uml.profile.apply", json!({ "package": sales, "profile": persistence }));
+    run(&mut s, "uml.profile.diagram", json!({ "profile": persistence }));
+    assert_eq!(schema.fingerprint(), CURRENT, "no table changed");
+    let back = save_and_reopen(&env, &schema, &path, s.doc(), "Profiles").expect("a project with profiles opens");
+    assert_eq!(rows_of(back.doc(), &schema), rows_of(s.doc(), &schema));
+    let st = back.doc();
+    let p = st.by_uuid(Uuid::parse(&persistence).unwrap()).unwrap();
+    let e = st.by_uuid(Uuid::parse(&entity).unwrap()).unwrap();
+    assert_eq!(archforge_uml::profiles::extended(st, e), ["Class", "Association"]);
+    assert_eq!(archforge_uml::profiles::applying(st, p).len(), 1);
+    assert!(archforge_uml::profiles::library(st).is_some(), "the library comes back");
+}
+
+/// AR-135: stereotype applications with their values set and left to their defaults, and a class
+/// diagram showing the values, are saved, closed and opened again through a real dolt, the
+/// project's tables unchanged and its check on open passing; the reopened model holds them as made.
+#[test]
+fn stereotype_applications_and_their_values_are_saved_and_opened_again() {
+    let env = Env::new("applications");
+    let schema = schema();
+    let project = Project::create(&env.dolt, &env.opts(), &env.base.join("Projects"), "Applications", "test", &timestamp(1_761_670_800)).unwrap();
+    let path = project.path().to_path_buf();
+    project.close().unwrap();
+    let mut s = model();
+    let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+    let order = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Order" }));
+    let id = run(&mut s, "uml.attribute.add", json!({ "class": order, "name": "id", "type": "Integer" }));
+    let fetch = run(&mut s, "uml.enumeration.add", json!({ "package": sales, "name": "Fetch" }));
+    run(&mut s, "uml.literal.add", json!({ "enumeration": fetch, "name": "lazy" }));
+    let persistence = run(&mut s, "uml.profile.add", json!({ "name": "Persistence", "package": sales }));
+    let entity = run(&mut s, "uml.stereotype.add", json!({ "profile": persistence, "name": "Entity", "extends": ["Class"] }));
+    run(&mut s, "uml.attribute.add", json!({ "class": entity, "name": "table", "type": "String" }));
+    run(&mut s, "uml.attribute.add", json!({ "class": entity, "name": "cached", "type": "Boolean", "default": "false" }));
+    run(&mut s, "uml.attribute.add", json!({ "class": entity, "name": "fetch", "type": fetch }));
+    run(&mut s, "uml.attribute.add", json!({ "class": entity, "name": "tags", "type": "String", "multiplicity": "*" }));
+    let key = run(&mut s, "uml.stereotype.add", json!({ "profile": persistence, "name": "Id", "extends": ["Property"] }));
+    run(&mut s, "uml.profile.apply", json!({ "package": sales, "profile": persistence }));
+    run(&mut s, "uml.stereotype.apply", json!({ "element": order, "stereotype": entity }));
+    run(&mut s, "uml.stereotype.apply", json!({ "element": id, "stereotype": key }));
+    for (property, values) in [("table", json!(["orders"])), ("fetch", json!(["lazy"])), ("tags", json!(["a", "b"]))] {
+        run(&mut s, "uml.stereotype.set-value", json!({ "element": order, "stereotype": entity, "property": property, "values": values }));
+    }
+    let d = run(&mut s, "diagram.add", json!({ "kind": "uml.class", "name": "Sales", "element": sales }));
+    run(&mut s, "uml.stereotype.show-values", json!({ "diagram": d, "show": true }));
+    assert_eq!(schema.fingerprint(), CURRENT, "no table changed");
+    let back = save_and_reopen(&env, &schema, &path, s.doc(), "Applications").expect("a project with stereotype applications opens");
+    assert_eq!(rows_of(back.doc(), &schema), rows_of(s.doc(), &schema));
+    let st = back.doc();
+    let o = st.by_uuid(Uuid::parse(&order).unwrap()).unwrap();
+    let e = st.by_uuid(Uuid::parse(&entity).unwrap()).unwrap();
+    let i = archforge_uml::applications::application(st, o, e).expect("Order is still an «Entity»");
+    let shown: Vec<Option<String>> =
+        archforge_uml::profiles::properties(st, e).into_iter().map(|p| archforge_uml::applications::shown(st, i, p)).collect();
+    assert_eq!(shown, [Some("\"orders\"".into()), None, Some("lazy".into()), Some("\"a\", \"b\"".into())], "set values back, the default unset");
+    assert_eq!(archforge_uml::applications::keywords(st, st.by_uuid(Uuid::parse(&id).unwrap()).unwrap()).as_deref(), Some("«Id»"));
+    assert!(archforge_uml::applications::values_shown(st, st.by_uuid(Uuid::parse(&d).unwrap()).unwrap()), "the diagram's choice comes back");
+}
+
 /// Saved, closed and opened again through the project, the rows come back and a session is made
 /// of them, or the reason it is not.
 fn save_and_reopen(env: &Env, schema: &ModelSchema, path: &std::path::Path, st: &Store, message: &str) -> Result<Session, String> {
@@ -434,6 +509,90 @@ fn a_domain_with_two_checks_named_alike_is_refused_and_one_named_apart_opens_aga
     let e = set.expect_err("checks set alike are refused");
     assert!(e.to_string().contains("two checks are named Positive"), "{e}");
     assert_eq!(rows_of(back.doc(), &schema), rows_of(s.doc(), &schema), "the checks named apart come back");
+}
+
+/// A template's parameters (AR-130), with their kinds, constraint, default and order, and a member
+/// typed by one, are saved in the project's existing tables and come back as written after the
+/// project is closed and opened again: no table or column is added for them, and the signature's
+/// parameter list is read back once, not twice.
+#[test]
+fn template_parameters_are_saved_and_opened_again() {
+    let env = Env::new("templates");
+    let schema = schema();
+    let project = Project::create(&env.dolt, &env.opts(), &env.base.join("Projects"), "Shop", "test", &timestamp(1_761_670_800)).unwrap();
+    project.prepare_model(&schema).unwrap();
+    let mut s = archforge_notations::new_project_session("Shop", ids(0)).unwrap();
+    let sales = run(&mut s, "uml.package.add", json!({ "name": "sales" }));
+    let entity = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Entity" }));
+    let repo = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Repository" }));
+    let t = run(&mut s, "uml.template-parameter.add", json!({ "classifier": repo, "name": "T", "constraint": entity, "default": entity }));
+    run(&mut s, "uml.template-parameter.add", json!({ "classifier": repo, "name": "Key", "kind": "data-type", "default": "Integer", "at": 0 }));
+    let element = s.execute("uml.template-parameter.list", &json!({ "classifier": repo })).unwrap().value["parameters"][1]["element"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    run(&mut s, "uml.attribute.add", json!({ "class": repo, "name": "items", "type": element, "multiplicity": "*" }));
+    let written = rows_of(s.doc(), &schema);
+    project.write_model(&schema, &written).unwrap();
+    project.commit("Templates").unwrap();
+    let path = project.path().to_path_buf();
+    project.close().unwrap();
+    let again = Project::open(&env.dolt, &env.opts(), &path).unwrap();
+    again.prepare_model(&schema).unwrap();
+    let read = again.read_model(&schema).unwrap();
+    assert_eq!(read, written, "the rows come back as written");
+    let mut session = archforge_notations::session_from_rows(&read, ids(1 << 41)).unwrap();
+    assert_eq!(rows_of(session.doc(), &schema), written, "read into a model, the same rows again");
+    let st = session.doc();
+    let r = st.by_uuid(Uuid::parse(&repo).unwrap()).unwrap();
+    assert_eq!(archforge_uml::templates::signature_rows(st, r), ["Key : DataType = Integer", "T : Class > Entity = Entity"]);
+    let listed = session.execute("uml.template-parameter.list", &json!({ "classifier": repo })).unwrap().value;
+    assert_eq!(listed["parameters"][1]["id"], json!(t), "the parameter keeps its id");
+    let card = session.execute("uml.class.get", &json!({ "class": repo })).unwrap().value;
+    assert_eq!(card["attributes"][0]["type"]["id"], json!(element), "the member keeps its type");
+    again.close().unwrap();
+}
+
+/// A template binding (AR-131), its substitutions and its line with its label, are saved in the
+/// project's existing tables and come back as written after the project is closed and opened
+/// again: no table or column is added for them, and the binding reads the same.
+#[test]
+fn template_bindings_are_saved_and_opened_again() {
+    let env = Env::new("bindings");
+    let schema = schema();
+    let project = Project::create(&env.dolt, &env.opts(), &env.base.join("Projects"), "Shop", "test", &timestamp(1_761_670_800)).unwrap();
+    project.prepare_model(&schema).unwrap();
+    let mut s = archforge_notations::new_project_session("Shop", ids(0)).unwrap();
+    let sales = run(&mut s, "uml.package.add", json!({ "name": "sales" }));
+    let order = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Order" }));
+    let repo = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Repository" }));
+    let bound = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "OrderRepository" }));
+    run(&mut s, "uml.template-parameter.add", json!({ "classifier": repo, "name": "T" }));
+    run(&mut s, "uml.template-parameter.add", json!({ "classifier": repo, "name": "Key", "kind": "data-type", "default": "Integer" }));
+    let b = run(&mut s, "uml.template-binding.add", json!({ "bound": bound, "template": repo, "arguments": { "T": order, "Key": "String" } }));
+    let d = run(&mut s, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": sales, "name": "Sales" }));
+    let from = run(&mut s, "diagram.place", json!({ "diagram": d, "element": bound, "x": 0, "y": 300 }));
+    let to = run(&mut s, "diagram.place", json!({ "diagram": d, "element": repo, "x": 400, "y": 0 }));
+    let e = run(&mut s, "diagram.connect", json!({ "diagram": d, "element": b, "source": from, "target": to }));
+    run(&mut s, "diagram.label", json!({ "edge": e, "kind": "name", "at": "middle" }));
+    let before = s.execute("uml.template-binding.list", &json!({ "classifier": bound })).unwrap().value;
+    let written = rows_of(s.doc(), &schema);
+    project.write_model(&schema, &written).unwrap();
+    project.commit("Bindings").unwrap();
+    let path = project.path().to_path_buf();
+    project.close().unwrap();
+    let again = Project::open(&env.dolt, &env.opts(), &path).unwrap();
+    again.prepare_model(&schema).unwrap();
+    let read = again.read_model(&schema).unwrap();
+    assert_eq!(read, written, "the rows come back as written");
+    let mut session = archforge_notations::session_from_rows(&read, ids(1 << 41)).unwrap();
+    assert_eq!(rows_of(session.doc(), &schema), written, "read into a model, the same rows again");
+    assert_eq!(session.execute("uml.template-binding.list", &json!({ "classifier": bound })).unwrap().value, before);
+    let st = session.doc();
+    let binding = st.by_uuid(Uuid::parse(&b).unwrap()).unwrap();
+    assert_eq!(archforge_uml::bindings::label(st, binding), "«bind» <T -> Order, Key -> String>");
+    assert_eq!(archforge_diagram::views_of(st, binding).1.len(), 1, "its line");
+    again.close().unwrap();
 }
 
 #[test]

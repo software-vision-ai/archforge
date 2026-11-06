@@ -12,15 +12,19 @@
 //! generalization as a line to a hollow triangle at the general class; a dependency dashed, with an
 //! open arrow at its supplier; an interface realization dashed in the muted ink, with a hollow
 //! triangle at its interface; an association class as an association's line and a class's card,
-//! its eyebrow Association class (AR-125), which the canvas ties to the line's middle. The canvas
-//! draws these descriptions.
+//! its eyebrow Association class (AR-125), which the canvas ties to the line's middle; a template
+//! binding dashed, with an open arrow at its template and its `«bind» <T -> Order>` label at its
+//! middle (AR-131). An element's stereotypes (AR-135) take the place of a card's kind word (a
+//! keyword kind keeps its keyword first), start a member's row and sit at a line's middle; a diagram
+//! that shows them lists the values set in a compartment per stereotype. The canvas draws these
+//! descriptions.
 
 use archforge_diagram::figure::{Card, End, EndMark, Line, Row, Text, Tone};
 use archforge_mof::{Obj, Store, Value};
 
 use crate::{
     ASSOCIATION, ASSOCIATION_CLASS, AggregationKind, CLASS, DATA_TYPE, DEPENDENCY, ENUMERATION, GENERALIZATION, INTERFACE, INTERFACE_REALIZATION,
-    PRIMITIVE_TYPE, ParameterDirectionKind, VisibilityKind, association, behavioral_feature, class, dependency, generalization,
+    PRIMITIVE_TYPE, ParameterDirectionKind, TEMPLATE_BINDING, VisibilityKind, association, behavioral_feature, class, dependency, generalization,
     interface_realization, literal_integer, literal_unlimited_natural, multiplicity_element, named_element, operation, parameter, property,
     typed_element,
 };
@@ -197,6 +201,9 @@ pub fn card(store: &Store, c: Obj, diagram: Obj) -> Option<Card> {
     // The eyebrow alone, and with the outsider's package beside it.
     let (here, away, is_class) = match store.class_of(c).ok()? {
         k if k == crate::PACKAGE => return Some(package_card(store, c)),
+        // A stereotype and a metaclass on a profile's diagram (AR-134, F1).
+        k if k == crate::STEREOTYPE => return Some(stereotype_card(store, c)),
+        k if k == CLASS && crate::profiles::is_metaclass(store, c) => return Some(metaclass_card(store, c)),
         k if k == ENUMERATION => return Some(enumeration_card(store, c, diagram)),
         k if k == PRIMITIVE_TYPE => return Some(primitive_type_card(store, c, diagram)),
         k if k == CLASS => ("Class", "Class · {package}", true),
@@ -204,33 +211,83 @@ pub fn card(store: &Store, c: Obj, diagram: Obj) -> Option<Card> {
         k if k == DATA_TYPE => ("«dataType»", "«dataType» · {package}", false),
         k if k == ASSOCIATION_CLASS => ("Association class", "Association class · {package}", false),
         k if k == crate::CONSTRAINT => return Some(constraint_card(store, c, diagram)),
+        k if k == ASSOCIATION => return crate::nary::is_nary(store, c).then(|| diamond_card(store, c)),
         _ => return None,
     };
     let elsewhere = elsewhere(store, c, diagram);
-    let eyebrow = match elsewhere {
-        Some(p) => Text::Said(away, vec![("package", name(store, p))]),
-        None => Text::said(here),
-    };
+    let eyebrow = eyebrow(store, c, here, away, elsewhere);
     // A static member underlined, an abstract operation slanted: a static abstract one is both.
     let row = |text, member, slanted| Row { mark: None, text, linked: false, slanted, underlined: is_static(store, member) };
     let (mut room, mut hidden) = (MAX_CARD_ROWS, 0);
     // An association's end a class owns draws as the line's role, not as a row: the members'
-    // attributes leave it out.
-    let attributes = capped(crate::members::attributes(store, c), &mut room, &mut hidden, |a| row(attribute_text(store, a), a, false));
+    // attributes leave it out. A member's stereotypes go before its text (AR-135).
+    let attributes = capped(crate::members::attributes(store, c), &mut room, &mut hidden, |a| row(member_text(store, a), a, false));
     let operations = capped(crate::members::operations(store, c), &mut room, &mut hidden, |op| {
-        row(operation_text(store, op), op, flag(store, op, behavioral_feature::IS_ABSTRACT))
+        row(member_text(store, op), op, flag(store, op, behavioral_feature::IS_ABSTRACT))
     });
+    let mut compartments = vec![attributes, operations];
+    compartments.extend(value_compartments(store, c, diagram, &mut room, &mut hidden));
     Some(Card {
         eyebrow,
         name: card_name(store, c, diagram),
-        compartments: vec![attributes, operations],
+        compartments,
         more: ("+ {n} more member", "+ {n} more members"),
         hidden,
         elsewhere: elsewhere.is_some(),
         tone: Tone::Plain,
         slanted: is_class && flag(store, c, class::IS_ABSTRACT),
         braces: braces(store, c),
+        template: crate::templates::signature_rows(store, c),
     })
+}
+
+/// A member's row as a card or Properties lists it: its stereotypes, then its text, `«Id» + id :
+/// Integer` (AR-135, F3).
+pub fn member_text(store: &Store, m: Obj) -> String {
+    let text = if store.class_of(m).ok() == Some(crate::OPERATION) { operation_text(store, m) } else { attribute_text(store, m) };
+    cut(format!("{}{text}", crate::applications::prefix(store, m)))
+}
+
+/// A classifier's eyebrow: its stereotypes in place of its kind's word (`«Entity»` for `Class`);
+/// a kind written as a UML keyword keeps it first in the same guillemets (`«interface, Entity»`);
+/// the package beside it for an outsider (AR-135, F3). `here` and `away` are the kind's own
+/// eyebrow, alone and with the package.
+fn eyebrow(store: &Store, c: Obj, here: &'static str, away: &'static str, elsewhere: Option<Obj>) -> Text {
+    let Some(keywords) = crate::applications::keywords(store, c) else {
+        return match elsewhere {
+            Some(p) => Text::Said(away, vec![("package", name(store, p))]),
+            None => Text::said(here),
+        };
+    };
+    let keywords = match here.strip_prefix('«').and_then(|k| k.strip_suffix('»')) {
+        Some(kind) => format!("«{kind}, {}", keywords.trim_start_matches('«')),
+        None => keywords,
+    };
+    match elsewhere {
+        Some(p) => Text::Said("{keywords} · {package}", vec![("keywords", keywords), ("package", name(store, p))]),
+        None => Text::Plain(keywords),
+    }
+}
+
+/// The compartments of the values set on `c`'s stereotypes, one per stereotype with a value set,
+/// headed by its `«Entity»`, when `diagram` shows them (AR-135, F3); none otherwise. They count
+/// against `room` as the members do.
+fn value_compartments(store: &Store, c: Obj, diagram: Obj, room: &mut usize, hidden: &mut usize) -> Vec<Vec<Row>> {
+    if !crate::applications::values_shown(store, diagram) {
+        return Vec::new();
+    }
+    let plain = |text: String| Row { mark: None, text: cut(text), linked: false, slanted: false, underlined: false };
+    crate::applications::value_rows(store, c)
+        .into_iter()
+        .map(|(heading, rows)| {
+            let all: Vec<String> = std::iter::once(heading).chain(rows).collect();
+            let shown = all.len().min(*room);
+            *hidden = hidden.saturating_add(all.len().saturating_sub(shown));
+            *room = room.saturating_sub(shown);
+            all.into_iter().take(shown).map(plain).collect::<Vec<Row>>()
+        })
+        .filter(|rows| !rows.is_empty())
+        .collect()
 }
 
 /// What a classifier's name row says in braces after its name: `final` when nothing may
@@ -271,20 +328,56 @@ pub fn shows(store: &Store, diagram: Obj, element: Obj) -> bool {
 /// it when it is an outsider, and its name, with no compartment, since it has no members.
 fn primitive_type_card(store: &Store, t: Obj, diagram: Obj) -> Card {
     let elsewhere = elsewhere(store, t, diagram);
-    let eyebrow = match elsewhere {
-        Some(p) => Text::Said("«primitive» · {package}", vec![("package", name(store, p))]),
-        None => Text::said("«primitive»"),
-    };
+    let eyebrow = eyebrow(store, t, "«primitive»", "«primitive» · {package}", elsewhere);
+    let (mut room, mut hidden) = (MAX_CARD_ROWS, 0);
     Card {
         eyebrow,
         name: card_name(store, t, diagram),
-        compartments: Vec::new(),
+        compartments: value_compartments(store, t, diagram, &mut room, &mut hidden),
         more: ("+ {n} more member", "+ {n} more members"),
-        hidden: 0,
+        hidden,
         elsewhere: elsewhere.is_some(),
         tone: Tone::Plain,
         slanted: false,
         braces: braces(store, t),
+        template: Vec::new(),
+    }
+}
+
+/// A stereotype's card on its profile's diagram (AR-134, F1): `«stereotype»` in its eyebrow, its
+/// name, and its properties as a class's attributes, its extensions' ends left out.
+fn stereotype_card(store: &Store, s: Obj) -> Card {
+    let (mut room, mut hidden) = (MAX_CARD_ROWS, 0);
+    let row = |text, member| Row { mark: None, text, linked: false, slanted: false, underlined: is_static(store, member) };
+    let properties = capped(crate::profiles::properties(store, s), &mut room, &mut hidden, |a| row(attribute_text(store, a), a));
+    Card {
+        eyebrow: Text::said("«stereotype»"),
+        name: name(store, s),
+        compartments: vec![properties],
+        more: ("+ {n} more member", "+ {n} more members"),
+        hidden,
+        elsewhere: false,
+        tone: Tone::Plain,
+        slanted: false,
+        braces: None,
+        template: Vec::new(),
+    }
+}
+
+/// A metaclass's card on a profile's diagram (AR-134, F1): `«metaclass»` over its UML name, with
+/// no compartment.
+fn metaclass_card(store: &Store, m: Obj) -> Card {
+    Card {
+        eyebrow: Text::said("«metaclass»"),
+        name: name(store, m),
+        compartments: Vec::new(),
+        more: ("+ {n} more member", "+ {n} more members"),
+        hidden: 0,
+        elsewhere: false,
+        tone: Tone::Plain,
+        slanted: false,
+        braces: None,
+        template: Vec::new(),
     }
 }
 
@@ -293,10 +386,7 @@ fn primitive_type_card(store: &Store, t: Obj, diagram: Obj) -> Card {
 /// when it has none; past [`MAX_CARD_ROWS`] the rest are counted, not listed.
 fn enumeration_card(store: &Store, e: Obj, diagram: Obj) -> Card {
     let elsewhere = elsewhere(store, e, diagram);
-    let eyebrow = match elsewhere {
-        Some(p) => Text::Said("«enumeration» · {package}", vec![("package", name(store, p))]),
-        None => Text::said("«enumeration»"),
-    };
+    let eyebrow = eyebrow(store, e, "«enumeration»", "«enumeration» · {package}", elsewhere);
     let (mut room, mut hidden) = (MAX_CARD_ROWS, 0);
     let literals = capped(crate::commands::literals(store, e), &mut room, &mut hidden, |l| Row {
         mark: None,
@@ -305,25 +395,73 @@ fn enumeration_card(store: &Store, e: Obj, diagram: Obj) -> Card {
         slanted: false,
         underlined: false,
     });
+    let mut compartments = vec![literals];
+    compartments.extend(value_compartments(store, e, diagram, &mut room, &mut hidden));
     Card {
         eyebrow,
         name: card_name(store, e, diagram),
-        compartments: vec![literals],
+        compartments,
         more: ("+ {n} more literal", "+ {n} more literals"),
         hidden,
         elsewhere: elsewhere.is_some(),
         tone: Tone::Plain,
         slanted: false,
         braces: braces(store, e),
+        template: Vec::new(),
     }
 }
 
-/// An association's two ends, in its member order.
+/// A binary association's two ends, in its member order; None for an n-ary one, whose ends
+/// [`crate::nary::ends`] gives (AR-128).
 pub fn member_ends(store: &Store, a: Obj) -> Option<[Obj; 2]> {
     match list(store, a, association::MEMBER_END).as_slice() {
-        [first, second, ..] => Some([*first, *second]),
+        [first, second] => Some([*first, *second]),
         _ => None,
     }
+}
+
+/// An n-ary association's diamond (AR-128): its name, which the canvas writes above the diamond,
+/// and no rows; its stereotypes, when it has any, in its eyebrow, written above the name (AR-135).
+fn diamond_card(store: &Store, a: Obj) -> Card {
+    Card {
+        eyebrow: crate::applications::keywords(store, a).map_or_else(|| Text::said("N-ary association"), Text::Plain),
+        name: name(store, a),
+        compartments: Vec::new(),
+        more: ("+ {n} more member", "+ {n} more members"),
+        hidden: 0,
+        elsewhere: false,
+        tone: Tone::Diamond,
+        slanted: false,
+        braces: None,
+        template: Vec::new(),
+    }
+}
+
+/// The leg of an n-ary association's end `end` (AR-128): from the diamond, unmarked, to the end's
+/// class, an open arrow there when the association navigates to it, the end's role and its
+/// multiplicity beside it.
+fn leg_line(store: &Store, end: Obj) -> Option<Line> {
+    let a = crate::nary::association_of_end(store, end)?;
+    let m = end_text(store, end);
+    let role = end_role(store, end);
+    let to = End {
+        mark: if navigable(store, a, end) { EndMark::OpenArrow } else { EndMark::None },
+        text: (!m.is_empty()).then_some(m),
+        slot: "to_end",
+        role: (!role.is_empty()).then_some(role),
+        qualifiers: Vec::new(),
+    };
+    // A leg is its end's: the end's stereotypes sit at its middle (AR-135).
+    Some(Line {
+        ends: [End::marked(EndMark::None), to],
+        styled: true,
+        dashed: false,
+        status: None,
+        note: None,
+        badge: false,
+        resolvable: false,
+        keyword: crate::applications::keywords(store, end),
+    })
 }
 
 /// Whether the association navigates to its end `end`: a class or an interface owns the end, or the
@@ -345,9 +483,10 @@ fn aggregation(store: &Store, end: Obj) -> AggregationKind {
     }
 }
 
-/// The classes an association, an association class, a generalization, a dependency or an
-/// interface realization joins, as its line runs: a realization from its implementing class to its
-/// interface.
+/// The classes an association, an association class, a generalization, a dependency, an interface
+/// realization, a template binding or an extension joins, as its line runs: a realization from its
+/// implementing class to its interface, a template binding from its bound element to its template,
+/// an extension from its stereotype to its metaclass.
 pub fn ends(store: &Store, element: Obj) -> Option<(Obj, Obj)> {
     match store.class_of(element).ok()? {
         c if crate::is_association(c) => {
@@ -362,6 +501,9 @@ pub fn ends(store: &Store, element: Obj) -> Option<(Obj, Obj)> {
         c if c == INTERFACE_REALIZATION => {
             Some((one(store, element, interface_realization::IMPLEMENTING_CLASSIFIER)?, one(store, element, interface_realization::CONTRACT)?))
         }
+        // An extension runs from its stereotype to the metaclass it extends (AR-134).
+        c if c == crate::EXTENSION => crate::profiles::extension_ends(store, element),
+        c if c == TEMPLATE_BINDING => Some((crate::templates::bound_element(store, element)?, crate::bindings::template_of(store, element)?)),
         _ => None,
     }
 }
@@ -370,6 +512,7 @@ pub fn ends(store: &Store, element: Obj) -> Option<(Obj, Obj)> {
 /// apart), a generalization, a dependency or an interface realization.
 pub fn line(store: &Store, element: Obj) -> Option<Line> {
     match store.class_of(element).ok()? {
+        c if c == crate::PROPERTY => leg_line(store, element),
         c if crate::is_association(c) => {
             let ends = member_ends(store, element)?;
             let end = |i: usize| {
@@ -396,8 +539,28 @@ pub fn line(store: &Store, element: Obj) -> Option<Line> {
                         .collect(),
                 }
             };
-            Some(Line { ends: [end(0), end(1)], styled: true, dashed: false, status: None, note: None, badge: false, resolvable: false })
+            Some(Line {
+                ends: [end(0), end(1)],
+                styled: true,
+                dashed: false,
+                status: None,
+                note: None,
+                badge: false,
+                resolvable: false,
+                keyword: crate::applications::keywords(store, element),
+            })
         }
+        // An extension: a solid line with a filled triangle at the metaclass (AR-134, F1).
+        c if c == crate::EXTENSION => Some(Line {
+            ends: [End::marked(EndMark::None), End::marked(EndMark::FilledTriangle)],
+            styled: true,
+            dashed: false,
+            status: None,
+            note: None,
+            badge: false,
+            resolvable: false,
+            keyword: crate::applications::keywords(store, element),
+        }),
         c if c == GENERALIZATION => Some(Line {
             ends: [End::marked(EndMark::None), End::marked(EndMark::Triangle)],
             styled: false,
@@ -406,6 +569,7 @@ pub fn line(store: &Store, element: Obj) -> Option<Line> {
             note: None,
             badge: false,
             resolvable: false,
+            keyword: crate::applications::keywords(store, element),
         }),
         c if c == DEPENDENCY => Some(Line {
             ends: [End::marked(EndMark::None), End::marked(EndMark::OpenArrow)],
@@ -415,6 +579,7 @@ pub fn line(store: &Store, element: Obj) -> Option<Line> {
             note: None,
             badge: false,
             resolvable: false,
+            keyword: crate::applications::keywords(store, element),
         }),
         // Thin in the muted ink as a generalization is, but dashed: realizing is not specializing.
         c if c == INTERFACE_REALIZATION => Some(Line {
@@ -425,20 +590,37 @@ pub fn line(store: &Store, element: Obj) -> Option<Line> {
             note: None,
             badge: false,
             resolvable: false,
+            keyword: crate::applications::keywords(store, element),
+        }),
+        // Dashed with an open arrow at the template, as a dependency's, and labelled «bind» with its
+        // substitutions: a binding is neither a dependency nor a realization (AR-131).
+        c if c == TEMPLATE_BINDING => Some(Line {
+            ends: [End::marked(EndMark::None), End::marked(EndMark::OpenArrow)],
+            styled: true,
+            dashed: true,
+            status: None,
+            note: None,
+            badge: false,
+            resolvable: false,
+            keyword: crate::applications::keywords(store, element),
         }),
         _ => None,
     }
 }
 
 /// The text slots a label of an association or a dependency may show; an association class's line
-/// its ends' alone, its name being on its card.
+/// its ends' alone, its name being on its card; a template binding's its `«bind»` label, in the
+/// name's slot, as it has no name.
 pub fn text_slots(class: archforge_mof::ClassId) -> &'static [&'static str] {
     if class == ASSOCIATION {
         &["name", "from_end", "to_end", "from_role", "to_role"]
     } else if class == ASSOCIATION_CLASS {
         &["from_end", "to_end", "from_role", "to_role"]
-    } else if class == DEPENDENCY {
+    } else if class == DEPENDENCY || class == TEMPLATE_BINDING {
         &["name"]
+    } else if class == crate::PROPERTY {
+        // An n-ary association's leg: its end's texts at the class (AR-128).
+        &["to_end", "to_role"]
     } else {
         &[]
     }
@@ -449,7 +631,16 @@ pub fn text_slots(class: archforge_mof::ClassId) -> &'static [&'static str] {
 pub fn slot_text(store: &Store, element: Obj, slot: &str) -> String {
     let end = |i: usize| member_ends(store, element).map(|e| e[i]);
     let ends = store.class_of(element).is_ok_and(crate::is_association);
+    // An n-ary association's leg writes its own end's texts (AR-128).
+    if crate::nary::association_of_end(store, element).is_some() {
+        return match slot {
+            "to_end" => end_text(store, element),
+            "to_role" => end_role(store, element),
+            _ => String::new(),
+        };
+    }
     match slot {
+        "name" if store.class_of(element).ok() == Some(TEMPLATE_BINDING) => crate::bindings::label(store, element),
         "name" => name(store, element),
         "from_end" if ends => end(0).map(|e| end_text(store, e)).unwrap_or_default(),
         "to_end" if ends => end(1).map(|e| end_text(store, e)).unwrap_or_default(),
@@ -496,6 +687,7 @@ fn constraint_card(store: &Store, c: Obj, diagram: Obj) -> Card {
         tone,
         slanted: false,
         braces: None,
+        template: Vec::new(),
     }
 }
 
@@ -512,5 +704,6 @@ fn package_card(store: &Store, p: Obj) -> Card {
         tone: Tone::Tabbed,
         slanted: false,
         braces: None,
+        template: Vec::new(),
     }
 }

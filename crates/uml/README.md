@@ -58,7 +58,7 @@ through `element.remove`; `uml.type.list`; a type is an
 element's id or a built-in type's name, Integer, String, Boolean, Real or UnlimitedNatural, made in
 the package Types the first time it is used and never twice, a built-in name always meaning the one
 in Types; a multiplicity is typed, `0`, `1`, `0..1`, `*`, `1..*`,
-`2..5`, and one that does not read is a `MultiplicityError` naming why; members are removed through `element.remove`), `figures::{card, line, ends, text_slots, slot_text, attribute_text,
+`2..5`, and one that does not read is a `MultiplicityError` naming why; members are removed through `element.remove`), `figures::{card, line, ends, text_slots, slot_text, attribute_text, member_text,
 operation_text, multiplicity, visibility, is_static, member_ends, navigable, MAX_CARD_ROWS}` (a class's card with its
 members' visibility, type and multiplicity, abstract names slanted, static members underlined; an interface's and a data
 type's the same under `«interface»` and `«dataType»`; a primitive type's `«primitive»` over its
@@ -94,7 +94,7 @@ none, a primitive type or an association class put in a classifier, and a name a
 the case, refused with the reason; an attribute or an operation of the owner may share it (AR-208); removing an owner removes what
 it nests, their relationships and views, in the same step; `UmlNotation::nested_in` names the owner the canvas ties a nested
 card to with a line ending in ⊕, worked out from the model; a card of a nested classifier whose owner the diagram does not show
-reads `Order::Priority`), `relations::{specs, relationships_of, generalization_problem, GeneralizationProblem, is_final, specializations, final_problem, is_leaf, redefiners, redefiner_name, leaf_problem, association_end_problem, association_class_end_problem, realization_problem, RealizationProblem}`
+reads `Order::Priority`), `profiles::{specs, library, in_library, is_metaclass, metaclass, metaclass_kind, metaclass_problem, library_problem, profiles, all_profiles, package_of, stereotypes, profile_of, extensions, extended, properties, extension_ends, metaclasses_of, is_base, applied, applying, home_of, in_scope, available, extends_kind, element_of, applications_of, stereotype_uses, profile_uses, unapply_uses, moving_uses, removal_uses, extension_uses, values_set, uses_text, stranding, removal_problem, Extension, Application, Uses, UML_URI, METACLASSES, NOT_DRAWN, BASE, APPLICATION_LINK, MAX_STEREOTYPES}` (AR-134: `uml.profile.{add, rename, apply, unapply, diagram, list, uses}`, `uml.stereotype.{add, set, get}`, `uml.package.profiles`, `uml.metaclass.list`; a Profile in a package beside its packages, a profile's name a package's kind; its Stereotypes, each extending metaclasses as UML has it, an Extension in the profile whose ends are the stereotype's `base_<Metaclass>` attribute typed by the metaclass and an ExtensionEnd typed by the stereotype, and owning properties through the attribute commands, typed by a primitive type, an enumeration or a data type, the names starting `base_` kept; the metaclasses Classes of the hidden UML library, an unnamed UML Model at the project's top level known by `UML_URI`, each made once on first use and never changed, shown in no list or type; no `Profile::metaclassReference` is stored, since it subsets the composite `elementImport` and a project's rows would list each import twice, which the reader refuses: the extensions name the metaclasses; a ProfileApplication per package that applies a profile, its stereotypes then available inside the package at any depth; a stereotype application an InstanceSpecification classified by the stereotype with Slots for its values and a core Link to its element, found by `applications_of`, and every unapply, removal, dropped extension, stereotype move, element or package move and removal of a property with values set that would strand one refused, the uses named; a profile's diagram a class diagram of the profile, its stereotypes' cards `«stereotype»`, its metaclasses' `«metaclass»`, an extension's line ending in a filled triangle at the metaclass), `applications::{specs, stereotype_of, is_application, all_stereotypes, applied_to, application, keywords, prefix, element_problem, offer, choices, apply_problem, apply, slot_of, values, is_set, value_texts, shown, read_values, set_values, value_rows, reshape_problem, literal_problem, values_shown, accepted, bounds_text, form_of, Offer, ValueProblem, MAX_APPLIED, MAX_VALUES, VALUES_TAG}` (AR-135: `uml.stereotype.{apply, unapply, set-value, show-values, list-applied, applicable}`; an application's instance at the project's top level beside the hidden library, so moving or handing up its element never moves it; a stereotype applied to an element of a metaclass it extends, or one specializing it, whose profile a package around the element applies, each once; values typed as text and read by the property's type as a default is, held to its multiplicity and uniqueness, kept in a Slot only when set, so a default is never a value; a property whose values are set kept from a new type or bounds they break, and a literal a value names kept; cards writing the stereotypes in place of the kind's word, a keyword kind keeping its keyword, members' rows and lines before their text; a class diagram's choice to list the values, kept by the one core tag `VALUES_TAG` listing such diagrams), `relations::{specs, relationships_of, generalization_problem, GeneralizationProblem, is_final, specializations, final_problem, is_leaf, redefiners, redefiner_name, leaf_problem, association_end_problem, association_class_end_problem, realization_problem, RealizationProblem}`
 (`uml.classifier.set` (AR-137): a classifier of any kind made final, UML's isFinalSpecialization, only while nothing specializes it and never a built-in type, after which no generalization is drawn to it or has its general end moved onto it; and made leaf (AR-138), UML's isLeaf, only while nothing redefines it, `{leaf}` after its name, as a property is with the attribute commands and `uml.association.set-end` and an operation with the operation commands, after which no property redefines a leaf one (`modifiers::TargetProblem::Leaf`, `modifiers::redefines_leaf`); an enumeration specializes only an enumeration, a data type only a data type and a primitive type
 only a primitive type, each specialized only by its own kind, a built-in type specializing nothing,
 and none of them joins an association; `uml.realization.add`: a class
@@ -104,8 +104,38 @@ through `element.remove`; `uml.association-class.add` (AR-125): one AssociationC
 classes, owning both its ends as an association does, its ends set with `uml.association.set-end`,
 its members with the member commands, renamed and moved with `uml.association-class.rename` and
 `.move` among its package's classifiers, refused at anything but a class; nothing specializes it),
-`commands::going_with` (the relationships that go with classifiers, an association class's own
-among them), `names::{kind, clash, CLASSIFIER}` (AR-208: which elements may share a
+`templates::{specs, signature, parameters, is_template, is_parameter, template_of, element_of,
+parameter_of, is_parameter_element, parameter_element_problem, type_scope_problem, kind_of,
+constraint_of, default_of, parameter_name, parameter_text, signature_rows, name_clash,
+substitutions, binding_of, bound_element, actual_of, users, bindings_to, removal_problem, fits,
+parameter_json, parameters_json, can_be_template, Kind, TEMPLATES, MAX_PARAMETERS}` (AR-130:
+`uml.template-parameter.{add, set, move, list}`; a class, an interface or a data type made a
+template by its first ClassifierTemplateParameter, its RedefinableTemplateSignature made with the
+first and removed with the last; each parameter owning a classifier of its kind (class, interface,
+data type, enumeration or primitive type; value and operation refused as not supported yet, never
+converted), named as the parameter, constrained to at most one classifier of its kind, with a
+default of its kind that fits the constraint (UML's `isCompatibleWith`), `allowSubstitutable`
+false; names told apart across the signature by the shared rule of `names`; its identity, and
+what it types, kept across rename, reorder and a change of kind; that classifier types only its
+template's own members (`members` refuses it elsewhere) and is never listed, placed or edited as
+one of the model's; a parameter a binding's substitution names (`formal`) never removed, nor
+changed to a kind or constraint the binding's argument would not fit, nor a template's last
+parameter removed while any binding names its signature, nor a generalization or a classifier
+removed when a surviving parameter's default or a binding's argument would then no longer specialize
+its constraint (`constraint_problem`), nor a parameter without a default added to a bound template or a default cleared
+that a binding relies on, all checked before anything is written
+(`removals_problem`, `last_parameter_problem`); removed through `element.remove`; the card's `template` rows drawn as the signature box),
+`bindings::{specs, is_binding, bindings_of, template_of, substitutions, substitution_for, argument, missing,
+substitution_text, label, argument_uses, can_bind, binds, problem, Problem, arg_of, arg_fits, Arg,
+argument_removal_problem, needs_argument_problem, binding_json}` (AR-131: `uml.template-binding.{add, set, list}`; UML's
+TemplateBinding owned by its bound element, a class, an interface or a data type of the template's kind, naming the
+template's signature, with a TemplateParameterSubstitution per argument given; a parameter left out uses its default,
+one without a default needs an argument, each argument of its parameter's kind and its constraint or one that
+specializes it, never a template parameter's classifier; never the template itself, a second binding of one template, or a
+cycle of bindings; one of `RELATIONSHIPS`, drawn dashed with an open arrow at the template and labelled `«bind» <T -> Order>`
+in its `name` slot, its ends moved by `uml.relationship.reconnect`; a classifier a binding uses as an argument not removed
+while the binding stays; gone with its bound element or its template), `commands::going_with` (the relationships that go with classifiers, an association class's own
+among them, the bindings they own, and the bindings to a template), `names::{kind, clash, CLASSIFIER}` (AR-208: which elements may share a
 name in one owner, as UML has it: two of one kind never, whatever the case; every classifier is one kind, a package, a
 property, an operation, a parameter, a literal and a generalization set each one of their own, relationships and constraints
 labels that never clash; the check a project gets as it opens and every command that names, adds or moves an element ask this
@@ -115,7 +145,13 @@ qualifier_text, qualifiers_json, MAX_QUALIFIERS}` (AR-127: `uml.qualifier.{add, 
 owns, each with a name, a type and a multiplicity; the qualified end's box drawn at its class
 (`figures::line` gives its rows in the end's `qualifiers`); a name told apart from its end's other
 qualifiers whatever the case, at most 32 an end; never an attribute or a role; kept through renaming
-and reconnecting; removed through `element.remove`), `modifiers::{read, apply, parse_default, default_text, braces, suffix, Shape,
+and reconnecting; removed through `element.remove`), `nary::{specs, ends, is_nary, association_of_end, end_type,
+leg_ends, default_role, diamonds, node_in, follow_legs, role_problem, MIN_ENDS, MAX_ENDS, DIAMOND_SIZE}` (AR-128:
+`uml.association.{add-nary, add-end, remove-end, reconnect-end}`; an Association with three to 32 member ends, one
+element drawn as a diamond, a node of the association in the diagram's existing node rows, with a leg per end, an edge of
+the end's Property from the diamond to its class's card (`figures::line` draws it); a class at several ends when their
+roles differ; its ends never aggregations; removing one of three refused unless made binary, which puts a named line in
+the diamond's place; `figures::member_ends` gives a binary association's two ends only), `modifiers::{read, apply, parse_default, default_text, spec_text, spec_shown, make_spec, stored_spec, braces, suffix, Shape,
 subsets_candidates, redefines_candidates, redefines_leaf, subsets_problem, redefines_problem}` (AR-126: a
 property's default value read by its type, derived, read only, ordered, unique, and the properties
 it subsets and redefines, set by `uml.attribute.add`/`set` and `uml.association.set-end`, checked
@@ -139,10 +175,23 @@ the kinds a skill aims at; inheritance down the package tree with an override by
 going with its element, a nested package's too, and back with undo. `tests/generalization_sets.rs` (AR-129): a set made, renamed, made complete and disjoint, given and
 losing members, each one undo step; a mixed selection and the other wrong sets refused, changing nothing; a generalization
 in two sets; a member's reconnection refused; a set emptied by a deletion going in the same step; its label placed on two
-diagrams; rows read back identical; the sweep. `tests/qualifiers.rs` (AR-127): qualifiers added, edited, moved and removed, each one undo
+diagrams; rows read back identical; the sweep. `tests/templates.rs` (AR-130): parameters added, edited,
+moved and removed, each one undo step, the signature made and gone with them; identity and the
+members typed by a parameter kept across rename, reorder and kind; value and operation refused;
+defaults and constraints checked by kind; a parameter's classifier kept the template's own; a
+binding keeping its parameters; the box on two diagrams; rows read back identical; the sweep; and
+(AR-131) a binding made with its substitutions in one undo step, its line and label on two
+diagrams, distinct from a dependency; a missing argument, one that does not fit and the other wrong
+bindings refused; a parameter left out using its default; arguments, bound element and template
+edited with undo and redo, and its ends reconnected; an argument's removal refused, the binding
+gone with its bound element or its template; rows read back identical; the sweep. `tests/profiles.rs` (AR-134): profiles and stereotypes made, extending and owning properties, one undo step each; unsupported metaclasses and property types refused; a profile applied and unapplied; unapplying, removing and moving refused while stereotype applications use them, the uses counted; the library out of types and reads; a profile's names a package's; rows read back identical; the profile's diagram; the sweep; and (AR-135) stereotypes applied and unapplied one step each, the picker's offers and refusals, every extended kind, values read by type and multiplicity, defaults apart from values set, cards, members and lines, each diagram's values choice, nothing lost unseen, rows read back through moves, and the sweep. `tests/qualifiers.rs` (AR-127): qualifiers added, edited, moved and removed, each one undo
 step; a duplicate name and the other wrong edits refused, changing nothing; a built-in type or the
 model's own; kept apart from attributes and roles and gone with their association; kept through
-renaming and reconnecting; the box on two diagrams; rows read back identical; the sweep. `tests/modifiers.rs` (AR-126):
+renaming and reconnecting; the box on two diagrams; rows read back identical; the sweep. `tests/nary_associations.rs` (AR-128):
+made with three and four ends, each one undo step, and drawn as one; too few ends and a data type refused; a class at two
+ends with different roles; no aggregation on an n-ary end; ends added, removed and reconnected with their legs on two
+diagrams; removing one of three ends kept or made binary; Remove from this diagram apart from Delete from the model; a
+card's legs gone and back; a binary association still a line; rows read back identical; the sweep. `tests/modifiers.rs` (AR-126):
 each modifier set and cleared on an attribute and an end, one undo step each; defaults for every
 built-in type, an enumeration and opaque text, and the type-change refusal; Subsets and Redefines
 valid and refused; the card's and the line's notation; rows read back identical; the sweep.
@@ -151,4 +200,4 @@ valid and refused; the card's and the line's notation; rows read back identical;
 read as Derived until a notation writes them). No hand-written rules beyond the core's. No
 documentation strings.
 
-**Non-goals.** Rendering, commands, OCL, profiles, XMI import or export of models.
+**Non-goals.** Rendering, commands, OCL, XMI import or export of models.

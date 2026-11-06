@@ -66,12 +66,14 @@ str		Delete {name} from the model?	{name} aus dem Modell löschen?
 str		Narrow the filter to see more	Filter eingrenzen, um mehr zu sehen
 str		No free name is left	Kein freier Name mehr
 str		What it holds goes with it.	Was es enthält, geht mit.
+str		What it holds moves to {parent}.	Was es enthält, wandert nach {parent}.
 str		Remove from this diagram only	Nur aus diesem Diagramm entfernen
 plural		It disappears from {n} diagram.	Es verschwindet aus {n} Diagramm.|Es verschwindet aus {n} Diagrammen.
 plural		{n} relationship goes with it.	{n} Beziehung geht mit.|{n} Beziehungen gehen mit.
 plural		{n} key goes with it.	{n} Schlüssel geht mit.|{n} Schlüssel gehen mit.
 plural		{n} foreign key goes with it.	{n} Fremdschlüssel geht mit.|{n} Fremdschlüssel gehen mit.
 plural		{n} nested classifier goes with it: {names}.	{n} verschachtelter Klassifizierer geht mit: {names}.|{n} verschachtelte Klassifizierer gehen mit: {names}.
+plural		{n} stereotype application goes with it: {names}.	{n} Stereotyp-Anwendung geht mit: {names}.|{n} Stereotyp-Anwendungen gehen mit: {names}.
 str		Delete	Löschen
 str		Schema · model	Schema · Modell
 str		Table · model, in every diagram	Tabelle · Modell, in jedem Diagramm
@@ -664,6 +666,9 @@ str		«enumeration»	«enumeration»
 str		Data type	Datentyp
 str		Primitive type	Primitiver Typ
 str		«dataType»	«dataType»
+str		«stereotype»	«stereotype»
+str		«metaclass»	«metaclass»
+str		{keywords} · {package}	{keywords} · {package}
 str		«primitive»	«primitive»
 str		Association class	Assoziationsklasse
 str		Classifier	Klassifikator
@@ -710,6 +715,7 @@ str		A subclass could not redefine {name} where it is inherited. Shown as {leaf}
 str		A subclass could not redefine this member. Shown as {leaf} after it.	Eine Unterklasse könnte dieses Element nicht redefinieren. Als {leaf} dahinter gezeigt.
 plural		{names} redefines it. Remove that redefinition first.	{names} redefiniert es. Entfernen Sie zuerst diese Redefinition.|{names} redefinieren es. Entfernen Sie zuerst diese Redefinitionen.
 str		Add attribute	Attribut hinzufügen
+str		Add property	Eigenschaft hinzufügen
 str		Add operation	Operation hinzufügen
 str		Add literal	Literal hinzufügen
 str		More details in Properties	Weitere Angaben in den Eigenschaften
@@ -730,6 +736,102 @@ str		{kind} · nested in {owner} · model, in every diagram	{kind} · verschacht
 str		Nested classifiers · {n}	Verschachtelte Klassifizierer · {n}
 str		Add nested classifier	Verschachtelten Klassifizierer hinzufügen
 str		None yet. Add one here or from Models ▸ New inside {name}; both offer the same kinds.	Noch keine. Hier oder über Modelle ▸ Neu in {name} hinzufügen; beide bieten dieselben Arten.
+str		New	Neu
+str		New in {name}	Neu in {name}
+str	uml	Profile	Profil
+str		profile	Profil
+str		Stereotype	Stereotyp
+str		extends {metaclasses}	erweitert {metaclasses}
+str		extends nothing yet	erweitert noch nichts
+str		applies {profiles}	wendet {profiles} an
+str		Profile · model	Profil · Modell
+str		This profile	Dieses Profil
+str		On this profile · {n}	Auf diesem Profil · {n}
+str		Stereotype · in profile {profile} · model	Stereotyp · im Profil {profile} · Modell
+str		This stereotype	Dieser Stereotyp
+str		On this stereotype · {n}	Auf diesem Stereotyp · {n}
+str		Metaclass · UML	Metaklasse · UML
+str		Metaclass	Metaklasse
+str		This metaclass	Diese Metaklasse
+str		On this metaclass · {n}	Auf dieser Metaklasse · {n}
+str		Metaclasses carry no skills	Metaklassen tragen keine Skills
+str		A UML metaclass, which stereotypes extend. It is UML's own, kept out of Models and the type menus, and never changes.	Eine UML-Metaklasse, die Stereotypen erweitern. Sie gehört UML selbst, erscheint weder in Modelle noch in den Typmenüs und ändert sich nie.
+str		Stereotypes · {n}	Stereotypen · {n}
+str		Add stereotype	Stereotyp hinzufügen
+str		None yet. Add one here or from Models ▸ New ▸ Stereotype.	Noch keiner. Hier hinzufügen oder in Modelle ▸ Neu ▸ Stereotyp.
+str		Open profile diagram	Profildiagramm öffnen
+str		A package applies the profile through Applied profiles in its Properties; its elements may then use the profile's stereotypes.	Ein Paket wendet das Profil über Angewendete Profile in seinen Eigenschaften an; seine Elemente können dann die Stereotypen des Profils verwenden.
+str		Extends · {n}	Erweitert · {n}
+str		Add extended metaclass	Erweiterte Metaklasse hinzufügen
+str		{name} extends	{name} erweitert
+str		extended	erweitert
+str		Extended already	Bereits erweitert
+str		not drawn by Archforge yet	von Archforge noch nicht gezeichnet
+str		Offered: the metaclasses Archforge draws. Other metaclasses are listed, disabled, as not drawn by Archforge yet.	Angeboten: die Metaklassen, die Archforge zeichnet. Andere Metaklassen stehen deaktiviert in der Liste, als von Archforge noch nicht gezeichnet.
+str		Properties · {n}	Eigenschaften · {n}
+str		Types: primitive types, enumerations and data types of the model. Renaming {name} keeps every application; removing it is refused while elements use it.	Typen: primitive Typen, Aufzählungen und Datentypen des Modells. Umbenennen von {name} behält jede Anwendung; Entfernen wird abgelehnt, solange Elemente ihn verwenden.
+str		Applied profiles · {n}	Angewendete Profile · {n}
+str		Apply profile	Profil anwenden
+str		Apply to {name}	Auf {name} anwenden
+str		applied	angewendet
+str		Applied already	Bereits angewendet
+str		No profile yet	Noch kein Profil
+str		Make one with New ▸ Profile in Models.	Eines mit Neu ▸ Profil in Modelle anlegen.
+str		Elements inside {name}, and inside its packages, can use the stereotypes of the applied profiles. Applying is one undo step; it adds no stereotype by itself.	Elemente in {name} und in seinen Paketen können die Stereotypen der angewendeten Profile verwenden. Anwenden ist ein Rückgängig-Schritt; es fügt selbst keinen Stereotyp hinzu.
+str		Unapply profile	Profil nicht mehr anwenden
+str		{profile} is in use in {package}: {uses}. Remove those first.	{profile} wird in {package} verwendet: {uses}. Diese zuerst entfernen.
+str		{name} is in use: {uses}. Remove those first.	{name} wird verwendet: {uses}. Diese zuerst entfernen.
+str		{name} applies the profiles its elements use: {uses}. Remove those first.	{name} wendet die Profile an, die seine Elemente verwenden: {uses}. Diese zuerst entfernen.
+str		{name} holds the profile {profile}, which is in use: {uses}. Remove those first.	{name} enthält das Profil {profile}, das verwendet wird: {uses}. Diese zuerst entfernen.
+str		«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.	«{stereotype}» auf {metaclass} wird verwendet: {uses}. Diese zuerst entfernen.
+str		«{stereotype}» on {elements}	«{stereotype}» auf {elements}
+str		{first} and {second}	{first} und {second}
+plural		Show the use	Die Verwendung zeigen|Die {n} Verwendungen zeigen
+str		A stereotype is shown on its profile's diagram	Ein Stereotyp erscheint im Diagramm seines Profils
+str		Place stereotype	Stereotyp platzieren
+# Stereotypes applied (AR-135)
+str		Stereotypes of {name} · {n}	Stereotypen von {name} · {n}
+str		Stereotypes of this end · {n}	Stereotypen dieses Endes · {n}
+str		Apply stereotype	Stereotyp anwenden
+str		Remove «{stereotype}» from {name}	«{stereotype}» von {name} entfernen
+str	value	default	Standard
+str		{value} (default)	{value} (Standard)
+str		Default ({value})	Standard ({value})
+str		No value	Kein Wert
+str		Values you set are stored on {name}; a default shows the tag until you change it. Remove takes «{stereotype}» off {name} and keeps its definition.	Gesetzte Werte werden an {name} gespeichert; ein Standardwert zeigt die Markierung, bis Sie ihn ändern. Entfernen nimmt «{stereotype}» von {name} und behält seine Definition.
+str		None applied yet. + offers the stereotypes of the profiles applied to {package} or a package around it.	Noch keiner angewendet. + bietet die Stereotypen der Profile an, die auf {package} oder ein Paket darum herum angewendet sind.
+str		Show stereotype values on this diagram	Stereotyp-Werte in diesem Diagramm zeigen
+str		Show stereotype values	Stereotyp-Werte zeigen
+str		Set stereotype value	Stereotyp-Wert setzen
+str		Filter: {text}	Filter: {text}
+str		No stereotype matches.	Kein Stereotyp passt.
+str		No stereotype yet. Make one in a profile from Models ▸ New ▸ Stereotype.	Noch kein Stereotyp. Legen Sie einen in einem Profil an, über Modelle ▸ Neu ▸ Stereotyp.
+str		{kinds} only	nur {kinds}
+str		classes	Klassen
+str		interfaces	Schnittstellen
+str		enumerations	Aufzählungen
+str		data types	Datentypen
+str		properties	Eigenschaften
+str		operations	Operationen
+str		associations	Assoziationen
+str		generalizations	Generalisierungen
+str		packages	Pakete
+str		{profile} not applied	{profile} nicht angewendet
+str		«{stereotype}» does not extend {metaclass}: it extends {metaclasses}.	«{stereotype}» erweitert nicht {metaclass}: es erweitert {metaclasses}.
+str		«{stereotype}» extends no metaclass yet.	«{stereotype}» erweitert noch keine Metaklasse.
+str		Its profile {profile} is not applied to {package} or a package around it.	Sein Profil {profile} ist weder auf {package} noch auf ein Paket darum herum angewendet.
+str		{value} is no value of {name}. {accepted}	{value} ist kein Wert von {name}. {accepted}
+str		A whole number, such as 42 or -7.	Eine ganze Zahl, etwa 42 oder -7.
+str		A number, such as 2.5 or -1e3.	Eine Zahl, etwa 2.5 oder -1e3.
+str		true or false.	true oder false.
+str		A whole number of 0 or more, or *.	Eine ganze Zahl ab 0 oder *.
+str		Any text.	Beliebiger Text.
+str		One of {literals}.	Eines von {literals}.
+str		{name} holds at most {n} values.	{name} fasst höchstens {n} Werte.
+str		{name} holds each value once, and {value} is there twice.	{name} fasst jeden Wert einmal, und {value} steht zweimal da.
+str		A value is empty. Clear the field to show the default.	Ein Wert ist leer. Leeren Sie das Feld, um den Standardwert zu zeigen.
+str		A value is longer than {n} characters.	Ein Wert ist länger als {n} Zeichen.
+plural		{name} holds [{bounds}] values; {n} is given.	{name} fasst [{bounds}] Werte; {n} ist angegeben.|{name} fasst [{bounds}] Werte; {n} sind angegeben.
 str		nested	verschachtelt
 str		package	Paket
 str		class	Klasse
@@ -905,6 +1007,114 @@ str		Counted per qualifier value of the other end; shown next to {class}.	Gezäh
 str		One {owner} and one {qualifiers} pick {multiplicity} {target}.	Ein {owner} und ein {qualifiers} wählen {multiplicity} {target}.
 str		Type a name: a qualifier without one picks nothing.	Geben Sie einen Namen ein: Ein Qualifizierer ohne Namen wählt nichts aus.
 str		This end already has a qualifier named {name}. Pick another name.	Dieses Ende hat bereits einen Qualifizierer namens {name}. Wählen Sie einen anderen Namen.
+# Templates (AR-130)
+str		Template parameters · {n}	Template-Parameter · {n}
+str		Add template parameter	Template-Parameter hinzufügen
+str		Constrained to	Eingeschränkt auf
+str		Any	Beliebig
+str		Value	Wert
+str		Parameter kind	Parameterart
+str		not yet	noch nicht
+str		{kind} template parameters are not supported yet.	{kind}-Template-Parameter werden noch nicht unterstützt.
+str		this parameter	diesen Parameter
+str		Arguments for {name} must be {constraint} or specialise it.	Argumente für {name} müssen {constraint} sein oder es spezialisieren.
+str		Arguments for {name} must be classes.	Argumente für {name} müssen Klassen sein.
+str		Arguments for {name} must be interfaces.	Argumente für {name} müssen Schnittstellen sein.
+str		Arguments for {name} must be data types.	Argumente für {name} müssen Datentypen sein.
+str		Arguments for {name} must be enumerations.	Argumente für {name} müssen Aufzählungen sein.
+str		Arguments for {name} must be primitive types.	Argumente für {name} müssen primitive Typen sein.
+str		Bindings that leave it out use {default}.	Bindungen, die ihn auslassen, verwenden {default}.
+str		Renaming or reordering keeps every binding.	Umbenennen oder Umordnen erhält jede Bindung.
+str		Show the binding	Bindung zeigen
+str		Show the binding selects it, on the canvas and in Properties.	Bindung zeigen wählt sie aus, auf der Arbeitsfläche und in den Eigenschaften.
+str		Renaming {name} or changing its default is allowed: bindings follow the parameter, not its name.	{name} umzubenennen oder seinen Standardwert zu ändern ist erlaubt: Bindungen folgen dem Parameter, nicht seinem Namen.
+str		{bound} binds {name} -> {actual}. Change or remove that binding first, then remove {name}.	{bound} bindet {name} -> {actual}. Ändern oder entfernen Sie zuerst diese Bindung und entfernen Sie dann {name}.
+str		{bound} binds {template}, and {name} is its last parameter. Remove that binding first, then remove {name}.	{bound} bindet {template}, und {name} ist sein letzter Parameter. Entfernen Sie zuerst diese Bindung und entfernen Sie dann {name}.
+plural		{n} more binding uses it too.	{n} weitere Bindung verwendet ihn ebenfalls.|{n} weitere Bindungen verwenden ihn ebenfalls.
+str		Type a name: a template parameter without one stands for nothing.	Geben Sie einen Namen ein: Ein Template-Parameter ohne Namen steht für nichts.
+str		{template} already has a template parameter named {name}. Pick another name.	{template} hat bereits einen Template-Parameter namens {name}. Wählen Sie einen anderen Namen.
+str		{default} does not fit {name}: pick a default its arguments could be.	{default} passt nicht zu {name}: Wählen Sie einen Standardwert, der eines seiner Argumente sein könnte.
+str		{bound} binds {name} -> {actual}, which would no longer fit. Change or remove that binding first.	{bound} bindet {name} -> {actual}, was nicht mehr passen würde. Ändern oder entfernen Sie zuerst diese Bindung.
+str		template parameter	Template-Parameter
+str		template	Template
+plural		{kind} · template, {n} parameter · model, in every diagram	{kind} · Template, {n} Parameter · Modell, in jedem Diagramm|{kind} · Template, {n} Parameter · Modell, in jedem Diagramm
+# Template bindings (AR-131)
+str		Template binding	Template-Bindung
+str		Template binding: from the bound class to its template	Template-Bindung: von der gebundenen Klasse zu ihrem Template
+str		«bind»	«bind»
+str		Add template binding	Template-Bindung hinzufügen
+str		This template binding	Diese Template-Bindung
+str		On this template binding · {n}	Auf dieser Template-Bindung · {n}
+str		Binding · {bound} binds {template} · model, in every diagram	Bindung · {bound} bindet {template} · Modell, in jedem Diagramm
+str		binds {template}	bindet {template}
+str		Binding	Bindung
+str		Bound element	Gebundenes Element
+str		Template	Template
+str		Substitutions · {n}	Ersetzungen · {n}
+str		default	Standard
+str		Default ({name})	Standardwert ({name})
+str		Choose a class	Klasse wählen
+str		Choose an interface	Schnittstelle wählen
+str		Choose a data type	Datentyp wählen
+str		Choose an enumeration	Aufzählung wählen
+str		Choose a primitive type	Primitiven Typ wählen
+str		{name} needs an argument: pick a class.	{name} braucht ein Argument: Wählen Sie eine Klasse.
+str		{name} needs an argument: pick an interface.	{name} braucht ein Argument: Wählen Sie eine Schnittstelle.
+str		{name} needs an argument: pick a data type.	{name} braucht ein Argument: Wählen Sie einen Datentyp.
+str		{name} needs an argument: pick an enumeration.	{name} braucht ein Argument: Wählen Sie eine Aufzählung.
+str		{name} needs an argument: pick a primitive type.	{name} braucht ein Argument: Wählen Sie einen primitiven Typ.
+plural		{names} can keep its default.	{names} kann seinen Standardwert behalten.|{names} können ihre Standardwerte behalten.
+str		New template binding	Neue Template-Bindung
+str		Drawing · not in the model until you apply	Wird gezeichnet · erst nach Übernehmen im Modell
+str		Releasing the line on a template opens this. The line stays dashed in the accent colour until Apply; one undo step then adds the binding with its arguments. Cancel or Esc removes the draft and leaves nothing.	Das Loslassen der Linie auf einem Template öffnet dies. Die Linie bleibt gestrichelt in der Akzentfarbe bis Übernehmen; ein Rückgängig-Schritt fügt dann die Bindung mit ihren Argumenten hinzu. Abbrechen oder Esc entfernt den Entwurf und hinterlässt nichts.
+str		Another template takes arguments of its own: pick them, then Apply. Cancel or Esc keeps the binding as it is.	Ein anderes Template braucht eigene Argumente: Wählen Sie sie, dann Übernehmen. Abbrechen oder Esc lässt die Bindung, wie sie ist.
+str		Each selector lists only the arguments that fit its parameter: its kind, and its constraint or what specialises it. A parameter on its default follows the template's default.	Jede Auswahl listet nur die Argumente, die zu ihrem Parameter passen: seine Art und seine Einschränkung oder was sie spezialisiert. Ein Parameter auf seinem Standardwert folgt dem Standardwert des Templates.
+str		The line reads «bind» with each parameter and its argument, and points at the template. The binding keeps its arguments in the model; it is neither a dependency nor a realization.	Die Linie zeigt «bind» mit jedem Parameter und seinem Argument und weist auf das Template. Die Bindung hält ihre Argumente im Modell; sie ist weder eine Abhängigkeit noch eine Realisierung.
+str		Only a class, an interface or a data type binds a template	Nur eine Klasse, eine Schnittstelle oder ein Datentyp bindet ein Template
+str		A binding ends at a template: a class, an interface or a data type with template parameters	Eine Bindung endet an einem Template: einer Klasse, Schnittstelle oder einem Datentyp mit Template-Parametern
+str		A template is bound by a classifier of its own kind	Ein Template wird von einem Classifier seiner eigenen Art gebunden
+str		A template does not bind itself	Ein Template bindet sich nicht selbst
+str		This one binds that template already	Dieses bindet dieses Template bereits
+str		That template binds this one already, which would make a cycle	Dieses Template bindet dieses Element bereits, was einen Zyklus ergäbe
+str		Pick another template in the binding's Properties, where its arguments are chosen.	Wählen Sie ein anderes Template in den Eigenschaften der Bindung, wo seine Argumente gewählt werden.
+str		N-ary association	N-äre Assoziation
+str		this n-ary association	Diese n-äre Assoziation
+str		N-ary association: click each class in turn, then press Enter	N-äre Assoziation: Klicken Sie nacheinander auf jede Klasse und drücken Sie dann die Eingabetaste
+str		An n-ary association is drawn by clicking each class in turn	Eine n-äre Assoziation wird durch Klicken auf jede Klasse nacheinander gezeichnet
+str		Enter finishes at 3+ · Backspace drops the last · Esc cancels	Eingabe beendet ab 3 · Rücktaste entfernt das letzte · Esc bricht ab
+str		Click a class for the new end	Klicken Sie auf eine Klasse für das neue Ende
+str		Esc cancels	Esc bricht ab
+str		An n-ary association joins classes and interfaces	Eine n-äre Assoziation verbindet Klassen und Schnittstellen
+str		An association takes at most {n} ends	Eine Assoziation hat höchstens {n} Enden
+str		An n-ary association needs three ends or more: click another class	Eine n-äre Assoziation braucht drei Enden oder mehr: Klicken Sie auf eine weitere Klasse
+str		Add n-ary association	N-äre Assoziation hinzufügen
+str		New n-ary association	Neue n-äre Assoziation
+str		Drawing · not in the model until you finish	Zeichnen · erst im Modell, wenn Sie fertig sind
+str		Ends so far · {n}	Bisherige Enden · {n}
+str		Next: click a class on the canvas	Weiter: Klicken Sie auf eine Klasse im Zeichenbereich
+str		Next: click a class on the canvas, or press Enter to finish	Weiter: Klicken Sie auf eine Klasse im Zeichenbereich oder drücken Sie die Eingabetaste, um abzuschließen
+str		Enter, or a double-click on the last class, finishes once there are 3 ends or more. One undo step adds the association, its diamond and every end.	Die Eingabetaste oder ein Doppelklick auf die letzte Klasse schließt ab, sobald es 3 Enden oder mehr sind. Ein Rückgängig-Schritt fügt die Assoziation, ihre Raute und jedes Ende hinzu.
+str		Esc, switching tools or clicking empty canvas cancels and leaves nothing in the model. Backspace takes the last end off.	Esc, ein Werkzeugwechsel oder ein Klick auf leere Fläche bricht ab und lässt nichts im Modell. Die Rücktaste nimmt das letzte Ende weg.
+str		New ends are named after their class and start at *; change them after finishing.	Neue Enden werden nach ihrer Klasse benannt und beginnen bei *; ändern Sie sie nach dem Abschließen.
+str		Ends · {n}	Enden · {n}
+str		Add end	Ende hinzufügen
+str		Draws a new leg	Zeichnet einen neuen Schenkel
+str		Reconnect end	Ende neu verbinden
+str		Drag a leg end	Ein Schenkelende ziehen
+str		Open a class diagram to pick the new end's class	Öffnen Sie ein Klassendiagramm, um die Klasse des neuen Endes zu wählen
+str		Ends of an n-ary association are not aggregations, so Aggregation is not offered. Repeat a type for two ends when the roles differ.	Enden einer n-ären Assoziation sind keine Aggregationen, daher wird Aggregation nicht angeboten. Wiederholen Sie einen Typ für zwei Enden, wenn sich die Rollen unterscheiden.
+str		Another end has the role {role} already. Pick another role.	Ein anderes Ende hat bereits die Rolle {role}. Wählen Sie eine andere Rolle.
+str		Set association end	Assoziationsende festlegen
+str		End {role} removed	Ende {role} entfernt
+str		Selecting the diamond or any leg selects the one association. Remove from this diagram hides it here; Delete from the model deletes it and its ends everywhere.	Die Raute oder ein beliebiger Schenkel wählt die eine Assoziation aus. Aus diesem Diagramm entfernen blendet sie hier aus; Aus dem Modell löschen löscht sie und ihre Enden überall.
+str		Two ends would remain	Zwei Enden blieben übrig
+str		An n-ary association needs three ends or more. Without {role}, only {first} and {second} remain.	Eine n-äre Assoziation braucht drei Enden oder mehr. Ohne {role} bleiben nur {first} und {second}.
+str		Keep 3 ends	3 Enden behalten
+str		Make it binary	Binär machen
+str		Make it binary turns it into a plain association between {first} and {second}, keeping both ends, as one undo step. Keep 3 ends, or Esc, changes nothing.	Binär machen macht sie zu einer einfachen Assoziation zwischen {first} und {second}, mit beiden Enden, in einem Rückgängig-Schritt. 3 Enden behalten oder Esc ändert nichts.
+str		Make it binary turns {name} into a plain association between {first} and {second}, keeping its name and both ends, as one undo step. Keep 3 ends, or Esc, changes nothing.	Binär machen macht {name} zu einer einfachen Assoziation zwischen {first} und {second}, mit ihrem Namen und beiden Enden, in einem Rückgängig-Schritt. 3 Enden behalten oder Esc ändert nichts.
+plural		N-ary association · {n} end · model, in every diagram	N-äre Assoziation · {n} Ende · Modell, in jedem Diagramm|N-äre Assoziation · {n} Enden · Modell, in jedem Diagramm
+plural		N-ary association · {n} end — click a class for the next end	N-äre Assoziation · {n} Ende — Klasse für das nächste Ende anklicken|N-äre Assoziation · {n} Enden — Klasse für das nächste Ende anklicken
 str		From	Von
 str		General	Allgemein
 str		Generalization	Generalisierung

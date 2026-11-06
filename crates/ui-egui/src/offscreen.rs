@@ -176,6 +176,52 @@ pub enum Screen {
     /// Order, `nested` after its name; on the diagram its card is tied to Order's by the line ending
     /// in ⊕ at Order; it is selected, Properties showing its Owner, Order (AR-132, D2).
     WorkspaceNestedClassifiers,
+    /// The sample class model with Repository a template of T : Class and Key : DataType =
+    /// Integer, its signature box over its card's top-right corner; Repository selected with the
+    /// template parameter editor open on Key (AR-130, C1).
+    WorkspaceTemplate,
+    /// The same, the editor's Kind menu open: the supported kinds, Data type ticked, then Value and
+    /// Operation disabled, saying not yet (AR-130, C4).
+    WorkspaceTemplateKinds,
+    /// The same, OrderRepository binding Key to Integer, and Key's removal refused under the rows
+    /// with Show the binding (AR-130, C5).
+    WorkspaceTemplateInUse,
+    /// The sample class model with the profile Persistence beside Commerce, which applies it: its
+    /// diagram open with the «stereotype» cards Entity, Id and Reference under the «metaclass» cards
+    /// Class, Property and Association, joined by extensions; Models open on Persistence; Entity
+    /// selected, its Properties showing Extends and its properties, the editor open on cached
+    /// (AR-134, F1).
+    WorkspaceProfiles,
+    /// The sample with Persistence applied to Commerce and used there: Commerce selected, Unapply
+    /// refused under its Applied profiles, the five uses counted (AR-134, F6).
+    WorkspaceProfileRefused,
+    /// OrderRepository binds Repository, T to Order and Key to Integer: its dashed line labelled
+    /// `«bind» <T -> Order, Key -> Integer>` selected, Properties showing the binding and its
+    /// substitutions (AR-131, C2).
+    WorkspaceTemplateBinding,
+    /// A binding being drawn from OrderRepository to Repository: its draft in Properties, Key on its
+    /// default, Apply pressed with T still without an argument and the refusal said (AR-131, C3).
+    WorkspaceTemplateBindingNew,
+    /// The sample class model's diagram Recommendations, Customer and Product side by side and
+    /// Catalog under them, the Relationship tool drawing an n-ary association: Customer and Product
+    /// picked, the preview diamond between them, the pointer on Catalog, the gesture hint counting
+    /// two ends and Properties showing the draft (AR-128, A3).
+    WorkspaceNaryDrawing,
+    /// The same diagram with the n-ary association recommends drawn, selected, its diamond and legs
+    /// in the accent, Properties showing its ends with the editor open on its Catalog end (AR-128,
+    /// A4).
+    WorkspaceNary,
+    /// The same, the bin of the Catalog end pressed: Properties asks to keep three ends or make it
+    /// binary, Keep 3 ends focused (AR-128, A5).
+    WorkspaceNaryBinary,
+    /// The sample with Persistence applied and used: Commerce's diagram showing the stereotype
+    /// values, Order selected, its Stereotypes section with «Entity», table set to orders and cached
+    /// at its default, the cards reading «Entity», `«Id» + id : Integer` and «Reference» on places
+    /// (AR-135, F3).
+    WorkspaceStereotypes,
+    /// The same, the Stereotypes picker open on Order: Entity applied and ticked, Auditable to
+    /// apply, then Id, Reference and Tracked disabled with why (AR-135, F4).
+    WorkspaceStereotypePicker,
     /// The user manual's class-model guide, first step: the root package's diagram Commerce with
     /// Customer (its name typed) and Order, a draft row open on Order's card with `number :
     /// Integer` typed.
@@ -212,6 +258,38 @@ pub enum Screen {
     GuideConstraints,
     /// The guide's finished model: the whole diagram, nothing selected, Properties folded away.
     GuideResult,
+    /// The user manual's further sections (AR-141), on the guide's finished model: Order's static
+    /// operation nextNumber() underlined on its card, Order selected and the operation editor open
+    /// on it, Static ticked.
+    GuideStatic,
+    /// The guide's association places qualified at Customer's end by number : Integer, Order's end
+    /// at 0..1 per qualifier value; places selected with the qualifier editor open on number.
+    GuideQualifier,
+    /// The guide's diagram Recommendations: the n-ary association recommends joining Customer,
+    /// Product and Catalog by a diamond, selected, the editor open on its Catalog end.
+    GuideNary,
+    /// The guide's diagram Payments: CardPayment, BankTransfer and WalletPayment specialising
+    /// Payment, grouped in the generalization set method {complete, disjoint}, the set selected.
+    GuideGeneralizationSet,
+    /// The same with CardPayment final and Payment's amount leaf: Payment selected and the
+    /// attribute editor open on amount, No redefinition (leaf) ticked.
+    GuideFinalLeaf,
+    /// The guide's enumeration OrderStatus moved inside Order: its card tied to Order's by the line
+    /// ending in ⊕, OrderStatus selected with its Owner, Models listing it under Order.
+    GuideNested,
+    /// The guide's diagram Storage: Repository a template of T : Class and Key : DataType = Integer
+    /// with items : T [*] and find(key : Key) : T, selected, the parameter editor open on Key.
+    GuideTemplate,
+    /// The same with OrderRepository binding Repository, T to Order and Key on its default: the
+    /// binding selected, its substitutions in Properties.
+    GuideTemplateBinding,
+    /// The guide's profile Persistence with the stereotype Entity, extending Class, with the
+    /// property table : String: the profile's diagram open, Entity selected, Models open on
+    /// Persistence.
+    GuideProfile,
+    /// The guide's root package applying Persistence and Order carrying «Entity» with table set to
+    /// orders: Commerce showing the stereotype values, Order selected, its Stereotypes section open.
+    GuideStereotype,
     /// The sample class model edited, unsaved, and its close asking Save, Don't save or Cancel
     ///.
     WorkspaceCloseAsk,
@@ -254,6 +332,43 @@ pub fn render(width: f32, height: f32, scale: f32, theme: ThemeKind) -> Result<(
 
 /// [`render`] of a given screen.
 pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, screen: Screen) -> Result<(u32, u32, Vec<u8>), String> {
+    let mut harness = drawn(width, height, scale, theme, screen)?;
+    let image = harness.render()?;
+    let (w, h) = (image.width(), image.height());
+    Ok((w, h, image.into_raw()))
+}
+
+/// The window of `screen` built and drawn, with no picture taken: every model change and view the
+/// screen makes has run, so a screen that cannot be built fails here, before any rendering.
+fn drawn(width: f32, height: f32, scale: f32, theme: ThemeKind, screen: Screen) -> Result<egui_kittest::Harness<'static, Shell>, String> {
+    let (shell, hover) = prepared(theme, screen)?;
+    let mut harness = egui_kittest::Harness::builder().with_size(egui::vec2(width, height)).with_pixels_per_point(scale).build_ui_state(
+        |ui, shell: &mut Shell| {
+            shell.logic(ui.ctx());
+            // The harness frames its ui with an 8 px margin; the shell draws on the whole window,
+            // as it does in the application.
+            let window = ui.ctx().content_rect();
+            let mut full = ui.new_child(egui::UiBuilder::new().max_rect(window));
+            full.set_clip_rect(window);
+            shell.ui(&mut full);
+        },
+        shell,
+    );
+    harness.run();
+    // The pointer over a control the screen names, as the design draws it there.
+    if let Some(id) = hover
+        && let Some(w) = harness.state().widgets().iter().find(|w| w.id == id)
+    {
+        let at = egui::pos2((w.rect[0] + w.rect[2]) / 2.0, w.rect[1] + 12.0);
+        harness.event(egui::Event::PointerMoved(at));
+        harness.run();
+    }
+    Ok(harness)
+}
+
+/// The shell of `screen` in `theme`, its project, model and view as the screen shows them, and the
+/// control the pointer rests on, if any.
+fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>), String> {
     crate::i18n::set_language("en");
     let n = std::sync::atomic::AtomicU64::new(0);
     let ids: std::sync::Arc<dyn Fn() -> archforge_mof::Uuid + Send + Sync> = std::sync::Arc::new(move || {
@@ -557,15 +672,47 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
         crate::uml_ui::open_sample(&mut shell)?;
         sample_leaf(&mut shell)?;
     }
+    let mut hover: Option<String> = None;
+    if matches!(screen, Screen::WorkspaceNaryDrawing | Screen::WorkspaceNary | Screen::WorkspaceNaryBinary) {
+        shell.adopt_project();
+        crate::uml_ui::open_sample(&mut shell)?;
+        hover = sample_nary(&mut shell, screen)?;
+    }
     if screen == Screen::WorkspaceNestedClassifiers {
         shell.adopt_project();
         crate::uml_ui::open_sample(&mut shell)?;
         sample_nested(&mut shell)?;
     }
+    if screen == Screen::WorkspaceProfiles || screen == Screen::WorkspaceProfileRefused {
+        shell.adopt_project();
+        crate::uml_ui::open_sample(&mut shell)?;
+        sample_profiles(&mut shell, screen == Screen::WorkspaceProfileRefused)?;
+    }
+    if screen == Screen::WorkspaceStereotypes || screen == Screen::WorkspaceStereotypePicker {
+        shell.adopt_project();
+        crate::uml_ui::open_sample(&mut shell)?;
+        let order = crate::uml_stereotypes::put_values(&mut shell)?;
+        crate::panels::run(&mut shell, "view.select", serde_json::json!({ "ids": [order.to_string()] }))?;
+        shell.state.show_panel(crate::state::Panel::Properties);
+        shell.state.show_explorer(crate::state::Explorer::Models);
+        if screen == Screen::WorkspaceStereotypePicker {
+            shell.panels.menu = Some(crate::panels::Menu::StereotypePick);
+        }
+    }
     if screen == Screen::WorkspaceGeneralizationSets {
         shell.adopt_project();
         crate::uml_ui::open_sample(&mut shell)?;
         sample_generalization_sets(&mut shell)?;
+    }
+    if matches!(screen, Screen::WorkspaceTemplate | Screen::WorkspaceTemplateKinds | Screen::WorkspaceTemplateInUse) {
+        shell.adopt_project();
+        crate::uml_ui::open_sample(&mut shell)?;
+        sample_template(&mut shell, screen)?;
+    }
+    if matches!(screen, Screen::WorkspaceTemplateBinding | Screen::WorkspaceTemplateBindingNew) {
+        shell.adopt_project();
+        crate::uml_ui::open_sample(&mut shell)?;
+        sample_binding(&mut shell, screen)?;
     }
     if screen == Screen::WorkspaceQualifiers || screen == Screen::WorkspaceQualifierRefused {
         shell.adopt_project();
@@ -575,6 +722,22 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
     if let Some(step) = guide_step(screen) {
         shell.adopt_project();
         sample_guide(&mut shell, step)?;
+    }
+    if matches!(
+        screen,
+        Screen::GuideStatic
+            | Screen::GuideQualifier
+            | Screen::GuideNary
+            | Screen::GuideGeneralizationSet
+            | Screen::GuideFinalLeaf
+            | Screen::GuideNested
+            | Screen::GuideTemplate
+            | Screen::GuideTemplateBinding
+            | Screen::GuideProfile
+            | Screen::GuideStereotype
+    ) {
+        shell.adopt_project();
+        sample_guide_more(&mut shell, screen)?;
     }
     if screen == Screen::WorkspaceInlineMember {
         shell.adopt_project();
@@ -691,22 +854,7 @@ pub fn render_screen(width: f32, height: f32, scale: f32, theme: ThemeKind, scre
             shell.canvas.popover = Some("relationship-types");
         }
     }
-    let mut harness = egui_kittest::Harness::builder().with_size(egui::vec2(width, height)).with_pixels_per_point(scale).build_ui_state(
-        |ui, shell: &mut Shell| {
-            shell.logic(ui.ctx());
-            // The harness frames its ui with an 8 px margin; the shell draws on the whole window,
-            // as it does in the application.
-            let window = ui.ctx().content_rect();
-            let mut full = ui.new_child(egui::UiBuilder::new().max_rect(window));
-            full.set_clip_rect(window);
-            shell.ui(&mut full);
-        },
-        shell,
-    );
-    harness.run();
-    let image = harness.render()?;
-    let (w, h) = (image.width(), image.height());
-    Ok((w, h, image.into_raw()))
+    Ok((shell, hover))
 }
 
 /// Settings → AI Agents over Home, in the state `screen` shows, from the fake agents host: what
@@ -1099,6 +1247,39 @@ fn sample_final(shell: &mut Shell) -> Result<(), String> {
     Ok(())
 }
 
+/// The n-ary association's screens (AR-128): the sample's Recommendations diagram at 100 %, the
+/// draft of Customer and Product on it, or recommends drawn and selected with the Catalog end's
+/// editor or the question its removal asks. Gives the control the pointer rests on.
+fn sample_nary(shell: &mut Shell, screen: Screen) -> Result<Option<String>, String> {
+    let drawn = screen != Screen::WorkspaceNaryDrawing;
+    let ids = crate::uml_nary::put_recommends(shell, drawn)?;
+    shell.state.show_panel(crate::state::Panel::Properties);
+    shell.canvas.fit_pending = false;
+    shell.canvas.zoom = 1.0;
+    shell.canvas.pan = egui::vec2(20.0, 30.0);
+    let uuid = |k: &str| ids.get(k).and_then(|v| archforge_mof::Uuid::parse(v)).ok_or_else(|| format!("the sample's {k}"));
+    if !drawn {
+        shell.canvas.tool = crate::canvas::Tool::Connect("relationship");
+        shell.canvas.uml_relation = crate::uml_relate::Relate::NAry;
+        let diagram = uuid("diagram")?;
+        let ends = vec![
+            crate::uml_nary::DraftEnd { class: uuid("Customer")?, node: uuid("customer")? },
+            crate::uml_nary::DraftEnd { class: uuid("Product")?, node: uuid("product")? },
+        ];
+        shell.canvas.nary = Some(crate::uml_nary::Nary::Draft { diagram, ends });
+        return Ok(Some(format!("workspace.canvas.node.{}", uuid("catalog")?)));
+    }
+    let a = uuid("recommends")?;
+    crate::panels::run(shell, "view.select", serde_json::json!({ "ids": [a.to_string()] }))?;
+    shell.panels.editors_for = Some(a);
+    if screen == Screen::WorkspaceNary {
+        crate::uml_nary::open(shell, a, 2);
+    } else {
+        shell.panels.nary_remove = Some(crate::uml_nary::RemoveAsk { association: a, end: 2, opened: true });
+    }
+    Ok(None)
+}
+
 /// In the sample class model, Priority nested in Order, placed under it with the ⊕ line, selected
 /// with its Properties open and its row in Models in sight (AR-132, D2).
 fn sample_nested(shell: &mut Shell) -> Result<(), String> {
@@ -1114,6 +1295,40 @@ fn sample_nested(shell: &mut Shell) -> Result<(), String> {
     shell.canvas.fit_pending = false;
     shell.canvas.zoom = z;
     shell.canvas.pan = egui::vec2(140.0 - b.x as f32 * z, 360.0 - b.y as f32 * z);
+    Ok(())
+}
+
+/// The profile Persistence of F1 in the sample: its diagram open with Entity selected and the
+/// editor on cached; or, `refused`, Commerce selected with Unapply refused for its uses (F6).
+fn sample_profiles(shell: &mut Shell, refused: bool) -> Result<(), String> {
+    let (commerce, persistence, entity) = crate::uml_profiles::put_profiles(shell, refused)?;
+    let id = |s: &str| archforge_mof::Uuid::parse(s).ok_or_else(|| "an id".to_string());
+    shell.state.show_panel(crate::state::Panel::Properties);
+    shell.state.show_explorer(crate::state::Explorer::Models);
+    if refused {
+        crate::panels::run(shell, "view.select", serde_json::json!({ "ids": [commerce] }))?;
+        shell.explorer.expanded.insert(id(&commerce)?);
+        crate::uml_profiles::unapply_profile(shell, id(&commerce)?, id(&persistence)?);
+        shell.panels.editors_for = Some(id(&commerce)?);
+        return Ok(());
+    }
+    crate::uml_profiles::open_profile_diagram(shell, id(&persistence)?)?;
+    crate::panels::run(shell, "view.select", serde_json::json!({ "ids": [entity] }))?;
+    shell.explorer.expanded.insert(id(&persistence)?);
+    let cached = {
+        let store = shell.session.as_ref().ok_or("no project is open")?.doc();
+        let e = store.by_uuid(id(&entity)?).ok_or("Entity")?;
+        let c = archforge_uml::profiles::properties(store, e).into_iter().find(|a| archforge_core::name_of(store, *a) == "cached").ok_or("cached")?;
+        store.uuid(c).map_err(|e| e.to_string())?
+    };
+    crate::uml_panel::open(shell, id(&entity)?, crate::uml_panel::MemberKind::Attribute, Some(cached));
+    shell.panels.editors_for = Some(id(&entity)?);
+    if let Some(s) = shell.session.as_mut() {
+        s.mark_saved().map_err(|e| e.to_string())?;
+    }
+    shell.canvas.fit_pending = false;
+    shell.canvas.zoom = 0.8;
+    shell.canvas.pan = egui::vec2(60.0, 60.0);
     Ok(())
 }
 
@@ -1136,6 +1351,65 @@ fn sample_generalization_sets(shell: &mut Shell) -> Result<(), String> {
     shell.canvas.fit_pending = false;
     shell.canvas.zoom = 0.75;
     shell.canvas.pan = egui::vec2(-470.0, -230.0);
+    Ok(())
+}
+
+/// In the sample class model, Repository made a template of T and Key, selected, with the editor
+/// open on Key; its Kind menu open for `WorkspaceTemplateKinds`; for `WorkspaceTemplateInUse`
+/// OrderRepository binding it and Key's removal refused (AR-130).
+fn sample_template(shell: &mut Shell, screen: Screen) -> Result<(), String> {
+    let in_use = screen == Screen::WorkspaceTemplateInUse;
+    let (repo, [_, key]) = crate::uml_ui::put_repository(shell, in_use)?;
+    shell.state.show_panel(crate::state::Panel::Properties);
+    crate::uml_templates::open(shell, repo, Some(key));
+    if in_use {
+        crate::uml_templates::remove_sample(shell);
+    } else if screen == Screen::WorkspaceTemplateKinds {
+        shell.panels.menu = Some(crate::panels::Menu::TemplateKind);
+    }
+    shell.panels.editors_for = Some(repo);
+    shell.canvas.fit_pending = false;
+    shell.canvas.zoom = 0.85;
+    shell.canvas.pan = egui::vec2(-280.0, -420.0);
+    Ok(())
+}
+
+/// In the sample class model, Repository a template bound by OrderRepository (AR-131): the binding
+/// selected for `WorkspaceTemplateBinding`; for `WorkspaceTemplateBindingNew` the binding removed
+/// again and a new one's draft opened from OrderRepository's card to Repository's, Apply pressed
+/// with T still to pick.
+fn sample_binding(shell: &mut Shell, screen: Screen) -> Result<(), String> {
+    let (repo, _) = crate::uml_ui::put_repository(shell, true)?;
+    let d = shell.canvas.active.ok_or("the sample's diagram")?;
+    let session = shell.session.as_mut().ok_or("the binding sample needs a session")?;
+    let store = session.doc();
+    let r = store.by_uuid(repo).ok_or("Repository")?;
+    let b = archforge_uml::templates::bindings_to(store, r).first().copied().ok_or("the sample's binding")?;
+    let bound = archforge_uml::templates::bound_element(store, b).ok_or("OrderRepository")?;
+    let b_id = store.uuid(b).map_err(|e| e.to_string())?.to_string();
+    shell.state.show_panel(crate::state::Panel::Properties);
+    if screen == Screen::WorkspaceTemplateBinding {
+        session.execute("view.select", &serde_json::json!({ "ids": [b_id] })).map_err(|e| e.to_string())?;
+    } else {
+        session.execute("element.remove", &serde_json::json!({ "ids": [b_id] })).map_err(|e| e.to_string())?;
+        session.execute("view.select", &serde_json::json!({ "ids": [] })).map_err(|e| e.to_string())?;
+        session.mark_saved().map_err(|e| e.to_string())?;
+        let store = session.doc();
+        let d_obj = store.by_uuid(d).ok_or("the diagram")?;
+        let node_of = |c| {
+            archforge_diagram::views_of(store, c)
+                .2
+                .into_iter()
+                .find(|n| archforge_diagram::diagram_of(store, *n) == Some(d_obj))
+                .and_then(|n| store.uuid(n).ok())
+        };
+        let (Some(from), Some(to)) = (node_of(bound), node_of(r)) else { return Err("the sample's nodes".into()) };
+        crate::uml_bindings::open_new(shell, d_obj, (from, to), bound, r);
+        crate::uml_bindings::apply_sample(shell);
+    }
+    shell.canvas.fit_pending = false;
+    shell.canvas.zoom = 0.75;
+    shell.canvas.pan = egui::vec2(-20.0, -400.0);
     Ok(())
 }
 
@@ -2037,6 +2311,221 @@ fn sample_guide(shell: &mut Shell, step: u8) -> Result<(), String> {
     Ok(())
 }
 
+/// The user manual's further class-model sections (AR-141): the guide's finished model (step 12)
+/// with Properties open again, the screen's feature added as its section adds it, its selection or
+/// editor, and the view on what the section is about.
+fn sample_guide_more(shell: &mut Shell, screen: Screen) -> Result<(), String> {
+    use archforge_mof::Uuid;
+    use serde_json::{Value, json};
+    sample_guide(shell, 12)?;
+    shell.state.panel_collapsed = false;
+    shell.state.show_panel(crate::state::Panel::Properties);
+    let run = |shell: &mut Shell, command: &str, params: Value| crate::panels::run(shell, command, params).map_err(|e| format!("{command}: {e}"));
+    let id = |v: &Value| v.get("id").and_then(Value::as_str).and_then(Uuid::parse).ok_or_else(|| "a command gave no id".to_string());
+    let find = |shell: &Shell, class: Option<archforge_mof::ClassId>, name: &str| -> Result<Uuid, String> {
+        let store = shell.session.as_ref().ok_or("no project is open")?.doc();
+        let o = store
+            .alive()
+            .filter(|o| store.class_of(*o).is_ok_and(|c| class.map_or(archforge_uml::is_classifier(c), |k| k == c)))
+            .find(|o| archforge_core::name_of(store, *o) == name)
+            .ok_or_else(|| format!("the guide has no {name}"))?;
+        store.uuid(o).map_err(|e| e.to_string())
+    };
+    // An element's card on the open diagram.
+    let node = |shell: &Shell, element: Uuid| -> Result<Uuid, String> {
+        let store = shell.session.as_ref().ok_or("no project is open")?.doc();
+        let d = shell.canvas.active.and_then(|d| store.by_uuid(d)).ok_or("no diagram is open")?;
+        let o = store.by_uuid(element).ok_or("an element of the guide is gone")?;
+        let n = archforge_diagram::views_of(store, o)
+            .2
+            .into_iter()
+            .find(|n| archforge_diagram::diagram_of(store, *n) == Some(d))
+            .ok_or("an element of the guide is not on the open diagram")?;
+        store.uuid(n).map_err(|e| e.to_string())
+    };
+    let root = id(&run(shell, "uml.model.root", json!({}))?)?;
+    let (order, customer) = (find(shell, None, "Order")?, find(shell, None, "Customer")?);
+    let w = archforge_uml::CLASS_SIZE.0;
+    // A class diagram of the root package, opened.
+    let new_diagram = |shell: &mut Shell, name: &str| -> Result<Uuid, String> {
+        let d = id(&run(shell, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": root.to_string(), "name": name }))?)?;
+        crate::canvas::open(shell, d);
+        Ok(d)
+    };
+    let place = |shell: &mut Shell, d: Uuid, element: Uuid, x: f64, y: f64, width: f64, height: f64| {
+        run(
+            shell,
+            "diagram.place",
+            json!({ "diagram": d.to_string(), "element": element.to_string(), "x": x, "y": y, "width": width, "height": height }),
+        )
+        .and_then(|v| id(&v))
+    };
+    let select = |shell: &mut Shell, ids: &[Uuid]| run(shell, "view.select", json!({ "ids": ids.iter().map(Uuid::to_string).collect::<Vec<_>>() }));
+    // Order's rule's braces under its card again, where showing them put them, once the card has
+    // grown.
+    let braces_under_order = |shell: &mut Shell| -> Result<(), String> {
+        let n = node(shell, order)?;
+        let (d, rule) = (shell.canvas.active.ok_or("no diagram is open")?, find(shell, Some(archforge_uml::CONSTRAINT), "positiveNumber")?);
+        let store = shell.session.as_ref().ok_or("no project is open")?.doc();
+        let at = archforge_diagram::grid::bounds_of(store, store.by_uuid(n).ok_or("Order's card")?);
+        run(
+            shell,
+            "uml.constraint.show",
+            json!({ "diagram": d.to_string(), "constraint": rule.to_string(), "as": "braces", "x": at.x, "y": at.y + at.height + 4.0 }),
+        )?;
+        Ok(())
+    };
+    // Order's card made taller for `rows` (attributes, operations).
+    let grow_order = |shell: &mut Shell, rows: (usize, usize)| -> Result<(), String> {
+        let n = node(shell, order)?;
+        let height = crate::uml_ui::members_height(rows.0, rows.1);
+        run(shell, "diagram.resize", json!({ "node": n.to_string(), "width": w + 60.0, "height": height }))?;
+        braces_under_order(shell)
+    };
+    match screen {
+        Screen::GuideStatic => {
+            let op = id(&run(
+                shell,
+                "uml.operation.add",
+                json!({ "class": order.to_string(), "name": "nextNumber", "returns": "Integer", "static": true }),
+            )?)?;
+            grow_order(shell, (3, 2))?;
+            select(shell, &[order])?;
+            crate::uml_panel::open(shell, order, crate::uml_panel::MemberKind::Operation, Some(op));
+            guide_view(shell, &[order], 1.0)?;
+        }
+        Screen::GuideQualifier => {
+            let places = find(shell, Some(archforge_uml::ASSOCIATION), "places")?;
+            let q =
+                id(&run(shell, "uml.qualifier.add", json!({ "association": places.to_string(), "end": 0, "name": "number", "type": "Integer" }))?)?;
+            run(shell, "uml.association.set-end", json!({ "association": places.to_string(), "end": 1, "multiplicity": "0..1" }))?;
+            // Customer a little further left, so the box leaves room for the line's labels.
+            let n = node(shell, customer)?;
+            run(shell, "diagram.move", json!({ "nodes": [n.to_string()], "dx": -100.0, "dy": 0.0 }))?;
+            select(shell, &[places])?;
+            crate::uml_qualifiers::open(shell, places, 0, Some(q));
+            guide_view(shell, &[customer, order], 0.75)?;
+        }
+        Screen::GuideNary => {
+            let catalog = id(&run(shell, "uml.class.add", json!({ "package": root.to_string(), "name": "Catalog" }))?)?;
+            sample_nary(shell, Screen::WorkspaceNary)?;
+            let product = find(shell, None, "Product")?;
+            guide_view(shell, &[customer, product, catalog], 0.85)?;
+        }
+        Screen::GuideGeneralizationSet | Screen::GuideFinalLeaf => {
+            let d = new_diagram(shell, "Payments")?;
+            let money = find(shell, None, "Money")?;
+            let payment = id(&run(shell, "uml.class.add", json!({ "package": root.to_string(), "name": "Payment" }))?)?;
+            let amount = id(&run(shell, "uml.attribute.add", json!({ "class": payment.to_string(), "name": "amount", "type": money.to_string() }))?)?;
+            place(shell, d, payment, 280.0, 0.0, w, crate::uml_ui::members_height(1, 0))?;
+            let mut generalizations = Vec::new();
+            let mut card = None;
+            let mut cards = vec![payment];
+            for (name, x) in [("CardPayment", 0.0), ("BankTransfer", 280.0), ("WalletPayment", 560.0)] {
+                let c = id(&run(shell, "uml.class.add", json!({ "package": root.to_string(), "name": name }))?)?;
+                place(shell, d, c, x, 340.0, w, crate::uml_ui::members_height(0, 0))?;
+                cards.push(c);
+                let g = run(shell, "uml.generalization.add", json!({ "specific": c.to_string(), "general": payment.to_string() }))?;
+                generalizations.push(id(&g)?.to_string());
+                card.get_or_insert(c);
+            }
+            run(shell, "diagram.connect-all", json!({ "diagram": d.to_string() }))?;
+            let set = id(&run(
+                shell,
+                "uml.generalization-set.add",
+                json!({ "generalizations": generalizations, "name": "method", "complete": true, "disjoint": true }),
+            )?)?;
+            if screen == Screen::GuideGeneralizationSet {
+                select(shell, &[set])?;
+            } else {
+                let card = card.ok_or("the guide has no CardPayment")?;
+                run(shell, "uml.classifier.set", json!({ "classifier": card.to_string(), "final": true }))?;
+                run(shell, "uml.attribute.set", json!({ "attribute": amount.to_string(), "leaf": true }))?;
+                select(shell, &[payment])?;
+                crate::uml_panel::open(shell, payment, crate::uml_panel::MemberKind::Attribute, Some(amount));
+            }
+            guide_view(shell, &cards, 0.85)?;
+        }
+        Screen::GuideNested => {
+            let status = find(shell, None, "OrderStatus")?;
+            run(shell, "uml.classifier.set-owner", json!({ "classifier": status.to_string(), "owner": order.to_string() }))?;
+            select(shell, &[status])?;
+            shell.state.show_explorer(crate::state::Explorer::Models);
+            shell.explorer.expanded.insert(order);
+            guide_view(shell, &[status, order], 0.9)?;
+        }
+        Screen::GuideTemplate | Screen::GuideTemplateBinding => {
+            let d = new_diagram(shell, "Storage")?;
+            let repo = id(&run(shell, "uml.class.add", json!({ "package": root.to_string(), "name": "Repository" }))?)?;
+            let t = run(shell, "uml.template-parameter.add", json!({ "classifier": repo.to_string(), "name": "T" }))?;
+            let key = run(
+                shell,
+                "uml.template-parameter.add",
+                json!({ "classifier": repo.to_string(), "name": "Key", "kind": "data-type", "default": "Integer" }),
+            )?;
+            let element = |v: &Value| v.get("element").and_then(Value::as_str).unwrap_or_default().to_string();
+            let (te, ke) = (element(&t), element(&key));
+            run(shell, "uml.attribute.add", json!({ "class": repo.to_string(), "name": "items", "type": te, "multiplicity": "*" }))?;
+            run(
+                shell,
+                "uml.operation.add",
+                json!({ "class": repo.to_string(), "name": "find", "parameters": [{ "name": "key", "type": ke }], "returns": te }),
+            )?;
+            let repo_node = place(shell, d, repo, 380.0, 40.0, 300.0, crate::uml_ui::members_height(1, 1))?;
+            if screen == Screen::GuideTemplate {
+                select(shell, &[repo])?;
+                crate::uml_templates::open(shell, repo, Some(id(&key)?));
+                guide_view(shell, &[repo], 1.0)?;
+            } else {
+                let bound = id(&run(shell, "uml.class.add", json!({ "package": root.to_string(), "name": "OrderRepository" }))?)?;
+                let bound_node = place(shell, d, bound, 410.0, 340.0, w, crate::uml_ui::members_height(0, 0))?;
+                let binding = id(&run(
+                    shell,
+                    "uml.template-binding.add",
+                    json!({ "bound": bound.to_string(), "template": repo.to_string(), "arguments": { "T": order.to_string() } }),
+                )?)?;
+                let edge = id(&run(
+                    shell,
+                    "diagram.connect",
+                    json!({ "diagram": d.to_string(), "element": binding.to_string(), "source": bound_node.to_string(), "target": repo_node.to_string() }),
+                )?)?;
+                run(shell, "diagram.label", json!({ "edge": edge.to_string(), "kind": "name", "at": "middle" }))?;
+                select(shell, &[binding])?;
+                guide_view(shell, &[repo, bound], 0.9)?;
+            }
+        }
+        Screen::GuideProfile | Screen::GuideStereotype => {
+            let profile = id(&run(shell, "uml.profile.add", json!({ "name": "Persistence" }))?)?;
+            let entity = id(&run(shell, "uml.stereotype.add", json!({ "profile": profile.to_string(), "name": "Entity", "extends": ["Class"] }))?)?;
+            run(shell, "uml.attribute.add", json!({ "class": entity.to_string(), "name": "table", "type": "String" }))?;
+            shell.state.show_explorer(crate::state::Explorer::Models);
+            if screen == Screen::GuideProfile {
+                crate::uml_profiles::open_profile_diagram(shell, profile)?;
+                select(shell, &[entity])?;
+                shell.explorer.expanded.insert(profile);
+                shell.canvas.fit_pending = false;
+                shell.canvas.zoom = 1.0;
+                shell.canvas.pan = egui::vec2(80.0, 80.0);
+            } else {
+                run(shell, "uml.profile.apply", json!({ "package": root.to_string(), "profile": profile.to_string() }))?;
+                run(shell, "uml.stereotype.apply", json!({ "element": order.to_string(), "stereotype": entity.to_string() }))?;
+                run(
+                    shell,
+                    "uml.stereotype.set-value",
+                    json!({ "element": order.to_string(), "stereotype": entity.to_string(), "property": "table", "values": ["orders"] }),
+                )?;
+                let d = shell.canvas.active.ok_or("no diagram is open")?;
+                crate::uml_stereotypes::show_values(shell, d, true)?;
+                braces_under_order(shell)?;
+                select(shell, &[order])?;
+                guide_view(shell, &[order], 1.0)?;
+            }
+        }
+        _ => return Err("not a screen of the guide's further sections".into()),
+    }
+    Ok(())
+}
+
 /// Zooms the open diagram to `zoom` with the cards of `elements` centred in the part of the canvas
 /// a 1440 by 900 window leaves free beside Models and Properties, above the toolbar and the
 /// minimap.
@@ -2045,7 +2534,11 @@ fn guide_view(shell: &mut Shell, elements: &[archforge_mof::Uuid], zoom: f32) ->
     let mut bounds: Option<egui::Rect> = None;
     for e in elements {
         let o = store.by_uuid(*e).ok_or("an element of the guide is gone")?;
-        let n = archforge_diagram::views_of(store, o).2.into_iter().next().ok_or("an element of the guide is on no diagram")?;
+        // Its card on the open diagram, or its first.
+        let cards = archforge_diagram::views_of(store, o).2;
+        let open = shell.canvas.active.and_then(|d| store.by_uuid(d));
+        let on_open = cards.iter().copied().find(|n| open.is_some() && archforge_diagram::diagram_of(store, *n) == open);
+        let n = on_open.or_else(|| cards.first().copied()).ok_or("an element of the guide is on no diagram")?;
         let b = archforge_diagram::grid::bounds_of(store, n);
         let r = egui::Rect::from_min_size(egui::pos2(b.x as f32, b.y as f32), egui::vec2(b.width as f32, b.height as f32));
         bounds = Some(bounds.map_or(r, |all| all.union(r)));
@@ -2238,4 +2731,51 @@ fn sample_new_entity(shell: &mut Shell) -> Result<(), String> {
     shell.canvas.tool = crate::canvas::Tool::Place("entity");
     shell.canvas.rename = Some(crate::editing::NodeRename { node, entity, text: "Entity".to_string(), opened: true, refused: None });
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The user manual's guide screens, the walkthrough's twelve and Going further's ten.
+    const GUIDE: [Screen; 22] = [
+        Screen::GuideClasses,
+        Screen::GuideRelateKinds,
+        Screen::GuideAssociation,
+        Screen::GuideClassifierKinds,
+        Screen::GuideLiterals,
+        Screen::GuideDataType,
+        Screen::GuidePrimitiveType,
+        Screen::GuideRealization,
+        Screen::GuideAssociationClass,
+        Screen::GuideModifiers,
+        Screen::GuideConstraints,
+        Screen::GuideResult,
+        Screen::GuideStatic,
+        Screen::GuideQualifier,
+        Screen::GuideNary,
+        Screen::GuideGeneralizationSet,
+        Screen::GuideFinalLeaf,
+        Screen::GuideNested,
+        Screen::GuideTemplate,
+        Screen::GuideTemplateBinding,
+        Screen::GuideProfile,
+        Screen::GuideStereotype,
+    ];
+
+    /// Every guide screen the release attaches, in both appearances, builds its model and view
+    /// and draws its window without a refusal, so a command or a lookup that fails shows here
+    /// rather than when the release renders the gallery. The picture itself needs a GPU and is
+    /// not taken.
+    #[test]
+    fn every_guide_screen_builds_and_draws_in_both_appearances() {
+        for screen in GUIDE {
+            for theme in [ThemeKind::Light, ThemeKind::Dark] {
+                let h = drawn(1440.0, 900.0, 1.0, theme, screen).unwrap_or_else(|e| panic!("{screen:?} in {theme:?}: {e}"));
+                let shell = h.state();
+                assert!(shell.session.is_some() && shell.canvas.active.is_some(), "{screen:?} in {theme:?} opens a diagram");
+                assert_eq!(shell.canvas.notice, None, "{screen:?} in {theme:?} draws without a refusal");
+            }
+        }
+    }
 }

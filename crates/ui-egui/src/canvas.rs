@@ -124,6 +124,10 @@ pub struct State {
     pub menu: Option<crate::editing::EntityMenu>,
     /// The context menu of selected generalization lines, open at a screen point (AR-129).
     pub line_menu: Option<Pos2>,
+    /// An n-ary association being drawn, or a class click awaited for a new end (AR-128).
+    pub nary: Option<crate::uml_nary::Nary>,
+    /// The context menu of an n-ary association's diamond or leg, at a screen point (AR-128).
+    pub nary_menu: Option<(Pos2, Uuid)>,
     pub focused: bool,
     /// Relationships (slice E2): the ends a new line gets, the chevron whose popover is open (the
     /// cardinality popover, a menu of kinds), the mapping table offer and the toast with Undo.
@@ -210,6 +214,8 @@ impl Default for State {
             gesture: None,
             menu: None,
             line_menu: None,
+            nary: None,
+            nary_menu: None,
             focused: false,
             relationship: crate::connect::RelKind::default(),
             popover: None,
@@ -290,6 +296,7 @@ pub fn retain_valid(state: &mut State, store: &Store) {
         state.reopen_pending = state.active.is_some();
     }
     crate::editing::retain_valid(state, store);
+    crate::uml_nary::retain(state, store);
     if state.mapping.as_ref().is_some_and(|m| store.by_uuid(m.relationship).is_none_or(|o| !store.is_alive(o))) {
         state.mapping = None;
     }
@@ -701,6 +708,8 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
         }
     }
     toolbar(shell, ui, p, r);
+    // What an n-ary association's drawing has so far, or what Add end waits for (AR-128).
+    crate::uml_nary::hint_bar(shell, ui, p, r, below_path);
     if let Some(notice) = shell.canvas.notice.clone() {
         ux::text(&paint, r.min + vec2(16.0, 12.0 + below_path), &notice, types::CAPTION, p.amber, Some((r.width() - 32.0).max(0.0)));
     }
@@ -834,8 +843,19 @@ fn draw_node(
     // Clipped to the card as drawn, so a draft's growing keeps the rows it moved down in sight.
     let inner = paint.with_clip_rect(rect.intersect(paint.clip_rect()));
     let annotation = card.as_ref().is_some_and(|c| matches!(c.tone, Tone::Constraint | Tone::Braces));
+    // A template's signature rows, drawn over the card and its selection (AR-130).
+    let signature = card.as_ref().filter(|c| !annotation && !c.template.is_empty() && z >= DETAIL_ZOOM).map(|c| c.template.clone());
+    let diamond = card.as_ref().is_some_and(|c| c.tone == Tone::Diamond);
     match element {
         Some(_) if annotation && let Some(card) = card => draw_constraint(paint, &inner, d, n, &card, rect),
+        // An n-ary association's diamond, its name above it (AR-128).
+        Some(_) if diamond && let Some(card) = card => {
+            let keyword = match &card.eyebrow {
+                archforge_diagram::figure::Text::Plain(k) => Some(k.as_str()),
+                archforge_diagram::figure::Text::Said(..) => None,
+            };
+            crate::uml_nary::draw_diamond(paint, p, rect, &card.name, keyword, z, selected, &look_of(store, n, node::STYLE));
+        }
         Some(_) if let Some(card) = card => {
             // An element of another scope: dimmed, dashed, its scope named in the eyebrow.
             let dim = |c: egui::Color32| if card.elsewhere { c.gamma_multiply(FOREIGN_ALPHA) } else { c };
@@ -958,6 +978,13 @@ fn draw_node(
     }
     if selected {
         selection_ring(paint, p, rect);
+    }
+    // A template's signature over the card's top-right corner (AR-130).
+    if let Some(rows) = signature
+        && let Some(sig) = signature_box(paint, p, &rows, rect, z)
+        && let Some(id) = id
+    {
+        widgets::record_visible(ui, registry, &format!("workspace.canvas.node.{id}.signature"), "label", sig);
     }
     let e = element.filter(|e| d.problems.contains_key(e))?;
     Some((rect.right_top() + vec2(-2.0, 2.0), id?, store.uuid(e).ok()?, e, false))
@@ -1164,6 +1191,8 @@ pub(crate) enum MiniLook {
     /// A constraint note and a constraint's braces (AR-133).
     Constraint,
     Braces,
+    /// An n-ary association's diamond (AR-128).
+    Diamond,
 }
 
 /// One card of a thumbnail, on screen: its look and how many rows each of its compartments has.
@@ -1216,6 +1245,7 @@ pub(crate) fn preview(store: &Store, notations: &archforge_diagram::ProjectView,
                         archforge_diagram::figure::Tone::Tinted => MiniLook::Tinted,
                         archforge_diagram::figure::Tone::Constraint => MiniLook::Constraint,
                         archforge_diagram::figure::Tone::Braces => MiniLook::Braces,
+                        archforge_diagram::figure::Tone::Diamond => MiniLook::Diamond,
                     };
                     (look, card.compartments.iter().map(Vec::len).collect())
                 }
@@ -1285,11 +1315,17 @@ fn mini_card(paint: &egui::Painter, p: &Palette, c: &MiniCard, s: f32) {
         paint.rect_filled(Rect::from_min_size(r.left_top(), vec2(r.width(), (5.0 * s).max(1.0))), 1.0, p.purple);
         return;
     }
+    // An n-ary association's diamond, hollow in the lines' ink (AR-128).
+    if c.look == MiniLook::Diamond {
+        let points = vec![r.left_center(), r.center_top(), r.right_center(), r.center_bottom()];
+        paint.add(egui::Shape::convex_polygon(points, p.surface, Stroke::new(1.0, p.text_secondary)));
+        return;
+    }
     let (fill, edge) = match c.look {
         MiniLook::Tinted => (p.entity, p.entity_edge),
         MiniLook::Note => (p.amber_tint, p.amber),
         MiniLook::Constraint => (p.surface, p.purple),
-        MiniLook::Plain | MiniLook::Tabbed | MiniLook::Braces => (p.surface, p.border),
+        MiniLook::Plain | MiniLook::Tabbed | MiniLook::Braces | MiniLook::Diamond => (p.surface, p.border),
     };
     if c.look == MiniLook::Tabbed {
         let tab =
@@ -1543,7 +1579,7 @@ fn mark_shape(mark: EndMark, tip: Pos2, back: Pos2, z: f32) -> (Vec2, Pos2, Vec2
     let dir = if (tip - back).length() > f32::EPSILON { (tip - back).normalized() } else { vec2(0.0, -1.0) };
     let s = z.max(0.6);
     let (len, half) = match mark {
-        EndMark::Triangle => (12.0 * s, 7.5 * s),
+        EndMark::Triangle | EndMark::FilledTriangle => (12.0 * s, 7.5 * s),
         EndMark::HollowDiamond | EndMark::FilledDiamond => (20.0 * s, 6.0 * s),
         _ => (0.0, 6.0 * s),
     };
@@ -1556,7 +1592,7 @@ fn mark_shape(mark: EndMark, tip: Pos2, back: Pos2, z: f32) -> (Vec2, Pos2, Vec2
 pub(crate) fn mark_outline(mark: EndMark, tip: Pos2, back: Pos2, z: f32) -> Vec<Pos2> {
     let (dir, base, side, len) = mark_shape(mark, tip, back, z);
     match mark {
-        EndMark::Triangle => vec![tip, base + side, base - side],
+        EndMark::Triangle | EndMark::FilledTriangle => vec![tip, base + side, base - side],
         EndMark::HollowDiamond | EndMark::FilledDiamond => {
             let middle = tip - dir * (len / 2.0);
             vec![tip, middle + side, base, middle - side]
@@ -1578,7 +1614,7 @@ pub(crate) fn line_mark(paint: &egui::Painter, mark: EndMark, tip: Pos2, back: P
         (EndMark::Triangle | EndMark::HollowDiamond, [_, ..]) => {
             paint.add(egui::Shape::convex_polygon(outline, bg, stroke));
         }
-        (EndMark::FilledDiamond, [_, ..]) => {
+        (EndMark::FilledDiamond | EndMark::FilledTriangle, [_, ..]) => {
             paint.add(egui::Shape::convex_polygon(outline, stroke.color, stroke));
         }
         (EndMark::OpenArrow, [tip, left, right]) => {
@@ -1610,9 +1646,20 @@ fn draw_edge(
     let mut points = edge_points(d, e)?;
     let n = points.len();
     // A selected qualifier marks its association's line, as a selected member marks its card.
+    // An n-ary association's leg draws selected with its association, the diamond and every leg
+    // being the one element (AR-128).
     let selected = selection.contains(&e)
         || selection.contains(&element)
-        || selection.iter().any(|o| archforge_uml::qualifiers::association_of(store, *o).is_some_and(|(a, _)| a == element));
+        || selection.iter().any(|o| archforge_uml::qualifiers::association_of(store, *o).is_some_and(|(a, _)| a == element))
+        || archforge_uml::nary::association_of_end(store, element).is_some_and(|a| selection.contains(&a));
+    // A leg leaves its diamond where the line meets the diamond's outline, not its node's border.
+    if let Some(source) = element_of(store, e, edge::SOURCE)
+        && element_of(store, source, node::ELEMENT).is_some_and(|a| archforge_uml::nary::is_nary(store, a))
+        && let (Some(tip), Some(next)) = (points.first().copied(), points.get(1).copied())
+        && let Some(on) = crate::uml_nary::onto_diamond(d.node_rect(source), tip, next)
+    {
+        points[0] = on;
+    }
     // A qualified end's box sits against its node, the line starting from its outer side (AR-127).
     let boxes = qualifier_boxes(paint, d, e, &line, &mut points);
     let hovered = d.hovered == Some(e);
@@ -1657,11 +1704,14 @@ fn draw_edge(
     {
         widgets::record_visible(ui, registry, &format!("workspace.canvas.edge.{id}.tie"), "edge", tied);
     }
-    if let Some(named) = bare_name(paint, d, element, &points)
+    let named = bare_name(paint, d, element, &points);
+    if let Some(named) = named
         && let Ok(id) = store.uuid(e)
     {
         widgets::record_visible(ui, registry, &format!("workspace.canvas.edge.{id}.name"), "label", named);
     }
+    // Where the line's name label sits, when it shows one: its stereotypes go above it.
+    let mut name_at: Option<Rect> = named;
     for (end, tip, back) in [(&line.ends[0], points[0], points[1]), (&line.ends[1], points[n - 1], points[n - 2])] {
         let (dir, base, _, _) = shape(end.mark, tip, back);
         line_mark(paint, end.mark, tip, back, stroke, z, p.canvas);
@@ -1765,6 +1815,9 @@ fn draw_edge(
                 (true, false) => vec2(-g.size().x / 2.0, -g.size().y - 6.0 * z),
                 (false, _) => vec2(-g.size().x / 2.0, 6.0 * z),
             };
+            if kind == "name" {
+                name_at = Some(Rect::from_min_size(at + offset, g.size()));
+            }
             paint.galley(at + offset, g, p.text_secondary);
         }
         if selected {
@@ -1778,7 +1831,34 @@ fn draw_edge(
             }
         }
     }
+    if let Some(keyword) = line.keyword.as_deref() {
+        let at = keyword_text(paint, d, keyword, &points, name_at);
+        if let Ok(id) = store.uuid(e) {
+            widgets::record_visible(ui, registry, &format!("workspace.canvas.edge.{id}.stereotypes"), "label", at);
+        }
+    }
     badge
+}
+
+/// A line's stereotypes, `«Reference»` (AR-135, F3), in the caption style: just above its name
+/// label `name` where it shows one, else at its middle where a name would sit. Gives where it is.
+fn keyword_text(paint: &egui::Painter, d: &Drawing<'_>, keyword: &str, points: &[Pos2], name: Option<Rect>) -> Rect {
+    let (p, z) = (d.p, d.view.zoom);
+    let g = ux::galley(paint, keyword, types::CAPTION.scaled(z), p.text_secondary, None);
+    let at = match name {
+        Some(r) => pos2(r.center().x - g.size().x / 2.0, r.top() - g.size().y - 1.0 * z),
+        None => {
+            let upright = {
+                let v = along(points, 0.51) - along(points, 0.49);
+                v.y.abs() > v.x.abs()
+            };
+            let offset = if upright { vec2(8.0 * z, -g.size().y / 2.0) } else { vec2(-g.size().x / 2.0, -g.size().y - 6.0 * z) };
+            along(points, 0.5) + offset
+        }
+    };
+    let rect = Rect::from_min_size(at, g.size());
+    paint.galley(at, g, p.text_secondary);
+    rect
 }
 
 /// The qualifier boxes of `line`'s ends (AR-127), each with its end's index, its rectangle and its
@@ -1824,6 +1904,37 @@ pub(crate) fn qualifier_place(node: Rect, tip: Pos2, size: Vec2) -> (Rect, Pos2)
         2 => (Rect::from_min_size(pos2(tip.x - w / 2.0, node.top() - h), size), pos2(tip.x, node.top() - h)),
         _ => (Rect::from_min_size(pos2(tip.x - w / 2.0, node.bottom()), size), pos2(tip.x, node.bottom() + h)),
     }
+}
+
+/// How far a template's signature box reaches past its card's right side and above its top, in
+/// diagram units, as the design draws it (page 08, C1).
+const SIGNATURE_OUT: Vec2 = vec2(28.0, 24.0);
+
+/// Where a template signature box of `size` sits on `card`: over its top-right corner, reaching
+/// [`SIGNATURE_OUT`] past it, scaled by `z`.
+pub(crate) fn signature_place(card: Rect, size: Vec2, z: f32) -> Rect {
+    Rect::from_min_size(pos2(card.right() + SIGNATURE_OUT.x * z - size.x, card.top() - SIGNATURE_OUT.y * z), size)
+}
+
+/// A template's signature (AR-130): a dashed box on the surface over the card's top-right corner,
+/// one parameter a row in their order; gives its rectangle, none for a card that is no template.
+fn signature_box(paint: &egui::Painter, p: &Palette, rows: &[String], card: Rect, z: f32) -> Option<Rect> {
+    if rows.is_empty() {
+        return None;
+    }
+    let galleys: Vec<_> = rows.iter().map(|t| ux::galley(paint, t, types::CAPTION.scaled(z), p.text, None)).collect();
+    let width = galleys.iter().map(|g| g.size().x).fold(0.0_f32, f32::max) + 16.0 * z;
+    let height = galleys.iter().map(|g| g.size().y).sum::<f32>() + 8.0 * z;
+    let rect = signature_place(card, vec2(width, height), z);
+    paint.rect_filled(rect, 0.0, p.surface);
+    dashed_rect(paint, rect, Stroke::new(1.0, p.text_secondary), 4.0 * z, 3.0 * z);
+    let mut y = rect.top() + 4.0 * z;
+    for g in galleys {
+        let h = g.size().y;
+        paint.galley(pos2(rect.left() + 8.0 * z, y), g, p.text);
+        y += h;
+    }
+    Some(rect)
 }
 
 /// A qualifier box: the surface, framed in the line's ink, its rows in model order.
@@ -2032,7 +2143,7 @@ fn outside_by(outline: &[Pos2], at: Pos2) -> f32 {
 fn mark_extent(mark: EndMark, z: f32) -> (f32, f32) {
     let s = z.max(0.6);
     match mark {
-        EndMark::Triangle => (12.0 * s, 7.5 * s),
+        EndMark::Triangle | EndMark::FilledTriangle => (12.0 * s, 7.5 * s),
         EndMark::HollowDiamond | EndMark::FilledDiamond => (20.0 * s, 6.0 * s),
         EndMark::OpenArrow => (12.0 * s, 6.0 * s),
         _ => (0.0, 0.0),

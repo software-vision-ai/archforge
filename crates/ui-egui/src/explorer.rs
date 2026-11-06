@@ -169,6 +169,13 @@ pub struct Delete {
     /// What goes with it by name, the dialog naming each: a UML classifier's nested classifiers
     /// (AR-132).
     pub along: Vec<String>,
+    /// The stereotype applications that go with it and what it takes along, `«Entity» on Order`,
+    /// the dialog naming each (AR-135).
+    pub applications: Vec<String>,
+    /// The package what it holds moves up to, a nested package's parent, and whether it holds
+    /// anything: the dialog says so instead of saying what it holds goes with it, and the toast
+    /// says where it went, as a removal without the dialog does.
+    pub hands_to: Option<(String, bool)>,
 }
 
 /// One row of the tree as drawn.
@@ -405,9 +412,12 @@ pub fn remove_selection(shell: &mut Shell) {
         shell.explorer.notice = Some(why);
         return;
     }
-    // What it holds moves up to its parent (a nested package): no dialog, the toast says where.
-    if let Some(parent) = ui.and_then(|u| u.hands_up(store, obj)) {
-        let (name, to) = (name_of(store, obj), name_of(store, parent));
+    // Stereotype applications go with it: removing them is never silent (AR-135).
+    let applications = ui.map(|u| u.applications_along(store, obj)).unwrap_or_default();
+    // What it holds moves up to its parent (a nested package): no dialog, the toast says where;
+    // the dialog when its stereotype applications would go with it.
+    if let Some(parent) = ui.and_then(|u| u.hands_up(store, obj)).filter(|_| applications.is_empty()) {
+        let (name, to) = (crate::notation_ui::label(shell.notation_uis, store, obj), name_of(store, parent));
         let held = ui.is_some_and(|u| u.has_children(store, obj));
         let said = crate::uml_constraints::before_removal(shell, &[id.to_string()]);
         match run(shell, "element.remove", json!({ "ids": [id.to_string()] })) {
@@ -429,8 +439,8 @@ pub fn remove_selection(shell: &mut Shell) {
     let has_children = ui.is_some_and(|u| u.has_children(store, obj));
     // The diagrams that show it, counted as the canvas counts them (AR-187).
     let diagrams = crate::editing::diagrams_showing(store, obj);
-    if [relationships, keys, foreign_keys, diagrams].iter().all(|n| *n == 0) && !has_children {
-        let lead = fmt(&tr("{name} deleted"), &[("name", &name_of(store, obj))]);
+    if [relationships, keys, foreign_keys, diagrams].iter().all(|n| *n == 0) && !has_children && applications.is_empty() {
+        let lead = fmt(&tr("{name} deleted"), &[("name", &crate::notation_ui::label(shell.notation_uis, store, obj))]);
         let said = crate::uml_constraints::before_removal(shell, &[id.to_string()]);
         match run(shell, "element.remove", json!({ "ids": [id.to_string()] })) {
             Ok(_) => crate::uml_constraints::say_dropped(shell, said, &lead),
@@ -439,7 +449,20 @@ pub fn remove_selection(shell: &mut Shell) {
         return;
     }
     let along = ui.map(|u| u.goes_along(store, obj)).unwrap_or_default();
-    shell.explorer.delete = Some(Delete { ids: vec![id], name: name_of(store, obj), relationships, keys, foreign_keys, diagrams, node: None, along });
+    let hands_to = ui.and_then(|u| u.hands_up(store, obj)).map(|p| (name_of(store, p), has_children));
+    shell.explorer.delete = Some(Delete {
+        ids: vec![id],
+        // Named as the canvas names it, an unnamed relationship by its ends (AR-216).
+        name: crate::notation_ui::label(shell.notation_uis, store, obj),
+        relationships,
+        keys,
+        foreign_keys,
+        diagrams,
+        node: None,
+        along,
+        applications,
+        hands_to,
+    });
 }
 
 /// Drops what the store no longer has, so a rename or a dialog never points at a gone element.
@@ -652,7 +675,8 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
             sub_reached: None,
         });
     }
-    if tree_keys && shell.explorer.context.is_none() {
+    // The Stereotypes picker takes typing, Backspace, the arrows and Enter (AR-135).
+    if tree_keys && shell.explorer.context.is_none() && shell.panels.menu != Some(crate::panels::Menu::StereotypePick) {
         keyboard(shell, ui, &rows, selected_obj);
     }
     if shell.explorer.menu_open {
@@ -1065,6 +1089,7 @@ fn context_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette) {
         })
         .unwrap_or_default();
     let kinds_n = inside.as_ref().map_or(0, |i| i.kinds.len());
+    let split = inside.as_ref().and_then(|i| i.split).unwrap_or(kinds_n);
     let sub_height = 8.0 + 26.0 + sub_rows.len() as f32 * CONTEXT_ROW + 9.0;
     let sub_x = if m.right() + 4.0 + CONTEXT_WIDTH <= window.right() - 8.0 {
         m.right() + 4.0
@@ -1153,7 +1178,7 @@ fn context_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette) {
             paint.rect_filled(sub, 8.0, p2.surface);
             paint.rect_stroke(sub, 8.0, Stroke::new(1.0, p2.border), StrokeKind::Inside);
             ux::text(&paint, pos2(sub.left() + 12.0, sub.top() + 12.0), &heading, types::EYEBROW, p2.text_muted, Some(CONTEXT_WIDTH - 24.0));
-            menu_rows(shell, ui, &p2, sub, sub.top() + 4.0 + 26.0, &sub_rows, Some(kinds_n), sub_reached, None)
+            menu_rows(shell, ui, &p2, sub, sub.top() + 4.0 + 26.0, &sub_rows, Some(split), sub_reached, None)
         });
         sub_clicked = c;
         if enter && state.sub_reached.is_some() && menu.sub {
@@ -1283,7 +1308,18 @@ fn delete_dialog_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: 
             &[("names", &d.along.join(", "))],
         ));
     }
-    lines.push(tr("What it holds goes with it."));
+    // The stereotype applications that go with it, by name (AR-135): their values go too.
+    if !d.applications.is_empty() {
+        let n = u64::try_from(d.applications.len()).unwrap_or(u64::MAX);
+        lines.push(fmt(
+            &trn("{n} stereotype application goes with it: {names}.", "{n} stereotype applications go with it: {names}.", n),
+            &[("names", &d.applications.join(", "))],
+        ));
+    }
+    lines.push(match &d.hands_to {
+        Some((parent, _)) => fmt(&tr("What it holds moves to {parent}."), &[("parent", parent)]),
+        None => tr("What it holds goes with it."),
+    });
     let size = vec2(440.0_f32.min(window.width() - 32.0), 110.0 + lines.len() as f32 * 20.0);
     let dialog = Rect::from_center_size(window.center(), size);
     ux::shadow(paint, dialog, 10.0, p.shadow);
@@ -1312,7 +1348,20 @@ fn delete_dialog_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: 
                 let ids: Vec<String> = d.ids.iter().map(|i| i.to_string()).collect();
                 let said = crate::uml_constraints::before_removal(shell, &ids);
                 match run(shell, "element.remove", json!({ "ids": ids })) {
-                    Ok(_) => crate::uml_constraints::say_dropped(shell, said, &fmt(&tr("{name} deleted"), &[("name", &d.name)])),
+                    Ok(_) => match &d.hands_to {
+                        // A nested package's contents moved up: the toast says where, with Undo.
+                        Some((parent, held)) => {
+                            let text = if *held {
+                                fmt(&tr("{name} removed; what it held moved to {parent}"), &[("name", &d.name), ("parent", parent)])
+                            } else {
+                                fmt(&tr("{name} removed"), &[("name", &d.name)])
+                            };
+                            let undo_label = shell.session.as_ref().and_then(|s| s.undo_label().map(str::to_string));
+                            shell.canvas.toast = Some(crate::connect::Toast { text, until: shell.frames.saturating_add(300), undo_label });
+                            crate::uml_constraints::say_dropped(shell, said, &d.name);
+                        }
+                        None => crate::uml_constraints::say_dropped(shell, said, &fmt(&tr("{name} deleted"), &[("name", &d.name)])),
+                    },
                     Err(e) => shell.explorer.notice = Some(e),
                 }
             } else if id == "workspace.explorer.delete.unplace"

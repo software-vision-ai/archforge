@@ -270,7 +270,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, k:
     paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
     crate::panels::reveal(shell, ui, card);
     // The type menu last, over the card.
-    crate::uml_panel::type_menu(shell, ui, p, type_field, &type_id, &mut edit.ty, Menu::QualifierType);
+    crate::uml_panel::type_menu(shell, ui, p, type_field, &type_id, &mut edit.ty, Menu::QualifierType, None);
     shell.panels.qualifier = Some(edit.clone());
     if cancel || (shell.panels.menu.is_none() && ui.input(|i| i.key_pressed(egui::Key::Escape))) {
         shell.panels.qualifier = None;
@@ -379,7 +379,7 @@ pub(crate) fn retain_valid(edit: &mut Option<QualifierEdit>, store: &Store) {
 
 /// `typed` as a new qualifier's name on end `end` of association `association`, applied and
 /// refused, as a sample to look at.
-#[cfg(feature = "snapshot")]
+#[cfg(any(test, feature = "snapshot"))]
 pub(crate) fn refuse_sample(shell: &mut Shell, association: Uuid, end: usize, typed: &str, ty: &str) {
     open(shell, association, end, None);
     if let Some(e) = shell.panels.qualifier.as_mut() {

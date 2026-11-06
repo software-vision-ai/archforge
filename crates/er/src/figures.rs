@@ -84,6 +84,7 @@ pub fn card(store: &Store, table: Obj, diagram: Obj) -> Option<Card> {
         tone: archforge_diagram::figure::Tone::Tinted,
         slanted: false,
         braces: None,
+        template: Vec::new(),
     })
 }
 
@@ -111,6 +112,7 @@ pub fn line(store: &Store, element: Obj) -> Option<Line> {
                 note: None,
                 badge: true,
                 resolvable: many_to_many,
+                keyword: None,
             })
         }
         c if c == GENERALIZATION => {
@@ -125,6 +127,7 @@ pub fn line(store: &Store, element: Obj) -> Option<Line> {
                 note,
                 badge: false,
                 resolvable: false,
+                keyword: None,
             })
         }
         _ => None,

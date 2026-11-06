@@ -1,0 +1,7 @@
+{"t": 0.0, "dir": "note", "line": "DOC-DERIVED EXAMPLE, NOT OBSERVED. ChatGPT sign-in in the browser: the app opens authUrl; app-server hosts the local callback (localhost:1455). Offered in 0.13.0 (owner decision, 2026-11-06). Shapes follow the codex-cli 0.166.0 generated schema (not kept in the repository; regenerate it with `codex app-server generate-json-schema`, see the README) and https://learn.chatgpt.com/docs/app-server and https://learn.chatgpt.com/docs/auth. Verify with a real round trip."}
+{"t": 0.0, "dir": "in", "line": "{\"id\":22,\"method\":\"account/login/start\",\"params\":{\"type\":\"chatgpt\"}}"}
+{"t": 0.05, "dir": "out", "line": "{\"id\":22,\"result\":{\"type\":\"chatgpt\",\"loginId\":\"019a0000-0000-7000-8000-00000000c001\",\"authUrl\":\"https://auth.openai.com/oauth/authorize?PLACEHOLDER\"}}"}
+{"t": 30.0, "dir": "out", "line": "{\"method\":\"account/login/completed\",\"params\":{\"loginId\":\"019a0000-0000-7000-8000-00000000c001\",\"success\":true,\"error\":null,\"onboardingEntrypoint\":null}}"}
+{"t": 30.0, "dir": "out", "line": "{\"method\":\"account/updated\",\"params\":{\"authMode\":\"chatgpt\",\"planType\":\"plus\"}}"}
+{"t": 30.1, "dir": "in", "line": "{\"id\":23,\"method\":\"account/read\",\"params\":{}}"}
+{"t": 30.11, "dir": "out", "line": "{\"id\":23,\"result\":{\"account\":{\"type\":\"chatgpt\",\"email\":\"person@example.com\",\"planType\":\"plus\",\"workspaceName\":null},\"requiresOpenaiAuth\":true}}"}

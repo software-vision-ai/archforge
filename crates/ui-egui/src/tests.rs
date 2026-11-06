@@ -1880,6 +1880,121 @@ fn with_a_schema_selected_the_plus_adds_a_table_and_delete_asks_before_the_schem
     assert_eq!(schema_names(&h), ["Schema 1"], "undo brings them back");
 }
 
+/// The title the open delete dialog paints, `Delete … from the model?`; never its empty form
+/// (AR-216).
+fn delete_title(h: &Harness<'static, Shell>) -> String {
+    let titles: Vec<String> = painted(h).into_iter().filter(|t| t.starts_with("Delete ") && t.ends_with(" from the model?")).collect();
+    assert_eq!(titles.len(), 1, "one title: {titles:?}");
+    assert_ne!(titles[0], "Delete  from the model?", "the title names the element");
+    titles[0].clone()
+}
+
+/// An association class drawn without a name has a nameless row in Models; deleted from there, the
+/// dialog names it by its ends as its line runs, `Order → Entity`, as a generalization set's
+/// members read (`CardPayment → Payment`) (AR-216). In light and dark.
+#[test]
+fn deleting_a_nameless_association_class_from_models_names_it_by_its_ends() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, made) = templates_sample(theme);
+        let s = h.state_mut().session.as_mut().unwrap();
+        let mut run = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap_or_default().to_string();
+        let ac = run("uml.association-class.add", serde_json::json!({ "from": made["Order"], "to": made["Entity"] }));
+        for (element, x) in [(&made["Order"], 200), (&made["Entity"], 700)] {
+            run("diagram.place", serde_json::json!({ "diagram": made["diagram"], "element": element, "x": x, "y": 500 }));
+        }
+        run("diagram.connect-all", serde_json::json!({ "diagram": made["diagram"] }));
+        run("view.select", serde_json::json!({ "ids": [] }));
+        let all: Vec<archforge_mof::Uuid> = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            st.alive().filter_map(|o| st.uuid(o).ok()).collect()
+        };
+        h.state_mut().explorer.expanded.extend(all);
+        h.run();
+        let rows = crate::explorer::rows(h.state().notation_uis, h.state().session.as_ref().unwrap().doc(), &h.state().explorer);
+        let row = rows.iter().find(|r| r.id.to_string() == ac).expect("its row in Models");
+        assert_eq!(row.label, "", "{theme:?}: a nameless row");
+        let at = rect_of(&h, &format!("workspace.explorer.row.{}", row.id)).center();
+        click(&mut h, at);
+        h.state_mut().explorer.focused = true;
+        key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
+        h.run();
+        let asked = h.state().explorer.delete.clone().expect("the dialog asks: a diagram shows it");
+        assert_eq!(asked.name, "Order → Entity", "{theme:?}");
+        assert_eq!(delete_title(&h), "Delete Order → Entity from the model?", "{theme:?}");
+        let at = rect_of(&h, "workspace.explorer.delete.cancel").center();
+        click(&mut h, at);
+        assert!(h.state().explorer.delete.is_none());
+    }
+}
+
+/// A constraint without a name, shown as a note, asks with ⇧⌫ on its note and the title reads it
+/// as its row in Constraints does, by its braces (AR-216). In light and dark.
+#[test]
+fn deleting_an_unnamed_constraint_from_the_canvas_names_it_by_its_braces() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, made) = templates_sample(theme);
+        let s = h.state_mut().session.as_mut().unwrap();
+        let c =
+            s.execute("uml.constraint.add", &serde_json::json!({ "context": made["Repository"], "expression": "size < 100" })).unwrap().value["id"]
+                .as_str()
+                .unwrap()
+                .to_string();
+        let note = s
+            .execute("uml.constraint.show", &serde_json::json!({ "diagram": made["diagram"], "constraint": c, "as": "note", "x": 700, "y": 200 }))
+            .unwrap()
+            .value["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        // Its note selected on the canvas, which has the keys.
+        crate::editing::run(h.state_mut(), "view.select", serde_json::json!({ "ids": [note] })).unwrap();
+        h.state_mut().canvas.focused = true;
+        h.run();
+        key(&mut h, egui::Key::Delete, egui::Modifiers::SHIFT);
+        h.run();
+        let asked = h.state().explorer.delete.clone().expect("asks first");
+        assert_eq!(asked.name, "{size < 100}", "{theme:?}");
+        assert_eq!(delete_title(&h), "Delete {size < 100} from the model?", "{theme:?}");
+    }
+}
+
+/// An n-ary association drawn without a name, as it is by default, asks with ⇧⌫ on its diamond
+/// and its title says what goes: this n-ary association (AR-216). In light and dark.
+#[test]
+fn deleting_an_unnamed_n_ary_association_from_the_canvas_names_its_kind() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, ids) = nary_sample(theme, false);
+        let s = h.state_mut().session.as_mut().unwrap();
+        let d = {
+            let st = s.doc();
+            let n = st.by_uuid(archforge_mof::Uuid::parse(&ids["customer"]).unwrap()).unwrap();
+            st.uuid(archforge_diagram::diagram_of(st, n).unwrap()).unwrap().to_string()
+        };
+        let classes = [ids["Customer"].clone(), ids["Product"].clone(), ids["Catalog"].clone()];
+        let a = s.execute("uml.association.add-nary", &serde_json::json!({ "classes": classes })).unwrap().value;
+        let a_id = a["id"].as_str().unwrap().to_string();
+        let n = s
+            .execute("diagram.place", &serde_json::json!({ "diagram": d, "element": a_id, "x": 400, "y": 360, "width": 44, "height": 28 }))
+            .unwrap()
+            .value["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let ends: Vec<String> = a["ends"].as_array().unwrap().iter().map(|e| e.as_str().unwrap().to_string()).collect();
+        for (end, card) in ends.iter().zip([&ids["customer"], &ids["product"], &ids["catalog"]]) {
+            s.execute("diagram.connect", &serde_json::json!({ "diagram": d, "element": end, "source": n, "target": card })).unwrap();
+        }
+        h.run();
+        let at = card(&h, &n);
+        click(&mut h, at);
+        key(&mut h, egui::Key::Delete, egui::Modifiers::SHIFT);
+        h.run();
+        let asked = h.state().explorer.delete.clone().expect("asks first");
+        assert_eq!(asked.name, "this n-ary association");
+        assert_eq!(delete_title(&h), "Delete this n-ary association from the model?", "{theme:?}");
+    }
+}
+
 #[test]
 fn the_filter_narrows_the_tree_and_the_keys_walk_it() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1120.0));
@@ -5688,6 +5803,7 @@ impl archforge_diagram::Notation for Sketch {
             tone: archforge_diagram::figure::Tone::Tinted,
             slanted: false,
             braces: None,
+            template: Vec::new(),
         })
     }
     fn line(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<archforge_diagram::figure::Line> {
@@ -5703,6 +5819,7 @@ impl archforge_diagram::Notation for Sketch {
             note: None,
             badge: false,
             resolvable: false,
+            keyword: None,
         })
     }
 }
@@ -6363,7 +6480,7 @@ fn member_rows(h: &Harness<'static, Shell>, class: archforge_mof::Uuid, operatio
 fn pick_type(h: &mut Harness<'static, Shell>, id: &str, label: &str) {
     let at = rect_of(h, id).center();
     click(h, at);
-    let i = crate::uml_panel::type_choices(h.state().session.as_ref().unwrap().doc()).iter().position(|(l, _)| l == label).expect(label);
+    let i = crate::uml_panel::type_choices(h.state().session.as_ref().unwrap().doc(), None).iter().position(|(l, _)| l == label).expect(label);
     let at = rect_of(h, &format!("{id}.{i}")).center();
     click(h, at);
 }
@@ -7234,7 +7351,7 @@ fn a_selected_class_takes_attributes_and_operations_typed_on_its_card_each_one_u
     h.run();
     let at = rect_of(&h, "workspace.canvas.member.type.menu").center();
     click(&mut h, at);
-    let real = crate::uml_panel::type_choices(h.state().session.as_ref().unwrap().doc()).iter().position(|(l, _)| l == "Real").unwrap();
+    let real = crate::uml_panel::type_choices(h.state().session.as_ref().unwrap().doc(), None).iter().position(|(l, _)| l == "Real").unwrap();
     let at = rect_of(&h, &format!("workspace.canvas.member.type.{real}")).center();
     click(&mut h, at);
     assert_eq!(h.state().canvas.inline.as_ref().unwrap().ty, "Real");
@@ -8328,7 +8445,9 @@ fn an_interface_takes_members_on_its_card_and_in_properties_and_is_offered_as_a_
     click(&mut h, at);
     // It is offered as a type: Customer's new attribute takes it.
     assert!(
-        crate::uml_panel::type_choices(h.state().session.as_ref().unwrap().doc()).iter().any(|(l, id)| l == "Payable" && *id == payable.to_string())
+        crate::uml_panel::type_choices(h.state().session.as_ref().unwrap().doc(), None)
+            .iter()
+            .any(|(l, id)| l == "Payable" && *id == payable.to_string())
     );
     let customer = select_named(&mut h, archforge_uml::CLASS, "Customer");
     let at = rect_of(&h, "workspace.properties.attributes.add").center();
@@ -9829,7 +9948,7 @@ fn an_enumeration_in_properties_shows_its_literals_and_is_offered_as_a_type() {
         assert!(painted(&h).iter().any(|t| t == "Literals · 3"), "its enumeration's panel stays");
         // It is offered as a type: Customer's new attribute takes it.
         assert!(
-            crate::uml_panel::type_choices(h.state().session.as_ref().unwrap().doc())
+            crate::uml_panel::type_choices(h.state().session.as_ref().unwrap().doc(), None)
                 .iter()
                 .any(|(l, id)| l == "Priority" && *id == priority.to_string())
         );
@@ -10327,7 +10446,7 @@ fn a_data_type_in_properties_takes_attributes_and_operations_and_is_offered_as_a
             assert!(texts.iter().any(|t| t == want), "{want} in {texts:?}");
         }
         // Offered as a type once, beside the built-in types, each once too: no type is listed twice.
-        let choices = crate::uml_panel::type_choices(h.state().session.as_ref().unwrap().doc());
+        let choices = crate::uml_panel::type_choices(h.state().session.as_ref().unwrap().doc(), None);
         assert_eq!(choices.iter().filter(|(l, id)| *id == money.to_string() && l == "Amount").count(), 1, "{choices:?}");
         let mut values: Vec<&str> = choices.iter().map(|(_, v)| v.as_str()).collect();
         let all = values.len();
@@ -10388,7 +10507,7 @@ fn a_type_far_down_the_type_menu_can_be_chosen_and_only_the_rows_in_sight_are_la
         click(&mut h, at);
         h.event(egui::Event::Text("zone".into()));
         h.run();
-        let choices = crate::uml_panel::type_choices(h.state().session.as_ref().unwrap().doc());
+        let choices = crate::uml_panel::type_choices(h.state().session.as_ref().unwrap().doc(), None);
         let wanted = choices.iter().position(|(l, _)| l == "Zone39").expect("every type is offered");
         assert!(wanted > 16 + archforge_uml::members::BUILT_IN.len(), "far past the sixteen the menu once listed: {wanted}");
         let at = rect_of(&h, "workspace.properties.member.type").center();
@@ -14409,4 +14528,1446 @@ fn a_new_nested_classifier_takes_a_name_free_of_its_owners_members() {
     let st = h.state().session.as_ref().unwrap().doc();
     assert_eq!(archforge_core::name_of(st, st.by_uuid(made).unwrap()), "Enumeration 2", "the next name the owner leaves free");
     assert_eq!(h.state().explorer.rename.as_ref().map(|r| r.text.as_str()), Some("Enumeration 2"));
+}
+
+/// Repository, Order and Entity (Order specializes it) in the package Shop, on two class diagrams,
+/// the first open and Repository selected with Properties shown (AR-130). Gives the ids by name:
+/// Repository, Order, Entity, diagram, second.
+fn templates_sample(theme: ThemeKind) -> (Harness<'static, Shell>, std::collections::BTreeMap<&'static str, String>) {
+    let mut h = workspace_harness(theme, egui::vec2(1600.0, 1500.0));
+    let mut made = std::collections::BTreeMap::new();
+    {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let mut run = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap_or_default().to_string();
+        let pkg = run("uml.package.add", serde_json::json!({ "name": "Shop" }));
+        let repo = run("uml.class.add", serde_json::json!({ "package": pkg, "name": "Repository" }));
+        let order = run("uml.class.add", serde_json::json!({ "package": pkg, "name": "Order" }));
+        let entity = run("uml.class.add", serde_json::json!({ "package": pkg, "name": "Entity" }));
+        run("uml.generalization.add", serde_json::json!({ "specific": order, "general": entity }));
+        let mut diagrams = Vec::new();
+        for (name, x) in [("Shop", 200), ("Overview", 500)] {
+            let d = run("diagram.add", serde_json::json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": pkg, "name": name }));
+            run("diagram.place", serde_json::json!({ "diagram": d, "element": repo, "x": x, "y": 200 }));
+            diagrams.push(d);
+        }
+        for (k, v) in [("Repository", repo), ("Order", order), ("Entity", entity), ("diagram", diagrams[0].clone()), ("second", diagrams[1].clone())]
+        {
+            made.insert(k, v);
+        }
+    }
+    crate::canvas::open(h.state_mut(), archforge_mof::Uuid::parse(&made["diagram"]).unwrap());
+    h.run();
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [made["Repository"]] })).unwrap();
+    h.state_mut().state.show_panel(crate::state::Panel::Properties);
+    h.run();
+    (h, made)
+}
+
+/// The rows of Repository's signature, as its card describes them.
+fn signature_of(h: &Harness<'static, Shell>, c: &str) -> Vec<String> {
+    let st = h.state().session.as_ref().unwrap().doc();
+    archforge_uml::templates::signature_rows(st, st.by_uuid(archforge_mof::Uuid::parse(c).unwrap()).unwrap())
+}
+
+/// The id of `element`'s card on diagram `d`.
+fn node_on(h: &Harness<'static, Shell>, element: &str, d: &str) -> String {
+    let st = h.state().session.as_ref().unwrap().doc();
+    let d = st.by_uuid(archforge_mof::Uuid::parse(d).unwrap()).unwrap();
+    let n = archforge_diagram::views_of(st, st.by_uuid(archforge_mof::Uuid::parse(element).unwrap()).unwrap())
+        .2
+        .into_iter()
+        .find(|n| archforge_diagram::diagram_of(st, *n) == Some(d))
+        .unwrap();
+    st.uuid(n).unwrap().to_string()
+}
+
+/// Picks entry `i` of the menu the select `id` opens.
+fn pick_entry(h: &mut Harness<'static, Shell>, id: &str, entry: &str) {
+    let at = rect_of(h, id).center();
+    click(h, at);
+    let at = rect_of(h, &format!("{id}.{entry}")).center();
+    click(h, at);
+}
+
+/// Template parameters (design page 08, C1 and C4) are added in Properties with the row editor:
+/// T as a class parameter, then Key whose Kind menu lists the supported kinds and Value and
+/// Operation disabled, never picked, with Integer as its default; each Apply one undo step; the
+/// signature box sits over the card's top-right corner on both diagrams; Key moved up, renamed and
+/// removed with the bin. In light and dark.
+#[test]
+fn template_parameters_are_edited_in_properties_and_boxed_on_both_diagrams() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, made) = templates_sample(theme);
+        let repo = made["Repository"].clone();
+        assert!(painted(&h).iter().any(|t| t == "Template parameters · 0"), "{theme:?}: {:?}", painted(&h));
+        let at = rect_of(&h, "workspace.properties.class.templateParameters.add").center();
+        click(&mut h, at);
+        let found = ids(&h);
+        for id in ["name", "kind", "constraint", "default", "cancel", "apply"] {
+            assert!(found.iter().any(|i| *i == format!("workspace.properties.class.templateParameter.0.{id}")), "{theme:?}: {id} in {found:?}");
+        }
+        assert!(!found.iter().any(|i| i == "workspace.properties.class.templateParameter.0.remove"), "a new one has no bin");
+        h.event(egui::Event::Text("T".into()));
+        h.run();
+        assert!(painted(&h).iter().any(|t| t.starts_with("Arguments for T must be classes.")), "{:?}", painted(&h));
+        assert!(signature_of(&h, &repo).is_empty(), "nothing before Apply");
+        let at = rect_of(&h, "workspace.properties.class.templateParameter.0.apply").center();
+        click(&mut h, at);
+        assert!(h.state().panels.template.is_none(), "applied, the editor closes");
+        assert_eq!(signature_of(&h, &repo), ["T : Class"]);
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add template parameter"));
+        h.run();
+        let shown = painted(&h);
+        for said in ["Template parameters · 1", "T : Class", "Class · template, 1 parameter · model, in every diagram"] {
+            assert!(shown.iter().any(|t| t == said), "{theme:?}: {said} in {shown:?}");
+        }
+        // T types Repository's own members alone: its type menus offer it, noted, and no other's do.
+        let st = h.state().session.as_ref().unwrap().doc();
+        let r = st.by_uuid(archforge_mof::Uuid::parse(&repo).unwrap()).unwrap();
+        let inside = crate::uml_panel::type_choices(st, Some(r));
+        assert_eq!(inside.get(1).map(|(l, _)| l.as_str()), Some("T"), "nearest first: {inside:?}");
+        assert_eq!(crate::uml_panel::type_notes(st, &inside).get(1).cloned(), Some(vec!["template parameter".to_string()]));
+        assert!(!crate::uml_panel::type_choices(st, None).iter().any(|(l, _)| l == "T"), "never outside the template");
+        // Key: the Kind menu offers the supported kinds; Value and Operation are named, disabled.
+        let at = rect_of(&h, "workspace.properties.class.templateParameters.add").center();
+        click(&mut h, at);
+        h.event(egui::Event::Text("Key".into()));
+        h.run();
+        let kind = "workspace.properties.class.templateParameter.1.kind";
+        let at = rect_of(&h, kind).center();
+        click(&mut h, at);
+        let shown = painted(&h);
+        for said in ["PARAMETER KIND", "Class", "Interface", "Data type", "Enumeration", "Primitive type", "Value", "Operation", "not yet"] {
+            assert!(shown.iter().any(|t| t == said), "{theme:?}: {said} in {shown:?}");
+        }
+        let at = rect_of(&h, &format!("{kind}.value")).center();
+        click(&mut h, at);
+        assert_eq!(h.state().panels.template.as_ref().unwrap().kind, archforge_uml::templates::Kind::Class, "a kind not supported is never taken");
+        assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::TemplateKind), "the menu stays open");
+        let at = rect_of(&h, &format!("{kind}.data-type")).center();
+        click(&mut h, at);
+        assert_eq!(h.state().panels.template.as_ref().unwrap().kind, archforge_uml::templates::Kind::DataType);
+        pick_entry(&mut h, "workspace.properties.class.templateParameter.1.default", "1");
+        assert_eq!(h.state().panels.template.as_ref().unwrap().default, "Integer", "the built-in types first");
+        let at = rect_of(&h, "workspace.properties.class.templateParameter.1.apply").center();
+        click(&mut h, at);
+        assert_eq!(signature_of(&h, &repo), ["T : Class", "Key : DataType = Integer"]);
+        // The box over the card's top-right corner, on both diagrams: the content is the model's.
+        for d in ["diagram", "second"] {
+            crate::canvas::open(h.state_mut(), archforge_mof::Uuid::parse(&made[d]).unwrap());
+            h.run();
+            let node = node_on(&h, &repo, &made[d]);
+            let card = rect_of(&h, &format!("workspace.canvas.node.{node}"));
+            let sig = rect_of(&h, &format!("workspace.canvas.node.{node}.signature"));
+            assert!(sig.contains(card.right_top()) && sig.right() > card.right() && sig.top() < card.top(), "{d}: {sig:?} over {card:?}");
+            assert!(painted(&h).iter().any(|t| t == "Key : DataType = Integer"), "{d}");
+        }
+        // Key moved up with the editor's arrow, renamed, then removed with its bin.
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [repo] })).unwrap();
+        h.run();
+        let row = rect_of(&h, "workspace.properties.class.templateParameter.1").left_center() + egui::vec2(20.0, 0.0);
+        h.event(egui::Event::PointerMoved(row));
+        h.run();
+        let at = rect_of(&h, "workspace.properties.class.templateParameter.1.edit").center();
+        click(&mut h, at);
+        let at = rect_of(&h, "workspace.properties.class.templateParameter.1.up").center();
+        click(&mut h, at);
+        assert_eq!(signature_of(&h, &repo), ["Key : DataType = Integer", "T : Class"]);
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Move template parameter"));
+        h.run();
+        let at = rect_of(&h, "workspace.properties.class.templateParameter.0.name").center();
+        click(&mut h, at);
+        key(&mut h, egui::Key::A, egui::Modifiers::COMMAND);
+        h.event(egui::Event::Text("Id".into()));
+        h.run();
+        let at = rect_of(&h, "workspace.properties.class.templateParameter.0.apply").center();
+        click(&mut h, at);
+        assert_eq!(signature_of(&h, &repo), ["Id : DataType = Integer", "T : Class"]);
+        let at = rect_of(&h, "workspace.properties.class.templateParameter.0.edit").center();
+        click(&mut h, at);
+        let at = rect_of(&h, "workspace.properties.class.templateParameter.0.remove").center();
+        click(&mut h, at);
+        assert_eq!(signature_of(&h, &repo), ["T : Class"]);
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        assert_eq!(signature_of(&h, &repo), ["Id : DataType = Integer", "T : Class"], "the removal is one step");
+    }
+}
+
+/// A name another parameter has, whatever the case, and a default that does not fit are refused in
+/// place, nothing written; removing a parameter a binding uses is refused under the rows naming the
+/// binding (C5), and Show the binding selects the binding itself (AR-131). In light and dark.
+#[test]
+fn template_parameter_refusals_are_said_in_place_and_nothing_is_written() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, made) = templates_sample(theme);
+        let repo = made["Repository"].clone();
+        h.state_mut()
+            .session
+            .as_mut()
+            .unwrap()
+            .execute("uml.template-parameter.add", &serde_json::json!({ "classifier": repo, "name": "T", "constraint": made["Entity"] }))
+            .unwrap();
+        h.run();
+        let before = (signature_of(&h, &repo), h.state().session.as_ref().unwrap().undo_label().map(str::to_string));
+        let at = rect_of(&h, "workspace.properties.class.templateParameters.add").center();
+        click(&mut h, at);
+        h.event(egui::Event::Text("t".into()));
+        h.run();
+        let at = rect_of(&h, "workspace.properties.class.templateParameter.1.apply").center();
+        click(&mut h, at);
+        let edit = h.state().panels.template.clone().expect("the editor stays open");
+        assert_eq!(edit.refused_at, Some("name"));
+        let said = "Repository already has a template parameter named T. Pick another name.";
+        assert!(painted(&h).iter().any(|t| t == said), "{theme:?}: said in place, {:?}", painted(&h));
+        assert_eq!((signature_of(&h, &repo), h.state().session.as_ref().unwrap().undo_label().map(str::to_string)), before, "nothing written");
+        h.state_mut().panels.template = None;
+        h.run();
+        // T's default offers only what fits Entity: Order, Entity; Repository is left out.
+        let at = rect_of(&h, "workspace.properties.class.templateParameter.0.edit").center();
+        click(&mut h, at);
+        let at = rect_of(&h, "workspace.properties.class.templateParameter.0.default").center();
+        click(&mut h, at);
+        let shown = painted(&h);
+        assert!(
+            shown.iter().any(|t| t == "Order") && !ids(&h).iter().any(|i| i == "workspace.properties.class.templateParameter.0.default.3"),
+            "{shown:?}"
+        );
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        // Typed in by hand, a default that does not fit is refused under Default.
+        if let Some(e) = h.state_mut().panels.template.as_mut() {
+            e.default = repo.clone();
+        }
+        h.run();
+        let at = rect_of(&h, "workspace.properties.class.templateParameter.0.apply").center();
+        click(&mut h, at);
+        let edit = h.state().panels.template.clone().expect("the editor stays open");
+        assert_eq!(edit.refused_at, Some("default"), "{:?}", edit.refused);
+        assert_eq!(signature_of(&h, &repo), ["T : Class > Entity"], "nothing written");
+        h.state_mut().panels.template = None;
+        h.run();
+        // In the sample model OrderRepository binds Repository: Key's removal is refused, naming
+        // the binding (C5).
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1500.0));
+        crate::uml_ui::open_sample(h.state_mut()).unwrap();
+        h.run();
+        let (sample_id, _) = crate::uml_ui::put_repository(h.state_mut(), true).unwrap_or_else(|e| panic!("{e}"));
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        h.run();
+        let rows_before = signature_of(&h, &sample_id.to_string());
+        let at = rect_of(&h, "workspace.properties.class.templateParameter.1.edit").center();
+        click(&mut h, at);
+        let at = rect_of(&h, "workspace.properties.class.templateParameter.1.remove").center();
+        click(&mut h, at);
+        h.run();
+        assert_eq!(signature_of(&h, &sample_id.to_string()), rows_before, "nothing removed");
+        let said = "OrderRepository binds Key -> Integer. Change or remove that binding first, then remove Key.";
+        assert!(painted(&h).iter().any(|t| t == said), "{theme:?}: {:?}", painted(&h));
+        assert!(ids(&h).iter().any(|i| i == "workspace.properties.class.templateParameter.refusal"));
+        let at = rect_of(&h, "workspace.properties.class.templateParameter.showBinding").center();
+        click(&mut h, at);
+        let s = h.state().session.as_ref().unwrap();
+        let chosen = s.view().selection.first().copied().unwrap();
+        assert_eq!(s.doc().class_of(chosen).unwrap(), archforge_uml::TEMPLATE_BINDING, "the binding itself is selected");
+        assert_eq!(
+            archforge_uml::templates::bound_element(s.doc(), chosen).map(|b| archforge_core::name_of(s.doc(), b)).as_deref(),
+            Some("OrderRepository")
+        );
+        h.run();
+        assert!(ids(&h).iter().any(|i| i == "workspace.properties.templateBinding.substitution.0.argument"), "its Properties show");
+    }
+}
+
+/// The template sample with T (no default) and Key (a data type, Integer by default) on
+/// Repository, and the class OrderRepository placed on the diagram beside it: gives the harness,
+/// the sample's ids, and the cards of OrderRepository and Repository.
+fn binding_sample(
+    theme: ThemeKind,
+) -> (Harness<'static, Shell>, std::collections::BTreeMap<&'static str, String>, (archforge_mof::Uuid, archforge_mof::Uuid)) {
+    let (mut h, mut made) = templates_sample(theme);
+    let repo = made["Repository"].clone();
+    let s = h.state_mut().session.as_mut().unwrap();
+    s.execute("uml.template-parameter.add", &serde_json::json!({ "classifier": repo, "name": "T" })).unwrap();
+    s.execute("uml.template-parameter.add", &serde_json::json!({ "classifier": repo, "name": "Key", "kind": "data-type", "default": "Integer" }))
+        .unwrap();
+    let st = s.doc();
+    let pkg = archforge_uml::commands::package_of(st, st.by_uuid(archforge_mof::Uuid::parse(&repo).unwrap()).unwrap()).unwrap();
+    let pkg = st.uuid(pkg).unwrap().to_string();
+    let bound = s.execute("uml.class.add", &serde_json::json!({ "package": pkg, "name": "OrderRepository" })).unwrap().value["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    s.execute("diagram.place", &serde_json::json!({ "diagram": made["diagram"], "element": bound, "x": 200, "y": 600 })).unwrap();
+    s.execute("view.select", &serde_json::json!({ "ids": [] })).unwrap();
+    made.insert("OrderRepository", bound.clone());
+    h.run();
+    let nodes = (
+        archforge_mof::Uuid::parse(&node_on(&h, &bound, &made["diagram"])).unwrap(),
+        archforge_mof::Uuid::parse(&node_on(&h, &repo, &made["diagram"])).unwrap(),
+    );
+    (h, made, nodes)
+}
+
+/// The bindings in the harness's model.
+fn bindings_in(h: &Harness<'static, Shell>) -> Vec<archforge_mof::Obj> {
+    let st = h.state().session.as_ref().unwrap().doc();
+    st.alive().filter(|o| archforge_uml::bindings::is_binding(st, *o)).collect()
+}
+
+/// A template binding is drawn from OrderRepository to Repository (design page 08, C3): releasing it
+/// opens the draft in Properties and writes nothing; Apply with T still to pick is refused naming
+/// it, the draft kept; Cancel, and Escape, leave the model and its history as they were; with T
+/// picked, Apply adds the binding, its line and its label as one undo step and selects it, Key on
+/// its default. In light and dark.
+#[test]
+fn a_template_binding_is_drawn_and_applied_from_its_draft() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _, (from, to)) = binding_sample(theme);
+        let d = h.state().canvas.active.unwrap();
+        let undo = h.state().session.as_ref().unwrap().undo_label().map(str::to_string);
+        h.state_mut().canvas.uml_relation = crate::uml_relate::Relate::TemplateBinding;
+        let draw = |h: &mut Harness<'static, Shell>| {
+            let d = h.state().session.as_ref().unwrap().doc().by_uuid(d).unwrap();
+            crate::uml_relate::connect(h.state_mut(), d, from, to);
+            h.run();
+        };
+        draw(&mut h);
+        assert!(bindings_in(&h).is_empty(), "{theme:?}: nothing in the model while drawing");
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label().map(str::to_string), undo);
+        let shown = painted(&h);
+        assert!(shown.iter().any(|t| t == "New template binding") && shown.iter().any(|t| t == "Choose a class"), "{shown:?}");
+        assert!(shown.iter().any(|t| t == "default"), "Key shows its default");
+        let st = h.state().session.as_ref().unwrap().doc();
+        assert_eq!(crate::uml_bindings::draft_line(h.state(), st.by_uuid(d).unwrap()), Some((from, to)), "the draft's line is drawn");
+        for id in ["bound", "template", "substitution.0.argument", "substitution.1.argument", "apply", "cancel"] {
+            assert!(ids(&h).iter().any(|i| *i == format!("workspace.properties.templateBinding.{id}")), "{id}");
+        }
+        // Apply with T to pick: refused, said, the draft kept.
+        let at = rect_of(&h, "workspace.properties.templateBinding.apply").center();
+        click(&mut h, at);
+        assert!(painted(&h).iter().any(|t| t.contains("T needs an argument: pick a class.")), "{:?}", painted(&h));
+        assert!(ids(&h).iter().any(|i| i == "workspace.properties.templateBinding.refusal"));
+        assert!(h.state().panels.binding.is_some() && bindings_in(&h).is_empty());
+        // Cancel leaves nothing; so does Escape.
+        let at = rect_of(&h, "workspace.properties.templateBinding.cancel").center();
+        click(&mut h, at);
+        assert!(h.state().panels.binding.is_none() && bindings_in(&h).is_empty());
+        draw(&mut h);
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert!(h.state().panels.binding.is_none() && bindings_in(&h).is_empty());
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label().map(str::to_string), undo, "{theme:?}: the history as it was");
+        // T picked from its selector (Entity, Order, OrderRepository, Repository), then Apply.
+        draw(&mut h);
+        pick_entry(&mut h, "workspace.properties.templateBinding.substitution.0.argument", "1");
+        let at = rect_of(&h, "workspace.properties.templateBinding.apply").center();
+        click(&mut h, at);
+        let made_now = bindings_in(&h);
+        assert_eq!(made_now.len(), 1, "{theme:?}");
+        let s = h.state().session.as_ref().unwrap();
+        assert_eq!(s.undo_label(), Some("Add template binding"));
+        assert_eq!(s.view().selection, made_now, "the binding is selected");
+        let st = s.doc();
+        assert_eq!(archforge_uml::figures::slot_text(st, made_now[0], "name"), "«bind» <T -> Order, Key -> Integer>");
+        assert_eq!(archforge_diagram::views_of(st, made_now[0]).1.len(), 1, "its line");
+        h.run();
+        assert!(painted(&h).iter().any(|t| t == "«bind» <T -> Order, Key -> Integer>"), "the label on the canvas");
+        assert!(ids(&h).iter().any(|i| i == "workspace.properties.templateBinding.substitution.1.argument"), "its Properties");
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        assert!(bindings_in(&h).is_empty(), "one undo step");
+    }
+}
+
+/// A binding's substitutions are edited in its Properties (C2), each pick one undo step: Key given
+/// String, then back to its default; another template opens the draft over the binding until
+/// Apply; a draft is dropped when the selection moves on. Models writes binds Repository after the
+/// bound class. In light and dark.
+#[test]
+fn a_template_binding_s_substitutions_are_edited_in_properties() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, made, _) = binding_sample(theme);
+        let s = h.state_mut().session.as_mut().unwrap();
+        let b = s
+            .execute(
+                "uml.template-binding.add",
+                &serde_json::json!({ "bound": made["OrderRepository"], "template": made["Repository"], "arguments": { "T": made["Order"] } }),
+            )
+            .unwrap()
+            .value["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        h.run();
+        assert!(painted(&h).iter().any(|t| t == "Template binding"), "{theme:?}: its heading");
+        let label = |h: &Harness<'static, Shell>| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            archforge_uml::bindings::label(st, st.by_uuid(archforge_mof::Uuid::parse(&b).unwrap()).unwrap())
+        };
+        // Key's menu: Default (Integer), then the built-in types and data types; String is one.
+        let at = rect_of(&h, "workspace.properties.templateBinding.substitution.1.argument").center();
+        click(&mut h, at);
+        assert!(painted(&h).iter().any(|t| t == "Default (Integer)"), "{:?}", painted(&h));
+        let entries: Vec<String> =
+            ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.templateBinding.substitution.1.argument.")).collect();
+        assert!(!entries.is_empty());
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        // Default (Integer) first, then the built-in types in their order: Integer, String, ….
+        let string_at = (archforge_uml::members::BUILT_IN.iter().position(|b| *b == "String").unwrap() + 1).to_string();
+        pick_entry(&mut h, "workspace.properties.templateBinding.substitution.1.argument", &string_at);
+        assert_eq!(label(&h), "«bind» <T -> Order, Key -> String>");
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Set template binding"));
+        pick_entry(&mut h, "workspace.properties.templateBinding.substitution.1.argument", "0");
+        assert_eq!(label(&h), "«bind» <T -> Order, Key -> Integer>", "back to the default");
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        assert_eq!(label(&h), "«bind» <T -> Order, Key -> String>", "undone");
+        h.state_mut().session.as_mut().unwrap().redo().unwrap();
+        // Models names the template after the bound class.
+        let all: Vec<archforge_mof::Uuid> = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            st.alive().filter_map(|o| st.uuid(o).ok()).collect()
+        };
+        h.state_mut().explorer.expanded.extend(all);
+        h.run();
+        assert!(painted(&h).iter().any(|t| t == "binds Repository"), "{:?}", painted(&h));
+        // Another template opens the draft over the binding; selecting something else drops it.
+        let s = h.state_mut().session.as_mut().unwrap();
+        let pair = s
+            .execute("uml.class.add", &serde_json::json!({ "package": archforge_uml::commands::package_of(s.doc(), s.doc().by_uuid(archforge_mof::Uuid::parse(&made["Repository"]).unwrap()).unwrap()).and_then(|p| s.doc().uuid(p).ok()).unwrap().to_string(), "name": "Pair" }))
+            .unwrap()
+            .value["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        s.execute("uml.template-parameter.add", &serde_json::json!({ "classifier": pair, "name": "A" })).unwrap();
+        s.execute("view.select", &serde_json::json!({ "ids": [b] })).unwrap();
+        h.run();
+        let before = label(&h);
+        // Pair is the first template by name, Repository the second.
+        pick_entry(&mut h, "workspace.properties.templateBinding.template", "0");
+        assert!(h.state().panels.binding.as_ref().is_some_and(|d| d.binding.is_some()), "the draft over the binding");
+        assert!(ids(&h).iter().any(|i| i == "workspace.properties.templateBinding.apply"));
+        assert_eq!(label(&h), before, "nothing written yet");
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [made["Order"]] })).unwrap();
+        h.run();
+        assert!(h.state().panels.binding.is_none(), "{theme:?}: the draft goes with the selection");
+        assert_eq!(label(&h), before);
+    }
+}
+
+/// Profiles and stereotypes (AR-134, design page 08, F1, F2, F5 and F6), in light and dark: a
+/// right click on a package's row in Models opens New ▸, which offers Package and Profile before
+/// the classifiers; a profile is made in one undo step and named in place, `profile` after its
+/// row; New ▸ Stereotype on the profile makes one; its Properties' Extends `+` lists the
+/// metaclasses Archforge draws and those it does not, disabled with why, and a pick extends it in
+/// one step, `extends Class` after its row; a property is added through the member editor, typed
+/// by a built-in type; the package's Applied profiles `+` applies the profile in one step,
+/// `applies …` after the package's row. With the profile in use, Unapply is refused under the
+/// rows, the uses counted, nothing written, and Show the uses selects them.
+#[test]
+fn profiles_are_made_in_models_edited_in_properties_and_applied_to_packages() {
+    use egui_kittest::kittest::Queryable;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1100.0));
+        let commerce = select_named(&mut h, archforge_uml::PACKAGE, "Commerce");
+        // F2: New ▸ on the package.
+        let row = rect_of(&h, &format!("workspace.explorer.row.{commerce}"));
+        right_click(&mut h, row.center());
+        let at = rect_of(&h, "workspace.explorer.contextMenu.newInside").center();
+        click(&mut h, at);
+        assert!(painted(&h).iter().any(|t| t == "NEW IN COMMERCE"), "{theme:?}: {:?}", painted(&h));
+        for kind in ["package", "profile", "class", "interface", "enumeration"] {
+            assert!(ids(&h).iter().any(|i| *i == format!("workspace.explorer.contextMenu.newInside.{kind}")), "{kind}");
+        }
+        let at = rect_of(&h, "workspace.explorer.contextMenu.newInside.profile").center();
+        click(&mut h, at);
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add profile"));
+        let rename = h.state().explorer.rename.clone().expect("named in place");
+        assert_eq!(rename.text, "Profile 1");
+        let profile = rename.target;
+        h.state_mut().explorer.rename = None;
+        h.run();
+        assert!(painted(&h).iter().any(|t| t == "profile"), "{theme:?}: `profile` after its row");
+        // New ▸ Stereotype on the profile.
+        let row = rect_of(&h, &format!("workspace.explorer.row.{profile}"));
+        right_click(&mut h, row.center());
+        let at = rect_of(&h, "workspace.explorer.contextMenu.newInside").center();
+        click(&mut h, at);
+        let at = rect_of(&h, "workspace.explorer.contextMenu.newInside.stereotype").center();
+        click(&mut h, at);
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add stereotype"));
+        let stereotype = h.state().explorer.rename.clone().expect("named in place").target;
+        h.state_mut().explorer.rename = None;
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [stereotype.to_string()] })).unwrap();
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        h.run();
+        // F1: Extends · 0, its + listing what may be extended and what may not.
+        assert!(painted(&h).iter().any(|t| t == "Extends · 0"), "{theme:?}: {:?}", painted(&h));
+        assert!(painted(&h).iter().any(|t| t.starts_with("Stereotype · in profile Profile 1")));
+        assert!(h.query_by_label("Profile: Profile 1").is_some(), "the Profile select's accessible name");
+        let at = rect_of(&h, crate::uml_profiles::EXTENDS_ADD_ID).center();
+        click(&mut h, at);
+        assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::StereotypeExtends));
+        assert!(painted(&h).iter().any(|t| t == "not drawn by Archforge yet"), "the rest disabled with why");
+        let before = h.state().session.as_ref().unwrap().revision();
+        let refused = format!("{}.{}", crate::uml_profiles::EXTENDS_ADD_ID, archforge_uml::profiles::METACLASSES.len());
+        let at = rect_of(&h, &refused).center();
+        click(&mut h, at);
+        assert_eq!(h.state().session.as_ref().unwrap().revision(), before, "a metaclass not drawn picks nothing");
+        let at = rect_of(&h, &format!("{}.0", crate::uml_profiles::EXTENDS_ADD_ID)).center();
+        click(&mut h, at);
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Change stereotype"));
+        h.run();
+        assert!(painted(&h).iter().any(|t| t == "Extends · 1"));
+        assert!(painted(&h).iter().any(|t| t == "extends Class"), "{theme:?}: after its row in Models");
+        // A property through the member editor.
+        assert!(painted(&h).iter().any(|t| t == "Properties · 0"));
+        let at = rect_of(&h, "workspace.properties.attributes.add").center();
+        click(&mut h, at);
+        h.event(egui::Event::Text("table".into()));
+        h.run();
+        pick_type(&mut h, "workspace.properties.member.type", "String");
+        let at = rect_of(&h, "workspace.properties.member.apply").center();
+        click(&mut h, at);
+        {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let props = archforge_uml::profiles::properties(st, st.by_uuid(stereotype).unwrap());
+            assert_eq!(props.iter().map(|a| archforge_uml::figures::attribute_text(st, *a)).collect::<Vec<_>>(), ["+ table : String"]);
+        }
+        // F5: Commerce applies it.
+        select_named(&mut h, archforge_uml::PACKAGE, "Commerce");
+        h.run();
+        assert!(painted(&h).iter().any(|t| t == "Applied profiles · 0"), "{theme:?}: {:?}", painted(&h));
+        let at = rect_of(&h, crate::uml_profiles::APPLIED_ADD_ID).center();
+        click(&mut h, at);
+        let at = rect_of(&h, &format!("{}.0", crate::uml_profiles::APPLIED_ADD_ID)).center();
+        click(&mut h, at);
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Apply profile"));
+        h.run();
+        assert!(painted(&h).iter().any(|t| t == "Applied profiles · 1"));
+        assert!(painted(&h).iter().any(|t| t == "applies Profile 1"), "after the package's row");
+
+        // F6: in use, Unapply is refused with the uses counted, and they can be selected.
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1100.0));
+        let (commerce, persistence, _) = crate::uml_profiles::put_profiles(h.state_mut(), true).unwrap();
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [commerce] })).unwrap();
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        h.run();
+        let at = rect_of(&h, &format!("{}.{persistence}.edit", crate::uml_profiles::APPLIED_ROW_ID)).center();
+        click(&mut h, at);
+        let before = (h.state().session.as_ref().unwrap().revision(), h.state().session.as_ref().unwrap().undo_label().map(str::to_string));
+        let at = rect_of(&h, &format!("{}.unapply", crate::uml_profiles::APPLIED_EDIT_ID)).center();
+        click(&mut h, at);
+        let after = (h.state().session.as_ref().unwrap().revision(), h.state().session.as_ref().unwrap().undo_label().map(str::to_string));
+        assert_eq!(after, before, "{theme:?}: nothing written");
+        let why = "Persistence is in use in Commerce: «Entity» on Order and Customer, «Id» on 2 elements, «Reference» on places. Remove those first.";
+        assert!(painted(&h).iter().any(|t| t == why), "{theme:?}: {:?}", painted(&h));
+        assert!(painted(&h).iter().any(|t| t == "Show the 5 uses"));
+        let at = rect_of(&h, &format!("{}.show", crate::uml_profiles::USES_ID)).center();
+        click(&mut h, at);
+        assert_eq!(h.state().session.as_ref().unwrap().view().selection.len(), 5, "the uses selected");
+    }
+}
+
+/// The sample class model's Recommendations diagram (AR-128): Customer and Product side by side,
+/// Catalog under them; `drawn`, the n-ary association recommends between them. In `theme`, in a
+/// window tall enough for an end's editor. Gives the ids by name, as `put_recommends` does.
+fn nary_sample(theme: ThemeKind, drawn: bool) -> (Harness<'static, Shell>, std::collections::BTreeMap<&'static str, String>) {
+    let mut h = workspace_harness(theme, egui::vec2(1600.0, 1200.0));
+    crate::uml_ui::open_sample(h.state_mut()).unwrap();
+    h.run();
+    let ids = crate::uml_nary::put_recommends(h.state_mut(), drawn).unwrap();
+    h.state_mut().canvas.fit_pending = false;
+    h.state_mut().canvas.zoom = 1.0;
+    h.state_mut().canvas.pan = egui::vec2(20.0, 30.0);
+    h.state_mut().state.show_panel(crate::state::Panel::Properties);
+    h.run();
+    (h, ids)
+}
+
+/// The centre of the card `node` on the canvas.
+fn card(h: &Harness<'static, Shell>, node: &str) -> egui::Pos2 {
+    rect_of(h, &format!("workspace.canvas.node.{node}")).center()
+}
+
+/// Arms the Relationship tool with N-ary association, from its chevron's menu.
+fn arm_nary(h: &mut Harness<'static, Shell>) {
+    let at = rect_of(h, "workspace.tools.relationship-kinds").center();
+    click(h, at);
+    let at = rect_of(h, "workspace.relate.n-ary").center();
+    click(h, at);
+}
+
+/// The n-ary associations of the model, each with its ends as `role : Class [multiplicity]`.
+fn naries(h: &Harness<'static, Shell>) -> Vec<(archforge_mof::Obj, Vec<String>)> {
+    let st = h.state().session.as_ref().unwrap().doc();
+    st.alive()
+        .filter(|o| archforge_uml::nary::is_nary(st, *o))
+        .map(|a| {
+            let ends = archforge_uml::nary::ends(st, a)
+                .into_iter()
+                .map(|e| {
+                    let ty = archforge_uml::nary::end_type(st, e).map(|t| archforge_core::name_of(st, t)).unwrap_or_default();
+                    format!("{} : {ty} [{}]", archforge_core::name_of(st, e), archforge_uml::figures::multiplicity(st, e))
+                })
+                .collect();
+            (a, ends)
+        })
+        .collect()
+}
+
+/// The legs of n-ary association ends on diagram `d` (the active one when none is given).
+fn legs_on(h: &Harness<'static, Shell>, d: Option<&str>) -> usize {
+    let st = h.state().session.as_ref().unwrap().doc();
+    let d = match d {
+        Some(d) => st.by_uuid(archforge_mof::Uuid::parse(d).unwrap()).unwrap(),
+        None => st.by_uuid(h.state().canvas.active.unwrap()).unwrap(),
+    };
+    st.list(d, archforge_diagram::diagram::EDGE)
+        .unwrap()
+        .iter()
+        .filter_map(archforge_mof::Value::as_ref)
+        .filter(|e| {
+            st.get(*e, archforge_diagram::edge::ELEMENT)
+                .ok()
+                .and_then(|v| v.as_ref())
+                .is_some_and(|x| archforge_uml::nary::association_of_end(st, x).is_some())
+        })
+        .count()
+}
+
+/// The diamonds on the active diagram.
+fn diamonds_here(h: &Harness<'static, Shell>) -> usize {
+    let st = h.state().session.as_ref().unwrap().doc();
+    let d = st.by_uuid(h.state().canvas.active.unwrap()).unwrap();
+    st.list(d, archforge_diagram::diagram::NODE)
+        .unwrap()
+        .iter()
+        .filter_map(archforge_mof::Value::as_ref)
+        .filter(|n| st.get(*n, archforge_diagram::node::ELEMENT).ok().and_then(|v| v.as_ref()).is_some_and(|e| archforge_uml::nary::is_nary(st, e)))
+        .count()
+}
+
+fn selection(h: &Harness<'static, Shell>) -> Vec<archforge_mof::Obj> {
+    h.state().session.as_ref().unwrap().view().selection.clone()
+}
+
+/// The Relationship menu lists N-ary association after Association class, below a separator of
+/// its own, its sample a line with a small diamond; a pick arms the tool with it (AR-128, A2). In
+/// light and dark.
+#[test]
+fn the_relationship_menu_lists_n_ary_association_after_association_class_below_a_separator() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = nary_sample(theme, false);
+        let at = rect_of(&h, "workspace.tools.relationship-kinds").center();
+        click(&mut h, at);
+        let (realization, class, nary) =
+            (rect_of(&h, "workspace.relate.realization"), rect_of(&h, "workspace.relate.association-class"), rect_of(&h, "workspace.relate.n-ary"));
+        let step = class.top() - realization.top();
+        assert!(nary.top() - class.top() > step + 8.0, "{theme:?}: a separator above N-ary association: {class:?} {nary:?}");
+        assert!(painted(&h).iter().any(|t| t == "N-ary association"), "{theme:?}: named");
+        let at = nary.center();
+        click(&mut h, at);
+        assert_eq!(h.state().canvas.uml_relation, crate::uml_relate::Relate::NAry);
+        assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Connect("relationship"));
+        assert!(h.state().canvas.popover.is_none(), "a pick closes the menu");
+    }
+}
+
+/// Drawn with three classes and Enter, the n-ary association is one undo step: nothing is in the
+/// model while the draft grows, the hint counts its ends, Properties shows the draft; finished, the
+/// association, its diamond and a leg per end are there, selected, and undo and redo take and give
+/// it whole. With four, a double click on the last class finishes it the same way. In light and
+/// dark.
+#[test]
+fn an_n_ary_association_is_drawn_class_by_class_and_finished_as_one_undo_step() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, ids) = nary_sample(theme, false);
+        let before = revision(&h);
+        arm_nary(&mut h);
+        for n in ["customer", "product"] {
+            let at = card(&h, &ids[n]);
+            click(&mut h, at);
+        }
+        let shown = painted(&h);
+        for said in [
+            "N-ary association · 2 ends — click a class for the next end",
+            "New n-ary association",
+            "Ends so far · 2",
+            "customer : Customer [*]",
+            "product : Product [*]",
+        ] {
+            assert!(shown.iter().any(|t| t == said), "{theme:?}: {said} in {shown:?}");
+        }
+        assert!(ids_of(&h).iter().any(|i| i == "workspace.canvas.gestureHint"), "the hint bar");
+        // Enter with two ends finishes nothing.
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert!(naries(&h).is_empty() && revision(&h) == before, "{theme:?}: nothing before three ends");
+        let at = card(&h, &ids["catalog"]);
+        click(&mut h, at);
+        assert_eq!(revision(&h), before, "{theme:?}: the draft is not in the model");
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        let made = naries(&h);
+        assert_eq!(made.len(), 1, "{theme:?}");
+        assert_eq!(made[0].1, ["customer : Customer [*]", "product : Product [*]", "catalog : Catalog [*]"]);
+        assert_eq!((diamonds_here(&h), legs_on(&h, None)), (1, 3), "{theme:?}: the diamond and three legs");
+        assert_eq!(selection(&h), vec![made[0].0], "{theme:?}: the association selected");
+        assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Select, "the tool hands back to Select");
+        assert!(h.state().canvas.nary.is_none());
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add n-ary association"));
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        h.run();
+        assert!(naries(&h).is_empty() && diamonds_here(&h) == 0 && legs_on(&h, None) == 0, "{theme:?}: one undo step takes it all");
+        h.state_mut().session.as_mut().unwrap().redo().unwrap();
+        h.run();
+        assert_eq!((naries(&h).len(), diamonds_here(&h), legs_on(&h, None)), (1, 1, 3), "{theme:?}: redo gives it whole");
+        // Four ends, the last by a double click.
+        let order = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let st = s.doc();
+            let o = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(st, *o) == "Order").unwrap();
+            let id = st.uuid(o).unwrap().to_string();
+            let placed = s
+                .execute(
+                    "diagram.place",
+                    &serde_json::json!({ "diagram": ids["diagram"], "element": id, "x": 640, "y": 560, "width": 180, "height": 120 }),
+                )
+                .unwrap();
+            placed.value["id"].as_str().unwrap().to_string()
+        };
+        h.run();
+        arm_nary(&mut h);
+        for n in [&ids["customer"], &ids["product"], &ids["catalog"]] {
+            let at = card(&h, n);
+            click(&mut h, at);
+        }
+        let at = card(&h, &order);
+        double_click(&mut h, at);
+        let made = naries(&h);
+        assert_eq!(made.len(), 2, "{theme:?}: the double click finishes");
+        assert!(made.iter().any(|(_, e)| e.len() == 4 && e[3] == "order : Order [*]"), "{made:?}");
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add n-ary association"));
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        assert_eq!(naries(&h).len(), 1, "{theme:?}: one step");
+    }
+}
+
+/// The ids of the controls the last frame registered.
+fn ids_of(h: &Harness<'static, Shell>) -> Vec<String> {
+    ids(h)
+}
+
+/// Backspace drops the draft's last end; Escape, another tool, a click on empty canvas and another
+/// diagram each drop the draft, leaving the model as it was and no draft for the next gesture.
+#[test]
+fn backspace_drops_the_last_end_and_every_cancel_leaves_nothing_behind() {
+    let (mut h, ids) = nary_sample(ThemeKind::Light, false);
+    let before = revision(&h);
+    let start = |h: &mut Harness<'static, Shell>| {
+        arm_nary(h);
+        for n in ["customer", "product"] {
+            let at = card(h, &ids[n]);
+            click(h, at);
+        }
+        assert!(matches!(&h.state().canvas.nary, Some(crate::uml_nary::Nary::Draft { ends, .. }) if ends.len() == 2));
+    };
+    start(&mut h);
+    key(&mut h, egui::Key::Backspace, egui::Modifiers::NONE);
+    assert!(matches!(&h.state().canvas.nary, Some(crate::uml_nary::Nary::Draft { ends, .. }) if ends.len() == 1), "Backspace drops one");
+    assert!(painted(&h).iter().any(|t| t == "N-ary association · 1 end — click a class for the next end"), "the singular");
+    // Escape.
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    assert!(h.state().canvas.nary.is_none() && h.state().canvas.tool == crate::canvas::Tool::Select, "Escape cancels");
+    // Another tool.
+    start(&mut h);
+    let at = rect_of(&h, "workspace.tools.select").center();
+    click(&mut h, at);
+    assert!(h.state().canvas.nary.is_none(), "another tool cancels");
+    // Another kind of relationship.
+    start(&mut h);
+    let at = rect_of(&h, "workspace.tools.relationship-kinds").center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.relate.association").center();
+    click(&mut h, at);
+    h.run();
+    assert!(h.state().canvas.nary.is_none(), "another kind cancels");
+    // Empty canvas.
+    start(&mut h);
+    let empty = rect_of(&h, "workspace.canvas").left_bottom() + egui::vec2(60.0, -200.0);
+    click(&mut h, empty);
+    assert!(h.state().canvas.nary.is_none(), "a click on empty canvas cancels");
+    // Another diagram, and back: no draft comes back.
+    start(&mut h);
+    let commerce = h.state().canvas.tabs[0];
+    crate::canvas::open(h.state_mut(), commerce);
+    h.run();
+    assert!(h.state().canvas.nary.is_none(), "another diagram drops it");
+    crate::canvas::open(h.state_mut(), archforge_mof::Uuid::parse(&ids["diagram"]).unwrap());
+    h.run();
+    assert!(h.state().canvas.nary.is_none() && !painted(&h).iter().any(|t| t == "New n-ary association"), "nothing stale");
+    assert_eq!(revision(&h), before, "the model is as it was");
+    assert!(naries(&h).is_empty());
+}
+
+/// Before the first end is clicked, Backspace is not the draft's: it reaches the selection's
+/// removal, so a selected card leaves the diagram as it does with any other tool.
+#[test]
+fn backspace_before_the_first_end_removes_the_selection_as_ever() {
+    let (mut h, ids) = nary_sample(ThemeKind::Light, false);
+    arm_nary(&mut h);
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [ids["Product"]] })).unwrap();
+    h.run();
+    assert!(h.state().canvas.nary.as_ref().is_none_or(|n| matches!(n, crate::uml_nary::Nary::Draft { ends, .. } if ends.is_empty())), "no end yet");
+    let shown = |h: &Harness<'static, Shell>| {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let d = st.by_uuid(archforge_mof::Uuid::parse(&ids["diagram"]).unwrap()).unwrap();
+        let product = st.by_uuid(archforge_mof::Uuid::parse(&ids["Product"]).unwrap()).unwrap();
+        archforge_uml::nary::node_in(st, d, product).is_some()
+    };
+    assert!(shown(&h));
+    h.state_mut().canvas.focused = true;
+    key(&mut h, egui::Key::Backspace, egui::Modifiers::NONE);
+    assert!(!shown(&h), "the selected card left the diagram");
+    assert!(naries(&h).is_empty(), "and nothing n-ary was made");
+}
+
+/// A class clicked twice gives two ends at it, told apart by their roles; a data type is refused at
+/// the canvas's top and adds no end.
+#[test]
+fn a_class_clicked_twice_gives_two_ends_of_one_type_and_a_data_type_is_refused() {
+    let (mut h, ids) = nary_sample(ThemeKind::Light, false);
+    let money = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let st = s.doc();
+        let pkg = archforge_uml::commands::package_of(st, st.by_uuid(archforge_mof::Uuid::parse(&ids["Customer"]).unwrap()).unwrap()).unwrap();
+        let pkg = st.uuid(pkg).unwrap().to_string();
+        let dt = s.execute("uml.data-type.add", &serde_json::json!({ "package": pkg, "name": "Amount" })).unwrap().value["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let n = s.execute(
+            "diagram.place",
+            &serde_json::json!({ "diagram": ids["diagram"], "element": dt, "x": 640, "y": 560, "width": 180, "height": 120 }),
+        );
+        n.unwrap().value["id"].as_str().unwrap().to_string()
+    };
+    h.run();
+    arm_nary(&mut h);
+    let at = card(&h, &money);
+    click(&mut h, at);
+    assert_eq!(h.state().canvas.notice.as_deref(), Some("A data type joins no association"));
+    assert!(h.state().canvas.nary.is_none(), "no end");
+    for n in ["customer", "customer", "product"] {
+        let at = card(&h, &ids[n]);
+        click(&mut h, at);
+    }
+    assert!(painted(&h).iter().any(|t| t == "customer2 : Customer [*]"), "{:?}", painted(&h));
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    let made = naries(&h);
+    assert_eq!(made[0].1, ["customer : Customer [*]", "customer2 : Customer [*]", "product : Product [*]"]);
+    assert_eq!(legs_on(&h, None), 3, "two legs to one card");
+}
+
+/// A click on a leg and a click on the diamond both select the one association; Properties shows
+/// its name, its package and its ends, and its kind line counts them. In light and dark.
+#[test]
+fn a_leg_and_the_diamond_both_select_the_n_ary_association() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, ids) = nary_sample(theme, true);
+        let a = archforge_mof::Uuid::parse(&ids["recommends"]).unwrap();
+        let leg = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let end = archforge_uml::nary::ends(st, st.by_uuid(a).unwrap())[0];
+            st.uuid(archforge_diagram::views_of(st, end).1[0]).unwrap()
+        };
+        let at = point_on_edge(&h, leg);
+        click(&mut h, at);
+        let a_obj = h.state().session.as_ref().unwrap().doc().by_uuid(a).unwrap();
+        assert_eq!(selection(&h), vec![a_obj], "{theme:?}: the leg selects the association");
+        let shown = painted(&h);
+        for said in
+            ["recommends", "N-ary association · 3 ends · model, in every diagram", "Ends · 3", "customer : Customer [*]", "catalog : Catalog [1]"]
+        {
+            assert!(shown.iter().any(|t| t == said), "{theme:?}: {said} in {shown:?}");
+        }
+        assert!(ids_of(&h).iter().any(|i| i == "workspace.canvas.leg-end.2"), "the legs' end handles");
+        let empty = rect_of(&h, "workspace.canvas").left_bottom() + egui::vec2(60.0, -200.0);
+        click(&mut h, empty);
+        assert_ne!(selection(&h), vec![a_obj]);
+        let at = card(&h, &ids["diamond"]);
+        click(&mut h, at);
+        assert_eq!(selection(&h), vec![a_obj], "{theme:?}: the diamond selects it");
+    }
+}
+
+/// An end's editor writes its role, multiplicity, navigability, ordering and uniqueness as one
+/// undo step; a role another end has, whatever the case, is refused in place, the editor open and
+/// nothing written. In light and dark.
+#[test]
+fn an_n_ary_end_s_editor_applies_as_one_step_and_refuses_a_duplicate_role_in_place() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, ids) = nary_sample(theme, true);
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [ids["recommends"]] })).unwrap();
+        h.run();
+        let at = rect_of(&h, "workspace.properties.end.2.edit").center();
+        click(&mut h, at);
+        for id in ["role", "type", "multiplicity", "navigable", "ordered", "unique", "remove", "cancel", "apply"] {
+            assert!(ids_of(&h).iter().any(|i| *i == format!("workspace.properties.end.2.{id}")), "{theme:?}: {id}");
+        }
+        assert!(!ids_of(&h).iter().any(|i| i.starts_with("workspace.properties.end.2.aggregation")), "no aggregation");
+        retype(&mut h, "workspace.properties.end.2.role", "source");
+        retype(&mut h, "workspace.properties.end.2.multiplicity", "0..1");
+        for b in ["navigable", "ordered", "unique"] {
+            let at = rect_of(&h, &format!("workspace.properties.end.2.{b}")).center();
+            click(&mut h, at);
+        }
+        let at = rect_of(&h, "workspace.properties.end.2.apply").center();
+        click(&mut h, at);
+        assert!(h.state().panels.nary_end.is_none(), "{theme:?}: applied, the editor closes");
+        assert_eq!(naries(&h)[0].1[2], "source : Catalog [0..1]");
+        let (a, end) = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let a = st.by_uuid(archforge_mof::Uuid::parse(&ids["recommends"]).unwrap()).unwrap();
+            (a, archforge_uml::nary::ends(st, a)[2])
+        };
+        let st = h.state().session.as_ref().unwrap().doc();
+        let (_, _, ordered, unique) = archforge_uml::modifiers::flags(st, end);
+        assert!(archforge_uml::figures::navigable(st, a, end) && ordered && !unique, "{theme:?}: the checks written");
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Set association end"));
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        assert_eq!(naries(&h)[0].1[2], "catalog : Catalog [1]", "{theme:?}: one step");
+        h.run();
+        // A duplicate role, refused in place.
+        let before = revision(&h);
+        let at = rect_of(&h, "workspace.properties.end.1.edit").center();
+        click(&mut h, at);
+        retype(&mut h, "workspace.properties.end.1.role", "CUSTOMER");
+        let at = rect_of(&h, "workspace.properties.end.1.apply").center();
+        click(&mut h, at);
+        let said = "Another end has the role customer already. Pick another role.";
+        assert!(h.state().panels.nary_end.as_ref().is_some_and(|e| e.refused.as_ref().is_some_and(|(at, why)| *at == Some("role") && why == said)));
+        assert!(painted(&h).iter().any(|t| t == said), "{theme:?}: said under the field");
+        assert_eq!(revision(&h), before, "{theme:?}: nothing written");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert!(h.state().panels.nary_end.is_none(), "Escape cancels");
+    }
+}
+
+/// Add end, from the Ends `+`, arms the next class click: it adds an end there with its leg, one
+/// undo step; the hint says what the click does.
+#[test]
+fn add_end_from_the_plus_takes_the_next_class_clicked() {
+    let (mut h, ids) = nary_sample(ThemeKind::Light, true);
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [ids["recommends"]] })).unwrap();
+    h.run();
+    let at = rect_of(&h, "workspace.properties.association.ends.add").center();
+    click(&mut h, at);
+    assert!(painted(&h).iter().any(|t| t == "Click a class for the new end"), "the hint");
+    let at = card(&h, &ids["customer"]);
+    click(&mut h, at);
+    assert_eq!(naries(&h)[0].1.len(), 4);
+    assert_eq!(naries(&h)[0].1[3], "customer2 : Customer [*]");
+    assert_eq!(legs_on(&h, None), 4, "its leg drawn");
+    assert!(h.state().canvas.nary.is_none(), "one class only");
+    h.state_mut().session.as_mut().unwrap().undo().unwrap();
+    assert_eq!(naries(&h)[0].1.len(), 3, "one step");
+    // Escape right after the `+` cancels it, the canvas taking the keys.
+    h.run();
+    let at = rect_of(&h, "workspace.properties.association.ends.add").center();
+    click(&mut h, at);
+    assert!(h.state().canvas.nary.is_some(), "armed again");
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    assert!(h.state().canvas.nary.is_none(), "Escape cancels Add end from the panel too");
+    // From the diamond's menu too; Escape cancels it.
+    h.run();
+    let at = card(&h, &ids["diamond"]);
+    right_click(&mut h, at);
+    for key_ in ["add-end", "reconnect-end", "remove", "delete"] {
+        assert!(ids_of(&h).iter().any(|i| *i == format!("workspace.canvas.menu.{key_}")), "{key_}");
+    }
+    let at = rect_of(&h, "workspace.canvas.menu.add-end").center();
+    click(&mut h, at);
+    assert!(h.state().canvas.nary.is_some(), "armed");
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    assert!(h.state().canvas.nary.is_none(), "Escape cancels Add end");
+}
+
+/// A selected leg's class end drags onto another class, moving that end there with its leg; the
+/// end editor's Type moves it back, one undo step with the rest.
+#[test]
+fn a_leg_end_drags_onto_another_class_and_the_type_select_moves_it_back() {
+    let (mut h, ids) = nary_sample(ThemeKind::Light, true);
+    let order = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let st = s.doc();
+        let o = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(st, *o) == "Order").unwrap();
+        let id = st.uuid(o).unwrap().to_string();
+        let placed = s.execute(
+            "diagram.place",
+            &serde_json::json!({ "diagram": ids["diagram"], "element": id, "x": 640, "y": 560, "width": 180, "height": 120 }),
+        );
+        placed.unwrap().value["id"].as_str().unwrap().to_string()
+    };
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [ids["recommends"]] })).unwrap();
+    h.run();
+    let handle = rect_of(&h, "workspace.canvas.leg-end.2").center();
+    let to = card(&h, &order);
+    drag(&mut h, handle, to);
+    assert_eq!(naries(&h)[0].1[2], "catalog : Order [1]", "notice {:?}", h.state().canvas.notice);
+    assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Reconnect association end"));
+    let st = h.state().session.as_ref().unwrap().doc();
+    let end = archforge_uml::nary::ends(st, st.by_uuid(archforge_mof::Uuid::parse(&ids["recommends"]).unwrap()).unwrap())[2];
+    let leg = archforge_diagram::views_of(st, end).1[0];
+    let target = st.get(leg, archforge_diagram::edge::TARGET).unwrap().as_ref().unwrap();
+    assert_eq!(st.uuid(target).unwrap().to_string(), order, "the leg follows");
+    // Back with Type.
+    let at = rect_of(&h, "workspace.properties.end.2.edit").center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.properties.end.2.type").center();
+    click(&mut h, at);
+    let k = crate::uml_nary::end_types(h.state().session.as_ref().unwrap().doc()).iter().position(|(_, n)| n == "Catalog").unwrap();
+    let at = rect_of(&h, &format!("workspace.properties.end.2.type.{k}")).center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.properties.end.2.apply").center();
+    click(&mut h, at);
+    assert_eq!(naries(&h)[0].1[2], "catalog : Catalog [1]");
+    assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Set association end"));
+}
+
+/// The bin of one of four ends removes it at once, one undo step said by a toast; of three it asks
+/// (A5), Keep 3 ends focused: Keep and Escape change nothing, Make it binary turns it into a plain
+/// association between the two classes left, its diamond giving way to a line, one undo step. In
+/// light and dark.
+#[test]
+fn removing_an_end_of_four_is_one_step_and_one_of_three_asks_to_keep_or_make_it_binary() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, ids) = nary_sample(theme, true);
+        let a = ids["recommends"].clone();
+        h.state_mut()
+            .session
+            .as_mut()
+            .unwrap()
+            .execute("uml.association.add-end", &serde_json::json!({ "association": a, "class": ids["Customer"] }))
+            .unwrap();
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [a] })).unwrap();
+        h.run();
+        let at = rect_of(&h, "workspace.properties.end.3.edit").center();
+        click(&mut h, at);
+        let at = rect_of(&h, "workspace.properties.end.3.remove").center();
+        click(&mut h, at);
+        assert_eq!(naries(&h)[0].1.len(), 3, "{theme:?}: removed at once");
+        assert_eq!(h.state().canvas.toast.as_ref().map(|t| t.text.as_str()), Some("End customer2 removed"));
+        assert_eq!(legs_on(&h, None), 3);
+        // One of three asks.
+        let before = revision(&h);
+        let ask = |h: &mut Harness<'static, Shell>| {
+            let at = rect_of(h, "workspace.properties.end.2.edit").center();
+            click(h, at);
+            let at = rect_of(h, "workspace.properties.end.2.remove").center();
+            click(h, at);
+            assert!(h.state().panels.nary_remove.is_some(), "asked");
+            let shown = painted(h);
+            for said in ["Two ends would remain", "Keep 3 ends", "Make it binary"] {
+                assert!(shown.iter().any(|t| t == said), "{said} in {shown:?}");
+            }
+        };
+        ask(&mut h);
+        let keep = "workspace.properties.association.ends.removeConfirm.keep";
+        assert!(h.ctx.memory(|m| m.has_focus(crate::widgets::egui_id(keep))), "{theme:?}: Keep 3 ends focused");
+        let at = rect_of(&h, keep).center();
+        click(&mut h, at);
+        assert!(h.state().panels.nary_remove.is_none() && revision(&h) == before && naries(&h)[0].1.len() == 3, "{theme:?}: Keep changes nothing");
+        ask(&mut h);
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert!(h.state().panels.nary_remove.is_none() && revision(&h) == before, "{theme:?}: Escape keeps");
+        ask(&mut h);
+        let at = rect_of(&h, "workspace.properties.association.ends.removeConfirm.binary").center();
+        click(&mut h, at);
+        assert!(naries(&h).is_empty(), "{theme:?}: binary now");
+        assert_eq!(diamonds_here(&h), 0, "its diamond gave way");
+        let st = h.state().session.as_ref().unwrap().doc();
+        let ao = st.by_uuid(archforge_mof::Uuid::parse(&a).unwrap()).unwrap();
+        assert!(st.is_alive(ao) && archforge_uml::figures::member_ends(st, ao).is_some(), "a binary association");
+        assert_eq!(archforge_diagram::views_of(st, ao).1.len(), 1, "a line in its place");
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Remove association end"));
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        h.run();
+        assert_eq!((naries(&h).len(), diamonds_here(&h), legs_on(&h, None)), (1, 1, 3), "{theme:?}: one undo step");
+    }
+}
+
+/// Delete with the association selected removes its diamond and legs from this diagram only;
+/// Shift+Delete asks first and deletes it with its ends everywhere.
+#[test]
+fn remove_from_this_diagram_keeps_the_n_ary_association_and_delete_from_the_model_asks_first() {
+    let (mut h, ids) = nary_sample(ThemeKind::Light, true);
+    let a = ids["recommends"].clone();
+    let at = card(&h, &ids["diamond"]);
+    click(&mut h, at);
+    key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
+    assert_eq!((diamonds_here(&h), legs_on(&h, None)), (0, 0), "gone from the diagram");
+    assert_eq!(naries(&h).len(), 1, "kept in the model");
+    h.state_mut().session.as_mut().unwrap().undo().unwrap();
+    h.run();
+    let at = card(&h, &ids["diamond"]);
+    click(&mut h, at);
+    key(&mut h, egui::Key::Delete, egui::Modifiers::SHIFT);
+    assert!(h.state().explorer.delete.is_some(), "asks first");
+    assert_eq!(naries(&h).len(), 1);
+    let at = rect_of(&h, "workspace.explorer.delete.confirm").center();
+    click(&mut h, at);
+    assert!(naries(&h).is_empty() && diamonds_here(&h) == 0 && legs_on(&h, None) == 0, "deleted with its ends");
+    let st = h.state().session.as_ref().unwrap().doc();
+    assert!(st.by_uuid(archforge_mof::Uuid::parse(&a).unwrap()).is_none_or(|o| !st.is_alive(o)));
+}
+
+/// Two diagrams stay in step: an end added on one draws its leg on the other where both show the
+/// diamond and the class; a class dragged onto a diagram that shows the diamond comes with its leg.
+#[test]
+fn two_diagrams_show_the_same_n_ary_association_and_a_dropped_class_brings_its_leg() {
+    let (mut h, ids) = nary_sample(ThemeKind::Light, true);
+    let second = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let st = s.doc();
+        let pkg = archforge_uml::commands::package_of(st, st.by_uuid(archforge_mof::Uuid::parse(&ids["Customer"]).unwrap()).unwrap()).unwrap();
+        let pkg = st.uuid(pkg).unwrap().to_string();
+        let d = s
+            .execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": pkg, "name": "Second" }))
+            .unwrap()
+            .value["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        for (c, x) in [("Customer", 80), ("Product", 500), ("Catalog", 900)] {
+            s.execute("diagram.place", &serde_json::json!({ "diagram": d, "element": ids[c], "x": x, "y": 80, "width": 200, "height": 120 }))
+                .unwrap();
+        }
+        s.execute("diagram.place", &serde_json::json!({ "diagram": d, "element": ids["recommends"], "x": 500, "y": 400, "width": 44, "height": 28 }))
+            .unwrap();
+        s.execute("diagram.connect-all", &serde_json::json!({ "diagram": d })).unwrap();
+        d
+    };
+    assert_eq!(legs_on(&h, Some(&second)), 3, "connect-all draws the legs");
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [ids["recommends"]] })).unwrap();
+    h.run();
+    let at = rect_of(&h, "workspace.properties.association.ends.add").center();
+    click(&mut h, at);
+    let at = card(&h, &ids["product"]);
+    click(&mut h, at);
+    assert_eq!((legs_on(&h, None), legs_on(&h, Some(&second))), (4, 4), "the new leg on both diagrams");
+    // Catalog off this diagram and dropped back: its leg comes with it.
+    h.state_mut().session.as_mut().unwrap().execute("diagram.unplace", &serde_json::json!({ "nodes": [ids["catalog"]] })).unwrap();
+    h.run();
+    assert_eq!(legs_on(&h, None), 3);
+    let d = h.state().session.as_ref().unwrap().doc().by_uuid(archforge_mof::Uuid::parse(&ids["diagram"]).unwrap()).unwrap();
+    crate::kinds::DiagramKind::drop(&crate::uml_ui::UmlKind, h.state_mut(), d, archforge_mof::Uuid::parse(&ids["Catalog"]).unwrap(), (460.0, 640.0));
+    h.run();
+    assert_eq!(legs_on(&h, None), 4, "the dropped class brings its leg");
+}
+
+/// A binary association keeps its two ends' sections, and its Delete still removes it.
+#[test]
+fn a_binary_association_keeps_its_ends_sections_beside_n_ary_ones() {
+    let (mut h, _) = nary_sample(ThemeKind::Light, true);
+    let places = {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let a = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::ASSOCIATION) && archforge_core::name_of(st, *o) == "places").unwrap();
+        st.uuid(a).unwrap().to_string()
+    };
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [places] })).unwrap();
+    h.run();
+    let shown = painted(&h);
+    assert!(shown.iter().any(|t| t == "End at Customer") && shown.iter().any(|t| t == "End at Order"), "{shown:?}");
+    assert!(!shown.iter().any(|t| t.starts_with("Ends · ")), "no n-ary ends section");
+    assert!(ids_of(&h).iter().any(|i| i == "workspace.properties.end.0.aggregation"), "aggregation offered");
+}
+/// Stereotypes applied (AR-135, design page 08, F3 and F4), in light and dark: Order's Properties
+/// have a Stereotypes section whose `+` opens the picker, Entity to apply, Id, Reference and Tracked
+/// disabled with why; a refused row picks nothing; typing filters and Enter applies, one undo step,
+/// `«Entity»` after Order's row in Models and in its card's eyebrow. Each property has a control
+/// fitting its type: cached a select showing its default with the `default` tag, table a field; a
+/// value typed and entered is set in one step, a select's pick too, and its Default row clears it; a
+/// value that does not read stays in its field with the reason under it, nothing written. Show
+/// stereotype values on this diagram lists the values on the card; the bin takes the stereotype off.
+#[test]
+fn stereotypes_are_applied_and_their_values_edited_in_properties() {
+    use egui_kittest::kittest::Queryable;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1100.0));
+        let (_, _, entity) = crate::uml_profiles::put_profiles(h.state_mut(), false).unwrap();
+        let (logging, rows_p) = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let logging = s.execute("uml.profile.add", &serde_json::json!({ "name": "Logging" })).unwrap().value["id"].as_str().unwrap().to_string();
+            s.execute("uml.stereotype.add", &serde_json::json!({ "profile": logging, "name": "Tracked", "extends": ["Class"] })).unwrap();
+            let rows = s.execute("uml.attribute.add", &serde_json::json!({ "class": entity, "name": "rows", "type": "Integer" })).unwrap();
+            (logging, rows.value["id"].as_str().unwrap().to_string())
+        };
+        let _ = logging;
+        let order = select_named(&mut h, archforge_uml::CLASS, "Order");
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        h.run();
+        assert!(painted_has(&h, "Stereotypes · 0"), "{theme:?}: {:?}", painted(&h));
+        assert!(painted_has(&h, "None applied yet. + offers the stereotypes of the profiles applied to Commerce or a package around it."));
+        // F4: the picker.
+        let at = rect_of(&h, crate::uml_stereotypes::ADD_ID).center();
+        click(&mut h, at);
+        assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::StereotypePick));
+        assert!(painted_has(&h, "APPLY TO ORDER"), "{theme:?}: {:?}", painted(&h));
+        assert!(painted_has(&h, "properties only") && painted_has(&h, "associations only") && painted_has(&h, "Logging not applied"));
+        let id_row = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let s = st.alive().find(|o| archforge_uml::profiles::is_stereotype(st, *o) && archforge_core::name_of(st, *o) == "Id").unwrap();
+            format!("{}.{}", crate::uml_stereotypes::ADD_ID, st.uuid(s).unwrap())
+        };
+        assert!(h.query_by_label("Id").is_some(), "a refused row keeps its accessible name");
+        let before = h.state().session.as_ref().unwrap().revision();
+        let at = rect_of(&h, &id_row).center();
+        click(&mut h, at);
+        assert_eq!(h.state().session.as_ref().unwrap().revision(), before, "a refused row picks nothing");
+        // Typing filters; Enter applies the first that applies.
+        h.event(egui::Event::Text("ent".into()));
+        h.run();
+        assert!(!ids(&h).contains(&id_row), "{theme:?}: filtered out");
+        assert!(painted_has(&h, "Filter: ent"));
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Apply stereotype"));
+        assert_eq!(h.state().panels.menu, None);
+        h.run();
+        assert!(painted_has(&h, "Stereotypes · 1") && painted_has(&h, "«Entity»") && painted_has(&h, "Persistence"));
+        assert!(painted_has(&h, "default"), "{theme:?}: cached shows its default with the tag");
+        assert!(h.query_by_label("cached: false (default)").is_some(), "the select's accessible name says the default");
+        // F3: a value typed in its field, one step.
+        let (table, cached) = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let props = archforge_uml::profiles::properties(st, st.by_uuid(archforge_mof::Uuid::parse(&entity).unwrap()).unwrap());
+            (st.uuid(props[0]).unwrap(), st.uuid(props[1]).unwrap())
+        };
+        let field = |p: archforge_mof::Uuid| format!("{}.{entity}.value.{p}", crate::uml_stereotypes::APPLIED_ID);
+        type_into(&mut h, &field(table), "orders");
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Set stereotype value"));
+        let shown = |h: &Harness<'static, Shell>, p: archforge_mof::Uuid| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let o = st.by_uuid(order).unwrap();
+            let i = archforge_uml::applications::application(st, o, st.by_uuid(archforge_mof::Uuid::parse(&entity).unwrap()).unwrap()).unwrap();
+            archforge_uml::applications::shown(st, i, st.by_uuid(p).unwrap())
+        };
+        assert_eq!(shown(&h, table).as_deref(), Some("\"orders\""));
+        // A select's pick sets it, its Default row clears it.
+        let at = rect_of(&h, &field(cached)).center();
+        click(&mut h, at);
+        let at = rect_of(&h, &format!("{}.1", field(cached))).center();
+        click(&mut h, at);
+        assert_eq!(shown(&h, cached).as_deref(), Some("true"));
+        let at = rect_of(&h, &field(cached)).center();
+        click(&mut h, at);
+        assert!(painted_has(&h, "Default (false)"));
+        let at = rect_of(&h, &format!("{}.0", field(cached))).center();
+        click(&mut h, at);
+        assert_eq!(shown(&h, cached), None, "{theme:?}: back to its default, unset");
+        // A value that does not read stays in its field with the reason; nothing is written.
+        let rows_p = archforge_mof::Uuid::parse(&rows_p).unwrap();
+        let before = h.state().session.as_ref().unwrap().revision();
+        type_into(&mut h, &field(rows_p), "many");
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert_eq!(h.state().session.as_ref().unwrap().revision(), before, "{theme:?}: nothing written");
+        assert!(painted_has(&h, "many is no value of rows. A whole number, such as 42 or -7."), "{theme:?}: {:?}", painted(&h));
+        assert!(ids(&h).contains(&format!("{}.refusal", field(rows_p))));
+        // Models and the card say «Entity».
+        assert!(painted_has(&h, "«Entity»"));
+        let card = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let o = st.by_uuid(order).unwrap();
+            let d = st.by_uuid(h.state().canvas.active.unwrap()).unwrap();
+            archforge_uml::figures::card(st, o, d).unwrap()
+        };
+        assert_eq!(card.eyebrow, archforge_diagram::figure::Text::Plain("«Entity»".into()));
+        assert_eq!(card.compartments.len(), 2, "no values while the diagram hides them");
+        // Show stereotype values on this diagram: Order's card lists table, and grows to show it.
+        h.state_mut().panels.stereotypes.value = None;
+        let height = |h: &Harness<'static, Shell>| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            archforge_diagram::grid::bounds_of(st, st.by_uuid(archforge_mof::Uuid::parse(&nodes["Order"]).unwrap()).unwrap()).height
+        };
+        let low = height(&h);
+        h.run();
+        let at = rect_of(&h, crate::uml_stereotypes::SHOW_ID).center();
+        click(&mut h, at);
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Show stereotype values"));
+        assert!(height(&h) > low, "{theme:?}: the card grew to show its values");
+        h.run();
+        assert!(painted_has(&h, "table = \"orders\""), "{theme:?}: {:?}", painted(&h));
+        // The bin takes it off; the stereotype stays.
+        let at = rect_of(&h, &format!("{}.{entity}.remove", crate::uml_stereotypes::APPLIED_ID)).center();
+        click(&mut h, at);
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Unapply stereotype"));
+        h.run();
+        assert!(painted_has(&h, "Stereotypes · 0"));
+    }
+}
+
+/// Deleting an element its stereotypes are applied to asks first, from Models too, and the dialog
+/// names the applications that go with it and with what it takes along (owner decision for
+/// AR-135, the design silent: as the nested classifiers are named); the confirmation removes them in
+/// one step. A member selected on its class's panel has the section for itself.
+#[test]
+fn deleting_a_stereotyped_element_names_its_applications() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1100.0));
+        crate::uml_profiles::put_profiles(h.state_mut(), true).unwrap();
+        // A member selected: the section is its own.
+        let id_attr = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let o = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(st, *o) == "Order").unwrap();
+            st.uuid(archforge_uml::members::attributes(st, o).into_iter().find(|a| archforge_core::name_of(st, *a) == "id").unwrap()).unwrap()
+        };
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [id_attr.to_string()] })).unwrap();
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        h.run();
+        assert!(painted_has(&h, "Stereotypes of id · 1"), "{theme:?}: {:?}", painted(&h));
+        assert!(painted_has(&h, "«Id» + id : Integer"), "the member's row says its stereotype");
+        // Order goes with «Entity» and its id's «Id».
+        select_named(&mut h, archforge_uml::CLASS, "Order");
+        crate::explorer::remove_selection(h.state_mut());
+        h.run();
+        let asked = h.state().explorer.delete.clone().expect("a dialog");
+        assert_eq!(asked.applications, ["«Entity» on Order", "«Id» on id", "«Reference» on places"]);
+        let said = "3 stereotype applications go with it: «Entity» on Order, «Id» on id, «Reference» on places.";
+        assert!(painted_has(&h, said), "{theme:?}: {:?}", painted(&h));
+        let at = rect_of(&h, "workspace.explorer.delete.confirm").center();
+        click(&mut h, at);
+        let st = h.state().session.as_ref().unwrap().doc();
+        let left: Vec<String> = st
+            .alive()
+            .filter(|o| archforge_uml::applications::is_application(st, *o))
+            .filter_map(|i| archforge_uml::profiles::element_of(st, i).map(|e| archforge_core::name_of(st, e)))
+            .collect();
+        assert_eq!(left, ["Customer", "id"], "{theme:?}: Customer's stay");
+    }
+}
+
+/// Removing a member from its editor asks first when stereotype applications would go with it, the
+/// dialog naming them as every other delete of a carrier does, and writes nothing until confirmed;
+/// a member without one goes at once, as before (AR-135).
+#[test]
+fn a_members_remove_asks_before_its_stereotype_applications_go() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1100.0));
+        crate::uml_profiles::put_profiles(h.state_mut(), true).unwrap();
+        let order = select_named(&mut h, archforge_uml::CLASS, "Order");
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        let member = |h: &Harness<'static, Shell>, n: &str| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let o = st.by_uuid(order).unwrap();
+            archforge_uml::members::attributes(st, o).into_iter().find(|a| archforge_core::name_of(st, *a) == n).and_then(|a| st.uuid(a).ok())
+        };
+        let id_attr = member(&h, "id").unwrap();
+        crate::uml_panel::open(h.state_mut(), order, crate::uml_panel::MemberKind::Attribute, Some(id_attr));
+        h.run();
+        let before = h.state().session.as_ref().unwrap().revision();
+        let at = rect_of(&h, "workspace.properties.member.remove").center();
+        click(&mut h, at);
+        assert_eq!(h.state().session.as_ref().unwrap().revision(), before, "{theme:?}: nothing written before the answer");
+        let asked = h.state().explorer.delete.clone().expect("a dialog");
+        assert_eq!(asked.applications, ["«Id» on id"]);
+        assert!(painted_has(&h, "1 stereotype application goes with it: «Id» on id."), "{theme:?}: {:?}", painted(&h));
+        let at = rect_of(&h, "workspace.explorer.delete.confirm").center();
+        click(&mut h, at);
+        assert_eq!(member(&h, "id"), None, "{theme:?}: removed once confirmed");
+        // One without an application goes at once.
+        let placed = member(&h, "placedAt").unwrap();
+        crate::uml_panel::open(h.state_mut(), order, crate::uml_panel::MemberKind::Attribute, Some(placed));
+        h.run();
+        let at = rect_of(&h, "workspace.properties.member.remove").center();
+        click(&mut h, at);
+        assert!(h.state().explorer.delete.is_none());
+        assert_eq!(member(&h, "placedAt"), None);
+    }
+}
+
+/// An association end's part of Properties has a Stereotypes section of its own, beside the
+/// association's, its ids its own: its picker applies a stereotype extending Property to that end
+/// alone, one undo step (AR-135).
+#[test]
+fn an_association_end_takes_stereotypes_in_its_part_of_properties() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 2000.0));
+        crate::uml_profiles::put_profiles(h.state_mut(), false).unwrap();
+        let places = select_named(&mut h, archforge_uml::ASSOCIATION, "places");
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        h.run();
+        let ids_now = ids(&h);
+        assert!(ids_now.iter().any(|i| i == "workspace.properties.stereotypes.add"), "{theme:?}: the association's own");
+        assert!(ids_now.iter().any(|i| i == "workspace.properties.end.0.stereotypes.add"), "{theme:?}: {ids_now:?}");
+        let id_stereotype = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let s = st.alive().find(|o| archforge_uml::profiles::is_stereotype(st, *o) && archforge_core::name_of(st, *o) == "Id").unwrap();
+            st.uuid(s).unwrap()
+        };
+        let at = rect_of(&h, "workspace.properties.end.0.stereotypes.add").center();
+        click(&mut h, at);
+        assert!(!ids(&h).iter().any(|i| i.starts_with("workspace.properties.stereotypes.add.")), "{theme:?}: only the end's picker opens");
+        let at = rect_of(&h, &format!("workspace.properties.end.0.stereotypes.add.{id_stereotype}")).center();
+        click(&mut h, at);
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Apply stereotype"));
+        let st = h.state().session.as_ref().unwrap().doc();
+        let a = st.by_uuid(places).unwrap();
+        let ends = archforge_uml::figures::member_ends(st, a).unwrap();
+        assert_eq!(archforge_uml::applications::keywords(st, ends[0]).as_deref(), Some("«Id»"), "{theme:?}");
+        assert_eq!(archforge_uml::applications::keywords(st, ends[1]), None);
+        assert_eq!(archforge_uml::applications::keywords(st, a), None);
+    }
+}
+
+/// A nested package carrying a stereotype is not removed unasked from Models: the dialog names the
+/// application and says its contents move up, and once confirmed the toast says where they went,
+/// as a removal without the dialog does (AR-135). With the Stereotypes picker open, Backspace edits
+/// its filter and never deletes the selected card.
+#[test]
+fn a_stereotyped_nested_package_asks_and_the_picker_keeps_backspace() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1100.0));
+        let (commerce, persistence, _) = crate::uml_profiles::put_profiles(h.state_mut(), false).unwrap();
+        {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let module =
+                s.execute("uml.stereotype.add", &serde_json::json!({ "profile": persistence, "name": "Module", "extends": ["Package"] })).unwrap();
+            let billing = s.execute("uml.package.add", &serde_json::json!({ "name": "Billing", "parent": commerce })).unwrap();
+            let billing = billing.value["id"].as_str().unwrap().to_string();
+            s.execute("uml.class.add", &serde_json::json!({ "package": billing, "name": "Invoice" })).unwrap();
+            s.execute("uml.stereotype.apply", &serde_json::json!({ "element": billing, "stereotype": module.value["id"] })).unwrap();
+        }
+        select_named(&mut h, archforge_uml::PACKAGE, "Billing");
+        let before = h.state().session.as_ref().unwrap().revision();
+        crate::explorer::remove_selection(h.state_mut());
+        h.run();
+        assert_eq!(h.state().session.as_ref().unwrap().revision(), before, "{theme:?}: nothing removed unasked");
+        let asked = h.state().explorer.delete.clone().expect("a dialog");
+        assert_eq!(asked.applications, ["«Module» on Billing"]);
+        assert!(painted_has(&h, "What it holds moves to Commerce."), "{theme:?}: {:?}", painted(&h));
+        let at = rect_of(&h, "workspace.explorer.delete.confirm").center();
+        click(&mut h, at);
+        let toast = h.state().canvas.toast.as_ref().map(|t| t.text.clone());
+        assert_eq!(toast.as_deref(), Some("Billing removed; what it held moved to Commerce"));
+        let st = h.state().session.as_ref().unwrap().doc();
+        let invoice =
+            st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(st, *o) == "Invoice").unwrap();
+        assert_eq!(archforge_uml::commands::package_of(st, invoice).map(|p| archforge_core::name_of(st, p)).as_deref(), Some("Commerce"));
+        // Backspace with the picker open edits its filter, the selected card stays.
+        let order = select_named(&mut h, archforge_uml::CLASS, "Order");
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        h.state_mut().canvas.focused = true;
+        h.run();
+        let shown = |h: &Harness<'static, Shell>| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            archforge_diagram::views_of(st, st.by_uuid(order).unwrap()).2.len()
+        };
+        let cards = shown(&h);
+        let at = rect_of(&h, crate::uml_stereotypes::ADD_ID).center();
+        click(&mut h, at);
+        h.state_mut().canvas.focused = true;
+        h.event(egui::Event::Text("en".into()));
+        h.run();
+        key(&mut h, egui::Key::Backspace, egui::Modifiers::NONE);
+        assert_eq!(h.state().panels.stereotypes.filter, "e", "{theme:?}: Backspace edits the filter");
+        assert_eq!(shown(&h), cards, "{theme:?}: the card stays on the diagram");
+        assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::StereotypePick));
+    }
 }

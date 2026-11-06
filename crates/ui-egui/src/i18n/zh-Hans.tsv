@@ -66,12 +66,14 @@ str		Delete {name} from the model?	从模型中删除 {name}？
 str		Narrow the filter to see more	缩小筛选范围以查看更多
 str		No free name is left	没有可用的名称了
 str		What it holds goes with it.	它包含的内容也会一并删除。
+str		What it holds moves to {parent}.	其所含内容将移到 {parent}。
 str		Remove from this diagram only	仅从此图中移除
 plural		It disappears from {n} diagram.	将从 {n} 个图中消失。
 plural		{n} relationship goes with it.	{n} 个关系将一并删除。
 plural		{n} key goes with it.	{n} 个键将一并删除。
 plural		{n} foreign key goes with it.	{n} 个外键将一并删除。
 plural		{n} nested classifier goes with it: {names}.	{n} 个嵌套分类器将一并删除：{names}。
+plural		{n} stereotype application goes with it: {names}.	{n} 个构造型应用将一并删除：{names}。
 str		Delete	删除
 str		Schema · model	架构 · 模型
 str		Table · model, in every diagram	表 · 模型，出现在每张图中
@@ -664,6 +666,9 @@ str		«enumeration»	«enumeration»
 str		Data type	数据类型
 str		Primitive type	基本类型
 str		«dataType»	«dataType»
+str		«stereotype»	«stereotype»
+str		«metaclass»	«metaclass»
+str		{keywords} · {package}	{keywords} · {package}
 str		«primitive»	«primitive»
 str		Association class	关联类
 str		Classifier	分类器
@@ -710,6 +715,7 @@ str		A subclass could not redefine {name} where it is inherited. Shown as {leaf}
 str		A subclass could not redefine this member. Shown as {leaf} after it.	子类不能重定义此成员。在其后显示为 {leaf}。
 plural		{names} redefines it. Remove that redefinition first.	{names} 重定义了它。请先移除该重定义。
 str		Add attribute	添加属性
+str		Add property	添加属性
 str		Add operation	添加操作
 str		Add literal	添加字面量
 str		More details in Properties	在属性中查看更多详细信息
@@ -730,6 +736,102 @@ str		{kind} · nested in {owner} · model, in every diagram	{kind} · 嵌套于 
 str		Nested classifiers · {n}	嵌套分类器 · {n}
 str		Add nested classifier	添加嵌套分类器
 str		None yet. Add one here or from Models ▸ New inside {name}; both offer the same kinds.	暂无。可在此处或从“模型 ▸ 在 {name} 中新建”添加；两者提供相同的种类。
+str		New	新建
+str		New in {name}	在 {name} 中新建
+str	uml	Profile	配置文件
+str		profile	配置文件
+str		Stereotype	构造型
+str		extends {metaclasses}	扩展 {metaclasses}
+str		extends nothing yet	尚未扩展任何元类
+str		applies {profiles}	应用 {profiles}
+str		Profile · model	配置文件 · 模型
+str		This profile	此配置文件
+str		On this profile · {n}	此配置文件上 · {n}
+str		Stereotype · in profile {profile} · model	构造型 · 位于配置文件 {profile} · 模型
+str		This stereotype	此构造型
+str		On this stereotype · {n}	此构造型上 · {n}
+str		Metaclass · UML	元类 · UML
+str		Metaclass	元类
+str		This metaclass	此元类
+str		On this metaclass · {n}	此元类上 · {n}
+str		Metaclasses carry no skills	元类不带技能
+str		A UML metaclass, which stereotypes extend. It is UML's own, kept out of Models and the type menus, and never changes.	构造型所扩展的 UML 元类。它属于 UML 本身，不出现在模型和类型菜单中，也从不改变。
+str		Stereotypes · {n}	构造型 · {n}
+str		Add stereotype	添加构造型
+str		None yet. Add one here or from Models ▸ New ▸ Stereotype.	尚无。可在此处或通过 模型 ▸ 新建 ▸ 构造型 添加。
+str		Open profile diagram	打开配置文件图
+str		A package applies the profile through Applied profiles in its Properties; its elements may then use the profile's stereotypes.	包可通过其属性中的“已应用配置文件”应用该配置文件；其元素随后即可使用该配置文件的构造型。
+str		Extends · {n}	扩展 · {n}
+str		Add extended metaclass	添加扩展的元类
+str		{name} extends	{name} 扩展
+str		extended	已扩展
+str		Extended already	已扩展
+str		not drawn by Archforge yet	Archforge 尚未绘制
+str		Offered: the metaclasses Archforge draws. Other metaclasses are listed, disabled, as not drawn by Archforge yet.	可选：Archforge 绘制的元类。其他元类会以禁用状态列出，标明 Archforge 尚未绘制。
+str		Properties · {n}	属性 · {n}
+str		Types: primitive types, enumerations and data types of the model. Renaming {name} keeps every application; removing it is refused while elements use it.	类型：模型的基本类型、枚举和数据类型。重命名 {name} 会保留所有应用；只要仍有元素使用它，就拒绝删除。
+str		Applied profiles · {n}	已应用的配置文件 · {n}
+str		Apply profile	应用配置文件
+str		Apply to {name}	应用到 {name}
+str		applied	已应用
+str		Applied already	已应用
+str		No profile yet	尚无配置文件
+str		Make one with New ▸ Profile in Models.	可在模型中通过 新建 ▸ 配置文件 创建。
+str		Elements inside {name}, and inside its packages, can use the stereotypes of the applied profiles. Applying is one undo step; it adds no stereotype by itself.	{name} 及其包中的元素可以使用已应用配置文件的构造型。应用是一个撤销步骤；它本身不会添加任何构造型。
+str		Unapply profile	取消应用配置文件
+str		{profile} is in use in {package}: {uses}. Remove those first.	{profile} 在 {package} 中正在使用：{uses}。请先移除这些使用。
+str		{name} is in use: {uses}. Remove those first.	{name} 正在使用：{uses}。请先移除这些使用。
+str		{name} applies the profiles its elements use: {uses}. Remove those first.	{name} 应用了其元素所使用的配置文件：{uses}。请先移除这些使用。
+str		{name} holds the profile {profile}, which is in use: {uses}. Remove those first.	{name} 包含正在使用的配置文件 {profile}：{uses}。请先移除这些使用。
+str		«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.	{metaclass} 上的 «{stereotype}» 正在使用：{uses}。请先移除这些使用。
+str		«{stereotype}» on {elements}	{elements} 上的 «{stereotype}»
+str		{first} and {second}	{first} 和 {second}
+plural		Show the use	显示 {n} 处使用
+str		A stereotype is shown on its profile's diagram	构造型显示在其配置文件的图中
+str		Place stereotype	放置构造型
+# Stereotypes applied (AR-135)
+str		Stereotypes of {name} · {n}	{name} 的构造型 · {n}
+str		Stereotypes of this end · {n}	此端的构造型 · {n}
+str		Apply stereotype	应用构造型
+str		Remove «{stereotype}» from {name}	从 {name} 移除 «{stereotype}»
+str	value	default	默认
+str		{value} (default)	{value}（默认）
+str		Default ({value})	默认（{value}）
+str		No value	无值
+str		Values you set are stored on {name}; a default shows the tag until you change it. Remove takes «{stereotype}» off {name} and keeps its definition.	您设置的值保存在 {name} 上；默认值在您更改之前会显示标签。移除会从 {name} 上取下 «{stereotype}»，并保留其定义。
+str		None applied yet. + offers the stereotypes of the profiles applied to {package} or a package around it.	尚未应用。+ 提供应用于 {package} 或其外层包的配置文件中的构造型。
+str		Show stereotype values on this diagram	在此图中显示构造型值
+str		Show stereotype values	显示构造型值
+str		Set stereotype value	设置构造型值
+str		Filter: {text}	筛选：{text}
+str		No stereotype matches.	没有匹配的构造型。
+str		No stereotype yet. Make one in a profile from Models ▸ New ▸ Stereotype.	尚无构造型。请通过 模型 ▸ 新建 ▸ 构造型 在配置文件中创建。
+str		{kinds} only	仅{kinds}
+str		classes	类
+str		interfaces	接口
+str		enumerations	枚举
+str		data types	数据类型
+str		properties	属性
+str		operations	操作
+str		associations	关联
+str		generalizations	泛化
+str		packages	包
+str		{profile} not applied	{profile} 未应用
+str		«{stereotype}» does not extend {metaclass}: it extends {metaclasses}.	«{stereotype}» 不扩展 {metaclass}：它扩展 {metaclasses}。
+str		«{stereotype}» extends no metaclass yet.	«{stereotype}» 尚未扩展任何元类。
+str		Its profile {profile} is not applied to {package} or a package around it.	其配置文件 {profile} 未应用于 {package} 或其外层包。
+str		{value} is no value of {name}. {accepted}	{value} 不是 {name} 的值。{accepted}
+str		A whole number, such as 42 or -7.	整数，例如 42 或 -7。
+str		A number, such as 2.5 or -1e3.	数字，例如 2.5 或 -1e3。
+str		true or false.	true 或 false。
+str		A whole number of 0 or more, or *.	0 或更大的整数，或 *。
+str		Any text.	任意文本。
+str		One of {literals}.	{literals} 之一。
+str		{name} holds at most {n} values.	{name} 最多包含 {n} 个值。
+str		{name} holds each value once, and {value} is there twice.	{name} 每个值只能出现一次，而 {value} 出现了两次。
+str		A value is empty. Clear the field to show the default.	有一个值为空。清空该字段即可显示默认值。
+str		A value is longer than {n} characters.	有一个值超过 {n} 个字符。
+plural		{name} holds [{bounds}] values; {n} is given.	{name} 包含 [{bounds}] 个值；给出了 {n} 个。
 str		nested	嵌套
 str		package	包
 str		class	类
@@ -905,6 +1007,114 @@ str		Counted per qualifier value of the other end; shown next to {class}.	按另
 str		One {owner} and one {qualifiers} pick {multiplicity} {target}.	一个 {owner} 和一个 {qualifiers} 选出 {multiplicity} 个 {target}。
 str		Type a name: a qualifier without one picks nothing.	请输入名称：没有名称的限定符什么也选不出。
 str		This end already has a qualifier named {name}. Pick another name.	此端已有名为 {name} 的限定符。请另选一个名称。
+# Templates (AR-130)
+str		Template parameters · {n}	模板参数 · {n}
+str		Add template parameter	添加模板参数
+str		Constrained to	约束为
+str		Any	任意
+str		Value	值
+str		Parameter kind	参数种类
+str		not yet	暂不支持
+str		{kind} template parameters are not supported yet.	{kind} 模板参数暂不支持。
+str		this parameter	此参数
+str		Arguments for {name} must be {constraint} or specialise it.	{name} 的实参必须是 {constraint} 或其特化。
+str		Arguments for {name} must be classes.	{name} 的实参必须是类。
+str		Arguments for {name} must be interfaces.	{name} 的实参必须是接口。
+str		Arguments for {name} must be data types.	{name} 的实参必须是数据类型。
+str		Arguments for {name} must be enumerations.	{name} 的实参必须是枚举。
+str		Arguments for {name} must be primitive types.	{name} 的实参必须是基本类型。
+str		Bindings that leave it out use {default}.	省略它的绑定使用 {default}。
+str		Renaming or reordering keeps every binding.	重命名或重新排序会保留所有绑定。
+str		Show the binding	显示绑定
+str		Show the binding selects it, on the canvas and in Properties.	“显示绑定”会选中绑定本身，在画布和属性中均可见。
+str		Renaming {name} or changing its default is allowed: bindings follow the parameter, not its name.	可以重命名 {name} 或更改其默认值：绑定跟随参数，而不是其名称。
+str		{bound} binds {name} -> {actual}. Change or remove that binding first, then remove {name}.	{bound} 将 {name} 绑定为 -> {actual}。请先更改或删除该绑定，再删除 {name}。
+str		{bound} binds {template}, and {name} is its last parameter. Remove that binding first, then remove {name}.	{bound} 绑定了 {template}，而 {name} 是它的最后一个参数。请先删除该绑定，再删除 {name}。
+plural		{n} more binding uses it too.	另有 {n} 个绑定也在使用它。
+str		Type a name: a template parameter without one stands for nothing.	请输入名称：没有名称的模板参数不代表任何内容。
+str		{template} already has a template parameter named {name}. Pick another name.	{template} 已有名为 {name} 的模板参数。请换一个名称。
+str		{default} does not fit {name}: pick a default its arguments could be.	{default} 不适合 {name}：请选择可以作为其实参的默认值。
+str		{bound} binds {name} -> {actual}, which would no longer fit. Change or remove that binding first.	{bound} 将 {name} 绑定为 -> {actual}，修改后将不再适合。请先更改或删除该绑定。
+str		template parameter	模板参数
+str		template	模板
+plural		{kind} · template, {n} parameter · model, in every diagram	{kind} · 模板，{n} 个参数 · 模型，在所有图中
+# Template bindings (AR-131)
+str		Template binding	模板绑定
+str		Template binding: from the bound class to its template	模板绑定：从绑定的类指向其模板
+str		«bind»	«bind»
+str		Add template binding	添加模板绑定
+str		This template binding	此模板绑定
+str		On this template binding · {n}	在此模板绑定上 · {n}
+str		Binding · {bound} binds {template} · model, in every diagram	绑定 · {bound} 绑定 {template} · 模型，在每个图中
+str		binds {template}	绑定 {template}
+str		Binding	绑定
+str		Bound element	绑定元素
+str		Template	模板
+str		Substitutions · {n}	替换 · {n}
+str		default	默认
+str		Default ({name})	默认值（{name}）
+str		Choose a class	选择一个类
+str		Choose an interface	选择一个接口
+str		Choose a data type	选择一个数据类型
+str		Choose an enumeration	选择一个枚举
+str		Choose a primitive type	选择一个基本类型
+str		{name} needs an argument: pick a class.	{name} 需要一个实参：请选择一个类。
+str		{name} needs an argument: pick an interface.	{name} 需要一个实参：请选择一个接口。
+str		{name} needs an argument: pick a data type.	{name} 需要一个实参：请选择一个数据类型。
+str		{name} needs an argument: pick an enumeration.	{name} 需要一个实参：请选择一个枚举。
+str		{name} needs an argument: pick a primitive type.	{name} 需要一个实参：请选择一个基本类型。
+plural		{names} can keep its default.	{names} 可以保留默认值。
+str		New template binding	新建模板绑定
+str		Drawing · not in the model until you apply	正在绘制 · 应用之前不在模型中
+str		Releasing the line on a template opens this. The line stays dashed in the accent colour until Apply; one undo step then adds the binding with its arguments. Cancel or Esc removes the draft and leaves nothing.	在模板上松开线会打开此处。在应用之前，线保持为强调色虚线；应用后，一个撤销步骤会添加绑定及其实参。取消或 Esc 会移除草稿，不留下任何内容。
+str		Another template takes arguments of its own: pick them, then Apply. Cancel or Esc keeps the binding as it is.	另一个模板需要自己的实参：先选择它们，再应用。取消或 Esc 会保持绑定不变。
+str		Each selector lists only the arguments that fit its parameter: its kind, and its constraint or what specialises it. A parameter on its default follows the template's default.	每个选择器只列出适合其参数的实参：参数的种类，以及其约束或特化该约束的类型。使用默认值的参数会跟随模板的默认值。
+str		The line reads «bind» with each parameter and its argument, and points at the template. The binding keeps its arguments in the model; it is neither a dependency nor a realization.	线上写着 «bind» 以及每个参数和它的实参，并指向模板。绑定在模型中保存其实参；它既不是依赖，也不是实现。
+str		Only a class, an interface or a data type binds a template	只有类、接口或数据类型才能绑定模板
+str		A binding ends at a template: a class, an interface or a data type with template parameters	绑定的终点是模板：带有模板参数的类、接口或数据类型
+str		A template is bound by a classifier of its own kind	模板只能由同种类的分类器绑定
+str		A template does not bind itself	模板不能绑定自身
+str		This one binds that template already	它已经绑定了该模板
+str		That template binds this one already, which would make a cycle	该模板已经绑定了它，这会形成循环
+str		Pick another template in the binding's Properties, where its arguments are chosen.	请在绑定的属性中选择另一个模板，在那里选择它的实参。
+str		N-ary association	多元关联
+str		this n-ary association	此多元关联
+str		N-ary association: click each class in turn, then press Enter	多元关联：依次点击每个类，然后按 Enter
+str		An n-ary association is drawn by clicking each class in turn	多元关联通过依次点击每个类来绘制
+str		Enter finishes at 3+ · Backspace drops the last · Esc cancels	满 3 个后按 Enter 完成 · Backspace 去掉最后一个 · Esc 取消
+str		Click a class for the new end	点击一个类作为新的端
+str		Esc cancels	Esc 取消
+str		An n-ary association joins classes and interfaces	多元关联连接类和接口
+str		An association takes at most {n} ends	一个关联最多有 {n} 个端
+str		An n-ary association needs three ends or more: click another class	多元关联需要三个或更多的端：请再点击一个类
+str		Add n-ary association	添加多元关联
+str		New n-ary association	新建多元关联
+str		Drawing · not in the model until you finish	绘制中 · 完成前不进入模型
+str		Ends so far · {n}	目前的端 · {n}
+str		Next: click a class on the canvas	下一步：点击画布上的类
+str		Next: click a class on the canvas, or press Enter to finish	下一步：点击画布上的类，或按 Enter 完成
+str		Enter, or a double-click on the last class, finishes once there are 3 ends or more. One undo step adds the association, its diamond and every end.	有 3 个或更多端后，按 Enter 或双击最后一个类即可完成。一个撤销步骤会添加关联、其菱形和每个端。
+str		Esc, switching tools or clicking empty canvas cancels and leaves nothing in the model. Backspace takes the last end off.	按 Esc、切换工具或点击空白画布会取消，模型中不留下任何内容。按 Backspace 会去掉最后一个端。
+str		New ends are named after their class and start at *; change them after finishing.	新的端以其类命名，并从 * 开始；完成后再修改。
+str		Ends · {n}	端 · {n}
+str		Add end	添加端
+str		Draws a new leg	绘制一条新分支
+str		Reconnect end	重新连接端
+str		Drag a leg end	拖动分支的端点
+str		Open a class diagram to pick the new end's class	请打开一个类图以选择新端的类
+str		Ends of an n-ary association are not aggregations, so Aggregation is not offered. Repeat a type for two ends when the roles differ.	多元关联的端不是聚合，因此不提供聚合。角色不同时，两个端可以使用同一类型。
+str		Another end has the role {role} already. Pick another role.	另一个端已有角色 {role}。请另选一个角色。
+str		Set association end	设置关联端
+str		End {role} removed	已移除端 {role}
+str		Selecting the diamond or any leg selects the one association. Remove from this diagram hides it here; Delete from the model deletes it and its ends everywhere.	选择菱形或任一分支即选择这一个关联。从此图中移除只在此处隐藏它；从模型中删除会在所有地方删除它及其端。
+str		Two ends would remain	将只剩两个端
+str		An n-ary association needs three ends or more. Without {role}, only {first} and {second} remain.	多元关联需要三个或更多的端。去掉 {role} 后，只剩 {first} 和 {second}。
+str		Keep 3 ends	保留 3 个端
+str		Make it binary	改为二元
+str		Make it binary turns it into a plain association between {first} and {second}, keeping both ends, as one undo step. Keep 3 ends, or Esc, changes nothing.	改为二元会把它变成 {first} 与 {second} 之间的普通关联，保留两个端，作为一个撤销步骤。保留 3 个端或按 Esc 不做任何更改。
+str		Make it binary turns {name} into a plain association between {first} and {second}, keeping its name and both ends, as one undo step. Keep 3 ends, or Esc, changes nothing.	改为二元会把 {name} 变成 {first} 与 {second} 之间的普通关联，保留其名称和两个端，作为一个撤销步骤。保留 3 个端或按 Esc 不做任何更改。
+plural		N-ary association · {n} end · model, in every diagram	多元关联 · {n} 个端 · 模型，在每个图中
+plural		N-ary association · {n} end — click a class for the next end	多元关联 · {n} 个端 — 点击一个类作为下一个端
 str		From	从
 str		General	一般
 str		Generalization	泛化

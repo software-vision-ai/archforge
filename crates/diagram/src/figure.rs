@@ -40,6 +40,9 @@ pub struct Card {
     /// What its name row says in braces after the name, as notation, never translated: `{final}`
     /// for a classifier nothing may specialize. None for nothing.
     pub braces: Option<String>,
+    /// The rows of its template signature, drawn in a dashed box over its top-right corner, one
+    /// parameter each in their order: a UML template (AR-130). Empty for none.
+    pub template: Vec<String>,
 }
 
 /// The colours a card is drawn in.
@@ -58,6 +61,9 @@ pub enum Tone {
     /// A constraint's braces beside its element (AR-133): its one row, `{expression}`, in purple,
     /// with no card around it.
     Braces,
+    /// An n-ary association's diamond (AR-128): a hollow diamond the size of its node, its name
+    /// above it, its legs running from it to the cards of its ends' classes.
+    Diamond,
 }
 
 /// A row of a compartment: a mark before it (such as `PK`, shown while the status marks are on),
@@ -88,6 +94,8 @@ pub enum EndMark {
     OneOrMore,
     /// A hollow triangle, the line stopping at its base: a generalization's general end.
     Triangle,
+    /// A filled triangle, the line stopping at its base: a UML extension's metaclass end.
+    FilledTriangle,
     /// An open arrowhead at the end: a navigable association end, a dependency's supplier.
     OpenArrow,
     /// A diamond, the line stopping at its far corner: the whole of a shared aggregation
@@ -100,7 +108,7 @@ impl EndMark {
     /// How far from its end the line stops, in diagram units, so the mark draws on its own.
     pub fn set_back(self) -> f32 {
         match self {
-            EndMark::Triangle => 12.0,
+            EndMark::Triangle | EndMark::FilledTriangle => 12.0,
             EndMark::HollowDiamond | EndMark::FilledDiamond => 20.0,
             _ => 0.0,
         }
@@ -144,6 +152,9 @@ pub struct Line {
     /// resolve it (a many-to-many relationship waiting for its mapping table).
     pub badge: bool,
     pub resolvable: bool,
+    /// The keywords written at the line's middle, above its name: a UML element's stereotypes,
+    /// `«Reference»` (AR-135). None for none.
+    pub keyword: Option<String>,
 }
 
 impl Default for Line {
@@ -157,6 +168,7 @@ impl Default for Line {
             note: None,
             badge: false,
             resolvable: false,
+            keyword: None,
         }
     }
 }

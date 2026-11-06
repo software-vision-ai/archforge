@@ -65,12 +65,14 @@ str		Delete {name} from the model?	Delete {name} from the model?
 str		Narrow the filter to see more	Narrow the filter to see more
 str		No free name is left	No free name is left
 str		What it holds goes with it.	What it holds goes with it.
+str		What it holds moves to {parent}.	What it holds moves to {parent}.
 str		Remove from this diagram only	Remove from this diagram only
 plural		It disappears from {n} diagram.	It disappears from {n} diagram.|It disappears from {n} diagrams.
 plural		{n} relationship goes with it.	{n} relationship goes with it.|{n} relationships go with it.
 plural		{n} key goes with it.	{n} key goes with it.|{n} keys go with it.
 plural		{n} foreign key goes with it.	{n} foreign key goes with it.|{n} foreign keys go with it.
 plural		{n} nested classifier goes with it: {names}.	{n} nested classifier goes with it: {names}.|{n} nested classifiers go with it: {names}.
+plural		{n} stereotype application goes with it: {names}.	{n} stereotype application goes with it: {names}.|{n} stereotype applications go with it: {names}.
 str		Delete	Delete
 str		Schema · model	Schema · model
 str		Table · model, in every diagram	Table · model, in every diagram
@@ -663,6 +665,9 @@ str		«enumeration»	«enumeration»
 str		Data type	Data type
 str		Primitive type	Primitive type
 str		«dataType»	«dataType»
+str		«stereotype»	«stereotype»
+str		«metaclass»	«metaclass»
+str		{keywords} · {package}	{keywords} · {package}
 str		«primitive»	«primitive»
 str		Association class	Association class
 str		Classifier	Classifier
@@ -709,6 +714,7 @@ str		A subclass could not redefine {name} where it is inherited. Shown as {leaf}
 str		A subclass could not redefine this member. Shown as {leaf} after it.	A subclass could not redefine this member. Shown as {leaf} after it.
 plural		{names} redefines it. Remove that redefinition first.	{names} redefines it. Remove that redefinition first.|{names} redefine it. Remove those redefinitions first.
 str		Add attribute	Add attribute
+str		Add property	Add property
 str		Add operation	Add operation
 str		Add literal	Add literal
 str		More details in Properties	More details in Properties
@@ -729,6 +735,102 @@ str		{kind} · nested in {owner} · model, in every diagram	{kind} · nested in 
 str		Nested classifiers · {n}	Nested classifiers · {n}
 str		Add nested classifier	Add nested classifier
 str		None yet. Add one here or from Models ▸ New inside {name}; both offer the same kinds.	None yet. Add one here or from Models ▸ New inside {name}; both offer the same kinds.
+str		New	New
+str		New in {name}	New in {name}
+str	uml	Profile	Profile
+str		profile	profile
+str		Stereotype	Stereotype
+str		extends {metaclasses}	extends {metaclasses}
+str		extends nothing yet	extends nothing yet
+str		applies {profiles}	applies {profiles}
+str		Profile · model	Profile · model
+str		This profile	This profile
+str		On this profile · {n}	On this profile · {n}
+str		Stereotype · in profile {profile} · model	Stereotype · in profile {profile} · model
+str		This stereotype	This stereotype
+str		On this stereotype · {n}	On this stereotype · {n}
+str		Metaclass · UML	Metaclass · UML
+str		Metaclass	Metaclass
+str		This metaclass	This metaclass
+str		On this metaclass · {n}	On this metaclass · {n}
+str		Metaclasses carry no skills	Metaclasses carry no skills
+str		A UML metaclass, which stereotypes extend. It is UML's own, kept out of Models and the type menus, and never changes.	A UML metaclass, which stereotypes extend. It is UML's own, kept out of Models and the type menus, and never changes.
+str		Stereotypes · {n}	Stereotypes · {n}
+str		Add stereotype	Add stereotype
+str		None yet. Add one here or from Models ▸ New ▸ Stereotype.	None yet. Add one here or from Models ▸ New ▸ Stereotype.
+str		Open profile diagram	Open profile diagram
+str		A package applies the profile through Applied profiles in its Properties; its elements may then use the profile's stereotypes.	A package applies the profile through Applied profiles in its Properties; its elements may then use the profile's stereotypes.
+str		Extends · {n}	Extends · {n}
+str		Add extended metaclass	Add extended metaclass
+str		{name} extends	{name} extends
+str		extended	extended
+str		Extended already	Extended already
+str		not drawn by Archforge yet	not drawn by Archforge yet
+str		Offered: the metaclasses Archforge draws. Other metaclasses are listed, disabled, as not drawn by Archforge yet.	Offered: the metaclasses Archforge draws. Other metaclasses are listed, disabled, as not drawn by Archforge yet.
+str		Properties · {n}	Properties · {n}
+str		Types: primitive types, enumerations and data types of the model. Renaming {name} keeps every application; removing it is refused while elements use it.	Types: primitive types, enumerations and data types of the model. Renaming {name} keeps every application; removing it is refused while elements use it.
+str		Applied profiles · {n}	Applied profiles · {n}
+str		Apply profile	Apply profile
+str		Apply to {name}	Apply to {name}
+str		applied	applied
+str		Applied already	Applied already
+str		No profile yet	No profile yet
+str		Make one with New ▸ Profile in Models.	Make one with New ▸ Profile in Models.
+str		Elements inside {name}, and inside its packages, can use the stereotypes of the applied profiles. Applying is one undo step; it adds no stereotype by itself.	Elements inside {name}, and inside its packages, can use the stereotypes of the applied profiles. Applying is one undo step; it adds no stereotype by itself.
+str		Unapply profile	Unapply profile
+str		{profile} is in use in {package}: {uses}. Remove those first.	{profile} is in use in {package}: {uses}. Remove those first.
+str		{name} is in use: {uses}. Remove those first.	{name} is in use: {uses}. Remove those first.
+str		{name} applies the profiles its elements use: {uses}. Remove those first.	{name} applies the profiles its elements use: {uses}. Remove those first.
+str		{name} holds the profile {profile}, which is in use: {uses}. Remove those first.	{name} holds the profile {profile}, which is in use: {uses}. Remove those first.
+str		«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.	«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.
+str		«{stereotype}» on {elements}	«{stereotype}» on {elements}
+str		{first} and {second}	{first} and {second}
+plural		Show the use	Show the use|Show the {n} uses
+str		A stereotype is shown on its profile's diagram	A stereotype is shown on its profile's diagram
+str		Place stereotype	Place stereotype
+# Stereotypes applied (AR-135)
+str		Stereotypes of {name} · {n}	Stereotypes of {name} · {n}
+str		Stereotypes of this end · {n}	Stereotypes of this end · {n}
+str		Apply stereotype	Apply stereotype
+str		Remove «{stereotype}» from {name}	Remove «{stereotype}» from {name}
+str	value	default	default
+str		{value} (default)	{value} (default)
+str		Default ({value})	Default ({value})
+str		No value	No value
+str		Values you set are stored on {name}; a default shows the tag until you change it. Remove takes «{stereotype}» off {name} and keeps its definition.	Values you set are stored on {name}; a default shows the tag until you change it. Remove takes «{stereotype}» off {name} and keeps its definition.
+str		None applied yet. + offers the stereotypes of the profiles applied to {package} or a package around it.	None applied yet. + offers the stereotypes of the profiles applied to {package} or a package around it.
+str		Show stereotype values on this diagram	Show stereotype values on this diagram
+str		Show stereotype values	Show stereotype values
+str		Set stereotype value	Set stereotype value
+str		Filter: {text}	Filter: {text}
+str		No stereotype matches.	No stereotype matches.
+str		No stereotype yet. Make one in a profile from Models ▸ New ▸ Stereotype.	No stereotype yet. Make one in a profile from Models ▸ New ▸ Stereotype.
+str		{kinds} only	{kinds} only
+str		classes	classes
+str		interfaces	interfaces
+str		enumerations	enumerations
+str		data types	data types
+str		properties	properties
+str		operations	operations
+str		associations	associations
+str		generalizations	generalizations
+str		packages	packages
+str		{profile} not applied	{profile} not applied
+str		«{stereotype}» does not extend {metaclass}: it extends {metaclasses}.	«{stereotype}» does not extend {metaclass}: it extends {metaclasses}.
+str		«{stereotype}» extends no metaclass yet.	«{stereotype}» extends no metaclass yet.
+str		Its profile {profile} is not applied to {package} or a package around it.	Its profile {profile} is not applied to {package} or a package around it.
+str		{value} is no value of {name}. {accepted}	{value} is no value of {name}. {accepted}
+str		A whole number, such as 42 or -7.	A whole number, such as 42 or -7.
+str		A number, such as 2.5 or -1e3.	A number, such as 2.5 or -1e3.
+str		true or false.	true or false.
+str		A whole number of 0 or more, or *.	A whole number of 0 or more, or *.
+str		Any text.	Any text.
+str		One of {literals}.	One of {literals}.
+str		{name} holds at most {n} values.	{name} holds at most {n} values.
+str		{name} holds each value once, and {value} is there twice.	{name} holds each value once, and {value} is there twice.
+str		A value is empty. Clear the field to show the default.	A value is empty. Clear the field to show the default.
+str		A value is longer than {n} characters.	A value is longer than {n} characters.
+plural		{name} holds [{bounds}] values; {n} is given.	{name} holds [{bounds}] values; {n} is given.|{name} holds [{bounds}] values; {n} are given.
 str		nested	nested
 str		package	package
 str		class	class
@@ -904,6 +1006,114 @@ str		Counted per qualifier value of the other end; shown next to {class}.	Counte
 str		One {owner} and one {qualifiers} pick {multiplicity} {target}.	One {owner} and one {qualifiers} pick {multiplicity} {target}.
 str		Type a name: a qualifier without one picks nothing.	Type a name: a qualifier without one picks nothing.
 str		This end already has a qualifier named {name}. Pick another name.	This end already has a qualifier named {name}. Pick another name.
+# Templates (AR-130)
+str		Template parameters · {n}	Template parameters · {n}
+str		Add template parameter	Add template parameter
+str		Constrained to	Constrained to
+str		Any	Any
+str		Value	Value
+str		Parameter kind	Parameter kind
+str		not yet	not yet
+str		{kind} template parameters are not supported yet.	{kind} template parameters are not supported yet.
+str		this parameter	this parameter
+str		Arguments for {name} must be {constraint} or specialise it.	Arguments for {name} must be {constraint} or specialise it.
+str		Arguments for {name} must be classes.	Arguments for {name} must be classes.
+str		Arguments for {name} must be interfaces.	Arguments for {name} must be interfaces.
+str		Arguments for {name} must be data types.	Arguments for {name} must be data types.
+str		Arguments for {name} must be enumerations.	Arguments for {name} must be enumerations.
+str		Arguments for {name} must be primitive types.	Arguments for {name} must be primitive types.
+str		Bindings that leave it out use {default}.	Bindings that leave it out use {default}.
+str		Renaming or reordering keeps every binding.	Renaming or reordering keeps every binding.
+str		Show the binding	Show the binding
+str		Show the binding selects it, on the canvas and in Properties.	Show the binding selects it, on the canvas and in Properties.
+str		Renaming {name} or changing its default is allowed: bindings follow the parameter, not its name.	Renaming {name} or changing its default is allowed: bindings follow the parameter, not its name.
+str		{bound} binds {name} -> {actual}. Change or remove that binding first, then remove {name}.	{bound} binds {name} -> {actual}. Change or remove that binding first, then remove {name}.
+str		{bound} binds {template}, and {name} is its last parameter. Remove that binding first, then remove {name}.	{bound} binds {template}, and {name} is its last parameter. Remove that binding first, then remove {name}.
+plural		{n} more binding uses it too.	{n} more binding uses it too.|{n} more bindings use it too.
+str		Type a name: a template parameter without one stands for nothing.	Type a name: a template parameter without one stands for nothing.
+str		{template} already has a template parameter named {name}. Pick another name.	{template} already has a template parameter named {name}. Pick another name.
+str		{default} does not fit {name}: pick a default its arguments could be.	{default} does not fit {name}: pick a default its arguments could be.
+str		{bound} binds {name} -> {actual}, which would no longer fit. Change or remove that binding first.	{bound} binds {name} -> {actual}, which would no longer fit. Change or remove that binding first.
+str		template parameter	template parameter
+str		template	template
+plural		{kind} · template, {n} parameter · model, in every diagram	{kind} · template, {n} parameter · model, in every diagram|{kind} · template, {n} parameters · model, in every diagram
+# Template bindings (AR-131)
+str		Template binding	Template binding
+str		Template binding: from the bound class to its template	Template binding: from the bound class to its template
+str		«bind»	«bind»
+str		Add template binding	Add template binding
+str		This template binding	This template binding
+str		On this template binding · {n}	On this template binding · {n}
+str		Binding · {bound} binds {template} · model, in every diagram	Binding · {bound} binds {template} · model, in every diagram
+str		binds {template}	binds {template}
+str		Binding	Binding
+str		Bound element	Bound element
+str		Template	Template
+str		Substitutions · {n}	Substitutions · {n}
+str		default	default
+str		Default ({name})	Default ({name})
+str		Choose a class	Choose a class
+str		Choose an interface	Choose an interface
+str		Choose a data type	Choose a data type
+str		Choose an enumeration	Choose an enumeration
+str		Choose a primitive type	Choose a primitive type
+str		{name} needs an argument: pick a class.	{name} needs an argument: pick a class.
+str		{name} needs an argument: pick an interface.	{name} needs an argument: pick an interface.
+str		{name} needs an argument: pick a data type.	{name} needs an argument: pick a data type.
+str		{name} needs an argument: pick an enumeration.	{name} needs an argument: pick an enumeration.
+str		{name} needs an argument: pick a primitive type.	{name} needs an argument: pick a primitive type.
+plural		{names} can keep its default.	{names} can keep its default.|{names} can keep their defaults.
+str		New template binding	New template binding
+str		Drawing · not in the model until you apply	Drawing · not in the model until you apply
+str		Releasing the line on a template opens this. The line stays dashed in the accent colour until Apply; one undo step then adds the binding with its arguments. Cancel or Esc removes the draft and leaves nothing.	Releasing the line on a template opens this. The line stays dashed in the accent colour until Apply; one undo step then adds the binding with its arguments. Cancel or Esc removes the draft and leaves nothing.
+str		Another template takes arguments of its own: pick them, then Apply. Cancel or Esc keeps the binding as it is.	Another template takes arguments of its own: pick them, then Apply. Cancel or Esc keeps the binding as it is.
+str		Each selector lists only the arguments that fit its parameter: its kind, and its constraint or what specialises it. A parameter on its default follows the template's default.	Each selector lists only the arguments that fit its parameter: its kind, and its constraint or what specialises it. A parameter on its default follows the template's default.
+str		The line reads «bind» with each parameter and its argument, and points at the template. The binding keeps its arguments in the model; it is neither a dependency nor a realization.	The line reads «bind» with each parameter and its argument, and points at the template. The binding keeps its arguments in the model; it is neither a dependency nor a realization.
+str		Only a class, an interface or a data type binds a template	Only a class, an interface or a data type binds a template
+str		A binding ends at a template: a class, an interface or a data type with template parameters	A binding ends at a template: a class, an interface or a data type with template parameters
+str		A template is bound by a classifier of its own kind	A template is bound by a classifier of its own kind
+str		A template does not bind itself	A template does not bind itself
+str		This one binds that template already	This one binds that template already
+str		That template binds this one already, which would make a cycle	That template binds this one already, which would make a cycle
+str		Pick another template in the binding's Properties, where its arguments are chosen.	Pick another template in the binding's Properties, where its arguments are chosen.
+str		N-ary association	N-ary association
+str		this n-ary association	this n-ary association
+str		N-ary association: click each class in turn, then press Enter	N-ary association: click each class in turn, then press Enter
+str		An n-ary association is drawn by clicking each class in turn	An n-ary association is drawn by clicking each class in turn
+str		Enter finishes at 3+ · Backspace drops the last · Esc cancels	Enter finishes at 3+ · Backspace drops the last · Esc cancels
+str		Click a class for the new end	Click a class for the new end
+str		Esc cancels	Esc cancels
+str		An n-ary association joins classes and interfaces	An n-ary association joins classes and interfaces
+str		An association takes at most {n} ends	An association takes at most {n} ends
+str		An n-ary association needs three ends or more: click another class	An n-ary association needs three ends or more: click another class
+str		Add n-ary association	Add n-ary association
+str		New n-ary association	New n-ary association
+str		Drawing · not in the model until you finish	Drawing · not in the model until you finish
+str		Ends so far · {n}	Ends so far · {n}
+str		Next: click a class on the canvas	Next: click a class on the canvas
+str		Next: click a class on the canvas, or press Enter to finish	Next: click a class on the canvas, or press Enter to finish
+str		Enter, or a double-click on the last class, finishes once there are 3 ends or more. One undo step adds the association, its diamond and every end.	Enter, or a double-click on the last class, finishes once there are 3 ends or more. One undo step adds the association, its diamond and every end.
+str		Esc, switching tools or clicking empty canvas cancels and leaves nothing in the model. Backspace takes the last end off.	Esc, switching tools or clicking empty canvas cancels and leaves nothing in the model. Backspace takes the last end off.
+str		New ends are named after their class and start at *; change them after finishing.	New ends are named after their class and start at *; change them after finishing.
+str		Ends · {n}	Ends · {n}
+str		Add end	Add end
+str		Draws a new leg	Draws a new leg
+str		Reconnect end	Reconnect end
+str		Drag a leg end	Drag a leg end
+str		Open a class diagram to pick the new end's class	Open a class diagram to pick the new end's class
+str		Ends of an n-ary association are not aggregations, so Aggregation is not offered. Repeat a type for two ends when the roles differ.	Ends of an n-ary association are not aggregations, so Aggregation is not offered. Repeat a type for two ends when the roles differ.
+str		Another end has the role {role} already. Pick another role.	Another end has the role {role} already. Pick another role.
+str		Set association end	Set association end
+str		End {role} removed	End {role} removed
+str		Selecting the diamond or any leg selects the one association. Remove from this diagram hides it here; Delete from the model deletes it and its ends everywhere.	Selecting the diamond or any leg selects the one association. Remove from this diagram hides it here; Delete from the model deletes it and its ends everywhere.
+str		Two ends would remain	Two ends would remain
+str		An n-ary association needs three ends or more. Without {role}, only {first} and {second} remain.	An n-ary association needs three ends or more. Without {role}, only {first} and {second} remain.
+str		Keep 3 ends	Keep 3 ends
+str		Make it binary	Make it binary
+str		Make it binary turns it into a plain association between {first} and {second}, keeping both ends, as one undo step. Keep 3 ends, or Esc, changes nothing.	Make it binary turns it into a plain association between {first} and {second}, keeping both ends, as one undo step. Keep 3 ends, or Esc, changes nothing.
+str		Make it binary turns {name} into a plain association between {first} and {second}, keeping its name and both ends, as one undo step. Keep 3 ends, or Esc, changes nothing.	Make it binary turns {name} into a plain association between {first} and {second}, keeping its name and both ends, as one undo step. Keep 3 ends, or Esc, changes nothing.
+plural		N-ary association · {n} end · model, in every diagram	N-ary association · {n} end · model, in every diagram|N-ary association · {n} ends · model, in every diagram
+plural		N-ary association · {n} end — click a class for the next end	N-ary association · {n} end — click a class for the next end|N-ary association · {n} ends — click a class for the next end
 str		From	From
 str		General	General
 str		Generalization	Generalization

@@ -37,6 +37,8 @@ macro_rules! kept_modifier_lines {
     };
 }
 
+pub mod applications;
+pub mod bindings;
 pub mod commands;
 pub mod constraints;
 pub mod descriptions;
@@ -46,9 +48,12 @@ mod generated;
 pub mod members;
 pub mod modifiers;
 pub mod names;
+pub mod nary;
 pub mod nesting;
+pub mod profiles;
 pub mod qualifiers;
 pub mod relations;
+pub mod templates;
 
 use std::sync::Arc;
 
@@ -86,9 +91,10 @@ pub fn is_classifier(class: ClassId) -> bool {
 }
 
 /// The relationships a class diagram draws as lines: associations, generalizations, dependencies,
-/// interface realizations, and association classes, which have a card of their own besides
-/// (AR-125): one element shown twice on a diagram, a node and an edge, so no view record is new.
-pub const RELATIONSHIPS: [ClassId; 5] = [ASSOCIATION, GENERALIZATION, DEPENDENCY, INTERFACE_REALIZATION, ASSOCIATION_CLASS];
+/// interface realizations, association classes, which have a card of their own besides
+/// (AR-125): one element shown twice on a diagram, a node and an edge, so no view record is new;
+/// and template bindings (AR-131), from the bound element to its template.
+pub const RELATIONSHIPS: [ClassId; 6] = [ASSOCIATION, GENERALIZATION, DEPENDENCY, INTERFACE_REALIZATION, ASSOCIATION_CLASS, TEMPLATE_BINDING];
 
 /// Whether `class` is an association or an association class: what has ends to set, roles,
 /// multiplicities, navigability and aggregation.
@@ -131,8 +137,10 @@ impl Notation for UmlNotation {
         &[CLASS_DIAGRAM]
     }
 
+    /// A class diagram is of a package, or of a profile, showing its stereotypes and the
+    /// metaclasses they extend (AR-134).
     fn is_of(&self, _kind: &str, class: ClassId) -> bool {
-        class == PACKAGE
+        class == PACKAGE || class == PROFILE
     }
 
     /// A class diagram is always of a package.
@@ -141,19 +149,34 @@ impl Notation for UmlNotation {
     }
 
     /// A class diagram shows classes, interfaces, enumerations, data types, primitive types,
-    /// association classes and packages as cards, and constraints as braces or notes (AR-133).
+    /// association classes and packages as cards, constraints as braces or notes (AR-133), and an
+    /// n-ary association as its diamond (AR-128).
     fn shows(&self, _kind: &str, class: ClassId) -> bool {
-        is_classifier(class) || class == PACKAGE || class == CONSTRAINT
+        is_classifier(class) || class == PACKAGE || class == CONSTRAINT || class == STEREOTYPE || class == ASSOCIATION
     }
 
     /// A package's diagram shows its own classes and, as outsiders, classes of other packages; and
     /// the packages it holds, each leading to its own diagram (AR-95).
     fn may_show(&self, store: &Store, diagram: Obj, element: Obj) -> bool {
         let of = store.get(diagram, archforge_diagram::diagram::ELEMENT).ok().and_then(|v| v.as_ref());
+        // A profile's diagram shows its stereotypes and the metaclasses they extend, and nothing
+        // else; a package's shows neither (AR-134).
+        if of.is_some_and(|p| profiles::is_profile(store, p)) {
+            return match store.class_of(element).ok() {
+                Some(c) if c == STEREOTYPE => of == profiles::profile_of(store, element),
+                Some(c) if c == CLASS => of.is_some_and(|p| profiles::metaclasses_of(store, p).contains(&element)),
+                _ => false,
+            };
+        }
+        if profiles::is_stereotype(store, element) || profiles::is_metaclass(store, element) {
+            return false;
+        }
         match store.class_of(element).ok() {
             Some(c) if c == PACKAGE => of.is_some() && commands::package_of(store, element) == of,
             // A constraint shows on any class diagram: its elements may be on several.
             Some(c) if c == CONSTRAINT => of.is_some() && constraints::in_model(store, element),
+            // An association is a node only as an n-ary one's diamond (AR-128); a binary one is a line.
+            Some(c) if c == ASSOCIATION => of.is_some() && nary::is_nary(store, element),
             // A nested classifier belongs in its owner's package (AR-132).
             _ => of.is_some() && nesting::home_package(store, element).is_some(),
         }
@@ -165,18 +188,24 @@ impl Notation for UmlNotation {
         match class {
             c if c == PACKAGE => PACKAGE_SIZE,
             c if c == PRIMITIVE_TYPE => PRIMITIVE_TYPE_SIZE,
+            c if c == STEREOTYPE => CLASS_SIZE,
             c if c == CONSTRAINT => (constraints::NOTE_WIDTH, 96.0),
+            c if c == ASSOCIATION => nary::DIAMOND_SIZE,
             _ => CLASS_SIZE,
         }
     }
 
-    /// Associations, generalizations, dependencies, interface realizations and association classes.
+    /// Associations, generalizations, dependencies, interface realizations, association classes,
+    /// template bindings, and a profile's extensions (AR-134); and an n-ary association's end, as
+    /// the leg from its diamond to its class (AR-128).
     fn connects(&self, _kind: &str, class: ClassId) -> bool {
-        is_relationship(class)
+        is_relationship(class) || class == EXTENSION || class == PROPERTY
     }
 
+    /// A relationship's two classes; an n-ary association's end's leg, from its association's
+    /// diamond to its class (AR-128).
     fn ends(&self, store: &Store, element: Obj) -> Option<(Obj, Obj)> {
-        figures::ends(store, element)
+        figures::ends(store, element).or_else(|| nary::leg_ends(store, element))
     }
 
     /// The texts a line of `class` places along it.
@@ -256,6 +285,14 @@ impl Notation for UmlNotation {
         if members::is_built_in(store, element) {
             return Some("a built-in type carries no skill; a primitive type of the model's own does");
         }
+        // A template parameter's classifier is its template's (AR-130).
+        if templates::is_parameter_element(store, element) {
+            return Some("a template parameter carries no skill; its template does");
+        }
+        // UML's own metaclasses are no element of the model (AR-134).
+        if profiles::in_library(store, element) {
+            return Some("a UML metaclass carries no skill; a stereotype extending it is the model's own");
+        }
         // A qualifier is its end's, not an attribute (AR-127).
         if qualifiers::is_qualifier(store, element) {
             return Some("a qualifier carries no skill; its association's classes do");
@@ -271,6 +308,9 @@ impl Notation for UmlNotation {
 
     /// Sets a UML element's description, kept as a Comment the element owns (AR-186).
     fn describe(&self, store: &mut Store, obj: Obj, text: &str) -> Result<(), archforge_engine::CommandError> {
+        if let Some(why) = profiles::library_problem(store, obj) {
+            return Err(archforge_engine::CommandError::new(why));
+        }
         descriptions::describe_element(store, obj, text)
     }
 
@@ -299,6 +339,10 @@ pub const WORDS: &[&str] = &[
     "Association class · {package}",
     "Package",
     "Constraint · not evaluated",
+    "«stereotype»",
+    "«metaclass»",
+    "N-ary association",
+    "{keywords} · {package}",
 ];
 pub const PLURALS: &[&str] = &["+ {n} more member", "+ {n} more literal", "+ {n} more element", "+ {n} more line"];
 
@@ -313,7 +357,12 @@ pub fn registry() -> Result<Arc<archforge_engine::Registry<Store, ProjectView>>,
     specs.extend(constraints::specs());
     specs.extend(generalization_sets::specs());
     specs.extend(qualifiers::specs());
+    specs.extend(nary::specs());
     specs.extend(nesting::specs());
+    specs.extend(templates::specs());
+    specs.extend(profiles::specs());
+    specs.extend(bindings::specs());
+    specs.extend(applications::specs());
     specs.extend(archforge_diagram::commands::specs::<ProjectView>());
     specs.extend(archforge_core::skills::specs::<ProjectView>());
     archforge_engine::Registry::new(specs)

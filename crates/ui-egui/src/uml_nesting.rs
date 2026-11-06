@@ -424,6 +424,7 @@ pub(crate) fn inside(store: &Store, o: Obj) -> Option<crate::notation_ui::Inside
         kinds: KINDS.iter().map(|k| (k.key(), k.word(), k.icon())).collect(),
         refused: vec![("package", tr("Package"), tr("not inside a class"))],
         why_not,
+        split: None,
     })
 }
 

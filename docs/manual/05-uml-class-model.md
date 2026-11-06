@@ -13,6 +13,17 @@ you change it, and what you see afterwards.
 Use the project you made in [Getting started](02-getting-started.md). The tables of the
 [previous chapter](04-er-model.md) can stay: the class model sits beside them in the same project.
 
+This chapter has four parts. You need only the first to make a useful model:
+
+- **A walkthrough in twelve steps**, after [the tools you will use](#the-tools-you-will-use): from
+  [a first class diagram](#1-make-a-class-diagram) to [a rule](#12-state-a-rule-constraints), then
+  [the result](#the-result) and [which element you need](#which-element-do-i-need).
+- **[Organise the model in packages](#organise-the-model-in-packages)**, for a model that grows.
+- **[Going further](#going-further)**: short sections for more precise models, such as finding an
+  item by a key, templates and your own stereotypes. Each stands on its own; read the ones you
+  need.
+- **[Reference](#reference)**: the rules and the other ways in, to look up.
+
 ## The tools you will use
 
 You make and change a class model in four places. Each step below says which one to use.
@@ -122,7 +133,7 @@ removes the member. On a draft row, the **⋯** at its right opens the same edit
 
 The editor's **Static** marks a member that belongs to the class itself, not to each instance. Its
 row is underlined on every card that shows the class, and in **Properties**; clear **Static** and
-the underline goes. An operation's **Abstract** slants its row, so a static abstract operation is
+the underline goes (see [Static members](#a-member-of-the-class-as-a-whole-static-members)). An operation's **Abstract** slants its row, so a static abstract operation is
 both underlined and slanted. **No redefinition (leaf)** writes `{leaf}` after the member's row.
 
 ## 4. Connect Customer and Order: an association
@@ -135,7 +146,7 @@ the link (*navigability*).
    current one highlighted.
 2. Choose **Association**.
 
-<!-- picture: workspace-guide-relate-kinds light | The Relationship tool's menu open over Customer and Order: Association highlighted, then the other kinds of line, and Interface realization and Association class below a line -->
+<!-- picture: workspace-guide-relate-kinds light | The Relationship tool's menu open over Customer and Order: Association highlighted, then the other kinds of line, Interface realization and Association class below a line, and N-ary association and Template binding below another -->
 
 3. Press on *Customer*, drag onto *Order*, and let go.
 
@@ -362,10 +373,10 @@ These extra facts are *property modifiers*.
 1. Select *Order*.
 2. In **Properties**, under **Attributes**, choose the pencil on *number*. Its editor opens.
 3. Tick **Read only**.
-4. Choose the check at the editor's foot, or press Enter.
+4. Choose the check at the editor's foot.
 5. Choose the pencil on *status*.
 6. Open **Default value** and choose *Placed*. The menu lists *OrderStatus*'s literals.
-7. Choose the check, or press Enter.
+7. Choose the check.
 
 <!-- picture: workspace-guide-modifiers light | Order selected, its card reading number : Integer {readOnly} and status : OrderStatus = Placed; Properties shows the attribute editor on status, its Default value Placed, the flags, Subsets and Redefines -->
 
@@ -383,22 +394,37 @@ the elements it is about, exactly as you write it, and never evaluates it: nothi
 against the model. Write it in any language you like, OCL, plain English or another.
 
 1. Select *Order*.
-2. In **Properties**, choose **+** beside **Constraints**. The editor opens with *Order* among the
-   **Constrained elements**.
-3. Type *positiveNumber* as the **Name** and `number > 0` as the **Expression**. In **Language**,
-   pick **OCL**, or type any other language; left empty, it is plain text.
-4. Choose the check at the editor's foot. A short rule shows in braces under *Order*'s card:
+2. In **Properties**, choose **+** beside **Constraints · 0**. The editor opens with *Order* among
+   the **Constrained elements**, and **Name** says *Constraint 1*.
+3. Replace *Constraint 1* in **Name** with *positiveNumber*.
+4. Type `number > 0` in **Expression**.
+5. In **Language**, pick **OCL**, or type any other language; left empty, it is plain text.
+6. Choose the check at the editor's foot. A short rule shows in braces under *Order*'s card:
    `{number > 0}`.
-5. Choose **+** again. Name it *paidInFull*, and type a longer rule on two lines:
-   `status = OrderStatus::Paid` and `implies total.amount > 0`.
-6. Choose **+** beside the chips of **Constrained elements** and pick *OrderStatus*.
-7. Under **On this diagram**, choose **Linked note**, then the check.
+7. Choose **+** again, and replace the name with *paidInFull*.
+8. In **Language**, pick **OCL**.
+9. In **Expression**, type `status = OrderStatus::Paid`, press Enter for a new line (Enter does not
+   apply here), and type `implies total.amount > 0`.
+10. Under **Constrained elements**, choose the **+** after *Order* and pick *OrderStatus*.
+11. Under **On this diagram**, check that **Linked note** is chosen: Archforge chooses it for a
+    long rule about several elements. Then choose the check.
 
 <!-- picture: workspace-guide-constraints light | Order selected: {number > 0} in braces under its card, and the constraint note paidInFull, its eyebrow CONSTRAINT · NOT EVALUATED, linked by dashed lines to Order and OrderStatus; Properties shows Constraints · 2 with the editor open on paidInFull, its language OCL, its expression on two lines, Order and OrderStatus as chips and Linked note chosen -->
 
 The note says *CONSTRAINT · NOT EVALUATED*, and dashed lines join it to *Order* and
-*OrderStatus*. It looks different from a plain note on purpose: a plain note is your remark on the
+*OrderStatus*. (The picture shows the editor opened again with the pencil on *paidInFull*.) It looks different from a plain note on purpose: a plain note is your remark on the
 diagram, a constraint is part of the model.
+
+What Archforge checks, and what it does not:
+
+- It refuses a constraint without an expression: *Type an expression. A constraint without one
+  states no rule.*
+- A constraint names only elements of this model. When you delete one of them, the constraint
+  drops it in the same step, and the message says what it constrains now. A constraint left naming
+  nothing is deleted with it.
+- It never reads the expression for meaning. It does not tell you when the model, or the data your
+  software holds, breaks the rule, even though the rule shows on the diagram. Checking the rule is
+  up to you, your code or your tests.
 
 A constraint belongs to the model, so every diagram shares its text; how it is shown is each
 diagram's own choice. [Constraints](#constraints) in the reference says more.
@@ -525,10 +551,508 @@ you can undo, and the project keeps it once saved.
 
 <!-- picture: workspace-package-parent light | Properties for the package Sales: its Parent package menu lists the root and Billing -->
 
+## Going further
+
+Steps 1 to 12 cover what most class models need. Each section below adds one more idea, for when
+your model needs it. Read only the ones you need: each starts from the model as step 12 left it,
+unless it says it builds on the section before. Each uses the same pattern: the problem first, then
+the steps, then what you see and how to change it later. The [Reference](#reference) has the
+rules and the other ways in.
+
+| You want to say | Read |
+|---|---|
+| A value or an action belongs to the class as a whole, not to each instance | [Static members](#a-member-of-the-class-as-a-whole-static-members) |
+| A related item is found by a key, such as a customer's order by its number | [Qualified associations](#find-an-item-by-a-key-qualified-associations) |
+| A link only makes sense between three things at once | [N-ary associations](#link-three-things-at-once-n-ary-associations) |
+| The more specific kinds of a class cover it, and whether they overlap | [Generalization sets](#divide-a-class-into-kinds-generalization-sets) |
+| Nothing may be a more specific kind of a class | [Final](#allow-no-more-specific-kinds-final) |
+| A more specific class may not replace a member it inherits | [Leaf](#allow-no-replaced-members-leaf) |
+| A type belongs inside the one class that uses it | [Nested classifiers](#keep-a-type-inside-its-class-nested-classifiers) |
+| One class works for many types, with blanks to fill in | [Defining a template](#one-class-for-many-types-defining-a-template) |
+| A class is such a class with its blanks filled in | [Binding a template](#fill-in-a-template-binding-it) |
+| Words and values of your own, such as a database table's name | [Defining a profile](#words-of-your-own-defining-a-profile-and-its-stereotypes) and [applying stereotypes](#label-elements-with-your-words-applying-stereotypes) |
+| A rule, such as "an order's number is above zero" | [Step 12](#12-state-a-rule-constraints) |
+
+The pictures in this part come from the latest Archforge release, so they need an internet
+connection and show the newest version of each screen.
+
+### A member of the class as a whole: static members
+
+Most facts and actions belong to each instance: every order has its own number. Some belong to the
+class as a whole. Handing out the next free order number is one counter for all orders, not one
+per order. UML calls such a member *static*, and draws it underlined.
+
+Start from the Commerce diagram of steps 1 to 12.
+
+1. Select *Order*.
+2. Press ⇧⌘↩ (Ctrl Shift Enter). A draft row opens in the operations compartment.
+3. Type *nextNumber*, press Tab, type *Integer*, and press Enter.
+4. Press Escape to close the empty draft.
+5. In **Properties**, under **Operations**, choose the pencil on *nextNumber*. Its editor opens.
+6. Tick **Static**.
+7. Choose the check at the editor's foot.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-guide-static-dark.png">
+  <img src="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-guide-static-light.png" alt="Order selected; its operation nextNumber() : Integer is underlined on its card, and the operation editor in Properties has Static ticked." width="100%">
+</picture>
+
+*An underlined row is a static member: it belongs to Order itself, not to each order.*
+
+The row `+ nextNumber() : Integer` is now underlined, on every card that shows *Order* and in
+**Properties**. (The picture shows its editor opened again with the pencil.) An attribute works
+the same way: tick **Static** in its editor for a value that all instances share, such as the last
+number handed out.
+
+To undo it, open the editor again and clear **Static**: the underline goes. An operation that is
+both static and **Abstract** is underlined and slanted.
+
+### Find an item by a key: qualified associations
+
+A customer places many orders, and you often look one up by its number: "this customer's order
+7". A customer and a number together pick out at most one order. The value that does the picking
+is a *qualifier*, and an association with one is a *qualified association*.
+
+Start from the Commerce diagram, with the association *places* of
+[step 4](#4-connect-customer-and-order-an-association).
+
+1. Click the line *places* to select it. **Properties** shows a section for each end.
+2. Below the fields of **End at Customer**, find **Qualifiers · 0** and choose its **+**. An editor
+   opens.
+3. In **Name**, type *number*.
+4. Open **Type** and choose *Integer*.
+5. Leave **Multiplicity** empty: one number picks.
+6. Choose the check at the editor's foot.
+7. Under **End at Order**, the field that said **Multiplicity** now says **Per qualifier value**.
+   Open it and choose `0..1`.
+
+The qualifier goes on the end of the class that does the looking up: a customer looks up its
+orders, so it is on **End at Customer**.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-guide-qualifier-dark.png">
+  <img src="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-guide-qualifier-light.png" alt="The association places selected: a small box number : Integer against Customer's card, 0..1 at Order's end; Properties shows End at Customer with Qualifiers · 1 and the qualifier editor open on number." width="100%">
+</picture>
+
+*The box against Customer holds the qualifier. Read the line as: one customer and one number pick
+0..1 orders.*
+
+A small box reading `number : Integer` sits against *Customer*'s card, where the line starts. The
+`0..1` at *Order* now counts the orders for one number, not all of a customer's orders. The
+qualifier's editor says it in words: choose the pencil on *number* to see *One Customer and one
+number pick 0..1 orders.*, as the picture does. (While you typed it, before step 7, it said
+*pick \* orders*.) If the box pushes the line's labels together, drag *Customer*'s card a little
+to the left; the picture shows it moved.
+
+A qualifier is not an attribute: *Customer*'s card and its **Attributes** do not list it.
+
+- **Change it:** choose the pencil on its row under **Qualifiers**, or double-click the row.
+- **Remove it:** in its editor, choose the red bin.
+- **Several qualifiers:** add more with **+**; the arrows in the editor change their order.
+
+More in the reference: [Qualified associations](#qualified-associations).
+
+### Link three things at once: n-ary associations
+
+The shop recommends products to customers, and each recommendation comes from a catalog, such as
+the summer catalog. Such a link only makes sense with all three: which customer, which product,
+which catalog. Lines between pairs of classes cannot say which catalog recommended which product
+to whom. An association that joins three or more classes at once is an *n-ary association*. It is
+drawn as a diamond with a leg to each class.
+
+Start with a new class diagram, so the legs have room.
+
+1. Make a class diagram named *Recommendations*, as in [step 1](#1-make-a-class-diagram).
+2. Drag *Customer*'s row from **Models** onto the canvas, towards the top left.
+3. Drag *Product*'s row onto the canvas, towards the top right.
+4. Choose the classifier tool (its tooltip says **Class**) and click below the two cards.
+5. Type *Catalog* and press Enter.
+6. Open the chevron beside the **Relationship** tool and choose **N-ary association**, below the
+   line after **Association class**. Its tooltip says to click each class in turn.
+7. Click *Customer*.
+8. Click *Product*. A diamond appears between them, and the bar at the top of the canvas counts
+   the ends.
+9. Click *Catalog*.
+10. Press Enter. The association is drawn and selected.
+11. In **Properties**, type *recommends* in **Name** and press Enter.
+12. Under **Ends · 3**, choose the pencil on the *catalog* row. The end's editor opens.
+13. Open **Multiplicity** and choose `1`.
+14. Choose the check at the editor's foot, or press Enter.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-guide-nary-dark.png">
+  <img src="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-guide-nary-light.png" alt="The diagram Recommendations: a diamond named recommends with legs to Customer, Product and Catalog, 1 at Catalog; Properties shows Ends · 3 with the editor open on the catalog end." width="100%">
+</picture>
+
+*One association, three legs. Each end's multiplicity counts the instances at that end for one
+choice at every other end: for one customer and one product, exactly one catalog.*
+
+Each end is named after its class (*customer*, *product*, *catalog*) and starts at `*`, any
+number. A click on the diamond or on any leg selects the whole association. (The picture shows the
+*catalog* end's editor opened again with its pencil.)
+
+- **Add an end:** choose **+** beside **Ends**, or right-click the diamond and choose **Add end**,
+  then click a class.
+- **Move an end:** drag the end of a leg onto another class.
+- **Remove an end:** choose the red bin in the end's editor. With three ends left, Archforge asks
+  first: **Keep 3 ends** changes nothing, **Make it binary** turns it into an ordinary association
+  between the two classes left.
+- **Take it off this diagram:** press Delete (⌫). **Delete it from the model:** press ⇧⌫ (Shift
+  Delete); Archforge asks *Delete recommends from the model?*, and **Delete** confirms.
+
+If you press Escape, choose another tool or click empty canvas while drawing, nothing is added. An
+n-ary association joins classes and interfaces only. More in the reference:
+[N-ary associations](#n-ary-associations).
+
+### Divide a class into kinds: generalization sets
+
+A payment is made by card, by bank transfer or from a wallet, and every payment is exactly one of
+these. A generalization says one class is a more specific kind of another: a card payment is a
+kind of payment. It does not say whether the kinds cover every payment, or whether one payment can
+be two kinds at once. A *generalization set* groups the generalizations to one class and says
+both.
+
+Start with a new class diagram for payments.
+
+1. Make a class diagram named *Payments*, as in [step 1](#1-make-a-class-diagram).
+2. With the classifier tool on **Class**, click near the top and add the class *Payment*.
+3. With *Payment* selected, press ⌘↩ (Ctrl Enter), type *amount*, press Tab, type *Money*, and
+   press Enter. Press Escape.
+4. Add three classes in a row below *Payment*: for each, choose the classifier tool, click, type
+   its name and press Enter. Name them *CardPayment*, *BankTransfer* and *WalletPayment*.
+5. Open the chevron beside the **Relationship** tool and choose **Generalization**.
+6. Press on *CardPayment*, drag onto *Payment*, and let go. A line with a hollow triangle at
+   *Payment* says that a card payment is a kind of payment.
+7. Choose the **Relationship** tool again (it still draws generalizations) and drag from
+   *BankTransfer* onto *Payment*.
+8. Do the same from *WalletPayment* onto *Payment*.
+9. Click *CardPayment*'s line to select it.
+10. Hold Shift and click the other two lines. All three are selected.
+11. Right-click one of them and choose **Create generalization set…** (⌥⌘G, or Ctrl Alt G).
+    **Properties** shows the new set, named *GeneralizationSet 1*, its **Name** field active.
+12. Select the whole name with ⌘A (Ctrl A), type *method*, and press Enter.
+13. Under **Completeness**, choose **Complete**.
+14. Under **Disjointness**, choose **Disjoint**.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-guide-generalization-set-dark.png">
+  <img src="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-guide-generalization-set-light.png" alt="The diagram Payments: CardPayment, BankTransfer and WalletPayment below Payment, their generalizations crossed by a dashed line labelled method {complete, disjoint}; Properties shows the set with Complete and Disjoint chosen and its three members." width="100%">
+</picture>
+
+*The dashed line across the three generalizations is the set. Its label says every payment is
+exactly one of these kinds.*
+
+The two choices mean:
+
+- **Complete**: every payment is one of these kinds; there is no plain payment. **Incomplete**:
+  there may be payments of other kinds too.
+- **Disjoint**: no payment is two kinds at once. **Overlapping**: one payment may be several kinds.
+
+A new set starts **Incomplete** and **Overlapping**, and its label says `{incomplete,
+overlapping}` until you choose otherwise. Click the label, or the set's row in **Models**, to select the set again.
+
+- **Add or take out members:** under **Members** in the set's **Properties**, **+** offers the
+  other generalizations to *Payment*, and the cross takes one out. Or right-click selected
+  generalizations and choose **Add to set ▸ method**.
+- **Move the label:** drag it. Where it sits is this diagram's own choice.
+- **Delete the set:** Delete with it selected. Its generalizations stay; only the grouping goes.
+
+More in the reference: [Generalization sets](#generalization-sets).
+
+### Allow no more specific kinds: final
+
+Card payments are handled one way, by one payment provider, and nobody should make a special kind
+of card payment that might behave differently. Marking *CardPayment* as *final* says that nothing
+may be a more specific kind of it.
+
+This section builds on the *Payments* diagram of the section before.
+
+1. Select *CardPayment*.
+2. In **Properties**, tick **No subclasses (final)**.
+
+Its card now shows `{final}` after its name, on every diagram. *CardPayment* is still a kind of
+*Payment*: final only stops new kinds below it. If you now draw a generalization from another class
+to *CardPayment*, nothing is drawn, and the top of the canvas says *CardPayment is final: nothing
+may specialise it. Clear "No subclasses" in its Properties first.*
+
+You can only tick the box while nothing specializes the class yet. Otherwise the box stays clear,
+and **Properties** names the classes that specialize it, with a button such as **Select the
+generalization** to find their lines. Clear the box to allow more specific kinds again.
+
+More in the reference: [Forbidding subclasses: final](#forbidding-subclasses-final).
+
+### Allow no replaced members: leaf
+
+A more specific class may *redefine* a member it inherits: *CardPayment* could replace *Payment*'s
+*amount* with an amount of its own. Sometimes the general class must keep control, so that every
+payment's amount means the same. A *leaf* member may be inherited, but not replaced. This is a
+different promise from final: other classes may still be kinds of *Payment*.
+
+This section builds on the *Payments* diagram too; the picture also shows `{final}` from the
+section before.
+
+1. Select *Payment*.
+2. In **Properties**, under **Attributes**, choose the pencil on *amount*. Its editor opens.
+3. Tick **No redefinition (leaf)**.
+4. Choose the check at the editor's foot.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-guide-final-leaf-dark.png">
+  <img src="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-guide-final-leaf-light.png" alt="The diagram Payments: CardPayment with {final} after its name, Payment's row amount : Money {leaf}; Payment selected with the attribute editor open on amount, No redefinition (leaf) ticked." width="100%">
+</picture>
+
+*`{final}` after a class's name: no more specific kinds. `{leaf}` after a member: no replacing it.*
+
+*Payment*'s row now reads `+ amount : Money {leaf}` (the picture shows its editor opened again). If a more specific class gets an attribute
+whose **Redefines** names *amount*, its editor lists *amount* last with `{leaf}` beside it, and
+choosing it is refused: *amount is leaf: nothing may redefine it. Clear "No redefinition" on it
+first.*
+
+An operation has the same box in its editor. A class, an interface, an enumeration, a data type
+and a primitive type have it too, right after **No subclasses (final)**; the card then shows
+`{leaf}` after the name, or `{final, leaf}` with both ticked. You can only tick the box while
+nothing redefines the element yet.
+
+More in the reference: [Forbidding redefinition: leaf](#forbidding-redefinition-leaf).
+
+### Keep a type inside its class: nested classifiers
+
+*OrderStatus* only makes sense for orders. Keeping it inside *Order* says so, and keeps it apart
+from a status of another class. A classifier owned by a class, rather than by a package, is
+*nested* in it.
+
+Start from the Commerce diagram, with *OrderStatus* of [step 5](#5-give-an-order-a-status-an-enumeration).
+
+1. Select *OrderStatus*.
+2. In **Properties**, open **Owner**. It shows the root package, your project's name.
+3. Choose *Order*.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-guide-nested-dark.png">
+  <img src="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-guide-nested-light.png" alt="OrderStatus selected below Order, joined to it by a line ending in a circled plus at Order; Models lists OrderStatus under Order with nested after its name; Properties shows Owner Order." width="100%">
+</picture>
+
+*The line ending in ⊕ at Order says Order owns OrderStatus.*
+
+**Models** now lists *OrderStatus* under *Order*, with a muted *nested* after its name. On the
+diagram, a line ending in ⊕ at *Order* shows the ownership. Archforge draws it while both cards
+are on the diagram; you cannot select it. On a diagram without *Order*, the card reads
+*Order::OrderStatus*, so you can still tell where it belongs. Everything else stays as it was:
+*Order*'s *status* is still of the type *OrderStatus*, and its literals are unchanged.
+
+- **Make a new one inside a class:** right-click the class in **Models** (or select its row and
+  press ⇧F10), choose **New inside Order ▸**, and pick a kind. Or choose **+** beside **Nested
+  classifiers** in the class's **Properties**. Drag the new row onto a diagram to show it.
+- **Move it out again:** pick a package as its **Owner**.
+- **Who can own one:** a class, an interface or an association class. An enumeration, a data type
+  or a primitive type owns none, and a primitive type or an association class always stays in a
+  package. The **Owner** menu lists what cannot take it disabled, with the reason.
+
+Placing one card over another on a diagram changes nothing in the model: only **Owner** and
+**Models** change ownership. More in the reference: [Nested classifiers](#nested-classifiers).
+
+### One class for many types: defining a template
+
+Your software stores orders and finds them by their number, and it stores customers and finds
+them by their email. Both stores work the same way, only the types differ. A *template* is one
+class written with blanks for those types: a *Repository* of some item type *T*, found by some key
+type *Key*. The blanks are its *template parameters*.
+
+Defining the template, with its blanks, is one task. Using it for orders, with the blanks filled
+in, is another: [binding it](#fill-in-a-template-binding-it), in the next section.
+
+Start with a new class diagram.
+
+1. Make a class diagram named *Storage*, as in [step 1](#1-make-a-class-diagram).
+2. With the classifier tool on **Class**, click on the canvas and add the class *Repository*.
+3. With *Repository* selected, choose **+** beside **Template parameters · 0** in **Properties**.
+   The parameter's editor opens.
+4. In **Name**, type *T*. Leave **Kind** on **Class** and **Constrained to** on **Any**.
+5. Choose the check at the editor's foot. *T* stands for any class.
+6. Choose **+** again and type *Key* in **Name**.
+7. Open **Kind** and choose **Data type**.
+8. Open **Default** and choose *Integer*. The line under the fields says what this asks of a
+   binding: *Arguments for Key must be data types. Bindings that leave it out use Integer.*
+9. Choose the check.
+10. With *Repository* selected, press ⌘↩ (Ctrl Enter), type *items*, press Tab, type *T*, and
+    press Enter. Press Escape.
+11. In **Properties**, under **Attributes**, choose the pencil on *items*.
+12. Type `*` in **Multiplicity** (a repository holds many items), and choose the check.
+13. Press ⇧⌘↩ (Ctrl Shift Enter), type *find*, press Tab, type *T*, and press Enter. Press Escape.
+14. In **Properties**, under **Operations**, choose the pencil on *find*.
+15. Choose **Add parameter**, click the new row's **Name** field, and type *key*.
+16. Open the parameter's type menu. The template's own parameters come first, after **None**,
+    each marked *template parameter*. Choose *Key*.
+17. Choose the check.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-guide-template-dark.png">
+  <img src="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-guide-template-light.png" alt="Repository selected on the diagram Storage, a dashed box T : Class and Key : DataType = Integer over its top-right corner, items : T [*] and find(key : Key) : T on its card; Properties shows Template parameters with the editor open on Key." width="100%">
+</picture>
+
+*The dashed box over the corner is the template's signature: its blanks, their kinds and Key's
+default.*
+
+The card shows the template's signature in a dashed box over its top-right corner: `T : Class`
+and `Key : DataType = Integer`. (The picture shows *Key*'s editor opened again with its pencil.) **Models** writes *template* after *Repository*, and **Properties**
+says *Class · template, 2 parameters*. Read it as: a repository holds any number of items of some
+class *T*, and finds one by a key of some data type *Key*, a whole number unless a binding says
+otherwise.
+
+*T* and *Key* are types only inside *Repository*: no other class's type menu offers them, and they
+are not listed in **Models**.
+
+- **Change a parameter:** choose the pencil on its row under **Template parameters**. Renaming it
+  keeps every member that uses it.
+- **Remove a parameter:** choose the red bin in its editor. A parameter that a binding fills in
+  cannot be removed until that binding changes.
+- **Kinds:** a parameter stands for a class, an interface, a data type, an enumeration or a
+  primitive type. **Value** and **Operation** are listed but disabled, marked *not yet*.
+
+More in the reference: [Templates](#templates).
+
+### Fill in a template: binding it
+
+*OrderRepository* is a *Repository* of orders, found by a whole number. Rather than writing its
+members again, say that it *binds* the template: it is *Repository* with *T* filled in as *Order*
+and *Key* as *Integer*. Each filled-in blank is a *substitution*.
+
+This section builds on the *Storage* diagram of the section before.
+
+1. With the classifier tool on **Class**, click below *Repository* and add the class
+   *OrderRepository*.
+2. Open the chevron beside the **Relationship** tool and choose **Template binding**, the last row.
+   Its tooltip says it runs from the bound class to its template.
+3. Press on *OrderRepository*, drag onto *Repository*, and let go. Nothing is in the model yet:
+   **Properties** shows *New template binding*, and the line stays dashed in the accent colour.
+4. Under **Substitutions**, open the selector beside *T* and choose *Order*. It lists only
+   classes, since *T* stands for a class.
+5. Leave *Key* as it is: it shows *Integer*, tagged *default*.
+6. Choose **Apply**.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-guide-template-binding-dark.png">
+  <img src="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-guide-template-binding-light.png" alt="OrderRepository below Repository, joined by a dashed line with an open arrow at Repository labelled «bind» with T to Order and Key to Integer; Properties shows the binding and its two substitutions, Key tagged default." width="100%">
+</picture>
+
+*«bind» and the substitutions: OrderRepository is Repository with T as Order and Key as Integer.*
+
+A dashed line with an open arrowhead at *Repository* reads `«bind» <T -> Order, Key -> Integer>`
+(the arrows may show as →).
+**Models** writes *binds Repository* after *OrderRepository*. Its card stays empty: the members
+come from the template, and Archforge does not copy them.
+
+If you choose **Apply** before picking *T*, nothing is added: the draft stays open and says *T
+needs an argument: pick a class. Key can keep its default.* **Cancel**, or Escape, removes the
+draft and leaves the model as it was.
+
+- **Change an argument:** select the line and pick another one under **Substitutions**, or
+  **Default (Integer)**, say, to go back to a parameter's default.
+- **Remove the binding:** select its line and press Delete (⌫). It goes from the model at once,
+  without a question, and the message at the canvas's foot says *Template binding removed* and
+  offers **Undo**.
+- **What is refused:** a binding between different kinds (a class binds a class template, an
+  interface an interface template, a data type a data type template), a second binding of the same
+  template, and deleting a class that a binding uses as an argument, such as *Order*.
+
+More in the reference: [Template bindings](#template-bindings).
+
+### Words of your own: defining a profile and its stereotypes
+
+The model says that *Order* is a class. Your team also wants to say that it is stored in a
+database table, named *orders*. UML has no word for that, so you add one. A *stereotype* is a word
+of your own, such as *Entity*, with values of its own, such as the table's name. Stereotypes are
+kept in a *profile*, a package for your own additions, such as *Persistence*.
+
+Defining the words is one task, done once. Putting them on elements is another:
+[applying stereotypes](#label-elements-with-your-words-applying-stereotypes), in the next section.
+
+Start from any diagram; this happens in **Models**.
+
+1. In **Models**, right-click the top row, your project's root package. (Or select it and press
+   ⇧F10.)
+2. Choose **New ▸**, then **Profile**. A profile appears with its name ready to type.
+3. Type *Persistence* and press Enter.
+4. Right-click *Persistence* and choose **New ▸**, then **Stereotype**.
+5. Type *Entity* and press Enter. **Models** says *extends nothing yet* after it.
+6. Select *Entity*. In **Properties**, choose **+** beside **Extends · 0**. The menu lists the
+   kinds of element the stereotype can be for; UML calls them *metaclasses*.
+7. Choose **Class**. **Models** now says *extends Class*.
+8. Choose **+** beside **Properties · 0**. An editor opens, as for an attribute.
+9. Type *table* in **Name**, choose *String* in **Type**, and choose the check.
+10. Select *Persistence* and choose **Open profile diagram** in its **Properties**.
+11. Click *Entity* on the diagram to see its **Properties** again.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-guide-profile-dark.png">
+  <img src="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-guide-profile-light.png" alt="The profile diagram of Persistence: a «stereotype» card Entity with table : String under a «metaclass» card Class, joined by a line with a filled triangle at Class; Models lists Persistence with Entity under it, extends Class." width="100%">
+</picture>
+
+*A stereotype under the metaclass it extends: Entity can be put on classes, and carries a table.*
+
+The profile's diagram opens. It shows *Entity* as a «stereotype» card under a «metaclass» card
+*Class*, joined by a line with a filled triangle at *Class*. Archforge makes this diagram the first
+time and adds what it lacks each time you open it. The metaclasses are UML's own: they are not in
+**Models**, and you cannot rename or delete them.
+
+- **Extend more kinds:** **+** under **Extends** again. The kinds Archforge draws can be chosen:
+  Class, Interface, Enumeration, DataType, Property (an attribute or an association's end),
+  Operation, Association, Generalization and Package. Others are listed but disabled.
+- **Types of a stereotype's properties:** a primitive type, an enumeration or a data type,
+  including the built-in types.
+- **Rename** a profile or a stereotype in **Models**; every element that uses it keeps it.
+
+More in the reference: [Profiles and stereotypes](#profiles-and-stereotypes).
+
+### Label elements with your words: applying stereotypes
+
+With *Persistence* defined, you can now say that *Order* is an *Entity* stored in the table
+*orders*. First a package allows the profile's words, then each element gets the ones it needs.
+
+This section builds on the profile of the section before.
+
+1. In **Models**, select the top row, your project's root package.
+2. In **Properties**, choose **+** beside **Applied profiles · 0**.
+3. Choose *Persistence*. **Models** now says *applies Persistence* after the top row. Everything
+   in the package, and in the packages inside it, may now use the profile's stereotypes.
+4. Go back to the *Commerce* diagram (its tab, or its row in **Diagrams**) and select *Order*.
+5. In **Properties**, choose **+** beside **Stereotypes · 0**. A list headed *APPLY TO ORDER*
+   opens.
+6. Choose *Entity*. (You can also type to filter the list, and press Enter.)
+7. Under *«Entity»*, type *orders* in the **table** field and press Enter.
+8. Tick **Show stereotype values on this diagram**.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-guide-stereotype-dark.png">
+  <img src="https://github.com/software-vision-ai/archforge/releases/latest/download/screenshot-guide-stereotype-light.png" alt="Order selected on the Commerce diagram, its card reading «Entity» above its name and a compartment «Entity» table = orders at its foot; Properties shows Stereotypes · 1 with «Entity» and table set to orders, and Show stereotype values on this diagram ticked." width="100%">
+</picture>
+
+*«Entity» takes the place of CLASS above the name. The last compartment lists the values set on
+this diagram.*
+
+*Order*'s card now says *«Entity»* above its name, where it said *CLASS*, and a compartment at its
+foot reads `table = "orders"`. **Models** shows *«Entity»* after *Order*. Each diagram chooses for
+itself whether it shows the values; a property left to its default is not listed.
+
+- **Other elements:** an interface, an enumeration, a data type, a package, an association, a
+  generalization and an association's end each have a **Stereotypes** section in **Properties**.
+  For an attribute or an operation, choose its row in the class's **Properties**; the section is
+  named after it. The list offers first the stereotypes that fit the element; others are listed
+  disabled, with why, such as *Persistence not applied*.
+- **An n-ary association's ends** have no **Stereotypes** section yet. Only an agent can apply
+  stereotypes to them (see [Working with an agent](07-agents.md#what-the-agent-can-do)).
+- **Remove a stereotype:** choose the bin on its row. Its values go with it; the stereotype stays
+  in its profile.
+- **Nothing in use is lost:** while *Order* is an *Entity*, unapplying *Persistence* or deleting
+  *Entity* is refused, and Archforge names what uses it.
+
+More in the reference: [Applying stereotypes](#applying-stereotypes).
+
 ## Reference
 
-The walkthrough above shows the usual way to do each thing. This part collects the other ways and
-the rules, to look up when you need them.
+The walkthrough and Going further show the usual way to do each thing. This part collects the
+other ways and the rules, to look up when you need them. What an agent can do with each feature is
+in [Working with an agent](07-agents.md#what-the-agent-can-do).
 
 ### Property modifiers
 
@@ -620,6 +1144,7 @@ When a line is not allowed, nothing is drawn and the reason shows at the top of 
 | Dependency | Any two classifiers, including enumerations, data types and primitive types. |
 | Interface realization | From a class (or an association class) to an interface, once per pair. |
 | Association class | Two classes, never the same class at both ends. |
+| N-ary association | Three or more classes and interfaces, a class at several ends when their roles differ. Never an enumeration, a data type or a primitive type. |
 
 When you let go on empty canvas, the line makes a new card there, its name ready to type: a new
 interface for an interface realization, a new class for an association class, and for a
@@ -724,7 +1249,7 @@ right-click one of them:
 
 The same actions are buttons in **Properties** when several generalizations are selected
 (**Create set from selection**), so the keyboard reaches them too. When the generalizations
-specialise different classes, or something else is selected with them, the actions stay listed but
+specialize different classes, or something else is selected with them, the actions stay listed but
 disabled, and the reason shows under the menu and on hover, such as *CardPayment specialises
 Payment and Voucher specialises Product. A set groups generalizations of one class.*
 
@@ -783,6 +1308,65 @@ arrows move it up and down the list.
 <!-- picture: workspace-qualifiers light | Order above OrderLine joined by the composition contains; the qualifier box lineNo : Integer against Order's card, order and 1 beside it, line and 0..1 at OrderLine; Properties shows End at Order with Qualifiers · 1 and the editor open on lineNo, and End at OrderLine with Per qualifier value 0..1 -->
 
 <!-- picture: workspace-qualifier-refused light | The same, a second qualifier lineNo : String applied on the Order end and refused: the name ringed and the reason in a tinted box under the fields -->
+
+### N-ary associations
+
+Most associations join two classes. An *n-ary* association joins three or more at once, when a
+link only makes sense with all of them: a customer is recommended a product from a catalog, so the
+association *recommends* joins *Customer*, *Product* and *Catalog*. It is drawn as a diamond with
+a leg to each class, and it is one association, however many legs it has.
+
+**Draw one.** Open the **Relationship** tool's chevron and pick **N-ary association**, below
+**Association class**. Then click each class in turn: every click on a class adds one end, the
+diamond appears with the second end, and the bar at the top of the canvas counts the ends. Press
+**Enter** to finish once there are three ends or more, or double-click the last class: the first
+click of the double-click adds its end, and the second finishes the association instead of adding
+that class again. The association, its diamond and every leg are added as one step you can undo.
+**Backspace** takes the last end off; before the first end, it removes the selection as usual.
+**Esc**, choosing another tool, or a click on empty canvas cancels and leaves nothing in the model.
+To give a class two ends, click it twice while fewer than three ends are drawn, or once more later:
+each end then has a role of its own.
+
+Each new end is named after its class, such as *customer*, and starts at `*`; a second end at the
+same class is *customer2*. Change them afterwards in **Properties**.
+
+**Select and edit it.** A click on the diamond or on any leg selects the association. Its
+**Properties** show its **Name** and its package, then **Ends**, one row per end, such as
+`customer : Customer [*]`. The pencil on a row, or a double click, opens the end's editor:
+**Role**, **Type** (the class at the end), **Multiplicity**, **Navigable**, **Ordered** and
+**Unique**. **Apply** (or Enter) writes them as one step; **Cancel** or Escape leaves the model as
+it was. Two ends may have the same type, but never the same role: a role another end has is
+refused in the editor, and nothing is written. An n-ary association's ends are never aggregations,
+so the editor offers no **Aggregation**.
+
+- **Add an end.** Press **+** beside **Ends**, or choose **Add end** on the diamond's menu (right
+  click), then click a class. The new leg is drawn only on the diagrams that show both the
+  diamond and that class; on the others it appears once you place the class there.
+- **Move an end.** Drag the end of a leg onto another class, or pick another **Type** in the end's
+  editor. On each diagram that shows the diamond, the leg moves to the new class's card; where that
+  class is not shown, the leg goes until you place it. The ends may drop **Subsets** or
+  **Redefines** entries that the move makes invalid; the canvas names them, and **Undo** brings
+  them back with the end.
+- **Remove an end.** The bin in the end's editor removes it with its legs. With four ends or more
+  it goes at once, and a message offers **Undo**. A constraint that applies to that end alone goes
+  with it, and the ends left drop any **Subsets** or **Redefines** entry that the removal makes
+  invalid. **Undo** brings all of it back. When only three ends are left, removing one would leave
+  two, and an n-ary association needs three or more. **Properties** asks first: **Keep 3 ends**
+  (where the focus starts; Esc does the same) changes nothing, and **Make it binary** turns it into
+  an ordinary association between the two classes left, keeping its name and both ends, as one
+  step you can undo. Wherever a diagram showed the diamond and both classes, a line takes its place.
+- **Remove from this diagram** (Delete, or the diamond's menu) takes the diamond and its legs off
+  this diagram only. **Delete from the model…** (Shift+Delete) asks first, then deletes the
+  association and its ends from every diagram.
+
+Taking a class's card off a diagram takes its legs with it; placing the card again brings them
+back.
+
+<!-- picture: workspace-nary-drawing light | N-ary association chosen and drawing: Customer and Product clicked, the diamond between them with their legs and a dashed leg to the pointer over Catalog; the bar at the top reads N-ary association · 2 ends; Properties shows New n-ary association with Ends so far · 2 -->
+
+<!-- picture: workspace-nary light | The n-ary association recommends selected, its diamond joined by legs to Customer, Product and Catalog; Properties shows Ends · 3 with the editor open on the catalog end: Role, Type, Multiplicity, Navigable, Ordered and Unique -->
+
+<!-- picture: workspace-nary-binary light | Properties of recommends after its catalog end's bin: Two ends would remain, with Keep 3 ends focused and Make it binary -->
 
 ### Constraints
 
@@ -847,10 +1431,206 @@ rather than held by a package.
 
 <!-- picture: workspace-nested-classifiers light | Priority nested in Order: Models lists it under Order with nested after its name; on the diagram Priority's card sits over Order's, joined by a line ending in ⊕ at Order; Properties shows Owner Order and what changing it keeps -->
 
-For agents, `uml.nested.add` makes a nested classifier, `uml.classifier.set-owner` changes an
-owner, `uml.nested.list` lists what a classifier nests and `uml.classifier.owners` lists where a
-classifier may go, with the reasons. The existing `uml.class.move` and its siblings still move a
-classifier, a nested one included, into a package.
+### Templates
+
+A *template* is a class, an interface or a data type written in terms of *parameters* it leaves
+open: a *Repository* of some item type `T` found by some key type `Key`. A classifier becomes a
+template when it gets its first parameter and stops being one when its last goes.
+
+- **Add a parameter.** Select the class and press **+** in **Template parameters** in
+  **Properties**. The editor takes its **Name**, its **Kind**, what it **Constrained to** and its
+  **Default**, and a line under the fields says what that asks of an argument, such as *Arguments
+  for Key must be data types. Bindings that leave it out use Integer.* **Apply** (or Enter in the
+  name) adds it as one step you can undo; **Cancel** or Escape leaves the model as it was. The
+  pencil on a row, or a double click, opens a parameter again; in its editor the bin removes it and
+  the arrows move it up and down the list.
+- **Kinds.** A parameter stands for a **Class**, an **Interface**, a **Data type**, an
+  **Enumeration** or a **Primitive type**. **Value** and **Operation** parameters are listed in the
+  menu but disabled, saying *not yet*: they are not supported in this version, and no other kind is
+  used in their place.
+- **Constrained to** narrows the arguments to one classifier of the kind and those that specialize
+  it; **Any** leaves them open. **Default** is the argument a binding that leaves the parameter out
+  uses: a classifier of the kind that fits the constraint, so a *Data type* parameter takes
+  *Integer* or your own *Money*, never the class *Order*. The menus offer only what fits.
+- **Using a parameter.** Inside the template, the type menus of its attributes, operations and
+  parameters offer its template parameters first, each marked *template parameter*: `- items : T
+  [*]`, `+ find(key : Key) : T`. No other classifier can use them, and they never appear in
+  **Models**, the search or a diagram on their own.
+- **On a diagram** the card shows the signature in a dashed box over its top-right corner, one
+  parameter a line, such as `T : Class` and `Key : DataType = Integer`; a constraint follows `>`.
+  Every diagram that shows the template shows the same box. **Models** writes *template* after its
+  name, and **Properties** says *Class · template, 2 parameters*.
+- **Identity.** Renaming a parameter, moving it or changing its default keeps it the same
+  parameter: every member typed by it follows, and so does every binding (see **Bindings** below).
+  Changing its kind keeps
+  the parameter too, and the members typed by it follow.
+- **What is refused.** A name another parameter of the template has, whatever the case: *Repository
+  already has a template parameter named T. Pick another name.* A default that does not fit is
+  refused under **Default**. The reason shows in the editor, the editor stays open, and nothing
+  reaches the model or the undo history. Deleting a generalization or a class so that a
+  parameter's default no longer specializes its constraint is refused too, naming the default;
+  where another path of generalizations keeps it fitting, the deletion goes ahead.
+- **Parameters a binding uses.** A parameter a binding (see **Template bindings** below) gives an
+  argument cannot be removed: the bin says, for example, *OrderRepository binds Key -> Integer.
+  Change or remove that binding first, then remove Key.*, under the rows, and **Show the binding**
+  selects the binding itself, its line on the canvas and its **Properties**. A template's last
+  parameter cannot be removed while any binding names the template, since the template would stop
+  being one under it. Its kind or constraint cannot change so that an argument no longer fits
+  either. A binding that leaves a parameter out uses its default, so a parameter without a default
+  cannot be added to a template that is bound, and a default cannot be cleared while a binding
+  relies on it. Deleting a template deletes the bindings to it.
+
+<!-- picture: workspace-template light | Repository with its signature box T : Class and Key : DataType = Integer over its card's top-right corner, items : T [*], find(key : Key) : T and save(item : T) on the card; Properties shows Template parameters · 2 with the editor open on Key: Kind Data type, Constrained to Any, Default Integer -->
+
+<!-- picture: workspace-template-kinds light | The same, the Kind menu open: Class, Interface, Data type ticked, Enumeration and Primitive type, then Value and Operation disabled, saying not yet -->
+
+<!-- picture: workspace-template-in-use light | OrderRepository binds Repository: Key's removal is refused under the rows, naming the binding, with Show the binding under it -->
+
+### Template bindings
+
+A *template binding* says that a class is a template with its parameters filled in:
+*OrderRepository* binds *Repository* with `T -> Order` and `Key -> Integer`. It is a relationship of
+its own, kept in the model with each *substitution*, a parameter and its argument; it is neither a
+dependency nor a realization.
+
+- **Draw one.** Pick **Template binding** in the **Relationship** tool's menu, under **N-ary
+  association**, and drag from the class that binds to the template. A class binds a class template, an
+  interface an interface template, a data type a data type template. Releasing the line on the
+  template writes nothing yet: **Properties** opens *New template binding*, *not in the model
+  until you apply*, with the **Bound element**, the **Template**, and **Substitutions**, one row
+  per parameter. Each selector lists only the arguments that fit the parameter: its kind, and its
+  constraint or what specializes it. A parameter with a default shows it, tagged *default*. While
+  the draft is open the line stays dashed in the accent colour.
+- **Apply** adds the binding, its substitutions and its line as one step you can undo, and selects
+  it. A parameter without a default needs an argument: **Apply** then says, for example, *T needs
+  an argument: pick a class. Key can keep its default.*, its selector ringed, and keeps the draft.
+  **Cancel** or Escape removes the draft and leaves the model and its history as they were;
+  selecting something else does the same.
+- **On a diagram** the line is dashed with an open arrowhead at the template, and reads `«bind» <T
+  -> Order, Key -> Integer>`, each parameter with its argument, a parameter left on its default
+  with the default. Every diagram that shows the binding shows the same line and text. **Models**
+  writes *binds Repository* after the class that binds.
+- **Change one.** Select the binding: **Properties** shows its **Binding**, the bound element and the
+  template, and its **Substitutions**. Picking another argument, or **Default** to go back to the
+  parameter's default, is one step you can undo. Another bound element keeps the arguments.
+  Another template opens the draft over the binding, its own arguments to pick before **Apply**.
+  On the canvas the binding's start drags onto another class; its end drags onto another template
+  only when that template needs no argument, else the canvas says to pick it in **Properties**.
+- **What is refused.** A class that is no class, interface or data type of the model, a template
+  of another kind, the template itself, a second binding of the same template, and a template that
+  binds the class already, directly or through other bindings: the canvas says why and draws
+  nothing. Renaming a parameter or an argument changes the line's text and nothing else: the
+  binding follows them. Deleting a class that a binding uses as an argument is refused, naming the
+  binding: change or remove that binding first. Deleting the class that binds deletes its
+  bindings, and deleting a template deletes the bindings to it.
+
+<!-- picture: workspace-template-binding light | OrderRepository binds Repository: the dashed line labelled «bind» <T -> Order, Key -> Integer> selected, Properties showing the Binding with Bound element and Template, and Substitutions · 2 -->
+
+<!-- picture: workspace-template-binding-new light | A binding being drawn from OrderRepository to Repository: New template binding in Properties, Key on its default Integer, and Apply refused: T needs an argument: pick a class. Key can keep its default. -->
+
+### Profiles and stereotypes
+
+A *profile* extends UML for your own project: it holds *stereotypes*, such as *Entity*, each saying
+which kinds of element it is for and which values it carries. Profiles, stereotypes and what they
+extend are UML model elements of their own, saved with the model, not labels or tags.
+
+- **Make a profile.** Right-click a package in **Models**, the root package included (or select it
+  and press ⇧F10), and choose **New ▸ Profile**. **New** also offers **Package** and the
+  classifier kinds. The profile sits in the package beside its packages, with a muted *profile*
+  after its name, and its name is ready to type. A profile never goes inside a class.
+- **Make a stereotype.** Right-click the profile and choose **New ▸ Stereotype**, or use **+** under
+  **Stereotypes** in the profile's **Properties**. In **Models** each stereotype is listed under its
+  profile, with what it extends after its name, such as *extends Class*.
+- **What a stereotype extends.** In the stereotype's **Properties**, **+** under **Extends** lists
+  the metaclasses Archforge draws: Class, Interface, Enumeration, DataType, Property, Operation,
+  Association, Generalization and Package. Other UML metaclasses, such as Actor or UseCase, are
+  listed but disabled, *not drawn by Archforge yet*. The pencil on an extension changes it to
+  another metaclass or removes it. **Profile** moves the stereotype to another profile.
+- **Its properties.** Under **Properties**, **+** opens the same editor as a class's attributes.
+  A stereotype's property is typed by a primitive type, an enumeration or a data type; the type
+  menu offers those, and the built-in types. Names starting *base_* are kept for the stereotype's
+  extensions.
+- **The profile's diagram.** **Open profile diagram** in the profile's **Properties** opens its
+  diagram, made the first time, showing each stereotype as a «stereotype» card under the
+  «metaclass» cards of what it extends, joined by a line with a filled triangle at the metaclass.
+  Each time, it adds what the diagram lacks below what it shows, as one step you can undo; cards
+  you placed stay where they are.
+  Drag a stereotype's row from **Models** onto it to show it there with its metaclasses. The
+  metaclasses themselves are UML's own: they never appear in **Models**, the search or the type
+  menus, and nothing renames, moves or deletes them.
+- **Apply a profile to a package.** In a package's **Properties**, **+** under **Applied profiles**
+  lists every profile of the model; a profile applied already is ticked. Applying is one step you
+  can undo and adds no stereotype by itself: the elements inside the package, and inside its
+  packages, can then use the profile's stereotypes. The package's row in **Models** says *applies
+  Persistence* after its name. The pencil on an applied profile offers **Unapply**.
+- **Nothing in use is dropped.** Once elements use stereotypes, unapplying a profile they need, deleting a stereotype or its profile,
+  dropping a metaclass the elements need, moving a stereotype to another profile, deleting a
+  stereotype's property whose values are set, and moving or deleting the package or element they
+  sit in out of the profile's reach are refused, the uses counted: *Persistence is in use in
+  Commerce: «Entity» on Order and Customer, «Id» on 2 elements, «Reference» on places. Remove
+  those first.* **Show the 5 uses** selects them. Renaming a profile or a stereotype keeps every
+  use. Deleting a package refuses the same way when its elements would lose the profile that
+  reaches them, and when it would take along a profile that is in use.
+- **Deleting a used element** itself, such as *Order*, asks first, from **Models** too, and the
+  dialog names the stereotype applications that go with it and with what it takes along: *3
+  stereotype applications go with it: «Entity» on Order, «Id» on id,
+  «Reference» on places.* **Delete** removes them in the same step: an application means nothing
+  without its element.
+- **Deleting** an unused stereotype takes its extensions along; deleting an unused profile takes
+  its stereotypes and its applications along, each as one step you can undo.
+
+<!-- picture: workspace-profiles light | The profile Persistence beside Commerce in Models, its stereotypes Entity, Id and Reference listed under it with what each extends; its diagram shows the three «stereotype» cards under the «metaclass» cards Class, Property and Association, joined by lines with filled triangles; Properties shows Entity's name, profile, Extends Class and its properties, the editor open on cached -->
+
+<!-- picture: workspace-profile-refused light | Commerce selected, applying Persistence; unapplying it refused under Applied profiles, naming the uses, with Show the 5 uses -->
+
+#### Applying stereotypes
+
+Once a package applies a profile, its elements, and those of its packages, can carry the profile's
+stereotypes. A stereotype and its values are model data, saved with the model.
+
+- **Apply a stereotype.** Select the element: a class, an interface, an enumeration, a data type,
+  a primitive type or an association class; an attribute or an operation (select its row in its
+  class's **Properties**, and the section is *Stereotypes of id*); an association, a
+  generalization or a package; the end of an association between two classes, in that end's part
+  of the association's **Properties**. An n-ary association's ends have no **Stereotypes** section
+  yet: only an agent can apply stereotypes to them (see
+  [Working with an agent](07-agents.md#what-the-agent-can-do)). **+** under **Stereotypes** in its **Properties** lists every
+  stereotype of the model. Those that extend the element's kind and whose profile is applied to its
+  package, or a package around it, come first; one applied already is ticked. After a line, the
+  others are listed but disabled, with why: *properties only* for a stereotype that extends
+  Property, *Logging not applied* for one whose profile no package around the element applies.
+  Type to filter the list, **↑** and **↓** move, **Enter** applies, **Esc** closes. Applying is one
+  step you can undo. **Stereotypes** shows only once the model has a stereotype.
+- **Set its values.** Under the stereotype's row each of its properties has a control fitting its
+  type: a Boolean or an enumeration a select, any other a field. A property you have not set shows
+  its default, muted with a *default* tag; a value you set has no tag, even when it says the same
+  as the default. Type a value and press **Enter**, or pick one from the select; its first row,
+  *Default (false)*, clears it so the default shows again, as an empty field does. A property that
+  holds several values takes them separated by commas. A value its type does not read stays in
+  the field with the reason under it, and nothing is written: *many is no value of rows. A whole
+  number, such as 42 or -7.* So are too many or too few values for the property's multiplicity,
+  and the same value twice where each is held once.
+- **Remove a stereotype** with the bin on its row. Its values go with it; the stereotype's
+  definition stays in its profile.
+- **Removing an attribute or an operation** in its editor asks first when stereotypes are applied
+  to it, naming them, as deleting any element that carries stereotypes does.
+- **On the diagram** a stereotype takes the place of the kind's word on the card: *«Entity»* for
+  *CLASS*. A kind written as a keyword keeps it first: *«interface, Entity»*. An attribute's or an
+  operation's row starts with its stereotypes, *«Id» + id : Integer*, in **Properties** too, and a
+  line's stereotypes sit above its name: *«Reference»*. An n-ary association's sit above its
+  diamond's name, and an end's at the middle of its leg. **Models** shows them, muted, after the
+  element's name.
+- **Show stereotype values on this diagram**, under the section while a class diagram is open,
+  lists the values set on each card in a compartment per stereotype, *«Entity»* then *table =
+  "orders"*; a property left to its default is not listed. Each diagram keeps its own choice.
+  Turned on, cards that would hide a value grow, in the same step.
+- **Nothing is lost unseen.** While a value is set, the stereotype's property is not deleted, given
+  another type, or given a multiplicity the value breaks, and a literal a value names is not
+  deleted: each is refused, saying which value to change first.
+
+<!-- picture: workspace-stereotypes light | Order selected on Commerce's diagram: its card reads «Entity» over its name, «Id» + id : Integer, and an «Entity» compartment with table = "orders"; «Reference» above places; Properties shows Stereotypes · 1 with «Entity» Persistence, table set to orders and cached false with the default tag, and Show stereotype values on this diagram ticked -->
+
+<!-- picture: workspace-stereotype-picker light | The Stereotypes picker open on Order: APPLY TO ORDER, Entity ticked, Auditable to apply, then Id (properties only), Reference (associations only) and Tracked (Logging not applied) disabled -->
 
 ### Cards
 

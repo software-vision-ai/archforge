@@ -9,6 +9,11 @@
 //!   class's attributes and its ends' roles are all its properties); an operation; a parameter;
 //!   an enumeration literal; a generalization set: each a kind of its own;
 //! - any other metaclass is a kind of its own, as UML's default rule has it;
+//! - a profile is a package's kind (AR-134); a stereotype, the hidden UML library's metaclass
+//!   classes (each in the library alone, which is unnamed), a stereotype's `base_` attributes
+//!   (properties, so a stereotype's own property never takes one's name), an extension's end, and a
+//!   stereotype application's instance specification are each their metaclass's kind; a core link
+//!   is no UML element and has no name;
 //! - a relationship (an association, a dependency, a realization) and a constraint carry their
 //!   names as labels and are told apart by what they join or constrain: their names never clash.
 //!
@@ -21,7 +26,7 @@ use archforge_mof::{ClassId, NameKind, Obj, Store};
 
 use crate::{
     ABSTRACTION, ASSOCIATION, COMMUNICATION_PATH, COMPONENT_REALIZATION, CONSTRAINT, DEPENDENCY, DEPLOYMENT, EXTEND, EXTENSION, GENERALIZATION,
-    INCLUDE, INFORMATION_FLOW, INTERFACE_REALIZATION, MANIFESTATION, REALIZATION, SUBSTITUTION, USAGE,
+    INCLUDE, INFORMATION_FLOW, INTERFACE_REALIZATION, MANIFESTATION, PACKAGE, PROFILE, REALIZATION, SUBSTITUTION, USAGE,
 };
 
 /// The kind every classifier is, whatever its metaclass.
@@ -55,6 +60,11 @@ pub fn kind(class: ClassId) -> Option<NameKind> {
     }
     if class == CONSTRAINT || LABELLED.contains(&class) {
         return None;
+    }
+    // A profile is a package (AR-134): the two never share a name in one owner, as UML's
+    // distinguishability has it for a kind and its specializations.
+    if class == PROFILE {
+        return Some(NameKind::Class(PACKAGE));
     }
     // A package, a property, an operation, a parameter, a literal, a generalization set, and any
     // other metaclass: each a kind of its own.

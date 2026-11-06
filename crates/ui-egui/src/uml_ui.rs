@@ -13,7 +13,7 @@ use serde_json::json;
 
 use crate::Shell;
 use crate::explorer::{Row, Tree, fresh_name};
-use crate::i18n::{fmt, tr};
+use crate::i18n::{fmt, tr, tr_ctx, trn};
 use crate::kinds::{DiagramKind, KindTool, ToolUse};
 use crate::notation_ui::{Added, Entry, NotationUi, Offer, Words};
 use crate::panels::Subject;
@@ -300,7 +300,9 @@ impl DiagramKind for UmlKind {
     /// A class, an interface, an enumeration, a data type, or a package on the diagram, goes from the model with
     /// ⇧⌫ (AR-95).
     fn deletes(&self, store: &Store, element: Obj) -> bool {
-        classifier(store, element) || matches!(class(store, element), Some(c) if c == archforge_uml::PACKAGE || c == archforge_uml::CONSTRAINT)
+        classifier(store, element)
+            || matches!(class(store, element), Some(c) if c == archforge_uml::PACKAGE || c == archforge_uml::CONSTRAINT)
+            || archforge_uml::nary::is_nary(store, element)
     }
 
     /// A package on a class diagram renames in place with a double click, as a class does.
@@ -396,6 +398,11 @@ impl DiagramKind for UmlKind {
             drop_package(shell, d, element, at);
             return;
         }
+        // A stereotype goes onto its profile's diagram with the metaclasses it extends (AR-134).
+        if let Some(s) = store.by_uuid(element).filter(|o| archforge_uml::profiles::is_stereotype(store, *o)) {
+            crate::uml_profiles::drop_stereotype(shell, d, s, at);
+            return;
+        }
         let Some((c, kind)) = store.by_uuid(element).and_then(|c| Some((c, Classifier::of(store, c)?))) else { return };
         if crate::editing::on_diagram(store, d, c) {
             shell.canvas.notice = Some(tr("Already on this diagram"));
@@ -408,6 +415,12 @@ impl DiagramKind for UmlKind {
             .filter(|l| *l == c || archforge_diagram::Notation::ends(&notation, store, *l).is_some_and(|(a, b)| a == c || b == c))
             // A line the diagram draws already (an association class's, its card not yet placed) stays as it is.
             .filter(|l| archforge_diagram::views_of(store, *l).1.iter().all(|e| archforge_diagram::diagram_of(store, *e) != Some(d)))
+            // The legs of n-ary associations whose diamond this diagram shows, from their ends at
+            // the classifier (AR-128).
+            .chain(store.alive().filter(|e| {
+                archforge_uml::nary::leg_ends(store, *e).is_some_and(|(a, t)| t == c && crate::editing::on_diagram(store, d, a))
+                    && archforge_diagram::views_of(store, *e).1.iter().all(|l| archforge_diagram::diagram_of(store, *l) != Some(d))
+            }))
             .collect();
         let (width, _) = kind.size();
         crate::editing::place_with_lines(shell, d, c, at, (width, content_height(store, c)), &links, &notation, &kind.place_step());
@@ -634,6 +647,9 @@ impl NotationUi for UmlUi {
             c if c == archforge_uml::PACKAGE => Some(("uml.package.rename", "package")),
             c if c == archforge_uml::ENUMERATION_LITERAL => Some(("uml.literal.rename", "literal")),
             c if c == archforge_uml::GENERALIZATION_SET => Some(("uml.generalization-set.set", "set")),
+            // A profile and a stereotype rename in place (AR-134).
+            c if c == archforge_uml::PROFILE => Some(("uml.profile.rename", "profile")),
+            c if c == archforge_uml::STEREOTYPE => Some(("uml.stereotype.set", "stereotype")),
             _ => Classifier::of(store, obj).map(Classifier::rename_command),
         }
     }
@@ -650,6 +666,10 @@ impl NotationUi for UmlUi {
     /// The package Types stays while it keeps the built-in types, which Models does not show: said
     /// under the tree before anything is asked.
     fn remove_refusal(&self, store: &Store, obj: Obj) -> Option<String> {
+        // A profile, a stereotype or a package whose profiles its elements use stays (AR-134).
+        if let Some(why) = crate::uml_profiles::removal_refusal(store, obj) {
+            return Some(why);
+        }
         let package = class(store, obj) == Some(archforge_uml::PACKAGE);
         archforge_uml::members::removal_problem(store, obj)
             .filter(|_| package)
@@ -669,10 +689,15 @@ impl NotationUi for UmlUi {
 
     /// New inside ▸ on a classifier: the kinds it may nest (AR-132).
     fn inside(&self, store: &Store, obj: Obj) -> Option<crate::notation_ui::Inside> {
-        crate::uml_nesting::inside(store, obj)
+        // New ▸ on a package or a profile (AR-134, F2).
+        crate::uml_profiles::inside(store, obj).or_else(|| crate::uml_nesting::inside(store, obj))
     }
 
     fn add_inside(&self, shell: &mut Shell, key: &str, obj: Obj) -> Option<Result<Uuid, String>> {
+        let store = shell.session.as_ref()?.doc();
+        if class(store, obj) == Some(archforge_uml::PACKAGE) || archforge_uml::profiles::is_profile(store, obj) {
+            return crate::uml_profiles::add_inside(shell, key, obj);
+        }
         crate::uml_nesting::add_inside(shell, key, obj)
     }
 
@@ -685,13 +710,22 @@ impl NotationUi for UmlUi {
         archforge_uml::nesting::nested_within(store, obj).into_iter().map(|n| archforge_uml::nesting::qualified_name(store, n)).collect()
     }
 
+    /// The stereotype applications that go with `obj` and what it takes along (AR-135).
+    fn applications_along(&self, store: &Store, obj: Obj) -> Vec<String> {
+        crate::uml_stereotypes::going_along(store, obj)
+    }
+
     /// Whether `obj` has rows under it: a package what it holds (the built-in types in Types, which
     /// Models does not show, aside), a classifier its members (an enumeration its literals).
     fn has_children(&self, store: &Store, obj: Obj) -> bool {
         match class(store, obj) {
             Some(c) if c == archforge_uml::PACKAGE => {
-                !shown_classifiers(store, obj).is_empty() || !archforge_uml::commands::subpackages(store, obj).is_empty()
+                !shown_classifiers(store, obj).is_empty()
+                    || !archforge_uml::commands::subpackages(store, obj).is_empty()
+                    || !archforge_uml::profiles::profiles(store, obj).is_empty()
             }
+            Some(c) if c == archforge_uml::PROFILE => !archforge_uml::profiles::stereotypes(store, obj).is_empty(),
+            Some(c) if c == archforge_uml::STEREOTYPE => !archforge_uml::profiles::properties(store, obj).is_empty(),
             Some(c) if archforge_uml::is_classifier(c) => has_members(store, obj),
             _ => false,
         }
@@ -706,6 +740,9 @@ impl NotationUi for UmlUi {
         for sub in archforge_uml::commands::subpackages(store, package) {
             out.extend(self.foldable(store, sub));
         }
+        for profile in archforge_uml::profiles::profiles(store, package) {
+            out.extend(crate::uml_profiles::foldable(store, profile));
+        }
         out
     }
 
@@ -713,6 +750,21 @@ impl NotationUi for UmlUi {
     /// literal's enumeration.
     fn parents(&self, store: &Store, obj: Obj) -> Vec<Obj> {
         let mut out: Vec<Obj> = owner_of(store, obj).into_iter().collect();
+        // A stereotype's property, a stereotype and a profile sit under their profile's package
+        // (AR-134).
+        let first = out.first().copied().unwrap_or(obj);
+        let profile = if archforge_uml::profiles::is_stereotype(store, first) {
+            archforge_uml::profiles::profile_of(store, first)
+        } else {
+            Some(first).filter(|f| archforge_uml::profiles::is_profile(store, *f))
+        };
+        if let Some(p) = profile {
+            if p != obj {
+                out.push(p);
+            }
+            out.extend(archforge_uml::profiles::package_of(store, p).map(|pk| chain(store, pk)).unwrap_or_default());
+            return out;
+        }
         // The classifiers that nest it, or its member's classifier, innermost first (AR-132).
         let start = out.first().copied().unwrap_or(obj);
         out.extend(archforge_uml::nesting::owner_chain(store, start).into_iter().rev());
@@ -776,7 +828,13 @@ impl NotationUi for UmlUi {
                 let detail = if at.is_empty() { tr("Package") } else { format!("{} · {at}", tr("Package")) };
                 Some(Entry { icon: &icons::PACKAGE, order: 1, label: name(store, o), detail })
             }
-            c if archforge_uml::is_classifier(c) && !archforge_uml::members::is_built_in(store, o) => {
+            // A template parameter's classifier is its template's own, never found on its own
+            // (AR-130); UML's own metaclasses stay out of the search (AR-134).
+            c if archforge_uml::is_classifier(c)
+                && !archforge_uml::members::is_built_in(store, o)
+                && !archforge_uml::templates::is_parameter_element(store, o)
+                && !archforge_uml::profiles::in_library(store, o) =>
+            {
                 let kind = Classifier::of(store, o)?;
                 // A nested classifier is found where it lives: its owners' path (AR-132).
                 let at = match archforge_uml::nesting::classifier_owner(store, o) {
@@ -785,6 +843,16 @@ impl NotationUi for UmlUi {
                 };
                 let detail = if at.is_empty() { kind.word() } else { format!("{} · {at}", kind.word()) };
                 Some(Entry { icon: kind.icon(), order: 2, label: name(store, o), detail })
+            }
+            c if c == archforge_uml::PROFILE => {
+                let at = archforge_uml::profiles::package_of(store, o).map(|p| name(store, p)).unwrap_or_default();
+                let detail = if at.is_empty() { tr_ctx("uml", "Profile") } else { format!("{} · {at}", tr_ctx("uml", "Profile")) };
+                Some(Entry { icon: &icons::PROFILE, order: 1, label: name(store, o), detail })
+            }
+            c if c == archforge_uml::STEREOTYPE => {
+                let at = archforge_uml::profiles::profile_of(store, o).map(|p| name(store, p)).unwrap_or_default();
+                let detail = if at.is_empty() { tr("Stereotype") } else { format!("{} · {at}", tr("Stereotype")) };
+                Some(Entry { icon: &icons::STEREOTYPE, order: 2, label: name(store, o), detail })
             }
             c if c == archforge_uml::GENERALIZATION_SET => {
                 let at = package_of(store, o).map(|p| name(store, p)).unwrap_or_default();
@@ -814,6 +882,9 @@ impl NotationUi for UmlUi {
         if archforge_uml::members::is_built_in(store, o) {
             return Some(tr("Built-in types carry no skills"));
         }
+        if archforge_uml::profiles::in_library(store, o) {
+            return Some(tr("Metaclasses carry no skills"));
+        }
         match class(store, o)? {
             c if c == archforge_uml::ENUMERATION_LITERAL => Some(tr("Literals carry no skills")),
             // An association class carries skills as the class it is.
@@ -826,6 +897,14 @@ impl NotationUi for UmlUi {
 
     /// How Properties names `o`: its kind line, its word, This …, and On this … · {n}.
     fn words(&self, store: &Store, o: Obj) -> Option<Words> {
+        // An n-ary association's kind line counts its ends (AR-128, A4).
+        if archforge_uml::nary::is_nary(store, o) {
+            let n = u64::try_from(archforge_uml::nary::ends(store, o).len()).unwrap_or(u64::MAX);
+            let mut w = words_of(store, o)?;
+            w.kind = trn("N-ary association · {n} end · model, in every diagram", "N-ary association · {n} ends · model, in every diagram", n);
+            w.word = tr("N-ary association");
+            return Some(w);
+        }
         // A nested classifier's kind line names its owner (AR-132, D2).
         if let Some(owner) = archforge_uml::nesting::classifier_owner(store, o)
             && let Some(kind) = Classifier::of(store, o)
@@ -834,13 +913,46 @@ impl NotationUi for UmlUi {
             w.kind = fmt(&tr("{kind} · nested in {owner} · model, in every diagram"), &[("kind", &kind.word()), ("owner", &name(store, owner))]);
             return Some(w);
         }
+        // A template's kind line counts its parameters (AR-130, C1).
+        let n = archforge_uml::templates::parameters(store, o).len();
+        if n > 0
+            && let Some(kind) = Classifier::of(store, o)
+        {
+            let mut w = words_of(store, o)?;
+            w.kind = crate::uml_templates::kind_line(&kind.word(), n);
+            return Some(w);
+        }
         words_of(store, o)
+    }
+
+    /// An unnamed relationship by its ends as its line runs (AR-216): a generalization from its
+    /// specific classifier to its general one, `CardPayment → Payment`, as a set's members read; a
+    /// realization, a dependency, a template binding and a binary association alike. An n-ary
+    /// association, which has no one direction, by its kind; a constraint by its braces, as its
+    /// row reads.
+    fn unnamed(&self, store: &Store, o: Obj) -> Option<String> {
+        if archforge_uml::nary::is_nary(store, o) {
+            return Some(tr("this n-ary association"));
+        }
+        if class(store, o) == Some(archforge_uml::CONSTRAINT) {
+            return Some(crate::uml_constraints::row_text(store, o));
+        }
+        let (from, to) = archforge_uml::figures::ends(store, o)?;
+        Some(crate::notation_ui::ends_label(&name(store, from), &name(store, to)))
     }
 
     /// A member's panel is its classifier's, a literal's its enumeration's.
     fn heading(&self, store: &Store, o: Obj) -> Option<String> {
+        // An n-ary association's first section is Association, as a binary one's (AR-128, A4).
+        if archforge_uml::nary::is_nary(store, o) {
+            return Some(tr("Association"));
+        }
         if archforge_uml::generalization_sets::is_set(store, o) {
             return Some(tr("Set"));
+        }
+        // A template binding's first section is the Binding (AR-131, C2).
+        if class(store, o) == Some(archforge_uml::TEMPLATE_BINDING) {
+            return Some(tr("Binding"));
         }
         if let Some(context) = constraint_context(store, o) {
             return Some(Classifier::of(store, context).map_or_else(|| tr("Package"), Classifier::word));
@@ -856,8 +968,23 @@ impl NotationUi for UmlUi {
     fn body(&self, shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, subject: &Subject) {
         let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
         let Some(o) = subject.obj else { return };
+        // A metaclass on a profile's diagram is UML's own: its panel says so, and nothing changes it
+        // (AR-134).
+        if archforge_uml::profiles::is_metaclass(store, o) {
+            let width = (r.width() - 2.0 * crate::panels::PAD).max(0.0);
+            let said = tr("A UML metaclass, which stereotypes extend. It is UML's own, kept out of Models and the type menus, and never changes.");
+            let paint = ui.painter();
+            let g = crate::ux::galley_rows(paint, &said, crate::ux::types::CAPTION, p.text_muted, Some(width), 6);
+            paint.galley(egui::pos2(r.left() + crate::panels::PAD, y), g, p.text_muted);
+            return;
+        }
         match class(store, o) {
             Some(c) if archforge_uml::is_classifier(c) => return crate::uml_panel::class_body(shell, ui, p, r, y, subject),
+            // A profile's and a stereotype's panels (AR-134, F1).
+            Some(c) if c == archforge_uml::PROFILE => return crate::uml_profiles::profile_body(shell, ui, p, r, y, subject),
+            Some(c) if c == archforge_uml::STEREOTYPE => return crate::uml_profiles::stereotype_body(shell, ui, p, r, y, subject),
+            // A template binding's own panel (AR-131, C2).
+            Some(c) if c == archforge_uml::TEMPLATE_BINDING => return crate::uml_bindings::body(shell, ui, p, r, y, subject),
             Some(c) if archforge_uml::is_relationship(c) => {
                 return crate::uml_relate::body(shell, ui, p, r, y, subject);
             }
@@ -882,6 +1009,10 @@ impl NotationUi for UmlUi {
             let Some(words) = self.words(store, c) else { return };
             let (Ok(id), Ok(metaclass)) = (store.uuid(c), store.class_of(c)) else { return };
             let of = Subject::of(c, id, metaclass, words);
+            // A stereotype's property shows its stereotype's panel, its row marked (AR-134).
+            if archforge_uml::profiles::is_stereotype(store, c) {
+                return crate::uml_profiles::stereotype_body(shell, ui, p, r, y, &of);
+            }
             return crate::uml_panel::class_body(shell, ui, p, r, y, &of);
         }
         if class(store, o) == Some(archforge_uml::PACKAGE) && archforge_uml::commands::root_package(store) != Some(o) {
@@ -890,10 +1021,18 @@ impl NotationUi for UmlUi {
         let Some((cmd, key)) = self.rename(store, o) else { return };
         let width = r.width() - 2.0 * crate::panels::PAD;
         let root = archforge_uml::constraints::is_context(store, o).then_some(subject.id).flatten();
+        let is_package = class(store, o) == Some(archforge_uml::PACKAGE);
         crate::panels::name_field(shell, ui, p, egui::pos2(r.left() + crate::panels::PAD, y), width, subject, cmd, key);
+        let mut below = y + 17.0 + crate::panels::FIELD + 16.0;
+        // The root package applies profiles as any package does (AR-134, F5), and carries
+        // stereotypes (AR-135).
+        if is_package && let Some(id) = subject.id {
+            below = crate::uml_stereotypes::section_for(shell, ui, p, r, below, o);
+            below = crate::uml_profiles::applied_section(shell, ui, p, r, below, o, id);
+        }
         // The root package's constraints hold for the whole model (AR-133).
         if let Some(id) = root {
-            crate::uml_constraints::section_of(shell, ui, p, r, y + 17.0 + crate::panels::FIELD + 16.0, o, id);
+            crate::uml_constraints::section_of(shell, ui, p, r, below, o, id);
         }
     }
 }
@@ -901,6 +1040,9 @@ impl NotationUi for UmlUi {
 /// How Properties names `o`, whatever owns it.
 fn words_of(store: &Store, o: Obj) -> Option<Words> {
     let words = |kind: String, word: String, this: String, on_this: String| Words { kind, word, this, on_this, name: name(store, o) };
+    if archforge_uml::profiles::is_metaclass(store, o) {
+        return Some(words(tr("Metaclass · UML"), tr("Metaclass"), tr("This metaclass"), tr("On this metaclass · {n}")));
+    }
     Some(match class(store, o)? {
         c if c == archforge_uml::PACKAGE => words(tr("Package · model"), tr("Package"), tr("This package"), tr("On this package · {n}")),
         c if c == archforge_uml::CLASS => words(tr("Class · model, in every diagram"), tr("Class"), tr("This class"), tr("On this class · {n}")),
@@ -937,6 +1079,14 @@ fn words_of(store: &Store, o: Obj) -> Option<Words> {
             tr("This interface realization"),
             tr("On this interface realization · {n}"),
         ),
+        // Named by its kind, which it has in place of a name; its kind line says what binds what (AR-131).
+        c if c == archforge_uml::TEMPLATE_BINDING => Words {
+            kind: crate::uml_bindings::kind_line(store, o),
+            word: tr("Template binding"),
+            this: tr("This template binding"),
+            on_this: tr("On this template binding · {n}"),
+            name: tr("Template binding"),
+        },
         c if c == archforge_uml::GENERALIZATION_SET => words(
             tr("Generalization set · model, in every diagram"),
             tr("Generalization set"),
@@ -945,6 +1095,17 @@ fn words_of(store: &Store, o: Obj) -> Option<Words> {
         ),
         c if c == archforge_uml::CONSTRAINT => {
             words(tr("Constraint · model, not evaluated"), tr("Constraint"), tr("This constraint"), tr("On this constraint · {n}"))
+        }
+        // A profile and a stereotype (AR-134, F1).
+        c if c == archforge_uml::PROFILE => words(tr("Profile · model"), tr_ctx("uml", "Profile"), tr("This profile"), tr("On this profile · {n}")),
+        c if c == archforge_uml::STEREOTYPE => {
+            let profile = archforge_uml::profiles::profile_of(store, o).map(|p| name(store, p)).unwrap_or_default();
+            words(
+                fmt(&tr("Stereotype · in profile {profile} · model"), &[("profile", &profile)]),
+                tr("Stereotype"),
+                tr("This stereotype"),
+                tr("On this stereotype · {n}"),
+            )
         }
         // A qualifier of an association's end (AR-127).
         c if c == archforge_uml::PROPERTY && archforge_uml::qualifiers::is_qualifier(store, o) => {
@@ -996,6 +1157,11 @@ fn package_rows(store: &Store, package: Obj, depth: u8, t: &Tree<'_>) -> Vec<Row
     for sub in archforge_uml::commands::subpackages(store, package) {
         under.extend(package_rows(store, sub, depth.saturating_add(1), t));
     }
+    // Its profiles beside its packages (AR-134, F1).
+    let held_profiles = archforge_uml::profiles::profiles(store, package);
+    for profile in &held_profiles {
+        under.extend(crate::uml_profiles::profile_rows(store, *profile, depth.saturating_add(1), t));
+    }
     let shown = shown_classifiers(store, package);
     // A generalization set sits after its general classifier when the package holds that, else
     // after the classifiers (AR-129).
@@ -1010,8 +1176,11 @@ fn package_rows(store: &Store, package: Obj, depth: u8, t: &Tree<'_>) -> Vec<Row
         under.extend(set_row(store, *s, depth.saturating_add(1), t));
     }
     let label = name(store, package);
-    let empty =
-        t.skills(package).is_empty() && archforge_uml::commands::subpackages(store, package).is_empty() && shown.is_empty() && sets.is_empty();
+    let empty = t.skills(package).is_empty()
+        && archforge_uml::commands::subpackages(store, package).is_empty()
+        && held_profiles.is_empty()
+        && shown.is_empty()
+        && sets.is_empty();
     if !t.matches(&label) && under.is_empty() {
         return Vec::new();
     }
@@ -1019,7 +1188,14 @@ fn package_rows(store: &Store, package: Obj, depth: u8, t: &Tree<'_>) -> Vec<Row
     let expanded = expandable && t.open(package);
     let mut out: Vec<Row> = t
         .row(package, depth, "package", &icons::PACKAGE, label)
-        .map(|row| Row { expandable, expanded, draggable: true, ..row })
+        // The profiles it applies, muted after its name (AR-134, F1).
+        .map(|row| Row {
+            expandable,
+            expanded,
+            draggable: true,
+            note: notes([archforge_uml::applications::keywords(store, package), crate::uml_profiles::package_note(store, package)]),
+            ..row
+        })
         .into_iter()
         .collect();
     if expanded {
@@ -1065,7 +1241,7 @@ fn class_rows(store: &Store, c: Obj, depth: u8, t: &Tree<'_>) -> Vec<Row> {
                 class_rows(store, n, depth.saturating_add(1), t)
                     .into_iter()
                     .enumerate()
-                    .map(|(i, row)| if i == 0 { Row { note: Some(tr("nested")), ..row } } else { row }),
+                    .map(|(i, row)| if i == 0 { Row { note: notes([Some(tr("nested")), row.note.clone()]), ..row } } else { row }),
             );
         }
         for l in archforge_uml::commands::literals(store, c) {
@@ -1098,12 +1274,27 @@ fn class_rows(store: &Store, c: Obj, depth: u8, t: &Tree<'_>) -> Vec<Row> {
     let expandable = if t.filtering() { !members.is_empty() } else { !t.skills(c).is_empty() || has_members(store, c) };
     let expanded = expandable && t.open(c);
     let kind = Classifier::of(store, c).unwrap_or_default();
-    let mut out: Vec<Row> =
-        t.row(c, depth, kind.key(), kind.icon(), label).map(|row| Row { expandable, expanded, draggable: true, ..row }).into_iter().collect();
+    // Its stereotypes after its name (AR-135, F3), then a template says so (AR-130, C1), and a
+    // class that binds one names it (AR-131, C2).
+    let note = notes([
+        archforge_uml::applications::keywords(store, c),
+        archforge_uml::templates::is_template(store, c).then(|| tr("template")).or_else(|| crate::uml_bindings::binds_note(store, c)),
+    ]);
+    let mut out: Vec<Row> = t
+        .row(c, depth, kind.key(), kind.icon(), label)
+        .map(|row| Row { expandable, expanded, draggable: true, note: note.clone().or(row.note), ..row })
+        .into_iter()
+        .collect();
     if expanded {
         out.extend(members);
     }
     out
+}
+
+/// What a row says muted after its name, its notes joined: `«Entity» · template`; none for none.
+fn notes<const N: usize>(parts: [Option<String>; N]) -> Option<String> {
+    let parts: Vec<String> = parts.into_iter().flatten().filter(|p| !p.is_empty()).collect();
+    (!parts.is_empty()).then(|| parts.join(" · "))
 }
 
 /// In the sample class model, the enumeration Priority nested in Order with the literals Standard
@@ -1153,6 +1344,67 @@ pub(crate) fn put_nested_priority(shell: &mut Shell) -> Result<(String, String),
         .map_err(|e| e.to_string())?;
     session.mark_saved().map_err(|e| e.to_string())?;
     Ok((priority, order))
+}
+
+/// In the sample class model, the class Repository made a template (AR-130, page 08 C1): its
+/// parameters `T : Class` and `Key : DataType = Integer`, its attribute `- items : T [*]` and its
+/// operations `find(key : Key) : T [0..1]` and `save(item : T)`, its card placed on the open
+/// diagram below Order's line and selected. With `bound`, OrderRepository, a class of the sample's
+/// package placed left of it, binds it, T to Order and Key to Integer (AR-131, C2), its line drawn
+/// with its label. All as one step; the project is then marked saved as it stands. Gives
+/// Repository's id and the parameters' ids.
+#[cfg(any(test, feature = "snapshot"))]
+pub(crate) fn put_repository(shell: &mut Shell, bound: bool) -> Result<(Uuid, [Uuid; 2]), String> {
+    let d = shell.canvas.active.ok_or("the sample's diagram")?;
+    let session = shell.session.as_mut().ok_or("the template sample needs a session")?;
+    let store = session.doc();
+    let order = store
+        .alive()
+        .find(|o| store.class_of(*o).ok() == Some(archforge_uml::CLASS) && name(store, *o) == "Order")
+        .ok_or("the sample has no Order")?;
+    let order_id = store.uuid(order).map_err(|e| e.to_string())?.to_string();
+    let pkg = package_of(store, order).and_then(|p| store.uuid(p).ok()).ok_or("Order's package")?.to_string();
+    let id = |v: serde_json::Value| v["id"].as_str().unwrap_or_default().to_string();
+    let element = |v: &serde_json::Value| v["element"].as_str().unwrap_or_default().to_string();
+    let (mut repo, mut t, mut key) = (String::new(), String::new(), String::new());
+    session
+        .batch("Make Repository a template", |b| {
+            repo = id(b.execute("uml.class.add", &json!({ "package": pkg, "name": "Repository" }))?);
+            let tv = b.execute("uml.template-parameter.add", &json!({ "classifier": repo, "name": "T" }))?;
+            let kv =
+                b.execute("uml.template-parameter.add", &json!({ "classifier": repo, "name": "Key", "kind": "data-type", "default": "Integer" }))?;
+            let (te, ke) = (element(&tv), element(&kv));
+            (t, key) = (id(tv), id(kv));
+            b.execute("uml.attribute.add", &json!({ "class": repo, "name": "items", "type": te, "multiplicity": "*", "visibility": "private" }))?;
+            b.execute("uml.operation.add", &json!({ "class": repo, "name": "find", "parameters": [{ "name": "key", "type": ke }], "returns": te }))?;
+            b.execute("uml.operation.add", &json!({ "class": repo, "name": "save", "parameters": [{ "name": "item", "type": te }] }))?;
+            let repo_node = id(b.execute(
+                "diagram.place",
+                &json!({ "diagram": d.to_string(), "element": repo, "x": 560.0, "y": 700.0, "width": 290.0, "height": members_height(1, 2) }),
+            )?);
+            if bound {
+                let bound_class = id(b.execute("uml.class.add", &json!({ "package": pkg, "name": "OrderRepository" }))?);
+                let bound_node = id(b.execute(
+                    "diagram.place",
+                    &json!({ "diagram": d.to_string(), "element": bound_class, "x": 80.0, "y": 1000.0, "width": 240.0, "height": 66.0 }),
+                )?);
+                let binding = id(b.execute(
+                    "uml.template-binding.add",
+                    &json!({ "bound": bound_class, "template": repo, "arguments": { "T": order_id, "Key": "Integer" } }),
+                )?);
+                let edge = id(b.execute(
+                    "diagram.connect",
+                    &json!({ "diagram": d.to_string(), "element": binding, "source": bound_node, "target": repo_node }),
+                )?);
+                b.execute("diagram.label", &json!({ "edge": edge, "kind": "name", "at": "middle" }))?;
+            }
+            b.execute("view.select", &json!({ "ids": [repo] }))?;
+            Ok(())
+        })
+        .map_err(|e| e.to_string())?;
+    session.mark_saved().map_err(|e| e.to_string())?;
+    let parse = |s: &str| Uuid::parse(s).ok_or_else(|| format!("{s} is no id"));
+    Ok((parse(&repo)?, [parse(&t)?, parse(&key)?]))
 }
 
 /// In the sample class model, BankTransfer and WalletPayment beside CardPayment, each specializing

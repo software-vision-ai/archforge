@@ -63,6 +63,12 @@ pub struct State {
     pub set_name_focus: Option<Uuid>,
     /// A reconnection refused on a generalization in a set, said in its Properties (AR-129).
     pub set_refused: Option<(Uuid, String)>,
+    /// An extension's or an applied profile's editor, and a change refused for its uses, said
+    /// under its section (AR-134).
+    pub profile_edit: Option<crate::uml_profiles::ProfileEdit>,
+    pub profile_refused: Option<crate::uml_profiles::ProfileRefusal>,
+    /// The Stereotypes section: a value being typed, the picker's filter and a refusal (AR-135).
+    pub stereotypes: crate::uml_stereotypes::Stereotypes,
     /// The selection the open editors belong to: selecting anything else closes them.
     pub editors_for: Option<Uuid>,
     /// A relationship's Properties (slice E3): a role being typed, whether More is open, and the
@@ -89,6 +95,17 @@ pub struct State {
     pub ends: Option<crate::uml_relate::EndsEdit>,
     /// An association end's qualifier editor (AR-127).
     pub qualifier: Option<crate::uml_qualifiers::QualifierEdit>,
+    /// A classifier's template parameter editor, and a removal refused while a binding uses the
+    /// parameter (AR-130).
+    pub template: Option<crate::uml_templates::TemplateEdit>,
+    pub template_in_use: Option<crate::uml_templates::InUse>,
+    /// A template binding before it is written: a new one drawn on the canvas, or another template
+    /// picked for a binding (AR-131).
+    pub binding: Option<crate::uml_bindings::BindingDraft>,
+    /// An n-ary association's end editor, and the question removing one of three ends asks
+    /// (AR-128).
+    pub nary_end: Option<crate::uml_nary::EndEdit>,
+    pub nary_remove: Option<crate::uml_nary::RemoveAsk>,
     /// The body's scroll: how far it is scrolled, how tall its content was last
     /// frame, what it was scrolled for (a new panel or selection starts at the top), the editors
     /// open last frame, whether an editor that just opened is still to be brought into view, and
@@ -116,6 +133,9 @@ fn open_editors(s: &State) -> Vec<Option<Option<Uuid>>> {
         s.member.as_ref().map(|e| e.target),
         s.constraint.as_ref().map(|e| e.target),
         s.qualifier.as_ref().map(|e| e.target),
+        s.template.as_ref().map(|e| e.target),
+        s.profile_edit.as_ref().map(|e| e.target.as_deref().and_then(Uuid::parse)),
+        s.nary_end.as_ref().map(|e| Some(e.association)),
     ]
 }
 
@@ -243,6 +263,17 @@ pub enum Menu {
     EndRedefines(usize),
     /// A qualifier editor's type (AR-127).
     QualifierType,
+    /// A template parameter editor's kind, constraint and default (AR-130).
+    TemplateKind,
+    TemplateConstraint,
+    TemplateDefault,
+    /// A template binding's bound element, template, and parameter `k`'s argument (AR-131).
+    BindingBound,
+    BindingTemplate,
+    BindingArgument(usize),
+    /// An n-ary association's end editor's type and multiplicity (AR-128).
+    NaryEndType,
+    NaryEndMultiplicity,
     /// A classifier's owner, a package or a classifier (AR-132), and the kinds its Nested
     /// classifiers `+` offers.
     ClassOwner,
@@ -255,6 +286,16 @@ pub enum Menu {
     /// A constraint editor's language presets and the elements it may name (AR-133).
     ConstraintLanguage,
     ConstraintElement,
+    /// A stereotype's profile, its Extends `+` and an extension editor's metaclass, and a
+    /// package's Applied profiles `+` (AR-134).
+    StereotypeProfile,
+    StereotypeExtends,
+    ExtensionMetaclass,
+    AppliedProfile,
+    /// The Stereotypes section's picker, and a property's value select by its place among the
+    /// section's properties (AR-135).
+    StereotypePick,
+    StereotypeValue(usize),
 }
 
 /// The selection the panels describe.
@@ -377,6 +418,16 @@ pub fn retain_valid(state: &mut State, store: &Store) {
     crate::uml_panel::retain_valid(&mut state.member, store);
     crate::uml_constraints::retain_valid(&mut state.constraint, store);
     crate::uml_qualifiers::retain_valid(&mut state.qualifier, store);
+    crate::uml_templates::retain_valid(&mut state.template, &mut state.template_in_use, store);
+    if state.profile_edit.as_ref().is_some_and(|e| store.by_uuid(e.owner).is_none()) {
+        state.profile_edit = None;
+    }
+    if state.profile_refused.as_ref().is_some_and(|r| store.by_uuid(r.owner).is_none()) {
+        state.profile_refused = None;
+    }
+    crate::uml_bindings::retain_valid(&mut state.binding, store);
+    crate::uml_nary::retain_valid(state, store);
+    crate::uml_stereotypes::retain_valid(&mut state.stereotypes, store);
     if state.ends.as_ref().is_some_and(|e| store.by_uuid(e.association).is_none()) {
         state.ends = None;
     }
@@ -820,6 +871,8 @@ pub struct TypeChoices {
     pub project: Option<Uuid>,
     pub revision: u64,
     pub language: &'static str,
+    /// The classifier whose member is typed, whose template parameters the menu offers (AR-130).
+    pub within: Option<Uuid>,
     pub labels: Vec<String>,
     pub values: Vec<String>,
     pub notes: Vec<String>,
@@ -1373,12 +1426,30 @@ fn close_editors(shell: &mut Shell) {
     panels.final_refused = None;
     panels.leaf_refused = None;
     panels.set_refused = None;
+    panels.profile_refused = None;
+    // A value typed and not entered closes with the editors, as a member's editor does (AR-135).
+    panels.stereotypes = crate::uml_stereotypes::Stereotypes::default();
+    if panels.profile_edit.as_ref().is_some_and(|e| !e.opened) {
+        panels.profile_edit = None;
+    }
     if panels.constraint.as_ref().is_some_and(|e| !e.opened) {
         panels.constraint = None;
     }
     if panels.qualifier.as_ref().is_some_and(|e| !e.opened) {
         panels.qualifier = None;
     }
+    if panels.template.as_ref().is_some_and(|e| !e.opened) {
+        panels.template = None;
+    }
+    panels.template_in_use = None;
+    // A binding's menus belong to the binding they opened on (AR-131).
+    if matches!(panels.menu, Some(Menu::BindingBound | Menu::BindingTemplate | Menu::BindingArgument(_))) {
+        panels.menu = None;
+    }
+    if panels.nary_end.as_ref().is_some_and(|e| !e.opened) {
+        panels.nary_end = None;
+    }
+    panels.nary_remove = None;
 }
 
 /// Opens the column editor on `target`, or on a column to add to `entity`.
@@ -2175,11 +2246,19 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, 
         }
         Panel::Properties | Panel::Skills => {}
     }
+    // A template binding being drawn: its draft, nothing in the model yet (AR-131).
+    if panel == Panel::Properties && crate::uml_bindings::draft_panel(shell, ui, p, r, y) {
+        return;
+    }
     // Several elements, generalizations among them: what a set may be made of them (AR-129).
     if panel == Panel::Properties
         && let Some(all) = crate::uml_sets::selected(shell).filter(|all| all.len() >= 2)
     {
         crate::uml_sets::selection_body(shell, ui, p, r, y, &all);
+        return;
+    }
+    // An n-ary association being drawn: its draft, not yet in the model (AR-128).
+    if panel == Panel::Properties && crate::uml_nary::draft_body(shell, ui, p, r, y) {
         return;
     }
     ux::text(&paint, r.min + vec2(PAD, y), &s.name, types::CARD_TITLE, p.text, Some((r.width() - 2.0 * PAD).max(0.0)));

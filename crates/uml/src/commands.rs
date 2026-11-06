@@ -55,11 +55,16 @@ pub(crate) fn has_packages(f: &Facts<'_, Store, ProjectView>) -> Result<(), &'st
     if f.doc.alive().any(|o| f.doc.class_of(o).ok() == Some(PACKAGE)) { Ok(()) } else { Err(NO_PACKAGES) }
 }
 
-/// The live element the id under `key` names, of whatever class.
+/// The live element the id under `key` names, of whatever class; never a template parameter's
+/// classifier, which is its template's own (AR-130).
 fn element_of(store: &Store, p: &Params, key: &str) -> Result<Obj, CommandError> {
     let id = text(p, key);
     let Some(uuid) = Uuid::parse(id) else { return Err(refuse(key, format!("{:?} is not an id", short(id)))) };
-    store.by_uuid(uuid).filter(|o| store.is_alive(*o)).ok_or_else(|| refuse(key, format!("there is no element {}", short(id))))
+    let obj = store.by_uuid(uuid).filter(|o| store.is_alive(*o)).ok_or_else(|| refuse(key, format!("there is no element {}", short(id))))?;
+    match crate::templates::parameter_element_problem(store, obj) {
+        Some(why) => Err(refuse(key, why)),
+        None => Ok(obj),
+    }
 }
 
 /// The element the id under `key` names, of `class` (`what` names it in a refusal).
@@ -67,6 +72,10 @@ pub(crate) fn id_of(store: &Store, p: &Params, key: &str, class: ClassId, what: 
     let obj = element_of(store, p, key)?;
     if store.class_of(obj).ok() != Some(class) {
         return Err(refuse(key, format!("{} is not {what}", text(p, key))));
+    }
+    // A metaclass of the hidden UML library is UML's own, never the model's (AR-134).
+    if let Some(why) = crate::profiles::library_problem(store, obj) {
+        return Err(refuse(key, why));
     }
     Ok(obj)
 }
@@ -87,6 +96,9 @@ pub(crate) fn classifier_of(store: &Store, p: &Params, key: &str) -> Result<Obj,
             key,
             format!("{} is not a class, an interface, an enumeration, a data type, a primitive type or an association class", text(p, key)),
         ));
+    }
+    if let Some(why) = crate::profiles::library_problem(store, obj) {
+        return Err(refuse(key, why));
     }
     Ok(obj)
 }
@@ -260,6 +272,8 @@ pub(crate) fn what(store: &Store, o: Obj) -> &'static str {
         Some(c) if c == crate::PROPERTY => "attribute",
         Some(c) if c == crate::OPERATION => "operation",
         Some(c) if c == crate::CONSTRAINT => "constraint",
+        Some(c) if c == crate::PROFILE => "profile",
+        Some(c) if c == crate::STEREOTYPE => "stereotype",
         _ => "element",
     }
 }
@@ -401,6 +415,12 @@ fn package_move(ctx: &mut C<'_>, p: &Params) -> R {
         return Err(refuse("to", why));
     }
     check_name(ctx.doc, holder_of(ctx.doc, to), PACKAGE, &name_of(ctx.doc, pkg), Some(pkg))?;
+    if let Some(to) = to {
+        let uses = crate::profiles::moving_uses(ctx.doc, pkg, to);
+        if !uses.is_empty() {
+            return Err(refuse("to", crate::profiles::stranding(ctx.doc, pkg, &uses)));
+        }
+    }
     detach(ctx.doc, pkg)?;
     place_package(ctx.doc, pkg, to)?;
     // Its cards go from the diagrams of a package that no longer holds it (AR-102): a class
@@ -437,6 +457,12 @@ fn classifier_move(ctx: &mut C<'_>, p: &Params, kind: ClassId, key: &str, what: 
     }
     if !(name.is_empty() && kind == ASSOCIATION_CLASS) {
         check_name(ctx.doc, Some(to), kind, &name, Some(c))?;
+    }
+    // A move that would take stereotype applications out of their profile's scope is refused
+    // (AR-134).
+    let uses = crate::profiles::moving_uses(ctx.doc, c, to);
+    if !uses.is_empty() {
+        return Err(refuse("package", crate::profiles::stranding(ctx.doc, c, &uses)));
     }
     detach(ctx.doc, c)?;
     ctx.doc.push(to, package::PACKAGED_ELEMENT, Value::Ref(c)).map_err(fail)?;
@@ -699,7 +725,8 @@ fn hand_up_problem(store: &Store, pkg: Obj, parent: Obj) -> Option<String> {
 
 /// Removes UML elements (packages, classes, interfaces, enumerations, data types, attributes,
 /// operations, literals, primitive types, associations, generalizations, dependencies, interface
-/// realizations, association classes, constraints and generalization sets), each with what it holds (an enumeration its literals, a
+/// realizations, association classes, constraints, generalization sets, template parameters,
+/// profiles, stereotypes and template bindings), each with what it holds (an enumeration its literals, a
 /// data type or an association class its attributes and operations, an association its ends) and the
 /// diagrams, nodes and lines that show them (`element.remove`, through [`crate::UmlNotation`]). A
 /// nested package hands what it holds, and its diagrams, up to its parent first (owner decision); a
@@ -710,7 +737,10 @@ fn hand_up_problem(store: &Store, pkg: Obj, parent: Obj) -> Option<String> {
 /// a constraint left naming none goes too, in the same step (AR-133,
 /// [`crate::constraints::dropped_by`]). A generalization set goes alone, keeping its generalizations;
 /// a generalization leaves its sets, and a set left with no member goes too, in the same step
-/// (AR-129, [`crate::generalization_sets::emptied_by`]).
+/// (AR-129, [`crate::generalization_sets::emptied_by`]). A template binding goes with its
+/// substitutions, and with its bound element or its template; a classifier a binding that stays
+/// uses as an argument is refused, naming the binding (AR-131,
+/// [`crate::bindings::argument_removal_problem`]).
 pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, CommandError> {
     // Every id is checked before anything goes, so a refusal leaves the store as it was.
     let removable = [
@@ -730,11 +760,37 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
         ASSOCIATION_CLASS,
         crate::CONSTRAINT,
         crate::GENERALIZATION_SET,
+        crate::CLASSIFIER_TEMPLATE_PARAMETER,
+        crate::PROFILE,
+        crate::STEREOTYPE,
+        crate::TEMPLATE_BINDING,
     ];
+    // Template parameters a binding stands in the way of stay: one it substitutes, or a template's
+    // last while a binding names its signature (AR-130). A template going too takes its parameters
+    // and the bindings to it along, so its own are not asked.
+    let params = removed_parameters(store, objs);
+    if let Some(why) = crate::templates::removals_problem(store, &params) {
+        return Err(refuse("ids", why));
+    }
     for o in objs.iter().filter(|o| store.is_alive(**o)) {
+        // A template parameter's classifier is its parameter's: the parameter is what goes (AR-130).
+        if let Some(why) = crate::templates::parameter_element_problem(store, *o) {
+            return Err(refuse("ids", why));
+        }
         let class = store.class_of(*o).map_err(fail)?;
         // An association's end goes with its association.
         let end = class == crate::PROPERTY && store.get(*o, crate::property::ASSOCIATION).ok().and_then(|v| v.as_ref()).is_some();
+        if end && crate::nary::association_of_end(store, *o).is_some() {
+            return Err(refuse(
+                "ids",
+                format!("{} is an end of an n-ary association; remove it with uml.association.remove-end", uuid_of(store, *o)?),
+            ));
+        }
+        // A profile, a stereotype or a property in use, a package whose applications its contents
+        // need, and UML's own metaclasses stay, the uses named (AR-134).
+        if let Some(refused) = crate::profiles::removal_problem(store, *o) {
+            return Err(refused);
+        }
         if !removable.contains(&class) || end {
             return Err(refuse("ids", format!("{} cannot be removed yet", uuid_of(store, *o)?)));
         }
@@ -745,12 +801,35 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
         if let Some(why) = crate::members::removal_problem(store, *o) {
             return Err(refuse("ids", why));
         }
+        // Only a classifier's template parameter is removed (AR-130).
+        if class == crate::CLASSIFIER_TEMPLATE_PARAMETER && !crate::templates::is_parameter(store, *o) {
+            return Err(refuse("ids", format!("{} cannot be removed yet", uuid_of(store, *o)?)));
+        }
         if class == PACKAGE
             && let Some(parent) = package_of(store, *o)
             && let Some(why) = hand_up_problem(store, *o, parent)
         {
             return Err(refuse("ids", format!("its contents cannot move up: {why}")));
         }
+    }
+    // A surviving template parameter's default, or a binding's argument, that would no longer
+    // specialize its constraint once what goes has gone is refused before anything goes (AR-130).
+    let (gone_classes, gone_generalizations) = going_for_constraints(store, objs);
+    if let Some(why) = crate::templates::constraint_problem(store, &gone_classes, &gone_generalizations, &params) {
+        return Err(refuse("ids", why));
+    }
+    // A classifier a binding that stays uses as an argument stays too (AR-131): the binding would
+    // be left naming nothing for its parameter.
+    let classes: Vec<Obj> = gone_classes.iter().copied().collect();
+    let going: Vec<Obj> = going_with(store, &classes).into_iter().chain(objs.iter().copied()).collect();
+    if let Some(why) = crate::bindings::argument_removal_problem(store, &classes, &going) {
+        return Err(refuse("ids", why));
+    }
+    // A literal a stereotype's value names stays while the element carrying that value stays
+    // (AR-135): the value would go with it unseen.
+    let going: Vec<Obj> = gone_classes.iter().chain(&gone_generalizations).copied().chain(going_with(store, &classes)).collect();
+    if let Some(why) = crate::applications::literal_problem(store, |o| goes_by(store, objs, &going, o)) {
+        return Err(refuse("ids", why));
     }
     // A classifier's nested classifiers go with it (AR-132), named among what goes so their
     // relationships, constraints and sets are worked out as theirs.
@@ -765,11 +844,15 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
             objs.push(n);
         }
     }
+    // Template parameters go first, each signature left with none going with its last (AR-130);
+    // those of a template that goes too go with it.
+    let params = removed_parameters(store, &objs);
+    let mut gone = crate::templates::remove(store, &params)?;
+    objs.retain(|o| !params.contains(o) && !crate::templates::is_parameter(store, *o));
     let objs = objs.as_slice();
     // A constraint left constraining nothing goes with what it constrained (AR-133), worked out
     // before anything moves; the others lose the elements that go as the core destroys them.
     let orphans = crate::constraints::orphans(&crate::constraints::dropped_by(store, objs));
-    let mut gone = 0;
     // A nested package's contents and diagrams move up to its parent before it goes.
     let nested: Vec<Obj> = objs.iter().copied().filter(|o| store.is_alive(*o) && store.class_of(*o).ok() == Some(PACKAGE)).collect();
     for o in nested {
@@ -805,11 +888,30 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
     // removing a set keeps its generalizations.
     let emptied = crate::generalization_sets::emptied_by(store, &all);
     all.extend(emptied);
+    // A stereotype application goes with the element it applies to (AR-134).
+    let applications = crate::profiles::applications_on(store, &all);
+    all.extend(applications);
+    // A profile a package with no parent takes along has its applications taken away first, as a
+    // profile removed on its own has; its uses were refused above (AR-134).
+    let taken: Vec<Obj> = objs
+        .iter()
+        .filter(|o| store.is_alive(**o) && store.class_of(**o).ok() == Some(PACKAGE) && package_of(store, **o).is_none())
+        .flat_map(|o| crate::profiles::profiles_within(store, *o))
+        .collect();
+    for profile in taken {
+        crate::profiles::before_profile_removal(store, profile)?;
+    }
     // A default that is a literal goes with the literal: an InstanceValue needs its instance.
     let defaults = crate::modifiers::literal_defaults(store);
     for o in all {
         if !store.is_alive(o) {
             continue;
+        }
+        // A profile's applications, and a stereotype's extensions, go before it (AR-134).
+        match store.class_of(o).ok() {
+            Some(c) if c == crate::PROFILE => crate::profiles::before_profile_removal(store, o)?,
+            Some(c) if c == crate::STEREOTYPE => crate::profiles::before_stereotype_removal(store, o)?,
+            _ => {}
         }
         gone += store
             .transaction(|st| {
@@ -826,6 +928,48 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
     Ok(gone)
 }
 
+/// What removing `objs` takes away that a specialization path may run through, worked out before
+/// anything changes (AR-130): the classifiers that go (those named, what they nest, and what a
+/// top-level package holds; a nested package hands its contents up, so they stay), and the
+/// generalizations that go (those named, and those that go with the classifiers).
+fn going_for_constraints(store: &Store, objs: &[Obj]) -> (std::collections::BTreeSet<Obj>, std::collections::BTreeSet<Obj>) {
+    let mut classes = std::collections::BTreeSet::new();
+    for o in objs.iter().copied().filter(|o| store.is_alive(*o)) {
+        match store.class_of(o).ok() {
+            Some(c) if crate::is_classifier(c) => {
+                classes.insert(o);
+                classes.extend(crate::nesting::nested_within(store, o));
+            }
+            Some(c) if c == PACKAGE && package_of(store, o).is_none() => classes.extend(classifiers_within(store, o)),
+            _ => {}
+        }
+    }
+    let list: Vec<Obj> = classes.iter().copied().collect();
+    let generalizations = going_with(store, &list)
+        .into_iter()
+        .chain(objs.iter().copied())
+        .filter(|g| store.is_alive(*g) && store.class_of(*g).ok() == Some(crate::GENERALIZATION))
+        .collect();
+    (classes, generalizations)
+}
+
+/// Whether `o` goes when `objs` are removed, `going` being the classifiers, generalizations and
+/// relationships that go with them ([`going_for_constraints`], [`going_with`]): it is one of them, or
+/// inside one; what a nested package holds is handed up and stays.
+fn goes_by(store: &Store, objs: &[Obj], going: &[Obj], o: Obj) -> bool {
+    let handed_up = |x: Obj| store.class_of(x).ok() == Some(PACKAGE) && package_of(store, x).is_some();
+    objs.iter().any(|x| *x == o || (store.contains(*x, o) && !handed_up(*x))) || going.iter().any(|x| *x == o || store.contains(*x, o))
+}
+
+/// The template parameters among `objs` whose template does not go with them: a template that
+/// goes, named among `objs` or inside one of them, takes its parameters along (AR-130).
+fn removed_parameters(store: &Store, objs: &[Obj]) -> Vec<Obj> {
+    objs.iter()
+        .copied()
+        .filter(|o| crate::templates::template_of(store, *o).is_some_and(|t| !objs.iter().any(|x| *x == t || store.contains(*x, t))))
+        .collect()
+}
+
 /// The relationships that go when `classes` go: those that touch any of them or a classifier
 /// nested in one (AR-132), and, since an association class is a classifier too, those that touch
 /// an association class going with them, and so on, each once. A seen-set bounds the walk.
@@ -839,7 +983,9 @@ pub fn going_with(store: &Store, classes: &[Obj]) -> Vec<Obj> {
                 queue.push(n);
             }
         }
-        for r in crate::relations::relationships_of(store, c) {
+        // The bindings to a template go with it (AR-130): a binding needs its signature.
+        let bindings = crate::templates::bindings_to(store, c);
+        for r in crate::relations::relationships_of(store, c).into_iter().chain(bindings) {
             if seen.insert(r) {
                 out.push(r);
                 if store.class_of(r).ok() == Some(ASSOCIATION_CLASS) {

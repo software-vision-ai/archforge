@@ -109,6 +109,51 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   one at another place among its end's. A name another qualifier of the end has, whatever the case,
   is refused. `uml_relationship_list` gives each end's qualifiers. A qualifier is removed with
   `element_remove`.
+- **Templates**: `uml_template_parameter_add` gives a class, an interface or a data type a
+  template parameter (`kind` class, interface, data-type, enumeration or primitive-type, an
+  optional `constraint` and `default`, each a classifier's id or a built-in type's name), making it
+  a template; `uml_template_parameter_set` changes one, a field left out keeping its value;
+  `uml_template_parameter_move` puts one at another place; `uml_template_parameter_list` lists them
+  with the bindings that use them, and `uml_class_get` gives them too. The kinds `value` and
+  `operation` are refused as not supported yet, never turned into another kind. A name another
+  parameter of the template has, whatever the case, a constraint of another kind and a default that
+  does not fit are refused. A parameter's `element` types the template's own attributes,
+  operations and parameters, and no other classifier's. A parameter is removed with
+  `element_remove`, refused while a binding uses it; the template's last parameter takes its
+  signature along, and is refused while any binding names the template. `element_remove` also
+  refuses removing a generalization or a classifier when a parameter's default, or a binding's
+  argument, would then no longer specialize the parameter's constraint. A parameter without a
+  default is refused on a template a binding names, and so is clearing a default a binding
+  relies on.
+- **Template bindings**: `uml_template_binding_add` makes `bound` (a class, an interface or a data
+  type) bind `template` (one of the same kind with template parameters), with `arguments`, an
+  object mapping each parameter's name or id to a classifier's id or a built-in type's name; a
+  parameter without a default needs one, and one left out uses its default.
+  `uml_template_binding_set` changes the bound element, the template (its arguments given anew) or
+  some arguments (`""` takes one back to its default); `uml_template_binding_list` gives a
+  classifier's bindings (`binds`) and those to it (`bound_by`), each with its `label`, `«bind» <T ->
+  Order, Key -> Integer>`, and every parameter's argument, `default` true where the default is
+  used. An argument of another kind, one that does not fit the parameter's constraint, a template
+  parameter's own classifier, a template of another kind, a second binding of the same template and
+  a cycle of bindings are refused. Show it on a class diagram with `diagram_connect` and its text
+  with `diagram_label` (`kind` name). `uml_relationship_reconnect` moves its source to another
+  bound element, or its target to another template whose parameters all have defaults.
+  `element_remove` removes it with its substitutions; a classifier a binding uses as an argument is
+  refused, naming the binding, until that binding changes or goes; removing the bound element or
+  the template takes the binding along.
+- **N-ary associations**: `uml_association_add_nary` joins three to 32 classes or interfaces in one
+  association (`classes`, in order; a class given twice has two ends), each end named after its
+  class and starting at `*`. On a class diagram it is a diamond: `diagram_place` with the
+  association's id, then `diagram_connect` from the diamond's node to each class's node with the
+  end's id (or `diagram_connect_all`), all in one `batch` for one undo step. `uml_association_set_end`
+  sets an end by its place among the ends; its role must differ from every other end's, and an
+  n-ary end takes no aggregation. `uml_association_add_end`, `uml_association_reconnect_end` and
+  `uml_association_remove_end` add, move and remove an end; a leg is drawn or kept only on the
+  diagrams that show both the diamond and the end's class, and what the ends subset or redefine
+  that a move or removal makes invalid is dropped and listed.
+  Removing one of three ends is refused unless `binary` is true, which makes it an ordinary
+  association between the two classes left. `uml_relationship_list` gives it with the kind
+  `n-ary association` and all its ends.
 - **Generalization sets**: `uml_generalization_set_add` groups generalizations to one general
   class, complete or incomplete and disjoint or overlapping; `uml_generalization_set_set` renames
   it, changes either flag, and adds or takes out members; `uml_generalization_set_place` puts its
@@ -126,6 +171,35 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   `uml_classifier_owners` where a classifier may go, each owner allowed or with its reason.
   `uml_class_get` says a classifier's owner and what it nests. Removing an owner with
   `element_remove` removes what it nests.
+- **Profiles and stereotypes**: `uml_profile_add` makes a profile in a package, the root package
+  when none is named; `uml_stereotype_add` makes a stereotype in it, with the metaclasses it
+  extends by UML's names (Class, Interface, Enumeration, DataType, Property, Operation,
+  Association, Generalization, Package; any other is refused, saying it is not drawn yet);
+  `uml_stereotype_set` renames it, moves it to another profile or replaces what it extends;
+  `uml_attribute_add` with the stereotype's id adds a property, typed by a primitive type, an
+  enumeration or a data type; `uml_profile_apply` and `uml_profile_unapply` apply a profile to a
+  package and take it away; `uml_profile_diagram` gives the profile's diagram, made the first time
+  and filled with every stereotype, every metaclass they extend and the extension lines, what it
+  showed already kept, as the window's Open profile diagram does. Unapplying,
+  deleting, dropping an extension, moving a stereotype or moving what a use sits in is refused
+  while elements use the stereotypes, the uses named; deleting a used element with
+  `element_remove` removes its applications with it. `uml_profile_list`, `uml_stereotype_get`,
+  `uml_package_profiles`, `uml_profile_uses` and `uml_metaclass_list` read them; a profile or a
+  stereotype is removed with `element_remove`.
+- **Stereotypes applied**: `uml_stereotype_apply` applies a stereotype to an element (a classifier,
+  an attribute or an association end, an n-ary association's ends included, which the window's
+  Properties do not offer yet (their ids come from `uml_association_add_nary` or
+  `uml_relationship_list`), an operation, an association, a generalization or a package)
+  whose metaclass it extends, its profile applied to the element's package or a package
+  around it, each stereotype once; `uml_stereotype_unapply` takes it off with its values, the
+  stereotype kept; `uml_stereotype_set_value` sets one property's `values` as text, read by the
+  property's type as a default is (a literal's name for an enumeration) and checked against its
+  multiplicity, `[]` clearing them so the default shows; `uml_stereotype_show_values` turns a class
+  diagram's values compartments on or off; `uml_stereotype_list_applied` reads an element's
+  stereotypes with every property's values, `set` telling a value set from a default, and
+  `uml_stereotype_applicable` every stereotype with whether it applies and why not. Removing a
+  literal a value names, retyping a property whose values are set or giving it a multiplicity a set
+  value breaks is refused, naming the value.
 
 Ask it in your own words, for example: *"Add a table Invoice to the Shop schema with an id
 primary key and a foreign key to Order."* The table appears on screen as the agent adds it.

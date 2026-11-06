@@ -135,11 +135,29 @@ fn model_types(store: &Store) -> Vec<(String, String)> {
             })
         })
         .filter(|t| !built_in(store, *t))
+        // A template parameter's classifier is offered only inside its template (AR-130).
+        .filter(|t| !archforge_uml::templates::is_parameter_element(store, *t))
+        // UML's own metaclasses and the stereotypes type nothing of the model (AR-134).
+        .filter(|t| !archforge_uml::profiles::is_stereotype(store, *t) && !archforge_uml::profiles::in_library(store, *t))
         .filter_map(|t| Some((store.uuid(t).ok()?.to_string(), name(store, t))))
         .filter(|(_, n)| !n.is_empty())
         .collect();
     out.sort_by_key(|a| a.1.to_lowercase());
     out
+}
+
+/// The template parameters of `within`, when it is a template, as a type menu offers them: each by
+/// its name and its classifier's id, in their order (AR-130).
+fn parameter_types(store: &Store, within: Option<Obj>) -> Vec<(String, String)> {
+    within
+        .map(|c| archforge_uml::templates::parameters(store, c))
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|p| {
+            let e = archforge_uml::templates::element_of(store, p)?;
+            Some((name(store, e), store.uuid(e).ok()?.to_string()))
+        })
+        .collect()
 }
 
 /// Opens the editor of `kind` on `target`, or on a new member of `class`.
@@ -222,7 +240,10 @@ pub(crate) fn edit_of(store: Option<&Store>, class: Uuid, kind: MemberKind, targ
 /// association's end, an operation, or an enumeration's literal.
 pub(crate) fn member_of(store: &Store, o: Obj) -> Option<(Obj, MemberKind)> {
     let (c, _) = store.container(o).ok()??;
-    if !archforge_uml::is_classifier(store.class_of(c).ok()?) {
+    // A stereotype's properties are members as a class's attributes are (AR-134); its base_
+    // attributes, an extension's ends, are not, as an association's end is not.
+    let owner = store.class_of(c).ok()?;
+    if !archforge_uml::is_classifier(owner) && owner != archforge_uml::STEREOTYPE {
         return None;
     }
     match store.class_of(o).ok()? {
@@ -274,9 +295,15 @@ pub(crate) fn class_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
     }
     y = final_check(shell, ui, p, r, y, class, class_id);
     y = leaf_check(shell, ui, p, r, y, class, class_id);
+    // Its stereotypes, or the selected member's (AR-135, F3).
+    y = crate::uml_stereotypes::section_for(shell, ui, p, r, y, class);
     // The classifiers it nests, a class's or an interface's (AR-132, D1).
     if shell.session.as_ref().is_some_and(|s| crate::uml_nesting::owns(s.doc(), class)) {
         y = crate::uml_nesting::nested_section(shell, ui, p, r, y, class, class_id);
+    }
+    // Its template parameters, a class's, an interface's or a data type's (AR-130, C1).
+    if shell.session.as_ref().is_some_and(|s| s.doc().class_of(class).is_ok_and(archforge_uml::templates::can_be_template)) {
+        y = crate::uml_templates::section_of(shell, ui, p, r, y, class, class_id);
     }
     if kind == Classifier::Enumeration {
         y = members_section(shell, ui, p, r, y, class, class_id, MemberKind::Literal);
@@ -537,9 +564,11 @@ pub(crate) fn package_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r:
         &here,
         Menu::PackageParent,
     );
-    // Its constraints (AR-133).
+    // Its stereotypes (AR-135), the profiles it applies (AR-134, F5), then its constraints (AR-133).
     if let Some(id) = subject.id {
-        crate::uml_constraints::section_of(shell, ui, p, r, field.bottom() + 16.0, package, id);
+        let below = crate::uml_stereotypes::section_for(shell, ui, p, r, field.bottom() + 16.0, package);
+        let below = crate::uml_profiles::applied_section(shell, ui, p, r, below, package, id);
+        crate::uml_constraints::section_of(shell, ui, p, r, below, package, id);
     }
     if shell.panels.menu == Some(Menu::PackageParent) {
         let paths: Vec<Vec<String>> = choices.iter().map(|(_, n)| n.clone()).collect();
@@ -607,7 +636,7 @@ pub(crate) fn members_section(
             .into_iter()
             .filter_map(|a| {
                 let marks = ux::Marks { slanted: false, underlined: archforge_uml::figures::is_static(store, a) };
-                Some((store.uuid(a).ok()?, archforge_uml::figures::attribute_text(store, a), marks))
+                Some((store.uuid(a).ok()?, archforge_uml::figures::member_text(store, a), marks))
             })
             .collect(),
         MemberKind::Operation => operations(store, class)
@@ -617,7 +646,7 @@ pub(crate) fn members_section(
                     slanted: flag(store, o, archforge_uml::behavioral_feature::IS_ABSTRACT),
                     underlined: archforge_uml::figures::is_static(store, o),
                 };
-                Some((store.uuid(o).ok()?, archforge_uml::figures::operation_text(store, o), marks))
+                Some((store.uuid(o).ok()?, archforge_uml::figures::member_text(store, o), marks))
             })
             .collect(),
         MemberKind::Literal => {
@@ -629,6 +658,9 @@ pub(crate) fn members_section(
         MemberKind::Operation => (tr("Operations · {n}"), "workspace.properties.operations.add", "Add operation", "workspace.properties.operation"),
         MemberKind::Literal => (tr("Literals · {n}"), "workspace.properties.literals.add", "Add literal", "workspace.properties.literal"),
     };
+    // A stereotype's attributes are its properties (AR-134, F1).
+    let stereotype = archforge_uml::profiles::is_stereotype(store, class);
+    let (title, hint) = if stereotype && kind == MemberKind::Attribute { (tr("Properties · {n}"), "Add property") } else { (title, hint) };
     let title = fmt(&title, &[("n", &rows.len().to_string())]);
     let Some(next) = section(shell, ui, p, r, y, &title, Some((add, hint))) else {
         open(shell, class_id, kind, None);
@@ -674,19 +706,22 @@ pub(crate) fn members_section(
     y + 10.0
 }
 
-/// What a type menu offers, each as it reads and as the commands take it: None, every built-in
-/// type by its name, which the commands always resolve to the one in Types, then the model's own
-/// by name. A type of the model's own named like a built-in one never hides it: both are offered,
-/// told apart by [`type_notes`].
-pub(crate) fn type_choices(store: &Store) -> Vec<(String, String)> {
+/// What a type menu offers, each as it reads and as the commands take it: None, the template
+/// parameters of `within` (the classifier whose member is typed) when it is a template, nearest
+/// first (AR-130), every built-in type by its name, which the commands always resolve to the one
+/// in Types, then the model's own by name. A type of the model's own named like a built-in one
+/// never hides it: both are offered, told apart by [`type_notes`].
+pub(crate) fn type_choices(store: &Store, within: Option<Obj>) -> Vec<(String, String)> {
     std::iter::once((tr("None"), String::new()))
+        .chain(parameter_types(store, within))
         .chain(BUILT_IN.iter().map(|b| (b.to_string(), b.to_string())))
         .chain(model_types(store).into_iter().map(|(id, n)| (n, id)))
         .collect()
 }
 
 /// The muted note after each of `choices` (from [`type_choices`]) in a type menu, empty for most:
-/// where several choices share a name, whatever the case, each says where it is from, "built-in"
+/// a template parameter always says so (AR-130); where several choices share a name, whatever the
+/// case, each says where it is from, "built-in"
 /// for a built-in type and its package's path below the root package (every package's top) for
 /// one of the model's own, so the entries are told apart. Each is given by its parts, the path's
 /// names, so a long one folds from its front.
@@ -700,6 +735,9 @@ pub(crate) fn type_notes(store: &Store, choices: &[(String, String)]) -> Vec<Vec
     choices
         .iter()
         .map(|(label, value)| {
+            if Uuid::parse(value).and_then(|u| store.by_uuid(u)).is_some_and(|t| archforge_uml::templates::is_parameter_element(store, t)) {
+                return vec![tr("template parameter")];
+            }
             if value.is_empty() || counts.get(&label.to_lowercase()).copied().unwrap_or(0) < 2 {
                 return Vec::new();
             }
@@ -719,8 +757,9 @@ pub(crate) fn type_notes(store: &Store, choices: &[(String, String)]) -> Vec<Vec
 /// Every type named `name`, ignoring case, as the commands take it: the built-in type of that
 /// name, and each of the model's own types, whichever package holds it. Typed where several share
 /// the name, it is refused and the menu, which tells them apart, picks one: a built-in type is
-/// never taken for one of the model's own nor one of those for it.
-pub(crate) fn types_named(store: &Store, name: &str) -> Vec<String> {
+/// never taken for one of the model's own nor one of those for it. Inside a template, `within`, its
+/// parameters are types too (AR-130).
+pub(crate) fn types_named(store: &Store, name: &str, within: Option<Obj>) -> Vec<String> {
     let universe = store.universe();
     let own = store
         .alive()
@@ -729,29 +768,32 @@ pub(crate) fn types_named(store: &Store, name: &str) -> Vec<String> {
                 universe.conforms(c, TypeRef::Class(archforge_uml::TYPE)) && !universe.conforms(c, TypeRef::Class(archforge_uml::ASSOCIATION))
             })
         })
-        .filter(|t| !built_in(store, *t) && self::name(store, *t).eq_ignore_ascii_case(name))
+        .filter(|t| !built_in(store, *t) && !archforge_uml::templates::is_parameter_element(store, *t))
+        .filter(|t| self::name(store, *t).eq_ignore_ascii_case(name))
+        .filter(|t| !archforge_uml::profiles::is_stereotype(store, *t) && !archforge_uml::profiles::in_library(store, *t))
         .filter_map(|t| store.uuid(t).ok().map(|u| u.to_string()));
     let builtin = BUILT_IN.iter().find(|b| b.eq_ignore_ascii_case(name)).map(|b| b.to_string());
-    builtin.into_iter().chain(own).collect()
+    let params = parameter_types(store, within).into_iter().filter(|(n, _)| n.eq_ignore_ascii_case(name)).map(|(_, id)| id);
+    params.chain(builtin).chain(own).collect()
 }
 
-/// The open type menu's choices, built by [`type_choices`] only when the project, its state or the
-/// interface language changed since they were last built; taken out of the shell for the frame, to be handed back
-/// with [`keep_choices`].
-pub(crate) fn choices_for_menu(shell: &mut Shell) -> crate::panels::TypeChoices {
+/// The open type menu's choices for a member of `within`, built by [`type_choices`] only when the
+/// project, its state, the classifier or the interface language changed since they were last built;
+/// taken out of the shell for the frame, to be handed back with [`keep_choices`].
+pub(crate) fn choices_for_menu(shell: &mut Shell, within: Option<Uuid>) -> crate::panels::TypeChoices {
     let Some(session) = shell.session.as_ref() else { return crate::panels::TypeChoices::default() };
     let store = session.doc();
     let project = archforge_uml::commands::model(store).ok().and_then(|m| store.uuid(m).ok());
     let revision = session.revision();
     let language = crate::i18n::language();
     match shell.panels.type_choices.take() {
-        Some(kept) if kept.project == project && kept.revision == revision && kept.language == language => kept,
+        Some(kept) if kept.project == project && kept.revision == revision && kept.language == language && kept.within == within => kept,
         _ => {
-            let choices = type_choices(store);
+            let choices = type_choices(store, within.and_then(|w| store.by_uuid(w)));
             let note_parts = type_notes(store, &choices);
             let notes = note_parts.iter().map(|parts| parts.join(crate::panels::PATH_SEP)).collect();
             let (labels, values) = choices.into_iter().unzip();
-            crate::panels::TypeChoices { project, revision, language, labels, values, notes, note_parts }
+            crate::panels::TypeChoices { project, revision, language, within, labels, values, notes, note_parts }
         }
     }
 }
@@ -761,14 +803,41 @@ pub(crate) fn keep_choices(shell: &mut Shell, choices: crate::panels::TypeChoice
     shell.panels.type_choices = Some(choices);
 }
 
-/// The menu of a type select, when it is open; sets `ty` to the type picked.
-pub(crate) fn type_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Rect, id: &str, ty: &mut String, which: Menu) {
+/// The menu of a type select for a member of `within`, when it is open; sets `ty` to the type
+/// picked.
+#[allow(clippy::too_many_arguments, reason = "a menu is drawn for its field, id, value and the classifier typed in")]
+pub(crate) fn type_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Rect, id: &str, ty: &mut String, which: Menu, within: Option<Uuid>) {
     if shell.panels.menu != Some(which) {
         return;
     }
-    let choices = choices_for_menu(shell);
-    if let Some(i) = crate::panels::menu_noted(shell, ui, p, field, id, &choices.labels, &choices.notes, &choices.note_parts) {
-        *ty = choices.values.get(i).cloned().unwrap_or_default();
+    let choices = choices_for_menu(shell, within);
+    // A stereotype's property is typed by a primitive type, an enumeration or a data type alone
+    // (AR-134): the menu offers those.
+    let stereotype = shell
+        .panels
+        .member
+        .as_ref()
+        .and_then(|e| shell.session.as_ref().and_then(|s| s.doc().by_uuid(e.class).map(|c| archforge_uml::profiles::is_stereotype(s.doc(), c))))
+        .unwrap_or(false);
+    let offered: Vec<usize> = (0..choices.values.len())
+        .filter(|i| {
+            !stereotype
+                || choices.values.get(*i).is_none_or(|v| {
+                    shell.session.as_ref().is_none_or(|s| match Uuid::parse(v).and_then(|u| s.doc().by_uuid(u)) {
+                        Some(t) => s
+                            .doc()
+                            .class_of(t)
+                            .is_ok_and(|c| c == archforge_uml::PRIMITIVE_TYPE || c == archforge_uml::ENUMERATION || c == archforge_uml::DATA_TYPE),
+                        None => true,
+                    })
+                })
+        })
+        .collect();
+    let pick = |v: &[String]| offered.iter().filter_map(|i| v.get(*i).cloned()).collect::<Vec<String>>();
+    let (labels, notes) = (pick(&choices.labels), pick(&choices.notes));
+    let note_parts: Vec<Vec<String>> = offered.iter().filter_map(|i| choices.note_parts.get(*i).cloned()).collect();
+    if let Some(i) = crate::panels::menu_noted(shell, ui, p, field, id, &labels, &notes, &note_parts) {
+        *ty = offered.get(i).and_then(|i| choices.values.get(*i)).cloned().unwrap_or_default();
     }
     keep_choices(shell, choices);
 }
@@ -992,13 +1061,14 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     {
         edit.visibility = i;
     }
+    let within = edit.class;
     for (field, id, which) in menus {
         let slot = match which {
             Menu::ParamType(i) => edit.params.get_mut(i).map(|p| &mut p.ty),
             _ => Some(&mut edit.ty),
         };
         if let Some(ty) = slot {
-            type_menu(shell, ui, p, field, &id, ty, which);
+            type_menu(shell, ui, p, field, &id, ty, which, Some(within));
         }
     }
     if let Some(m) = modifier_menus {
@@ -1007,6 +1077,11 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     shell.panels.member = Some(edit.clone());
     if cancel || (shell.panels.menu.is_none() && ui.input(|i| i.key_pressed(egui::Key::Escape))) {
         shell.panels.member = None;
+    } else if remove && let Some(asked) = ask_for_applications(shell, &edit) {
+        // Its stereotype applications would go with it: the delete dialog names them first, as
+        // every other delete of a carrier does (AR-135).
+        shell.panels.member = None;
+        shell.explorer.delete = Some(asked);
     } else if remove {
         let target = edit.target.map(|t| t.to_string()).unwrap_or_default();
         let said = crate::uml_constraints::before_removal(shell, std::slice::from_ref(&target));
@@ -1024,6 +1099,27 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
         commit(shell, &edit);
     }
     card.bottom() + 8.0
+}
+
+/// The delete dialog for the member `edit` edits, when stereotype applications would go with it
+/// (AR-135): naming them, so removing it never takes them along unasked. None when none would.
+fn ask_for_applications(shell: &Shell, edit: &MemberEdit) -> Option<crate::explorer::Delete> {
+    let target = edit.target?;
+    let store = shell.session.as_ref()?.doc();
+    let member = store.by_uuid(target)?;
+    let applications = crate::uml_stereotypes::going_along(store, member);
+    (!applications.is_empty()).then(|| crate::explorer::Delete {
+        ids: vec![target],
+        name: crate::notation_ui::label(shell.notation_uis, store, member),
+        relationships: 0,
+        keys: 0,
+        foreign_keys: 0,
+        diagrams: 0,
+        node: None,
+        along: Vec::new(),
+        applications,
+        hands_to: None,
+    })
 }
 
 /// The member editor's No redefinition (leaf) at `at`, `width` wide, with its explanation under it
@@ -1700,5 +1796,6 @@ pub(crate) fn retain_valid(edit: &mut Option<MemberEdit>, store: &Store) {
 /// The hover texts given by key and the visibilities' words, for the catalogue tests.
 #[cfg(test)]
 pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
-    ["Add attribute", "Add operation", "Add literal", "Remove", "Remove parameter", "Move up", "Move down", "Cancel", "Apply"].into_iter()
+    ["Add attribute", "Add property", "Add operation", "Add literal", "Remove", "Remove parameter", "Move up", "Move down", "Cancel", "Apply"]
+        .into_iter()
 }

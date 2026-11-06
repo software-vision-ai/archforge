@@ -567,7 +567,8 @@ What is UML's own, beside the shared rules above.
 - The Relationship tool's face is a sample of the kind it draws; its chevron opens a menu of
   Association, Directed association, Aggregation, Composition, Generalization and Dependency, then
   after a separator Interface realization and Association class (its sample a small card over the
-  line's middle), each a row with its sample line, the current kind tinted and ticked at the
+  line's middle), then after another separator N-ary association (AR-128; its sample a small
+  diamond on the line with a leg down) and Template binding (AR-131), in that order, each a row with its sample line, the current kind tinted and ticked at the
   row's right as the classifier tool's menu ticks its own (AR-191), and a pick closes it.
   A line is drawn from the whole to the part, from the specific class to the general one, from the
   client to the supplier, from the implementing class to its interface; dropped on empty canvas it
@@ -728,8 +729,8 @@ What is UML's own, beside the shared rules above.
   says "Qualified end: the qualifier box is drawn here, against Order." under its title; the
   other end's multiplicity field is labelled Per qualifier value with "Counted per qualifier
   value of the other end; shown next to OrderLine." under it. As built, the ends keep their two
-  sections (End at …) rather than the design's Ends switch, which belongs with n-ary associations
-  (AR-128). A name another qualifier of the end has, whatever the case, is refused in a tinted
+  sections (End at …) rather than the design's Ends switch; n-ary associations (AR-128) list their
+  ends as rows with an editor each, as frame A4 draws, so no switch is built. A name another qualifier of the end has, whatever the case, is refused in a tinted
   box under the fields with the name ringed ("This end already has a qualifier named lineNo. Pick
   another name."), the editor open and nothing written. On the canvas the box is drawn in the
   surface, framed in the line's ink, against the side of the class's card the line leaves, rows in
@@ -768,6 +769,35 @@ What is UML's own, beside the shared rules above.
   fits, whichever compartment they are in; with no row's place left, a row above the card's foot
   while that is under the header, and on a card shorter still at the right of its eyebrow's line.
   Below the detail zoom every card shows only its name.
+- N-ary associations (AR-128, design page 08, frames A2 to A5): one association of three ends or
+  more, drawn as a hollow diamond (the page-02 N-ary diamond, 44 × 28, its name above it) with a
+  leg to the card of each end's class; the diamond is a node of the association and each leg an
+  edge of its end, so nothing new is stored. Drawing: pick N-ary association, then click each class
+  in turn; the diamond appears with the second end at the middle of the cards clicked, a dashed leg
+  follows the pointer, and the page-02 Gesture hint at the canvas's top counts the ends ("N-ary
+  association · 2 ends — click a class for the next end", then Enter, Backspace and Esc in muted
+  words); Properties shows the draft ("New n-ary association", Ends so far). Enter, or a double
+  click on the last class, finishes at three ends or more as one undo step and selects it;
+  Backspace drops the last end; Esc, another tool or kind, a click on empty canvas or another tab
+  cancels and leaves nothing. A class clicked twice has two ends. New ends are named after their
+  class (`customer`, `customer2` for a second end there) and start at `*`; the association gets
+  no name until one is typed. A click on the diamond or any leg selects the one association, the
+  diamond and every leg drawn in the accent. Properties: Name and its package (read only: nothing
+  moves an association yet), then `Ends · n` with `+` and a row per end, `customer : Customer [*]`
+  with its pencil; the row editor has Role and Type, Multiplicity, Navigable, Ordered and Unique,
+  the line "Ends of an n-ary association are not aggregations…", the bin at its foot and Cancel and
+  Apply (one undo step); a role another end has, whatever the case, is refused in a tinted box in
+  the editor. The design's arrows that reorder ends are left out: nothing reorders them yet. Add
+  end (`+`, or the diamond's or a leg's right-click menu: Add end, Reconnect end, Remove from this
+  diagram, Delete from the model…) waits for a class click; dragging a leg's class end, or picking
+  another Type, moves that end; a leg is drawn on each diagram that shows the diamond and its class. Removing one of three ends asks in
+  Properties (frame A5): "Two ends would remain", Keep 3 ends (focused, as Esc) or Make it
+  binary, which turns it into a plain association between the two classes left, a named line in the
+  diamond's place wherever both are shown, as one undo step; with four ends or more the bin removes
+  at once. Delete takes the diamond and its legs off this diagram; Delete from the model asks first.
+  Its ends are never aggregations, as UML has only binary aggregations. Agents use
+  `uml.association.{add-nary, add-end, remove-end, reconnect-end}` and `uml.association.set-end`
+  with an end's place.
 - Constraints (AR-133, page 08 section E): a classifier's or a package's Properties end with
   `Constraints · n`, its `+` opening the editor with the selected element as the one constrained
   element; each row reads `name {expression}` with its pencil (a double click opens it too). The
@@ -829,6 +859,159 @@ What is UML's own, beside the shared rules above.
   Deleting an owner from the model asks first, the dialog naming what it nests (`{n} nested
   classifiers go with it: Order::Priority.`), and takes them along with their relationships and
   cards in one step.
+- Templates (AR-130, design page 08, C1, C4 and C5). A class, an interface or a data type
+  becomes a template with its first parameter: `Template parameters · n` in its Properties, after
+  Nested classifiers, its `+` (`workspace.properties.class.templateParameters.add`) opening the
+  row editor; rows read `Key : DataType = Integer` with their pencil (a double click opens it too),
+  ids `workspace.properties.class.templateParameter.<k>` and `….<k>.name`, `.kind`, `.constraint`,
+  `.default`, `.remove`, `.up`, `.down`, `.cancel`, `.apply`. The editor holds Name and Kind side
+  by side, Constrained to (Any, or a classifier of the kind) and Default (None, or one of the kind
+  that fits the constraint) under them, a line saying what an argument must be ("Arguments for Key
+  must be data types. Bindings that leave it out use Integer. Renaming or reordering keeps every
+  binding."), the bin and the moves at its foot on the left, Cancel and Apply on the right. The
+  Kind menu, headed PARAMETER KIND, lists Class, Interface, Data type, Enumeration and Primitive
+  type, the current one ticked, then after a line Value and Operation, disabled with "not yet" at
+  their right and the reason on hover, never taken (`….kind.<kind>`). A name another parameter has,
+  whatever the case, and a default that does not fit are refused in a tinted box under the fields,
+  the field ringed. Removing a parameter a binding uses is refused under the rows on the danger
+  tint ("OrderRepository binds Key -> Integer. Change or remove that binding first, then remove
+  Key."), its row marked, with Show the binding (`….showBinding`), and so is a template's last
+  parameter while any binding names the template ("OrderRepository binds Repository, and Key is
+  its last parameter. …"). Show the binding selects the binding itself (AR-131), its line and its
+  Properties, and the line under it says so. The card shows the
+  signature in a dashed box in the secondary text colour on the surface, over its top-right corner
+  (28 past its right side, 24 above its top), one parameter a row in the caption style, drawn over
+  the selection (`workspace.canvas.node.<id>.signature`), on every diagram, at the detail zoom.
+  Models writes a muted `template` after its name; its kind line reads `Class · template, 2
+  parameters · model, in every diagram`. A parameter's classifier types its template's own members
+  alone: their type menus list its parameters first, after None, each noted `template parameter`.
+  Agents use `uml.template-parameter.add`, `.set`, `.move` and `.list`, and `element.remove`.
+- Template bindings (AR-131, design page 08, A2, C2 and C3). Template binding is the Relationship
+  menu's group after Association class, under a separator (`workspace.relate.template-binding`,
+  its sample a dashed line with an open arrow under a tiny `«bind»`), after N-ary association,
+  which opens that group (AR-128). It is dragged from the bound class to the template; releasing it on a template
+  commits nothing: Properties shows the draft, `New template binding` over `Drawing · not in the
+  model until you apply`, Binding with Bound element and Template read only, `Substitutions · n`
+  with one row per parameter (its name strong, its kind muted after it, its selector at the right,
+  `workspace.properties.templateBinding.substitution.<k>.argument`), each listing only what fits
+  the parameter's kind and constraint, Default (Integer) first where the parameter has a default,
+  a parameter on its default showing it with a `default` tag and a parameter without one `Choose a
+  class`. Cancel and Apply are the design's text buttons (`….cancel`, `….apply`), the help under
+  them. The draft's line is dashed in the accent colour from card to card with an open arrow until
+  Apply, which adds the binding, its line and its `name` label as one undo step and selects it. A
+  parameter still needing an argument refuses Apply on the danger tint (`T needs an argument: pick
+  a class. Key can keep its default.`, `….refusal`), its selector ringed, the draft kept. Cancel,
+  Escape, another selection or another diagram drops the draft, nothing written. Drawn, the line is
+  dashed in its own colour with an open arrow at the template and reads `«bind» <T -> Order, Key ->
+  Integer>` at its middle; the text writes `->`, which Inter draws as an arrow, as every message
+  about bindings writes it. Its Properties are titled Template binding, kind line `Binding ·
+  OrderRepository binds Repository · model, in every diagram`, the section Binding with Bound
+  element and Template selects (`….bound`, `….template`), then the substitutions, each pick one
+  undo step; another template opens the draft over the binding, applied by Apply. Models writes a
+  muted `binds Repository` after the bound class. A drop that may not bind (another kind, the
+  template itself, a second binding of one template, a cycle) is said at the canvas's top; empty
+  canvas makes nothing. The binding's end drags onto another template only when that one needs no
+  argument, else the canvas points to Properties. Deleting a classifier a binding uses as an
+  argument is refused, naming the binding. Agents use `uml.template-binding.add`, `.set` and
+  `.list`, `uml.relationship.reconnect` and `element.remove`.
+- Profiles and stereotypes (AR-134, design page 08, F1, F2, F5, F6; owner decisions 2026-11-06).
+  A profile sits in a package beside its packages, never in a classifier, made with Models' row
+  menu New ▸ Profile on a package or the root (New ▸ lists Package and Profile, a line, then the
+  classifier kinds; ids `workspace.explorer.contextMenu.newInside.{package, profile, class, …}`),
+  named in place, `profile` muted after its row; a profile's name is a package's kind. New ▸
+  Stereotype on a profile, or the `+` under its Properties' Stereotypes · n
+  (`workspace.properties.profile.stereotypes.add`), makes a stereotype, its row muted `extends
+  Class, …` (or `extends nothing yet`). A stereotype's Properties: Name and Profile
+  (`workspace.properties.stereotype.profile`) side by side, Extends · n with `+`
+  (`workspace.properties.stereotype.extends.add`, its menu the metaclasses Archforge draws by UML's
+  names, Class, Interface, Enumeration, DataType, Property, Operation, Association, Generalization,
+  Package, then Activity, Actor, Artifact, Component, Interaction, Node, StateMachine and UseCase
+  disabled with `not drawn by Archforge yet`), each row's pencil opening an editor with the
+  metaclass, the bin, Cancel and Apply; then Properties · n through the member editor, whose type
+  menu offers only primitive types, enumerations and data types; a name starting `base_` is kept
+  for the extensions. A package's Properties (the root's too) have Applied profiles · n
+  (`workspace.properties.package.profiles.add`, its menu every profile, those applied ticked and
+  disabled), each row's pencil opening Unapply (`workspace.properties.package.profileEditor.unapply`)
+  and Cancel; the package's row says `applies Persistence` after its name. Storage (owner decision
+  2026-11-06): everything is UML's own Profile, Stereotype, Extension, ExtensionEnd and
+  ProfileApplication; the metaclasses are Classes of a hidden UML library, a second, unnamed UML
+  Model at the project's top level known by UML's address `http://www.omg.org/spec/UML/20161101`,
+  each made the first time a stereotype extends it and never twice, never shown in Models, type
+  menus, the search or `uml.type.list`, and never changed; no `Profile::metaclassReference` is
+  stored (the rows reader refuses an import its composite superset lists too), the extensions
+  naming the metaclasses. A stereotype application (AR-135, owner decision 2026-11-06) is an
+  InstanceSpecification classified by the stereotype with Slots for its values and a core Link
+  from it to its element; one function finds them, and while any exists, unapplying a profile they
+  need, deleting a stereotype or a profile, dropping an extension they need, moving a stereotype to
+  another profile, deleting a property whose values are set, and moving or deleting what they sit
+  in out of the profile's scope, or deleting a package that takes a used profile along, are
+  refused, the uses counted under the section in a tinted box
+  (`Persistence is in use in Commerce: «Entity» on Order and Customer, «Id» on 2 elements,
+  «Reference» on places. Remove those first.`, two of one name counted, not named twice) with Show
+  the {n} uses selecting them; deleting a used element itself removes its applications with it,
+  the delete dialog naming them (AR-135).
+  Open profile diagram (`workspace.properties.profile.diagram`, `uml.profile.diagram`) opens the
+  profile's class diagram, made the first time, placing what it lacks below what it shows: «metaclass» cards in a
+  row, «stereotype» cards under them, joined by extension lines, solid, a filled triangle at the
+  metaclass; a stereotype's row dragged onto it comes with its metaclasses. A selected metaclass's
+  Properties say it is UML's own and change nothing.
+- Stereotypes applied (AR-135, design page 08, F3 and F4; owner decisions 2026-11-06). The
+  Properties of every element a stereotype may extend (a classifier, a package, an association,
+  a generalization; an attribute or an operation selected on its class's panel, the section then
+  `Stereotypes of id · n`) have `Stereotypes · n`, after No redefinition and before the other
+  sections, shown only once the model has a stereotype (only what works is shown). Its `+`
+  (`workspace.properties.stereotypes.add`) opens the picker headed `APPLY TO ORDER`: every
+  stereotype of the model, those that apply first (their profile at the right), one applied ticked
+  on the accent tint, then after a line the rest, muted and disabled with the short reason at the
+  right (`properties only`, `classes and interfaces only`, `extends nothing yet`, `Logging not
+  applied`), the whole reason on hover and as the description; typing filters it (`Filter: ent`
+  under the heading), the arrows walk what applies, Enter applies (the first that applies when none
+  is reached), Escape or a press elsewhere closes; rows `….add.<stereotypeId>`. Each applied
+  stereotype is a row, `«Entity»` semibold and its profile muted, a bin at its right
+  (`workspace.properties.stereotypes.applied.<id>.remove`) taking it off with its values, its
+  definition kept; then a line per property, its name at the left and its control at the right
+  (`….applied.<id>.value.<propertyId>`): a select for a Boolean or an enumeration holding one value,
+  its first row `Default (false)` (or `No value`) clearing it; a field for any other value, several
+  separated by commas, written on Enter or leaving it, emptied to clear it. Unset, the control shows
+  the property's default muted with a bordered `default` tag (a muted dash without one); a value set
+  has no tag even when it equals the default. A value that does not read stays in its field, ringed
+  in the danger colour, the reason under it (`many is no value of rows. A whole number, such as 42
+  or -7.`, `….refusal`), nothing written; so are too many or too few values for the multiplicity
+  and a unique property's value twice. Under the rows, "Values you set are stored on Order; …", and
+  while a class diagram is open the check Show stereotype values on this diagram
+  (`workspace.properties.stereotypes.showValues`). On a card the stereotypes replace the kind's
+  word (`«Entity»` for CLASS, `«Entity, Auditable»` for two, in the profiles' order); a kind written
+  as a keyword keeps it first (`«interface, Entity»`, a decision of ours, the design silent: the
+  kind stays readable); an outsider reads `«Entity» · Commerce`. A member's row, on the card and in
+  Properties, starts with its stereotypes (`«Id» + id : Integer`); a line's sit above its name in
+  the caption style (`«Reference»`), at the middle where it has no name; an n-ary association's
+  above its diamond's name, and an n-ary end's at its leg's middle (AR-128). A template binding
+  shows none: no stereotype extends its metaclass yet (it is not among those offered). Models writes them muted
+  after the name (`«Entity» · template`). With the diagram's check on, a card lists, under its
+  members, a compartment per stereotype with a value set: `«Entity»`, then `table = "orders"`, a
+  String's in quotes; a property left to its default is not listed; turning it on, and setting a
+  value while it is on, grows the cards that would hide one, in the same undo step. Storage (owner
+  decision 2026-11-06, with ours where it was silent): the InstanceSpecification sits at the
+  project's top level beside the hidden library, so moving or handing up its element never moves
+  it; a Slot exists only for a value set, so a default is never stored as a value; values are
+  ValueSpecifications read by the property's type as a default is, an enumeration's an
+  InstanceValue referring to the literal; the diagram's choice is kept by a core tag, as the root package's mark is: the
+  one tag named `archforge.stereotypeValues` lists the diagrams that show their values, and goes
+  when the last is turned off. Nothing is lost unseen: a property whose values are set is not removed, retyped or
+  given bounds a value breaks, and a literal a value names is not removed, each refused naming the
+  value. Deleting an element its stereotypes are applied to asks first, from Models too, and the
+  dialog names the applications going with it and with what it takes along (`3 stereotype
+  applications go with it: «Entity» on Order, «Id» on id, «Reference» on
+  places.`), as it names nested classifiers (decision of ours, the design silent); so does a
+  member's Remove in its editor when applications would go with it, writing nothing until
+  confirmed, and a nested package carrying one, its dialog saying `What it holds moves to
+  Commerce.` and its toast where it went. While the picker is open it takes the keys: Backspace
+  edits its filter, never deletes the selection. A binary association's end has a section of its own in its part of Properties, after
+  its qualifiers (`Stereotypes of customer · n`, `Stereotypes of this end · n` without a role; ids
+  `workspace.properties.end.<i>.stereotypes.*`, no diagram check); an n-ary association's ends have no section
+  yet and take stereotypes through `uml.stereotype.apply` with the end's id, which
+  `uml.association.add-nary` and `uml.relationship.list` give. Agents use `uml.stereotype.apply`,
+  `.unapply`, `.set-value`, `.show-values`, `.list-applied` and `.applicable`.
 
 On every line: a role, and a label at the line's middle, sit above a level stretch of the line and
 beside an upright one, never on the line or its mark.

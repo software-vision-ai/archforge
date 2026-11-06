@@ -30,7 +30,7 @@ pub mod markdown;
 pub mod new_project;
 mod notation_ui;
 pub mod objects;
-#[cfg(feature = "snapshot")]
+#[cfg(any(test, feature = "snapshot"))]
 pub mod offscreen;
 pub(crate) mod package_nav;
 pub mod panels;
@@ -45,14 +45,19 @@ pub mod subtypes;
 pub mod support;
 pub mod theme;
 pub mod types;
+mod uml_bindings;
 mod uml_classifier;
 mod uml_constraints;
 mod uml_inline;
+mod uml_nary;
 mod uml_nesting;
 mod uml_panel;
+mod uml_profiles;
 mod uml_qualifiers;
 mod uml_relate;
 mod uml_sets;
+mod uml_stereotypes;
+mod uml_templates;
 mod uml_ui;
 pub mod ux;
 pub mod widgets;
@@ -795,6 +800,9 @@ impl Shell {
     fn stash(&mut self) {
         let Some(i) = self.active else { return };
         let Some(project) = self.project.take() else { return };
+        // A drawing under way never outlives the project it was on (AR-128).
+        self.canvas.nary = None;
+        self.canvas.nary_menu = None;
         let parked = Parked {
             project,
             session: self.session.take(),
