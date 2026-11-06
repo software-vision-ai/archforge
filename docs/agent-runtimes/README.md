@@ -417,13 +417,21 @@ conversation.
 
 `codex app-server generate-json-schema --out <dir>` and `generate-ts --out <dir>` work offline
 (observed, exit 0, 4.5 MB of schema and 3.1 MB of TypeScript); `--experimental` adds the
-experimental methods. The bundle for 0.166.0 is saved as
-`fixtures/codex/schema/codex-app-server-0.166.0.schemas.json` (everything, v1 and v2 definitions,
-non-experimental). The stable protocol has 106 client requests, 1 client notification (`initialized`), 10 server
-requests and 85 server notifications.
-Every observed message and every doc-derived Codex fixture validates against it (checked with
-`jsonschema`, Draft 7, by method). The docs say the generated output is specific to the Codex
-version; the subcommands are marked experimental.
+experimental methods. The full schema is not kept in the repository. To regenerate the one these
+fixtures were checked against, with codex-cli **0.166.0** installed:
+
+```sh
+codex --version                                    # codex-cli 0.166.0
+codex app-server generate-json-schema --out "$SCHEMA_DIR"
+```
+
+`$SCHEMA_DIR/codex_app_server_protocol.schemas.json` is the whole bundle (v1 and v2 definitions,
+non-experimental, about 750 KB). The stable protocol has 106 client requests, 1 client notification
+(`initialized`), 10 server requests and 85 server notifications. Every observed message and every
+doc-derived Codex fixture validated against it (checked with `jsonschema`, Draft 7, requests and
+notifications by kind, responses by method). The Codex adapter's tests use a small, credited cut
+of that schema in `crates/agents` once its pull request (#193) lands. The docs say the generated
+output is specific to the Codex version; the subcommands are marked experimental.
 
 ## Versions
 
@@ -431,7 +439,7 @@ version; the subcommands are marked experimental.
 |---|---|---|
 | Read the version | `claude --version` → `2.1.317 (Claude Code)`, exit 0; also `claude_code_version` in `system/init` | `codex --version` → `codex-cli 0.166.0`, exit 0; also `userAgent` in the `initialize` result |
 | Needed features and where they appeared | stream-json output 0.2.66, `--mcp-config` 0.2.75, `--disallowedTools` 0.2.82, `--replay-user-messages` 1.0.86, `--include-partial-messages` 1.0.109, `--bare` 2.1.81 with full enforcement (only CLI MCP servers) from 2.1.286, interrupt receipt 2.1.205, `--permission-prompts` 2.1.259, `api_retry.no_response` 2.1.261 (doc, changelog and reference pages) | The schema is version-specific; when `chatgptDeviceCode`, `ephemeral` threads and `model/list` first appeared was not found |
-| Recommended range | **>= 2.1.286 and < 3.0.0**; tested 2.1.317. Below the floor: MissingRuntime ("update Claude Code"). Newer 2.x: accepted with a warning (owner, 2026-11-06) | **>= 0.166.0 and < 1.0.0**; tested 0.166.0. Contract tests run against the committed schema; each tested bump regenerates it. Newer 0.x: accepted with a warning (owner, 2026-11-06), since unknown methods fail loudly (-32600) |
+| Recommended range | **>= 2.1.286 and < 3.0.0**; tested 2.1.317. Below the floor: MissingRuntime ("update Claude Code"). Newer 2.x: accepted with a warning (owner, 2026-11-06) | **>= 0.166.0 and < 1.0.0**; tested 0.166.0. Contract tests run against the credited schema cut in `crates/agents` (#193); each tested bump regenerates it. Newer 0.x: accepted with a warning (owner, 2026-11-06), since unknown methods fail loudly (-32600) |
 | Missing | spawn fails with "not found" → MissingRuntime | the same |
 | Too old at run time | `error: unknown option '…'` on stderr, exit 1, before any event → MissingRuntime | `-32600 unknown variant` for a needed method → MissingRuntime |
 | stderr | Usage errors and input-parse errors, plain text | Tracing logs with ANSI colours; malformed-input reports |
@@ -489,7 +497,6 @@ newest undo step, or null>}`, with `isError: false` (`crates/mcp/src/lib.rs`, `c
 | `codex/observed-sigint.jsonl`, `observed-sigterm.jsonl` | Exit on signals |
 | `codex/observed-recommended-flags-handshake.jsonl`, `observed-strict-config-unknown-key.jsonl` | The recommended command line under `--strict-config`; an unknown key refused |
 | `codex/doc-*.jsonl` | A turn with a tool call, interrupt, declined approvals, API-key, browser and device-code sign-in, logout, rate limits, and six failed turns, one per terminal error category |
-| `codex/schema/codex-app-server-0.166.0.schemas.json` | The generated protocol schema |
 | `synthetic-hostile-lines.jsonl` | Lines both parsers must survive |
 
 The Claude adapter (AR-201) copied the Claude fixtures and the hostile lines into
