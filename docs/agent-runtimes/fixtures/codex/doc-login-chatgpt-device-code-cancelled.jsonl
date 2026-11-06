@@ -3,4 +3,4 @@
 {"t": 0.3, "dir": "out", "line": "{\"id\":24,\"result\":{\"type\":\"chatgptDeviceCode\",\"loginId\":\"019a0000-0000-7000-8000-00000000c002\",\"verificationUrl\":\"https://auth.openai.com/codex/device\",\"userCode\":\"ABCD-EFGH\"}}"}
 {"t": 20.0, "dir": "in", "line": "{\"id\":25,\"method\":\"account/login/cancel\",\"params\":{\"loginId\":\"019a0000-0000-7000-8000-00000000c002\"}}"}
 {"t": 20.01, "dir": "out", "line": "{\"id\":25,\"result\":{\"status\":\"canceled\"}}"}
-{"t": 20.02, "dir": "out", "line": "{\"method\":\"account/login/completed\",\"params\":{\"loginId\":\"019a0000-0000-7000-8000-00000000c002\",\"success\":false,\"error\":\"login cancelled\",\"onboardingEntrypoint\":null}}"}
+{"t": 20.02, "dir": "out", "line": "{\"method\":\"account/login/completed\",\"params\":{\"loginId\":\"019a0000-0000-7000-8000-00000000c002\",\"success\":false,\"error\":\"Login was not completed\",\"onboardingEntrypoint\":null}}"}
