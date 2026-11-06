@@ -882,20 +882,23 @@ template when it gets its first parameter and stops being one when its last goes
   Every diagram that shows the template shows the same box. **Models** writes *template* after its
   name, and **Properties** says *Class · template, 2 parameters*.
 - **Identity.** Renaming a parameter, moving it or changing its default keeps it the same
-  parameter: every member typed by it follows, and so does every binding. Changing its kind keeps
+  parameter: every member typed by it follows, and so does every binding (see **Bindings** below).
+  Changing its kind keeps
   the parameter too, and the members typed by it follow.
 - **What is refused.** A name another parameter of the template has, whatever the case: *Repository
   already has a template parameter named T. Pick another name.* A default that does not fit is
   refused under **Default**. The reason shows in the editor, the editor stays open, and nothing
   reaches the model or the undo history.
-- **Bindings.** Another class can *bind* a template, giving each parameter an argument. A parameter
-  a binding uses cannot be removed: the bin says, for example, *OrderRepository binds Key ->
-  Integer. Change or remove that binding first, then remove Key.*, under the rows, and **Show the
-  binding** selects the element that binds it. A template's last parameter cannot be removed while
-  any binding names the template, even one with no arguments yet, since the template would stop
-  being one under it. Its kind or constraint cannot change so that an
-  argument no longer fits either. Drawing bindings comes in a later version; deleting a template
-  deletes the bindings to it.
+- **Bindings.** A *binding* is another class that binds a template, giving each parameter an
+  argument. Making a binding is not available in this version yet: there is no tool, menu or
+  command for it, and drawing bindings comes in a later version. What follows holds for a model
+  that already has bindings, and it is how the parameters will behave once bindings can be made.
+  A parameter a binding uses cannot be removed: the bin says, for example, *OrderRepository binds
+  Key -> Integer. Change or remove that binding first, then remove Key.*, under the rows, and
+  **Show the binding** selects the element that binds it. A template's last parameter cannot be
+  removed while any binding names the template, even one with no arguments yet, since the template
+  would stop being one under it. Its kind or constraint cannot change so that an argument no
+  longer fits either. Deleting a template deletes the bindings to it.
 
 <!-- picture: workspace-template light | Repository with its signature box T : Class and Key : DataType = Integer over its card's top-right corner, items : T [*], find(key : Key) : T and save(item : T) on the card; Properties shows Template parameters · 2 with the editor open on Key: Kind Data type, Constrained to Any, Default Integer -->
 

@@ -847,8 +847,9 @@ What is UML's own, beside the shared rules above.
   tint ("OrderRepository binds Key -> Integer. Change or remove that binding first, then remove
   Key."), its row marked, with Show the binding (`….showBinding`), and so is a template's last
   parameter while any binding names the template ("OrderRepository binds Repository, and Key is
-  its last parameter. …"); until bindings are drawn
-  (AR-131) it selects the element that binds it, and the line under it says so. The card shows the
+  its last parameter. …"). Bindings cannot be made yet (AR-131), and the manual says so; until
+  they are made and drawn, Show the binding selects the element that binds it, and the line under
+  it says so. The card shows the
   signature in a dashed box in the secondary text colour on the surface, over its top-right corner
   (28 past its right side, 24 above its top), one parameter a row in the caption style, drawn over
   the selection (`workspace.canvas.node.<id>.signature`), on every diagram, at the detail zoom.

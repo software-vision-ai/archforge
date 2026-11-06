@@ -120,7 +120,8 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   does not fit are refused. A parameter's `element` types the template's own attributes,
   operations and parameters, and no other classifier's. A parameter is removed with
   `element_remove`, refused while a binding uses it; the template's last parameter takes its
-  signature along, and is refused while any binding names the template.
+  signature along, and is refused while any binding names the template. No command makes a
+  binding in this version yet, so `bound_by` stays empty in a model made here.
 - **Generalization sets**: `uml_generalization_set_add` groups generalizations to one general
   class, complete or incomplete and disjoint or overlapping; `uml_generalization_set_set` renames
   it, changes either flag, and adds or takes out members; `uml_generalization_set_place` puts its
