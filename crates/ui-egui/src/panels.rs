@@ -100,6 +100,10 @@ pub struct State {
     /// A template binding before it is written: a new one drawn on the canvas, or another template
     /// picked for a binding (AR-131).
     pub binding: Option<crate::uml_bindings::BindingDraft>,
+    /// An n-ary association's end editor, and the question removing one of three ends asks
+    /// (AR-128).
+    pub nary_end: Option<crate::uml_nary::EndEdit>,
+    pub nary_remove: Option<crate::uml_nary::RemoveAsk>,
     /// The body's scroll: how far it is scrolled, how tall its content was last
     /// frame, what it was scrolled for (a new panel or selection starts at the top), the editors
     /// open last frame, whether an editor that just opened is still to be brought into view, and
@@ -129,6 +133,7 @@ fn open_editors(s: &State) -> Vec<Option<Option<Uuid>>> {
         s.qualifier.as_ref().map(|e| e.target),
         s.template.as_ref().map(|e| e.target),
         s.profile_edit.as_ref().map(|e| e.target.as_deref().and_then(Uuid::parse)),
+        s.nary_end.as_ref().map(|e| Some(e.association)),
     ]
 }
 
@@ -264,6 +269,9 @@ pub enum Menu {
     BindingBound,
     BindingTemplate,
     BindingArgument(usize),
+    /// An n-ary association's end editor's type and multiplicity (AR-128).
+    NaryEndType,
+    NaryEndMultiplicity,
     /// A classifier's owner, a package or a classifier (AR-132), and the kinds its Nested
     /// classifiers `+` offers.
     ClassOwner,
@@ -412,6 +420,7 @@ pub fn retain_valid(state: &mut State, store: &Store) {
         state.profile_refused = None;
     }
     crate::uml_bindings::retain_valid(&mut state.binding, store);
+    crate::uml_nary::retain_valid(state, store);
     if state.ends.as_ref().is_some_and(|e| store.by_uuid(e.association).is_none()) {
         state.ends = None;
     }
@@ -1428,6 +1437,10 @@ fn close_editors(shell: &mut Shell) {
     if matches!(panels.menu, Some(Menu::BindingBound | Menu::BindingTemplate | Menu::BindingArgument(_))) {
         panels.menu = None;
     }
+    if panels.nary_end.as_ref().is_some_and(|e| !e.opened) {
+        panels.nary_end = None;
+    }
+    panels.nary_remove = None;
 }
 
 /// Opens the column editor on `target`, or on a column to add to `entity`.
@@ -2233,6 +2246,10 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, 
         && let Some(all) = crate::uml_sets::selected(shell).filter(|all| all.len() >= 2)
     {
         crate::uml_sets::selection_body(shell, ui, p, r, y, &all);
+        return;
+    }
+    // An n-ary association being drawn: its draft, not yet in the model (AR-128).
+    if panel == Panel::Properties && crate::uml_nary::draft_body(shell, ui, p, r, y) {
         return;
     }
     ux::text(&paint, r.min + vec2(PAD, y), &s.name, types::CARD_TITLE, p.text, Some((r.width() - 2.0 * PAD).max(0.0)));

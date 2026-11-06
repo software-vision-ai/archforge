@@ -1031,6 +1031,43 @@ str		A template does not bind itself	Una plantilla no se vincula a sí misma
 str		This one binds that template already	Este ya vincula esa plantilla
 str		That template binds this one already, which would make a cycle	Esa plantilla ya vincula este, lo que crearía un ciclo
 str		Pick another template in the binding's Properties, where its arguments are chosen.	Elija otra plantilla en las Propiedades de la vinculación, donde se eligen sus argumentos.
+str		N-ary association	Asociación n-aria
+str		N-ary association: click each class in turn, then press Enter	Asociación n-aria: haga clic en cada clase por turno y pulse Intro
+str		An n-ary association is drawn by clicking each class in turn	Una asociación n-aria se dibuja haciendo clic en cada clase por turno
+str		Enter finishes at 3+ · Backspace drops the last · Esc cancels	Intro termina a partir de 3 · Retroceso quita el último · Esc cancela
+str		Click a class for the new end	Haga clic en una clase para el nuevo extremo
+str		Esc cancels	Esc cancela
+str		An n-ary association joins classes and interfaces	Una asociación n-aria une clases e interfaces
+str		An association takes at most {n} ends	Una asociación tiene como máximo {n} extremos
+str		An n-ary association needs three ends or more: click another class	Una asociación n-aria necesita tres extremos o más: haga clic en otra clase
+str		Add n-ary association	Añadir asociación n-aria
+str		New n-ary association	Nueva asociación n-aria
+str		Drawing · not in the model until you finish	Dibujando · no está en el modelo hasta que termine
+str		Ends so far · {n}	Extremos hasta ahora · {n}
+str		Next: click a class on the canvas	Siguiente: haga clic en una clase del lienzo
+str		Next: click a class on the canvas, or press Enter to finish	Siguiente: haga clic en una clase del lienzo o pulse Intro para terminar
+str		Enter, or a double-click on the last class, finishes once there are 3 ends or more. One undo step adds the association, its diamond and every end.	Intro, o un doble clic en la última clase, termina cuando hay 3 extremos o más. Un solo paso de deshacer añade la asociación, su rombo y cada extremo.
+str		Esc, switching tools or clicking empty canvas cancels and leaves nothing in the model. Backspace takes the last end off.	Esc, cambiar de herramienta o hacer clic en el lienzo vacío cancela y no deja nada en el modelo. Retroceso quita el último extremo.
+str		New ends are named after their class and start at *; change them after finishing.	Los extremos nuevos llevan el nombre de su clase y empiezan en *; cámbielos después de terminar.
+str		Ends · {n}	Extremos · {n}
+str		Add end	Añadir extremo
+str		Draws a new leg	Dibuja un nuevo tramo
+str		Reconnect end	Reconectar extremo
+str		Drag a leg end	Arrastre el final de un tramo
+str		Open a class diagram to pick the new end's class	Abra un diagrama de clases para elegir la clase del nuevo extremo
+str		Ends of an n-ary association are not aggregations, so Aggregation is not offered. Repeat a type for two ends when the roles differ.	Los extremos de una asociación n-aria no son agregaciones, así que no se ofrece Agregación. Repita un tipo para dos extremos cuando los roles difieran.
+str		Another end has the role {role} already. Pick another role.	Otro extremo ya tiene el rol {role}. Elija otro rol.
+str		Set association end	Definir extremo de asociación
+str		End {role} removed	Extremo {role} eliminado
+str		Selecting the diamond or any leg selects the one association. Remove from this diagram hides it here; Delete from the model deletes it and its ends everywhere.	Seleccionar el rombo o cualquier tramo selecciona la única asociación. Quitar de este diagrama la oculta aquí; Eliminar del modelo la elimina a ella y sus extremos en todas partes.
+str		Two ends would remain	Quedarían dos extremos
+str		An n-ary association needs three ends or more. Without {role}, only {first} and {second} remain.	Una asociación n-aria necesita tres extremos o más. Sin {role}, solo quedan {first} y {second}.
+str		Keep 3 ends	Mantener 3 extremos
+str		Make it binary	Hacerla binaria
+str		Make it binary turns it into a plain association between {first} and {second}, keeping both ends, as one undo step. Keep 3 ends, or Esc, changes nothing.	Hacerla binaria la convierte en una asociación simple entre {first} y {second}, conservando ambos extremos, en un solo paso de deshacer. Mantener 3 extremos, o Esc, no cambia nada.
+str		Make it binary turns {name} into a plain association between {first} and {second}, keeping its name and both ends, as one undo step. Keep 3 ends, or Esc, changes nothing.	Hacerla binaria convierte {name} en una asociación simple entre {first} y {second}, conservando su nombre y ambos extremos, en un solo paso de deshacer. Mantener 3 extremos, o Esc, no cambia nada.
+plural		N-ary association · {n} end · model, in every diagram	Asociación n-aria · {n} extremo · modelo, en todos los diagramas|Asociación n-aria · {n} extremos · modelo, en todos los diagramas
+plural		N-ary association · {n} end — click a class for the next end	Asociación n-aria · {n} extremo — haga clic en una clase para el siguiente|Asociación n-aria · {n} extremos — haga clic en una clase para el siguiente
 str		From	Desde
 str		General	General
 str		Generalization	Generalización

@@ -14949,3 +14949,616 @@ fn profiles_are_made_in_models_edited_in_properties_and_applied_to_packages() {
         assert_eq!(h.state().session.as_ref().unwrap().view().selection.len(), 5, "the uses selected");
     }
 }
+
+/// The sample class model's Recommendations diagram (AR-128): Customer and Product side by side,
+/// Catalog under them; `drawn`, the n-ary association recommends between them. In `theme`, in a
+/// window tall enough for an end's editor. Gives the ids by name, as `put_recommends` does.
+fn nary_sample(theme: ThemeKind, drawn: bool) -> (Harness<'static, Shell>, std::collections::BTreeMap<&'static str, String>) {
+    let mut h = workspace_harness(theme, egui::vec2(1600.0, 1200.0));
+    crate::uml_ui::open_sample(h.state_mut()).unwrap();
+    h.run();
+    let ids = crate::uml_nary::put_recommends(h.state_mut(), drawn).unwrap();
+    h.state_mut().canvas.fit_pending = false;
+    h.state_mut().canvas.zoom = 1.0;
+    h.state_mut().canvas.pan = egui::vec2(20.0, 30.0);
+    h.state_mut().state.show_panel(crate::state::Panel::Properties);
+    h.run();
+    (h, ids)
+}
+
+/// The centre of the card `node` on the canvas.
+fn card(h: &Harness<'static, Shell>, node: &str) -> egui::Pos2 {
+    rect_of(h, &format!("workspace.canvas.node.{node}")).center()
+}
+
+/// Arms the Relationship tool with N-ary association, from its chevron's menu.
+fn arm_nary(h: &mut Harness<'static, Shell>) {
+    let at = rect_of(h, "workspace.tools.relationship-kinds").center();
+    click(h, at);
+    let at = rect_of(h, "workspace.relate.n-ary").center();
+    click(h, at);
+}
+
+/// The n-ary associations of the model, each with its ends as `role : Class [multiplicity]`.
+fn naries(h: &Harness<'static, Shell>) -> Vec<(archforge_mof::Obj, Vec<String>)> {
+    let st = h.state().session.as_ref().unwrap().doc();
+    st.alive()
+        .filter(|o| archforge_uml::nary::is_nary(st, *o))
+        .map(|a| {
+            let ends = archforge_uml::nary::ends(st, a)
+                .into_iter()
+                .map(|e| {
+                    let ty = archforge_uml::nary::end_type(st, e).map(|t| archforge_core::name_of(st, t)).unwrap_or_default();
+                    format!("{} : {ty} [{}]", archforge_core::name_of(st, e), archforge_uml::figures::multiplicity(st, e))
+                })
+                .collect();
+            (a, ends)
+        })
+        .collect()
+}
+
+/// The legs of n-ary association ends on diagram `d` (the active one when none is given).
+fn legs_on(h: &Harness<'static, Shell>, d: Option<&str>) -> usize {
+    let st = h.state().session.as_ref().unwrap().doc();
+    let d = match d {
+        Some(d) => st.by_uuid(archforge_mof::Uuid::parse(d).unwrap()).unwrap(),
+        None => st.by_uuid(h.state().canvas.active.unwrap()).unwrap(),
+    };
+    st.list(d, archforge_diagram::diagram::EDGE)
+        .unwrap()
+        .iter()
+        .filter_map(archforge_mof::Value::as_ref)
+        .filter(|e| {
+            st.get(*e, archforge_diagram::edge::ELEMENT)
+                .ok()
+                .and_then(|v| v.as_ref())
+                .is_some_and(|x| archforge_uml::nary::association_of_end(st, x).is_some())
+        })
+        .count()
+}
+
+/// The diamonds on the active diagram.
+fn diamonds_here(h: &Harness<'static, Shell>) -> usize {
+    let st = h.state().session.as_ref().unwrap().doc();
+    let d = st.by_uuid(h.state().canvas.active.unwrap()).unwrap();
+    st.list(d, archforge_diagram::diagram::NODE)
+        .unwrap()
+        .iter()
+        .filter_map(archforge_mof::Value::as_ref)
+        .filter(|n| st.get(*n, archforge_diagram::node::ELEMENT).ok().and_then(|v| v.as_ref()).is_some_and(|e| archforge_uml::nary::is_nary(st, e)))
+        .count()
+}
+
+fn selection(h: &Harness<'static, Shell>) -> Vec<archforge_mof::Obj> {
+    h.state().session.as_ref().unwrap().view().selection.clone()
+}
+
+/// The Relationship menu lists N-ary association after Association class, below a separator of
+/// its own, its sample a line with a small diamond; a pick arms the tool with it (AR-128, A2). In
+/// light and dark.
+#[test]
+fn the_relationship_menu_lists_n_ary_association_after_association_class_below_a_separator() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = nary_sample(theme, false);
+        let at = rect_of(&h, "workspace.tools.relationship-kinds").center();
+        click(&mut h, at);
+        let (realization, class, nary) =
+            (rect_of(&h, "workspace.relate.realization"), rect_of(&h, "workspace.relate.association-class"), rect_of(&h, "workspace.relate.n-ary"));
+        let step = class.top() - realization.top();
+        assert!(nary.top() - class.top() > step + 8.0, "{theme:?}: a separator above N-ary association: {class:?} {nary:?}");
+        assert!(painted(&h).iter().any(|t| t == "N-ary association"), "{theme:?}: named");
+        let at = nary.center();
+        click(&mut h, at);
+        assert_eq!(h.state().canvas.uml_relation, crate::uml_relate::Relate::NAry);
+        assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Connect("relationship"));
+        assert!(h.state().canvas.popover.is_none(), "a pick closes the menu");
+    }
+}
+
+/// Drawn with three classes and Enter, the n-ary association is one undo step: nothing is in the
+/// model while the draft grows, the hint counts its ends, Properties shows the draft; finished, the
+/// association, its diamond and a leg per end are there, selected, and undo and redo take and give
+/// it whole. With four, a double click on the last class finishes it the same way. In light and
+/// dark.
+#[test]
+fn an_n_ary_association_is_drawn_class_by_class_and_finished_as_one_undo_step() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, ids) = nary_sample(theme, false);
+        let before = revision(&h);
+        arm_nary(&mut h);
+        for n in ["customer", "product"] {
+            let at = card(&h, &ids[n]);
+            click(&mut h, at);
+        }
+        let shown = painted(&h);
+        for said in [
+            "N-ary association · 2 ends — click a class for the next end",
+            "New n-ary association",
+            "Ends so far · 2",
+            "customer : Customer [*]",
+            "product : Product [*]",
+        ] {
+            assert!(shown.iter().any(|t| t == said), "{theme:?}: {said} in {shown:?}");
+        }
+        assert!(ids_of(&h).iter().any(|i| i == "workspace.canvas.gestureHint"), "the hint bar");
+        // Enter with two ends finishes nothing.
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert!(naries(&h).is_empty() && revision(&h) == before, "{theme:?}: nothing before three ends");
+        let at = card(&h, &ids["catalog"]);
+        click(&mut h, at);
+        assert_eq!(revision(&h), before, "{theme:?}: the draft is not in the model");
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        let made = naries(&h);
+        assert_eq!(made.len(), 1, "{theme:?}");
+        assert_eq!(made[0].1, ["customer : Customer [*]", "product : Product [*]", "catalog : Catalog [*]"]);
+        assert_eq!((diamonds_here(&h), legs_on(&h, None)), (1, 3), "{theme:?}: the diamond and three legs");
+        assert_eq!(selection(&h), vec![made[0].0], "{theme:?}: the association selected");
+        assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Select, "the tool hands back to Select");
+        assert!(h.state().canvas.nary.is_none());
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add n-ary association"));
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        h.run();
+        assert!(naries(&h).is_empty() && diamonds_here(&h) == 0 && legs_on(&h, None) == 0, "{theme:?}: one undo step takes it all");
+        h.state_mut().session.as_mut().unwrap().redo().unwrap();
+        h.run();
+        assert_eq!((naries(&h).len(), diamonds_here(&h), legs_on(&h, None)), (1, 1, 3), "{theme:?}: redo gives it whole");
+        // Four ends, the last by a double click.
+        let order = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let st = s.doc();
+            let o = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(st, *o) == "Order").unwrap();
+            let id = st.uuid(o).unwrap().to_string();
+            let placed = s
+                .execute(
+                    "diagram.place",
+                    &serde_json::json!({ "diagram": ids["diagram"], "element": id, "x": 640, "y": 560, "width": 180, "height": 120 }),
+                )
+                .unwrap();
+            placed.value["id"].as_str().unwrap().to_string()
+        };
+        h.run();
+        arm_nary(&mut h);
+        for n in [&ids["customer"], &ids["product"], &ids["catalog"]] {
+            let at = card(&h, n);
+            click(&mut h, at);
+        }
+        let at = card(&h, &order);
+        double_click(&mut h, at);
+        let made = naries(&h);
+        assert_eq!(made.len(), 2, "{theme:?}: the double click finishes");
+        assert!(made.iter().any(|(_, e)| e.len() == 4 && e[3] == "order : Order [*]"), "{made:?}");
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add n-ary association"));
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        assert_eq!(naries(&h).len(), 1, "{theme:?}: one step");
+    }
+}
+
+/// The ids of the controls the last frame registered.
+fn ids_of(h: &Harness<'static, Shell>) -> Vec<String> {
+    ids(h)
+}
+
+/// Backspace drops the draft's last end; Escape, another tool, a click on empty canvas and another
+/// diagram each drop the draft, leaving the model as it was and no draft for the next gesture.
+#[test]
+fn backspace_drops_the_last_end_and_every_cancel_leaves_nothing_behind() {
+    let (mut h, ids) = nary_sample(ThemeKind::Light, false);
+    let before = revision(&h);
+    let start = |h: &mut Harness<'static, Shell>| {
+        arm_nary(h);
+        for n in ["customer", "product"] {
+            let at = card(h, &ids[n]);
+            click(h, at);
+        }
+        assert!(matches!(&h.state().canvas.nary, Some(crate::uml_nary::Nary::Draft { ends, .. }) if ends.len() == 2));
+    };
+    start(&mut h);
+    key(&mut h, egui::Key::Backspace, egui::Modifiers::NONE);
+    assert!(matches!(&h.state().canvas.nary, Some(crate::uml_nary::Nary::Draft { ends, .. }) if ends.len() == 1), "Backspace drops one");
+    assert!(painted(&h).iter().any(|t| t == "N-ary association · 1 end — click a class for the next end"), "the singular");
+    // Escape.
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    assert!(h.state().canvas.nary.is_none() && h.state().canvas.tool == crate::canvas::Tool::Select, "Escape cancels");
+    // Another tool.
+    start(&mut h);
+    let at = rect_of(&h, "workspace.tools.select").center();
+    click(&mut h, at);
+    assert!(h.state().canvas.nary.is_none(), "another tool cancels");
+    // Another kind of relationship.
+    start(&mut h);
+    let at = rect_of(&h, "workspace.tools.relationship-kinds").center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.relate.association").center();
+    click(&mut h, at);
+    h.run();
+    assert!(h.state().canvas.nary.is_none(), "another kind cancels");
+    // Empty canvas.
+    start(&mut h);
+    let empty = rect_of(&h, "workspace.canvas").left_bottom() + egui::vec2(60.0, -200.0);
+    click(&mut h, empty);
+    assert!(h.state().canvas.nary.is_none(), "a click on empty canvas cancels");
+    // Another diagram, and back: no draft comes back.
+    start(&mut h);
+    let commerce = h.state().canvas.tabs[0];
+    crate::canvas::open(h.state_mut(), commerce);
+    h.run();
+    assert!(h.state().canvas.nary.is_none(), "another diagram drops it");
+    crate::canvas::open(h.state_mut(), archforge_mof::Uuid::parse(&ids["diagram"]).unwrap());
+    h.run();
+    assert!(h.state().canvas.nary.is_none() && !painted(&h).iter().any(|t| t == "New n-ary association"), "nothing stale");
+    assert_eq!(revision(&h), before, "the model is as it was");
+    assert!(naries(&h).is_empty());
+}
+
+/// Before the first end is clicked, Backspace is not the draft's: it reaches the selection's
+/// removal, so a selected card leaves the diagram as it does with any other tool.
+#[test]
+fn backspace_before_the_first_end_removes_the_selection_as_ever() {
+    let (mut h, ids) = nary_sample(ThemeKind::Light, false);
+    arm_nary(&mut h);
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [ids["Product"]] })).unwrap();
+    h.run();
+    assert!(h.state().canvas.nary.as_ref().is_none_or(|n| matches!(n, crate::uml_nary::Nary::Draft { ends, .. } if ends.is_empty())), "no end yet");
+    let shown = |h: &Harness<'static, Shell>| {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let d = st.by_uuid(archforge_mof::Uuid::parse(&ids["diagram"]).unwrap()).unwrap();
+        let product = st.by_uuid(archforge_mof::Uuid::parse(&ids["Product"]).unwrap()).unwrap();
+        archforge_uml::nary::node_in(st, d, product).is_some()
+    };
+    assert!(shown(&h));
+    h.state_mut().canvas.focused = true;
+    key(&mut h, egui::Key::Backspace, egui::Modifiers::NONE);
+    assert!(!shown(&h), "the selected card left the diagram");
+    assert!(naries(&h).is_empty(), "and nothing n-ary was made");
+}
+
+/// A class clicked twice gives two ends at it, told apart by their roles; a data type is refused at
+/// the canvas's top and adds no end.
+#[test]
+fn a_class_clicked_twice_gives_two_ends_of_one_type_and_a_data_type_is_refused() {
+    let (mut h, ids) = nary_sample(ThemeKind::Light, false);
+    let money = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let st = s.doc();
+        let pkg = archforge_uml::commands::package_of(st, st.by_uuid(archforge_mof::Uuid::parse(&ids["Customer"]).unwrap()).unwrap()).unwrap();
+        let pkg = st.uuid(pkg).unwrap().to_string();
+        let dt = s.execute("uml.data-type.add", &serde_json::json!({ "package": pkg, "name": "Amount" })).unwrap().value["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let n = s.execute(
+            "diagram.place",
+            &serde_json::json!({ "diagram": ids["diagram"], "element": dt, "x": 640, "y": 560, "width": 180, "height": 120 }),
+        );
+        n.unwrap().value["id"].as_str().unwrap().to_string()
+    };
+    h.run();
+    arm_nary(&mut h);
+    let at = card(&h, &money);
+    click(&mut h, at);
+    assert_eq!(h.state().canvas.notice.as_deref(), Some("A data type joins no association"));
+    assert!(h.state().canvas.nary.is_none(), "no end");
+    for n in ["customer", "customer", "product"] {
+        let at = card(&h, &ids[n]);
+        click(&mut h, at);
+    }
+    assert!(painted(&h).iter().any(|t| t == "customer2 : Customer [*]"), "{:?}", painted(&h));
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    let made = naries(&h);
+    assert_eq!(made[0].1, ["customer : Customer [*]", "customer2 : Customer [*]", "product : Product [*]"]);
+    assert_eq!(legs_on(&h, None), 3, "two legs to one card");
+}
+
+/// A click on a leg and a click on the diamond both select the one association; Properties shows
+/// its name, its package and its ends, and its kind line counts them. In light and dark.
+#[test]
+fn a_leg_and_the_diamond_both_select_the_n_ary_association() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, ids) = nary_sample(theme, true);
+        let a = archforge_mof::Uuid::parse(&ids["recommends"]).unwrap();
+        let leg = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let end = archforge_uml::nary::ends(st, st.by_uuid(a).unwrap())[0];
+            st.uuid(archforge_diagram::views_of(st, end).1[0]).unwrap()
+        };
+        let at = point_on_edge(&h, leg);
+        click(&mut h, at);
+        let a_obj = h.state().session.as_ref().unwrap().doc().by_uuid(a).unwrap();
+        assert_eq!(selection(&h), vec![a_obj], "{theme:?}: the leg selects the association");
+        let shown = painted(&h);
+        for said in
+            ["recommends", "N-ary association · 3 ends · model, in every diagram", "Ends · 3", "customer : Customer [*]", "catalog : Catalog [1]"]
+        {
+            assert!(shown.iter().any(|t| t == said), "{theme:?}: {said} in {shown:?}");
+        }
+        assert!(ids_of(&h).iter().any(|i| i == "workspace.canvas.leg-end.2"), "the legs' end handles");
+        let empty = rect_of(&h, "workspace.canvas").left_bottom() + egui::vec2(60.0, -200.0);
+        click(&mut h, empty);
+        assert_ne!(selection(&h), vec![a_obj]);
+        let at = card(&h, &ids["diamond"]);
+        click(&mut h, at);
+        assert_eq!(selection(&h), vec![a_obj], "{theme:?}: the diamond selects it");
+    }
+}
+
+/// An end's editor writes its role, multiplicity, navigability, ordering and uniqueness as one
+/// undo step; a role another end has, whatever the case, is refused in place, the editor open and
+/// nothing written. In light and dark.
+#[test]
+fn an_n_ary_end_s_editor_applies_as_one_step_and_refuses_a_duplicate_role_in_place() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, ids) = nary_sample(theme, true);
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [ids["recommends"]] })).unwrap();
+        h.run();
+        let at = rect_of(&h, "workspace.properties.end.2.edit").center();
+        click(&mut h, at);
+        for id in ["role", "type", "multiplicity", "navigable", "ordered", "unique", "remove", "cancel", "apply"] {
+            assert!(ids_of(&h).iter().any(|i| *i == format!("workspace.properties.end.2.{id}")), "{theme:?}: {id}");
+        }
+        assert!(!ids_of(&h).iter().any(|i| i.starts_with("workspace.properties.end.2.aggregation")), "no aggregation");
+        retype(&mut h, "workspace.properties.end.2.role", "source");
+        retype(&mut h, "workspace.properties.end.2.multiplicity", "0..1");
+        for b in ["navigable", "ordered", "unique"] {
+            let at = rect_of(&h, &format!("workspace.properties.end.2.{b}")).center();
+            click(&mut h, at);
+        }
+        let at = rect_of(&h, "workspace.properties.end.2.apply").center();
+        click(&mut h, at);
+        assert!(h.state().panels.nary_end.is_none(), "{theme:?}: applied, the editor closes");
+        assert_eq!(naries(&h)[0].1[2], "source : Catalog [0..1]");
+        let (a, end) = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let a = st.by_uuid(archforge_mof::Uuid::parse(&ids["recommends"]).unwrap()).unwrap();
+            (a, archforge_uml::nary::ends(st, a)[2])
+        };
+        let st = h.state().session.as_ref().unwrap().doc();
+        let (_, _, ordered, unique) = archforge_uml::modifiers::flags(st, end);
+        assert!(archforge_uml::figures::navigable(st, a, end) && ordered && !unique, "{theme:?}: the checks written");
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Set association end"));
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        assert_eq!(naries(&h)[0].1[2], "catalog : Catalog [1]", "{theme:?}: one step");
+        h.run();
+        // A duplicate role, refused in place.
+        let before = revision(&h);
+        let at = rect_of(&h, "workspace.properties.end.1.edit").center();
+        click(&mut h, at);
+        retype(&mut h, "workspace.properties.end.1.role", "CUSTOMER");
+        let at = rect_of(&h, "workspace.properties.end.1.apply").center();
+        click(&mut h, at);
+        let said = "Another end has the role customer already. Pick another role.";
+        assert!(h.state().panels.nary_end.as_ref().is_some_and(|e| e.refused.as_ref().is_some_and(|(at, why)| *at == Some("role") && why == said)));
+        assert!(painted(&h).iter().any(|t| t == said), "{theme:?}: said under the field");
+        assert_eq!(revision(&h), before, "{theme:?}: nothing written");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert!(h.state().panels.nary_end.is_none(), "Escape cancels");
+    }
+}
+
+/// Add end, from the Ends `+`, arms the next class click: it adds an end there with its leg, one
+/// undo step; the hint says what the click does.
+#[test]
+fn add_end_from_the_plus_takes_the_next_class_clicked() {
+    let (mut h, ids) = nary_sample(ThemeKind::Light, true);
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [ids["recommends"]] })).unwrap();
+    h.run();
+    let at = rect_of(&h, "workspace.properties.association.ends.add").center();
+    click(&mut h, at);
+    assert!(painted(&h).iter().any(|t| t == "Click a class for the new end"), "the hint");
+    let at = card(&h, &ids["customer"]);
+    click(&mut h, at);
+    assert_eq!(naries(&h)[0].1.len(), 4);
+    assert_eq!(naries(&h)[0].1[3], "customer2 : Customer [*]");
+    assert_eq!(legs_on(&h, None), 4, "its leg drawn");
+    assert!(h.state().canvas.nary.is_none(), "one class only");
+    h.state_mut().session.as_mut().unwrap().undo().unwrap();
+    assert_eq!(naries(&h)[0].1.len(), 3, "one step");
+    // Escape right after the `+` cancels it, the canvas taking the keys.
+    h.run();
+    let at = rect_of(&h, "workspace.properties.association.ends.add").center();
+    click(&mut h, at);
+    assert!(h.state().canvas.nary.is_some(), "armed again");
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    assert!(h.state().canvas.nary.is_none(), "Escape cancels Add end from the panel too");
+    // From the diamond's menu too; Escape cancels it.
+    h.run();
+    let at = card(&h, &ids["diamond"]);
+    right_click(&mut h, at);
+    for key_ in ["add-end", "reconnect-end", "remove", "delete"] {
+        assert!(ids_of(&h).iter().any(|i| *i == format!("workspace.canvas.menu.{key_}")), "{key_}");
+    }
+    let at = rect_of(&h, "workspace.canvas.menu.add-end").center();
+    click(&mut h, at);
+    assert!(h.state().canvas.nary.is_some(), "armed");
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    assert!(h.state().canvas.nary.is_none(), "Escape cancels Add end");
+}
+
+/// A selected leg's class end drags onto another class, moving that end there with its leg; the
+/// end editor's Type moves it back, one undo step with the rest.
+#[test]
+fn a_leg_end_drags_onto_another_class_and_the_type_select_moves_it_back() {
+    let (mut h, ids) = nary_sample(ThemeKind::Light, true);
+    let order = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let st = s.doc();
+        let o = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(st, *o) == "Order").unwrap();
+        let id = st.uuid(o).unwrap().to_string();
+        let placed = s.execute(
+            "diagram.place",
+            &serde_json::json!({ "diagram": ids["diagram"], "element": id, "x": 640, "y": 560, "width": 180, "height": 120 }),
+        );
+        placed.unwrap().value["id"].as_str().unwrap().to_string()
+    };
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [ids["recommends"]] })).unwrap();
+    h.run();
+    let handle = rect_of(&h, "workspace.canvas.leg-end.2").center();
+    let to = card(&h, &order);
+    drag(&mut h, handle, to);
+    assert_eq!(naries(&h)[0].1[2], "catalog : Order [1]", "notice {:?}", h.state().canvas.notice);
+    assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Reconnect association end"));
+    let st = h.state().session.as_ref().unwrap().doc();
+    let end = archforge_uml::nary::ends(st, st.by_uuid(archforge_mof::Uuid::parse(&ids["recommends"]).unwrap()).unwrap())[2];
+    let leg = archforge_diagram::views_of(st, end).1[0];
+    let target = st.get(leg, archforge_diagram::edge::TARGET).unwrap().as_ref().unwrap();
+    assert_eq!(st.uuid(target).unwrap().to_string(), order, "the leg follows");
+    // Back with Type.
+    let at = rect_of(&h, "workspace.properties.end.2.edit").center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.properties.end.2.type").center();
+    click(&mut h, at);
+    let k = crate::uml_nary::end_types(h.state().session.as_ref().unwrap().doc()).iter().position(|(_, n)| n == "Catalog").unwrap();
+    let at = rect_of(&h, &format!("workspace.properties.end.2.type.{k}")).center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.properties.end.2.apply").center();
+    click(&mut h, at);
+    assert_eq!(naries(&h)[0].1[2], "catalog : Catalog [1]");
+    assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Set association end"));
+}
+
+/// The bin of one of four ends removes it at once, one undo step said by a toast; of three it asks
+/// (A5), Keep 3 ends focused: Keep and Escape change nothing, Make it binary turns it into a plain
+/// association between the two classes left, its diamond giving way to a line, one undo step. In
+/// light and dark.
+#[test]
+fn removing_an_end_of_four_is_one_step_and_one_of_three_asks_to_keep_or_make_it_binary() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, ids) = nary_sample(theme, true);
+        let a = ids["recommends"].clone();
+        h.state_mut()
+            .session
+            .as_mut()
+            .unwrap()
+            .execute("uml.association.add-end", &serde_json::json!({ "association": a, "class": ids["Customer"] }))
+            .unwrap();
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [a] })).unwrap();
+        h.run();
+        let at = rect_of(&h, "workspace.properties.end.3.edit").center();
+        click(&mut h, at);
+        let at = rect_of(&h, "workspace.properties.end.3.remove").center();
+        click(&mut h, at);
+        assert_eq!(naries(&h)[0].1.len(), 3, "{theme:?}: removed at once");
+        assert_eq!(h.state().canvas.toast.as_ref().map(|t| t.text.as_str()), Some("End customer2 removed"));
+        assert_eq!(legs_on(&h, None), 3);
+        // One of three asks.
+        let before = revision(&h);
+        let ask = |h: &mut Harness<'static, Shell>| {
+            let at = rect_of(h, "workspace.properties.end.2.edit").center();
+            click(h, at);
+            let at = rect_of(h, "workspace.properties.end.2.remove").center();
+            click(h, at);
+            assert!(h.state().panels.nary_remove.is_some(), "asked");
+            let shown = painted(h);
+            for said in ["Two ends would remain", "Keep 3 ends", "Make it binary"] {
+                assert!(shown.iter().any(|t| t == said), "{said} in {shown:?}");
+            }
+        };
+        ask(&mut h);
+        let keep = "workspace.properties.association.ends.removeConfirm.keep";
+        assert!(h.ctx.memory(|m| m.has_focus(crate::widgets::egui_id(keep))), "{theme:?}: Keep 3 ends focused");
+        let at = rect_of(&h, keep).center();
+        click(&mut h, at);
+        assert!(h.state().panels.nary_remove.is_none() && revision(&h) == before && naries(&h)[0].1.len() == 3, "{theme:?}: Keep changes nothing");
+        ask(&mut h);
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert!(h.state().panels.nary_remove.is_none() && revision(&h) == before, "{theme:?}: Escape keeps");
+        ask(&mut h);
+        let at = rect_of(&h, "workspace.properties.association.ends.removeConfirm.binary").center();
+        click(&mut h, at);
+        assert!(naries(&h).is_empty(), "{theme:?}: binary now");
+        assert_eq!(diamonds_here(&h), 0, "its diamond gave way");
+        let st = h.state().session.as_ref().unwrap().doc();
+        let ao = st.by_uuid(archforge_mof::Uuid::parse(&a).unwrap()).unwrap();
+        assert!(st.is_alive(ao) && archforge_uml::figures::member_ends(st, ao).is_some(), "a binary association");
+        assert_eq!(archforge_diagram::views_of(st, ao).1.len(), 1, "a line in its place");
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Remove association end"));
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        h.run();
+        assert_eq!((naries(&h).len(), diamonds_here(&h), legs_on(&h, None)), (1, 1, 3), "{theme:?}: one undo step");
+    }
+}
+
+/// Delete with the association selected removes its diamond and legs from this diagram only;
+/// Shift+Delete asks first and deletes it with its ends everywhere.
+#[test]
+fn remove_from_this_diagram_keeps_the_n_ary_association_and_delete_from_the_model_asks_first() {
+    let (mut h, ids) = nary_sample(ThemeKind::Light, true);
+    let a = ids["recommends"].clone();
+    let at = card(&h, &ids["diamond"]);
+    click(&mut h, at);
+    key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
+    assert_eq!((diamonds_here(&h), legs_on(&h, None)), (0, 0), "gone from the diagram");
+    assert_eq!(naries(&h).len(), 1, "kept in the model");
+    h.state_mut().session.as_mut().unwrap().undo().unwrap();
+    h.run();
+    let at = card(&h, &ids["diamond"]);
+    click(&mut h, at);
+    key(&mut h, egui::Key::Delete, egui::Modifiers::SHIFT);
+    assert!(h.state().explorer.delete.is_some(), "asks first");
+    assert_eq!(naries(&h).len(), 1);
+    let at = rect_of(&h, "workspace.explorer.delete.confirm").center();
+    click(&mut h, at);
+    assert!(naries(&h).is_empty() && diamonds_here(&h) == 0 && legs_on(&h, None) == 0, "deleted with its ends");
+    let st = h.state().session.as_ref().unwrap().doc();
+    assert!(st.by_uuid(archforge_mof::Uuid::parse(&a).unwrap()).is_none_or(|o| !st.is_alive(o)));
+}
+
+/// Two diagrams stay in step: an end added on one draws its leg on the other where both show the
+/// diamond and the class; a class dragged onto a diagram that shows the diamond comes with its leg.
+#[test]
+fn two_diagrams_show_the_same_n_ary_association_and_a_dropped_class_brings_its_leg() {
+    let (mut h, ids) = nary_sample(ThemeKind::Light, true);
+    let second = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let st = s.doc();
+        let pkg = archforge_uml::commands::package_of(st, st.by_uuid(archforge_mof::Uuid::parse(&ids["Customer"]).unwrap()).unwrap()).unwrap();
+        let pkg = st.uuid(pkg).unwrap().to_string();
+        let d = s
+            .execute("diagram.add", &serde_json::json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": pkg, "name": "Second" }))
+            .unwrap()
+            .value["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        for (c, x) in [("Customer", 80), ("Product", 500), ("Catalog", 900)] {
+            s.execute("diagram.place", &serde_json::json!({ "diagram": d, "element": ids[c], "x": x, "y": 80, "width": 200, "height": 120 }))
+                .unwrap();
+        }
+        s.execute("diagram.place", &serde_json::json!({ "diagram": d, "element": ids["recommends"], "x": 500, "y": 400, "width": 44, "height": 28 }))
+            .unwrap();
+        s.execute("diagram.connect-all", &serde_json::json!({ "diagram": d })).unwrap();
+        d
+    };
+    assert_eq!(legs_on(&h, Some(&second)), 3, "connect-all draws the legs");
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [ids["recommends"]] })).unwrap();
+    h.run();
+    let at = rect_of(&h, "workspace.properties.association.ends.add").center();
+    click(&mut h, at);
+    let at = card(&h, &ids["product"]);
+    click(&mut h, at);
+    assert_eq!((legs_on(&h, None), legs_on(&h, Some(&second))), (4, 4), "the new leg on both diagrams");
+    // Catalog off this diagram and dropped back: its leg comes with it.
+    h.state_mut().session.as_mut().unwrap().execute("diagram.unplace", &serde_json::json!({ "nodes": [ids["catalog"]] })).unwrap();
+    h.run();
+    assert_eq!(legs_on(&h, None), 3);
+    let d = h.state().session.as_ref().unwrap().doc().by_uuid(archforge_mof::Uuid::parse(&ids["diagram"]).unwrap()).unwrap();
+    crate::kinds::DiagramKind::drop(&crate::uml_ui::UmlKind, h.state_mut(), d, archforge_mof::Uuid::parse(&ids["Catalog"]).unwrap(), (460.0, 640.0));
+    h.run();
+    assert_eq!(legs_on(&h, None), 4, "the dropped class brings its leg");
+}
+
+/// A binary association keeps its two ends' sections, and its Delete still removes it.
+#[test]
+fn a_binary_association_keeps_its_ends_sections_beside_n_ary_ones() {
+    let (mut h, _) = nary_sample(ThemeKind::Light, true);
+    let places = {
+        let st = h.state().session.as_ref().unwrap().doc();
+        let a = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::ASSOCIATION) && archforge_core::name_of(st, *o) == "places").unwrap();
+        st.uuid(a).unwrap().to_string()
+    };
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [places] })).unwrap();
+    h.run();
+    let shown = painted(&h);
+    assert!(shown.iter().any(|t| t == "End at Customer") && shown.iter().any(|t| t == "End at Order"), "{shown:?}");
+    assert!(!shown.iter().any(|t| t.starts_with("Ends · ")), "no n-ary ends section");
+    assert!(ids_of(&h).iter().any(|i| i == "workspace.properties.end.0.aggregation"), "aggregation offered");
+}

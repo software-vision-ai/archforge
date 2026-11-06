@@ -492,7 +492,10 @@ pub fn remove_selected_line(shell: &mut Shell) -> bool {
     });
     let carded = |e: Obj| {
         let Ok(class) = store.class_of(e) else { return false };
+        // A binary association is a line, though the class of an n-ary one's diamond is shown as a
+        // card (AR-128).
         session.view().of_element(store, e).is_some_and(|n| n.kinds().iter().any(|k| n.shows(k, class)))
+            && (class != archforge_uml::ASSOCIATION || archforge_uml::nary::is_nary(store, e))
     };
     let Some(element) = element.filter(|e| {
         let (_, edges, nodes) = archforge_diagram::views_of(store, *e);

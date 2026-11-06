@@ -49,10 +49,13 @@ pub enum Relate {
     /// A template binding, from the bound class to its template (AR-131): released on the
     /// template, it opens its draft in Properties instead of drawing at once.
     TemplateBinding,
+    /// An n-ary association (AR-128): drawn by clicking each class in turn, not by dragging; the
+    /// gesture is `crate::uml_nary`'s.
+    NAry,
 }
 
 impl Relate {
-    pub(crate) const ALL: [Relate; 9] = [
+    pub(crate) const ALL: [Relate; 10] = [
         Relate::Association,
         Relate::Directed,
         Relate::Aggregation,
@@ -61,6 +64,7 @@ impl Relate {
         Relate::Dependency,
         Relate::Realization,
         Relate::AssociationClass,
+        Relate::NAry,
         Relate::TemplateBinding,
     ];
 
@@ -76,6 +80,7 @@ impl Relate {
             Relate::Realization => "Interface realization",
             Relate::AssociationClass => "Association class",
             Relate::TemplateBinding => "Template binding",
+            Relate::NAry => "N-ary association",
         }
     }
 
@@ -86,21 +91,23 @@ impl Relate {
             Relate::Realization => Some("Interface realization: from the implementing class to its interface"),
             Relate::AssociationClass => Some("Association class: between two classes, with a card of its own"),
             Relate::TemplateBinding => Some("Template binding: from the bound class to its template"),
+            Relate::NAry => Some("N-ary association: click each class in turn, then press Enter"),
             _ => None,
         }
     }
 
     /// Whether a separator sets it apart above it in the menu: realizing is neither relating nor
-    /// specializing; the association class follows the realization in that group; a template
-    /// binding starts the group after it (design A2), where the n-ary association joins it.
+    /// specializing; the association class follows the realization in that group; an n-ary
+    /// association, drawn class by class, and a template binding share the group after it (design
+    /// A2), the n-ary association first.
     fn after_separator(self) -> bool {
-        matches!(self, Relate::Realization | Relate::TemplateBinding)
+        matches!(self, Relate::Realization | Relate::NAry)
     }
 
     /// Whether its line carries the relationship's name at its middle: a generalization and a
     /// realization have none, and an association class's name is on its card.
     fn named(self) -> bool {
-        !matches!(self, Relate::Generalization | Relate::Realization | Relate::AssociationClass | Relate::TemplateBinding)
+        !matches!(self, Relate::Generalization | Relate::Realization | Relate::AssociationClass | Relate::TemplateBinding | Relate::NAry)
     }
 
     /// Whether it draws an association, of any kind.
@@ -120,6 +127,7 @@ impl Relate {
             Relate::Realization => "realization",
             Relate::AssociationClass => "association-class",
             Relate::TemplateBinding => "template-binding",
+            Relate::NAry => "n-ary",
         }
     }
 
@@ -133,13 +141,14 @@ impl Relate {
             Relate::Generalization => ([EndMark::None, EndMark::Triangle], false),
             Relate::Dependency => ([EndMark::None, EndMark::OpenArrow], true),
             Relate::Realization => ([EndMark::None, EndMark::Triangle], true),
-            Relate::AssociationClass => ([EndMark::None, EndMark::None], false),
+            Relate::AssociationClass | Relate::NAry => ([EndMark::None, EndMark::None], false),
             Relate::TemplateBinding => ([EndMark::None, EndMark::OpenArrow], true),
         }
     }
 
     /// The command that draws it, its parameters for the two classes, and its undo step's name. An
-    /// association class's is drawn with its name by [`connect_class`] instead.
+    /// association class's is drawn with its name by [`connect_class`] instead, and an n-ary
+    /// association never between two classes (`crate::uml_nary` draws it).
     fn command(self, from: Uuid, to: Uuid) -> (&'static str, serde_json::Value, &'static str) {
         let (from, to) = (from.to_string(), to.to_string());
         match self {
@@ -187,6 +196,15 @@ fn sample(paint: &egui::Painter, a: Pos2, b: Pos2, kind: Relate, ink: egui::Colo
         let g = ux::galley(paint, &tr("«bind»"), types::TINY, ink, None);
         let middle = a + (b - a) / 2.0;
         paint.galley(pos2(middle.x - g.size().x / 2.0, middle.y - g.size().y - 1.0), g, ink);
+    }
+    // An n-ary association (AR-128): a small hollow diamond at the line's middle with a short leg
+    // down from it, the third end.
+    if kind == Relate::NAry {
+        let middle = a + (b - a) / 2.0;
+        let (w, h) = (6.0, 4.0);
+        let diamond = vec![middle - vec2(w, 0.0), middle - vec2(0.0, h), middle + vec2(w, 0.0), middle + vec2(0.0, h)];
+        paint.add(egui::Shape::convex_polygon(diamond, fill, stroke));
+        paint.line_segment([middle + vec2(0.0, h), middle + vec2(0.0, h + 6.0)], stroke);
     }
 }
 
@@ -262,7 +280,7 @@ pub(crate) fn popover(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, an
 
 /// The classifier a node shows: a class, an interface, an enumeration, a data type or a primitive
 /// type.
-fn class_of_node(store: &Store, node: Uuid) -> Option<Obj> {
+pub(crate) fn class_of_node(store: &Store, node: Uuid) -> Option<Obj> {
     let n = store.by_uuid(node)?;
     let c = store.get(n, archforge_diagram::node::ELEMENT).ok()?.as_ref()?;
     store.class_of(c).is_ok_and(archforge_uml::is_classifier).then_some(c)
@@ -321,6 +339,10 @@ fn is_class(store: &Store, element: Obj) -> bool {
 /// (an association class is one), no association at an enumeration, a data type or a primitive
 /// type, and an association class only at a class.
 fn kind_start_problem(kind: Relate, store: &Store, element: Obj) -> Option<String> {
+    // An n-ary association is drawn by clicks, never dragged from a class (AR-128).
+    if kind == Relate::NAry {
+        return Some(tr("An n-ary association is drawn by clicking each class in turn"));
+    }
     if kind == Relate::Realization && !is_class(store, element) {
         return Some(tr("Only a class implements an interface"));
     }
@@ -340,7 +362,7 @@ fn class_end_refusal(kind: Relate, store: &Store, element: Obj) -> Option<String
 /// Why an association of `kind` has no end at `element`, when it has none, in the user's words for
 /// what it is: a data type joins no association, an enumeration is one, and a primitive type joins
 /// none either.
-fn association_refusal(kind: Relate, store: &Store, element: Obj) -> Option<String> {
+pub(crate) fn association_refusal(kind: Relate, store: &Store, element: Obj) -> Option<String> {
     if !kind.associates() || archforge_uml::relations::association_end_problem(store, element).is_none() {
         return None;
     }
@@ -369,6 +391,11 @@ pub(crate) fn tool_hint(shell: &Shell) -> Option<String> {
 pub(crate) fn connect(shell: &mut Shell, d: Obj, from_node: Uuid, to_node: Uuid) {
     shell.canvas.notice = None;
     let kind = shell.canvas.uml_relation;
+    // An n-ary association is drawn by clicks, never dragged (AR-128).
+    if kind == Relate::NAry {
+        shell.canvas.notice = Some(tr("An n-ary association is drawn by clicking each class in turn"));
+        return;
+    }
     let Some(session) = shell.session.as_mut() else { return };
     let store = session.doc();
     // A realization refused draws nothing, and says why in the user's words.
@@ -621,6 +648,11 @@ pub(crate) fn reconnect(shell: &mut Shell, element: Uuid, source: bool, to_node:
     shell.canvas.notice = None;
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
     let line = store.by_uuid(element);
+    // An n-ary association's leg moves its end onto another class (AR-128).
+    if line.is_some_and(|l| archforge_uml::nary::association_of_end(store, l).is_some()) {
+        crate::uml_nary::reconnect_end(shell, element, to_node);
+        return;
+    }
     if let Some(r) = line.filter(|r| store.class_of(*r).ok() == Some(archforge_uml::INTERFACE_REALIZATION))
         && let Some((implementing, contract)) = archforge_uml::figures::ends(store, r)
     {
@@ -857,6 +889,11 @@ pub(crate) fn body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, m
     let width = (r.width() - 2.0 * PAD).max(0.0);
     let (Some(o), Some(id)) = (subject.obj, subject.id) else { return };
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
+    // An n-ary association's panel is its own: its name and package, then its ends (AR-128).
+    if archforge_uml::nary::is_nary(store, o) {
+        crate::uml_nary::body(shell, ui, p, r, y, subject, o, id);
+        return;
+    }
     let class = store.class_of(o).ok();
     let name = |c: Option<Obj>| c.map(|c| archforge_core::name_of(store, c)).unwrap_or_default();
     let ends = archforge_uml::figures::ends(store, o);

@@ -146,6 +146,14 @@ enum Action {
     ResetRoute(Uuid),
     /// Something refused before it began, said at the canvas's top: a line the tool starts nowhere.
     Notice(String),
+    /// The armed N-ary association tool clicked on a card, double or not; or anywhere else, which
+    /// cancels the drawing (AR-128).
+    NaryEnd(Uuid, bool),
+    NaryCancel,
+    /// A card clicked while Add end waits: the association's new end at its class (AR-128).
+    NaryAddEnd(Uuid),
+    /// The context menu of an n-ary association, from its diamond or a leg (AR-128).
+    NaryMenu(Pos2, Uuid),
 }
 
 pub(crate) fn run(shell: &mut Shell, id: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
@@ -386,6 +394,15 @@ fn decide(
     };
     match shell.canvas.tool {
         Tool::Pan => Action::Nothing,
+        // An n-ary association is drawn class by class, by clicks (AR-128).
+        Tool::Connect(tool) if crate::uml_nary::clicks(shell, tool) => match pos {
+            Some(pos) if resp.clicked() => match hit_node(pos).and_then(|n| uuid(store, n)) {
+                // A third click in a row reads as a double one too: egui counts it a triple.
+                Some(node) => Action::NaryEnd(node, resp.double_clicked() || resp.triple_clicked()),
+                None => Action::NaryCancel,
+            },
+            _ => Action::Nothing,
+        },
         Tool::Connect(tool) => {
             if (resp.drag_stopped_by(egui::PointerButton::Primary) || released) && shell.canvas.gesture.is_some() {
                 return Action::Commit;
@@ -457,6 +474,13 @@ fn decide(
                 return Action::Commit;
             }
             let Some(pos) = pos else { return Action::Nothing };
+            // Add end waits for a class: a click on a card gives it, anywhere else cancels (AR-128).
+            if crate::uml_nary::adding_end(shell).is_some() && resp.clicked() {
+                return match hit_node(pos).and_then(|n| uuid(store, n)) {
+                    Some(node) => Action::NaryAddEnd(node),
+                    None => Action::NaryCancel,
+                };
+            }
             if resp.drag_started_by(egui::PointerButton::Primary) && shell.canvas.gesture.is_none() {
                 // The gesture starts where the button went down, not where the pointer is now.
                 let from = origin.filter(|o| o.is_finite()).unwrap_or(pos);
@@ -498,6 +522,7 @@ fn decide(
                             Some(Hit::Edge(e)) => match (segment_at(store, grid, e, x, y, f64::from(SEGMENT_REACH / view.zoom)), uuid(store, e)) {
                                 (Some((index, route)), Some(edge)) => {
                                     let element = store.get(e, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref()).unwrap_or(e);
+                                    let element = crate::uml_nary::selectable(store, element);
                                     Action::Start(Gesture::Segment { edge, index, route, from }, uuid(store, element))
                                 }
                                 _ => Action::Nothing,
@@ -506,6 +531,20 @@ fn decide(
                         }
                     }
                 };
+            }
+            // A right click on an n-ary association's diamond or leg opens its menu (AR-128).
+            if resp.secondary_clicked() {
+                let (x, y) = view.to_canvas(pos);
+                let shown = match hit_node(pos) {
+                    Some(n) => element_of(store, n),
+                    None => match hit(store, grid, x, y) {
+                        Some(Hit::Edge(e)) => store.get(e, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref()),
+                        _ => None,
+                    },
+                };
+                if let Some(a) = shown.and_then(|e| crate::uml_nary::shown_by(store, e)).and_then(|a| uuid(store, a)) {
+                    return Action::NaryMenu(pos, a);
+                }
             }
             // A right click on a generalization's line opens the set actions (AR-129).
             if resp.secondary_clicked()
@@ -609,7 +648,10 @@ fn decide(
                 };
                 let target = match (on_top(shell, store, grid, card, pos), hit) {
                     (Some(n), _) => element_of(store, n).unwrap_or(n),
-                    (None, Some(Hit::Edge(e))) => store.get(e, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref()).unwrap_or(e),
+                    // A leg of an n-ary association selects the association (AR-128).
+                    (None, Some(Hit::Edge(e))) => {
+                        crate::uml_nary::selectable(store, store.get(e, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref()).unwrap_or(e))
+                    }
                     (None, _) => d,
                 };
                 let Some(id) = uuid(store, target) else { return Action::Nothing };
@@ -642,9 +684,17 @@ pub(crate) fn pointer(shell: &mut Shell, ui: &egui::Ui, resp: &egui::Response, v
         shell.canvas.focused = true;
         shell.canvas.menu = None;
         shell.canvas.line_menu = None;
+        shell.canvas.nary_menu = None;
     }
     match action {
         Action::Nothing => {}
+        Action::NaryEnd(node, double) => crate::uml_nary::click(shell, d, node, double),
+        Action::NaryCancel => crate::uml_nary::cancel(shell),
+        Action::NaryAddEnd(node) => crate::uml_nary::add_end(shell, node),
+        Action::NaryMenu(at, a) => {
+            select(shell, vec![a]);
+            shell.canvas.nary_menu = Some((at, a));
+        }
         Action::Select(ids) => select(shell, ids),
         Action::Toggle(id) => {
             let mut ids: Vec<Uuid> =
@@ -1412,7 +1462,7 @@ fn commit_rename(shell: &mut Shell) {
 }
 
 /// Removes the nodes from the diagram, the model untouched.
-fn unplace(shell: &mut Shell, nodes: Vec<Uuid>) {
+pub(crate) fn unplace(shell: &mut Shell, nodes: Vec<Uuid>) {
     if nodes.is_empty() {
         return;
     }
@@ -1434,7 +1484,7 @@ pub fn diagrams_showing(store: &Store, element: Obj) -> usize {
 
 /// Asks before an entity goes from the model, with what goes with it; what its notation keeps
 /// (the package Types while it holds the built-in types) is said at the canvas's top instead.
-fn ask_delete(shell: &mut Shell, node: Uuid, entity: Uuid) {
+pub(crate) fn ask_delete(shell: &mut Shell, node: Uuid, entity: Uuid) {
     ask_delete_of(shell, Some(node), entity);
 }
 
@@ -1584,6 +1634,8 @@ pub(crate) fn overlays(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rec
     if let Some(at) = shell.canvas.line_menu {
         crate::uml_sets::line_menu(shell, ui, p, r, at, d);
     }
+    // An n-ary association's draft, its legs' end handles and its menu (AR-128).
+    crate::uml_nary::overlay(shell, ui, p, r, view, d);
     keyboard(shell, ui, d);
 }
 
@@ -1596,6 +1648,10 @@ fn selected_line(
     selection: &[Obj],
 ) -> Option<(Uuid, Vec<(f64, f64)>, [archforge_diagram::figure::EndMark; 2])> {
     let [element] = selection else { return None };
+    // An n-ary association's leg moves only its class end, by its own handle (AR-128).
+    if archforge_uml::nary::association_of_end(store, *element).is_some() {
+        return None;
+    }
     let (_, edges, nodes) = archforge_diagram::views_of(store, *element);
     // A card's element has no line, but an association class has both: its line keeps its handles.
     if !nodes.is_empty() && store.class_of(*element).ok() != Some(archforge_uml::ASSOCIATION_CLASS) {
@@ -1983,12 +2039,17 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
         || shell.canvas.note_edit.is_some()
         || shell.canvas.menu.is_some()
         || shell.canvas.line_menu.is_some()
+        || shell.canvas.nary_menu.is_some()
         || shell.explorer.delete.is_some()
         || shell.diagrams.new.is_some()
     {
         return;
     }
     if ui.memory(|m| m.focused().is_some()) {
+        return;
+    }
+    // A drawing of an n-ary association, or Add end, takes Enter, Backspace and Escape (AR-128).
+    if crate::uml_nary::keys(shell, ui, d) {
         return;
     }
     // An open menu the keys walk (the classifier's kinds) takes the arrows and Enter itself; the

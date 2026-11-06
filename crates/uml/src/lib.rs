@@ -47,6 +47,7 @@ mod generated;
 pub mod members;
 pub mod modifiers;
 pub mod names;
+pub mod nary;
 pub mod nesting;
 pub mod profiles;
 pub mod qualifiers;
@@ -147,9 +148,10 @@ impl Notation for UmlNotation {
     }
 
     /// A class diagram shows classes, interfaces, enumerations, data types, primitive types,
-    /// association classes and packages as cards, and constraints as braces or notes (AR-133).
+    /// association classes and packages as cards, constraints as braces or notes (AR-133), and an
+    /// n-ary association as its diamond (AR-128).
     fn shows(&self, _kind: &str, class: ClassId) -> bool {
-        is_classifier(class) || class == PACKAGE || class == CONSTRAINT || class == STEREOTYPE
+        is_classifier(class) || class == PACKAGE || class == CONSTRAINT || class == STEREOTYPE || class == ASSOCIATION
     }
 
     /// A package's diagram shows its own classes and, as outsiders, classes of other packages; and
@@ -172,6 +174,8 @@ impl Notation for UmlNotation {
             Some(c) if c == PACKAGE => of.is_some() && commands::package_of(store, element) == of,
             // A constraint shows on any class diagram: its elements may be on several.
             Some(c) if c == CONSTRAINT => of.is_some() && constraints::in_model(store, element),
+            // An association is a node only as an n-ary one's diamond (AR-128); a binary one is a line.
+            Some(c) if c == ASSOCIATION => of.is_some() && nary::is_nary(store, element),
             // A nested classifier belongs in its owner's package (AR-132).
             _ => of.is_some() && nesting::home_package(store, element).is_some(),
         }
@@ -185,18 +189,22 @@ impl Notation for UmlNotation {
             c if c == PRIMITIVE_TYPE => PRIMITIVE_TYPE_SIZE,
             c if c == STEREOTYPE => CLASS_SIZE,
             c if c == CONSTRAINT => (constraints::NOTE_WIDTH, 96.0),
+            c if c == ASSOCIATION => nary::DIAMOND_SIZE,
             _ => CLASS_SIZE,
         }
     }
 
     /// Associations, generalizations, dependencies, interface realizations, association classes,
-    /// template bindings, and a profile's extensions (AR-134).
+    /// template bindings, and a profile's extensions (AR-134); and an n-ary association's end, as
+    /// the leg from its diamond to its class (AR-128).
     fn connects(&self, _kind: &str, class: ClassId) -> bool {
-        is_relationship(class) || class == EXTENSION
+        is_relationship(class) || class == EXTENSION || class == PROPERTY
     }
 
+    /// A relationship's two classes; an n-ary association's end's leg, from its association's
+    /// diamond to its class (AR-128).
     fn ends(&self, store: &Store, element: Obj) -> Option<(Obj, Obj)> {
-        figures::ends(store, element)
+        figures::ends(store, element).or_else(|| nary::leg_ends(store, element))
     }
 
     /// The texts a line of `class` places along it.
@@ -332,6 +340,7 @@ pub const WORDS: &[&str] = &[
     "Constraint · not evaluated",
     "«stereotype»",
     "«metaclass»",
+    "N-ary association",
 ];
 pub const PLURALS: &[&str] = &["+ {n} more member", "+ {n} more literal", "+ {n} more element", "+ {n} more line"];
 
@@ -346,6 +355,7 @@ pub fn registry() -> Result<Arc<archforge_engine::Registry<Store, ProjectView>>,
     specs.extend(constraints::specs());
     specs.extend(generalization_sets::specs());
     specs.extend(qualifiers::specs());
+    specs.extend(nary::specs());
     specs.extend(nesting::specs());
     specs.extend(templates::specs());
     specs.extend(profiles::specs());

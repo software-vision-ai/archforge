@@ -135,7 +135,7 @@ the link (*navigability*).
    current one highlighted.
 2. Choose **Association**.
 
-<!-- picture: workspace-guide-relate-kinds light | The Relationship tool's menu open over Customer and Order: Association highlighted, then the other kinds of line, and Interface realization and Association class below a line -->
+<!-- picture: workspace-guide-relate-kinds light | The Relationship tool's menu open over Customer and Order: Association highlighted, then the other kinds of line, Interface realization and Association class below a line, and N-ary association and Template binding below another -->
 
 3. Press on *Customer*, drag onto *Order*, and let go.
 
@@ -620,6 +620,7 @@ When a line is not allowed, nothing is drawn and the reason shows at the top of 
 | Dependency | Any two classifiers, including enumerations, data types and primitive types. |
 | Interface realization | From a class (or an association class) to an interface, once per pair. |
 | Association class | Two classes, never the same class at both ends. |
+| N-ary association | Three or more classes and interfaces, a class at several ends when their roles differ. Never an enumeration, a data type or a primitive type. |
 
 When you let go on empty canvas, the line makes a new card there, its name ready to type: a new
 interface for an interface realization, a new class for an association class, and for a
@@ -784,6 +785,65 @@ arrows move it up and down the list.
 
 <!-- picture: workspace-qualifier-refused light | The same, a second qualifier lineNo : String applied on the Order end and refused: the name ringed and the reason in a tinted box under the fields -->
 
+### N-ary associations
+
+Most associations join two classes. An *n-ary* association joins three or more at once, when a
+link only makes sense with all of them: a customer is recommended a product from a catalog, so the
+association *recommends* joins *Customer*, *Product* and *Catalog*. It is drawn as a diamond with
+a leg to each class, and it is one association, however many legs it has.
+
+**Draw one.** Open the **Relationship** tool's chevron and pick **N-ary association**, below
+**Association class**. Then click each class in turn: every click on a class adds one end, the
+diamond appears with the second end, and the bar at the top of the canvas counts the ends. Press
+**Enter** to finish once there are three ends or more, or double-click the last class: the first
+click of the double-click adds its end, and the second finishes the association instead of adding
+that class again. The association, its diamond and every leg are added as one step you can undo.
+**Backspace** takes the last end off; before the first end, it removes the selection as usual.
+**Esc**, choosing another tool, or a click on empty canvas cancels and leaves nothing in the model.
+To give a class two ends, click it twice while fewer than three ends are drawn, or once more later:
+each end then has a role of its own.
+
+Each new end is named after its class, such as *customer*, and starts at `*`; a second end at the
+same class is *customer2*. Change them afterwards in **Properties**.
+
+**Select and edit it.** A click on the diamond or on any leg selects the association. Its
+**Properties** show its **Name** and its package, then **Ends**, one row per end, such as
+`customer : Customer [*]`. The pencil on a row, or a double click, opens the end's editor:
+**Role**, **Type** (the class at the end), **Multiplicity**, **Navigable**, **Ordered** and
+**Unique**. **Apply** (or Enter) writes them as one step; **Cancel** or Escape leaves the model as
+it was. Two ends may have the same type, but never the same role: a role another end has is
+refused in the editor, and nothing is written. An n-ary association's ends are never aggregations,
+so the editor offers no **Aggregation**.
+
+- **Add an end.** Press **+** beside **Ends**, or choose **Add end** on the diamond's menu (right
+  click), then click a class. The new leg is drawn only on the diagrams that show both the
+  diamond and that class; on the others it appears once you place the class there.
+- **Move an end.** Drag the end of a leg onto another class, or pick another **Type** in the end's
+  editor. On each diagram that shows the diamond, the leg moves to the new class's card; where that
+  class is not shown, the leg goes until you place it. The ends may drop **Subsets** or
+  **Redefines** entries that the move makes invalid; the canvas names them, and **Undo** brings
+  them back with the end.
+- **Remove an end.** The bin in the end's editor removes it with its legs. With four ends or more
+  it goes at once, and a message offers **Undo**. A constraint that applies to that end alone goes
+  with it, and the ends left drop any **Subsets** or **Redefines** entry that the removal makes
+  invalid. **Undo** brings all of it back. When only three ends are left, removing one would leave
+  two, and an n-ary association needs three or more. **Properties** asks first: **Keep 3 ends**
+  (where the focus starts; Esc does the same) changes nothing, and **Make it binary** turns it into
+  an ordinary association between the two classes left, keeping its name and both ends, as one
+  step you can undo. Wherever a diagram showed the diamond and both classes, a line takes its place.
+- **Remove from this diagram** (Delete, or the diamond's menu) takes the diamond and its legs off
+  this diagram only. **Delete from the model…** (Shift+Delete) asks first, then deletes the
+  association and its ends from every diagram.
+
+Taking a class's card off a diagram takes its legs with it; placing the card again brings them
+back.
+
+<!-- picture: workspace-nary-drawing light | N-ary association chosen and drawing: Customer and Product clicked, the diamond between them with their legs and a dashed leg to the pointer over Catalog; the bar at the top reads N-ary association · 2 ends; Properties shows New n-ary association with Ends so far · 2 -->
+
+<!-- picture: workspace-nary light | The n-ary association recommends selected, its diamond joined by legs to Customer, Product and Catalog; Properties shows Ends · 3 with the editor open on the catalog end: Role, Type, Multiplicity, Navigable, Ordered and Unique -->
+
+<!-- picture: workspace-nary-binary light | Properties of recommends after its catalog end's bin: Two ends would remain, with Keep 3 ends focused and Make it binary -->
+
 ### Constraints
 
 A constraint is owned by a class, an interface, an enumeration, a data type, your own primitive
@@ -918,8 +978,8 @@ A *template binding* says that a class is a template with its parameters filled 
 its own, kept in the model with each *substitution*, a parameter and its argument; it is neither a
 dependency nor a realization.
 
-- **Draw one.** Pick **Template binding** in the **Relationship** tool's menu, under **Association
-  class**, and drag from the class that binds to the template. A class binds a class template, an
+- **Draw one.** Pick **Template binding** in the **Relationship** tool's menu, under **N-ary
+  association**, and drag from the class that binds to the template. A class binds a class template, an
   interface an interface template, a data type a data type template. Releasing the line on the
   template writes nothing yet: **Properties** opens *New template binding*, *not in the model
   until you apply*, with the **Bound element**, the **Template**, and **Substitutions**, one row

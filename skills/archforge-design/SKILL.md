@@ -567,7 +567,8 @@ What is UML's own, beside the shared rules above.
 - The Relationship tool's face is a sample of the kind it draws; its chevron opens a menu of
   Association, Directed association, Aggregation, Composition, Generalization and Dependency, then
   after a separator Interface realization and Association class (its sample a small card over the
-  line's middle), each a row with its sample line, the current kind tinted and ticked at the
+  line's middle), then after another separator N-ary association (AR-128; its sample a small
+  diamond on the line with a leg down) and Template binding (AR-131), in that order, each a row with its sample line, the current kind tinted and ticked at the
   row's right as the classifier tool's menu ticks its own (AR-191), and a pick closes it.
   A line is drawn from the whole to the part, from the specific class to the general one, from the
   client to the supplier, from the implementing class to its interface; dropped on empty canvas it
@@ -728,8 +729,8 @@ What is UML's own, beside the shared rules above.
   says "Qualified end: the qualifier box is drawn here, against Order." under its title; the
   other end's multiplicity field is labelled Per qualifier value with "Counted per qualifier
   value of the other end; shown next to OrderLine." under it. As built, the ends keep their two
-  sections (End at …) rather than the design's Ends switch, which belongs with n-ary associations
-  (AR-128). A name another qualifier of the end has, whatever the case, is refused in a tinted
+  sections (End at …) rather than the design's Ends switch; n-ary associations (AR-128) list their
+  ends as rows with an editor each, as frame A4 draws, so no switch is built. A name another qualifier of the end has, whatever the case, is refused in a tinted
   box under the fields with the name ringed ("This end already has a qualifier named lineNo. Pick
   another name."), the editor open and nothing written. On the canvas the box is drawn in the
   surface, framed in the line's ink, against the side of the class's card the line leaves, rows in
@@ -768,6 +769,35 @@ What is UML's own, beside the shared rules above.
   fits, whichever compartment they are in; with no row's place left, a row above the card's foot
   while that is under the header, and on a card shorter still at the right of its eyebrow's line.
   Below the detail zoom every card shows only its name.
+- N-ary associations (AR-128, design page 08, frames A2 to A5): one association of three ends or
+  more, drawn as a hollow diamond (the page-02 N-ary diamond, 44 × 28, its name above it) with a
+  leg to the card of each end's class; the diamond is a node of the association and each leg an
+  edge of its end, so nothing new is stored. Drawing: pick N-ary association, then click each class
+  in turn; the diamond appears with the second end at the middle of the cards clicked, a dashed leg
+  follows the pointer, and the page-02 Gesture hint at the canvas's top counts the ends ("N-ary
+  association · 2 ends — click a class for the next end", then Enter, Backspace and Esc in muted
+  words); Properties shows the draft ("New n-ary association", Ends so far). Enter, or a double
+  click on the last class, finishes at three ends or more as one undo step and selects it;
+  Backspace drops the last end; Esc, another tool or kind, a click on empty canvas or another tab
+  cancels and leaves nothing. A class clicked twice has two ends. New ends are named after their
+  class (`customer`, `customer2` for a second end there) and start at `*`; the association gets
+  no name until one is typed. A click on the diamond or any leg selects the one association, the
+  diamond and every leg drawn in the accent. Properties: Name and its package (read only: nothing
+  moves an association yet), then `Ends · n` with `+` and a row per end, `customer : Customer [*]`
+  with its pencil; the row editor has Role and Type, Multiplicity, Navigable, Ordered and Unique,
+  the line "Ends of an n-ary association are not aggregations…", the bin at its foot and Cancel and
+  Apply (one undo step); a role another end has, whatever the case, is refused in a tinted box in
+  the editor. The design's arrows that reorder ends are left out: nothing reorders them yet. Add
+  end (`+`, or the diamond's or a leg's right-click menu: Add end, Reconnect end, Remove from this
+  diagram, Delete from the model…) waits for a class click; dragging a leg's class end, or picking
+  another Type, moves that end; a leg is drawn on each diagram that shows the diamond and its class. Removing one of three ends asks in
+  Properties (frame A5): "Two ends would remain", Keep 3 ends (focused, as Esc) or Make it
+  binary, which turns it into a plain association between the two classes left, a named line in the
+  diamond's place wherever both are shown, as one undo step; with four ends or more the bin removes
+  at once. Delete takes the diamond and its legs off this diagram; Delete from the model asks first.
+  Its ends are never aggregations, as UML has only binary aggregations. Agents use
+  `uml.association.{add-nary, add-end, remove-end, reconnect-end}` and `uml.association.set-end`
+  with an end's place.
 - Constraints (AR-133, page 08 section E): a classifier's or a package's Properties end with
   `Constraints · n`, its `+` opening the editor with the selected element as the one constrained
   element; each row reads `name {expression}` with its pencil (a double click opens it too). The
@@ -858,8 +888,8 @@ What is UML's own, beside the shared rules above.
   Agents use `uml.template-parameter.add`, `.set`, `.move` and `.list`, and `element.remove`.
 - Template bindings (AR-131, design page 08, A2, C2 and C3). Template binding is the Relationship
   menu's group after Association class, under a separator (`workspace.relate.template-binding`,
-  its sample a dashed line with an open arrow under a tiny `«bind»`; the n-ary association joins
-  that group). It is dragged from the bound class to the template; releasing it on a template
+  its sample a dashed line with an open arrow under a tiny `«bind»`), after N-ary association,
+  which opens that group (AR-128). It is dragged from the bound class to the template; releasing it on a template
   commits nothing: Properties shows the draft, `New template binding` over `Drawing · not in the
   model until you apply`, Binding with Bound element and Template read only, `Substitutions · n`
   with one row per parameter (its name strong, its kind muted after it, its selector at the right,

@@ -61,6 +61,9 @@ pub enum Tone {
     /// A constraint's braces beside its element (AR-133): its one row, `{expression}`, in purple,
     /// with no card around it.
     Braces,
+    /// An n-ary association's diamond (AR-128): a hollow diamond the size of its node, its name
+    /// above it, its legs running from it to the cards of its ends' classes.
+    Diamond,
 }
 
 /// A row of a compartment: a mark before it (such as `PK`, shown while the status marks are on),
