@@ -8,6 +8,10 @@ set -eu
 ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 case "$ROOT" in */packaging) ROOT=$(dirname -- "$ROOT") ;; esac
 APP=archforge
+# The command-line tool agents run, which the application is to start for an agent from its in-app
+# chat on; the macOS and Linux packages place it beside the application's executable, where
+# archforge_control::cli_path finds it.
+CLI="$APP-cli"
 APP_NAME="Archforge"
 BUNDLE_ID="ai.software-vision.archforge"
 # Flatpak and AppStream allow a hyphen only in an id's last segment, so Linux spells the domain's

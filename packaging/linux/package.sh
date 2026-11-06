@@ -79,15 +79,15 @@ modules:
         strip-components: 0
 MANIFEST
   flatpak-builder --user --force-clean --state-dir="$work/state" --repo="$work/repo" "$work/build" "$work/manifest.yml"
-  for f in "bin/$APP" "share/applications/$LINUX_APP_ID.desktop" \
+  for f in "bin/$APP" "bin/$CLI" "share/applications/$LINUX_APP_ID.desktop" \
     "share/doc/$APP/LICENSE-MIT" "share/doc/$APP/LICENSE-APACHE" "share/doc/$APP/NOTICE" \
     "share/doc/$APP/ATTRIBUTION.md" "share/doc/$APP/licenses/fonts/OFL-1.1.txt"; do
     [ -f "$work/build/files/$f" ] || die "the Flatpak lacks /app/$f"
   done
   # Every Linux artefact carries identical binaries.
   mkdir "$work/from-tarball"
-  tar -C "$work/from-tarball" -xzf "$tarball" "./bin/$APP"
-  for b in "$APP"; do
+  tar -C "$work/from-tarball" -xzf "$tarball" "./bin/$APP" "./bin/$CLI"
+  for b in "$APP" "$CLI"; do
     [ "$(sha256_of "$work/build/files/bin/$b")" = "$(sha256_of "$work/from-tarball/bin/$b")" ] ||
       die "the Flatpak's bin/$b differs from the tarball's"
   done
@@ -98,13 +98,18 @@ MANIFEST
 fi
 
 need cargo tar
-cargo build --release --locked -p "$APP" --manifest-path "$ROOT/Cargo.toml"
+# One build each, so the application is built with its own features only, as before.
+for b in "$APP" "$CLI"; do
+  cargo build --release --locked -p "$b" --manifest-path "$ROOT/Cargo.toml"
+done
 bin="$TARGET_DIR/release"
 
-# The tree every Linux artefact is made from.
+# The tree every Linux artefact is made from. The command-line tool lies beside the application's
+# executable in every format (bin/ of the tarball and the Flatpak, /usr/bin of deb and rpm,
+# usr/bin of the AppImage), where the application finds it.
 stage=$(mktemp -d)
 mkdir -p "$stage/bin" "$stage/share/applications" "$stage/share/metainfo" "$stage/share/doc/$APP"
-cp "$bin/$APP" "$stage/bin/"
+cp "$bin/$APP" "$bin/$CLI" "$stage/bin/"
 cp "$here/$APP.desktop" "$stage/share/applications/$LINUX_APP_ID.desktop"
 sed "s|__VERSION__|$version|g; s|__DATE__|$(date -u +%Y-%m-%d)|g" "$here/$APP.metainfo.xml.in" >"$stage/share/metainfo/$LINUX_APP_ID.metainfo.xml"
 ship_licences "$stage/share/doc/$APP"
@@ -116,7 +121,7 @@ for size in 32 48 64 128 256 512; do
 done
 tar -C "$stage" -czf "$tarball" .
 # The tarball is the source of the Flatpak too; every artefact carries the licence texts.
-for f in "./bin/$APP" "./share/doc/$APP/LICENSE-MIT" "./share/doc/$APP/ATTRIBUTION.md" "./share/doc/$APP/licenses/fonts/OFL-1.1.txt"; do
+for f in "./bin/$APP" "./bin/$CLI" "./share/doc/$APP/LICENSE-MIT" "./share/doc/$APP/ATTRIBUTION.md" "./share/doc/$APP/licenses/fonts/OFL-1.1.txt"; do
   tar -tzf "$tarball" | grep -qx "$f" || die "$tarball lacks $f"
 done
 

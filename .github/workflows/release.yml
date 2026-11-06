@@ -5,6 +5,9 @@
 #   Linux x86_64, aarch64   AppImage (+ .zsync), .deb, .rpm,    packaging/linux/package.sh
 #                           .tar.gz
 #
+# The macOS and Linux packages carry archforge-cli, the command-line tool agents run (and the
+# in-app chat is to start), beside the application's executable; the Windows packages don't yet.
+#
 # A push to the `release` branch builds every package and attaches them, with SHA256SUMS, to a
 # DRAFT release named Archforge v<version>, the version from Cargo.toml's [workspace.package]
 # (docs/releasing.md). Its notes are GitHub's, made from the pull requests merged since the last
@@ -96,6 +99,12 @@ jobs:
           app="$RUNNER_TEMP/dmg/Archforge.app"
           lipo -archs "$app/Contents/MacOS/archforge" | grep -q x86_64
           lipo -archs "$app/Contents/MacOS/archforge" | grep -q arm64
+          # archforge-cli, the command-line tool agents run, beside the executable inside the bundle,
+          # for both architectures, and of this version.
+          lipo -archs "$app/Contents/MacOS/archforge-cli" | grep -q x86_64
+          lipo -archs "$app/Contents/MacOS/archforge-cli" | grep -q arm64
+          "$app/Contents/MacOS/archforge-cli" --version | tee /dev/stderr | grep -Fx "archforge-cli $VERSION"
+          "$app/Contents/MacOS/archforge" --version | tee /dev/stderr | grep -F "archforge $VERSION ($ARCHFORGE_BUILD_SHA, $ARCHFORGE_BUILD_DATE)"
           test -f "$app/Contents/Resources/LICENSE-MIT"
           plutil -extract CFBundleShortVersionString raw "$app/Contents/Info.plist" | grep -qx "${VERSION%%-*}"
           hdiutil detach "$RUNNER_TEMP/dmg" >/dev/null
@@ -201,7 +210,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libxkbcommon-dev libwayland-dev libx11-dev \
-            libxrandr-dev libxi-dev libxcursor-dev libgl1-mesa-dev zsync
+            libxrandr-dev libxi-dev libxcursor-dev libgl1-mesa-dev zsync rpm
           rustup toolchain install stable --profile minimal
           rustup default stable
       - name: Build and package (AppImage, deb, rpm, tar.gz)
@@ -212,10 +221,18 @@ jobs:
           tar -tzf "$base.tar.gz" | grep -qx ./bin/archforge
           dpkg-deb --contents "$base.deb" | grep -q 'usr/bin/archforge$'
           test -s "$base.rpm"
+          # archforge-cli, the command-line tool agents run, lies beside the executable in every
+          # format.
+          tar -tzf "$base.tar.gz" | grep -qx ./bin/archforge-cli
+          dpkg-deb --contents "$base.deb" | grep -q 'usr/bin/archforge-cli$'
+          rpm -qlp "$base.rpm" | grep -qx /usr/bin/archforge
+          rpm -qlp "$base.rpm" | grep -qx /usr/bin/archforge-cli
           test -s "$base.AppImage.zsync"
           chmod +x "$base.AppImage"
           "$base.AppImage" --appimage-extract >/dev/null
           test -x squashfs-root/usr/bin/archforge
+          test -x squashfs-root/usr/bin/archforge-cli
+          squashfs-root/usr/bin/archforge-cli --version | tee /dev/stderr | grep -Fx "archforge-cli $VERSION"
           # The binary reports this build, not a dev build.
           squashfs-root/usr/bin/archforge --version | tee /dev/stderr | grep -F "archforge $VERSION ($ARCHFORGE_BUILD_SHA, $ARCHFORGE_BUILD_DATE)"
           rm -rf squashfs-root

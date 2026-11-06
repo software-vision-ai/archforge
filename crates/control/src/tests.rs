@@ -310,3 +310,67 @@ fn hostile_lines_never_bring_the_channel_down() {
     let client = Client::new(&dir, port).unwrap();
     assert!(client.call("still.there", json!({})).is_ok());
 }
+
+/// The packaged layout: the application's executable and the command-line tool in one folder.
+fn layout(name: &str, with_cli: bool) -> (PathBuf, PathBuf) {
+    let dir = folder(name);
+    let exe = dir.join(if cfg!(windows) { "archforge.exe" } else { "archforge" });
+    std::fs::write(&exe, b"app").unwrap();
+    if with_cli {
+        std::fs::write(dir.join(CLI_FILE), b"cli").unwrap();
+    }
+    (dir, exe)
+}
+
+#[test]
+fn the_command_line_tool_is_found_beside_the_executable_before_any_development_folder() {
+    let (dir, exe) = layout("cli-beside", true);
+    let (dev, _) = layout("cli-beside-dev", true);
+    // The executable's own folder, links followed (the temporary folder may be one).
+    let beside = std::fs::canonicalize(&dir).unwrap().join(CLI_FILE);
+    assert_eq!(find_cli(&exe, std::slice::from_ref(&dev)), Ok(beside));
+    // A development folder is looked in only when nothing lies beside the executable.
+    let (_, lone) = layout("cli-beside-lone", false);
+    assert_eq!(find_cli(&lone, std::slice::from_ref(&dev)), Ok(dev.join(CLI_FILE)));
+}
+
+#[test]
+fn a_missing_command_line_tool_is_a_typed_error_naming_every_place_looked_at() {
+    let (dir, exe) = layout("cli-missing", false);
+    let dev = folder("cli-missing-dev");
+    let Err(CliError::NotFound { looked }) = find_cli(&exe, std::slice::from_ref(&dev)) else {
+        panic!("a missing archforge-cli must be NotFound");
+    };
+    let real = std::fs::canonicalize(&dir).unwrap().join(CLI_FILE);
+    let mut expected = vec![real.clone()];
+    if dir.join(CLI_FILE) != real {
+        expected.push(dir.join(CLI_FILE));
+    }
+    expected.push(dev.join(CLI_FILE));
+    assert_eq!(looked, expected);
+    let message = CliError::NotFound { looked }.to_string();
+    assert!(message.contains(&dir.join(CLI_FILE).display().to_string()), "{message}");
+    // A folder named like the tool is not the tool.
+    std::fs::create_dir(dir.join(CLI_FILE)).unwrap();
+    assert!(matches!(find_cli(&exe, &[]), Err(CliError::NotFound { .. })));
+}
+
+#[test]
+fn only_a_debug_build_looks_in_the_cargo_target_folder() {
+    assert!(dev_cli_dirs(false).is_empty());
+    let dirs = dev_cli_dirs(true);
+    assert!(dirs.last().is_some_and(|d| d.ends_with("target/debug")), "{dirs:?}");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_linked_executable_finds_the_command_line_tool_beside_the_file_it_links_to() {
+    let (dir, exe) = layout("cli-linked", true);
+    let elsewhere = folder("cli-linked-bin");
+    let link = elsewhere.join("archforge");
+    std::os::unix::fs::symlink(&exe, &link).unwrap();
+    // Another install's tool beside the link is not this application's.
+    std::fs::write(elsewhere.join(CLI_FILE), b"another install").unwrap();
+    let found = find_cli(&link, &[]).unwrap();
+    assert_eq!(found, std::fs::canonicalize(&dir).unwrap().join(CLI_FILE));
+}

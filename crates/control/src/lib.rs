@@ -61,6 +61,68 @@ pub fn token_path(settings: &Path, port: u16) -> PathBuf {
     settings.join(format!("control-{port}.token"))
 }
 
+/// The command-line tool's file name on this system.
+pub const CLI_FILE: &str = if cfg!(windows) { "archforge-cli.exe" } else { "archforge-cli" };
+
+/// Why the command-line tool the application starts for an agent was not found.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CliError {
+    /// The running executable's own path is unknown, so nothing lies beside it.
+    NoExecutable(String),
+    /// No `archforge-cli` at any of these places, in the order they were looked at.
+    NotFound { looked: Vec<PathBuf> },
+}
+
+impl std::fmt::Display for CliError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CliError::NoExecutable(e) => write!(f, "the application's own path is unknown, so {CLI_FILE} cannot be found beside it: {e}"),
+            CliError::NotFound { looked } => {
+                let places: Vec<String> = looked.iter().map(|p| p.display().to_string()).collect();
+                write!(f, "{CLI_FILE} is not installed with this application; looked at {}", places.join(", "))
+            }
+        }
+    }
+}
+
+/// The command-line tool agents run (`archforge-cli mcp --bridge`), which the application is to
+/// start for an agent from its in-app chat on: the one the macOS and Linux packages place beside
+/// the application's executable (`Contents/MacOS/` in the macOS bundle, `bin/` on Linux). A debug build also looks in the workspace's cargo target folder, where
+/// `cargo build -p archforge-cli` puts it while developing; a release build never does.
+pub fn cli_path() -> Result<PathBuf, CliError> {
+    let exe = std::env::current_exe().map_err(|e| CliError::NoExecutable(e.to_string()))?;
+    find_cli(&exe, &dev_cli_dirs(cfg!(debug_assertions)))
+}
+
+/// The development folders a debug build also looks in: `debug` under `CARGO_TARGET_DIR` when it
+/// is set, then under the workspace's `target`. None for a release build.
+fn dev_cli_dirs(debug: bool) -> Vec<PathBuf> {
+    if !debug {
+        return Vec::new();
+    }
+    let workspace_target = Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..").join("target");
+    let env_target = std::env::var_os("CARGO_TARGET_DIR").filter(|v| !v.is_empty()).map(PathBuf::from);
+    env_target.into_iter().chain([workspace_target]).map(|t| t.join("debug")).collect()
+}
+
+/// The first `archforge-cli` that is a file: beside the file `exe` is, following links, so a link
+/// to the application elsewhere never picks up another install's tool lying beside the link; then
+/// beside `exe` as given; then in each of `dev`.
+fn find_cli(exe: &Path, dev: &[PathBuf]) -> Result<PathBuf, CliError> {
+    let mut folders: Vec<PathBuf> = std::fs::canonicalize(exe).ok().and_then(|r| r.parent().map(Path::to_path_buf)).into_iter().collect();
+    if let Some(given) = exe.parent().map(Path::to_path_buf)
+        && !folders.contains(&given)
+    {
+        folders.push(given);
+    }
+    folders.extend(dev.iter().cloned());
+    let looked: Vec<PathBuf> = folders.iter().map(|d| d.join(CLI_FILE)).collect();
+    match looked.iter().find(|p| p.is_file()) {
+        Some(found) => Ok(found.clone()),
+        None => Err(CliError::NotFound { looked }),
+    }
+}
+
 /// A token minted from the operating system's random source, as 64 lowercase hexadecimal
 /// characters. Never logged.
 pub fn mint_token() -> Result<String, String> {
