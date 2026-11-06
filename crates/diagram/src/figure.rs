@@ -60,6 +60,9 @@ pub struct Row {
     pub linked: bool,
     /// Slanted: an abstract operation.
     pub slanted: bool,
+    /// Underlined: a static attribute or operation (UML's notation for a feature of the classifier
+    /// itself, not of its instances).
+    pub underlined: bool,
 }
 
 /// A mark at a line's end.

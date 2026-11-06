@@ -59,8 +59,8 @@ element's id or a built-in type's name, Integer, String, Boolean, Real or Unlimi
 the package Types the first time it is used and never twice, a built-in name always meaning the one
 in Types; a multiplicity is typed, `0`, `1`, `0..1`, `*`, `1..*`,
 `2..5`, and one that does not read is a `MultiplicityError` naming why; members are removed through `element.remove`), `figures::{card, line, ends, text_slots, slot_text, attribute_text,
-operation_text, multiplicity, visibility, member_ends, navigable, MAX_CARD_ROWS}` (a class's card with its
-members' visibility, type and multiplicity, abstract names slanted; an interface's and a data
+operation_text, multiplicity, visibility, is_static, member_ends, navigable, MAX_CARD_ROWS}` (a class's card with its
+members' visibility, type and multiplicity, abstract names slanted, static members underlined; an interface's and a data
 type's the same under `«interface»` and `«dataType»`; a primitive type's `«primitive»` over its
 name and no compartment; an enumeration's with
 `«enumeration»` and one compartment of its literals; at most `MAX_CARD_ROWS` rows a card, the rest

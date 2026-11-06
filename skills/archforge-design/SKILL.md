@@ -401,7 +401,8 @@ What is UML's own, beside the shared rules above.
   then two compartments under dividing lines, attributes and operations, each shown even when
   empty. Every compartment is padded as the card is: its first row as far under its line as under
   the header's, its last as far over the next line as over the card's foot (AR-191), so a new
-  class is 240 × 146. An abstract class's name, and an abstract operation, are slanted.
+  class is 240 × 146. An abstract class's name, and an abstract operation, are slanted; a static
+  member is underlined.
 - An enumeration (AR-121) is the classifier tool's third kind, after Interface, its face and menu
   icon a short list (Tool · Enumeration), placed and named in place as `Enumeration 1`. Its card is
   plain, `«enumeration»` in its eyebrow kept as written, and has one compartment: its literals in
@@ -702,8 +703,11 @@ member and drawing a relationship stay three separate gestures:
   default follows `=`, and braces list what differs from the usual (`{readOnly}`, `{ordered}`,
   `{nonunique}`, `{subsets name}`, `{redefines name}`); unique is the usual and is not said. An
   association end follows the same order beside its line: `/` before the role when derived, the
-  multiplicity, `= default` after it, then the braces, as in `/items 0..* = none {ordered}`. Static
-  has no mark yet, on a card or an end; its underlining comes with 0.13.0.
+  multiplicity, `= default` after it, then the braces, as in `/items 0..* = none {ordered}`. A
+  static attribute's or operation's row is underlined (AR-136) on every card that lists it, and in
+  Properties' rows: the line runs under its glyphs, the ellipsis of a cut row too, in the text's
+  ink and as thick as the text is large; a static abstract operation is underlined and slanted. An
+  association end's static has no mark yet beside its line.
   As built (AR-126): the attribute editor keeps the design's layout under Type and Multiplicity
   (Default value; Static and Derived, Read only and Ordered, Unique; Subsets and Redefines side by
   side, a muted line under a select with nothing to offer), and one Apply writes it all. An

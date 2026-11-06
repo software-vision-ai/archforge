@@ -1395,7 +1395,8 @@ fn sample_association_class(shell: &mut Shell) -> Result<(), String> {
 }
 
 /// A package Orders: the class Order with `id : Integer {readOnly}`, a derived `total : Money = 0`,
-/// `status : OrderStatus = Placed` and `lines : OrderLine [1..*] {ordered}`; the data type Money,
+/// `status : OrderStatus = Placed` and `lines : OrderLine [1..*] {ordered}`, and the operations
+/// `create() : Order`, static and so underlined (AR-136), and `place()`; the data type Money,
 /// the enumeration OrderStatus and the class OrderLine, Order associated with it, its end at
 /// OrderLine `/items 0..* = none {ordered}`. Order selected, the attribute editor open on total in
 /// Properties, the package open in Models (AR-126).
@@ -1420,6 +1421,8 @@ fn sample_modifiers(shell: &mut Shell) -> Result<(), String> {
     let total = run(session, "uml.attribute.add", json!({ "class": order, "name": "total", "type": money, "default": "0", "derived": true }))?;
     run(session, "uml.attribute.add", json!({ "class": order, "name": "status", "type": status, "default": "Placed" }))?;
     run(session, "uml.attribute.add", json!({ "class": order, "name": "lines", "type": line, "multiplicity": "1..*", "ordered": true }))?;
+    // A static operation, underlined on the card (AR-136).
+    run(session, "uml.operation.add", json!({ "class": order, "name": "create", "returns": order, "static": true }))?;
     run(session, "uml.operation.add", json!({ "class": order, "name": "place" }))?;
     let holds = run(session, "uml.association.add", json!({ "from": order, "to": line, "kind": "directed" }))?;
     run(
@@ -1428,7 +1431,7 @@ fn sample_modifiers(shell: &mut Shell) -> Result<(), String> {
         json!({ "association": holds, "end": 1, "role": "items", "multiplicity": "0..*", "derived": true, "default": "none", "ordered": true }),
     )?;
     let (w, _) = archforge_uml::CLASS_SIZE;
-    let order_height = crate::uml_ui::members_height(4, 1);
+    let order_height = crate::uml_ui::members_height(4, 2);
     let line_height = crate::uml_ui::members_height(1, 0);
     // OrderLine's middle level with Order's, so the line between them runs straight.
     let line_y = (120.0 + (order_height - line_height) / 2.0).round();

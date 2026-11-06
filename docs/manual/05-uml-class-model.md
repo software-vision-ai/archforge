@@ -118,6 +118,11 @@ as the visibility (who may use the member) and an operation's parameters. Apply 
 the check at the editor's foot, or Enter; cancel it with the cross, or Escape. The red bin
 removes the member. On a draft row, the **⋯** at its right opens the same editor.
 
+The editor's **Static** marks a member that belongs to the class itself, not to each instance. Its
+row is underlined on every card that shows the class, and in **Properties**; clear **Static** and
+the underline goes. An operation's **Abstract** slants its row, so a static abstract operation is
+both underlined and slanted.
+
 ## 4. Connect Customer and Order: an association
 
 A customer places orders. An *association* says that instances of two classes are linked like
@@ -514,8 +519,8 @@ An attribute's modifiers are in its editor in **Properties**, under **Type** and
   - an enumeration offers its literals to choose from. If the literal is renamed later, the
     default follows it; if the literal is removed, the default goes with it;
   - any other type, or no type, takes the text as written.
-- **Static**: the attribute belongs to the class as a whole, not to each instance. The card does
-  not mark it yet.
+- **Static**: the attribute belongs to the class as a whole, not to each instance. The card
+  underlines its row.
 - **Derived**: the value is worked out from other values, such as a total from the lines.
 - **Read only**: the value cannot change once set.
 - **Ordered** and **Unique** matter only when the attribute holds more than one value, that is,
@@ -541,7 +546,8 @@ The card writes modifiers the UML way:
 - `/` before the name of a derived attribute;
 - `=` and the default after the multiplicity; a String's default is in double quotes;
 - in braces, what differs from the usual: `{readOnly}`, `{ordered}`, `{nonunique}`,
-  `{subsets name}` and `{redefines name}`. Unique is the usual, so it is not written.
+  `{subsets name}` and `{redefines name}`. Unique is the usual, so it is not written;
+- a static attribute's or operation's whole row underlined, as `create() : Order` in the picture.
 
 An association's end has the same modifiers, under **Modifiers** in its section of
 **Properties**. Closed, the line beside **Modifiers** sums them up. Open it to edit them, then use
@@ -555,7 +561,7 @@ The picture shows a separate, fuller example in a package *Orders*, where *Order
 class rather than the walkthrough's association class: a derived *total*, an ordered list of
 *lines*, and an association end with modifiers.
 
-<!-- picture: workspace-modifiers light | The class Order on its card with id {readOnly}, a derived total defaulting to 0, status defaulting to Placed and ordered lines, its end at OrderLine reading /items with * = none {ordered}; Order selected with the attribute editor open on total, showing Default value, the flags, and Subsets and Redefines -->
+<!-- picture: workspace-modifiers light | The class Order on its card with id {readOnly}, a derived total defaulting to 0, status defaulting to Placed and ordered lines, and the static operation create() : Order underlined, its end at OrderLine reading /items with * = none {ordered}; Order selected with the attribute editor open on total, showing Default value, the flags, and Subsets and Redefines -->
 
 ### Moving a line's end
 

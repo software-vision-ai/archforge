@@ -70,6 +70,7 @@ pub fn card(store: &Store, table: Obj, diagram: Obj) -> Option<Card> {
                 text: if ty.is_empty() { name } else { format!("{name} : {ty}") },
                 linked: rules::linked_to(store, column).is_some(),
                 slanted: false,
+                underlined: false,
             }
         })
         .collect();

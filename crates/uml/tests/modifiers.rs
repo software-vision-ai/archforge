@@ -3,8 +3,8 @@
 //! cleared on attributes with `uml.attribute.*` and on association ends with
 //! `uml.association.set-end`, one undo step each; a refusal names the value or the target and why,
 //! and changes nothing; a type its default does not fit is refused, naming the default; the card's
-//! and the line's notation; a literal that goes takes its defaults along; saved as rows and read
-//! back identical; the sweep.
+//! and the line's notation, a static member's row underlined (AR-136); a literal that goes takes its
+//! defaults along; saved as rows and read back identical; the sweep.
 
 use archforge_diagram::ProjectView;
 use archforge_engine::testing::sweep_with;
@@ -179,6 +179,93 @@ fn each_modifier_is_set_and_cleared_on_an_attribute_one_undo_step_each() {
     let total =
         round_trip(&mut s, "uml.attribute.add", json!({ "class": order, "name": "total", "type": "Real", "default": "0.5", "derived": true }));
     assert_eq!(row(&s, &total), "+ / total : Real = 0.5");
+}
+
+/// The card row of member `id` of the classifier `owner` on `diagram`, as the canvas draws it.
+fn card_row(s: &S, owner: &str, diagram: &str, id: &str) -> archforge_diagram::figure::Row {
+    let st = s.doc();
+    let card = archforge_uml::figures::card(st, obj(s, owner), obj(s, diagram)).unwrap();
+    let member = obj(s, id);
+    let rows: Vec<_> = card.compartments.into_iter().flatten().collect();
+    let attributes = archforge_uml::members::attributes(st, obj(s, owner));
+    let operations = archforge_uml::members::operations(st, obj(s, owner));
+    let at = attributes.iter().chain(operations.iter()).position(|m| *m == member).unwrap();
+    rows[at].clone()
+}
+
+/// A static attribute or operation is underlined on every card kind that lists members, on every
+/// diagram that shows it, read from the model: a static abstract operation is both slanted and
+/// underlined, clearing Static takes the underline away as one undo step, setting another modifier
+/// keeps it, and it comes back from the saved rows (AR-136).
+#[test]
+fn a_static_member_is_underlined_on_its_card() {
+    use archforge_diagram::figure::Row;
+    let mut s = session();
+    let (pkg, d, item, order, status) = shop(&mut s);
+    let other = run(&mut s, "diagram.add", json!({ "kind": "uml.class", "element": pkg, "name": "Other" }));
+    let marks = |r: Row| (r.slanted, r.underlined);
+    // A static attribute and a plain one; a static operation, a static abstract one, an abstract one.
+    let count = round_trip(&mut s, "uml.attribute.add", json!({ "class": order, "name": "count", "type": "Integer", "static": true }));
+    let id = run(&mut s, "uml.attribute.add", json!({ "class": order, "name": "id", "type": "Integer" }));
+    let make = round_trip(&mut s, "uml.operation.add", json!({ "class": order, "name": "make", "static": true }));
+    let rule = run(&mut s, "uml.operation.add", json!({ "class": order, "name": "rule", "static": true, "abstract": true }));
+    let pay = run(&mut s, "uml.operation.add", json!({ "class": order, "name": "pay", "abstract": true }));
+    for diagram in [&d, &other] {
+        assert_eq!(marks(card_row(&s, &order, diagram, &count)), (false, true), "static attribute");
+        assert_eq!(marks(card_row(&s, &order, diagram, &id)), (false, false), "plain attribute");
+        assert_eq!(marks(card_row(&s, &order, diagram, &make)), (false, true), "static operation");
+        assert_eq!(marks(card_row(&s, &order, diagram, &rule)), (true, true), "static abstract operation");
+        assert_eq!(marks(card_row(&s, &order, diagram, &pay)), (true, false), "abstract operation");
+    }
+    // The row's text is the member's signature as before: the underline is the only static mark.
+    assert_eq!(card_row(&s, &order, &d, &count).text, "+ count : Integer");
+    // Another modifier set keeps Static, and so the underline.
+    round_trip(&mut s, "uml.attribute.set", json!({ "attribute": count, "default": "3", "read_only": true }));
+    let row = card_row(&s, &order, &d, &count);
+    assert_eq!((row.text.as_str(), row.underlined), ("+ count : Integer = 3 {readOnly}", true));
+    // Static cleared: the underline goes, undo brings it back, redo takes it again.
+    s.execute("uml.attribute.set", &json!({ "attribute": count, "static": false })).unwrap();
+    assert!(!card_row(&s, &order, &d, &count).underlined, "cleared");
+    s.undo().unwrap();
+    assert!(card_row(&s, &order, &d, &count).underlined, "undone");
+    s.redo().unwrap();
+    assert!(!card_row(&s, &order, &d, &count).underlined, "redone");
+    // An operation's Static cleared keeps its Abstract, and its slant.
+    s.execute("uml.operation.set", &json!({ "operation": rule, "name": "rule", "static": false, "abstract": true })).unwrap();
+    assert_eq!(marks(card_row(&s, &order, &d, &rule)), (true, false), "abstract kept, static cleared");
+    s.undo().unwrap();
+    assert_eq!(marks(card_row(&s, &order, &d, &rule)), (true, true), "undone");
+    // An interface's, a data type's and an association class's card underline theirs too.
+    let payable = run(&mut s, "uml.interface.add", json!({ "package": pkg, "name": "Payable" }));
+    let money = run(&mut s, "uml.data-type.add", json!({ "package": pkg, "name": "Money" }));
+    let ac = run(&mut s, "uml.association-class.add", json!({ "from": order, "to": item, "name": "Review" }));
+    for owner in [&payable, &money, &ac] {
+        let a = run(&mut s, "uml.attribute.add", json!({ "class": owner, "name": "zero", "type": "Integer", "static": true }));
+        let op = run(&mut s, "uml.operation.add", json!({ "class": owner, "name": "of", "static": true }));
+        assert!(card_row(&s, owner, &d, &a).underlined, "{owner}: static attribute");
+        assert!(card_row(&s, owner, &d, &op).underlined, "{owner}: static operation");
+    }
+    // The literals of an enumeration are never underlined.
+    let status_card = archforge_uml::figures::card(s.doc(), obj(&s, &status), obj(&s, &d)).unwrap();
+    assert!(status_card.compartments.iter().flatten().all(|r| !r.underlined));
+    // Saved and opened again, every row is marked as before.
+    let (tables, junctions) = tables();
+    let saved = archforge_mof::rows::snapshot(s.doc(), &tables, &junctions).unwrap();
+    let mut back = store(1 << 20);
+    archforge_mof::rows::restore(&mut back, &saved, &tables, &junctions).unwrap();
+    let reopened = |owner: &str| {
+        let o = back.by_uuid(Uuid::parse(owner).unwrap()).unwrap();
+        let card = archforge_uml::figures::card(&back, o, back.by_uuid(Uuid::parse(&d).unwrap()).unwrap()).unwrap();
+        card.compartments.into_iter().flatten().map(|r| (r.text, r.slanted, r.underlined)).collect::<Vec<_>>()
+    };
+    let now = |owner: &str| {
+        let card = archforge_uml::figures::card(s.doc(), obj(&s, owner), obj(&s, &d)).unwrap();
+        card.compartments.into_iter().flatten().map(|r| (r.text, r.slanted, r.underlined)).collect::<Vec<_>>()
+    };
+    for owner in [order.as_str(), payable.as_str(), money.as_str(), ac.as_str()] {
+        assert_eq!(reopened(owner), now(owner), "{owner} reopened");
+    }
+    assert!(reopened(&order).iter().any(|(_, slanted, underlined)| *slanted && *underlined), "the static abstract operation reopened");
 }
 
 /// Ordered and nonunique are kept on a property that holds one value, and said in braces only once

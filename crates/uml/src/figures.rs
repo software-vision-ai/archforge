@@ -3,7 +3,8 @@
 //! plain card with the keyword «primitive» over its name and no compartment; an enumeration as a plain card with the keyword «enumeration» and one
 //! compartment of its literals, in their order; a class's, an interface's or a data type's attributes
 //! (visibility, name, type, multiplicity) and its operations (visibility, name, parameters, return
-//! type), its name slanted when it is abstract; an association as a line with its name, its ends'
+//! type), its name slanted when it is abstract, an abstract operation slanted and a static member
+//! underlined; an association as a line with its name, its ends'
 //! roles and multiplicities, an open arrow at every end it navigates to (owner decision), and a
 //! diamond, which takes the place of an arrow at its end, at the whole of an aggregation (hollow) or a composition (filled); a
 //! generalization as a line to a hollow triangle at the general class; a dependency dashed, with an
@@ -60,6 +61,12 @@ fn one(store: &Store, o: Obj, prop: archforge_mof::PropId) -> Option<Obj> {
 
 fn flag(store: &Store, o: Obj, prop: archforge_mof::PropId) -> bool {
     store.get(o, prop).ok().and_then(|v| v.as_bool()).unwrap_or(false)
+}
+
+/// Whether a feature (an attribute or an operation) is static, a feature of its classifier rather
+/// than of each instance: its card's row is underlined (AR-136).
+pub fn is_static(store: &Store, feature: Obj) -> bool {
+    flag(store, feature, crate::feature::IS_STATIC)
 }
 
 /// The sign of an element's visibility, when it has one.
@@ -195,13 +202,14 @@ pub fn card(store: &Store, c: Obj, diagram: Obj) -> Option<Card> {
         Some(p) => Text::Said(away, vec![("package", name(store, p))]),
         None => Text::said(here),
     };
-    let row = |text, slanted| Row { mark: None, text, linked: false, slanted };
+    // A static member underlined, an abstract operation slanted: a static abstract one is both.
+    let row = |text, member, slanted| Row { mark: None, text, linked: false, slanted, underlined: is_static(store, member) };
     let (mut room, mut hidden) = (MAX_CARD_ROWS, 0);
     // An association's end a class owns draws as the line's role, not as a row: the members'
     // attributes leave it out.
-    let attributes = capped(crate::members::attributes(store, c), &mut room, &mut hidden, |a| row(attribute_text(store, a), false));
+    let attributes = capped(crate::members::attributes(store, c), &mut room, &mut hidden, |a| row(attribute_text(store, a), a, false));
     let operations = capped(crate::members::operations(store, c), &mut room, &mut hidden, |op| {
-        row(operation_text(store, op), flag(store, op, behavioral_feature::IS_ABSTRACT))
+        row(operation_text(store, op), op, flag(store, op, behavioral_feature::IS_ABSTRACT))
     });
     Some(Card {
         eyebrow,
@@ -256,6 +264,7 @@ fn enumeration_card(store: &Store, e: Obj, diagram: Obj) -> Card {
         text: cut(name(store, l)),
         linked: false,
         slanted: false,
+        underlined: false,
     });
     Card {
         eyebrow,

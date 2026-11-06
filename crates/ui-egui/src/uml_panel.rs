@@ -398,23 +398,27 @@ pub(crate) fn members_section(
     let paint = ui.painter().clone();
     let width = (r.width() - 2.0 * PAD).max(0.0);
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return y };
-    let rows: Vec<(Uuid, String, bool)> = match kind {
+    let plain = ux::Marks::default();
+    let rows: Vec<(Uuid, String, ux::Marks)> = match kind {
         MemberKind::Attribute => attributes(store, class)
             .into_iter()
-            .filter_map(|a| Some((store.uuid(a).ok()?, archforge_uml::figures::attribute_text(store, a), false)))
+            .filter_map(|a| {
+                let marks = ux::Marks { slanted: false, underlined: archforge_uml::figures::is_static(store, a) };
+                Some((store.uuid(a).ok()?, archforge_uml::figures::attribute_text(store, a), marks))
+            })
             .collect(),
         MemberKind::Operation => operations(store, class)
             .into_iter()
             .filter_map(|o| {
-                Some((
-                    store.uuid(o).ok()?,
-                    archforge_uml::figures::operation_text(store, o),
-                    flag(store, o, archforge_uml::behavioral_feature::IS_ABSTRACT),
-                ))
+                let marks = ux::Marks {
+                    slanted: flag(store, o, archforge_uml::behavioral_feature::IS_ABSTRACT),
+                    underlined: archforge_uml::figures::is_static(store, o),
+                };
+                Some((store.uuid(o).ok()?, archforge_uml::figures::operation_text(store, o), marks))
             })
             .collect(),
         MemberKind::Literal => {
-            archforge_uml::commands::literals(store, class).into_iter().filter_map(|l| Some((store.uuid(l).ok()?, name(store, l), false))).collect()
+            archforge_uml::commands::literals(store, class).into_iter().filter_map(|l| Some((store.uuid(l).ok()?, name(store, l), plain))).collect()
         }
     };
     let (title, add, hint, row_id) = match kind {
@@ -434,7 +438,7 @@ pub(crate) fn members_section(
         ux::text(&paint, pos2(r.left() + PAD + 10.0, y + 9.0), &tr("No literals yet"), types::UI, p.text_muted, Some(width));
         y += ROW;
     }
-    for (id, text, slanted) in &rows {
+    for (id, text, marks) in &rows {
         if editing(shell) == Some(Some(*id)) {
             y = editor(shell, ui, p, r, y);
             continue;
@@ -449,14 +453,10 @@ pub(crate) fn members_section(
         } else if resp.contains_pointer() {
             paint.rect_filled(row, 6.0, p.page);
         }
-        // The row as the card lists it, an abstract operation slanted.
+        // The row as the card lists it, an abstract operation slanted, a static member underlined.
         let at = pos2(row.left() + 10.0, row.top() + 9.0);
         let room = Some((width - 50.0).max(0.0));
-        if *slanted {
-            ux::text_slanted(&paint, at, text, types::UI, p.text, room);
-        } else {
-            ux::text(&paint, at, text, types::UI, p.text, room);
-        }
+        ux::text_marked(&paint, at, text, types::UI, p.text, room, *marks);
         if crate::panels::edit_button(shell, ui, p, row, &key, resp.contains_pointer()) || resp.double_clicked() {
             crate::panels::select_element(shell, *id);
             open(shell, class_id, kind, Some(*id));
