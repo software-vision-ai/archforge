@@ -11,6 +11,10 @@
 //! through `execute_command` (CS-14). The model and its skills are read-only resources too
 //! (`resources`), in both modes. Only the reads say they are read-only (CS-13); unknown tools, methods and
 //! argument keys are refused, naming the accepted ones (CS-3).
+//!
+//! With `read_only` the server offers only the tools whose `readOnlyHint` is true, and refuses a
+//! call of any other with the typed error [`READ_ONLY`] naming the tool. Both the listing and the
+//! refusal read the one hint each tool carries ([`Catalog`]'s entries), so they cannot drift apart.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
 mod resources;
@@ -22,6 +26,10 @@ use serde_json::{Value, json};
 
 /// The protocol versions spoken, the newest last.
 pub const VERSIONS: [&str; 3] = ["2024-11-05", "2025-03-26", "2025-06-18"];
+
+/// The JSON-RPC error code of a tool refused because the session is read-only; the error's data
+/// names the tool (`{"tool": name, "readOnly": true}`).
+pub const READ_ONLY: i64 = -32004;
 
 /// What the tools reach: the running application's control channel, or a stand-in in tests.
 pub trait Backend {
@@ -160,6 +168,13 @@ pub fn tool_methods() -> (Vec<(&'static str, Vec<String>)>, &'static str) {
     (methods, call_app)
 }
 
+/// The fixed tools, `call_app` among them: each one's name, the control method it calls (none for
+/// `call_app`, which calls any) and whether it says it only reads, for a test beside the
+/// application to hold each hint to what its method can do.
+pub fn fixed_tools() -> Vec<(&'static str, Option<&'static str>, bool)> {
+    TOOLS.iter().map(|t| (t.name, t.method, t.read_only)).collect()
+}
+
 /// One command of the table as a tool: its tool name, the command it runs, what it does, its
 /// arguments' schema, whether it only reads and whether it can remove anything (a change of the
 /// view alone cannot).
@@ -181,11 +196,79 @@ const MAX_WORDS: usize = 16;
 /// The most tools one search gives.
 const MAX_FOUND: usize = 20;
 
-/// The tools a server offers: the fixed ones and one per command of the table.
+/// The tools a server offers: the fixed ones and one per command of the table, all of them or,
+/// read-only, only those that read.
 #[derive(Debug, Clone, Default)]
 pub struct Catalog {
     commands: Vec<CommandTool>,
     compact: bool,
+    read_only: bool,
+}
+
+/// Which kind of tool an entry is, and what it runs.
+enum Kind<'a> {
+    Fixed(&'a Tool),
+    Search,
+    Command(&'a CommandTool),
+}
+
+/// One tool as the server knows it: the one place its name, description, schema and hints are
+/// read from, by `tools/list` and by `tools/call` alike. `listed` is false for a command's tool in
+/// the compact mode, which runs when called but is found through `search_tools`, unless the
+/// session is read-only: then the reads are few, and listed, since a client may call only what
+/// it was offered.
+struct Entry<'a> {
+    kind: Kind<'a>,
+    listed: bool,
+}
+
+impl Entry<'_> {
+    fn name(&self) -> &str {
+        match &self.kind {
+            Kind::Fixed(t) => t.name,
+            Kind::Search => SEARCH,
+            Kind::Command(c) => &c.name,
+        }
+    }
+
+    fn read_only(&self) -> bool {
+        match &self.kind {
+            Kind::Fixed(t) => t.read_only,
+            Kind::Search => true,
+            Kind::Command(c) => c.read_only,
+        }
+    }
+
+    fn destructive(&self) -> bool {
+        match &self.kind {
+            Kind::Fixed(t) => t.destructive,
+            Kind::Search => false,
+            Kind::Command(c) => c.destructive,
+        }
+    }
+
+    fn description(&self) -> &str {
+        match &self.kind {
+            Kind::Fixed(t) => t.description,
+            Kind::Search => SEARCH_DOC,
+            Kind::Command(c) => &c.description,
+        }
+    }
+
+    fn schema(&self) -> Value {
+        match &self.kind {
+            Kind::Fixed(t) => (t.schema)(),
+            Kind::Search => object(
+                json!({ "query": { "type": "string", "description": "Words of the command's name or label, such as \"add relationship\"" } }),
+                &["query"],
+            ),
+            Kind::Command(c) => c.schema.clone(),
+        }
+    }
+
+    fn listing(&self) -> Value {
+        listed(self.name(), self.description(), self.schema(), self.read_only(), self.destructive())
+    }
 }
 
 /// A command id as a tool name: `er.foreign-key.add` becomes `er_foreign_key_add`.
@@ -206,7 +289,13 @@ impl Catalog {
                 commands.push(tool);
             }
         }
-        Catalog { commands, compact }
+        Catalog { commands, compact, read_only: false }
+    }
+
+    /// The catalogue offering only the tools that read, when `read_only`: the others are neither
+    /// listed nor run.
+    pub fn read_only(self, read_only: bool) -> Catalog {
+        Catalog { read_only, ..self }
     }
 
     /// Whether the command tools are left out of the listing.
@@ -214,27 +303,29 @@ impl Catalog {
         self.compact
     }
 
-    fn find(&self, name: &str) -> Option<&CommandTool> {
-        self.commands.iter().find(|c| c.name == name)
+    /// Whether only the tools that read are offered.
+    pub fn is_read_only(&self) -> bool {
+        self.read_only
+    }
+
+    /// Every tool this server knows, offered or not: the fixed ones, `search_tools` in the compact
+    /// mode, and one per command.
+    fn entries(&self) -> impl Iterator<Item = Entry<'_>> {
+        let fixed = TOOLS.iter().map(|t| Entry { kind: Kind::Fixed(t), listed: true });
+        let search = self.compact.then_some(Entry { kind: Kind::Search, listed: true });
+        let commands = self.commands.iter().map(|c| Entry { kind: Kind::Command(c), listed: !self.compact || self.read_only });
+        fixed.chain(search).chain(commands)
+    }
+
+    /// Whether a tool with this hint is offered: every tool, or in a read-only session only those
+    /// that say they only read.
+    fn offers(&self, read_only: bool) -> bool {
+        !self.read_only || read_only
     }
 
     /// The tools as `tools/list` gives them.
     pub fn list(&self) -> Value {
-        let mut tools: Vec<Value> = TOOLS.iter().map(|t| listed(t.name, t.description, (t.schema)(), t.read_only, t.destructive)).collect();
-        if self.compact {
-            tools.push(listed(
-                SEARCH,
-                SEARCH_DOC,
-                object(
-                    json!({ "query": { "type": "string", "description": "Words of the command's name or label, such as \"add relationship\"" } }),
-                    &["query"],
-                ),
-                true,
-                false,
-            ));
-        } else {
-            tools.extend(self.commands.iter().map(|c| listed(&c.name, &c.description, c.schema.clone(), c.read_only, c.destructive)));
-        }
+        let tools: Vec<Value> = self.entries().filter(|e| e.listed && self.offers(e.read_only())).map(|e| e.listing()).collect();
         json!({ "tools": tools })
     }
 }
@@ -378,7 +469,12 @@ pub fn handle(line: &[u8], backend: &dyn Backend, catalog: &Catalog) -> Option<V
                     "protocolVersion": version,
                     "capabilities": { "tools": { "listChanged": false }, "resources": { "subscribe": false, "listChanged": false } },
                     "serverInfo": { "name": "archforge", "version": env!("CARGO_PKG_VERSION") },
-                    "instructions": if catalog.compact() { COMPACT_INSTRUCTIONS } else { INSTRUCTIONS },
+                    "instructions": match (catalog.is_read_only(), catalog.compact()) {
+                        (false, false) => INSTRUCTIONS,
+                        (false, true) => COMPACT_INSTRUCTIONS,
+                        (true, false) => READ_ONLY_INSTRUCTIONS,
+                        (true, true) => READ_ONLY_COMPACT_INSTRUCTIONS,
+                    },
                 }),
             )
         }
@@ -410,24 +506,37 @@ fn call(id: Value, params: &Value, backend: &dyn Backend, catalog: &Catalog) -> 
     let Some(name) = params.get("name").and_then(Value::as_str) else { return error(id, -32602, "tools/call needs name") };
     let args = params.get("arguments").cloned().unwrap_or_else(|| json!({}));
     let Some(given) = args.as_object() else { return tool_error(id, "arguments must be an object") };
-    let (schema, method, request) = if let Some(tool) = TOOLS.iter().find(|t| t.name == name) {
-        let (method, request) = match tool.method {
+    let Some(entry) = catalog.entries().find(|e| e.name() == name) else {
+        return error(id, -32602, &format!("unknown tool {name:?}; {}", close_tools(name, catalog)));
+    };
+    // The hint the listing went by decides: a tool not offered is refused before anything runs.
+    if !catalog.offers(entry.read_only()) {
+        return json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "error": {
+                "code": READ_ONLY,
+                "message": format!("{name} can change the model, the view or the project, and this session is read-only: it offers only the tools that read; changes need a session started without --read-only"),
+                "data": { "tool": name, "readOnly": true },
+            },
+        });
+    }
+    let schema = entry.schema();
+    let (method, request) = match entry.kind {
+        Kind::Fixed(tool) => match tool.method {
             Some(m) => (m.to_string(), args.clone()),
             None => (
                 given.get("method").and_then(Value::as_str).unwrap_or_default().to_string(),
                 given.get("params").cloned().unwrap_or_else(|| json!({})),
             ),
-        };
-        ((tool.schema)(), method, request)
-    } else if let Some(c) = catalog.find(name) {
-        (c.schema.clone(), "engine.execute".to_string(), json!({ "command": c.id, "params": args }))
-    } else if name == SEARCH && catalog.compact {
-        return match given.get("query").and_then(Value::as_str) {
-            Some(q) => search(id, catalog, q),
-            None => tool_error(id, "search_tools needs \"query\""),
-        };
-    } else {
-        return error(id, -32602, &format!("unknown tool {name:?}; {}", close_tools(name, catalog)));
+        },
+        Kind::Command(c) => ("engine.execute".to_string(), json!({ "command": c.id, "params": args })),
+        Kind::Search => {
+            return match given.get("query").and_then(Value::as_str) {
+                Some(q) => search(id, catalog, q),
+                None => tool_error(id, "search_tools needs \"query\""),
+            };
+        }
     };
     if let Err(why) = check(name, &schema, given) {
         return tool_error(id, &why);
@@ -446,16 +555,57 @@ fn call(id: Value, params: &Value, backend: &dyn Backend, catalog: &Catalog) -> 
     }
 }
 
-const INSTRUCTIONS: &str = "Archforge models UML class diagrams (packages; classes, interfaces and data types with their attributes and operations; enumerations with their literals; primitive types, beside the built-in Integer, String, Boolean, Real and UnlimitedNatural; associations, generalizations, dependencies and interface realizations; association classes, an association between two classes that is a class with its own attributes and operations; property modifiers on attributes and association ends: a default value read by the type, derived, read only, ordered, unique, and the properties it subsets or redefines, which the attribute commands and the association end's command set, a field left out keeping its value and clearing said explicitly (an empty default, an empty list), and the class read gives back) and ER diagrams (schemas, entities, attributes, keys, relationships). Every tool works on the project open in the running Archforge window, which must have agent access on (started with --control <port>). Each command has its own tool (uml_package_add, uml_class_add, uml_interface_add, uml_enumeration_add, uml_data_type_add, uml_primitive_type_add, uml_literal_add, uml_literal_rename, uml_literal_move, uml_attribute_add, uml_operation_add, uml_association_add, uml_realization_add, uml_association_class_add, er_schema_add, er_entity_add, er_attribute_add, er_relationship_add, diagram_add with kind uml.class or er, diagram_place, diagram_connect, element_remove, ...; ids come back in the results); batch runs several as one undo step; inspect_document tells what is open and selected; undo and redo step through the history; save_project saves the project, as the Save button does, once the model is done. Resources give read-only context: archforge://project, archforge://skills, archforge://element/{id} and archforge://skills/effective/{id}/export, the skills in effect for generating code such as SQL DDL. Every change shows in the window at once and the user can undo it.";
-const COMPACT_INSTRUCTIONS: &str = "Archforge models UML class diagrams (packages; classes, interfaces and data types with their attributes and operations; enumerations with their literals; primitive types, beside the built-in Integer, String, Boolean, Real and UnlimitedNatural; associations, generalizations, dependencies and interface realizations; association classes, an association between two classes that is a class with its own attributes and operations; property modifiers on attributes and association ends: a default value read by the type, derived, read only, ordered, unique, and the properties it subsets or redefines, which the attribute commands and the association end's command set, a field left out keeping its value and clearing said explicitly (an empty default, an empty list), and the class read gives back) and ER diagrams (schemas, entities, attributes, keys, relationships). Every tool works on the project open in the running Archforge window, which must have agent access on (started with --control <port>). search_tools finds a command (uml.class.add, uml.interface.add, uml.enumeration.add, uml.data-type.add, uml.primitive-type.add, uml.literal.add, uml.association.add, uml.realization.add, uml.association-class.add, er.entity.add, er.relationship.add, diagram.add with kind uml.class or er, diagram.place, ...) with its parameters; execute_command {command, params} runs it and batch runs several as one undo step; inspect_document tells what is open and selected; undo and redo step through the history; save_project saves the project, as the Save button does, once the model is done. Resources give read-only context: archforge://project, archforge://skills, archforge://element/{id} and archforge://skills/effective/{id}/export, the skills in effect for generating code such as SQL DDL. Every change shows in the window at once and the user can undo it.";
+/// What every mode says first: what Archforge models and where the tools work.
+macro_rules! scope {
+    () => {
+        "Archforge models UML class diagrams (packages; classes, interfaces and data types with their attributes and operations; enumerations with their literals; primitive types, beside the built-in Integer, String, Boolean, Real and UnlimitedNatural; associations, generalizations, dependencies and interface realizations; association classes, an association between two classes that is a class with its own attributes and operations; property modifiers on attributes and association ends: a default value read by the type, derived, read only, ordered, unique, and the properties it subsets or redefines, which the attribute commands and the association end's command set, a field left out keeping its value and clearing said explicitly (an empty default, an empty list), and the class read gives back) and ER diagrams (schemas, entities, attributes, keys, relationships). Every tool works on the project open in the running Archforge window, which must have agent access on (started with --control <port>)."
+    };
+}
+/// What every mode says of the resources.
+macro_rules! resources {
+    () => {
+        "Resources give read-only context: archforge://project, archforge://skills, archforge://element/{id} and archforge://skills/effective/{id}/export, the skills in effect for generating code such as SQL DDL."
+    };
+}
+const INSTRUCTIONS: &str = concat!(
+    scope!(),
+    " Each command has its own tool (uml_package_add, uml_class_add, uml_interface_add, uml_enumeration_add, uml_data_type_add, uml_primitive_type_add, uml_literal_add, uml_literal_rename, uml_literal_move, uml_attribute_add, uml_operation_add, uml_association_add, uml_realization_add, uml_association_class_add, er_schema_add, er_entity_add, er_attribute_add, er_relationship_add, diagram_add with kind uml.class or er, diagram_place, diagram_connect, element_remove, ...; ids come back in the results); batch runs several as one undo step; inspect_document tells what is open and selected; undo and redo step through the history; save_project saves the project, as the Save button does, once the model is done. ",
+    resources!(),
+    " Every change shows in the window at once and the user can undo it."
+);
+const COMPACT_INSTRUCTIONS: &str = concat!(
+    scope!(),
+    " search_tools finds a command (uml.class.add, uml.interface.add, uml.enumeration.add, uml.data-type.add, uml.primitive-type.add, uml.literal.add, uml.association.add, uml.realization.add, uml.association-class.add, er.entity.add, er.relationship.add, diagram.add with kind uml.class or er, diagram.place, ...) with its parameters; execute_command {command, params} runs it and batch runs several as one undo step; inspect_document tells what is open and selected; undo and redo step through the history; save_project saves the project, as the Save button does, once the model is done. ",
+    resources!(),
+    " Every change shows in the window at once and the user can undo it."
+);
+const READ_ONLY_INSTRUCTIONS: &str = concat!(
+    scope!(),
+    " This session is read-only: it offers only the tools that read, and refuses any other. Each read has its own tool (uml_package_list, uml_class_list, uml_class_get, uml_relationship_list, er_schema_list, er_schema_get, er_entity_list, er_entity_get, diagram_list, diagram_get, skill_list, skill_effective, ...); list_commands and describe_command tell what the commands are, and inspect_document what is open and selected. ",
+    resources!(),
+    " Changing the model needs a session the user starts with changes allowed."
+);
+const READ_ONLY_COMPACT_INSTRUCTIONS: &str = concat!(
+    scope!(),
+    " This session is read-only: it offers only the tools that read, and refuses any other. Each read has its own tool (uml_class_list, uml_class_get, uml_relationship_list, er_entity_list, er_entity_get, diagram_get, skill_effective, ...), and search_tools finds one by words of its name with its parameters. list_commands and describe_command tell what the commands are, and inspect_document what is open and selected. ",
+    resources!(),
+    " Changing the model needs a session the user starts with changes allowed."
+);
 
 /// Up to five tool names close to an unknown one: those sharing its first word, else the general
 /// tools.
 fn close_tools(name: &str, catalog: &Catalog) -> String {
     let head = name.split('_').next().unwrap_or_default();
-    let mut close: Vec<&str> = catalog.commands.iter().map(|c| c.name.as_str()).filter(|n| !head.is_empty() && n.starts_with(head)).take(5).collect();
+    let mut close: Vec<&str> = catalog
+        .commands
+        .iter()
+        .filter(|c| catalog.offers(c.read_only))
+        .map(|c| c.name.as_str())
+        .filter(|n| !head.is_empty() && n.starts_with(head))
+        .take(5)
+        .collect();
     if close.is_empty() || catalog.compact() {
-        close = TOOLS.iter().map(|t| t.name).take(5).collect();
+        close = TOOLS.iter().filter(|t| catalog.offers(t.read_only)).map(|t| t.name).take(5).collect();
     }
     format!("close ones are {}; tools/list names them all", close.join(", "))
 }
@@ -512,6 +662,7 @@ fn search(id: Value, catalog: &Catalog, query: &str) -> Value {
     let matching: Vec<&CommandTool> = catalog
         .commands
         .iter()
+        .filter(|c| catalog.offers(c.read_only))
         .filter(|c| {
             let text = format!("{} {} {}", c.name, c.id, c.description).to_lowercase();
             words.iter().all(|w| text.contains(w.as_str()))
@@ -523,6 +674,7 @@ fn search(id: Value, catalog: &Catalog, query: &str) -> Value {
         .map(|c| {
             json!({
                 "command": c.id,
+                "tool": c.name,
                 "description": c.description,
                 "inputSchema": c.schema,
                 "annotations": { "readOnlyHint": c.read_only, "destructiveHint": c.destructive },
@@ -530,7 +682,8 @@ fn search(id: Value, catalog: &Catalog, query: &str) -> Value {
         })
         .collect();
     let more = matching.len().saturating_sub(MAX_FOUND);
-    let answer = json!({ "commands": found, "more": more, "run": "execute_command {command, params}" });
+    let run = if catalog.is_read_only() { "call the tool named in \"tool\" with the command's params" } else { "execute_command {command, params}" };
+    let answer = json!({ "commands": found, "more": more, "run": run });
     result(id, json!({ "content": [{ "type": "text", "text": answer.to_string() }], "isError": false }))
 }
 

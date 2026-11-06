@@ -8,12 +8,14 @@ fn folder(name: &str) -> PathBuf {
     dir
 }
 
-/// A server whose handler echoes its method and parameters, a panic for `boom`.
+/// A server whose handler echoes its method and parameters, and its origin when there is one, a
+/// panic for `boom`.
 fn echo(name: &str) -> (Server, PathBuf) {
     let dir = folder(name);
-    let handler: Handler = Arc::new(|method, params| match method {
+    let handler: Handler = Arc::new(|method, params, origin| match method {
         "boom" => panic!("a handler that fails"),
         "refuse" => Err("refused on purpose".into()),
+        _ if origin.is_some() => Ok(json!({ "method": method, "params": params, "origin": origin })),
         _ => Ok(json!({ "method": method, "params": params })),
     });
     (Server::start(0, &dir, handler).unwrap(), dir)
@@ -76,7 +78,7 @@ fn a_settings_folder_others_may_write_to_is_closed_to_them() {
     use std::os::unix::fs::PermissionsExt;
     let dir = folder("umask");
     std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o775)).unwrap();
-    let handler: Handler = Arc::new(|_, _| Ok(json!({})));
+    let handler: Handler = Arc::new(|_, _, _| Ok(json!({})));
     let server = Server::start(0, &dir, handler).unwrap();
     assert_eq!(std::fs::metadata(&dir).unwrap().permissions().mode() & 0o777, 0o755);
     drop(server);
@@ -167,6 +169,78 @@ fn a_peer_that_drips_its_first_line_is_closed_on_time() {
     }
     assert!(closed, "a first line dripped in is cut off at its deadline");
     assert!(started.elapsed() < Duration::from_secs(3), "{:?}", started.elapsed());
+}
+
+#[test]
+fn an_origin_is_short_printable_text_and_anything_else_is_refused_by_name() {
+    for good in ["Chat 1", "Chat · Orders", "Bestellungen prüfen", "注文", "a", &"x".repeat(MAX_ORIGIN)] {
+        assert_eq!(check_origin(good), Ok(()), "{good:?}");
+    }
+    assert_eq!(check_origin(""), Err(OriginError::Empty));
+    assert_eq!(check_origin("   "), Err(OriginError::Empty));
+    assert_eq!(check_origin(&"x".repeat(MAX_ORIGIN + 1)), Err(OriginError::TooLong { chars: MAX_ORIGIN + 1 }));
+    // Counted in characters, not bytes.
+    assert_eq!(check_origin(&"é".repeat(MAX_ORIGIN)), Ok(()));
+    assert_eq!(check_origin(" Chat"), Err(OriginError::Padded));
+    assert_eq!(check_origin("Chat "), Err(OriginError::Padded));
+    for (bad, at, code) in [
+        ("Chat\n1", 5, 0x0A),
+        ("Chat\t1", 5, 0x09),
+        ("\u{1b}[31mChat", 1, 0x1B),
+        ("Chat\u{202E}1", 5, 0x202E),
+        ("Chat\u{200B}1", 5, 0x200B),
+        ("Chat\u{2028}1", 5, 0x2028),
+        ("Chat\u{00A0}1", 5, 0xA0),
+        ("\u{FEFF}Chat", 1, 0xFEFF),
+        ("Chat\u{E0041}", 5, 0xE0041),
+        ("Chat\u{180E}", 5, 0x180E),
+        ("Chat\u{1BCA0}", 5, 0x1BCA0),
+        ("Chat\u{1D173}", 5, 0x1D173),
+    ] {
+        assert_eq!(check_origin(bad), Err(OriginError::NotPrintable { at, code }), "{bad:?}");
+    }
+    // Every refusal says what was wrong.
+    let said = check_origin("Chat\u{202E}1").unwrap_err().to_string();
+    assert!(said.contains("U+202E") && said.contains("printable"), "{said}");
+    assert!(check_origin(&"x".repeat(65)).unwrap_err().to_string().contains("at most 64"));
+    // A client is never made with an origin the server would refuse.
+    let client = Client::with_token(1, mint_token().unwrap());
+    assert!(client.with_origin(Some("Chat\n2".into())).is_err());
+}
+
+#[cfg(unix)]
+#[test]
+fn the_origin_travels_beside_the_params_and_a_bad_one_is_refused() {
+    let (server, dir) = echo("origin");
+    let port = server.port();
+    let chat = Client::new(&dir, port).unwrap().with_origin(Some("Chat 1".into())).unwrap();
+    assert_eq!(
+        chat.call("engine.execute", json!({ "command": "x" })).unwrap(),
+        json!({ "method": "engine.execute", "params": { "command": "x" }, "origin": "Chat 1" })
+    );
+    // Without one, the handler gets none.
+    let plain = Client::new(&dir, port).unwrap();
+    assert_eq!(plain.call("m", json!({})).unwrap(), json!({ "method": "m", "params": {} }));
+    // A bad origin on the wire is an error reply naming it, never passed on.
+    let token = read_token(&token_path(&dir, port)).unwrap();
+    let first = format!("{{\"id\":1,\"method\":\"a\",\"token\":\"{token}\"}}\n");
+    let long = format!("{{\"id\":3,\"method\":\"c\",\"origin\":\"{}\"}}\n", "x".repeat(MAX_ORIGIN + 1));
+    let out = raw(
+        port,
+        &[
+            first.as_bytes(),
+            b"{\"id\":2,\"method\":\"b\",\"origin\":\"Chat\\n1\"}\n",
+            long.as_bytes(),
+            b"{\"id\":4,\"method\":\"d\",\"origin\":7}\n",
+            b"{\"id\":5,\"method\":\"e\",\"origin\":\"Chat 2\"}\n",
+        ],
+    );
+    let replies: Vec<Value> = out.split(|b| *b == b'\n').filter(|l| !l.is_empty()).map(|l| serde_json::from_slice(l).unwrap()).collect();
+    assert_eq!(replies.len(), 5);
+    assert!(replies[1]["error"].as_str().unwrap().contains("U+000A"), "{}", replies[1]);
+    assert!(replies[2]["error"].as_str().unwrap().contains("at most 64"), "{}", replies[2]);
+    assert!(replies[3]["error"].as_str().unwrap().contains("origin must be a string"), "{}", replies[3]);
+    assert_eq!(replies[4]["result"]["origin"], "Chat 2");
 }
 
 #[test]

@@ -4,8 +4,11 @@
 //! line. The application answers through its command engine, so the window shows every change and
 //! undo covers it. `archforge-cli` reaches the port through [`Client`].
 //!
-//! The wire: a request is `{id, method, params}`, the first on a connection also carrying `token`;
-//! a reply is `{id, ok: true, result}` or `{id, ok: false, error}`. A first line that is not a
+//! The wire: a request is `{id, method, params}`, the first on a connection also carrying `token`,
+//! and any request may carry `origin`, the label of who sent it (a chat, say), which the
+//! application puts on the undo steps the request makes; a reply is `{id, ok: true, result}` or
+//! `{id, ok: false, error}`. The origin is a key of the request, never of its parameters, so the
+//! one who chooses the parameters (an agent through `call_app`) cannot choose it. A first line that is not a
 //! well-formed request with the right token closes the connection without a word, so a web page
 //! cannot drive the port (CS-6). Lines, requests, replies, connections and waits are capped (CS-7).
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
@@ -186,9 +189,72 @@ fn read_line_with(r: &mut impl BufRead, max: usize, mut before: impl FnMut() -> 
     }
 }
 
-/// What answers a request: the method and its parameters in, the result or why not out. It may
-/// block until the application has answered, at most [`TIMEOUT`].
-pub type Handler = Arc<dyn Fn(&str, Value) -> Result<Value, String> + Send + Sync>;
+/// What answers a request: the method, its parameters and its origin (checked by [`check_origin`])
+/// in, the result or why not out. It may block until the application has answered, at most
+/// [`TIMEOUT`].
+pub type Handler = Arc<dyn Fn(&str, Value, Option<&str>) -> Result<Value, String> + Send + Sync>;
+
+/// The longest origin, in characters.
+pub const MAX_ORIGIN: usize = 64;
+
+/// Why an origin label was refused.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OriginError {
+    /// Empty, or nothing but spaces.
+    Empty,
+    /// Longer than [`MAX_ORIGIN`] characters.
+    TooLong { chars: usize },
+    /// Space at either end, which would hide in a label.
+    Padded,
+    /// A character that is not printable text: a control character, a line break, or one that
+    /// changes how the text around it shows (direction marks, zero-width characters).
+    NotPrintable { at: usize, code: u32 },
+}
+
+impl std::fmt::Display for OriginError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            OriginError::Empty => write!(f, "the origin is empty; give a short label such as \"Chat 1\""),
+            OriginError::TooLong { chars } => write!(f, "the origin has {chars} characters; it may have at most {MAX_ORIGIN}"),
+            OriginError::Padded => f.write_str("the origin starts or ends with a space"),
+            OriginError::NotPrintable { at, code } => {
+                write!(f, "the origin's character {at} (U+{code:04X}) is not printable text; an origin is letters, digits, spaces and punctuation")
+            }
+        }
+    }
+}
+
+impl std::error::Error for OriginError {}
+
+/// Checks an origin label: 1 to [`MAX_ORIGIN`] characters of printable text, no space at either
+/// end. It is refused, never cleaned up, so the label shown is the label given.
+pub fn check_origin(origin: &str) -> Result<(), OriginError> {
+    if origin.trim().is_empty() {
+        return Err(OriginError::Empty);
+    }
+    let chars = origin.chars().count();
+    if chars > MAX_ORIGIN {
+        return Err(OriginError::TooLong { chars });
+    }
+    if let Some((at, c)) = origin.chars().enumerate().find(|(_, c)| !printable(*c)) {
+        return Err(OriginError::NotPrintable { at: at.saturating_add(1), code: u32::from(c) });
+    }
+    if origin.trim() != origin {
+        return Err(OriginError::Padded);
+    }
+    Ok(())
+}
+
+/// Whether `c` is printable text: not a control character, and not one of the format characters
+/// that reorder or hide text (direction marks and overrides, zero-width characters, the byte order
+/// mark, the line and paragraph separators). A plain space is printable; other spaces are not.
+fn printable(c: char) -> bool {
+    !(c.is_control()
+        || (c.is_whitespace() && c != ' ')
+        || matches!(c, '\u{00AD}' | '\u{034F}' | '\u{061C}' | '\u{115F}' | '\u{1160}' | '\u{180E}' | '\u{3164}' | '\u{FEFF}' | '\u{FFA0}')
+        || matches!(c, '\u{180B}'..='\u{180F}' | '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2060}'..='\u{206F}' | '\u{FE00}'..='\u{FE0F}' | '\u{FFF0}'..='\u{FFFB}')
+        || matches!(c, '\u{13430}'..='\u{1343F}' | '\u{1BCA0}'..='\u{1BCA3}' | '\u{1D173}'..='\u{1D17A}' | '\u{E0000}'..='\u{E0FFF}'))
+}
 
 /// The listening port, its token file and its threads; dropping it stops listening and removes
 /// the token file.
@@ -292,7 +358,7 @@ fn trusted_folder(_settings: &Path) -> Result<(), String> {
 }
 
 /// The keys a request may carry.
-const REQUEST_KEYS: [&str; 4] = ["id", "method", "params", "token"];
+const REQUEST_KEYS: [&str; 5] = ["id", "method", "params", "token", "origin"];
 
 /// Serves one connection until it closes, an unauthorised or malformed first line, or a failure.
 fn serve_connection(stream: TcpStream, token: &str, handler: &Handler) {
@@ -362,8 +428,16 @@ fn answer(r: &Value, size: usize, handler: &Handler) -> Value {
     if !params.is_object() {
         return fail(id, "params must be an object");
     }
+    let origin = match r.get("origin") {
+        None => None,
+        Some(Value::String(o)) => match check_origin(o) {
+            Ok(()) => Some(o.as_str()),
+            Err(e) => return fail(id, &e.to_string()),
+        },
+        Some(_) => return fail(id, "origin must be a string"),
+    };
     // A handler that panics answers with an error; the connection and the application go on.
-    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| handler(method, params))) {
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| handler(method, params, origin))) {
         Ok(Ok(result)) => json!({ "id": id, "ok": true, "result": result }),
         Ok(Err(e)) => fail(id, &e),
         Err(_) => fail(id, "the request failed inside the application"),
@@ -393,10 +467,11 @@ impl std::fmt::Display for CallError {
 }
 
 /// A client of the application listening on one port: each call opens a connection, sends the
-/// token with its one request and reads the reply.
+/// token with its one request and reads the reply, and the client's origin when it has one.
 pub struct Client {
     port: u16,
     token: String,
+    origin: Option<String>,
 }
 
 impl Client {
@@ -405,19 +480,32 @@ impl Client {
         let path = token_path(settings, port);
         let token = read_token(&path)
             .map_err(|e| CallError::Unreachable(format!("no Archforge with agent access on port {port} (start it with --control {port}): {e}")))?;
-        Ok(Client { port, token })
+        Ok(Client { port, token, origin: None })
     }
 
     /// The client with a token in hand, for tests.
     pub fn with_token(port: u16, token: String) -> Client {
-        Client { port, token }
+        Client { port, token, origin: None }
+    }
+
+    /// The client sending `origin` with every request, so the application labels the undo steps
+    /// its requests make with it; a label [`check_origin`] refuses is refused here.
+    pub fn with_origin(mut self, origin: Option<String>) -> Result<Client, OriginError> {
+        if let Some(o) = &origin {
+            check_origin(o)?;
+        }
+        self.origin = origin;
+        Ok(self)
     }
 
     /// Sends `method` with `params` and gives the result.
     pub fn call(&self, method: &str, params: Value) -> Result<Value, CallError> {
         let unreachable = |e: std::io::Error| CallError::Unreachable(format!("Archforge on port {} could not be reached: {e}", self.port));
-        let mut line = serde_json::to_vec(&json!({ "id": 1, "method": method, "params": params, "token": self.token }))
-            .map_err(|e| CallError::Refused(format!("the request could not be written: {e}")))?;
+        let mut request = json!({ "id": 1, "method": method, "params": params, "token": self.token });
+        if let Some(o) = &self.origin {
+            request["origin"] = Value::String(o.clone());
+        }
+        let mut line = serde_json::to_vec(&request).map_err(|e| CallError::Refused(format!("the request could not be written: {e}")))?;
         if line.len() > MAX_REQUEST {
             return Err(CallError::Refused(format!("the request is larger than {} KiB; split it", MAX_REQUEST / 1024)));
         }

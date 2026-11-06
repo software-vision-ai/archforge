@@ -70,12 +70,12 @@ fn start_control(
     let (requests, receiver) = std::sync::mpsc::channel::<archforge_ui_egui::control::ControlRequest>();
     let slot: ContextSlot = std::sync::Arc::new(std::sync::Mutex::new(None));
     let window = slot.clone();
-    let handler: archforge_control::Handler = std::sync::Arc::new(move |method, params| {
+    let handler: archforge_control::Handler = std::sync::Arc::new(move |method, params, origin| {
         use archforge_ui_egui::control::{ControlRequest, abandon};
         let (reply, answer) = std::sync::mpsc::channel();
         let state = std::sync::Arc::new(std::sync::atomic::AtomicU8::new(archforge_ui_egui::control::WAITING));
         requests
-            .send(ControlRequest { method: method.to_string(), params, reply, state: state.clone() })
+            .send(ControlRequest { method: method.to_string(), params, origin: origin.map(str::to_string), reply, state: state.clone() })
             .map_err(|_| "Archforge is closing".to_string())?;
         if let Some(ctx) = window.lock().ok().and_then(|g| g.clone()) {
             ctx.request_repaint();
@@ -495,6 +495,109 @@ mod tests {
         for m in &shell {
             assert!(call_app.contains(m), "call_app does not name the method {m}");
         }
+        // A fixed tool says it only reads exactly when the shell's method it calls only reads;
+        // call_app reaches every method, so it never says so.
+        use archforge_ui_egui::control::READS;
+        assert!(READS.iter().all(|m| shell.contains(m)), "every read is a method");
+        for (name, method, read_only) in archforge_mcp::fixed_tools() {
+            assert_eq!(read_only, method.is_some_and(|m| READS.contains(&m)), "{name} calls {method:?}");
+        }
+    }
+
+    /// A shell with a fresh project, for the control channel tests.
+    fn shell_with_project() -> Shell {
+        let mut n: u128 = 0;
+        let ids = Box::new(move || {
+            n += 1;
+            archforge_mof::Uuid(n.to_le_bytes())
+        });
+        let mut shell = Shell::new(archforge_ui_egui::Services::default());
+        shell.session = Some(archforge_notations::new_project_session("Shop", ids).unwrap());
+        shell
+    }
+
+    /// The methods the shell calls reads change neither the model, its history nor the view.
+    #[test]
+    fn the_shells_reads_change_nothing() {
+        use serde_json::json;
+        let mut shell = shell_with_project();
+        archforge_ui_egui::control::answer(&mut shell, "engine.execute", &json!({ "command": "er.schema.add", "params": { "name": "shop" } }))
+            .unwrap();
+        let state = |shell: &Shell| {
+            let s = shell.session.as_ref().unwrap();
+            (s.revision(), s.undo_label().map(str::to_string), s.journal().count(), s.view().selection.clone())
+        };
+        let before = state(&shell);
+        for m in archforge_ui_egui::control::READS {
+            let params = match m {
+                "engine.describe" => json!({ "command": "er.schema.add" }),
+                "app.saved" => json!({ "ticket": 1 }),
+                _ => json!({}),
+            };
+            let _ = archforge_ui_egui::control::answer(&mut shell, m, &params);
+            assert_eq!(state(&shell), before, "{m} is listed as a read");
+        }
+    }
+
+    /// The origin `archforge-cli mcp --origin` sets travels the real control channel beside the
+    /// parameters, labels the undo step each change makes, comes back in the result and in
+    /// `document.inspect`, and cannot be set through the parameters.
+    #[cfg(unix)]
+    #[test]
+    fn an_origin_labels_the_undo_steps_its_requests_make_through_the_control_channel() {
+        use serde_json::{Value, json};
+        let settings = std::env::temp_dir().join(format!("archforge-origin-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&settings);
+        std::fs::create_dir_all(&settings).unwrap();
+        let (server, requests, _slot) = start_control(0, &settings).unwrap();
+        let port = server.port();
+        let folder = settings.clone();
+        let agent = std::thread::spawn(move || {
+            let chat = archforge_control::Client::new(&folder, port).unwrap().with_origin(Some("Chat 1".into())).unwrap();
+            let user = archforge_control::Client::new(&folder, port).unwrap();
+            let schema = chat.call("engine.execute", json!({ "command": "er.schema.add", "params": { "name": "shop" } })).unwrap();
+            let id = schema["result"]["id"].as_str().unwrap().to_string();
+            let batch = chat
+                .call(
+                    "engine.batch",
+                    json!({ "label": "Add tables", "steps": [
+                        { "command": "er.entity.add", "params": { "schema": id, "name": "Customer" } },
+                        { "command": "er.entity.add", "params": { "schema": id, "name": "Order" } },
+                    ] }),
+                )
+                .unwrap();
+            let inspected = chat.call("document.inspect", json!({})).unwrap();
+            let spoof = chat.call("engine.execute", json!({ "command": "er.schema.add", "params": { "name": "x" }, "origin": "Spoof" }));
+            let own = user.call("engine.execute", json!({ "command": "er.schema.add", "params": { "name": "mine" } })).unwrap();
+            let undone = chat.call("engine.undo", json!({})).unwrap();
+            let after = user.call("document.inspect", json!({})).unwrap();
+            (schema, batch, inspected, spoof, own, undone, after)
+        });
+        // The window's side: each request answered by the shell, as a frame does.
+        let mut shell = shell_with_project();
+        while !agent.is_finished() {
+            if let Ok(req) = requests.recv_timeout(std::time::Duration::from_millis(10)) {
+                use std::sync::atomic::Ordering;
+                let ws = archforge_ui_egui::control::WAITING;
+                if req.state.compare_exchange(ws, archforge_ui_egui::control::TAKEN, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
+                    let answer = archforge_ui_egui::control::answer_from(&mut shell, &req.method, &req.params, req.origin.as_deref());
+                    let _ = req.reply.send(answer);
+                }
+            }
+        }
+        let (schema, batch, inspected, spoof, own, undone, after) = agent.join().unwrap();
+        assert_eq!((schema["undo"].as_str(), schema["origin"].as_str()), (Some("Chat 1: Add schema"), Some("Chat 1")), "{schema}");
+        assert_eq!((batch["undo"].as_str(), batch["origin"].as_str()), (Some("Chat 1: Add tables"), Some("Chat 1")), "{batch}");
+        assert_eq!((inspected["undo"].as_str(), inspected["undo_origin"].as_str()), (Some("Chat 1: Add tables"), Some("Chat 1")));
+        let spoof = spoof.unwrap_err().to_string();
+        assert!(spoof.contains("\"origin\""), "an origin among the parameters is refused: {spoof}");
+        assert_eq!((own["undo"].as_str(), own.get("origin")), (Some("Add schema"), None), "the user's own change has no origin");
+        assert_eq!(undone["undone"], "Add schema");
+        assert_eq!((after["redo_origin"].clone(), after["undo_origin"].as_str()), (Value::Null, Some("Chat 1")));
+        let session = shell.session.as_ref().unwrap();
+        assert_eq!(session.undo_label(), Some("Chat 1: Add tables"));
+        drop(server);
+        let _ = std::fs::remove_dir_all(&settings);
     }
 
     #[test]

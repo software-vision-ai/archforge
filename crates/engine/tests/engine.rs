@@ -332,6 +332,48 @@ fn coalescing_merges_only_into_the_step_the_previous_call_made() {
 }
 
 #[test]
+fn a_step_made_for_an_origin_carries_it_through_undo_and_redo_and_never_merges_across_origins() {
+    let mut s = session();
+    s.execute("item.add", &json!({ "name": "A" })).unwrap();
+    assert_eq!((s.undo_label(), s.undo_origin()), (Some("Add item"), None), "the user's own step has no origin");
+    s.execute_from("item.add", &json!({ "name": "B" }), Some("Chat 1")).unwrap();
+    assert_eq!((s.undo_label(), s.undo_origin()), (Some("Chat 1: Add item"), Some("Chat 1")));
+    s.batch_from("Add two", Some("Chat 1"), |b| {
+        b.execute("item.add", &json!({ "name": "C" }))?;
+        b.execute("item.add", &json!({ "name": "D" }))?;
+        Ok(())
+    })
+    .unwrap();
+    assert_eq!((s.undo_label(), s.undo_origin()), (Some("Chat 1: Add two"), Some("Chat 1")));
+    // Undo and redo keep the origin with its step.
+    s.undo().unwrap();
+    assert_eq!((s.redo_label(), s.redo_origin()), (Some("Chat 1: Add two"), Some("Chat 1")));
+    assert_eq!(s.undo_origin(), Some("Chat 1"));
+    s.redo().unwrap();
+    assert_eq!(s.undo_label(), Some("Chat 1: Add two"));
+    // A gesture's coalescing key never joins steps of two origins: the user's drag after the chat's
+    // is a step of its own, and so is another chat's.
+    s.execute_from("item.move", &json!({ "from": 0, "to": 1, "coalesce": "drag" }), Some("Chat 1")).unwrap();
+    s.execute("item.move", &json!({ "from": 1, "to": 2, "coalesce": "drag" })).unwrap();
+    assert_eq!((s.undo_label(), s.undo_origin()), (Some("Move item"), None));
+    s.execute_from("item.move", &json!({ "from": 2, "to": 3, "coalesce": "drag" }), Some("Chat 2")).unwrap();
+    assert_eq!(s.undo_origin(), Some("Chat 2"));
+    s.undo().unwrap();
+    assert_eq!(s.undo_origin(), None, "the user's move stayed its own step");
+    s.undo().unwrap();
+    assert_eq!(s.undo_label(), Some("Chat 1: Move item"), "and the chat's too");
+    // The same origin and key still merge, as the user's own do.
+    s.execute_from("item.move", &json!({ "from": 0, "to": 1, "coalesce": "g" }), Some("Chat 1")).unwrap();
+    s.execute_from("item.move", &json!({ "from": 1, "to": 2, "coalesce": "g" }), Some("Chat 1")).unwrap();
+    s.undo().unwrap();
+    assert_eq!(s.undo_label(), Some("Chat 1: Move item"), "two moves of one origin and key were one step");
+    // The batch label's cap is the label's own, the origin aside.
+    let long = "x".repeat(256);
+    assert!(s.batch_from(&long, Some("Chat 1"), |b| b.execute("item.add", &json!({ "name": "E" })).map(|_| ())).is_ok());
+    assert!(s.batch_from(&format!("{long}x"), Some("Chat 1"), |b| b.execute("item.add", &json!({ "name": "F" })).map(|_| ())).is_err());
+}
+
+#[test]
 fn a_batch_is_one_step_and_one_entry_or_nothing() {
     let mut s = session();
     s.batch("Add two", |b| {

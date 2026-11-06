@@ -40,6 +40,42 @@ tools and `search_tools` in place of one tool per command. To try agent access b
 `archforge-cli app <method> [<json>] --port 47000` sends one request to the running window, and
 `archforge-cli commands` lists the commands there are.
 
+## Read-only sessions and labelled changes
+
+Two more flags of `archforge-cli mcp` shape what an agent may do. You set them where the MCP server
+is started (your agent's MCP settings, or the program that starts the agent); nothing the agent
+sends can change them.
+
+| Flag | What it does |
+|---|---|
+| `--bridge <port>` | Connects to Archforge started with `--control <port>`. Needed. |
+| `--compact` | Lists the general tools and `search_tools` in place of one tool per command. |
+| `--read-only` | Offers only the tools that read: listing commands, `inspect_document`, the reads such as `er_entity_list` or `uml_class_get` (listed even with `--compact`), and the resources. Every other tool is left out of the list, and a call to one is refused with an error that names it and says the session is read-only. Nothing reaches the model. |
+| `--origin <label>` | Labels every change the agent makes. Its undo step is named *label: change*, for example `Chat 1: Add entity`, or `Chat 1: Add tables` for a batch, and each result gives the label back as `origin`. The window does not show undo step names yet; the agent's results and `inspect_document` do, and `inspect_document` names the origin of the steps undo and redo would take (`undo_origin`, `redo_origin`). |
+
+The flags combine. For example, an agent you only want answers from:
+
+```sh
+archforge-cli mcp --bridge 47000 --read-only
+```
+
+and one whose changes you want to tell apart from yours in the history, for the program that
+started it or a later look at `inspect_document`:
+
+```sh
+archforge-cli mcp --bridge 47000 --origin "Chat 1"
+```
+
+A label is 1 to 64 characters of printable text: letters, digits, spaces and punctuation, in any
+language. It may not start or end with a space or hold line breaks, tabs, control characters or
+characters that hide or reorder text. A label that breaks these rules is refused and the server
+does not start (exit code 2). Your own changes in the window carry no label, nor do those of an
+agent started without `--origin`, and a change by one origin never merges into another's undo
+step.
+
+Neither flag fences the agent off from your computer: an agent that may run commands could still
+start `archforge-cli` itself. Keep its other tools to what you trust it with.
+
 ## What the agent can do
 
 - **Change the model**: one tool per command, such as `er_entity_add`, `er_relationship_add`,
