@@ -530,7 +530,11 @@ the installation id zeroed, colour escapes removed, Codex tool tables cut to two
 `supportedReasoningEfforts[].description` and `serviceTiers[].name` and `.description`) replaced by
 neutral "Fixture text: …" strings with every field kept; that file's first `note` line lists its changes).
 Files named `doc-*` are written from the documentation and the schema and start with a `note` line
-saying so; `synthetic-*` are made-up hostile lines.
+saying so; `synthetic-*` are made-up hostile lines. The Codex `observed-*` captures other than `observed-handshake.jsonl` (which
+probes the order on purpose) were recorded by a driver that wrote its lines without waiting for
+answers, so `initialized` and the next request precede the `initialize` result; their `note` line
+says so. App-server read them in order and answered `initialize` first, so no observation depends
+on it, and the adapter keeps the strict order of [Handshake](#handshake-observed).
 
 The doc-derived tool calls use the bridge's real shapes. `er_entity_list` takes the schema's id, a
 UUID, and a command tool's `tools/call` answer is one text block holding the control channel's
