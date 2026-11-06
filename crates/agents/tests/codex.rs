@@ -997,6 +997,38 @@ on_turn() {
     std::fs::remove_dir_all(&base).unwrap();
 }
 
+/// When the first held notification names no turn, a later held one that does names it at once,
+/// before the bound runs out.
+#[test]
+fn a_later_held_notification_names_the_turn() {
+    let base = scratch("held-later");
+    let body = r#"
+on_turn() {
+  send '{"method":"item/agentMessage/delta","params":{"threadId":"019a0000-0000-7000-8000-000000000001","itemId":"i","delta":"anonymous "}}'
+  send '{"method":"item/agentMessage/delta","params":{"threadId":"019a0000-0000-7000-8000-000000000001","turnId":"u-7","itemId":"i","delta":"named"}}'
+  send '{"id":@ID@,"result":{"turn":{}}}'
+  ( sleep 0.6; send '{"method":"turn/completed","params":{"threadId":"019a0000-0000-7000-8000-000000000001","turn":{"id":"u-7","status":"completed","items":[]}}}' ) &
+}
+"#;
+    let (runtime, account, folder) = fake_codex(&base, body);
+    let cfg = CodexConfig { request_timeout: Duration::from_millis(300), ..config(false) };
+    let mut session = CodexSession::start(&runtime, &account, &folder, cfg, SignIn::ApiKey(canary())).unwrap();
+    session.send("hi").unwrap();
+    let events = events_until(&mut session, turn_end);
+    let shown: Vec<&SessionEvent> = events.iter().filter(|e| !matches!(e, SessionEvent::Started { .. })).collect();
+    assert_eq!(
+        shown,
+        vec![
+            &SessionEvent::TextDelta { text: "anonymous ".into() },
+            &SessionEvent::TextDelta { text: "named".into() },
+            &SessionEvent::TurnFinished { outcome: TurnOutcome::Completed, usage: Usage::default() },
+        ],
+        "the turn is named from the second held notification, so it outlives the 300 ms bound: {events:?}"
+    );
+    session.shutdown(Duration::from_secs(2)).unwrap();
+    std::fs::remove_dir_all(&base).unwrap();
+}
+
 /// A turn Codex never names fails once one request timeout has passed, as Other; its thread is
 /// left, and the session takes the next message on a fresh thread.
 #[test]

@@ -255,8 +255,8 @@ A turn's notifications (`turn/*`, `item/*`, `error`, `thread/tokenUsage/updated`
 the open turn whose `turn/start` was sent: those for another thread, an ended or abandoned turn (the
 last 64 are remembered), or before the turn was asked for change nothing, neither the events nor
 the copy; those that come before Codex named the turn are held (at most 1024) and then given to the
-turn it names. When Codex answers `turn/start` without naming the turn, the first notification
-that names one (held or later) names it; with none within one request timeout the turn fails as
+turn it names. When Codex answers `turn/start` without naming the turn, a held `turn/started`
+that names one names it, else the first held notification that does, else the first later one; with none within one request timeout the turn fails as
 `Other` (stopped when a stop was asked for) and its thread is left. A `turn/start` past its deadline fails the turn (as stopped when a stop was asked
 for), and its thread is left: the next message starts a fresh thread with the copy, so it can never
 join a turn Codex started after all; a late answer names that turn, which is interrupted while the

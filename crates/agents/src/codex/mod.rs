@@ -728,6 +728,13 @@ impl CodexSession {
         }
     }
 
+    /// The turn the held notifications name: the first held `turn/started` that names one, else
+    /// the first held notification that does, ended turns skipped.
+    fn first_held_turn(&self) -> Option<String> {
+        let fresh = |(_, params): &(String, Value)| turn_of(params).filter(|t| !self.stale_turns.contains(t));
+        self.held.iter().filter(|(method, _)| method == "turn/started").find_map(fresh).or_else(|| self.held.iter().find_map(fresh))
+    }
+
     /// Takes `turn` as the running turn's id (from a notification, when Codex answered
     /// `turn/start` without one): what was held is given to it, and a stop asked for meanwhile is
     /// sent.
@@ -846,7 +853,7 @@ impl CodexSession {
                         log::warn!("codex started a turn without naming it; a notification that names it is waited for");
                         self.unnamed_deadline = Instant::now().checked_add(self.timeout);
                         // `turn/started` (or any notification naming a turn) may already be held.
-                        let named = self.held.iter().find(|(m, _)| m == "turn/started").or_else(|| self.held.front()).and_then(|(_, p)| turn_of(p));
+                        let named = self.first_held_turn();
                         match named {
                             Some(turn) => self.adopt(&turn),
                             None if self.unnamed_deadline.is_none() => self.abandon_unnamed(),
