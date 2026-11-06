@@ -861,6 +861,121 @@ fn a_stop_before_the_thread_starts_no_turn() {
     std::fs::remove_dir_all(&base).unwrap();
 }
 
+/// Notifications for another turn or thread change nothing: an earlier turn's answer is not added
+/// to the copy and its end does not end the current turn. What comes before Codex named the turn is
+/// held and then given to the turn it names.
+#[test]
+fn notifications_for_other_turns_are_ignored() {
+    let base = scratch("stale");
+    let body = r#"
+on_turn() {
+  send '{"method":"item/agentMessage/delta","params":{"threadId":"019a0000-0000-7000-8000-000000000001","turnId":"u-old","itemId":"i0","delta":"stale early"}}'
+  send '{"method":"item/agentMessage/delta","params":{"threadId":"019a0000-0000-7000-8000-000000000001","turnId":"u-2","itemId":"i1","delta":"early "}}'
+  send '{"id":@ID@,"result":{"turn":{"id":"u-2","status":"inProgress","items":[]}}}'
+  send '{"method":"item/completed","params":{"threadId":"019a0000-0000-7000-8000-000000000001","turnId":"u-old","item":{"type":"agentMessage","id":"i0","text":"stale"}}}'
+  send '{"method":"turn/completed","params":{"threadId":"019a0000-0000-7000-8000-000000000001","turn":{"id":"u-old","status":"completed","items":[]}}}'
+  send '{"method":"item/agentMessage/delta","params":{"threadId":"another-thread","turnId":"u-2","itemId":"i1","delta":"elsewhere"}}'
+  send '{"method":"item/agentMessage/delta","params":{"threadId":"019a0000-0000-7000-8000-000000000001","turnId":"u-2","itemId":"i1","delta":"fresh"}}'
+  send '{"method":"item/completed","params":{"threadId":"019a0000-0000-7000-8000-000000000001","turnId":"u-2","item":{"type":"agentMessage","id":"i1","text":"early fresh"}}}'
+  send '{"method":"turn/completed","params":{"threadId":"019a0000-0000-7000-8000-000000000001","turn":{"id":"u-2","status":"completed","items":[]}}}'
+  send '{"method":"item/completed","params":{"threadId":"019a0000-0000-7000-8000-000000000001","turnId":"u-2","item":{"type":"agentMessage","id":"i2","text":"after the end"}}}'
+}
+"#;
+    let (runtime, account, folder) = fake_codex(&base, body);
+    let mut session = CodexSession::start(&runtime, &account, &folder, config(false), SignIn::ApiKey(canary())).unwrap();
+    session.send("hi").unwrap();
+    let mut events = events_until(&mut session, turn_end);
+    events.extend(std::iter::from_fn(|| session.next_event(Duration::from_millis(200))));
+    let shown: Vec<&SessionEvent> = events.iter().filter(|e| !matches!(e, SessionEvent::Started { .. })).collect();
+    assert_eq!(
+        shown,
+        vec![
+            &SessionEvent::TextDelta { text: "early ".into() },
+            &SessionEvent::TextDelta { text: "fresh".into() },
+            &SessionEvent::MessageDone { text: "early fresh".into() },
+            &SessionEvent::TurnFinished { outcome: TurnOutcome::Completed, usage: Usage::default() },
+        ],
+        "{events:?}"
+    );
+    let copy: Vec<String> = History::read(&folder).unwrap().entries().iter().map(|e| e.text.clone()).collect();
+    assert_eq!(copy, vec!["hi".to_owned(), "early fresh".to_owned()]);
+    session.shutdown(Duration::from_secs(2)).unwrap();
+    std::fs::remove_dir_all(&base).unwrap();
+}
+
+/// A `turn/start` that passed its deadline fails its turn, and the next message starts a fresh
+/// thread (with the copy) so it cannot join a turn that runs after all; when the late answer comes,
+/// that turn is interrupted by name while the current turn goes on, and nothing of it is shown.
+#[test]
+fn a_late_turn_start_answer_is_interrupted() {
+    let base = scratch("late-start");
+    let body = r#"
+turns=0
+threads=0
+on_thread() { threads=$((threads+1)); send "{\"id\":$id,\"result\":{\"thread\":{\"id\":\"t-$threads\"},\"model\":\"m\"}}"; }
+on_turn() {
+  turns=$((turns+1))
+  if [ $turns = 1 ]; then
+    ( sleep 0.6; send "{\"id\":$id,\"result\":{\"turn\":{\"id\":\"u-late\"}}}"; send '{"method":"item/agentMessage/delta","params":{"threadId":"t-1","turnId":"u-late","itemId":"x","delta":"stale"}}' ) &
+  else
+    send "{\"id\":$id,\"result\":{\"turn\":{\"id\":\"u-2\"}}}"
+    ( sleep 0.7; send '{"method":"item/agentMessage/delta","params":{"threadId":"t-2","turnId":"u-2","itemId":"y","delta":"fresh"}}'; send '{"method":"turn/completed","params":{"threadId":"t-2","turn":{"id":"u-2","status":"completed","items":[]}}}' ) &
+  fi
+}
+"#;
+    let (runtime, account, folder) = fake_codex(&base, body);
+    let cfg = CodexConfig { request_timeout: Duration::from_millis(300), ..config(false) };
+    let mut session = CodexSession::start(&runtime, &account, &folder, cfg, SignIn::ApiKey(canary())).unwrap();
+    session.send("one").unwrap();
+    let first = events_until(&mut session, turn_end);
+    assert!(
+        matches!(first.last(), Some(SessionEvent::TurnFinished { outcome: TurnOutcome::Failed(e), .. }) if e.to_string().contains("did not answer turn/start")),
+        "{first:?}"
+    );
+    session.send("two").unwrap();
+    let second = events_until(&mut session, turn_end);
+    let shown: Vec<&SessionEvent> = second.iter().filter(|e| !matches!(e, SessionEvent::Started { .. })).collect();
+    assert_eq!(
+        shown,
+        vec![
+            &SessionEvent::TextDelta { text: "fresh".into() },
+            &SessionEvent::TurnFinished { outcome: TurnOutcome::Completed, usage: Usage::default() }
+        ],
+        "the current turn goes on and the late one shows nothing: {second:?}"
+    );
+    let sent = stdin_lines(&base, 10);
+    let interrupts: Vec<Value> = requests(&sent, "turn/interrupt").into_iter().map(|l| serde_json::from_str(l).unwrap()).collect();
+    assert_eq!(interrupts.len(), 1, "{sent:?}");
+    assert_eq!(interrupts[0]["params"], json!({ "threadId": "t-1", "turnId": "u-late" }));
+    let starts: Vec<Value> = requests(&sent, "turn/start").into_iter().map(|l| serde_json::from_str(l).unwrap()).collect();
+    assert_eq!(starts[1]["params"]["threadId"], "t-2", "the next message starts on a fresh thread");
+    let inject: Value = serde_json::from_str(requests(&sent, "thread/inject_items")[0]).unwrap();
+    assert_eq!(inject["params"]["threadId"], "t-2");
+    assert_eq!(inject["params"]["items"][0]["content"][0]["text"], "one");
+    session.shutdown(Duration::from_secs(2)).unwrap();
+    std::fs::remove_dir_all(&base).unwrap();
+}
+
+/// A stop while `turn/start` waits for an answer that never comes ends the turn as stopped once the
+/// request's deadline passes, not as failed.
+#[test]
+fn a_stop_while_the_turn_start_goes_unanswered_ends_as_stopped() {
+    let base = scratch("stop-unanswered");
+    let (runtime, account, folder) = fake_codex(&base, "on_turn() { :; }");
+    let cfg = CodexConfig { request_timeout: Duration::from_millis(300), ..config(false) };
+    let mut session = CodexSession::start(&runtime, &account, &folder, cfg, SignIn::ApiKey(canary())).unwrap();
+    session.send("hi").unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while requests(&stdin_lines(&base, 1), "turn/start").is_empty() && Instant::now() < deadline {
+        let _ = session.next_event(Duration::from_millis(20));
+    }
+    session.stop().unwrap();
+    let events = events_until(&mut session, turn_end);
+    assert!(matches!(events.last(), Some(SessionEvent::TurnFinished { outcome: TurnOutcome::Stopped, .. })), "{events:?}");
+    session.shutdown(Duration::from_secs(2)).unwrap();
+    std::fs::remove_dir_all(&base).unwrap();
+}
+
 /// Approvals and questions from Codex are declined in the shape each takes, an unknown request gets
 /// an error answer, and the turn goes on.
 #[test]

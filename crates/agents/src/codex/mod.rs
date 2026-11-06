@@ -113,6 +113,15 @@ pub const DECLINED_REQUESTS: [&str; 7] = [
 const LINES_PER_CALL: u32 = 256;
 /// How long the session waits for the runtime's exit status once its output closed.
 const EXIT_WAIT: Duration = Duration::from_millis(500);
+/// The notifications that belong to one turn (named by `turnId`, or `turn.id`).
+const TURN_NOTIFICATIONS: [&str; 7] =
+    ["turn/started", "turn/completed", "item/started", "item/completed", "item/agentMessage/delta", "error", "thread/tokenUsage/updated"];
+/// The most turn notifications held while Codex has not yet named the running turn.
+const MAX_HELD: usize = 1024;
+/// The most ended or abandoned turns remembered, whose late notifications are ignored.
+const MAX_STALE_TURNS: usize = 64;
+/// The most `turn/start` requests remembered after their deadline, whose late answers are stopped.
+const MAX_LATE_STARTS: usize = 16;
 
 /// How Codex is signed in, without the key.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -368,6 +377,17 @@ fn api_key_login_line(id: u64, key: &Secret) -> Result<Zeroizing<String>, AgentE
     Ok(line)
 }
 
+/// Whom a notification is for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Scope {
+    /// The current turn, or the session.
+    Current,
+    /// The turn being started, before Codex named it.
+    Hold,
+    /// An ended or abandoned turn, or another thread.
+    Other,
+}
+
 /// What a request of the session was for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Purpose {
@@ -417,6 +437,14 @@ pub struct CodexSession {
     awaiting: bool,
     stop_requested: bool,
     interrupt_sent: bool,
+    /// Turn notifications that came while `turn/start` waited for its answer, for the turn it
+    /// names.
+    held: VecDeque<(String, Value)>,
+    /// Turns that ended or were abandoned: their late notifications are ignored.
+    stale_turns: VecDeque<String>,
+    /// `turn/start` requests that passed their deadline, with their thread: a late answer names a
+    /// turn that runs without anyone waiting for it, which is then interrupted.
+    late_starts: VecDeque<(u64, String)>,
     lines_seen: bool,
     shutting_down: bool,
     ended: bool,
@@ -524,6 +552,9 @@ impl CodexSession {
             awaiting: false,
             stop_requested: false,
             interrupt_sent: false,
+            held: VecDeque::new(),
+            stale_turns: VecDeque::new(),
+            late_starts: VecDeque::new(),
             lines_seen: false,
             shutting_down: false,
             ended: false,
@@ -578,11 +609,7 @@ impl CodexSession {
                 match rpc::read_line(&line, self.max_line_bytes) {
                     Incoming::Response { id, result } => match self.requests.close(id) {
                         Some((method, purpose)) => self.answered(purpose, method, result),
-                        None => {
-                            log::debug!("codex answered a request that is not waiting (id {id})");
-                            let event = self.parser.skip(Skipped::Malformed { kind: "response", reason: "it answers no request waiting" });
-                            self.pending.push_back(event);
-                        }
+                        None => self.late_answer(id, result),
                     },
                     Incoming::Notification { method, params } => self.notified(&method, &params),
                     Incoming::Request { id, method, .. } => self.decline(&id, &method),
@@ -609,16 +636,103 @@ impl CodexSession {
         if method == "account/updated" && params.get("authMode").is_some_and(Value::is_null) {
             log::warn!("codex reports that it is no longer signed in");
         }
+        match self.scope(method, params) {
+            Scope::Current => self.deliver(method, params),
+            Scope::Hold if self.held.len() < MAX_HELD => self.held.push_back((method.to_owned(), params.clone())),
+            Scope::Hold => log::warn!("codex sent more than {MAX_HELD} turn notifications before naming the turn; the rest are dropped"),
+            Scope::Other => log::debug!("codex sent {} for a turn or thread that is not current; it was ignored", parse::kind_name(method)),
+        }
+    }
+
+    /// Whom a notification is for. A turn's notifications count only for the open turn whose
+    /// `turn/start` was sent: those for an ended or abandoned turn, another thread, or before the
+    /// turn was asked for change nothing; while Codex has not yet named the turn they are held.
+    fn scope(&self, method: &str, params: &Value) -> Scope {
+        let named = |key: &str| params.get(key).and_then(Value::as_str).map(|v| rpc::capped(v, MAX_NAME_BYTES));
+        if let (Some(thread), Some(ours)) = (named("threadId"), self.thread_id())
+            && thread != ours
+        {
+            return Scope::Other;
+        }
+        if method == "mcpServer/startupStatus/updated" && self.thread_id().is_none() {
+            // A thread whose start was given up on: not this session's.
+            return Scope::Other;
+        }
+        if !TURN_NOTIFICATIONS.contains(&method) {
+            return Scope::Current;
+        }
+        if !self.turn_open || !self.turn_requested {
+            return Scope::Other;
+        }
+        let turn =
+            named("turnId").or_else(|| params.get("turn").and_then(|t| t.get("id")).and_then(Value::as_str).map(|v| rpc::capped(v, MAX_NAME_BYTES)));
+        if turn.as_ref().is_some_and(|t| self.stale_turns.contains(t)) {
+            return Scope::Other;
+        }
+        match (self.parser.turn_id(), turn) {
+            (Some(ours), Some(turn)) if ours != turn => Scope::Other,
+            (Some(_), _) => Scope::Current,
+            (None, _) => Scope::Hold,
+        }
+    }
+
+    /// A notification for the current turn: its events, the copy, and the turn's end.
+    fn deliver(&mut self, method: &str, params: &Value) {
+        // `turn/completed` clears the parser's turn: its id is kept to ignore what comes after.
+        let turn = self.parser.turn_id().map(str::to_owned);
         for event in self.parser.notification(method, params) {
             match &event {
                 SessionEvent::MessageDone { text } => self.history.push(history::Role::Assistant, text.clone()),
                 SessionEvent::TurnFinished { .. } => {
+                    if let Some(turn) = turn.clone() {
+                        self.remember_stale(turn);
+                    }
                     self.turn_closed();
                 }
                 _ => {}
             }
             self.pending.push_back(event);
         }
+    }
+
+    /// The notifications held until Codex named the turn, now for the turn it named.
+    fn release_held(&mut self) {
+        let held: Vec<(String, Value)> = self.held.drain(..).collect();
+        for (method, params) in held {
+            match self.scope(&method, &params) {
+                Scope::Current => self.deliver(&method, &params),
+                // Codex named no turn: what it said meanwhile is taken as this turn's.
+                Scope::Hold => self.deliver(&method, &params),
+                Scope::Other => log::debug!("a held {} was for another turn; it was ignored", parse::kind_name(&method)),
+            }
+        }
+    }
+
+    /// An answer to no waiting request. A late answer to a `turn/start` that passed its deadline
+    /// names a turn nobody waits for: it is remembered as stale and interrupted.
+    fn late_answer(&mut self, id: u64, result: Result<Value, RpcError>) {
+        let Some(at) = self.late_starts.iter().position(|(late, _)| *late == id) else {
+            log::debug!("codex answered a request that is not waiting (id {id})");
+            let event = self.parser.skip(Skipped::Malformed { kind: "response", reason: "it answers no request waiting" });
+            self.pending.push_back(event);
+            return;
+        };
+        let Some((_, thread)) = self.late_starts.remove(at) else { return };
+        let turn = result.ok().and_then(|v| v.get("turn").and_then(|t| t.get("id")).and_then(Value::as_str).map(|t| rpc::capped(t, MAX_NAME_BYTES)));
+        let Some(turn) = turn else { return };
+        log::warn!("codex started a turn after its request's deadline; it is interrupted");
+        self.remember_stale(turn.clone());
+        if let Err(e) = self.request("turn/interrupt", Purpose::Interrupt, json!({ "threadId": thread, "turnId": turn })) {
+            log::warn!("the late turn could not be interrupted: {e}");
+        }
+    }
+
+    /// Remembers a turn whose late notifications are to be ignored.
+    fn remember_stale(&mut self, turn: String) {
+        if self.stale_turns.len() >= MAX_STALE_TURNS {
+            self.stale_turns.pop_front();
+        }
+        self.stale_turns.push_back(turn);
     }
 
     /// Answers a request from Codex with a decline, and logs it.
@@ -687,10 +801,12 @@ impl CodexSession {
                 self.fail_turn(error);
             }
             (Purpose::TurnStart, Ok(value)) => {
-                if let Some(id) = value.get("turn").and_then(|t| t.get("id")).and_then(Value::as_str) {
-                    self.parser.turn_started(id);
+                match value.get("turn").and_then(|t| t.get("id")).and_then(Value::as_str) {
+                    Some(id) => self.parser.turn_started(id),
+                    None => log::warn!("codex started a turn without naming it"),
                 }
-                if self.stop_requested {
+                self.release_held();
+                if self.stop_requested && self.turn_open {
                     self.interrupt();
                 }
             }
@@ -702,7 +818,7 @@ impl CodexSession {
 
     /// Requests that waited past their deadline.
     fn expire(&mut self, now: Instant) {
-        for (_, method, purpose) in self.requests.expired(now) {
+        for (id, method, purpose) in self.requests.expired(now) {
             if matches!(purpose, Purpose::ThreadStart | Purpose::Inject) {
                 self.awaiting = false;
             }
@@ -711,9 +827,25 @@ impl CodexSession {
                 Purpose::Initialize | Purpose::Login | Purpose::AccountRead => self.fail(error),
                 Purpose::ThreadStart => {
                     self.thread = Thread::None;
-                    self.fail_turn(error);
+                    self.abandon_turn(error);
                 }
-                Purpose::Inject | Purpose::TurnStart => self.fail_turn(error),
+                // Codex may still take the request: the thread is left, so the next message starts
+                // a fresh one (with the copy) instead of adding the earlier messages twice or
+                // joining a turn that runs after all; a late `turn/start` answer is interrupted.
+                Purpose::Inject => {
+                    self.thread = Thread::None;
+                    self.abandon_turn(error);
+                }
+                Purpose::TurnStart => {
+                    if let Thread::Ready(thread) = std::mem::replace(&mut self.thread, Thread::None) {
+                        if self.late_starts.len() >= MAX_LATE_STARTS {
+                            self.late_starts.pop_front();
+                        }
+                        self.late_starts.push_back((id, thread));
+                    }
+                    self.inject = !self.history.entries().is_empty();
+                    self.abandon_turn(error);
+                }
                 Purpose::Interrupt => log::warn!("{error}"),
             }
         }
@@ -799,6 +931,10 @@ impl CodexSession {
 
     /// The turn ended: the session takes the next message, and the copy is written.
     fn turn_closed(&mut self) {
+        if let Some(turn) = self.parser.turn_id().map(str::to_owned) {
+            self.remember_stale(turn);
+        }
+        self.held.clear();
         self.parser.reset_turn();
         self.turn_open = false;
         self.turn_requested = false;
@@ -816,6 +952,16 @@ impl CodexSession {
         if self.turn_open {
             self.turn_closed();
             self.pending.push_back(SessionEvent::TurnFinished { outcome, usage: Default::default() });
+        }
+    }
+
+    /// Ends the open turn whose request went unanswered: as stopped when a stop was asked for,
+    /// else failed with `error`.
+    fn abandon_turn(&mut self, error: AgentError) {
+        if self.stop_requested {
+            self.finish_turn(TurnOutcome::Stopped);
+        } else {
+            self.fail_turn(error);
         }
     }
 

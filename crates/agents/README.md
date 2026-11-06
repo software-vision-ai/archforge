@@ -251,6 +251,15 @@ model?}`. `Started` comes with the thread (its id and model) and again with each
 `turn/completed` `TurnFinished` (`completed`, `interrupted` → `Stopped`, `failed`), with the tokens
 of every `thread/tokenUsage/updated` in the turn summed. `stop` sends `turn/interrupt {threadId,
 turnId}` once Codex named the turn; a message still waiting for its thread is dropped as stopped.
+A turn's notifications (`turn/*`, `item/*`, `error`, `thread/tokenUsage/updated`) count only for
+the open turn whose `turn/start` was sent: those for another thread, an ended or abandoned turn (the
+last 64 are remembered), or before the turn was asked for change nothing, neither the events nor
+the copy; those that come before Codex named the turn are held (at most 1024) and then given to the
+turn it names. A `turn/start` past its deadline fails the turn (as stopped when a stop was asked
+for), and its thread is left: the next message starts a fresh thread with the copy, so it can never
+join a turn Codex started after all; a late answer names that turn, which is interrupted while the
+current turn goes on. A `thread/inject_items` past its deadline leaves its thread too, so the
+earlier messages are never given twice.
 There is no signal fallback: SIGINT ends `codex app-server`. Shutdown closes the input (Codex exits
 0), then terminates and kills as for every runtime.
 
