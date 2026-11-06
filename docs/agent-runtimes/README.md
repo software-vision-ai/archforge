@@ -88,14 +88,14 @@ What was observed is marked **observed**; what comes from the providers' documen
 # SESSION_ID: the conversation's UUID. For a stored conversation, --resume replaces --session-id.
 claude -p --bare \
   --input-format stream-json --output-format stream-json --verbose --include-partial-messages \
-  --mcp-config "$CONVERSATION/mcp.json" --strict-mcp-config \
+  --mcp-config "$CONVERSATION/claude-mcp.json" --strict-mcp-config \
   --tools "" --allowedTools "mcp__archforge__*" \
   --permission-mode dontAsk \
   --model "$MODEL" \
   --session-id "$SESSION_ID"
 ```
 
-The tool server configuration in `$CONVERSATION/mcp.json`, as the Claude adapter writes it
+The tool server configuration in `$CONVERSATION/claude-mcp.json` (`MCP_CONFIG_FILE`), as the Claude adapter writes it
 (`crates/agents/src/claude/mod.rs`; `HOME` and `XDG_CONFIG_HOME` are the person's own, the latter
 only where it is set, as on some Linux systems):
 
@@ -375,9 +375,13 @@ names the computer's host name and an installation id (sanitised in the fixtures
   `bespoke_event_handling.rs`): the `turn/start` response has `startedAt`, `completedAt` and
   `durationMs` null, no items and `itemsView:"notLoaded"`; `turn/started` carries `startedAt`
   (seconds); `turn/completed` carries the times and, when the turn produced a final agent message,
-  that one item with `itemsView:"summary"`, otherwise no items and `"notLoaded"`. Item times are on
-  the notifications, not the items: `item/started` has `startedAtMs`, `item/completed` has
-  `completedAtMs` (milliseconds); a `ThreadItem` has neither.
+  that one item with `itemsView:"summary"`, otherwise no items and `"notLoaded"`. Item times are in
+  milliseconds in two places: `item/started` carries `startedAtMs` and `item/completed` carries
+  `completedAtMs` (both required), and every `ThreadItem` also carries its own `startedAtMs` and
+  `completedAtMs`, each `null` when not recorded (in the generated schema they sit beside the
+  variants, at the top level of `ThreadItem`; in the source the payload is flattened into a struct
+  with the two times). An item in `item/started` has its start and `completedAtMs: null`; in
+  `item/completed` and in a turn's summary it has both.
 - `turn/interrupt {threadId, turnId}` → `{}` and `turn/completed` with `status:"interrupted"` (doc).
 - `error {error{message, codexErrorInfo}, willRetry, threadId, turnId}`: with `willRetry:true` the
   turn goes on (show "retrying"); otherwise a failed `turn/completed` follows (doc).
