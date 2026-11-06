@@ -195,6 +195,28 @@ fn two_elements_of_one_kind_named_alike_are_refused_by_every_command() {
     refused(&mut s, "element.remove", json!({ "ids": [gone] }), "Sales has an interface named payable already");
 }
 
+/// A nested package removed hands up an element named like itself, since it goes; a clash with
+/// another of its parent's elements is still refused.
+#[test]
+fn a_removed_package_hands_up_an_element_of_its_own_name() {
+    let (mut s, sales) = project();
+    let billing = run(&mut s, "uml.package.add", json!({ "parent": sales, "name": "Billing" }));
+    let inner = run(&mut s, "uml.package.add", json!({ "parent": billing, "name": "billing" }));
+    let class = run(&mut s, "uml.class.add", json!({ "package": billing, "name": "Billing" }));
+    let audit = run(&mut s, "uml.package.add", json!({ "parent": billing, "name": "Audit" }));
+    run(&mut s, "uml.package.add", json!({ "parent": sales, "name": "AUDIT" }));
+    refused(&mut s, "element.remove", json!({ "ids": [billing] }), "Sales has a package named Audit already");
+    run(&mut s, "uml.package.rename", json!({ "package": audit, "name": "Reports" }));
+    run(&mut s, "element.remove", json!({ "ids": [billing] }));
+    let st = s.doc();
+    let sales = st.by_uuid(Uuid::parse(&sales).unwrap()).unwrap();
+    for id in [&inner, &class] {
+        let o = st.by_uuid(Uuid::parse(id).unwrap()).unwrap();
+        assert!(st.is_alive(o) && archforge_uml::commands::package_of(st, o) == Some(sales), "{id} is handed up to Sales");
+    }
+    reopens(st).unwrap();
+}
+
 /// The id of the generalization set generalization `g` is in.
 fn set_of(s: &Session, g: &str) -> String {
     let st = s.doc();

@@ -689,7 +689,8 @@ fn hand_up_problem(store: &Store, pkg: Obj, parent: Obj) -> Option<String> {
         {
             return Some(why);
         }
-        if let Some(s) = crate::names::clash(store, parent, class, &n, None) {
+        // The package itself goes, so its own name is free for what it hands up.
+        if let Some(s) = crate::names::clash(store, parent, class, &n, Some(pkg)) {
             return Some(format!("{} has {} named {n} already", name_of(store, parent), a_what(store, s)));
         }
     }
