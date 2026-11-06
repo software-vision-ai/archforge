@@ -123,19 +123,23 @@ a folder not private to this user; `remove_dir_all` never follows a link inside 
 first. A probe folder that could not be removed stays as `probe-<pid>-<n>` and is logged.
 
 **The Claude adapter** (`claude`, AR-201, after the AR-196 spike's note). `ClaudeSession::start`
-writes the tool server configuration and starts
+writes the tool server configuration and starts, in a cleared environment and the conversation's
+`work` folder (shown here with shell variables for the parts that vary)
 
 ```sh
-claude -p --bare --input-format stream-json --output-format stream-json --verbose \
-  --include-partial-messages --mcp-config <conversation>/claude-mcp.json --strict-mcp-config \
+cd "$CONVERSATION/work" && env -i PATH="$PATH" HOME="$CONVERSATION/home" TMPDIR="$CONVERSATION/tmp" \
+  CLAUDE_CONFIG_DIR="$CONVERSATION/config" CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
+  claude -p --bare --input-format stream-json --output-format stream-json --verbose \
+  --include-partial-messages --mcp-config "$CONVERSATION/claude-mcp.json" --strict-mcp-config \
   --tools "" --allowedTools "mcp__archforge__*" --permission-mode dontAsk \
-  --model <model> --session-id <uuid>      # or --resume <uuid>
+  --model "$MODEL" --session-id "$SESSION_UUID"
 ```
 
-with `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` and the key as `ANTHROPIC_API_KEY`, its only way
-in. The model is named on every start, as a resume does not keep it; the session id is the
+A resume passes `--resume "$SESSION_UUID"` in place of `--session-id`. The adapter adds the key as
+`ANTHROPIC_API_KEY` to that environment, its only way in, and never to a command line (which is why
+the example leaves it out). The model is named on every start, as a resume does not keep it; the session id is the
 conversation's UUID, and the transcripts stay under the conversation's `CLAUDE_CONFIG_DIR`. The
-configuration names one server:
+configuration names one server (`XDG_CONFIG_HOME` joins `HOME` in `env` where it is set):
 
 ```json
 {"mcpServers":{"archforge":{"command":"<abs>/archforge-cli",
@@ -186,30 +190,46 @@ line is parsed into a whole `serde_json::Value`, which may take several times th
 
 **The Codex adapter** (`codex`, AR-202, after the AR-196 spike's note). One `codex app-server`
 process per conversation, driven over JSON-RPC 2.0 on its standard input and output (one object a
-line, no `jsonrpc` field). `CodexSession::start` starts
+line, no `jsonrpc` field). `CodexSession::start` starts, in a cleared environment and the
+conversation's `work` folder, with the workspace's shared account folder as `CODEX_HOME` (shown here
+with shell variables for the parts that vary)
 
 ```sh
-codex app-server --strict-config \
-  -c cli_auth_credentials_store="ephemeral"   # "keyring" for ChatGPT
-  -c forced_login_method="api"                # "chatgpt"
-  -c history.persistence="none" -c analytics.enabled=false -c check_for_update_on_startup=false \
-  -c web_search="disabled" -c approval_policy="on-request" -c sandbox_mode="read-only" \
-  -c sqlite_home="<conversation>/config/codex-state" -c log_dir="<conversation>/config/codex-log" \
-  -c mcp_servers.archforge.command="<abs>/archforge-cli" \
-  -c mcp_servers.archforge.args=["mcp","--bridge","<port>","--read-only","--origin","<label>"] \
-  -c mcp_servers.archforge.env={HOME="<the person's home>"} \
-  -c mcp_servers.archforge.startup_timeout_sec=10 -c mcp_servers.archforge.tool_timeout_sec=60 \
-  -c mcp_servers.archforge.default_tools_approval_mode="approve" \
+cd "$CONVERSATION/work" && env -i PATH="$PATH" HOME="$CONVERSATION/home" TMPDIR="$CONVERSATION/tmp" \
+  CODEX_HOME="$WORKSPACE/account-codex/config" \
+  codex app-server --strict-config \
+  -c 'cli_auth_credentials_store="ephemeral"' \
+  -c 'forced_login_method="api"' \
+  -c 'history.persistence="none"' \
+  -c 'analytics.enabled=false' \
+  -c 'check_for_update_on_startup=false' \
+  -c 'web_search="disabled"' \
+  -c 'approval_policy="on-request"' \
+  -c 'sandbox_mode="read-only"' \
+  -c "sqlite_home=\"$CONVERSATION/config/codex-state\"" \
+  -c "log_dir=\"$CONVERSATION/config/codex-log\"" \
+  -c "mcp_servers.archforge.command=\"$ARCHFORGE_CLI\"" \
+  -c "mcp_servers.archforge.args=[\"mcp\",\"--bridge\",\"$PORT\",\"--read-only\",\"--origin\",\"$ORIGIN\"]" \
+  -c "mcp_servers.archforge.env={HOME=\"$PERSON_HOME\"}" \
+  -c 'mcp_servers.archforge.startup_timeout_sec=10' \
+  -c 'mcp_servers.archforge.tool_timeout_sec=60' \
+  -c 'mcp_servers.archforge.default_tools_approval_mode="approve"' \
   --disable shell_tool --disable unified_exec --disable apps --disable plugins --disable multi_agent \
   --disable view_image --disable image_generation --disable browser_use --disable computer_use \
   --disable goals --disable hooks --disable skill_search --disable tool_suggest --disable sleep_tool \
   --disable memories --disable shell_snapshot
 ```
 
-Every value is a TOML basic string with quotes, backslashes and control characters escaped, so no
-label can end it. `--strict-config` makes Codex refuse an unknown key or feature before reading its
-input; the whole line was accepted by codex-cli 0.166.0 offline. `--read-only` goes only when "Allow
-changes" is off; the origin label is the conversation's. `apply_patch` has no switch: the read-only
+That is an API-key conversation: a ChatGPT one passes `cli_auth_credentials_store="keyring"` and
+`forced_login_method="chatgpt"` instead, and `DBUS_SESSION_BUS_ADDRESS` and `XDG_RUNTIME_DIR` on
+Linux. `--read-only` goes only when "Allow changes" is off; the origin label is the conversation's;
+`XDG_CONFIG_HOME` joins `HOME` in `env` where it is set. The shell variables above must hold no `"`
+or `\`; the adapter writes every value as a TOML basic string itself, with quotes, backslashes and
+control characters escaped, so no label can end it. An account process (Settings) passes the same
+switches but no tool server, and its own `sqlite_home` and `log_dir` under the account's `tmp`.
+`--strict-config` makes Codex refuse an unknown key or feature before reading its input; the
+example above, run offline, was accepted by codex-cli 0.166.0 and answered `initialize`.
+`apply_patch` has no switch: the read-only
 sandbox and the declined approvals hold it back. The bridge's tool calls are not asked about
 (`approve`): its own `--read-only` is the guard.
 
