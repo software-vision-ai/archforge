@@ -11,6 +11,11 @@
 //! finished) and `app.saved` (how the save with that ticket went, whichever tab is shown by then).
 //! Unknown methods and
 //! parameter keys are refused, naming the accepted ones (CS-3).
+//!
+//! A request may come with an origin, the label of who sent it (`archforge-cli mcp --origin`), set
+//! beside the parameters by the channel and checked there: the undo step an `engine.execute` or an
+//! `engine.batch` makes carries it and is labelled `<origin>: <label>`, the result gives it back,
+//! and `document.inspect` names the origin of the steps undo and redo would take.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, Ordering};
@@ -25,6 +30,8 @@ use crate::{SaveState, Shell};
 pub struct ControlRequest {
     pub method: String,
     pub params: Value,
+    /// Who sent it, when the sender gave a label (already checked by the channel).
+    pub origin: Option<String>,
     pub reply: std::sync::mpsc::Sender<Result<Value, String>>,
     pub state: Arc<AtomicU8>,
 }
@@ -63,6 +70,10 @@ pub const METHODS: [(&str, &[&str]); 10] = [
     ("app.saved", &["ticket"]),
 ];
 
+/// The methods that only read: they change neither the model, its history nor the view. Every
+/// other method of [`METHODS`] may change something.
+pub const READS: [&str; 5] = ["engine.commands", "engine.describe", "document.inspect", "ui.inspect", "app.saved"];
+
 /// Answers the requests waiting on the channel, at most [`PER_FRAME`] of them.
 pub(crate) fn drain(shell: &mut Shell) {
     for _ in 0..PER_FRAME {
@@ -72,13 +83,18 @@ pub(crate) fn drain(shell: &mut Shell) {
         if req.state.compare_exchange(WAITING, TAKEN, Ordering::SeqCst, Ordering::SeqCst).is_err() {
             continue;
         }
-        let answer = answer(shell, &req.method, &req.params);
+        let answer = answer_from(shell, &req.method, &req.params, req.origin.as_deref());
         let _ = req.reply.send(answer);
     }
 }
 
-/// Answers one request.
+/// Answers one request from the user's own side: its changes have no origin.
 pub fn answer(shell: &mut Shell, method: &str, params: &Value) -> Result<Value, String> {
+    answer_from(shell, method, params, None)
+}
+
+/// Answers one request sent on behalf of `origin`: the undo steps it makes carry the origin.
+pub fn answer_from(shell: &mut Shell, method: &str, params: &Value, origin: Option<&str>) -> Result<Value, String> {
     let Some((_, keys)) = METHODS.iter().find(|(m, _)| *m == method) else {
         let all: Vec<&str> = METHODS.iter().map(|(m, _)| *m).collect();
         return Err(format!("unknown method {method:?}; the methods are {}", all.join(", ")));
@@ -98,7 +114,7 @@ pub fn answer(shell: &mut Shell, method: &str, params: &Value) -> Result<Value, 
         "ui.inspect" => {
             Ok(json!({ "controls": shell.widgets().iter().map(|w| json!({ "id": w.id, "kind": w.kind, "rect": w.rect })).collect::<Vec<_>>() }))
         }
-        _ => engine(shell, method, params),
+        _ => engine(shell, method, params, origin),
     }
 }
 
@@ -118,6 +134,8 @@ fn inspect(shell: &Shell) -> Value {
         "save_error": shell.save_error,
         "undo": session.undo_label(),
         "redo": session.redo_label(),
+        "undo_origin": session.undo_origin(),
+        "redo_origin": session.redo_origin(),
         "selection": ids(&session.view().selection),
         "diagram": shell.canvas.active.map(|d| d.to_string()),
         "tabs": shell.canvas.tabs.iter().map(|t| t.to_string()).collect::<Vec<_>>(),
@@ -169,7 +187,17 @@ fn saved(shell: &Shell, params: &Value) -> Result<Value, String> {
     }
 }
 
-fn engine(shell: &mut Shell, method: &str, params: &Value) -> Result<Value, String> {
+/// A change's answer: the result under `key`, the undo step now on top, and the origin it was made
+/// for when there is one.
+fn changed(key: &str, value: Value, undo: Option<&str>, origin: Option<&str>) -> Value {
+    let mut answer = json!({ key: value, "undo": undo });
+    if let Some(o) = origin {
+        answer["origin"] = Value::String(o.to_string());
+    }
+    answer
+}
+
+fn engine(shell: &mut Shell, method: &str, params: &Value, origin: Option<&str>) -> Result<Value, String> {
     let Some(session) = shell.session.as_mut() else { return Err("no project is open in Archforge; open one first".into()) };
     let text = |key: &str| params.get(key).and_then(Value::as_str);
     match method {
@@ -192,8 +220,8 @@ fn engine(shell: &mut Shell, method: &str, params: &Value) -> Result<Value, Stri
         "engine.execute" => {
             let id = text("command").ok_or("engine.execute needs command, a command id")?;
             let args = params.get("params").cloned().unwrap_or_else(|| json!({}));
-            let out = session.execute(id, &args).map_err(|e| e.to_string())?;
-            Ok(json!({ "result": out.value, "undo": session.undo_label() }))
+            let out = session.execute_from(id, &args, origin).map_err(|e| e.to_string())?;
+            Ok(changed("result", out.value, session.undo_label(), origin))
         }
         "engine.batch" => {
             let steps = params.get("steps").and_then(Value::as_array).ok_or("engine.batch needs steps, a list of {command, params}")?;
@@ -205,7 +233,7 @@ fn engine(shell: &mut Shell, method: &str, params: &Value) -> Result<Value, Stri
             let mut held = 0usize;
             // A step's own problem, kept to report once the batch has rolled back.
             let mut problem: Option<String> = None;
-            let outcome = session.batch(&label, |b| {
+            let outcome = session.batch_from(&label, origin, |b| {
                 for (n, step) in steps.iter().enumerate() {
                     let mut stop = |why: String| {
                         problem = Some(format!("step {n}: {why}"));
@@ -237,7 +265,7 @@ fn engine(shell: &mut Shell, method: &str, params: &Value) -> Result<Value, Stri
             if let Err(e) = outcome {
                 return Err(format!("the batch was rolled back: {}", problem.unwrap_or_else(|| e.to_string())));
             }
-            Ok(json!({ "results": results, "undo": session.undo_label() }))
+            Ok(changed("results", Value::Array(results), session.undo_label(), origin))
         }
         "engine.undo" => session.undo().map(|label| json!({ "undone": label })).map_err(|e| e.to_string()),
         "engine.redo" => session.redo().map(|label| json!({ "redone": label })).map_err(|e| e.to_string()),

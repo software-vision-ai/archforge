@@ -35,6 +35,7 @@ is and clears the history it belonged to.
 | `Session::counter`, `Ctx::fresh` | the counter new ids come from: outside undo, so an id is never given twice |
 | `Session::execute` | `pub fn execute(&mut self, id: &str, params: &Value) -> Result<Outcome, EngineError>` |
 | `Session::{undo, redo, batch, replay}` | history, several commands as one step, a journal entry again |
+| `Session::{execute_from, batch_from}`, `Session::{undo_origin, redo_origin}` | a call or a batch on behalf of an origin (a chat): its step carries the origin, is labelled `<origin>: <label>` and never merges into another origin's step; the origin of the steps undo and redo would take |
 | `Session::{begin_interaction, preview, commit, cancel}` | a gesture: previews on the state before it, one step at the end |
 | `Session::{is_dirty, mark_saved, mark_unsaved, journal, dropped}` | unsaved changes (or none saved yet), the tail log, what the caps dropped |
 | `Document` | what undo covers: `begin`, `end` (the recorded delta), `apply` (all or nothing), `invert`, `compose`, `is_empty`, `weight` |

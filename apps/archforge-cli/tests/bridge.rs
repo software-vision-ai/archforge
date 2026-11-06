@@ -34,7 +34,7 @@ fn an_agent_drives_the_application_through_the_real_binary() {
     let (home, settings) = home("bridge");
     let seen: Arc<Mutex<Vec<(String, Value)>>> = Arc::default();
     let log = seen.clone();
-    let handler: archforge_control::Handler = Arc::new(move |method, params| {
+    let handler: archforge_control::Handler = Arc::new(move |method, params, _origin| {
         log.lock().unwrap().push((method.to_string(), params.clone()));
         match method {
             "engine.execute" => Ok(json!({ "result": { "id": "e1" }, "undo": "Add entity" })),
@@ -78,5 +78,91 @@ fn an_agent_drives_the_application_through_the_real_binary() {
     assert!(String::from_utf8_lossy(&gone.stderr).contains("--control"));
     // A usage error exits 2.
     assert_eq!(cli(&home).args(["app"]).output().unwrap().status.code(), Some(2));
+    let _ = std::fs::remove_dir_all(&home);
+}
+
+/// Runs the real MCP server with `flags` against `port`, sends `messages` and gives the replies.
+fn session(home: &Path, port: &str, flags: &[&str], messages: &[Value]) -> Vec<Value> {
+    let mut child = cli(home).args(["mcp", "--bridge", port]).args(flags).stdin(Stdio::piped()).stdout(Stdio::piped()).spawn().unwrap();
+    let mut input = child.stdin.take().unwrap();
+    for m in messages {
+        writeln!(input, "{m}").unwrap();
+    }
+    drop(input);
+    let replies = BufReader::new(child.stdout.take().unwrap()).lines().map(|l| serde_json::from_str(&l.unwrap()).unwrap()).collect();
+    assert!(child.wait().unwrap().success());
+    replies
+}
+
+fn call(id: u64, name: &str, arguments: Value) -> Value {
+    json!({ "jsonrpc": "2.0", "id": id, "method": "tools/call", "params": { "name": name, "arguments": arguments } })
+}
+
+/// `--origin` set by the parent goes with every request beside the parameters, and nothing the
+/// agent sends changes it; `--read-only` refuses a change before it leaves the server; a bad
+/// origin is a usage error before any I/O.
+#[cfg(unix)]
+#[test]
+fn the_origin_comes_from_the_command_line_alone_and_read_only_refuses_changes_in_the_real_binary() {
+    let (home, settings) = home("origin");
+    let seen: Arc<Mutex<Vec<(String, Value, Option<String>)>>> = Arc::default();
+    let log = seen.clone();
+    let handler: archforge_control::Handler = Arc::new(move |method, params, origin| {
+        log.lock().unwrap().push((method.to_string(), params.clone(), origin.map(str::to_string)));
+        Ok(json!({ "result": { "id": "e1" }, "undo": origin.map(|o| format!("{o}: Add entity")), "origin": origin }))
+    });
+    let server = archforge_control::Server::start(0, &settings, handler).unwrap();
+    let port = server.port().to_string();
+
+    let replies = session(
+        &home,
+        &port,
+        &["--origin", "Chat 1"],
+        &[
+            call(1, "er_entity_add", json!({ "schema": "s1", "name": "Invoice" })),
+            // An origin among the arguments is no argument of the tool.
+            call(2, "execute_command", json!({ "command": "er.entity.add", "params": { "schema": "s1" }, "origin": "Spoof" })),
+            // Through call_app it stays a parameter, which the window refuses as unknown; the
+            // request's own origin is still the command line's.
+            call(3, "call_app", json!({ "method": "engine.execute", "params": { "command": "er.entity.add", "origin": "Spoof" } })),
+        ],
+    );
+    assert_eq!(replies.len(), 3);
+    assert_eq!(replies[0]["result"]["isError"], false, "{}", replies[0]);
+    let text: Value = serde_json::from_str(replies[0]["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!((text["undo"].as_str(), text["origin"].as_str()), (Some("Chat 1: Add entity"), Some("Chat 1")));
+    assert!(replies[1]["result"]["content"][0]["text"].as_str().unwrap().contains("no argument \"origin\""), "{}", replies[1]);
+    let got = seen.lock().unwrap().clone();
+    assert_eq!(got.len(), 2, "the refused call reached nothing: {got:?}");
+    assert!(got.iter().all(|(_, _, o)| o.as_deref() == Some("Chat 1")), "{got:?}");
+    assert_eq!(got[1].1, json!({ "command": "er.entity.add", "origin": "Spoof" }), "a parameter, never the request's origin");
+
+    // Read-only: only reads are listed, and a change is refused by name before it is sent.
+    seen.lock().unwrap().clear();
+    let replies = session(
+        &home,
+        &port,
+        &["--read-only"],
+        &[
+            json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" }),
+            call(2, "er_entity_add", json!({ "schema": "s1" })),
+            call(3, "inspect_document", json!({})),
+        ],
+    );
+    let tools = replies[0]["result"]["tools"].as_array().unwrap();
+    assert!(tools.iter().all(|t| t["annotations"]["readOnlyHint"] == true) && tools.iter().any(|t| t["name"] == "er_entity_list"));
+    assert_eq!(replies[1]["error"]["code"], -32004, "{}", replies[1]);
+    assert_eq!(replies[1]["error"]["data"]["tool"], "er_entity_add");
+    assert_eq!(replies[2]["result"]["isError"], false);
+    let got = seen.lock().unwrap().clone();
+    assert_eq!(got.iter().map(|(m, _, o)| (m.as_str(), o.clone())).collect::<Vec<_>>(), [("document.inspect", None)]);
+
+    // A bad origin exits 2 and says why.
+    for bad in ["", "Chat\n1", " Chat", "Chat\u{202E}1"] {
+        let out = cli(&home).args(["mcp", "--bridge", &port, "--origin", bad]).stdin(Stdio::null()).output().unwrap();
+        assert_eq!(out.status.code(), Some(2), "{bad:?}");
+        assert!(String::from_utf8_lossy(&out.stderr).contains("--origin"), "{bad:?}");
+    }
+    drop(server);
     let _ = std::fs::remove_dir_all(&home);
 }

@@ -67,12 +67,23 @@ pub struct Dropped {
     pub journal: u64,
 }
 
-/// One undo or redo step: the forward delta, the state id before it, its label and weight.
+/// One undo or redo step: the forward delta, the state id before it, its label, its origin (who
+/// made it, when not the user at the window) and weight.
 struct Step<X> {
     delta: X,
     id: u64,
     label: String,
+    origin: Option<String>,
     weight: usize,
+}
+
+/// A step's label as the history shows it: the command's or the batch's own, after its origin when
+/// it has one (`Chat 1: Add entity`).
+fn labelled(label: &str, origin: Option<&str>) -> String {
+    match origin {
+        Some(o) => format!("{o}: {label}"),
+        None => label.to_string(),
+    }
 }
 
 /// A gesture in progress: the command it runs, the view and counter before it, and its last good
@@ -206,6 +217,17 @@ impl<D: Document, V: View<D>> Session<D, V> {
 
     pub fn redo_label(&self) -> Option<&str> {
         self.redo.last().map(|s| s.label.as_str())
+    }
+
+    /// The origin of the step undo would take back: none when the user made it at the window or
+    /// there is no step.
+    pub fn undo_origin(&self) -> Option<&str> {
+        self.undo.last().and_then(|s| s.origin.as_deref())
+    }
+
+    /// The origin of the step redo would apply again.
+    pub fn redo_origin(&self) -> Option<&str> {
+        self.redo.last().and_then(|s| s.origin.as_deref())
     }
 
     /// The document's state: it changes with every change, and undo and redo bring an earlier
@@ -384,6 +406,12 @@ impl<D: Document, V: View<D>> Session<D, V> {
 
     /// Runs the command `id` with `params`.
     pub fn execute(&mut self, id: &str, params: &Value) -> Result<Outcome, EngineError> {
+        self.execute_from(id, params, None)
+    }
+
+    /// [`Session::execute`] on behalf of `origin` (a chat, say): the undo step it makes carries the
+    /// origin and is labelled with it, and it never merges into a step of another origin.
+    pub fn execute_from(&mut self, id: &str, params: &Value, origin: Option<&str>) -> Result<Outcome, EngineError> {
         let (spec, docs) = self.spec(id)?;
         let is_query = !spec.journal && !spec.undoable && matches!(spec.handler, Handler::Run(_));
         if self.interaction.is_some() && !is_query {
@@ -429,8 +457,10 @@ impl<D: Document, V: View<D>> Session<D, V> {
             let key = params.coalesce().map(str::to_string);
             let chain = self.chain.take();
             let same_chain = matches!((&chain, &key), (Some((cid, ck)), Some(k)) if *cid == spec.id && ck == k);
+            // A gesture continues only from the same origin.
+            let same_origin = self.undo.last().is_some_and(|s| s.origin.as_deref() == origin);
             self.clear_redo();
-            if same_chain && !self.undo.is_empty() {
+            if same_chain && same_origin {
                 cleared = self.merge_into_top(spec.id, delta, weight)?;
                 if !cleared {
                     self.chain = chain;
@@ -438,7 +468,8 @@ impl<D: Document, V: View<D>> Session<D, V> {
             } else {
                 let before_id = self.id;
                 self.id = self.fresh_id();
-                cleared = self.push_undo(Step { delta, id: before_id, label: spec.label.to_string(), weight });
+                let step = Step { delta, id: before_id, label: labelled(spec.label, origin), origin: origin.map(str::to_string), weight };
+                cleared = self.push_undo(step);
                 self.chain = if cleared { None } else { key.map(|k| (spec.id, k)) };
             }
         } else if matches!((&self.chain, params.coalesce()), (Some((cid, ck)), Some(k)) if *cid == spec.id && ck == k) {
@@ -456,7 +487,7 @@ impl<D: Document, V: View<D>> Session<D, V> {
     /// that ends where the step began removes the step. Gives whether the history was cleared.
     fn merge_into_top(&mut self, id: &str, delta: D::Delta, weight: usize) -> Result<bool, EngineError> {
         let Some(top) = self.undo.pop() else { return Ok(false) };
-        let (top_delta, top_id, top_label, top_weight) = (top.delta.clone(), top.id, top.label.clone(), top.weight);
+        let (top_delta, top_id, top_label, top_origin, top_weight) = (top.delta.clone(), top.id, top.label.clone(), top.origin.clone(), top.weight);
         let composed = match guard(id, || {
             let composed = D::compose(top.delta, delta.clone());
             let empty = D::is_empty(&composed);
@@ -466,7 +497,7 @@ impl<D: Document, V: View<D>> Session<D, V> {
             Ok(c) => c,
             Err(e) => {
                 // The step stays as it was; the new change is taken back.
-                self.undo.push(Step { delta: top_delta, id: top_id, label: top_label, weight: top_weight });
+                self.undo.push(Step { delta: top_delta, id: top_id, label: top_label, origin: top_origin, weight: top_weight });
                 let view = self.view.clone();
                 let next = self.counter;
                 self.roll_back(id, Some(delta), view, next)?;
@@ -481,7 +512,7 @@ impl<D: Document, V: View<D>> Session<D, V> {
         }
         let _ = weight;
         self.id = self.fresh_id();
-        Ok(self.push_undo(Step { delta: composed, id: top_id, label: top_label, weight: composed_weight }))
+        Ok(self.push_undo(Step { delta: composed, id: top_id, label: top_label, origin: top_origin, weight: composed_weight }))
     }
 
     /// Restores the state before the last step and journals it; gives that step's label.
@@ -525,7 +556,7 @@ impl<D: Document, V: View<D>> Session<D, V> {
             return Err(e);
         }
         let s = if undo { self.undo.pop() } else { self.redo.pop() }.ok_or_else(|| disabled(id, reason))?;
-        let current = Step { delta: s.delta, id: self.id, label: s.label.clone(), weight: s.weight };
+        let current = Step { delta: s.delta, id: self.id, label: s.label.clone(), origin: s.origin, weight: s.weight };
         self.id = s.id;
         if undo {
             self.redo.push(current)
@@ -541,6 +572,17 @@ impl<D: Document, V: View<D>> Session<D, V> {
     /// Several commands as one undo step and one journal entry, or nothing when any fails. Gives the
     /// commands' results in order.
     pub fn batch(&mut self, label: &str, f: impl FnOnce(&mut Batch<'_, D, V>) -> Result<(), EngineError>) -> Result<Outcome, EngineError> {
+        self.batch_from(label, None, f)
+    }
+
+    /// [`Session::batch`] on behalf of `origin`: its one undo step carries the origin and is
+    /// labelled with it. `label` is held to its cap before the origin goes in front.
+    pub fn batch_from(
+        &mut self,
+        label: &str,
+        origin: Option<&str>,
+        f: impl FnOnce(&mut Batch<'_, D, V>) -> Result<(), EngineError>,
+    ) -> Result<Outcome, EngineError> {
         self.no_interaction()?;
         self.healthy()?;
         if label.len() > MAX_LABEL {
@@ -586,7 +628,7 @@ impl<D: Document, V: View<D>> Session<D, V> {
             self.clear_redo();
             let before_id = self.id;
             self.id = self.fresh_id();
-            cleared = self.push_undo(Step { delta, id: before_id, label: label.to_string(), weight });
+            cleared = self.push_undo(Step { delta, id: before_id, label: labelled(label, origin), origin: origin.map(str::to_string), weight });
         }
         if doc_changed || view_changed {
             self.log(JournalEntry::Batch { label: label.to_string(), commands }, next0);
@@ -671,7 +713,7 @@ impl<D: Document, V: View<D>> Session<D, V> {
                 self.clear_redo();
                 let before_id = self.id;
                 self.id = self.fresh_id();
-                let cleared = self.push_undo(Step { delta, id: before_id, label, weight });
+                let cleared = self.push_undo(Step { delta, id: before_id, label, origin: None, weight });
                 // A gesture is one step of its own: its coalescing key is not kept.
                 let mut p = params.to_value();
                 if let Value::Object(m) = &mut p {

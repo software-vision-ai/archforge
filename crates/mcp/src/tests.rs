@@ -476,3 +476,96 @@ fn save_project_follows_its_save_by_the_ticket_until_it_is_done() {
     let script = Script(RefCell::new(vec![("app.save", json!({}), Ok(json!({ "saving": false, "saved": true, "unsaved": false })))]));
     assert_eq!(serde_json::from_str::<Value>(save(&script)["content"][0]["text"].as_str().unwrap()).unwrap()["saved"], true);
 }
+
+/// A tools/call message.
+fn tool_call(name: &str, args: Value) -> Vec<u8> {
+    json!({ "jsonrpc": "2.0", "id": 9, "method": "tools/call", "params": { "name": name, "arguments": args } }).to_string().into_bytes()
+}
+
+#[test]
+fn a_read_only_session_lists_only_the_reads_and_refuses_every_other_tool_by_name() {
+    for compact in [false, true] {
+        let full = Catalog::new(&infos(), compact);
+        let catalog = Catalog::new(&infos(), compact).read_only(true);
+        assert!(catalog.is_read_only() && !full.is_read_only());
+        let list = catalog.list();
+        let listed: Vec<&Value> = list["tools"].as_array().unwrap().iter().collect();
+        assert!(!listed.is_empty());
+        for t in &listed {
+            assert_eq!(t["annotations"]["readOnlyHint"], true, "compact {compact}: {t}");
+        }
+        // The listing is the full one less every tool that does not only read; compact, the reads
+        // stay listed, since a client calls only what it was offered, and search_tools joins them.
+        let all = Catalog::new(&infos(), false).list();
+        let mut reads: Vec<&str> = all["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|t| t["annotations"]["readOnlyHint"] == true)
+            .map(|t| t["name"].as_str().unwrap())
+            .collect();
+        if compact {
+            reads.push("search_tools");
+        }
+        let mut names: Vec<&str> = listed.iter().map(|t| t["name"].as_str().unwrap()).collect();
+        reads.sort();
+        names.sort();
+        assert_eq!(names, reads, "compact {compact}");
+        assert!(names.contains(&"inspect_document") && !names.contains(&"execute_command") && !names.contains(&"call_app"));
+        assert!(names.contains(&"er_foreign_key_list") && !names.contains(&"er_entity_add") && !names.contains(&"view_select"));
+        // Every tool the full server would run that does not only read is refused with the typed
+        // error, naming it, before anything reaches the application; listed or not (compact).
+        let mut known: Vec<String> = TOOLS.iter().map(|t| t.name.to_string()).collect();
+        known.extend(full.commands.iter().map(|c| c.name.clone()));
+        let fake = Fake::ok();
+        let mut refused = 0;
+        for name in &known {
+            let entry = full.entries().find(|e| e.name() == name).unwrap();
+            let r = handle(&tool_call(name, json!({})), &fake, &catalog).unwrap();
+            if entry.read_only() {
+                assert!(r.get("error").is_none_or(|e| e["code"] != READ_ONLY), "compact {compact}: {name} reads: {r}");
+                continue;
+            }
+            refused += 1;
+            assert_eq!(r["error"]["code"], READ_ONLY, "compact {compact}: {name}: {r}");
+            assert_eq!(r["error"]["data"], json!({ "tool": name, "readOnly": true }));
+            let message = r["error"]["message"].as_str().unwrap();
+            assert!(message.contains(name.as_str()) && message.contains("read-only"), "{message}");
+        }
+        assert!(refused >= 6, "compact {compact}: execute_command, batch, undo, redo, save_project, call_app and the command tools");
+        assert!(
+            fake.calls.borrow().iter().all(|(m, p)| m == "engine.commands"
+                || m == "engine.describe"
+                || m == "document.inspect"
+                || (m == "engine.execute" && p["command"] == "er.foreign-key.list")),
+            "only reads reached the application: {:?}",
+            fake.calls.borrow()
+        );
+        // Refused even with arguments that would be right, and whatever call_app is asked to send.
+        let r = handle(&tool_call("call_app", json!({ "method": "document.inspect" })), &fake, &catalog).unwrap();
+        assert_eq!(r["error"]["code"], READ_ONLY);
+        let r = handle(&tool_call("er_entity_add", json!({ "schema": "s1" })), &fake, &catalog).unwrap();
+        assert_eq!(r["error"]["code"], READ_ONLY);
+        // An unknown tool is still unknown, not read-only.
+        assert_eq!(handle(&tool_call("format_disk", json!({})), &fake, &catalog).unwrap()["error"]["code"], -32602);
+    }
+}
+
+#[test]
+fn a_read_only_search_finds_only_reads_and_runs_them_by_their_tool() {
+    let fake = Fake::ok();
+    let catalog = Catalog::new(&infos(), true).read_only(true);
+    let found = handle(&tool_call("search_tools", json!({ "query": "e" })), &fake, &catalog).unwrap();
+    let text: Value = serde_json::from_str(found["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    let commands: Vec<&str> = text["commands"].as_array().unwrap().iter().map(|c| c["command"].as_str().unwrap()).collect();
+    assert_eq!(commands, ["er.foreign-key.list"], "{text}");
+    assert_eq!(text["commands"][0]["tool"], "er_foreign_key_list");
+    assert!(text["run"].as_str().unwrap().contains("tool"), "{text}");
+    let r = handle(&tool_call("er_foreign_key_list", json!({})), &fake, &catalog).unwrap();
+    assert_eq!(r["result"]["isError"], false, "{r}");
+    assert_eq!(fake.calls.borrow()[0], ("engine.execute".into(), json!({ "command": "er.foreign-key.list", "params": {} })));
+    // The instructions say the session is read-only and name only what it offers.
+    let init = handle(br#"{"jsonrpc":"2.0","id":5,"method":"initialize","params":{}}"#, &fake, &catalog).unwrap();
+    let said = init["result"]["instructions"].as_str().unwrap();
+    assert!(said.contains("read-only") && !said.contains("execute_command") && !said.contains("batch"), "{said}");
+}
