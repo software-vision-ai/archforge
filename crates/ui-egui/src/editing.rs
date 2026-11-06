@@ -509,6 +509,19 @@ fn decide(
             {
                 return Action::Rename(node, e);
             }
+            // A double click on a constraint's braces or note opens its editor (AR-133).
+            if (resp.double_clicked() || resp.triple_clicked())
+                && let Some(n) = hit_node(pos)
+                && let Some(e) = element_of(store, n)
+                && shell
+                    .session
+                    .as_ref()
+                    .and_then(|s| s.view().of_element(store, e)?.card(store, e, d))
+                    .is_some_and(|c| matches!(c.tone, archforge_diagram::figure::Tone::Constraint | archforge_diagram::figure::Tone::Braces))
+                && let Some(id) = uuid(store, e)
+            {
+                return Action::Open(id, None);
+            }
             // A double click on a card: its header renames it in place, a row opens its editor there.
             if (resp.double_clicked() || resp.triple_clicked())
                 && let Some(n) = hit_node(pos)

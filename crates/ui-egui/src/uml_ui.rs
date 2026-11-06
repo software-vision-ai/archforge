@@ -64,6 +64,11 @@ fn owner_of(store: &Store, o: Obj) -> Option<Obj> {
     member_of(store, o).map(|(c, _)| c)
 }
 
+/// The context of `o` when it is a constraint: the classifier or package whose panel shows it.
+fn constraint_context(store: &Store, o: Obj) -> Option<Obj> {
+    archforge_uml::constraints::is_constraint(store, o).then(|| archforge_uml::constraints::context_of(store, o)).flatten()
+}
+
 /// The class diagram in the shell.
 pub(crate) struct UmlKind;
 
@@ -295,7 +300,7 @@ impl DiagramKind for UmlKind {
     /// A class, an interface, an enumeration, a data type, or a package on the diagram, goes from the model with
     /// ⇧⌫ (AR-95).
     fn deletes(&self, store: &Store, element: Obj) -> bool {
-        classifier(store, element) || class(store, element) == Some(archforge_uml::PACKAGE)
+        classifier(store, element) || matches!(class(store, element), Some(c) if c == archforge_uml::PACKAGE || c == archforge_uml::CONSTRAINT)
     }
 
     /// A package on a class diagram renames in place with a double click, as a class does.
@@ -307,6 +312,18 @@ impl DiagramKind for UmlKind {
     /// enumeration's literals), or a new attribute (a new literal), typed in place on the card, or
     /// in Properties' editor where the card cannot hold it. A primitive type has no member to open.
     fn open(&self, shell: &mut Shell, element: Uuid, row: Option<usize>) {
+        // A constraint's braces or note open its editor in its context's Properties (AR-133).
+        let context = shell.session.as_ref().and_then(|s| {
+            let store = s.doc();
+            let c = store.by_uuid(element).filter(|c| archforge_uml::constraints::is_constraint(store, *c))?;
+            store.uuid(archforge_uml::constraints::context_of(store, c)?).ok()
+        });
+        if let Some(context) = context {
+            let _ = crate::editing::run(shell, "view.select", json!({ "ids": [element.to_string()] }));
+            shell.state.show_panel(crate::state::Panel::Properties);
+            crate::uml_constraints::open(shell, context, Some(element));
+            return;
+        }
         if shell.session.as_ref().is_some_and(|s| s.doc().by_uuid(element).is_some_and(|e| !has_member_kinds(s.doc(), e))) {
             return;
         }
@@ -808,6 +825,9 @@ impl NotationUi for UmlUi {
                 tr("This interface realization"),
                 tr("On this interface realization · {n}"),
             ),
+            c if c == archforge_uml::CONSTRAINT => {
+                words(tr("Constraint · model, not evaluated"), tr("Constraint"), tr("This constraint"), tr("On this constraint · {n}"))
+            }
             _ => match member_of(store, o)?.1 {
                 MemberKind::Attribute => words(tr("Attribute · model"), tr("Attribute"), tr("This attribute"), tr("On this attribute · {n}")),
                 MemberKind::Operation => words(tr("Operation · model"), tr("Operation"), tr("This operation"), tr("On this operation · {n}")),
@@ -818,6 +838,9 @@ impl NotationUi for UmlUi {
 
     /// A member's panel is its classifier's, a literal's its enumeration's.
     fn heading(&self, store: &Store, o: Obj) -> Option<String> {
+        if let Some(context) = constraint_context(store, o) {
+            return Some(Classifier::of(store, context).map_or_else(|| tr("Package"), Classifier::word));
+        }
         owner_of(store, o).and_then(|c| Classifier::of(store, c)).map(Classifier::word)
     }
 
@@ -832,6 +855,13 @@ impl NotationUi for UmlUi {
             }
             _ => {}
         }
+        // A constraint shows its context's panel, its row marked (AR-133).
+        if let Some(c) = constraint_context(store, o) {
+            let Some(words) = self.words(store, c) else { return };
+            let (Ok(id), Ok(metaclass)) = (store.uuid(c), store.class_of(c)) else { return };
+            let of = Subject::of(c, id, metaclass, words);
+            return self.body(shell, ui, p, r, y, &of);
+        }
         if let Some(c) = owner_of(store, o) {
             let Some(words) = self.words(store, c) else { return };
             let (Ok(id), Ok(metaclass)) = (store.uuid(c), store.class_of(c)) else { return };
@@ -843,7 +873,12 @@ impl NotationUi for UmlUi {
         }
         let Some((cmd, key)) = self.rename(store, o) else { return };
         let width = r.width() - 2.0 * crate::panels::PAD;
+        let root = archforge_uml::constraints::is_context(store, o).then_some(subject.id).flatten();
         crate::panels::name_field(shell, ui, p, egui::pos2(r.left() + crate::panels::PAD, y), width, subject, cmd, key);
+        // The root package's constraints hold for the whole model (AR-133).
+        if let Some(id) = root {
+            crate::uml_constraints::section_of(shell, ui, p, r, y + 17.0 + crate::panels::FIELD + 16.0, o, id);
+        }
     }
 }
 

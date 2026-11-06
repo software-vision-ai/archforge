@@ -11,7 +11,7 @@
 //! 200 by 156 at 16 px from the right and 14 px above the status bar, the toolbar 342 by 50 at
 //! the bottom centre. The grid dots sit 32 units apart and thin out as the zoom falls.
 
-use archforge_diagram::figure::EndMark;
+use archforge_diagram::figure::{EndMark, Tone};
 use archforge_diagram::grid::bounds_of;
 use archforge_diagram::{DIAGRAM, Grid, LabelPlace, diagram, edge, label, node, point, style};
 use archforge_mof::{Obj, Store, Uuid, Value};
@@ -625,6 +625,7 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
             }
         }
         shell.canvas.ends = draw.ends.take();
+        draw_constraint_links(&clip, &draw);
         for n in &visible.nodes {
             if let Some(badge) = draw_node(&clip, &draw, *n, &mut shell.registry, ui) {
                 badges.push(badge);
@@ -791,7 +792,9 @@ fn draw_node(
     }
     // Clipped to the card as drawn, so a draft's growing keeps the rows it moved down in sight.
     let inner = paint.with_clip_rect(rect.intersect(paint.clip_rect()));
+    let annotation = card.as_ref().is_some_and(|c| matches!(c.tone, Tone::Constraint | Tone::Braces));
     match element {
+        Some(_) if annotation && let Some(card) = card => draw_constraint(paint, &inner, d, n, &card, rect),
         Some(_) if let Some(card) = card => {
             // An element of another scope: dimmed, dashed, its scope named in the eyebrow.
             let dim = |c: egui::Color32| if card.elsewhere { c.gamma_multiply(FOREIGN_ALPHA) } else { c };
@@ -919,6 +922,76 @@ fn draw_node(
     Some((rect.right_top() + vec2(-2.0, 2.0), id?, store.uuid(e).ok()?, e, false))
 }
 
+/// A constraint as its diagram shows it (AR-133): braces, `{expression}` in purple beside its
+/// element with no card around it; or a constraint note, the surface with a purple border and a
+/// folded corner, `CONSTRAINT · NOT EVALUATED` in its purple eyebrow, its name, then its expression
+/// between braces, as written. Its own look on the diagram wins, as a note's does.
+fn draw_constraint(paint: &egui::Painter, inner: &egui::Painter, d: &Drawing<'_>, n: Obj, card: &archforge_diagram::figure::Card, rect: Rect) {
+    let (p, z) = (d.p, d.view.zoom);
+    let look = look_of(d.store, n, node::STYLE);
+    let text_ink = look.text.unwrap_or_else(|| look.fill.map_or(p.text, |f| ink_for(f).text));
+    let rows: Vec<&str> = card.compartments.iter().flatten().map(|r| r.text.as_str()).collect();
+    if card.tone == Tone::Braces {
+        let text = rows.first().copied().unwrap_or_default();
+        let ink = look.text.unwrap_or(p.purple);
+        ux::text(paint, rect.min + vec2(2.0, 2.0) * z, text, types::CAPTION.scaled(z), ink, None);
+        return;
+    }
+    let edge = look.stroke.unwrap_or(p.purple);
+    let border = look.width.map_or(1.25 * z, |w| w * z).max(1.0);
+    paint.rect_filled(rect, 0.0, look.fill.unwrap_or(p.surface));
+    paint.rect_stroke(rect, 0.0, Stroke::new(border, edge), StrokeKind::Inside);
+    // The folded corner at the top right.
+    let fold = (14.0 * z).min(rect.width() / 2.0).min(rect.height() / 2.0);
+    let (tr_, fl, fb) = (rect.right_top(), rect.right_top() - vec2(fold, 0.0), rect.right_top() + vec2(0.0, fold));
+    paint.add(egui::Shape::convex_polygon(vec![fl, pos2(fl.x, fb.y), fb], p.purple_tint, Stroke::new(border, edge)));
+    paint.line_segment([fl, tr_], Stroke::new(border, look.fill.unwrap_or(p.canvas)));
+    let room = Some((rect.width() - 24.0 * z - fold).max(0.0));
+    if z < DETAIL_ZOOM {
+        let g = ux::galley(inner, &card.name, types::SECTION.scaled(z.max(DETAIL_ZOOM)), text_ink, room);
+        inner.galley(rect.center() - g.size() / 2.0, g, text_ink);
+        return;
+    }
+    let eyebrow = eyebrow_case(&say(&card.eyebrow));
+    ux::text(inner, rect.min + vec2(12.0, 12.0) * z, &eyebrow, types::EYEBROW.scaled(z), look.stroke.unwrap_or(p.purple), room);
+    let mut y = 30.0;
+    if !card.name.is_empty() {
+        ux::text(inner, rect.min + vec2(12.0, y) * z, &card.name, types::SMALL_STRONG.scaled(z), text_ink, room);
+        y += 21.0;
+    }
+    for row in rows {
+        if rect.top() + (y + 17.0) * z > rect.bottom() {
+            break;
+        }
+        ux::text(inner, rect.min + vec2(12.0, y) * z, row, types::SMALL.scaled(z), text_ink, Some((rect.width() - 24.0 * z).max(0.0)));
+        y += 18.0;
+    }
+}
+
+/// The dashed links of the diagram's constraint notes to the nodes of the elements they constrain
+/// (AR-133), worked out from the model each frame: purple, the accent while the note is selected.
+fn draw_constraint_links(paint: &egui::Painter, d: &Drawing<'_>) {
+    let (p, store, z) = (d.p, d.store, d.view.zoom);
+    for (n, _) in &d.boxes {
+        let Some(e) = element_of(store, *n, node::ELEMENT) else { continue };
+        let Some(notation) = d.notations.of_element(store, e) else { continue };
+        let targets = notation.links(store, e, d.diagram);
+        if targets.is_empty() {
+            continue;
+        }
+        let from_rect = d.node_rect(*n);
+        let selected = d.selection.contains(n) || d.selection.contains(&e);
+        let stroke = Stroke::new((1.25 * z).clamp(1.0, 2.5), if selected { p.accent } else { p.purple });
+        for t in targets {
+            let to_rect = d.node_rect(t);
+            let (from, to) = (exit_point(from_rect, to_rect.center()), exit_point(to_rect, from_rect.center()));
+            if from.is_finite() && to.is_finite() {
+                paint.extend(egui::Shape::dashed_line(&[from, to], stroke, (3.0 * z).max(1.5), (3.0 * z).max(1.5)));
+            }
+        }
+    }
+}
+
 /// A package's tab: its height, the room either side of its name and its least width (AR-113).
 pub(crate) const PACKAGE_TAB_HEIGHT: f32 = 22.0;
 const PACKAGE_TAB_PAD: f32 = 12.0;
@@ -952,6 +1025,9 @@ pub(crate) enum MiniLook {
     Tinted,
     Tabbed,
     Note,
+    /// A constraint note and a constraint's braces (AR-133).
+    Constraint,
+    Braces,
 }
 
 /// One card of a thumbnail, on screen: its look and how many rows each of its compartments has.
@@ -1002,6 +1078,8 @@ pub(crate) fn preview(store: &Store, notations: &archforge_diagram::ProjectView,
                         archforge_diagram::figure::Tone::Tabbed => MiniLook::Tabbed,
                         archforge_diagram::figure::Tone::Plain => MiniLook::Plain,
                         archforge_diagram::figure::Tone::Tinted => MiniLook::Tinted,
+                        archforge_diagram::figure::Tone::Constraint => MiniLook::Constraint,
+                        archforge_diagram::figure::Tone::Braces => MiniLook::Braces,
                     };
                     (look, card.compartments.iter().map(Vec::len).collect())
                 }
@@ -1067,10 +1145,15 @@ fn draw_preview(paint: &egui::Painter, d: &Drawing<'_>, package: Obj, rect: Rect
 /// its name, a line under its header, and a bar for each row that fits.
 fn mini_card(paint: &egui::Painter, p: &Palette, c: &MiniCard, s: f32) {
     let r = c.rect;
+    if c.look == MiniLook::Braces {
+        paint.rect_filled(Rect::from_min_size(r.left_top(), vec2(r.width(), (5.0 * s).max(1.0))), 1.0, p.purple);
+        return;
+    }
     let (fill, edge) = match c.look {
         MiniLook::Tinted => (p.entity, p.entity_edge),
         MiniLook::Note => (p.amber_tint, p.amber),
-        MiniLook::Plain | MiniLook::Tabbed => (p.surface, p.border),
+        MiniLook::Constraint => (p.surface, p.purple),
+        MiniLook::Plain | MiniLook::Tabbed | MiniLook::Braces => (p.surface, p.border),
     };
     if c.look == MiniLook::Tabbed {
         let tab =
@@ -1080,7 +1163,7 @@ fn mini_card(paint: &egui::Painter, p: &Palette, c: &MiniCard, s: f32) {
     }
     paint.rect_filled(r, 2.0, fill);
     paint.rect_stroke(r, 2.0, Stroke::new(1.0, edge), StrokeKind::Inside);
-    if c.look == MiniLook::Note || c.look == MiniLook::Tabbed {
+    if matches!(c.look, MiniLook::Note | MiniLook::Tabbed | MiniLook::Constraint) {
         return;
     }
     let bar = |y: f32, w: f32, h: f32, colour: egui::Color32| {

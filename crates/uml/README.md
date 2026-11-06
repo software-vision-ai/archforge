@@ -69,7 +69,14 @@ name, roles, multiplicities, an arrow at every end it navigates to and a diamond
 an aggregation or a composition; a generalization's triangle; a dependency dashed with an open
 arrow; an interface realization dashed in the muted ink to a hollow triangle at its interface; an
 association class's line an association's and its card a class's under `Association class`),
-`relations::{specs, relationships_of, generalization_problem, GeneralizationProblem, is_final, specializations, final_problem, is_leaf, redefiners, redefiner_name, leaf_problem, association_end_problem, association_class_end_problem, realization_problem, RealizationProblem}`
+`constraints::{specs, constraints_of, context_of, constrained, expression, language, braces, is_context, is_constrainable,
+in_model, expression_problem, suggested_form, form_for, shown_on, form_of, linked_nodes, show, dropped_by, Dropped, Form, BRACES, NOTE,
+MAX_CONSTRAINED}` (AR-133: `uml.constraint.{add, set, move, show, list}`; a Constraint owned by a classifier of the model's own
+or a package, naming the elements it constrains in order and stating its rule as an OpaqueExpression of one body and at most one
+language, kept exactly as typed and never evaluated; the only refusals an empty expression and an element outside the model;
+shown per diagram as a node of the kind `uml.constraint.braces`, nested in its element's node, or `uml.constraint.note`, linked
+to its elements by `Notation::links`; removed through `element.remove`, and a constraint left naming nothing by a removal goes
+with it in the same step), `relations::{specs, relationships_of, generalization_problem, GeneralizationProblem, is_final, specializations, final_problem, is_leaf, redefiners, redefiner_name, leaf_problem, association_end_problem, association_class_end_problem, realization_problem, RealizationProblem}`
 (`uml.classifier.set` (AR-137): a classifier of any kind made final, UML's isFinalSpecialization, only while nothing specializes it and never a built-in type, after which no generalization is drawn to it or has its general end moved onto it; and made leaf (AR-138), UML's isLeaf, only while nothing redefines it, `{leaf}` after its name, as a property is with the attribute commands and `uml.association.set-end` and an operation with the operation commands, after which no property redefines a leaf one (`modifiers::TargetProblem::Leaf`, `modifiers::redefines_leaf`); an enumeration specializes only an enumeration, a data type only a data type and a primitive type
 only a primitive type, each specialized only by its own kind, a built-in type specializing nothing,
 and none of them joins an association; `uml.realization.add`: a class

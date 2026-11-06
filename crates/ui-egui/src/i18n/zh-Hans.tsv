@@ -580,6 +580,8 @@ str		This primitive type	此基本类型
 str		This package	此包
 plural		+ {n} more member	+ 另 {n} 个成员
 plural		+ {n} more literal	+ 另 {n} 个字面量
+plural		{n} constraint changed	{n} 个约束已更改
+plural		+ {n} more line	+ 另外 {n} 行
 plural		+ {n} more element	+ 另 {n} 个元素
 # 属性面板中的类成员
 str		Abstract	抽象
@@ -608,6 +610,35 @@ str		Attribute · model	属性 · 模型
 str		Literal · model	字面量 · 模型
 str		Attributes · {n}	属性 · {n}
 str		Literals · {n}	字面量 · {n}
+str		Constraints · {n}	约束 · {n}
+str		Add constraint	添加约束
+str		Edit constraint	编辑约束
+str		Constraint	约束
+str		Describe the rule…	描述规则…
+str		Constrained elements	受约束的元素
+str		Remove {name} from the constrained elements	从受约束的元素中移除 {name}
+str		Add a constrained element	添加受约束的元素
+str		On this diagram	在此图中
+str		Linked note	链接的注释
+str		Braces	花括号
+str		Language	语言
+str		Plain text	纯文本
+str		Pick a language	选择语言
+str		Pick the constraint's language	选择约束的语言
+str		Or type any language	或输入任意语言
+str		Stored as written. Archforge keeps the text and its references but does not evaluate it: nothing is checked against the model.	按原样保存：文本及其引用由 Archforge 保留，但不对其求值：不会对照模型检查任何内容。
+str		Long or multi-element constraints read best as a linked note; the choice is per diagram.	较长或涉及多个元素的约束最好显示为链接的注释；此选择按图而定。
+str		Type an expression. A constraint without one states no rule.	请输入表达式。没有表达式的约束不陈述任何规则。
+str		Braces sit by an element they constrain, and this diagram shows none of them. Show it as a linked note.	花括号位于受约束的元素旁边，而此图未显示其中任何一个。请将其显示为链接的注释。
+str		a constraint	一个约束
+str		{constraint} constrained nothing else and went with it	{constraint} 不约束其他任何元素，已一并删除
+str		{constraint} now constrains {elements} only	{constraint} 现在只约束 {elements}
+str		{name} deleted	已删除 {name}
+str		Constraint · model, not evaluated	约束 · 模型，不求值
+str		This constraint	此约束
+str		On this constraint · {n}	在此约束上 · {n}
+str		Constraint · not evaluated	约束 · 不求值
+str		Parameter	参数
 str		No literals yet	尚无字面量
 str		Move down	下移
 str		Move up	上移

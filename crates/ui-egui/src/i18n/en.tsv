@@ -579,6 +579,8 @@ str		This primitive type	This primitive type
 str		This package	This package
 plural		+ {n} more member	+ {n} more member|+ {n} more members
 plural		+ {n} more literal	+ {n} more literal|+ {n} more literals
+plural		{n} constraint changed	{n} constraint changed|{n} constraints changed
+plural		+ {n} more line	+ {n} more line|+ {n} more lines
 plural		+ {n} more element	+ {n} more element|+ {n} more elements
 # Class members in Properties
 str		Abstract	Abstract
@@ -607,6 +609,35 @@ str		Attribute · model	Attribute · model
 str		Literal · model	Literal · model
 str		Attributes · {n}	Attributes · {n}
 str		Literals · {n}	Literals · {n}
+str		Constraints · {n}	Constraints · {n}
+str		Add constraint	Add constraint
+str		Edit constraint	Edit constraint
+str		Constraint	Constraint
+str		Describe the rule…	Describe the rule…
+str		Constrained elements	Constrained elements
+str		Remove {name} from the constrained elements	Remove {name} from the constrained elements
+str		Add a constrained element	Add a constrained element
+str		On this diagram	On this diagram
+str		Linked note	Linked note
+str		Braces	Braces
+str		Language	Language
+str		Plain text	Plain text
+str		Pick a language	Pick a language
+str		Pick the constraint's language	Pick the constraint's language
+str		Or type any language	Or type any language
+str		Stored as written. Archforge keeps the text and its references but does not evaluate it: nothing is checked against the model.	Stored as written. Archforge keeps the text and its references but does not evaluate it: nothing is checked against the model.
+str		Long or multi-element constraints read best as a linked note; the choice is per diagram.	Long or multi-element constraints read best as a linked note; the choice is per diagram.
+str		Type an expression. A constraint without one states no rule.	Type an expression. A constraint without one states no rule.
+str		Braces sit by an element they constrain, and this diagram shows none of them. Show it as a linked note.	Braces sit by an element they constrain, and this diagram shows none of them. Show it as a linked note.
+str		a constraint	a constraint
+str		{constraint} constrained nothing else and went with it	{constraint} constrained nothing else and went with it
+str		{constraint} now constrains {elements} only	{constraint} now constrains {elements} only
+str		{name} deleted	{name} deleted
+str		Constraint · model, not evaluated	Constraint · model, not evaluated
+str		This constraint	This constraint
+str		On this constraint · {n}	On this constraint · {n}
+str		Constraint · not evaluated	Constraint · not evaluated
+str		Parameter	Parameter
 str		No literals yet	No literals yet
 str		Move down	Move down
 str		Move up	Move up

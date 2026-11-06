@@ -847,6 +847,11 @@ fn class_get(ctx: &mut C<'_>, p: &Params) -> R {
     {
         fields.insert("built_in".to_string(), Json::Bool(is_built_in(store, c)));
     }
+    // Its constraints, stored as written and never evaluated (AR-133).
+    let rules: Vec<Json> = crate::constraints::constraints_of(store, c).into_iter().map(|k| crate::constraints::constraint_json(store, k)).collect();
+    if let Some(fields) = out.as_object_mut() {
+        fields.insert("constraints".to_string(), Json::Array(rules));
+    }
     if store.class_of(c).ok() == Some(crate::ASSOCIATION_CLASS)
         && let Some(fields) = out.as_object_mut()
     {

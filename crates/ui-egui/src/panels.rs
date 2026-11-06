@@ -79,6 +79,8 @@ pub struct State {
     pub object_edit: Option<crate::objects::ObjectEdit>,
     /// A class's attribute or operation editor.
     pub member: Option<crate::uml_panel::MemberEdit>,
+    /// A classifier's or a package's constraint editor (AR-133).
+    pub constraint: Option<crate::uml_constraints::ConstraintEdit>,
     /// An association's ends' roles and multiplicities as typed.
     pub ends: Option<crate::uml_relate::EndsEdit>,
     /// The body's scroll: how far it is scrolled, how tall its content was last
@@ -106,6 +108,7 @@ fn open_editors(s: &State) -> Vec<Option<Option<Uuid>>> {
         s.type_edit.as_ref().map(|e| e.target),
         s.object_edit.as_ref().map(|e| e.target),
         s.member.as_ref().map(|e| e.target),
+        s.constraint.as_ref().map(|e| e.target),
     ]
 }
 
@@ -235,6 +238,9 @@ pub enum Menu {
     ClassPackage,
     /// The package a package sits in (AR-102).
     PackageParent,
+    /// A constraint editor's language presets and the elements it may name (AR-133).
+    ConstraintLanguage,
+    ConstraintElement,
 }
 
 /// The selection the panels describe.
@@ -355,6 +361,7 @@ pub fn retain_valid(state: &mut State, store: &Store) {
         state.object_edit = None;
     }
     crate::uml_panel::retain_valid(&mut state.member, store);
+    crate::uml_constraints::retain_valid(&mut state.constraint, store);
     if state.ends.as_ref().is_some_and(|e| store.by_uuid(e.association).is_none()) {
         state.ends = None;
     }
@@ -1350,6 +1357,9 @@ fn close_editors(shell: &mut Shell) {
     }
     panels.final_refused = None;
     panels.leaf_refused = None;
+    if panels.constraint.as_ref().is_some_and(|e| !e.opened) {
+        panels.constraint = None;
+    }
 }
 
 /// Opens the column editor on `target`, or on a column to add to `entity`.

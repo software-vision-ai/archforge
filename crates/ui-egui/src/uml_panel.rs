@@ -290,11 +290,15 @@ pub(crate) fn class_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: R
     y = final_check(shell, ui, p, r, y, class, class_id);
     y = leaf_check(shell, ui, p, r, y, class, class_id);
     if kind == Classifier::Enumeration {
-        members_section(shell, ui, p, r, y, class, class_id, MemberKind::Literal);
+        y = members_section(shell, ui, p, r, y, class, class_id, MemberKind::Literal);
     }
     if kind.takes_members() {
-        let y = members_section(shell, ui, p, r, y, class, class_id, MemberKind::Attribute);
-        members_section(shell, ui, p, r, y + 4.0, class, class_id, MemberKind::Operation);
+        let below = members_section(shell, ui, p, r, y, class, class_id, MemberKind::Attribute);
+        y = members_section(shell, ui, p, r, below + 4.0, class, class_id, MemberKind::Operation);
+    }
+    // Its constraints, a built-in type's aside (AR-133).
+    if shell.session.as_ref().is_some_and(|s| archforge_uml::constraints::is_context(s.doc(), class)) {
+        crate::uml_constraints::section_of(shell, ui, p, r, y + 4.0, class, class_id);
     }
     // The package menu last, over the sections.
     if shell.panels.menu == Some(Menu::ClassPackage) {
@@ -555,6 +559,10 @@ pub(crate) fn package_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r:
         &here,
         Menu::PackageParent,
     );
+    // Its constraints (AR-133).
+    if let Some(id) = subject.id {
+        crate::uml_constraints::section_of(shell, ui, p, r, field.bottom() + 16.0, package, id);
+    }
     if shell.panels.menu == Some(Menu::PackageParent) {
         let paths: Vec<Vec<String>> = choices.iter().map(|(_, n)| n.clone()).collect();
         if let Some(i) = crate::panels::menu_paths(shell, ui, p, field, parent_id, &paths)
@@ -1018,10 +1026,12 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
         shell.panels.member = None;
     } else if remove {
         let target = edit.target.map(|t| t.to_string()).unwrap_or_default();
+        let said = crate::uml_constraints::before_removal(shell, std::slice::from_ref(&target));
         match run(shell, "element.remove", json!({ "ids": [target] })) {
             Ok(_) => {
                 shell.panels.member = None;
                 reselect(shell, edit.class);
+                crate::uml_constraints::say_dropped(shell, said, &fmt(&tr("{name} deleted"), &[("name", &edit.name)]));
             }
             Err(e) => refuse(shell, Some(e)),
         }

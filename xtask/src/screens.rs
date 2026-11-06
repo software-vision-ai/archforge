@@ -25,7 +25,7 @@ pub const GALLERY: [(&str, &str); 4] =
 /// The wiki's guide screens: a screen of the snapshot example and the file stem it is published as,
 /// beside the README's gallery (`screenshot-<stem>-<light|dark>.png`, attached to every release).
 /// The wiki loads them from the latest release; the README shows none of them.
-pub const WIKI_GALLERY: [(&str, &str); 9] = [
+pub const WIKI_GALLERY: [(&str, &str); 10] = [
     ("workspace-guide-classifier-kinds", "guide-classifier-kinds"),
     ("workspace-guide-relate-kinds", "guide-relate-kinds"),
     ("workspace-guide-literals", "guide-literals"),
@@ -34,6 +34,7 @@ pub const WIKI_GALLERY: [(&str, &str); 9] = [
     ("workspace-guide-realization", "guide-realization"),
     ("workspace-guide-association-class", "guide-association-class"),
     ("workspace-guide-modifiers", "guide-modifiers"),
+    ("workspace-guide-constraints", "guide-constraints"),
     ("workspace-guide-result", "guide-result"),
 ];
 

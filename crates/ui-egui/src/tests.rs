@@ -9213,6 +9213,177 @@ fn an_enumeration_s_literals_are_added_edited_moved_and_removed_in_properties() 
     }
 }
 
+/// The constraints of the class named `name`, each as its row reads.
+fn constraint_rows(h: &Harness<'static, Shell>, name: &str) -> Vec<String> {
+    let st = h.state().session.as_ref().unwrap().doc();
+    let c = st.by_uuid(named(h, archforge_uml::CLASS, name)).unwrap();
+    archforge_uml::constraints::constraints_of(st, c).into_iter().map(|k| crate::uml_constraints::row_text(st, k)).collect()
+}
+
+/// Constraints (AR-133) in Properties and on the canvas: `+` in Constraints opens the editor, an
+/// empty expression is refused in place with nothing written, Apply adds one in one undo step and
+/// shows it on the open diagram as braces for a short expression; the pencil reopens it, a second
+/// constrained element and Linked note make it a constraint note linked to both cards, which says
+/// it is not evaluated; deleting a constrained element drops it and the toast says so, and a
+/// constraint left naming nothing goes with it, said too; a double click on the note opens its
+/// editor. In light and dark, every control found by its automation id.
+#[test]
+fn constraints_are_added_in_properties_shown_as_braces_or_a_note_and_follow_a_deleted_element() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        let order = named(&h, archforge_uml::CLASS, "Order");
+        let payment = named(&h, archforge_uml::CLASS, "Payment");
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [order.to_string()] })).unwrap();
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        h.run();
+        assert!(painted(&h).iter().any(|t| t == "Constraints · 0"), "the section shows on a class");
+        let at = rect_of(&h, "workspace.properties.constraints.add").center();
+        click(&mut h, at);
+        let edit = h.state().panels.constraint.clone().expect("the editor");
+        assert_eq!((edit.target, edit.context, edit.elements.clone()), (None, order, vec![order]), "the selected element is constrained");
+        assert_eq!(edit.name, "Constraint 1");
+        let found = ids(&h);
+        for id in ["name", "language", "language.menu", "expression", "element.0", "elements.add", "show.note", "show.braces", "cancel", "apply"] {
+            assert!(found.iter().any(|i| *i == format!("workspace.properties.constraint.{id}")), "{id}");
+        }
+        assert!(!found.iter().any(|i| i == "workspace.properties.constraint.remove"), "a new constraint has nothing to remove");
+        assert!(!found.iter().any(|i| i == "workspace.properties.constraint.element.0.remove"), "the last element stays");
+        assert!(painted(&h).iter().any(|t| t.starts_with("Stored as written.")), "the editor says it is never evaluated");
+        // An empty expression is refused in place; nothing is written.
+        let revision = h.state().session.as_ref().unwrap().revision();
+        let at = rect_of(&h, "workspace.properties.constraint.apply").center();
+        click(&mut h, at);
+        let refused = "Type an expression. A constraint without one states no rule.";
+        assert_eq!(h.state().panels.constraint.as_ref().and_then(|e| e.refused.clone()).as_deref(), Some(refused));
+        assert!(painted(&h).iter().any(|t| t == refused), "said in the editor");
+        assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "nothing written");
+        // Typed and applied: one step, braces on the open diagram for a short expression.
+        let edit = h.state_mut().panels.constraint.as_mut().unwrap();
+        edit.name = "nonEmpty".into();
+        edit.expression = "lines->notEmpty()".into();
+        h.run();
+        assert!(h.state().panels.constraint.as_ref().unwrap().refused.is_none(), "the refusal goes once there is text");
+        let at = rect_of(&h, "workspace.properties.constraint.apply").center();
+        click(&mut h, at);
+        assert!(h.state().panels.constraint.is_none(), "{:?}", h.state().panels.constraint);
+        assert_eq!(constraint_rows(&h, "Order"), ["nonEmpty {lines->notEmpty()}"]);
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add constraint"), "one undo step");
+        h.run();
+        let painted_now = painted(&h);
+        assert!(painted_now.iter().any(|t| t == "{lines->notEmpty()}"), "braces by Order");
+        assert!(painted_now.iter().any(|t| t == "Constraints · 1"));
+        let (c, d) = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let c = archforge_uml::constraints::constraints_of(st, st.by_uuid(order).unwrap())[0];
+            (st.uuid(c).unwrap(), st.by_uuid(h.state().canvas.active.unwrap()).unwrap())
+        };
+        let form = |h: &Harness<'static, Shell>| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            archforge_uml::constraints::shown_on(st, d, st.by_uuid(c).unwrap()).map(|(n, f)| (st.uuid(n).unwrap(), f))
+        };
+        assert_eq!(form(&h).map(|f| f.1), Some(archforge_uml::constraints::Form::Braces));
+        // The pencil reopens it; Payment picked from the element menu and Linked note make it a note.
+        let at = rect_of(&h, &format!("workspace.properties.constraint.{c}.edit")).center();
+        click(&mut h, at);
+        assert_eq!(h.state().panels.constraint.as_ref().map(|e| e.target), Some(Some(c)));
+        let at = rect_of(&h, "workspace.properties.constraint.elements.add").center();
+        click(&mut h, at);
+        let menu: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.constraint.elements.menu.")).collect();
+        assert!(!menu.is_empty(), "the model's elements are offered");
+        let at = rect_of(&h, "workspace.properties.constraint.elements.menu.0").center();
+        click(&mut h, at);
+        assert_eq!(h.state().panels.constraint.as_ref().unwrap().elements.len(), 2, "a pick adds it");
+        assert!(ids(&h).iter().any(|i| i == "workspace.properties.constraint.element.1.remove"), "with two, each may go");
+        h.state_mut().panels.constraint.as_mut().unwrap().elements = vec![order, payment];
+        h.run();
+        assert_eq!(h.state().panels.constraint.as_ref().unwrap().elements, vec![order, payment]);
+        let at = rect_of(&h, "workspace.properties.constraint.show.note").center();
+        click(&mut h, at);
+        h.state_mut().panels.constraint.as_mut().unwrap().expression = "payment.amount = total()\nwhen status = Paid".into();
+        let at = rect_of(&h, "workspace.properties.constraint.apply").center();
+        click(&mut h, at);
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Edit constraint"), "one undo step");
+        let (note, f) = form(&h).expect("shown");
+        assert_eq!(f, archforge_uml::constraints::Form::Note);
+        h.run();
+        let painted_now = painted(&h);
+        assert!(painted_now.iter().any(|t| t == "CONSTRAINT · NOT EVALUATED"), "{painted_now:?}");
+        assert!(painted_now.iter().any(|t| t == "{ payment.amount = total()"));
+        assert!(ids(&h).contains(&format!("workspace.canvas.node.{note}")));
+        // A double click on the note opens its editor.
+        h.state_mut().canvas.fit_pending = true;
+        h.run();
+        let at = rect_of(&h, &format!("workspace.canvas.node.{note}")).center();
+        double_click(&mut h, at);
+        assert_eq!(h.state().panels.constraint.as_ref().map(|e| e.target), Some(Some(c)), "the note's double click opens it");
+        let at = rect_of(&h, "workspace.properties.constraint.cancel").center();
+        click(&mut h, at);
+        // Deleting Payment drops it, one step, and the toast says what nonEmpty constrains now.
+        let _ = &nodes;
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [payment.to_string()] })).unwrap();
+        h.run();
+        crate::explorer::remove_selection(h.state_mut());
+        h.run();
+        if h.state().explorer.delete.is_some() {
+            let at = rect_of(&h, "workspace.explorer.delete.confirm").center();
+            click(&mut h, at);
+        }
+        let toast = h.state().canvas.toast.clone().expect("a toast").text;
+        assert!(toast.ends_with("nonEmpty now constrains Order only"), "{toast}");
+        assert_eq!(constraint_rows(&h, "Order"), ["nonEmpty {payment.amount = total() when status = Paid}"]);
+        let st = h.state().session.as_ref().unwrap().doc();
+        assert_eq!(archforge_uml::constraints::constrained(st, st.by_uuid(c).unwrap()), vec![st.by_uuid(order).unwrap()]);
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        h.run();
+        // A constraint naming Payment alone goes with it, and the toast names it.
+        h.state_mut()
+            .session
+            .as_mut()
+            .unwrap()
+            .execute("uml.constraint.set", &serde_json::json!({ "constraint": c.to_string(), "constrained": [payment.to_string()] }))
+            .unwrap();
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [payment.to_string()] })).unwrap();
+        h.run();
+        crate::explorer::remove_selection(h.state_mut());
+        h.run();
+        if h.state().explorer.delete.is_some() {
+            let at = rect_of(&h, "workspace.explorer.delete.confirm").center();
+            click(&mut h, at);
+        }
+        let toast = h.state().canvas.toast.clone().expect("a toast").text;
+        assert!(toast.ends_with("nonEmpty constrained nothing else and went with it"), "{toast}");
+        assert!(constraint_rows(&h, "Order").is_empty());
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        h.run();
+        assert_eq!(constraint_rows(&h, "Order").len(), 1, "one undo step brings it back");
+        // An association class's Properties end with its constraints too, as the class it is.
+        let s = h.state_mut().session.as_mut().unwrap();
+        let line = s
+            .execute("uml.association-class.add", &serde_json::json!({ "from": order.to_string(), "to": payment.to_string(), "name": "Settlement" }))
+            .unwrap()
+            .value["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let rule = s
+            .execute("uml.constraint.add", &serde_json::json!({ "context": line, "name": "settled", "expression": "amount > 0" }))
+            .unwrap()
+            .value["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        s.execute("view.select", &serde_json::json!({ "ids": [line] })).unwrap();
+        h.run();
+        assert!(painted(&h).iter().any(|t| t == "Constraints · 1"), "the association class's section");
+        // It follows the operations, at the foot of a long panel: scrolled into view.
+        h.state_mut().panels.scroll = 10_000.0;
+        h.run();
+        let found = ids(&h);
+        assert!(found.iter().any(|i| i == "workspace.properties.constraints.add"));
+        assert!(found.iter().any(|i| *i == format!("workspace.properties.constraint.{rule}.edit")), "its row with its pencil");
+    }
+}
+
 /// Models lists enumerations under their package with their literals below them; a literal row
 /// renames in place and Delete removes it, each one undo step, and `+` on a selected enumeration
 /// adds a literal named in place; `+` adds an enumeration, the search finds it, and it drags onto a

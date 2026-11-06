@@ -580,6 +580,8 @@ str		This primitive type	Ce type primitif
 str		This package	Ce paquetage
 plural		+ {n} more member	+ {n} membre de plus|+ {n} membres de plus
 plural		+ {n} more literal	+ {n} littéral de plus|+ {n} littéraux de plus
+plural		{n} constraint changed	{n} contrainte modifiée|{n} contraintes modifiées
+plural		+ {n} more line	+ {n} autre ligne|+ {n} autres lignes
 plural		+ {n} more element	+ {n} élément de plus|+ {n} éléments de plus
 # Membres de classe dans Propriétés
 str		Abstract	Abstraite
@@ -608,6 +610,35 @@ str		Attribute · model	Attribut · modèle
 str		Literal · model	Littéral · modèle
 str		Attributes · {n}	Attributs · {n}
 str		Literals · {n}	Littéraux · {n}
+str		Constraints · {n}	Contraintes · {n}
+str		Add constraint	Ajouter une contrainte
+str		Edit constraint	Modifier la contrainte
+str		Constraint	Contrainte
+str		Describe the rule…	Décrivez la règle…
+str		Constrained elements	Éléments contraints
+str		Remove {name} from the constrained elements	Retirer {name} des éléments contraints
+str		Add a constrained element	Ajouter un élément contraint
+str		On this diagram	Sur ce diagramme
+str		Linked note	Note liée
+str		Braces	Accolades
+str		Language	Langage
+str		Plain text	Texte brut
+str		Pick a language	Choisir un langage
+str		Pick the constraint's language	Choisir le langage de la contrainte
+str		Or type any language	Ou saisissez n'importe quel langage
+str		Stored as written. Archforge keeps the text and its references but does not evaluate it: nothing is checked against the model.	Enregistrée telle qu'écrite. Archforge conserve le texte et ses références mais ne l'évalue pas : rien n'est vérifié par rapport au modèle.
+str		Long or multi-element constraints read best as a linked note; the choice is per diagram.	Les contraintes longues ou portant sur plusieurs éléments se lisent mieux en note liée ; le choix se fait par diagramme.
+str		Type an expression. A constraint without one states no rule.	Saisissez une expression. Une contrainte sans expression n'énonce aucune règle.
+str		Braces sit by an element they constrain, and this diagram shows none of them. Show it as a linked note.	Les accolades se placent près d'un élément contraint, et ce diagramme n'en montre aucun. Affichez-la en note liée.
+str		a constraint	une contrainte
+str		{constraint} constrained nothing else and went with it	{constraint} ne contraignait rien d'autre et a été supprimée avec
+str		{constraint} now constrains {elements} only	{constraint} ne contraint plus que {elements}
+str		{name} deleted	{name} supprimé
+str		Constraint · model, not evaluated	Contrainte · modèle, non évaluée
+str		This constraint	Cette contrainte
+str		On this constraint · {n}	Sur cette contrainte · {n}
+str		Constraint · not evaluated	Contrainte · non évaluée
+str		Parameter	Paramètre
 str		No literals yet	Aucun littéral pour l’instant
 str		Move down	Descendre
 str		Move up	Monter

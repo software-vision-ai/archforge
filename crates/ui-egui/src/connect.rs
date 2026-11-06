@@ -502,6 +502,7 @@ pub fn remove_selected_line(shell: &mut Shell) -> bool {
     };
     let Some(id) = store.uuid(element).ok() else { return false };
     let word = crate::notation_ui::of(shell.notation_uis, store, element).and_then(|ui| ui.words(store, element)).map(|w| w.word).unwrap_or_default();
+    let said = crate::uml_constraints::before_removal(shell, &[id.to_string()]);
     let Some(session) = shell.session.as_mut() else { return false };
     let removed = session.execute("element.remove", &json!({ "ids": [id.to_string()] })).map_err(|e| e.to_string());
     match removed {
@@ -509,6 +510,7 @@ pub fn remove_selected_line(shell: &mut Shell) -> bool {
             let text = fmt(&tr("{what} removed"), &[("what", &word)]);
             let undo_label = shell.session.as_ref().and_then(|s| s.undo_label().map(str::to_string));
             shell.canvas.toast = Some(Toast { text, until: shell.frames.saturating_add(TOAST_FRAMES), undo_label });
+            crate::uml_constraints::say_dropped(shell, said, "");
         }
         Err(e) => shell.canvas.notice = Some(e),
     }

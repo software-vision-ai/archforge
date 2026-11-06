@@ -75,6 +75,12 @@ pub trait Notation: Send + Sync + 'static {
         let _ = (store, element, diagram);
         None
     }
+    /// The nodes of `diagram` a node of `element` is tied to by dashed links worked out from the
+    /// model, never stored: a constraint note's to its constrained elements' nodes (AR-133).
+    fn links(&self, store: &Store, element: Obj, diagram: Obj) -> Vec<Obj> {
+        let _ = (store, element, diagram);
+        Vec::new()
+    }
     /// The line an edge of `element` draws; None draws a plain solid line.
     fn line(&self, store: &Store, element: Obj) -> Option<Line> {
         let _ = (store, element);

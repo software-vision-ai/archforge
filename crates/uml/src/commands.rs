@@ -692,14 +692,16 @@ fn hand_up_problem(store: &Store, pkg: Obj, parent: Obj) -> Option<String> {
 
 /// Removes UML elements (packages, classes, interfaces, enumerations, data types, attributes,
 /// operations, literals, primitive types, associations, generalizations, dependencies, interface
-/// realizations and association classes), each with what it holds (an enumeration its literals, a
+/// realizations, association classes and constraints), each with what it holds (an enumeration its literals, a
 /// data type or an association class its attributes and operations, an association its ends) and the
 /// diagrams, nodes and lines that show them (`element.remove`, through [`crate::UmlNotation`]). A
 /// nested package hands what it holds, and its diagrams, up to its parent first (owner decision); a
 /// top-level package takes them along. A classifier takes the relationships that touch it along,
 /// and an association class among them takes its own ([`going_with`]); a member's type that goes is
 /// dropped from what had it, and so is a default that is a literal that goes (AR-126), as the
-/// property's own type would be.
+/// property's own type would be. An element a constraint names leaves the constraint's elements, and
+/// a constraint left naming none goes too, in the same step (AR-133,
+/// [`crate::constraints::dropped_by`]).
 pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, CommandError> {
     // Every id is checked before anything goes, so a refusal leaves the store as it was.
     let removable = [
@@ -717,6 +719,7 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
         crate::DEPENDENCY,
         crate::INTERFACE_REALIZATION,
         ASSOCIATION_CLASS,
+        crate::CONSTRAINT,
     ];
     for o in objs.iter().filter(|o| store.is_alive(**o)) {
         let class = store.class_of(*o).map_err(fail)?;
@@ -739,6 +742,9 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
             return Err(refuse("ids", format!("its contents cannot move up: {why}")));
         }
     }
+    // A constraint left constraining nothing goes with what it constrained (AR-133), worked out
+    // before anything moves; the others lose the elements that go as the core destroys them.
+    let orphans = crate::constraints::orphans(&crate::constraints::dropped_by(store, objs));
     let mut gone = 0;
     // A nested package's contents and diagrams move up to its parent before it goes.
     let nested: Vec<Obj> = objs.iter().copied().filter(|o| store.is_alive(*o) && store.class_of(*o).ok() == Some(PACKAGE)).collect();
@@ -770,6 +776,7 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
     }
     let mut all = going_with(store, &classes);
     all.extend(objs);
+    all.extend(orphans);
     // A default that is a literal goes with the literal: an InstanceValue needs its instance.
     let defaults = crate::modifiers::literal_defaults(store);
     for o in all {

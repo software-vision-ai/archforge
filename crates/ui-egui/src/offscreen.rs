@@ -173,6 +173,10 @@ pub enum Screen {
     /// The guide with Order's number read only and its status defaulting to Placed, Order
     /// selected and the attribute editor open on status.
     GuideModifiers,
+    /// The guide with Order's two constraints (AR-133): positiveNumber in braces under its card and
+    /// paidInFull as a constraint note linked to Order and OrderStatus, Order selected and the
+    /// constraint editor open on paidInFull.
+    GuideConstraints,
     /// The guide's finished model: the whole diagram, nothing selected, Properties folded away.
     GuideResult,
     /// The sample class model edited, unsaved, and its close asking Save, Don't save or Cancel
@@ -1562,7 +1566,7 @@ fn sample_modifiers(shell: &mut Shell) -> Result<(), String> {
 }
 
 /// How far the user manual's class-model guide has come in `screen`, from 1 (the first classes)
-/// to 11 (the finished model); none for a screen that is not the guide's.
+/// to 12 (the finished model); none for a screen that is not the guide's.
 fn guide_step(screen: Screen) -> Option<u8> {
     Some(match screen {
         Screen::GuideClasses => 1,
@@ -1575,7 +1579,8 @@ fn guide_step(screen: Screen) -> Option<u8> {
         Screen::GuideRealization => 8,
         Screen::GuideAssociationClass => 9,
         Screen::GuideModifiers => 10,
-        Screen::GuideResult => 11,
+        Screen::GuideConstraints => 11,
+        Screen::GuideResult => 12,
         _ => return None,
     })
 }
@@ -1716,11 +1721,34 @@ fn sample_guide(shell: &mut Shell, step: u8) -> Result<(), String> {
             run(session, "diagram.label", json!({ "edge": edge.to_string(), "kind": "name", "at": "middle" }))?;
         }
     }
-    if matches!(step, 1 | 10) {
+    // Order's rules (AR-133): a short one in braces under its card, a long one naming OrderStatus
+    // too as a note linked to both.
+    let mut paid = String::new();
+    if step >= 11 {
+        let positive =
+            run(session, "uml.constraint.add", json!({ "context": order, "name": "positiveNumber", "expression": "number > 0", "language": "OCL" }))?;
+        run(session, "uml.constraint.show", json!({ "diagram": diagram, "constraint": positive, "as": "braces" }))?;
+        paid = run(
+            session,
+            "uml.constraint.add",
+            json!({
+                "context": order,
+                "name": "paidInFull",
+                "expression": "status = OrderStatus::Paid\n  implies total.amount > 0",
+                "language": "OCL",
+                "constrained": [order, status],
+            }),
+        )?;
+        run(session, "uml.constraint.show", json!({ "diagram": diagram, "constraint": paid, "as": "note", "x": 1000, "y": 480 }))?;
+    }
+    if matches!(step, 1 | 10 | 11) {
         selected = Some(order.clone());
     }
     if step == 10 {
         about.clear();
+    }
+    if step == 11 {
+        about = vec![status.clone(), paid.clone()];
     }
     run(session, "view.select", json!({ "ids": [] }))?;
     // Left unsaved, as the reader's project is while they work: the status bar says so.
@@ -1739,7 +1767,7 @@ fn sample_guide(shell: &mut Shell, step: u8) -> Result<(), String> {
     let zoom = match step {
         1..=4 | 7 => 0.8,
         5 => 0.9,
-        6 | 8 | 9 => 0.8,
+        6 | 8 | 9 | 11 => 0.8,
         _ => 1.1,
     };
     match step {
@@ -1783,10 +1811,11 @@ fn sample_guide(shell: &mut Shell, step: u8) -> Result<(), String> {
             };
             crate::uml_panel::open(shell, order, crate::uml_panel::MemberKind::Attribute, Some(status_attribute));
         }
-        11 => shell.state.panel_collapsed = true,
+        11 => crate::uml_constraints::open(shell, order, Some(id(&paid)?)),
+        12 => shell.state.panel_collapsed = true,
         _ => {}
     }
-    if step == 11 {
+    if step == 12 {
         shell.canvas.fit_pending = true;
     } else {
         guide_view(shell, &view, zoom)?;

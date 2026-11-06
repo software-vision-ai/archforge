@@ -96,9 +96,13 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   class, each with its attributes, operations and description) and
   `archforge://skills/effective/{id}` (the skills that apply to an element, optionally for one
   trigger: modelling, drawing, naming or export). Other elements are read through the tools:
-  packages with `uml_package_list` and a class's relationships with `uml_relationship_list`, or,
-  with `--compact`, `execute_command` given the command ids `uml.package.list` and
-  `uml.relationship.list`.
+  packages with `uml_package_list`, a class's relationships with `uml_relationship_list` and an
+  element's constraints with `uml_constraint_list`, or, with `--compact`, `execute_command` given
+  the command ids `uml.package.list`, `uml.relationship.list` and `uml.constraint.list`.
+- **Constraints**: `uml_constraint_add`, `uml_constraint_set`, `uml_constraint_move` and
+  `uml_constraint_show`, which shows a constraint on a class diagram as braces or as a linked
+  note. The expression is kept exactly as sent and never evaluated; an empty one, or an element
+  outside the model, is refused. A constraint is removed with `element_remove`.
 
 Ask it in your own words, for example: *"Add a table Invoice to the Shop schema with an id
 primary key and a foreign key to Order."* The table appears on screen as the agent adds it.
