@@ -181,10 +181,21 @@ fn set_name(ctx: &mut C<'_>, obj: Obj, prop: archforge_mof::PropId, name: &str) 
 
 // Schemas.
 
+/// Refuses `name` for a schema of `model` other than `except` when another schema has it, whatever
+/// the case: SQL names a schema once in a database, and the project's check as it opens asks the
+/// same rule (AR-209).
+fn schema_name(ctx: &C<'_>, model: Obj, name: &str, except: Option<Obj>) -> Result<(), CommandError> {
+    match crate::names::clash(ctx.doc, model, SCHEMA, name, except) {
+        Some(other) => Err(refuse("name", format!("there is a schema named {} already", name_of(ctx.doc, other)))),
+        None => Ok(()),
+    }
+}
+
 fn schema_add(ctx: &mut C<'_>, p: &Params) -> R {
     let name = text(p, "name");
     check_name("name", name, MAX_NAME)?;
     let m = model(ctx)?;
+    schema_name(ctx, m, name, None)?;
     let s = ctx.doc.create(SCHEMA).map_err(fail)?;
     set_name(ctx, s, named_element::NAME, name)?;
     ctx.doc.push(m, archforge_core::model::MEMBER, Value::Ref(s)).map_err(fail)?;
@@ -196,6 +207,8 @@ fn schema_rename(ctx: &mut C<'_>, p: &Params) -> R {
     let s = id_of(ctx, p, "schema", SCHEMA)?;
     let name = text(p, "name");
     check_name("name", name, MAX_NAME)?;
+    let m = ctx.doc.container(s).ok().flatten().map(|(m, _)| m).ok_or_else(|| refuse("schema", "the schema belongs to no model"))?;
+    schema_name(ctx, m, name, Some(s))?;
     set_name(ctx, s, named_element::NAME, name)?;
     Ok(json!({ "id": uuid_of(ctx.doc, s)? }))
 }
@@ -1115,6 +1128,11 @@ fn domain_fields(p: &Params) -> Result<DomainFields, CommandError> {
             }
         }
         Some(_) => return Err(refuse("checks", "an array of checks")),
+    }
+    // A domain names each of its checks once, whatever the case, as the project's check as it
+    // opens asks (AR-209).
+    if let Some(name) = rules::first_twice(checks.iter().map(|(_, n)| n.as_str())) {
+        return Err(refuse("checks", format!("two checks are named {name}")));
     }
     Ok(DomainFields { base: base.to_string(), size, default: default.to_string(), not_null, checks })
 }

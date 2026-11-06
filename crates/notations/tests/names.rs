@@ -301,3 +301,234 @@ fn a_project_saved_with_names_the_old_check_refused_opens_and_one_kind_named_twi
     put(&mut twice, sales, package::PACKAGED_ELEMENT, archforge_uml::ENUMERATION, "ORDER");
     assert!(reopens(&twice).unwrap_err().contains("DuplicateName"));
 }
+
+// ER (AR-209): names as SQL has them, by ER's own rule (`archforge_er::names`).
+
+/// The id of the element of `class` named `name`, from the store.
+fn er_id(s: &Session, class: archforge_mof::ClassId, name: &str) -> String {
+    let st = s.doc();
+    let o = st.alive().find(|o| st.class_of(*o).ok() == Some(class) && archforge_core::name_of(st, *o) == name).unwrap();
+    st.uuid(o).unwrap().to_string()
+}
+
+/// An ER project holding two elements of every ER kind in one owner, each pair named apart: the
+/// schemas shop and billing; in shop the tables Customer and Order, the domain money (with the
+/// checks positive and small), the enum type state, the sequence counter, the view report and the
+/// relationships places and billed; in Customer the columns id and name, the primary key
+/// pk_customer, the unique constraint uq_name, the checks named and positive_id and the indexes
+/// ix_a and ix_b; in Order the foreign keys fk_places and fk_billed.
+fn er_project() -> Session {
+    let mut s = new_project_session("Shop", ids(0)).unwrap();
+    let shop = run(&mut s, "er.schema.add", json!({ "name": "shop" }));
+    run(&mut s, "er.schema.add", json!({ "name": "billing" }));
+    let customer = run(&mut s, "er.entity.add", json!({ "schema": shop, "name": "Customer" }));
+    let order = run(&mut s, "er.entity.add", json!({ "schema": shop, "name": "Order" }));
+    let checks = json!([{ "expression": "VALUE > 0", "name": "positive" }, { "expression": "VALUE < 100", "name": "small" }]);
+    run(&mut s, "er.domain.add", json!({ "schema": shop, "name": "money", "base_type": "INTEGER", "checks": checks }));
+    run(&mut s, "er.enum.add", json!({ "schema": shop, "name": "state", "literals": ["open"] }));
+    run(&mut s, "er.sequence.add", json!({ "schema": shop, "name": "counter" }));
+    run(&mut s, "er.view.add", json!({ "schema": shop, "name": "report", "query": "SELECT 1" }));
+    let id = run(&mut s, "er.attribute.add", json!({ "entity": customer, "name": "id", "type": "BIGINT" }));
+    let name = run(&mut s, "er.attribute.add", json!({ "entity": customer, "name": "name", "type": "TEXT" }));
+    run(&mut s, "er.primary-key.set", json!({ "entity": customer, "columns": [id], "name": "pk_customer" }));
+    run(&mut s, "er.unique.add", json!({ "entity": customer, "columns": [name], "name": "uq_name" }));
+    run(&mut s, "er.check.add", json!({ "entity": customer, "expression": "name <> ''", "name": "named" }));
+    run(&mut s, "er.check.add", json!({ "entity": customer, "expression": "id > 0", "name": "positive_id" }));
+    run(&mut s, "er.index.add", json!({ "entity": customer, "columns": [name], "name": "ix_a" }));
+    run(&mut s, "er.index.add", json!({ "entity": customer, "columns": [id], "name": "ix_b" }));
+    for (rel, role) in [("places", ""), ("billed", "payer")] {
+        let p = json!({ "from": customer, "to": order, "name": rel, "from_role": role, "create_foreign_key": true });
+        run(&mut s, "er.relationship.add", p);
+    }
+    let st = s.doc();
+    let order_obj = st.by_uuid(Uuid::parse(&order).unwrap()).unwrap();
+    let fks: Vec<String> = archforge_er::rules::foreign_keys(st, order_obj).into_iter().map(|fk| st.uuid(fk).unwrap().to_string()).collect();
+    for (fk, name) in fks.iter().zip(["fk_places", "fk_billed"]) {
+        run(&mut s, "er.foreign-key.rename", json!({ "foreign_key": fk, "name": name }));
+    }
+    reopens(s.doc()).unwrap();
+    s
+}
+
+/// Two ER elements of one kind named alike in one owner, whatever the case, are refused by every
+/// command that would make them, with the reason, and the model and its history stay as they were.
+#[test]
+fn two_er_elements_of_one_kind_named_alike_are_refused_by_every_command() {
+    use archforge_er::{DOMAIN, ENTITY, ENUM_TYPE, RELATIONSHIP, SCHEMA, SEQUENCE, VIEW};
+    let mut s = er_project();
+    let (shop, billing) = (er_id(&s, SCHEMA, "shop"), er_id(&s, SCHEMA, "billing"));
+    // Schemas: one name per schema in the model.
+    refused(&mut s, "er.schema.add", json!({ "name": "SHOP" }), "there is a schema named shop already");
+    refused(&mut s, "er.schema.rename", json!({ "schema": billing, "name": "Shop" }), "there is a schema named shop already");
+    run(&mut s, "er.schema.rename", json!({ "schema": billing, "name": "Billing" }));
+    // Tables, domains, enum types, sequences and views: one namespace per schema.
+    let (order, state, counter) = (er_id(&s, ENTITY, "Order"), er_id(&s, ENUM_TYPE, "state"), er_id(&s, SEQUENCE, "counter"));
+    let (money, report) = (er_id(&s, DOMAIN, "money"), er_id(&s, VIEW, "report"));
+    refused(&mut s, "er.entity.add", json!({ "schema": shop, "name": "customer" }), "named \"customer\" already");
+    refused(&mut s, "er.entity.rename", json!({ "entity": order, "name": "MONEY" }), "named \"MONEY\" already");
+    refused(&mut s, "er.domain.add", json!({ "schema": shop, "name": "STATE", "base_type": "TEXT" }), "named \"STATE\" already");
+    refused(&mut s, "er.enum.set", json!({ "enum": state, "name": "Report", "literals": ["open"] }), "named \"Report\" already");
+    refused(&mut s, "er.sequence.set", json!({ "sequence": counter, "name": "order" }), "named \"order\" already");
+    refused(&mut s, "er.view.add", json!({ "schema": shop, "name": "Counter", "query": "SELECT 1" }), "named \"Counter\" already");
+    refused(&mut s, "er.view.set", json!({ "view": report, "name": "customer", "query": "SELECT 1" }), "named \"customer\" already");
+    refused(&mut s, "er.domain.set", json!({ "domain": money, "name": "Customer", "base_type": "TEXT" }), "named \"Customer\" already");
+    let customer = er_id(&s, ENTITY, "Customer");
+    let m2m = run(&mut s, "er.relationship.add", json!({ "from": customer, "to": order, "from_end": "zero-or-more" }));
+    refused(&mut s, "er.relationship.resolve", json!({ "relationship": m2m, "name": "ORDER" }), "named \"ORDER\" already");
+    // Columns: one name per column in a table.
+    let column = |s: &Session, name: &str| {
+        let st = s.doc();
+        let e = st.by_uuid(Uuid::parse(&customer).unwrap()).unwrap();
+        let a =
+            st.list(e, archforge_er::entity::ATTRIBUTE).unwrap().iter().filter_map(Value::as_ref).find(|a| archforge_core::name_of(st, *a) == name);
+        st.uuid(a.unwrap()).unwrap().to_string()
+    };
+    let (id, name) = (column(&s, "id"), column(&s, "name"));
+    refused(
+        &mut s,
+        "er.attribute.add",
+        json!({ "entity": customer, "name": "ID", "type": "TEXT" }),
+        "the entity has an attribute named \"ID\" already",
+    );
+    refused(&mut s, "er.attribute.rename", json!({ "attribute": name, "name": "Id" }), "the entity has an attribute named \"Id\" already");
+    // Relationships: one name per relationship in a schema.
+    let billed = er_id(&s, RELATIONSHIP, "billed");
+    refused(
+        &mut s,
+        "er.relationship.add",
+        json!({ "from": customer, "to": order, "name": "Places" }),
+        "the schema has a relationship named \"Places\" already",
+    );
+    refused(
+        &mut s,
+        "er.relationship.rename",
+        json!({ "relationship": billed, "name": "PLACES" }),
+        "the schema has a relationship named \"PLACES\" already",
+    );
+    // Keys, foreign keys, checks and indexes: one constraint name per schema, more than opening asks.
+    let taken = "the schema has a constraint named";
+    refused(&mut s, "er.unique.add", json!({ "entity": customer, "columns": [id], "name": "PK_CUSTOMER" }), taken);
+    refused(&mut s, "er.primary-key.set", json!({ "entity": customer, "columns": [id], "name": "Uq_Name" }), taken);
+    refused(&mut s, "er.check.add", json!({ "entity": order, "expression": "1 = 1", "name": "IX_A" }), taken);
+    refused(&mut s, "er.index.add", json!({ "entity": customer, "columns": [name], "name": "Named" }), taken);
+    let fk = {
+        let st = s.doc();
+        let fk = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_er::FOREIGN_KEY) && archforge_core::name_of(st, *o) == "fk_billed");
+        st.uuid(fk.unwrap()).unwrap().to_string()
+    };
+    refused(&mut s, "er.foreign-key.rename", json!({ "foreign_key": fk, "name": "FK_PLACES" }), taken);
+    // A domain's checks: one name per check in a domain.
+    let twice = json!([{ "expression": "VALUE > 0", "name": "positive" }, { "expression": "VALUE < 9", "name": "POSITIVE" }]);
+    refused(
+        &mut s,
+        "er.domain.add",
+        json!({ "schema": shop, "name": "amount", "base_type": "INTEGER", "checks": twice }),
+        "two checks are named POSITIVE",
+    );
+    refused(
+        &mut s,
+        "er.domain.set",
+        json!({ "domain": money, "name": "money", "base_type": "INTEGER", "checks": twice }),
+        "two checks are named POSITIVE",
+    );
+    // In another owner the same names are free.
+    let other = run(&mut s, "er.entity.add", json!({ "schema": billing, "name": "customer" }));
+    run(&mut s, "er.attribute.add", json!({ "entity": other, "name": "ID", "type": "TEXT" }));
+    run(&mut s, "er.domain.add", json!({ "schema": billing, "name": "Money", "base_type": "INTEGER", "checks": [twice[0].clone()] }));
+    reopens(s.doc()).unwrap();
+}
+
+/// ER elements of different kinds share a name in one owner, through the commands, and the project
+/// opens again: a schema and its table, a table and its column, a relationship and a table, a
+/// constraint and a column, a domain's check and its domain.
+#[test]
+fn er_elements_of_different_kinds_share_a_name_and_the_project_opens_again() {
+    use archforge_er::{ENTITY, RELATIONSHIP, SCHEMA};
+    let mut s = er_project();
+    let shop = er_id(&s, SCHEMA, "shop");
+    let table = run(&mut s, "er.entity.add", json!({ "schema": shop, "name": "Shop" }));
+    let column = run(&mut s, "er.attribute.add", json!({ "entity": table, "name": "SHOP", "type": "BIGINT" }));
+    let places = er_id(&s, RELATIONSHIP, "places");
+    run(&mut s, "er.relationship.rename", json!({ "relationship": places, "name": "Customer" }));
+    run(&mut s, "er.unique.add", json!({ "entity": table, "columns": [column], "name": "shop" }));
+    let order = er_id(&s, ENTITY, "Order");
+    run(&mut s, "er.check.add", json!({ "entity": order, "expression": "1 = 1", "name": "order" }));
+    let checks = json!([{ "expression": "VALUE > 0", "name": "amount" }]);
+    run(&mut s, "er.domain.add", json!({ "schema": shop, "name": "amount", "base_type": "INTEGER", "checks": checks }));
+    reopens(s.doc()).unwrap();
+}
+
+/// The project opens by the very rule ER's commands ask: for every named ER metaclass the kind is
+/// ER's, and for every kind two elements named alike in one owner are what the commands refuse
+/// ([`archforge_er::names::clash`], and for constraints the wider rule of the schema) and what the
+/// check as it opens refuses; a name that clashes with nothing of its kind opens.
+#[test]
+fn er_opens_by_the_rule_its_commands_ask() {
+    use archforge_er::names::{self, CONSTRAINT, RELATION, clash};
+    use archforge_er::{
+        ATTRIBUTE, CHECK_CONSTRAINT, DOMAIN, DOMAIN_CHECK, ENTITY, ENUM_TYPE, FOREIGN_KEY, INDEX, PRIMARY_KEY, RELATIONSHIP, SCHEMA, SEQUENCE,
+        TABLE_INDEX, UNIQUE_CONSTRAINT, VIEW,
+    };
+    let u = universe().unwrap();
+    let mut named = 0;
+    for c in u.classes().filter(|c| c.metamodel() == INDEX) {
+        if u.info(c).and_then(|i| i.name_prop).is_some() {
+            named += 1;
+            assert_eq!(name_kind(c), names::kind(c), "{}", u.class_name(c));
+        }
+    }
+    assert_eq!(named, 16, "every named ER metaclass is asked, the abstract NamedElement and Key among them");
+    for c in [ENTITY, DOMAIN, ENUM_TYPE, SEQUENCE, VIEW] {
+        assert_eq!(name_kind(c), Some(RELATION), "{}", u.class_name(c));
+    }
+    for c in [PRIMARY_KEY, UNIQUE_CONSTRAINT, FOREIGN_KEY, CHECK_CONSTRAINT, TABLE_INDEX] {
+        assert_eq!(name_kind(c), Some(CONSTRAINT), "{}", u.class_name(c));
+    }
+    for c in [SCHEMA, ATTRIBUTE, RELATIONSHIP, DOMAIN_CHECK] {
+        assert_eq!(name_kind(c), Some(NameKind::Class(c)), "{}", u.class_name(c));
+    }
+    let s = er_project();
+    let st = s.doc();
+    let named_obj = |class, name: &str| st.alive().find(|o| st.class_of(*o).ok() == Some(class) && archforge_core::name_of(st, *o) == name).unwrap();
+    let shop = named_obj(SCHEMA, "shop");
+    // (the element whose name is taken, another of its kind in its owner, whether it is a constraint)
+    let same_kind = [
+        (named_obj(SCHEMA, "shop"), named_obj(SCHEMA, "billing"), false),
+        (named_obj(ENTITY, "Customer"), named_obj(ENTITY, "Order"), false),
+        (named_obj(ENTITY, "Customer"), named_obj(DOMAIN, "money"), false),
+        (named_obj(ENUM_TYPE, "state"), named_obj(VIEW, "report"), false),
+        (named_obj(VIEW, "report"), named_obj(SEQUENCE, "counter"), false),
+        (named_obj(ATTRIBUTE, "id"), named_obj(ATTRIBUTE, "name"), false),
+        (named_obj(RELATIONSHIP, "places"), named_obj(RELATIONSHIP, "billed"), false),
+        (named_obj(PRIMARY_KEY, "pk_customer"), named_obj(UNIQUE_CONSTRAINT, "uq_name"), true),
+        (named_obj(FOREIGN_KEY, "fk_places"), named_obj(FOREIGN_KEY, "fk_billed"), true),
+        (named_obj(CHECK_CONSTRAINT, "named"), named_obj(CHECK_CONSTRAINT, "positive_id"), true),
+        (named_obj(TABLE_INDEX, "ix_a"), named_obj(TABLE_INDEX, "ix_b"), true),
+        (named_obj(DOMAIN_CHECK, "positive"), named_obj(DOMAIN_CHECK, "small"), false),
+    ];
+    let (tables, junctions) = storage();
+    for (first, second, constraint) in same_kind {
+        let taken = archforge_core::name_of(st, first).to_uppercase();
+        let (owner, _) = st.container(second).unwrap().unwrap();
+        let class = st.class_of(second).unwrap();
+        let what = u.class_name(class);
+        // What the commands ask of the name.
+        assert_eq!(clash(st, owner, class, &taken, Some(second)), Some(first), "{what} {taken}: the commands refuse it");
+        if constraint {
+            assert!(!archforge_er::rules::constraint_name_free(st, shop, &taken, Some(second)), "{what} {taken}: the schema's constraints refuse it");
+        }
+        // What the check as it opens makes of it, written straight into the store.
+        let mut copy = store(ids(1 << 41)).unwrap();
+        rows::restore(&mut copy, &snapshot(st), &tables, &junctions).unwrap();
+        let prop = copy.universe().info(class).and_then(|i| i.name_prop).unwrap();
+        let second = copy.by_uuid(st.uuid(second).unwrap()).unwrap();
+        copy.set(second, prop, Value::str(&taken)).unwrap();
+        let e = reopens(&copy).expect_err(&format!("{what} {taken}: the project does not open"));
+        assert!(e.contains("DuplicateName"), "{what} {taken}: {e}");
+        // A name of no element of its kind there passes both.
+        let free = format!("{taken}_free");
+        assert_eq!(clash(&copy, copy.container(second).unwrap().unwrap().0, class, &free, Some(second)), None, "{what} {free}");
+        copy.set(second, prop, Value::str(&free)).unwrap();
+        reopens(&copy).unwrap_or_else(|e| panic!("{what} {free}: {e}"));
+    }
+}

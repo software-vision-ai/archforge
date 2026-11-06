@@ -9,6 +9,7 @@
 pub mod commands;
 pub mod figures;
 mod generated;
+pub mod names;
 pub mod rules;
 
 use std::sync::Arc;

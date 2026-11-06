@@ -9,7 +9,7 @@ use crate::{
     ATTRIBUTE, CHECK_CONSTRAINT, Cardinality, DOMAIN, Deferrability, ENTITY, ENUM_TYPE, EntityKind, FOREIGN_KEY, GENERALIZATION, Generation,
     MatchType, NullsOrder, PRIMARY_KEY, RELATIONSHIP, ReferentialAction, SCHEMA, SEQUENCE, SortDirection, SubtypeMapping, TABLE_INDEX,
     UNIQUE_CONSTRAINT, VIEW, attribute, check_constraint, domain, domain_check, entity, enum_type, foreign_key, generalization, index_column, key,
-    named_element, relationship, schema, sequence, table_index, unique_constraint, view,
+    relationship, schema, sequence, table_index, unique_constraint, view,
 };
 
 /// The most literals of an enum type.
@@ -67,34 +67,28 @@ pub fn name_of(store: &Store, obj: Obj) -> String {
     archforge_core::name_of(store, obj)
 }
 
-/// Whether `name` is free among the children of `parent` named through the shared name property,
-/// except for `except`: a lookup in the store's name index, filtered by the container.
-fn name_free_under(store: &Store, parent: Obj, name: &str, except: Option<Obj>) -> bool {
-    !store
-        .by_name(named_element::NAME, name)
-        .into_iter()
-        .any(|o| Some(o) != except && store.container(o).ok().flatten().map(|(c, _)| c) == Some(parent))
-}
-
 /// Whether `name` is free in `schema`, except for `except`: tables, domains, enum types, sequences
 /// and views share one namespace, as relations and types do in SQL.
 pub fn entity_name_free(store: &Store, schema: Obj, name: &str, except: Option<Obj>) -> bool {
-    name_free_under(store, schema, name, except)
+    crate::names::clash(store, schema, ENTITY, name, except).is_none()
 }
 
 /// Whether `name` is free among the relationships of `schema`, except for `except`; an unnamed
 /// relationship takes no name.
 pub fn relationship_name_free(store: &Store, schema: Obj, name: &str, except: Option<Obj>) -> bool {
-    name.is_empty()
-        || !store
-            .by_name(relationship::NAME, name)
-            .into_iter()
-            .any(|o| Some(o) != except && store.container(o).ok().flatten().map(|(c, _)| c) == Some(schema))
+    crate::names::clash(store, schema, RELATIONSHIP, name, except).is_none()
 }
 
 /// Whether `name` is free among the attributes of `entity`, except for `except`.
 pub fn attribute_name_free(store: &Store, entity: Obj, name: &str, except: Option<Obj>) -> bool {
-    name_free_under(store, entity, name, except)
+    crate::names::clash(store, entity, ATTRIBUTE, name, except).is_none()
+}
+
+/// The first name used twice among `names`, ignoring case, as the second one is written; empty
+/// names name nothing.
+pub fn first_twice<'a>(names: impl IntoIterator<Item = &'a str>) -> Option<&'a str> {
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    names.into_iter().filter(|n| !n.is_empty()).find(|n| !seen.insert(n.to_lowercase()))
 }
 
 /// The names used twice among `children`, ignoring case, in one pass.
@@ -1186,6 +1180,25 @@ pub fn problems(store: &Store) -> Vec<String> {
             let name = name_of(store, o);
             if let Some(p) = name_problem(&name, MAX_NAME) {
                 out.push(format!("the name of {o} {p}"));
+            }
+        }
+        if class == archforge_core::MODEL {
+            // A schema is named once in the model, which is one database (AR-209).
+            let schemas: Vec<Obj> = store
+                .list(o, archforge_core::model::MEMBER)
+                .unwrap_or_default()
+                .iter()
+                .filter_map(Value::as_ref)
+                .filter(|s| store.class_of(*s).ok() == Some(SCHEMA))
+                .collect();
+            for name in duplicate_names(store, &schemas) {
+                out.push(format!("the schema name {name:?} is used twice"));
+            }
+        }
+        if class == DOMAIN {
+            let names: Vec<String> = domain_checks(store, o).into_iter().map(|c| name_of(store, c)).collect();
+            if let Some(name) = first_twice(names.iter().map(String::as_str)) {
+                out.push(format!("the check name {name:?} is used twice in the domain {}", label(store, o)));
             }
         }
         if class == SCHEMA {

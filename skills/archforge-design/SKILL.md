@@ -393,6 +393,14 @@ What is ER's own, beside the shared rules above.
   it, and the editor offers Unlink.
 - A line's own colour shows while Key status is off; while it is on, the panel offers Show line
   colours, which turns it off. A line's own width shows always.
+- Names are told apart as SQL does, compared without case (AR-209): a schema is named once in the
+  project; tables, domains, enum types, sequences and views share one name per schema; a column is
+  named once in its table, a relationship once in its schema, a domain's check once in its domain;
+  keys, foreign keys, checks and indexes share one constraint name per schema. Elements of
+  different kinds may share a name (a schema and its table, a table and its column). A clash is
+  refused ("there is a schema named shop already", "two checks are named positive").
+  `archforge_er::names::kind` is the one rule the project's check as it opens asks, and the
+  commands keep it, so a project the commands made always opens again.
 
 ## UML notation
 What is UML's own, beside the shared rules above.
