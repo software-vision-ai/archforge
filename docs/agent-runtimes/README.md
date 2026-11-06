@@ -448,32 +448,62 @@ output is specific to the Codex version; the subcommands are marked experimental
 | Needed features and where they appeared | stream-json output 0.2.66, `--mcp-config` 0.2.75, `--disallowedTools` 0.2.82, `--replay-user-messages` 1.0.86, `--include-partial-messages` 1.0.109, `--bare` 2.1.81 with full enforcement (only CLI MCP servers) from 2.1.286, interrupt receipt 2.1.205, `--permission-prompts` 2.1.259, `api_retry.no_response` 2.1.261 (doc, changelog and reference pages) | The schema is version-specific; when `chatgptDeviceCode`, `ephemeral` threads and `model/list` first appeared was not found |
 | Recommended range | **>= 2.1.286 and < 3.0.0**; tested 2.1.317. Below the floor: MissingRuntime ("update Claude Code"). Newer 2.x: accepted with a warning (owner, 2026-11-06) | **>= 0.166.0 and < 1.0.0**; tested 0.166.0. Contract tests run against the credited schema cut in `crates/agents` (#193); each tested bump regenerates it. Newer 0.x: accepted with a warning (owner, 2026-11-06), since unknown methods fail loudly (-32600) |
 | Missing | spawn fails with "not found" → MissingRuntime | the same |
-| Too old at run time | `error: unknown option '…'` on stderr, exit 1, before any event → MissingRuntime | `-32600 unknown variant` for a needed method → MissingRuntime |
+| Too old at run time | The version check stops it first; a `claude` that still refuses an option prints `error: unknown option '…'` on stderr and exits 1 before any event, which the adapter reports as an exit (Other) | `-32600 unknown variant` for a needed method → MissingRuntime |
 | stderr | Usage errors and input-parse errors, plain text | Tracing logs with ANSI colours; malformed-input reports |
 
 ## Error mapping
 
-A turn ends in one of three outcomes: completed, **stopped** or failed. Stopped is not an error and
-is decided before the mapping below, as the Claude adapter does (`TurnOutcome::Stopped`,
-`crates/agents/src/claude/parse.rs`): for Claude, a `result` with
-`terminal_reason:"aborted_streaming"` (its `subtype` is `error_during_execution` and `is_error` is
-true, as after SIGINT or the interrupt control request), or a turn the person asked to stop whose
-result carries no error category; a real category that arrived during the stop still shows as that
-failure. For Codex, `turn/completed` with `status:"interrupted"`. Only failed turns map to a
-category:
+This is what the adapters do: Claude in `crates/agents/src/claude/parse.rs` (`ClaudeParser::result`,
+`failure`, `kind_of`) and Codex in the Codex adapter's `crates/agents/src/codex/parse.rs`
+(`turn_completed`, `kind_of`, #193). A turn ends **completed**, **stopped** or **failed**; stopped is
+not an error, and only a failed turn gets a neutral category. Retries (`api_retry`, an `error`
+notification with `willRetry:true`) are progress: shown, never a failure by themselves.
+
+**Claude**, at the turn's `result`, the first rule that applies:
+
+1. `is_error:false`: completed.
+2. `terminal_reason:"aborted_streaming"` (after SIGINT or the interrupt control request; its
+   `subtype` is `error_during_execution`): stopped, **even when a category was recorded earlier in
+   the turn**.
+3. A stop was asked for and no category was recorded in the turn: stopped.
+4. `is_error` missing or not a boolean: failed, Other.
+5. Otherwise failed, with the first of: (a) the category recorded in the turn, from the last
+   `assistant` message with `error` (through the category list below, with that message's
+   `api_error`) or a `rate_limit_event` with `status:"rejected"` (RateLimited), whichever came last;
+   (b) the result's `api_error:"connection_failed"`: Network; (c) the result's `api_error_status`:
+   401 or 403 InvalidCredential, 429 RateLimited, 404 or 529 ModelUnavailable; (d) the kind of the
+   turn's last `api_retry` (no `error_status` and category `unknown`: Network; otherwise its
+   category, else its `error_status` as in (c)); (e) Other.
+
+The category list: `authentication_failed` and `cloud_credential_error` are InvalidCredential;
+`rate_limit` and `billing_error` RateLimited; `model_not_found` and `overloaded` ModelUnavailable;
+`oauth_org_not_allowed`, `account_on_hold`, `invalid_request` and `max_output_tokens` Other. Any
+other category (`server_error`, `unknown`, …) is Network when its `api_error` is
+`connection_failed`, else its HTTP status as in (c) where it has one, else Other. So the order is:
+category, then `connection_failed`, then HTTP status, then the last retry, then Other. If `claude`
+ends while a turn is open, the turn fails with the end's error (an exit or a crash: Other).
+
+**Codex**, at `turn/completed`: `status:"completed"` is completed; `"interrupted"` is stopped;
+`"failed"` fails with the category of the turn's own `error`, else of the last `error` notification
+with `willRetry:false`; with neither it is stopped when a stop was asked for, else Other; any other
+status fails as Other. A category comes from `codexErrorInfo`: its name first, and an HTTP status
+only inside the connection failures (below); anything not listed is Other. Before a turn, a sign-in
+problem fails the turn when it is sent (below).
 
 | Neutral category | Claude | Codex |
 |---|---|---|
-| **MissingRuntime** | Not found on the search path; `--version` fails or is below the floor; an unknown option exits 1 before `init` | Not found; `--version` below the floor; `initialize` fails; a needed method answers `-32600 unknown variant` |
-| **InvalidCredential** | `error:"authentication_failed"` or `cloud_credential_error` (assistant or `api_retry`), or an HTTP status 401 or 403 where no category came. With `apiKeySource:"none"` in `init` it means no key reached the child (observed, `Not logged in`) | `codexErrorInfo:"unauthorized"` with `authMode:"apikey"`; `account/login/completed` with `success:false` for an API key; `account/read` → `account:null` when a key was expected |
-| **SignInExpired** | Not applicable (API key only); `oauth_org_not_allowed` and `account_on_hold` go to Other | `unauthorized` while `authMode:"chatgpt"`; `account/updated` with `authMode:null` unprompted; `modelProvider/authRecoveryStarted` without a matching success |
-| **RateLimited** | `error:"rate_limit"`; HTTP status 429 (`api_retry.error_status` or `result.api_error_status`); `rate_limit_event` with `status:"rejected"`; `billing_error` (credits used up) | `rateLimitExceeded`, `usageLimitExceeded`, `sessionBudgetExceeded`; `account/rateLimits/updated` with `rateLimitReachedType`; `ordinaryUsageAllowed:false` |
-| **Network** | `api_retry` with `error_status:null` while retrying (observed); final `error:"server_error"` with `api_error:"connection_failed"` (observed) | `httpConnectionFailed`, `responseStreamConnectionFailed`, `responseStreamDisconnected`, `responseTooManyFailedAttempts`; `willRetry:true` is transient |
-| **ModelUnavailable** | `error:"model_not_found"`; `overloaded` (temporary); HTTP status 404 or 529 where no category came | `modelNotFound`, `serverOverloaded`, `flexUnavailable`, `policyCapacityUnavailable` |
-| **Other** | `invalid_request`, `max_output_tokens`, `server_error` with an HTTP status, `unknown` at the end, a failed `result` (`is_error:true`, `subtype` `error_*`) that is not a stop and carries no category, an exit without a `result`, an unparsable line, `oauth_org_not_allowed`, `account_on_hold` | `badRequest`, `internalServerError`, `contextWindowExceeded`, `sandboxError`, `cyberPolicy`, `misalignmentPolicyViolation`, `tooManyDenials`, `other`, a request timeout, an exit with requests pending |
+| **MissingRuntime** | Not found, not executable, or its location not safe; `--version` fails, times out or cannot be read; the version is below the floor or at or past the first unsupported major version | The same for `codex`; `initialize` refused, or the handshake's version below the floor or past the supported range; a request Archforge needs answered as an unknown method (`-32600 unknown variant`) |
+| **InvalidCredential** | Category `authentication_failed` or `cloud_credential_error`; else HTTP status 401 or 403 (rule 5c or a retry's status). A missing key shows as `authentication_failed` with `apiKeySource:"none"` in `init` (observed, `Not logged in`) | `unauthorized` when signed in with an API key, or a connection failure with HTTP status 401 or 403 then; `account/login/start` refused; `account/login/completed` with `success:false`; `account/read` with `account:null`; `account/updated` with `authMode:null` for an API key |
+| **SignInExpired** | Not used (API key only) | `unauthorized` when signed in with ChatGPT, or a connection failure with HTTP status 401 or 403 then; `account/updated` with `authMode:null` for a ChatGPT sign-in |
+| **RateLimited** | Category `rate_limit` or `billing_error`; a `rate_limit_event` with `status:"rejected"`; else HTTP status 429 | `usageLimitExceeded`, `rateLimitExceeded`, `sessionBudgetExceeded`; a connection failure with HTTP status 429 |
+| **Network** | `api_error:"connection_failed"` (observed after the retries ran out); else a last `api_retry` with no `error_status` and category `unknown` (observed) | `httpConnectionFailed`, `responseStreamConnectionFailed`, `responseStreamDisconnected`, `responseTooManyFailedAttempts` with no HTTP status or another one than 401, 403, 404 or 429 |
+| **ModelUnavailable** | Category `model_not_found` or `overloaded`; else HTTP status 404 or 529 | `modelNotFound`, `serverOverloaded`, `flexUnavailable`, `policyCapacityUnavailable`; a connection failure with HTTP status 404 |
+| **Other** | Category `oauth_org_not_allowed`, `account_on_hold`, `invalid_request` or `max_output_tokens`; any other category, or a failed `result` without one, that none of `connection_failed`, a mapped HTTP status (401, 403, 404, 429, 529) or the last retry places; `is_error` missing; `claude` exiting or crashing with a turn open | Every other `codexErrorInfo` (`badRequest`, `internalServerError`, `contextWindowExceeded`, `sandboxError`, `cyberPolicy`, `misalignmentPolicyViolation`, `tooManyDenials`, `other`, …); a failed turn with no error and no stop asked for; an unknown status; a request not answered in time; a refused request other than the ones above; `codex` ending with a turn open |
 
-Mapping reads the category fields only. `api_retry` and `willRetry:true` are progress, not failures:
-show them, keep the draft, and map only the final outcome.
+Not mapped to a category by either adapter: an unreadable output line (skipped and counted);
+`account/rateLimits/read`, which the Codex adapter reads for Settings as limits, not as a failure;
+and `account/rateLimits/updated` and `modelProvider/authRecoveryStarted` / `authRecoveryCompleted`,
+which a Codex session knows and passes over.
 
 ## Fixtures
 
