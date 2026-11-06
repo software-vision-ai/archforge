@@ -251,7 +251,8 @@ read itself, the file stays in place and the error says so; every start that wou
 (`Start::New` and `Start::ResumeFrom` as well as `Start::Resume`) is then refused with that error,
 so a damaged copy is never overwritten: keep the file aside by hand, or fix what the error names,
 before starting again. `Start::Resume` gives a new thread that copy with `thread/inject_items`
-before the first turn; `Start::ResumeFrom(History)` primes it from the project's record (AR-206)
+before the first turn (the most recent earlier messages whose JSON, as written, fits the line limit
+with the request around it; older ones are dropped and logged); `Start::ResumeFrom(History)` primes it from the project's record (AR-206)
 instead, for when the folder has none, as on another computer. It uses the history it is given even
 when the folder holds a readable copy, and replaces that copy at the end of the first turn: check
 `history::exists(folder)` first and choose `Start::Resume` when it is true. Tool calls
@@ -288,7 +289,7 @@ turnId}` once Codex named the turn; a message still waiting for its thread is dr
 A turn's notifications (`turn/*`, `item/*`, `error`, `thread/tokenUsage/updated`) count only for
 the open turn whose `turn/start` was sent: those for another thread, an ended or abandoned turn (the
 last 64 are remembered), or before the turn was asked for change nothing, neither the events nor
-the copy; those that come before Codex named the turn are held (at most 1024) and then given to the
+the copy; those that come before Codex named the turn are held (at most 1024 of them, from at most 16 MiB of lines) and then given to the
 turn it names. When Codex answers `turn/start` without naming the turn, a held `turn/started`
 that names one names it, else the first held notification that does, else the first later one; with none within one request timeout the turn fails as
 `Other` (stopped when a stop was asked for) and its thread is left. A `turn/start` past its deadline fails the turn (as stopped when a stop was asked

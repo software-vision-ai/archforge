@@ -22,8 +22,10 @@ pub const MAX_HISTORY_BYTES: usize = 4 * 1024 * 1024;
 pub const MAX_ENTRY_BYTES: usize = 1024 * 1024;
 /// The most messages the copy keeps; past it the oldest are dropped.
 pub const MAX_HISTORY_ENTRIES: usize = 4096;
-/// The most bytes the file may have on disk (its text may grow by escaping).
-const MAX_FILE_BYTES: u64 = 6 * 4 * 1024 * 1024;
+/// The most bytes the file may have on disk: every copy this module writes fits. Its text is at
+/// most [`MAX_HISTORY_BYTES`], which JSON escaping may grow six times (a control character becomes
+/// `\u00XX`), and each message and the file itself add at most 64 bytes of JSON around it.
+const MAX_FILE_BYTES: u64 = 6 * MAX_HISTORY_BYTES as u64 + 64 * (MAX_HISTORY_ENTRIES as u64 + 1);
 /// The version of the file's layout.
 const VERSION: u64 = 1;
 
@@ -98,23 +100,43 @@ impl History {
     }
 
     /// The items `thread/inject_items` takes (Responses API messages) for every message but the
-    /// newest, which is the one waiting to be sent; the oldest are dropped until they fit
-    /// `max_bytes` of JSON text.
+    /// newest, which is the one waiting to be sent: the newest of them whose JSON array, as it is
+    /// written (escaping, the objects around each text, the commas and brackets), takes at most
+    /// `max_bytes`. The oldest are dropped first, so what is kept is the most recent stretch of the
+    /// conversation, without a gap; when even the newest earlier message alone does not fit, none
+    /// is. Each drop is logged by count.
     pub fn items_before_last(&self, max_bytes: usize) -> Vec<Value> {
         let earlier = self.entries.len().saturating_sub(1);
-        let mut entries: Vec<Entry> = self.entries.iter().take(earlier).cloned().collect();
-        // JSON escaping may grow text up to six times (a control character becomes \u00XX).
-        trim(&mut entries, max_bytes / 6);
-        entries
+        let items: Vec<(Value, usize)> = self
+            .entries
             .iter()
+            .take(earlier)
             .map(|e| {
                 let part = match e.role {
                     Role::User => "input_text",
                     Role::Assistant => "output_text",
                 };
-                json!({ "type": "message", "role": e.role.as_str(), "content": [{ "type": part, "text": e.text }] })
+                let item = json!({ "type": "message", "role": e.role.as_str(), "content": [{ "type": part, "text": e.text }] });
+                let bytes = item.to_string().len();
+                (item, bytes)
             })
-            .collect()
+            .collect();
+        // `[` and `]`, then each item and a comma before every item but the first.
+        let mut total = 2usize;
+        let mut first_kept = items.len();
+        for (at, (_, bytes)) in items.iter().enumerate().rev() {
+            let comma = usize::from(first_kept < items.len());
+            let grown = total.saturating_add(*bytes).saturating_add(comma);
+            if grown > max_bytes {
+                break;
+            }
+            total = grown;
+            first_kept = at;
+        }
+        if first_kept > 0 {
+            log::info!("{first_kept} of the earlier messages do not fit the line limit and are not given to the new thread");
+        }
+        items.into_iter().skip(first_kept).map(|(item, _)| item).collect()
     }
 
     /// The file's text.
@@ -263,8 +285,9 @@ mod tests {
         }
         assert_eq!(history.entries().len(), MAX_HISTORY_ENTRIES);
         assert_eq!(history.entries()[0].text, "m10");
-        let items = history.items_before_last(6 * 1000);
+        let items = history.items_before_last(1000);
         assert!(items.len() < 20 && !items.is_empty());
+        assert!(Value::Array(items.clone()).to_string().len() <= 1000);
         assert_eq!(items.last().unwrap()["content"][0]["text"], format!("m{}", MAX_HISTORY_ENTRIES + 8), "the waiting message is not injected");
         assert_eq!(items.last().unwrap()["content"][0]["type"], "input_text");
 
@@ -277,5 +300,54 @@ mod tests {
         let items = big.items_before_last(8 * 1024 * 1024);
         assert_eq!(items.len(), 2, "a long waiting message does not crowd out the earlier ones");
         assert!(!format!("{big:?}").contains("first"), "Debug shows no text");
+    }
+
+    /// The budget is measured on the JSON as it is written: text that grows when escaped (quotes,
+    /// backslashes, control characters) counts at its escaped size, right to the byte.
+    #[test]
+    fn the_injected_items_fit_their_budget_as_json() {
+        let mut history = History::default();
+        let grows = "\"\\\u{1}\n".repeat(50);
+        for role in [Role::User, Role::Assistant, Role::User] {
+            history.push(role, grows.clone());
+        }
+        history.push(Role::Assistant, "older".into());
+        history.push(Role::User, "waiting".into());
+        let all = history.items_before_last(usize::MAX);
+        assert_eq!(all.len(), 4, "the waiting message is never among them");
+        let size = |items: &[Value]| Value::Array(items.to_vec()).to_string().len();
+        let last_two = size(&all[2..]);
+        assert!(last_two > 2 * (grows.len() + 64), "the escaped size is what is measured: {last_two}");
+        assert_eq!(history.items_before_last(last_two), all[2..].to_vec(), "exactly at the budget, both fit");
+        assert_eq!(history.items_before_last(last_two - 1), all[3..].to_vec(), "one byte less, the older one goes");
+        assert!(history.items_before_last(size(&all[3..]) - 1).is_empty(), "the newest alone too large: none, no gap");
+        for budget in [2, 100, 1000, last_two, size(&all)] {
+            assert!(size(&history.items_before_last(budget)) <= budget.max(2), "{budget}");
+        }
+    }
+
+    /// A copy as large as the caps allow, all of it text that grows the most when escaped, is
+    /// written and read back: every copy this module writes fits the file cap.
+    #[test]
+    fn the_largest_copy_reads_back() {
+        let base = std::env::temp_dir().join(format!("archforge-codex-history-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        let ws = crate::Workspace::open(&base.join("ws")).unwrap();
+        let folder = ws.conversation(&crate::ConversationId::new("big").unwrap()).unwrap();
+        let mut history = History::default();
+        for _ in 0..(MAX_HISTORY_BYTES / MAX_ENTRY_BYTES + 2) {
+            history.push(Role::User, "\u{1}".repeat(MAX_ENTRY_BYTES));
+        }
+        // Fill what the text cap leaves with one more message.
+        let cost: usize = history.entries().iter().map(|e| e.text.len() + 64).sum();
+        history.push(Role::Assistant, "\u{1}".repeat(MAX_HISTORY_BYTES - cost - 64));
+        let cost: usize = history.entries().iter().map(|e| e.text.len() + 64).sum();
+        assert_eq!(cost, MAX_HISTORY_BYTES, "the copy is at its text cap, and escaping grows every byte six times");
+        history.write(&folder).unwrap();
+        let written = std::fs::metadata(path(&folder)).unwrap().len();
+        assert!(written <= MAX_FILE_BYTES, "{written} > {MAX_FILE_BYTES}");
+        assert_eq!(History::read(&folder).unwrap(), history);
+        std::fs::remove_dir_all(&base).unwrap();
     }
 }

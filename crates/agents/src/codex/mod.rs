@@ -118,6 +118,8 @@ const TURN_NOTIFICATIONS: [&str; 7] =
     ["turn/started", "turn/completed", "item/started", "item/completed", "item/agentMessage/delta", "error", "thread/tokenUsage/updated"];
 /// The most turn notifications held while Codex has not yet named the running turn.
 const MAX_HELD: usize = 1024;
+/// The most bytes of output lines those held notifications may come from.
+const MAX_HELD_BYTES: usize = 16 * 1024 * 1024;
 /// The most ended or abandoned turns remembered, whose late notifications are ignored.
 const MAX_STALE_TURNS: usize = 64;
 /// The most `turn/start` requests remembered after their deadline, whose late answers are stopped.
@@ -473,6 +475,8 @@ pub struct CodexSession {
     /// Turn notifications that came while `turn/start` waited for its answer, for the turn it
     /// names.
     held: VecDeque<(String, Value)>,
+    /// The bytes of the output lines the held notifications came from.
+    held_bytes: usize,
     /// Turns that ended or were abandoned: their late notifications are ignored.
     stale_turns: VecDeque<String>,
     /// `turn/start` requests that passed their deadline, with their thread: a late answer names a
@@ -596,6 +600,7 @@ impl CodexSession {
             stop_requested: false,
             interrupt_sent: false,
             held: VecDeque::new(),
+            held_bytes: 0,
             stale_turns: VecDeque::new(),
             late_starts: VecDeque::new(),
             unnamed_deadline: None,
@@ -655,7 +660,7 @@ impl CodexSession {
                         Some((method, purpose)) => self.answered(purpose, method, result),
                         None => self.late_answer(id, result),
                     },
-                    Incoming::Notification { method, params } => self.notified(&method, &params),
+                    Incoming::Notification { method, params } => self.notified(&method, &params, line.len()),
                     Incoming::Request { id, method, .. } => self.decline(&id, &method),
                     Incoming::Skipped(why) => {
                         let event = self.parser.skip(why);
@@ -673,7 +678,7 @@ impl CodexSession {
     }
 
     /// A notification: its events, and what it changes for the session.
-    fn notified(&mut self, method: &str, params: &Value) {
+    fn notified(&mut self, method: &str, params: &Value, bytes: usize) {
         match (method, params.get("success").and_then(Value::as_bool)) {
             ("account/login/completed", Some(false)) => {
                 self.sign_in_problem = Some(AgentError::reported(ErrorKind::InvalidCredential, "codex refused the sign-in"));
@@ -706,8 +711,14 @@ impl CodexSession {
                 }
                 self.deliver(method, params);
             }
-            Scope::Hold if self.held.len() < MAX_HELD => self.held.push_back((method.to_owned(), params.clone())),
-            Scope::Hold => log::warn!("codex sent more than {MAX_HELD} turn notifications before naming the turn; the rest are dropped"),
+            // Capped by count and by the bytes of the lines they came from, not by the count alone.
+            Scope::Hold if self.held.len() < MAX_HELD && self.held_bytes.saturating_add(bytes) <= MAX_HELD_BYTES => {
+                self.held_bytes = self.held_bytes.saturating_add(bytes);
+                self.held.push_back((method.to_owned(), params.clone()));
+            }
+            Scope::Hold => log::warn!(
+                "codex sent more than {MAX_HELD} turn notifications or {MAX_HELD_BYTES} bytes before naming the turn; the rest are dropped"
+            ),
             Scope::Other => log::debug!("codex sent {} for a turn or thread that is not current; it was ignored", parse::kind_name(method)),
         }
     }
@@ -765,6 +776,7 @@ impl CodexSession {
     /// The notifications held until Codex named the turn, now for the turn it named; while it has
     /// named none, they stay held.
     fn release_held(&mut self) {
+        // What stays held keeps its share of the byte count, which stays an upper bound.
         let held: Vec<(String, Value)> = self.held.drain(..).collect();
         for (method, params) in held {
             match self.scope(&method, &params) {
@@ -1015,7 +1027,10 @@ impl CodexSession {
                 Ok(())
             }
             Thread::Ready(thread) if self.inject => {
-                let budget = self.max_line_bytes.saturating_sub(1024);
+                // The items must fit the line limit as JSON with the request around them (written
+                // here with empty items and the largest id an id can be).
+                let envelope = rpc::request_line(u64::MAX, "thread/inject_items", Some(json!({ "threadId": thread, "items": [] }))).len();
+                let budget = self.max_line_bytes.saturating_sub(1).saturating_sub(envelope).saturating_add(2);
                 // The message waiting is the newest entry: it goes in the turn, not before it.
                 let items = self.history.items_before_last(budget);
                 if items.is_empty() {
@@ -1057,6 +1072,7 @@ impl CodexSession {
             self.remember_stale(turn);
         }
         self.held.clear();
+        self.held_bytes = 0;
         self.unnamed_deadline = None;
         self.parser.reset_turn();
         // A message whose `turn/start` was never sent or was refused never reached the thread:
