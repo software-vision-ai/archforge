@@ -338,8 +338,11 @@ turn then stays open (no new message is taken, as Codex may still run it) for on
 timeout: Codex saying the turn ended closes it as usual, and otherwise the session ends with a
 reason ("did not stop the turn"), so the caller starts it again with `Start::Resume`. When the
 session ends this way (or any way it cannot go on), Codex's input is closed; a Codex that has not
-exited one request timeout later is ended (SIGTERM to its group, then SIGKILL, as at shutdown), so
-`Ended` always follows, with the error the session failed with. A stop
+exited one request timeout later is ended (SIGTERM and SIGKILL to its group,
+`RuntimeProcess::terminate`, which never waits), so `Ended` always follows, with the error the
+session failed with. A Codex that closes its output but keeps running is ended the same way as the
+session ends ("it was ended"); either way it is collected by a later `next_event`, `shutdown` or
+the drop, as soon as it has gone, and no call waits for it past its timeout. A stop
 request names its turn: a refusal or timeout that comes after that turn ended is ignored, so it
 never times a newer turn. Shutdown
 closes the input (Codex exits 0), then terminates and kills as for every runtime.

@@ -1129,10 +1129,10 @@ impl CodexSession {
         if self.end_deadline.is_some_and(|d| now >= d) {
             self.end_deadline = None;
             if !self.ended {
-                // Signalled at once (the grace has passed): its output then closes and the session
-                // ends with the error it failed with.
+                // Signalled at once and without waiting (the grace has passed): its output then
+                // closes and the session ends with the error it failed with.
                 log::warn!("codex did not exit after its input closed; it is ended");
-                if let Err(e) = self.process.shutdown(Duration::ZERO) {
+                if let Err(e) = self.process.terminate() {
                     log::warn!("codex could not be ended: {e}");
                 }
             }
@@ -1374,6 +1374,16 @@ impl CodexSession {
             _ => EXIT_WAIT,
         };
         let exit = wait_for_exit(&mut self.process, wait);
+        // A Codex that closed its output but still runs is of no more use: the session is over, so
+        // it is ended now, without waiting, and collected later (`next_event`, `shutdown`, the drop).
+        // Its exit stays unseen in `Ended`: the signal would be Archforge's, not a crash.
+        let ended_here = exit.is_none() && !self.shutting_down;
+        if ended_here {
+            log::warn!("codex closed its output but still runs; it is ended");
+            if let Err(e) = self.process.terminate() {
+                log::warn!("codex could not be ended: {e}");
+            }
+        }
         for (_, method, _) in self.requests.drain() {
             log::debug!("codex ended without answering {method}");
         }
@@ -1389,6 +1399,7 @@ impl CodexSession {
             } else {
                 match exit {
                     Some(exit) => self.process.exit_error(exit),
+                    None if ended_here => AgentError::reported(ErrorKind::Other, "codex closed its output and its exit was not seen; it was ended"),
                     None => AgentError::reported(ErrorKind::Other, "codex closed its output and its exit was not seen"),
                 }
             })
@@ -1499,6 +1510,8 @@ impl AgentSession for CodexSession {
                 return Some(event);
             }
             if self.ended {
+                // A Codex ended without waiting is collected here, as soon as it has gone.
+                let _ = self.process.status();
                 return None;
             }
             self.expire(Instant::now());

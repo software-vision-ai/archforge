@@ -504,6 +504,34 @@ impl RuntimeProcess {
         }
     }
 
+    /// Ends the runtime without waiting for it: its input is closed, then SIGTERM and SIGKILL go to
+    /// its whole group, and SIGKILL to the runtime itself in case it left the group. It is collected
+    /// only when it has already ended (checked without waiting); otherwise a later [`status`],
+    /// [`shutdown`] or the drop collects it, so it never stays a zombie past this value. Answers its
+    /// exit when collected. For a caller that must not block, unlike [`shutdown`].
+    ///
+    /// [`status`]: Self::status
+    /// [`shutdown`]: Self::shutdown
+    pub fn terminate(&mut self) -> Result<Option<Exit>, AgentError> {
+        self.close_input();
+        if self.exit.is_some() {
+            return Ok(self.exit);
+        }
+        if !sys::has_ended(&self.child).map_err(|e| self.io("check on", e))? {
+            let pid = self.child.id();
+            // Each signal once and without pausing: `collect` signals the group again before it waits.
+            for sig in [sys::Sig::Terminate, sys::Sig::Kill] {
+                if let Err(e) = sys::signal_group(pid, sig) {
+                    log::debug!("{} could not be signalled ({sig:?}): {e}", self.kind);
+                }
+            }
+            if let Err(e) = sys::signal_process(pid, sys::Sig::Kill) {
+                log::debug!("{} could not be sent SIGKILL: {e}", self.kind);
+            }
+        }
+        self.status()
+    }
+
     /// Waits at most `grace` for the runtime to end, without collecting it; says whether it did.
     fn wait_for_end(&self, grace: Duration) -> Result<bool, AgentError> {
         let started = Instant::now();

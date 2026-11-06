@@ -1079,15 +1079,21 @@ fn a_thread_left_by_an_unanswered_turn_is_let_go() {
     std::fs::remove_dir_all(&base).unwrap();
 }
 
-/// A Codex that ignores its input closing after a fatal stop failure is ended one request timeout
-/// later, so the session's end still comes, with the error it failed with, and the process is gone.
+/// Whether process `pid` still exists (a zombie included).
+fn alive(pid: u32) -> bool {
+    std::process::Command::new("/bin/kill").args(["-0", &pid.to_string()]).stderr(std::process::Stdio::null()).status().unwrap().success()
+}
+
+/// A Codex that ignores its input closing (and SIGTERM) after a fatal stop failure is ended one
+/// request timeout later, so the session's end still comes, with the error it failed with, and the
+/// process is gone. Polled with a zero timeout, no call waits, the one that ends Codex included.
 #[test]
 fn a_codex_that_will_not_exit_is_ended_after_a_fatal_stop_failure() {
     let base = scratch("will-not-exit");
     // The stop is refused, and then Codex stops reading its input and never exits by itself.
     let body = r#"
 on_turn() { send '{"id":@ID@,"result":{"turn":{"id":"u-1"}}}'; send '{"method":"item/agentMessage/delta","params":{"threadId":"019a0000-0000-7000-8000-000000000001","turnId":"u-1","itemId":"x","delta":"working"}}'; }
-on_interrupt() { send '{"id":@ID@,"error":{"code":-32600,"message":"no such turn"}}'; exec sleep 1000; }
+on_interrupt() { send '{"id":@ID@,"error":{"code":-32600,"message":"no such turn"}}'; trap '' TERM; exec sleep 1000; }
 "#;
     let (runtime, account, folder) = fake_codex(&base, body);
     let cfg = CodexConfig { request_timeout: Duration::from_millis(300), ..config(false) };
@@ -1097,14 +1103,52 @@ on_interrupt() { send '{"id":@ID@,"error":{"code":-32600,"message":"no such turn
     let pid = session.process().pid();
     let stopped = Instant::now();
     session.stop().unwrap();
-    let events = events_until(&mut session, |e| matches!(e, SessionEvent::Ended { .. }));
-    assert!(stopped.elapsed() < Duration::from_secs(3), "the end came after {:?}", stopped.elapsed());
+    let mut events = Vec::new();
+    while !events.iter().any(|e| matches!(e, SessionEvent::Ended { .. })) {
+        assert!(stopped.elapsed() < Duration::from_secs(3), "the end came not within the bound: {events:?}");
+        let started = Instant::now();
+        events.extend(session.next_event(Duration::ZERO));
+        assert!(started.elapsed() < Duration::from_millis(50), "a zero-timeout poll waited {:?}", started.elapsed());
+        std::thread::sleep(Duration::from_millis(5));
+    }
     assert!(
         matches!(events.last(), Some(SessionEvent::Ended { error: Some(e), .. }) if e.to_string().contains("did not stop the turn")),
         "{events:?}"
     );
-    let alive = std::process::Command::new("/bin/kill").args(["-0", &pid.to_string()]).status().unwrap().success();
-    assert!(!alive, "the process is gone");
+    // Collected by the next polls, as soon as it has gone.
+    let deadline = Instant::now() + Duration::from_secs(1);
+    while alive(pid) && Instant::now() < deadline {
+        assert_eq!(session.next_event(Duration::ZERO), None);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(!alive(pid), "the process is gone");
+    session.shutdown(Duration::from_secs(2)).unwrap();
+    std::fs::remove_dir_all(&base).unwrap();
+}
+
+/// A Codex that closes its output after a fatal stop failure but keeps running (and ignores
+/// SIGTERM) is ended as the session ends, and is gone within the bound.
+#[test]
+fn a_codex_that_closes_its_output_but_keeps_running_is_ended() {
+    let base = scratch("closed-but-running");
+    let body = r#"
+on_turn() { send '{"id":@ID@,"result":{"turn":{"id":"u-1"}}}'; send '{"method":"item/agentMessage/delta","params":{"threadId":"019a0000-0000-7000-8000-000000000001","turnId":"u-1","itemId":"x","delta":"working"}}'; }
+on_interrupt() { send '{"id":@ID@,"error":{"code":-32600,"message":"no such turn"}}'; exec 1>&-; trap '' TERM; exec sleep 1000; }
+"#;
+    let (runtime, account, folder) = fake_codex(&base, body);
+    let cfg = CodexConfig { request_timeout: Duration::from_millis(300), ..config(false) };
+    let mut session = CodexSession::start(&runtime, &account, &folder, cfg, SignIn::ApiKey(canary())).unwrap();
+    session.send("hi").unwrap();
+    events_until(&mut session, |e| matches!(e, SessionEvent::TextDelta { .. }));
+    let pid = session.process().pid();
+    session.stop().unwrap();
+    let ended = events_until(&mut session, |e| matches!(e, SessionEvent::Ended { .. }));
+    assert!(matches!(ended.last(), Some(SessionEvent::Ended { exit: None, error: Some(e) }) if e.to_string().contains("it was ended")), "{ended:?}");
+    let deadline = Instant::now() + Duration::from_secs(1);
+    while alive(pid) && Instant::now() < deadline {
+        let _ = session.next_event(Duration::from_millis(10));
+    }
+    assert!(!alive(pid), "the process is gone within the bound");
     session.shutdown(Duration::from_secs(2)).unwrap();
     std::fs::remove_dir_all(&base).unwrap();
 }
