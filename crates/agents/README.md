@@ -231,7 +231,8 @@ switches but no tool server, and its own `sqlite_home` and `log_dir` under the a
 example above, run offline, was accepted by codex-cli 0.166.0 and answered `initialize`.
 `apply_patch` has no switch: the read-only
 sandbox and the declined approvals hold it back. The bridge's tool calls are not asked about
-(`approve`): its own `--read-only` is the guard.
+(`approve`, meant to keep Codex from asking about each call; that it does is a round-trip item):
+its own `--read-only` is the guard.
 
 *Folders.* `CODEX_HOME` is the workspace's account folder (`Workspace::account(RuntimeKind::Codex)`,
 `account-codex/config`), the same for every conversation: Codex names its keyring entry for the
@@ -242,10 +243,14 @@ it: Codex's state and log databases (`sqlite_home`, `log_dir`, checked offline t
 `*.sqlite` there), and the conversation itself. Threads are `ephemeral`, so Codex writes no thread
 history under `CODEX_HOME`; Archforge keeps its own copy, the person's messages and the answers in
 order, in `codex-history.json` in the conversation's folder (written after every turn, atomically,
-0600, at most 4096 messages and 4 MiB, the oldest dropped first and logged; the person's text is
-scrubbed of the key). `Start::Resume` gives a new thread that copy with `thread/inject_items`
+0600, at most 4096 messages and 4 MiB, a message cut at 1 MiB, the oldest dropped first and
+logged, never the newest; the person's text is scrubbed of the key). A copy that cannot be read is
+set aside as `codex-history.json.damaged-<n>`, logged, and refused as a typed error, so a later
+write never replaces it. `Start::Resume` gives a new thread that copy with `thread/inject_items`
 before the first turn; `Start::ResumeFrom(History)` primes it from the project's record (AR-206)
-when the folder has none, as on another computer (the folder's copy then starts from it). Tool calls
+instead, for when the folder has none, as on another computer. It uses the history it is given even
+when the folder holds a copy, and replaces that copy at the end of the first turn: check
+`history::exists(folder)` first and choose `Start::Resume` when it is true. Tool calls
 are not in the copy.
 
 *Sign-in.* `SignIn::ApiKey(key)`: the key goes once, in the `account/login/start
@@ -320,11 +325,15 @@ server and never starting a thread, so nothing reaches a model; its state and lo
 folder of its own under the account's temporary folder, removed when it drops, so nothing it logs
 outlives it. Every call waits for its own answer
 at most the request timeout, so call it on a worker. `open` with `SignIn::ChatGpt` uses the keyring
-store; with `SignIn::ApiKey` the in-memory one and gives the key at once (a refused key is an
-`InvalidCredential` error from `open`): that is the API-key check, and the key is not kept, since
-each conversation gives it again. `read(refresh)` is `account/read` (`refreshToken` renews a ChatGPT
+store; with `SignIn::ApiKey` the in-memory one and gives the key at once. Codex keeps the key
+without asking OpenAI whether it is valid (codex-cli 0.166.0's `account/login/start` only stores
+it), so a wrong or revoked key is accepted by `open` and shows only on the first real request, a
+turn, as `InvalidCredential`; `open` answers `InvalidCredential` only when Codex refuses to take the
+key at all (API-key sign-in switched off, or the key could not be held), and a timeout or an early
+end stays `Other`. The key is not kept, since each conversation gives it again. `read(refresh)` is `account/read` (`refreshToken` renews a ChatGPT
 sign-in, reaching the sign-in service only); `check` reads and, for ChatGPT, renews once: a renewal
-refused with words of an expired or revoked sign-in reads as `Expired`. `login_chatgpt` and
+refused with words of an expired or revoked sign-in reads as `Expired`; for an API key it says only
+that Codex holds one. `login_chatgpt` and
 `login_device_code` answer the address to open, or the code and the address, and queue the same as
 `AccountEvent::LoginStarted`; an address must be `https` on `openai.com` or `chatgpt.com` (or below)
 without a user part, else it is refused and never queued; a device code is letters, digits and
@@ -364,7 +373,8 @@ missing and a refused sign-in, a Codex out of range, an exit during a turn, the 
 the login line; not in arguments, environment, any file, events, errors, `Debug` or logs, and no
 `auth.json`), the command line for both settings, the account folder, and the account calls
 (device code shown and cancelled, browser sign-in, check, rate limits, models over pages, sign-out,
-a foreign address refused, expiry, the API-key check, a call timeout). Each crate has one real
+a foreign address refused, expiry, the API key given over standard input, a refused login and a
+login timeout, a call timeout). Each crate has one real
 round trip, `#[ignore]`d: it needs a real key or sign-in and the owner's OK. Unix only.
 
 **Non-goals.** Windows: every entry point answers `AgentError::NotAvailable` ("not available on this

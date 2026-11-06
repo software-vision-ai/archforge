@@ -234,6 +234,13 @@ fn set_aside(path: &std::path::Path) -> String {
     "nothing: 64 damaged copies are already set aside".to_owned()
 }
 
+/// Whether the conversation's folder holds a copy (readable or not), for a caller choosing between
+/// [`Start::Resume`](super::Start::Resume), which reads it, and
+/// [`Start::ResumeFrom`](super::Start::ResumeFrom), which replaces it.
+pub fn exists(folder: &ConversationFolder) -> bool {
+    std::fs::symlink_metadata(path(folder)).is_ok()
+}
+
 /// Where the copy of the conversation in `folder` is kept.
 pub fn path(folder: &ConversationFolder) -> PathBuf {
     folder.path().join(HISTORY_FILE)

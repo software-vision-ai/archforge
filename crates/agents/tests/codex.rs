@@ -784,7 +784,9 @@ fn a_resume_gives_the_thread_the_earlier_messages() {
 
     // Without the folder's copy (another computer), the caller primes the thread from the
     // project's record, and the folder's copy starts from it.
+    assert!(history::exists(&folder));
     std::fs::remove_file(history::path(&folder)).unwrap();
+    assert!(!history::exists(&folder), "the caller sees there is no copy to resume");
     std::fs::remove_file(base.join("stdin")).unwrap();
     let mut record = History::default();
     record.push(history::Role::User, "From the project".into());
@@ -1579,11 +1581,12 @@ fn foreign_addresses_are_refused_and_expiry_is_read() {
     std::fs::remove_dir_all(&base).unwrap();
 }
 
-/// The API-key check: the key goes over standard input once, Codex reads as signed in with a key,
-/// and nothing is written; a refused key is an invalid credential; ChatGPT calls are refused on a
-/// key's process, which keeps nothing in the keyring.
+/// The API key goes over standard input once, Codex reads as signed in with a key, and nothing is
+/// written; Codex refusing to take the key is an invalid credential, while a login that goes
+/// unanswered stays a timeout (`Other`); ChatGPT calls are refused on a key's process, which keeps
+/// nothing in the keyring.
 #[test]
-fn an_api_key_is_checked_over_standard_input() {
+fn an_api_key_is_given_over_standard_input() {
     capture_logs();
     let base = scratch("account-key");
     let body = format!(
@@ -1611,6 +1614,26 @@ fn an_api_key_is_checked_over_standard_input() {
     let (runtime, account, _) = fake_codex(&base, &body);
     let error = CodexAccounts::open(&runtime, &account, SignIn::ApiKey(canary()), Default::default()).unwrap_err();
     assert_eq!(error.kind(), ErrorKind::InvalidCredential, "{error}");
+    assert!(error.to_string().contains("did not take the API key: bad key"), "{error}");
+    std::fs::remove_dir_all(&base).unwrap();
+
+    // A login Codex never answers is a timeout, not a refused key.
+    let base = scratch("account-key-timeout");
+    let body = format!("{ACCOUNT_BODY}\non_key_login() {{ :; }}");
+    let (runtime, account, _) = fake_codex(&base, &body);
+    let options = archforge_agents::codex::AccountOptions { request_timeout: Duration::from_millis(200), ..Default::default() };
+    let error = CodexAccounts::open(&runtime, &account, SignIn::ApiKey(canary()), options).unwrap_err();
+    assert_eq!(error.kind(), ErrorKind::Other, "{error}");
+    assert!(error.to_string().contains("did not answer account/login/start within 200 ms"), "{error}");
+    std::fs::remove_dir_all(&base).unwrap();
+
+    // Codex ending before it answers the login is that, not a refused key either.
+    let base = scratch("account-key-exit");
+    let body = format!("{ACCOUNT_BODY}\non_key_login() {{ exit 3; }}");
+    let (runtime, account, _) = fake_codex(&base, &body);
+    let error = CodexAccounts::open(&runtime, &account, SignIn::ApiKey(canary()), Default::default()).unwrap_err();
+    assert_eq!(error.kind(), ErrorKind::Other, "{error}");
+    assert!(error.to_string().contains("ended before it answered account/login/start"), "{error}");
     let logs = LOG.lock().unwrap_or_else(PoisonError::into_inner).join("\n");
     assert!(!logs.contains(&CANARY[..20]));
     std::fs::remove_dir_all(&base).unwrap();

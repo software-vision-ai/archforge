@@ -20,7 +20,7 @@
 //!
 //! **Tools.** The bridge is the only tool server, read-only unless "Allow changes" is on; Codex's
 //! own tools are switched off where a switch exists, and the read-only sandbox with every approval
-//! declined holds back `apply_patch`, which has none.
+//! declined is what holds back `apply_patch`, which has none (that it does is a round-trip item).
 
 mod accounts;
 pub mod history;
@@ -177,8 +177,10 @@ pub enum Start {
     Resume,
     /// A conversation whose folder holds no copy (opened on another computer, or the folder was
     /// lost or its copy damaged): the new thread is primed with these messages instead, built from
-    /// the project's own record of the conversation (AR-206). The folder's copy starts from them
-    /// and replaces any copy there at the end of the first turn.
+    /// the project's own record of the conversation (AR-206). These messages are used even when
+    /// the folder does hold a copy, and the folder's copy is replaced by them (and the first
+    /// turn) at the end of that turn, so check [`history::exists`] first and choose
+    /// [`Start::Resume`] when it does.
     ResumeFrom(History),
 }
 

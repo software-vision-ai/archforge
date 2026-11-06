@@ -185,8 +185,12 @@ impl CodexAccounts {
     /// Starts `codex app-server` in the `account` folder ([`crate::Workspace::account`]) and shakes
     /// hands. With [`SignIn::ChatGpt`] Codex uses the keyring, where it keeps the ChatGPT sign-in;
     /// with [`SignIn::ApiKey`] it uses the in-memory store and is given the key over standard
-    /// input at once, so a refused key is an `InvalidCredential` error here and nothing is ever
-    /// written. Waits for the answers, at most the request timeout each.
+    /// input at once, and nothing is ever written. Codex keeps the key without asking OpenAI
+    /// whether it is valid (codex-cli 0.166.0 only stores it), so a wrong or revoked key is
+    /// accepted here and shows only on the first real request, a turn, as `InvalidCredential`;
+    /// `open` answers `InvalidCredential` only when Codex refuses to take the key at all (API-key
+    /// sign-in switched off, or the key could not be held). A timeout or an early end of Codex is
+    /// the `Other` error it is. Waits for the answers, at most the request timeout each.
     pub fn open(runtime: &Runtime, account: &ConversationFolder, sign_in: SignIn, options: AccountOptions) -> Result<CodexAccounts, AgentError> {
         if runtime.kind() != RuntimeKind::Codex {
             return Err(AgentError::InvalidSetting {
@@ -231,15 +235,29 @@ impl CodexAccounts {
             shutting_down: false,
             ended: false,
         };
-        let hello = accounts.call("initialize", Some(initialize_params())).map_err(|e| missing_if_refused(e, "initialize"))?;
+        // Codex refusing the handshake means a Codex Archforge cannot use; a timeout or an early
+        // end stays what it is.
+        let hello =
+            accounts.exchange("initialize", &rpc::request_line(accounts.next_id, "initialize", Some(initialize_params()))).map_err(|e| match e {
+                Call::Refused(refusal) => AgentError::reported(
+                    ErrorKind::MissingRuntime,
+                    &format!("codex refused initialize, so Archforge cannot use it: {}", refusal.message),
+                ),
+                Call::Failed(error) => error,
+            })?;
         check_agent(runtime, &hello)?;
         accounts.process.send_line(&rpc::notification_line("initialized"))?;
         if let Some(line) = login {
             // Id 2: the login line was made with it before the start.
             accounts.next_id = 2;
-            accounts.call_line("account/login/start", &line).map_err(|e| match e {
-                AgentError::Reported { kind: ErrorKind::Other, detail } => AgentError::Reported { kind: ErrorKind::InvalidCredential, detail },
-                other => other,
+            // Only Codex refusing to take the key means no key reached it (`InvalidCredential`); a
+            // timeout or an early end stays what it is.
+            accounts.exchange("account/login/start", &line).map_err(|e| match e {
+                Call::Refused(refusal) if refusal.unknown_method() => refused("account/login/start", &refusal),
+                Call::Refused(refusal) => {
+                    AgentError::reported(ErrorKind::InvalidCredential, &format!("codex did not take the API key: {}", refusal.message))
+                }
+                Call::Failed(error) => error,
             })?;
         }
         Ok(accounts)
@@ -273,8 +291,10 @@ impl CodexAccounts {
     }
 
     /// The free check: the account as Codex reads it, and for a ChatGPT sign-in whether it can still
-    /// be renewed: a renewal that is refused for an expired or revoked sign-in reads as
-    /// [`AccountStatus::Expired`]. (A metered test, a real turn, is a conversation's.)
+    /// be renewed: a renewal refused with words of an expired or revoked sign-in reads as
+    /// [`AccountStatus::Expired`]. For an API key it says only that Codex holds one, not that the
+    /// key is valid: that shows only on a real request (a metered test, a turn, is a
+    /// conversation's).
     pub fn check(&mut self) -> Result<AccountState, AgentError> {
         let state = self.read(false)?;
         if !matches!(state.status, AccountStatus::ChatGpt { .. }) {
@@ -390,12 +410,8 @@ impl CodexAccounts {
             }
             budget -= 1;
             let wait = deadline.map_or(timeout, |d| d.saturating_duration_since(now));
-            match self.process.next_event(wait) {
-                Some(event) => {
-                    let _ = self.take(event, None);
-                }
-                None => return None,
-            }
+            let event = self.process.next_event(wait)?;
+            let _ = self.take(event, None);
         }
     }
 
@@ -428,43 +444,44 @@ impl CodexAccounts {
         }
     }
 
-    /// Sends `method` and waits for its answer.
+    /// Sends `method` and waits for its answer; a refusal is `MissingRuntime` when Codex does not
+    /// know the method, else `Other`.
     fn call(&mut self, method: &'static str, params: Option<Value>) -> Result<Value, AgentError> {
         let line = rpc::request_line(self.next_id, method, params);
-        self.call_line(method, &line)
+        self.exchange(method, &line).map_err(|e| match e {
+            Call::Refused(refusal) => refused(method, &refusal),
+            Call::Failed(error) => error,
+        })
     }
 
     /// Sends `line`, the request `method` under the next id, and waits at most the request timeout
-    /// for its answer, reading what else Codex says on the way.
-    fn call_line(&mut self, method: &'static str, line: &str) -> Result<Value, AgentError> {
+    /// for its answer, reading what else Codex says on the way. Codex's refusal is kept apart from
+    /// every other failure (a timeout, an early end, a line that could not be sent).
+    fn exchange(&mut self, method: &'static str, line: &str) -> Result<Value, Call> {
         if self.ended {
-            return Err(AgentError::InputClosed { runtime: RuntimeKind::Codex });
+            return Err(Call::Failed(AgentError::InputClosed { runtime: RuntimeKind::Codex }));
         }
         let id = self.next_id;
-        self.next_id = self.next_id.checked_add(1).ok_or_else(|| AgentError::reported(ErrorKind::Other, "the request ids are used up"))?;
-        self.process.send_line(line)?;
-        let deadline = Instant::now().checked_add(self.timeout).ok_or(AgentError::InvalidLimit {
+        self.next_id =
+            self.next_id.checked_add(1).ok_or_else(|| Call::Failed(AgentError::reported(ErrorKind::Other, "the request ids are used up")))?;
+        self.process.send_line(line).map_err(Call::Failed)?;
+        let deadline = Instant::now().checked_add(self.timeout).ok_or(Call::Failed(AgentError::InvalidLimit {
             limit: "request timeout (ms)",
             value: self.timeout.as_millis(),
             accepted: "a duration the clock can hold".to_owned(),
-        })?;
+        }))?;
         loop {
             let now = Instant::now();
             if now >= deadline {
-                return Err(AgentError::reported(ErrorKind::Other, &format!("codex did not answer {method} within {} ms", self.timeout.as_millis())));
+                let detail = format!("codex did not answer {method} within {} ms", self.timeout.as_millis());
+                return Err(Call::Failed(AgentError::reported(ErrorKind::Other, &detail)));
             }
             let Some(event) = self.process.next_event(deadline.saturating_duration_since(now)) else { continue };
             if let Some(answer) = self.take(event, Some(id)) {
-                return answer.map_err(|e| {
-                    if e.unknown_method() {
-                        AgentError::reported(ErrorKind::MissingRuntime, &format!("codex does not know {method}, which Archforge needs; update it"))
-                    } else {
-                        AgentError::reported(ErrorKind::Other, &format!("codex refused {method}: {}", e.message))
-                    }
-                });
+                return answer.map_err(Call::Refused);
             }
             if self.ended {
-                return Err(AgentError::reported(ErrorKind::Other, &format!("codex ended before it answered {method}")));
+                return Err(Call::Failed(AgentError::reported(ErrorKind::Other, &format!("codex ended before it answered {method}"))));
             }
         }
     }
@@ -571,13 +588,20 @@ impl Drop for Scratch {
     }
 }
 
-/// An `initialize` that Codex does not take means a Codex Archforge cannot use.
-fn missing_if_refused(error: AgentError, method: &str) -> AgentError {
-    match error {
-        AgentError::Reported { kind: ErrorKind::Other, detail } if detail.starts_with("codex refused") => {
-            AgentError::reported(ErrorKind::MissingRuntime, &format!("codex refused {method}, so Archforge cannot use it: {detail}"))
-        }
-        other => other,
+/// How a call failed: Codex answered with a refusal, or no answer came (a timeout, an early end, a
+/// line that could not be sent).
+enum Call {
+    Refused(rpc::RpcError),
+    Failed(AgentError),
+}
+
+/// The error for a request Codex refused: `MissingRuntime` when it does not know the method (a
+/// Codex too old for it), else `Other` with Codex's words.
+fn refused(method: &str, refusal: &rpc::RpcError) -> AgentError {
+    if refusal.unknown_method() {
+        AgentError::reported(ErrorKind::MissingRuntime, &format!("codex does not know {method}, which Archforge needs; update it"))
+    } else {
+        AgentError::reported(ErrorKind::Other, &format!("codex refused {method}: {}", refusal.message))
     }
 }
 
