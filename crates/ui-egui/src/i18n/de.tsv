@@ -1078,6 +1078,7 @@ str		This one binds that template already	Dieses bindet dieses Template bereits
 str		That template binds this one already, which would make a cycle	Dieses Template bindet dieses Element bereits, was einen Zyklus ergäbe
 str		Pick another template in the binding's Properties, where its arguments are chosen.	Wählen Sie ein anderes Template in den Eigenschaften der Bindung, wo seine Argumente gewählt werden.
 str		N-ary association	N-äre Assoziation
+str		this n-ary association	Diese n-äre Assoziation
 str		N-ary association: click each class in turn, then press Enter	N-äre Assoziation: Klicken Sie nacheinander auf jede Klasse und drücken Sie dann die Eingabetaste
 str		An n-ary association is drawn by clicking each class in turn	Eine n-äre Assoziation wird durch Klicken auf jede Klasse nacheinander gezeichnet
 str		Enter finishes at 3+ · Backspace drops the last · Esc cancels	Eingabe beendet ab 3 · Rücktaste entfernt das letzte · Esc bricht ab

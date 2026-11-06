@@ -925,6 +925,22 @@ impl NotationUi for UmlUi {
         words_of(store, o)
     }
 
+    /// An unnamed relationship by its ends as its line runs (AR-216): a generalization from its
+    /// specific classifier to its general one, `CardPayment → Payment`, as a set's members read; a
+    /// realization, a dependency, a template binding and a binary association alike. An n-ary
+    /// association, which has no one direction, by its kind; a constraint by its braces, as its
+    /// row reads.
+    fn unnamed(&self, store: &Store, o: Obj) -> Option<String> {
+        if archforge_uml::nary::is_nary(store, o) {
+            return Some(tr("this n-ary association"));
+        }
+        if class(store, o) == Some(archforge_uml::CONSTRAINT) {
+            return Some(crate::uml_constraints::row_text(store, o));
+        }
+        let (from, to) = archforge_uml::figures::ends(store, o)?;
+        Some(crate::notation_ui::ends_label(&name(store, from), &name(store, to)))
+    }
+
     /// A member's panel is its classifier's, a literal's its enumeration's.
     fn heading(&self, store: &Store, o: Obj) -> Option<String> {
         // An n-ary association's first section is Association, as a binary one's (AR-128, A4).

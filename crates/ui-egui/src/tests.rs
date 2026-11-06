@@ -1880,6 +1880,121 @@ fn with_a_schema_selected_the_plus_adds_a_table_and_delete_asks_before_the_schem
     assert_eq!(schema_names(&h), ["Schema 1"], "undo brings them back");
 }
 
+/// The title the open delete dialog paints, `Delete … from the model?`; never its empty form
+/// (AR-216).
+fn delete_title(h: &Harness<'static, Shell>) -> String {
+    let titles: Vec<String> = painted(h).into_iter().filter(|t| t.starts_with("Delete ") && t.ends_with(" from the model?")).collect();
+    assert_eq!(titles.len(), 1, "one title: {titles:?}");
+    assert_ne!(titles[0], "Delete  from the model?", "the title names the element");
+    titles[0].clone()
+}
+
+/// An association class drawn without a name has a nameless row in Models; deleted from there, the
+/// dialog names it by its ends as its line runs, `Order → Entity`, as a generalization set's
+/// members read (`CardPayment → Payment`) (AR-216). In light and dark.
+#[test]
+fn deleting_a_nameless_association_class_from_models_names_it_by_its_ends() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, made) = templates_sample(theme);
+        let s = h.state_mut().session.as_mut().unwrap();
+        let mut run = |cmd: &str, p: serde_json::Value| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap_or_default().to_string();
+        let ac = run("uml.association-class.add", serde_json::json!({ "from": made["Order"], "to": made["Entity"] }));
+        for (element, x) in [(&made["Order"], 200), (&made["Entity"], 700)] {
+            run("diagram.place", serde_json::json!({ "diagram": made["diagram"], "element": element, "x": x, "y": 500 }));
+        }
+        run("diagram.connect-all", serde_json::json!({ "diagram": made["diagram"] }));
+        run("view.select", serde_json::json!({ "ids": [] }));
+        let all: Vec<archforge_mof::Uuid> = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            st.alive().filter_map(|o| st.uuid(o).ok()).collect()
+        };
+        h.state_mut().explorer.expanded.extend(all);
+        h.run();
+        let rows = crate::explorer::rows(h.state().notation_uis, h.state().session.as_ref().unwrap().doc(), &h.state().explorer);
+        let row = rows.iter().find(|r| r.id.to_string() == ac).expect("its row in Models");
+        assert_eq!(row.label, "", "{theme:?}: a nameless row");
+        let at = rect_of(&h, &format!("workspace.explorer.row.{}", row.id)).center();
+        click(&mut h, at);
+        h.state_mut().explorer.focused = true;
+        key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
+        h.run();
+        let asked = h.state().explorer.delete.clone().expect("the dialog asks: a diagram shows it");
+        assert_eq!(asked.name, "Order → Entity", "{theme:?}");
+        assert_eq!(delete_title(&h), "Delete Order → Entity from the model?", "{theme:?}");
+        let at = rect_of(&h, "workspace.explorer.delete.cancel").center();
+        click(&mut h, at);
+        assert!(h.state().explorer.delete.is_none());
+    }
+}
+
+/// A constraint without a name, shown as a note, asks with ⇧⌫ on its note and the title reads it
+/// as its row in Constraints does, by its braces (AR-216). In light and dark.
+#[test]
+fn deleting_an_unnamed_constraint_from_the_canvas_names_it_by_its_braces() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, made) = templates_sample(theme);
+        let s = h.state_mut().session.as_mut().unwrap();
+        let c =
+            s.execute("uml.constraint.add", &serde_json::json!({ "context": made["Repository"], "expression": "size < 100" })).unwrap().value["id"]
+                .as_str()
+                .unwrap()
+                .to_string();
+        let note = s
+            .execute("uml.constraint.show", &serde_json::json!({ "diagram": made["diagram"], "constraint": c, "as": "note", "x": 700, "y": 200 }))
+            .unwrap()
+            .value["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        // Its note selected on the canvas, which has the keys.
+        crate::editing::run(h.state_mut(), "view.select", serde_json::json!({ "ids": [note] })).unwrap();
+        h.state_mut().canvas.focused = true;
+        h.run();
+        key(&mut h, egui::Key::Delete, egui::Modifiers::SHIFT);
+        h.run();
+        let asked = h.state().explorer.delete.clone().expect("asks first");
+        assert_eq!(asked.name, "{size < 100}", "{theme:?}");
+        assert_eq!(delete_title(&h), "Delete {size < 100} from the model?", "{theme:?}");
+    }
+}
+
+/// An n-ary association drawn without a name, as it is by default, asks with ⇧⌫ on its diamond
+/// and its title says what goes: this n-ary association (AR-216). In light and dark.
+#[test]
+fn deleting_an_unnamed_n_ary_association_from_the_canvas_names_its_kind() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, ids) = nary_sample(theme, false);
+        let s = h.state_mut().session.as_mut().unwrap();
+        let d = {
+            let st = s.doc();
+            let n = st.by_uuid(archforge_mof::Uuid::parse(&ids["customer"]).unwrap()).unwrap();
+            st.uuid(archforge_diagram::diagram_of(st, n).unwrap()).unwrap().to_string()
+        };
+        let classes = [ids["Customer"].clone(), ids["Product"].clone(), ids["Catalog"].clone()];
+        let a = s.execute("uml.association.add-nary", &serde_json::json!({ "classes": classes })).unwrap().value;
+        let a_id = a["id"].as_str().unwrap().to_string();
+        let n = s
+            .execute("diagram.place", &serde_json::json!({ "diagram": d, "element": a_id, "x": 400, "y": 360, "width": 44, "height": 28 }))
+            .unwrap()
+            .value["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let ends: Vec<String> = a["ends"].as_array().unwrap().iter().map(|e| e.as_str().unwrap().to_string()).collect();
+        for (end, card) in ends.iter().zip([&ids["customer"], &ids["product"], &ids["catalog"]]) {
+            s.execute("diagram.connect", &serde_json::json!({ "diagram": d, "element": end, "source": n, "target": card })).unwrap();
+        }
+        h.run();
+        let at = card(&h, &n);
+        click(&mut h, at);
+        key(&mut h, egui::Key::Delete, egui::Modifiers::SHIFT);
+        h.run();
+        let asked = h.state().explorer.delete.clone().expect("asks first");
+        assert_eq!(asked.name, "this n-ary association");
+        assert_eq!(delete_title(&h), "Delete this n-ary association from the model?", "{theme:?}");
+    }
+}
+
 #[test]
 fn the_filter_narrows_the_tree_and_the_keys_walk_it() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1120.0));

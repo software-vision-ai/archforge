@@ -1511,7 +1511,8 @@ fn ask_delete_of(shell: &mut Shell, node: Option<Uuid>, entity: Uuid) {
         along,
         applications,
         ids: vec![entity],
-        name: archforge_core::name_of(store, e),
+        // Named as every path that asks names it, an unnamed relationship by its ends (AR-216).
+        name: crate::notation_ui::label(shell.notation_uis, store, e),
         relationships,
         keys,
         foreign_keys,

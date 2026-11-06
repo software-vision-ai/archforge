@@ -1078,6 +1078,7 @@ str		This one binds that template already	Este já vincula esse modelo
 str		That template binds this one already, which would make a cycle	Esse modelo já vincula este, o que faria um ciclo
 str		Pick another template in the binding's Properties, where its arguments are chosen.	Escolha outro modelo nas Propriedades da vinculação, onde se escolhem os seus argumentos.
 str		N-ary association	Associação n-ária
+str		this n-ary association	esta associação n-ária
 str		N-ary association: click each class in turn, then press Enter	Associação n-ária: clique em cada classe por ordem e depois prima Enter
 str		An n-ary association is drawn by clicking each class in turn	Uma associação n-ária desenha-se clicando em cada classe por ordem
 str		Enter finishes at 3+ · Backspace drops the last · Esc cancels	Enter termina a partir de 3 · Retrocesso tira a última · Esc cancela
