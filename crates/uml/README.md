@@ -95,7 +95,13 @@ classes, owning both its ends as an association does, its ends set with `uml.ass
 its members with the member commands, renamed and moved with `uml.association-class.rename` and
 `.move` among its package's classifiers, refused at anything but a class; nothing specializes it),
 `commands::going_with` (the relationships that go with classifiers, an association class's own
-among them), `modifiers::{read, apply, parse_default, default_text, braces, suffix, Shape,
+among them), `qualifiers::{specs, qualifiers, qualified_end, is_qualifier, association_of, name_clash,
+qualifier_text, qualifiers_json, MAX_QUALIFIERS}` (AR-127: `uml.qualifier.{add, set, move}`; UML's
+`Property::qualifier`, an ordered list of properties an association's or an association class's end
+owns, each with a name, a type and a multiplicity; the qualified end's box drawn at its class
+(`figures::line` gives its rows in the end's `qualifiers`); a name told apart from its end's other
+qualifiers whatever the case, at most 32 an end; never an attribute or a role; kept through renaming
+and reconnecting; removed through `element.remove`), `modifiers::{read, apply, parse_default, default_text, braces, suffix, Shape,
 subsets_candidates, redefines_candidates, redefines_leaf, subsets_problem, redefines_problem}` (AR-126: a
 property's default value read by its type, derived, read only, ordered, unique, and the properties
 it subsets and redefines, set by `uml.attribute.add`/`set` and `uml.association.set-end`, checked
@@ -119,7 +125,10 @@ the kinds a skill aims at; inheritance down the package tree with an override by
 going with its element, a nested package's too, and back with undo. `tests/generalization_sets.rs` (AR-129): a set made, renamed, made complete and disjoint, given and
 losing members, each one undo step; a mixed selection and the other wrong sets refused, changing nothing; a generalization
 in two sets; a member's reconnection refused; a set emptied by a deletion going in the same step; its label placed on two
-diagrams; rows read back identical; the sweep. `tests/modifiers.rs` (AR-126):
+diagrams; rows read back identical; the sweep. `tests/qualifiers.rs` (AR-127): qualifiers added, edited, moved and removed, each one undo
+step; a duplicate name and the other wrong edits refused, changing nothing; a built-in type or the
+model's own; kept apart from attributes and roles and gone with their association; kept through
+renaming and reconnecting; the box on two diagrams; rows read back identical; the sweep. `tests/modifiers.rs` (AR-126):
 each modifier set and cleared on an attribute and an end, one undo step each; defaults for every
 built-in type, an enumeration and opaque text, and the type-change refusal; Subsets and Redefines
 valid and refused; the card's and the line's notation; rows read back identical; the sweep.

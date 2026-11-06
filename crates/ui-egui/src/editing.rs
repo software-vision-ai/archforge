@@ -1602,7 +1602,16 @@ fn line_ends(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, view: View,
     let Some((element, route, marks)) = shell.session.as_ref().and_then(|s| selected_line(s.doc(), s.view(), d, &s.view().selection)) else {
         return;
     };
-    let screen: Vec<Pos2> = route.iter().map(|(x, y)| view.to_screen(*x, *y)).collect();
+    let mut screen: Vec<Pos2> = route.iter().map(|(x, y)| view.to_screen(*x, *y)).collect();
+    // An end the last frame moved out to its qualifier box starts there (AR-127).
+    let n = screen.len();
+    for k in [0, n.saturating_sub(1)] {
+        if let Some(at) = screen.get(k).copied()
+            && let Some((_, outer)) = shell.canvas.qualified_ends.iter().find(|(from, _)| (*from - at).length() < 0.5)
+        {
+            screen[k] = *outer;
+        }
+    }
     let (Some(a), Some(b)) = (screen.first().copied(), screen.last().copied()) else { return };
     // Both handles placed together, so their hit boxes never meet on screen.
     let [at_source, at_target] = crate::canvas::end_handles_at(&screen, marks, view.zoom);

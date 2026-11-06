@@ -750,6 +750,10 @@ str		{name} deleted	{name} eliminado
 str		Constraint · model, not evaluated	Restricción · modelo, no evaluada
 str		This constraint	Esta restricción
 str		On this constraint · {n}	En esta restricción · {n}
+str		Qualifier · model	Calificador · modelo
+str		Qualifier	Calificador
+str		This qualifier	Este calificador
+str		On this qualifier · {n}	En este calificador · {n}
 str		Constraint · not evaluated	Restricción · no evaluada
 str		Parameter	Parámetro
 str		No literals yet	Aún no hay literales
@@ -861,6 +865,14 @@ str		Drag a line end onto another class.	Arrastre un extremo de la línea a otra
 str		Drag onto another class to move this end	Arrastre a otra clase para mover este extremo
 str		Drag the class end onto another class, the interface end onto another interface.	Arrastre el extremo de la clase a otra clase y el extremo de la interfaz a otra interfaz.
 str		End at {class}	Extremo en {class}
+str		Qualifiers · {n}	Calificadores · {n}
+str		Add qualifier	Añadir calificador
+str		Qualified end: the qualifier box is drawn here, against {class}.	Extremo calificado: el recuadro del calificador se dibuja aquí, junto a {class}.
+str		Per qualifier value	Por valor del calificador
+str		Counted per qualifier value of the other end; shown next to {class}.	Se cuenta por cada valor del calificador del otro extremo; se muestra junto a {class}.
+str		One {owner} and one {qualifiers} pick {multiplicity} {target}.	Un {owner} y un {qualifiers} seleccionan {multiplicity} {target}.
+str		Type a name: a qualifier without one picks nothing.	Escriba un nombre: un calificador sin nombre no selecciona nada.
+str		This end already has a qualifier named {name}. Pick another name.	Este extremo ya tiene un calificador llamado {name}. Elija otro nombre.
 str		From	Desde
 str		General	General
 str		Generalization	Generalización

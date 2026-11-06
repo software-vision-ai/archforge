@@ -750,6 +750,10 @@ str		{name} deleted	{name} eliminado
 str		Constraint · model, not evaluated	Restrição · modelo, não avaliada
 str		This constraint	Esta restrição
 str		On this constraint · {n}	Nesta restrição · {n}
+str		Qualifier · model	Qualificador · modelo
+str		Qualifier	Qualificador
+str		This qualifier	Este qualificador
+str		On this qualifier · {n}	Neste qualificador · {n}
 str		Constraint · not evaluated	Restrição · não avaliada
 str		Parameter	Parâmetro
 str		No literals yet	Ainda não há literais
@@ -861,6 +865,14 @@ str		Drag a line end onto another class.	Arraste uma ponta da linha para outra c
 str		Drag onto another class to move this end	Arraste para outra classe para mover esta ponta
 str		Drag the class end onto another class, the interface end onto another interface.	Arraste a ponta da classe para outra classe e a ponta da interface para outra interface.
 str		End at {class}	Ponta em {class}
+str		Qualifiers · {n}	Qualificadores · {n}
+str		Add qualifier	Adicionar qualificador
+str		Qualified end: the qualifier box is drawn here, against {class}.	Ponta qualificada: a caixa do qualificador é desenhada aqui, junto a {class}.
+str		Per qualifier value	Por valor do qualificador
+str		Counted per qualifier value of the other end; shown next to {class}.	Contado por valor do qualificador da outra ponta; mostrado junto a {class}.
+str		One {owner} and one {qualifiers} pick {multiplicity} {target}.	Um {owner} e um {qualifiers} escolhem {multiplicity} {target}.
+str		Type a name: a qualifier without one picks nothing.	Escreva um nome: um qualificador sem nome não escolhe nada.
+str		This end already has a qualifier named {name}. Pick another name.	Esta ponta já tem um qualificador chamado {name}. Escolha outro nome.
 str		From	De
 str		General	Geral
 str		Generalization	Generalização

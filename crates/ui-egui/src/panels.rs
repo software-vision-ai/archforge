@@ -87,6 +87,8 @@ pub struct State {
     pub constraint: Option<crate::uml_constraints::ConstraintEdit>,
     /// An association's ends' roles and multiplicities as typed.
     pub ends: Option<crate::uml_relate::EndsEdit>,
+    /// An association end's qualifier editor (AR-127).
+    pub qualifier: Option<crate::uml_qualifiers::QualifierEdit>,
     /// The body's scroll: how far it is scrolled, how tall its content was last
     /// frame, what it was scrolled for (a new panel or selection starts at the top), the editors
     /// open last frame, whether an editor that just opened is still to be brought into view, and
@@ -113,6 +115,7 @@ fn open_editors(s: &State) -> Vec<Option<Option<Uuid>>> {
         s.object_edit.as_ref().map(|e| e.target),
         s.member.as_ref().map(|e| e.target),
         s.constraint.as_ref().map(|e| e.target),
+        s.qualifier.as_ref().map(|e| e.target),
     ]
 }
 
@@ -238,6 +241,8 @@ pub enum Menu {
     EndDefault(usize),
     EndSubsets(usize),
     EndRedefines(usize),
+    /// A qualifier editor's type (AR-127).
+    QualifierType,
     /// A class's package.
     ClassPackage,
     /// The package a package sits in (AR-102).
@@ -369,6 +374,7 @@ pub fn retain_valid(state: &mut State, store: &Store) {
     }
     crate::uml_panel::retain_valid(&mut state.member, store);
     crate::uml_constraints::retain_valid(&mut state.constraint, store);
+    crate::uml_qualifiers::retain_valid(&mut state.qualifier, store);
     if state.ends.as_ref().is_some_and(|e| store.by_uuid(e.association).is_none()) {
         state.ends = None;
     }
@@ -1367,6 +1373,9 @@ fn close_editors(shell: &mut Shell) {
     panels.set_refused = None;
     if panels.constraint.as_ref().is_some_and(|e| !e.opened) {
         panels.constraint = None;
+    }
+    if panels.qualifier.as_ref().is_some_and(|e| !e.opened) {
+        panels.qualifier = None;
     }
 }
 

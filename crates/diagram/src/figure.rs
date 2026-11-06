@@ -108,19 +108,22 @@ impl EndMark {
 }
 
 /// One end of a line: its mark, the text beside it, which the user may move (kept in a label of
-/// the kind `slot`), and a role written above the line near it.
+/// the kind `slot`), a role written above the line near it, and a qualifier box at the node.
 #[derive(Debug, Clone, PartialEq)]
 pub struct End {
     pub mark: EndMark,
     pub text: Option<String>,
     pub slot: &'static str,
     pub role: Option<String>,
+    /// The rows of a qualifier box drawn at this end, between the line and its node, in their
+    /// order: a UML qualified association end (AR-127). Empty for none.
+    pub qualifiers: Vec<String>,
 }
 
 impl End {
     /// An end with a mark and nothing written.
     pub fn marked(mark: EndMark) -> End {
-        End { mark, text: None, slot: "", role: None }
+        End { mark, text: None, slot: "", role: None, qualifiers: Vec::new() }
     }
 }
 

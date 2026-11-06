@@ -151,6 +151,10 @@ pub struct State {
     pub package_tabs: Vec<PackageTab>,
     /// The generalization sets' labels the last frame drew, which take a press (AR-129).
     pub set_labels: Vec<SetLabel>,
+    /// The line ends the last frame moved out to a qualifier box's outer side (AR-127): where the
+    /// route ended on its node, and where the line now starts, on screen; a selected line's end
+    /// handle follows.
+    pub qualified_ends: Vec<(Pos2, Pos2)>,
     /// Moving between a package's diagram and its parent's (AR-95).
     pub(crate) nav: crate::package_nav::Nav,
 }
@@ -220,6 +224,7 @@ impl Default for State {
             ends: Vec::new(),
             package_tabs: Vec::new(),
             set_labels: Vec::new(),
+            qualified_ends: Vec::new(),
             nav: crate::package_nav::Nav::default(),
         }
     }
@@ -630,6 +635,7 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
             end_drag: crate::editing::end_preview(shell, pointer),
             segment_drag: crate::editing::segment_preview(shell, view, pointer),
             ends: std::cell::RefCell::new(Vec::new()),
+            qualified_ends: std::cell::RefCell::new(Vec::new()),
             draft: crate::uml_inline::draft(shell, store),
             rename_text: shell.canvas.rename.as_ref().map(|rn| rn.text.as_str()),
             tabs: std::cell::RefCell::new(Vec::new()),
@@ -642,6 +648,7 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
             }
         }
         shell.canvas.ends = draw.ends.take();
+        shell.canvas.qualified_ends = draw.qualified_ends.take();
         draw_constraint_links(&clip, &draw);
         shell.canvas.set_labels = draw_sets(&clip, &draw, &mut shell.registry, ui);
         // A set's label says its whole text while the pointer is on it.
@@ -750,6 +757,8 @@ struct Drawing<'a> {
     segment_drag: Option<(Uuid, Vec<(f64, f64)>)>,
     /// The cardinality texts drawn this frame, for the next frame's press.
     ends: std::cell::RefCell<Vec<EndText>>,
+    /// The line ends moved out to a qualifier box this frame, for the next frame's end handles.
+    qualified_ends: std::cell::RefCell<Vec<(Pos2, Pos2)>>,
     /// A row typed in place on a card: its element, compartment and row (none for a new one).
     draft: Option<(Obj, usize, Option<usize>)>,
     /// The name being typed in place, which a package's tab follows as it is typed.
@@ -1502,9 +1511,14 @@ fn draw_edge(
     };
     let notation = d.notations.of_element(store, element);
     let line = notation.and_then(|nt| nt.line(store, element)).unwrap_or_default();
-    let points = edge_points(d, e)?;
+    let mut points = edge_points(d, e)?;
     let n = points.len();
-    let selected = selection.contains(&e) || selection.contains(&element);
+    // A selected qualifier marks its association's line, as a selected member marks its card.
+    let selected = selection.contains(&e)
+        || selection.contains(&element)
+        || selection.iter().any(|o| archforge_uml::qualifiers::association_of(store, *o).is_some_and(|(a, _)| a == element));
+    // A qualified end's box sits against its node, the line starting from its outer side (AR-127).
+    let boxes = qualifier_boxes(paint, d, e, &line, &mut points);
     let hovered = d.hovered == Some(e);
     let stroke = if line.styled {
         // The line's colour says its status while the marks are on: green when complete, orange
@@ -1536,6 +1550,12 @@ fn draw_edge(
         drawn[n - 1] = shape(line.ends[1].mark, points[n - 1], points[n - 2]).1;
     }
     crate::connect::line(paint, &drawn, stroke, !line.dashed, z);
+    for (i, rect, rows) in boxes {
+        draw_qualifier_box(paint, p, rect, rows, Stroke::new((1.0 * z).clamp(1.0, 2.0), stroke.color), z);
+        if let Ok(id) = store.uuid(e) {
+            widgets::record_visible(ui, registry, &format!("workspace.canvas.edge.{id}.qualifiers.{i}"), "label", rect);
+        }
+    }
     if let Some(tied) = tie(paint, d, element, &points, selected)
         && let Ok(id) = store.uuid(e)
     {
@@ -1663,6 +1683,63 @@ fn draw_edge(
         }
     }
     badge
+}
+
+/// The qualifier boxes of `line`'s ends (AR-127), each with its end's index, its rectangle and its
+/// rows laid out: a box sits against the side of its node where the line leaves it, centred on the
+/// line, and the line's end in `points` moves to the box's outer side, so the end's mark, role and
+/// text sit there. A line from a node to itself draws none.
+fn qualifier_boxes(
+    paint: &egui::Painter,
+    d: &Drawing<'_>,
+    e: Obj,
+    line: &archforge_diagram::figure::Line,
+    points: &mut [Pos2],
+) -> Vec<(usize, Rect, Vec<std::sync::Arc<egui::Galley>>)> {
+    let (store, z, n) = (d.store, d.view.zoom, points.len());
+    let nodes = [element_of(store, e, edge::SOURCE), element_of(store, e, edge::TARGET)];
+    if n < 2 || nodes[0] == nodes[1] {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    for (i, end) in line.ends.iter().enumerate() {
+        let (Some(node), false) = (nodes[i], end.qualifiers.is_empty()) else { continue };
+        let k = if i == 0 { 0 } else { n - 1 };
+        let rows: Vec<_> = end.qualifiers.iter().map(|t| ux::galley(paint, t, types::SMALL.scaled(z), d.p.text, None)).collect();
+        let width = rows.iter().map(|g| g.size().x).fold(0.0_f32, f32::max) + 16.0 * z;
+        let height = rows.iter().map(|g| g.size().y).sum::<f32>() + 8.0 * z;
+        let (rect, outer) = qualifier_place(d.node_rect(node), points[k], vec2(width, height));
+        d.qualified_ends.borrow_mut().push((points[k], outer));
+        points[k] = outer;
+        out.push((i, rect, rows));
+    }
+    out
+}
+
+/// Where a qualifier box of `size` sits against `node` for a line leaving it at `tip`: on the side
+/// `tip` is nearest, centred on it, and the point on its outer side the line starts from.
+pub(crate) fn qualifier_place(node: Rect, tip: Pos2, size: Vec2) -> (Rect, Pos2) {
+    let gaps = [(tip.x - node.left()).abs(), (tip.x - node.right()).abs(), (tip.y - node.top()).abs(), (tip.y - node.bottom()).abs()];
+    let side = (0..4).min_by(|a, b| gaps[*a].total_cmp(&gaps[*b])).unwrap_or(1);
+    let (w, h) = (size.x, size.y);
+    match side {
+        0 => (Rect::from_min_size(pos2(node.left() - w, tip.y - h / 2.0), size), pos2(node.left() - w, tip.y)),
+        1 => (Rect::from_min_size(pos2(node.right(), tip.y - h / 2.0), size), pos2(node.right() + w, tip.y)),
+        2 => (Rect::from_min_size(pos2(tip.x - w / 2.0, node.top() - h), size), pos2(tip.x, node.top() - h)),
+        _ => (Rect::from_min_size(pos2(tip.x - w / 2.0, node.bottom()), size), pos2(tip.x, node.bottom() + h)),
+    }
+}
+
+/// A qualifier box: the surface, framed in the line's ink, its rows in model order.
+fn draw_qualifier_box(paint: &egui::Painter, p: &Palette, rect: Rect, rows: Vec<std::sync::Arc<egui::Galley>>, stroke: Stroke, z: f32) {
+    paint.rect_filled(rect, 1.0, p.surface);
+    paint.rect_stroke(rect, 1.0, stroke, StrokeKind::Inside);
+    let mut y = rect.top() + 4.0 * z;
+    for g in rows {
+        let h = g.size().y;
+        paint.galley(pos2(rect.left() + 8.0 * z, y), g, p.text);
+        y += h;
+    }
 }
 
 /// An association class's tie (AR-125): when the diagram shows its card too, a dashed line in the
