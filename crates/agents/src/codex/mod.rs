@@ -464,8 +464,9 @@ enum Purpose {
     TurnStart,
     /// `turn/interrupt` for a late turn Codex started after its request's deadline.
     Interrupt,
-    /// `turn/interrupt` for the open turn, after a stop.
-    StopTurn,
+    /// `turn/interrupt` for the open turn, after a stop; it names that turn by its number, so a
+    /// late result for a turn that has since ended reaches no newer one.
+    StopTurn(u64),
     /// `thread/unsubscribe` for a thread the session left after its setup timed out.
     Unsubscribe,
 }
@@ -505,6 +506,8 @@ pub struct CodexSession {
     thread: Thread,
     queued: Option<String>,
     turn_open: bool,
+    /// The number of the latest turn `send` opened, which a stop request carries.
+    turn_number: u64,
     turn_requested: bool,
     /// The copy as it was before the open turn's message was added (which may have dropped the
     /// oldest messages), put back when the message never reaches the thread; dropped once Codex
@@ -652,6 +655,7 @@ impl CodexSession {
             thread: Thread::None,
             queued: None,
             turn_open: false,
+            turn_number: 0,
             turn_requested: false,
             unsent: None,
             awaiting: false,
@@ -1047,10 +1051,10 @@ impl CodexSession {
             (Purpose::Interrupt, Err(e)) => log::warn!("codex refused the stop request for a late turn: {}", e.message),
             (Purpose::Unsubscribe, Ok(_)) => log::debug!("codex let go of a thread the session left"),
             (Purpose::Unsubscribe, Err(e)) => log::warn!("codex refused to let go of a thread the session left: {}", e.message),
-            (Purpose::StopTurn, Ok(_)) => log::debug!("codex took the stop request"),
-            (Purpose::StopTurn, Err(e)) => {
+            (Purpose::StopTurn(_), Ok(_)) => log::debug!("codex took the stop request"),
+            (Purpose::StopTurn(turn), Err(e)) => {
                 log::warn!("codex refused the stop request: {}", e.message);
-                self.await_stop();
+                self.await_stop(turn);
             }
         }
     }
@@ -1111,9 +1115,9 @@ impl CodexSession {
                     self.abandon_turn(error);
                 }
                 Purpose::Interrupt => log::warn!("{error}"),
-                Purpose::StopTurn => {
+                Purpose::StopTurn(turn) => {
                     log::warn!("{error}");
-                    self.await_stop();
+                    self.await_stop(turn);
                 }
                 Purpose::Unsubscribe => log::warn!("{error}"),
             }
@@ -1151,7 +1155,13 @@ impl CodexSession {
     /// still run: it stays open (no new message is taken) for at most one more request timeout,
     /// in which Codex's own word that the turn ended closes it as usual; past that, the session
     /// ends ([`expire`](Self::expire)).
-    fn await_stop(&mut self) {
+    /// `turn` is the number the stop request was sent for: a refusal or a timeout that comes after
+    /// that turn ended belongs to no open turn and is ignored, so it never times a newer one.
+    fn await_stop(&mut self, turn: u64) {
+        if turn != self.turn_number {
+            log::debug!("the stop request was for a turn that has ended; its result is ignored");
+            return;
+        }
         if !self.turn_open || self.stop_deadline.is_some() {
             return;
         }
@@ -1245,7 +1255,7 @@ impl CodexSession {
             return;
         }
         let (Some(thread), Some(turn)) = (self.thread_id().map(str::to_owned), self.parser.turn_id().map(str::to_owned)) else { return };
-        match self.request("turn/interrupt", Purpose::StopTurn, json!({ "threadId": thread, "turnId": turn })) {
+        match self.request("turn/interrupt", Purpose::StopTurn(self.turn_number), json!({ "threadId": thread, "turnId": turn })) {
             Ok(_) => self.interrupt_sent = true,
             Err(e) => log::warn!("codex's stop request could not be sent: {e}"),
         }
@@ -1293,10 +1303,15 @@ impl CodexSession {
     }
 
     /// Ends the open turn Codex never named: as stopped when a stop was asked for, else failed.
-    /// Its thread is left, as the unnamed turn may still run in it.
+    /// Its thread is left, as the unnamed turn may still run in it, and let go
+    /// (`thread/unsubscribe`), as the session does not use it again.
     fn abandon_unnamed(&mut self) {
         self.unnamed_deadline = None;
-        self.thread = Thread::None;
+        // The next message starts a fresh thread, so this one is let go; with the turn unnamed there
+        // is nothing to interrupt first.
+        if let Thread::Ready(thread) = std::mem::replace(&mut self.thread, Thread::None) {
+            self.release_thread(thread);
+        }
         self.inject = !self.history.entries().is_empty();
         self.abandon_turn(AgentError::reported(
             ErrorKind::Other,
@@ -1403,6 +1418,7 @@ impl AgentSession for CodexSession {
             return Err(AgentError::TurnRunning { runtime: RuntimeKind::Codex });
         }
         self.turn_open = true;
+        self.turn_number = self.turn_number.wrapping_add(1);
         self.turn_requested = false;
         self.stop_requested = false;
         self.interrupt_sent = false;

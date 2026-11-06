@@ -318,7 +318,8 @@ last 64 are remembered), or before the turn was asked for change nothing, neithe
 the copy; those that come before Codex named the turn are held (at most 1024 of them, from at most 16 MiB of lines) and then given to the
 turn it names. When Codex answers `turn/start` without naming the turn, a held `turn/started`
 that names one names it, else the first held notification that does, else the first later one; with none within one request timeout the turn fails as
-`Other` (stopped when a stop was asked for) and its thread is left. A `turn/start` past its deadline fails the turn (as stopped when a stop was asked
+`Other` (stopped when a stop was asked for) and its thread is left and let go
+(`thread/unsubscribe`), as the next message starts a fresh one. A `turn/start` past its deadline fails the turn (as stopped when a stop was asked
 for), and its thread is left: the next message starts a fresh thread with the copy, so it can never
 join a turn Codex started after all. Its message stays in the copy, as Codex may have taken it and
 started the turn (only a message that never reached Codex, or that Codex refused, leaves it), so
@@ -335,7 +336,9 @@ There is no signal fallback: SIGINT ends `codex app-server`. A stop request that
 written is sent again by the next `stop`; one Codex refuses or leaves unanswered is not, and the
 turn then stays open (no new message is taken, as Codex may still run it) for one more request
 timeout: Codex saying the turn ended closes it as usual, and otherwise the session ends with a
-reason ("did not stop the turn"), so the caller starts it again with `Start::Resume`. Shutdown
+reason ("did not stop the turn"), so the caller starts it again with `Start::Resume`. A stop
+request names its turn: a refusal or timeout that comes after that turn ended is ignored, so it
+never times a newer turn. Shutdown
 closes the input (Codex exits 0), then terminates and kills as for every runtime.
 
 *Requests and errors.* Every request has its own deadline (`request_timeout`), as Codex never

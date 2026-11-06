@@ -1079,6 +1079,45 @@ fn a_thread_left_by_an_unanswered_turn_is_let_go() {
     std::fs::remove_dir_all(&base).unwrap();
 }
 
+/// A stop request's result that comes after its turn ended belongs to no open turn: refused late
+/// or timed out, it never starts the wait for a newer turn's stop, which runs on undisturbed.
+#[test]
+fn a_late_stop_result_never_reaches_a_newer_turn() {
+    let turns = r#"
+turns=0
+on_turn() {
+  turns=$((turns+1))
+  send "{\"id\":$id,\"result\":{\"turn\":{\"id\":\"u-$turns\"}}}"
+  send "{\"method\":\"item/agentMessage/delta\",\"params\":{\"threadId\":\"019a0000-0000-7000-8000-000000000001\",\"turnId\":\"u-$turns\",\"itemId\":\"x\",\"delta\":\"working\"}}"
+}
+"#;
+    // Codex ends turn A at once, then refuses its stop late, or never answers it.
+    let refused_late = r#"on_interrupt() { send '{"method":"turn/completed","params":{"threadId":"019a0000-0000-7000-8000-000000000001","turn":{"id":"u-1","status":"interrupted","items":[]}}}'; ( sleep 0.4; send "{\"id\":$id,\"error\":{\"code\":-32600,\"message\":\"no such turn\"}}" ) & }"#;
+    let silent = r#"on_interrupt() { send '{"method":"turn/completed","params":{"threadId":"019a0000-0000-7000-8000-000000000001","turn":{"id":"u-1","status":"interrupted","items":[]}}}'; }"#;
+    for (name, interrupt) in [("refused late", refused_late), ("silent", silent)] {
+        let base = scratch(&format!("late-stop-{}", name.replace(' ', "-")));
+        let (runtime, account, folder) = fake_codex(&base, &format!("{turns}\n{interrupt}"));
+        let cfg = CodexConfig { request_timeout: Duration::from_millis(300), ..config(false) };
+        let mut session = CodexSession::start(&runtime, &account, &folder, cfg, SignIn::ApiKey(canary())).unwrap();
+        session.send("a").unwrap();
+        events_until(&mut session, |e| matches!(e, SessionEvent::TextDelta { .. }));
+        session.stop().unwrap();
+        let a = events_until(&mut session, turn_end);
+        assert!(matches!(a.last(), Some(SessionEvent::TurnFinished { outcome: TurnOutcome::Stopped, .. })), "{name}: {a:?}");
+        session.send("b").unwrap();
+        // Long past A's stop result and any wait it could have started for B.
+        let until = Instant::now() + Duration::from_millis(1500);
+        let mut b = Vec::new();
+        while Instant::now() < until {
+            b.extend(session.next_event(Duration::from_millis(50)));
+        }
+        assert!(!b.iter().any(|e| matches!(e, SessionEvent::TurnFinished { .. } | SessionEvent::Ended { .. })), "{name}: {b:?}");
+        assert!(session.turn_running(), "{name}: B runs on");
+        session.shutdown(Duration::from_secs(2)).unwrap();
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+}
+
 /// A `turn/start` that passed its deadline fails its turn but keeps its message in the copy, as
 /// Codex may have taken it; the next message starts a fresh thread (with the copy) so it cannot
 /// join a turn that runs after all; when the late answer comes, that turn is interrupted by name
@@ -1250,6 +1289,12 @@ on_turn() {
     let sent = stdin_lines(&base, 9);
     let starts: Vec<Value> = requests(&sent, "turn/start").into_iter().map(|l| serde_json::from_str(l).unwrap()).collect();
     assert_eq!(starts[1]["params"]["threadId"], "t-2", "the next message starts on a fresh thread: {sent:?}");
+    let unsubscribes: Vec<Value> = requests(&sent, "thread/unsubscribe").into_iter().map(|l| serde_json::from_str(l).unwrap()).collect();
+    assert_eq!(
+        unsubscribes.iter().map(|u| u["params"].clone()).collect::<Vec<_>>(),
+        vec![json!({ "threadId": "t-1" })],
+        "and t-1 is let go: {sent:?}"
+    );
     session.shutdown(Duration::from_secs(2)).unwrap();
     std::fs::remove_dir_all(&base).unwrap();
 }
