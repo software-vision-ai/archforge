@@ -171,10 +171,14 @@ fn a_constraint_is_added_set_moved_and_removed_each_one_step_its_text_kept_as_ty
     one_step(&mut s, "uml.constraint.set", json!({ "constraint": non_empty, "expression": "ÿ ≠ ∅", "name": "" }));
     assert_eq!(constraints::expression(s.doc(), ne), "ÿ ≠ ∅");
     assert_eq!(archforge_core::name_of(s.doc(), ne), "");
-    // Moved among its context's constraints.
+    // Moved among its context's constraints; -1, the default, is the last place.
     one_step(&mut s, "uml.constraint.move", json!({ "constraint": non_empty, "at": 0 }));
     let st = s.doc();
     assert_eq!(constraints::constraints_of(st, obj(st, &order)), vec![ne, c]);
+    one_step(&mut s, "uml.constraint.move", json!({ "constraint": non_empty }));
+    let st = s.doc();
+    assert_eq!(constraints::constraints_of(st, obj(st, &order)), vec![c, ne], "the default goes to the last place");
+    one_step(&mut s, "uml.constraint.move", json!({ "constraint": non_empty, "at": 0 }));
     // Removed through element.remove, with its specification.
     let before = s.doc().alive().count();
     one_step(&mut s, "element.remove", json!({ "ids": [paid] }));
@@ -256,6 +260,35 @@ fn deleting_a_constrained_element_drops_the_reference_and_an_orphan_constraint_i
     run(&mut s, "element.remove", json!({ "ids": [order] }));
     let st = s.doc();
     assert!(st.alive().all(|o| st.class_of(o).ok() != Some(CONSTRAINT)), "every constraint named only Order, or was Order's own");
+}
+
+/// A nested package removed hands up what it holds but takes its own constraints along: they are
+/// not counted as changed, whatever they name, and nothing else is touched.
+#[test]
+fn a_removed_nested_package_takes_its_own_constraints_and_reports_none_as_changed() {
+    let mut s = session();
+    let [sales, order, payment, ..] = shop(&mut s);
+    let inner = run(&mut s, "uml.package.add", json!({ "name": "inner", "parent": sales }));
+    let held = run(&mut s, "uml.class.add", json!({ "package": inner, "name": "Refund" }));
+    let own = run(&mut s, "uml.constraint.add", json!({ "context": inner, "expression": "refunds are rare", "constrained": [inner, order] }));
+    let kept = run(&mut s, "uml.constraint.add", json!({ "context": order, "expression": "x", "constrained": [order, inner] }));
+    let lone = run(&mut s, "uml.constraint.add", json!({ "context": payment, "expression": "y", "constrained": [inner] }));
+    let st = s.doc();
+    let said = constraints::dropped_by(st, &[obj(st, &inner)]);
+    let changed: Vec<Obj> = said.iter().map(|d| d.constraint).collect();
+    assert!(!changed.contains(&obj(st, &own)), "the package's own constraint goes with it, not reported: {said:?}");
+    assert_eq!(changed, vec![obj(st, &kept), obj(st, &lone)]);
+    assert_eq!(said[0].remaining, vec![obj(st, &order)]);
+    assert!(said[1].remaining.is_empty());
+    let before = picture(s.doc());
+    run(&mut s, "element.remove", json!({ "ids": [inner] }));
+    let st = s.doc();
+    let alive = |id: &str| st.by_uuid(Uuid::parse(id).unwrap()).is_some_and(|o| st.is_alive(o));
+    assert!(!alive(&own) && !alive(&lone), "its own constraint and the one naming it alone go");
+    assert!(alive(&kept) && alive(&held), "the other stays, and what it held moved up");
+    assert_eq!(constraints::constrained(st, obj(st, &kept)), vec![obj(st, &order)]);
+    s.undo().unwrap();
+    assert_eq!(picture(s.doc()), before, "one undo step");
 }
 
 /// Each diagram shows a constraint its own way, braces or a note, while its content is the

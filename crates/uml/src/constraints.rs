@@ -233,8 +233,11 @@ pub fn dropped_by(store: &Store, objs: &[Obj]) -> Vec<Dropped> {
     let goes = |e: Obj| roots.iter().any(|(r, deep)| *r == e || (*deep && store.contains(*r, e)));
     let mut out = Vec::new();
     for c in store.alive().filter(|c| store.class_of(*c).ok() == Some(CONSTRAINT)) {
-        // A constraint inside what goes, its context's own among them, goes with it anyway.
-        if goes(c) {
+        // A constraint inside what goes goes with it anyway: one whose context is a removed element,
+        // a nested package too, which hands up what it holds but not its own rules, or one deeper
+        // inside what goes.
+        let context = context_of(store, c);
+        if goes(c) || context.is_some_and(|x| roots.iter().any(|(r, _)| *r == x) || goes(x)) {
             continue;
         }
         let elements = constrained(store, c);
@@ -527,11 +530,17 @@ fn constraint_move(ctx: &mut C<'_>, p: &Params) -> R {
     let all: Vec<Obj> = ctx.doc.list(context, namespace::OWNED_RULE).unwrap_or_default().iter().filter_map(Value::as_ref).collect();
     let last = all.len().saturating_sub(1);
     let from = all.iter().position(|x| *x == c).ok_or_else(|| refuse("constraint", "the constraint is not among its context's"))?;
+    // -1, the default, is the last place, as a member's place is the end; any other place is one
+    // of the list's, from 0, and anything else is refused, never clamped.
     let at = p.integer("at").unwrap_or(-1);
-    let to = usize::try_from(at)
-        .ok()
-        .filter(|i| *i <= last)
-        .ok_or_else(|| refuse("at", format!("{at} is past the last constraint; a place from 0 to {last}")))?;
+    let to = match at {
+        -1 => last,
+        _ => match usize::try_from(at) {
+            Ok(i) if i <= last => i,
+            Ok(_) => return Err(refuse("at", format!("{at} is past the last constraint; a place from 0 to {last}, or -1 for the last"))),
+            Err(_) => return Err(refuse("at", format!("{at} is no place; a place from 0 to {last}, or -1 for the last"))),
+        },
+    };
     let (Ok(from), Ok(to)) = (u32::try_from(from), u32::try_from(to)) else {
         return Err(refuse("at", format!("{at} is too far; a place from 0 to {last}")));
     };
@@ -624,7 +633,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Move constraint",
             &["Constraint"],
             None,
-            "constraint: string; the constraint's id\nat: integer = -1, -1..1000000; its new place among its context's constraints, from 0",
+            "constraint: string; the constraint's id\nat: integer = -1, -1..1000000; its new place among its context's constraints, from 0, or -1 for the last",
             has_constraints,
             constraint_move
         ),
