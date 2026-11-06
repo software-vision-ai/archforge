@@ -1107,7 +1107,7 @@ fn class_rows(store: &Store, c: Obj, depth: u8, t: &Tree<'_>) -> Vec<Row> {
 }
 
 /// In the sample class model, the enumeration Priority nested in Order with the literals Standard
-/// and Express, Order's attribute `urgency : Priority`, and Priority's card placed above Order's on
+/// and Express, Order's attribute `priority : Priority` (design D2), and Priority's card placed above Order's on
 /// the open diagram, tied to it by the ⊕ line, as one step, for the snapshot screens
 /// and the tests (AR-132); the project is then marked saved as it stands. Gives Priority's id and
 /// Order's.
@@ -1137,8 +1137,8 @@ pub(crate) fn put_nested_priority(shell: &mut Shell) -> Result<(String, String),
             for l in ["Standard", "Express"] {
                 b2.execute("uml.literal.add", &json!({ "enumeration": priority, "name": l }))?;
             }
-            // An attribute shares its class's names with what the class nests, whatever the case.
-            b2.execute("uml.attribute.add", &json!({ "class": order, "name": "urgency", "type": priority }))?;
+            // An attribute and a nested classifier are different kinds and share a name (AR-208).
+            b2.execute("uml.attribute.add", &json!({ "class": order, "name": "priority", "type": priority }))?;
             for (n, width, height) in &grow {
                 b2.execute("diagram.resize", &json!({ "node": n.to_string(), "width": width, "height": height }))?;
             }

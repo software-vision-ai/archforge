@@ -45,6 +45,7 @@ pub mod generalization_sets;
 mod generated;
 pub mod members;
 pub mod modifiers;
+pub mod names;
 pub mod nesting;
 pub mod qualifiers;
 pub mod relations;

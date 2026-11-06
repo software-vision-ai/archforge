@@ -629,6 +629,12 @@ generalization a new element of the kind it started from.
 
 - All classifiers of one package share its names: a class, an interface, an enumeration, a data
   type, a primitive type and an association class in the same package need different names.
+- Names are told apart by kind, as UML does, and compared without case. Two elements of one kind
+  in one owner need different names: two classifiers, two packages, two attributes, two
+  operations, two literals, two parameters or two generalization sets. Elements of different kinds
+  may share a name: a package may hold a package *Billing* beside a class *Billing*, and a class
+  may have an attribute *total* and an operation *total()*. Relationships, constraints and
+  diagrams may be named alike, since their names are labels.
 - An association class's attributes and its ends' roles share its own names. A clash is refused
   under the attribute's row, or in **Properties** for a role.
 - Every class, interface, enumeration, data type and primitive type you made is offered once
@@ -822,13 +828,13 @@ rather than held by a package.
   members, its relationships and every type that uses it. The menu lists each package and
   classifier with its kind; those that cannot take it stay listed, disabled, with the reason at
   the right: *itself*, *owns none* (an enumeration, a data type or a primitive type), or *class
-  Priority already holds that name* where the owner already has a member of that name, said by its
-  kind. A classifier inside it is never
+  Priority already holds that name* where the owner already has a classifier of that name, said by
+  its kind. A classifier inside it is never
   offered, since owning it would make a cycle. A primitive type and an association class stay in a
   package.
-- **Names.** A nested classifier's name differs, whatever the case, from everything its owner
-  holds: its other nested classifiers, its attributes and its operations. So an attribute of
-  *Order* cannot be called *priority* while *Order* nests *Priority*; name it *urgency* instead.
+- **Names.** A nested classifier's name differs, whatever the case, from the other classifiers its
+  owner nests. Its owner's attributes and operations may share it, so *Order* can nest *Priority*
+  and have the attribute *priority : Priority*.
 - **On a diagram**, drag the nested classifier's row from **Models** onto the canvas. Where its
   owner is on the diagram too, a line ending in ⊕ at the owner shows the ownership; it is worked out
   from the model, comes and goes with either card, and cannot be selected. Where the owner is not on

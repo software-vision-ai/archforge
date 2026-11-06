@@ -168,8 +168,7 @@ pub fn ensure_root(store: &mut Store) -> Result<Obj, CommandError> {
     store.push(tag, archforge_core::tag::ELEMENT, Value::Ref(root)).map_err(fail)?;
     store.push(m, archforge_core::model::TAG, Value::Ref(tag)).map_err(fail)?;
     for pkg in top.into_iter().filter(|p| *p != root) {
-        let taken = subpackages(store, root).iter().any(|s| name_of(store, *s).eq_ignore_ascii_case(&name_of(store, pkg)));
-        if !taken {
+        if crate::names::clash(store, root, PACKAGE, &name_of(store, pkg), None).is_none() {
             detach(store, pkg)?;
             place_package(store, pkg, Some(root))?;
         }
@@ -177,9 +176,9 @@ pub fn ensure_root(store: &mut Store) -> Result<Obj, CommandError> {
     Ok(root)
 }
 
-/// The packages beside `package`: its parent's, or the model's top level.
-fn siblings_of(store: &Store, parent: Option<Obj>) -> Vec<Obj> {
-    parent.map_or_else(|| packages(store), |p| subpackages(store, p))
+/// What holds a package in `parent`: the parent, or the model at the top level.
+fn holder_of(store: &Store, parent: Option<Obj>) -> Option<Obj> {
+    parent.or_else(|| model(store).ok())
 }
 
 /// Whether `package` is `ancestor` or sits inside it, at any depth.
@@ -271,14 +270,16 @@ pub fn package_of(store: &Store, class: Obj) -> Option<Obj> {
     store.container(class).ok().flatten().map(|(c, _)| c).filter(|c| store.class_of(*c).ok() == Some(PACKAGE))
 }
 
-/// A name a package or a classifier may have, distinct, whatever the case, from its siblings'
-/// (a namespace tells its members apart by name); a refusal names what has it already.
-pub(crate) fn check_name(store: &Store, name: &str, siblings: &[Obj], except: Option<Obj>) -> Result<(), CommandError> {
+/// A name an element of `class` (a package or a classifier) may have in `owner`: distinct, whatever
+/// the case, from the names of the elements of its kind there ([`crate::names`]: a namespace tells
+/// its members apart by kind, then by name, so a package and a class may share a name); a refusal
+/// names what has it already. No owner, no clash.
+pub(crate) fn check_name(store: &Store, owner: Option<Obj>, class: ClassId, name: &str, except: Option<Obj>) -> Result<(), CommandError> {
     if let Some(p) = archforge_core::skills::name_problem(name, MAX_NAME) {
         return Err(refuse("name", format!("the name {p}")));
     }
-    if let Some(s) = siblings.iter().find(|s| Some(**s) != except && name_of(store, **s).to_lowercase() == name.to_lowercase()) {
-        return Err(refuse("name", format!("there is {} named {name} already", a_what(store, *s))));
+    if let Some(s) = owner.and_then(|o| crate::names::clash(store, o, class, name, except)) {
+        return Err(refuse("name", format!("there is {} named {name} already", a_what(store, s))));
     }
     Ok(())
 }
@@ -336,7 +337,7 @@ fn place_package(store: &mut Store, pkg: Obj, parent: Option<Obj>) -> Result<(),
 fn package_add(ctx: &mut C<'_>, p: &Params) -> R {
     let parent = parent_param(ctx.doc, p, "parent")?;
     let name = text(p, "name");
-    check_name(ctx.doc, name, &siblings_of(ctx.doc, parent), None)?;
+    check_name(ctx.doc, holder_of(ctx.doc, parent), PACKAGE, name, None)?;
     let pkg = ctx.doc.create(PACKAGE).map_err(fail)?;
     set_name(ctx.doc, pkg, name)?;
     place_package(ctx.doc, pkg, parent)?;
@@ -353,7 +354,7 @@ fn package_rename(ctx: &mut C<'_>, p: &Params) -> R {
     if let Some(why) = crate::members::types_problem(ctx.doc, pkg, name, package_of(ctx.doc, pkg)) {
         return Err(refuse("name", why));
     }
-    check_name(ctx.doc, name, &siblings_of(ctx.doc, package_of(ctx.doc, pkg)), Some(pkg))?;
+    check_name(ctx.doc, holder_of(ctx.doc, package_of(ctx.doc, pkg)), PACKAGE, name, Some(pkg))?;
     let old = name_of(ctx.doc, pkg);
     set_name(ctx.doc, pkg, name)?;
     // Its class diagrams still named like it follow the new name (AR-95: a package's own diagram).
@@ -399,7 +400,7 @@ fn package_move(ctx: &mut C<'_>, p: &Params) -> R {
     if let Some(why) = crate::members::types_problem(ctx.doc, pkg, &name_of(ctx.doc, pkg), to) {
         return Err(refuse("to", why));
     }
-    check_name(ctx.doc, &name_of(ctx.doc, pkg), &siblings_of(ctx.doc, to), Some(pkg))?;
+    check_name(ctx.doc, holder_of(ctx.doc, to), PACKAGE, &name_of(ctx.doc, pkg), Some(pkg))?;
     detach(ctx.doc, pkg)?;
     place_package(ctx.doc, pkg, to)?;
     // Its cards go from the diagrams of a package that no longer holds it (AR-102): a class
@@ -435,7 +436,7 @@ fn classifier_move(ctx: &mut C<'_>, p: &Params, kind: ClassId, key: &str, what: 
         return Err(refuse("package", format!("{}: {why}", uuid_of(ctx.doc, c)?)));
     }
     if !(name.is_empty() && kind == ASSOCIATION_CLASS) {
-        check_name(ctx.doc, &name, &classifiers(ctx.doc, to), Some(c))?;
+        check_name(ctx.doc, Some(to), kind, &name, Some(c))?;
     }
     detach(ctx.doc, c)?;
     ctx.doc.push(to, package::PACKAGED_ELEMENT, Value::Ref(c)).map_err(fail)?;
@@ -451,7 +452,7 @@ fn classifier_add(ctx: &mut C<'_>, p: &Params, kind: ClassId) -> R {
     if let Some(why) = crate::members::reserved_problem(ctx.doc, pkg, name) {
         return Err(refuse("name", why));
     }
-    check_name(ctx.doc, name, &classifiers(ctx.doc, pkg), None)?;
+    check_name(ctx.doc, Some(pkg), kind, name, None)?;
     let c = ctx.doc.create(kind).map_err(fail)?;
     set_name(ctx.doc, c, name)?;
     ctx.doc.push(pkg, package::PACKAGED_ELEMENT, Value::Ref(c)).map_err(fail)?;
@@ -475,9 +476,8 @@ fn classifier_rename(ctx: &mut C<'_>, p: &Params, kind: ClassId, key: &str, what
     if let Some(why) = package_of(ctx.doc, c).and_then(|pkg| crate::members::reserved_problem(ctx.doc, pkg, name)) {
         return Err(refuse("name", why));
     }
-    // A nested classifier's name is told apart from its owner's other nested ones (AR-132).
-    let siblings = crate::nesting::siblings(ctx.doc, c);
-    check_name(ctx.doc, name, &siblings, Some(c))?;
+    // A nested classifier's name is told apart from its owner's other classifiers (AR-132).
+    check_name(ctx.doc, crate::nesting::owner_of(ctx.doc, c), kind, name, Some(c))?;
     set_name(ctx.doc, c, name)?;
     Ok(json!({ "id": uuid_of(ctx.doc, c)? }))
 }
@@ -671,31 +671,26 @@ pub(crate) fn classifiers_within(store: &Store, pkg: Obj) -> Vec<Obj> {
     out
 }
 
-/// Why `parent` cannot take what `pkg` holds, when a name would clash there, a built-in type's name
-/// would land in the package Types, or a package handed up would become a second Types or a Types
-/// holding such a name.
+/// Why `parent` cannot take what `pkg` holds, when a name would clash there with one of its kind
+/// ([`crate::names`]), a built-in type's name would land in the package Types, or a package handed
+/// up would become a second Types or a Types holding such a name.
 fn hand_up_problem(store: &Store, pkg: Obj, parent: Obj) -> Option<String> {
     for o in held(store, pkg) {
-        // Classifiers share their package's names, and the package Types keeps the built-in
-        // types'; a package has its own.
         let n = name_of(store, o);
-        let siblings = match store.class_of(o).ok() {
-            Some(c) if crate::is_classifier(c) => {
-                if let Some(why) = crate::members::reserved_problem(store, parent, &n) {
-                    return Some(why);
-                }
-                classifiers(store, parent)
-            }
-            Some(c) if c == PACKAGE => {
-                if let Some(why) = crate::members::types_problem(store, o, &n, Some(parent)) {
-                    return Some(why);
-                }
-                subpackages(store, parent)
-            }
-            _ => continue,
-        };
-        if let Some(s) = siblings.iter().find(|s| !n.is_empty() && name_of(store, **s).to_lowercase() == n.to_lowercase()) {
-            return Some(format!("{} has {} named {n} already", name_of(store, parent), a_what(store, *s)));
+        let Ok(class) = store.class_of(o) else { continue };
+        // The package Types keeps the built-in types' names, and one package is Types.
+        if crate::is_classifier(class)
+            && let Some(why) = crate::members::reserved_problem(store, parent, &n)
+        {
+            return Some(why);
+        }
+        if class == PACKAGE
+            && let Some(why) = crate::members::types_problem(store, o, &n, Some(parent))
+        {
+            return Some(why);
+        }
+        if let Some(s) = crate::names::clash(store, parent, class, &n, None) {
+            return Some(format!("{} has {} named {n} already", name_of(store, parent), a_what(store, s)));
         }
     }
     None

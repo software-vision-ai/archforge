@@ -62,7 +62,8 @@ pub(crate) fn owner_parts(store: &Store, o: Obj) -> Vec<String> {
 }
 
 /// What an owner is, as the Owner menu says it at its row's right (package, class, interface),
-/// and what an element its name clashes with is (attribute, operation, constraint).
+/// and what an element its name clashes with is: a classifier, the one kind a classifier's name
+/// clashes with (AR-208).
 fn kind_word(store: &Store, o: Obj) -> String {
     match store.class_of(o).ok() {
         Some(c) if c == archforge_uml::PACKAGE => return tr("package"),
@@ -327,8 +328,8 @@ fn owner_menu_body(shell: &mut Shell, ui: &egui::Ui, p: &Palette, m: Rect, rows:
 pub(crate) fn add_nested(shell: &mut Shell, owner: Uuid, kind: Classifier) -> Result<Uuid, String> {
     let store = shell.session.as_ref().map(|s| s.doc()).ok_or_else(|| tr("The model could not be opened"))?;
     let o = store.by_uuid(owner).ok_or_else(|| tr("The model could not be opened"))?;
-    // Free among everything the owner holds, its attributes and operations too, which a nested
-    // classifier's name may not take.
+    // Free among everything the owner holds: a nested classifier clashes only with its other
+    // classifiers (`archforge_uml::names`), but a default name its members have reads as theirs.
     let taken = nesting::names_under(store, o).into_iter().map(|c| name(store, c));
     let fresh = fresh_name(kind.stem(), taken, false).ok_or_else(|| tr("No free name is left"))?;
     let out = run(shell, "uml.nested.add", json!({ "owner": owner.to_string(), "kind": command_kind(kind), "name": fresh }))?;

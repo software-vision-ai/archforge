@@ -162,12 +162,13 @@ fn nested_classifiers_are_made_inside_a_class_one_step_each() {
     assert_eq!(listed["nested"][4]["nested"][0]["name"], "Deep");
 }
 
-/// A name is told apart from what the owner holds, its nested classifiers, attributes and operations, whatever the case, made or
-/// renamed; the package's classifiers' names, and a name nested elsewhere, do not clash.
+/// A nested classifier's name is told apart from the owner's other classifiers, whatever the case,
+/// made, renamed or moved there; the package's classifiers' names, a name nested elsewhere, and the
+/// owner's attributes and operations, which are other kinds (AR-208), do not clash.
 #[test]
-fn names_clash_only_among_what_an_owner_holds() {
+fn names_clash_only_among_the_classifiers_an_owner_holds() {
     let mut s = session();
-    let [_, order, customer, ..] = shop(&mut s);
+    let [sales, order, customer, ..] = shop(&mut s);
     let priority = run(&mut s, "uml.nested.add", json!({ "owner": order, "kind": "enumeration", "name": "Priority" }));
     let why = refused(&mut s, "uml.nested.add", json!({ "owner": order, "kind": "class", "name": "priority" }));
     assert!(why.contains("an enumeration named priority already"), "{why}");
@@ -175,19 +176,19 @@ fn names_clash_only_among_what_an_owner_holds() {
     run(&mut s, "uml.nested.add", json!({ "owner": order, "kind": "class", "name": "Customer" }));
     run(&mut s, "uml.nested.add", json!({ "owner": customer, "kind": "enumeration", "name": "Priority" }));
     let line = run(&mut s, "uml.nested.add", json!({ "owner": order, "kind": "class", "name": "Line" }));
-    assert!(refused(&mut s, "uml.class.rename", json!({ "class": line, "name": "PRIORITY" })).contains("already"));
+    assert!(refused(&mut s, "uml.class.rename", json!({ "class": line, "name": "PRIORITY" })).contains("an enumeration named PRIORITY already"));
+    let loose = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "LINE" }));
+    assert!(refused(&mut s, "uml.classifier.set-owner", json!({ "classifier": loose, "owner": order })).contains("a class named Line already"));
     one_step(&mut s, "uml.enumeration.rename", json!({ "enumeration": priority, "name": "Urgency" }));
-    // An owner's attributes and operations share its nested classifiers' names, whatever the case,
-    // since a model opening is checked for two elements of one owner named alike: each way round
-    // is refused, and the saved model opens again.
-    let why = refused(&mut s, "uml.attribute.add", json!({ "class": order, "name": "urgency" }));
-    assert!(why.contains("nests an enumeration named Urgency already"), "{why}");
-    assert!(refused(&mut s, "uml.operation.add", json!({ "class": order, "name": "LINE" })).contains("nests a class named Line"));
+    // An owner's attributes and operations are other kinds: they share its nested classifiers'
+    // names, each way round, and the model opens again, as D2's `priority : Priority` has it.
+    one_step(&mut s, "uml.attribute.add", json!({ "class": order, "name": "urgency", "type": priority }));
+    one_step(&mut s, "uml.operation.add", json!({ "class": order, "name": "LINE" }));
     run(&mut s, "uml.attribute.add", json!({ "class": order, "name": "total" }));
-    assert!(
-        refused(&mut s, "uml.nested.add", json!({ "owner": order, "kind": "class", "name": "Total" })).contains("an attribute named Total already")
-    );
-    assert_eq!(s.doc().first_problem(), None, "the model holds together as it would open");
+    one_step(&mut s, "uml.nested.add", json!({ "owner": order, "kind": "class", "name": "Total" }));
+    one_step(&mut s, "uml.classifier.set-owner", json!({ "classifier": loose, "owner": customer }));
+    run(&mut s, "uml.attribute.add", json!({ "class": customer, "name": "line" }));
+    assert_eq!(s.doc().first_problem_by(archforge_uml::names::kind), None, "the model holds together as it would open");
 }
 
 /// A classifier moves from its package into a class, from one class to another and back to a

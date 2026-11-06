@@ -71,11 +71,10 @@ pub fn association_of(store: &Store, q: Obj) -> Option<(Obj, usize)> {
 }
 
 /// The qualifier of `end`, other than `except`, that a qualifier named `name` would clash with:
-/// an end's qualifiers are told apart whatever the case. The commands and the shell ask this one
-/// rule.
+/// an end's qualifiers, the properties it holds, are told apart whatever the case by the shared
+/// rule ([`crate::names`]). The commands and the shell ask this one rule.
 pub fn name_clash(store: &Store, end: Obj, name: &str, except: Option<Obj>) -> Option<Obj> {
-    let wanted = name.to_lowercase();
-    qualifiers(store, end).into_iter().find(|q| Some(*q) != except && name_of(store, *q).to_lowercase() == wanted)
+    crate::names::clash(store, end, PROPERTY, name, except)
 }
 
 /// A qualifier as its box and Properties list it: `lineNo : Integer`, the multiplicity in

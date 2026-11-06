@@ -292,7 +292,7 @@ fn nested_classifiers_are_saved_and_opened_again_nested() {
     run(&mut s, "uml.literal.add", json!({ "enumeration": priority, "name": "Express" }));
     let line = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Line" }));
     run(&mut s, "uml.classifier.set-owner", json!({ "classifier": line, "owner": order }));
-    run(&mut s, "uml.attribute.add", json!({ "class": order, "name": "urgency", "type": priority }));
+    run(&mut s, "uml.attribute.add", json!({ "class": order, "name": "priority", "type": priority }));
     let written = rows_of(s.doc(), &schema);
     project.write_model(&schema, &written).unwrap();
     project.commit("Nested").unwrap();
@@ -310,6 +310,72 @@ fn nested_classifiers_are_saved_and_opened_again_nested() {
     let p = st.by_uuid(Uuid::parse(&priority).unwrap()).unwrap();
     assert_eq!(archforge_uml::nesting::qualified_name(st, p), "Order::Priority");
     again.close().unwrap();
+}
+
+/// Saved, closed and opened again through the project, the rows come back and a session is made
+/// of them, or the reason it is not.
+fn save_and_reopen(env: &Env, schema: &ModelSchema, path: &std::path::Path, st: &Store, message: &str) -> Result<Session, String> {
+    let project = Project::open(&env.dolt, &env.opts(), path).unwrap();
+    project.prepare_model(schema).unwrap();
+    let written = rows_of(st, schema);
+    project.write_model(schema, &written).unwrap();
+    assert!(project.commit(message).unwrap());
+    project.close().unwrap();
+    let project = Project::open(&env.dolt, &env.opts(), path).unwrap();
+    project.prepare_model(schema).unwrap();
+    let read = project.read_model(schema).unwrap();
+    project.close().unwrap();
+    assert_eq!(read, written, "{message}: the rows come back as written");
+    archforge_notations::session_from_rows(&read, ids(1 << 44))
+}
+
+/// AR-208: a project whose names differ only in case across kinds (an attribute and an operation,
+/// a package and a class in one package) saved, but its check as it opened refused it, so it never
+/// opened again. As UML has it, elements of different kinds share names: such a project opens, one
+/// that opened before still does, and so does one saved in that state before the fix; two
+/// elements of one kind named alike still never open.
+#[test]
+fn names_shared_across_kinds_are_saved_and_the_project_opens_again() {
+    let env = Env::new("names");
+    let schema = schema();
+    let project = Project::create(&env.dolt, &env.opts(), &env.base.join("Projects"), "Names", "test", &timestamp(1_761_670_800)).unwrap();
+    let path = project.path().to_path_buf();
+    project.close().unwrap();
+    // A project that opened before opens still.
+    let mut s = model();
+    save_and_reopen(&env, &schema, &path, s.doc(), "As before").expect("a project that opened before opens");
+    // Made by the commands, as the bug was found.
+    let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+    let order = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Order" }));
+    run(&mut s, "uml.attribute.add", json!({ "class": order, "name": "total" }));
+    run(&mut s, "uml.operation.add", json!({ "class": order, "name": "Total" }));
+    let line = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Line" }));
+    run(&mut s, "uml.attribute.add", json!({ "class": line, "name": "total" }));
+    run(&mut s, "uml.operation.add", json!({ "class": line, "name": "total" }));
+    run(&mut s, "uml.package.add", json!({ "parent": sales, "name": "Billing" }));
+    run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Billing" }));
+    let back = save_and_reopen(&env, &schema, &path, s.doc(), "Names shared across kinds").expect("names of different kinds open");
+    assert_eq!(rows_of(back.doc(), &schema), rows_of(s.doc(), &schema));
+    // Saved before the fix, written straight into the store as no command would now: a data
+    // type's attribute and operation named alike, and a package beside a classifier of its name.
+    let mut st = archforge_notations::store(ids(1 << 42)).unwrap();
+    rows::restore(&mut st, &rows_of(s.doc(), &schema), schema.tables(), &schema.junctions()).unwrap();
+    let sales = st.by_uuid(Uuid::parse(&sales).unwrap()).unwrap();
+    let named = |st: &mut Store, owner, prop, class, name: &str| {
+        let o = st.create(class).unwrap();
+        st.set(o, archforge_uml::named_element::NAME, Value::str(name)).unwrap();
+        st.push(owner, prop, Value::Ref(o)).unwrap();
+        o
+    };
+    let money = named(&mut st, sales, archforge_uml::package::PACKAGED_ELEMENT, archforge_uml::DATA_TYPE, "Money");
+    named(&mut st, money, archforge_uml::data_type::OWNED_ATTRIBUTE, archforge_uml::PROPERTY, "amount");
+    named(&mut st, money, archforge_uml::data_type::OWNED_OPERATION, archforge_uml::OPERATION, "AMOUNT");
+    named(&mut st, sales, archforge_uml::package::PACKAGED_ELEMENT, archforge_uml::PACKAGE, "money");
+    save_and_reopen(&env, &schema, &path, &st, "Saved in the old state").expect("a project saved before the fix opens");
+    // Two classifiers of one name never open.
+    named(&mut st, sales, archforge_uml::package::PACKAGED_ELEMENT, archforge_uml::ENUMERATION, "ORDER");
+    let e = save_and_reopen(&env, &schema, &path, &st, "Two of one kind").err().expect("two classifiers of one name are refused");
+    assert!(e.contains("DuplicateName"), "{e}");
 }
 
 #[test]

@@ -85,13 +85,13 @@ sets; a member is never reconnected (`uml.relationship.reconnect` refuses it, na
 `element.remove`, which keeps its generalizations, and a set left with no member by a removal, or by `uml.generalization-set.set`,
 goes in the same step; where a diagram shows its label, once moved, a node of the kind `uml.generalization-set.label` nested in
 the general classifier's node; the set line itself is the canvas's, worked out from the model), `nesting::{specs, nested,
-nested_within, classifier_owner, owner_of, home_package, owner_chain, qualified_name, names_under, siblings, member_clash,
+nested_within, classifier_owner, owner_of, home_package, owner_chain, qualified_name, names_under, classifier_clash,
 owner_problem, problem_text, candidates, can_own, can_nest, is_nested, OwnerProblem, OWNERS, NESTABLE, KINDS}` (AR-132:
 `uml.nested.add`, `uml.classifier.set-owner`, `uml.nested.list`, `uml.classifier.owners`; a class, an interface, an
 enumeration or a data type in a class's, an interface's or an association class's `nestedClassifier`, its home package its
 owner's; an owner changed keeping the id, members, relationships and type references; a cycle, an owner of a kind that owns
-none, a primitive type or an association class put in a classifier, and a name anything the owner holds has, whatever the case,
-refused with the reason; an attribute or an operation never takes a nested classifier's name; removing an owner removes what
+none, a primitive type or an association class put in a classifier, and a name another classifier of the owner has, whatever
+the case, refused with the reason; an attribute or an operation of the owner may share it (AR-208); removing an owner removes what
 it nests, their relationships and views, in the same step; `UmlNotation::nested_in` names the owner the canvas ties a nested
 card to with a line ending in ⊕, worked out from the model; a card of a nested classifier whose owner the diagram does not show
 reads `Order::Priority`), `relations::{specs, relationships_of, generalization_problem, GeneralizationProblem, is_final, specializations, final_problem, is_leaf, redefiners, redefiner_name, leaf_problem, association_end_problem, association_class_end_problem, realization_problem, RealizationProblem}`
@@ -105,7 +105,11 @@ classes, owning both its ends as an association does, its ends set with `uml.ass
 its members with the member commands, renamed and moved with `uml.association-class.rename` and
 `.move` among its package's classifiers, refused at anything but a class; nothing specializes it),
 `commands::going_with` (the relationships that go with classifiers, an association class's own
-among them), `qualifiers::{specs, qualifiers, qualified_end, is_qualifier, association_of, name_clash,
+among them), `names::{kind, clash, CLASSIFIER}` (AR-208: which elements may share a
+name in one owner, as UML has it: two of one kind never, whatever the case; every classifier is one kind, a package, a
+property, an operation, a parameter, a literal and a generalization set each one of their own, relationships and constraints
+labels that never clash; the check a project gets as it opens and every command that names, adds or moves an element ask this
+one rule), `qualifiers::{specs, qualifiers, qualified_end, is_qualifier, association_of, name_clash,
 qualifier_text, qualifiers_json, MAX_QUALIFIERS}` (AR-127: `uml.qualifier.{add, set, move}`; UML's
 `Property::qualifier`, an ordered list of properties an association's or an association class's end
 owns, each with a name, a type and a multiplicity; the qualified end's box drawn at its class

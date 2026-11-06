@@ -269,6 +269,20 @@ impl fmt::Display for Invalid {
 
 impl std::error::Error for Invalid {}
 
+/// The kind an element's name is told apart within, among the elements of its owner: two
+/// elements of one kind and one name property in one owner never share a name, whatever the case,
+/// while elements of different kinds may (as a namespace tells its members apart by kind first).
+/// A notation says which kind each of its classes is ([`Store::first_problem_by`],
+/// [`Store::name_clash`]); the store knows none of them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum NameKind {
+    /// A group of classes named by the notation, whose elements share one set of names: every
+    /// kind of classifier, say.
+    Group(&'static str),
+    /// One class alone.
+    Class(ClassId),
+}
+
 /// What `validate` reports.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Problem {
@@ -1170,7 +1184,8 @@ impl Store {
         }
     }
 
-    /// Lower bounds and sibling names of one object.
+    /// Lower bounds and sibling names of one object: every sibling with its name property, whatever
+    /// its kind, as [`first_problem`](Self::first_problem) sees them.
     pub fn validate(&self, obj: Obj) -> R<Vec<Problem>> {
         let class = self.class_of(obj)?;
         let r = self.reflect(obj)?;
@@ -1209,14 +1224,16 @@ impl Store {
     /// without gathering the rest: a missing value, or two siblings of one container whose
     /// names differ only in case. For checking a model as it opens, whatever its size.
     pub fn first_problem(&self) -> Option<Problem> {
-        self.first_problem_except(&[])
+        self.first_problem_by(|_| Some(NameKind::Group("")))
     }
 
-    /// [`first_problem`](Self::first_problem), with the names of objects of the classes `own_rule`
-    /// left out of the siblings' check: a class whose names are unique by a rule of its own, such
-    /// as skills, one name per subject they sit on though they all share one container.
-    pub fn first_problem_except(&self, own_rule: &[ClassId]) -> Option<Problem> {
-        let mut names: std::collections::HashMap<(Obj, PropId, String), Obj> = std::collections::HashMap::new();
+    /// [`first_problem`](Self::first_problem), with `kind` saying which siblings' names must
+    /// differ: only those of one [`NameKind`] (and one name property) in one container do, and the
+    /// names of a class whose kind is none are not checked here at all (names that are labels, or
+    /// unique by a rule of their own, such as skills, one name per subject they sit on though they
+    /// all share one container). [`name_clash`](Self::name_clash) asks the same of one name.
+    pub fn first_problem_by(&self, kind: impl Fn(ClassId) -> Option<NameKind>) -> Option<Problem> {
+        let mut names: HashMap<(Obj, PropId, NameKind, String), Obj> = HashMap::new();
         for obj in self.alive() {
             let Ok(class) = self.class_of(obj) else { continue };
             let Some(info) = self.universe.info(class) else { continue };
@@ -1231,19 +1248,36 @@ impl Store {
                     return Some(Problem::Missing { obj, prop: *p, lower: prop.lower, found });
                 }
             }
-            if own_rule.contains(&class) {
-                continue;
-            }
+            let Some(k) = kind(class) else { continue };
             // An empty name names nothing, as `validate` sees it: unnamed siblings never clash.
             if let (Some(np), Ok(Some((c, _)))) = (info.name_prop, self.container(obj))
                 && let Some(Value::Str(name)) = r.get(np)
                 && !name.is_empty()
-                && let Some(other) = names.insert((c, np, name.to_lowercase()), obj)
+                && let Some(other) = names.insert((c, np, k, name.to_lowercase()), obj)
             {
                 return Some(Problem::DuplicateName { obj, other, name: name.to_string() });
             }
         }
         None
+    }
+
+    /// The element of `owner`, other than `except`, that an element of `class` named `name` would
+    /// clash with there, by the rule [`first_problem_by`](Self::first_problem_by) checks with the
+    /// same `kind`: one of the same kind and name property whose name differs from `name` only in
+    /// case. None for an empty name, and for a class whose kind is none. So a change refused by
+    /// neither leaves a model that opens again.
+    pub fn name_clash(&self, owner: Obj, class: ClassId, name: &str, except: Option<Obj>, kind: impl Fn(ClassId) -> Option<NameKind>) -> Option<Obj> {
+        if name.is_empty() {
+            return None;
+        }
+        let np = self.universe.info(class)?.name_prop?;
+        let k = kind(class)?;
+        self.by_name(np, name).into_iter().find(|o| {
+            Some(*o) != except
+                && self.is_alive(*o)
+                && self.container(*o).ok().flatten().map(|(c, _)| c) == Some(owner)
+                && self.class_of(*o).ok().and_then(&kind) == Some(k)
+        })
     }
 
     // The raw level.
