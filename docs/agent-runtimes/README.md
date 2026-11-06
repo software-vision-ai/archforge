@@ -71,8 +71,8 @@ What was observed is marked **observed**; what comes from the providers' documen
                    terminal_reason "aborted_streaming"
                 the process stays up for the next turn
                      |                                         |
- exit           close stdin -> exits; 1 if the last       close stdin -> exit 0 (observed)
-                result was an error, else 0 (observed)    SIGTERM -> exit 0 (observed)
+ exit           close stdin -> exits; the code varies     close stdin -> exit 0 (observed)
+                (0 or 1 seen); `result` decides the turn  SIGTERM -> exit 0 (observed)
                 SIGTERM -> 143, no result (doc)           SIGINT -> killed by the signal (observed)
                 resume later: --resume <session_id>       resume later: thread/resume (not ephemeral)
 ```
@@ -293,8 +293,7 @@ names the computer's host name and an installation id (sanitised in the fixtures
 - **An API key in the environment is not read** (observed): with `OPENAI_API_KEY` or
   `CODEX_API_KEY` set, `account/read` still answered `account:null`. The documented way is
   `account/login/start {"type":"apiKey","apiKey":"…"}`, which "stores it for API requests" (doc).
-  This conflicts with the owner's rule that keys reach the child only through its environment; see
-  the open questions.
+  The owner accepted this route with the ephemeral store on 2026-11-06 (owner question 2).
 - ChatGPT: `account/login/start {"type":"chatgpt"}` returns `{loginId, authUrl}`; the app opens
   `authUrl`, Codex runs the local callback (port 1455) and sends `account/login/completed
   {loginId, success, error}` and `account/updated {authMode, planType}` (doc).
@@ -383,7 +382,7 @@ version; the subcommands are marked experimental.
 |---|---|---|
 | Read the version | `claude --version` → `2.1.317 (Claude Code)`, exit 0; also `claude_code_version` in `system/init` | `codex --version` → `codex-cli 0.166.0`, exit 0; also `userAgent` in the `initialize` result |
 | Needed features and where they appeared | stream-json output 0.2.66, `--mcp-config` 0.2.75, `--disallowedTools` 0.2.82, `--replay-user-messages` 1.0.86, `--include-partial-messages` 1.0.109, `--bare` 2.1.81 with full enforcement (only CLI MCP servers) from 2.1.286, interrupt receipt 2.1.205, `--permission-prompts` 2.1.259, `api_retry.no_response` 2.1.261 (doc, changelog and reference pages) | The schema is version-specific; when `chatgptDeviceCode`, `ephemeral` threads and `model/list` first appeared was not found |
-| Recommended range | **>= 2.1.286 and < 3.0.0**; tested 2.1.317. Below the floor: MissingRuntime ("update Claude Code"). Newer 2.x: accepted, logged | **>= 0.166.0 and < 1.0.0**; tested 0.166.0. Contract tests run against the committed schema; each tested bump regenerates it. Newer: accepted with a warning in the log, since unknown methods fail loudly (-32600) |
+| Recommended range | **>= 2.1.286 and < 3.0.0**; tested 2.1.317. Below the floor: MissingRuntime ("update Claude Code"). Newer 2.x: accepted with a warning (owner, 2026-11-06) | **>= 0.166.0 and < 1.0.0**; tested 0.166.0. Contract tests run against the committed schema; each tested bump regenerates it. Newer 0.x: accepted with a warning (owner, 2026-11-06), since unknown methods fail loudly (-32600) |
 | Missing | spawn fails with "not found" → MissingRuntime | the same |
 | Too old at run time | `error: unknown option '…'` on stderr, exit 1, before any event → MissingRuntime | `-32600 unknown variant` for a needed method → MissingRuntime |
 | stderr | Usage errors and input-parse errors, plain text | Tracing logs with ANSI colours; malformed-input reports |
@@ -461,41 +460,43 @@ Each needs a real key or sign-in and costs a little.
 11. Codex: that the switched-off tools stay off in a real request and that `apply_patch` is refused
     under the read-only sandbox.
 
-## Open questions for the owner
+## Owner questions
 
-1. **Codex "Sign in with ChatGPT" in Archforge.** Not decided here. The app-server documentation
-   says app-server authentication "has never been permitted for commercial or hosted services";
-   local or open-source applications built on it may continue, and OpenAI recommends migrating to
-   its "Sign in with ChatGPT" programme ([app-server, Auth
-   endpoints](https://learn.chatgpt.com/docs/app-server)). The programme's plan usage is for
-   open-source projects, personal projects that run locally and selected private apps; paid or
-   hosted apps join a waitlist ([cookbook](https://developers.openai.com/cookbook/articles/sign-in-with-chatgpt),
+Questions 1, 2, 3 and 5 were decided by the owner on 2026-11-06; 4 and 6 are still open.
+
+1. **Codex "Sign in with ChatGPT" in Archforge. Decided (2026-11-06): offered in 0.13.0, as an
+   open-source local app.** Background: the app-server documentation says app-server
+   authentication "has never been permitted for commercial or hosted services"; local or
+   open-source applications built on it may continue, and OpenAI recommends migrating to its "Sign
+   in with ChatGPT" programme ([app-server, Auth endpoints](https://learn.chatgpt.com/docs/app-server)).
+   The programme's plan usage is for open-source projects, personal projects that run locally and
+   selected private apps; paid or hosted apps join a waitlist
+   ([cookbook](https://developers.openai.com/cookbook/articles/sign-in-with-chatgpt),
    [developer docs](https://developers.openai.com/siwc),
    [app-server token sharing](https://developers.openai.com/siwc/token-sharing-open-source/codex-app-server),
    [waitlist](https://openai.com/form/sign-in-with-chatgpt-interest/)). Also relevant: the
    [authentication overview](https://learn.chatgpt.com/docs/auth) and the
    [Terms of Use](https://openai.com/policies/terms-of-use/), whose clause against sharing account
-   credentials or making an account available to others was seen only in search results: the
-   policy pages refused automated reading, so the Terms, the Services Agreement and the Usage
-   Policies need a human read. Archforge is open source (MIT or Apache-2.0) and runs locally, which matches the
-   permitted wording, but whether a distributed desktop app counts, and whether to use the built-in
-   app-server login or register for the programme's token sharing, is the owner's call, possibly
-   with OpenAI.
-2. **How the OpenAI API key reaches Codex.** The app-server does not read `OPENAI_API_KEY` or
-   `CODEX_API_KEY` from its environment; the documented way is `account/login/start` with the key,
-   sent over the child's stdin pipe, kept in memory with `cli_auth_credentials_store="ephemeral"`.
-   Options: (a) accept stdin plus ephemeral as equivalent to "environment only" (private pipe, no
-   file, no argument visible to other processes); (b) a custom model provider in `config.toml` whose
-   `env_key` names an environment variable (to verify; it bypasses the account flow and the
-   account state Settings shows); (c) something else. Recommendation: (a).
-3. **Runtime transcripts.** `--resume` needs Claude's transcript files under the private
-   `CLAUDE_CONFIG_DIR`, and a non-ephemeral Codex thread writes its own history under `CODEX_HOME`:
-   a second copy of the conversation outside the project database (AR-206). Keep them (resume after
-   a restart works) or run without persistence and rebuild context from the project's own copy?
-   Recommendation: keep them in Archforge's private folders and delete them with the conversation.
-4. **Codex `apply_patch`.** It cannot be switched off; the read-only sandbox and declined approvals
-   hold it back. Acceptable, given the bridge's own read-only mode (AR-198)?
-5. **Version policy.** Accept newer runtime versions than the tested ones with a log warning (as
-   recommended), or refuse until tested?
-6. **The bridge's token lookup.** Let `archforge-cli mcp` take the token file (or settings folder)
-   as an argument so the children's `HOME` stops mattering, in AR-198 or AR-203?
+   credentials or making an account available to others was seen only in search results; the
+   policy pages refused automated reading. Archforge is open source (MIT or Apache-2.0) and runs
+   locally.
+2. **How the OpenAI API key reaches Codex. Decided (2026-11-06): over stdin with
+   `account/login/start {"type":"apiKey"}` and `cli_auth_credentials_store="ephemeral"`, accepted in
+   place of "only through the environment".** Background: the app-server does not read
+   `OPENAI_API_KEY` or `CODEX_API_KEY` from its environment (observed); the pipe is private to the
+   child, nothing is written to a file and no argument is visible to other processes. The
+   alternative, a custom model provider whose `env_key` names an environment variable, is not
+   pursued.
+3. **Runtime transcripts. Decided (2026-11-06): kept in a private folder per conversation and
+   deleted with the conversation.** Background: `--resume` needs Claude's transcript files, which
+   land under `CLAUDE_CONFIG_DIR/projects/<working folder>/`, so a private working folder per
+   conversation keeps them apart; a non-ephemeral Codex thread writes its history under
+   `CODEX_HOME`, where the person's sign-in also lives, so AR-202 settles how a thread's history is
+   kept per conversation without splitting the sign-in.
+4. **Codex `apply_patch`. Open.** It cannot be switched off; the read-only sandbox and declined
+   approvals hold it back. Acceptable, given the bridge's own read-only mode (AR-198)?
+5. **Version policy. Decided (2026-11-06): newer runtime versions than the tested ones are accepted
+   with a warning within the same major version** (Claude Code 2.x, Codex 0.x, as in
+   [Versions](#versions)); a new major version is refused until tested.
+6. **The bridge's token lookup. Open.** Let `archforge-cli mcp` take the token file (or settings
+   folder) as an argument so the children's `HOME` stops mattering, in AR-198 or AR-203?
