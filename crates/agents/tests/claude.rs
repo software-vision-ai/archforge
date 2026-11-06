@@ -4,7 +4,8 @@
 //! round trip at the end, which needs the owner's OK.
 //!
 //! The transcripts in `tests/fixtures/` come from the spike (`docs/agent-runtimes/README.md` on the
-//! AR-196 branch): one JSON object a line, `{"t", "dir": in|out|err|sig|exit|note, "line"}`.
+//! AR-196 branch): one JSON object a line, `{"t", "dir": in|out|err|close|sig|exit|note, "line"}`,
+//! where `close` is the end of input (stdin closed) and carries no line.
 //! `observed-*` were recorded from Claude Code 2.1.317 and sanitised (paths under
 //! `/tmp/archforge-agent/`, the host name `host.example`, the installation id zeroed, colour escapes
 //! removed); `doc-*` were written from the documentation and start with a `note` line saying so;
@@ -167,15 +168,15 @@ fn fake_claude(base: &Path, body: &str) -> (Runtime, ConversationFolder) {
 }
 
 /// A shell body that replays a transcript: output lines are printed, the error stream's lines
-/// written to it, each input line waited for (and recorded), an end of input waited for, a signal
-/// waited for, and the exit code kept.
+/// written to it, each input line waited for (and recorded), the end of input (`close`) waited
+/// for, a signal waited for, and the exit code kept.
 fn replay(name: &str) -> String {
     let mut body = String::from("got=\ntrap 'got=1' INT\n");
     for record in fixture(name) {
         match record.dir.as_str() {
             "out" => body.push_str(&format!("printf '%s\\n' {}\n", quoted(&record.line))),
             "err" => body.push_str(&format!("printf '%s\\n' {} >&2\n", quoted(&record.line))),
-            "in" if record.line == "<EOF>" => body.push_str("while IFS= read -r line; do :; done\n"),
+            "close" => body.push_str("while IFS= read -r line; do :; done\n"),
             "in" => body.push_str("input\n"),
             "sig" => body.push_str("while [ -z \"$got\" ]; do sleep 0.02; done\n"),
             "exit" => body.push_str(&format!("exit {}\n", record.line)),

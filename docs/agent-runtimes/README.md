@@ -453,15 +453,24 @@ output is specific to the Codex version; the subcommands are marked experimental
 
 ## Error mapping
 
+A turn ends in one of three outcomes: completed, **stopped** or failed. Stopped is not an error and
+is decided before the mapping below, as the Claude adapter does (`TurnOutcome::Stopped`,
+`crates/agents/src/claude/parse.rs`): for Claude, a `result` with
+`terminal_reason:"aborted_streaming"` (its `subtype` is `error_during_execution` and `is_error` is
+true, as after SIGINT or the interrupt control request), or a turn the person asked to stop whose
+result carries no error category; a real category that arrived during the stop still shows as that
+failure. For Codex, `turn/completed` with `status:"interrupted"`. Only failed turns map to a
+category:
+
 | Neutral category | Claude | Codex |
 |---|---|---|
 | **MissingRuntime** | Not found on the search path; `--version` fails or is below the floor; an unknown option exits 1 before `init` | Not found; `--version` below the floor; `initialize` fails; a needed method answers `-32600 unknown variant` |
-| **InvalidCredential** | `error:"authentication_failed"` (assistant or `api_retry`), with `apiKeySource:"ANTHROPIC_API_KEY"`; with `apiKeySource:"none"` it means no key reached the child (observed, `Not logged in`); also `cloud_credential_error` | `codexErrorInfo:"unauthorized"` with `authMode:"apikey"`; `account/login/completed` with `success:false` for an API key; `account/read` → `account:null` when a key was expected |
+| **InvalidCredential** | `error:"authentication_failed"` or `cloud_credential_error` (assistant or `api_retry`), or an HTTP status 401 or 403 where no category came. With `apiKeySource:"none"` in `init` it means no key reached the child (observed, `Not logged in`) | `codexErrorInfo:"unauthorized"` with `authMode:"apikey"`; `account/login/completed` with `success:false` for an API key; `account/read` → `account:null` when a key was expected |
 | **SignInExpired** | Not applicable (API key only); `oauth_org_not_allowed` and `account_on_hold` go to Other | `unauthorized` while `authMode:"chatgpt"`; `account/updated` with `authMode:null` unprompted; `modelProvider/authRecoveryStarted` without a matching success |
-| **RateLimited** | `error:"rate_limit"`; `api_retry.error_status:429`; `rate_limit_event` with `status:"rejected"`; `billing_error` (credits used up) | `rateLimitExceeded`, `usageLimitExceeded`, `sessionBudgetExceeded`; `account/rateLimits/updated` with `rateLimitReachedType`; `ordinaryUsageAllowed:false` |
+| **RateLimited** | `error:"rate_limit"`; HTTP status 429 (`api_retry.error_status` or `result.api_error_status`); `rate_limit_event` with `status:"rejected"`; `billing_error` (credits used up) | `rateLimitExceeded`, `usageLimitExceeded`, `sessionBudgetExceeded`; `account/rateLimits/updated` with `rateLimitReachedType`; `ordinaryUsageAllowed:false` |
 | **Network** | `api_retry` with `error_status:null` while retrying (observed); final `error:"server_error"` with `api_error:"connection_failed"` (observed) | `httpConnectionFailed`, `responseStreamConnectionFailed`, `responseStreamDisconnected`, `responseTooManyFailedAttempts`; `willRetry:true` is transient |
-| **ModelUnavailable** | `error:"model_not_found"`; `overloaded` (temporary) | `modelNotFound`, `serverOverloaded`, `flexUnavailable`, `policyCapacityUnavailable` |
-| **Other** | `invalid_request`, `max_output_tokens`, `server_error` with an HTTP status, `unknown` at the end, `result.subtype` `error_*`, an exit without a `result`, an unparsable line, `oauth_org_not_allowed`, `account_on_hold` | `badRequest`, `internalServerError`, `contextWindowExceeded`, `sandboxError`, `cyberPolicy`, `misalignmentPolicyViolation`, `tooManyDenials`, `other`, a request timeout, an exit with requests pending |
+| **ModelUnavailable** | `error:"model_not_found"`; `overloaded` (temporary); HTTP status 404 or 529 where no category came | `modelNotFound`, `serverOverloaded`, `flexUnavailable`, `policyCapacityUnavailable` |
+| **Other** | `invalid_request`, `max_output_tokens`, `server_error` with an HTTP status, `unknown` at the end, a failed `result` (`is_error:true`, `subtype` `error_*`) that is not a stop and carries no category, an exit without a `result`, an unparsable line, `oauth_org_not_allowed`, `account_on_hold` | `badRequest`, `internalServerError`, `contextWindowExceeded`, `sandboxError`, `cyberPolicy`, `misalignmentPolicyViolation`, `tooManyDenials`, `other`, a request timeout, an exit with requests pending |
 
 Mapping reads the category fields only. `api_retry` and `willRetry:true` are progress, not failures:
 show them, keep the draft, and map only the final outcome.
@@ -469,8 +478,20 @@ show them, keep the draft, and map only the final outcome.
 ## Fixtures
 
 `fixtures/` holds transcripts for the adapter tests: one JSON object per line,
-`{"t": seconds since start, "dir": "in" | "out" | "err" | "sig" | "exit" | "note", "line": raw text}`.
-`line` is exactly what crossed the pipe, so malformed input is representable. Files named
+`{"t": seconds since start, "dir": …, "line": …}`, where `dir` is one of:
+
+| `dir` | Meaning | `line` |
+|---|---|---|
+| `in` | One line written to the child's stdin | the raw line, without its line break |
+| `out` | One line the child wrote to stdout | the raw line |
+| `err` | One line the child wrote to stderr | the raw line |
+| `close` | The recorder closed the child's stdin (end of input); nothing is written | `""` |
+| `sig` | The recorder sent the child a signal | its name, such as `SIGINT` |
+| `exit` | The child ended | its exit code, or `-N` when signal N ended it |
+| `note` | Not part of the run: what the file is and how it was made | free text |
+
+For `in`, `out` and `err`, `line` is exactly what crossed the pipe, so malformed input is
+representable; a replay writes `in` lines, and closes stdin at a `close` record. Files named
 `observed-*` were recorded from the installed programs and sanitised (paths replaced by
 `/tmp/archforge-agent/…` and `/opt/archforge/bin/archforge-cli`, the host name by `host.example`,
 the installation id zeroed, colour escapes removed, Codex tool tables cut to two entries, and in

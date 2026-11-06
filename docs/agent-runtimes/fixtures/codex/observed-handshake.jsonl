@@ -21,5 +21,5 @@
 {"t": 1.815, "dir": "out", "line": "{\"id\":3,\"result\":{\"account\":null,\"requiresOpenaiAuth\":true,\"workspaceRouting\":null}}"}
 {"t": 1.815, "dir": "out", "line": "{\"error\":{\"code\":-32600,\"message\":\"thread not found: 00000000-0000-0000-0000-000000000000\"},\"id\":7}"}
 {"t": 1.824, "dir": "out", "line": "{\"id\":8,\"result\":{\"data\":[],\"nextCursor\":null}}"}
-{"t": 5.82, "dir": "in", "line": "<EOF>"}
+{"t": 5.82, "dir": "close", "line": ""}
 {"t": 6.052, "dir": "exit", "line": "0"}

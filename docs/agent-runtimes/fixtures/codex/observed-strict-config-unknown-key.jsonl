@@ -2,5 +2,5 @@
 {"t": 0.0, "dir": "in", "line": "{\"method\": \"initialized\"}"}
 {"t": 0.0, "dir": "in", "line": "{\"id\": 2, \"method\": \"account/read\", \"params\": {}}"}
 {"t": 0.017, "dir": "err", "line": "Error: unknown configuration field `tools.apply_patch` in -c/--config override"}
-{"t": 1.009, "dir": "in", "line": "<EOF>"}
+{"t": 1.009, "dir": "close", "line": ""}
 {"t": 1.219, "dir": "exit", "line": "1"}
