@@ -158,8 +158,11 @@ folder itself. A configuration that holds the key (pasted into the origin label,
 before it is written, as `SecretExposed`. The file is written to a temporary file created new
 beside it (mode 0600, which never follows a link), synchronised and renamed over its place; the
 rename replaces whatever is there, a link itself rather than what it names, so a link put there,
-even between a check and the write, never sends the bytes out of the private folder. A folder at
-the place is refused, and the new file must come out a regular file only this user can read.
+even between a check and the write, never sends the bytes out of the private folder. Before the
+rename the temporary file must still be the one made, a regular file only this user can read; any
+failure up to the rename removes it and leaves an earlier file as it was. After the rename the
+file is checked again, and a failure is reported but never removes the file, as another process
+may have put it there. A folder at the place is refused.
 
 `send` writes `{"type":"user","message":{"role":"user","content":…},"parent_tool_use_id":null}`
 and refuses a second message while a turn runs. `stop` writes
@@ -321,7 +324,11 @@ join a turn Codex started after all. Its message stays in the copy, as Codex may
 started the turn (only a message that never reached Codex, or that Codex refused, leaves it), so
 the next thread may be given that question without its answer; a late answer names that turn, which is interrupted while the
 current turn goes on. A `thread/inject_items` past its deadline leaves its thread too, so the
-earlier messages are never given twice.
+earlier messages are never given twice. A thread left after its setup timed out is let go
+(`thread/unsubscribe`), so it and its tool server do not stay loaded for the session: a thread
+whose `thread/inject_items` timed out at once, and one from a `thread/start` past its deadline when
+its late answer names it (such a request is remembered for ten request timeouts, at most 16 of
+them).
 There is no signal fallback: SIGINT ends `codex app-server`. A stop request that could not be
 written is sent again by the next `stop`; one Codex refuses or leaves unanswered is not, and the
 turn then stays open (no new message is taken, as Codex may still run it) for one more request

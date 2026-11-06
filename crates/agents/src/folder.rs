@@ -238,13 +238,21 @@ impl Drop for ProbeFolder {
 const TEMP_TRIES: usize = 16;
 
 /// Writes `bytes` to `path` atomically (a temporary file beside it, synchronised, renamed over it),
-/// readable by this user alone (0600); a failed write leaves an earlier file whole. Nothing on the
-/// way follows a link: the temporary file is created new (it fails when anything, a link included,
-/// already has its name) with mode 0600, and the rename replaces whatever is at `path`, a link
-/// itself rather than what it names, so a link put in its place, even between a check and the
-/// write, can never send the bytes out of the private folder. A folder at `path` is refused. `what`
-/// names the file in errors.
+/// readable by this user alone (0600). Nothing on the way follows a link: the temporary file is
+/// created new (it fails when anything, a link included, already has its name) with mode 0600, and
+/// the rename replaces whatever is at `path`, a link itself rather than what it names, so a link
+/// put in its place, even between a check and the write, can never send the bytes out of the
+/// private folder. The temporary file is checked before the rename (still the file made here, a
+/// private regular file of this user): any failure up to the rename removes it and leaves an
+/// earlier file as it was. After the rename the file at `path` is checked again, and a failure is
+/// reported but never removes it, as another process may have put it there. A folder at `path` is
+/// refused. `what` names the file in errors.
 pub(crate) fn write_private_file(path: &Path, bytes: &[u8], what: &str) -> Result<(), AgentError> {
+    replace_checked(path, bytes, what, &private_file)
+}
+
+/// [`write_private_file`], with the privacy check given, so its failures can be tested.
+fn replace_checked(path: &Path, bytes: &[u8], what: &str, private: &dyn Fn(&std::fs::Metadata) -> bool) -> Result<(), AgentError> {
     use craft_atomic::AtomicFs;
     use std::io::Write;
     let failed = |problem: String| AgentError::Folder { path: path.to_path_buf(), problem };
@@ -271,18 +279,48 @@ pub(crate) fn write_private_file(path: &Path, bytes: &[u8], what: &str) -> Resul
         return Err(failed(format!("found no free temporary name beside {what} after {TEMP_TRIES} tries")));
     };
     let written = file.write_all(bytes).and_then(|()| fs.sync(&file));
+    // The name must still hold the file made here (nothing swapped in), and that file must be private.
+    let made = file.metadata();
+    let named = std::fs::symlink_metadata(&temp);
     drop(file);
-    if let Err(e) = written.and_then(|()| fs.rename(&temp, path)) {
+    let ours = matches!((&made, &named), (Ok(m), Ok(n)) if same_file(m, n));
+    let problem = match written {
+        Err(e) => Some(format!("could not hold {what}: {e}")),
+        Ok(()) if !ours => Some(format!("lost its temporary file for {what} to another")),
+        Ok(()) if !named.as_ref().is_ok_and(private) => Some(format!("could not keep {what} private to this user")),
+        Ok(()) => None,
+    };
+    if let Some(problem) = problem {
+        // Only the file made here is removed, never one put in its place.
+        if ours {
+            let _ = fs.remove(&temp);
+        }
+        return Err(failed(problem));
+    }
+    if let Err(e) = fs.rename(&temp, path) {
         let _ = fs.remove(&temp);
         return Err(failed(format!("could not hold {what}: {e}")));
     }
     // The bytes are in place; a failed folder sync cannot be undone, so it is best effort.
     let _ = fs.sync_dir(dir);
-    if !std::fs::symlink_metadata(path).is_ok_and(|m| private_file(&m)) {
-        let _ = std::fs::remove_file(path);
-        return Err(failed(format!("did not keep {what} private to this user")));
+    if !std::fs::symlink_metadata(path).is_ok_and(|m| private(&m)) {
+        return Err(failed(format!("was replaced, but what is there now is not {what} private to this user; it was left as it is")));
     }
     Ok(())
+}
+
+/// Whether `a` and `b` describe the same file (device and inode).
+fn same_file(a: &std::fs::Metadata, b: &std::fs::Metadata) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        a.dev() == b.dev() && a.ino() == b.ino()
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (a, b);
+        false
+    }
 }
 
 /// Whether `meta` is a regular file (not a link) of this user that no one else may read.
@@ -347,6 +385,35 @@ mod tests {
         std::fs::create_dir(&target).unwrap();
         assert!(write_private_file(&target, b"new", "the copy").is_err());
         assert!(target.is_dir());
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    /// A temporary file that fails its check before the rename is removed and the earlier file
+    /// stays as it was; a check that fails only after the rename is reported, and the file there is
+    /// never removed.
+    #[test]
+    #[cfg(unix)]
+    fn a_failed_privacy_check_never_costs_a_file() {
+        let base = std::env::temp_dir().join(format!("archforge-private-check-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        sys::make_private_folder(&base, true).unwrap();
+        let target = base.join("copy.json");
+        write_private_file(&target, b"old", "the copy").unwrap();
+        let names = || std::fs::read_dir(&base).unwrap().map(|e| e.unwrap().file_name()).collect::<Vec<_>>();
+        let error = replace_checked(&target, b"new", "the copy", &|_| false).unwrap_err();
+        assert!(error.to_string().contains("private"), "{error}");
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "old", "the earlier file stays");
+        assert_eq!(names(), vec![std::ffi::OsString::from("copy.json")], "no temporary file is left");
+        // Past the rename, a failed check reports and leaves the file.
+        let checks = std::cell::Cell::new(0);
+        let error = replace_checked(&target, b"new", "the copy", &|_| {
+            checks.set(checks.get() + 1);
+            checks.get() == 1
+        })
+        .unwrap_err();
+        assert!(error.to_string().contains("left as it is"), "{error}");
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "new", "the file there is not removed");
+        assert_eq!(names(), vec![std::ffi::OsString::from("copy.json")]);
         std::fs::remove_dir_all(&base).unwrap();
     }
 

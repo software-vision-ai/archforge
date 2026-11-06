@@ -996,6 +996,62 @@ fn a_stop_codex_does_not_take_cannot_leave_the_turn_stuck() {
     }
 }
 
+/// A thread the session left because its setup timed out is let go (`thread/unsubscribe`): a
+/// `thread/start` answered late has its thread let go once the answer comes, and a thread whose
+/// `thread/inject_items` timed out at once; the turn fails as before.
+#[test]
+fn threads_left_after_setup_timeouts_are_let_go() {
+    let unsubscribed = |base: &Path| -> Vec<Value> {
+        let sent = stdin_lines(base, 1);
+        requests(&sent, "thread/unsubscribe").iter().map(|l| serde_json::from_str::<Value>(l).unwrap()["params"].clone()).collect()
+    };
+    let wait_for_unsubscribe = |session: &mut CodexSession, base: &Path| {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while unsubscribed(base).is_empty() && Instant::now() < deadline {
+            let _ = session.next_event(Duration::from_millis(50));
+        }
+    };
+    let answer =
+        r#"on_other() { case "$line" in *'"method":"thread/unsubscribe"'*) send '{"id":@ID@,"result":{"status":"unsubscribed"}}' ;; esac; }"#;
+
+    // A late `thread/start` answer.
+    let base = scratch("late-thread");
+    let late = r#"on_thread() { ( sleep 0.6; send "{\"id\":$id,\"result\":{\"thread\":{\"id\":\"t-late\"},\"model\":\"m\"}}" ) & }"#;
+    let (runtime, account, folder) = fake_codex(&base, &format!("{late}\n{answer}"));
+    let cfg = CodexConfig { request_timeout: Duration::from_millis(300), ..config(false) };
+    let mut session = CodexSession::start(&runtime, &account, &folder, cfg, SignIn::ApiKey(canary())).unwrap();
+    session.send("hi").unwrap();
+    let events = events_until(&mut session, turn_end);
+    assert!(
+        matches!(events.last(), Some(SessionEvent::TurnFinished { outcome: TurnOutcome::Failed(e), .. }) if e.to_string().contains("did not answer thread/start")),
+        "{events:?}"
+    );
+    assert!(unsubscribed(&base).is_empty(), "nothing to let go before the answer names the thread");
+    wait_for_unsubscribe(&mut session, &base);
+    assert_eq!(unsubscribed(&base), vec![json!({ "threadId": "t-late" })]);
+    session.shutdown(Duration::from_secs(2)).unwrap();
+    std::fs::remove_dir_all(&base).unwrap();
+
+    // A `thread/inject_items` that is never answered.
+    let base = scratch("late-inject");
+    let (runtime, account, folder) = fake_codex(&base, &format!("on_inject() {{ :; }}\n{answer}"));
+    let mut earlier = History::default();
+    earlier.push(history::Role::User, "first question".into());
+    earlier.push(history::Role::Assistant, "first answer".into());
+    let cfg = CodexConfig { start: Start::ResumeFrom(earlier), request_timeout: Duration::from_millis(300), ..config(false) };
+    let mut session = CodexSession::start(&runtime, &account, &folder, cfg, SignIn::ApiKey(canary())).unwrap();
+    session.send("hi").unwrap();
+    let events = events_until(&mut session, turn_end);
+    assert!(
+        matches!(events.last(), Some(SessionEvent::TurnFinished { outcome: TurnOutcome::Failed(e), .. }) if e.to_string().contains("did not answer thread/inject_items")),
+        "{events:?}"
+    );
+    wait_for_unsubscribe(&mut session, &base);
+    assert_eq!(unsubscribed(&base), vec![json!({ "threadId": THREAD })]);
+    session.shutdown(Duration::from_secs(2)).unwrap();
+    std::fs::remove_dir_all(&base).unwrap();
+}
+
 /// A `turn/start` that passed its deadline fails its turn but keeps its message in the copy, as
 /// Codex may have taken it; the next message starts a fresh thread (with the copy) so it cannot
 /// join a turn that runs after all; when the late answer comes, that turn is interrupted by name

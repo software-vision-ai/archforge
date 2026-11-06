@@ -86,7 +86,7 @@ pub const DISABLED_FEATURES: [&str; 16] = [
     "shell_snapshot",
 ];
 /// Every request method this adapter sends; each is in the 0.166.0 schema (the contract test).
-pub const CLIENT_METHODS: [&str; 11] = [
+pub const CLIENT_METHODS: [&str; 12] = [
     "initialize",
     "account/read",
     "account/login/start",
@@ -96,6 +96,7 @@ pub const CLIENT_METHODS: [&str; 11] = [
     "model/list",
     "thread/start",
     "thread/inject_items",
+    "thread/unsubscribe",
     "turn/start",
     "turn/interrupt",
 ];
@@ -131,6 +132,9 @@ const MAX_EARLY_STATUS_BYTES: usize = 1024 * 1024;
 const MAX_STALE_TURNS: usize = 64;
 /// The most `turn/start` requests remembered after their deadline, whose late answers are stopped.
 const MAX_LATE_STARTS: usize = 16;
+/// How many request timeouts a `thread/start` past its deadline is remembered, so a late answer
+/// can still be told apart and its thread let go.
+const LATE_THREAD_TIMEOUTS: u32 = 10;
 
 /// How Codex is signed in, without the key.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -462,6 +466,8 @@ enum Purpose {
     Interrupt,
     /// `turn/interrupt` for the open turn, after a stop.
     StopTurn,
+    /// `thread/unsubscribe` for a thread the session left after its setup timed out.
+    Unsubscribe,
 }
 
 /// Where the session's thread stands.
@@ -524,6 +530,9 @@ pub struct CodexSession {
     /// `turn/start` requests that passed their deadline, with their thread: a late answer names a
     /// turn that runs without anyone waiting for it, which is then interrupted.
     late_starts: VecDeque<(u64, String)>,
+    /// `thread/start` requests past their deadline, with when they are forgotten: a late answer
+    /// names a thread the session no longer uses, which is let go (`thread/unsubscribe`).
+    late_threads: VecDeque<(u64, Instant)>,
     /// When Codex answered `turn/start` without naming the turn: the turn waits at most one request
     /// timeout for a notification that names it, then fails.
     unnamed_deadline: Option<Instant>,
@@ -653,6 +662,7 @@ impl CodexSession {
             history_problem: None,
             stale_turns: VecDeque::new(),
             late_starts: VecDeque::new(),
+            late_threads: VecDeque::new(),
             unnamed_deadline: None,
             stop_deadline: None,
             lines_seen: false,
@@ -879,6 +889,15 @@ impl CodexSession {
     /// An answer to no waiting request. A late answer to a `turn/start` that passed its deadline
     /// names a turn nobody waits for: it is remembered as stale and interrupted.
     fn late_answer(&mut self, id: u64, result: Result<Value, RpcError>) {
+        if let Some(at) = self.late_threads.iter().position(|(late, _)| *late == id) {
+            self.late_threads.remove(at);
+            let thread = result.ok().and_then(|v| v.get("thread").and_then(|t| t.get("id")).and_then(Value::as_str).map(str::to_owned));
+            if let Some(thread) = thread.filter(|t| !t.is_empty() && t.len() <= MAX_NAME_BYTES) {
+                log::warn!("codex started a thread after its request's deadline; it is let go");
+                self.release_thread(thread);
+            }
+            return;
+        }
         let Some(at) = self.late_starts.iter().position(|(late, _)| *late == id) else {
             log::debug!("codex answered a request that is not waiting (id {id})");
             let event = self.parser.skip(Skipped::Malformed { kind: "response", reason: "it answers no request waiting" });
@@ -1021,6 +1040,8 @@ impl CodexSession {
             }
             (Purpose::Interrupt, Ok(_)) => log::debug!("codex took the stop request for a late turn"),
             (Purpose::Interrupt, Err(e)) => log::warn!("codex refused the stop request for a late turn: {}", e.message),
+            (Purpose::Unsubscribe, Ok(_)) => log::debug!("codex let go of a thread the session left"),
+            (Purpose::Unsubscribe, Err(e)) => log::warn!("codex refused to let go of a thread the session left: {}", e.message),
             (Purpose::StopTurn, Ok(_)) => log::debug!("codex took the stop request"),
             (Purpose::StopTurn, Err(e)) => {
                 log::warn!("codex refused the stop request: {}", e.message);
@@ -1045,16 +1066,25 @@ impl CodexSession {
                     self.fail_turn(error);
                 }
                 Purpose::Initialize | Purpose::Login | Purpose::AccountRead => self.fail(error),
+                // Codex may still start the thread: the request is remembered for a while, and a late
+                // answer's thread is let go, as the session no longer uses it.
                 Purpose::ThreadStart => {
                     self.take_early_status();
                     self.thread = Thread::None;
+                    if self.late_threads.len() >= MAX_LATE_STARTS {
+                        self.late_threads.pop_front();
+                    }
+                    let forget = now.checked_add(self.timeout.saturating_mul(LATE_THREAD_TIMEOUTS)).unwrap_or(now);
+                    self.late_threads.push_back((id, forget));
                     self.abandon_turn(error);
                 }
                 // Codex may still take the request: the thread is left, so the next message starts
                 // a fresh one (with the copy) instead of adding the earlier messages twice or
-                // joining a turn that runs after all; a late `turn/start` answer is interrupted.
+                // joining a turn that runs after all; the left thread is let go.
                 Purpose::Inject => {
-                    self.thread = Thread::None;
+                    if let Thread::Ready(thread) = std::mem::replace(&mut self.thread, Thread::None) {
+                        self.release_thread(thread);
+                    }
                     self.abandon_turn(error);
                 }
                 // Codex may have taken the message and started the turn, so the message stays in
@@ -1075,8 +1105,10 @@ impl CodexSession {
                     log::warn!("{error}");
                     self.await_stop();
                 }
+                Purpose::Unsubscribe => log::warn!("{error}"),
             }
         }
+        self.late_threads.retain(|(_, forget)| now < *forget);
         if self.stop_deadline.is_some_and(|d| now >= d) {
             self.stop_deadline = None;
             if self.turn_open {
@@ -1089,6 +1121,14 @@ impl CodexSession {
                     ),
                 ));
             }
+        }
+    }
+
+    /// Asks Codex to let go of `thread`, which the session left after its setup timed out, so the
+    /// thread (and its tool server) does not stay loaded for this connection; a failure is logged.
+    fn release_thread(&mut self, thread: String) {
+        if let Err(e) = self.request("thread/unsubscribe", Purpose::Unsubscribe, json!({ "threadId": thread })) {
+            log::warn!("a thread the session left could not be let go: {e}");
         }
     }
 
