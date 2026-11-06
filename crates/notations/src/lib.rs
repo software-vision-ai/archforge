@@ -63,7 +63,8 @@ pub const PARTS: &[Part] = &[
         slabs: || Box::new(archforge_er::ErSlabs::default()),
         tables: archforge_er::TABLES,
         junctions: archforge_er::JUNCTIONS,
-        name_kind: |_| ONE_KIND,
+        // ER's own rule, the one its commands ask too (AR-209).
+        name_kind: archforge_er::names::kind,
     },
     Part {
         name: "uml",

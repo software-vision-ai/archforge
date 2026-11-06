@@ -378,6 +378,64 @@ fn names_shared_across_kinds_are_saved_and_the_project_opens_again() {
     assert!(e.contains("DuplicateName"), "{e}");
 }
 
+/// AR-209: two ER schemas whose names differed only in case were added, or renamed into, and the
+/// project saved, but its check as it opened refused it, so it never opened again. SQL names a
+/// schema once in a database: the commands refuse the second, whatever the case, and a project of
+/// distinct names, with a table and a column named like their schema, opens again.
+#[test]
+fn schemas_named_alike_are_refused_and_distinct_ones_are_saved_and_open_again() {
+    let env = Env::new("schemas");
+    let schema = schema();
+    let project = Project::create(&env.dolt, &env.opts(), &env.base.join("Projects"), "Schemas", "test", &timestamp(1_761_670_800)).unwrap();
+    let path = project.path().to_path_buf();
+    project.close().unwrap();
+    // As the bug was found: a second schema named like the first ("shop"), added or renamed into.
+    let mut s = model();
+    let added = s.execute("er.schema.add", &json!({ "name": "Shop" })).map(|_| ());
+    save_and_reopen(&env, &schema, &path, s.doc(), "A second shop").expect("the project opens again after er.schema.add");
+    let e = added.expect_err("a second schema named shop is refused");
+    assert!(e.to_string().contains("there is a schema named shop already"), "{e}");
+    let billing = run(&mut s, "er.schema.add", json!({ "name": "billing" }));
+    let renamed = s.execute("er.schema.rename", &json!({ "schema": billing, "name": "SHOP" })).map(|_| ());
+    save_and_reopen(&env, &schema, &path, s.doc(), "Renamed onto shop").expect("the project opens again after er.schema.rename");
+    let e = renamed.expect_err("a schema renamed onto shop is refused");
+    assert!(e.to_string().contains("there is a schema named shop already"), "{e}");
+    // Distinct names, a schema's own name in another case, and a table and a column named like
+    // their schema save and open again.
+    run(&mut s, "er.schema.rename", json!({ "schema": billing, "name": "Billing" }));
+    let table = run(&mut s, "er.entity.add", json!({ "schema": billing, "name": "billing" }));
+    run(&mut s, "er.attribute.add", json!({ "entity": table, "name": "Billing", "type": "TEXT" }));
+    let back = save_and_reopen(&env, &schema, &path, s.doc(), "Distinct schemas").expect("distinct schemas open");
+    assert_eq!(rows_of(back.doc(), &schema), rows_of(s.doc(), &schema));
+}
+
+/// AR-209, found beside it: a domain given two checks whose names differed only in case saved, but
+/// the check as it opened refused it. As SQL names a domain's constraints once, the commands refuse
+/// them, and a domain whose checks are named apart opens again.
+#[test]
+fn a_domain_with_two_checks_named_alike_is_refused_and_one_named_apart_opens_again() {
+    let env = Env::new("domain-checks");
+    let schema = schema();
+    let project = Project::create(&env.dolt, &env.opts(), &env.base.join("Projects"), "Checks", "test", &timestamp(1_761_670_800)).unwrap();
+    let path = project.path().to_path_buf();
+    project.close().unwrap();
+    let mut s = model();
+    let shop = s.doc().alive().find(|o| s.doc().class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap();
+    let shop = s.doc().uuid(shop).unwrap().to_string();
+    let twice = json!([{ "expression": "VALUE > 0", "name": "positive" }, { "expression": "VALUE < 100", "name": "Positive" }]);
+    let added = s.execute("er.domain.add", &json!({ "schema": shop, "name": "amount", "base_type": "INTEGER", "checks": twice })).map(|_| ());
+    save_and_reopen(&env, &schema, &path, s.doc(), "Checks named alike").expect("the project opens again after er.domain.add");
+    let e = added.expect_err("two checks named alike are refused");
+    assert!(e.to_string().contains("two checks are named Positive"), "{e}");
+    let apart = json!([{ "expression": "VALUE > 0", "name": "positive" }, { "expression": "VALUE < 100", "name": "small" }]);
+    let amount = run(&mut s, "er.domain.add", json!({ "schema": shop, "name": "amount", "base_type": "INTEGER", "checks": apart }));
+    let set = s.execute("er.domain.set", &json!({ "domain": amount, "name": "amount", "base_type": "INTEGER", "checks": twice })).map(|_| ());
+    let back = save_and_reopen(&env, &schema, &path, s.doc(), "Checks named apart").expect("the project opens again after er.domain.set");
+    let e = set.expect_err("checks set alike are refused");
+    assert!(e.to_string().contains("two checks are named Positive"), "{e}");
+    assert_eq!(rows_of(back.doc(), &schema), rows_of(s.doc(), &schema), "the checks named apart come back");
+}
+
 #[test]
 fn a_long_text_in_any_script_is_written_and_read_back_whole() {
     let env = Env::new("long");

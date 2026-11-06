@@ -24,7 +24,7 @@ holds no notation and so knows no diagram kind.
 | Item | What it is |
 |---|---|
 | `Part`, `PARTS` | what a metamodel brings to the store, its name rule among it; the list a project holds |
-| `name_kind` | the kind an element is told apart within by name in its owner, by its metamodel's rule (UML's is `archforge_uml::names::kind`): the check as a project opens refuses only two of one kind named alike (AR-208) |
+| `name_kind` | the kind an element is told apart within by name in its owner, by its metamodel's rule (UML's is `archforge_uml::names::kind`, ER's `archforge_er::names::kind`): the check as a project opens refuses only two of one kind named alike (AR-208, AR-209) |
 | `NOTATIONS`, `view` | the notations a project's view asks; a `ProjectView` of them |
 | `universe`, `store` | the universe of every notation; an empty store over it with the host's ids |
 | `storage` | every metamodel's tables and list tables, in the order of `PARTS` |

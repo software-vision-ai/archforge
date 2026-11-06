@@ -15,6 +15,11 @@ from a new, empty project (see [Getting started](02-getting-started.md)).
 
 The empty diagram opens in its tab.
 
+Names in a model work as in SQL, whatever their case: two schemas never share a name, nor two
+tables, domains, enum types, sequences or views in one schema, nor two columns in one table. A
+name that is taken is refused with the reason; a table may still share its schema's name, and a
+column its table's.
+
 <!-- picture: workspace-diagram-empty light | A new, empty ER diagram with its tools at the bottom -->
 
 ## 2. Add the tables
