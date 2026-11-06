@@ -453,9 +453,7 @@ fn the_profile_diagram_shows_stereotypes_metaclasses_and_extensions() {
     assert_eq!(UmlNotation.line(st, ext.extension).unwrap().ends[1].mark, archforge_diagram::figure::EndMark::FilledTriangle);
     let m = st.uuid(ext.metaclass).unwrap().to_string();
     let x = st.uuid(ext.extension).unwrap().to_string();
-    run(&mut s, "diagram.place", json!({ "diagram": d, "element": entity, "x": 0, "y": 300 }));
-    run(&mut s, "diagram.place", json!({ "diagram": d, "element": m, "x": 0, "y": 0 }));
-    run(&mut s, "diagram.connect-all", json!({ "diagram": d }));
+    // Made, the diagram shows the cards and the line already.
     {
         let st = s.doc();
         assert_eq!(archforge_diagram::views_of(st, obj(st, &x)).1.len(), 1, "the extension's line is drawn");
@@ -479,4 +477,76 @@ fn the_sweep_over_profiles_breaks_nothing() {
     let ids = [commerce.as_str(), order.as_str(), persistence.as_str(), entity.as_str(), id.as_str(), "not-an-id"];
     let calls = sweep_with(&mut s, &ids, picture).unwrap();
     assert!(calls > 50, "{calls}");
+}
+
+/// The session `s` with the package `package` moved to the model's top level, as a project made
+/// before the root package keeps one: removed, it takes what it holds along.
+fn at_top(s: &S, package: &str) -> S {
+    let (tables, junctions) = tables();
+    let saved = rows::snapshot(s.doc(), &tables, &junctions).unwrap();
+    let mut st = store(1 << 45);
+    rows::restore(&mut st, &saved, &tables, &junctions).unwrap();
+    let p = obj(&st, package);
+    let (parent, prop) = st.container(p).unwrap().unwrap();
+    st.remove_value(parent, prop, &Value::Ref(p)).unwrap();
+    let model = archforge_uml::commands::model(&st).unwrap();
+    st.push(model, archforge_core::model::MEMBER, Value::Ref(p)).unwrap();
+    session_over(st)
+}
+
+/// A package with no parent takes its profiles along when it is removed: one whose stereotypes are
+/// used elsewhere is refused with the uses, changing nothing; an unused one goes in the same step
+/// with every package's application of it, leaving no application, link or reference behind.
+#[test]
+fn a_package_taking_a_profile_along_is_checked_for_its_uses() {
+    let mut s = session();
+    let [commerce, order, ..] = shop(&mut s);
+    let tools = run(&mut s, "uml.package.add", json!({ "name": "Tools" }));
+    let audit = run(&mut s, "uml.profile.add", json!({ "name": "Audit", "package": tools }));
+    let tracked = run(&mut s, "uml.stereotype.add", json!({ "profile": audit, "name": "Tracked", "extends": ["Class"] }));
+    run(&mut s, "uml.profile.apply", json!({ "package": commerce, "profile": audit }));
+    // Used on Order in Commerce: removing Tools would take Audit along, so it is refused.
+    let mut used = at_top(&with_applications(&s, &[(&tracked, &order)]), &tools);
+    let why = refused(&mut used, "element.remove", json!({ "ids": [tools] }));
+    assert!(why.contains("Tools holds the profile Audit, which is in use: «Tracked» on Order. Remove those first."), "{why}");
+    // Unused, it goes with Tools in one step, and Commerce no longer applies it.
+    let mut unused = at_top(&s, &tools);
+    one_step(&mut unused, "element.remove", json!({ "ids": [tools] }));
+    let st = unused.doc();
+    assert!(profiles::applied(st, obj(st, &commerce)).is_empty(), "no application of a gone profile");
+    assert!(st.alive().all(|o| st.class_of(o).ok() != Some(archforge_uml::PROFILE_APPLICATION)));
+    assert!(st.alive().all(|o| st.class_of(o).ok() != Some(archforge_core::LINK)), "no link left");
+    assert_eq!(st.first_problem_by(archforge_uml::names::kind), None);
+}
+
+/// `uml.profile.diagram` fills the profile's diagram as the window's Open profile diagram does:
+/// every metaclass in a row, every stereotype under them and every extension line, as one step;
+/// asked again it adds only what is missing, keeping what the diagram shows where it is.
+#[test]
+fn the_profile_diagram_command_fills_the_diagram_keeping_what_it_shows() {
+    let mut s = session();
+    let [_, _, _, _, persistence, entity, ..] = shop(&mut s);
+    let d = one_step(&mut s, "uml.profile.diagram", json!({ "profile": persistence }));
+    let count = |s: &S| {
+        let st = s.doc();
+        let dd = obj(st, &d);
+        (st.list(dd, archforge_diagram::diagram::NODE).unwrap().len(), st.list(dd, archforge_diagram::diagram::EDGE).unwrap().len())
+    };
+    assert_eq!(count(&s), (6, 3), "three metaclasses, three stereotypes, three extensions");
+    assert_eq!(read(&mut s, "uml.profile.diagram", json!({ "profile": persistence }))["added"], 0);
+    // A card moved by hand stays; a new stereotype and its new metaclass are added under the rest.
+    let node = {
+        let st = s.doc();
+        st.uuid(archforge_diagram::views_of(st, obj(st, &entity)).2[0]).unwrap().to_string()
+    };
+    run(&mut s, "diagram.move", json!({ "nodes": [node], "dx": 40, "dy": 0 }));
+    let before = {
+        let st = s.doc();
+        st.get(obj(st, &node), archforge_diagram::node::X).unwrap()
+    };
+    run(&mut s, "uml.stereotype.add", json!({ "profile": persistence, "name": "Audited", "extends": ["Package"] }));
+    assert_eq!(read(&mut s, "uml.profile.diagram", json!({ "profile": persistence }))["added"], 3);
+    assert_eq!(count(&s), (8, 4));
+    let st = s.doc();
+    assert_eq!(st.get(obj(st, &node), archforge_diagram::node::X).unwrap(), before, "a card placed stays where it is");
 }

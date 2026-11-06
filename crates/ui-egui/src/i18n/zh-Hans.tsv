@@ -712,6 +712,7 @@ str		A subclass could not redefine {name} where it is inherited. Shown as {leaf}
 str		A subclass could not redefine this member. Shown as {leaf} after it.	子类不能重定义此成员。在其后显示为 {leaf}。
 plural		{names} redefines it. Remove that redefinition first.	{names} 重定义了它。请先移除该重定义。
 str		Add attribute	添加属性
+str		Add property	添加属性
 str		Add operation	添加操作
 str		Add literal	添加字面量
 str		More details in Properties	在属性中查看更多详细信息
@@ -778,6 +779,7 @@ str		Unapply profile	取消应用配置文件
 str		{profile} is in use in {package}: {uses}. Remove those first.	{profile} 在 {package} 中正在使用：{uses}。请先移除这些使用。
 str		{name} is in use: {uses}. Remove those first.	{name} 正在使用：{uses}。请先移除这些使用。
 str		{name} applies the profiles its elements use: {uses}. Remove those first.	{name} 应用了其元素所使用的配置文件：{uses}。请先移除这些使用。
+str		{name} holds the profile {profile}, which is in use: {uses}. Remove those first.	{name} 包含正在使用的配置文件 {profile}：{uses}。请先移除这些使用。
 str		«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.	{metaclass} 上的 «{stereotype}» 正在使用：{uses}。请先移除这些使用。
 str		«{stereotype}» on {elements}	{elements} 上的 «{stereotype}»
 str		{first} and {second}	{first} 和 {second}

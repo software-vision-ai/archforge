@@ -867,6 +867,16 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
     // A stereotype application goes with the element it applies to (AR-134).
     let applications = crate::profiles::applications_on(store, &all);
     all.extend(applications);
+    // A profile a package with no parent takes along has its applications taken away first, as a
+    // profile removed on its own has; its uses were refused above (AR-134).
+    let taken: Vec<Obj> = objs
+        .iter()
+        .filter(|o| store.is_alive(**o) && store.class_of(**o).ok() == Some(PACKAGE) && package_of(store, **o).is_none())
+        .flat_map(|o| crate::profiles::profiles_within(store, *o))
+        .collect();
+    for profile in taken {
+        crate::profiles::before_profile_removal(store, profile)?;
+    }
     // A default that is a literal goes with the literal: an InstanceValue needs its instance.
     let defaults = crate::modifiers::literal_defaults(store);
     for o in all {

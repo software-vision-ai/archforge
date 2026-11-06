@@ -712,6 +712,7 @@ str		A subclass could not redefine {name} where it is inherited. Shown as {leaf}
 str		A subclass could not redefine this member. Shown as {leaf} after it.	サブクラスはこのメンバーを再定義できません。後ろに {leaf} と表示されます。
 plural		{names} redefines it. Remove that redefinition first.	{names} がこれを再定義しています。先にその再定義を削除してください。
 str		Add attribute	属性を追加
+str		Add property	プロパティを追加
 str		Add operation	操作を追加
 str		Add literal	リテラルを追加
 str		More details in Properties	詳細はプロパティで
@@ -778,6 +779,7 @@ str		Unapply profile	プロファイルの適用を解除
 str		{profile} is in use in {package}: {uses}. Remove those first.	{profile} は {package} で使われています: {uses}。先にそれらを外してください。
 str		{name} is in use: {uses}. Remove those first.	{name} は使われています: {uses}。先にそれらを外してください。
 str		{name} applies the profiles its elements use: {uses}. Remove those first.	{name} は要素が使うプロファイルを適用しています: {uses}。先にそれらを外してください。
+str		{name} holds the profile {profile}, which is in use: {uses}. Remove those first.	{name} には使われているプロファイル {profile} があります: {uses}。先にそれらを外してください。
 str		«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.	{metaclass} への «{stereotype}» は使われています: {uses}。先にそれらを外してください。
 str		«{stereotype}» on {elements}	{elements} に «{stereotype}»
 str		{first} and {second}	{first} と {second}

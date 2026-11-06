@@ -106,6 +106,18 @@ pub(crate) fn removal_refusal(store: &Store, obj: Obj) -> Option<String> {
         c if c == archforge_uml::PROFILE => profiles::profile_uses(store, obj),
         c if c == archforge_uml::STEREOTYPE => profiles::stereotype_uses(store, obj),
         c if c == archforge_uml::PACKAGE => {
+            // A package with no parent takes its profiles along: one in use stays.
+            if archforge_uml::commands::package_of(store, obj).is_none() {
+                for profile in profiles::profiles_within(store, obj) {
+                    let uses = profiles::profile_uses(store, profile);
+                    if !uses.is_empty() {
+                        return Some(fmt(
+                            &tr("{name} holds the profile {profile}, which is in use: {uses}. Remove those first."),
+                            &[("name", &name(store, obj)), ("profile", &name(store, profile)), ("uses", &uses_text(store, &uses))],
+                        ));
+                    }
+                }
+            }
             let uses = profiles::removal_uses(store, obj);
             if uses.is_empty() {
                 return None;
@@ -921,66 +933,12 @@ fn move_stereotype(shell: &mut Shell, s: Uuid, to: Uuid) {
 
 // The profile's diagram.
 
-/// The cards a profile's diagram is still to show: its metaclasses in a row at the top, its
-/// stereotypes in a row under them, each with the place it goes; those it shows already left out.
-fn missing_cards(store: &Store, d: Obj, profile: Obj) -> Vec<(Uuid, f64, f64, f64)> {
-    let shown = |e: Obj| archforge_diagram::views_of(store, e).2.iter().any(|n| archforge_diagram::diagram_of(store, *n) == Some(d));
-    let (w, gap) = (archforge_uml::CLASS_SIZE.0, 50.0);
-    let mut out = Vec::new();
-    for (i, m) in profiles::metaclasses_of(store, profile).into_iter().enumerate() {
-        if !shown(m)
-            && let Ok(id) = store.uuid(m)
-        {
-            out.push((id, i as f64 * (w + gap), 0.0, archforge_uml::PRIMITIVE_TYPE_SIZE.1));
-        }
-    }
-    for (i, s) in profiles::stereotypes(store, profile).into_iter().enumerate() {
-        if !shown(s)
-            && let Ok(id) = store.uuid(s)
-        {
-            let rows = profiles::properties(store, s).len().max(1);
-            out.push((id, i as f64 * (w + gap), 280.0, 66.0 + 20.0 * rows as f64 + 16.0));
-        }
-    }
-    out
-}
-
-/// Opens the profile's diagram (made when it has none), showing every stereotype, every metaclass
-/// they extend and the extensions between them, what was missing placed as one undo step.
+/// Opens the profile's diagram, made when it has none and filled with every stereotype, every
+/// metaclass they extend and the extensions between them, what it lacked placed as one undo step
+/// (`uml.profile.diagram`).
 pub(crate) fn open_profile_diagram(shell: &mut Shell, profile: Uuid) -> Result<(), String> {
-    let session = shell.session.as_mut().ok_or_else(|| tr("The model could not be opened"))?;
-    let label = tr("Open profile diagram");
-    let id = profile.to_string();
-    let out = session
-        .batch(&label, |b| {
-            let made = b.execute("uml.profile.diagram", &json!({ "profile": id }))?;
-            let d = made.get("id").and_then(|v| v.as_str()).unwrap_or_default().to_string();
-            let cards = {
-                let store = b.doc();
-                let dd = Uuid::parse(&d).and_then(|u| store.by_uuid(u));
-                let p = store.by_uuid(profile);
-                match (dd, p) {
-                    (Some(dd), Some(p)) => missing_cards(store, dd, p),
-                    _ => Vec::new(),
-                }
-            };
-            for (e, x, y, h) in cards {
-                b.execute(
-                    "diagram.place",
-                    &json!({ "diagram": d, "element": e.to_string(), "x": x, "y": y, "width": archforge_uml::CLASS_SIZE.0, "height": h }),
-                )?;
-            }
-            b.execute("diagram.connect-all", &json!({ "diagram": d }))?;
-            Ok(())
-        })
-        .map_err(|e| e.to_string())?;
-    let d = out
-        .value
-        .get(0)
-        .and_then(|v| v.get("id"))
-        .and_then(|v| v.as_str())
-        .and_then(Uuid::parse)
-        .ok_or_else(|| tr("The model could not be opened"))?;
+    let out = run(shell, "uml.profile.diagram", json!({ "profile": profile.to_string() }))?;
+    let d = out.get("id").and_then(|v| v.as_str()).and_then(Uuid::parse).ok_or_else(|| tr("The model could not be opened"))?;
     crate::canvas::open(shell, d);
     Ok(())
 }

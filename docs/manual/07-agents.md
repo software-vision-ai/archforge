@@ -148,9 +148,12 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   `uml_stereotype_set` renames it, moves it to another profile or replaces what it extends;
   `uml_attribute_add` with the stereotype's id adds a property, typed by a primitive type, an
   enumeration or a data type; `uml_profile_apply` and `uml_profile_unapply` apply a profile to a
-  package and take it away; `uml_profile_diagram` gives the profile's diagram. Unapplying,
+  package and take it away; `uml_profile_diagram` gives the profile's diagram, made the first time
+  and filled with every stereotype, every metaclass they extend and the extension lines, what it
+  showed already kept, as the window's Open profile diagram does. Unapplying,
   deleting, dropping an extension, moving a stereotype or moving what a use sits in is refused
-  while elements use the stereotypes, the uses named. `uml_profile_list`, `uml_stereotype_get`,
+  while elements use the stereotypes, the uses named; deleting a used element with
+  `element_remove` removes its applications with it. `uml_profile_list`, `uml_stereotype_get`,
   `uml_package_profiles`, `uml_profile_uses` and `uml_metaclass_list` read them; a profile or a
   stereotype is removed with `element_remove`.
 

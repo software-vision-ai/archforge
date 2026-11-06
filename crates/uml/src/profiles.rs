@@ -203,6 +203,21 @@ pub fn profiles(store: &Store, package: Obj) -> Vec<Obj> {
     refs(store, package, package::PACKAGED_ELEMENT).into_iter().filter(|o| is_profile(store, *o)).collect()
 }
 
+/// Every profile `package` holds, in it or in a package inside it, at any depth.
+pub fn profiles_within(store: &Store, package: Obj) -> Vec<Obj> {
+    let mut out = Vec::new();
+    let mut stack = vec![package];
+    let mut seen = BTreeSet::new();
+    while let Some(p) = stack.pop() {
+        if !seen.insert(p) {
+            continue;
+        }
+        out.extend(profiles(store, p));
+        stack.extend(crate::commands::subpackages(store, p));
+    }
+    out
+}
+
 /// Every profile of the model, by the packages' order.
 pub fn all_profiles(store: &Store) -> Vec<Obj> {
     crate::commands::all_packages(store).into_iter().flat_map(|p| profiles(store, p)).collect()
@@ -674,6 +689,24 @@ pub fn removal_problem(store: &Store, o: Obj) -> Option<CommandError> {
         c if c == PROFILE => profile_uses(store, o),
         c if c == STEREOTYPE => stereotype_uses(store, o),
         c if c == PACKAGE => {
+            // A package with no parent takes what it holds along: a profile inside it goes, and
+            // is checked for uses as a profile removed on its own is.
+            if crate::commands::package_of(store, o).is_none() {
+                for profile in profiles_within(store, o) {
+                    let uses = profile_uses(store, profile);
+                    if !uses.is_empty() {
+                        return Some(refuse(
+                            "ids",
+                            format!(
+                                "{} holds the profile {}, which is in use: {}. Remove those first.",
+                                name_of(store, o),
+                                name_of(store, profile),
+                                uses_text(store, &uses)
+                            ),
+                        ));
+                    }
+                }
+            }
             let uses = removal_uses(store, o);
             if uses.is_empty() {
                 return None;
@@ -992,17 +1025,99 @@ fn metaclass_list(_: &mut C<'_>, _: &Params) -> R {
     Ok(json!({ "offered": offered, "not_drawn": NOT_DRAWN }))
 }
 
-/// `uml.profile.diagram`: the profile's diagram, made when it has none, named after it.
+/// The room between two cards a profile's diagram places side by side, and between its rows.
+const GAP: f64 = 50.0;
+const ROW_GAP: f64 = 280.0;
+/// The height of a placed metaclass's card (its header alone), and of a stereotype's per property.
+const METACLASS_HEIGHT: f64 = 66.0;
+const PROPERTY_ROW: f64 = 20.0;
+
+/// Fills `d`, a diagram of `profile`, with what it lacks: a card for every metaclass the profile's
+/// stereotypes extend, in a row, and one for every stereotype, in a row under them, below whatever
+/// it shows already, which stays where it is; then a line for every extension whose two cards it
+/// shows and does not join yet. Gives how many cards and lines it added.
+fn fill_diagram(store: &mut Store, d: Obj, profile: Obj) -> Result<usize, CommandError> {
+    use archforge_diagram::{EDGE, NODE, diagram, edge, node};
+    let on_d = |st: &Store, e: Obj| archforge_diagram::views_of(st, e).2.into_iter().find(|n| archforge_diagram::diagram_of(st, *n) == Some(d));
+    let real = |st: &Store, n: Obj, prop| match st.get(n, prop) {
+        Ok(Value::Real(r)) => r,
+        _ => 0.0,
+    };
+    let top_nodes = refs(store, d, diagram::NODE);
+    let below = top_nodes
+        .iter()
+        .map(|n| real(store, *n, node::Y) + real(store, *n, node::HEIGHT))
+        .fold(None, |m: Option<f64>, y| Some(m.map_or(y, |m| m.max(y))));
+    let top = below.map_or(0.0, |b| b + 80.0);
+    let (w, _) = crate::CLASS_SIZE;
+    let metaclasses: Vec<Obj> = metaclasses_of(store, profile).into_iter().filter(|m| on_d(store, *m).is_none()).collect();
+    let stereotypes: Vec<(Obj, f64)> = stereotypes(store, profile)
+        .into_iter()
+        .filter(|s| on_d(store, *s).is_none())
+        .map(|s| (s, METACLASS_HEIGHT + PROPERTY_ROW * properties(store, s).len().max(1) as f64 + 16.0))
+        .collect();
+    let mut added = 0;
+    let mut place = |st: &mut Store, e: Obj, x: f64, y: f64, h: f64| -> Result<(), CommandError> {
+        let n = st.create(NODE).map_err(fail)?;
+        st.set(n, node::ELEMENT, Value::Ref(e)).map_err(fail)?;
+        st.set(n, node::X, Value::Real(x)).map_err(fail)?;
+        st.set(n, node::Y, Value::Real(y)).map_err(fail)?;
+        st.set(n, node::WIDTH, Value::Real(w)).map_err(fail)?;
+        st.set(n, node::HEIGHT, Value::Real(h)).map_err(fail)?;
+        st.push(d, diagram::NODE, Value::Ref(n)).map_err(fail)?;
+        added += 1;
+        Ok(())
+    };
+    for (i, m) in metaclasses.iter().enumerate() {
+        place(store, *m, i as f64 * (w + GAP), top, METACLASS_HEIGHT)?;
+    }
+    let row = if metaclasses.is_empty() { top } else { top + ROW_GAP };
+    for (i, (s, h)) in stereotypes.iter().enumerate() {
+        place(store, *s, i as f64 * (w + GAP), row, *h)?;
+    }
+    for e in stereotypes_of_extensions(store, profile) {
+        let joined = archforge_diagram::views_of(store, e.extension).1.into_iter().any(|x| archforge_diagram::diagram_of(store, x) == Some(d));
+        let ends = e.end.and_then(|end| one(store, end, extension_end::TYPE)).and_then(|s| Some((on_d(store, s)?, on_d(store, e.metaclass)?)));
+        if let (false, Some((from, to))) = (joined, ends) {
+            let x = store.create(EDGE).map_err(fail)?;
+            store.set(x, edge::ELEMENT, Value::Ref(e.extension)).map_err(fail)?;
+            store.set(x, edge::SOURCE, Value::Ref(from)).map_err(fail)?;
+            store.set(x, edge::TARGET, Value::Ref(to)).map_err(fail)?;
+            store.push(d, diagram::EDGE, Value::Ref(x)).map_err(fail)?;
+            added += 1;
+        }
+    }
+    Ok(added)
+}
+
+/// Every extension of the profile's stereotypes, in their order.
+fn stereotypes_of_extensions(store: &Store, profile: Obj) -> Vec<Extension> {
+    stereotypes(store, profile).into_iter().flat_map(|s| extensions(store, s)).collect()
+}
+
+/// `uml.profile.diagram`: the profile's diagram, made when it has none and named after it, filled
+/// with every stereotype, every metaclass they extend and the extensions between them, what it
+/// showed already kept where it was.
 fn profile_diagram(ctx: &mut C<'_>, p: &Params) -> R {
     let profile = element(ctx.doc, p, "profile", PROFILE, "a profile")?;
-    if let Some(d) = diagrams_of(ctx.doc, profile).first() {
-        return Ok(json!({ "id": uuid_of(ctx.doc, *d)?, "made": false }));
-    }
-    let m = crate::commands::model(ctx.doc)?;
-    let name: String = format!("{} profile", name_of(ctx.doc, profile)).chars().take(archforge_diagram::rules::MAX_NAME).collect();
-    let d = archforge_diagram::commands::new_diagram(ctx.doc, crate::CLASS_DIAGRAM, &name, Some(profile), Some((m, archforge_core::model::MEMBER)))
-        .map_err(fail)?;
-    Ok(json!({ "id": uuid_of(ctx.doc, d)?, "made": true }))
+    let (d, made) = match diagrams_of(ctx.doc, profile).first() {
+        Some(d) => (*d, false),
+        None => {
+            let m = crate::commands::model(ctx.doc)?;
+            let name: String = format!("{} profile", name_of(ctx.doc, profile)).chars().take(archforge_diagram::rules::MAX_NAME).collect();
+            let d = archforge_diagram::commands::new_diagram(
+                ctx.doc,
+                crate::CLASS_DIAGRAM,
+                &name,
+                Some(profile),
+                Some((m, archforge_core::model::MEMBER)),
+            )
+            .map_err(fail)?;
+            (d, true)
+        }
+    };
+    let added = fill_diagram(ctx.doc, d, profile)?;
+    Ok(json!({ "id": uuid_of(ctx.doc, d)?, "made": made, "added": added }))
 }
 
 fn has_profiles(f: &Facts<'_, Store, ProjectView>) -> Result<(), &'static str> {
@@ -1080,7 +1195,7 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             "Profile's diagram",
             &["Profile", "Diagram"],
             None,
-            "profile: string; the profile's id; its class diagram, made when it has none, shows its stereotypes and the metaclasses they extend",
+            "profile: string; the profile's id; its class diagram, made when it has none, filled with every stereotype, every metaclass they extend and the extension lines between them, in rows under what it shows already, which stays",
             has_profiles,
             profile_diagram
         ),

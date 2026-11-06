@@ -887,11 +887,13 @@ What is UML's own, beside the shared rules above.
   from it to its element; one function finds them, and while any exists, unapplying a profile they
   need, deleting a stereotype or a profile, dropping an extension they need, moving a stereotype to
   another profile, deleting a property whose values are set, and moving or deleting what they sit
-  in out of the profile's scope are refused, the uses counted under the section in a tinted box
+  in out of the profile's scope, or deleting a package that takes a used profile along, are
+  refused, the uses counted under the section in a tinted box
   (`Persistence is in use in Commerce: «Entity» on Order and Customer, «Id» on 2 elements,
   «Reference» on places. Remove those first.`, two of one name counted, not named twice) with Show
-  the {n} uses selecting them. Open profile diagram (`workspace.properties.profile.diagram`) opens
-  the profile's class diagram, made the first time, placing what it lacks: «metaclass» cards in a
+  the {n} uses selecting them; deleting a used element itself removes its applications with it.
+  Open profile diagram (`workspace.properties.profile.diagram`, `uml.profile.diagram`) opens the
+  profile's class diagram, made the first time, placing what it lacks below what it shows: «metaclass» cards in a
   row, «stereotype» cards under them, joined by extension lines, solid, a filled triangle at the
   metaclass; a stereotype's row dragged onto it comes with its metaclasses. A selected metaclass's
   Properties say it is UML's own and change nothing.

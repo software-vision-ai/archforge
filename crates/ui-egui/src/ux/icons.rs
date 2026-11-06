@@ -1245,19 +1245,20 @@ pub const PROFILE: Icon = Icon {
     ],
 };
 
-/// A UML stereotype (AR-134, the design's Icon / Stereotype): a pair of guillemets, «».
+/// A UML stereotype (AR-134, the design's Icon / Stereotype): a pair of guillemets, «», the
+/// design's glyph centred in its box with the 1.5 margin the profile's icon keeps.
 pub const STEREOTYPE: Icon = Icon {
     size: [14.0, 14.0],
     stroke: 1.1,
     segments: &[
-        L([5.5, 3.5], [3.0, 7.0]),
-        L([3.0, 7.0], [5.5, 10.5]),
-        L([8.0, 3.5], [5.5, 7.0]),
-        L([5.5, 7.0], [8.0, 10.5]),
-        L([9.0, 3.5], [11.5, 7.0]),
-        L([11.5, 7.0], [9.0, 10.5]),
-        L([11.5, 3.5], [14.0, 7.0]),
-        L([14.0, 7.0], [11.5, 10.5]),
+        L([4.0, 3.5], [1.5, 7.0]),
+        L([1.5, 7.0], [4.0, 10.5]),
+        L([6.5, 3.5], [4.0, 7.0]),
+        L([4.0, 7.0], [6.5, 10.5]),
+        L([7.5, 3.5], [10.0, 7.0]),
+        L([10.0, 7.0], [7.5, 10.5]),
+        L([10.0, 3.5], [12.5, 7.0]),
+        L([12.5, 7.0], [10.0, 10.5]),
     ],
 };
 

@@ -937,6 +937,8 @@ extend are UML model elements of their own, saved with the model, not labels or 
 - **The profile's diagram.** **Open profile diagram** in the profile's **Properties** opens its
   diagram, made the first time, showing each stereotype as a «stereotype» card under the
   «metaclass» cards of what it extends, joined by a line with a filled triangle at the metaclass.
+  Each time, it adds what the diagram lacks below what it shows, as one step you can undo; cards
+  you placed stay where they are.
   Drag a stereotype's row from **Models** onto it to show it there with its metaclasses. The
   metaclasses themselves are UML's own: they never appear in **Models**, the search or the type
   menus, and nothing renames, moves or deletes them.
@@ -952,7 +954,10 @@ extend are UML model elements of their own, saved with the model, not labels or 
   sit in out of the profile's reach are refused, the uses counted: *Persistence is in use in
   Commerce: «Entity» on Order and Customer, «Id» on 2 elements, «Reference» on places. Remove
   those first.* **Show the 5 uses** selects them. Renaming a profile or a stereotype keeps every
-  use.
+  use. Deleting a package refuses the same way when its elements would lose the profile that
+  reaches them, and when it would take along a profile that is in use.
+- **Deleting a used element** itself, such as *Order*, removes its stereotype applications with it,
+  in the same step: an application means nothing without its element.
 - **Deleting** an unused stereotype takes its extensions along; deleting an unused profile takes
   its stereotypes and its applications along, each as one step you can undo.
 
@@ -963,7 +968,7 @@ extend are UML model elements of their own, saved with the model, not labels or 
 For agents, `uml.profile.add`, `uml.profile.rename`, `uml.stereotype.add` and `uml.stereotype.set`
 make and change profiles and stereotypes, `uml.attribute.add` and its siblings their properties,
 `uml.profile.apply` and `uml.profile.unapply` apply them to packages, and `uml.profile.diagram`
-gives a profile's diagram. `uml.profile.list`, `uml.stereotype.get`, `uml.package.profiles`,
+gives a profile's diagram filled as **Open profile diagram** fills it. `uml.profile.list`, `uml.stereotype.get`, `uml.package.profiles`,
 `uml.profile.uses` and `uml.metaclass.list` read them. A profile or a stereotype is deleted with
 `element.remove`.
 

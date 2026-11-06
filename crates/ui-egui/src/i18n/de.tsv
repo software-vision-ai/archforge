@@ -712,6 +712,7 @@ str		A subclass could not redefine {name} where it is inherited. Shown as {leaf}
 str		A subclass could not redefine this member. Shown as {leaf} after it.	Eine Unterklasse könnte dieses Element nicht redefinieren. Als {leaf} dahinter gezeigt.
 plural		{names} redefines it. Remove that redefinition first.	{names} redefiniert es. Entfernen Sie zuerst diese Redefinition.|{names} redefinieren es. Entfernen Sie zuerst diese Redefinitionen.
 str		Add attribute	Attribut hinzufügen
+str		Add property	Eigenschaft hinzufügen
 str		Add operation	Operation hinzufügen
 str		Add literal	Literal hinzufügen
 str		More details in Properties	Weitere Angaben in den Eigenschaften
@@ -778,6 +779,7 @@ str		Unapply profile	Profil nicht mehr anwenden
 str		{profile} is in use in {package}: {uses}. Remove those first.	{profile} wird in {package} verwendet: {uses}. Diese zuerst entfernen.
 str		{name} is in use: {uses}. Remove those first.	{name} wird verwendet: {uses}. Diese zuerst entfernen.
 str		{name} applies the profiles its elements use: {uses}. Remove those first.	{name} wendet die Profile an, die seine Elemente verwenden: {uses}. Diese zuerst entfernen.
+str		{name} holds the profile {profile}, which is in use: {uses}. Remove those first.	{name} enthält das Profil {profile}, das verwendet wird: {uses}. Diese zuerst entfernen.
 str		«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.	«{stereotype}» auf {metaclass} wird verwendet: {uses}. Diese zuerst entfernen.
 str		«{stereotype}» on {elements}	«{stereotype}» auf {elements}
 str		{first} and {second}	{first} und {second}
