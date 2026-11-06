@@ -2202,7 +2202,7 @@ fn an_api_key_is_given_over_standard_input() {
     let (runtime, account, _) = fake_codex(&base, &body);
     let error = CodexAccounts::open(&runtime, &account, SignIn::ApiKey(canary()), Default::default()).unwrap_err();
     assert_eq!(error.kind(), ErrorKind::Other, "{error}");
-    assert!(error.to_string().contains("ended before it answered account/login/start"), "{error}");
+    assert!(matches!(error, AgentError::Exited { code: Some(3), .. }), "the call answers how Codex ended: {error:?}");
     let logs = LOG.lock().unwrap_or_else(PoisonError::into_inner).join("\n");
     assert!(!logs.contains(&CANARY[..20]));
     std::fs::remove_dir_all(&base).unwrap();
@@ -2217,7 +2217,10 @@ fn a_crashed_account_process_reports_why() {
     let (runtime, account, _) = fake_codex(&base, &body);
     let mut accounts = CodexAccounts::open(&runtime, &account, SignIn::ChatGpt(KeyringAccess::default()), Default::default()).unwrap();
     let error = accounts.read(false).unwrap_err();
-    assert!(error.to_string().contains("ended before it answered account/read"), "{error}");
+    assert!(
+        matches!(&error, AgentError::Exited { code: Some(3), stderr_tail, .. } if stderr_tail.contains("codex broke here")),
+        "the call answers how Codex ended: {error:?}"
+    );
     let events = account_events_until(&mut accounts, |e| matches!(e, AccountEvent::Ended { .. }));
     let Some(AccountEvent::Ended { exit, error }) = events.last() else { panic!("{events:?}") };
     assert_eq!(exit.map(|e| e.code), Some(Some(3)), "{events:?}");
@@ -2310,7 +2313,9 @@ fn the_exit_wait_keeps_the_callers_timeout() {
     let started = Instant::now();
     let error = accounts.read(false).unwrap_err();
     assert!(started.elapsed() < Duration::from_millis(400), "the call took {:?}", started.elapsed());
-    assert!(error.to_string().contains("ended before it answered account/read"), "{error}");
+    assert!(error.to_string().contains("its exit was not seen; it was ended"), "the call answers how Codex ended: {error}");
+    let ended = account_events_until(&mut accounts, |e| matches!(e, AccountEvent::Ended { .. }));
+    assert!(matches!(ended.last(), Some(AccountEvent::Ended { exit: None, error: Some(e) }) if *e == error), "the same reason is queued: {ended:?}");
     accounts.shutdown(Duration::from_secs(2)).unwrap();
     std::fs::remove_dir_all(&base).unwrap();
 }

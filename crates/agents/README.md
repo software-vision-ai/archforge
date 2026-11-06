@@ -410,7 +410,9 @@ at most 500 ms, as a conversation's is, and never past the timeout of the call t
 (so a zero-timeout poll checks once without waiting), so `Ended` carries a crash's exit status and
 the end of its error stream; an exit not seen by then ends with the general reason, and a process
 still running then is ended without waiting (`RuntimeProcess::terminate`, "it was ended") and
-collected by a later `next_event`, `shutdown` or the drop. At most 256 events wait to be read; past that the oldest is dropped and logged.
+collected by a later `next_event`, `shutdown` or the drop. A call the end cuts short answers with
+that same reason (its exit and error stream, as `Ended` carries it, which stays queued), and in
+general words only when there is none (a shutdown). At most 256 events wait to be read; past that the oldest is dropped and logged.
 `cancel_login`, `logout`, `rate_limits` and `models` (every page, hidden models
 left out, at most 10 pages and 1000 models) complete the set. ChatGPT calls on an API-key process
 are refused (`InvalidSetting`), so a key never meets the keyring.

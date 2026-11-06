@@ -196,6 +196,8 @@ pub struct CodexAccounts {
     logging_out: bool,
     shutting_down: bool,
     ended: bool,
+    /// Why the process ended, as [`AccountEvent::Ended`] says: what a call it cut short answers.
+    end_error: Option<AgentError>,
 }
 
 impl std::fmt::Debug for CodexAccounts {
@@ -264,6 +266,7 @@ impl CodexAccounts {
             logging_out: false,
             shutting_down: false,
             ended: false,
+            end_error: None,
         };
         // Codex refusing the handshake means a Codex Archforge cannot use; a timeout or an early
         // end stays what it is.
@@ -557,7 +560,15 @@ impl CodexAccounts {
                 return answer.map_err(Call::Refused);
             }
             if self.ended {
-                return Err(Call::Failed(AgentError::reported(ErrorKind::Other, &format!("codex ended before it answered {method}"))));
+                // The reason it ended (its exit and error stream), which `Ended` carries too; only an
+                // end without one (a shutdown) answers in general words.
+                return Err(Call::Failed(match self.end_error.clone() {
+                    Some(reason) => {
+                        log::warn!("codex ended before it answered {method}: {reason}");
+                        reason
+                    }
+                    None => AgentError::reported(ErrorKind::Other, &format!("codex ended before it answered {method}")),
+                }));
             }
         }
     }
@@ -651,6 +662,7 @@ impl CodexAccounts {
                 None => AgentError::reported(ErrorKind::Other, "codex closed its output and its exit was not seen"),
             })
         };
+        self.end_error = error.clone();
         self.queue(AccountEvent::Ended { exit, error });
     }
 }
