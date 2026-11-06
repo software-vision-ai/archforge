@@ -121,7 +121,7 @@ through the program `claude`, or Codex through the program `codex`. Archforge ne
 You set them up in **Settings ▸ AI Agents**: click the avatar at the right of the bar, or press
 ⌘, (Ctrl ,), and choose **AI Agents** on the left.
 
-<!-- picture: settings-ai-agents-ready light | Settings, AI Agents: Claude with its key saved and Codex signed in with ChatGPT, checked -->
+<!-- picture: settings-ai-agents-missing light | Settings, AI Agents: Claude's program not found, with its install steps, and Codex on a saved API key -->
 
 - **Default agent** is the one Chat starts with.
 - **Claude** uses an API key from your Anthropic account. Paste it and choose **Save key**.
@@ -129,10 +129,12 @@ You set them up in **Settings ▸ AI Agents**: click the avatar at the right of 
   Linux) and nowhere else: never in the project and never in the preferences. Afterwards it shows
   only the key's last four characters, with **Replace** and **Remove**. Its model can be chosen
   once a key is saved.
-- **Codex** signs in with ChatGPT or with an API key from your OpenAI account. **Sign in…** lets
-  the codex program open your browser; the codex program keeps that sign-in itself. On a computer
-  without a browser, choose **Sign in with a device code**: Archforge shows the code, which you enter
-  on any device with a browser.
+- **Codex** uses an API key from your OpenAI account: choose **API key** and save it as for Claude.
+  **Sign in with ChatGPT** is not available in this version yet; the page says so. It becomes
+  available once Archforge drives the codex program's own sign-in: **Sign in…** will let the codex
+  program open your browser, and on a computer without a browser **Sign in with a device code**
+  will show a code to enter on any device with a browser. The codex program will keep that
+  sign-in itself.
 - **Let Chat use the model** is off until you turn it on. While a conversation holds this access,
   Chat reads the project's model and the status bar says so; changes still wait for **Allow
   changes** in each conversation.
@@ -141,10 +143,12 @@ Opening the page sends nothing over the network. Archforge looked for the progra
 started; your keys are read from the secure store the first time you open the page, never when
 Archforge starts, so the system asks for access only once you use AI agents.
 
-- **Check connection** is free and runs on your computer: it looks again for each program, its
-  version and your key or sign-in, and sends nothing. The badge under it sums up each agent.
-- **Send test message** sends one short message to the default agent's provider, which uses a
-  little of your plan or API credit.
+- **Check connection** is free and runs on your computer: it looks again for each program and its
+  version and reads which API keys are saved, and sends nothing. The badge under it sums up each
+  agent. It cannot read a Codex ChatGPT sign-in yet; that comes with the sign-in itself.
+- **Send test message** is not available in this version yet. Once Archforge talks to the agents'
+  providers, it will send one short message to the default agent's provider, which uses a little
+  of your plan or API credit.
 
 When a program is missing, its card shows how to install it, as its maker documents it:
 
@@ -157,8 +161,9 @@ Then choose **Look again**; **Installation guide** opens the maker's own page. A
 the version Archforge was tested with works, and its badge says *Not yet tested with this version*.
 
 On Linux without a running Secret Service (such as GNOME Keyring or KWallet), API keys cannot be
-saved until you start one and restart Archforge, and Archforge keeps them nowhere else; Codex's ChatGPT sign-in still works, as the codex
-program keeps it in its own files. On Windows, AI Agents are not available yet; everything else
+saved until you start one and restart Archforge, and Archforge keeps them nowhere else. Once
+Sign in with ChatGPT is available, it will work without a secure store, as the codex program
+keeps that sign-in in its own files. On Windows, AI Agents are not available yet; everything else
 works as usual.
 
 ## The Generate handoff
