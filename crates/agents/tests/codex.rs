@@ -1478,6 +1478,56 @@ fn settings_are_refused_before_anything_starts() {
     std::fs::remove_dir_all(&base).unwrap();
 }
 
+/// A new conversation never replaces an earlier one: a folder that still holds a copy refuses
+/// `Start::New` before anything starts and keeps the copy, which a resume then continues.
+#[test]
+fn a_new_conversation_never_replaces_an_earlier_one() {
+    let base = scratch("new-over-copy");
+    let (runtime, account, folder) = fake_codex(&base, "");
+    let mut earlier = History::default();
+    earlier.push(history::Role::User, "first question".into());
+    earlier.push(history::Role::Assistant, "first answer".into());
+    earlier.write(&folder).unwrap();
+    let error = CodexSession::start(&runtime, &account, &folder, config(false), SignIn::ApiKey(canary())).unwrap_err();
+    assert!(matches!(&error, AgentError::Folder { problem, .. } if problem.contains("earlier conversation")), "{error:?}");
+    assert!(!base.join("args").exists(), "nothing was started");
+    assert_eq!(History::read(&folder).unwrap(), earlier, "the earlier conversation stays");
+    let mut session =
+        CodexSession::start(&runtime, &account, &folder, CodexConfig { start: Start::Resume, ..config(false) }, SignIn::ApiKey(canary())).unwrap();
+    assert_eq!(session.history(), &earlier);
+    session.shutdown(Duration::from_secs(2)).unwrap();
+    std::fs::remove_dir_all(&base).unwrap();
+}
+
+/// A refused turn on a copy at its cap leaves the copy as it was before the message: adding the
+/// message dropped the oldest one, and that is put back, in memory and on disk.
+#[test]
+fn a_refused_turn_keeps_the_whole_copy() {
+    let base = scratch("refused-full");
+    let (runtime, account, folder) =
+        fake_codex(&base, "on_turn() { send '{\"id\":@ID@,\"error\":{\"code\":-32600,\"message\":\"turn refused\"}}'; }");
+    let mut full = History::default();
+    for n in 0..history::MAX_HISTORY_ENTRIES {
+        full.push(if n % 2 == 0 { history::Role::User } else { history::Role::Assistant }, format!("m{n}"));
+    }
+    assert_eq!(full.entries().len(), history::MAX_HISTORY_ENTRIES, "the copy is at its cap");
+    let mut session = CodexSession::start(
+        &runtime,
+        &account,
+        &folder,
+        CodexConfig { start: Start::ResumeFrom(full.clone()), ..config(false) },
+        SignIn::ApiKey(canary()),
+    )
+    .unwrap();
+    session.send("one more").unwrap();
+    let events = events_until(&mut session, turn_end);
+    assert!(matches!(events.last(), Some(SessionEvent::TurnFinished { outcome: TurnOutcome::Failed(_), .. })), "{events:?}");
+    assert_eq!(session.history(), &full, "the message left, and the oldest came back");
+    assert_eq!(History::read(&folder).unwrap(), full, "and the file holds the whole copy");
+    session.shutdown(Duration::from_secs(2)).unwrap();
+    std::fs::remove_dir_all(&base).unwrap();
+}
+
 /// The account folder is the workspace's `account-codex`, never a conversation's, and survives a
 /// conversation's removal, which takes the conversation's state, logs and copy with it.
 #[test]
@@ -1806,6 +1856,23 @@ fn an_api_key_is_given_over_standard_input() {
     assert!(error.to_string().contains("ended before it answered account/login/start"), "{error}");
     let logs = LOG.lock().unwrap_or_else(PoisonError::into_inner).join("\n");
     assert!(!logs.contains(&CANARY[..20]));
+    std::fs::remove_dir_all(&base).unwrap();
+}
+
+/// A Codex that crashes reports why: its exit status and its error stream, even when its output
+/// closed a moment before it ended.
+#[test]
+fn a_crashed_account_process_reports_why() {
+    let base = scratch("account-crash");
+    let body = format!("{ACCOUNT_BODY}\non_account() {{ printf '%s\\n' 'codex broke here' >&2; exec 1>&-; sleep 0.2; exit 3; }}");
+    let (runtime, account, _) = fake_codex(&base, &body);
+    let mut accounts = CodexAccounts::open(&runtime, &account, SignIn::ChatGpt(KeyringAccess::default()), Default::default()).unwrap();
+    let error = accounts.read(false).unwrap_err();
+    assert!(error.to_string().contains("ended before it answered account/read"), "{error}");
+    let events = account_events_until(&mut accounts, |e| matches!(e, AccountEvent::Ended { .. }));
+    let Some(AccountEvent::Ended { exit, error }) = events.last() else { panic!("{events:?}") };
+    assert_eq!(exit.map(|e| e.code), Some(Some(3)), "{events:?}");
+    assert!(matches!(error, Some(AgentError::Exited { code: Some(3), stderr_tail, .. }) if stderr_tail.contains("codex broke here")), "{error:?}");
     std::fs::remove_dir_all(&base).unwrap();
 }
 

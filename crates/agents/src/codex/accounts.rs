@@ -572,13 +572,15 @@ impl CodexAccounts {
             return;
         }
         self.ended = true;
-        let exit = self.process.status().ok().flatten();
+        // The output can close a moment before Codex is seen to end: unless it is being shut down,
+        // its exit is waited for briefly, so a crash keeps its reason and its error stream.
+        let exit = if self.shutting_down { self.process.status().ok().flatten() } else { super::wait_for_exit(&mut self.process) };
         let error = if self.shutting_down {
             None
         } else {
             Some(match exit {
                 Some(exit) => self.process.exit_error(exit),
-                None => AgentError::reported(ErrorKind::Other, "codex closed its output"),
+                None => AgentError::reported(ErrorKind::Other, "codex closed its output and its exit was not seen"),
             })
         };
         self.queue(AccountEvent::Ended { exit, error });

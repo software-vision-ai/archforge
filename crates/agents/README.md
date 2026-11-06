@@ -257,7 +257,9 @@ with the request around it; older ones are dropped and logged); `Start::ResumeFr
 instead, for when the folder has none, as on another computer. It uses the history it is given even
 when the folder holds a readable copy, and replaces that copy at the end of the first turn: check
 `history::exists(folder)` first (an error when the system cannot tell, never taken for "no copy")
-and choose `Start::Resume` when it is true. A copy that cannot be written at a turn's end (a full
+and choose `Start::Resume` when it is true. `Start::New` is for a conversation in a folder of its
+own (a new conversation has a new id, AR-206): while the folder still holds a readable copy it is
+refused with a `Folder` error before anything starts, as its first turn would replace that copy. A copy that cannot be written at a turn's end (a full
 disk, a folder in its place) does not fail the turn: it is logged and `CodexSession::history_problem()`
 names the error until a later turn writes the copy again; meanwhile the file lacks the newest
 messages and a restart would not see them, so keep `CodexSession::history()` (or the project's own
@@ -283,7 +285,9 @@ conversation is not signed in, each message reads the account again first, so a 
 Settings (the keyring is shared) is picked up without a restart; `account/updated` keeps the state
 current (`authMode` null: the next turn fails as `SignInExpired`; a mode: signed in). A message that
 never reached a thread (its turn failed or was stopped before `turn/start`, or `turn/start` was
-refused) leaves the copy again. Then `thread/start
+refused) leaves the copy again, which goes back to exactly how it was before that message, oldest
+messages its adding dropped included; the copy with the message stays only once Codex takes the
+turn. Then `thread/start
 {cwd, approvalPolicy:"on-request", sandbox:"read-only", ephemeral:true, model?,
 developerInstructions?}`, the earlier messages on a resume, and `turn/start {threadId, input,
 model?}`. `Started` comes with the thread (its id and model) and again with each tool server state.
@@ -357,7 +361,9 @@ hyphens. A refused address or code also cancels the sign-in Codex already began 
 only when Codex's own id is a valid one), so it does not wait for an answer that never comes. Keep
 the process running until `LoginCompleted`: Codex receives the browser's answer on its own local
 callback. `next_event` with a zero timeout polls once without waiting, still reading what Codex has
-already written. At most 256 events wait to be read; past that the oldest is dropped and logged.
+already written. When the account process ends without being shut down, its exit is waited for
+at most 500 ms, as a conversation's is, so `Ended` carries a crash's exit status and the end of
+its error stream. At most 256 events wait to be read; past that the oldest is dropped and logged.
 `cancel_login`, `logout`, `rate_limits` and `models` (every page, hidden models
 left out, at most 10 pages and 1000 models) complete the set. ChatGPT calls on an API-key process
 are refused (`InvalidSetting`), so a key never meets the keyring.

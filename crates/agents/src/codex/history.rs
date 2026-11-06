@@ -94,11 +94,6 @@ impl History {
         trim(&mut self.entries, MAX_HISTORY_BYTES);
     }
 
-    /// Takes back the newest message (a message that could not be sent).
-    pub(crate) fn pop(&mut self) {
-        self.entries.pop();
-    }
-
     /// The items `thread/inject_items` takes (Responses API messages) for every message but the
     /// newest, which is the one waiting to be sent: the newest of them whose JSON array, as it is
     /// written (escaping, the objects around each text, the commas and brackets), takes at most

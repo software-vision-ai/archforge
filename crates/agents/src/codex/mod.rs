@@ -172,7 +172,9 @@ impl KeyringAccess {
 /// Whether a start opens a new conversation or continues a stored one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Start {
-    /// A new conversation: the first message starts a new thread.
+    /// A new conversation, in a folder of its own: the first message starts a new thread. Refused
+    /// while the folder still holds a conversation copy, which its first turn would replace: check
+    /// [`history::exists`] and choose [`Start::Resume`] when it does.
     New,
     /// A conversation with earlier messages: the first message starts a new thread that is given
     /// the copy in the conversation's folder first (`thread/inject_items`).
@@ -368,6 +370,22 @@ fn keep_unreadable_copy(folder: &ConversationFolder) -> Result<(), AgentError> {
     }
 }
 
+/// Refuses [`Start::New`] in a folder that still holds a conversation copy: a new conversation has
+/// a new id and so a new folder (AR-206), and its first turn's write would replace the earlier
+/// conversation. A copy that could not be read was set aside first ([`keep_unreadable_copy`]), so
+/// what is refused here is a copy still in place.
+fn refuse_earlier_copy(folder: &ConversationFolder) -> Result<(), AgentError> {
+    if history::exists(folder)? {
+        return Err(AgentError::Folder {
+            path: history::path(folder),
+            problem: "holds an earlier conversation, which a new conversation would replace; continue it with Start::Resume, or start the new \
+                      conversation in a folder of its own"
+                .to_owned(),
+        });
+    }
+    Ok(())
+}
+
 /// Refuses a request timeout of zero or past [`MAX_REQUEST_TIMEOUT`].
 fn check_timeout(timeout: Duration) -> Result<(), AgentError> {
     if timeout.is_zero() || timeout > MAX_REQUEST_TIMEOUT {
@@ -470,6 +488,10 @@ pub struct CodexSession {
     queued: Option<String>,
     turn_open: bool,
     turn_requested: bool,
+    /// The copy as it was before the open turn's message was added (which may have dropped the
+    /// oldest messages), put back when the message never reaches the thread; dropped once Codex
+    /// takes the turn.
+    unsent: Option<History>,
     awaiting: bool,
     stop_requested: bool,
     interrupt_sent: bool,
@@ -543,6 +565,7 @@ impl CodexSession {
         let history = match &config.start {
             Start::New => {
                 keep_unreadable_copy(folder)?;
+                refuse_earlier_copy(folder)?;
                 History::default()
             }
             Start::Resume => History::read(folder)?,
@@ -599,6 +622,7 @@ impl CodexSession {
             queued: None,
             turn_open: false,
             turn_requested: false,
+            unsent: None,
             awaiting: false,
             stop_requested: false,
             interrupt_sent: false,
@@ -924,6 +948,8 @@ impl CodexSession {
                 self.fail_turn(error);
             }
             (Purpose::TurnStart, Ok(value)) => {
+                // Codex took the message: the copy with it stays.
+                self.unsent = None;
                 match value.get("turn").and_then(|t| t.get("id")).and_then(Value::as_str) {
                     Some(id) => {
                         self.parser.turn_started(id);
@@ -1088,9 +1114,12 @@ impl CodexSession {
         self.unnamed_deadline = None;
         self.parser.reset_turn();
         // A message whose `turn/start` was never sent or was refused never reached the thread:
-        // it leaves the copy, so a later thread is not given a question without its answer.
-        if !self.turn_requested && self.history.entries().last().is_some_and(|e| e.role == history::Role::User) {
-            self.history.pop();
+        // the copy goes back to how it was before it, with any older messages adding it dropped,
+        // so a later thread is not given a question without its answer.
+        if let Some(before) = self.unsent.take()
+            && !self.turn_requested
+        {
+            self.history = before;
         }
         self.turn_open = false;
         self.turn_requested = false;
@@ -1185,16 +1214,23 @@ impl CodexSession {
 
     /// The runtime's exit, waiting a little for it once its output closed.
     fn exit_status(&mut self) -> Option<Exit> {
-        let started = Instant::now();
-        loop {
-            match self.process.status() {
-                Ok(Some(exit)) => return Some(exit),
-                Ok(None) if started.elapsed() < EXIT_WAIT => std::thread::sleep(Duration::from_millis(10)),
-                Ok(None) => return None,
-                Err(e) => {
-                    log::warn!("codex's exit could not be checked: {e}");
-                    return None;
-                }
+        wait_for_exit(&mut self.process)
+    }
+}
+
+/// The exit of a runtime whose output closed, waiting at most [`EXIT_WAIT`] for it: the output can
+/// close a moment before the process is seen to end. `None` when it was not seen in that time, or
+/// could not be checked (logged).
+fn wait_for_exit(process: &mut RuntimeProcess) -> Option<Exit> {
+    let started = Instant::now();
+    loop {
+        match process.status() {
+            Ok(Some(exit)) => return Some(exit),
+            Ok(None) if started.elapsed() < EXIT_WAIT => std::thread::sleep(Duration::from_millis(10)),
+            Ok(None) => return None,
+            Err(e) => {
+                log::warn!("codex's exit could not be checked: {e}");
+                return None;
             }
         }
     }
@@ -1219,6 +1255,7 @@ impl AgentSession for CodexSession {
         self.interrupt_sent = false;
         self.queued = Some(text.to_owned());
         let entry = self.process.redact(text.to_owned());
+        self.unsent = Some(self.history.clone());
         self.history.push(history::Role::User, entry);
         // Not signed in with ChatGPT when last asked: the person may have signed in under Settings
         // since (Codex keeps the sign-in in the keyring all its processes share), so the account is
@@ -1234,7 +1271,9 @@ impl AgentSession for CodexSession {
             self.ready = self.ready || reread;
             self.turn_open = false;
             self.queued = None;
-            self.history.pop();
+            if let Some(before) = self.unsent.take() {
+                self.history = before;
+            }
             return Err(e);
         }
         Ok(())
