@@ -120,6 +120,13 @@ const TURN_NOTIFICATIONS: [&str; 7] =
 const MAX_HELD: usize = 1024;
 /// The most bytes of output lines those held notifications may come from.
 const MAX_HELD_BYTES: usize = 16 * 1024 * 1024;
+/// The tool-server status notification, which Codex may send for a new thread before it answers
+/// `thread/start`.
+const SERVER_STATUS: &str = "mcpServer/startupStatus/updated";
+/// The most tool-server statuses held while `thread/start` waits for its answer, and the most bytes
+/// of the lines they came from.
+const MAX_EARLY_STATUS: usize = 64;
+const MAX_EARLY_STATUS_BYTES: usize = 1024 * 1024;
 /// The most ended or abandoned turns remembered, whose late notifications are ignored.
 const MAX_STALE_TURNS: usize = 64;
 /// The most `turn/start` requests remembered after their deadline, whose late answers are stopped.
@@ -436,6 +443,8 @@ enum Scope {
     Current,
     /// The turn being started, before Codex named it.
     Hold,
+    /// A tool-server status while `thread/start` waits for its answer: perhaps for that thread.
+    Early,
     /// An ended or abandoned turn, or another thread.
     Other,
 }
@@ -500,6 +509,11 @@ pub struct CodexSession {
     held: VecDeque<(String, Value)>,
     /// The bytes of the output lines the held notifications came from.
     held_bytes: usize,
+    /// Tool-server statuses that came while `thread/start` waited for its answer (Codex's thread
+    /// listener runs beside that answer), and the bytes of their lines: given to the thread the
+    /// answer names, dropped when the start is given up.
+    early_status: Vec<Value>,
+    early_status_bytes: usize,
     /// Why the copy could not be written at the end of the last turn.
     history_problem: Option<AgentError>,
     /// Turns that ended or were abandoned: their late notifications are ignored.
@@ -628,6 +642,8 @@ impl CodexSession {
             interrupt_sent: false,
             held: VecDeque::new(),
             held_bytes: 0,
+            early_status: Vec::new(),
+            early_status_bytes: 0,
             history_problem: None,
             stale_turns: VecDeque::new(),
             late_starts: VecDeque::new(),
@@ -756,6 +772,13 @@ impl CodexSession {
             Scope::Hold => log::warn!(
                 "codex sent more than {MAX_HELD} turn notifications or {MAX_HELD_BYTES} bytes before naming the turn; the rest are dropped"
             ),
+            Scope::Early if self.early_status.len() < MAX_EARLY_STATUS && self.early_status_bytes.saturating_add(bytes) <= MAX_EARLY_STATUS_BYTES => {
+                self.early_status_bytes = self.early_status_bytes.saturating_add(bytes);
+                self.early_status.push(params.clone());
+            }
+            Scope::Early => log::warn!(
+                "codex sent more than {MAX_EARLY_STATUS} tool-server statuses or {MAX_EARLY_STATUS_BYTES} bytes before naming its thread; the rest are dropped"
+            ),
             Scope::Other => log::debug!("codex sent {} for a turn or thread that is not current; it was ignored", parse::kind_name(method)),
         }
     }
@@ -770,9 +793,10 @@ impl CodexSession {
         {
             return Scope::Other;
         }
-        if method == "mcpServer/startupStatus/updated" && self.thread_id().is_none() {
-            // A thread whose start was given up on: not this session's.
-            return Scope::Other;
+        if method == SERVER_STATUS && self.thread_id().is_none() {
+            // While `thread/start` waits, perhaps the new thread's (held until the answer names
+            // it); otherwise a thread whose start was given up on, not this session's.
+            return if matches!(self.thread, Thread::Starting) { Scope::Early } else { Scope::Other };
         }
         if !TURN_NOTIFICATIONS.contains(&method) {
             return Scope::Current;
@@ -819,7 +843,8 @@ impl CodexSession {
             match self.scope(&method, &params) {
                 Scope::Current => self.deliver(&method, &params),
                 Scope::Hold => self.held.push_back((method, params)),
-                Scope::Other => log::debug!("a held {} was for another turn; it was ignored", parse::kind_name(&method)),
+                // Only turn notifications are held here, never a tool-server status (`Early`).
+                Scope::Other | Scope::Early => log::debug!("a held {} was for another turn; it was ignored", parse::kind_name(&method)),
             }
         }
     }
@@ -923,9 +948,18 @@ impl CodexSession {
                         self.thread = Thread::Ready(session_id.clone());
                     }
                     self.pending.push_back(started);
+                    // The statuses that came before the answer, for this thread only.
+                    for params in self.take_early_status() {
+                        if params.get("threadId").and_then(Value::as_str).is_some_and(|t| self.thread_id() == Some(t)) {
+                            self.deliver(SERVER_STATUS, &params);
+                        } else {
+                            log::debug!("codex sent a tool-server status for another thread before naming its own; it was ignored");
+                        }
+                    }
                     self.proceed_or_fail();
                 }
                 Err(why) => {
+                    self.take_early_status();
                     self.thread = Thread::None;
                     let event = self.parser.skip(why);
                     self.pending.push_back(event);
@@ -933,6 +967,7 @@ impl CodexSession {
                 }
             },
             (Purpose::ThreadStart, Err(e)) => {
+                self.take_early_status();
                 self.thread = Thread::None;
                 self.fail_turn(refused(method, &e, ErrorKind::Other));
             }
@@ -999,6 +1034,7 @@ impl CodexSession {
                 }
                 Purpose::Initialize | Purpose::Login | Purpose::AccountRead => self.fail(error),
                 Purpose::ThreadStart => {
+                    self.take_early_status();
                     self.thread = Thread::None;
                     self.abandon_turn(error);
                 }
@@ -1025,6 +1061,13 @@ impl CodexSession {
                 Purpose::Interrupt => log::warn!("{error}"),
             }
         }
+    }
+
+    /// The tool-server statuses held while `thread/start` waited, emptied: delivered once its
+    /// answer names the thread, dropped when the start is given up.
+    fn take_early_status(&mut self) -> Vec<Value> {
+        self.early_status_bytes = 0;
+        std::mem::take(&mut self.early_status)
     }
 
     /// Takes the next step of the waiting message; a step that cannot be sent fails the turn.

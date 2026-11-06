@@ -61,8 +61,8 @@ pub struct AccountState {
     pub requires_openai_auth: bool,
 }
 
-/// A ChatGPT sign-in that has begun.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// A ChatGPT sign-in that has begun. Its `Debug` leaves out the addresses and the device code.
+#[derive(Clone, PartialEq, Eq)]
 pub enum LoginStarted {
     /// Open `auth_url` in the browser; Codex waits for the answer on its local callback.
     Browser { login_id: String, auth_url: String },
@@ -75,6 +75,33 @@ impl LoginStarted {
     pub fn login_id(&self) -> &str {
         match self {
             LoginStarted::Browser { login_id, .. } | LoginStarted::DeviceCode { login_id, .. } => login_id,
+        }
+    }
+}
+
+impl std::fmt::Debug for LoginStarted {
+    /// Writes the kind of sign-in and its id, never the address to open or the device code: those
+    /// are sign-in material, so no log line or panic message (an [`AccountEvent`] holding this
+    /// one included) can show them; their lengths are written instead. The id stays, as it only
+    /// names this process's own sign-in and ties it to its [`AccountEvent::LoginCompleted`].
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        /// A value written as its length alone.
+        struct Withheld<'a>(&'a str);
+        impl std::fmt::Debug for Withheld<'_> {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "<withheld, {} bytes>", self.0.len())
+            }
+        }
+        match self {
+            LoginStarted::Browser { login_id, auth_url } => {
+                f.debug_struct("Browser").field("login_id", login_id).field("auth_url", &Withheld(auth_url)).finish()
+            }
+            LoginStarted::DeviceCode { login_id, verification_url, user_code } => f
+                .debug_struct("DeviceCode")
+                .field("login_id", login_id)
+                .field("verification_url", &Withheld(verification_url))
+                .field("user_code", &Withheld(user_code))
+                .finish(),
         }
     }
 }
@@ -859,6 +886,27 @@ mod tests {
         assert!(!made.exists(), "the folder this call made goes with it");
         assert_eq!(std::fs::read_to_string(taken.join("left")).unwrap(), "kept", "the folder that was there stays");
         std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    /// A sign-in's `Debug`, alone and inside an event, shows neither address nor device code.
+    #[test]
+    fn sign_in_details_stay_out_of_debug() {
+        let browser =
+            LoginStarted::Browser { login_id: "login-1".into(), auth_url: "https://auth.openai.com/oauth/authorize?state=SECRETSTATE".into() };
+        let device = LoginStarted::DeviceCode {
+            login_id: "login-2".into(),
+            verification_url: "https://auth.openai.com/codex/device?hint=SECRETHINT".into(),
+            user_code: "WXYZ-9876".into(),
+        };
+        for started in [browser, device] {
+            let event = AccountEvent::LoginStarted(started.clone());
+            for text in [format!("{started:?}"), format!("{started:#?}"), format!("{event:?}"), format!("{event:#?}")] {
+                for secret in ["SECRETSTATE", "SECRETHINT", "WXYZ-9876", "auth.openai.com", "https://"] {
+                    assert!(!text.contains(secret), "{secret} in {text}");
+                }
+                assert!(text.contains("withheld") && text.contains(started.login_id()), "{text}");
+            }
+        }
     }
 
     /// Only https addresses on the sign-in hosts pass.

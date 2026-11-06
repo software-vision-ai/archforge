@@ -299,6 +299,9 @@ turn. Then `thread/start
 {cwd, approvalPolicy:"on-request", sandbox:"read-only", ephemeral:true, model?,
 developerInstructions?}`, the earlier messages on a resume, and `turn/start {threadId, input,
 model?}`. `Started` comes with the thread (its id and model) and again with each tool server state.
+A tool server's status that Codex sends before it answers `thread/start` (its thread listener runs
+beside that answer) is held, at most 64 of them and 1 MiB of lines, and given to the thread the
+answer names; one naming another thread, or those of a start that failed, are dropped.
 `item/agentMessage/delta` is `TextDelta`, a completed `agentMessage` `MessageDone`, an
 `mcpToolCall` item `ToolStarted`/`ToolFinished`, `error` with `willRetry` `Retrying`, and
 `turn/completed` `TurnFinished` (`completed`, `interrupted` → `Stopped`, `failed`), with the tokens
@@ -368,7 +371,8 @@ codex-cli 0.166.0 gives no structured reason, so that is its internal error (-32
 one of the five messages of its refresh-token failure; any other refusal stays an error, even one
 that says "revoked". For an API key it says only that Codex holds one. `login_chatgpt` and
 `login_device_code` answer the address to open, or the code and the address, and queue the same as
-`AccountEvent::LoginStarted`; an address must be `https` on `openai.com` or `chatgpt.com` (or below)
+`AccountEvent::LoginStarted` (whose `Debug` writes the sign-in id but withholds the addresses
+and the device code, so no log line or panic message shows them); an address must be `https` on `openai.com` or `chatgpt.com` (or below)
 without a user part, else it is refused and never queued; a device code is letters, digits and
 hyphens. A refused address or code also cancels the sign-in Codex already began (best effort, and
 only when Codex's own id is a valid one), so it does not wait for an answer that never comes. Keep

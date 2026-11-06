@@ -1570,6 +1570,44 @@ fn lines_that_mean_nothing_cannot_hold_next_event() {
     std::fs::remove_dir_all(&base).unwrap();
 }
 
+/// Tool-server statuses Codex sends for a new thread before it answers `thread/start` (its thread
+/// listener runs beside that answer) are kept and given to the thread the answer names; one for
+/// another thread is not, and those of a start Codex refused are dropped.
+#[test]
+fn tool_server_status_before_the_thread_answer_is_kept() {
+    let base = scratch("early-status");
+    let body = r#"
+starts=0
+on_thread() {
+  starts=$((starts+1))
+  if [ $starts = 1 ]; then
+    send '{"method":"mcpServer/startupStatus/updated","params":{"threadId":"019a0000-0000-7000-8000-0000000000aa","name":"refused","status":"ready","error":null,"failureReason":null}}'
+    send '{"id":@ID@,"error":{"code":-32600,"message":"no thread now"}}'
+  else
+    send '{"method":"mcpServer/startupStatus/updated","params":{"threadId":"019a0000-0000-7000-8000-000000000001","name":"archforge","status":"starting","error":null,"failureReason":null}}'
+    send '{"method":"mcpServer/startupStatus/updated","params":{"threadId":"019a0000-0000-7000-8000-0000000000bb","name":"other","status":"ready","error":null,"failureReason":null}}'
+    send '{"id":@ID@,"result":{"thread":{"id":"019a0000-0000-7000-8000-000000000001","ephemeral":true,"model":"gpt-6.1-sol","status":{"type":"idle"},"path":null},"model":"gpt-6.1-sol","modelProvider":"openai","cwd":"/tmp","approvalPolicy":"on-request","approvalsReviewer":"user","sandbox":{"type":"readOnly","networkAccess":false}}}'
+    send '{"method":"thread/started","params":{"thread":{"id":"019a0000-0000-7000-8000-000000000001"}}}'
+  fi
+}
+"#;
+    let (runtime, account, folder) = fake_codex(&base, body);
+    let mut session = CodexSession::start(&runtime, &account, &folder, config(false), SignIn::ApiKey(canary())).unwrap();
+    session.send("first").unwrap();
+    let first = events_until(&mut session, turn_end);
+    assert!(matches!(first.last(), Some(SessionEvent::TurnFinished { outcome: TurnOutcome::Failed(_), .. })), "{first:?}");
+    session.send("second").unwrap();
+    let with_server = |e: &SessionEvent| matches!(e, SessionEvent::Started { servers, .. } if !servers.is_empty());
+    let second = events_until(&mut session, with_server);
+    let Some(SessionEvent::Started { session_id, servers, .. }) = second.last() else { panic!("{second:?}") };
+    assert_eq!(session_id, THREAD);
+    assert_eq!(servers.iter().map(|s| (s.name.as_str(), s.status.as_str())).collect::<Vec<_>>(), vec![("archforge", "starting")]);
+    let shown = format!("{first:?}{second:?}");
+    assert!(!shown.contains("\"refused\"") && !shown.contains("\"other\""), "{shown}");
+    session.shutdown(Duration::from_secs(2)).unwrap();
+    std::fs::remove_dir_all(&base).unwrap();
+}
+
 /// The session's wait for Codex's exit once its output closed stays within the caller's time: a
 /// zero-timeout poll reads what Codex wrote and checks the exit once without waiting, a timed
 /// `next_event` keeps its timeout, and an exit not seen by then ends with the general reason.
