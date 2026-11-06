@@ -524,3 +524,61 @@ fn the_sweep_over_templates_breaks_nothing() {
     let calls = sweep_with(&mut s, &ids, picture).unwrap();
     assert!(calls > 50, "{calls}");
 }
+
+/// A removal that takes away the only specialization path by which a parameter's default, or a
+/// binding's argument, fits its constraint is refused before anything goes, the store and the
+/// history as they were: a generalization, or a classifier in the middle of the chain. Another
+/// path kept, the same removal goes ahead; a constraint that goes itself asks nothing.
+#[test]
+fn a_removal_that_breaks_a_parameter_s_constraint_is_refused() {
+    let mut s = session();
+    let shop = shop(&mut s);
+    // Entity ← Order (from `shop`); Entity ← Record ← Invoice.
+    let record = run(&mut s, "uml.class.add", json!({ "package": shop.shop, "name": "Record" }));
+    let invoice = run(&mut s, "uml.class.add", json!({ "package": shop.shop, "name": "Invoice" }));
+    let up = run(&mut s, "uml.generalization.add", json!({ "specific": record, "general": shop.entity }));
+    run(&mut s, "uml.generalization.add", json!({ "specific": invoice, "general": record }));
+    let t = run(
+        &mut s,
+        "uml.template-parameter.add",
+        json!({ "classifier": shop.repository, "name": "T", "constraint": shop.entity, "default": invoice }),
+    );
+    run(&mut s, "uml.template-parameter.add", json!({ "classifier": shop.repository, "name": "Key", "kind": "data-type" }));
+    let undo = s.undo_label().map(str::to_string);
+    // The default's only path: through Record's generalization, or Record itself.
+    for ids in [json!([up]), json!([record])] {
+        let e = refused(&mut s, "element.remove", json!({ "ids": ids }));
+        assert!(e.contains("Invoice, the default of Repository's template parameter T, would no longer specialize Entity"), "{e}");
+        assert_eq!(s.undo_label().map(str::to_string), undo, "no undo step");
+    }
+    // Another path kept: Invoice specializes Entity directly too; then either removal goes.
+    let direct = run(&mut s, "uml.generalization.add", json!({ "specific": invoice, "general": shop.entity }));
+    run(&mut s, "element.remove", json!({ "ids": [up] }));
+    s.undo().unwrap();
+    run(&mut s, "element.remove", json!({ "ids": [direct] }));
+    // A constraint that goes takes the question along: removing Entity is allowed.
+    run(&mut s, "element.remove", json!({ "ids": [shop.entity] }));
+    let st = s.doc();
+    assert!(templates::constraint_of(st, obj(st, &t)).is_none(), "the constraint went with Entity");
+}
+
+/// A binding's argument that would no longer specialize its parameter's constraint stands in the
+/// way of the removal, naming the binding; the store and the history are untouched.
+#[test]
+fn a_removal_that_breaks_a_binding_s_argument_is_refused() {
+    let mut s = session();
+    let shop = shop(&mut s);
+    run(&mut s, "uml.template-parameter.add", json!({ "classifier": shop.repository, "name": "T", "constraint": shop.entity }));
+    run(&mut s, "uml.template-parameter.add", json!({ "classifier": shop.repository, "name": "Key", "kind": "data-type" }));
+    run(&mut s, "uml.attribute.add", json!({ "class": shop.order, "name": "id", "type": "Integer" }));
+    // OrderRepository binds T to Order, which specializes Entity through one generalization.
+    let (mut s, _) = bound(&s, &shop);
+    let st = s.doc();
+    let order = obj(st, &shop.order);
+    let g = st.list(order, archforge_uml::classifier::GENERALIZATION).unwrap()[0].as_ref().unwrap();
+    let g = st.uuid(g).unwrap().to_string();
+    let undo = s.undo_label().map(str::to_string);
+    let e = refused(&mut s, "element.remove", json!({ "ids": [g] }));
+    assert!(e.contains("OrderRepository binds T to Order, and Order would no longer specialize Entity, T's constraint"), "{e}");
+    assert_eq!(s.undo_label().map(str::to_string), undo, "no undo step");
+}

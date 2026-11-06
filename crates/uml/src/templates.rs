@@ -39,6 +39,7 @@ use archforge_diagram::ProjectView;
 use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, always, cmd};
 use archforge_mof::{ClassId, Obj, PropId, Store, TypeRef, Value};
 use serde_json::{Value as Json, json};
+use std::collections::BTreeSet;
 
 use crate::commands::{fail, name_of, refuse, set_name, short, text, uuid_of};
 use crate::{
@@ -421,6 +422,73 @@ fn signature_problem(store: &Store, t: Obj, p: Obj) -> Option<String> {
 pub fn last_parameter_problem(store: &Store, p: Obj) -> Option<String> {
     let t = template_of(store, p)?;
     (parameters(store, t).as_slice() == [p]).then(|| signature_problem(store, t, p)).flatten()
+}
+
+/// Whether `from` is `to` or specializes it through generalizations none of which is in
+/// `gone_generalizations` and classifiers none of which is in `gone_classes`: what `specializes`
+/// will say once they have gone. A seen-set bounds the walk.
+fn specializes_after(store: &Store, from: Obj, to: Obj, gone_classes: &BTreeSet<Obj>, gone_generalizations: &BTreeSet<Obj>) -> bool {
+    let mut seen = BTreeSet::new();
+    let mut stack = vec![from];
+    while let Some(c) = stack.pop() {
+        if gone_classes.contains(&c) {
+            continue;
+        }
+        if c == to {
+            return true;
+        }
+        if seen.insert(c) {
+            for g in list(store, c, classifier::GENERALIZATION).into_iter().filter(|g| !gone_generalizations.contains(g)) {
+                stack.extend(one(store, g, crate::generalization::GENERAL));
+            }
+        }
+    }
+    false
+}
+
+/// Why removing the classifiers `gone_classes` and the generalizations `gone_generalizations`,
+/// with the template parameters `gone_params`, may not happen: a parameter that stays, of a
+/// template that stays, has a default, or a binding's argument, that specializes its constraining
+/// classifier now and would not once they have gone, no other path keeping it. A constraint,
+/// default, argument or binding that goes itself asks nothing; one that does not fit already is
+/// left as it is. Worked out before anything changes.
+pub fn constraint_problem(store: &Store, gone_classes: &BTreeSet<Obj>, gone_generalizations: &BTreeSet<Obj>, gone_params: &[Obj]) -> Option<String> {
+    if gone_classes.is_empty() && gone_generalizations.is_empty() {
+        return None;
+    }
+    let breaks = |x: Obj, c: Obj| {
+        !gone_classes.contains(&x)
+            && crate::relations::specializes(store, x, c)
+            && !specializes_after(store, x, c, gone_classes, gone_generalizations)
+    };
+    for p in store.alive().filter(|o| store.class_of(*o).ok() == Some(CLASSIFIER_TEMPLATE_PARAMETER)) {
+        if gone_params.contains(&p) {
+            continue;
+        }
+        let Some(t) = template_of(store, p).filter(|t| !gone_classes.contains(t)) else { continue };
+        let Some(c) = constraint_of(store, p).filter(|c| !gone_classes.contains(c)) else { continue };
+        let (name, template, constraint) = (parameter_name(store, p), name_of(store, t), name_of(store, c));
+        if let Some(d) = default_of(store, p).filter(|d| breaks(*d, c)) {
+            return Some(format!(
+                "{}, the default of {template}'s template parameter {name}, would no longer specialize {constraint}, the parameter's constraint; change that default or constraint first",
+                name_of(store, d)
+            ));
+        }
+        for (b, bound, actual) in users(store, p) {
+            // A binding goes with the element that binds.
+            if bound.is_none_or(|o| gone_classes.contains(&o)) {
+                continue;
+            }
+            if let Some(a) = actual.filter(|a| breaks(*a, c)) {
+                return Some(format!(
+                    "{}, and {} would no longer specialize {constraint}, {name}'s constraint; change or remove that binding first",
+                    use_text(store, p, (b, bound, actual)),
+                    name_of(store, a)
+                ));
+            }
+        }
+    }
+    None
 }
 
 /// Whether `arg` may be the argument, or the default, of a parameter of `kind` constrained to

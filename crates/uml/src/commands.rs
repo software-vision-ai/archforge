@@ -773,6 +773,12 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
             return Err(refuse("ids", format!("its contents cannot move up: {why}")));
         }
     }
+    // A surviving template parameter's default, or a binding's argument, that would no longer
+    // specialize its constraint once what goes has gone is refused before anything goes (AR-130).
+    let (gone_classes, gone_generalizations) = going_for_constraints(store, objs);
+    if let Some(why) = crate::templates::constraint_problem(store, &gone_classes, &gone_generalizations, &params) {
+        return Err(refuse("ids", why));
+    }
     // A classifier's nested classifiers go with it (AR-132), named among what goes so their
     // relationships, constraints and sets are worked out as theirs.
     let mut objs: Vec<Obj> = objs.to_vec();
@@ -849,6 +855,31 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
             .map_err(fail)?;
     }
     Ok(gone)
+}
+
+/// What removing `objs` takes away that a specialization path may run through, worked out before
+/// anything changes (AR-130): the classifiers that go (those named, what they nest, and what a
+/// top-level package holds; a nested package hands its contents up, so they stay), and the
+/// generalizations that go (those named, and those that go with the classifiers).
+fn going_for_constraints(store: &Store, objs: &[Obj]) -> (std::collections::BTreeSet<Obj>, std::collections::BTreeSet<Obj>) {
+    let mut classes = std::collections::BTreeSet::new();
+    for o in objs.iter().copied().filter(|o| store.is_alive(*o)) {
+        match store.class_of(o).ok() {
+            Some(c) if crate::is_classifier(c) => {
+                classes.insert(o);
+                classes.extend(crate::nesting::nested_within(store, o));
+            }
+            Some(c) if c == PACKAGE && package_of(store, o).is_none() => classes.extend(classifiers_within(store, o)),
+            _ => {}
+        }
+    }
+    let list: Vec<Obj> = classes.iter().copied().collect();
+    let generalizations = going_with(store, &list)
+        .into_iter()
+        .chain(objs.iter().copied())
+        .filter(|g| store.is_alive(*g) && store.class_of(*g).ok() == Some(crate::GENERALIZATION))
+        .collect();
+    (classes, generalizations)
 }
 
 /// The template parameters among `objs` whose template does not go with them: a template that

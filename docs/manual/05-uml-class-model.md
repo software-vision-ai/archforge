@@ -888,7 +888,9 @@ template when it gets its first parameter and stops being one when its last goes
 - **What is refused.** A name another parameter of the template has, whatever the case: *Repository
   already has a template parameter named T. Pick another name.* A default that does not fit is
   refused under **Default**. The reason shows in the editor, the editor stays open, and nothing
-  reaches the model or the undo history.
+  reaches the model or the undo history. Deleting a generalization or a class so that a
+  parameter's default no longer specialises its constraint is refused too, naming the default;
+  where another path of generalizations keeps it fitting, the deletion goes ahead.
 - **Bindings.** A *binding* is another class that binds a template, giving each parameter an
   argument. Making a binding is not available in this version yet: there is no tool, menu or
   command for it, and drawing bindings comes in a later version. What follows holds for a model
