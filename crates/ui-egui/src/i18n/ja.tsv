@@ -738,11 +738,14 @@ str		enumeration	列挙
 str		data type	データ型
 str		primitive type	プリミティブ型
 str		association class	関連クラス
+str		attribute	属性
+str		operation	操作
+str		constraint	制約
+str		element	要素
 str		itself	自分自身
 str		inside it	その中
 str		owns none	所有しない
-str		owns a {name}	{name} を所有
-str		holds a {name}	{name} を含む
+str		{kind} {name} already holds that name	{kind} {name} がすでにその名前です
 str		kept for a built-in type	組み込み型用に予約
 str		built-in type	組み込み型
 str		{name} cannot own itself.	{name} は自分自身を所有できません。

@@ -821,8 +821,9 @@ rather than held by a package.
   package or a classifier to move it there, as one step you can undo. It keeps its identity, its
   members, its relationships and every type that uses it. The menu lists each package and
   classifier with its kind; those that cannot take it stay listed, disabled, with the reason at
-  the right: *itself*, *owns none* (an enumeration, a data type or a primitive type), or *owns a
-  Priority* where the owner already has a member of that name. A classifier inside it is never
+  the right: *itself*, *owns none* (an enumeration, a data type or a primitive type), or *class
+  Priority already holds that name* where the owner already has a member of that name, said by its
+  kind. A classifier inside it is never
   offered, since owning it would make a cycle. A primitive type and an association class stay in a
   package.
 - **Names.** A nested classifier's name differs, whatever the case, from everything its owner

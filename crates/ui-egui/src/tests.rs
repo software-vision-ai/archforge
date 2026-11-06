@@ -14225,9 +14225,14 @@ fn nested_classifiers_are_made_from_models_owned_in_properties_and_named_on_the_
         let row = rect_of(&h, &format!("workspace.explorer.row.{made}"));
         right_click(&mut h, row.center());
         assert!(painted(&h).iter().any(|t| t == "New inside Enumeration 1"));
+        let before = (h.state().session.as_ref().unwrap().revision(), h.state().session.as_ref().unwrap().doc().alive().count());
         let at = rect_of(&h, "workspace.explorer.contextMenu.newInside").center();
         click(&mut h, at);
-        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add nested classifier"), "nothing made");
+        // Disabled, it makes nothing and opens no name.
+        let st = h.state().session.as_ref().unwrap().doc();
+        assert_eq!((h.state().session.as_ref().unwrap().revision(), st.alive().count()), before, "{theme:?}: the model unchanged");
+        assert!(archforge_uml::nesting::nested(st, st.by_uuid(made).unwrap()).is_empty(), "nothing nested in the enumeration");
+        assert!(h.state().explorer.rename.is_none(), "no name opened for typing");
         h.state_mut().explorer.context = None;
         // D2: its Properties name its owner.
         h.state_mut().state.show_panel(crate::state::Panel::Properties);
@@ -14249,7 +14254,7 @@ fn nested_classifiers_are_made_from_models_owned_in_properties_and_named_on_the_
         assert_eq!(h.state().panels.menu, Some(crate::panels::Menu::ClassOwner));
         assert!(painted(&h).iter().any(|t| t == "OWNER"));
         assert!(painted(&h).iter().any(|t| t == "itself"), "{theme:?}: {:?}", painted(&h));
-        assert!(painted(&h).iter().any(|t| t == "owns a Enumeration 1"), "Customer owns one of its name");
+        assert!(painted(&h).iter().any(|t| t == "class Enumeration 1 already holds that name"), "Customer owns one of its name");
         let rows = {
             let st = h.state().session.as_ref().unwrap().doc();
             crate::uml_nesting::owner_rows(st, st.by_uuid(made).unwrap())

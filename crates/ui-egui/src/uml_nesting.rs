@@ -61,10 +61,17 @@ pub(crate) fn owner_parts(store: &Store, o: Obj) -> Vec<String> {
     parts
 }
 
-/// What an owner is, as the Owner menu says it at its row's right: package, class, interface.
+/// What an owner is, as the Owner menu says it at its row's right (package, class, interface),
+/// and what an element its name clashes with is (attribute, operation, constraint).
 fn kind_word(store: &Store, o: Obj) -> String {
-    if store.class_of(o).ok() == Some(archforge_uml::PACKAGE) {
-        return tr("package");
+    match store.class_of(o).ok() {
+        Some(c) if c == archforge_uml::PACKAGE => return tr("package"),
+        Some(c) if c == archforge_uml::PROPERTY => return tr("attribute"),
+        Some(c) if c == archforge_uml::OPERATION => return tr("operation"),
+        Some(c) if c == archforge_uml::CONSTRAINT => return tr("constraint"),
+        Some(c) if c == archforge_uml::GENERALIZATION_SET => return tr("generalization set"),
+        Some(c) if !archforge_uml::is_classifier(c) => return tr("element"),
+        _ => {}
     }
     match Classifier::of(store, o) {
         Some(Classifier::Interface) => tr("interface"),
@@ -95,8 +102,9 @@ pub(crate) fn reason(store: &Store, c: Obj, owner: Obj, problem: &OwnerProblem) 
         ),
         OwnerProblem::NameTaken(s) => {
             let taken = name(store, *s);
-            let short = if store.class_of(owner).ok() == Some(archforge_uml::PACKAGE) { tr("holds a {name}") } else { tr("owns a {name}") };
-            (fmt(&short, &[("name", &taken)]), fmt(&tr("{owner} already owns a member named {name}."), &[("owner", &to), ("name", &taken)]))
+            // The clashing element said by its kind, `class Priority`, for a package owner too.
+            let short = fmt(&tr("{kind} {name} already holds that name"), &[("kind", &kind_word(store, *s)), ("name", &taken)]);
+            (short, fmt(&tr("{owner} already owns a member named {name}."), &[("owner", &to), ("name", &taken)]))
         }
         OwnerProblem::Reserved => (
             tr("kept for a built-in type"),

@@ -120,7 +120,9 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   type inside a class, an interface or an association class; `uml_classifier_set_owner` moves any
   classifier under a package or a classifier, keeping its id, members, relationships and the types
   that use it, and refuses a cycle, an owner that owns no classifiers and a name the owner holds
-  already, with the reason; `uml_nested_list` lists what a classifier nests and
+  already, with the reason; only a class, an interface, an enumeration or a data type goes under a
+  classifier, so a primitive type and an association class stay in packages, and a built-in type
+  does not move at all; `uml_nested_list` lists what a classifier nests and
   `uml_classifier_owners` where a classifier may go, each owner allowed or with its reason.
   `uml_class_get` says a classifier's owner and what it nests. Removing an owner with
   `element_remove` removes what it nests.

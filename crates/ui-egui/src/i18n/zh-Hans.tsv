@@ -738,11 +738,14 @@ str		enumeration	枚举
 str		data type	数据类型
 str		primitive type	基本类型
 str		association class	关联类
+str		attribute	属性
+str		operation	操作
+str		constraint	约束
+str		element	元素
 str		itself	自身
 str		inside it	在其内部
 str		owns none	不拥有
-str		owns a {name}	拥有 {name}
-str		holds a {name}	包含 {name}
+str		{kind} {name} already holds that name	{kind} {name} 已使用该名称
 str		kept for a built-in type	保留给内置类型
 str		built-in type	内置类型
 str		{name} cannot own itself.	{name} 不能拥有自身。

@@ -738,11 +738,14 @@ str		enumeration	énumération
 str		data type	type de données
 str		primitive type	type primitif
 str		association class	classe d’association
+str		attribute	attribut
+str		operation	opération
+str		constraint	contrainte
+str		element	élément
 str		itself	lui-même
 str		inside it	à l’intérieur
 str		owns none	n’en possède aucun
-str		owns a {name}	possède un {name}
-str		holds a {name}	contient un {name}
+str		{kind} {name} already holds that name	{kind} {name} porte déjà ce nom
 str		kept for a built-in type	réservé à un type intégré
 str		built-in type	type intégré
 str		{name} cannot own itself.	{name} ne peut pas se posséder lui-même.

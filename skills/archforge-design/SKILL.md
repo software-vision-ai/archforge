@@ -791,8 +791,9 @@ What is UML's own, beside the shared rules above.
   members, a muted `nested` after its name. Properties: Package becomes Owner on every classifier
   (`workspace.properties.class.owner`), a package or a classifier; its menu (OWNER) lists the
   owners that may take it with their kind at the right and the current one ticked, then, after a
-  line, those that may not, muted with a short reason (itself, owns none, owns a {name}, not inside
-  a class) and the whole reason on hover and as their description; one nested in it is never
+  line, those that may not, muted with a short reason (itself, owns none, `{kind} {name} already
+  holds that name` naming the clashing element by its kind, for a package owner too, not inside a
+  class) and the whole reason on hover and as their description; one nested in it is never
   listed. A pick is `uml.classifier.set-owner`, one step, keeping identity, members, relationships
   and type references. A nested classifier's kind line reads `{kind} · nested in {owner} · model, in
   every diagram`, and an explanation sits under Owner. A class's or an interface's panel has
