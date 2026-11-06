@@ -36,9 +36,11 @@ What was observed is marked **observed**; what comes from the providers' documen
                 -> "2.1.317 (Claude Code)", exit 0        -> "codex-cli 0.166.0", exit 0
                 below the floor -> MissingRuntime         below the floor -> MissingRuntime
                      |                                         |
- spawn          env: PATH, HOME, ANTHROPIC_API_KEY,       env: PATH, HOME, CODEX_HOME=<private>
-                CLAUDE_CONFIG_DIR=<private>,              args: app-server --strict-config -c ...
-                CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC  cwd: private per-conversation folder
+ spawn          env (cleared first): PATH, locale,        env: PATH, HOME, CODEX_HOME=<private>
+                HOME=<private>, TMPDIR=<private>,         args: app-server --strict-config -c ...
+                CLAUDE_CONFIG_DIR=<private>,              cwd: private per-conversation folder
+                CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1,
+                ANTHROPIC_API_KEY
                 cwd: private per-conversation folder
                 args: see "Claude: the command line"
                      |                                         |
@@ -82,14 +84,39 @@ What was observed is marked **observed**; what comes from the providers' documen
 ### The command line
 
 ```sh
+# CONVERSATION: the conversation's private folder; MODEL: an alias or a full model name;
+# SESSION_ID: the conversation's UUID. For a stored conversation, --resume replaces --session-id.
 claude -p --bare \
   --input-format stream-json --output-format stream-json --verbose --include-partial-messages \
-  --mcp-config <private>/mcp.json --strict-mcp-config \
+  --mcp-config "$CONVERSATION/mcp.json" --strict-mcp-config \
   --tools "" --allowedTools "mcp__archforge__*" \
   --permission-mode dontAsk \
-  --model <alias or full name> \
-  --session-id <uuid>            # a new conversation; or --resume <uuid> for an existing one
+  --model "$MODEL" \
+  --session-id "$SESSION_ID"
 ```
+
+The tool server configuration in `$CONVERSATION/mcp.json`, as the Claude adapter writes it
+(`crates/agents/src/claude/mod.rs`; `HOME` and `XDG_CONFIG_HOME` are the person's own, the latter
+only where it is set, as on some Linux systems):
+
+```json
+{
+  "mcpServers": {
+    "archforge": {
+      "command": "/opt/archforge/bin/archforge-cli",
+      "args": ["mcp", "--bridge", "47000", "--read-only", "--origin", "Chat 1"],
+      "env": {
+        "ANTHROPIC_API_KEY": "",
+        "HOME": "/home/person",
+        "XDG_CONFIG_HOME": "/home/person/.config"
+      }
+    }
+  }
+}
+```
+
+`--read-only` is left out only once "Allow changes to the model" is on; `--origin` labels the
+conversation's changes in the history.
 
 | Flag | What it does (observed unless marked) |
 |---|---|
@@ -98,7 +125,7 @@ claude -p --bare \
 | `--input-format stream-json` | One JSON user message per stdin line. Refused without `--output-format stream-json`: `Error: --input-format=stream-json requires output-format=stream-json.`, exit 1. |
 | `--output-format stream-json --verbose` | One JSON event per stdout line. Without `--verbose`: `Error: When using --print, --output-format=stream-json requires --verbose`, exit 1. |
 | `--include-partial-messages` | Adds `stream_event` lines (raw model stream events) for live text. |
-| `--mcp-config <file or JSON>` | `{"mcpServers":{"archforge":{"command":"<abs path>/archforge-cli","args":["mcp","--bridge","<port>","--read-only"],"env":{}}}}`, without `--read-only` only once "Allow changes" is on. Observed (the spike ran before `--read-only` existed, so without it): the server connected (`mcp_servers:[{"name":"archforge","status":"connected","source":"dynamic"}]`) and its 151 tools were listed. |
+| `--mcp-config <file or JSON>` | The configuration above. Observed (the spike ran before `--read-only` and the `env` block were used, so without them): the server connected (`mcp_servers:[{"name":"archforge","status":"connected","source":"dynamic"}]`) and its 151 tools were listed. |
 | `--strict-mcp-config` | Only the servers from `--mcp-config` (no project `.mcp.json`, no user servers). Use it: a stray project file is otherwise a second source. |
 | `--tools ""` | Removes every built-in tool (Bash, Edit, Read, WebFetch, Task, …). Observed: with it the init `tools` list held only `mcp__archforge__*`; without it, bare mode listed `Bash`, `Edit`, `Read`. MCP tools are not affected (doc). |
 | `--allowedTools "mcp__archforge__*"` | Pre-approves the server's tools so `dontAsk` does not deny them. The wildcard is safe because read-only is enforced by the bridge, not by this list: a conversation's server runs `archforge-cli mcp --bridge <port> --read-only` (AR-198, [Working with an agent](../manual/07-agents.md#read-only-sessions-and-labelled-changes)), which lists and allows only the reads and refuses every other tool with JSON-RPC error -32004 before the call reaches Archforge. Only "Allow changes to the model" drops `--read-only`, which means restarting the session with a new `--mcp-config` and `--resume`. |
@@ -127,16 +154,21 @@ not needed with `--bare`.
   stdio MCP server it starts, plus the server's `env` block. With the canary key set, the
   `archforge-cli` child saw `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`, `CLAUDE_CONFIG_DIR`,
   `CLAUDE_CODE_SESSION_ID`, `CLAUDE_PROJECT_DIR`, `CLAUDECODE`, `HOME`, `PATH`, `PWD`. The bridge
-  does not log its environment, but AR-201's leak test should cover it, and the adapter can blank
-  the key in the server's `env` block (`"ANTHROPIC_API_KEY": ""`, to verify).
+  does not log its environment; the Claude adapter blanks the key in the server's `env` block
+  (`"ANTHROPIC_API_KEY": ""`), and whether that keeps it out entirely is still to verify with a
+  real round trip.
 - **`CLAUDE_CONFIG_DIR`** moves the whole settings tree. After the runs the private folder held
   `.claude.json`, `backups/`, `plugins/store/…` and `projects/<cwd with / as ->/<session-id>.jsonl`,
   the transcripts `--resume` reads. The person's own folder is never touched.
-- **`HOME`** must stay the person's real home for the MCP server: `archforge-cli` finds the control
-  token in the platform settings folder derived from `HOME` (or `XDG_CONFIG_HOME`), and Claude
-  passes its `HOME` on. With a private `HOME`, the bridge connects and lists tools but every call
-  fails to find the token. Better still, AR-198 or AR-203 lets `archforge-cli` take the token file
-  or settings folder explicitly, so the child's `HOME` does not matter.
+- **`HOME`**: `claude` itself runs with a private `HOME` (the adapter gives each conversation its
+  own home, temporary and config folders), but the bridge must see the person's real one:
+  `archforge-cli` finds the control token in the platform settings folder it derives from `HOME`
+  (or `XDG_CONFIG_HOME` on Linux), and Claude passes its own environment on to the server. So the
+  server's `env` block sets `HOME` to the person's home folder, and `XDG_CONFIG_HOME` to theirs
+  where it is set (the example above). Without that override the bridge connects and lists its
+  tools, but every call fails to find the token. The adapter refuses to start a session when the
+  person's home folder is unknown. Once the bridge takes the token file or settings folder as an
+  argument (AR-203), the override goes.
 - **Working directory**: give each conversation a private empty folder. One of the startup probes
   run inside the repository checkout began connecting the repository's `.mcp.json` server before it
   shut down (an `mcp-logs-archforge` log appeared: "Skipping connection (Claude Code is shutting
@@ -219,9 +251,12 @@ The categories in `assistant.error` and `api_retry.error` (doc,
 
 ### Starting it
 
+`cli_auth_credentials_store` is `"keyring"` for a ChatGPT sign-in and `"ephemeral"` for an API key
+(see [Accounts and sign-in](#accounts-and-sign-in)); `CODEX_HOME_DIR` is the private folder.
+
 ```sh
-CODEX_HOME=<private> codex app-server --strict-config \
-  -c cli_auth_credentials_store='"keyring"'      # or "ephemeral" for an API key; see Credentials
+CODEX_HOME="$CODEX_HOME_DIR" codex app-server --strict-config \
+  -c cli_auth_credentials_store='"keyring"' \
   -c history.persistence='"none"' -c analytics.enabled=false \
   -c web_search='"disabled"' \
   --disable shell_tool --disable unified_exec --disable apps --disable plugins \
@@ -230,15 +265,22 @@ CODEX_HOME=<private> codex app-server --strict-config \
   --disable skill_search --disable tool_suggest --disable sleep_tool
 ```
 
-The Archforge server goes in `<CODEX_HOME>/config.toml` (observed working):
+The Archforge server goes in `$CODEX_HOME_DIR/config.toml` (observed working without `--read-only`,
+`--origin` and `env`, which came later):
 
 ```toml
 [mcp_servers.archforge]
-command = "/abs/path/archforge-cli"
-args = ["mcp", "--bridge", "47000", "--read-only"]   # without --read-only only after "Allow changes"
+command = "/opt/archforge/bin/archforge-cli"
+# --read-only is left out only after "Allow changes to the model".
+args = ["mcp", "--bridge", "47000", "--read-only", "--origin", "Chat 1"]
+# The person's own folders, so the bridge finds the control token (XDG_CONFIG_HOME only where set).
+env = { HOME = "/home/person", XDG_CONFIG_HOME = "/home/person/.config" }
 startup_timeout_sec = 10
 tool_timeout_sec = 60
 ```
+
+Which environment Codex passes to a stdio server by default is not documented, so the `env` table
+names the folders explicitly, as the Claude configuration does.
 
 Further keys (doc, [config reference](https://learn.chatgpt.com/docs/config-file/config-reference)):
 `env`, `env_vars`, `cwd`, `enabled`, `enabled_tools`, `disabled_tools`, `required`, and
@@ -277,7 +319,7 @@ Observed in 0.166.0:
 
 ### Handshake (observed)
 
-```json
+```jsonl
 {"id":1,"method":"initialize","params":{"clientInfo":{"name":"archforge","title":"Archforge","version":"0.13.0"},"capabilities":{"experimentalApi":false,"requestAttestation":false}}}
 {"id":1,"result":{"userAgent":"archforge/0.166.0 (Mac OS 27.2.0; arm64) unknown (archforge; 0.13.0)","codexHome":"/tmp/archforge-agent/codex-home","platformFamily":"unix","platformOs":"macos"}}
 {"method":"initialized"}
@@ -329,6 +371,13 @@ names the computer's host name and an installation id (sanitised in the fixtures
   arguments, status, result, error, readOnlyHint}` and `agentMessage`, `item/agentMessage/delta
   {itemId, delta}`, and `turn/completed {turn{status: completed | interrupted | failed, error}}`
   (doc and schema; see the doc-derived fixtures).
+- Turn snapshots, per the public source (`codex-rs/app-server`, `turn_processor.rs` and
+  `bespoke_event_handling.rs`): the `turn/start` response has `startedAt`, `completedAt` and
+  `durationMs` null, no items and `itemsView:"notLoaded"`; `turn/started` carries `startedAt`
+  (seconds); `turn/completed` carries the times and, when the turn produced a final agent message,
+  that one item with `itemsView:"summary"`, otherwise no items and `"notLoaded"`. Item times are on
+  the notifications, not the items: `item/started` has `startedAtMs`, `item/completed` has
+  `completedAtMs` (milliseconds); a `ThreadItem` has neither.
 - `turn/interrupt {threadId, turnId}` → `{}` and `turn/completed` with `status:"interrupted"` (doc).
 - `error {error{message, codexErrorInfo}, willRetry, threadId, turnId}`: with `willRetry:true` the
   turn goes on (show "retrying"); otherwise a failed `turn/completed` follows (doc).
