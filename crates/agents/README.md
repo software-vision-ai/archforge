@@ -382,8 +382,10 @@ failure is logged and leaves the folder, and a crash of Archforge leaves it too,
 `account-codex/tmp/codex-<pid>-<n>`, until the account folder is cleared; nothing sweeps such
 folders, as nothing tells them apart from one in use. The request timeout
 applies to each request, not to a call: `open` makes one or two requests (the handshake, and the
-key's login), `check` up to two, `models` up to ten (one a page), every other call one, so a call
-may take up to that many timeouts. Call them on a worker. `open` with `SignIn::ChatGpt` uses the keyring
+key's login), `check` up to two, `models` up to ten (one a page), `login_chatgpt` and
+`login_device_code` one or two (`account/login/start`, and `account/login/cancel` when Archforge
+refuses the address or code Codex offered and Codex's own sign-in id is valid), every other call
+one, so a call may take up to that many timeouts. Call them on a worker. `open` with `SignIn::ChatGpt` uses the keyring
 store; with `SignIn::ApiKey` the in-memory one and gives the key at once. Codex keeps the key
 without asking OpenAI whether it is valid (codex-cli 0.166.0's `account/login/start` only stores
 it), so a wrong or revoked key is accepted by `open` and shows only on the first real request, a

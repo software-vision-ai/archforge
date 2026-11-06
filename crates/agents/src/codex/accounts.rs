@@ -3,8 +3,10 @@
 //! the models. Each [`CodexAccounts`] runs one `codex app-server` in the account folder; no thread
 //! is ever started, so none of these reaches a model or costs anything.
 //!
-//! Every call waits for its own answer at most the request timeout and belongs on a worker thread,
-//! never the interface thread. What Codex says on its own (a sign-in that finished, the account
+//! Every request a call makes waits for its answer at most the request timeout; a call makes one
+//! request, or a few where its documentation says so (`open`, `check`, `models`, and a sign-in
+//! that is refused and then cancelled), so it may take that many timeouts. Calls belong on a worker
+//! thread, never the interface thread. What Codex says on its own (a sign-in that finished, the account
 //! changing, new rate limits) comes from [`CodexAccounts::next_event`].
 
 use std::collections::VecDeque;
@@ -351,7 +353,9 @@ impl CodexAccounts {
 
     /// Begins a ChatGPT sign-in in the browser: the address to open (on a host of
     /// [`SIGN_IN_HOSTS`], else refused). Also queued as [`AccountEvent::LoginStarted`]. Keep this
-    /// process running until [`AccountEvent::LoginCompleted`]: Codex receives the answer.
+    /// process running until [`AccountEvent::LoginCompleted`]: Codex receives the answer. A refused
+    /// address also cancels the sign-in Codex began, a second request, so the call may take up to
+    /// two request timeouts.
     pub fn login_chatgpt(&mut self) -> Result<LoginStarted, AgentError> {
         self.chatgpt_only("a ChatGPT sign-in")?;
         let value = self.call("account/login/start", Some(json!({ "type": "chatgpt" })))?;
@@ -364,7 +368,8 @@ impl CodexAccounts {
 
     /// Begins a ChatGPT sign-in with a device code, for when the browser cannot reach this
     /// computer: the code to show and the address where the person enters it. Also queued as
-    /// [`AccountEvent::LoginStarted`].
+    /// [`AccountEvent::LoginStarted`]. A refused address or code also cancels the sign-in Codex
+    /// began, a second request, so the call may take up to two request timeouts.
     pub fn login_device_code(&mut self) -> Result<LoginStarted, AgentError> {
         self.chatgpt_only("a ChatGPT sign-in")?;
         let value = self.call("account/login/start", Some(json!({ "type": "chatgptDeviceCode" })))?;
