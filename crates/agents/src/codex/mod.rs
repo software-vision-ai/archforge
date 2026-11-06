@@ -1008,6 +1008,9 @@ impl CodexSession {
                     self.thread = Thread::None;
                     self.abandon_turn(error);
                 }
+                // Codex may have taken the message and started the turn, so the message stays in
+                // the copy (only a message that never reached Codex, or that it refused, leaves it);
+                // the turn fails, and its late answer is interrupted and shows nothing.
                 Purpose::TurnStart => {
                     if let Thread::Ready(thread) = std::mem::replace(&mut self.thread, Thread::None) {
                         if self.late_starts.len() >= MAX_LATE_STARTS {
@@ -1214,19 +1217,22 @@ impl CodexSession {
 
     /// The runtime's exit, waiting a little for it once its output closed.
     fn exit_status(&mut self) -> Option<Exit> {
-        wait_for_exit(&mut self.process)
+        wait_for_exit(&mut self.process, EXIT_WAIT)
     }
 }
 
-/// The exit of a runtime whose output closed, waiting at most [`EXIT_WAIT`] for it: the output can
-/// close a moment before the process is seen to end. `None` when it was not seen in that time, or
-/// could not be checked (logged).
-fn wait_for_exit(process: &mut RuntimeProcess) -> Option<Exit> {
+/// The exit of a runtime whose output closed, waiting at most `wait` for it (at most
+/// [`EXIT_WAIT`] is ever asked): the output can close a moment before the process is seen to end.
+/// A zero `wait` checks once without waiting. `None` when it was not seen in that time, or could
+/// not be checked (logged).
+fn wait_for_exit(process: &mut RuntimeProcess, wait: Duration) -> Option<Exit> {
     let started = Instant::now();
     loop {
         match process.status() {
             Ok(Some(exit)) => return Some(exit),
-            Ok(None) if started.elapsed() < EXIT_WAIT => std::thread::sleep(Duration::from_millis(10)),
+            Ok(None) if started.elapsed() < wait => {
+                std::thread::sleep(wait.saturating_sub(started.elapsed()).min(Duration::from_millis(10)));
+            }
             Ok(None) => return None,
             Err(e) => {
                 log::warn!("codex's exit could not be checked: {e}");

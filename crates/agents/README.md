@@ -248,7 +248,9 @@ at most 4096 messages whose text, with 64 bytes counted for each message, takes 
 message cut at 1 MiB; the oldest are dropped first and logged, never the newest. JSON escaping can
 make the file up to six times its text (a control character becomes `\u00XX`), so the file itself
 is at most 25,164,437 bytes (just under 24 MiB: four messages of control characters at the cut);
-the reader accepts up to 25,428,032 (24.25 MiB), so every copy it wrote reads back. A copy that cannot be read is
+the reader accepts up to 25,428,032 (24.25 MiB), so every copy it wrote reads back. A copy of one
+message past the cap is trimmed as it is read; one with more is taken as damaged, so none of its
+newest messages is left out. A copy that cannot be read is
 renamed to `codex-history.json.damaged-<n>`, logged, and refused as a typed error that says where
 it went; the name is claimed before the move, so a damaged copy set aside earlier, even by another
 process at the same moment, is never replaced. When the rename fails, 64 damaged copies are
@@ -308,7 +310,9 @@ turn it names. When Codex answers `turn/start` without naming the turn, a held `
 that names one names it, else the first held notification that does, else the first later one; with none within one request timeout the turn fails as
 `Other` (stopped when a stop was asked for) and its thread is left. A `turn/start` past its deadline fails the turn (as stopped when a stop was asked
 for), and its thread is left: the next message starts a fresh thread with the copy, so it can never
-join a turn Codex started after all; a late answer names that turn, which is interrupted while the
+join a turn Codex started after all. Its message stays in the copy, as Codex may have taken it and
+started the turn (only a message that never reached Codex, or that Codex refused, leaves it), so
+the next thread may be given that question without its answer; a late answer names that turn, which is interrupted while the
 current turn goes on. A `thread/inject_items` past its deadline leaves its thread too, so the
 earlier messages are never given twice.
 There is no signal fallback: SIGINT ends `codex app-server`. Shutdown closes the input (Codex exits
@@ -341,9 +345,12 @@ past its timeout or the next request deadline.
 *The account operations* (`CodexAccounts`, for AR-204's `AgentAccounts`). Each opens its own
 `codex app-server` in the account folder (its home, work and temporary folders), without a tool
 server and never starting a thread, so nothing reaches a model; its state and log databases go to a
-folder of its own under the account's temporary folder, removed when it drops. That removal is
-best effort: a failure is logged and leaves the folder, and a crash of Archforge leaves it too,
-under `account-codex/tmp/codex-<pid>-<n>`, until the account folder is cleared. The request timeout
+folder of its own under the account's temporary folder, made by that process's `open` (a name
+already taken, as by an earlier Archforge with the same process id, is skipped and left alone) and
+removed when it drops, or when `open` fails after making it. That removal is best effort: a
+failure is logged and leaves the folder, and a crash of Archforge leaves it too, under
+`account-codex/tmp/codex-<pid>-<n>`, until the account folder is cleared; nothing sweeps such
+folders, as nothing tells them apart from one in use. The request timeout
 applies to each request, not to a call: `open` makes one or two requests (the handshake, and the
 key's login), `check` up to two, `models` up to ten (one a page), every other call one, so a call
 may take up to that many timeouts. Call them on a worker. `open` with `SignIn::ChatGpt` uses the keyring
@@ -366,8 +373,9 @@ only when Codex's own id is a valid one), so it does not wait for an answer that
 the process running until `LoginCompleted`: Codex receives the browser's answer on its own local
 callback. `next_event` with a zero timeout polls once without waiting, still reading what Codex has
 already written. When the account process ends without being shut down, its exit is waited for
-at most 500 ms, as a conversation's is, so `Ended` carries a crash's exit status and the end of
-its error stream. At most 256 events wait to be read; past that the oldest is dropped and logged.
+at most 500 ms, as a conversation's is, and never past the timeout of the call that read the end
+(so a zero-timeout poll checks once without waiting), so `Ended` carries a crash's exit status and
+the end of its error stream; an exit not seen by then ends with the general reason. At most 256 events wait to be read; past that the oldest is dropped and logged.
 `cancel_login`, `logout`, `rate_limits` and `models` (every page, hidden models
 left out, at most 10 pages and 1000 models) complete the set. ChatGPT calls on an API-key process
 are refused (`InvalidSetting`), so a key never meets the keyring.

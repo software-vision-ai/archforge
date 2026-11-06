@@ -954,9 +954,10 @@ on_turn() {
     std::fs::remove_dir_all(&base).unwrap();
 }
 
-/// A `turn/start` that passed its deadline fails its turn, and the next message starts a fresh
-/// thread (with the copy) so it cannot join a turn that runs after all; when the late answer comes,
-/// that turn is interrupted by name while the current turn goes on, and nothing of it is shown.
+/// A `turn/start` that passed its deadline fails its turn but keeps its message in the copy, as
+/// Codex may have taken it; the next message starts a fresh thread (with the copy) so it cannot
+/// join a turn that runs after all; when the late answer comes, that turn is interrupted by name
+/// while the current turn goes on, and nothing of it is shown.
 #[test]
 fn a_late_turn_start_answer_is_interrupted() {
     let base = scratch("late-start");
@@ -983,6 +984,10 @@ on_turn() {
         matches!(first.last(), Some(SessionEvent::TurnFinished { outcome: TurnOutcome::Failed(e), .. }) if e.to_string().contains("did not answer turn/start")),
         "{first:?}"
     );
+    // Codex may have taken the message, so it stays in the copy, in memory and on disk.
+    let kept = |h: &History| h.entries().last().map(|e| (e.role, e.text.clone()));
+    assert_eq!(kept(session.history()), Some((history::Role::User, "one".to_owned())));
+    assert_eq!(kept(&History::read(&folder).unwrap()), Some((history::Role::User, "one".to_owned())));
     session.send("two").unwrap();
     let second = events_until(&mut session, turn_end);
     let shown: Vec<&SessionEvent> = second.iter().filter(|e| !matches!(e, SessionEvent::Started { .. })).collect();
@@ -1873,6 +1878,47 @@ fn a_crashed_account_process_reports_why() {
     let Some(AccountEvent::Ended { exit, error }) = events.last() else { panic!("{events:?}") };
     assert_eq!(exit.map(|e| e.code), Some(Some(3)), "{events:?}");
     assert!(matches!(error, Some(AgentError::Exited { code: Some(3), stderr_tail, .. }) if stderr_tail.contains("codex broke here")), "{error:?}");
+    std::fs::remove_dir_all(&base).unwrap();
+}
+
+/// The wait for Codex's exit once its output closed stays within the caller's time: a zero-timeout
+/// poll that reads the end checks once without waiting, and a call keeps its request timeout. An
+/// exit not seen by then ends with the general reason.
+#[test]
+fn the_exit_wait_keeps_the_callers_timeout() {
+    // The output closes after the answer; Codex is seen to end only two seconds later.
+    let base = scratch("exit-poll");
+    let body = format!(
+        "{ACCOUNT_BODY}\non_account() {{ send '{{\"id\":@ID@,\"result\":{{\"account\":null,\"requiresOpenaiAuth\":true}}}}'; exec 1>&-; sleep 2; exit 3; }}"
+    );
+    let (runtime, account, _) = fake_codex(&base, &body);
+    let mut accounts = CodexAccounts::open(&runtime, &account, SignIn::ChatGpt(KeyringAccess::default()), Default::default()).unwrap();
+    assert_eq!(accounts.read(false).unwrap().status, AccountStatus::SignedOut);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let ended = loop {
+        let started = Instant::now();
+        let event = accounts.next_event(Duration::ZERO);
+        assert!(started.elapsed() < Duration::from_millis(100), "a zero-timeout poll waited {:?}", started.elapsed());
+        if let Some(event @ AccountEvent::Ended { .. }) = event {
+            break event;
+        }
+        assert!(Instant::now() < deadline, "the end never came");
+        std::thread::sleep(Duration::from_millis(10));
+    };
+    assert!(matches!(&ended, AccountEvent::Ended { exit: None, error: Some(e) } if e.to_string().contains("its exit was not seen")), "{ended:?}");
+    accounts.shutdown(Duration::from_secs(2)).unwrap();
+    std::fs::remove_dir_all(&base).unwrap();
+
+    // The output closes before the answer: the call ends within its request timeout.
+    let base = scratch("exit-call");
+    let (runtime, account, _) = fake_codex(&base, &format!("{ACCOUNT_BODY}\non_account() {{ exec 1>&-; sleep 2; exit 3; }}"));
+    let options = archforge_agents::codex::AccountOptions { request_timeout: Duration::from_millis(200), ..Default::default() };
+    let mut accounts = CodexAccounts::open(&runtime, &account, SignIn::ChatGpt(KeyringAccess::default()), options).unwrap();
+    let started = Instant::now();
+    let error = accounts.read(false).unwrap_err();
+    assert!(started.elapsed() < Duration::from_millis(400), "the call took {:?}", started.elapsed());
+    assert!(error.to_string().contains("ended before it answered account/read"), "{error}");
+    accounts.shutdown(Duration::from_secs(2)).unwrap();
     std::fs::remove_dir_all(&base).unwrap();
 }
 

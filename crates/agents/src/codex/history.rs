@@ -219,8 +219,13 @@ fn read_file(path: &std::path::Path) -> Result<History, Unreadable> {
         return Err(damaged());
     }
     let list = value.get("entries").and_then(Value::as_array).ok_or_else(damaged)?;
+    // One message past the cap is what a copy holds while its newest is added, and it is trimmed
+    // as before; more would have its newest messages left out, so it is set aside whole instead.
+    if list.len() > MAX_HISTORY_ENTRIES.saturating_add(1) {
+        return Err(Unreadable::Damaged(format!("holds {} messages, more than the {MAX_HISTORY_ENTRIES} a conversation copy keeps", list.len())));
+    }
     let mut history = History::default();
-    for item in list.iter().take(MAX_HISTORY_ENTRIES.saturating_add(1)) {
+    for item in list {
         let role = match item.get("role").and_then(Value::as_str) {
             Some("user") => Role::User,
             Some("assistant") => Role::Assistant,
@@ -295,6 +300,33 @@ pub fn path(folder: &ConversationFolder) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A copy one message past the cap is trimmed as it is read, as while its newest message is
+    /// added; one with more is set aside whole, so none of its newest messages is left out.
+    #[test]
+    fn an_oversized_copy_is_set_aside_whole() {
+        let base = std::env::temp_dir().join(format!("archforge-codex-oversized-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        let ws = crate::Workspace::open(&base.join("ws")).unwrap();
+        let folder = ws.conversation(&crate::ConversationId::new("long").unwrap()).unwrap();
+        let file = |count: usize| {
+            let entries: Vec<Value> = (0..count).map(|n| json!({ "role": "user", "text": format!("m{n}") })).collect();
+            json!({ "version": VERSION, "entries": entries }).to_string()
+        };
+        std::fs::write(path(&folder), file(MAX_HISTORY_ENTRIES + 1)).unwrap();
+        let history = History::read(&folder).unwrap();
+        assert_eq!(history.entries().len(), MAX_HISTORY_ENTRIES);
+        assert_eq!(history.entries()[0].text, "m1", "the oldest is trimmed");
+        let oversized = file(4100);
+        std::fs::write(path(&folder), &oversized).unwrap();
+        let error = History::read(&folder).unwrap_err();
+        assert!(matches!(&error, AgentError::Folder { problem, .. } if problem.contains("holds 4100 messages")), "{error:?}");
+        assert!(!path(&folder).exists(), "set aside");
+        let aside = folder.path().join(format!("{HISTORY_FILE}.damaged-1"));
+        assert_eq!(std::fs::read_to_string(aside).unwrap(), oversized, "whole");
+        std::fs::remove_dir_all(&base).unwrap();
+    }
 
     /// A damaged copy is never moved over a name that is taken, even one taken after it was found
     /// free: the move claims the name first and refuses a taken one, and setting aside skips to the

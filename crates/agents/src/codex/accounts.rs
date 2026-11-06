@@ -417,7 +417,8 @@ impl CodexAccounts {
 
     /// The next thing Codex said on its own, waiting at most `timeout`; `None` when nothing came,
     /// and for every call after [`AccountEvent::Ended`]. A zero timeout polls once without waiting:
-    /// it still reads what Codex has already written.
+    /// it still reads what Codex has already written. When the output closes, Codex's exit is
+    /// waited for only within the same `timeout`; one not seen by then ends without its reason.
     pub fn next_event(&mut self, timeout: Duration) -> Option<AccountEvent> {
         let deadline = Instant::now().checked_add(timeout);
         let mut budget = LINES_PER_CALL;
@@ -434,7 +435,7 @@ impl CodexAccounts {
             budget -= 1;
             let wait = deadline.map_or(timeout, |d| d.saturating_duration_since(now));
             let event = self.process.next_event(wait)?;
-            let _ = self.take(event, None);
+            let _ = self.take(event, None, deadline);
         }
     }
 
@@ -518,7 +519,7 @@ impl CodexAccounts {
                 return Err(Call::Failed(AgentError::reported(ErrorKind::Other, &detail)));
             }
             let Some(event) = self.process.next_event(deadline.saturating_duration_since(now)) else { continue };
-            if let Some(answer) = self.take(event, Some(id)) {
+            if let Some(answer) = self.take(event, Some(id), Some(deadline)) {
                 return answer.map_err(Call::Refused);
             }
             if self.ended {
@@ -527,8 +528,9 @@ impl CodexAccounts {
         }
     }
 
-    /// Reads one output event; answers the answer to `waiting` when this is it.
-    fn take(&mut self, event: OutputEvent, waiting: Option<u64>) -> Option<Result<Value, rpc::RpcError>> {
+    /// Reads one output event; answers the answer to `waiting` when this is it. The caller's
+    /// `deadline` bounds the wait for Codex's exit when the output closed.
+    fn take(&mut self, event: OutputEvent, waiting: Option<u64>, deadline: Option<Instant>) -> Option<Result<Value, rpc::RpcError>> {
         match event {
             OutputEvent::Line(line) => {
                 let line = self.process.redact(line);
@@ -550,7 +552,7 @@ impl CodexAccounts {
             }
             OutputEvent::Dropped(_) => self.skipped = self.skipped.saturating_add(1),
             OutputEvent::ReadFailed(detail) => log::warn!("codex's output could not be read: {detail}"),
-            OutputEvent::End => self.finish(),
+            OutputEvent::End => self.finish(deadline),
         }
         None
     }
@@ -581,14 +583,21 @@ impl CodexAccounts {
     }
 
     /// The process's output closed.
-    fn finish(&mut self) {
+    fn finish(&mut self, deadline: Option<Instant>) {
         if self.ended {
             return;
         }
         self.ended = true;
         // The output can close a moment before Codex is seen to end: unless it is being shut down,
-        // its exit is waited for briefly, so a crash keeps its reason and its error stream.
-        let exit = if self.shutting_down { self.process.status().ok().flatten() } else { super::wait_for_exit(&mut self.process) };
+        // its exit is waited for briefly, so a crash keeps its reason and its error stream; never
+        // past the caller's deadline, so a call keeps its timeout and a zero-timeout poll checks
+        // once without waiting.
+        let exit = if self.shutting_down {
+            self.process.status().ok().flatten()
+        } else {
+            let wait = deadline.map_or(super::EXIT_WAIT, |d| d.saturating_duration_since(Instant::now()).min(super::EXIT_WAIT));
+            super::wait_for_exit(&mut self.process, wait)
+        };
         let error = if self.shutting_down {
             None
         } else {
@@ -602,23 +611,49 @@ impl CodexAccounts {
 }
 
 /// The state and log folders of one account process, in the account folder's temporary folder and
-/// removed with everything in them when it drops: nothing an account process logs outlives it.
+/// removed with everything in them when it drops: nothing an account process logs outlives it,
+/// unless Archforge itself ends abruptly ([`Scratch::new`]).
 struct Scratch {
     path: std::path::PathBuf,
     state: super::StateFolders,
 }
 
+/// The number of the next account process's folder in this process.
+static NEXT_SCRATCH: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+/// The most names [`Scratch::new`] tries before it gives up.
+const SCRATCH_TRIES: usize = 64;
+
 impl Scratch {
-    /// A new private folder `codex-<pid>-<n>` with its state and log folders.
+    /// A new private folder `codex-<pid>-<n>` with its state and log folders. The folder is made
+    /// here and must not exist yet: a name already taken (left by an earlier process that had the
+    /// same id, say) is skipped, never used or removed. From the moment it is made the folder is
+    /// this value's, so a later step that fails removes it again, as a drop does. Only a drop
+    /// removes it: the folder of a process that ended abruptly stays in the account folder's
+    /// temporary folder, as nothing can tell it apart from one still in use.
     fn new(account: &ConversationFolder) -> Result<Scratch, AgentError> {
-        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let path = account.tmp().join(format!("codex-{}-{n}", std::process::id()));
         let uid = crate::sys::current_uid();
-        crate::folder::ensure_private(&path, uid)?;
-        let state = super::StateFolders { sqlite_home: path.join(super::STATE_FOLDER), log_dir: path.join(super::LOG_FOLDER) };
-        super::ensure_state(&state)?;
-        Ok(Scratch { path, state })
+        for _ in 0..SCRATCH_TRIES {
+            let n = NEXT_SCRATCH.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let path = account.tmp().join(format!("codex-{}-{n}", std::process::id()));
+            match crate::sys::make_private_folder(&path, false) {
+                Ok(()) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                    log::warn!("the account process's folder {} is taken; the next name is tried", path.display());
+                    continue;
+                }
+                Err(e) => return Err(AgentError::Folder { path, problem: format!("cannot be made: {e}") }),
+            }
+            let state = super::StateFolders { sqlite_home: path.join(super::STATE_FOLDER), log_dir: path.join(super::LOG_FOLDER) };
+            // Made by this call: a failure from here drops `scratch`, which removes it.
+            let scratch = Scratch { path, state };
+            crate::folder::ensure_private(&scratch.path, uid)?;
+            super::ensure_state(&scratch.state)?;
+            return Ok(scratch);
+        }
+        Err(AgentError::Folder {
+            path: account.tmp().to_path_buf(),
+            problem: format!("holds no free name for an account process's folder after {SCRATCH_TRIES} tries"),
+        })
     }
 }
 
@@ -801,6 +836,30 @@ fn checked_id(id: &str) -> Result<String, AgentError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The account process's folder is made by the call that uses it: a folder already at the next
+    /// name is skipped and left as it was, while the folder this call made goes with its value.
+    #[test]
+    fn the_scratch_folder_is_its_own() {
+        let base = std::env::temp_dir().join(format!("archforge-codex-scratch-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        let ws = crate::Workspace::open(&base.join("ws")).unwrap();
+        let account = ws.account(RuntimeKind::Codex).unwrap();
+        // The next name is taken, as by an earlier process with this id, with something in it.
+        let n = NEXT_SCRATCH.load(std::sync::atomic::Ordering::Relaxed);
+        let taken = account.tmp().join(format!("codex-{}-{n}", std::process::id()));
+        std::fs::create_dir_all(&taken).unwrap();
+        std::fs::write(taken.join("left"), "kept").unwrap();
+        let scratch = Scratch::new(&account).unwrap();
+        assert_ne!(scratch.path, taken, "the taken name is skipped");
+        assert!(scratch.state.sqlite_home.is_dir() && scratch.state.log_dir.is_dir());
+        let made = scratch.path.clone();
+        drop(scratch);
+        assert!(!made.exists(), "the folder this call made goes with it");
+        assert_eq!(std::fs::read_to_string(taken.join("left")).unwrap(), "kept", "the folder that was there stays");
+        std::fs::remove_dir_all(&base).unwrap();
+    }
 
     /// Only https addresses on the sign-in hosts pass.
     #[test]
