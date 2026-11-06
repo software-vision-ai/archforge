@@ -235,3 +235,37 @@ fn the_system_store_round_trips_a_secret() {
     assert_eq!(store.delete(&name).unwrap(), Deleted::WasAbsent);
     assert!(matches!(store.get(&name), Err(SecretError::NotFound { .. })));
 }
+
+/// A store whose every read is refused, as a locked keychain refuses.
+struct LockedStore;
+
+impl SecretStore for LockedStore {
+    fn get(&self, name: &SecretName) -> Result<Secret, SecretError> {
+        Err(SecretError::Denied { name: name.as_str().to_owned(), detail: "locked".to_owned() })
+    }
+    fn set(&self, _: &SecretName, _: &Secret) -> Result<(), SecretError> {
+        Ok(())
+    }
+    fn delete(&self, _: &SecretName) -> Result<Deleted, SecretError> {
+        Ok(Deleted::WasAbsent)
+    }
+}
+
+/// A text holding a kept key is found out and the key named, never shown; a text without one, a key
+/// not kept or a system without a store find nothing; a store that cannot be read is an error.
+#[test]
+fn a_kept_key_in_a_text_is_found_and_named_never_shown() {
+    let store = MemoryStore::new();
+    store.set(&SecretName::OPENAI_API_KEY, &canary()).unwrap();
+    let pasted = format!("Why does this fail? export OPENAI_API_KEY={CANARY}");
+    let found = held_key_in(&store, &pasted).unwrap();
+    assert_eq!(found, Some(SecretName::OPENAI_API_KEY));
+    assert!(!format!("{found:?}").contains(CANARY));
+    assert_eq!(held_key_in(&store, "Rename Customer to Client").unwrap(), None);
+    assert_eq!(held_key_in(&store, &CANARY[..CANARY.len() - 1]).unwrap(), None, "part of a key is not the key");
+    assert_eq!(held_key_in(&MemoryStore::new(), &pasted).unwrap(), None, "no key kept");
+    assert_eq!(held_key_in(&MemoryStore::unavailable(), &pasted).unwrap(), None, "no store at all");
+    let locked = held_key_in(&LockedStore, &pasted).unwrap_err();
+    assert!(matches!(locked, SecretError::Denied { .. }));
+    assert!(!shown(&locked).contains(CANARY));
+}

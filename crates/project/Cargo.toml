@@ -12,6 +12,7 @@ publish = false
 archforge-dolt.workspace = true
 archforge-mof.workspace = true
 archforge-names.workspace = true
+archforge-secrets.workspace = true
 log.workspace = true
 mysql.workspace = true
 
@@ -21,6 +22,7 @@ archforge-core.workspace = true
 archforge-diagram.workspace = true
 archforge-er.workspace = true
 archforge-notations.workspace = true
+archforge-secrets = { workspace = true, features = ["testing"] }
 archforge-uml.workspace = true
 serde_json.workspace = true
 

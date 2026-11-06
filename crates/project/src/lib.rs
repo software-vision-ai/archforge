@@ -2,8 +2,9 @@
 //! `project`, whose `settings` table says what the project is. Creating it makes the folder, starts
 //! the server, writes the settings and commits them; opening it checks the folder, starts the
 //! server and reads the settings back. The model's own tables come with the generated storage;
-//! a format-2 project may still carry the `er_` tables an earlier Archforge made, unused. The project stays open, its server running, until it is
-//! closed or dropped.
+//! a format-2 project may still carry the `er_` tables an earlier Archforge made, unused. Its
+//! conversations live in tables of its own (the `chat` module). The project stays open, its server
+//! running, until it is closed or dropped.
 //!
 //! A folder from elsewhere is never trusted: its server settings cannot sync with a remote or run
 //! events (the server crate overrides them), its own `.dolt` must hold nothing Archforge does not
@@ -12,6 +13,7 @@
 //! user. Host services, layer 9: the interface never depends on this crate.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
+mod chat;
 mod error;
 mod model;
 mod time;
@@ -23,12 +25,19 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use archforge_dolt::{Dolt, Server, ServerOptions};
 use mysql::prelude::Queryable;
 
+pub use chat::{
+    Anchor, AnchorRole, CHAT_AUTHOR, CHAT_TABLES, ChangeKind, ChangeRecord, ChangeState, ChangedElement, Chat, ChatSummary, Conversation, Listed,
+    Message, MessageRecord, NewAnchor, NewChat, NewQuestion, NewReply, NewToolCall, NewTurn, Provider, Role, ToolCall, ToolStatus, Turn, TurnChanges,
+    TurnEnd, TurnError, TurnOutcome, TurnRecord, TurnSpan, limits,
+};
 pub use error::Error;
 pub use model::{EARLIER_MODELS, ModelSchema};
 pub use time::timestamp;
 
-/// The project format this Archforge writes and the newest it reads.
-pub const FORMAT: u32 = 2;
+/// The project format this Archforge writes and the newest it reads. Format 3 may hold
+/// conversations (the chat tables, AR-206); a project of format 1 or 2 is raised to 3 only when it
+/// first holds one, so an Archforge that reads up to 2 still opens every project never chatted in.
+pub const FORMAT: u32 = 3;
 /// A project folder's extension.
 pub const EXTENSION: &str = archforge_names::EXTENSION;
 /// The one database in a project folder.
@@ -73,6 +82,9 @@ pub struct Project {
     server: Server,
     path: PathBuf,
     settings: Settings,
+    /// The state of each change link of this session's turns, now and at the last save, for Don't
+    /// save to put back.
+    changes: std::sync::Mutex<chat::Ledger>,
 }
 
 impl Project {
@@ -116,7 +128,7 @@ impl Project {
         let mut server = None;
         match build(dolt, opts, &target, name, created_by, now, hooks, &mut server) {
             Ok(settings) => match (std::fs::remove_file(target.join(MARKER)), server) {
-                (Ok(()), Some(server)) => Ok(Project { server, path: target, settings }),
+                (Ok(()), Some(server)) => Ok(Project { server, path: target, settings, changes: Default::default() }),
                 (Err(e), server) => Err(undo(server, &made, Error::io("cannot remove the marker from", &target, e))),
                 (Ok(()), None) => Err(undo(None, &made, Error::Damaged { path: target.clone(), why: "no server ran".into() })),
             },
@@ -148,7 +160,7 @@ impl Project {
         own_dot_dolt(&path)?;
         let server = Server::start(dolt, &path, opts).map_err(Error::Server)?;
         match read_settings(&server, &path).and_then(|settings| unscripted(&server, &path, settings)) {
-            Ok(settings) => Ok(Project { server, path, settings }),
+            Ok(settings) => Ok(Project { server, path, settings, changes: Default::default() }),
             Err(e) => {
                 if let Err(stop) = server.stop() {
                     log::warn!("the server of the refused project {} did not stop: {stop}", path.display());
@@ -405,15 +417,21 @@ fn read_settings(server: &Server, path: &Path) -> Result<Settings, Error> {
     }
     let format = map.get("format").ok_or_else(|| damaged("it has no format".into()))?;
     let format: u32 = format.parse().map_err(|_| damaged(format!("its format {format:?} is not a number")))?;
-    if format > FORMAT {
-        return Err(Error::NewerFormat { found: format, supported: FORMAT });
-    }
+    readable(format, FORMAT)?;
     let name = map.get("name").ok_or_else(|| damaged("it has no name".into()))?.clone();
     if let Some(problem) = archforge_names::problem(&name) {
         return Err(damaged(format!("its name cannot be a file name ({problem:?})")));
     }
     let get = |k: &str| map.get(k).cloned().unwrap_or_default();
     Ok(Settings { format, name, created_by: get("created_by"), created_at: get("created_at") })
+}
+
+/// Refuses a project in a format newer than `supported`, the newest this Archforge reads.
+fn readable(format: u32, supported: u32) -> Result<(), Error> {
+    if format > supported {
+        return Err(Error::NewerFormat { found: format, supported });
+    }
+    Ok(())
 }
 
 /// Refuses a project whose database holds triggers, stored procedures or events: Archforge's own
@@ -484,6 +502,16 @@ fn own_dot_dolt(path: &Path) -> Result<(), Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_format_3_project_is_refused_by_the_check_of_an_archforge_that_reads_up_to_format_2() {
+        // Archforge 0.12 read up to format 2 with this same check: a project that holds
+        // conversations says format 3, and is refused with the newer-format error, never misread.
+        assert!(matches!(readable(3, 2), Err(Error::NewerFormat { found: 3, supported: 2 })));
+        assert!(readable(2, 2).is_ok());
+        assert!(readable(2, FORMAT).is_ok() && readable(3, FORMAT).is_ok());
+        assert!(matches!(readable(FORMAT + 1, FORMAT), Err(Error::NewerFormat { .. })));
+    }
 
     #[test]
     fn find_lists_finished_projects_down_to_its_depth_and_no_further() {

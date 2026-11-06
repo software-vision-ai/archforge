@@ -36,6 +36,7 @@ archforge-core.workspace = true
 archforge-diagram.workspace = true
 archforge-er.workspace = true
 archforge-mcp.workspace = true
+archforge-secrets = { workspace = true, features = ["testing"] }
 egui_kittest.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]

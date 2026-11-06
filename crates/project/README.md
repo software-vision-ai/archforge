@@ -27,6 +27,19 @@ Archforge does not know, columns it does not write, or a list table of another s
 project refused, unchanged. Opening refuses a project whose database holds triggers,
 stored procedures or events, since Archforge's writes would set them off.
 
+The project's conversations (AR-206; the signed-off schema is `docs/design/chat-storage.md`) live in
+seven tables of its own, `chat` and `chat_*`, outside the model's tables and fingerprint; no model
+table may take such a name. They are made with the first conversation, and a project of format 1 or
+2 becomes format 3 only then. They are committed in chat commits of their own (author
+`Archforge chat`), staging only the chat tables, at a turn's end and when a conversation is made,
+renamed or deleted; Save stages every changed table but them, by name, and they never make the
+project unsaved. Don't save commits what of them waits and refuses when it cannot, so its reset never
+puts them back. The settings go into a chat commit only when they hold no other change, so a model
+fingerprint is never committed without its tables. A question is capped and refused when it holds a
+kept API key (`archforge-secrets`); what an agent or tool produced is cut and marked; everything read
+back is shape-checked, capped and refused with its reason, and a damaged chat table never blocks the
+model.
+
 **Public API.**
 
 | Item | Signature |
@@ -37,10 +50,18 @@ stored procedures or events, since Archforge's writes would set them off.
 | `Project::{settings, path, server, close}` | the open project's facts, its server, and closing it |
 | `Settings` | format, name, created by, created at |
 | `timestamp` | `pub fn timestamp(unix_seconds: u64) -> String` (RFC 3339, UTC) |
+| `Project::{prepare_model, write_model, read_model, has_unsaved, commit}` | the model's tables; Save commits every changed table but the conversations' |
+| `Project::discard` | `pub fn discard(&self, now: &str) -> Result<(), Error>`: Don't save; the conversations are kept, and this session's change links go back to their state at the last save |
+| `Project::{create_chat, start_turn, append_reply, append_tool_call, end_turn}` | make a conversation (its title refused when it holds a kept key); start a turn with its question (refused over 64 KiB or holding a kept key); append replies and tool calls; end it with what it changed, then a chat commit |
+| `Project::{set_change_states, rename_chat, set_chat_model, delete_chat, commit_chats, open_chats}` | change links after undo or redo; rename; the next turn's model; delete (it stays in earlier commits); commit what waits; on opening, interrupt turns left running |
+| `Project::{list_chats, load_chat}` | the conversations newest first with provider and message count (`Listed`); one conversation whole (`Conversation`) |
+| `TurnSpan` | a turn's session revisions before and after; `moved(state, revision)` says whether undo or redo undid or applied it |
+| `CHAT_TABLES`, `CHAT_AUTHOR`, `limits` | the seven tables, the chat commits' author, the size limits |
 | `FORMAT`, `EXTENSION`, `DATABASE`, `MARKER` | the format written and read, the folder's extension, the database, the unfinished marker |
 | `Error` | one enum; every variant names the value it is about |
 
-**Tests.** `tests/project.rs` against a real dolt 2.6 or later, measured on macOS; the Linux and
+**Tests.** `tests/project.rs`, `tests/model.rs` and `tests/chat.rs` (the conversations) against a real dolt 2.6 or later, measured on macOS; the Linux and
 Windows runs are still to be done.
 
-**Non-goals.** The model's own tables and Save, the Open screen and the recent list.
+**Non-goals.** The Open screen and the recent list; the chat panel and the agent runtimes' private
+folders.
