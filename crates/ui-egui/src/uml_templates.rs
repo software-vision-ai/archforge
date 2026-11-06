@@ -521,10 +521,11 @@ fn refuse(shell: &mut Shell, why: String, at: Option<&'static str>) {
 }
 
 /// Why parameter `p` may not be removed, in the user's words, with the element that binds it: a
-/// binding substitutes it (C5).
+/// binding substitutes it (C5), or it is its template's last and a binding names the template,
+/// substitutions or none. The model keeps the same rule (`templates::removals_problem`).
 pub(crate) fn in_use(store: &Store, p: Obj) -> Option<(String, Option<Uuid>)> {
     let users = templates::users(store, p);
-    let (_, bound, actual) = *users.first()?;
+    let Some(&(_, bound, actual)) = users.first() else { return last_in_use(store, p) };
     let name = templates::parameter_name(store, p);
     let bound_name = bound.map(|b| name_of(store, b)).unwrap_or_default();
     let actual = actual.map(|a| name_of(store, a)).unwrap_or_default();
@@ -537,6 +538,20 @@ pub(crate) fn in_use(store: &Store, p: Obj) -> Option<(String, Option<Uuid>)> {
         why.push(' ');
         why.push_str(&trn("{n} more binding uses it too.", "{n} more bindings use it too.", more));
     }
+    Some((why, bound.and_then(|b| store.uuid(b).ok())))
+}
+
+/// Why `p`, its template's last parameter, may not be removed while a binding names the template:
+/// the template's signature would go with it.
+fn last_in_use(store: &Store, p: Obj) -> Option<(String, Option<Uuid>)> {
+    templates::last_parameter_problem(store, p)?;
+    let t = templates::template_of(store, p)?;
+    let bound = templates::bindings_to(store, t).first().and_then(|b| templates::bound_element(store, *b));
+    let name = templates::parameter_name(store, p);
+    let why = fmt(
+        &tr("{bound} binds {template}, and {name} is its last parameter. Remove that binding first, then remove {name}."),
+        &[("bound", &bound.map(|b| name_of(store, b)).unwrap_or_default()), ("template", &name_of(store, t)), ("name", &name)],
+    );
     Some((why, bound.and_then(|b| store.uuid(b).ok())))
 }
 

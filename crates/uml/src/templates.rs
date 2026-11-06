@@ -31,7 +31,9 @@
 //! Bindings (`TemplateBinding`, AR-131) name a parameter through a substitution's `formal`. A
 //! parameter a binding substitutes is never removed, and its kind and constraint change only while
 //! every argument bound to it still fits; its name and its default change freely, since bindings
-//! follow the parameter, not its name. A template removed takes the bindings to it along.
+//! follow the parameter, not its name. A template's last parameter is never removed while a
+//! binding names the template's signature, substitutions or none, since the signature would go
+//! with it. A template removed takes the bindings to it along.
 
 use archforge_diagram::ProjectView;
 use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, always, cmd};
@@ -368,6 +370,57 @@ pub fn removal_problem(store: &Store, p: Obj) -> Option<String> {
         n => format!(" and {n} other bindings"),
     };
     Some(format!("{}{others}; change or remove that binding first, then remove {}", use_text(store, p, first), parameter_name(store, p)))
+}
+
+/// Why removing template parameters `params` together may not happen, worked out before anything
+/// changes: a binding substitutes one of them ([`removal_problem`]), or they are all a template's
+/// parameters, whose signature would go with the last, while a binding still names that signature,
+/// substitutions or none ([`last_parameter_problem`]).
+pub fn removals_problem(store: &Store, params: &[Obj]) -> Option<String> {
+    for p in params {
+        if let Some(why) = removal_problem(store, *p) {
+            return Some(why);
+        }
+    }
+    let mut templates: Vec<Obj> = params.iter().filter_map(|p| template_of(store, *p)).collect();
+    templates.sort();
+    templates.dedup();
+    for t in templates {
+        let all = parameters(store, t);
+        if all.iter().all(|p| params.contains(p))
+            && let Some(last) = all.last()
+            && let Some(why) = signature_problem(store, t, *last)
+        {
+            return Some(why);
+        }
+    }
+    None
+}
+
+/// Why `p`, the last parameter of template `t`, may not be removed: its signature would go with
+/// it, and a binding names that signature. None while no binding does.
+fn signature_problem(store: &Store, t: Obj, p: Obj) -> Option<String> {
+    let bindings = bindings_to(store, t);
+    let first = *bindings.first()?;
+    let bound = bound_element(store, first).map(|b| name_of(store, b)).unwrap_or_else(|| uuid_of(store, first).unwrap_or_default());
+    let others = match bindings.len().saturating_sub(1) {
+        0 => String::new(),
+        1 => " and 1 other binding".to_string(),
+        n => format!(" and {n} other bindings"),
+    };
+    Some(format!(
+        "{bound} binds {}{others}, and {} is its last template parameter: its signature, which the binding names, would go with it; remove that binding first, then remove {}",
+        name_of(store, t),
+        parameter_name(store, p),
+        parameter_name(store, p)
+    ))
+}
+
+/// Why template parameter `p` may not be removed on its own: a binding substitutes it, or it is its
+/// template's last and a binding names the template's signature. The shell asks this one rule.
+pub fn last_parameter_problem(store: &Store, p: Obj) -> Option<String> {
+    let t = template_of(store, p)?;
+    (parameters(store, t).as_slice() == [p]).then(|| signature_problem(store, t, p)).flatten()
 }
 
 /// Whether `arg` may be the argument, or the default, of a parameter of `kind` constrained to
@@ -740,10 +793,8 @@ fn parameter_list(ctx: &mut C<'_>, p: &Params) -> R {
 /// substitutes one), each signature left with none going with its last: what `element.remove`
 /// does with them.
 pub(crate) fn remove(store: &mut Store, params: &[Obj]) -> Result<usize, CommandError> {
-    for p in params {
-        if let Some(why) = removal_problem(store, *p) {
-            return Err(refuse("ids", why));
-        }
+    if let Some(why) = removals_problem(store, params) {
+        return Err(refuse("ids", why));
     }
     let mut gone = 0;
     for p in params {

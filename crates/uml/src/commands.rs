@@ -737,6 +737,13 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
         crate::GENERALIZATION_SET,
         crate::CLASSIFIER_TEMPLATE_PARAMETER,
     ];
+    // Template parameters a binding stands in the way of stay: one it substitutes, or a template's
+    // last while a binding names its signature (AR-130). A template going too takes its parameters
+    // and the bindings to it along, so its own are not asked.
+    let params = removed_parameters(store, objs);
+    if let Some(why) = crate::templates::removals_problem(store, &params) {
+        return Err(refuse("ids", why));
+    }
     for o in objs.iter().filter(|o| store.is_alive(**o)) {
         // A template parameter's classifier is its parameter's: the parameter is what goes (AR-130).
         if let Some(why) = crate::templates::parameter_element_problem(store, *o) {
@@ -755,14 +762,9 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
         if let Some(why) = crate::members::removal_problem(store, *o) {
             return Err(refuse("ids", why));
         }
-        // A template parameter a binding substitutes stays (AR-130).
-        if class == crate::CLASSIFIER_TEMPLATE_PARAMETER {
-            if !crate::templates::is_parameter(store, *o) {
-                return Err(refuse("ids", format!("{} cannot be removed yet", uuid_of(store, *o)?)));
-            }
-            if let Some(why) = crate::templates::removal_problem(store, *o) {
-                return Err(refuse("ids", why));
-            }
+        // Only a classifier's template parameter is removed (AR-130).
+        if class == crate::CLASSIFIER_TEMPLATE_PARAMETER && !crate::templates::is_parameter(store, *o) {
+            return Err(refuse("ids", format!("{} cannot be removed yet", uuid_of(store, *o)?)));
         }
         if class == PACKAGE
             && let Some(parent) = package_of(store, *o)
@@ -784,10 +786,11 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
             objs.push(n);
         }
     }
-    // Template parameters go first, each signature left with none going with its last (AR-130).
-    let params: Vec<Obj> = objs.iter().copied().filter(|o| crate::templates::is_parameter(store, *o)).collect();
+    // Template parameters go first, each signature left with none going with its last (AR-130);
+    // those of a template that goes too go with it.
+    let params = removed_parameters(store, &objs);
     let mut gone = crate::templates::remove(store, &params)?;
-    objs.retain(|o| !params.contains(o));
+    objs.retain(|o| !params.contains(o) && !crate::templates::is_parameter(store, *o));
     let objs = objs.as_slice();
     // A constraint left constraining nothing goes with what it constrained (AR-133), worked out
     // before anything moves; the others lose the elements that go as the core destroys them.
@@ -846,6 +849,15 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
             .map_err(fail)?;
     }
     Ok(gone)
+}
+
+/// The template parameters among `objs` whose template does not go with them: a template that
+/// goes, named among `objs` or inside one of them, takes its parameters along (AR-130).
+fn removed_parameters(store: &Store, objs: &[Obj]) -> Vec<Obj> {
+    objs.iter()
+        .copied()
+        .filter(|o| crate::templates::template_of(store, *o).is_some_and(|t| !objs.iter().any(|x| *x == t || store.contains(*x, t))))
+        .collect()
 }
 
 /// The relationships that go when `classes` go: those that touch any of them or a classifier

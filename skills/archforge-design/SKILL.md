@@ -845,7 +845,9 @@ What is UML's own, beside the shared rules above.
   whatever the case, and a default that does not fit are refused in a tinted box under the fields,
   the field ringed. Removing a parameter a binding uses is refused under the rows on the danger
   tint ("OrderRepository binds Key -> Integer. Change or remove that binding first, then remove
-  Key."), its row marked, with Show the binding (`….showBinding`); until bindings are drawn
+  Key."), its row marked, with Show the binding (`….showBinding`), and so is a template's last
+  parameter while any binding names the template ("OrderRepository binds Repository, and Key is
+  its last parameter. …"); until bindings are drawn
   (AR-131) it selects the element that binds it, and the line under it says so. The card shows the
   signature in a dashed box in the secondary text colour on the surface, over its top-right corner
   (28 past its right side, 24 above its top), one parameter a row in the caption style, drawn over

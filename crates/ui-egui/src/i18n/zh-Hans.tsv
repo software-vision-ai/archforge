@@ -927,6 +927,7 @@ str		Show the binding	显示绑定
 str		Show the binding selects the element that binds it.	“显示绑定”会选中绑定它的元素。
 str		Renaming {name} or changing its default is allowed: bindings follow the parameter, not its name.	可以重命名 {name} 或更改其默认值：绑定跟随参数，而不是其名称。
 str		{bound} binds {name} -> {actual}. Change or remove that binding first, then remove {name}.	{bound} 将 {name} 绑定为 -> {actual}。请先更改或删除该绑定，再删除 {name}。
+str		{bound} binds {template}, and {name} is its last parameter. Remove that binding first, then remove {name}.	{bound} 绑定了 {template}，而 {name} 是它的最后一个参数。请先删除该绑定，再删除 {name}。
 plural		{n} more binding uses it too.	另有 {n} 个绑定也在使用它。
 str		Type a name: a template parameter without one stands for nothing.	请输入名称：没有名称的模板参数不代表任何内容。
 str		{template} already has a template parameter named {name}. Pick another name.	{template} 已有名为 {name} 的模板参数。请换一个名称。

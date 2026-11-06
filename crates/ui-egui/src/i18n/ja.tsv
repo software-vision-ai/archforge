@@ -927,6 +927,7 @@ str		Show the binding	バインディングを表示
 str		Show the binding selects the element that binds it.	「バインディングを表示」は、これをバインドしている要素を選択します。
 str		Renaming {name} or changing its default is allowed: bindings follow the parameter, not its name.	{name} の名前の変更や既定値の変更はできます。バインディングは名前ではなくパラメーターに従います。
 str		{bound} binds {name} -> {actual}. Change or remove that binding first, then remove {name}.	{bound} は {name} -> {actual} とバインドしています。先にそのバインディングを変更または削除してから {name} を削除してください。
+str		{bound} binds {template}, and {name} is its last parameter. Remove that binding first, then remove {name}.	{bound} は {template} をバインドしており、{name} はその最後のパラメーターです。先にそのバインディングを削除してから {name} を削除してください。
 plural		{n} more binding uses it too.	ほかに {n} 件のバインディングもこれを使っています。
 str		Type a name: a template parameter without one stands for nothing.	名前を入力してください。名前のないテンプレートパラメーターは何も表しません。
 str		{template} already has a template parameter named {name}. Pick another name.	{template} には {name} という名前のテンプレートパラメーターがすでにあります。別の名前を選んでください。

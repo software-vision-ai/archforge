@@ -891,7 +891,9 @@ template when it gets its first parameter and stops being one when its last goes
 - **Bindings.** Another class can *bind* a template, giving each parameter an argument. A parameter
   a binding uses cannot be removed: the bin says, for example, *OrderRepository binds Key ->
   Integer. Change or remove that binding first, then remove Key.*, under the rows, and **Show the
-  binding** selects the element that binds it. Its kind or constraint cannot change so that an
+  binding** selects the element that binds it. A template's last parameter cannot be removed while
+  any binding names the template, even one with no arguments yet, since the template would stop
+  being one under it. Its kind or constraint cannot change so that an
   argument no longer fits either. Drawing bindings comes in a later version; deleting a template
   deletes the bindings to it.
 

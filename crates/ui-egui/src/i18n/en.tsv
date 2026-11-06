@@ -926,6 +926,7 @@ str		Show the binding	Show the binding
 str		Show the binding selects the element that binds it.	Show the binding selects the element that binds it.
 str		Renaming {name} or changing its default is allowed: bindings follow the parameter, not its name.	Renaming {name} or changing its default is allowed: bindings follow the parameter, not its name.
 str		{bound} binds {name} -> {actual}. Change or remove that binding first, then remove {name}.	{bound} binds {name} -> {actual}. Change or remove that binding first, then remove {name}.
+str		{bound} binds {template}, and {name} is its last parameter. Remove that binding first, then remove {name}.	{bound} binds {template}, and {name} is its last parameter. Remove that binding first, then remove {name}.
 plural		{n} more binding uses it too.	{n} more binding uses it too.|{n} more bindings use it too.
 str		Type a name: a template parameter without one stands for nothing.	Type a name: a template parameter without one stands for nothing.
 str		{template} already has a template parameter named {name}. Pick another name.	{template} already has a template parameter named {name}. Pick another name.

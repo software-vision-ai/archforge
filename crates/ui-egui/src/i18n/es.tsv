@@ -927,6 +927,7 @@ str		Show the binding	Mostrar la vinculación
 str		Show the binding selects the element that binds it.	Mostrar la vinculación selecciona el elemento que lo vincula.
 str		Renaming {name} or changing its default is allowed: bindings follow the parameter, not its name.	Se permite renombrar {name} o cambiar su valor predeterminado: las vinculaciones siguen al parámetro, no a su nombre.
 str		{bound} binds {name} -> {actual}. Change or remove that binding first, then remove {name}.	{bound} vincula {name} -> {actual}. Cambia o elimina primero esa vinculación y después elimina {name}.
+str		{bound} binds {template}, and {name} is its last parameter. Remove that binding first, then remove {name}.	{bound} vincula {template}, y {name} es su último parámetro. Elimina primero esa vinculación y después elimina {name}.
 plural		{n} more binding uses it too.	{n} vinculación más también lo usa.|{n} vinculaciones más también lo usan.
 str		Type a name: a template parameter without one stands for nothing.	Escribe un nombre: un parámetro de plantilla sin nombre no representa nada.
 str		{template} already has a template parameter named {name}. Pick another name.	{template} ya tiene un parámetro de plantilla llamado {name}. Elige otro nombre.

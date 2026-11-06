@@ -363,6 +363,12 @@ fn a_parameter_s_classifier_stays_its_template_s_own() {
 /// A binding (AR-131) built in the store: OrderRepository binds Repository's Key to Integer and T
 /// to Order. Gives the session over it and the binding's id.
 fn bound(s: &S, shop: &Shop) -> (S, String) {
+    bind(s, shop, true)
+}
+
+/// A binding built in the store as [`bound`] builds it, with its substitutions or, without
+/// `substitute`, none: OrderRepository naming Repository's signature alone.
+fn bind(s: &S, shop: &Shop, substitute: bool) -> (S, String) {
     let (tables, junctions) = tables();
     let saved = rows::snapshot(s.doc(), &tables, &junctions).unwrap();
     let mut st = store(1 << 30);
@@ -376,8 +382,9 @@ fn bound(s: &S, shop: &Shop) -> (S, String) {
     let b = st.create(archforge_uml::TEMPLATE_BINDING).unwrap();
     st.set(b, archforge_uml::template_binding::SIGNATURE, Value::Ref(sig)).unwrap();
     st.push(bound_class, archforge_uml::templateable_element::TEMPLATE_BINDING, Value::Ref(b)).unwrap();
-    let integer = st.alive().find(|o| archforge_core::name_of(&st, *o) == "Integer").unwrap();
-    for (p, actual) in templates::parameters(&st, repo).into_iter().zip([obj(&st, &shop.order), integer]) {
+    let integer = st.alive().find(|o| archforge_core::name_of(&st, *o) == "Integer");
+    let actuals = if substitute { vec![obj(&st, &shop.order), integer.unwrap()] } else { Vec::new() };
+    for (p, actual) in templates::parameters(&st, repo).into_iter().zip(actuals) {
         let sub = st.create(archforge_uml::TEMPLATE_PARAMETER_SUBSTITUTION).unwrap();
         st.set(sub, archforge_uml::template_parameter_substitution::FORMAL, Value::Ref(p)).unwrap();
         st.set(sub, archforge_uml::template_parameter_substitution::ACTUAL, Value::Ref(actual)).unwrap();
@@ -421,6 +428,40 @@ fn a_parameter_a_binding_uses_is_kept_and_kept_fitting() {
     assert!(!alive(&s, &binding));
     s.undo().unwrap();
     assert_eq!(picture(s.doc()), before);
+}
+
+/// A binding that names the template's signature with no substitution still needs that
+/// signature: removing the last parameter, which would take the signature along, is refused before
+/// anything is written, the store and the history as they were; so is removing every parameter at
+/// once. A parameter that is not the last goes, and the template removed takes the binding along.
+#[test]
+fn a_binding_without_substitutions_keeps_the_last_parameter() {
+    let mut s = session();
+    let shop = shop(&mut s);
+    let t = run(&mut s, "uml.template-parameter.add", json!({ "classifier": shop.repository, "name": "T" }));
+    let key = run(&mut s, "uml.template-parameter.add", json!({ "classifier": shop.repository, "name": "Key", "kind": "data-type" }));
+    let (mut s, binding) = bind(&s, &shop, false);
+    let st = s.doc();
+    assert!(templates::users(st, obj(st, &t)).is_empty() && templates::users(st, obj(st, &key)).is_empty(), "no substitution");
+    // Both at once would take the signature the binding names.
+    let undo = s.undo_label().map(str::to_string);
+    let e = refused(&mut s, "element.remove", json!({ "ids": [t, key] }));
+    assert!(e.contains("OrderRepository binds Repository") && e.contains("its last template parameter"), "{e}");
+    // One that is not the last goes.
+    run(&mut s, "element.remove", json!({ "ids": [key] }));
+    assert_eq!(names(&mut s, &shop.repository), ["T"]);
+    // The last is refused before anything is written: the store and the history as they were.
+    let undo_after = s.undo_label().map(str::to_string);
+    assert_ne!(undo_after, undo);
+    let e = refused(&mut s, "element.remove", json!({ "ids": [t] }));
+    assert!(e.contains("OrderRepository binds Repository, and T is its last template parameter"), "{e}");
+    assert_eq!(s.undo_label().map(str::to_string), undo_after, "no undo step");
+    assert!(alive(&s, &binding) && names(&mut s, &shop.repository) == ["T"]);
+    let st = s.doc();
+    assert!(templates::last_parameter_problem(st, obj(st, &t)).is_some(), "the shell asks the same rule");
+    // The template and its last parameter removed together take the binding along.
+    run(&mut s, "element.remove", json!({ "ids": [shop.repository, t] }));
+    assert!(!alive(&s, &binding) && !alive(&s, &shop.repository));
 }
 
 /// Every diagram that shows the template draws the same box: the content is the model's.

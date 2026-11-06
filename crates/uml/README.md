@@ -119,8 +119,9 @@ false; names told apart across the signature by the shared rule of `names`; its 
 what it types, kept across rename, reorder and a change of kind; that classifier types only its
 template's own members (`members` refuses it elsewhere) and is never listed, placed or edited as
 one of the model's; a parameter a binding's substitution names (`formal`) never removed, nor
-changed to a kind or constraint the binding's argument would not fit; removed through
-`element.remove`; the card's `template` rows drawn as the signature box), `commands::going_with` (the relationships that go with classifiers, an association class's own
+changed to a kind or constraint the binding's argument would not fit, nor a template's last
+parameter removed while any binding names its signature, all checked before anything is written
+(`removals_problem`, `last_parameter_problem`); removed through `element.remove`; the card's `template` rows drawn as the signature box), `commands::going_with` (the relationships that go with classifiers, an association class's own
 among them, and the bindings to a template), `names::{kind, clash, CLASSIFIER}` (AR-208: which elements may share a
 name in one owner, as UML has it: two of one kind never, whatever the case; every classifier is one kind, a package, a
 property, an operation, a parameter, a literal and a generalization set each one of their own, relationships and constraints
