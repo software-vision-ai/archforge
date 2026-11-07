@@ -378,8 +378,8 @@ With the real keys saved (as after R1 and R2), put them in a file without showin
     *) { secret-tool lookup service Archforge username anthropic-api-key; echo
          secret-tool lookup service Archforge username openai-api-key; echo; } ;;
   esac | grep . > "$WORK/keys" )
-if [ "$(wc -l < "$WORK/keys")" -eq 2 ]; then echo "both keys read"
-else echo "STOP: $(wc -l < "$WORK/keys") of 2 keys read; the searches for the real keys would prove nothing"; fi
+if [ "$(wc -l < "$WORK/keys")" -eq 2 ]; then KEYS_OK=1; echo "both keys read"
+else KEYS_OK=0; echo "STOP: $(wc -l < "$WORK/keys") of 2 keys read; fix the store or the keys and run this again"; false; fi
 ```
 
 1. Make Claude the default agent, and start a new conversation (**New conversation**, +). Turn
@@ -476,6 +476,9 @@ then again with `$WORK/keys` (the real keys, from K2), then with `$WORK/marker`.
 
 ```sh
 search() {
+  if [ "$1" = "$WORK/keys" ] && [ "${KEYS_OK:-0}" != 1 ]; then
+    echo "SEARCH FAILED: K2 did not read both real keys, so this search would prove nothing"; return 2
+  fi
   grep -r -a -l -F -f "$1" -- "${@:2}"
   case $? in 0) echo "FOUND: the files above" ;; 1) echo "none found" ;; *) echo "SEARCH FAILED: see the error above" ;; esac
 }
@@ -632,7 +635,7 @@ key files the searches read.
    ```sh
    rm -rf "$WORK"
    unset WORK CANARY_CLAUDE CANARY_CODEX MARKER MARKER_CODEX_KEY MARKER_CODEX_GPT MARKER_DELETED \
-     DELETED_DIR ASK PROBE_FILE CLAUDE_AT CODEX_AT APP
+     DELETED_DIR ASK PROBE_FILE CLAUDE_AT CODEX_AT APP KEYS_OK
    ```
 
 ## Results

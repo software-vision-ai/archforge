@@ -249,18 +249,18 @@ refused counts as not ready.
 
 ### Asking a question
 
+**A project made with Archforge 0.12 or earlier** is raised to a newer project format by the first
+question asked in it, as it then holds conversations. Archforge 0.12 and earlier cannot open it
+after that: they say the project is in a format they do not read. If someone still opens the
+project with an older Archforge, copy its `.archforge` folder first, or wait with Chat until they
+have moved on. Opening the project alone changes nothing.
+
 1. Open a project, and the diagram your question is about.
 2. Select the elements it is about, if any.
 3. Type your question in the box at the foot of the panel, *Ask about this model…*.
 4. Press Enter, or choose Send (the arrow).
 
 Shift Enter starts a new line. A question is at most 64 KiB.
-
-**A project made with Archforge 0.12 or earlier** is raised to a newer project format by the first
-question asked in it, as it then holds conversations. Archforge 0.12 and earlier cannot open it
-after that: they say the project is in a format they do not read. If someone still opens the
-project with an older Archforge, copy its `.archforge` folder first, or wait with Chat until they
-have moved on. Opening the project alone changes nothing.
 
 Your question is kept in the project first, then sent. A question that holds one of your saved API
 keys is neither sent nor kept: the panel says so and leaves it in the box for you to edit. So does a
