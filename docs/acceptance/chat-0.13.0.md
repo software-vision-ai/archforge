@@ -215,11 +215,10 @@ This shows Check connection needs no network; it does not by itself prove that n
    with **Open Settings**. Signing out of all devices may not end a Codex sign-in: if the
    question gets a reply, the sign-in is still valid and expiry was not established.
    Record F2 as *skipped: expiry not established*, with the way you tried, and stop F2 here.
-3. Choose **Open Settings**. **Expect:** the Codex card may still say *Signed in as*: Archforge
-   reads the sign-in once a run. Record what it says.
-4. Quit Archforge, run `wait_quit`, start it again, and open **Settings ▸ AI Agents**.
-   **Expect:** *Sign-in expired*, with **Sign in again…**.
-5. Sign in again, then ask again. **Expect:** a reply.
+3. Choose **Open Settings**. **Expect:** without a restart, the Codex card says *The ChatGPT
+   sign-in for* your email *has expired.*, with **Sign in again…**; the conversation's card made
+   Archforge read the sign-in again.
+4. Choose **Sign in again…**, sign in, then ask again. **Expect:** a reply.
 
 No other way to end a Codex 0.166.0 sign-in from outside is known here. If the account offers
 none, leave Archforge signed in for a few days and try step 2 then. F2 passes only with the card

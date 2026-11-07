@@ -57,12 +57,22 @@ pub struct Page {
     replacing: [bool; 2],
     refusal: [Option<KeyRefusal>; 2],
     focus_key: Option<Provider>,
+    /// Codex's account was asked to be read again for this opening of the page (AR-222).
+    account_asked: bool,
 }
 
 impl Default for Page {
+    /// The page as it opens: no list open, the key fields empty with their room reserved, and
+    /// Codex's account not yet asked for.
     fn default() -> Self {
-        Page { menu: None, drafts: [draft_room(), draft_room()], replacing: [false; 2], refusal: [None; 2], focus_key: None }
+        Page { menu: None, drafts: [draft_room(), draft_room()], replacing: [false; 2], refusal: [None; 2], focus_key: None, account_asked: false }
     }
+}
+
+/// The page shown again from another section of the dialog: Codex's account is read again, as
+/// when Settings opens (AR-222).
+pub(crate) fn shown_again(page: &mut Page) {
+    page.account_asked = false;
 }
 
 /// An empty draft with room for the longest key the field takes, in any characters.
@@ -184,7 +194,8 @@ fn button_width(paint: &egui::Painter, p: &Palette, label: &str) -> f32 {
     (ux::galley(paint, label, types::UI, p.text, None).size().x + 20.0).ceil()
 }
 
-/// Draws the page from `top`, `width` wide at `left`; gives how far it reaches below `top`.
+/// Draws the page from `top`, `width` wide at `left`; gives how far it reaches below `top`. The
+/// first frame of each opening reads Codex's account again.
 pub(crate) fn page(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, page: &mut Page, left: f32, top: f32, width: f32) -> f32 {
     let paint = ui.painter().clone();
     ux::text(&paint, pos2(left, top + 26.0), &tr("AI Agents"), types::LEAD, p.text, Some(width));
@@ -192,10 +203,14 @@ pub(crate) fn page(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, page: &mut
     if system != Some(System::Supported) {
         return unavailable(ui, p, system, left, top, width);
     }
-    // The keys are read from the secure store the first time the page is drawn, and kept; Codex's
-    // account too, which starts the codex program, so never before the page shows.
+    // The keys are read from the secure store the first time the page is drawn, and kept. Codex's
+    // account is read each time the page opens (AR-222), so a sign-in that expired since shows so;
+    // reading it starts the codex program, so never before the page shows.
     agents::need_keys(shell);
-    agents::need_account(shell);
+    if !page.account_asked {
+        page.account_asked = true;
+        agents::reread_account(shell);
+    }
     let mut y = top + 52.0;
     y += wrapped(&paint, pos2(left, y), width, &tr(INTRO), types::UI, p.text_secondary, 3) + 20.0;
     if let Store::Missing { why } = &shell.agents.look.store {

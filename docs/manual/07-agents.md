@@ -42,8 +42,10 @@ The page has a card for each agent, then **Let Chat use the model**, **Check con
 Opening the page sends nothing over the network. Archforge looked for the programs when it
 started, asking each only for its version. Your keys are read from the secure store the first
 time you open the page or the Chat panel, never when Archforge starts, so the system asks for
-access only once you use AI agents. Who Codex is signed in as is read once, the first time the
-page shows or a Codex conversation starts, by starting the codex program on your computer.
+access only once you use AI agents. Who Codex is signed in as is read by starting the codex
+program on your computer: the first time the page shows or a Codex conversation starts, and then
+again each time you open the page, choose **Check connection**, or a Codex conversation says
+*Sign-in expired*.
 
 ### What you need
 
@@ -149,9 +151,10 @@ out; choose **Cancel**.
 A sign-in not finished within 15 minutes, or one the codex program cancels, says so under it; sign
 in again. **Sign out** ends the sign-in.
 
-When a sign-in expires, Chat says *Sign-in expired*. The card learns of it only when Archforge reads
-the sign-in again, at its next start; it then says *Sign-in expired*, with **Sign in again…**.
-Until then it may still say *Signed in as*: choose **Sign out**, then **Sign in…**.
+When a sign-in expires, Chat says *Sign-in expired*, and the Codex card then shows it too, with
+the email (*The ChatGPT sign-in for … has expired.*) and **Sign in again…**, without a restart.
+Until the codex program or a Codex conversation reports the expiry, the card may still say
+*Signed in as*.
 
 For **Codex** with an API key:
 
@@ -222,8 +225,8 @@ Click it, or reach it with Tab and press Enter, to open **Settings ▸ AI Agents
 ### Checking it works
 
 - **Check connection** is free and runs on your computer. It looks again for each program, asking
-  it only for its version, and reads which API keys are saved; Archforge sends nothing. The badge
-  on each card sums up its agent, with Codex's sign-in as it was last read.
+  it only for its version, and reads which API keys are saved and who Codex is signed in as;
+  Archforge sends nothing. The badge on each card sums up its agent.
 - **Send test message** sends one message to the default agent's provider: *Reply with the single
   word OK.* It uses a little of your plan or API credit. It runs without access to your model, in a
   folder of its own that is removed afterwards. The page then says *Claude answered the test
@@ -374,7 +377,7 @@ A card in the conversation says what went wrong and what to do.
 | *Program not found* | The agent's program is not on this computer. | **Open Settings**, install it, choose **Look again**, then ask again. |
 | *Key refused* | The provider refused the saved key: it is wrong, or was revoked. | **Open Settings**, **Replace** the key, then ask again. |
 | *No key saved* | There is no key or sign-in for the agent. | **Open Settings**, add one, then ask again. |
-| *Sign-in expired* | Codex's ChatGPT sign-in has expired. | **Open Settings**, sign in again (choose **Sign out** first if the card still says *Signed in as*), then ask again. |
+| *Sign-in expired* | Codex's ChatGPT sign-in has expired. | **Open Settings**: the Codex card says the sign-in expired. Choose **Sign in again…**, then ask again. |
 | *Not sent* | **Let Chat use the model** was turned off while the question was on its way. | Turn it on in **Settings ▸ AI Agents**, then press Enter (the question is back in the box) or **Send again**. |
 | *Not started yet* | The conversation's working files are being removed: a copy of the project deleted it, or it was just brought back with Undo. | **Send again** in a moment. Reopened from **Conversations** later, the same turn shows *No answer*, as the reason is not kept. |
 | *No answer* | Anything else: the agent stopped before answering. | **Send again**. |
