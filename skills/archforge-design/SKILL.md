@@ -443,7 +443,7 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   The private folder of its program goes when the toast closes without Undo, when Undo fails,
   when its project closes or when Archforge quits; a copy of the project open beside it showing
   that conversation keeps it. While the folder is being removed the conversation does not start:
-  its turn says "No answer", the folder is kept for it, and Send again starts it once the removal
+  its turn says "Not started yet" (AR-225), the folder is kept for it, and Send again starts it once the removal
   is done. While a history row's menu or the confirmation is open, the canvas and ⌘Z take no keys.
   While the list cannot be read again (chat writing off) the rows read before stay, and the bin
   and the item are disabled saying "The

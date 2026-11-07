@@ -893,9 +893,9 @@ fn failure_card(
             settings = true;
             (true, tr("Sign-in expired"), fmt(&tr("{agent}'s sign-in has expired. Sign in again in Settings, then send again."), &[("agent", agent)]))
         }
-        // Let Chat use the model went off while its question was being kept (AR-221).
         // Its folder was being removed after a deletion of it, so its program did not start (AR-225).
         FailureKind::Other if turn.removing => (false, tr("Not started yet"), tr("This conversation is being removed. Try again in a moment.")),
+        // Let Chat use the model went off while its question was being kept (AR-221).
         FailureKind::Other if turn.unsent => {
             let body = if turn.returned {
                 tr("Let Chat use the model was turned off, so this question was not sent. It is back in the box, ready once the switch is on.")
