@@ -279,6 +279,7 @@ str		Agent access off	Acesso de agentes desligado
 str		Conversations	Conversas
 str		New conversation	Nova conversa
 str		Stop the reply first	Pare primeiro a resposta
+str		Let Chat use the model is off, so nothing is sent. Turn it on in Settings ▸ AI Agents.	«Deixar a Conversa usar o modelo» está desligado, por isso nada é enviado. Ligue-o em Definições ▸ Agentes de IA.
 str		No agent set up yet	Ainda não há nenhum agente configurado
 str		Chat answers with Claude or Codex, run by the program installed on this computer. Choose one in Settings and let Chat use the model.	A Conversa responde com o Claude ou o Codex, executados pelo programa instalado neste computador. Escolha um nas Definições e deixe a Conversa usar o modelo.
 str		Configure agent	Configurar agente
@@ -333,6 +334,9 @@ str		No key saved	Nenhuma chave guardada
 str		{agent} needs an API key or a sign-in. Add one in Settings, then send again.	O {agent} precisa de uma chave de API ou de uma sessão iniciada. Adicione uma nas Definições e depois envie de novo.
 str		{agent}'s sign-in has expired. Sign in again in Settings, then send again.	A sessão do {agent} expirou. Inicie sessão de novo nas Definições e depois envie de novo.
 str		No answer	Sem resposta
+str		Not sent	Não enviada
+str		Let Chat use the model was turned off, so this question was not sent. It is back in the box, ready once the switch is on.	«Deixar a Conversa usar o modelo» foi desligado, por isso esta pergunta não foi enviada. Voltou à caixa, pronta quando o interruptor estiver ligado.
+str		Let Chat use the model was turned off, so this question was not sent. Send it again once the switch is on.	«Deixar a Conversa usar o modelo» foi desligado, por isso esta pergunta não foi enviada. Envie-a de novo quando o interruptor estiver ligado.
 str		{agent} stopped before answering.	O {agent} parou antes de responder.
 str		This turn changed the model, so it is not sent again; ask again to go on.	Esta vez alterou o modelo, por isso não é enviada de novo; pergunte outra vez para continuar.
 str		Open Settings	Abrir Definições

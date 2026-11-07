@@ -186,8 +186,8 @@ files are in its `agents` folder.
 
 ### Let Chat use the model
 
-**Let Chat use the model** is off until you turn it on. A new conversation starts only while it
-is on.
+**Let Chat use the model** is off until you turn it on. While it is off, no conversation sends
+anything to its provider.
 
 While it is on, each Chat conversation gets agent access of its own while it runs. Chat reads the
 project's model through it. A conversation changes the model only when **Allow changes to the
@@ -198,9 +198,18 @@ refused every change, undo and save it asks for. The access opens on your comput
 conversation needs it. It closes when the last conversation ends, at once when you turn the switch
 off, and when you quit.
 
-A conversation already started can still be asked after you turn the switch off. Its agent then
-reads nothing from the model, but your question, its chips and the conversation so far still go
-to the provider.
+Turning it off also ends every conversation that runs: a reply under way stops, and what it wrote
+so far stays, marked as stopped. Until you turn it on again:
+
+- A new conversation says *No agent set up yet*, with **Configure agent**.
+- A conversation already started, or one reopened from the history, keeps its box, but sends
+  nothing: Enter leaves your question in the box, **Send again** sends nothing, and the panel says
+  *Let Chat use the model is off, so nothing is sent. Turn it on in Settings ▸ AI Agents.*
+- A question still on its way when you turn it off is not sent either. Its card says *Not sent*.
+  The question goes back into the box when the box is empty; otherwise it stays in the
+  conversation, and **Send again** sends it once the switch is on.
+
+Turn it on, and the line goes; press Enter, or **Send again**, to send.
 
 The status bar says which, at its right beside the project's location:
 
@@ -340,6 +349,7 @@ A card in the conversation says what went wrong and what to do.
 | *Key refused* | The provider refused the saved key: it is wrong, or was revoked. | **Open Settings**, **Replace** the key, then ask again. |
 | *No key saved* | There is no key or sign-in for the agent. | **Open Settings**, add one, then ask again. |
 | *Sign-in expired* | Codex's ChatGPT sign-in has expired. | **Open Settings**, sign in again (choose **Sign out** first if the card still says *Signed in as*), then ask again. |
+| *Not sent* | **Let Chat use the model** was turned off while the question was on its way. | Turn it on in **Settings ▸ AI Agents**, then press Enter (the question is back in the box) or **Send again**. |
 | *No answer* | Anything else: the agent stopped before answering. | **Send again**. |
 
 **Send again** asks the same question again in the same place: the conversation keeps it once. A

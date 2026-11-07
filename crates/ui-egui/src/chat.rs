@@ -64,6 +64,8 @@ pub enum ChatRefusal {
     NotAvailable,
     /// Archforge is closing.
     Closing,
+    /// Let Chat use the model is off: no conversation starts or is sent anything.
+    ModelUseOff,
     /// The conversation's private folder is being removed, after a deletion of it (AR-218): it
     /// starts once that is done, so asking again shortly after succeeds.
     Forgetting,
@@ -81,6 +83,7 @@ impl std::fmt::Display for ChatRefusal {
             ChatRefusal::TooMany { most } => write!(f, "at most {most} conversations run at once"),
             ChatRefusal::NotAvailable => f.write_str("conversations are not available here"),
             ChatRefusal::Closing => f.write_str("Archforge is closing"),
+            ChatRefusal::ModelUseOff => f.write_str("Let Chat use the model is off"),
             ChatRefusal::Forgetting => f.write_str("the conversation's private folder is being removed; it starts once that is done"),
             ChatRefusal::Refused { why } => f.write_str(why),
         }
@@ -336,7 +339,8 @@ pub(crate) fn frame(shell: &mut crate::Shell, ctx: &egui::Context) {
 }
 
 /// Tells the host the opt-in, Let Chat use the model, when it differs from what it was told last:
-/// turning it off closes agent access at once.
+/// turning it off closes agent access at once and ends every conversation that runs, so none sends
+/// anything more (AR-221); the panel says so.
 pub(crate) fn tell_access(shell: &mut crate::Shell) {
     let on = shell.state.agents.chat_uses_model;
     if shell.chats.told == Some(on) {
@@ -345,6 +349,18 @@ pub(crate) fn tell_access(shell: &mut crate::Shell) {
     if let Some(host) = host(shell) {
         host.set_model_access(on);
         shell.chats.told = Some(on);
+        let mut ended = Vec::new();
+        if !on {
+            for kept in shell.chats.kept.iter().filter(|k| k.running) {
+                match host.end(&kept.chat) {
+                    Ok(()) => ended.push(kept.chat.clone()),
+                    // Already ending: its end is on its way.
+                    Err(ChatRefusal::NotRunning) => {}
+                    Err(e) => log::warn!("the conversation {:?} could not be ended as Let Chat use the model went off: {e}", kept.chat),
+                }
+            }
+        }
+        crate::chat_panel::model_use_changed(shell, on, &ended);
     }
 }
 
@@ -402,11 +418,12 @@ fn drop_one(kept: &mut Kept) {
     kept.dropped = kept.dropped.saturating_add(1);
 }
 
-/// Starts a conversation: checked here (its id, a duplicate, the cap), then asked of the host,
-/// which answers at once and reports the rest as events. A Codex conversation reads Codex's account
-/// the first time, as opening AI Agents does.
+/// Starts a conversation: checked here (its id, Let Chat use the model on, a duplicate, the cap),
+/// then asked of the host, which answers at once and reports the rest as events. A Codex
+/// conversation reads Codex's account the first time, as opening AI Agents does.
 pub fn start(shell: &mut crate::Shell, request: ChatStart) -> Result<(), ChatRefusal> {
     check_id(&request.chat)?;
+    model_use_on(shell)?;
     let host = host(shell).ok_or(ChatRefusal::NotAvailable)?;
     if shell.chats.running(&request.chat) {
         return Err(ChatRefusal::AlreadyRunning);
@@ -429,10 +446,17 @@ pub fn start(shell: &mut crate::Shell, request: ChatStart) -> Result<(), ChatRef
     Ok(())
 }
 
-/// Sends the person's message to the running conversation `chat`.
+/// Sends the person's message to the running conversation `chat`; refused while Let Chat use the
+/// model is off.
 pub fn send(shell: &crate::Shell, chat: &str, text: String) -> Result<(), ChatRefusal> {
     check_id(chat)?;
+    model_use_on(shell)?;
     host(shell).ok_or(ChatRefusal::NotAvailable)?.send(chat, text)
+}
+
+/// Refuses while Let Chat use the model is off: then nothing of any conversation leaves Archforge.
+fn model_use_on(shell: &crate::Shell) -> Result<(), ChatRefusal> {
+    if shell.state.agents.chat_uses_model { Ok(()) } else { Err(ChatRefusal::ModelUseOff) }
 }
 
 /// Stops the turn the conversation `chat` runs; the conversation stays up.
