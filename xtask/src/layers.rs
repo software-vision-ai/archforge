@@ -2,8 +2,10 @@
 //!
 //! Reads `cargo metadata`, strips the application prefix from each package name, classifies the
 //! remainder through `TABLE`, walks normal, build and development edges between workspace crates,
-//! checks toolkit crates against their minimum layer, reports every violation and prints the table.
-//! Applications under `apps/` and the task runner are exempt.
+//! checks toolkit crates against their minimum layer, refuses process and network crates as the
+//! shell's dependencies and scans the shell's sources for process and network code
+//! (`shell_io`), reports every violation and prints the table. Applications under `apps/` and the
+//! task runner are exempt.
 
 use std::collections::BTreeMap;
 
@@ -133,6 +135,8 @@ pub fn violations(packages: &[Package]) -> Vec<String> {
                 }
             } else if is_toolkit(dep) && here < TOOLKIT_MIN_LAYER {
                 out.push(format!("{} (layer {here}) uses the toolkit crate {dep}, allowed from layer {TOOLKIT_MIN_LAYER}", p.short));
+            } else if p.short == SHELL && crate::shell_io::is_io_crate(dep) {
+                out.push(format!("{SHELL} uses the process or network crate {dep} ({kind}); the host does that through Services"));
             }
         }
     }
@@ -177,7 +181,8 @@ pub fn run() -> Result<(), String> {
     for p in &packages {
         println!("{:<12} {:?}", p.short, p.class);
     }
-    let v = violations(&packages);
+    let mut v = violations(&packages);
+    v.extend(crate::shell_io::scan(&util::root().join("crates").join(SHELL).join("src"))?);
     if v.is_empty() {
         println!("layers: {} crates, no violation", packages.len());
         Ok(())
@@ -212,6 +217,15 @@ mod tests {
         assert!(v.contains("toolkit crate egui"), "{v}");
         assert!(v.contains("inside layer 3"), "{v}");
         assert!(v.contains("stray is missing"), "{v}");
+    }
+
+    #[test]
+    fn the_shell_may_not_depend_on_a_process_or_network_crate() {
+        let packages = vec![pkg("ui-egui", Some(Class::Layer(9)), &[("egui", "normal"), ("tokio", "normal"), ("socket2", "dev")])];
+        let v = violations(&packages).join("\n");
+        assert!(v.contains("process or network crate tokio (normal)") && v.contains("socket2 (dev)"), "{v}");
+        let host = vec![pkg("control", Some(Class::Layer(9)), &[("rustix", "normal")])];
+        assert_eq!(violations(&host), Vec::<String>::new(), "a host service may");
     }
 
     #[test]
