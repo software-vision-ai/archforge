@@ -133,13 +133,13 @@ minutes; the icon beside it copies it. **Cancel** stops the sign-in.
 
 Then open the sign-in page and enter the code there. The codex program names that page each time.
 Archforge opens it only when it is on `https://auth.openai.com/`; for any other address **Open
-sign-in page** is greyed out and says *Not an address Archforge opens*. The card does not show the
-page's address yet:
+sign-in page** is greyed out, and pointing at it says *Not an address Archforge opens*. The card
+does not show the page's address yet:
 
 - **Open sign-in page** opens it in this computer's browser. To sign in on another device, copy
   the address from that browser's address bar and open it there.
-- On a computer with no browser at all, Archforge cannot show you the address yet. Sign in with
-  ChatGPT on a computer with a browser, or use an API key.
+- On a computer with no browser at all, Archforge cannot show you the address yet. There, use
+  Codex with an API key instead: the sign-in is kept on the computer that made it.
 
 <!-- picture: settings-ai-agents-device-code light | Settings, AI Agents: Codex's device code, with Copy the code and Open sign-in page -->
 
