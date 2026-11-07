@@ -16,6 +16,8 @@ pub const MAX_CONVERSATION_ID_BYTES: usize = 64;
 const CONVERSATION_PREFIX: &str = "conversation-";
 /// The prefix of a version probe's folder name.
 const PROBE_PREFIX: &str = "probe-";
+/// How many names a scratch folder tries before giving up: a name already taken is skipped.
+pub(crate) const SCRATCH_TRIES: u32 = 64;
 /// How many names a private file's temporary file tries before giving up.
 const TEMP_TRIES: u32 = 16;
 /// The folders inside a conversation's folder.
@@ -130,6 +132,53 @@ impl Workspace {
         Ok(true)
     }
 
+    /// A new private folder `<prefix>-<pid>-<n>` for one short-lived runtime that belongs to no
+    /// conversation (Codex's account process), laid out as a conversation's (home, configuration,
+    /// work and temporary folders, all 0700). The name is claimed by making the folder, so a name
+    /// already taken is skipped, up to [`SCRATCH_TRIES`] names. The returned guard owns the folder
+    /// from the moment it is made: a failure while filling it removes that folder alone, and so does
+    /// dropping the guard. A process that ends without dropping it (a crash) leaves it behind; nothing
+    /// sweeps such folders.
+    pub(crate) fn scratch(&self, prefix: &str) -> Result<ScratchFolder, AgentError> {
+        self.scratch_with(prefix, &[HOME, CONFIG, WORK, TMP])
+    }
+
+    /// [`Workspace::scratch`] with the inner folders `inner`, so a test can make filling it fail.
+    fn scratch_with(&self, prefix: &str, inner: &[&str]) -> Result<ScratchFolder, AgentError> {
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        let mut last = None;
+        for _ in 0..SCRATCH_TRIES {
+            let n = NEXT.fetch_add(1, Ordering::Relaxed);
+            let name = format!("{prefix}-{}-{n}", std::process::id());
+            let path = self.root.join(&name);
+            match sys::make_private_folder(&path, false) {
+                Ok(()) => {
+                    // Owned from here on: every early return below removes this folder alone.
+                    let mut guard = ScratchFolder { path: path.clone(), uid: self.uid, folder: None };
+                    check_private(&path, self.uid)?;
+                    for folder in inner {
+                        let inside = path.join(folder);
+                        sys::make_private_folder(&inside, false)
+                            .map_err(|e| AgentError::Folder { path: inside.clone(), problem: format!("cannot be made: {e}") })?;
+                        check_private(&inside, self.uid)?;
+                    }
+                    let id = ConversationId::new(&name)?;
+                    let folder =
+                        ConversationFolder { id, home: path.join(HOME), config: path.join(CONFIG), work: path.join(WORK), tmp: path.join(TMP), path };
+                    guard.folder = Some(folder);
+                    return Ok(guard);
+                }
+                Err(e) if e.kind() == io::ErrorKind::AlreadyExists => last = Some(e),
+                Err(e) => return Err(AgentError::Folder { path, problem: format!("cannot be made: {e}") }),
+            }
+        }
+        let detail = last.map(|e| e.to_string()).unwrap_or_default();
+        Err(AgentError::Folder {
+            path: self.root.clone(),
+            problem: format!("has no free name for a {prefix} folder after {SCRATCH_TRIES} tries: {detail}"),
+        })
+    }
+
     /// A new, empty private folder for one version probe, removed when the returned guard drops.
     pub(crate) fn probe_folder(&self) -> Result<ProbeFolder, AgentError> {
         static NEXT: AtomicU64 = AtomicU64::new(0);
@@ -212,6 +261,48 @@ impl Drop for ProbeFolder {
     fn drop(&mut self) {
         if let Err(e) = std::fs::remove_dir_all(&self.path) {
             log::warn!("the probe folder {} stays: {e}", self.path.display());
+        }
+    }
+}
+
+/// A private folder made by [`Workspace::scratch`] for one short-lived runtime, removed with
+/// everything in it when dropped.
+#[derive(Debug)]
+pub(crate) struct ScratchFolder {
+    path: PathBuf,
+    uid: u32,
+    /// Set once the folder is complete; a guard without it is a folder being made.
+    folder: Option<ConversationFolder>,
+}
+
+impl ScratchFolder {
+    /// The folder as a runtime is given one: its home, configuration, work and temporary folders.
+    /// `None` only while it is being made, which no caller sees.
+    pub(crate) fn folder(&self) -> Option<&ConversationFolder> {
+        self.folder.as_ref()
+    }
+}
+
+impl Drop for ScratchFolder {
+    /// Removes the folder this guard made and everything in it, never following a link inside it,
+    /// and only while it is still a private folder of this user; otherwise, or when the removal
+    /// fails, it is left in place and logged.
+    fn drop(&mut self) {
+        match std::fs::symlink_metadata(&self.path) {
+            Ok(meta) => {
+                if let Some(problem) = sys::private_folder_problem(&meta, self.uid) {
+                    log::warn!("the scratch folder {} {problem}, so it is not removed", self.path.display());
+                    return;
+                }
+            }
+            Err(e) if e.kind() == io::ErrorKind::NotFound => return,
+            Err(e) => {
+                log::warn!("the scratch folder {} cannot be read, so it stays: {e}", self.path.display());
+                return;
+            }
+        }
+        if let Err(e) = std::fs::remove_dir_all(&self.path) {
+            log::warn!("the scratch folder {} stays: {e}", self.path.display());
         }
     }
 }
@@ -367,6 +458,57 @@ mod tests {
         assert_eq!(names(&dir), vec!["copy.json".to_owned()], "only the temporary file went");
         assert!(target.join("inside").is_file(), "the target is kept");
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A scratch folder skips names already taken, never touches them, and is removed when dropped;
+    /// after 64 taken names it gives up.
+    #[cfg(unix)]
+    #[test]
+    fn scratch_folders_claim_a_free_name_and_go_when_dropped() {
+        let base = scratch_dir("scratch");
+        let ws = Workspace::open(&base.join("ws")).unwrap();
+        // The next names the counter hands out, taken already by someone else.
+        let probe = ws.scratch("probe").unwrap();
+        let taken_from = probe.path.file_name().unwrap().to_string_lossy().rsplit('-').next().unwrap().parse::<u64>().unwrap() + 1;
+        drop(probe);
+        for n in taken_from..taken_from + 3 {
+            let taken = ws.root().join(format!("codex-{}-{n}", std::process::id()));
+            std::fs::create_dir(&taken).unwrap();
+            std::fs::write(taken.join("theirs"), b"x").unwrap();
+        }
+        let folder = ws.scratch("codex").unwrap();
+        let path = folder.path.clone();
+        assert!(path.ends_with(format!("codex-{}-{}", std::process::id(), taken_from + 3)), "{}", path.display());
+        let inner = folder.folder().unwrap();
+        for dir in [inner.home(), inner.config(), inner.work(), inner.tmp()] {
+            assert!(dir.is_dir() && dir.starts_with(&path));
+        }
+        drop(folder);
+        assert!(!path.exists(), "the folder went with its guard");
+        for n in taken_from..taken_from + 3 {
+            assert!(ws.root().join(format!("codex-{}-{n}", std::process::id())).join("theirs").is_file(), "a taken name was touched");
+        }
+        // Every name taken: refused after the tries.
+        let next = taken_from + 4;
+        for n in next..next + u64::from(SCRATCH_TRIES) {
+            std::fs::create_dir(ws.root().join(format!("full-{}-{n}", std::process::id()))).unwrap();
+        }
+        let error = ws.scratch("full").unwrap_err();
+        assert!(matches!(&error, AgentError::Folder { problem, .. } if problem.contains("no free name")), "{error:?}");
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    /// A scratch folder whose filling fails is removed, and nothing beside it.
+    #[cfg(unix)]
+    #[test]
+    fn a_scratch_folder_that_fails_to_fill_removes_only_itself() {
+        let base = scratch_dir("scratch-fail");
+        let ws = Workspace::open(&base.join("ws")).unwrap();
+        std::fs::create_dir(ws.root().join("neighbour")).unwrap();
+        let error = ws.scratch_with("codex", &["home", "missing/inner"]).unwrap_err();
+        assert!(matches!(error, AgentError::Folder { .. }), "{error:?}");
+        assert_eq!(names(ws.root()), vec!["neighbour".to_owned()]);
+        std::fs::remove_dir_all(&base).unwrap();
     }
 
     /// Ids are lowercase letters, digits and hyphens, and a refused id is never repeated.

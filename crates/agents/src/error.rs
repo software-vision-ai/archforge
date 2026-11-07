@@ -78,6 +78,16 @@ pub enum AgentError {
     TurnRunning { runtime: RuntimeKind },
     /// A failure an adapter read from the runtime's own output, already in its category.
     Reported { kind: ErrorKind, detail: String },
+    /// The runtime answered a request with an error. `message` is its own words, cut to
+    /// [`MAX_DETAIL_BYTES`] with every secret it was given replaced; `unknown_method` is set when it
+    /// said it does not know the request at all (an older runtime), a missing runtime to the
+    /// interface.
+    Refused { runtime: RuntimeKind, request: &'static str, code: i64, message: String, unknown_method: bool },
+    /// The runtime did not answer a request within its time.
+    TimedOut { runtime: RuntimeKind, request: &'static str, after_ms: u128 },
+    /// The runtime's answer to a request could not be read: `reason` says what was wrong, never
+    /// quoting the answer.
+    Unreadable { runtime: RuntimeKind, request: &'static str, reason: String },
 }
 
 impl AgentError {
@@ -87,7 +97,7 @@ impl AgentError {
             AgentError::NotAvailable | AgentError::Missing { .. } | AgentError::TooOld { .. } | AgentError::Unsupported { .. } => {
                 ErrorKind::MissingRuntime
             }
-            AgentError::Spawn { not_found: true, .. } => ErrorKind::MissingRuntime,
+            AgentError::Spawn { not_found: true, .. } | AgentError::Refused { unknown_method: true, .. } => ErrorKind::MissingRuntime,
             AgentError::Reported { kind, .. } => *kind,
             AgentError::InvalidVariable { .. }
             | AgentError::SecretExposed { .. }
@@ -103,6 +113,9 @@ impl AgentError {
             | AgentError::InputBacklog { .. }
             | AgentError::InvalidSetting { .. }
             | AgentError::TurnRunning { .. }
+            | AgentError::Refused { unknown_method: false, .. }
+            | AgentError::TimedOut { .. }
+            | AgentError::Unreadable { .. }
             | AgentError::Io { .. } => ErrorKind::Other,
         }
     }
@@ -155,6 +168,14 @@ impl fmt::Display for AgentError {
             AgentError::InvalidSetting { setting, bytes, reason } => write!(f, "the {setting} of {bytes} bytes was refused: {reason}"),
             AgentError::TurnRunning { runtime } => write!(f, "{runtime} is still answering; stop the turn or wait for its end before sending"),
             AgentError::Reported { detail, .. } => f.write_str(detail),
+            AgentError::Refused { runtime, request, message, unknown_method: true, .. } => {
+                write!(f, "{runtime} does not know the request {request}, so it is too old for Archforge; update it ({message})")
+            }
+            AgentError::Refused { runtime, request, code, message, unknown_method: false } => {
+                write!(f, "{runtime} refused {request} (error {code}): {message}")
+            }
+            AgentError::TimedOut { runtime, request, after_ms } => write!(f, "{runtime} did not answer {request} within {after_ms} ms"),
+            AgentError::Unreadable { runtime, request, reason } => write!(f, "the answer of {runtime} to {request} could not be read: {reason}"),
         }
     }
 }

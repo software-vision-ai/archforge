@@ -15,3 +15,9 @@ distributed replaces it. Its terms are in licenses/brand/archforge-icon.txt.
 Third-party assets and their licences are listed in ATTRIBUTION.md, as are the fonts the program
 draws with: Inter, from craft-fonts, the fonts input of the build, and the fonts bundled with egui.
 Their licence texts are in licenses/fonts/.
+
+The Codex adapter's tests check its messages against
+crates/agents/schema/codex-app-server-0.166.0.contract.json, a cut of the JSON schema of the
+app-server protocol of OpenAI Codex 0.166.0 (github.com/openai/codex, tag rust-v0.166.0). That
+schema is part of OpenAI Codex, Copyright 2025 OpenAI, licensed under the Apache License, Version 2.0
+(LICENSE-APACHE); the file's "$comment" says what was changed.
