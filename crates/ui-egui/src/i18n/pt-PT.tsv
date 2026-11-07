@@ -273,6 +273,8 @@ str		Saving…	A guardar…
 str		Opening…	A abrir…
 str		Saved	Guardado
 str		Unsaved changes · {chord} saves	Alterações por guardar · {chord} guarda
+str		Chat is using the model	A Conversa está a usar o modelo
+str		Agent access off	Acesso de agentes desligado
 str		Not saved	Não guardado
 str		Changes could not be written to the project	Não foi possível escrever as alterações no projeto
 str		The save stopped without an answer	A gravação terminou sem resposta

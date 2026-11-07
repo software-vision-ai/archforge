@@ -273,6 +273,8 @@ str		Saving…	Wird gesichert…
 str		Opening…	Wird geöffnet…
 str		Saved	Gesichert
 str		Unsaved changes · {chord} saves	Ungesicherte Änderungen · {chord} sichert
+str		Chat is using the model	Chat nutzt das Modell
+str		Agent access off	Agentenzugriff aus
 str		Not saved	Nicht gesichert
 str		Changes could not be written to the project	Änderungen konnten nicht ins Projekt geschrieben werden
 str		The save stopped without an answer	Das Sichern endete ohne Antwort

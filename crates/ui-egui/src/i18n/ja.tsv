@@ -273,6 +273,8 @@ str		Saving…	保存中…
 str		Opening…	開いています…
 str		Saved	保存済み
 str		Unsaved changes · {chord} saves	未保存の変更 · {chord} で保存
+str		Chat is using the model	チャットがモデルを使用中
+str		Agent access off	エージェントのアクセスはオフ
 str		Not saved	保存されていません
 str		Changes could not be written to the project	変更をプロジェクトに書き込めませんでした
 str		The save stopped without an answer	保存が応答なしで終了しました

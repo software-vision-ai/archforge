@@ -16,8 +16,13 @@ description: "Use when writing, placing or running tests in Archforge: a regress
   - projects on disk: `crates/project/tests/project.rs` against a real dolt, a project's model in
     `crates/project/tests/model.rs`, its conversations in `crates/project/tests/chat.rs`; the app's
     projects host: the `tests` module in `apps/archforge/src/projects.rs`
+  - the app's agents host (conversations, agent access, the test message, Codex's account):
+    `apps/archforge/src/agents/tests.rs`, the real host against fake `claude` and `codex` scripts
+    replaying `crates/agents/tests/fixtures/`, keys as canaries in a `MemoryStore`, never an
+    installed program, a real key, `~/.claude` or `~/.codex`
   - the control channel's tokens, roles and revocation: `crates/control/src/tests.rs`; what the
     window lets a read-only token do: the `tests` module in `crates/ui-egui/src/control.rs`
+  - the shell's process and network scan: the `tests` module in `xtask/src/shell_io.rs`
   - name rules: the case table in `crates/names/src/lib.rs`
   - API keys: `crates/secrets/src/tests.rs`, against `MemoryStore`; another crate's tests use
     `archforge_secrets::MemoryStore` (feature `testing`), never the system's store

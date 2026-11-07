@@ -2,15 +2,19 @@
 //! and sign-ins, as Settings → AI Agents shows them.
 //!
 //! The shell never touches a program, a key or the system's secure store: the host does, through
-//! two services. [`AgentHost`] looks for the programs and keeps the API keys (local work that sends
-//! nothing); [`AgentAccounts`] does what talks to a provider or to the codex program's own sign-in:
-//! a test message, and Codex's ChatGPT sign-in with its device code. Every call returns at once
-//! with a channel the host answers on from its own thread, so the window never waits.
+//! one service, [`AgentHost`]. It looks for the programs and keeps the API keys (local work that
+//! sends nothing); it sends the test message and runs Codex's ChatGPT sign-in with its device
+//! code; and it starts, drives, stops and ends Chat's conversations ([`crate::chat`]), giving them
+//! agent access while Let Chat use the model is on. Every call returns at once, with a channel the
+//! host answers on from its own thread, or with the conversation's events on the one channel
+//! [`AgentHost::connect`] gave it, so the window never waits.
 //!
 //! The programs are looked for once when Archforge starts (no key is read then: the secure store
 //! is not touched at launch, so it never asks for access unless agents are used). The keys are
 //! read from the store the first time the AI Agents page or Chat needs them, on the host's
-//! thread, and kept until Look again, Check connection, a save or a removal, or a restart.
+//! thread, and kept until Look again, Check connection, a save or a removal, or a restart. Codex's
+//! account is read the first time the AI Agents page shows or a Codex conversation starts, never
+//! at launch: reading it starts the codex program.
 //! Nothing here sends anything over the network unless the user asks for a test message or a
 //! sign-in. A key goes from the field to the host as a
 //! [`KeyText`], whose bytes are overwritten when it drops; the shell only ever keeps a saved key's
@@ -189,6 +193,9 @@ pub struct Look {
     pub codex: Program,
     pub claude_key: Key,
     pub codex_key: Key,
+    /// Whether the codex program keeps a ChatGPT sign-in in its own files (no secure store opened)
+    /// rather than the system keyring, as the host chose with the store's read.
+    pub sign_in_files: bool,
 }
 
 impl Look {
@@ -220,6 +227,8 @@ pub struct Keys {
     pub store: Store,
     pub claude_key: Key,
     pub codex_key: Key,
+    /// Whether a ChatGPT sign-in is kept in the codex program's own files rather than the keyring.
+    pub sign_in_files: bool,
 }
 
 /// The most bytes a key may have, as the secure store takes it.
@@ -287,32 +296,24 @@ pub fn last_four(key: &str) -> String {
     if n < 12 { String::new() } else { key.chars().skip(n - 4).collect() }
 }
 
-/// The host's local work for AI Agents: finding the programs and keeping the keys in the system's
-/// secure store. Nothing it does sends anything over the network.
-pub trait AgentHost: Send + Sync {
-    /// Whether this system runs agents; answered at once, without looking at anything.
-    fn system(&self) -> System {
-        System::Supported
-    }
-    /// Looks for both programs; never touches the secure store, so the answer's store and keys
-    /// are left unread.
-    fn look(&self) -> Receiver<Look>;
-    /// Opens the secure store and reads which keys are saved, by their last four: the only call
-    /// that reads a key, made the first time the AI Agents page or Chat needs one.
-    fn read_keys(&self) -> Receiver<Keys>;
-    /// Saves `key` as `provider`'s, replacing the one saved before; the answer is the key as now
-    /// kept, or why not in the host's words.
-    fn save_key(&self, provider: Provider, key: KeyText) -> Receiver<Result<Key, String>>;
-    /// Removes `provider`'s key; the answer is the key as now kept, or why not.
-    fn remove_key(&self, provider: Provider) -> Receiver<Result<Key, String>>;
-}
-
-/// Who Codex is signed in as, as the codex program keeps it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Who Codex is signed in as, as the codex program keeps it. An expired sign-in whose email Codex
+/// did not say has an empty one.
+#[derive(Clone, PartialEq, Eq)]
 pub enum CodexAccount {
     NotSignedIn,
     SignedIn { email: String, plan: Option<String> },
     Expired { email: String },
+}
+
+impl std::fmt::Debug for CodexAccount {
+    /// The state and the plan; an email by its length only.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CodexAccount::NotSignedIn => f.write_str("NotSignedIn"),
+            CodexAccount::SignedIn { email, plan } => f.debug_struct("SignedIn").field("email_bytes", &email.len()).field("plan", plan).finish(),
+            CodexAccount::Expired { email } => f.debug_struct("Expired").field("email_bytes", &email.len()).finish(),
+        }
+    }
 }
 
 /// Why an account call failed.
@@ -338,8 +339,12 @@ pub enum LoginWay {
 }
 
 /// What a sign-in says while it runs.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum LoginEvent {
+    /// The page the codex program's sign-in waits on, for the window to open in the browser.
+    OpenBrowser {
+        url: String,
+    },
     /// The code to enter, where, and how many minutes it lasts.
     DeviceCode {
         code: String,
@@ -350,13 +355,49 @@ pub enum LoginEvent {
     Failed(AccountError),
 }
 
-/// What talks to a provider or to the codex program's own sign-in. The codex program keeps its
-/// ChatGPT sign-in itself; Archforge only starts it and shows what it says.
-pub trait AgentAccounts: Send + Sync {
-    /// Sends one short message to `provider` with the model given, which costs a little of the
-    /// plan or the API credit.
-    fn test_message(&self, provider: Provider, model: &str) -> Receiver<Result<(), AccountError>>;
-    /// Who Codex is signed in as, read from the codex program; sends nothing.
+impl std::fmt::Debug for LoginEvent {
+    /// The kind of event; an address and a code by their lengths only, as they hold the sign-in.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LoginEvent::OpenBrowser { url } => f.debug_struct("OpenBrowser").field("url_bytes", &url.len()).finish(),
+            LoginEvent::DeviceCode { code, url, minutes } => {
+                f.debug_struct("DeviceCode").field("code_bytes", &code.len()).field("url_bytes", &url.len()).field("minutes", minutes).finish()
+            }
+            LoginEvent::Done(account) => f.debug_tuple("Done").field(account).finish(),
+            LoginEvent::Failed(e) => f.debug_tuple("Failed").field(e).finish(),
+        }
+    }
+}
+
+/// The host's side of AI Agents and Chat, the one service the shell asks.
+///
+/// Local work that sends nothing: finding the programs and keeping the keys in the system's secure
+/// store. Work that talks to a provider or runs the codex program: the test message and Codex's
+/// account. Chat's conversations: each runs its program on a thread of its own, its events reach
+/// the window through the sink [`AgentHost::connect`] gave, and while Let Chat use the model is on
+/// ([`AgentHost::set_model_access`]) each gets agent access, its own token on a loopback control
+/// channel that is open only while a conversation holds it.
+pub trait AgentHost: Send + Sync {
+    /// Whether this system runs agents; answered at once, without looking at anything.
+    fn system(&self) -> System {
+        System::Supported
+    }
+    /// Looks for both programs; never touches the secure store, so the answer's store and keys
+    /// are left unread.
+    fn look(&self) -> Receiver<Look>;
+    /// Opens the secure store and reads which keys are saved, by their last four: the only call
+    /// that reads a key, made the first time the AI Agents page or Chat needs one.
+    fn read_keys(&self) -> Receiver<Keys>;
+    /// Saves `key` as `provider`'s, replacing the one saved before; the answer is the key as now
+    /// kept, or why not in the host's words.
+    fn save_key(&self, provider: Provider, key: KeyText) -> Receiver<Result<Key, String>>;
+    /// Removes `provider`'s key; the answer is the key as now kept, or why not.
+    fn remove_key(&self, provider: Provider) -> Receiver<Result<Key, String>>;
+    /// Sends one short message to `provider` with the model given (Codex signed in as `sign_in`
+    /// says), which costs a little of the plan or the API credit. It runs without agent access, in
+    /// a scratch folder removed after.
+    fn test_message(&self, provider: Provider, model: &str, sign_in: CodexSignIn) -> Receiver<Result<(), AccountError>>;
+    /// Who Codex is signed in as, read from the codex program (which it starts); sends nothing.
     fn codex_account_read(&self) -> Receiver<Result<CodexAccount, AccountError>>;
     /// Starts signing Codex in with ChatGPT.
     fn codex_login_start(&self, way: LoginWay) -> Receiver<LoginEvent>;
@@ -364,32 +405,22 @@ pub trait AgentAccounts: Send + Sync {
     fn codex_login_cancel(&self);
     /// Signs Codex out.
     fn codex_logout(&self) -> Receiver<Result<(), AccountError>>;
-}
-
-/// The accounts service of a host that cannot do any of it yet: every call answers
-/// [`AccountError::NotAvailableYet`].
-pub struct NotYet;
-
-fn not_yet<T: Send + 'static>(value: T) -> Receiver<T> {
-    let (tx, rx) = std::sync::mpsc::channel();
-    let _ = tx.send(value);
-    rx
-}
-
-impl AgentAccounts for NotYet {
-    fn test_message(&self, _provider: Provider, _model: &str) -> Receiver<Result<(), AccountError>> {
-        not_yet(Err(AccountError::NotAvailableYet))
-    }
-    fn codex_account_read(&self) -> Receiver<Result<CodexAccount, AccountError>> {
-        not_yet(Err(AccountError::NotAvailableYet))
-    }
-    fn codex_login_start(&self, _way: LoginWay) -> Receiver<LoginEvent> {
-        not_yet(LoginEvent::Failed(AccountError::NotAvailableYet))
-    }
-    fn codex_login_cancel(&self) {}
-    fn codex_logout(&self) -> Receiver<Result<(), AccountError>> {
-        not_yet(Err(AccountError::NotAvailableYet))
-    }
+    /// Where the conversations' events and agent access's changes go from now on.
+    fn connect(&self, sink: crate::chat::EventSink);
+    /// Let Chat use the model, on or off. Off closes agent access at once: every conversation's
+    /// token is revoked and the control channel closes; the conversations go on without it.
+    fn set_model_access(&self, on: bool);
+    /// Starts a conversation, answering at once: refused for a bad id, one already running, or past
+    /// [`crate::chat::MAX_RUNNING`]; the rest (the program found, the key read, the start) comes
+    /// as events, a failure as an end.
+    fn start(&self, request: crate::chat::ChatStart) -> Result<(), crate::chat::ChatRefusal>;
+    /// Sends the person's message to the running conversation `chat`.
+    fn send(&self, chat: &str, text: String) -> Result<(), crate::chat::ChatRefusal>;
+    /// Stops the turn `chat` runs; the conversation stays up.
+    fn stop(&self, chat: &str) -> Result<(), crate::chat::ChatRefusal>;
+    /// Ends the conversation `chat`: its program stops, its token is revoked, and the control
+    /// channel closes with the last conversation that held it.
+    fn end(&self, chat: &str) -> Result<(), crate::chat::ChatRefusal>;
 }
 
 /// How Codex signs in.
@@ -512,6 +543,9 @@ pub struct State {
     /// Codex's account, once read: `None` before.
     pub codex: Option<Result<CodexAccount, AccountError>>,
     reading: Option<Receiver<Result<CodexAccount, AccountError>>>,
+    /// Codex's account is wanted (the AI Agents page shows, or a Codex conversation started): it is
+    /// read once the look has found the program.
+    account_wanted: bool,
     /// Check connection waits for the look, the keys and the account read it started.
     checking: bool,
     pub outcome: Option<Outcome>,
@@ -541,6 +575,11 @@ impl State {
 
     pub fn looking(&self) -> bool {
         self.looking.is_some() || self.keys_reading.is_some()
+    }
+
+    /// Whether Codex's account is being read, or waits for the look to read it.
+    pub fn reading_account(&self) -> bool {
+        self.reading.is_some() || (self.account_wanted && self.codex.is_none() && self.looking.is_some())
     }
 
     /// Whether the keys have been read from the store in this run.
@@ -650,20 +689,31 @@ pub fn remove_key(shell: &mut crate::Shell, provider: Provider) {
     shell.agents.saving[i] = Some(host.remove_key(provider));
 }
 
+/// Reads Codex's account the first time it is needed: the AI Agents page shows, or a Codex
+/// conversation starts. Never at launch, as reading it starts the codex program. Once the look has
+/// found the program it is read at once; before, it is read when the look answers.
+pub fn need_account(shell: &mut crate::Shell) {
+    if shell.agents.account_wanted {
+        return;
+    }
+    shell.agents.account_wanted = true;
+    read_account(shell);
+}
+
 /// Send test message: one short message to the default agent's provider.
 pub fn send_test(shell: &mut crate::Shell) {
-    let Some(accounts) = shell.services.agent_accounts.clone() else { return };
+    let Some(accounts) = host(shell) else { return };
     if shell.agents.testing.is_some() {
         return;
     }
     let p = shell.state.agents.default_agent;
     let model = shell.state.agents.model(p).to_string();
-    shell.agents.testing = Some((p, accounts.test_message(p, &model)));
+    shell.agents.testing = Some((p, accounts.test_message(p, &model, shell.state.agents.codex_sign_in)));
 }
 
 /// Starts signing Codex in with ChatGPT.
 pub fn sign_in(shell: &mut crate::Shell, way: LoginWay) {
-    let Some(accounts) = shell.services.agent_accounts.clone() else { return };
+    let Some(accounts) = host(shell) else { return };
     if shell.agents.login.is_some() {
         return;
     }
@@ -674,7 +724,7 @@ pub fn sign_in(shell: &mut crate::Shell, way: LoginWay) {
 /// Stops the sign-in under way.
 pub fn cancel_sign_in(shell: &mut crate::Shell) {
     if shell.agents.login.take().is_some()
-        && let Some(accounts) = &shell.services.agent_accounts
+        && let Some(accounts) = host(shell)
     {
         accounts.codex_login_cancel();
     }
@@ -682,7 +732,7 @@ pub fn cancel_sign_in(shell: &mut crate::Shell) {
 
 /// Signs Codex out.
 pub fn sign_out(shell: &mut crate::Shell) {
-    let Some(accounts) = shell.services.agent_accounts.clone() else { return };
+    let Some(accounts) = host(shell) else { return };
     shell.agents.login_error = None;
     shell.agents.logout = Some(accounts.codex_logout());
 }
@@ -691,7 +741,7 @@ fn read_account(shell: &mut crate::Shell) {
     if shell.agents.reading.is_some() || !shell.agents.look.codex.found() {
         return;
     }
-    if let Some(accounts) = shell.services.agent_accounts.clone() {
+    if let Some(accounts) = host(shell) {
         shell.agents.reading = Some(accounts.codex_account_read());
     }
 }
@@ -735,8 +785,9 @@ fn finish_check(shell: &mut crate::Shell) {
     shell.agents.outcome = Some(Outcome::Checked { at: crate::home::now(), agents });
 }
 
-/// Takes in what the host has answered; once per frame.
-pub(crate) fn poll(shell: &mut crate::Shell) {
+/// Takes in what the host has answered; once per frame. A sign-in's page opens in the browser
+/// through `ctx` when it is the codex program's sign-in host.
+pub(crate) fn poll(shell: &mut crate::Shell, ctx: &egui::Context) {
     if let Some(rx) = &shell.agents.looking {
         match rx.try_recv() {
             Ok(look) => {
@@ -744,7 +795,10 @@ pub(crate) fn poll(shell: &mut crate::Shell) {
                 // The programs only: the store and the keys come from their own read.
                 shell.agents.look.claude = look.claude;
                 shell.agents.look.codex = look.codex;
-                read_account(shell);
+                // Codex's account only once it is wanted, never at launch.
+                if shell.agents.account_wanted && shell.agents.codex.is_none() {
+                    read_account(shell);
+                }
             }
             Err(TryRecvError::Empty) => {}
             Err(TryRecvError::Disconnected) => {
@@ -759,7 +813,12 @@ pub(crate) fn poll(shell: &mut crate::Shell) {
             Err(TryRecvError::Empty) => None,
             Err(TryRecvError::Disconnected) => {
                 let why = tr("The secure store stopped without an answer");
-                Some(Keys { store: Store::NotLooked, claude_key: Key::Unreadable { why: why.clone() }, codex_key: Key::Unreadable { why } })
+                Some(Keys {
+                    store: Store::NotLooked,
+                    claude_key: Key::Unreadable { why: why.clone() },
+                    codex_key: Key::Unreadable { why },
+                    sign_in_files: false,
+                })
             }
         };
         if let Some(keys) = answer {
@@ -767,6 +826,7 @@ pub(crate) fn poll(shell: &mut crate::Shell) {
             shell.agents.keys_known = true;
             let look = &mut shell.agents.look;
             look.store = keys.store;
+            look.sign_in_files = keys.sign_in_files;
             for (p, key) in [(Provider::Claude, keys.claude_key), (Provider::Codex, keys.codex_key)] {
                 // A key saved or removed while the read ran is newer than what the read found.
                 if std::mem::take(&mut shell.agents.changed_while_reading[p.index()]) {
@@ -850,6 +910,15 @@ pub(crate) fn poll(shell: &mut crate::Shell) {
                 // Only a code of letters, digits and hyphens is shown: nothing that hides or
                 // reorders text reaches the page.
                 Ok(LoginEvent::DeviceCode { code, url, minutes }) if device_code_ok(&code) => login.code = Some((code, url, minutes)),
+                // The browser opens only on the codex program's sign-in host.
+                Ok(LoginEvent::OpenBrowser { url }) => match approved_browser_page(&url) {
+                    Some(page) => ctx.open_url(egui::OpenUrl::new_tab(page)),
+                    None => {
+                        shell.agents.login_error = Some(AccountError::Failed { detail: tr("Not an address Archforge opens") });
+                        login_over = true;
+                        break;
+                    }
+                },
                 Ok(LoginEvent::DeviceCode { .. }) => {
                     shell.agents.login_error =
                         Some(AccountError::Failed { detail: tr("The sign-in gave a code that is not letters, digits and hyphens.") });
@@ -907,6 +976,14 @@ pub fn approved_sign_in_page(url: &str) -> Option<&str> {
     ok.then_some(url)
 }
 
+/// The page a browser sign-in opens: an HTTPS address on OpenAI's sign-in host, at most 8 KiB of
+/// printable ASCII without spaces (its query names the sign-in), or none.
+pub fn approved_browser_page(url: &str) -> Option<&str> {
+    let rest = url.strip_prefix("https://auth.openai.com/")?;
+    let ok = url.len() <= 8 * 1024 && rest.bytes().all(|b| b.is_ascii_graphic() && b != b'\\' && b != b'"');
+    ok.then_some(url)
+}
+
 /// A host for tests and the offscreen screens: answers each call with what it was set up with,
 /// at once, and counts the calls.
 #[cfg(any(test, feature = "snapshot"))]
@@ -928,6 +1005,11 @@ pub mod fake {
         pub login: AtomicUsize,
         pub cancel: AtomicUsize,
         pub logout: AtomicUsize,
+        pub connect: AtomicUsize,
+        pub start: AtomicUsize,
+        pub send: AtomicUsize,
+        pub stop: AtomicUsize,
+        pub end: AtomicUsize,
     }
 
     impl Calls {
@@ -962,6 +1044,13 @@ pub mod fake {
         /// Holds each read of the keys until [`Fake::release_keys`], as a slow store would.
         pub hold_keys: bool,
         pub(crate) held: Mutex<Vec<(std::sync::mpsc::Sender<Keys>, Keys)>>,
+        /// Where the shell takes the events, once it connected.
+        pub sink: Mutex<Option<crate::chat::EventSink>>,
+        /// Let Chat use the model, as each call told it.
+        pub model_access: Mutex<Vec<bool>>,
+        /// The conversations started, in order, and the ones running.
+        pub started: Mutex<Vec<crate::chat::ChatStart>>,
+        pub running: Mutex<Vec<String>>,
     }
 
     impl Default for Fake {
@@ -977,6 +1066,10 @@ pub mod fake {
                 open: Mutex::new(Vec::new()),
                 hold_keys: false,
                 held: Mutex::new(Vec::new()),
+                sink: Mutex::new(None),
+                model_access: Mutex::new(Vec::new()),
+                started: Mutex::new(Vec::new()),
+                running: Mutex::new(Vec::new()),
             }
         }
     }
@@ -1003,7 +1096,12 @@ pub mod fake {
         fn read_keys(&self) -> Receiver<Keys> {
             self.calls.keys.fetch_add(1, Ordering::Relaxed);
             let look = lock(&self.look);
-            let keys = Keys { store: look.store.clone(), claude_key: look.claude_key.clone(), codex_key: look.codex_key.clone() };
+            let keys = Keys {
+                store: look.store.clone(),
+                claude_key: look.claude_key.clone(),
+                codex_key: look.codex_key.clone(),
+                sign_in_files: look.sign_in_files,
+            };
             if self.hold_keys {
                 let (tx, rx) = std::sync::mpsc::channel();
                 lock(&self.held).push((tx, keys));
@@ -1027,10 +1125,43 @@ pub mod fake {
             *lock(&self.look).key_mut(provider) = Key::Absent;
             answered(Ok(Key::Absent))
         }
-    }
-
-    impl AgentAccounts for Fake {
-        fn test_message(&self, _provider: Provider, _model: &str) -> Receiver<Result<(), AccountError>> {
+        fn connect(&self, sink: crate::chat::EventSink) {
+            self.calls.connect.fetch_add(1, Ordering::Relaxed);
+            *lock(&self.sink) = Some(sink);
+        }
+        fn set_model_access(&self, on: bool) {
+            lock(&self.model_access).push(on);
+        }
+        fn start(&self, request: crate::chat::ChatStart) -> Result<(), crate::chat::ChatRefusal> {
+            self.calls.start.fetch_add(1, Ordering::Relaxed);
+            crate::chat::check_id(&request.chat)?;
+            let mut running = lock(&self.running);
+            if running.contains(&request.chat) {
+                return Err(crate::chat::ChatRefusal::AlreadyRunning);
+            }
+            if running.len() >= crate::chat::MAX_RUNNING {
+                return Err(crate::chat::ChatRefusal::TooMany { most: crate::chat::MAX_RUNNING });
+            }
+            running.push(request.chat.clone());
+            lock(&self.started).push(request);
+            Ok(())
+        }
+        fn send(&self, chat: &str, _text: String) -> Result<(), crate::chat::ChatRefusal> {
+            self.calls.send.fetch_add(1, Ordering::Relaxed);
+            self.known(chat)
+        }
+        fn stop(&self, chat: &str) -> Result<(), crate::chat::ChatRefusal> {
+            self.calls.stop.fetch_add(1, Ordering::Relaxed);
+            self.known(chat)
+        }
+        fn end(&self, chat: &str) -> Result<(), crate::chat::ChatRefusal> {
+            self.calls.end.fetch_add(1, Ordering::Relaxed);
+            self.known(chat)?;
+            lock(&self.running).retain(|c| c != chat);
+            self.emit(chat, crate::chat::ChatEvent::Ended { failure: None });
+            Ok(())
+        }
+        fn test_message(&self, _provider: Provider, _model: &str, _sign_in: CodexSignIn) -> Receiver<Result<(), AccountError>> {
             self.calls.test.fetch_add(1, Ordering::Relaxed);
             answered(lock(&self.test).clone())
         }
@@ -1058,6 +1189,24 @@ pub mod fake {
     }
 
     impl Fake {
+        /// Refuses a conversation that is not running.
+        fn known(&self, chat: &str) -> Result<(), crate::chat::ChatRefusal> {
+            if lock(&self.running).iter().any(|c| c == chat) { Ok(()) } else { Err(crate::chat::ChatRefusal::NotRunning) }
+        }
+
+        /// Sends `event` of `chat` to the shell, as a running conversation would; false before the
+        /// shell connected or once it is gone.
+        pub fn emit(&self, chat: &str, event: crate::chat::ChatEvent) -> bool {
+            let sink = lock(&self.sink).clone();
+            sink.is_some_and(|s| s.send(crate::chat::HostEvent::Chat { chat: chat.to_string(), event, ticket: crate::chat::Ticket::uncounted() }))
+        }
+
+        /// Says agent access opened or closed, as the host does.
+        pub fn access(&self, held: bool) -> bool {
+            let sink = lock(&self.sink).clone();
+            sink.is_some_and(|s| s.send(crate::chat::HostEvent::Access { held }))
+        }
+
         /// Answers the reads of the keys held so far, with what the store held when each began.
         pub fn release_keys(&self) {
             for (tx, keys) in lock(&self.held).drain(..) {

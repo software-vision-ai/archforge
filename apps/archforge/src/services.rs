@@ -6,7 +6,8 @@ use std::path::PathBuf;
 
 use archforge_ui_egui::{Folder, Services};
 
-pub fn native(projects: std::sync::Arc<crate::projects::Projects>, settings: &std::path::Path) -> Services {
+/// The host's services: the system's, with `agents` the host of AI Agents and Chat.
+pub fn native(projects: std::sync::Arc<crate::projects::Projects>, agents: std::sync::Arc<crate::agents::Agents>) -> Services {
     Services {
         // The installed fonts, scanned and read on the shell's font worker.
         fonts: Some(std::sync::Arc::new(crate::fonts::SystemFonts::installed())),
@@ -18,9 +19,7 @@ pub fn native(projects: std::sync::Arc<crate::projects::Projects>, settings: &st
         find_projects: Some(std::sync::Arc::new(find_projects)),
         ids: Some(std::sync::Arc::new(fresh_id)),
         support: support(),
-        agents: Some(std::sync::Arc::new(crate::agents::Agents::new(settings))),
-        // The test message and Codex's sign-in come with the agents' adapters (AR-202, AR-203).
-        agent_accounts: Some(std::sync::Arc::new(archforge_ui_egui::ai_agents::NotYet)),
+        agents: Some(agents),
     }
 }
 

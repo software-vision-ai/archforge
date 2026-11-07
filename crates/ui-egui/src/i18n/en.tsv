@@ -272,6 +272,8 @@ str		Saving…	Saving…
 str		Opening…	Opening…
 str		Saved	Saved
 str		Unsaved changes · {chord} saves	Unsaved changes · {chord} saves
+str		Chat is using the model	Chat is using the model
+str		Agent access off	Agent access off
 str		Not saved	Not saved
 str		Changes could not be written to the project	Changes could not be written to the project
 str		The save stopped without an answer	The save stopped without an answer

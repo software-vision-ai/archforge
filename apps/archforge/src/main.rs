@@ -58,52 +58,6 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
     Ok(a)
 }
 
-/// Turns agent access on: listens on `port` of the loopback interface and hands each request to
-/// the shell, nudging a frame so it is answered at once. Gives the server, which removes its token
-/// file when dropped, the requests' receiving end for the shell, and the slot the window's context
-/// goes into once it exists.
-type ContextSlot = std::sync::Arc<std::sync::Mutex<Option<egui::Context>>>;
-
-fn start_control(
-    port: u16,
-    settings: &std::path::Path,
-) -> Result<(archforge_control::Server, std::sync::mpsc::Receiver<archforge_ui_egui::control::ControlRequest>, ContextSlot), String> {
-    let (requests, receiver) = std::sync::mpsc::channel::<archforge_ui_egui::control::ControlRequest>();
-    let slot: ContextSlot = std::sync::Arc::new(std::sync::Mutex::new(None));
-    let window = slot.clone();
-    let handler: archforge_control::Handler = std::sync::Arc::new(move |call: archforge_control::Call<'_>| {
-        use archforge_ui_egui::control::{ControlRequest, abandon};
-        let (reply, answer) = std::sync::mpsc::channel();
-        let state = std::sync::Arc::new(std::sync::atomic::AtomicU8::new(archforge_ui_egui::control::WAITING));
-        let request = ControlRequest {
-            method: call.method.to_string(),
-            params: call.params,
-            origin: call.origin.map(str::to_string),
-            reply,
-            state: state.clone(),
-            read_only: call.role == archforge_control::Role::ReadOnly,
-            live: call.live.clone(),
-        };
-        requests.send(request).map_err(|_| "Archforge is closing".to_string())?;
-        if let Some(ctx) = window.lock().ok().and_then(|g| g.clone()) {
-            ctx.request_repaint();
-        }
-        if let Ok(answer) = answer.recv_timeout(archforge_control::TIMEOUT) {
-            return answer;
-        }
-        // Given up before the window took it: it never runs. Taken and still running: a few more
-        // seconds, then the truth that it may have been applied.
-        if abandon(&state) {
-            return Err("Archforge did not answer in time (its window may be busy or hidden); the request was not run".into());
-        }
-        answer
-            .recv_timeout(std::time::Duration::from_secs(5))
-            .unwrap_or_else(|_| Err("Archforge did not answer in time; the request may have been applied".into()))
-    });
-    let server = archforge_control::Server::start(port, settings, handler)?;
-    Ok((server, receiver, slot))
-}
-
 /// The frame host: forwards per-frame logic, drawing and exit to the shell.
 struct DesktopApp {
     shell: Shell,
@@ -111,6 +65,8 @@ struct DesktopApp {
     settings: PathBuf,
     /// The projects the shell creates: their servers stop on exit.
     projects: std::sync::Arc<projects::Projects>,
+    /// AI Agents and Chat: its conversations, programs and agent access end on exit.
+    agents: std::sync::Arc<agents::Agents>,
     /// The control channel while agent access is on; dropping it removes its token file.
     _control: Option<archforge_control::Server>,
     /// The preferences as last saved, and when the next save may run, so a change is saved a
@@ -168,6 +124,9 @@ impl eframe::App for DesktopApp {
             log::error!("the preferences could not be saved: {e}");
         }
         self.projects.shutdown();
+        self.agents.shutdown();
+        // The person's own access closes with the window: its token is revoked and its file removed.
+        self._control = None;
     }
 }
 
@@ -212,8 +171,11 @@ fn run() -> i32 {
     logging::set_dir(&dirs.logs());
     log::info!("{}", build_info::version_line());
 
-    // Agent access: the port is opened before the window, so a port in use exits 3 at once.
-    let control = match args.control.map(|port| start_control(port, &dirs.settings)) {
+    // One queue of control requests for the window, from the person's own access and Chat's.
+    let (window, requests) = agents::Window::new();
+    // The person's agent access: the port is opened before the window, so a port in use exits 3 at
+    // once.
+    let server = match args.control.map(|port| agents::start_control(port, &dirs.settings, &window)) {
         None => None,
         Some(Ok(started)) => Some(started),
         Some(Err(e)) => {
@@ -222,12 +184,8 @@ fn run() -> i32 {
             return 3;
         }
     };
-    let (server, requests, window_slot) = match control {
-        Some((s, r, w)) => (Some(s), Some(r), Some(w)),
-        None => (None, None, None),
-    };
     let server = Rc::new(RefCell::new(server));
-    let requests = Rc::new(RefCell::new(requests));
+    let requests = Rc::new(RefCell::new(Some(requests)));
     let (stored, warning) = prefs::load(&dirs.settings);
     if let Some(w) = warning {
         log::warn!("{w}");
@@ -240,23 +198,20 @@ fn run() -> i32 {
         let mut options = native_options();
         graphics::configure(&mut options, choice);
         let (cell, marker, settings) = (start.clone(), marker.clone(), dirs.settings.clone());
-        let (server, requests, window_slot) = (server.clone(), requests.clone(), window_slot.clone());
+        let (server, requests, window) = (server.clone(), requests.clone(), window.clone());
         let result = eframe::run_native(
             "Archforge",
             options,
             Box::new(move |cc| {
                 let stored = cell.borrow_mut().take().ok_or("the application was already started")?;
                 let projects = std::sync::Arc::new(projects::Projects::new(&settings, build_info::version_line()));
-                let mut shell = Shell::new(services::native(projects.clone(), &settings));
+                let agents = std::sync::Arc::new(agents::Agents::new(&settings, window.clone()));
+                let mut shell = Shell::new(services::native(projects.clone(), agents.clone()));
                 prefs::apply(&stored, &mut shell);
                 if let Some(rx) = requests.borrow_mut().take() {
                     shell.attach_control(rx);
                 }
-                if let Some(slot) = &window_slot
-                    && let Ok(mut g) = slot.lock()
-                {
-                    *g = Some(cc.egui_ctx.clone());
-                }
+                window.attach(cc.egui_ctx.clone());
                 #[cfg(target_os = "macos")]
                 let menu = native_menu(&mut shell);
                 let saved = prefs::capture(&shell);
@@ -265,6 +220,7 @@ fn run() -> i32 {
                     marker,
                     settings,
                     projects,
+                    agents,
                     _control: server.borrow_mut().take(),
                     saved,
                     next_save: std::time::Instant::now() + PREFS_SETTLE,
@@ -557,7 +513,8 @@ mod tests {
         let settings = std::env::temp_dir().join(format!("archforge-origin-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&settings);
         std::fs::create_dir_all(&settings).unwrap();
-        let (server, requests, _slot) = start_control(0, &settings).unwrap();
+        let (window, requests) = agents::Window::new();
+        let server = agents::start_control(0, &settings, &window).unwrap();
         let port = server.port();
         let folder = settings.clone();
         let agent = std::thread::spawn(move || {
