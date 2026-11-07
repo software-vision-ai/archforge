@@ -109,15 +109,16 @@ struct Segment<X> {
 
 /// What an origin's group changed, once it ends, counting only its steps still applied: the state
 /// before its first and after its last, those undo steps (one unless other changes came between),
-/// the commands that made them, and everything they changed, each step's own delta put after the
-/// one before (none when it outgrew the history's weight cap).
+/// the commands that made them, and what each step changed: its own delta, in order, never put
+/// together with the next, since another's change or an undo may lie between (none when they
+/// outgrew the history's weight cap).
 #[derive(Debug, Clone)]
 pub struct GroupEnd<X> {
     pub before: u64,
     pub after: u64,
     pub steps: u32,
     pub changes: u32,
-    pub delta: Option<X>,
+    pub deltas: Option<Vec<X>>,
 }
 
 /// A step's label as the history shows it: the command's or the batch's own, after its origin when
@@ -312,21 +313,10 @@ impl<D: Document, V: View<D>> Session<D, V> {
         let (before, after) = (applied.first()?.before, applied.last()?.after);
         let changes = applied.iter().fold(0u32, |n, s| n.saturating_add(s.changes));
         let steps = u32::try_from(applied.len()).unwrap_or(u32::MAX);
-        // Each step's delta is whole; steps apart are put together for listing what changed, as
-        // independent changes, each from the state its own step started at.
-        let mut delta: Option<D::Delta> = None;
-        if !g.lost {
-            for s in applied {
-                delta = Some(match delta {
-                    None => s.delta,
-                    Some(whole) => match guard("a group", || Ok(D::compose(whole, s.delta))) {
-                        Ok(d) => d,
-                        Err(_) => return Some(GroupEnd { before, after, steps, changes, delta: None }),
-                    },
-                });
-            }
-        }
-        Some(GroupEnd { before, after, steps, changes, delta })
+        // Each step's delta is whole from the state its own step started at; two steps are never
+        // composed, as what lies between them is not the group's.
+        let deltas = (!g.lost).then(|| applied.into_iter().map(|s| s.delta).collect());
+        Some(GroupEnd { before, after, steps, changes, deltas })
     }
 
     /// Whether a group is open for `origin`.

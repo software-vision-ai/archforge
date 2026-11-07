@@ -643,8 +643,9 @@ The Chat panel over the storage of section 11; no table or column changed.
   The row's words are made when it is drawn.
 - **No key saved** is kept as `invalid_credential`: both send the person to Settings.
 - **Undo.** The engine groups a turn's changes into one undo step (`Session::begin_group` and
-  `end_group`, `Chat N: Turn n`); the end gives the span (`TurnSpan`'s before and after) and the
-  composed delta the changed elements come from (none when the turn's changes cancelled out). The
+  `end_group`, `Chat N: Turn n`); the end gives the span (`TurnSpan`'s before and after) and each
+  of the turn's undo steps' own delta, never composed across another's change between them, that
+  the changed elements come from (none when the turn's changes cancelled out). The
   panel moves `chat_change.state` of the conversation shown as undo and redo bring the model to
   either end of a turn's span; a conversation not shown records such a move when it is shown again,
   if the model is then at either end. Each span is kept while the project is open, so a

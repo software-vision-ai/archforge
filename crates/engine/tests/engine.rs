@@ -4,7 +4,8 @@ use std::sync::Arc;
 
 use archforge_engine::testing::round_trip;
 use archforge_engine::{
-    CommandError, CommandSpec, Ctx, EngineError, Facts, JournalEntry, Options, Params, Registry, Session, Snapshot, Snapshotted, View, always, cmd,
+    CommandError, CommandSpec, Ctx, EngineError, Facts, JournalEntry, Options, Params, Registry, Replace, Session, Snapshot, Snapshotted, View,
+    always, cmd,
 };
 use serde_json::{Value, json};
 
@@ -174,6 +175,16 @@ fn session() -> S {
 
 fn names(s: &S) -> Vec<&str> {
     s.doc().0.iter().map(String::as_str).collect()
+}
+
+/// The items now, owned, to compare with a delta's states.
+fn items(s: &S) -> Vec<String> {
+    s.doc().0.clone()
+}
+
+/// The items before and after each of a group's step deltas, in order.
+fn steps_of(deltas: Option<Vec<Replace<Items>>>) -> Option<Vec<(Vec<String>, Vec<String>)>> {
+    deltas.map(|ds| ds.into_iter().map(|d| (d.before.0, d.after.0)).collect())
 }
 
 /// Everything a refused call must leave as it was.
@@ -417,9 +428,9 @@ fn a_group_makes_one_step_of_its_origins_changes_and_never_takes_anyone_elses() 
     let end = s.end_group("Chat 1").unwrap();
     assert_eq!((end.before, end.after, end.steps, end.changes), (before, after, 1, 4));
     assert_eq!(
-        end.delta.map(|d| (d.before.0, d.after.0)),
-        Some((vec!["Mine".to_string()], vec!["Mine".to_string(), "A2".into(), "B".into(), "C".into()])),
-        "the whole of what it changed"
+        steps_of(end.deltas),
+        Some(vec![(vec!["Mine".to_string()], vec!["Mine".to_string(), "A2".into(), "B".into(), "C".into()])]),
+        "the whole of what it changed, as its one step"
     );
     // One undo takes the group back, and only the group: the user's own item stays.
     s.undo().unwrap();
@@ -434,15 +445,17 @@ fn a_group_makes_one_step_of_its_origins_changes_and_never_takes_anyone_elses() 
     // another, so undoing it never takes the change in between.
     s.begin_group("Chat 1", "Turn 2").unwrap();
     let before = s.revision();
+    let start = items(&s);
     s.execute_from("item.add", &json!({ "name": "E" }), Some("Chat 1")).unwrap();
+    let first = items(&s);
     s.execute("item.add", &json!({ "name": "Yours" })).unwrap();
     s.execute_from("item.add", &json!({ "name": "F" }), Some("Chat 2")).unwrap();
+    let between = items(&s);
     s.execute_from("item.add", &json!({ "name": "G" }), Some("Chat 1")).unwrap();
     let end = s.end_group("Chat 1").unwrap();
     assert_eq!((end.before, end.steps, end.changes), (before, 2, 2));
-    // The steps' deltas are put together from the state the first started at to the last's end.
-    let d = end.delta.unwrap();
-    assert_eq!((d.before.0.last().map(String::as_str), d.after.0.last().map(String::as_str)), (Some("D"), Some("G")));
+    // Each step's own delta, never put together across the person's and Chat 2's changes between.
+    assert_eq!(steps_of(end.deltas), Some(vec![(start, first), (between, items(&s))]), "neither Yours nor F is the group's");
     assert_ne!(s.undo_revision(), Some(end.before), "its last step does not start where the group did");
     s.undo().unwrap();
     assert_eq!(s.undo_origin(), Some("Chat 2"), "Chat 2's step stayed its own");
@@ -455,12 +468,12 @@ fn a_group_makes_one_step_of_its_origins_changes_and_never_takes_anyone_elses() 
     s.execute_from("item.add", &json!({ "name": "H" }), Some("Chat 3")).unwrap();
     s.undo().unwrap();
     let before = s.revision();
+    let start = items(&s);
     s.execute_from("item.add", &json!({ "name": "I" }), Some("Chat 3")).unwrap();
     let end = s.end_group("Chat 3").unwrap();
     assert_eq!((end.before, end.after, end.steps, end.changes), (before, s.revision(), 1, 1), "the undone change is not counted");
     assert_eq!(s.undo_revision(), Some(end.before), "one undo takes the group back");
-    let d = end.delta.unwrap();
-    assert!(!d.after.0.contains(&"H".to_string()) && d.after.0.last().map(String::as_str) == Some("I"));
+    assert_eq!(steps_of(end.deltas), Some(vec![(start, items(&s))]), "H is in neither state");
     // Undone and redone before the next change: still applied, and joined by what follows.
     s.begin_group("Chat 9", "Turn 1").unwrap();
     let before = s.revision();
@@ -503,7 +516,8 @@ fn a_group_makes_one_step_of_its_origins_changes_and_never_takes_anyone_elses() 
 /// that clears the whole history, a step undone and then cleared from redo by someone else's
 /// change, undo and redo just before the group ends, a step cancelled out after someone else's
 /// change, and the oldest steps dropped by the caps. A step cancelled out or cleared from redo is
-/// gone from the group, its weight included.
+/// gone from the group, its weight included; with another chat's or the person's change between,
+/// each step's own delta is given, nothing of theirs.
 #[test]
 fn a_group_keeps_its_changes_on_every_path_the_history_takes() {
     // A merge heavier than the whole cap clears the history; the change it merged stays the group's.
@@ -517,7 +531,7 @@ fn a_group_keeps_its_changes_on_every_path_the_history_takes() {
     assert!(out.history_cleared && !s.can_undo());
     let end = s.end_group("Chat 1").unwrap();
     assert_eq!((end.before, end.after, end.steps, end.changes), (before, s.revision(), 1, 2), "both changes, up to the state now");
-    assert!(end.delta.is_none(), "what it changed outgrew the cap");
+    assert!(end.deltas.is_none(), "what it changed outgrew the cap");
 
     // A step of its own heavier than the cap clears the history too: still the group's, and the
     // next change is a step after it.
@@ -554,16 +568,17 @@ fn a_group_keeps_its_changes_on_every_path_the_history_takes() {
     // Cancelled out after someone else's change: only that step goes, the one before stays.
     s.begin_group("Chat 6", "Turn 1").unwrap();
     let before = s.revision();
+    let start = items(&s);
     s.execute_from("item.add", &json!({ "name": "f" }), Some("Chat 6")).unwrap();
     let first = s.revision();
+    let made = items(&s);
     s.execute("item.add", &json!({ "name": "Mine" })).unwrap();
     s.execute_from("item.add", &json!({ "name": "g" }), Some("Chat 6")).unwrap();
     let last = s.doc().0.len() - 1;
     s.execute_from("item.remove", &json!({ "index": last }), Some("Chat 6")).unwrap();
     let end = s.end_group("Chat 6").unwrap();
     assert_eq!((end.before, end.after, end.steps, end.changes), (before, first, 1, 1));
-    let d = end.delta.unwrap();
-    assert_eq!(d.after.0.last().map(String::as_str), Some("f"));
+    assert_eq!(steps_of(end.deltas), Some(vec![(start, made)]));
     // A step cancelled out leaves nothing in the group, its weight included: what follows is
     // still known.
     let mut s = Session::new(registry(), Doc::default(), 1, Options { max_weight: 1_000, ..Options::default() });
@@ -571,19 +586,39 @@ fn a_group_keeps_its_changes_on_every_path_the_history_takes() {
     s.begin_group("Chat 8", "Turn 1").unwrap();
     s.execute_from("item.add", &json!({ "name": "j" }), Some("Chat 8")).unwrap();
     s.execute_from("item.remove", &json!({ "index": 1 }), Some("Chat 8")).unwrap();
+    let start = items(&s);
     s.execute_from("item.add", &json!({ "name": "k" }), Some("Chat 8")).unwrap();
     let end = s.end_group("Chat 8").unwrap();
     assert_eq!((end.steps, end.changes), (1, 1));
-    assert!(end.delta.is_some(), "the step cancelled out weighs nothing in the group");
+    assert_eq!(steps_of(end.deltas), Some(vec![(start, items(&s))]), "the step cancelled out weighs nothing in the group");
     // Likewise a step undone and cleared from redo: gone from the group, its weight included.
     s.begin_group("Chat 9", "Turn 1").unwrap();
     s.execute_from("item.add", &json!({ "name": "l" }), Some("Chat 9")).unwrap();
     s.undo().unwrap();
     s.execute("item.add", &json!({ "name": "u" })).unwrap();
+    let start = items(&s);
     s.execute_from("item.add", &json!({ "name": "m" }), Some("Chat 9")).unwrap();
     let end = s.end_group("Chat 9").unwrap();
     assert_eq!((end.steps, end.changes), (1, 1));
-    assert!(end.delta.is_some(), "the step cleared from redo weighs nothing in the group");
+    assert_eq!(steps_of(end.deltas), Some(vec![(start, items(&s))]), "the step cleared from redo weighs nothing in the group");
+
+    // Another chat's change between two of the group's, and then the person's: each step's own
+    // delta, nothing of theirs.
+    let mut s = session();
+    s.begin_group("Chat 10", "Turn 1").unwrap();
+    let a = items(&s);
+    s.execute_from("item.add", &json!({ "name": "n" }), Some("Chat 10")).unwrap();
+    let b = items(&s);
+    s.execute_from("item.add", &json!({ "name": "Theirs" }), Some("Chat 11")).unwrap();
+    let c = items(&s);
+    s.execute_from("item.add", &json!({ "name": "o" }), Some("Chat 10")).unwrap();
+    let d = items(&s);
+    s.execute("item.add", &json!({ "name": "Yours" })).unwrap();
+    let e = items(&s);
+    s.execute_from("item.add", &json!({ "name": "q" }), Some("Chat 10")).unwrap();
+    let end = s.end_group("Chat 10").unwrap();
+    assert_eq!((end.steps, end.changes), (3, 3));
+    assert_eq!(steps_of(end.deltas), Some(vec![(a, b), (c, d), (e, items(&s))]));
 
     // The caps drop the group's oldest steps from the history, never from the group: the
     // document still holds them.

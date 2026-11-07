@@ -7836,8 +7836,8 @@ fn a_cut_reply_is_kept_shortened_and_a_conversation_reopened_while_ending_waits_
 }
 
 /// A turn's changes are counted from its steps still applied: a change the person undid between
-/// two of the turn's changes is neither counted nor listed, and the person's own change between
-/// is not the turn's.
+/// two of the turn's changes is neither counted nor listed, and the person's own change or
+/// another chat's between is not the turn's.
 #[test]
 fn a_turns_changes_leave_out_what_was_undone_between_and_the_persons_own_change() {
     use crate::chat::ChatEvent;
@@ -7889,6 +7889,27 @@ fn a_turns_changes_leave_out_what_was_undone_between_and_the_persons_own_change(
     let mut expected = vec![catalog, payment];
     expected.sort();
     assert_eq!((changes.changes, listed), (2, expected));
+    // Another chat's change between two of the turn's: listed in full are the turn's own, each as
+    // changed, and the card counts the turn's two changes, with no undo across the other's step.
+    ask_in_chat(&mut h, "Describe two others");
+    let card = describe(&mut h, "CardPayment", "Paid by card");
+    let customer = fx::element(h.state(), archforge_uml::CLASS, "Customer").unwrap();
+    h.state_mut()
+        .session
+        .as_mut()
+        .unwrap()
+        .execute_from("element.describe", &serde_json::json!({ "element": customer.to_string(), "text": "Theirs" }), Some("Chat 99"))
+        .unwrap();
+    let line = describe(&mut h, "OrderLine", "One product ordered");
+    chat_event(&mut h, &rig, ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+    let changes = kept_chat(&h, &rig).ends.last().unwrap().1.clone().unwrap();
+    let mut listed: Vec<_> = changes.changed.iter().map(|e| (e.element, e.kind, e.metaclass.clone())).collect();
+    listed.sort_by_key(|(id, _, _)| *id);
+    let mut expected = vec![(card, ChangeKind::Changed, "uml_class".to_string()), (line, ChangeKind::Changed, "uml_class".to_string())];
+    expected.sort_by_key(|(id, _, _)| *id);
+    assert_eq!((changes.changes, changes.elements, listed), (2, 2, expected), "nothing of Chat 99's change to Customer");
+    assert!(painted_has(&h, "2 changes to the model"), "{:?}", painted(&h));
+    assert!(!ids(&h).iter().any(|i| i == "workspace.chat.turn.3.undo"), "two steps apart: no undo of the turn as one");
 }
 
 /// A turn's change that cleared the whole history, merged into the turn's step, is still the

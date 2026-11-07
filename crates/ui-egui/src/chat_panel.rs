@@ -792,7 +792,7 @@ pub(crate) fn finish(chat: &mut Chat, session: Option<&mut archforge_notations::
     if let Some(s) = session
         && let Some(group) = s.end_group(&origin)
     {
-        let (elements, changed) = group.delta.as_ref().map(|d| changed_elements(s.doc(), d)).unwrap_or((0, Vec::new()));
+        let (elements, changed) = group.deltas.as_deref().map(|d| changed_elements(s.doc(), d)).unwrap_or((0, Vec::new()));
         changes = Some(Changes { changes: group.changes, elements, changed });
         turn.change = Some(Change {
             changes: group.changes,
@@ -837,12 +837,13 @@ fn stored_kind(kind: FailureKind) -> FailureKind {
     if kind == FailureKind::NoCredential { FailureKind::InvalidCredential } else { kind }
 }
 
-/// The elements a turn's changes touched, net over the turn, those a person reads about only:
-/// how many in all, and each with what happened to it.
-pub fn changed_elements(store: &Store, delta: &archforge_mof::Delta) -> (u32, Vec<ChangedElement>) {
+/// The elements a turn's changes touched, net over the turn's undo steps (`deltas`, each step's
+/// own, so nothing of another's change between them), those a person reads about only: how many
+/// in all, and each with what happened to it.
+pub fn changed_elements(store: &Store, deltas: &[archforge_mof::Delta]) -> (u32, Vec<ChangedElement>) {
     use archforge_mof::Op;
     let mut seen: BTreeMap<Uuid, (bool, bool, Obj)> = BTreeMap::new();
-    for op in delta.0.iter() {
+    for op in deltas.iter().flat_map(|d| d.0.iter()) {
         let (obj, created, destroyed) = match op {
             Op::Create { obj, .. } => (*obj, true, false),
             Op::Destroy { obj, .. } => (*obj, false, true),
