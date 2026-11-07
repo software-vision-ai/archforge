@@ -179,6 +179,10 @@ fn account_program(inner: &Inner) -> Result<Program, AccountError> {
         archforge_agents::codex::ChatGptStore::Keyring => CredentialStore::Keyring,
         archforge_agents::codex::ChatGptStore::File => CredentialStore::File,
     };
+    // The store's read may have waited on its prompt past a quit: no program starts then.
+    if inner.quitting() {
+        return Err(AccountError::Failed { detail: "Archforge is closing".into() });
+    }
     Program::start(&runtime, &workspace, &home, store, Limits::default(), REQUEST, REQUEST).map_err(failed)
 }
 
