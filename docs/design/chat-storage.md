@@ -712,11 +712,11 @@ Deleting a conversation from the history, with Undo; no table or column changed.
   conversation being listed. When the project closes or Archforge quits, its toasts close at once
   and nothing waits on the window's thread: a finished deletion's folder goes; one still under way
   goes to `AgentHost::forget_after`, which waits at most five seconds in all for the project's
-  answers and removes the folder only when every one lets it go. A deletion's lets it go when it
-  says deleted; an Undo's restoration when it was refused for any reason but the conversation being
-  listed. An Undo pressed before its deletion answered hands over both answers (AR-218), so a
-  deletion that failed keeps the folder even when the restoration after it failed too, as it does
-  when the project cannot read its list. At quit the host's threads are joined within its quit
+  answers and removes the folder only when every one lets it go. A deletion's answer lets it go
+  when it says deleted. A restoration's answer lets it go when the restoration was refused for any
+  reason but the conversation being listed. An Undo pressed before its deletion answered hands over
+  both answers (AR-218), so a deletion that failed keeps the folder even when the restoration after
+  it failed too, as it does when the project cannot read its list. At quit the host's threads are joined within its quit
   budget. An answer that does not come in time, an answer lost, or a crash leaves the folder as an
   orphan; sweeping orphans stays for later, as section 8 says. The folder is named by the
   conversation's id alone, so a copy of the project open beside it shares it: it is kept while an
