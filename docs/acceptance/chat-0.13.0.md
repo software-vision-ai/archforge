@@ -222,9 +222,11 @@ This shows Check connection needs no network; it does not by itself prove that n
 5. Sign in again, then ask again. **Expect:** a reply.
 
 No other way to end a Codex 0.166.0 sign-in from outside is known here. If the account offers
-none, leave Archforge signed in for a few days and try step 2 then; if the sign-in still answers,
-record F2 as skipped. Once a question does fail, record what the card says: *Key refused* or *No
-answer* in place of *Sign-in expired* is a fail to note.
+none, leave Archforge signed in for a few days and try step 2 then. F2 passes only with the card
+*Sign-in expired*. Whenever expiry cannot be shown, record F2 as *skipped: expiry not
+established*: when the sign-in still answers, and also when the question fails with another card
+(*Key refused*, *No answer* or any other), as those have other causes. Note that card, its text and
+the time apart from the result, so the log can be read for it.
 
 ### F3. Network off
 

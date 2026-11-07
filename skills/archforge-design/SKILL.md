@@ -409,8 +409,10 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   {max}…" (the attempt and the most only as far as the program says them), with Stop as ever; any
   text, tool call or end from the provider takes it away (AR-224, decided by UX).
 - Failures the design does not draw: a missing program, a refused key, no key and an expired
-  sign-in are danger cards with Open Settings; anything else is an amber "No answer" with Send
-  again. A rate limit without a reset time names none. Model not available offers Send again once
+  sign-in are danger cards with Open Settings; a start refused while the conversation's folder is
+  being removed is an amber "Not started yet", "This conversation is being removed. Try again in
+  a moment.", with Send again (AR-225, decided by UX); anything else is an amber "No answer" with
+  Send again. A rate limit without a reset time names none. Model not available offers Send again once
   another model is chosen in the badge.
 - The provider badge names the agent and the model asked for ("Claude · Sonnet"), the version once
   the program names it ("Claude · Sonnet 4.5"); the program's default shows the agent alone until
@@ -445,7 +447,7 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   The private folder of its program goes when the toast closes without Undo, when Undo fails,
   when its project closes or when Archforge quits; a copy of the project open beside it showing
   that conversation keeps it. While the folder is being removed the conversation does not start:
-  its turn says "No answer", the folder is kept for it, and Send again starts it once the removal
+  its turn says "Not started yet" (AR-225), the folder is kept for it, and Send again starts it once the removal
   is done. While a history row's menu or the confirmation is open, the canvas and ⌘Z take no keys.
   While the list cannot be read again (chat writing off) the rows read before stay, and the bin
   and the item are disabled saying "The

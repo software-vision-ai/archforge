@@ -731,7 +731,7 @@ Deleting a conversation from the history, with Undo; no table or column changed.
   step, the folder is moved aside by one rename (`Workspace::move_conversation`, to
   `conversation-<id>-rm-<pid>-<n>`) and the refusal ends; the folder moved aside is removed after,
   outside the lock. So every refused start keeps the folder, a start after the move makes a new
-  folder, and no start waits for a removal. The refused turn ends with "No answer", and Send again
+  folder, and no start waits for a removal. The refused turn ends with "Not started yet" (AR-225), and Send again
   starts it once the removal has decided (at most about ten seconds: five for the answers, five for
   the program to end). A program that started before the removal was asked is ended first, as
   before. A copy that opens the conversation without sending until the folder is gone finds no

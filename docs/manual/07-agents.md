@@ -267,8 +267,10 @@ keys is neither sent nor kept: the panel says so and leaves it in the box for yo
 project that cannot be written.
 
 - **The chips** above the box are sent with your question: the project, the open diagram and what
-  is selected, by name. Remove one with its ×; it stays removed for this conversation. The line
-  under them is a reminder: they, and everything the agent reads, go to the agent's provider.
+  is selected, by name. Remove one with its ×; it stays removed while this conversation stays
+  shown. Open another conversation and then this one again from **Conversations**, and the chip
+  is back and goes with the next question: check the chips before you ask. The line under them is
+  a reminder: they, and everything the agent reads, go to the agent's provider.
 - **What the agent does** shows as it happens, under its name: a row such as *Read diagram
   Commerce* with *8 classes* beside it, or *Changed Customer* with *description*. Each row is what
   Archforge itself answered the agent, so a refused change says *refused*. The reply is written in
@@ -321,10 +323,10 @@ for Claude, OpenAI for Codex):
 - **the conversation so far**: this conversation's earlier questions and replies, as the agent's
   program kept them in Archforge's private folder on this computer (see below). Claude keeps the
   whole conversation in its transcript, but may sum up earlier parts when its context fills, so a
-  long conversation's later questions may not carry every earlier word. Codex keeps only its text messages, not what the agent read or changed, and
-  at most 4,096 messages and 4 MiB of text, the oldest going first; whenever its program starts
-  again (the conversation reopened, **Allow changes** or the model switched), Codex gets only that
-  copy, so repeat details it may have lost;
+  long conversation's later questions may not carry every earlier word. Codex keeps only its text
+  messages, not what the agent read or changed, and at most 4,096 messages and 4 MiB of text, the
+  oldest going first; whenever its program starts again (the conversation reopened, **Allow
+  changes** or the model switched), Codex gets only that copy, so repeat details it may have lost;
 - **what the agent reads in the model**, exactly as Archforge answers it: the elements it looks at
   with their names, descriptions, attributes and other details, the diagrams, the skills, and what
   is open and selected, with the project's name and its folder's location on your computer;
@@ -374,6 +376,7 @@ A card in the conversation says what went wrong and what to do.
 | *No key saved* | There is no key or sign-in for the agent. | **Open Settings**, add one, then ask again. |
 | *Sign-in expired* | Codex's ChatGPT sign-in has expired. | **Open Settings**, sign in again (choose **Sign out** first if the card still says *Signed in as*), then ask again. |
 | *Not sent* | **Let Chat use the model** was turned off while the question was on its way. | Turn it on in **Settings ▸ AI Agents**, then press Enter (the question is back in the box) or **Send again**. |
+| *Not started yet* | The conversation's working files are being removed: a copy of the project deleted it, or it was just brought back with Undo. | **Send again** in a moment. Reopened from **Conversations** later, the same turn shows *No answer*, as the reason is not kept. |
 | *No answer* | Anything else: the agent stopped before answering. | **Send again**. |
 
 **Send again** asks the same question again in the same place: the conversation keeps it once. A
@@ -437,8 +440,9 @@ files for that conversation are removed from your computer, with these exception
 Archforge's log:
 
 - a copy of the project open beside it still shows that conversation;
-- that copy asks the conversation something in those few seconds: the answer is *No answer*, and
-  **Send again** a moment later goes through;
+- that copy asks the conversation something in those few seconds: its card says *Not started
+  yet*, *This conversation is being removed. Try again in a moment.*, and **Send again** a moment
+  later goes through;
 - the program did not end in time, the project did not answer, Archforge was closing, or the
   removal failed.
 
