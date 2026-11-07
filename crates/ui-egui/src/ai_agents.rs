@@ -597,7 +597,8 @@ pub struct State {
     /// sign-in without one.
     known_email: String,
     /// A Codex turn ended with an expired sign-in (Codex's own word for it): until a sign-in or a
-    /// sign-out, a read that still says signed in as the same email shows it expired.
+    /// sign-out, a read that still says signed in shows it expired, when it names the email known or
+    /// no email was known yet.
     expired_seen: bool,
     /// Check connection waits for the look, the keys and the account read it started.
     checking: bool,
@@ -854,11 +855,14 @@ pub fn sign_out(shell: &mut crate::Shell) {
 
 /// Keeps the account a sign-in or a sign-out just made: a read of the account that began before it
 /// is dropped unanswered, so its older answer never undoes it, and a read again asked before is
-/// done with.
+/// done with. A Check connection that waited only for that read ends now, with the new account.
 fn account_changed(shell: &mut crate::Shell, account: CodexAccount) {
     shell.agents.reading = None;
     shell.agents.account_stale = false;
     take_account(shell, Ok(account));
+    if shell.agents.checking && shell.agents.looking.is_none() && shell.agents.keys_reading.is_none() {
+        finish_check(shell);
+    }
 }
 
 /// Starts reading Codex's account once the look found the program, unless a read runs already.

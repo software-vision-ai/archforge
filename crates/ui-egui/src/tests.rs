@@ -15827,6 +15827,45 @@ fn an_account_read_older_than_a_sign_out_does_not_undo_it() {
     }
 }
 
+/// A read of Codex's account that began before a sign-in answers after it: its older answer is
+/// dropped, so the page keeps the new sign-in; a Check connection that waited only for that read
+/// ends at once, saying Codex is ready (AR-222, review). In both appearances.
+#[test]
+fn an_account_read_older_than_a_sign_in_does_not_undo_it_nor_hold_check_connection() {
+    use crate::ai_agents::{CodexAccount, LoginEvent};
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, f) = agents_harness(theme, |f| {
+            *f.login.lock().unwrap() = vec![LoginEvent::Done(CodexAccount::SignedIn { email: "you@example.com".into(), plan: None })];
+        });
+        open_agents(&mut h);
+        assert!(painted_has(&h, "Not signed in"), "{theme:?}");
+        // Check connection reads the account again, slow to answer; meanwhile the person signs in.
+        f.hold_account.store(true, std::sync::atomic::Ordering::Relaxed);
+        let at = rect_of(&h, "settings.agents.check").center();
+        click(&mut h, at);
+        assert_eq!(f.held_account.lock().unwrap().len(), 1, "{theme:?}: the read waits");
+        assert!(h.state().agents.checking(), "{theme:?}: the check waits for it");
+        // Frame by frame: the click starts the sign-in, the next frame takes its end; the check
+        // ends in that same frame, as nothing else asks for one more.
+        let at = rect_of(&h, "settings.agents.codex.sign-in").center();
+        h.event(egui::Event::PointerMoved(at));
+        for pressed in [true, false] {
+            h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE });
+        }
+        h.step();
+        h.step();
+        assert_eq!(h.state().agents.codex, Some(Ok(CodexAccount::SignedIn { email: "you@example.com".into(), plan: None })), "{theme:?}");
+        assert!(!h.state().agents.checking(), "{theme:?}: the check ended with the sign-in");
+        h.run();
+        assert!(painted_has(&h, "Signed in as you@example.com"), "{theme:?}");
+        assert!(painted_has(&h, "Codex ready"), "{theme:?}: {:?}", painted(&h));
+        // The older read answers "not signed in" now: dropped.
+        f.release_account();
+        h.run();
+        assert!(painted_has(&h, "Signed in as you@example.com") && !painted_has(&h, "Not signed in"), "{theme:?}");
+    }
+}
+
 /// A sign-in that runs out of time, or that the codex program cancels, says so under the sign-in
 /// in the page's words, and the sign-in can start again.
 #[test]
