@@ -636,6 +636,11 @@ fn timeline(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, area: Rect, panel
                 let retry_now = n == last && crate::chat_panel::retryable(turn, now);
                 y += failure_card(shell, &clip, p, pos2(left, y), width, turn, f, provider, &model_now, retry_now, n == last, now, acts);
             }
+            // The agent's program retries the provider (AR-224): said, with Stop still there.
+            TurnState::Running if turn.retrying.is_some() => {
+                y += ENTRY_GAP;
+                y += retry_line(&paint, p, pos2(left, y), width, speaker, turn.retrying);
+            }
             TurnState::Running | TurnState::Completed => {}
         }
     }
@@ -735,6 +740,26 @@ fn tool_row(paint: &egui::Painter, p: &Palette, at: egui::Pos2, width: f32, fact
 fn ended_line(paint: &egui::Painter, p: &Palette, at: egui::Pos2, width: f32, words: &str) -> f32 {
     ux::icon_in(paint, Rect::from_min_size(pos2(at.x, at.y + 1.0), Vec2::splat(14.0)), &icons::STOP, p.text_muted);
     ux::text(paint, pos2(at.x + 20.0, at.y), words, types::SMALL, p.text_muted, Some((width - 20.0).max(0.0))).height().max(16.0)
+}
+
+/// The line of a running turn whose agent's program retries the provider: the attempt, and of how
+/// many, as far as the program said them (an attempt of 0 is none said). Gives its height.
+fn retry_line(paint: &egui::Painter, p: &Palette, at: egui::Pos2, width: f32, agent: &str, retrying: Option<(u32, Option<u32>)>) -> f32 {
+    let words = match retrying {
+        Some((n, Some(max))) if n > 0 && max >= n => fmt(
+            &tr("No answer from {agent}'s provider yet. Trying again, attempt {n} of {max}…"),
+            &[("agent", agent), ("n", &n.to_string()), ("max", &max.to_string())],
+        ),
+        Some((n, _)) if n > 0 => {
+            fmt(&tr("No answer from {agent}'s provider yet. Trying again, attempt {n}…"), &[("agent", agent), ("n", &n.to_string())])
+        }
+        _ => fmt(&tr("No answer from {agent}'s provider yet. Trying again…"), &[("agent", agent)]),
+    };
+    ux::icon_in(paint, Rect::from_min_size(pos2(at.x, at.y + 1.0), Vec2::splat(14.0)), &icons::LOOK_AGAIN, p.amber);
+    let shown = ux::galley_rows(paint, &words, types::SMALL, p.text_secondary, Some((width - 20.0).max(0.0)), 3);
+    let h = shown.size().y.max(16.0);
+    paint.galley(pos2(at.x + 20.0, at.y), shown, p.text_secondary);
+    h
 }
 
 /// The card of a turn's changes to the model (B4): how many, made as one step of the undo

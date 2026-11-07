@@ -298,6 +298,10 @@ Chat answers once the default agent is ready and **Let Chat use the model** is o
 - **Stop** (the square in place of Send) ends the reply; what was written so far stays, marked as
   stopped. If the agent's program does not stop within ten seconds, Archforge ends it. While a reply runs you can type the next question, but Enter, the badge, the switch,
   New conversation and the history wait: *Stop the reply first*.
+- **While the provider cannot be reached**, the agent's program keeps trying again for a while
+  (Claude for about three minutes). The reply then says so, *No answer from Claude's provider yet.
+  Trying again, attempt 3 of 10…*, with the attempt and how many as far as the program says them;
+  **Stop** ends the wait. When the program gives up, the *Connection lost* card below shows.
 - **Allow changes to the model** is off for every conversation, and every time one is opened again:
   the agent can then only read. Turn it on and the agent may change the model; everything one
   question changes is **one step** of the project's undo history, named *Chat 1: Turn 2*, as long

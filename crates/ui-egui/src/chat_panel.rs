@@ -213,6 +213,9 @@ pub struct Turn {
     pub rows_dropped: u64,
     /// The rendered streaming text.
     pub laid: Option<Laid>,
+    /// While it runs, the agent's program tries the provider again (AR-224): its attempt and the
+    /// most it makes, as it said them; gone once anything comes from the provider.
+    pub retrying: Option<(u32, Option<u32>)>,
 }
 
 impl Turn {
@@ -728,6 +731,7 @@ fn asked(shell: &mut Shell, answer: Result<Answer, Refusal>, pending: Pending, r
                     cut: false,
                     rows_dropped: 0,
                     laid: None,
+                    retrying: None,
                 });
                 number
             };
@@ -1068,6 +1072,7 @@ fn from_stored(stored: Stored, spans: &BTreeMap<Uuid, Span>) -> Chat {
             cut: false,
             rows_dropped: 0,
             laid: None,
+            retrying: None,
         });
     }
     for m in stored.messages {
@@ -1211,8 +1216,17 @@ fn events_parked(shell: &mut Shell, i: usize) {
     }
 }
 
-/// Takes one event of `chat`; gives the text to send when the program ended to start again.
+/// Takes one event of `chat`; gives the text to send when the program ended to start again. A
+/// retry the program reports is kept on the running turn until anything else comes of it.
 fn event(chat: &mut Chat, e: ChatEvent, session: Option<&mut archforge_notations::Session>, out: &Out) -> Option<String> {
+    if let Some(turn) = chat.turns.last_mut().filter(|t| t.state == TurnState::Running) {
+        match &e {
+            ChatEvent::Retrying { attempt, max } => turn.retrying = Some((*attempt, *max)),
+            // The program starting says nothing of the provider.
+            ChatEvent::Started { .. } => {}
+            _ => turn.retrying = None,
+        }
+    }
     match e {
         ChatEvent::Started { model, .. } => {
             if !model.trim().is_empty() && model != "default" {
