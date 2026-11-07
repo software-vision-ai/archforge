@@ -65,14 +65,7 @@ impl Default for Page {
     /// The page as it opens: no list open, the key fields empty with their room reserved, and
     /// Codex's account not yet asked for.
     fn default() -> Self {
-        Page {
-            menu: None,
-            drafts: [draft_room(), draft_room()],
-            replacing: [false; 2],
-            refusal: [None; 2],
-            focus_key: None,
-            account_asked: false,
-        }
+        Page { menu: None, drafts: [draft_room(), draft_room()], replacing: [false; 2], refusal: [None; 2], focus_key: None, account_asked: false }
     }
 }
 
