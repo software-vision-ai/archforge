@@ -580,18 +580,28 @@ fn refused_while_off(shell: &mut Shell) -> bool {
     true
 }
 
-/// Let Chat use the model turned `on` or off: off, a conversation shown that runs (its program,
-/// which is being ended, or a question on its way) says why it stops; on, that line goes.
-pub(crate) fn model_use_changed(shell: &mut Shell, on: bool) {
-    let said = shell.chat_panel.notice.as_deref() == Some(model_use_off().as_str());
-    if on {
-        if said {
-            shell.chat_panel.notice = None;
+/// Let Chat use the model turned `on` or off. Off, every panel's conversation, the shown one and
+/// those of tabs left, that runs (its program, or a question on its way) says why it stops, and one
+/// whose program is in `ended` waits for that end, as [`restart`] does, so a question asked before
+/// it comes waits for it and starts the program again. On, that line goes.
+pub(crate) fn model_use_changed(shell: &mut Shell, on: bool, ended: &[String]) {
+    let off_line = model_use_off();
+    let mut panels: Vec<&mut Panel> = vec![&mut shell.chat_panel];
+    panels.extend(shell.tabs.iter_mut().filter_map(|t| t.parked.as_mut()).map(|p| &mut p.chat_panel));
+    for panel in panels {
+        if on {
+            if panel.notice.as_deref() == Some(off_line.as_str()) {
+                panel.notice = None;
+            }
+            continue;
         }
-        return;
-    }
-    if shell.chat_panel.chat.as_ref().is_some_and(|c| c.busy() || c.session != Session::Off) {
-        shell.chat_panel.notice = Some(model_use_off());
+        let Some(chat) = panel.chat.as_mut() else { continue };
+        if chat.busy() || chat.session != Session::Off {
+            panel.notice = Some(off_line.clone());
+        }
+        if chat.session == Session::Running && ended.contains(&chat.key) {
+            chat.session = Session::Ending;
+        }
     }
 }
 
@@ -789,6 +799,13 @@ fn asked(shell: &mut Shell, answer: Result<Answer, Refusal>, pending: Pending, r
 fn deliver(shell: &mut Shell, text: String) {
     if refused_while_off(shell) {
         end_here(shell, TurnState::Stopped);
+        // The question goes back into an empty box, ready once the switch is on again.
+        let question = shell.chat_panel.chat.as_ref().and_then(|c| c.turns.last()).map(|t| t.question.clone());
+        if shell.chat_panel.draft.trim().is_empty()
+            && let Some(q) = question
+        {
+            shell.chat_panel.draft = q;
+        }
         return;
     }
     let Some(chat) = shell.chat_panel.chat.as_mut() else { return };

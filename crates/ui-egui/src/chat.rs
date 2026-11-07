@@ -345,14 +345,18 @@ pub(crate) fn tell_access(shell: &mut crate::Shell) {
     if let Some(host) = host(shell) {
         host.set_model_access(on);
         shell.chats.told = Some(on);
+        let mut ended = Vec::new();
         if !on {
             for kept in shell.chats.kept.iter().filter(|k| k.running) {
-                if let Err(e) = host.end(&kept.chat) {
-                    log::warn!("the conversation {:?} could not be ended as Let Chat use the model went off: {e}", kept.chat);
+                match host.end(&kept.chat) {
+                    Ok(()) => ended.push(kept.chat.clone()),
+                    // Already ending: its end is on its way.
+                    Err(ChatRefusal::NotRunning) => {}
+                    Err(e) => log::warn!("the conversation {:?} could not be ended as Let Chat use the model went off: {e}", kept.chat),
                 }
             }
         }
-        crate::chat_panel::model_use_changed(shell, on);
+        crate::chat_panel::model_use_changed(shell, on, &ended);
     }
 }
 

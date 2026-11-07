@@ -7344,6 +7344,52 @@ fn turning_model_use_off_ends_a_running_conversation_and_sends_nothing_more() {
     assert_eq!((chat_calls(&rig).0, chat_calls(&rig).1), (2, 2), "started again and sent");
 }
 
+/// Off and on again before the ended program has gone (AR-221): a question asked meanwhile waits
+/// for its end, then starts the program again and is sent, never lost into the ending one.
+#[test]
+fn a_question_asked_after_model_use_is_off_and_on_again_waits_for_the_end_then_goes() {
+    use crate::chat::ChatEvent;
+    let (mut h, rig) = chat_harness(ThemeKind::Light, true);
+    ask_in_chat(&mut h, "Explain how Payment relates to Order.");
+    chat_event(&mut h, &rig, ChatEvent::Message { text: "Payment is linked to Order.".into() });
+    chat_event(&mut h, &rig, ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+    let key = crate::chat_fixture::key(h.state());
+    rig.agents.hold_ends.store(true, std::sync::atomic::Ordering::Relaxed);
+    h.state_mut().state.agents.chat_uses_model = false;
+    h.run();
+    assert_eq!(chat_calls(&rig).3, 1, "its program is asked to end");
+    assert_eq!(h.state().chat_panel.chat.as_ref().map(|c| c.session), Some(crate::chat_panel::Session::Ending));
+    h.state_mut().state.agents.chat_uses_model = true;
+    h.run();
+    ask_in_chat(&mut h, "And Invoice?");
+    assert_eq!((chat_calls(&rig).0, chat_calls(&rig).1), (1, 1), "the question waits for the end");
+    rig.agents.hold_ends.store(false, std::sync::atomic::Ordering::Relaxed);
+    rig.agents.running.lock().unwrap().retain(|k| *k != key);
+    chat_event(&mut h, &rig, ChatEvent::Ended { failure: None });
+    assert_eq!((chat_calls(&rig).0, chat_calls(&rig).1), (2, 2), "then starts the program again and sends it");
+    assert!(sent_texts(&rig).last().is_some_and(|t| t.starts_with("And Invoice?")));
+}
+
+/// Off while a question is still being kept (AR-221): it is not sent, its turn ends stopped, and
+/// the question goes back into the empty box.
+#[test]
+fn a_question_being_kept_when_model_use_goes_off_is_not_sent_and_goes_back_to_the_box() {
+    let (mut h, rig) = chat_harness(ThemeKind::Light, true);
+    rig.store.hold.store(true, std::sync::atomic::Ordering::SeqCst);
+    ask_in_chat(&mut h, "Explain how Payment relates to Order.");
+    assert_eq!(chat_calls(&rig).0, 0, "still being kept");
+    h.state_mut().state.agents.chat_uses_model = false;
+    h.run();
+    rig.store.release();
+    for _ in 0..4 {
+        h.run();
+    }
+    assert_eq!((chat_calls(&rig).0, chat_calls(&rig).1), (0, 0), "nothing started or sent");
+    assert_eq!(h.state().chat_panel.draft, "Explain how Payment relates to Order.", "back in the box");
+    assert_eq!(kept_chat(&h, &rig).turns[0].outcome, crate::chat_store::Outcome::Stopped);
+    assert!(painted_has(&h, "Let Chat use the model is off, so nothing is sent. Turn it on in Settings ▸ AI Agents."));
+}
+
 /// A conversation opened again from the history while Let Chat use the model is off sends nothing
 /// (AR-221): neither its question nor, by resuming, what it said before; the panel says why.
 #[test]
@@ -15734,7 +15780,11 @@ fn a_conversation_is_checked_before_the_host_is_asked_and_its_events_are_kept_in
     use crate::chat::{ChatEvent, ChatRefusal, MAX_SESSIONS, MAX_WAITING};
     use std::sync::atomic::Ordering::Relaxed;
     let (mut h, f) = agents_harness(ThemeKind::Light, |_| {});
-    // Conversations start only while Let Chat use the model is on (AR-221).
+    // Conversations start, and are sent anything, only while Let Chat use the model is on (AR-221):
+    // refused here, never asked of the host.
+    assert_eq!(crate::chat::start(h.state_mut(), chat_start(1, Provider::Claude)), Err(ChatRefusal::ModelUseOff));
+    assert_eq!(crate::chat::send(h.state(), &chat_id(1), "hi".into()), Err(ChatRefusal::ModelUseOff));
+    assert_eq!((f.calls.start.load(Relaxed), f.calls.send.load(Relaxed)), (0, 0));
     h.state_mut().state.agents.chat_uses_model = true;
     assert_eq!(f.calls.connect.load(Relaxed), 1, "the window connected its events once");
     // A bad id is refused here, never asked of the host.
