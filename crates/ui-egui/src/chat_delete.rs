@@ -328,7 +328,7 @@ fn held_elsewhere(shell: &Shell, key: &str) -> bool {
 /// Asks the host to remove the private folder of the conversation `key`, its program ended first;
 /// with `after`, once every one of the project's answers lets it go. Until the host is done it
 /// refuses to start that conversation, so a panel that asks it something meanwhile (a copy of the
-/// project) gets "No answer" and Send again, and its folder is kept, rather than losing its new
+/// project) gets "Not started yet" (AR-225) and Send again, and its folder is kept, rather than losing its new
 /// program or folder (AR-218).
 fn forget(shell: &mut Shell, key: &str, after: Awaited) {
     if held_elsewhere(shell, key) {

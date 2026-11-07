@@ -340,6 +340,8 @@ When something goes wrong, a card in the conversation says what and what to do:
 - *Model not available*: choose another model in the badge, then **Send again**, or check the key
   in Settings.
 - A missing program, a refused key, no key or an expired sign-in: **Open Settings**.
+- *Not started yet*: the conversation is being removed, as a copy of the project deleted it or it
+  was just brought back with Undo; **Send again** in a moment.
 - *No answer*: anything else; **Send again**.
 
 **Send again** asks the same question again in the same place: the conversation keeps it once.
@@ -379,8 +381,8 @@ or brings back a conversation: it stays the model's undo.
 
 When the note has gone (or the project closes, or Archforge quits), the agent program's own working
 files for that conversation are removed from your computer. If a copy of the project open beside
-it asks that conversation something in those few seconds, the answer is *No answer*; its files are
-then kept, and **Send again** a moment later goes through. When the project's conversations
+it asks that conversation something in those few seconds, the answer is *Not started yet*; its
+files are then kept, and **Send again** a moment later goes through. When the project's conversations
 cannot be changed (for example because one of its tables is damaged), the bin and the menu item
 are greyed out and say why.
 

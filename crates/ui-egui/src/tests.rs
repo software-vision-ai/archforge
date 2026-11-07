@@ -8301,39 +8301,48 @@ fn an_undo_before_a_failed_deletion_keeps_the_folder_of_a_conversation_still_lis
 }
 
 /// A conversation started while the host removes its private folder (AR-218), as a copy of the
-/// project can: the host refuses the start, the turn says "No answer" with Send again and nothing
-/// hangs; the refused start keeps the folder although the deletion went through, and once the
-/// removal is done, Send again starts it.
+/// project can: the host refuses the start, the turn says it is not started yet as the conversation
+/// is being removed (AR-225), with Send again, and nothing hangs; the refused start keeps the
+/// folder although the deletion went through, and once the removal is done, Send again starts it.
+/// In both appearances.
 #[test]
-fn a_conversation_started_while_its_folder_is_being_removed_says_no_answer_and_sends_again_once_done() {
+fn a_conversation_started_while_its_folder_is_being_removed_says_so_and_sends_again_once_done() {
     use crate::ai_agents::FolderGoes;
     use crate::chat_store::Answer;
-    let (mut h, rig) = chat_harness(ThemeKind::Light, true);
-    ask_in_chat(&mut h, "First question");
-    chat_event(&mut h, &rig, crate::chat::ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
-    let key = crate::chat_fixture::key(h.state());
-    let _ = crate::chat::end(h.state(), &key);
-    h.run();
-    assert!(rig.agents.running.lock().unwrap().is_empty(), "its program ended");
-    // A copy of the project deleted it, and its folder's removal waits for that project's answer.
-    let (tx, rx) = std::sync::mpsc::channel();
-    let removal = crate::ai_agents::AgentHost::forget_after(&*rig.agents, &key, vec![(rx, FolderGoes::IfDeleted)]);
-    let starts = chat_calls(&rig).0;
-    ask_in_chat(&mut h, "Second question");
-    assert_eq!(chat_calls(&rig).0, starts + 1, "a start was asked");
-    assert!(rig.agents.running.lock().unwrap().is_empty(), "and refused");
-    assert!(painted_has(&h, "No answer") && painted_has(&h, "Claude stopped before answering. Nothing was changed."), "{:?}", painted(&h));
-    assert!(ids(&h).iter().any(|i| i == "workspace.chat.turn.2.retry"), "Send again is offered");
-    assert!(ids(&h).iter().any(|i| i == "workspace.chat.send"), "the composer is free: nothing hangs");
-    // The copy's deletion went through, but a panel here asked for the conversation: its folder stays.
-    tx.send(Ok(Answer::Deleted { before: "0".repeat(32) })).unwrap();
-    rig.agents.settle_after();
-    assert_eq!(removal.recv_timeout(std::time::Duration::from_secs(5)).unwrap(), Ok(false));
-    let at = rect_of(&h, "workspace.chat.turn.2.retry").center();
-    click(&mut h, at);
-    assert_eq!(*rig.agents.running.lock().unwrap(), std::slice::from_ref(&key), "it starts now");
-    assert!(rig.agents.sent.lock().unwrap().iter().any(|(c, t)| *c == key && t.starts_with("Second question")), "and gets the question");
-    assert!(forgotten(&rig).is_empty());
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, rig) = chat_harness(theme, true);
+        ask_in_chat(&mut h, "First question");
+        chat_event(&mut h, &rig, crate::chat::ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+        let key = crate::chat_fixture::key(h.state());
+        let _ = crate::chat::end(h.state(), &key);
+        h.run();
+        assert!(rig.agents.running.lock().unwrap().is_empty(), "its program ended");
+        // A copy of the project deleted it, and its folder's removal waits for that project's answer.
+        let (tx, rx) = std::sync::mpsc::channel();
+        let removal = crate::ai_agents::AgentHost::forget_after(&*rig.agents, &key, vec![(rx, FolderGoes::IfDeleted)]);
+        let starts = chat_calls(&rig).0;
+        ask_in_chat(&mut h, "Second question");
+        assert_eq!(chat_calls(&rig).0, starts + 1, "a start was asked");
+        assert!(rig.agents.running.lock().unwrap().is_empty(), "and refused");
+        // Its own card says why and what to do (AR-225), not the generic No answer.
+        assert!(
+            painted_has(&h, "Not started yet") && painted_has(&h, "This conversation is being removed. Try again in a moment."),
+            "{theme:?}: {:?}",
+            painted(&h)
+        );
+        assert!(!painted_has(&h, "No answer") && !painted_has(&h, "Claude stopped before answering."));
+        assert!(ids(&h).iter().any(|i| i == "workspace.chat.turn.2.retry"), "{theme:?}: Send again is offered");
+        assert!(ids(&h).iter().any(|i| i == "workspace.chat.send"), "the composer is free: nothing hangs");
+        // The copy's deletion went through, but a panel here asked for the conversation: its folder stays.
+        tx.send(Ok(Answer::Deleted { before: "0".repeat(32) })).unwrap();
+        rig.agents.settle_after();
+        assert_eq!(removal.recv_timeout(std::time::Duration::from_secs(5)).unwrap(), Ok(false));
+        let at = rect_of(&h, "workspace.chat.turn.2.retry").center();
+        click(&mut h, at);
+        assert_eq!(*rig.agents.running.lock().unwrap(), std::slice::from_ref(&key), "it starts now");
+        assert!(rig.agents.sent.lock().unwrap().iter().any(|(c, t)| *c == key && t.starts_with("Second question")), "and gets the question");
+        assert!(forgotten(&rig).is_empty());
+    }
 }
 
 /// When a re-read of the list fails, the rows read before stay and their changes are off, saying
