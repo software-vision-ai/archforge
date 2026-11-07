@@ -614,6 +614,43 @@ fn a_read_only_token_only_reads_and_an_ended_conversations_token_is_refused() {
     assert!(listens(port), "the writer still holds access");
 }
 
+/// A conversation asked to end gives its token back at once, before its program has shut down
+/// (AR-228): a call with it while the program still ends, here a change from a conversation that
+/// allowed changes, is refused and changes nothing.
+#[test]
+fn an_ending_conversations_token_is_revoked_before_its_program_shuts_down() {
+    // The program says when its input closed, that is when it was asked to end, then takes a
+    // second to go.
+    let host = Host::new(
+        "revoke-on-end",
+        Setup { claude: "while IFS= read -r line; do :; done\nprintf 'closed\\n' >> \"$IN\"\nsleep 1\n", ..Setup::default() },
+    );
+    host.agents.set_model_access(true);
+    host.agents.start(claude(CHAT, "Chat 1", true)).unwrap();
+    host.until("access held", |e| matches!(e, HostEvent::Access { held: true }));
+    let (port, file) = bridge_of(&host.mcp(CHAT));
+    let client = Client::from_token_file(&file, port).unwrap().with_origin(Some("Chat 1".into())).unwrap();
+    host.agents.end(CHAT).unwrap();
+    let closed = || std::fs::read_to_string(host.base.join("claude.stdin")).unwrap_or_default().contains("closed");
+    let deadline = Instant::now() + WAIT;
+    while !closed() {
+        assert!(Instant::now() < deadline, "its program was asked to end");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    // The program still ends: a change with its token.
+    let call = std::thread::spawn(move || client.call("engine.execute", json!({ "command": "er.schema.add", "params": { "name": "late" } })));
+    let mut window = shell();
+    host.window(&mut window, || call.is_finished());
+    let answer = call.join().unwrap();
+    assert!(
+        matches!(&answer, Err(CallError::Unreachable(_))) || answer == Err(CallError::Refused(archforge_control::REVOKED.into())),
+        "refused while the program ends: {answer:?}"
+    );
+    let schemas = archforge_ui_egui::control::answer(&mut window, "engine.execute", &json!({ "command": "er.schema.list" })).unwrap();
+    assert_eq!(schemas["result"].as_array().map(Vec::len), Some(0), "nothing changed: {schemas}");
+    host.until("the end", |e| matches!(e, HostEvent::Chat { event: ChatEvent::Ended { .. }, .. }));
+}
+
 /// A request of a token revoked while it waits in the window's queue is given up at once, answered
 /// "revoked", and never runs when the window comes to it.
 #[test]

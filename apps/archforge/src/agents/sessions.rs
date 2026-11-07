@@ -13,7 +13,9 @@
 //!
 //! A guard on every thread ([`Guard`]) gives everything back however the thread ends, a panic
 //! included: the conversation leaves the running list, its token is revoked, agent access closes
-//! with the last conversation that held it, and the window is told the conversation ended.
+//! with the last conversation that held it, and the window is told the conversation ended. The
+//! token goes first: as soon as the conversation is asked to end, or its program ends, before the
+//! program is shut down, which can take seconds (AR-228).
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -306,6 +308,16 @@ impl Guard {
         };
         sink.send(HostEvent::Chat { chat: self.chat.clone(), event, ticket });
     }
+
+    /// Revokes the conversation's token now, when it holds one, and closes agent access when no
+    /// conversation holds it any more (AR-228): a conversation asked to end, or whose program
+    /// ended, gives its access back before its program is shut down, so nothing it asks for while
+    /// it ends is answered.
+    fn revoke(&mut self) {
+        if self.grant.take().is_some() {
+            locked(&self.inner.access).released(self.inner.sink().as_ref());
+        }
+    }
 }
 
 impl Drop for Guard {
@@ -369,7 +381,8 @@ fn model(name: &str) -> Result<Model, ChatFailure> {
     Model::new(name).map_err(|e| failure(&e))
 }
 
-/// A conversation's thread: everything but the checks [`start`] made.
+/// A conversation's thread: everything but the checks [`start`] made. Once it is asked to end, or
+/// its program ends, its token is revoked before the program is shut down (AR-228).
 fn run(inner: &Arc<Inner>, request: ChatStart, id: ConversationId, session: SessionId, commands: &Receiver<Command>) {
     let mut guard =
         Guard { inner: inner.clone(), chat: request.chat.clone(), grant: None, failure: None, waiting: Arc::new(Waiting::default()), dropped: false };
@@ -420,6 +433,9 @@ fn run(inner: &Arc<Inner>, request: ChatStart, id: ConversationId, session: Sess
             guard.emit(event);
         }
     }
+    // Its access goes first, at once (AR-228): the program takes seconds to shut down, and nothing
+    // it asks for meanwhile is answered.
+    guard.revoke();
     // The program is shut down while the guard still holds the conversation, so a new start of the
     // same id waits for it.
     if let Err(e) = program.shutdown(GRACE) {
