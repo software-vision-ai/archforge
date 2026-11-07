@@ -88,8 +88,7 @@ One full round trip per route. Each uses the project of P1.
    reply naming the classes; the badge names the exact model, such as *Claude · Sonnet 4.5*.
 7. Turn **Allow changes to the model** on. Ask: *Give each class without a description a one-line
    description.* **Expect:** rows *Changed …* with *description* beside them, the card *N changes
-   to the model* with
-   **Undo this turn’s changes**, and the descriptions in **Properties**.
+   to the model* with **Undo this turn’s changes**, and the descriptions in **Properties**.
 8. Choose **Undo this turn’s changes**. **Expect:** *N changes undone*; the descriptions are gone.
 9. Ask a long question, such as *Describe every class in detail.* Choose **Stop** while it
    answers. **Expect:** the reply so far stays, marked as stopped.
@@ -249,7 +248,9 @@ CLAUDE_AT="$(command -v claude)"; echo "$CLAUDE_AT"
 
    **Expect:** *Found* or *Not yet tested with this version*, with its version; a question gets a
    reply.
-6. Repeat 1 to 5 for Codex, with `CODEX_AT="$(command -v codex)"` and `ARCHFORGE_CODEX`.
+6. Repeat 1 to 5 for Codex, with `CODEX_AT="$(command -v codex)"` and `ARCHFORGE_CODEX`. Then
+   quit Archforge and start it as usual, without the override, so the shell of
+   [Before you start](#before-you-start) is free for the key search.
 
 ### F5. Linux without a secure store (Linux only)
 
@@ -271,18 +272,22 @@ A made-up canary key goes through every path a key can take; then every place Ar
 searched for it, and for the real keys. Run it last: it replaces the saved keys, which you put back
 at the end.
 
-### K1. Make the canaries and a marker
+### K1. Make the canaries and the markers
 
 ```sh
 CANARY_CLAUDE="sk-ant-api03-AFCANARY$(openssl rand -hex 12)"
 CANARY_CODEX="sk-proj-AFCANARY$(openssl rand -hex 12)"
-MARKER="AFMARKER$(openssl rand -hex 6)"
+MARKER="AFMARKER$(openssl rand -hex 6)"           # a class name, added through Claude
+MARKER_CODEX_KEY="AFQKEY$(openssl rand -hex 6)"   # one question to Codex on an API key
+MARKER_CODEX_GPT="AFQGPT$(openssl rand -hex 6)"   # one question to Codex signed in with ChatGPT
 printf '%s\n%s\n' "$CANARY_CLAUDE" "$CANARY_CODEX" > "$WORK/canaries"
 printf '%s\n' "$MARKER" > "$WORK/marker"
-printf '%s\n%s\n%s\n' "$CANARY_CLAUDE" "$CANARY_CODEX" "$MARKER"   # to paste in K2 and K3
+printf '%s\n' "$CANARY_CLAUDE" "$CANARY_CODEX" "$MARKER" "$MARKER_CODEX_KEY" "$MARKER_CODEX_GPT"   # to paste
 ```
 
-The marker is a word that must be found: it proves the search can find what was written.
+The markers are words that must be found. `$MARKER` is a class name: it proves the project search
+finds what was written. Each Codex marker goes in one question of one Codex route and nowhere
+else, never in the model, so a match tells which route's question was kept.
 
 ### K2. The real keys, and the programs while a turn runs
 
@@ -301,7 +306,8 @@ wc -l < "$WORK/keys"    # how many keys were read (2 expected), never what they 
 [ -s "$WORK/keys" ] || echo "NO KEYS READ: the searches for the real keys would prove nothing"
 ```
 
-1. With Claude, **Allow changes to the model** on, ask: *Add a class named* and paste the marker.
+1. With Claude, **Allow changes to the model** on, ask: *Add a class named* and paste `$MARKER`'s
+   value.
    **Expect:** the class appears. Save (⌘S).
 2. Ask a long question. While the reply runs, list the processes whose command line or
    environment holds a key (process id and program only):
@@ -322,10 +328,11 @@ wc -l < "$WORK/keys"    # how many keys were read (2 expected), never what they 
    any other.
 3. Repeat step 2 with Codex on **API key**. **Expect:** no line: the key goes over the program's
    input.
-4. With Codex the default agent and still on **API key**, ask in a new conversation: *Is there a class named* and paste
-   the marker. Then sign Codex in with ChatGPT (R3), switch the card to **Sign in with ChatGPT**,
-   and ask the same in another new conversation. **Expect:** a reply each time. Both Codex routes
-   have now sent the marker, for the `codex-home` check in K4.
+4. With Codex the default agent and still on **API key**, ask in a new conversation: *Reply with
+   this one word and read nothing:* and paste `$MARKER_CODEX_KEY`'s value. Then sign Codex in with
+   ChatGPT (R3), switch the card to **Sign in with ChatGPT**, and ask the same in another new
+   conversation with `$MARKER_CODEX_GPT`'s value. **Expect:** a reply each time, repeating the
+   word. Each Codex route has now sent one question with a marker of its own, for K4 step 8.
 
 ### K3. Send the canaries everywhere they can go
 
@@ -432,34 +439,46 @@ search() {
    search "$WORK/canaries" "${TMPDIR:-/tmp}"
    ```
 
-8. **Codex's own home**, for the question text both Codex routes sent in K2 step 4 (the marker
-   only):
+8. **Codex's own home**, for the question each Codex route sent in K2 step 4, one route at a
+   time:
 
    ```sh
-   search "$WORK/marker" "$SETTINGS/agents/codex-home"
-   search "$WORK/marker" "$SETTINGS/agents"
+   for m in "$MARKER_CODEX_KEY" "$MARKER_CODEX_GPT"; do
+     printf '%s\n' "$m" > "$WORK/one-marker"
+     echo "== $m in codex-home"
+     search "$WORK/one-marker" "$SETTINGS/agents/codex-home"
+     grep -r -a -o -E ".{0,80}$m.{0,40}" "$SETTINGS/agents/codex-home" | head -n 10   # each match in context
+     echo "== $m in the conversations' own folders"
+     search "$WORK/one-marker" "$SETTINGS/agents"
+   done
    ```
 
-   Record both results. The first answers the open question below on Codex's own databases. The
-   second should list the `conversation-…` folders' own copies, besides whatever the first found.
+   For each route, look at every match in `codex-home` before recording it. A context line that
+   reads *Reply with this one word and read nothing:* before the marker is the question kept by
+   Codex: record its file. A match with other text around it (the reply, a log line) is recorded
+   as what it is, with its file. No match means that route's question is not in `codex-home`. The
+   second search should also list each conversation's own copy, in its `conversation-…` folder.
+   The context lines should hold only the question and the reply. If one shows anything like a
+   key, record a fail without copying it.
 
 **Expect** for `$WORK/canaries` and `$WORK/keys`: *none found* everywhere. The secure
 store itself is the only place that holds a key.
 
-**Expect** for `$WORK/marker`: found in `project-rows.csv` (the class and the question of K2);
-this proves the search reads the project. The conversation deleted in K3 step 5 is still in the
-`dolt_history_` rows, as the manual says.
+**Expect** for `$WORK/marker` (`$MARKER`, the class of K2 step 1): found in `project-rows.csv`
+(the class and the question); this proves the search reads the project. Elsewhere, record where
+it shows: Claude's own transcript in that conversation's `conversation-…` folder is expected. The
+conversation deleted in K3 step 5 is still in the `dolt_history_` rows, as the manual says.
 
 ### K5. Put things back
 
-Run this only after every K4 search, step 8 included: it removes `$WORK`, with the marker and the
+Run this only after every K4 search, step 8 included: it removes `$WORK`, with the markers and the
 key files the searches read.
 
 1. Start Archforge. Replace both keys with the real ones, or **Remove** them.
 2. Remove the pass's files, which hold the real keys and the project's rows:
 
    ```sh
-   rm -rf "$WORK"; unset WORK CANARY_CLAUDE CANARY_CODEX MARKER
+   rm -rf "$WORK"; unset WORK CANARY_CLAUDE CANARY_CODEX MARKER MARKER_CODEX_KEY MARKER_CODEX_GPT
    ```
 
 ## Results
@@ -487,7 +506,7 @@ key files the searches read.
 | K4.5 | The project and its saved history | | |
 | K4.6 | Exports | | |
 | K4.7 | The temporary folder | | |
-| K4.8 | Codex's own home (marker) | | |
+| K4.8 | Codex's own home (one marker per route) | | |
 | K5 | Put back | | |
 
 Versions: Archforge …, claude …, codex …, system …, date ….
@@ -501,5 +520,5 @@ Note what the pass shows for these:
 - R1 step 11: Claude resumes a conversation after **Allow changes** was switched.
 - K2: the bridge (`archforge-cli`) never holds Claude's key in its environment.
 - R2 step 4: Codex with an API key writes no `auth.json`.
-- K4 step 8: whether Codex's own databases in `codex-home` hold question text, with an API key or
-  with ChatGPT (the marker both routes sent in K2 step 4).
+- K4 step 8: whether Codex's own databases in `codex-home` hold question text, for each route
+  (API key, ChatGPT) on its own, from the marker each sent in K2 step 4.
