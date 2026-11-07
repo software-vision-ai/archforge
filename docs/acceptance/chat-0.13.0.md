@@ -432,6 +432,17 @@ search() {
    search "$WORK/canaries" "${TMPDIR:-/tmp}"
    ```
 
+8. **Codex's own home**, for the question text both Codex routes sent in K2 step 4 (the marker
+   only):
+
+   ```sh
+   search "$WORK/marker" "$SETTINGS/agents/codex-home"
+   search "$WORK/marker" "$SETTINGS/agents"
+   ```
+
+   Record both results. The first answers the open question below on Codex's own databases. The
+   second should list the `conversation-…` folders' own copies, besides whatever the first found.
+
 **Expect** for `$WORK/canaries` and `$WORK/keys`: *none found* everywhere. The secure
 store itself is the only place that holds a key.
 
@@ -440,6 +451,9 @@ this proves the search reads the project. The conversation deleted in K3 step 5 
 `dolt_history_` rows, as the manual says.
 
 ### K5. Put things back
+
+Run this only after every K4 search, step 8 included: it removes `$WORK`, with the marker and the
+key files the searches read.
 
 1. Start Archforge. Replace both keys with the real ones, or **Remove** them.
 2. Remove the pass's files, which hold the real keys and the project's rows:
@@ -473,6 +487,7 @@ this proves the search reads the project. The conversation deleted in K3 step 5 
 | K4.5 | The project and its saved history | | |
 | K4.6 | Exports | | |
 | K4.7 | The temporary folder | | |
+| K4.8 | Codex's own home (marker) | | |
 | K5 | Put back | | |
 
 Versions: Archforge …, claude …, codex …, system …, date ….
@@ -486,7 +501,5 @@ Note what the pass shows for these:
 - R1 step 11: Claude resumes a conversation after **Allow changes** was switched.
 - K2: the bridge (`archforge-cli`) never holds Claude's key in its environment.
 - R2 step 4: Codex with an API key writes no `auth.json`.
-- K2 step 4: Codex's own databases in `codex-home` hold no question text, with an API key or with
-  ChatGPT. Check with the marker both routes sent: `search "$WORK/marker"
-  "$SETTINGS/agents/codex-home"`. A conversation's own copy is in its `conversation-…` folder,
-  where the marker is expected.
+- K4 step 8: whether Codex's own databases in `codex-home` hold question text, with an API key or
+  with ChatGPT (the marker both routes sent in K2 step 4).
