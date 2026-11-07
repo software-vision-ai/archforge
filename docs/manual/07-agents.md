@@ -330,6 +330,8 @@ When something goes wrong, a card in the conversation says what and what to do:
 - *Model not available*: choose another model in the badge, then **Send again**, or check the key
   in Settings.
 - A missing program, a refused key, no key or an expired sign-in: **Open Settings**.
+- *Not started yet*: the conversation is being removed, as a copy of the project deleted it or it
+  was just brought back with Undo; **Send again** in a moment.
 - *No answer*: anything else; **Send again**.
 
 **Send again** asks the same question again in the same place: the conversation keeps it once.

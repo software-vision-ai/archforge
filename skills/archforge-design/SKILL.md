@@ -405,8 +405,10 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   answer the question goes back to the composer when that is empty, its bubble hidden, and Send
   again sends what the composer holds; otherwise it stays in its bubble.
 - Failures the design does not draw: a missing program, a refused key, no key and an expired
-  sign-in are danger cards with Open Settings; anything else is an amber "No answer" with Send
-  again. A rate limit without a reset time names none. Model not available offers Send again once
+  sign-in are danger cards with Open Settings; a start refused while the conversation's folder is
+  being removed is an amber "Not started yet", "This conversation is being removed. Try again in
+  a moment.", with Send again (AR-225, decided by UX); anything else is an amber "No answer" with
+  Send again. A rate limit without a reset time names none. Model not available offers Send again once
   another model is chosen in the badge.
 - The provider badge names the agent and the model asked for ("Claude · Sonnet"), the version once
   the program names it ("Claude · Sonnet 4.5"); the program's default shows the agent alone until
