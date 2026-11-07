@@ -725,8 +725,10 @@ Deleting a conversation from the history, with Undo; no table or column changed.
   AR-218), checked under the same lock that adds a conversation to the running list, so the
   removal never ends a program started after it was asked. A start refused meanwhile means a
   panel shows the conversation (a copy of the project that opened it after the check above), so
-  the removal then keeps the folder; the folder is removed under that same lock, so a start is
-  refused either before the check, keeping the folder, or after the folder is gone. The refused
+  the removal then keeps the folder. That is decided under the same lock, just before the folder
+  is removed, so a start refused before the decision keeps the folder and one refused after it
+  finds the folder gone, as one asked after the removal would; the removal itself runs outside the
+  lock, so no start waits for it, and no start lands while it runs. The refused
   turn ends with "No answer", and Send again starts it once the removal is done (at most about ten
   seconds: five for the answers, five for the program to end). A program that started before the
   removal was asked is ended first, as before. A copy that opens the conversation without sending

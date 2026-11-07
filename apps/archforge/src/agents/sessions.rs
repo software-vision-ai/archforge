@@ -225,10 +225,12 @@ fn remove(thread: &Arc<Inner>, chat: &str, id: &ConversationId, after: Awaited) 
     } else {
         match Workspace::open(&thread.workspace) {
             Ok(workspace) => {
-                // Removed under the lock `start` takes: a start refused before keeps the folder,
-                // and none lands while it goes.
-                let forgetting = locked(&thread.forgetting);
-                if forgetting.get(chat).is_some_and(|r| r.wanted) {
+                // Decided under the lock `start` marks it under: a start refused before this keeps
+                // the folder; one refused after it finds the folder gone, as one asked after the
+                // removal would. The folder goes outside the lock, so no start waits for it, and
+                // none lands while it goes, as it is still counted.
+                let wanted = locked(&thread.forgetting).get(chat).is_some_and(|r| r.wanted);
+                if wanted {
                     log::info!("the private folder of the deleted conversation {chat:?} is kept: a project asked to start it meanwhile");
                     return Ok(false);
                 }

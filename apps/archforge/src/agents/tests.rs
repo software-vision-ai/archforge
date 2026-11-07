@@ -1057,9 +1057,13 @@ fn a_conversation_does_not_start_while_its_folder_is_being_removed_and_starts_on
             host.until("its end", |e| matches!(e, HostEvent::Chat { chat, event: ChatEvent::Ended { .. }, .. } if chat.as_str() == c.as_str()));
         }
     }
-    // A program slow to end: the removal waits for it, and a start meanwhile is refused too and
-    // keeps the folder.
-    let slow = Host::new("forget-slow", Setup { claude: "while IFS= read -r line; do :; done\nsleep 1\n", ..Setup::default() });
+    // A program slow to end: the removal waits for it, and a start while it ends is refused too
+    // and keeps the folder. The program says when its input closed, that is when it was asked to
+    // end, then takes a second.
+    let slow = Host::new(
+        "forget-slow",
+        Setup { claude: "while IFS= read -r line; do :; done\nprintf 'closed\\n' >> \"$IN\"\nsleep 1\n", ..Setup::default() },
+    );
     slow.agents.start(claude(CHAT, "Chat 1", false)).unwrap();
     let folder = slow.settings.join("agents").join(format!("conversation-{CHAT}"));
     let deadline = Instant::now() + WAIT;
@@ -1068,6 +1072,12 @@ fn a_conversation_does_not_start_while_its_folder_is_being_removed_and_starts_on
         std::thread::sleep(Duration::from_millis(10));
     }
     let removal = slow.agents.forget(CHAT);
+    let closed = || std::fs::read_to_string(slow.base.join("claude.stdin")).unwrap_or_default().contains("closed");
+    let deadline = Instant::now() + WAIT;
+    while !closed() {
+        assert!(Instant::now() < deadline, "the removal asked its program to end");
+        std::thread::sleep(Duration::from_millis(10));
+    }
     assert_eq!(slow.agents.start(claude(CHAT, "Chat 1", false)), Err(ChatRefusal::Forgetting), "refused while its program ends");
     assert_eq!(removal.recv_timeout(WAIT).unwrap(), Ok(false), "kept for the start refused");
     assert!(folder.is_dir());
