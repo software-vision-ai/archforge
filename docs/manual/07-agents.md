@@ -237,9 +237,11 @@ You set them up in **Settings ▸ AI Agents**: click the avatar at the right of 
   and closes when the last conversation ends, at once when you turn the switch off, and when you
   quit.
   Turning it off also ends every conversation that runs: a reply under way stops, marked as
-  stopped. Until you turn it on again, no conversation sends anything to its provider, neither a
-  new one nor one opened again from the history: the panel says *Let Chat use the model is off, so
-  nothing is sent*, and your question stays in the box.
+  stopped. Until you turn it on, no conversation sends anything to its provider, neither a new
+  one nor one reopened from the history: the panel says *Let Chat use the model is off, so
+  nothing is sent*, and your question stays in the box. A question already on its way when you
+  turn it off is not sent either: its card says *Not sent*, the question goes back into the box
+  when that is empty, and **Send again** sends it once the switch is on.
 
 The status bar says which, at its right beside the project's location: *Chat is using the model*
 with a blue dot while a conversation holds agent access, *Agent access off* with a purple dot

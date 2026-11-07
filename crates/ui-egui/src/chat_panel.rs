@@ -213,6 +213,9 @@ pub struct Turn {
     pub rows_dropped: u64,
     /// The rendered streaming text.
     pub laid: Option<Laid>,
+    /// Its question was kept but never sent, as Let Chat use the model went off first: its card
+    /// says so and offers Send again. Not kept in the project, which keeps the turn as failed.
+    pub unsent: bool,
 }
 
 impl Turn {
@@ -745,6 +748,7 @@ fn asked(shell: &mut Shell, answer: Result<Answer, Refusal>, pending: Pending, r
                 // What belonged to the failed attempt goes: its stop, its cut, its streaming
                 // layout. Its rows and reply stay in the timeline as what it did.
                 t.returned = false;
+                t.unsent = false;
                 t.stopping = false;
                 t.stopping_since = None;
                 t.cut = false;
@@ -772,6 +776,7 @@ fn asked(shell: &mut Shell, answer: Result<Answer, Refusal>, pending: Pending, r
                     cut: false,
                     rows_dropped: 0,
                     laid: None,
+                    unsent: false,
                 });
                 number
             };
@@ -795,17 +800,10 @@ fn asked(shell: &mut Shell, answer: Result<Answer, Refusal>, pending: Pending, r
 
 /// Gives the agent `text`: its program starts first when it does not run, and the text waits
 /// while it ends to start again. Let Chat use the model turned off while the question was being
-/// kept ends its turn here as stopped, and nothing is sent.
+/// kept: nothing is sent, and the turn ends unsent ([`not_sent`]).
 fn deliver(shell: &mut Shell, text: String) {
     if refused_while_off(shell) {
-        end_here(shell, TurnState::Stopped);
-        // The question goes back into an empty box, ready once the switch is on again.
-        let question = shell.chat_panel.chat.as_ref().and_then(|c| c.turns.last()).map(|t| t.question.clone());
-        if shell.chat_panel.draft.trim().is_empty()
-            && let Some(q) = question
-        {
-            shell.chat_panel.draft = q;
-        }
+        not_sent(shell);
         return;
     }
     let Some(chat) = shell.chat_panel.chat.as_mut() else { return };
@@ -848,6 +846,22 @@ fn deliver(shell: &mut Shell, text: String) {
             c.session = Session::Off;
         }
         end_here(shell, TurnState::Failed(ChatFailure { kind: FailureKind::Other, detail: e.to_string(), reset: None }));
+    }
+}
+
+/// Ends the running turn of the panel shown unsent, as Let Chat use the model went off while its
+/// question was being kept: failed, so Send again sends it once the switch is on again. Its
+/// question goes back into an empty box, its bubble hidden, as after a lost connection; when the
+/// box holds something else, that stays, and the question stays in its bubble with Send again.
+fn not_sent(shell: &mut Shell) {
+    let empty = shell.chat_panel.draft.trim().is_empty();
+    let failure = ChatFailure { kind: FailureKind::Other, detail: "Let Chat use the model is off".into(), reset: None };
+    end_here(shell, TurnState::Failed(failure));
+    let Some(turn) = shell.chat_panel.chat.as_mut().and_then(|c| c.turns.last_mut()) else { return };
+    turn.unsent = true;
+    if empty && turn.change.is_none() {
+        turn.returned = true;
+        shell.chat_panel.draft = turn.question.clone();
     }
 }
 
@@ -1124,6 +1138,7 @@ fn from_stored(stored: Stored, spans: &BTreeMap<Uuid, Span>) -> Chat {
             cut: false,
             rows_dropped: 0,
             laid: None,
+            unsent: false,
         });
     }
     for m in stored.messages {

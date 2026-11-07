@@ -7386,8 +7386,56 @@ fn a_question_being_kept_when_model_use_goes_off_is_not_sent_and_goes_back_to_th
     }
     assert_eq!((chat_calls(&rig).0, chat_calls(&rig).1), (0, 0), "nothing started or sent");
     assert_eq!(h.state().chat_panel.draft, "Explain how Payment relates to Order.", "back in the box");
-    assert_eq!(kept_chat(&h, &rig).turns[0].outcome, crate::chat_store::Outcome::Stopped);
+    assert_eq!(kept_chat(&h, &rig).turns[0].outcome, crate::chat_store::Outcome::Failed);
+    assert!(painted_has(&h, "Not sent"));
     assert!(painted_has(&h, "Let Chat use the model is off, so nothing is sent. Turn it on in Settings ▸ AI Agents."));
+    // On again, the box sends it in place: the same turn, now sent.
+    h.state_mut().state.agents.chat_uses_model = true;
+    h.run();
+    let at = rect_of(&h, "workspace.chat.composer").center();
+    click(&mut h, at);
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    h.ctx.memory_mut(|m| m.surrender_focus(crate::widgets::egui_id("workspace.chat.composer")));
+    h.run();
+    assert_eq!((chat_calls(&rig).0, chat_calls(&rig).1), (1, 1));
+    assert_eq!(h.state().chat_panel.chat.as_ref().map(|c| c.turns.len()), Some(1), "sent in place");
+}
+
+/// Off while a question is being kept and the box already holds something else (AR-221, review):
+/// what was typed stays, the question stays in its bubble, and its card offers Send again, which
+/// sends it once the switch is on again; nothing has to be typed twice.
+#[test]
+fn a_question_not_sent_while_the_box_holds_other_text_can_be_sent_again() {
+    let (mut h, rig) = chat_harness(ThemeKind::Light, true);
+    rig.store.hold.store(true, std::sync::atomic::Ordering::SeqCst);
+    ask_in_chat(&mut h, "Explain how Payment relates to Order.");
+    // The person writes something else in the box meanwhile.
+    h.state_mut().chat_panel.draft = "A second thought".into();
+    h.run();
+    h.state_mut().state.agents.chat_uses_model = false;
+    h.run();
+    rig.store.release();
+    for _ in 0..4 {
+        h.run();
+    }
+    assert_eq!((chat_calls(&rig).0, chat_calls(&rig).1), (0, 0), "nothing started or sent");
+    assert_eq!(h.state().chat_panel.draft, "A second thought", "what was typed stays");
+    assert!(painted_has(&h, "Explain how Payment relates to Order."), "the question stays in its bubble");
+    assert!(painted_has(&h, "Let Chat use the model was turned off, so this question was not sent. Send it again once the switch is on."));
+    // Send again while it is still off sends nothing and says why.
+    let at = rect_of(&h, "workspace.chat.turn.1.retry").center();
+    click(&mut h, at);
+    assert_eq!((chat_calls(&rig).0, chat_calls(&rig).1), (0, 0));
+    // On again, Send again sends the question as it was, in place, and the box keeps its text.
+    h.state_mut().state.agents.chat_uses_model = true;
+    h.run();
+    let at = rect_of(&h, "workspace.chat.turn.1.retry").center();
+    click(&mut h, at);
+    h.run();
+    assert_eq!((chat_calls(&rig).0, chat_calls(&rig).1), (1, 1));
+    assert!(sent_texts(&rig).last().is_some_and(|t| t.starts_with("Explain how Payment relates to Order.")));
+    assert_eq!(h.state().chat_panel.draft, "A second thought");
+    assert_eq!(h.state().chat_panel.chat.as_ref().map(|c| c.turns.len()), Some(1), "sent in place");
 }
 
 /// A conversation opened again from the history while Let Chat use the model is off sends nothing

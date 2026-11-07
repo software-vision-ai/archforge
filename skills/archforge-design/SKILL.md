@@ -365,7 +365,9 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   stopped. While it is off nothing is sent from any conversation, a running or reopened one
   included: Send and Send again refuse with the panel's red line "Let Chat use the model is off,
   so nothing is sent. Turn it on in Settings ▸ AI Agents.", the question stays in the box and is
-  not kept; turning it on takes the line away (AR-221, decided by UX).
+  not kept; turning it on takes the line away (AR-221, decided by UX). A question being kept when
+  it goes off ends failed and unsent: an amber "Not sent" card with Send again, the question back
+  in the box (bubble hidden) when the box is empty, else in its bubble with the box's text kept.
 - Opening the panel the first time in a project starts a new conversation (B2); it stays while
   the project is open. One read back from the history opens read-only: Allow changes is off for
   every conversation until turned on in it.
