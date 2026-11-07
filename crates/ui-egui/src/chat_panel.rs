@@ -566,15 +566,45 @@ pub fn refusal_text(r: &Refusal) -> String {
 
 // Asking.
 
-/// Sends the composer's text: a new turn, or the failed turn run again when its question went back
-/// to the composer. Refused while a turn runs, for an empty or too long question, or without a
-/// project.
-pub fn send(shell: &mut Shell) {
-    let text = shell.chat_panel.draft.trim().to_string();
-    let Some(chat) = shell.chat_panel.chat.as_ref() else { return };
-    if chat.busy() || text.is_empty() {
+/// What the panel says while Let Chat use the model is off and something would be sent.
+fn model_use_off() -> String {
+    tr("Let Chat use the model is off, so nothing is sent. Turn it on in Settings ▸ AI Agents.")
+}
+
+/// Whether Let Chat use the model is off; then the panel says so, and nothing is sent (AR-221).
+fn refused_while_off(shell: &mut Shell) -> bool {
+    if shell.state.agents.chat_uses_model {
+        return false;
+    }
+    shell.chat_panel.notice = Some(model_use_off());
+    true
+}
+
+/// Let Chat use the model turned `on` or off: off, a conversation shown that runs (its program,
+/// which is being ended, or a question on its way) says why it stops; on, that line goes.
+pub(crate) fn model_use_changed(shell: &mut Shell, on: bool) {
+    let said = shell.chat_panel.notice.as_deref() == Some(model_use_off().as_str());
+    if on {
+        if said {
+            shell.chat_panel.notice = None;
+        }
         return;
     }
+    if shell.chat_panel.chat.as_ref().is_some_and(|c| c.busy() || c.session != Session::Off) {
+        shell.chat_panel.notice = Some(model_use_off());
+    }
+}
+
+/// Sends the composer's text: a new turn, or the failed turn run again when its question went back
+/// to the composer. Refused while a turn runs, for an empty or too long question, without a
+/// project, or while Let Chat use the model is off (the question then stays in the box, not kept).
+pub fn send(shell: &mut Shell) {
+    let text = shell.chat_panel.draft.trim().to_string();
+    let Some(busy) = shell.chat_panel.chat.as_ref().map(Chat::busy) else { return };
+    if busy || text.is_empty() || refused_while_off(shell) {
+        return;
+    }
+    let Some(chat) = shell.chat_panel.chat.as_ref() else { return };
     if text.len() > QUESTION_BYTES {
         let kib = (text.len() / 1024).to_string();
         shell.chat_panel.notice = Some(fmt(&tr("A question is at most 64 KiB; this one is {n} KiB."), &[("n", &kib)]));
@@ -638,8 +668,12 @@ fn ask_write(chat: &Chat, pending: &Pending, now: u64) -> Write {
 /// decision): only a failed turn that changed nothing, and not before a rate limit's reset. While
 /// the question is back in the composer, what the composer holds is the question sent. The question
 /// always goes with its chips (an edited one with the chips now), so the project checks it against
-/// the kept keys again and the agent gets its context line again.
+/// the kept keys again and the agent gets its context line again. Refused while Let Chat use the
+/// model is off.
 pub fn retry(shell: &mut Shell, edited: Option<String>) {
+    if refused_while_off(shell) {
+        return;
+    }
     let removed = shell.chat_panel.chat.as_ref().map(|c| c.removed.clone()).unwrap_or_default();
     let chips_now: Vec<Anchor> = chips(shell).into_iter().filter(|c| !removed.contains(&c.chip)).flat_map(|c| c.anchors).collect();
     let store = store_of(shell);
@@ -750,8 +784,13 @@ fn asked(shell: &mut Shell, answer: Result<Answer, Refusal>, pending: Pending, r
 }
 
 /// Gives the agent `text`: its program starts first when it does not run, and the text waits
-/// while it ends to start again.
+/// while it ends to start again. Let Chat use the model turned off while the question was being
+/// kept ends its turn here as stopped, and nothing is sent.
 fn deliver(shell: &mut Shell, text: String) {
+    if refused_while_off(shell) {
+        end_here(shell, TurnState::Stopped);
+        return;
+    }
     let Some(chat) = shell.chat_panel.chat.as_mut() else { return };
     match chat.session {
         Session::Ending => {

@@ -279,6 +279,7 @@ str		Agent access off	代理访问已关闭
 str		Conversations	对话
 str		New conversation	新对话
 str		Stop the reply first	请先停止回复
+str		Let Chat use the model is off, so nothing is sent. Turn it on in Settings ▸ AI Agents.	“允许聊天使用模型”已关闭，因此不会发送任何内容。请在“设置 ▸ AI 智能体”中将其打开。
 str		No agent set up yet	尚未设置智能体
 str		Chat answers with Claude or Codex, run by the program installed on this computer. Choose one in Settings and let Chat use the model.	聊天通过这台电脑上安装的程序运行 Claude 或 Codex 来回答。请在设置中选择一个，并允许聊天使用模型。
 str		Configure agent	设置智能体

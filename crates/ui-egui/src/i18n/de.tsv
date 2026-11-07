@@ -279,6 +279,7 @@ str		Agent access off	Agentenzugriff aus
 str		Conversations	Unterhaltungen
 str		New conversation	Neue Unterhaltung
 str		Stop the reply first	Zuerst die Antwort stoppen
+str		Let Chat use the model is off, so nothing is sent. Turn it on in Settings ▸ AI Agents.	„Chat das Modell nutzen lassen“ ist aus, daher wird nichts gesendet. Schalten Sie es unter Einstellungen ▸ KI-Agenten ein.
 str		No agent set up yet	Noch kein Agent eingerichtet
 str		Chat answers with Claude or Codex, run by the program installed on this computer. Choose one in Settings and let Chat use the model.	Chat antwortet mit Claude oder Codex, ausgeführt vom Programm, das auf diesem Computer installiert ist. Wählen Sie einen in den Einstellungen und lassen Sie Chat das Modell nutzen.
 str		Configure agent	Agent einrichten

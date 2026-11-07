@@ -278,6 +278,7 @@ str		Agent access off	Agent access off
 str		Conversations	Conversations
 str		New conversation	New conversation
 str		Stop the reply first	Stop the reply first
+str		Let Chat use the model is off, so nothing is sent. Turn it on in Settings ▸ AI Agents.	Let Chat use the model is off, so nothing is sent. Turn it on in Settings ▸ AI Agents.
 str		No agent set up yet	No agent set up yet
 str		Chat answers with Claude or Codex, run by the program installed on this computer. Choose one in Settings and let Chat use the model.	Chat answers with Claude or Codex, run by the program installed on this computer. Choose one in Settings and let Chat use the model.
 str		Configure agent	Configure agent

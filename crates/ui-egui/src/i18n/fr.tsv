@@ -279,6 +279,7 @@ str		Agent access off	Accès des agents désactivé
 str		Conversations	Conversations
 str		New conversation	Nouvelle conversation
 str		Stop the reply first	Arrêtez d’abord la réponse
+str		Let Chat use the model is off, so nothing is sent. Turn it on in Settings ▸ AI Agents.	« Laisser Discussion utiliser le modèle » est désactivé, donc rien n’est envoyé. Activez-le dans Réglages ▸ Agents IA.
 str		No agent set up yet	Aucun agent configuré pour l’instant
 str		Chat answers with Claude or Codex, run by the program installed on this computer. Choose one in Settings and let Chat use the model.	Discussion répond avec Claude ou Codex, exécuté par le programme installé sur cet ordinateur. Choisissez-en un dans les Réglages et laissez Discussion utiliser le modèle.
 str		Configure agent	Configurer un agent

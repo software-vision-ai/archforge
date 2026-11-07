@@ -7309,6 +7309,70 @@ fn a_question_is_kept_before_it_is_sent_with_its_chips_as_a_context_line_and_str
     assert_eq!(chat_calls(&rig).1, 1, "Shift+Enter sent nothing");
 }
 
+/// Turning Let Chat use the model off ends a conversation that runs (AR-221): its program ends, the
+/// reply so far stays, marked stopped, the panel says why, and the next question is neither sent
+/// nor kept; it stays in the box. Turned on again, the question goes.
+#[test]
+fn turning_model_use_off_ends_a_running_conversation_and_sends_nothing_more() {
+    use crate::chat::ChatEvent;
+    const OFF: &str = "Let Chat use the model is off, so nothing is sent. Turn it on in Settings ▸ AI Agents.";
+    let (mut h, rig) = chat_harness(ThemeKind::Light, true);
+    ask_in_chat(&mut h, "Explain how Payment relates to Order.");
+    chat_event(&mut h, &rig, ChatEvent::Text { delta: "Payment is linked to Order by".into() });
+    assert_eq!(chat_calls(&rig), (1, 1, 0, 0));
+    h.state_mut().state.agents.chat_uses_model = false;
+    h.run();
+    assert_eq!(chat_calls(&rig).3, 1, "the running conversation's program ends");
+    assert!(painted_has(&h, "Payment is linked to Order by"), "the reply so far stays");
+    assert_eq!(kept_chat(&h, &rig).turns[0].outcome, crate::chat_store::Outcome::Stopped);
+    assert!(painted_has(&h, OFF), "{:?}", painted(&h));
+    let log = rig.store.log.lock().unwrap().len();
+    ask_in_chat(&mut h, "And how does Invoice relate to Order?");
+    assert_eq!((chat_calls(&rig).0, chat_calls(&rig).1), (1, 1), "nothing more is started or sent");
+    assert_eq!(rig.store.log.lock().unwrap().len(), log, "nor kept");
+    assert_eq!(h.state().chat_panel.draft, "And how does Invoice relate to Order?", "the question stays in the box");
+    assert!(painted_has(&h, OFF));
+    // On again: the line goes, and the question in the box is sent.
+    h.state_mut().state.agents.chat_uses_model = true;
+    h.run();
+    assert!(!painted_has(&h, OFF));
+    let at = rect_of(&h, "workspace.chat.composer").center();
+    click(&mut h, at);
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    h.ctx.memory_mut(|m| m.surrender_focus(crate::widgets::egui_id("workspace.chat.composer")));
+    h.run();
+    assert_eq!((chat_calls(&rig).0, chat_calls(&rig).1), (2, 2), "started again and sent");
+}
+
+/// A conversation opened again from the history while Let Chat use the model is off sends nothing
+/// (AR-221): neither its question nor, by resuming, what it said before; the panel says why.
+#[test]
+fn a_conversation_reopened_while_model_use_is_off_sends_nothing() {
+    use crate::chat::ChatEvent;
+    let (mut h, rig) = chat_harness(ThemeKind::Light, true);
+    ask_in_chat(&mut h, "Explain how Payment relates to Order.");
+    chat_event(&mut h, &rig, ChatEvent::Message { text: "Payment is linked to Order.".into() });
+    chat_event(&mut h, &rig, ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+    let at = rect_of(&h, "workspace.chat.new").center();
+    click(&mut h, at);
+    assert_eq!(chat_calls(&rig), (1, 1, 0, 1), "a new conversation ended the first one's program");
+    h.state_mut().state.agents.chat_uses_model = false;
+    h.run();
+    let at = rect_of(&h, "workspace.chat.history").center();
+    click(&mut h, at);
+    let at = rect_of(&h, "workspace.chat.history.0").center();
+    click(&mut h, at);
+    h.run();
+    assert_eq!(h.state().chat_panel.chat.as_ref().map(|c| c.turns.len()), Some(1), "open again with what it said");
+    assert!(painted_has(&h, "Payment is linked to Order."));
+    let log = rig.store.log.lock().unwrap().len();
+    ask_in_chat(&mut h, "Go on from there.");
+    assert_eq!((chat_calls(&rig).0, chat_calls(&rig).1), (1, 1), "nothing started or sent: neither the question nor, by resuming, the history");
+    assert_eq!(rig.store.log.lock().unwrap().len(), log, "nor kept");
+    assert_eq!(h.state().chat_panel.draft, "Go on from there.");
+    assert!(painted_has(&h, "Let Chat use the model is off, so nothing is sent. Turn it on in Settings ▸ AI Agents."));
+}
+
 /// Stop keeps the reply so far, marked cut off and kept; an unreachable program's turn ends here.
 #[test]
 fn stop_keeps_the_reply_so_far_marked_cut_off_and_keeps_it_in_the_project() {
@@ -15670,6 +15734,8 @@ fn a_conversation_is_checked_before_the_host_is_asked_and_its_events_are_kept_in
     use crate::chat::{ChatEvent, ChatRefusal, MAX_SESSIONS, MAX_WAITING};
     use std::sync::atomic::Ordering::Relaxed;
     let (mut h, f) = agents_harness(ThemeKind::Light, |_| {});
+    // Conversations start only while Let Chat use the model is on (AR-221).
+    h.state_mut().state.agents.chat_uses_model = true;
     assert_eq!(f.calls.connect.load(Relaxed), 1, "the window connected its events once");
     // A bad id is refused here, never asked of the host.
     for bad in ["", "Chat 1", "00000000-0000-4000-8000-00000000000G", "00000000-0000-4000-8000-0000000000001", "../../etc/passwd"] {
@@ -15727,6 +15793,7 @@ fn a_conversations_waiting_events_are_capped_by_their_bytes_too() {
     use crate::ai_agents::Provider;
     use crate::chat::{ChatEvent, MAX_WAITING_BYTES};
     let (mut h, f) = agents_harness(ThemeKind::Light, |_| {});
+    h.state_mut().state.agents.chat_uses_model = true;
     crate::chat::start(h.state_mut(), chat_start(1, Provider::Claude)).unwrap();
     let one = chat_id(1);
     let big = || ChatEvent::Message { text: "x".repeat(MAX_WAITING_BYTES / 3 + 1) };
