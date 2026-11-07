@@ -10,6 +10,13 @@ pub mod ai_agents;
 pub mod appearance;
 pub mod canvas;
 pub mod chat;
+#[cfg(any(test, feature = "snapshot"))]
+pub mod chat_fixture;
+pub mod chat_markdown;
+pub mod chat_panel;
+pub mod chat_store;
+mod chat_view;
+pub mod chat_words;
 pub mod checks;
 pub mod close_ask;
 pub mod connect;
@@ -102,6 +109,12 @@ pub struct Services {
     /// store, the test message, Codex's ChatGPT sign-in, and Chat's conversations with their agent
     /// access; none leaves the page saying it is not available and runs no conversation.
     pub agents: Option<std::sync::Arc<dyn ai_agents::AgentHost>>,
+    /// Keeps Chat's conversations in the open projects, on the project's writer; none keeps none
+    /// and the Chat panel says so when a question would be kept.
+    pub chats: Option<std::sync::Arc<dyn chat_store::ChatStore>>,
+    /// The time now and the local offset from UTC, for the times Chat shows; none says them in
+    /// UTC from the system's clock.
+    pub clock: Option<std::sync::Arc<dyn Fn() -> chat_words::Clock + Send + Sync>>,
 }
 
 /// The host's search for projects in folders: the folders and a wake in, the projects found sent
@@ -271,7 +284,7 @@ fn poll_save(
 }
 
 /// Everything the window keeps for a project whose tab is not the one shown.
-struct Parked {
+pub(crate) struct Parked {
     project: Opened,
     session: Option<archforge_notations::Session>,
     session_error: Option<SessionError>,
@@ -285,6 +298,8 @@ struct Parked {
     canvas: canvas::State,
     panels: panels::State,
     problems: std::collections::BTreeMap<archforge_mof::Obj, Vec<String>>,
+    /// The project's Chat panel: its conversation, draft and history.
+    pub(crate) chat_panel: chat_panel::Panel,
 }
 
 /// An open project as the shell shows it: its model's rows when it was opened from disk (none for
@@ -364,6 +379,8 @@ pub struct Shell {
     pub agents: ai_agents::State,
     /// Chat's conversations as this window knows them, and whether one holds agent access.
     pub chats: chat::State,
+    /// The Chat panel of the project shown: its conversation, draft and history.
+    pub chat_panel: chat_panel::Panel,
     /// The open projects, one tab each, in the bar's order; the one shown has its state in the
     /// fields below, the others keep theirs parked in their tab.
     pub tabs: Vec<Tab>,
@@ -451,6 +468,7 @@ impl Shell {
             about: None,
             agents: ai_agents::State::default(),
             chats: chat::State::default(),
+            chat_panel: chat_panel::Panel::default(),
             tabs: Vec::new(),
             active: None,
             project: None,
@@ -531,6 +549,7 @@ impl Shell {
             self.canvas = p.canvas;
             self.panels = p.panels;
             self.problems = p.problems;
+            self.chat_panel = p.chat_panel;
             self.active = Some(i);
         }
     }
@@ -607,6 +626,7 @@ impl Shell {
             return;
         }
         self.tabs[i].close_error = None;
+        self.end_chats(i);
         let path = &self.tabs[i].path;
         let Some(rx) =
             self.services.projects.as_ref().map(|host| if reset { host.discard_and_close(path) } else { host.close_without_writing(path) })
@@ -712,6 +732,7 @@ impl Shell {
             self.tabs[i].close_error = Some(e);
             return;
         }
+        self.end_chats(i);
         let Some(rx) = self.services.projects.as_ref().map(|host| host.close(&self.tabs[i].path)) else {
             self.closed(i);
             return;
@@ -724,6 +745,28 @@ impl Shell {
                 self.activate(next);
             }
         }
+    }
+
+    /// Tab `i`'s project closes: its Chat conversation's program ends, a running turn with it. The
+    /// turn is ended here as stopped, its reply so far kept, and written to its own project before
+    /// it closes: once the conversation is let go of, the program's own end is not taken any more.
+    fn end_chats(&mut self, i: usize) {
+        let chat = |p: &chat_panel::Panel| p.chat.as_ref().map(|c| (c.key.clone(), c.origin.clone()));
+        let shown = if self.active == Some(i) {
+            chat_panel::leaving(self);
+            chat_panel::end_here(self, chat_panel::TurnState::Stopped);
+            chat(&self.chat_panel)
+        } else {
+            let out = self.tabs.get(i).map(|t| chat_panel::Out::of(self, t.path.clone(), false));
+            if let (Some(out), Some(parked)) = (out, self.tabs.get_mut(i).and_then(|t| t.parked.as_mut())) {
+                let Parked { chat_panel: panel, session, .. } = &mut **parked;
+                if let Some(c) = panel.chat.as_mut() {
+                    chat_panel::finish(c, session.as_mut(), &out, chat_panel::TurnState::Stopped);
+                }
+            }
+            self.tabs.get(i).and_then(|t| t.parked.as_ref()).and_then(|p| chat(&p.chat_panel))
+        };
+        chat_panel::closing(self, shown);
     }
 
     /// The open tab nearest `i`, after it first, that is not closing.
@@ -792,6 +835,8 @@ impl Shell {
         if self.active.is_none() {
             return;
         }
+        // A turn running in Chat is stopped: its agent access would reach the next project shown.
+        chat_panel::leaving(self);
         skill_tab::sync(self, 0.0, true, None);
         panels::commit_description(self);
         self.write_changes();
@@ -819,6 +864,7 @@ impl Shell {
             canvas: std::mem::take(&mut self.canvas),
             panels: std::mem::take(&mut self.panels),
             problems: std::mem::take(&mut self.problems),
+            chat_panel: std::mem::take(&mut self.chat_panel),
         };
         if let Some(tab) = self.tabs.get_mut(i) {
             tab.parked = Some(Box::new(parked));
@@ -843,6 +889,7 @@ impl Shell {
         self.canvas = canvas::State::default();
         self.panels = panels::State::default();
         self.problems.clear();
+        self.chat_panel = chat_panel::Panel::default();
     }
 
     /// Where the open project lives, as the status bar says it: the label of the folder new
@@ -1305,6 +1352,8 @@ impl Shell {
         // Chat's conversations: the host's events, and the opt-in told to the host.
         chat::frame(self, ctx);
         control::drain(self);
+        // The Chat panels' conversations: the agent's events, the project's answers, undo's moves.
+        chat_panel::frame(self);
         // While the host works on an opening, a save or a write, the window looks again soon, so
         // its answer shows without waiting for the pointer to move.
         // A write that failed waits for the next change or Save, and the status bar already says
@@ -1317,7 +1366,14 @@ impl Shell {
             _ => false,
         };
         let closing = self.tabs.iter().any(Tab::closing);
-        if self.opening.is_some() || self.dolt_check.is_some() || self.saving.is_some() || writing || closing || self.agents.busy() {
+        if self.opening.is_some()
+            || self.dolt_check.is_some()
+            || self.saving.is_some()
+            || writing
+            || closing
+            || self.agents.busy()
+            || chat_panel::waiting(self)
+        {
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
         }
         // Cmd+S (Ctrl+S) saves the open project and Cmd+O (Ctrl+O) opens one; on macOS the menu

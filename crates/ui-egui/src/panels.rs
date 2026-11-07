@@ -1136,7 +1136,7 @@ pub(crate) fn name_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: 
 }
 
 /// The description of the element `obj` as its notation keeps it, or nothing.
-fn description_now(shell: &Shell, obj: Obj) -> String {
+pub(crate) fn description_now(shell: &Shell, obj: Obj) -> String {
     shell.session.as_ref().and_then(|s| s.view().of_element(s.doc(), obj).map(|n| n.description(s.doc(), obj))).unwrap_or_default()
 }
 
@@ -2229,7 +2229,7 @@ pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
 // The panel.
 
 /// Draws the panel body for `panel` under its header, from `y`: Properties and Skills follow the
-/// selection; Chat and Appearance say what is true, Chat that it is coming.
+/// selection; Chat holds the project's conversations; Appearance says what is true.
 pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, panel: Panel, project: &str) {
     let paint = ui.painter().clone();
     let s = subject(shell, project);
@@ -2237,7 +2237,7 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, 
     flush_description(shell, s.id);
     match panel {
         Panel::Agent => {
-            ux::text(&paint, r.min + vec2(PAD, y), &tr("Coming soon"), types::SECTION, p.text, Some((r.width() - 2.0 * PAD).max(0.0)));
+            crate::chat_view::draw(shell, ui, p, r, y);
             return;
         }
         Panel::Appearance => {

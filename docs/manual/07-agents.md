@@ -7,10 +7,11 @@ makes shows in the window at once and ⌘Z (Ctrl Z) takes it back.
 ## What does what
 
 - **Archforge** holds the model, draws it, checks every change, keeps the history and saves. It
-  never generates code or text itself and has no built-in chat yet.
-- **The agent** runs outside Archforge, in the coding assistant or tool you already use. It talks
-  to Archforge through `archforge-cli`, an [MCP](https://modelcontextprotocol.io) server, and it
-  does the writing: SQL DDL, documentation, a change to the model you asked for.
+  never generates code or text itself.
+- **The agent** does the writing: SQL DDL, documentation, a change to the model you asked for. It
+  runs either in Archforge's Chat panel (see [Chat](#chat)) or outside Archforge, in the coding
+  assistant or tool you already use, talking to Archforge through `archforge-cli`, an
+  [MCP](https://modelcontextprotocol.io) server.
 
 ## Connecting an agent
 
@@ -207,7 +208,7 @@ primary key and a foreign key to Order."* The table appears on screen as the age
 
 ## Setting up AI agents for Chat
 
-Chat, coming in a later version, talks to an agent program installed on your computer: Claude
+Chat talks to an agent program installed on your computer: Claude
 through the program `claude`, or Codex through the program `codex`. Archforge never bundles them.
 You set them up in **Settings ▸ AI Agents**: click the avatar at the right of the bar, or press
 ⌘, (Ctrl ,), and choose **AI Agents** on the left.
@@ -268,6 +269,70 @@ saved until you start one and restart Archforge, and Archforge keeps them nowher
 with ChatGPT works without a secure store: the codex program then keeps that sign-in in its own
 files, in Archforge's private settings folder, readable by you alone. On Windows, AI Agents are not available yet; everything else
 works as usual.
+
+## Chat
+
+The Chat panel is the speech bubble at the top of the right rail. It holds the open project's
+conversations with Claude or Codex.
+
+<!-- picture: workspace-chat light | The Chat panel ready: the intro, the context chips, the composer with Claude's badge, Allow changes off -->
+
+Until an agent is set up, the panel says *No agent set up yet*; **Configure agent** opens
+**Settings ▸ AI Agents** (see [Setting up AI agents for Chat](#setting-up-ai-agents-for-chat)).
+Chat answers once the default agent is ready and **Let Chat use the model** is on.
+
+- **Ask** in the box at the foot of the panel. Enter sends; Shift Enter starts a new line. Your
+  question is kept in the project first, then sent. A question that holds one of your saved API
+  keys is neither sent nor kept: the panel says so and leaves it in the box for you to edit. So
+  does a project that cannot be written.
+- **The chips** above the box are sent with your question: the project, the open diagram and what
+  is selected, by name. Remove one with its ×; it stays removed for this conversation. The line
+  under them is a reminder: they, and everything the agent reads, go to the agent's provider.
+- **What the agent does** shows as it happens, under its name: *Read diagram Commerce · 8
+  classes*, *Changed Customer · description*. Each row is what Archforge itself answered the
+  agent, so a refused change says *refused*. The reply is written in after them.
+- **Stop** (the square in place of Send) ends the reply; what was written so far stays, marked as
+  stopped. If the agent's program does not stop within ten seconds, Archforge ends it. While a reply runs you can type the next question, but Enter, the badge, the switch,
+  New conversation and the history wait: *Stop the reply first*.
+- **Allow changes to the model** is off for every conversation, and every time one is opened again:
+  the agent can then only read. Turn it on and the agent may change the model; everything one
+  question changes is **one step** of the project's undo history, named *Chat 1: Turn 2*, as long
+  as nothing else changes the model while the reply runs. The green card under the changes offers
+  **Undo this turn's changes**, which takes back exactly those changes and keeps your own. If you
+  or another conversation change the model while the reply runs, the question's changes become
+  separate steps around yours. Then, or once the model was changed since, or the project was
+  closed in between, the card says the changes can no longer be undone on their own; ⌘Z (Ctrl Z)
+  still works step by step.
+- **The badge** in the box names the agent and its model, *Claude · Sonnet*, then the exact version
+  once the agent names it, *Claude · Sonnet 4.5*. Choose another model there; before the first
+  question you can choose the other agent too. A conversation keeps its agent and model: changing
+  the default in Settings never switches a conversation already started.
+
+When something goes wrong, a card in the conversation says what and what to do:
+
+<!-- picture: workspace-chat-network-lost light | Connection lost: the question back in the box, ready to send again -->
+
+- *Rate limited*: the provider asks Chat to wait. When it says until when, the card names the time
+  and **Send again** waits for it; otherwise **Send again** is there at once.
+- *Connection lost*: when it went before the agent answered anything and the box is empty, your
+  question goes back into the box, ready to send again, edited or not; otherwise it stays where it
+  was. **Send again** sends it again.
+- *Model not available*: choose another model in the badge, then **Send again**, or check the key
+  in Settings.
+- A missing program, a refused key, no key or an expired sign-in: **Open Settings**.
+- *No answer*: anything else; **Send again**.
+
+**Send again** asks the same question again in the same place: the conversation keeps it once.
+A question whose turn already changed the model is not sent again; ask again in your own words.
+
+**Conversations** (the clock at the top of the panel) lists the project's conversations, newest
+first, with when, the agent and how many messages. Click one to open it again, read-only until you
+allow changes. **New conversation** (+) starts another. Conversations are kept in the project: they
+travel with it, never show in another project, and are not unsaved changes. Leaving the project's
+tab stops a reply that runs; closing the project ends its conversation.
+
+Links in a reply open only after you confirm them, and only web addresses; pictures show their
+description, and HTML shows as text.
 
 ## The Generate handoff
 

@@ -27,8 +27,8 @@ use mysql::prelude::Queryable;
 
 pub use chat::{
     Anchor, AnchorRole, CHAT_AUTHOR, CHAT_TABLES, ChangeKind, ChangeRecord, ChangeState, ChangedElement, Chat, ChatSummary, Conversation, Listed,
-    Message, MessageRecord, NewAnchor, NewChat, NewQuestion, NewReply, NewToolCall, NewTurn, Provider, Role, ToolCall, ToolStatus, Turn, TurnChanges,
-    TurnEnd, TurnError, TurnOutcome, TurnRecord, TurnSpan, limits,
+    Message, MessageRecord, NewAnchor, NewChat, NewQuestion, NewReply, NewToolCall, NewTurn, Provider, Rerun, Role, ToolCall, ToolStatus, Turn,
+    TurnChanges, TurnEnd, TurnError, TurnOutcome, TurnRecord, TurnSpan, limits,
 };
 pub use error::Error;
 pub use model::{EARLIER_MODELS, ModelSchema};

@@ -275,6 +275,120 @@ str		Saved	已保存
 str		Unsaved changes · {chord} saves	有未保存的更改 · {chord} 保存
 str		Chat is using the model	聊天正在使用模型
 str		Agent access off	代理访问已关闭
+# 聊天面板
+str		Conversations	对话
+str		New conversation	新对话
+str		Stop the reply first	请先停止回复
+str		No agent set up yet	尚未设置智能体
+str		Chat answers with Claude or Codex, run by the program installed on this computer. Choose one in Settings and let Chat use the model.	聊天通过这台电脑上安装的程序运行 Claude 或 Codex 来回答。请在设置中选择一个，并允许聊天使用模型。
+str		Configure agent	设置智能体
+str		Ask about {project}	询问关于 {project} 的问题
+str		Chat reads the model to answer and shows each read below. It changes nothing until you allow changes for this conversation.	聊天会读取模型来回答，并在下方显示每次读取。在你允许此对话进行更改之前，它不会更改任何内容。
+str		These and everything the agent reads are sent to the provider.	这些内容以及智能体读取的所有内容都会发送给提供商。
+str		Ask about this model…	询问关于此模型的问题…
+str		{agent} is replying… you can type the next message	{agent} 正在回复… 你可以输入下一条消息
+str		Send	发送
+str		Stop	停止
+str		Agent and model	智能体和模型
+str		{agent} · {model}	{agent} · {model}
+str		Allow changes to the model	允许更改模型
+str		A question is at most 64 KiB; this one is {n} KiB.	一个问题最多 64 KiB；这个问题有 {n} KiB。
+str		This project keeps no conversations	此项目不保存对话
+str		This question holds your saved {agent} API key, so it was neither sent nor saved.	此问题包含你已保存的 {agent} API 密钥，因此既未发送也未保存。
+str		This conversation could not be saved: {why}	无法保存此对话：{why}
+str		the project did not answer	项目没有响应
+str		the project gave no label for the conversation	项目没有为对话提供标签
+str		Turn {n}	第 {n} 轮
+str		This conversation cannot be read: {why}	无法读取此对话：{why}
+str		The undo history ends when the project closes, so these changes can no longer be undone here.	撤销历史在项目关闭时结束，因此这些更改无法再在这里撤销。
+str		The model changed after this turn, so its changes can no longer be undone on their own.	此轮之后模型已更改，因此无法再单独撤销它的更改。
+str		The model changed during this turn, so its changes can no longer be undone on their own.	此轮期间模型已更改，因此无法再单独撤销它的更改。
+str		The undo history no longer holds this turn's changes, so they can no longer be undone here.	撤销历史中已不再有此轮的更改，因此无法再在这里撤销。
+str		Interrupted: Archforge closed while this turn ran.	已中断：此轮运行时 Archforge 已关闭。
+str		Stopped.	已停止。
+str		Stopped. Nothing was changed.	已停止。没有更改任何内容。
+str		The reply was shortened to fit.	回复已缩短以适应。
+str		Undo this turn’s changes	撤销此轮的更改
+str		Made in this turn, as one step of the project's undo history.	在此轮中完成，作为项目撤销历史中的一步。
+str		Taken back in one step of the project's undo history.	已在项目撤销历史的一步中撤回。
+str		Taken back in the project's undo history.	已在项目撤销历史中撤回。
+str		Not kept: the changes were not saved.	未保留：这些更改未保存。
+str		Nothing was changed.	没有更改任何内容。
+str		Send again	再次发送
+str		Send again at {time}	在 {time} 再次发送
+str		{agent}'s provider asks Chat to wait. You can send again at {time}, {wait}.	{agent} 的提供商要求聊天等待。你可以在 {time}（{wait}）再次发送。
+str		{agent}'s provider asks Chat to wait.	{agent} 的提供商要求聊天等待。
+str		Rate limited	已达速率限制
+str		Connection lost	连接已断开
+str		The network went away before {agent} answered. Your message is back in the box below, ready to send again.	在 {agent} 回答之前网络已断开。你的消息已回到下方的输入框，可以再次发送。
+str		The network went away before {agent} answered.	在 {agent} 回答之前网络已断开。
+str		The network went away while {agent} was answering.	在 {agent} 回答时网络已断开。
+str		Model not available	模型不可用
+str		{model} isn't offered to this key. Choose another model in the badge below and send again, or check the key in Settings.	此密钥无法使用 {model}。请在下方的标签中选择其他模型后再次发送，或在设置中检查密钥。
+str		Program not found	找不到程序
+str		{agent} runs through a program that is not on this computer. Settings shows how to install it.	{agent} 需要通过一个不在这台电脑上的程序运行。设置中会显示如何安装。
+str		Key refused	密钥被拒绝
+str		{agent}'s provider refused the saved key. Replace it in Settings, then send again.	{agent} 的提供商拒绝了已保存的密钥。请在设置中替换它，然后再次发送。
+str		No key saved	未保存密钥
+str		{agent} needs an API key or a sign-in. Add one in Settings, then send again.	{agent} 需要 API 密钥或登录。请在设置中添加，然后再次发送。
+str		{agent}'s sign-in has expired. Sign in again in Settings, then send again.	{agent} 的登录已过期。请在设置中重新登录，然后再次发送。
+str		No answer	没有回答
+str		{agent} stopped before answering.	{agent} 在回答前已停止。
+str		This turn changed the model, so it is not sent again; ask again to go on.	此轮更改了模型，因此不会再次发送；请再次提问以继续。
+str		Open Settings	打开设置
+str		Saved with {project}	随 {project} 保存
+str		The conversations in this project cannot be read: {why}	无法读取此项目中的对话：{why}
+str		No conversations in this project yet.	此项目中还没有对话。
+str		{when} · {agent} · {messages}	{when} · {agent} · {messages}
+str		Conversations are kept in the project, so they travel with it and never show in another project.	对话保存在项目中，因此会随项目一起移动，并且不会出现在其他项目中。
+str		Today {time}	今天 {time}
+str		{day} {month}	{month}{day}日
+str		{day} {month} {year}	{year}年{month}{day}日
+str		{time} UTC	{time} UTC
+str		{first}, {second}	{first}，{second}
+str		Read {what}	已读取 {what}
+str		Read diagram {name}	已读取图 {name}
+str		Read the model	已读取模型
+str		Read the project	已读取项目
+str		Changed {what}	已更改 {what}
+str		Changed the model	已更改模型
+str		Added {what}	已添加 {what}
+str		Removed {what}	已移除 {what}
+str		Undid a step	已撤销一步
+str		Redid a step	已重做一步
+str		Saved the project	已保存项目
+str		refused	已拒绝
+str		failed	失败
+str	month	Jan	1月
+str	month	Feb	2月
+str	month	Mar	3月
+str	month	Apr	4月
+str	month	May	5月
+str	month	Jun	6月
+str	month	Jul	7月
+str	month	Aug	8月
+str	month	Sep	9月
+str	month	Oct	10月
+str	month	Nov	11月
+str	month	Dec	12月
+plural		{n} change to the model	{n} 处模型更改
+plural		{n} change undone	已撤销 {n} 处更改
+plural		in about {n} minute	大约 {n} 分钟后
+plural		{n} message	{n} 条消息
+plural		{n} more call is not shown	另有 {n} 次调用未显示
+plural		{n} class	{n} 个类
+plural		{n} interface	{n} 个接口
+plural		{n} enumeration	{n} 个枚举
+plural		{n} data type	{n} 个数据类型
+plural		{n} package	{n} 个包
+plural		{n} attribute	{n} 个属性
+plural		{n} operation	{n} 个操作
+plural		{n} line	{n} 条线
+plural		{n} table	{n} 个表
+plural		{n} column	{n} 个列
+plural		{n} schema	{n} 个架构
+plural		{n} diagram	{n} 个图
+plural		{n} skill	{n} 个技能
 str		Not saved	未保存
 str		Changes could not be written to the project	无法将更改写入项目
 str		The save stopped without an answer	保存未返回结果即已停止
@@ -509,7 +623,6 @@ str		Select a table or a line on the diagram	在图表中选择一个表或一�
 str		Selection · this diagram	所选内容 · 此图表
 str		{kind} · this diagram	{kind} · 此图表
 plural		{n} item	{n} 个项目
-str		Coming soon	即将推出
 str		The model could not be opened	无法打开模型
 str		The host gives no ids for the model's elements	宿主未提供模型元素的 ID
 str		Collapse panel	折叠面板

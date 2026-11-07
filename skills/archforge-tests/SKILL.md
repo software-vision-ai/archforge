@@ -15,7 +15,11 @@ description: "Use when writing, placing or running tests in Archforge: a regress
     `crates/dolt/tests/server.rs` against a real dolt
   - projects on disk: `crates/project/tests/project.rs` against a real dolt, a project's model in
     `crates/project/tests/model.rs`, its conversations in `crates/project/tests/chat.rs`; the app's
-    projects host: the `tests` module in `apps/archforge/src/projects.rs`
+    projects host, and its store of conversations (`apps/archforge/src/chats.rs`) against a real
+    dolt: the `tests` module in `apps/archforge/src/projects.rs`
+  - the Chat panel: `crates/ui-egui/src/tests.rs`, built through `crate::chat_fixture` over the
+    agents host's fake and `chat_store::fake::Memory`, never a real program or `~/.claude` or
+    `~/.codex`
   - the app's agents host (conversations, agent access, the test message, Codex's account):
     `apps/archforge/src/agents/tests.rs`, the real host against fake `claude` and `codex` scripts
     replaying `crates/agents/tests/fixtures/`, keys as canaries in a `MemoryStore`, never an

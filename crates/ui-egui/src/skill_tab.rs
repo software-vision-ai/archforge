@@ -500,68 +500,79 @@ fn site_of(url: &str) -> String {
 /// Esc cancels; nothing opens without the click on Open.
 fn confirm_link(shell: &mut Shell, ui: &egui::Ui, p: &Palette, page: Rect, i: usize) {
     let Some(url) = shell.canvas.skills[i].link.clone() else { return };
+    let prefix = format!("workspace.skill.link.{}", shell.canvas.skills[i].skill);
+    if let Some(answer) = link_card(shell, ui, p, page, &prefix, "workspace.skill.link", &url) {
+        if answer {
+            ui.ctx().open_url(egui::OpenUrl::new_tab(&url));
+        }
+        shell.canvas.skills[i].link = None;
+    }
+}
+
+/// The card that asks before `url` opens, over the top of `page`: the site on a line of its own,
+/// the whole address under it, Cancel and Open, its controls `{ids}.cancel` and `{ids}.open`.
+/// Gives true for Open, false for Cancel or Esc, none while it waits; it opens nothing itself.
+pub(crate) fn link_card(shell: &mut Shell, ui: &egui::Ui, p: &Palette, page: Rect, layer: &str, ids: &str, url: &str) -> Option<bool> {
     let width = page.width().clamp(0.0, 420.0);
     let inner = (width - 32.0).max(0.0);
     // The site on a line of its own, its end kept when it is long, since the end names it; then the
     // whole address over up to three rows.
-    let site = site_of(&url);
+    let site = site_of(url);
     let site = if site.chars().count() > 44 { format!("…{}", site.chars().skip(site.chars().count() - 43).collect::<String>()) } else { site };
     let paint = ui.painter();
     let site_g = ux::galley(paint, &site, types::UI_STRONG, p.text, Some(inner));
     let mut job = egui::text::LayoutJob::single_section(
-        url.clone(),
+        url.to_string(),
         egui::text::TextFormat { font_id: types::SMALL.font(), color: p.text_secondary, line_height: Some(types::SMALL.line), ..Default::default() },
     );
     job.wrap = egui::text::TextWrapping { max_width: inner, max_rows: 3, break_anywhere: true, overflow_character: Some('…') };
     let url_g = paint.layout_job(job);
     let height = 16.0 + 24.0 + site_g.size().y + 4.0 + url_g.size().y + 14.0 + crate::panels::FIELD + 16.0;
     let card = Rect::from_min_size(pos2(page.center().x - width / 2.0, page.top() + 24.0), vec2(width, height));
-    let area = egui::Area::new(widgets::egui_id(&format!("workspace.skill.link.{}", shell.canvas.skills[i].skill)))
-        .order(egui::Order::Foreground)
-        .fixed_pos(card.min)
-        .show(ui.ctx(), |ui| {
-            // The card takes every click on it, so none reaches a link under it.
-            let _ = ui.interact(card, widgets::egui_id("workspace.skill.link.card"), egui::Sense::click());
-            let paint = ui.painter().clone();
-            paint.rect_filled(card, 8.0, p.surface);
-            paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
-            ux::text(&paint, card.min + vec2(16.0, 16.0), &tr("Open this link?"), types::BODY_STRONG, p.text, Some(inner));
-            let mut y = card.top() + 40.0;
-            let h = site_g.size().y;
-            paint.galley(pos2(card.left() + 16.0, y), site_g, p.text);
-            y += h + 4.0;
-            paint.galley(pos2(card.left() + 16.0, y), url_g, p.text_secondary);
-            let y = card.bottom() - 16.0 - crate::panels::FIELD;
-            let cancel = crate::panels::icon_button(
-                shell,
-                ui,
-                p,
-                pos2(card.right() - 16.0 - 2.0 * crate::panels::FIELD - 8.0, y),
-                "workspace.skill.link.cancel",
-                &icons::CLOSE,
-                p.text_secondary,
-                None,
-                "Cancel",
-            );
-            let open = crate::panels::icon_button(
-                shell,
-                ui,
-                p,
-                pos2(card.right() - 16.0 - crate::panels::FIELD, y),
-                "workspace.skill.link.open",
-                &icons::TICK,
-                p.on_accent,
-                Some(p.accent_fill),
-                "Open link",
-            );
-            (cancel, open)
-        });
+    let area = egui::Area::new(widgets::egui_id(layer)).order(egui::Order::Foreground).fixed_pos(card.min).show(ui.ctx(), |ui| {
+        // The card takes every click on it, so none reaches a link under it.
+        let _ = ui.interact(card, widgets::egui_id(&format!("{ids}.card")), egui::Sense::click());
+        let paint = ui.painter().clone();
+        paint.rect_filled(card, 8.0, p.surface);
+        paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
+        ux::text(&paint, card.min + vec2(16.0, 16.0), &tr("Open this link?"), types::BODY_STRONG, p.text, Some(inner));
+        let mut y = card.top() + 40.0;
+        let h = site_g.size().y;
+        paint.galley(pos2(card.left() + 16.0, y), site_g, p.text);
+        y += h + 4.0;
+        paint.galley(pos2(card.left() + 16.0, y), url_g, p.text_secondary);
+        let y = card.bottom() - 16.0 - crate::panels::FIELD;
+        let cancel = crate::panels::icon_button(
+            shell,
+            ui,
+            p,
+            pos2(card.right() - 16.0 - 2.0 * crate::panels::FIELD - 8.0, y),
+            &format!("{ids}.cancel"),
+            &icons::CLOSE,
+            p.text_secondary,
+            None,
+            "Cancel",
+        );
+        let open = crate::panels::icon_button(
+            shell,
+            ui,
+            p,
+            pos2(card.right() - 16.0 - crate::panels::FIELD, y),
+            &format!("{ids}.open"),
+            &icons::TICK,
+            p.on_accent,
+            Some(p.accent_fill),
+            "Open link",
+        );
+        (cancel, open)
+    });
     let (cancel, open) = area.inner;
     if open {
-        ui.ctx().open_url(egui::OpenUrl::new_tab(&url));
-    }
-    if open || cancel || ui.input(|inp| inp.key_pressed(egui::Key::Escape)) {
-        shell.canvas.skills[i].link = None;
+        Some(true)
+    } else if cancel || ui.input(|inp| inp.key_pressed(egui::Key::Escape)) {
+        Some(false)
+    } else {
+        None
     }
 }
 

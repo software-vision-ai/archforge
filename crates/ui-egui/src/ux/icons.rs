@@ -517,6 +517,59 @@ pub const BUBBLE: Icon = Icon {
     ],
 };
 
+/// Chat's conversations (the design's Icon / History on page 07): a clock whose rim turns back.
+pub const CONVERSATIONS: Icon = Icon {
+    size: [14.0, 14.0],
+    stroke: 1.2,
+    segments: &[
+        C([2.2, 7.0], [2.206, 9.29], [3.828, 11.257], [6.074, 11.698]),
+        C([6.074, 11.698], [8.321, 12.14], [10.567, 10.933], [11.438, 8.816]),
+        C([11.438, 8.816], [12.31, 6.699], [11.565, 4.26], [9.659, 2.992]),
+        C([9.659, 2.992], [7.753, 1.724], [5.216, 1.978], [3.6, 3.6]),
+        L([2.2, 1.8], [2.2, 3.9]),
+        L([2.2, 3.9], [4.3, 3.9]),
+        L([7.0, 4.4], [7.0, 7.0]),
+        L([7.0, 7.0], [8.8, 8.2]),
+    ],
+};
+
+/// A read (the design's Icon / Read): an eye, before a tool row that read the model.
+pub const READ: Icon = Icon {
+    size: [14.0, 14.0],
+    stroke: 1.2,
+    segments: &[
+        C([1.5, 7.0], [3.2, 4.0], [10.8, 4.0], [12.5, 7.0]),
+        C([12.5, 7.0], [10.8, 10.0], [3.2, 10.0], [1.5, 7.0]),
+        C([8.7, 7.0], [8.7, 7.939], [7.939, 8.7], [7.0, 8.7]),
+        C([7.0, 8.7], [6.061, 8.7], [5.3, 7.939], [5.3, 7.0]),
+        C([5.3, 7.0], [5.3, 6.061], [6.061, 5.3], [7.0, 5.3]),
+        C([7.0, 5.3], [7.939, 5.3], [8.7, 6.061], [8.7, 7.0]),
+    ],
+};
+
+/// Send (the design's Icon / Send): an arrow up.
+pub const SEND: Icon =
+    Icon { size: [14.0, 14.0], stroke: 1.2, segments: &[L([7.0, 12.0], [7.0, 2.5]), L([3.0, 6.5], [7.0, 2.5]), L([7.0, 2.5], [11.0, 6.5])] };
+
+/// Stop (the design's Icon / Stop): a small rounded square.
+pub const STOP: Icon = Icon {
+    size: [14.0, 14.0],
+    stroke: 1.2,
+    segments: &[
+        L([4.6, 4.0], [9.4, 4.0]),
+        C([9.4, 4.0], [9.8, 4.0], [10.0, 4.2], [10.0, 4.6]),
+        L([10.0, 4.6], [10.0, 9.4]),
+        C([10.0, 9.4], [10.0, 9.8], [9.8, 10.0], [9.4, 10.0]),
+        L([9.4, 10.0], [4.6, 10.0]),
+        C([4.6, 10.0], [4.2, 10.0], [4.0, 9.8], [4.0, 9.4]),
+        L([4.0, 9.4], [4.0, 4.6]),
+        C([4.0, 4.6], [4.0, 4.2], [4.2, 4.0], [4.6, 4.0]),
+    ],
+};
+
+/// Applied (the design's Icon / Apply): a small check, before a turn's changes to the model.
+pub const APPLIED: Icon = Icon { size: [14.0, 14.0], stroke: 1.2, segments: &[L([2.94, 7.005], [5.782, 10.05]), L([5.782, 10.05], [11.06, 3.96])] };
+
 /// History: a clock face.
 pub const HISTORY: Icon = Icon {
     size: [16.0, 16.0],

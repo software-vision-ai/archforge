@@ -25,6 +25,8 @@ are the two kinds of diagram Archforge has today; what is planned is listed belo
   project with the same commands you use, and reads the model and its skills.
 - **Undo and saving**: every change is one step you can undo; edits are written to the project as
   you go, and Save makes a version.
+- **Chat**: ask Claude or Codex about the model in the Chat panel; with your permission it changes
+  the model, and one step undoes what a question changed (see [Working with an agent](07-agents.md)).
 - Light and dark appearances, and an interface in English, German, Spanish, French, Portuguese,
   Japanese and simplified Chinese.
 
@@ -33,8 +35,6 @@ are the two kinds of diagram Archforge has today; what is planned is listed belo
 These are not in Archforge yet. Where the window shows a place for them, it says so.
 
 - C4 diagrams of a system's architecture.
-- A chat with an agent inside the window: the Chat panel says *Coming soon*. Today an agent works
-  from outside, through agent access (see [Working with an agent](07-agents.md)).
 - Source control for projects, beyond the versions Save makes.
 - A menu bar with every command; on macOS, the application and File menus exist already.
 - Signed packages: today's packages are not signed, so macOS and Windows ask before they first

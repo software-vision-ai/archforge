@@ -1077,7 +1077,7 @@ fn segmented(
 }
 
 /// The design's switch, 28 by 16: the accent track with the knob right when on.
-fn toggle(shell: &mut Shell, ui: &egui::Ui, p: &Palette, id: &str, r: Rect, on: bool, name: &str) -> Response {
+pub(crate) fn toggle(shell: &mut Shell, ui: &egui::Ui, p: &Palette, id: &str, r: Rect, on: bool, name: &str) -> Response {
     let paint = ui.painter().clone();
     let resp = control(shell, ui, id, "toggle", r, true);
     resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Switch, true, on, name));

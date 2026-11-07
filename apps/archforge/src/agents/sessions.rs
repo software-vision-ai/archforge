@@ -164,7 +164,8 @@ impl Drop for Guard {
 
 /// The failure an adapter error is to the window.
 pub(super) fn failure(e: &AgentError) -> ChatFailure {
-    ChatFailure { kind: failure_kind(e.kind()), detail: e.to_string() }
+    // The runtimes give no reset time with a rate limit yet, so the panel names none.
+    ChatFailure { kind: failure_kind(e.kind()), detail: e.to_string(), reset: None }
 }
 
 /// The window's category of a failure's kind.
@@ -182,7 +183,7 @@ fn failure_kind(kind: ErrorKind) -> FailureKind {
 
 /// A failure of Archforge's own, with its words.
 fn other(detail: String) -> ChatFailure {
-    ChatFailure { kind: FailureKind::Other, detail }
+    ChatFailure { kind: FailureKind::Other, detail, reset: None }
 }
 
 /// The model to name: `default` leaves it to the program, which Codex takes as none.
@@ -312,7 +313,7 @@ fn begin(
 fn key(inner: &Inner, provider: Provider) -> Result<archforge_secrets::Secret, ChatFailure> {
     inner.key(provider).map_err(|e| match e {
         archforge_secrets::SecretError::NotFound { .. } | archforge_secrets::SecretError::NoSecureStore { .. } => {
-            ChatFailure { kind: FailureKind::NoCredential, detail: format!("no {} API key is saved: {e}", provider.name()) }
+            ChatFailure { kind: FailureKind::NoCredential, detail: format!("no {} API key is saved: {e}", provider.name()), reset: None }
         }
         e => other(format!("the {} API key could not be read: {e}", provider.name())),
     })

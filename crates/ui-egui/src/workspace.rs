@@ -45,7 +45,7 @@ const EXPLORERS: [(&str, Explorer, &ux::Icon, &str); 3] = [
 
 /// The panels of the right rail: automation id, the panel, its icon and its title.
 const PANELS: [(&str, Panel, &ux::Icon, &str); 4] = [
-    // Chat is coming (owner): its panel says so; its id stays the agent's.
+    // Chat's panel keeps its id, the agent's.
     ("agent", Panel::Agent, &icons::CHAT_BUBBLE, "Chat"),
     ("appearance", Panel::Appearance, &icons::PALETTE, "Appearance"),
     ("properties", Panel::Properties, &icons::PROPERTIES, "Properties"),
@@ -436,6 +436,9 @@ fn panel(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, name: &str)
     }
     paint.rect_filled(Rect::from_min_size(pos2(r.left(), r.top() + 43.0), vec2(r.width(), 1.0)), 0.0, p.border);
     let which = shell.state.panel;
+    if which == Panel::Agent {
+        crate::chat_view::header(shell, ui, p, r);
+    }
     crate::panels::draw(shell, ui, p, r, 58.0, which, name);
 }
 

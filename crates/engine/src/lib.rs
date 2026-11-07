@@ -23,7 +23,7 @@ pub mod testing;
 pub use cmd::{CommandInfo, CommandSpec, Ctx, Facts, Handler, ParamInfo, Registry, always};
 pub use error::{CommandError, EngineError};
 pub use params::{ParamDoc, Params, parse_params};
-pub use session::{Batch, Dropped, JournalEntry, Options, Outcome, Session};
+pub use session::{Batch, Dropped, GroupEnd, JournalEntry, MAX_GROUPS, Options, Outcome, Session};
 pub use snapshot::{Replace, Snapshot, Snapshotted};
 
 /// What undo covers: the model, its layout, the project's settings. A handler changes it in place;

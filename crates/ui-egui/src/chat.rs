@@ -116,11 +116,13 @@ pub enum FailureKind {
     Other,
 }
 
-/// A failure: its category and the host's words (never a key).
+/// A failure: its category and the host's words (never a key), and for a rate limit the time the
+/// provider said it may be asked again (seconds since 1970), when it said one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChatFailure {
     pub kind: FailureKind,
     pub detail: String,
+    pub reset: Option<u64>,
 }
 
 /// How a turn ended.
@@ -277,6 +279,10 @@ pub struct State {
     access: bool,
     /// The opt-in last told to the host.
     told: Option<bool>,
+    /// The Chat conversations let go of (a new one started, another opened, their project closed),
+    /// with their labels: their events are taken and dropped until each has ended, and requests on
+    /// behalf of their labels are refused meanwhile.
+    pub(crate) letting_go: Vec<(String, Option<String>)>,
 }
 
 impl State {

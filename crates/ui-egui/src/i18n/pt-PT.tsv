@@ -275,6 +275,120 @@ str		Saved	Guardado
 str		Unsaved changes · {chord} saves	Alterações por guardar · {chord} guarda
 str		Chat is using the model	A Conversa está a usar o modelo
 str		Agent access off	Acesso de agentes desligado
+# Painel da Conversa
+str		Conversations	Conversas
+str		New conversation	Nova conversa
+str		Stop the reply first	Pare primeiro a resposta
+str		No agent set up yet	Ainda não há nenhum agente configurado
+str		Chat answers with Claude or Codex, run by the program installed on this computer. Choose one in Settings and let Chat use the model.	A Conversa responde com o Claude ou o Codex, executados pelo programa instalado neste computador. Escolha um nas Definições e deixe a Conversa usar o modelo.
+str		Configure agent	Configurar agente
+str		Ask about {project}	Perguntar sobre {project}
+str		Chat reads the model to answer and shows each read below. It changes nothing until you allow changes for this conversation.	A Conversa lê o modelo para responder e mostra abaixo cada leitura. Não altera nada até permitir alterações nesta conversa.
+str		These and everything the agent reads are sent to the provider.	Estes e tudo o que o agente lê são enviados ao fornecedor.
+str		Ask about this model…	Pergunte sobre este modelo…
+str		{agent} is replying… you can type the next message	{agent} está a responder… pode escrever a mensagem seguinte
+str		Send	Enviar
+str		Stop	Parar
+str		Agent and model	Agente e modelo
+str		{agent} · {model}	{agent} · {model}
+str		Allow changes to the model	Permitir alterações ao modelo
+str		A question is at most 64 KiB; this one is {n} KiB.	Uma pergunta tem no máximo 64 KiB; esta tem {n} KiB.
+str		This project keeps no conversations	Este projeto não guarda conversas
+str		This question holds your saved {agent} API key, so it was neither sent nor saved.	Esta pergunta contém a sua chave de API do {agent} guardada, por isso não foi enviada nem guardada.
+str		This conversation could not be saved: {why}	Não foi possível guardar esta conversa: {why}
+str		the project did not answer	o projeto não respondeu
+str		the project gave no label for the conversation	o projeto não deu uma etiqueta à conversa
+str		Turn {n}	Vez {n}
+str		This conversation cannot be read: {why}	Não é possível ler esta conversa: {why}
+str		The undo history ends when the project closes, so these changes can no longer be undone here.	O histórico de anulação termina quando o projeto é fechado, por isso estas alterações já não podem ser anuladas aqui.
+str		The model changed after this turn, so its changes can no longer be undone on their own.	O modelo mudou depois desta vez, por isso as suas alterações já não podem ser anuladas sozinhas.
+str		The model changed during this turn, so its changes can no longer be undone on their own.	O modelo mudou durante esta vez, por isso as suas alterações já não podem ser anuladas sozinhas.
+str		The undo history no longer holds this turn's changes, so they can no longer be undone here.	O histórico de anulação já não contém as alterações desta vez, por isso já não podem ser anuladas aqui.
+str		Interrupted: Archforge closed while this turn ran.	Interrompido: o Archforge fechou enquanto esta vez decorria.
+str		Stopped.	Parado.
+str		Stopped. Nothing was changed.	Parado. Nada foi alterado.
+str		The reply was shortened to fit.	A resposta foi encurtada para caber.
+str		Undo this turn’s changes	Anular as alterações desta vez
+str		Made in this turn, as one step of the project's undo history.	Feitas nesta vez, como um só passo do histórico de anulação do projeto.
+str		Taken back in one step of the project's undo history.	Anuladas num só passo do histórico de anulação do projeto.
+str		Taken back in the project's undo history.	Anuladas no histórico de anulação do projeto.
+str		Not kept: the changes were not saved.	Não mantidas: as alterações não foram guardadas.
+str		Nothing was changed.	Nada foi alterado.
+str		Send again	Enviar de novo
+str		Send again at {time}	Enviar de novo às {time}
+str		{agent}'s provider asks Chat to wait. You can send again at {time}, {wait}.	O fornecedor do {agent} pede à Conversa que espere. Pode enviar de novo às {time}, {wait}.
+str		{agent}'s provider asks Chat to wait.	O fornecedor do {agent} pede à Conversa que espere.
+str		Rate limited	Limite de utilização atingido
+str		Connection lost	Ligação perdida
+str		The network went away before {agent} answered. Your message is back in the box below, ready to send again.	A rede foi abaixo antes de o {agent} responder. A sua mensagem voltou à caixa abaixo, pronta para enviar de novo.
+str		The network went away before {agent} answered.	A rede foi abaixo antes de o {agent} responder.
+str		The network went away while {agent} was answering.	A rede foi abaixo enquanto o {agent} respondia.
+str		Model not available	Modelo indisponível
+str		{model} isn't offered to this key. Choose another model in the badge below and send again, or check the key in Settings.	O {model} não está disponível para esta chave. Escolha outro modelo no distintivo abaixo e envie de novo, ou verifique a chave nas Definições.
+str		Program not found	Programa não encontrado
+str		{agent} runs through a program that is not on this computer. Settings shows how to install it.	O {agent} funciona através de um programa que não está neste computador. As Definições mostram como o instalar.
+str		Key refused	Chave recusada
+str		{agent}'s provider refused the saved key. Replace it in Settings, then send again.	O fornecedor do {agent} recusou a chave guardada. Substitua-a nas Definições e depois envie de novo.
+str		No key saved	Nenhuma chave guardada
+str		{agent} needs an API key or a sign-in. Add one in Settings, then send again.	O {agent} precisa de uma chave de API ou de uma sessão iniciada. Adicione uma nas Definições e depois envie de novo.
+str		{agent}'s sign-in has expired. Sign in again in Settings, then send again.	A sessão do {agent} expirou. Inicie sessão de novo nas Definições e depois envie de novo.
+str		No answer	Sem resposta
+str		{agent} stopped before answering.	O {agent} parou antes de responder.
+str		This turn changed the model, so it is not sent again; ask again to go on.	Esta vez alterou o modelo, por isso não é enviada de novo; pergunte outra vez para continuar.
+str		Open Settings	Abrir Definições
+str		Saved with {project}	Guardadas com {project}
+str		The conversations in this project cannot be read: {why}	Não é possível ler as conversas deste projeto: {why}
+str		No conversations in this project yet.	Ainda não há conversas neste projeto.
+str		{when} · {agent} · {messages}	{when} · {agent} · {messages}
+str		Conversations are kept in the project, so they travel with it and never show in another project.	As conversas são guardadas no projeto, por isso viajam com ele e nunca aparecem noutro projeto.
+str		Today {time}	Hoje {time}
+str		{day} {month}	{day} {month}
+str		{day} {month} {year}	{day} {month} {year}
+str		{time} UTC	{time} UTC
+str		{first}, {second}	{first}, {second}
+str		Read {what}	Lido: {what}
+str		Read diagram {name}	Lido o diagrama {name}
+str		Read the model	Lido o modelo
+str		Read the project	Lido o projeto
+str		Changed {what}	Alterado: {what}
+str		Changed the model	Alterado o modelo
+str		Added {what}	Adicionado: {what}
+str		Removed {what}	Removido: {what}
+str		Undid a step	Anulado um passo
+str		Redid a step	Refeito um passo
+str		Saved the project	Guardado o projeto
+str		refused	recusado
+str		failed	falhou
+str	month	Jan	jan.
+str	month	Feb	fev.
+str	month	Mar	mar.
+str	month	Apr	abr.
+str	month	May	mai.
+str	month	Jun	jun.
+str	month	Jul	jul.
+str	month	Aug	ago.
+str	month	Sep	set.
+str	month	Oct	out.
+str	month	Nov	nov.
+str	month	Dec	dez.
+plural		{n} change to the model	{n} alteração ao modelo|{n} alterações ao modelo
+plural		{n} change undone	{n} alteração anulada|{n} alterações anuladas
+plural		in about {n} minute	dentro de cerca de {n} minuto|dentro de cerca de {n} minutos
+plural		{n} message	{n} mensagem|{n} mensagens
+plural		{n} more call is not shown	Mais {n} chamada não é mostrada|Mais {n} chamadas não são mostradas
+plural		{n} class	{n} classe|{n} classes
+plural		{n} interface	{n} interface|{n} interfaces
+plural		{n} enumeration	{n} enumeração|{n} enumerações
+plural		{n} data type	{n} tipo de dados|{n} tipos de dados
+plural		{n} package	{n} pacote|{n} pacotes
+plural		{n} attribute	{n} atributo|{n} atributos
+plural		{n} operation	{n} operação|{n} operações
+plural		{n} line	{n} linha|{n} linhas
+plural		{n} table	{n} tabela|{n} tabelas
+plural		{n} column	{n} coluna|{n} colunas
+plural		{n} schema	{n} esquema|{n} esquemas
+plural		{n} diagram	{n} diagrama|{n} diagramas
+plural		{n} skill	{n} skill|{n} skills
 str		Not saved	Não guardado
 str		Changes could not be written to the project	Não foi possível escrever as alterações no projeto
 str		The save stopped without an answer	A gravação terminou sem resposta
@@ -509,7 +623,6 @@ str		Select a table or a line on the diagram	Selecione uma tabela ou uma linha n
 str		Selection · this diagram	Seleção · este diagrama
 str		{kind} · this diagram	{kind} · este diagrama
 plural		{n} item	{n} item|{n} itens
-str		Coming soon	Brevemente
 str		The model could not be opened	Não foi possível abrir o modelo
 str		The host gives no ids for the model's elements	O anfitrião não fornece ids para os elementos do modelo
 str		Collapse panel	Recolher o painel
