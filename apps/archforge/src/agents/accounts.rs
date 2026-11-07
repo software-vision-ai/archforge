@@ -26,7 +26,7 @@ const TEST_MESSAGE: &str = "Reply with the single word OK.";
 const TEST_BUDGET: Duration = Duration::from_secs(120);
 const REQUEST: Duration = Duration::from_secs(10);
 /// How long a sign-in waits for the person to finish in the browser.
-const SIGN_IN_BUDGET: Duration = Duration::from_secs(15 * 60);
+pub(super) const SIGN_IN_BUDGET: Duration = Duration::from_secs(15 * 60);
 /// How long one wait for an event lasts, between looks at the quitting and cancel flags.
 const TICK: Duration = Duration::from_millis(100);
 /// The minutes a device code lasts, as Codex gives them.
@@ -213,8 +213,9 @@ pub fn read(inner: &Arc<Inner>) -> Result<CodexAccount, AccountError> {
 }
 
 /// Signs Codex in with ChatGPT: the browser page or the device code goes to the window, then the
-/// sign-in's end is awaited within [`SIGN_IN_BUDGET`], cancelled when `cancel` is set or Archforge
-/// quits.
+/// sign-in's end is awaited within [`SIGN_IN_BUDGET`]. The window hears how it ended: signed in,
+/// or why not (not finished in time, cancelled by the codex program, or another failure); only a
+/// cancel the person asked for, or Archforge quitting, ends it without a word, as nobody waits.
 pub fn sign_in(inner: &Arc<Inner>, way: LoginWay, cancel: &AtomicBool, tx: &Sender<LoginEvent>) {
     let result = signed_in(inner, way, cancel, tx);
     let event = match result {
@@ -242,11 +243,19 @@ fn signed_in(inner: &Arc<Inner>, way: LoginWay, cancel: &AtomicBool, tx: &Sender
             login.login_id
         }
     };
-    let deadline = Instant::now() + SIGN_IN_BUDGET;
+    let budget = Duration::from_millis(inner.sign_in_millis.load(Ordering::SeqCst));
+    let deadline = Instant::now() + budget;
+    // Asked to stop here: by the person's cancel, or Archforge quitting.
+    let stopped = || cancel.load(Ordering::SeqCst) || inner.quitting();
     let outcome = loop {
-        if cancel.load(Ordering::SeqCst) || inner.quitting() || Instant::now() >= deadline {
+        let timed_out = Instant::now() >= deadline;
+        if stopped() || timed_out {
             let _ = program.cancel_login(&login_id, REQUEST);
             finish(program);
+            if timed_out && !stopped() {
+                log::info!("the ChatGPT sign-in was not finished within {} s and was cancelled", budget.as_secs());
+                return Err(AccountError::SignInTimedOut);
+            }
             log::info!("the ChatGPT sign-in was cancelled");
             return Ok(None);
         }
@@ -266,7 +275,9 @@ fn signed_in(inner: &Arc<Inner>, way: LoginWay, cancel: &AtomicBool, tx: &Sender
                 _ => Some(CodexAccount::NotSignedIn),
             })
         }
-        LoginOutcome::Cancelled => Ok(None),
+        // A cancel nobody here asked for is the codex program's: the window is told.
+        LoginOutcome::Cancelled if stopped() => Ok(None),
+        LoginOutcome::Cancelled => Err(AccountError::SignInCancelled),
         LoginOutcome::Failed { detail } => Err(AccountError::Failed { detail }),
     };
     finish(program);

@@ -224,7 +224,9 @@ You set them up in **Settings ▸ AI Agents**: click the avatar at the right of 
   **Sign in with ChatGPT**, **Sign in…** opens the sign-in page in your browser, and on a computer
   without a browser **Sign in with a device code** shows a code to enter on any device with a
   browser. The codex program keeps that sign-in itself: in the system's secure store, or, where
-  there is none, in its own files in Archforge's private settings folder. **Sign out** ends it.
+  there is none, in its own files in Archforge's private settings folder. A sign-in not finished
+  within 15 minutes, or one the codex program cancels, says so under it; sign in again. **Sign
+  out** ends it.
   With **API key**, save the key as for Claude.
 - **Let Chat use the model** is off until you turn it on. While it is on, each Chat conversation
   gets agent access of its own while it runs: Chat reads the project's model through it, and a

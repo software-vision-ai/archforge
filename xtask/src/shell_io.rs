@@ -258,14 +258,70 @@ fn tree(
                     }
                 }
             }
+            // A glob keeps its `*`, so what it brings in is judged by its stem.
+            Some(Token::Star) => {
+                path.push("*".into());
+                return (vec![path], at + 1);
+            }
             _ => return (vec![path], at),
         }
-        if tokens.get(at).map(|(t, _)| t) == Some(&Token::Path) {
-            at += 1;
-        } else {
-            return (vec![path], at);
+        match tokens.get(at).map(|(t, _)| t) {
+            Some(Token::Path) => at += 1,
+            // A rename keeps an `as` mark; the new name is skipped.
+            Some(Token::Name(a)) if a == "as" => {
+                path.push("as".into());
+                return (vec![path], at + 2);
+            }
+            _ => return (vec![path], at),
         }
     }
+}
+
+/// How a path of a `std` tree brings things in: written out, through a glob, or renamed.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Brings {
+    Path,
+    Glob,
+    Renamed,
+}
+
+/// A path's stem (without its glob or rename mark and a trailing `self`) and how it brings things in.
+fn stem(path: &[String]) -> (&[String], Brings) {
+    let (rest, brings) = match path.split_last() {
+        Some((last, rest)) if last == "*" => (rest, Brings::Glob),
+        Some((last, rest)) if last == "as" => (rest, Brings::Renamed),
+        _ => (path, Brings::Path),
+    };
+    match rest.split_last() {
+        Some((last, before)) if last == "self" => (before, brings),
+        _ => (rest, brings),
+    }
+}
+
+/// Whether `stem` starts with a refused path.
+fn refused(stem: &[String]) -> bool {
+    PATHS.iter().any(|f| stem.len() >= f.len() && stem.iter().zip(f.iter()).all(|(a, b)| a == b))
+}
+
+/// The refused path `stem` leads to, when it is the start of one (`std`, `std::os`, `std::os::unix`).
+fn leads_to(stem: &[String]) -> Option<String> {
+    PATHS.iter().find(|f| stem.len() < f.len() && stem.iter().zip(f.iter()).all(|(a, b)| a == b)).map(|f| f.join("::"))
+}
+
+/// The finding for one path of a `std` tree, if it reaches a refused path: written out, through a
+/// glob, or by bringing in (or renaming) a module on the way to one.
+fn judge(path: &[String]) -> Option<String> {
+    let (stem, brings) = stem(path);
+    let shown = path.iter().filter(|s| *s != "as").cloned().collect::<Vec<_>>().join("::");
+    if refused(stem) {
+        return Some(shown);
+    }
+    let reached = leads_to(stem)?;
+    Some(match brings {
+        Brings::Renamed => format!("{} renamed, which hides its paths from this check", stem.join("::")),
+        Brings::Glob => format!("{shown}, a glob that reaches {reached}"),
+        Brings::Path => format!("{shown} brought in by name, which reaches {reached}"),
+    })
 }
 
 /// The process and network uses in one source file's text, each `line N: …`.
@@ -284,22 +340,9 @@ pub fn findings(source: &str) -> Vec<String> {
             Token::Name(n) if n == "std" && tokens.get(i + 1).map(|(t, _)| t) == Some(&Token::Path) => {
                 let mut cut = false;
                 let (paths, end) = tree(&tokens, i, Vec::new(), 0, &mut budget, &mut cut);
-                for p in paths {
-                    if PATHS.iter().any(|f| p.len() >= f.len() && p.iter().zip(f.iter()).all(|(a, b)| a == b)) {
-                        out.push(format!("line {line}: {}", p.join("::")));
-                    }
-                }
+                out.extend(paths.iter().filter_map(|p| judge(p)).map(|f| format!("line {line}: {f}")));
                 if cut {
                     out.push(format!("line {line}: a path too long or too deeply nested to follow"));
-                }
-                // `use std::{self as s}` renames it too.
-                let renamed = tokens
-                    .get(i..end)
-                    .unwrap_or_default()
-                    .windows(2)
-                    .any(|w| matches!((&w[0].0, &w[1].0), (Token::Name(a), Token::Name(b)) if a == "self" && b == "as"));
-                if renamed {
-                    out.push(format!("line {line}: std renamed, which hides its paths from this check"));
                 }
                 i = end.max(i + 1);
                 continue;
@@ -369,7 +412,29 @@ mod tests {
         assert_eq!(findings("use std::{\n    fmt,\n    process,\n};"), vec!["line 1: std::process"]);
         assert_eq!(findings("use std::{os::{unix::{net::{self}}}, sync::Arc};"), vec!["line 1: std::os::unix::net::self"]);
         assert_eq!(findings("use std::{io::{Read, Write}, sync::{Arc, Mutex}};"), Vec::<String>::new());
-        assert_eq!(findings("use std::process::*;"), vec!["line 1: std::process"]);
+        assert_eq!(findings("use std::process::*;"), vec!["line 1: std::process::*"]);
+    }
+
+    /// A glob, a module brought in by name or renamed on the way to a refused path, in any group,
+    /// is a finding; a glob or a module elsewhere in std is not.
+    #[test]
+    fn globs_and_modules_on_the_way_to_a_refused_path_are_found() {
+        assert_eq!(findings("use std::net::*;"), vec!["line 1: std::net::*"]);
+        assert_eq!(findings("use std::{io, net::*};"), vec!["line 1: std::net::*"]);
+        assert_eq!(findings("use std::*;"), vec!["line 1: std::*, a glob that reaches std::process"]);
+        assert_eq!(findings("use std::{*};"), vec!["line 1: std::*, a glob that reaches std::process"]);
+        assert_eq!(
+            findings("use std::os::*; fn f(_: unix::net::UnixListener) {}"),
+            vec!["line 1: std::os::*, a glob that reaches std::os::unix::net", "line 1: the socket type UnixListener"]
+        );
+        assert_eq!(findings("use std::{os::{unix::*}};"), vec!["line 1: std::os::unix::*, a glob that reaches std::os::unix::net"]);
+        assert_eq!(findings("use std::os; os::unix::net::X;"), vec!["line 1: std::os brought in by name, which reaches std::os::unix::net"]);
+        assert_eq!(findings("use std::os::{self};"), vec!["line 1: std::os::self brought in by name, which reaches std::os::unix::net"]);
+        assert_eq!(findings("use std::os as o;"), vec!["line 1: std::os renamed, which hides its paths from this check"]);
+        assert_eq!(findings("use std::os::unix::{self as u};"), vec!["line 1: std::os::unix renamed, which hides its paths from this check"]);
+        assert_eq!(findings("use std::{net as n};"), vec!["line 1: std::net"]);
+        // Elsewhere in std a glob, a module or a rename reaches nothing refused.
+        assert_eq!(findings("use std::collections::*; use std::os::unix::fs::PermissionsExt; use std::{fmt, io::*};"), Vec::<String>::new());
     }
 
     /// Strings, characters and comments never count, and lifetimes do not throw the blanking off.
@@ -402,6 +467,8 @@ mod tests {
         assert_eq!(findings("use std as s; s::process::exit(0);"), vec!["line 1: std renamed, which hides its paths from this check"]);
         assert_eq!(findings("extern crate std as x;"), vec!["line 1: std renamed, which hides its paths from this check"]);
         assert_eq!(findings("use std::{self as s, io}; s::process::exit(0);"), vec!["line 1: std renamed, which hides its paths from this check"]);
+        // Renaming something that leads nowhere refused is no finding.
+        assert_eq!(findings("use std::fmt::{self as f, Result as FmtResult};"), Vec::<String>::new());
         // A byte escape is four characters long, and the scan reads past it as the compiler does.
         assert_eq!(findings("let q = ['\\x41','\"']; std::process::exit(0); let s = \"x\";"), vec!["line 1: std::process::exit"]);
         assert_eq!(findings("let b = b'\\x7f'; let s = \"std::net\"; std::net::X"), vec!["line 1: std::net::X"]);

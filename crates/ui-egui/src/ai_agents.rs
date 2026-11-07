@@ -325,6 +325,10 @@ pub enum AccountError {
     KeyRefused { detail: String },
     /// The agent has no key or sign-in to use.
     NoCredential,
+    /// A sign-in was not finished in the time it had.
+    SignInTimedOut,
+    /// The codex program cancelled a sign-in that nobody here cancelled.
+    SignInCancelled,
     /// Anything else, in the host's words.
     Failed { detail: String },
 }

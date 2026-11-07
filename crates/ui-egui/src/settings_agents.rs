@@ -152,6 +152,8 @@ fn account_error(e: &AccountError) -> String {
         AccountError::NotAvailableYet => tr("Not available yet"),
         AccountError::KeyRefused { detail } => fmt(&tr("The provider refused the key ({detail})."), &[("detail", detail)]),
         AccountError::NoCredential => tr("There is no key or sign-in to use."),
+        AccountError::SignInTimedOut => tr("The sign-in was not finished in time. Sign in again."),
+        AccountError::SignInCancelled => tr("The codex program cancelled the sign-in. Sign in again."),
         AccountError::Failed { detail } => detail.clone(),
     }
 }

@@ -327,7 +327,9 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   with why under it; the refusal comes from a test message, since Check connection sends nothing.
 - Codex has a segmented control, Sign in with ChatGPT or API key. The codex program keeps the
   ChatGPT sign-in itself; Archforge starts it, shows its device code inline (the code with Copy,
-  Open sign-in page, the wait and Cancel) and shows who is signed in with Sign out. On an API key
+  Open sign-in page, the wait and Cancel) and shows who is signed in with Sign out. A sign-in not
+  finished within 15 minutes, or cancelled by the codex program, ends with a line saying so and
+  Sign in again (AR-203; the design draws no such state, decided by UX); Cancel ends it silently. On an API key
   the saved key shows as a row (key icon, "ends in" its last four) with Replace and Remove.
 - A missing program shows why, the maker's install command with Copy, Look again (primary) and
   Installation guide; a program newer than tested is accepted with an amber badge, "Not yet

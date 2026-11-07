@@ -14007,6 +14007,33 @@ fn a_key_typed_and_not_saved_is_dropped_with_the_fields_memory_of_it() {
     assert_eq!(f.calls.save.load(std::sync::atomic::Ordering::Relaxed), 0, "nothing was saved");
 }
 
+/// A sign-in that runs out of time, or that the codex program cancels, says so under the sign-in
+/// in the page's words, and the sign-in can start again.
+#[test]
+fn a_sign_in_that_times_out_or_is_cancelled_by_codex_says_so() {
+    use crate::ai_agents::{AccountError, LoginEvent};
+    for (error, said) in [
+        (AccountError::SignInTimedOut, "The sign-in was not finished in time. Sign in again."),
+        (AccountError::SignInCancelled, "The codex program cancelled the sign-in. Sign in again."),
+    ] {
+        let (mut h, f) = agents_harness(ThemeKind::Light, |f| {
+            *f.login.lock().unwrap() = vec![
+                LoginEvent::DeviceCode { code: "WXYZ-4821".into(), url: "https://auth.openai.com/codex/device".into(), minutes: 15 },
+                LoginEvent::Failed(error.clone()),
+            ];
+        });
+        open_agents(&mut h);
+        let at = rect_of(&h, "settings.agents.codex.device-code").center();
+        click(&mut h, at);
+        h.run();
+        assert!(h.state().agents.login.is_none(), "{error:?}: the sign-in is over");
+        assert!(painted_has(&h, said), "{error:?}");
+        let at = rect_of(&h, "settings.agents.codex.sign-in").center();
+        click(&mut h, at);
+        assert_eq!(f.calls.login.load(std::sync::atomic::Ordering::Relaxed), 2, "{error:?}: it can start again");
+    }
+}
+
 #[test]
 fn a_device_code_that_is_not_letters_digits_and_hyphens_is_not_shown() {
     use crate::ai_agents::LoginEvent;

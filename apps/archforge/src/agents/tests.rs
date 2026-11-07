@@ -715,6 +715,77 @@ fn the_test_message_and_codex_account_calls_run_through_their_programs() {
     assert!(!format!("{events:?}").contains("person@example.com"), "Debug shows no email");
 }
 
+/// A Codex script body for a device-code sign-in that never completes: the code, then only reading.
+const CODEX_DEVICE_WAITS: &str = r#"
+hello
+req
+ok "$id" '{"type":"chatgptDeviceCode","loginId":"019a0000-0000-7000-8000-00000000c002","verificationUrl":"https://auth.openai.com/codex/device","userCode":"ABCD-EFGH"}'
+drain
+"#;
+
+/// The device code every sign-in test is given.
+fn device_code() -> LoginEvent {
+    LoginEvent::DeviceCode { code: "ABCD-EFGH".into(), url: "https://auth.openai.com/codex/device".into(), minutes: 15 }
+}
+
+/// The lines the fake `program` read on its input.
+fn stdin_of(host: &Host, program: &str) -> String {
+    std::fs::read_to_string(host.base.join(format!("{program}.stdin"))).unwrap_or_default()
+}
+
+/// Waits until the fake `program` has read a line holding `text`, within [`WAIT`].
+fn read_by(host: &Host, program: &str, text: &str) {
+    let deadline = Instant::now() + WAIT;
+    while !stdin_of(host, program).contains(text) {
+        assert!(Instant::now() < deadline, "{program} never read {text:?}: {}", stdin_of(host, program));
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
+/// A sign-in nobody finishes in its time is cancelled with the codex program and the window is told
+/// it ran out of time, never left waiting.
+#[test]
+fn a_sign_in_that_runs_out_of_time_says_so() {
+    let host = Host::new("sign-in-timeout", Setup { codex: CODEX_DEVICE_WAITS, ..Setup::default() });
+    host.agents.inner.sign_in_millis.store(300, Ordering::SeqCst);
+    let events: Vec<LoginEvent> = host.agents.codex_login_start(LoginWay::DeviceCode).iter().collect();
+    assert_eq!(events, vec![device_code(), LoginEvent::Failed(AccountError::SignInTimedOut)]);
+    read_by(&host, "codex", "account/login/cancel");
+}
+
+/// A sign-in the codex program cancels on its own is a failure the window shows, naming the cancel.
+#[test]
+fn a_sign_in_the_codex_program_cancels_says_so() {
+    let body = r#"
+hello
+req
+ok "$id" '{"type":"chatgptDeviceCode","loginId":"019a0000-0000-7000-8000-00000000c002","verificationUrl":"https://auth.openai.com/codex/device","userCode":"ABCD-EFGH"}'
+say '{"method":"account/login/completed","params":{"loginId":"019a0000-0000-7000-8000-00000000c002","success":false,"error":"Login was not completed","onboardingEntrypoint":null}}'
+drain
+"#;
+    let host = Host::new("sign-in-codex-cancel", Setup { codex: body, ..Setup::default() });
+    let events: Vec<LoginEvent> = host.agents.codex_login_start(LoginWay::DeviceCode).iter().collect();
+    assert_eq!(events, vec![device_code(), LoginEvent::Failed(AccountError::SignInCancelled)]);
+}
+
+/// The person's own cancel, and quitting, end a sign-in without a word to a window that no longer
+/// waits for it; the codex program is told to cancel either way.
+#[test]
+fn the_persons_cancel_or_quitting_ends_a_sign_in_quietly() {
+    let host = Host::new("sign-in-cancel", Setup { codex: CODEX_DEVICE_WAITS, ..Setup::default() });
+    let events = host.agents.codex_login_start(LoginWay::DeviceCode);
+    assert_eq!(events.recv_timeout(WAIT).unwrap(), device_code());
+    host.agents.codex_login_cancel();
+    assert_eq!(events.iter().collect::<Vec<_>>(), vec![], "nothing after the person's cancel");
+    read_by(&host, "codex", "account/login/cancel");
+    let quit = Host::new("sign-in-quit", Setup { codex: CODEX_DEVICE_WAITS, ..Setup::default() });
+    let events = quit.agents.codex_login_start(LoginWay::DeviceCode);
+    assert_eq!(events.recv_timeout(WAIT).unwrap(), device_code());
+    quit.agents.shutdown();
+    assert_eq!(events.iter().collect::<Vec<_>>(), vec![], "nothing after quitting");
+    read_by(&quit, "codex", "account/login/cancel");
+}
+
 /// The test message of a provider without a key says so, and sends nothing.
 #[test]
 fn a_test_message_without_a_key_needs_one() {

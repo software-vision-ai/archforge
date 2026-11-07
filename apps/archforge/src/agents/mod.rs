@@ -24,7 +24,7 @@ mod tests;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::Receiver;
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -74,6 +74,9 @@ pub(crate) struct Inner {
     sessions: Mutex<HashMap<String, sessions::Handle>>,
     /// The sign-in under way: its cancel flag.
     login: Mutex<Option<Arc<AtomicBool>>>,
+    /// How long a sign-in waits for the person to finish, in milliseconds (`accounts::SIGN_IN_BUDGET`;
+    /// the tests shorten it).
+    sign_in_millis: AtomicU64,
 }
 
 /// A lock a panicking thread poisoned is taken over: what it guards stays usable.
@@ -205,6 +208,7 @@ impl Agents {
                 access: Mutex::new(access::Access::new(settings, window)),
                 sessions: Mutex::new(HashMap::new()),
                 login: Mutex::new(None),
+                sign_in_millis: AtomicU64::new(u64::try_from(accounts::SIGN_IN_BUDGET.as_millis()).unwrap_or(u64::MAX)),
             }),
         }
     }

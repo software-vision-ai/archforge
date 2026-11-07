@@ -346,6 +346,8 @@ str		{agent} too old	{agent} demasiado antigo
 str		{agent} can't be used	{agent} não pode ser usado
 str		{agent} sign-in could not be read	não foi possível ler a sessão de {agent}
 str		The sign-in gave a code that is not letters, digits and hyphens.	O início de sessão deu um código que não é só letras, algarismos e hífenes.
+str		The sign-in was not finished in time. Sign in again.	O início de sessão não foi concluído a tempo. Inicie sessão novamente.
+str		The codex program cancelled the sign-in. Sign in again.	O programa codex cancelou o início de sessão. Inicie sessão novamente.
 str		{agent} has no key	{agent} não tem chave
 str		{agent} key refused	chave de {agent} recusada
 str		{agent} not signed in	{agent} sem sessão iniciada

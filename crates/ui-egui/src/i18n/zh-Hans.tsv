@@ -346,6 +346,8 @@ str		{agent} too old	{agent} 版本过旧
 str		{agent} can't be used	{agent} 无法使用
 str		{agent} sign-in could not be read	无法读取 {agent} 登录
 str		The sign-in gave a code that is not letters, digits and hyphens.	登录给出的代码不只包含字母、数字和连字符。
+str		The sign-in was not finished in time. Sign in again.	登录未在时限内完成。请重新登录。
+str		The codex program cancelled the sign-in. Sign in again.	codex 程序取消了登录。请重新登录。
 str		{agent} has no key	{agent} 没有密钥
 str		{agent} key refused	{agent} 密钥被拒绝
 str		{agent} not signed in	{agent} 未登录
