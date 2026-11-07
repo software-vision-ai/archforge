@@ -114,8 +114,8 @@ enum Phase {
     Open,
     /// Codex closed its output at `since`; its exit is awaited for up to [`END_GRACE`].
     Closed { since: Instant },
-    /// Codex is being ended for `reason` since `since`: it was terminated at `terminated` and is
-    /// given up on [`END_GRACE`] after that.
+    /// Archforge is ending Codex for `reason`: its input was closed at `since`; it is terminated
+    /// [`END_GRACE`] later, and given up on [`END_GRACE`] after that.
     Ending { reason: AgentError, since: Instant, terminated: Option<Instant> },
     /// [`Incoming::Ended`] was given; nothing more comes.
     Done,
@@ -199,12 +199,39 @@ impl Conn {
         self.process.send_line(&json!({ "method": method }).to_string())
     }
 
+    /// Answers Codex's request `id` with `result`.
+    pub(crate) fn respond(&mut self, id: &Value, result: Value) -> Result<(), AgentError> {
+        if !self.is_open() {
+            return Err(AgentError::InputClosed { runtime: RuntimeKind::Codex });
+        }
+        self.process.send_line(&json!({ "id": id, "result": result }).to_string())
+    }
+
     /// Answers Codex's request `id` with the error `code` and `message`.
     pub(crate) fn respond_error(&mut self, id: &Value, code: i64, message: &str) -> Result<(), AgentError> {
         if !self.is_open() {
             return Err(AgentError::InputClosed { runtime: RuntimeKind::Codex });
         }
         self.process.send_line(&json!({ "id": id, "error": { "code": code, "message": message } }).to_string())
+    }
+
+    /// Starts ending Codex because of `reason`, which the end will carry: its input is closed now,
+    /// it is terminated if it has not ended [`END_GRACE`] later, and given up on [`END_GRACE`] after
+    /// that, so [`Incoming::Ended`] always comes within twice [`END_GRACE`]. Nothing here waits; the
+    /// steps happen in [`Conn::poll`]. Once Codex closed its output on its own, its end is already
+    /// coming with its exit status and error tail, which say more, so `reason` is only logged; so is
+    /// a later reason once ending.
+    pub(crate) fn fail(&mut self, reason: AgentError) {
+        match self.phase {
+            Phase::Open => {
+                log::warn!("codex is being ended: {reason}");
+                self.process.close_input();
+                self.phase = Phase::Ending { reason, since: Instant::now(), terminated: None };
+            }
+            Phase::Closed { .. } | Phase::Ending { .. } | Phase::Done => {
+                log::debug!("codex is already ending; a further reason is not kept: {reason}")
+            }
+        }
     }
 
     /// Ends Codex as [`RuntimeProcess::shutdown`] does (waiting up to twice `grace`); the end it

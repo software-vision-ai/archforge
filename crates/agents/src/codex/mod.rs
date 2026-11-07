@@ -1,35 +1,47 @@
-//! The OpenAI Codex adapter (AR-202, after the AR-196 spike in `docs/agent-runtimes/README.md`).
+//! The OpenAI Codex adapter: `codex app-server` sessions and sign-in over JSON-RPC (AR-202, after
+//! the AR-196 spike in `docs/agent-runtimes/README.md`).
 //!
-//! - [`CodexAccount`] is a short-lived `codex app-server` for Settings: the account, ChatGPT sign-in
-//!   in the browser or with a device code, an API key's check, sign-out, and the models.
-//! - The conversation's copy ([`history`]) keeps a conversation's messages, as Codex's threads are
-//!   ephemeral.
+//! - [`CodexSession`] drives one conversation: it starts `codex app-server` in the conversation's
+//!   private folder, with Archforge's bridge as its only tool server, makes the handshake (signing in
+//!   with the API key when the conversation uses one), and runs each turn on an ephemeral thread.
+//!   Its text messages are kept in the conversation's copy ([`history`]), so a resumed conversation
+//!   starts a new thread and hands it the copy.
+//! - [`CodexAccount`] is a short-lived app-server for Settings: the account, ChatGPT sign-in in the
+//!   browser or with a device code, an API key's check, sign-out, and the models.
 //!
 //! Where the sign-in lives (owner decisions): an API key goes to Codex over its standard input in
 //! `account/login/start`, with `cli_auth_credentials_store="ephemeral"`, so it is never written to a
 //! file, the keyring or the command line, and every process signs in again. A ChatGPT sign-in is
 //! kept in the system keyring (`"keyring"`) or, where no usable keyring exists, in Codex's own files
 //! (`"file"`) inside Archforge's private `CODEX_HOME` ([`CodexHome`], a 0700 folder in the
-//! workspace); [`CredentialStore`] offers both and the application chooses. Every process of a
-//! person shares that `CODEX_HOME`, as the keyring entry is tied to its path.
+//! workspace); [`ChatGptStore`] offers both and the application chooses. Every process of a person
+//! shares that `CODEX_HOME`, as the keyring entry is tied to its path; each conversation keeps its
+//! own home, working and temporary folders.
 
 pub mod account;
 pub mod history;
+pub mod parse;
 pub mod rpc;
 
+use std::collections::{HashMap, VecDeque};
 use std::ffi::OsString;
+use std::fmt;
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use archforge_secrets::Secret;
+use serde_json::{Value, json};
 use zeroize::Zeroizing;
 
 pub use account::{AccountEvent, AccountState, BrowserLogin, CancelStatus, CodexAccount, DeviceLogin, LoginId, LoginOutcome, ModelInfo};
 pub use history::History;
+pub use parse::{SignedInWith, kind_of};
 pub use rpc::{EXPIRED_SIGN_IN_MESSAGES, RpcError};
 
-pub use crate::claude::{Bridge, BridgeHome};
-use crate::{AgentError, Workspace};
+pub use crate::claude::{Bridge, BridgeHome, Model, Start};
+use crate::session::{AgentSession, SessionEvent, Skipped, ToolServer, TurnOutcome};
+use crate::{AgentError, ConversationFolder, ErrorKind, Exit, Limits, Runtime, RuntimeKind, SpawnRequest, Workspace, spawn};
+use rpc::{Conn, Incoming, LINES_PER_CALL};
 
 /// The folder in the workspace that is Archforge's private `CODEX_HOME`.
 pub const HOME_FOLDER: &str = "codex-home";
@@ -43,6 +55,21 @@ pub const MIN_REQUEST_TIMEOUT: Duration = Duration::from_millis(10);
 pub const MAX_REQUEST_TIMEOUT: Duration = Duration::from_secs(600);
 /// The default request timeout.
 pub const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+/// The shortest line limit a session accepts: the longest message in a `turn/start` or an injected
+/// item, written as JSON, must fit one line.
+pub const MIN_SESSION_LINE_BYTES: usize = 8 * 1024 * 1024;
+/// The longest instructions given to a thread, in bytes.
+pub const MAX_INSTRUCTIONS_BYTES: usize = 64 * 1024;
+/// How many request timeouts a timed-out `thread/start` or `turn/start` is remembered, so a late
+/// answer's thread is still released.
+pub const LATE_FACTOR: u32 = 10;
+/// The most timed-out `thread/start` requests, and the most threads left by a timed-out
+/// `turn/start`, remembered at once; past it the oldest is released or forgotten (logged).
+pub const MAX_LATE: usize = 16;
+/// The most tool server states held while the thread they may name is not answered yet.
+pub const MAX_HELD_STATUSES: usize = 64;
+/// The most bytes of held tool server states.
+pub const MAX_HELD_BYTES: usize = 1024 * 1024;
 /// The features `codex app-server` is started without (the spike's list): Archforge's bridge is the
 /// model's only tool.
 const DISABLED: [&str; 14] = [
@@ -85,6 +112,43 @@ impl CredentialStore {
     }
 }
 
+/// Where a ChatGPT sign-in is kept; the application decides which.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChatGptStore {
+    /// The system keyring.
+    Keyring,
+    /// Codex's own files in Archforge's private `CODEX_HOME` (mode 0700).
+    File,
+}
+
+/// How a session signs in.
+#[derive(Debug)]
+pub enum Auth {
+    /// With an API key, sent in `account/login/start` during the handshake; the ephemeral store.
+    ApiKey(Secret),
+    /// With the ChatGPT sign-in already kept in `store`.
+    ChatGpt(ChatGptStore),
+}
+
+impl Auth {
+    /// The credential store the session's Codex is started with.
+    pub fn store(&self) -> CredentialStore {
+        match self {
+            Auth::ApiKey(_) => CredentialStore::Ephemeral,
+            Auth::ChatGpt(ChatGptStore::Keyring) => CredentialStore::Keyring,
+            Auth::ChatGpt(ChatGptStore::File) => CredentialStore::File,
+        }
+    }
+
+    /// How the session is signed in, which decides what a refused credential means.
+    pub fn signed_in_with(&self) -> SignedInWith {
+        match self {
+            Auth::ApiKey(_) => SignedInWith::ApiKey,
+            Auth::ChatGpt(_) => SignedInWith::ChatGpt,
+        }
+    }
+}
+
 /// Archforge's private `CODEX_HOME`: `codex-home` in the workspace, a real folder of this user
 /// with mode 0700, shared by every Codex process of the person, as the ChatGPT sign-in is.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -105,6 +169,26 @@ impl CodexHome {
     pub fn path(&self) -> &Path {
         &self.path
     }
+}
+
+/// Everything a Codex session is started with, but the sign-in.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CodexConfig {
+    /// [`Start::New`] for a new conversation (its folder must hold no copy yet), [`Start::Resume`]
+    /// to continue the copy in its folder.
+    pub start: Start,
+    /// The model to ask for; Codex's default when `None`.
+    pub model: Option<Model>,
+    /// Archforge's tool server.
+    pub bridge: Bridge,
+    /// The thread's developer instructions, at most [`MAX_INSTRUCTIONS_BYTES`].
+    pub instructions: Option<String>,
+    /// The caps on the process's input and output; `max_line_bytes` at least
+    /// [`MIN_SESSION_LINE_BYTES`].
+    pub limits: Limits,
+    /// How long each request may wait for its answer, [`MIN_REQUEST_TIMEOUT`] to
+    /// [`MAX_REQUEST_TIMEOUT`].
+    pub request_timeout: Duration,
 }
 
 /// The command line after `codex`: `app-server --strict-config`, the credential store, no history
@@ -281,12 +365,1130 @@ pub(crate) mod initialize {
     }
 }
 
+/// A request waiting for its answer, and what its answer or its timeout means.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Call {
+    Initialize,
+    Login,
+    ThreadStart,
+    Inject { thread: String },
+    TurnStart { turn: u64, thread: String },
+    Interrupt { turn: u64 },
+    Unsubscribe { thread: String },
+    LateInterrupt { thread: String },
+}
+
+impl Call {
+    /// The method the request was.
+    fn method(&self) -> &'static str {
+        match self {
+            Call::Initialize => "initialize",
+            Call::Login => "account/login/start",
+            Call::ThreadStart => "thread/start",
+            Call::Inject { .. } => "thread/inject_items",
+            Call::TurnStart { .. } => "turn/start",
+            Call::Interrupt { .. } | Call::LateInterrupt { .. } => "turn/interrupt",
+            Call::Unsubscribe { .. } => "thread/unsubscribe",
+        }
+    }
+}
+
+/// A request in flight with its deadline.
+#[derive(Debug)]
+struct Pending {
+    call: Call,
+    sent: Instant,
+    deadline: Instant,
+}
+
+/// The handshake's progress.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Handshake {
+    Initializing,
+    SigningIn,
+    Done,
+}
+
+/// The thread turns run on.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ThreadState {
+    /// None yet, or the last one was released.
+    None,
+    /// `thread/start` is in flight.
+    Starting,
+    /// Answered: the copy is being handed over, from message `next` on, in batches.
+    Injecting { id: String, model: String, next: usize },
+    /// Ready for turns.
+    Ready { id: String },
+}
+
+/// The stop request of the open turn: at most one a turn.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Stop {
+    None,
+    /// Asked for while the turn has no id yet; sent once it is named.
+    Wanted {
+        at: Instant,
+    },
+    /// `turn/interrupt` is in flight.
+    Sent,
+    /// Refused or timed out: the turn has until `deadline` to end before the session is ended.
+    Failed {
+        deadline: Instant,
+    },
+}
+
+/// The open turn.
+#[derive(Debug)]
+struct Turn {
+    /// The turn's number among this session's turns, which its stop request is tied to.
+    number: u64,
+    text: String,
+    /// The thread `turn/start` went to, once sent.
+    thread: Option<String>,
+    sent: bool,
+    accepted: bool,
+    /// Codex's id for the turn, once it named it.
+    id: Option<String>,
+    stop: Stop,
+    last_error: Option<AgentError>,
+    retries: u32,
+}
+
+/// A `thread/start` that timed out: a late answer's thread is released until `forget_at`.
+#[derive(Debug)]
+struct LateStart {
+    request: u64,
+    forget_at: Instant,
+}
+
+/// A thread left by a `turn/start` that timed out: kept until a late turn on it is interrupted,
+/// released when the request is forgotten at `forget_at`.
+#[derive(Debug)]
+struct Retired {
+    thread: String,
+    request: u64,
+    forget_at: Instant,
+    interrupting: bool,
+}
+
+/// A running Codex conversation.
+pub struct CodexSession {
+    conn: Conn,
+    copy_path: PathBuf,
+    work: String,
+    model: Option<Model>,
+    instructions: Option<String>,
+    signed_in_with: SignedInWith,
+    request_timeout: Duration,
+    max_line_bytes: usize,
+    key: Option<Secret>,
+    handshake: Handshake,
+    thread: ThreadState,
+    history: History,
+    damaged_copy: Option<PathBuf>,
+    calls: HashMap<u64, Pending>,
+    late_starts: VecDeque<LateStart>,
+    retired: VecDeque<Retired>,
+    held: Vec<(Option<String>, ToolServer)>,
+    held_bytes: usize,
+    servers: Vec<ToolServer>,
+    /// The model the ready thread runs, as Codex named it.
+    thread_model: String,
+    turn: Option<Turn>,
+    turns: u64,
+    events: VecDeque<SessionEvent>,
+    skipped: u64,
+    ended: bool,
+}
+
+impl fmt::Debug for CodexSession {
+    /// Writes the process and the state by counts and kinds, never a message, a key or a line.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("CodexSession")
+            .field("conn", &self.conn)
+            .field("handshake", &self.handshake)
+            .field("thread_ready", &matches!(self.thread, ThreadState::Ready { .. }))
+            .field("history", &self.history)
+            .field("calls", &self.calls.len())
+            .field("turn", &self.turn.as_ref().map(|t| t.number))
+            .field("key_held", &self.key.is_some())
+            .field("skipped", &self.skipped)
+            .field("ended", &self.ended)
+            .finish()
+    }
+}
+
+impl CodexSession {
+    /// Starts `codex app-server` for the conversation in `folder` with Archforge's private
+    /// `CODEX_HOME` (`home`) and `config`, signing in with `auth`, and sends `initialize`; it does
+    /// not wait for anything. The rest of the handshake (`initialized`, then `account/login/start`
+    /// with the key when `auth` is an API key) follows in [`AgentSession::next_event`]; the first
+    /// thread starts with the first turn.
+    ///
+    /// [`Start::New`] refuses a folder that already holds a conversation copy (every new
+    /// conversation gets a fresh folder); [`Start::Resume`] reads the copy there, setting a damaged
+    /// one aside ([`CodexSession::damaged_copy`]).
+    pub fn start(
+        runtime: &Runtime,
+        folder: &ConversationFolder,
+        home: &CodexHome,
+        config: CodexConfig,
+        auth: Auth,
+    ) -> Result<CodexSession, AgentError> {
+        if runtime.kind() != RuntimeKind::Codex {
+            return Err(AgentError::InvalidSetting {
+                setting: "runtime",
+                bytes: 0,
+                reason: format!("the Codex adapter cannot drive {}", runtime.kind()),
+            });
+        }
+        if !crate::sys::AVAILABLE {
+            return Err(AgentError::NotAvailable);
+        }
+        config.limits.check()?;
+        if config.limits.max_line_bytes < MIN_SESSION_LINE_BYTES {
+            return Err(AgentError::InvalidLimit {
+                limit: "max_line_bytes for a Codex session",
+                value: u128::try_from(config.limits.max_line_bytes).unwrap_or(u128::MAX),
+                accepted: format!("{MIN_SESSION_LINE_BYTES} to {}", Limits::MAX_LINE_BYTES),
+            });
+        }
+        timeout_check(config.request_timeout)?;
+        if let Some(instructions) = &config.instructions
+            && instructions.len() > MAX_INSTRUCTIONS_BYTES
+        {
+            return Err(setting("instructions", instructions, &format!("instructions are at most {MAX_INSTRUCTIONS_BYTES} bytes")));
+        }
+        let work = folder
+            .work()
+            .to_str()
+            .map(str::to_owned)
+            .ok_or_else(|| AgentError::Folder { path: folder.work().to_path_buf(), problem: "is not UTF-8 text, which Codex needs".to_owned() })?;
+        if let Auth::ApiKey(key) = &auth {
+            checked_api_key(key)?;
+        }
+        let copy_path = folder.path().join(history::COPY_FILE);
+        let (history, damaged_copy) = match config.start {
+            Start::New => match std::fs::symlink_metadata(&copy_path) {
+                Ok(_) => {
+                    return Err(AgentError::Folder {
+                        path: copy_path,
+                        problem:
+                            "already holds a conversation copy; a new conversation starts in a fresh folder, and Start::Resume continues this one"
+                                .to_owned(),
+                    });
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => (History::default(), None),
+                Err(e) => return Err(AgentError::Folder { path: copy_path, problem: format!("cannot be checked for a conversation copy: {e}") }),
+            },
+            Start::Resume => History::load(&copy_path)?,
+        };
+        let store = auth.store();
+        let signed_in_with = auth.signed_in_with();
+        let (input_secrets, key) = match auth {
+            Auth::ApiKey(key) => {
+                // One copy scrubs the process's error tail; the other is sent once and dropped.
+                let scrub = Secret::new(key.expose().to_owned()).map_err(|e| AgentError::InvalidSetting {
+                    setting: "Codex API key",
+                    bytes: 0,
+                    reason: e.to_string(),
+                })?;
+                (vec![(KEY_LABEL.to_owned(), scrub)], Some(key))
+            }
+            Auth::ChatGpt(_) => (Vec::new(), None),
+        };
+        let request = SpawnRequest {
+            args: command_line(store, Some(&config.bridge))?,
+            input_secrets,
+            config_dir: Some(home.path().to_path_buf()),
+            limits: config.limits,
+            ..SpawnRequest::default()
+        };
+        let process = spawn(runtime, folder, request)?;
+        let mut session = CodexSession {
+            conn: Conn::new(process),
+            copy_path,
+            work,
+            model: config.model,
+            instructions: config.instructions,
+            signed_in_with,
+            request_timeout: config.request_timeout,
+            max_line_bytes: config.limits.max_line_bytes,
+            key,
+            handshake: Handshake::Initializing,
+            thread: ThreadState::None,
+            history,
+            damaged_copy,
+            calls: HashMap::new(),
+            late_starts: VecDeque::new(),
+            retired: VecDeque::new(),
+            held: Vec::new(),
+            held_bytes: 0,
+            servers: Vec::new(),
+            thread_model: String::new(),
+            turn: None,
+            turns: 0,
+            events: VecDeque::new(),
+            skipped: 0,
+            ended: false,
+        };
+        session.request(Call::Initialize, Some(initialize::params()))?;
+        Ok(session)
+    }
+
+    /// Where a damaged copy found at the start was set aside; the conversation then went on without
+    /// its earlier messages.
+    pub fn damaged_copy(&self) -> Option<&Path> {
+        self.damaged_copy.as_deref()
+    }
+
+    /// The conversation's messages as the copy holds them.
+    pub fn history(&self) -> &History {
+        &self.history
+    }
+
+    /// How many output lines were not understood so far.
+    pub fn skipped(&self) -> u64 {
+        self.skipped
+    }
+
+    /// Whether a turn is open (send is refused until it ends).
+    pub fn turn_running(&self) -> bool {
+        self.turn.is_some()
+    }
+
+    /// The runtime process, for its id and the end of its error stream.
+    pub fn process(&self) -> &crate::RuntimeProcess {
+        self.conn.process()
+    }
+
+    /// Sends request `call` with `params` and remembers it with its deadline.
+    fn request(&mut self, call: Call, params: Option<Value>) -> Result<u64, AgentError> {
+        let id = self.conn.request(call.method(), params)?;
+        self.pending(id, call);
+        Ok(id)
+    }
+
+    /// Remembers request `id` as `call`, due one request timeout from now.
+    fn pending(&mut self, id: u64, call: Call) {
+        let sent = Instant::now();
+        let deadline = sent.checked_add(self.request_timeout).unwrap_or(sent);
+        self.calls.insert(id, Pending { call, sent, deadline });
+    }
+
+    /// Ends the session for `reason`: an open turn fails with it at once, and Codex is ended within
+    /// a bound ([`rpc::Conn::fail`]), its end carrying the reason.
+    fn fail(&mut self, reason: AgentError) {
+        if let Some(turn) = self.turn.take() {
+            self.settle_history(&turn);
+            self.events.push_back(SessionEvent::TurnFinished { outcome: TurnOutcome::Failed(reason.clone()), usage: Default::default() });
+        }
+        self.conn.fail(reason);
+    }
+
+    /// Keeps or restores the open turn's question as it ends, and saves the copy: a turn that was
+    /// sent keeps it (Codex may have it), one never sent is restored.
+    fn settle_history(&mut self, turn: &Turn) {
+        if turn.sent || turn.accepted {
+            self.history.keep();
+            self.history.trim();
+            self.save();
+        } else {
+            self.history.restore();
+        }
+    }
+
+    /// Saves the copy; a failure is logged (the folder and the purpose, never the content), and the
+    /// next save tries again.
+    fn save(&self) {
+        if let Err(e) = self.history.save(&self.copy_path) {
+            log::warn!("the conversation's copy could not be saved: {e}");
+        }
+    }
+
+    /// Ends the open turn with `outcome`.
+    fn close_turn(&mut self, outcome: TurnOutcome) {
+        if let Some(turn) = self.turn.take() {
+            self.settle_history(&turn);
+            self.events.push_back(SessionEvent::TurnFinished { outcome, usage: Default::default() });
+        }
+    }
+
+    /// Moves the open turn on as far as it can go now: once the handshake is done, a thread is
+    /// started when there is none, and the turn sent once one is ready. A request that cannot be
+    /// sent is the error.
+    fn advance(&mut self) -> Result<(), AgentError> {
+        let waiting = self.turn.as_ref().is_some_and(|t| !t.sent);
+        if !waiting || self.handshake != Handshake::Done {
+            return Ok(());
+        }
+        match self.thread.clone() {
+            ThreadState::None => {
+                let mut params = json!({ "approvalPolicy": "on-request", "cwd": self.work, "ephemeral": true, "sandbox": "read-only" });
+                if let Some(object) = params.as_object_mut() {
+                    if let Some(model) = &self.model {
+                        object.insert("model".to_owned(), json!(model.as_str()));
+                    }
+                    if let Some(instructions) = &self.instructions {
+                        object.insert("developerInstructions".to_owned(), json!(instructions));
+                    }
+                }
+                self.request(Call::ThreadStart, Some(params))?;
+                self.thread = ThreadState::Starting;
+                Ok(())
+            }
+            ThreadState::Starting | ThreadState::Injecting { .. } => Ok(()),
+            ThreadState::Ready { id } => {
+                let Some(turn) = self.turn.as_ref() else { return Ok(()) };
+                let mut params = json!({ "threadId": id, "input": [{ "type": "text", "text": turn.text, "text_elements": [] }] });
+                if let (Some(model), Some(object)) = (&self.model, params.as_object_mut()) {
+                    object.insert("model".to_owned(), json!(model.as_str()));
+                }
+                let number = turn.number;
+                self.request(Call::TurnStart { turn: number, thread: id.clone() }, Some(params))?;
+                if let Some(turn) = self.turn.as_mut() {
+                    turn.sent = true;
+                    turn.thread = Some(id);
+                }
+                Ok(())
+            }
+        }
+    }
+
+    /// [`CodexSession::advance`] where nobody waits for its result: a failure fails the open turn,
+    /// restoring the copy when it was never sent.
+    fn advance_or_fail_turn(&mut self) {
+        if let Err(e) = self.advance() {
+            self.close_turn(TurnOutcome::Failed(e));
+        }
+    }
+
+    /// The thread could not be started or prepared: it is forgotten with the tool server states
+    /// held for it, and the turn waiting for it fails (its question was never sent, so the copy is
+    /// restored).
+    fn thread_failed(&mut self, error: AgentError) {
+        self.thread = ThreadState::None;
+        self.held.clear();
+        self.held_bytes = 0;
+        self.close_turn(TurnOutcome::Failed(error));
+    }
+
+    /// The thread is ready: its tool servers are reported with [`SessionEvent::Started`] and the
+    /// waiting turn is sent.
+    fn thread_ready(&mut self, id: String, model: String) {
+        self.thread = ThreadState::Ready { id: id.clone() };
+        self.thread_model = model.clone();
+        self.events.push_back(SessionEvent::Started { session_id: id, model, tools: Vec::new(), servers: self.servers.clone() });
+        self.advance_or_fail_turn();
+    }
+
+    /// Sends the next batch of the copy to thread `id` with `thread/inject_items`, from message
+    /// `next`: as many messages as fit one line of half the line limit, at least one. When every
+    /// message was sent, the thread is ready.
+    fn inject(&mut self, id: String, model: String, next: usize) {
+        let messages = self.history.before_turn();
+        if next >= messages.len() {
+            self.thread_ready(id, model);
+            return;
+        }
+        let budget = self.max_line_bytes / 2;
+        let mut items = Vec::new();
+        let mut bytes = 0usize;
+        let mut end = next;
+        for message in messages.iter().skip(next) {
+            let item = match message.role {
+                history::Role::User => json!({ "type": "message", "role": "user", "content": [{ "type": "input_text", "text": message.text }] }),
+                history::Role::Assistant => {
+                    json!({ "type": "message", "role": "assistant", "content": [{ "type": "output_text", "text": message.text }] })
+                }
+            };
+            let size = item.to_string().len();
+            if !items.is_empty() && bytes.saturating_add(size) > budget {
+                break;
+            }
+            bytes = bytes.saturating_add(size);
+            items.push(item);
+            end = end.saturating_add(1);
+        }
+        match self.request(Call::Inject { thread: id.clone() }, Some(json!({ "threadId": id, "items": items }))) {
+            Ok(_) => self.thread = ThreadState::Injecting { id, model, next: end },
+            Err(e) => {
+                self.unsubscribe(&id);
+                self.thread_failed(e);
+            }
+        }
+    }
+
+    /// Releases thread `id` with `thread/unsubscribe` (a failure to send is logged).
+    fn unsubscribe(&mut self, id: &str) {
+        if !self.conn.is_open() {
+            return;
+        }
+        if let Err(e) = self.request(Call::Unsubscribe { thread: id.to_owned() }, Some(json!({ "threadId": id }))) {
+            log::warn!("a codex thread could not be released: {e}");
+        }
+    }
+
+    /// Sends the open turn's one stop request, `turn/interrupt`, tied to the turn's number. A
+    /// request that cannot be sent counts as refused.
+    fn send_interrupt(&mut self) {
+        let Some(turn) = self.turn.as_ref() else { return };
+        let (Some(thread), Some(turn_id)) = (turn.thread.clone(), turn.id.clone()) else { return };
+        let number = turn.number;
+        let sent = self.request(Call::Interrupt { turn: number }, Some(json!({ "threadId": thread, "turnId": turn_id })));
+        if let Some(turn) = self.turn.as_mut() {
+            turn.stop = match sent {
+                Ok(_) => Stop::Sent,
+                Err(e) => {
+                    log::warn!("codex's stop request could not be sent: {e}");
+                    Stop::Failed { deadline: deadline_after(self.request_timeout) }
+                }
+            };
+        }
+    }
+
+    /// Whether `turn` is the open turn's number.
+    fn is_current(&self, turn: u64) -> bool {
+        self.turn.as_ref().is_some_and(|t| t.number == turn)
+    }
+
+    /// Handles everything due by `now`: requests past their deadline, a refused stop whose grace
+    /// ran out, a stop waiting for an unnamed turn, and late requests to forget.
+    fn tick(&mut self, now: Instant) {
+        let due: Vec<u64> = self.calls.iter().filter(|(_, p)| p.deadline <= now).map(|(id, _)| *id).collect();
+        for id in due {
+            if let Some(pending) = self.calls.remove(&id) {
+                self.timed_out(id, pending);
+            }
+        }
+        if let Some((stop, accepted, unnamed)) = self.turn.as_ref().map(|t| (t.stop, t.accepted, t.id.is_none())) {
+            match stop {
+                Stop::Failed { deadline } if deadline <= now => {
+                    self.fail(AgentError::reported(
+                        ErrorKind::Other,
+                        "codex did not stop the turn and may still be running it, so the session was ended; start it again with Start::Resume to go on with the conversation",
+                    ));
+                    return;
+                }
+                Stop::Wanted { at } if accepted && unnamed && now.saturating_duration_since(at) >= self.request_timeout => {
+                    // The turn never got a name to stop it by: its thread is released, which ends
+                    // it, and the next turn starts a new one.
+                    log::warn!("codex never named the turn being stopped; its thread is released");
+                    if let ThreadState::Ready { id } = self.thread.clone() {
+                        self.unsubscribe(&id);
+                    }
+                    self.thread = ThreadState::None;
+                    self.close_turn(TurnOutcome::Stopped);
+                }
+                _ => {}
+            }
+        }
+        while self.late_starts.front().is_some_and(|l| l.forget_at <= now) {
+            self.late_starts.pop_front();
+        }
+        while let Some(at) = self.retired.iter().position(|r| r.forget_at <= now) {
+            if let Some(retired) = self.retired.remove(at) {
+                self.unsubscribe(&retired.thread);
+            }
+        }
+    }
+
+    /// The next moment [`CodexSession::tick`] has work, if any.
+    fn next_timer(&self) -> Option<Instant> {
+        let calls = self.calls.values().map(|p| p.deadline);
+        let stop = self.turn.as_ref().and_then(|t| match t.stop {
+            Stop::Failed { deadline } => Some(deadline),
+            Stop::Wanted { at } if t.accepted && t.id.is_none() => at.checked_add(self.request_timeout),
+            _ => None,
+        });
+        let late = self.late_starts.iter().map(|l| l.forget_at);
+        let retired = self.retired.iter().map(|r| r.forget_at);
+        calls.chain(stop).chain(late).chain(retired).min()
+    }
+
+    /// What a request's timeout means.
+    fn timed_out(&mut self, id: u64, pending: Pending) {
+        let error = AgentError::TimedOut {
+            runtime: RuntimeKind::Codex,
+            request: pending.call.method(),
+            after_ms: pending.deadline.saturating_duration_since(pending.sent).as_millis(),
+        };
+        match pending.call {
+            Call::Initialize | Call::Login => self.fail(error),
+            Call::ThreadStart => {
+                if self.late_starts.len() >= MAX_LATE {
+                    log::warn!("too many codex thread starts timed out; the oldest is forgotten, and a thread it starts late stays until codex ends");
+                    self.late_starts.pop_front();
+                }
+                self.late_starts.push_back(LateStart { request: id, forget_at: late_deadline(self.request_timeout) });
+                self.thread_failed(error);
+            }
+            Call::Inject { thread } => {
+                self.unsubscribe(&thread);
+                self.thread_failed(error);
+            }
+            Call::TurnStart { turn, thread } => {
+                if !self.is_current(turn) {
+                    return;
+                }
+                // Codex may have the turn: its question stays in the copy, and its thread is kept
+                // only to stop a turn that starts late.
+                if self.retired.len() >= MAX_LATE
+                    && let Some(oldest) = self.retired.pop_front()
+                {
+                    self.unsubscribe(&oldest.thread);
+                }
+                self.retired.push_back(Retired { thread, request: id, forget_at: late_deadline(self.request_timeout), interrupting: false });
+                self.thread = ThreadState::None;
+                self.close_turn(TurnOutcome::Failed(error));
+            }
+            Call::Interrupt { turn } => {
+                if let Some(open) = self.turn.as_mut()
+                    && open.number == turn
+                    && open.stop == Stop::Sent
+                {
+                    log::warn!("codex did not answer the stop request in time; the turn gets one more request timeout to end");
+                    open.stop = Stop::Failed { deadline: deadline_after(self.request_timeout) };
+                }
+            }
+            Call::Unsubscribe { .. } => log::warn!("codex did not answer a thread's release in time"),
+            Call::LateInterrupt { thread } => self.unsubscribe(&thread),
+        }
+    }
+
+    /// What one incoming message means.
+    fn take(&mut self, incoming: Incoming) {
+        match incoming {
+            Incoming::Response { id, result } => self.answer(id, result),
+            Incoming::Notification { method, params } => self.notification(&method, &params),
+            Incoming::Request { id, method } => self.server_request(&id, &method),
+            Incoming::Skipped(why) => {
+                self.skipped = self.skipped.saturating_add(1);
+                self.events.push_back(SessionEvent::Ignored(why));
+            }
+            Incoming::Ended { exit, error } => self.finish(exit, error),
+        }
+    }
+
+    /// Codex has ended: an open turn fails with the end's reason, then [`SessionEvent::Ended`].
+    fn finish(&mut self, exit: Option<Exit>, error: Option<AgentError>) {
+        self.ended = true;
+        self.calls.clear();
+        if let Some(turn) = self.turn.take() {
+            self.settle_history(&turn);
+            let failed = error.clone().unwrap_or_else(|| AgentError::reported(ErrorKind::Other, "codex ended before the turn did"));
+            self.events.push_back(SessionEvent::TurnFinished { outcome: TurnOutcome::Failed(failed), usage: Default::default() });
+        }
+        self.events.push_back(SessionEvent::Ended { exit, error });
+    }
+
+    /// What the answer to request `id` means.
+    fn answer(&mut self, id: u64, result: Result<Value, RpcError>) {
+        let Some(pending) = self.calls.remove(&id) else {
+            self.late_answer(id, result);
+            return;
+        };
+        let method = pending.call.method();
+        match pending.call {
+            Call::Initialize => match result.map_err(|e| e.into_error(method, None)).and_then(|answer| initialize::check(&answer)) {
+                Ok(()) => self.initialized(),
+                Err(e) => self.fail(e),
+            },
+            Call::Login => {
+                let accepted = result.map_err(|e| e.into_error(method, Some(ErrorKind::InvalidCredential))).and_then(|answer| {
+                    match answer.get("type").and_then(Value::as_str) {
+                        Some("apiKey") => Ok(()),
+                        _ => {
+                            Err(AgentError::Unreadable { runtime: RuntimeKind::Codex, request: method, reason: "its type is not apiKey".to_owned() })
+                        }
+                    }
+                });
+                match accepted {
+                    Ok(()) => {
+                        self.handshake = Handshake::Done;
+                        self.advance_or_fail_turn();
+                    }
+                    Err(e) => self.fail(e),
+                }
+            }
+            Call::ThreadStart => match result {
+                Ok(answer) => match rpc::checked_id(answer.get("thread").and_then(|t| t.get("id"))) {
+                    Some(thread) => {
+                        let model =
+                            answer.get("model").and_then(Value::as_str).map(|m| parse::capped(m, crate::claude::MAX_NAME_BYTES)).unwrap_or_default();
+                        let held = std::mem::take(&mut self.held);
+                        self.held_bytes = 0;
+                        self.servers.clear();
+                        for (named, server) in held {
+                            if named.as_deref() == Some(thread.as_str()) {
+                                update_server(&mut self.servers, server);
+                            }
+                        }
+                        self.inject(thread, model, 0);
+                    }
+                    None => self.thread_failed(AgentError::Unreadable {
+                        runtime: RuntimeKind::Codex,
+                        request: method,
+                        reason: "its thread id is not readable".to_owned(),
+                    }),
+                },
+                Err(e) => self.thread_failed(e.into_error(method, None)),
+            },
+            Call::Inject { thread } => match (result, self.thread.clone()) {
+                (Ok(_), ThreadState::Injecting { id, model, next }) if id == thread => self.inject(id, model, next),
+                (Ok(_), _) => log::debug!("an injection answer came for a thread no longer being prepared"),
+                (Err(e), _) => {
+                    self.unsubscribe(&thread);
+                    self.thread_failed(e.into_error(method, None));
+                }
+            },
+            Call::TurnStart { turn, thread } => {
+                if !self.is_current(turn) {
+                    return;
+                }
+                match result {
+                    Ok(answer) => {
+                        self.history.keep();
+                        self.save();
+                        let named = rpc::checked_id(answer.get("turn").and_then(|t| t.get("id")));
+                        let mut interrupt = false;
+                        if let Some(open) = self.turn.as_mut() {
+                            open.accepted = true;
+                            open.thread = Some(thread);
+                            if open.id.is_none() {
+                                open.id = named;
+                            }
+                            interrupt = matches!(open.stop, Stop::Wanted { .. }) && open.id.is_some();
+                        }
+                        if interrupt {
+                            self.send_interrupt();
+                        }
+                    }
+                    Err(e) => {
+                        let error = e.into_error(method, None);
+                        self.history.restore();
+                        if let Some(open) = self.turn.as_mut() {
+                            open.sent = false;
+                        }
+                        self.close_turn(TurnOutcome::Failed(error));
+                    }
+                }
+            }
+            Call::Interrupt { turn } => {
+                let Err(e) = result else { return };
+                if let Some(open) = self.turn.as_mut()
+                    && open.number == turn
+                    && open.stop == Stop::Sent
+                {
+                    log::warn!("codex refused the stop request ({}); the turn gets one more request timeout to end", e.message);
+                    open.stop = Stop::Failed { deadline: deadline_after(self.request_timeout) };
+                }
+            }
+            Call::Unsubscribe { .. } => {
+                if let Err(e) = result {
+                    log::debug!("codex refused a thread's release: {}", e.message);
+                }
+            }
+            Call::LateInterrupt { thread } => self.unsubscribe(&thread),
+        }
+    }
+
+    /// The handshake's `initialize` was answered: `initialized` goes out, then the key's sign-in
+    /// when the session uses one.
+    fn initialized(&mut self) {
+        if let Err(e) = self.conn.notify("initialized") {
+            self.fail(e);
+            return;
+        }
+        match self.key.take() {
+            Some(key) => {
+                // The key is sent in this one line and then dropped, which overwrites it.
+                match self.conn.request_secret(|id| api_key_line(id, &key)) {
+                    Ok(id) => {
+                        self.pending(id, Call::Login);
+                        self.handshake = Handshake::SigningIn;
+                    }
+                    Err(e) => self.fail(e),
+                }
+            }
+            None => {
+                self.handshake = Handshake::Done;
+                self.advance_or_fail_turn();
+            }
+        }
+    }
+
+    /// An answer to a request no longer waited for: the thread a late `thread/start` names is
+    /// released; a late `turn/start` on a retired thread gets its turn stopped, then the thread is
+    /// released (at once when the answer names no turn).
+    fn late_answer(&mut self, id: u64, result: Result<Value, RpcError>) {
+        if let Some(at) = self.late_starts.iter().position(|l| l.request == id) {
+            self.late_starts.remove(at);
+            if let Ok(answer) = result {
+                match rpc::checked_id(answer.get("thread").and_then(|t| t.get("id"))) {
+                    Some(thread) => self.unsubscribe(&thread),
+                    None => log::warn!("a thread codex started late has no readable id, so it is not released"),
+                }
+            }
+            return;
+        }
+        if let Some(at) = self.retired.iter().position(|r| r.request == id) {
+            let named = result.ok().and_then(|answer| rpc::checked_id(answer.get("turn").and_then(|t| t.get("id"))));
+            match named {
+                Some(turn_id) => self.interrupt_retired(at, &turn_id),
+                None => {
+                    if let Some(retired) = self.retired.remove(at) {
+                        self.unsubscribe(&retired.thread);
+                    }
+                }
+            }
+            return;
+        }
+        log::debug!("codex answered request {id} after it was given up; the answer is dropped");
+    }
+
+    /// Stops the late turn `turn_id` on the retired thread at `at` (once); the thread is released
+    /// when the stop is answered or times out.
+    fn interrupt_retired(&mut self, at: usize, turn_id: &str) {
+        let Some(retired) = self.retired.get_mut(at) else { return };
+        if retired.interrupting {
+            return;
+        }
+        retired.interrupting = true;
+        let thread = retired.thread.clone();
+        self.retired.remove(at);
+        if self.request(Call::LateInterrupt { thread: thread.clone() }, Some(json!({ "threadId": thread, "turnId": turn_id }))).is_err() {
+            self.unsubscribe(&thread);
+        }
+    }
+
+    /// Whether a notification for `thread` (and `turn`, where it names one) belongs to the open turn.
+    fn for_open_turn(&self, thread: Option<&str>, turn: Option<&str>) -> bool {
+        let Some(open) = &self.turn else { return false };
+        let thread_matches = open.thread.as_deref().is_some_and(|t| Some(t) == thread);
+        let turn_matches = match (&open.id, turn) {
+            (Some(id), Some(turn)) => id == turn,
+            _ => true,
+        };
+        open.sent && thread_matches && turn_matches
+    }
+
+    /// What a notification means.
+    fn notification(&mut self, method: &str, params: &Value) {
+        let thread = parse::thread_of(params);
+        let turn_id = parse::turn_of(params);
+        match method {
+            "turn/started" => {
+                if let Some(at) = self.retired.iter().position(|r| Some(r.thread.as_str()) == thread.as_deref()) {
+                    if let Some(turn_id) = &turn_id {
+                        self.interrupt_retired(at, turn_id);
+                    }
+                    return;
+                }
+                if self.for_open_turn(thread.as_deref(), turn_id.as_deref()) {
+                    let mut interrupt = false;
+                    if let Some(open) = self.turn.as_mut()
+                        && open.id.is_none()
+                    {
+                        open.id = turn_id;
+                        interrupt = matches!(open.stop, Stop::Wanted { .. }) && open.id.is_some();
+                    }
+                    if interrupt {
+                        self.send_interrupt();
+                    }
+                }
+            }
+            "turn/completed" => {
+                if let Some(at) = self.retired.iter().position(|r| Some(r.thread.as_str()) == thread.as_deref()) {
+                    if let Some(retired) = self.retired.remove(at) {
+                        self.unsubscribe(&retired.thread);
+                    }
+                    return;
+                }
+                if self.for_open_turn(thread.as_deref(), turn_id.as_deref()) {
+                    let Some(open) = self.turn.as_mut() else { return };
+                    let stop_requested = open.stop != Stop::None;
+                    let last_error = open.last_error.take();
+                    let outcome = parse::turn_completed(params.get("turn").unwrap_or(&Value::Null), last_error, stop_requested, self.signed_in_with);
+                    open.accepted = true;
+                    self.close_turn(outcome);
+                }
+            }
+            "item/agentMessage/delta" => {
+                if self.for_open_turn(thread.as_deref(), turn_id.as_deref())
+                    && let Some(event) = parse::delta(params)
+                {
+                    self.events.push_back(event);
+                }
+            }
+            "item/started" => {
+                if self.for_open_turn(thread.as_deref(), turn_id.as_deref())
+                    && let Some(event) = parse::item_started(params)
+                {
+                    self.events.push_back(event);
+                }
+            }
+            "item/completed" => {
+                if self.for_open_turn(thread.as_deref(), turn_id.as_deref())
+                    && let Some((event, answer)) = parse::item_completed(params)
+                {
+                    if let Some(text) = answer
+                        && self.turn.as_ref().is_some_and(|t| t.accepted)
+                    {
+                        self.history.push_answer(&text);
+                    }
+                    self.events.push_back(event);
+                }
+            }
+            "error" => {
+                if !self.for_open_turn(thread.as_deref(), turn_id.as_deref()) {
+                    return;
+                }
+                let Some(error) = params.get("error").and_then(|e| parse::failure(e, self.signed_in_with)) else { return };
+                let Some(open) = self.turn.as_mut() else { return };
+                if params.get("willRetry").and_then(Value::as_bool) == Some(true) {
+                    open.retries = open.retries.saturating_add(1);
+                    let kind = error.kind();
+                    self.events.push_back(SessionEvent::Retrying { attempt: open.retries, max_attempts: None, delay_ms: None, kind });
+                } else {
+                    open.last_error = Some(error);
+                }
+            }
+            "mcpServer/startupStatus/updated" => self.server_status(params),
+            "account/login/completed" => {
+                if params.get("success").and_then(Value::as_bool) == Some(false) {
+                    self.fail(AgentError::reported(ErrorKind::InvalidCredential, "codex did not accept the API key"));
+                }
+            }
+            "account/updated" => {
+                if params.get("authMode").is_some_and(Value::is_null) {
+                    log::warn!("codex says it is no longer signed in");
+                }
+            }
+            "thread/started"
+            | "thread/status/changed"
+            | "thread/tokenUsage/updated"
+            | "thread/name/updated"
+            | "thread/settings/updated"
+            | "thread/compacted"
+            | "thread/closed"
+            | "remoteControl/status/changed"
+            | "account/rateLimits/updated"
+            | "serverRequest/resolved"
+            | "turn/diff/updated"
+            | "turn/plan/updated"
+            | "item/plan/delta"
+            | "item/mcpToolCall/progress"
+            | "item/reasoning/summaryTextDelta"
+            | "item/reasoning/summaryPartAdded"
+            | "item/reasoning/textDelta"
+            | "item/commandExecution/outputDelta"
+            | "item/fileChange/outputDelta"
+            | "hook/started"
+            | "hook/completed"
+            | "model/rerouted"
+            | "modelProvider/authRecoveryStarted"
+            | "modelProvider/authRecoveryCompleted"
+            | "warning"
+            | "configWarning"
+            | "deprecationNotice" => {}
+            other => {
+                let kind = rpc::kind_name(other);
+                log::debug!("codex sent the notification {kind}, which Archforge does not read; it was skipped");
+                self.skipped = self.skipped.saturating_add(1);
+                self.events.push_back(SessionEvent::Ignored(Skipped::Unknown { kind }));
+            }
+        }
+    }
+
+    /// A tool server's state: held while `thread/start` is not answered yet (at most
+    /// [`MAX_HELD_STATUSES`] and [`MAX_HELD_BYTES`], the rest dropped and logged), then delivered only
+    /// when it names the answered thread; reported with [`SessionEvent::Started`] again once the
+    /// thread is ready.
+    fn server_status(&mut self, params: &Value) {
+        let Some((named, server)) = parse::server_status(params) else {
+            self.skipped = self.skipped.saturating_add(1);
+            self.events
+                .push_back(SessionEvent::Ignored(Skipped::Malformed { kind: "mcpServer/startupStatus/updated", reason: "it has no name or state" }));
+            return;
+        };
+        match self.thread.clone() {
+            ThreadState::Starting => {
+                let size = server.name.len().saturating_add(server.status.len()).saturating_add(named.as_ref().map_or(0, String::len));
+                if self.held.len() >= MAX_HELD_STATUSES || self.held_bytes.saturating_add(size) > MAX_HELD_BYTES {
+                    log::warn!("too many tool server states came before codex's thread; one was dropped");
+                    return;
+                }
+                self.held_bytes = self.held_bytes.saturating_add(size);
+                self.held.push((named, server));
+            }
+            ThreadState::Injecting { id, .. } if named.as_deref() == Some(id.as_str()) => update_server(&mut self.servers, server),
+            ThreadState::Ready { id } if named.as_deref() == Some(id.as_str()) => {
+                update_server(&mut self.servers, server);
+                let model = self.thread_model.clone();
+                self.events.push_back(SessionEvent::Started { session_id: id, model, tools: Vec::new(), servers: self.servers.clone() });
+            }
+            _ => log::debug!("a tool server state for another thread was skipped"),
+        }
+    }
+
+    /// Answers a request of Codex's own: approvals and elicitations are declined (Archforge's bridge
+    /// is the only tool and runs read-only unless the person allowed changes), a permission request
+    /// gets an empty grant, and anything else a JSON-RPC error.
+    fn server_request(&mut self, id: &Value, method: &str) {
+        let answered = match method {
+            "item/commandExecution/requestApproval" | "item/fileChange/requestApproval" => self.conn.respond(id, json!({ "decision": "decline" })),
+            "mcpServer/elicitation/request" => self.conn.respond(id, json!({ "action": "decline", "content": null, "_meta": null })),
+            "item/permissions/requestApproval" => self.conn.respond(id, json!({ "permissions": {}, "scope": "turn" })),
+            other => {
+                log::warn!("codex asked {}, which Archforge does not handle; refused", rpc::kind_name(other));
+                self.conn.respond_error(id, rpc::METHOD_NOT_FOUND, "Archforge does not handle this request")
+            }
+        };
+        if let Err(e) = answered {
+            log::warn!("codex's request could not be answered: {e}");
+        }
+    }
+}
+
+/// Replaces the state of the server with `server`'s name, or adds it (at most
+/// [`MAX_HELD_STATUSES`] servers).
+fn update_server(servers: &mut Vec<ToolServer>, server: ToolServer) {
+    if let Some(known) = servers.iter_mut().find(|s| s.name == server.name) {
+        known.status = server.status;
+    } else if servers.len() < MAX_HELD_STATUSES {
+        servers.push(server);
+    } else {
+        log::warn!("codex reports more tool servers than Archforge keeps; one was dropped");
+    }
+}
+
+/// One request timeout from now.
+fn deadline_after(timeout: Duration) -> Instant {
+    let now = Instant::now();
+    now.checked_add(timeout).unwrap_or(now)
+}
+
+/// [`LATE_FACTOR`] request timeouts from now.
+fn late_deadline(timeout: Duration) -> Instant {
+    deadline_after(timeout.saturating_mul(LATE_FACTOR))
+}
+
+impl AgentSession for CodexSession {
+    /// Opens a turn with the person's message: the copy's snapshot is taken and the question added,
+    /// then `turn/start` goes out at once when the thread is ready, or after the handshake and the
+    /// thread's start (`thread/start`, then the copy in `thread/inject_items` batches) otherwise.
+    /// Refused while a turn is open, once Codex has ended, and for an empty message or one past
+    /// [`history::MAX_MESSAGE_BYTES`]. A request that cannot be sent restores the copy.
+    fn send(&mut self, text: &str) -> Result<(), AgentError> {
+        if self.ended || !self.conn.is_open() {
+            return Err(AgentError::InputClosed { runtime: RuntimeKind::Codex });
+        }
+        if self.turn.is_some() {
+            return Err(AgentError::TurnRunning { runtime: RuntimeKind::Codex });
+        }
+        if text.is_empty() {
+            return Err(AgentError::InvalidSetting { setting: "message", bytes: 0, reason: "a message is not empty".to_owned() });
+        }
+        self.history.begin_turn(text)?;
+        self.turns = self.turns.saturating_add(1);
+        self.turn = Some(Turn {
+            number: self.turns,
+            text: text.to_owned(),
+            thread: None,
+            sent: false,
+            accepted: false,
+            id: None,
+            stop: Stop::None,
+            last_error: None,
+            retries: 0,
+        });
+        if let Err(e) = self.advance() {
+            self.history.restore();
+            self.turn = None;
+            return Err(e);
+        }
+        Ok(())
+    }
+
+    /// Asks Codex to stop the open turn with one `turn/interrupt`, tied to the turn's number; a
+    /// second stop of the same turn does nothing more. A turn not sent yet ends at once as stopped;
+    /// one Codex has not named yet is stopped as soon as it is named, or, when it stays unnamed for a
+    /// request timeout after being accepted, its thread is released. When Codex refuses the stop or
+    /// does not answer in time, the turn gets one more request timeout to end (send stays refused);
+    /// then the session is ended, naming [`Start::Resume`]. A stop answer for a turn that is no
+    /// longer open is ignored.
+    fn stop(&mut self) -> Result<(), AgentError> {
+        if self.ended {
+            return Ok(());
+        }
+        let Some((stop, sent, named)) = self.turn.as_ref().map(|t| (t.stop, t.sent, t.id.is_some())) else { return Ok(()) };
+        if stop != Stop::None {
+            return Ok(());
+        }
+        if !sent {
+            self.close_turn(TurnOutcome::Stopped);
+        } else if named {
+            self.send_interrupt();
+        } else if let Some(turn) = self.turn.as_mut() {
+            turn.stop = Stop::Wanted { at: Instant::now() };
+        }
+        Ok(())
+    }
+
+    /// The next event, never waiting past `timeout` (an exit wait is at most the smaller of half a
+    /// second and the time left) and reading at most [`rpc::LINES_PER_CALL`] lines: with a zero
+    /// timeout every line already there is read within that budget, without waiting, so an event
+    /// behind lines that mean nothing still comes. Requests past their timeout are handled on the
+    /// way. Once Codex has ended it is collected here without waiting.
+    fn next_event(&mut self, timeout: Duration) -> Option<SessionEvent> {
+        let start = Instant::now();
+        let deadline = start.checked_add(timeout).unwrap_or(start);
+        let mut budget = LINES_PER_CALL;
+        loop {
+            if let Some(event) = self.events.pop_front() {
+                return Some(event);
+            }
+            if self.ended {
+                self.conn.reap();
+                return None;
+            }
+            let now = Instant::now();
+            self.tick(now);
+            if !self.events.is_empty() {
+                continue;
+            }
+            let wake = self.next_timer().map_or(deadline, |t| t.max(now.checked_add(Duration::from_millis(1)).unwrap_or(now)).min(deadline));
+            match self.conn.poll(wake, &mut budget) {
+                Some(incoming) => self.take(incoming),
+                None => {
+                    if budget == 0 || Instant::now() >= deadline {
+                        self.tick(Instant::now());
+                        return self.events.pop_front();
+                    }
+                }
+            }
+        }
+    }
+
+    /// Ends Codex as [`crate::RuntimeProcess::shutdown`] does, waiting up to twice `grace`; an open
+    /// turn then fails and [`SessionEvent::Ended`] follows from [`AgentSession::next_event`].
+    fn shutdown(&mut self, grace: Duration) -> Result<Exit, AgentError> {
+        self.conn.shutdown(grace)
+    }
+}
+
+impl Drop for CodexSession {
+    /// Collects Codex if it has ended; otherwise the process's drop kills its group and collects it.
+    fn drop(&mut self) {
+        self.conn.reap();
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
-
     use super::*;
-    use crate::ErrorKind;
 
     /// The command line carries the store, the switches and the bridge, read-only unless changes
     /// are allowed, and refuses values TOML would need escaped.
@@ -353,5 +1555,14 @@ mod tests {
         assert_eq!(initialize::check(&agent("1.0.0")).unwrap_err().kind(), ErrorKind::MissingRuntime);
         assert!(initialize::check(&json!({ "userAgent": "something else" })).is_ok());
         assert!(matches!(initialize::check(&json!({})), Err(AgentError::Unreadable { .. })));
+    }
+
+    /// `Debug` of a session's sign-in never shows the key.
+    #[test]
+    fn debug_never_shows_the_key() {
+        let auth = Auth::ApiKey(Secret::new("sk-SECRET-KEY-123".into()).unwrap());
+        for shown in [format!("{auth:?}"), format!("{auth:#?}")] {
+            assert!(!shown.contains("sk-SECRET"), "{shown}");
+        }
     }
 }

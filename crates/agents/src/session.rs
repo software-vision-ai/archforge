@@ -1,5 +1,5 @@
 //! The neutral face of a conversation with an agent runtime: one trait every adapter implements
-//! (Claude here, Codex in AR-202) and the events the Chat panel reads, the same for every runtime.
+//! (Claude and Codex) and the events the Chat panel reads, the same for every runtime.
 
 use std::time::Duration;
 
@@ -39,7 +39,9 @@ pub trait AgentSession {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SessionEvent {
     /// The runtime is ready for the turn: the model it resolved, the tools the model may call, and
-    /// the state of each tool server. It may come again on a later turn.
+    /// the state of each tool server. It may come again: on a later turn, and (Codex, whose
+    /// `session_id` is its thread's id and which lists no tools here) when a tool server's state
+    /// changes.
     Started { session_id: String, model: String, tools: Vec<String>, servers: Vec<ToolServer> },
     /// A piece of the answer being written, to show as it arrives.
     TextDelta { text: String },
