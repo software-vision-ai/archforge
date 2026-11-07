@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+#
+# CodeRabbit's settings for Archforge. Settings not named here keep the organisation's values.
+#
+# A pull request merges only on CodeRabbit's approval. CodeRabbit approves when its review
+# threads are resolved, the latest commit is reviewed and the pre-merge checks pass. A finding
+# outside the changed lines opens no thread, so before this file such a finding did not hold the
+# approval back (#211 was approved seven seconds after two "Major" outside-diff findings). The
+# custom check below turns every unresolved finding into a failing pre-merge check, so no
+# approval comes while one is open.
+reviews:
+  profile: chill
+  auto_approvals:
+    enabled: true
+  auto_review:
+    # Review every commit; a paused review left #210's last commit unreviewed for half an hour.
+    auto_pause_after_reviewed_commits: 0
+  pre_merge_checks:
+    docstrings:
+      mode: error
+      threshold: 80
+    custom_checks:
+      - name: "No open findings"
+        mode: error
+        instructions: |
+          Fail if any finding CodeRabbit has raised on this pull request is still unresolved for
+          the latest commit, whether it was posted in a review thread, as an "outside diff range"
+          comment, or as an actionable comment in a review summary.
+
+          A finding is resolved only when the latest commit changes the code so the finding no
+          longer applies, or when its review thread is resolved after a reply that shows why it
+          does not apply.
+
+          Pass only when no Critical, Major or Minor finding raised on any commit of this pull
+          request remains unresolved for the latest commit. Nitpick and Trivial comments do not
+          fail the check, but list them. When failing, list each open finding with its severity,
+          file, line range and title.
