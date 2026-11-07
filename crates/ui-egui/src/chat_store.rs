@@ -36,7 +36,8 @@ pub enum ChangeState {
     Discarded,
 }
 
-/// What a turn did to an element, net over the turn.
+/// What a turn did to an element: added or removed (one both added and removed within the turn is
+/// not listed), else changed, even when the turn changed it back.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChangeKind {
     Added,

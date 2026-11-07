@@ -284,7 +284,8 @@ codes! {
 }
 
 codes! {
-    /// What a turn did to an element, net over the whole turn.
+    /// What a turn did to an element: added or removed (one both added and removed within the turn
+    /// is not kept), else changed, even when the turn changed it back.
     ChangeKind { Added = "added", Changed = "changed", Removed = "removed" }
 }
 
@@ -533,7 +534,7 @@ pub struct TurnChanges {
     pub changes: u32,
     /// The elements added, changed or removed in all: at least as many as `changed` lists.
     pub elements: u32,
-    /// The elements, net over the turn, each once.
+    /// The elements, each once: one added and removed within the turn left out.
     pub changed: Vec<ChangedElement>,
 }
 

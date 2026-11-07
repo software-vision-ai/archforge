@@ -381,11 +381,13 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   conversation's origin runs only while that conversation's turn runs in the project shown, never
   while a conversation of the same label still runs or ends elsewhere, and it undoes or redoes
   only a step of its own, never the person's; while its turn runs, its own undo takes back the
-  turn's one step so far.
-- A turn's changes are one step of the project's undo history, `Chat N: Turn n`; their card follows
-  the turn's last tool row. Undo this turn's changes is offered while that step is on top of the
-  history; otherwise the card says why (another change came after it, or the project was closed
-  since). Undone, the card says so, and redo brings it back.
+  turn's latest step so far.
+- A turn's changes are one step of the project's undo history, `Chat N: Turn n`, unless another
+  change (the person's or another conversation's) lands while the turn runs: that ends the step,
+  the turn's next change starts another, and the turn is several steps. Their card follows the
+  turn's last tool row. Undo this turn's changes is offered while a turn of one step is on top of
+  the history; otherwise the card says why (the model was changed during or after the turn, or the
+  project was closed since). Undone, the card says so, and redo brings it back.
 - Stop keeps the reply so far, marked cut off ("Stopped. Nothing was changed.", or "Stopped." over
   the changes' card); a program that has not stopped within ten seconds is ended, and the turn
   with it. Send again runs a failed turn again in place, its question kept once and its chips sent

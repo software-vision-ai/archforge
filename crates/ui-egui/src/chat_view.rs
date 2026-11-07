@@ -691,7 +691,8 @@ fn ended_line(paint: &egui::Painter, p: &Palette, at: egui::Pos2, width: f32, wo
 }
 
 /// The card of a turn's changes to the model (B4): how many, made as one step of the undo
-/// history, and Undo this turn's changes while that step is on top; else why not.
+/// history unless another change came during the turn, and Undo this turn's changes while a turn
+/// of one step is on top; else why not.
 #[allow(clippy::too_many_arguments)]
 fn changes_card(
     shell: &mut Shell,

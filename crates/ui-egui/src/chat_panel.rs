@@ -8,7 +8,9 @@
 //!   not be written) keeps the draft and says why.
 //! - **A turn** groups the model's edits its tool calls make into one undo step of the project's
 //!   history (`Chat N: Turn n`), so "Undo this turn's changes" undoes exactly them and keeps the
-//!   person's own edits; it is offered while that step is on top of the history.
+//!   person's own edits; it is offered while that step is on top of the history. Another change
+//!   during the turn ends the step, and the turn's next edit starts another: a turn of several
+//!   steps is not undone as one.
 //! - **Tool rows** are worded from what the control channel answered for the conversation's
 //!   origin, never from what the agent says it did.
 //! - **Stop** keeps the reply so far, marked cut off; **Send again** runs a failed turn again in
@@ -837,9 +839,10 @@ fn stored_kind(kind: FailureKind) -> FailureKind {
     if kind == FailureKind::NoCredential { FailureKind::InvalidCredential } else { kind }
 }
 
-/// The elements a turn's changes touched, net over the turn's undo steps (`deltas`, each step's
-/// own, so nothing of another's change between them), those a person reads about only: how many
-/// in all, and each with what happened to it.
+/// The elements a turn's changes touched over the turn's undo steps (`deltas`, each step's own, so
+/// nothing of another's change between them), those a person reads about only: how many in all,
+/// and each with what happened to it. An element added and removed within the turn is left out;
+/// one changed and changed back is still changed, as values are not compared.
 pub fn changed_elements(store: &Store, deltas: &[archforge_mof::Delta]) -> (u32, Vec<ChangedElement>) {
     use archforge_mof::Op;
     let mut seen: BTreeMap<Uuid, (bool, bool, Obj)> = BTreeMap::new();

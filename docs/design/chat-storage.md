@@ -319,23 +319,24 @@ Proposed linking:
    conversation's bridge with `--origin "Chat 7"`. One turn runs at a time per conversation, so
    while a turn runs the window knows which turn every step from that origin belongs to.
 2. **In memory, per turn of this session:** the revision before the turn's first change and after
-   its last. "Undo this turn's changes" is offered while the turn's steps are on top of the undo
+   its last. "Undo this turn's changes" is offered while the turn's one step is on top of the undo
    history (`undo_origin()` is this conversation's origin and the revision is the turn's
    "after"). When the user has changed the model since, the button explains why it is off instead
    of undoing around the user's edits.
 3. **One step per turn** (the design: "Made in this turn, as one step of the project's undo
-   history") needs a small engine addition. Today each command is its own step unless the agent
-   calls `batch`. The addition: while a turn runs, steps of that origin compose into the turn's
-   one step, and any other origin's step in between ends the group. This belongs to the subtask
-   that does "edits undo as a group" (AR-173 decision 8), not to the schema. Until it exists,
-   "Undo this turn's changes" undoes the turn's consecutive steps one after another, and ⌘Z takes
-   them one at a time.
+   history") needs a small engine addition, built with the panel (AR-205, section 12): while a
+   turn runs, steps of that origin compose into the turn's step while it is on top of the history.
+   Any other origin's step in between ends that step, and the turn's next change starts another,
+   so a turn the model was changed in by someone else meanwhile is several steps. "Undo this
+   turn's changes" is refused for such a turn, and ⌘Z takes its steps back one at a time. This
+   belongs to the subtask that does "edits undo as a group" (AR-173 decision 8), not to the
+   schema.
 4. **Durable, in the project:** at the end of the turn, Archforge writes `chat_change` with
-   `changes` (the commands that changed the model) and `chat_change_element` (the net
-   added/changed/removed per element). The elements come from the turn's composed delta: the MOF
+   `changes` (the commands that changed the model) and `chat_change_element` (added, changed or
+   removed, per element). The elements come from the deltas of the turn's steps: the MOF
    ops carry or resolve to UUIDs (`Create`/`Destroy` hold `uuid`; `Set`, `Insert` and the rest hold
    an object whose UUID the store knows). An element added and removed within the same turn is
-   left out. The engine's `Document` trait cannot list touched elements today; the notation
+   left out; one changed and then changed back is still listed as changed. The engine's `Document` trait cannot list touched elements today; the notation
    documents can, so this is a small host-side addition.
 
 ### 4.3 What survives undo, redo, Save, Don't save and reopening
@@ -643,10 +644,20 @@ The Chat panel over the storage of section 11; no table or column changed.
   The row's words are made when it is drawn.
 - **No key saved** is kept as `invalid_credential`: both send the person to Settings.
 - **Undo.** The engine groups a turn's changes into one undo step (`Session::begin_group` and
-  `end_group`, `Chat N: Turn n`); the end gives the span (`TurnSpan`'s before and after) and each
-  of the turn's undo steps' own delta, never composed across another's change between them, that
-  the changed elements come from (none when the turn's changes cancelled out). The
-  panel moves `chat_change.state` of the conversation shown as undo and redo bring the model to
+  `end_group`, `Chat N: Turn n`) as long as nothing else changes the model during the turn.
+  Another change in between, the person's or another conversation's, ends that step, and the
+  turn's next change starts another, so the turn is then several undo steps. "Undo this turn's
+  changes" is offered only for a turn of one step that is on top of the history; for a turn of
+  several steps it is refused, the card saying its changes can no longer be undone on their own,
+  and ⌘Z takes the steps back one at a time.
+- **What the end gives.** The span (`TurnSpan`'s before and after) and each of the turn's undo
+  steps' own delta, never composed across another's change between them, that the changed
+  elements come from. Changes cancel out within one step only: a step that comes to nothing as a
+  whole is dropped, and the end gives nothing when no step is left. A change the turn reverts
+  after another change in between stays in two steps, counted as two changes, and its element is
+  listed as changed. Within the turn, an element added and then removed is left out; one changed
+  and then changed back is still listed as changed.
+- **The change's state.** The panel moves `chat_change.state` of the conversation shown as undo and redo bring the model to
   either end of a turn's span; a conversation not shown records such a move when it is shown again,
   if the model is then at either end. Each span is kept while the project is open, so a
   conversation opened again from the history still offers its undo.
