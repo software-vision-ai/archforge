@@ -414,7 +414,8 @@ pub trait AgentHost: Send + Sync {
     /// Let Chat use the model, on or off. Off closes agent access at once: every conversation's
     /// token is revoked and the control channel closes; the conversations go on without it.
     fn set_model_access(&self, on: bool);
-    /// Starts a conversation, answering at once: refused for a bad id, one already running, or past
+    /// Starts a conversation, answering at once: refused for a bad id, one already running, one
+    /// whose private folder is being removed ([`AgentHost::forget`]), or past
     /// [`crate::chat::MAX_RUNNING`]; the rest (the program found, the key read, the start) comes
     /// as events, a failure as an end.
     fn start(&self, request: crate::chat::ChatStart) -> Result<(), crate::chat::ChatRefusal>;
@@ -427,19 +428,23 @@ pub trait AgentHost: Send + Sync {
     fn end(&self, chat: &str) -> Result<(), crate::chat::ChatRefusal>;
     /// Removes the private folder of the conversation `chat` for good, once it was deleted
     /// (AR-217): a running program is ended first and waited for, a bounded time; a folder whose
-    /// program has not ended by then is kept. The answer says whether there was a folder, or why it
+    /// program has not ended by then is kept. From the call until the removal is done, a start of
+    /// `chat` is refused ([`crate::chat::ChatRefusal::Forgetting`]), so no new program of it is
+    /// ended or loses its folder (AR-218). The answer says whether there was a folder, or why it
     /// was not removed.
     fn forget(&self, chat: &str) -> Receiver<Result<bool, String>>;
-    /// [`AgentHost::forget`] once the project answered `answer`, a deletion or a restoration still
-    /// under way when its project closed or Archforge quit, when `goes` says the answer lets the
-    /// folder go; waited for a bounded time, and an answer that does not come keeps the folder.
-    fn forget_after(
-        &self,
-        chat: &str,
-        answer: Receiver<Result<crate::chat_store::Answer, crate::chat_store::Refusal>>,
-        goes: FolderGoes,
-    ) -> Receiver<Result<bool, String>>;
+    /// [`AgentHost::forget`] once the project answered every one of `answers`, a deletion or a
+    /// restoration still under way when its project closed or Archforge quit, and each let the
+    /// folder go by its [`FolderGoes`]: an Undo pressed before its deletion answered passes both,
+    /// so the folder goes only once the deletion said deleted and the restoration did not bring it
+    /// back (AR-218). They are waited for in order, a bounded time in all; an answer that does not
+    /// come, or keeps the folder, keeps it.
+    fn forget_after(&self, chat: &str, answers: Awaited) -> Receiver<Result<bool, String>>;
 }
+
+/// The project's answers a deleted conversation's folder waits for, in the order the project's
+/// writer gives them, each with what in it lets the folder go (AR-218).
+pub type Awaited = Vec<(Receiver<Result<crate::chat_store::Answer, crate::chat_store::Refusal>>, FolderGoes)>;
 
 /// When a deleted conversation's private folder goes, once the project answers (AR-217).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -447,7 +452,7 @@ pub enum FolderGoes {
     /// Once its deletion succeeded.
     IfDeleted,
     /// Once its restoration was refused for a reason other than its being listed: it stays
-    /// deleted.
+    /// deleted, provided its deletion was made, which the deletion's own answer says.
     IfNotRestored,
 }
 
@@ -1098,16 +1103,9 @@ pub mod fake {
         pub hold_ends: std::sync::atomic::AtomicBool,
         /// The conversations whose private folders were removed, in order.
         pub forgotten: Mutex<Vec<String>>,
-        /// The removals waiting for the project's answer, as the host's threads wait.
-        #[allow(clippy::type_complexity, reason = "a removal waits for the answer, its rule and its own answer")]
-        pub after: Mutex<
-            Vec<(
-                String,
-                Receiver<Result<crate::chat_store::Answer, crate::chat_store::Refusal>>,
-                super::FolderGoes,
-                std::sync::mpsc::Sender<Result<bool, String>>,
-            )>,
-        >,
+        /// The removals waiting for the project's answers, as the host's threads wait; a start of
+        /// their conversations is refused meanwhile, as the host refuses it.
+        pub after: Mutex<Vec<(String, super::Awaited, std::sync::mpsc::Sender<Result<bool, String>>)>>,
     }
 
     impl Default for Fake {
@@ -1196,10 +1194,14 @@ pub mod fake {
         fn set_model_access(&self, on: bool) {
             lock(&self.model_access).push(on);
         }
-        /// Starts a conversation as the host does: a bad id, one running, or past the cap refused.
+        /// Starts a conversation as the host does: a bad id, one running, one whose folder is
+        /// being removed, or past the cap refused.
         fn start(&self, request: crate::chat::ChatStart) -> Result<(), crate::chat::ChatRefusal> {
             self.calls.start.fetch_add(1, Ordering::Relaxed);
             crate::chat::check_id(&request.chat)?;
+            if lock(&self.after).iter().any(|(chat, ..)| *chat == request.chat) {
+                return Err(crate::chat::ChatRefusal::Forgetting);
+            }
             let mut running = lock(&self.running);
             if running.contains(&request.chat) {
                 return Err(crate::chat::ChatRefusal::AlreadyRunning);
@@ -1234,15 +1236,10 @@ pub mod fake {
             self.emit(chat, crate::chat::ChatEvent::Ended { failure: None });
             Ok(())
         }
-        /// Keeps `answer` for [`Fake::settle_after`], as the host's thread waits for it.
-        fn forget_after(
-            &self,
-            chat: &str,
-            answer: Receiver<Result<crate::chat_store::Answer, crate::chat_store::Refusal>>,
-            goes: super::FolderGoes,
-        ) -> Receiver<Result<bool, String>> {
+        /// Keeps `answers` for [`Fake::settle_after`], as the host's thread waits for them.
+        fn forget_after(&self, chat: &str, answers: super::Awaited) -> Receiver<Result<bool, String>> {
             let (tx, rx) = std::sync::mpsc::channel();
-            lock(&self.after).push((chat.to_string(), answer, goes, tx));
+            lock(&self.after).push((chat.to_string(), answers, tx));
             rx
         }
         /// Ends the conversation when it runs, then records its folder as removed.
@@ -1284,12 +1281,14 @@ pub mod fake {
     }
 
     impl Fake {
-        /// Takes the project's answers the removals wait for, at most a few seconds each, and
-        /// forgets the folders they let go, as the host's threads do.
+        /// Takes the project's answers the removals wait for, in order, at most a few seconds
+        /// each, and forgets the folders all of whose answers let them go, as the host's threads
+        /// do; their conversations may start again.
         pub fn settle_after(&self) {
             let waiting = std::mem::take(&mut *lock(&self.after));
-            for (chat, answer, goes, tx) in waiting {
-                let gone = answer.recv_timeout(std::time::Duration::from_secs(5)).is_ok_and(|a| goes.decides(&a));
+            for (chat, answers, tx) in waiting {
+                let gone =
+                    answers.into_iter().all(|(answer, goes)| answer.recv_timeout(std::time::Duration::from_secs(5)).is_ok_and(|a| goes.decides(&a)));
                 if gone {
                     lock(&self.forgotten).push(chat);
                 }

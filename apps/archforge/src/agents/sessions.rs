@@ -2,7 +2,8 @@
 //!
 //! [`start`] answers at once: it refuses an id that is not a conversation's UUID (checked as the
 //! agents crate's `ConversationId` and `SessionId` before anything uses it), one already running,
-//! and more than [`MAX_RUNNING`] at once; the thread does the rest. The thread finds the program,
+//! one whose private folder is being removed ([`forget`]), and more than [`MAX_RUNNING`] at once;
+//! the thread does the rest. The thread finds the program,
 //! takes the key from the secure store (or Codex's ChatGPT sign-in), takes a token for agent access
 //! when Let Chat use the model is on (read-only unless the conversation allows changes), starts the
 //! adapter with the bridge (`archforge-cli mcp --bridge <port> --token-file <file> [--read-only]
@@ -21,7 +22,7 @@ use std::time::Duration;
 use archforge_agents::claude::{ClaudeConfig, ClaudeSession, Model, SessionId, Start};
 use archforge_agents::codex::{Auth, Bridge, CodexConfig, CodexHome, CodexSession};
 use archforge_agents::{AgentError, AgentSession, ConversationId, ErrorKind, Limits, SessionEvent, TurnOutcome, Workspace};
-use archforge_ui_egui::ai_agents::{CodexSignIn, Provider};
+use archforge_ui_egui::ai_agents::{Awaited, CodexSignIn, Provider};
 use archforge_ui_egui::chat::{ChatEvent, ChatFailure, ChatRefusal, ChatStart, FailureKind, HostEvent, MAX_RUNNING, Ticket, TurnEnd, Waiting};
 
 use super::{Inner, locked};
@@ -72,6 +73,12 @@ pub fn start(inner: &Arc<Inner>, request: ChatStart) -> Result<(), ChatRefusal> 
     archforge_control::check_origin(&request.origin).map_err(|e| ChatRefusal::Refused { why: format!("the origin label: {e}") })?;
     let (commands, rx) = std::sync::mpsc::channel();
     {
+        // Held while the conversation joins the running list, so a removal of its folder either
+        // began before (refused here) or finds it running and ends it first.
+        let forgetting = locked(&inner.forgetting);
+        if forgetting.contains_key(&request.chat) {
+            return Err(ChatRefusal::Forgetting);
+        }
         let mut running = locked(&inner.sessions);
         if running.contains_key(&request.chat) {
             return Err(ChatRefusal::AlreadyRunning);
@@ -105,18 +112,49 @@ pub fn command(inner: &Inner, chat: &str, command: Command) -> Result<(), ChatRe
 /// own shutdown takes up to two of [`GRACE`].
 const FORGET_WAIT: Duration = Duration::from_secs(5);
 
-/// The project's answer a folder's removal waits for, and what in it lets the folder go.
-pub type After =
-    (Receiver<Result<archforge_ui_egui::chat_store::Answer, archforge_ui_egui::chat_store::Refusal>>, archforge_ui_egui::ai_agents::FolderGoes);
+/// A conversation whose private folder is being removed, counted in [`Inner::forgetting`] from
+/// the moment the removal is asked until it is done, however it ends: [`start`] refuses the
+/// conversation meanwhile (AR-218).
+struct Forgetting {
+    inner: Arc<Inner>,
+    chat: String,
+}
+
+impl Forgetting {
+    /// Counts one more removal of `chat` under way.
+    fn new(inner: &Arc<Inner>, chat: &str) -> Forgetting {
+        let mut forgetting = locked(&inner.forgetting);
+        let n = forgetting.entry(chat.to_string()).or_insert(0);
+        *n = n.saturating_add(1);
+        Forgetting { inner: inner.clone(), chat: chat.to_string() }
+    }
+}
+
+impl Drop for Forgetting {
+    /// Counts the removal done; with none left the conversation may start again.
+    fn drop(&mut self) {
+        let mut forgetting = locked(&self.inner.forgetting);
+        if let Some(n) = forgetting.get_mut(&self.chat) {
+            *n = n.saturating_sub(1);
+            if *n == 0 {
+                forgetting.remove(&self.chat);
+            }
+        }
+    }
+}
 
 /// Removes the private folder of the deleted conversation `chat` (AR-217), on a thread the host
-/// tracks: first, with `after`, the project's answer is waited for, at most [`FORGET_WAIT`], and
-/// only one that lets the folder go goes on; then its program, when it runs, is asked to end and
-/// waited for, at most [`FORGET_WAIT`] again; a folder whose program has not ended by then is
-/// kept, as a running program may write into it again. Answers whether there was a folder (false
-/// too when the answer kept it), or why it is kept. Started at quit before the host stops, it is
-/// waited for with the host's other threads, within [`super::QUIT_BUDGET`].
-pub fn forget(inner: &Arc<Inner>, chat: &str, after: Option<After>) -> Receiver<Result<bool, String>> {
+/// tracks: first the project's answers in `after` are waited for, in order, at most
+/// [`FORGET_WAIT`] in all, and only when every one lets the folder go does it go on (an Undo
+/// pressed before its deletion answered passes the deletion's and the restoration's, so a deletion
+/// that failed keeps the folder whatever the restoration says, AR-218); then its program, when it
+/// runs, is asked to end and waited for, at most [`FORGET_WAIT`] again; a folder whose program has
+/// not ended by then is kept, as a running program may write into it again. From this call until
+/// the removal is done, [`start`] refuses `chat`, so no new program of it is ended or loses its
+/// folder (AR-218). Answers whether there was a folder (false too when an answer kept it), or why
+/// it is kept, once `chat` may start again. Started at quit before the host stops, it is waited for
+/// with the host's other threads, within [`super::QUIT_BUDGET`].
+pub fn forget(inner: &Arc<Inner>, chat: &str, after: Awaited) -> Receiver<Result<bool, String>> {
     let (tx, rx) = std::sync::mpsc::channel();
     let id = match (ConversationId::new(chat), SessionId::new(chat)) {
         (Ok(id), Ok(_)) => id,
@@ -125,51 +163,61 @@ pub fn forget(inner: &Arc<Inner>, chat: &str, after: Option<After>) -> Receiver<
             return rx;
         }
     };
+    // Counted before the thread starts, so a start asked after this call is refused; a thread that
+    // cannot start drops it again.
+    let registered = Forgetting::new(inner, chat);
     let thread = inner.clone();
     let chat = chat.to_string();
     let started = inner.spawn("agents-forget", move || {
-        if let Some((answer, goes)) = after {
-            match answer.recv_timeout(FORGET_WAIT) {
-                Ok(a) if goes.decides(&a) => {}
-                Ok(_) => {
-                    log::info!("the private folder of the conversation {chat:?} is kept: the project's answer keeps it");
-                    let _ = tx.send(Ok(false));
-                    return;
-                }
-                Err(_) => {
-                    log::warn!(
-                        "the private folder of the conversation {chat:?} is kept: the project did not answer within {} s",
-                        FORGET_WAIT.as_secs()
-                    );
-                    let _ = tx.send(Ok(false));
-                    return;
-                }
-            }
-        }
-        let running = || locked(&thread.sessions).contains_key(&chat);
-        if let Some(handle) = locked(&thread.sessions).get(&chat) {
-            handle.end();
-        }
-        let deadline = std::time::Instant::now() + FORGET_WAIT;
-        while running() && std::time::Instant::now() < deadline {
-            std::thread::sleep(Duration::from_millis(10));
-        }
-        let answer = if running() {
-            Err(format!("its program did not end within {} s", FORGET_WAIT.as_secs()))
-        } else {
-            Workspace::open(&thread.workspace).and_then(|w| w.remove_conversation(&id)).map_err(|e| e.to_string())
-        };
-        match &answer {
-            Ok(true) => log::info!("the private folder of the deleted conversation {chat:?} was removed"),
-            Ok(false) => log::info!("the deleted conversation {chat:?} had no private folder"),
-            Err(why) => log::warn!("the private folder of the deleted conversation {chat:?} is kept: {why}"),
-        }
+        let answer = remove(&thread, &chat, &id, after);
+        // Done before the answer goes, so whoever reads it may start the conversation again.
+        drop(registered);
         let _ = tx.send(answer);
     });
     if !started {
         log::warn!("the private folder of a deleted conversation is kept: Archforge is closing or a thread could not start");
     }
     rx
+}
+
+/// The work of [`forget`] on its thread: the answers waited for, the program ended, the folder
+/// removed. Gives whether there was a folder, or why it is kept.
+fn remove(thread: &Arc<Inner>, chat: &str, id: &ConversationId, after: Awaited) -> Result<bool, String> {
+    let deadline = std::time::Instant::now() + FORGET_WAIT;
+    for (answer, goes) in after {
+        match answer.recv_timeout(deadline.saturating_duration_since(std::time::Instant::now())) {
+            Ok(a) if goes.decides(&a) => {}
+            Ok(_) => {
+                log::info!("the private folder of the conversation {chat:?} is kept: the project's answer keeps it");
+                return Ok(false);
+            }
+            Err(_) => {
+                log::warn!("the private folder of the conversation {chat:?} is kept: the project did not answer within {} s", FORGET_WAIT.as_secs());
+                return Ok(false);
+            }
+        }
+    }
+    let running = || locked(&thread.sessions).contains_key(chat);
+    if let Some(handle) = locked(&thread.sessions).get(chat) {
+        handle.end();
+    }
+    let deadline = std::time::Instant::now() + FORGET_WAIT;
+    while running() && std::time::Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    // No start of it is taken while it is counted in `forgetting`, so once it is not running it
+    // stays so until the folder is gone.
+    let answer = if running() {
+        Err(format!("its program did not end within {} s", FORGET_WAIT.as_secs()))
+    } else {
+        Workspace::open(&thread.workspace).and_then(|w| w.remove_conversation(id)).map_err(|e| e.to_string())
+    };
+    match &answer {
+        Ok(true) => log::info!("the private folder of the deleted conversation {chat:?} was removed"),
+        Ok(false) => log::info!("the deleted conversation {chat:?} had no private folder"),
+        Err(why) => log::warn!("the private folder of the deleted conversation {chat:?} is kept: {why}"),
+    }
+    answer
 }
 
 /// What a conversation's thread holds that must be given back however it ends.

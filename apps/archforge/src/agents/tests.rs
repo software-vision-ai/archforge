@@ -955,9 +955,9 @@ fn forgetting_a_deleted_conversation_ends_its_program_and_removes_its_folder_alo
     for chat in [&listed, &unanswered, &deleted] {
         made(chat);
     }
-    let kept_listed = host.agents.forget_after(&listed, answer(Some(Err(Refusal::Listed))), FolderGoes::IfNotRestored);
-    let kept_silent = host.agents.forget_after(&unanswered, answer(None), FolderGoes::IfDeleted);
-    let removed = host.agents.forget_after(&deleted, answer(Some(Ok(Answer::Deleted { before: "0".repeat(32) }))), FolderGoes::IfDeleted);
+    let kept_listed = host.agents.forget_after(&listed, vec![(answer(Some(Err(Refusal::Listed))), FolderGoes::IfNotRestored)]);
+    let kept_silent = host.agents.forget_after(&unanswered, vec![(answer(None), FolderGoes::IfDeleted)]);
+    let removed = host.agents.forget_after(&deleted, vec![(answer(Some(Ok(Answer::Deleted { before: "0".repeat(32) }))), FolderGoes::IfDeleted)]);
     assert_eq!(
         (kept_listed.recv_timeout(WAIT).unwrap(), kept_silent.recv_timeout(WAIT).unwrap(), removed.recv_timeout(WAIT).unwrap()),
         (Ok(false), Ok(false), Ok(true))
@@ -969,4 +969,85 @@ fn forgetting_a_deleted_conversation_ends_its_program_and_removes_its_folder_alo
     assert!(!folder(&last).exists(), "removed by the time quitting returned");
     assert_eq!(at_quit.try_recv(), Ok(Ok(true)));
     assert!(folder(&kept).is_dir(), "a conversation not deleted keeps its folder at quit");
+}
+
+/// A channel already holding the project's answer `a`, or closed without one.
+fn project_answer(
+    a: Option<Result<archforge_ui_egui::chat_store::Answer, archforge_ui_egui::chat_store::Refusal>>,
+) -> Receiver<Result<archforge_ui_egui::chat_store::Answer, archforge_ui_egui::chat_store::Refusal>> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    if let Some(a) = a {
+        tx.send(a).unwrap();
+    }
+    rx
+}
+
+/// Makes the private folder of the conversation `chat` in `host`'s workspace, as its program would,
+/// and gives its path.
+fn conversation_folder(host: &Host, chat: &str) -> PathBuf {
+    let id = archforge_agents::ConversationId::new(chat).unwrap();
+    archforge_agents::Workspace::open(&host.settings.join("agents")).unwrap().conversation(&id).unwrap();
+    host.settings.join("agents").join(format!("conversation-{chat}"))
+}
+
+/// An Undo pressed before its deletion answered, its project then closed (AR-218): the host gets
+/// both answers and removes the folder only when the deletion said deleted and the restoration did
+/// not bring the conversation back. A deletion that failed, or whose answer never came, keeps the
+/// folder even when the restoration after it failed too (as when the project could not read its
+/// list), and so does a restoration that brought it back or found it listed.
+#[test]
+fn an_undo_before_its_deletion_answered_lets_the_folder_go_only_once_deleted_and_not_brought_back() {
+    use archforge_ui_egui::ai_agents::FolderGoes;
+    use archforge_ui_egui::chat_store::{Answer, Refusal};
+    let host = Host::new("forget-both", Setup::default());
+    let deleted = || Some(Ok(Answer::Deleted { before: "0".repeat(32) }));
+    let failed = |why: &str| Some(Err(Refusal::Failed(why.into())));
+    let cases = [
+        ("deletion failed, restoration failed", failed("the project is busy"), failed("no deletion of it was asked in this project"), false),
+        ("deletion unanswered, restoration failed", None, failed("no deletion of it was asked in this project"), false),
+        ("deleted, brought back", deleted(), Some(Ok(Answer::Done)), false),
+        ("deleted, listed", deleted(), Some(Err(Refusal::Listed)), false),
+        ("deleted, restoration failed", deleted(), failed("another conversation has its label now"), true),
+    ];
+    for (n, (case, deletion, restoration, goes)) in cases.into_iter().enumerate() {
+        let chat = id(40 + n as u64);
+        let folder = conversation_folder(&host, &chat);
+        let answers = vec![(project_answer(deletion), FolderGoes::IfDeleted), (project_answer(restoration), FolderGoes::IfNotRestored)];
+        let answer = host.agents.forget_after(&chat, answers).recv_timeout(WAIT).unwrap();
+        assert_eq!(answer, Ok(goes), "{case}");
+        assert_eq!(!folder.exists(), goes, "{case}: the folder {}", if goes { "goes" } else { "stays" });
+    }
+}
+
+/// While a conversation's private folder is being removed (AR-218), the host refuses to start it,
+/// saying so in a refusal of its own, so a project copy or the project opened again cannot start a
+/// program the removal then ends, or lose the folder under it; other conversations start
+/// meanwhile, and once the removal is done, whether it removed the folder or kept it, the
+/// conversation starts again.
+#[test]
+fn a_conversation_does_not_start_while_its_folder_is_being_removed_and_starts_once_it_is_done() {
+    use archforge_ui_egui::ai_agents::FolderGoes;
+    use archforge_ui_egui::chat_store::{Answer, Refusal};
+    let host = Host::new("forget-start", Setup::default());
+    for (n, (answer, goes)) in
+        [(Ok(Answer::Deleted { before: "0".repeat(32) }), true), (Err(Refusal::Failed("the project is busy".into())), false)].into_iter().enumerate()
+    {
+        let chat = id(50 + n as u64);
+        let folder = conversation_folder(&host, &chat);
+        let (tx, rx) = std::sync::mpsc::channel();
+        let removal = host.agents.forget_after(&chat, vec![(rx, FolderGoes::IfDeleted)]);
+        assert_eq!(host.agents.start(claude(&chat, "Chat 1", false)), Err(ChatRefusal::Forgetting), "refused while the removal waits");
+        assert_eq!(host.agents.start(claude(&chat, "Chat 1", false)), Err(ChatRefusal::Forgetting), "and asked again");
+        assert!(folder.is_dir(), "its folder is untouched meanwhile");
+        let other = id(60 + n as u64);
+        host.agents.start(claude(&other, "Chat 2", false)).unwrap();
+        tx.send(answer).unwrap();
+        assert_eq!(removal.recv_timeout(WAIT).unwrap(), Ok(goes));
+        assert_eq!(!folder.exists(), goes);
+        host.agents.start(claude(&chat, "Chat 1", false)).unwrap();
+        for c in [&chat, &other] {
+            host.agents.end(c).unwrap();
+            host.until("its end", |e| matches!(e, HostEvent::Chat { chat, event: ChatEvent::Ended { .. }, .. } if chat.as_str() == c.as_str()));
+        }
+    }
 }
