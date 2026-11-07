@@ -29,12 +29,12 @@ can't be released again, so the next release always bumps it first.
 
    The workflow starts by itself.
 3. **Wait for the draft.** After about 40 minutes the Releases page has the draft
-   `Archforge v<version>`, with every package, `SHA256SUMS` and 48 screenshots: the README
-   gallery's eight, which the workflow makes no draft without, and the forty guide pictures of the
-   wiki and the user manual (see [Screenshots](#screenshots)). Its notes are Archforge's own lines
-   (install Dolt first, the packages are unsigned, what isn't available yet) above GitHub's notes
-   from the pull requests merged since the last release: *What's Changed*, *New Contributors* and the
-   *Full Changelog* link.
+   `Archforge v<version>`, with every package, `SHA256SUMS` and 56 screenshots: the README
+   gallery's eight, which the workflow makes no draft without, and the forty-eight guide pictures
+   of the wiki and the user manual (see [Screenshots](#screenshots)). Its notes are Archforge's own
+   lines (install Dolt first, the packages are unsigned, what isn't available yet) above GitHub's
+   notes from the pull requests merged since the last release: *What's Changed*, *New Contributors*
+   and the *Full Changelog* link.
 4. **Check it.** Download a package or two, and follow the
    [release checklist](release-checklist.md) in the running app.
 5. **Publish** the draft on GitHub. Publishing creates the tag `v<version>` on the commit that was
@@ -90,8 +90,8 @@ The README's gallery shows four screens in the visitor's appearance: Home, an ER
 class diagram and File → Generate. The pictures are never committed. The workflow renders them
 from the release's own commit with `cargo xtask screens --gallery <dir>` (the screens and their
 file names are `GALLERY` in `xtask/src/screens.rs`) and attaches them to the release as
-`screenshot-<name>-<light|dark>.png`. The same command renders twenty guide screens beside them
-(`WIKI_GALLERY`, published as `screenshot-guide-<name>-<light|dark>.png`), which the README
+`screenshot-<name>-<light|dark>.png`. The same command renders twenty-four guide screens beside
+them (`WIKI_GALLERY`, published as `screenshot-guide-<name>-<light|dark>.png`), which the README
 doesn't show: the wiki shows them, and the user manual's
 [Going further](manual/05-uml-class-model.md#going-further) shows those of its sections. The
 README, the wiki and the manual load them from `releases/latest/download/`, so every published

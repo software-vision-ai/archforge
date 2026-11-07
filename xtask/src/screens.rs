@@ -24,8 +24,10 @@ pub const GALLERY: [(&str, &str); 4] =
 
 /// The wiki's guide screens: a screen of the snapshot example and the file stem it is published as,
 /// beside the README's gallery (`screenshot-<stem>-<light|dark>.png`, attached to every release).
-/// The wiki loads them from the latest release; the README shows none of them.
-pub const WIKI_GALLERY: [(&str, &str); 20] = [
+/// The wiki loads them from the latest release; the README shows none of them. The last four are the
+/// chat pages' screens: AI Agents set up and with a program to install, the Chat panel ready, and a
+/// turn's changes as one undo step.
+pub const WIKI_GALLERY: [(&str, &str); 24] = [
     ("workspace-guide-classifier-kinds", "guide-classifier-kinds"),
     ("workspace-guide-relate-kinds", "guide-relate-kinds"),
     ("workspace-guide-literals", "guide-literals"),
@@ -46,6 +48,10 @@ pub const WIKI_GALLERY: [(&str, &str); 20] = [
     ("workspace-guide-template-binding", "guide-template-binding"),
     ("workspace-guide-profile", "guide-profile"),
     ("workspace-guide-stereotype", "guide-stereotype"),
+    ("settings-ai-agents-ready", "guide-ai-agents"),
+    ("settings-ai-agents-missing", "guide-ai-agents-install"),
+    ("workspace-chat", "guide-chat"),
+    ("workspace-chat-changes", "guide-chat-changes"),
 ];
 
 /// The screens the snapshot example's `--screen` takes, in its order: each `Some("<name>") =>
@@ -207,6 +213,20 @@ mod tests {
             }
         }
         assert!(loaded > 0, "the manual loads its guide pictures from the latest release");
+    }
+
+    /// The wiki's chat pages load the AI Agents and Chat screens from the latest release, so every
+    /// release publishes them under the names those pages use.
+    #[test]
+    fn the_wiki_gallery_publishes_the_chat_pages_screens() {
+        for pair in [
+            ("settings-ai-agents-ready", "guide-ai-agents"),
+            ("settings-ai-agents-missing", "guide-ai-agents-install"),
+            ("workspace-chat", "guide-chat"),
+            ("workspace-chat-changes", "guide-chat-changes"),
+        ] {
+            assert!(WIKI_GALLERY.contains(&pair), "the wiki gallery does not publish {} as screenshot-{}", pair.0, pair.1);
+        }
     }
 
     #[test]
