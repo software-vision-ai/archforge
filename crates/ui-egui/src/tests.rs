@@ -7331,6 +7331,13 @@ fn a_codex_sign_in_expired_card_reads_the_sign_in_again() {
     assert_eq!(rig.agents.calls.account.load(Relaxed), reads + 1, "the card read the sign-in again");
     h.run();
     assert_eq!(h.state().agents.codex, Some(Ok(CodexAccount::Expired { email: "you@example.com".into() })), "expired, its email kept");
+    // Should the codex program still read it as signed in (it may not try to refresh it), the
+    // card's word stands until a sign-in or a sign-out.
+    *rig.agents.account.lock().unwrap() = Ok(CodexAccount::SignedIn { email: "you@example.com".into(), plan: None });
+    crate::ai_agents::reread_account(h.state_mut());
+    h.run();
+    assert_eq!(rig.agents.calls.account.load(Relaxed), reads + 2);
+    assert_eq!(h.state().agents.codex, Some(Ok(CodexAccount::Expired { email: "you@example.com".into() })), "still expired");
 }
 
 /// Stop keeps the reply so far, marked cut off and kept; an unreachable program's turn ends here.
@@ -15551,7 +15558,7 @@ fn a_key_typed_and_not_saved_is_dropped_with_the_fields_memory_of_it() {
 fn a_codex_sign_in_that_expires_mid_run_shows_as_expired_after_check_connection_and_reopening() {
     use crate::ai_agents::CodexAccount;
     const EXPIRED: &str = "The ChatGPT sign-in for you@example.com has expired.";
-    for trigger in ["check connection", "reopening Settings"] {
+    for trigger in ["check connection", "reopening Settings", "another section and back"] {
         let (mut h, f) = agents_harness(ThemeKind::Light, |f| {
             *f.account.lock().unwrap() = Ok(CodexAccount::SignedIn { email: "you@example.com".into(), plan: None });
         });
@@ -15562,10 +15569,15 @@ fn a_codex_sign_in_that_expires_mid_run_shows_as_expired_after_check_connection_
         if trigger == "check connection" {
             let at = rect_of(&h, "settings.agents.check").center();
             click(&mut h, at);
-        } else {
+        } else if trigger == "reopening Settings" {
             let at = rect_of(&h, "settings.done").center();
             click(&mut h, at);
             open_agents(&mut h);
+        } else {
+            let at = rect_of(&h, "settings.nav.profile").center();
+            click(&mut h, at);
+            let at = rect_of(&h, "settings.nav.agents").center();
+            click(&mut h, at);
         }
         h.run();
         assert_eq!(f.calls.account.load(std::sync::atomic::Ordering::Relaxed), 2, "{trigger}: read again");

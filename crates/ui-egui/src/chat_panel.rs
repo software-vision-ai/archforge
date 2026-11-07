@@ -1154,8 +1154,8 @@ pub(crate) fn frame(shell: &mut Shell) {
     track_undo(shell);
 }
 
-/// The events of the conversation shown; a Codex turn that ends with an expired sign-in reads
-/// Codex's sign-in again.
+/// The events of the conversation shown; a Codex turn that ends with an expired sign-in marks
+/// Codex's sign-in expired and reads it again.
 fn events_shown(shell: &mut Shell) {
     let Some(key) = shell.chat_panel.chat.as_ref().map(|c| c.key.clone()) else { return };
     let events = crate::chat::take_events(shell, &key);
@@ -1184,9 +1184,9 @@ fn events_shown(shell: &mut Shell) {
     if let Some(text) = restart_with {
         deliver(shell, text);
     }
-    // The "Sign-in expired" card: Codex's sign-in is read again, so Settings shows it (AR-222).
+    // The "Sign-in expired" card: Codex's sign-in shows expired and is read again (AR-222).
     if expired {
-        crate::ai_agents::reread_account(shell);
+        crate::ai_agents::sign_in_expired(shell);
     }
 }
 
@@ -1199,12 +1199,20 @@ fn sign_in_expired(event: &ChatEvent) -> bool {
 }
 
 /// The events of tab `i`'s parked conversation: its turn was stopped when the tab was left, and its
-/// end is written to its own project.
+/// end is written to its own project. A Codex turn that ends with an expired sign-in marks Codex's
+/// sign-in expired and reads it again, as the conversation shown does.
 fn events_parked(shell: &mut Shell, i: usize) {
-    let Some(key) = shell.tabs.get(i).and_then(|t| t.parked.as_ref()).and_then(|p| p.chat_panel.chat.as_ref()).map(|c| c.key.clone()) else { return };
+    let Some((key, provider)) =
+        shell.tabs.get(i).and_then(|t| t.parked.as_ref()).and_then(|p| p.chat_panel.chat.as_ref()).map(|c| (c.key.clone(), c.provider))
+    else {
+        return;
+    };
     let events = crate::chat::take_events(shell, &key);
     if events.is_empty() {
         return;
+    }
+    if provider == Provider::Codex && events.iter().any(sign_in_expired) {
+        crate::ai_agents::sign_in_expired(shell);
     }
     let Some(tab) = shell.tabs.get(i) else { return };
     let draft_empty = tab.parked.as_ref().is_some_and(|p| p.chat_panel.draft.trim().is_empty());

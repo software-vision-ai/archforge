@@ -590,9 +590,15 @@ pub struct State {
     /// Codex's account is wanted (the AI Agents page shows, or a Codex conversation started): it is
     /// read once the look has found the program.
     account_wanted: bool,
-    /// Codex's account is to be read again once the look under way answers, though it was read
-    /// before (Check connection, or a read again asked while the look ran).
+    /// Codex's account is to be read again, though it was read before (AR-222): at once when no look
+    /// and no read runs, else once they have answered.
     account_stale: bool,
+    /// The email of the last ChatGPT sign-in known in this run: the codex program reads an expired
+    /// sign-in without one.
+    known_email: String,
+    /// A Codex turn ended with an expired sign-in (Codex's own word for it): until a sign-in or a
+    /// sign-out, a read that still says signed in as the same email shows it expired.
+    expired_seen: bool,
     /// Check connection waits for the look, the keys and the account read it started.
     checking: bool,
     pub outcome: Option<Outcome>,
@@ -624,9 +630,10 @@ impl State {
         self.looking.is_some() || self.keys_reading.is_some()
     }
 
-    /// Whether Codex's account is being read, or waits for the look to read it.
+    /// Whether Codex's account is being read, or waits for the look to read it (the first time, or
+    /// again).
     pub fn reading_account(&self) -> bool {
-        self.reading.is_some() || (self.account_wanted && self.codex.is_none() && self.looking.is_some())
+        self.reading.is_some() || (self.account_wanted && (self.codex.is_none() || self.account_stale) && self.looking.is_some())
     }
 
     /// Whether the keys have been read from the store in this run.
@@ -756,14 +763,55 @@ pub fn need_account(shell: &mut crate::Shell) {
 /// program.
 pub fn reread_account(shell: &mut crate::Shell) {
     shell.agents.account_wanted = true;
-    if shell.agents.reading.is_some() {
+    shell.agents.account_stale = true;
+    read_when_idle(shell);
+}
+
+/// A Codex conversation's turn ended with an expired sign-in (its "Sign-in expired" card): Codex's
+/// account shows expired at once, with the email known, and is read again (AR-222). Until a
+/// sign-in or a sign-out, a read that still says signed in as that email shows it expired, as the
+/// codex program may read a sign-in it cannot refresh without trying to.
+pub fn sign_in_expired(shell: &mut crate::Shell) {
+    shell.agents.expired_seen = true;
+    if let Some(Ok(CodexAccount::SignedIn { email, .. })) = &shell.agents.codex {
+        shell.agents.codex = Some(Ok(CodexAccount::Expired { email: email.clone() }));
+    }
+    reread_account(shell);
+}
+
+/// Starts the read again that was asked, once neither the look nor a read runs: a read already
+/// under way may have started before the sign-in changed, so it is read once more after it.
+fn read_when_idle(shell: &mut crate::Shell) {
+    if !shell.agents.account_stale || shell.agents.looking.is_some() || shell.agents.reading.is_some() {
         return;
     }
-    if shell.agents.looking.is_some() {
-        shell.agents.account_stale = true;
-        return;
-    }
+    shell.agents.account_stale = false;
     read_account(shell);
+}
+
+/// Keeps `account` as Codex's, as the window shows it: an expired sign-in the codex program names
+/// no one for keeps the email known, and one still read as signed in after a turn found it expired
+/// shows expired. Remembers the email; a sign-out forgets it.
+fn take_account(shell: &mut crate::Shell, account: Result<CodexAccount, AccountError>) {
+    let a = &mut shell.agents;
+    let account = match account {
+        Ok(CodexAccount::Expired { email }) if email.is_empty() && !a.known_email.is_empty() => {
+            Ok(CodexAccount::Expired { email: a.known_email.clone() })
+        }
+        Ok(CodexAccount::SignedIn { email, .. }) if a.expired_seen && !email.is_empty() && email == a.known_email => {
+            Ok(CodexAccount::Expired { email })
+        }
+        other => other,
+    };
+    match &account {
+        Ok(CodexAccount::SignedIn { email, .. } | CodexAccount::Expired { email }) if !email.is_empty() => a.known_email = email.clone(),
+        Ok(CodexAccount::NotSignedIn) => {
+            a.known_email.clear();
+            a.expired_seen = false;
+        }
+        _ => {}
+    }
+    a.codex = Some(account);
 }
 
 /// Send test message: one short message to the default agent's provider.
@@ -846,20 +894,6 @@ pub fn readiness(shell: &crate::Shell, p: Provider) -> Readiness {
     }
 }
 
-/// The account `read` with the email known before kept on an expired sign-in the codex program
-/// names no one for (it reads an expired sign-in without its email), when the sign-in known before,
-/// signed in or expired, had one.
-fn with_known_email(read: Result<CodexAccount, AccountError>, known: Option<&Result<CodexAccount, AccountError>>) -> Result<CodexAccount, AccountError> {
-    match (read, known) {
-        (Ok(CodexAccount::Expired { email }), Some(Ok(CodexAccount::SignedIn { email: before, .. } | CodexAccount::Expired { email: before })))
-            if email.is_empty() =>
-        {
-            Ok(CodexAccount::Expired { email: before.clone() })
-        }
-        (read, _) => read,
-    }
-}
-
 /// Ends Check connection: the badge sums up each agent as it is now.
 fn finish_check(shell: &mut crate::Shell) {
     shell.agents.checking = false;
@@ -879,15 +913,16 @@ pub(crate) fn poll(shell: &mut crate::Shell, ctx: &egui::Context) {
                 shell.agents.look.codex = look.codex;
                 // Codex's account only once it is wanted, never at launch: the first time, or again
                 // when a read again waited for the look.
-                let stale = std::mem::take(&mut shell.agents.account_stale);
-                if shell.agents.account_wanted && (shell.agents.codex.is_none() || stale) {
-                    read_account(shell);
+                if shell.agents.account_wanted && shell.agents.codex.is_none() {
+                    shell.agents.account_stale = true;
                 }
+                read_when_idle(shell);
             }
             Err(TryRecvError::Empty) => {}
             Err(TryRecvError::Disconnected) => {
                 shell.agents.looking = None;
                 log::warn!("the look for the agent programs stopped without an answer");
+                read_when_idle(shell);
             }
         }
     }
@@ -928,12 +963,14 @@ pub(crate) fn poll(shell: &mut crate::Shell, ctx: &egui::Context) {
         match rx.try_recv() {
             Ok(answer) => {
                 shell.agents.reading = None;
-                shell.agents.codex = Some(with_known_email(answer, shell.agents.codex.as_ref()));
+                take_account(shell, answer);
+                read_when_idle(shell);
             }
             Err(TryRecvError::Empty) => {}
             Err(TryRecvError::Disconnected) => {
                 shell.agents.reading = None;
                 shell.agents.codex = Some(Err(AccountError::Failed { detail: tr("The look stopped without an answer") }));
+                read_when_idle(shell);
             }
         }
     }
@@ -1010,7 +1047,9 @@ pub(crate) fn poll(shell: &mut crate::Shell, ctx: &egui::Context) {
                     break;
                 }
                 Ok(LoginEvent::Done(account)) => {
-                    shell.agents.codex = Some(Ok(account));
+                    // A sign-in made now is not the one found expired.
+                    shell.agents.expired_seen = false;
+                    take_account(shell, Ok(account));
                     login_over = true;
                     break;
                 }
@@ -1040,7 +1079,7 @@ pub(crate) fn poll(shell: &mut crate::Shell, ctx: &egui::Context) {
         if let Some(answer) = answer {
             shell.agents.logout = None;
             match answer {
-                Ok(()) => shell.agents.codex = Some(Ok(CodexAccount::NotSignedIn)),
+                Ok(()) => take_account(shell, Ok(CodexAccount::NotSignedIn)),
                 Err(e) => shell.agents.login_error = Some(e),
             }
         }

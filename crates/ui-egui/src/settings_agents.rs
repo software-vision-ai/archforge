@@ -76,6 +76,12 @@ impl Default for Page {
     }
 }
 
+/// The page shown again from another section of the dialog: Codex's account is read again, as
+/// when Settings opens (AR-222).
+pub(crate) fn shown_again(page: &mut Page) {
+    page.account_asked = false;
+}
+
 /// An empty draft with room for the longest key the field takes, in any characters.
 fn draft_room() -> String {
     String::with_capacity(agents::MAX_KEY_BYTES.saturating_mul(4))
