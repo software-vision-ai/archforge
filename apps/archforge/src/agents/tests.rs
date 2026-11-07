@@ -1020,34 +1020,56 @@ fn an_undo_before_its_deletion_answered_lets_the_folder_go_only_once_deleted_and
 }
 
 /// While a conversation's private folder is being removed (AR-218), the host refuses to start it,
-/// saying so in a refusal of its own, so a project copy or the project opened again cannot start a
-/// program the removal then ends, or lose the folder under it; other conversations start
-/// meanwhile, and once the removal is done, whether it removed the folder or kept it, the
-/// conversation starts again.
+/// saying so in a refusal of its own, both while the removal waits for the project's answers and
+/// while it waits for the conversation's program to end; other conversations start meanwhile. A
+/// start refused meanwhile keeps the folder, as a panel (a copy of the project, say) shows the
+/// conversation and will start it again; without one, the folder goes when the answers let it.
+/// Once the removal is done, whatever it decided, the conversation starts again.
 #[test]
 fn a_conversation_does_not_start_while_its_folder_is_being_removed_and_starts_once_it_is_done() {
     use archforge_ui_egui::ai_agents::FolderGoes;
     use archforge_ui_egui::chat_store::{Answer, Refusal};
     let host = Host::new("forget-start", Setup::default());
-    for (n, (answer, goes)) in
-        [(Ok(Answer::Deleted { before: "0".repeat(32) }), true), (Err(Refusal::Failed("the project is busy".into())), false)].into_iter().enumerate()
-    {
+    let deleted = || Ok(Answer::Deleted { before: "0".repeat(32) });
+    let cases = [
+        ("deleted, a start refused meanwhile", deleted(), true, false),
+        ("deleted, no start asked", deleted(), false, true),
+        ("not deleted, a start refused meanwhile", Err(Refusal::Failed("the project is busy".into())), true, false),
+    ];
+    for (n, (case, answer, ask, goes)) in cases.into_iter().enumerate() {
         let chat = id(50 + n as u64);
         let folder = conversation_folder(&host, &chat);
         let (tx, rx) = std::sync::mpsc::channel();
         let removal = host.agents.forget_after(&chat, vec![(rx, FolderGoes::IfDeleted)]);
-        assert_eq!(host.agents.start(claude(&chat, "Chat 1", false)), Err(ChatRefusal::Forgetting), "refused while the removal waits");
-        assert_eq!(host.agents.start(claude(&chat, "Chat 1", false)), Err(ChatRefusal::Forgetting), "and asked again");
-        assert!(folder.is_dir(), "its folder is untouched meanwhile");
+        if ask {
+            assert_eq!(host.agents.start(claude(&chat, "Chat 1", false)), Err(ChatRefusal::Forgetting), "{case}: refused while the removal waits");
+            assert_eq!(host.agents.start(claude(&chat, "Chat 1", false)), Err(ChatRefusal::Forgetting), "{case}: and asked again");
+        }
+        assert!(folder.is_dir(), "{case}: its folder is untouched meanwhile");
         let other = id(60 + n as u64);
         host.agents.start(claude(&other, "Chat 2", false)).unwrap();
         tx.send(answer).unwrap();
-        assert_eq!(removal.recv_timeout(WAIT).unwrap(), Ok(goes));
-        assert_eq!(!folder.exists(), goes);
+        assert_eq!(removal.recv_timeout(WAIT).unwrap(), Ok(goes), "{case}");
+        assert_eq!(!folder.exists(), goes, "{case}");
         host.agents.start(claude(&chat, "Chat 1", false)).unwrap();
         for c in [&chat, &other] {
             host.agents.end(c).unwrap();
             host.until("its end", |e| matches!(e, HostEvent::Chat { chat, event: ChatEvent::Ended { .. }, .. } if chat.as_str() == c.as_str()));
         }
     }
+    // A program slow to end: the removal waits for it, and a start meanwhile is refused too and
+    // keeps the folder.
+    let slow = Host::new("forget-slow", Setup { claude: "while IFS= read -r line; do :; done\nsleep 1\n", ..Setup::default() });
+    slow.agents.start(claude(CHAT, "Chat 1", false)).unwrap();
+    let folder = slow.settings.join("agents").join(format!("conversation-{CHAT}"));
+    let deadline = Instant::now() + WAIT;
+    while !folder.is_dir() {
+        assert!(Instant::now() < deadline, "its program made its folder");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let removal = slow.agents.forget(CHAT);
+    assert_eq!(slow.agents.start(claude(CHAT, "Chat 1", false)), Err(ChatRefusal::Forgetting), "refused while its program ends");
+    assert_eq!(removal.recv_timeout(WAIT).unwrap(), Ok(false), "kept for the start refused");
+    assert!(folder.is_dir());
+    slow.agents.start(claude(CHAT, "Chat 1", false)).unwrap();
 }

@@ -8045,12 +8045,13 @@ fn an_undo_before_a_failed_deletion_keeps_the_folder_of_a_conversation_still_lis
 }
 
 /// A conversation started while the host removes its private folder (AR-218), as a copy of the
-/// project or the project opened again can: the host refuses the start, the turn says "No answer"
-/// with Send again and nothing hangs; once the removal is done, Send again starts it.
+/// project can: the host refuses the start, the turn says "No answer" with Send again and nothing
+/// hangs; the refused start keeps the folder although the deletion went through, and once the
+/// removal is done, Send again starts it.
 #[test]
 fn a_conversation_started_while_its_folder_is_being_removed_says_no_answer_and_sends_again_once_done() {
     use crate::ai_agents::FolderGoes;
-    use crate::chat_store::Refusal;
+    use crate::chat_store::Answer;
     let (mut h, rig) = chat_harness(ThemeKind::Light, true);
     ask_in_chat(&mut h, "First question");
     chat_event(&mut h, &rig, crate::chat::ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
@@ -8068,13 +8069,13 @@ fn a_conversation_started_while_its_folder_is_being_removed_says_no_answer_and_s
     assert!(painted_has(&h, "No answer") && painted_has(&h, "Claude stopped before answering. Nothing was changed."), "{:?}", painted(&h));
     assert!(ids(&h).iter().any(|i| i == "workspace.chat.turn.2.retry"), "Send again is offered");
     assert!(ids(&h).iter().any(|i| i == "workspace.chat.send"), "the composer is free: nothing hangs");
-    // The copy's deletion did not go through: the folder stays and the removal is done.
-    tx.send(Err(Refusal::Failed("the project is busy".into()))).unwrap();
+    // The copy's deletion went through, but a panel here asked for the conversation: its folder stays.
+    tx.send(Ok(Answer::Deleted { before: "0".repeat(32) })).unwrap();
     rig.agents.settle_after();
-    assert_eq!(removal.recv().unwrap(), Ok(false));
+    assert_eq!(removal.recv_timeout(std::time::Duration::from_secs(5)).unwrap(), Ok(false));
     let at = rect_of(&h, "workspace.chat.turn.2.retry").center();
     click(&mut h, at);
-    assert_eq!(*rig.agents.running.lock().unwrap(), [key.clone()], "it starts now");
+    assert_eq!(*rig.agents.running.lock().unwrap(), std::slice::from_ref(&key), "it starts now");
     assert!(rig.agents.sent.lock().unwrap().iter().any(|(c, t)| *c == key && t.starts_with("Second question")), "and gets the question");
     assert!(forgotten(&rig).is_empty());
 }

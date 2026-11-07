@@ -72,10 +72,9 @@ pub(crate) struct Inner {
     access: Mutex<access::Access>,
     /// The running conversations, by id.
     sessions: Mutex<HashMap<String, sessions::Handle>>,
-    /// The conversations whose private folders are being removed, each with how many removals of
-    /// it are under way: none of them starts meanwhile (AR-218). Taken before `sessions` when both
-    /// are held.
-    forgetting: Mutex<HashMap<String, usize>>,
+    /// The conversations whose private folders are being removed: none of them starts meanwhile,
+    /// and a start refused keeps the folder (AR-218). Taken before `sessions` when both are held.
+    forgetting: Mutex<HashMap<String, sessions::Removing>>,
     /// The sign-in under way: its cancel flag.
     login: Mutex<Option<Arc<AtomicBool>>>,
     /// How long a sign-in waits for the person to finish, in milliseconds (`accounts::SIGN_IN_BUDGET`;

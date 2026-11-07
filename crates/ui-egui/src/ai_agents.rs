@@ -1106,6 +1106,9 @@ pub mod fake {
         /// The removals waiting for the project's answers, as the host's threads wait; a start of
         /// their conversations is refused meanwhile, as the host refuses it.
         pub after: Mutex<Vec<(String, super::Awaited, std::sync::mpsc::Sender<Result<bool, String>>)>>,
+        /// The conversations a start was refused for while their removal waited: their folders are
+        /// kept, as the host keeps them.
+        pub wanted: Mutex<Vec<String>>,
     }
 
     impl Default for Fake {
@@ -1129,6 +1132,7 @@ pub mod fake {
                 hold_ends: std::sync::atomic::AtomicBool::new(false),
                 forgotten: Mutex::new(Vec::new()),
                 after: Mutex::new(Vec::new()),
+                wanted: Mutex::new(Vec::new()),
             }
         }
     }
@@ -1200,6 +1204,7 @@ pub mod fake {
             self.calls.start.fetch_add(1, Ordering::Relaxed);
             crate::chat::check_id(&request.chat)?;
             if lock(&self.after).iter().any(|(chat, ..)| *chat == request.chat) {
+                lock(&self.wanted).push(request.chat.clone());
                 return Err(crate::chat::ChatRefusal::Forgetting);
             }
             let mut running = lock(&self.running);
@@ -1282,13 +1287,21 @@ pub mod fake {
 
     impl Fake {
         /// Takes the project's answers the removals wait for, in order, at most a few seconds
-        /// each, and forgets the folders all of whose answers let them go, as the host's threads
-        /// do; their conversations may start again.
+        /// each, and forgets the folders all of whose answers let them go and whose conversation no
+        /// start was refused for meanwhile, as the host's threads do; their conversations may start
+        /// again.
         pub fn settle_after(&self) {
             let waiting = std::mem::take(&mut *lock(&self.after));
             for (chat, answers, tx) in waiting {
-                let gone =
+                let let_go =
                     answers.into_iter().all(|(answer, goes)| answer.recv_timeout(std::time::Duration::from_secs(5)).is_ok_and(|a| goes.decides(&a)));
+                let wanted = {
+                    let mut wanted = lock(&self.wanted);
+                    let was = wanted.contains(&chat);
+                    wanted.retain(|c| *c != chat);
+                    was
+                };
+                let gone = let_go && !wanted;
                 if gone {
                     lock(&self.forgotten).push(chat);
                 }

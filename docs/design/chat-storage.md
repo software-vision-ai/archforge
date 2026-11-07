@@ -722,11 +722,15 @@ Deleting a conversation from the history, with Undo; no table or column changed.
   conversation's id alone, so a copy of the project open beside it shares it: it is kept while an
   open project's panel shows that conversation. From the moment the shell asks for a removal until
   the host has finished it, the host refuses to start that conversation (`ChatRefusal::Forgetting`,
-  AR-218), checked under the same lock that adds a conversation to the running list. So a copy of
-  the project, or the project opened again, cannot start a program that the removal then ends, or
-  lose the folder under it: its turn ends with "No answer", and Send again starts it once the
-  removal is done (at most about ten seconds: five for the answers, five for the program to end).
-  A program that started before the removal was asked is ended first, as before.
+  AR-218), checked under the same lock that adds a conversation to the running list, so the
+  removal never ends a program started after it was asked. A start refused meanwhile means a
+  panel shows the conversation (a copy of the project that opened it after the check above), so
+  the removal then keeps the folder; the folder is removed under that same lock, so a start is
+  refused either before the check, keeping the folder, or after the folder is gone. The refused
+  turn ends with "No answer", and Send again starts it once the removal is done (at most about ten
+  seconds: five for the answers, five for the program to end). A program that started before the
+  removal was asked is ended first, as before. A copy that opens the conversation without sending
+  until the folder is gone finds no transcript, as one opened after the removal does.
 - **Chat writing off.** When reading the list again fails, the rows read before stay shown and
   nothing in them can be deleted, saying why; a row that cannot be read cannot be deleted either.
 - **Known limit.** ⌘Z while a toast is up is the model's undo: it may take back the deleted
